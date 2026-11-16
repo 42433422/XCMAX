@@ -225,7 +225,7 @@ def parse_delivery_notes(
     )
 
 
-def preview_shipment_excel_etl(
+def preview_shipment_excel_elt(
     file_path: str | Path,
     *,
     include_ledger: bool | str = "auto",
@@ -246,7 +246,7 @@ def preview_shipment_excel_etl(
     )
 
 
-def execute_shipment_excel_etl(
+def execute_shipment_excel_elt(
     file_path: str | Path,
     *,
     import_products: bool = True,
@@ -341,7 +341,7 @@ def regenerate_delivery_notes_from_file(
     )
 
 
-def batch_preview_shipment_excel_etl(
+def batch_preview_shipment_excel_elt(
     directory: str | Path,
     *,
     include_ledger: bool | str = "auto",
@@ -358,11 +358,11 @@ def batch_preview_shipment_excel_etl(
         profile_id=profile_id,
         profile=profile,
         resolve_profile=_resolve_profile,
-        preview_file=preview_shipment_excel_etl,
+        preview_file=preview_shipment_excel_elt,
     )
 
 
-def batch_execute_shipment_excel_etl(
+def batch_execute_shipment_excel_elt(
     directory: str | Path,
     *,
     include_ledger: bool | str = False,
@@ -389,7 +389,7 @@ def batch_execute_shipment_excel_etl(
         profile_id=profile_id,
         profile=profile,
         resolve_profile=_resolve_profile,
-        execute_file=execute_shipment_excel_etl,
+        execute_file=execute_shipment_excel_elt,
     )
 
 
@@ -405,16 +405,16 @@ class ShipmentExcelEltApplicationService:
         return kwargs
 
     def preview(self, file_path: str | Path, **kwargs: Any) -> dict[str, Any]:
-        return preview_shipment_excel_etl(file_path, **self._profile_kwargs(kwargs))
+        return preview_shipment_excel_elt(file_path, **self._profile_kwargs(kwargs))
 
     def execute(self, file_path: str | Path, **kwargs: Any) -> dict[str, Any]:
-        return execute_shipment_excel_etl(file_path, **self._profile_kwargs(kwargs))
+        return execute_shipment_excel_elt(file_path, **self._profile_kwargs(kwargs))
 
     def batch_preview(self, directory: str | Path, **kwargs: Any) -> dict[str, Any]:
-        return batch_preview_shipment_excel_etl(directory, **self._profile_kwargs(kwargs))
+        return batch_preview_shipment_excel_elt(directory, **self._profile_kwargs(kwargs))
 
     def batch_execute(self, directory: str | Path, **kwargs: Any) -> dict[str, Any]:
-        return batch_execute_shipment_excel_etl(directory, **self._profile_kwargs(kwargs))
+        return batch_execute_shipment_excel_elt(directory, **self._profile_kwargs(kwargs))
 
     def write_delivery_template(
         self,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.application.elt_env import elt_getenv, reject_legacy_elt_env
 import os
 import re
 from typing import Any
@@ -247,7 +248,7 @@ def _map_headers(ws, header_row: int, profile: ShipmentEltProfile) -> dict[str, 
 def _infer_columns_from_samples(ws, header_row: int, mapping: dict[str, int]) -> dict[str, int]:
     """陌生表头：用样例值类型补列（不编造数值，只猜列位）。"""
 
-    flag = str(os.environ.get("FHD_EXCEL_ETL_HEURISTIC") or "1").strip().lower()
+    flag = str(elt_getenv("FHD_EXCEL_ELT_HEURISTIC") or "1").strip().lower()
     if flag in {"0", "false", "no", "off"}:
         return dict(mapping)
     out = dict(mapping)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.application.elt_env import elt_getenv, reject_legacy_elt_env
 import logging
 import sqlite3
 import threading
@@ -70,7 +71,7 @@ def _ensure_orm_table() -> bool:
 def _use_orm_backend() -> bool:
     import os
 
-    mode = os.environ.get("FHD_SHIPMENT_ETL_FINGERPRINT_BACKEND", "auto").strip().lower()
+    mode = elt_getenv("FHD_SHIPMENT_ELT_FINGERPRINT_BACKEND", default="auto").strip().lower()
     if mode in {"legacy", "sqlite", "file"}:
         return False
     if mode in {"orm", "db", "sqlalchemy"}:

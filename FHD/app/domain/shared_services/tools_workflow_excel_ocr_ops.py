@@ -266,7 +266,7 @@ def _registered_router_excel_import(
         from app.application.office_parse_app_service import registered_office_stage
 
         return registered_office_stage(user_message, runtime_context)
-    if action in {"import_delivery_notes", "execute_delivery_etl"}:
+    if action in {"import_delivery_notes", "execute_delivery_elt"}:
         file_path = str(params.get("file_path") or "").strip()
         notes = params.get("notes")
         if not file_path and (not isinstance(notes, list)):
@@ -308,7 +308,7 @@ def _registered_router_excel_import(
         import_data = pending_imports.get(pending_import_id)
         if not import_data:
             return {"success": False, "message": "未找到待处理的导入数据或已过期"}
-        if str(import_data.get("kind") or "") == "shipment_delivery_etl":
+        if str(import_data.get("kind") or "") == "shipment_delivery_elt":
             try:
                 from app.application.shipment_excel_elt_app_service import (
                     get_shipment_excel_elt_app_service,

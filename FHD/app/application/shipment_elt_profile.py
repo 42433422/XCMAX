@@ -2,14 +2,13 @@
 
 来源优先级：
 1. 显式 profile 对象 / profile_id（含 knowledge:* 记忆条目）
-2. ``FHD_EXCEL_ETL_PROFILE_DIR`` 用户自定义 YAML（可选）
+2. ``FHD_EXCEL_ELT_PROFILE_DIR`` 用户自定义 YAML（可选）
 3. 知识库生成的 ``universal`` 通用 profile（默认）
-仓库内置 profile 仅当 ``FHD_EXCEL_ETL_ALLOW_BUILTIN=1`` 时加载（默认关闭）。
+仓库内置 profile 仅当 ``FHD_EXCEL_ELT_ALLOW_BUILTIN=1`` 时加载（默认关闭）。
 """
 
 from __future__ import annotations
 
-import os
 import re
 from dataclasses import dataclass
 from functools import lru_cache
@@ -18,6 +17,7 @@ from typing import Any
 
 import yaml
 
+from app.application.elt_env import elt_getenv
 from app.domain.app_pure.excel_elt_kb import get_excel_elt_kb
 
 _BUILTIN_DIR = (
@@ -262,11 +262,11 @@ def build_universal_profile_from_kb() -> ShipmentEltProfile:
 
 def profile_search_dirs() -> list[Path]:
     dirs: list[Path] = []
-    for env_key in ("FHD_EXCEL_ETL_PROFILE_DIR", "FHD_SHIPMENT_ETL_PROFILE_DIR"):
-        override = str(os.environ.get(env_key) or "").strip()
+    for env_key in ("FHD_EXCEL_ELT_PROFILE_DIR", "FHD_SHIPMENT_ELT_PROFILE_DIR"):
+        override = str(elt_getenv(env_key) or "").strip()
         if override:
             dirs.append(Path(override).expanduser().resolve())
-    allow_builtin = str(os.environ.get("FHD_EXCEL_ETL_ALLOW_BUILTIN") or "").strip().lower()
+    allow_builtin = str(elt_getenv("FHD_EXCEL_ELT_ALLOW_BUILTIN") or "").strip().lower()
     if allow_builtin in {"1", "true", "yes", "on"}:
         dirs.append(_BUILTIN_DIR.resolve())
     seen: set[str] = set()
@@ -327,10 +327,10 @@ def _index_profiles() -> dict[str, Path]:
 def _dir_cache_key() -> str:
     return "|".join(
         [
-            str(os.environ.get("FHD_EXCEL_ETL_PROFILE_DIR") or "").strip(),
-            str(os.environ.get("FHD_SHIPMENT_ETL_PROFILE_DIR") or "").strip(),
-            str(os.environ.get("FHD_EXCEL_ETL_ALLOW_BUILTIN") or "").strip(),
-            str(os.environ.get("FHD_EXCEL_ETL_KB_PATH") or "").strip(),
+            str(elt_getenv("FHD_EXCEL_ELT_PROFILE_DIR") or "").strip(),
+            str(elt_getenv("FHD_SHIPMENT_ELT_PROFILE_DIR") or "").strip(),
+            str(elt_getenv("FHD_EXCEL_ELT_ALLOW_BUILTIN") or "").strip(),
+            str(elt_getenv("FHD_EXCEL_ELT_KB_PATH") or "").strip(),
         ]
     )
 
@@ -402,8 +402,8 @@ def clear_profile_cache() -> None:
 def resolve_profile_id(explicit: str | None = None) -> str:
     if explicit and str(explicit).strip():
         return str(explicit).strip()
-    for env_key in ("FHD_EXCEL_ETL_PROFILE", "FHD_SHIPMENT_ETL_PROFILE"):
-        env = str(os.environ.get(env_key) or "").strip()
+    for env_key in ("FHD_EXCEL_ELT_PROFILE", "FHD_SHIPMENT_ELT_PROFILE"):
+        env = str(elt_getenv(env_key) or "").strip()
         if env:
             return env
     return _DEFAULT_PROFILE_ID

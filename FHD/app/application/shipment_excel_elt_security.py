@@ -11,6 +11,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import BinaryIO, Iterator
 
+from app.application.elt_env import elt_getenv
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
@@ -988,7 +989,7 @@ def _open_elt_output_under_root(path: Path, root: Path) -> Iterator[BinaryIO]:
                 os.close(parent_fd)
 
 
-def tenant_key_for_etl() -> str:
+def tenant_key_for_elt() -> str:
     try:
         from app.infrastructure.tenant_scope import current_tenant_id
 
@@ -1001,7 +1002,7 @@ def tenant_key_for_etl() -> str:
 
 
 def batch_execute_allowed() -> bool:
-    return os.environ.get("FHD_SHIPMENT_ETL_ALLOW_BATCH", "").strip().lower() in {
+    return elt_getenv("FHD_SHIPMENT_ELT_ALLOW_BATCH", default="").strip().lower() in {
         "1",
         "true",
         "yes",
@@ -1011,7 +1012,7 @@ def batch_execute_allowed() -> bool:
 
 def direct_execute_allowed() -> bool:
     """无预览直写生产库：默认关闭，需显式环境开关。"""
-    for key in ("FHD_EXCEL_ETL_ALLOW_DIRECT", "FHD_SHIPMENT_ETL_ALLOW_DIRECT"):
-        if os.environ.get(key, "").strip().lower() in {"1", "true", "yes", "on"}:
+    for key in ("FHD_EXCEL_ELT_ALLOW_DIRECT", "FHD_SHIPMENT_ELT_ALLOW_DIRECT"):
+        if elt_getenv(key, default="").strip().lower() in {"1", "true", "yes", "on"}:
             return True
     return False

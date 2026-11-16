@@ -18,8 +18,8 @@
   ],
   "notes": [
     "客户/产品导入与发货单写入仍非同一 DB 事务；发货单失败会补偿撤销本批发货单。",
-    "生产/预发默认要求登录 + shipment.create；桌面开发可设 FHD_SHIPMENT_ETL_REQUIRE_RBAC=0。",
-    "批量入库默认关闭，需 FHD_SHIPMENT_ETL_ALLOW_BATCH=1。",
+    "生产/预发默认要求登录 + shipment.create；桌面开发可设 FHD_SHIPMENT_ELT_REQUIRE_RBAC=0。",
+    "批量入库默认关闭，需 FHD_SHIPMENT_ELT_ALLOW_BATCH=1。",
     "上线前请执行 alembic upgrade 到 2026_07_24_shipment_elt_fingerprints。"
   ]
 }

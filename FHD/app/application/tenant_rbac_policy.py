@@ -22,11 +22,6 @@ TENANT_PERMISSION_CODES = frozenset(
 )
 
 
-def canonical_permission_code(code: str) -> str:
-    text = str(code or "")
-    return f"elt.{text[4:]}" if text.startswith("etl.") else text
-
-
 def is_tenant_role(role_name: str) -> bool:
     return str(role_name or "").startswith("tenant:")
 

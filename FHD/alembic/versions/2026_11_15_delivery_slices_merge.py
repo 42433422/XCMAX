@@ -15,19 +15,27 @@ def upgrade():
     pass
 
 
+def _run_rows_table(inspector) -> str | None:
+    names = set(inspector.get_table_names())
+    if "elt_run_rows" in names:
+        return "elt_run_rows"
+    if "etl_run_rows" in names:
+        return "etl_run_rows"
+    return None
+
+
 def downgrade():
     connection = op.get_bind()
     inspector = sa.inspect(connection)
-    if not inspector.has_table("etl_run_rows"):
+    table = _run_rows_table(inspector)
+    if table is None:
         return
-    if "source_slice" not in {column["name"] for column in inspector.get_columns("etl_run_rows")}:
+    if "source_slice" not in {column["name"] for column in inspector.get_columns(table)}:
         return
     # Refuse before Alembic traverses either historical branch. The old split
     # revision cannot be rewritten and its downgrade predates this safeguard.
     if connection.execute(
-        sa.text(
-            "SELECT 1 FROM etl_run_rows WHERE source_slice != 0 OR source_slice IS NULL LIMIT 1"
-        )
+        sa.text(f"SELECT 1 FROM {table} WHERE source_slice != 0 OR source_slice IS NULL LIMIT 1")
     ).first():
         raise RuntimeError(
             "Cannot downgrade delivery histories without losing ELT slice provenance"

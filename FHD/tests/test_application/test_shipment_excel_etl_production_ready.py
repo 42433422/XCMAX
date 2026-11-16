@@ -14,9 +14,9 @@ from sqlalchemy.orm import sessionmaker
 
 from app.application.shipment_app_service import ShipmentApplicationService
 from app.application.shipment_excel_elt_app_service import (
-    execute_shipment_excel_etl,
+    execute_shipment_excel_elt,
     note_fingerprint,
-    preview_shipment_excel_etl,
+    preview_shipment_excel_elt,
     write_delivery_note_workbook,
 )
 from app.db.db_base import Base
@@ -69,10 +69,10 @@ def orm_fp_db(tmp_path, monkeypatch):
     from app.application.shipment_elt_profile import clear_profile_cache
     from app.domain.app_pure.excel_elt_kb import reset_excel_elt_kb_for_tests
 
-    monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))
-    monkeypatch.setenv("FHD_EXCEL_ETL_DEFAULT_TARGET", "shipment")
-    monkeypatch.setenv("FHD_SHIPMENT_ETL_LLM", "0")
-    monkeypatch.delenv("FHD_EXCEL_ETL_ALLOW_BUILTIN", raising=False)
+    monkeypatch.setenv("FHD_EXCEL_ELT_KB_PATH", str(tmp_path / "kb.json"))
+    monkeypatch.setenv("FHD_EXCEL_ELT_DEFAULT_TARGET", "shipment")
+    monkeypatch.setenv("FHD_SHIPMENT_ELT_LLM", "0")
+    monkeypatch.delenv("FHD_EXCEL_ELT_ALLOW_BUILTIN", raising=False)
     reset_excel_elt_kb_for_tests(tmp_path / "kb.json")
     clear_profile_cache()
 
@@ -88,7 +88,7 @@ def orm_fp_db(tmp_path, monkeypatch):
         def __exit__(self, *a):
             self.db.close()
 
-    monkeypatch.setenv("FHD_SHIPMENT_ETL_FINGERPRINT_BACKEND", "orm")
+    monkeypatch.setenv("FHD_SHIPMENT_ELT_FINGERPRINT_BACKEND", "orm")
     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     monkeypatch.setattr("app.db.session.get_db", lambda: _Ctx())
     monkeypatch.setattr(
@@ -162,7 +162,7 @@ def test_real_create_shipment_idempotent_and_order_meta(tmp_path, monkeypatch, o
         lambda records: {"success": True, "imported": len(records)},
     )
 
-    first = execute_shipment_excel_etl(path, workspace_root=tmp_path, idempotent=True)
+    first = execute_shipment_excel_elt(path, workspace_root=tmp_path, idempotent=True)
     assert first["success"] is True
     assert first["shipment_created"] == 1
     assert len(repo.items) == 1
@@ -170,7 +170,7 @@ def test_real_create_shipment_idempotent_and_order_meta(tmp_path, monkeypatch, o
     assert "external_order_number=PROD-9001" in str(saved.raw_text or "")
     assert "fingerprint=" in str(saved.raw_text or "")
 
-    second = execute_shipment_excel_etl(path, workspace_root=tmp_path, idempotent=True)
+    second = execute_shipment_excel_elt(path, workspace_root=tmp_path, idempotent=True)
     assert second["success"] is True
     assert second["shipment_created"] == 0
     assert second["shipment_skipped"] == 1
@@ -239,7 +239,7 @@ def test_compensate_on_failure_rolls_back_created(tmp_path, monkeypatch, orm_fp_
         lambda records: {"success": True, "imported": len(records)},
     )
 
-    out = execute_shipment_excel_etl(
+    out = execute_shipment_excel_elt(
         path,
         workspace_root=tmp_path,
         idempotent=True,
@@ -285,7 +285,7 @@ def test_production_gates_checklist(tmp_path, monkeypatch, orm_fp_db):
         path,
     )
     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
-    monkeypatch.delenv("FHD_SHIPMENT_ETL_ALLOW_BATCH", raising=False)
+    monkeypatch.delenv("FHD_SHIPMENT_ELT_ALLOW_BATCH", raising=False)
 
     gates = {}
 
@@ -307,11 +307,11 @@ def test_production_gates_checklist(tmp_path, monkeypatch, orm_fp_db):
         "app.domain.shared_services.tools_workflow_registered._execute_excel_import_records",
         lambda records: {"success": True, "imported": len(records)},
     )
-    dry = execute_shipment_excel_etl(path, dry_run=True, workspace_root=tmp_path)
+    dry = execute_shipment_excel_elt(path, dry_run=True, workspace_root=tmp_path)
     gates["dry_run"] = dry.get("dry_run") is True and len(repo.items) == 0
 
     # 4) 预览含确认与重复计数字段
-    preview = preview_shipment_excel_etl(path, workspace_root=tmp_path)
+    preview = preview_shipment_excel_elt(path, workspace_root=tmp_path)
     gates["preview_contract"] = bool(
         preview.get("success")
         and preview.get("confirm_required")
@@ -320,8 +320,8 @@ def test_production_gates_checklist(tmp_path, monkeypatch, orm_fp_db):
     )
 
     # 5) 指纹唯一 + 幂等
-    first = execute_shipment_excel_etl(path, workspace_root=tmp_path)
-    second = execute_shipment_excel_etl(path, workspace_root=tmp_path)
+    first = execute_shipment_excel_elt(path, workspace_root=tmp_path)
+    second = execute_shipment_excel_elt(path, workspace_root=tmp_path)
     gates["idempotent"] = (
         first.get("success") is True
         and first.get("shipment_created") == 1

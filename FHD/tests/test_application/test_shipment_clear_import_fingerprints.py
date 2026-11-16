@@ -41,7 +41,7 @@ def _seed(session_factory, *, tenant_id: int, unit_name: str = "刘英") -> None
                 unit_name=unit_name,
                 order_number="26-0100061A",
                 file_name=f"{unit_name}.xlsx",
-                source_kind="general_etl",
+                source_kind="general_elt",
             )
         )
         db.commit()
@@ -111,7 +111,7 @@ def test_stale_fingerprint_does_not_block_reimport(tmp_path, monkeypatch):
                 shipment_id=49,
                 unit_name="刘英",
                 order_number="26-0100061A",
-                source_kind="general_etl",
+                source_kind="general_elt",
             )
         )
         db.commit()
@@ -142,7 +142,7 @@ def test_stale_fingerprint_is_replaced_on_execute(tmp_path, monkeypatch):
                 shipment_id=999,
                 unit_name="澜宇家私",
                 order_number="26-0100051A",
-                source_kind="general_etl",
+                source_kind="general_elt",
             )
         )
         db.commit()

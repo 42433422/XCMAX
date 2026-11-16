@@ -19,10 +19,10 @@ from app.infrastructure.llm.structured_output import StructuredResult
 def _reset_llm_env(monkeypatch, tmp_path):
     clear_assist_cache()
     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
-    monkeypatch.setenv("FHD_SHIPMENT_ETL_LLM", "0")
-    monkeypatch.setenv("FHD_EXCEL_ETL_HEURISTIC", "0")
-    monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))
-    monkeypatch.delenv("FHD_EXCEL_ETL_ALLOW_BUILTIN", raising=False)
+    monkeypatch.setenv("FHD_SHIPMENT_ELT_LLM", "0")
+    monkeypatch.setenv("FHD_EXCEL_ELT_HEURISTIC", "0")
+    monkeypatch.setenv("FHD_EXCEL_ELT_KB_PATH", str(tmp_path / "kb.json"))
+    monkeypatch.delenv("FHD_EXCEL_ELT_ALLOW_BUILTIN", raising=False)
     from app.application.shipment_elt_profile import clear_profile_cache
     from app.domain.app_pure.excel_elt_kb import reset_excel_elt_kb_for_tests
 
@@ -34,7 +34,7 @@ def _reset_llm_env(monkeypatch, tmp_path):
 
 
 def test_llm_disabled_by_env(monkeypatch):
-    monkeypatch.setenv("FHD_SHIPMENT_ETL_LLM", "0")
+    monkeypatch.setenv("FHD_SHIPMENT_ELT_LLM", "0")
     assert llm_assist_enabled() is False
     probe = SheetProbe(
         profile_id="universal",
@@ -110,7 +110,7 @@ def test_unit_name_is_weak_and_triggers_assist():
 
 
 def test_invalid_llm_columns_are_rejected(monkeypatch):
-    monkeypatch.setenv("FHD_SHIPMENT_ETL_LLM", "1")
+    monkeypatch.setenv("FHD_SHIPMENT_ELT_LLM", "1")
     calls: list[int] = []
 
     def _fake_complete(messages, **kwargs):
@@ -158,8 +158,8 @@ def test_invalid_llm_columns_are_rejected(monkeypatch):
 
 
 def test_llm_assist_fills_alt_headers(tmp_path, monkeypatch):
-    monkeypatch.setenv("FHD_SHIPMENT_ETL_LLM", "1")
-    monkeypatch.setenv("FHD_SHIPMENT_ETL_LLM_TIMEOUT", "5")
+    monkeypatch.setenv("FHD_SHIPMENT_ELT_LLM", "1")
+    monkeypatch.setenv("FHD_SHIPMENT_ELT_LLM_TIMEOUT", "5")
     calls: list[int] = []
 
     def _fake_complete(messages, **kwargs):
@@ -223,11 +223,11 @@ def test_llm_assist_fills_alt_headers(tmp_path, monkeypatch):
     wb.close()
 
     # 无 LLM 时通用同义词不应识别这些表头
-    monkeypatch.setenv("FHD_SHIPMENT_ETL_LLM", "0")
+    monkeypatch.setenv("FHD_SHIPMENT_ELT_LLM", "0")
     off = parse_delivery_notes(path, include_ledger=False)
     assert off["note_count"] == 0
 
-    monkeypatch.setenv("FHD_SHIPMENT_ETL_LLM", "1")
+    monkeypatch.setenv("FHD_SHIPMENT_ELT_LLM", "1")
     clear_assist_cache()
     first = parse_delivery_notes(path, include_ledger=False)
     assert first["success"] is True
@@ -248,7 +248,7 @@ def test_llm_assist_fills_alt_headers(tmp_path, monkeypatch):
 
 
 def test_llm_failure_degrades_quietly(tmp_path, monkeypatch):
-    monkeypatch.setenv("FHD_SHIPMENT_ETL_LLM", "1")
+    monkeypatch.setenv("FHD_SHIPMENT_ELT_LLM", "1")
 
     def _boom(*a, **k):
         raise RuntimeError("llm down")

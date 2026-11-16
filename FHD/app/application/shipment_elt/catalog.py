@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.application.elt_env import elt_getenv, reject_legacy_elt_env
 import logging
 from collections.abc import Callable
 
@@ -43,8 +44,8 @@ def _profiles_for_parse(
         import os
 
         raw = (
-            str(os.environ.get("FHD_EXCEL_ETL_PROFILE") or "").strip()
-            or str(os.environ.get("FHD_SHIPMENT_ETL_PROFILE") or "").strip()
+            str(elt_getenv("FHD_EXCEL_ELT_PROFILE") or "").strip()
+            or str(elt_getenv("FHD_SHIPMENT_ELT_PROFILE") or "").strip()
         )
     if raw and raw.lower() not in {"auto", "*"}:
         return [load_profile(raw)]

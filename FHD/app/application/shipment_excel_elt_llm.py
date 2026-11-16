@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.application.elt_env import elt_getenv, reject_legacy_elt_env
 import hashlib
 import json
 import logging
@@ -113,7 +114,7 @@ _CACHE_MAX = 64
 
 def llm_assist_mode() -> str:
     """返回 auto / on / off。"""
-    raw = str(os.environ.get("FHD_SHIPMENT_ETL_LLM") or "auto").strip().lower()
+    raw = str(elt_getenv("FHD_SHIPMENT_ELT_LLM") or "auto").strip().lower()
     if raw in {"0", "false", "no", "off", "disabled"}:
         return "off"
     if raw in {"1", "true", "yes", "on", "enabled"}:
@@ -122,7 +123,7 @@ def llm_assist_mode() -> str:
 
 
 def llm_timeout_seconds() -> float:
-    raw = str(os.environ.get("FHD_SHIPMENT_ETL_LLM_TIMEOUT") or "12").strip()
+    raw = str(elt_getenv("FHD_SHIPMENT_ELT_LLM_TIMEOUT") or "12").strip()
     try:
         return max(1.0, float(raw))
     except ValueError:

@@ -20,9 +20,9 @@ if str(ROOT) not in sys.path:
 
 def main() -> int:
     from app.application.shipment_excel_elt_app_service import (
-        batch_execute_shipment_excel_etl,
-        batch_preview_shipment_excel_etl,
-        execute_shipment_excel_etl,
+        batch_execute_shipment_excel_elt,
+        batch_preview_shipment_excel_elt,
+        execute_shipment_excel_elt,
         parse_delivery_notes,
         regenerate_delivery_notes_from_file,
         write_delivery_note_workbook,
@@ -136,7 +136,7 @@ def main() -> int:
 
         fp_store._legacy_db_path = lambda: td_path / "fps.sqlite3"
         fp_store._db_path = lambda: td_path / "fps.sqlite3"
-        os.environ["FHD_SHIPMENT_ETL_FINGERPRINT_BACKEND"] = "legacy"
+        os.environ["FHD_SHIPMENT_ELT_FINGERPRINT_BACKEND"] = "legacy"
 
         class _FakeShipmentSvc:
             def __init__(self):
@@ -168,29 +168,29 @@ def main() -> int:
         }
 
         os.environ["WORKSPACE_ROOT"] = str(td_path)
-        os.environ["FHD_SHIPMENT_ETL_ALLOW_BATCH"] = "1"
-        os.environ["FHD_SHIPMENT_ETL_ALLOW_TMP"] = "1"
+        os.environ["FHD_SHIPMENT_ELT_ALLOW_BATCH"] = "1"
+        os.environ["FHD_SHIPMENT_ELT_ALLOW_TMP"] = "1"
 
-        preview = batch_preview_shipment_excel_etl(batch_dir, workspace_root=td_path)
+        preview = batch_preview_shipment_excel_elt(batch_dir, workspace_root=td_path)
         # 默认不入库流水；仅送货单
-        first = batch_execute_shipment_excel_etl(
+        first = batch_execute_shipment_excel_elt(
             batch_dir,
             idempotent=True,
             include_ledger=False,
             workspace_root=td_path,
         )
-        second = batch_execute_shipment_excel_etl(
+        second = batch_execute_shipment_excel_elt(
             batch_dir,
             idempotent=True,
             include_ledger=False,
             workspace_root=td_path,
         )
-        dry = execute_shipment_excel_etl(
+        dry = execute_shipment_excel_elt(
             delivery_path,
             dry_run=True,
             workspace_root=ROOT,
         )
-        single = execute_shipment_excel_etl(
+        single = execute_shipment_excel_elt(
             delivery_path,
             idempotent=True,
             workspace_root=ROOT,

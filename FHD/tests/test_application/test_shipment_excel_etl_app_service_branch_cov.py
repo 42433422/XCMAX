@@ -34,13 +34,13 @@ from app.application.shipment_elt_profile import (
 )
 from app.application.shipment_excel_elt_app_service import (
     ShipmentExcelEltApplicationService,
-    batch_execute_shipment_excel_etl,
-    batch_preview_shipment_excel_etl,
-    execute_shipment_excel_etl,
+    batch_execute_shipment_excel_elt,
+    batch_preview_shipment_excel_elt,
+    execute_shipment_excel_elt,
     get_shipment_excel_elt_app_service,
     note_fingerprint,
     parse_delivery_notes,
-    preview_shipment_excel_etl,
+    preview_shipment_excel_elt,
     regenerate_delivery_notes_from_file,
     write_delivery_note_workbook,
     write_ledger_workbook,
@@ -512,7 +512,7 @@ def test_infer_columns_from_samples(monkeypatch):
             ["M-02", "底漆", "20", "8"],
         ]
     )
-    monkeypatch.setitem(os.environ, "FHD_EXCEL_ETL_HEURISTIC", "1")
+    monkeypatch.setitem(os.environ, "FHD_EXCEL_ELT_HEURISTIC", "1")
     base = {"product_name": 2}
     inferred = svc_mod._infer_columns_from_samples(ws, 1, base)
     assert "model_number" in inferred
@@ -520,7 +520,7 @@ def test_infer_columns_from_samples(monkeypatch):
     assert "tin_spec" in inferred
 
     # heuristic off -> copy
-    monkeypatch.setitem(os.environ, "FHD_EXCEL_ETL_HEURISTIC", "off")
+    monkeypatch.setitem(os.environ, "FHD_EXCEL_ELT_HEURISTIC", "off")
     assert svc_mod._infer_columns_from_samples(ws, 1, base) == base
 
 
@@ -1190,9 +1190,9 @@ def test_preview_shipment_excel_elt_happy(tmp_path, monkeypatch):
             "ledger_note_count": 0,
         },
     )
-    monkeypatch.setattr(f"{SEC}.tenant_key_for_etl", lambda: "tenant:1")
+    monkeypatch.setattr(f"{SEC}.tenant_key_for_elt", lambda: "tenant:1")
     monkeypatch.setattr(f"{MOD}._is_fingerprint_imported", lambda a, b: False)
-    res = preview_shipment_excel_etl(tmp_path / "d.xlsx")
+    res = preview_shipment_excel_elt(tmp_path / "d.xlsx")
     assert res["success"] is True
     assert res["preview"] is True
     assert res["confirm_required"] is True
@@ -1208,7 +1208,7 @@ def test_preview_shipment_excel_elt_unsafe(tmp_path, monkeypatch):
         raise ShipmentEltPathError("bad")
 
     monkeypatch.setattr(f"{SEC}.resolve_elt_path", _raise)
-    res = preview_shipment_excel_etl(tmp_path / "d.xlsx")
+    res = preview_shipment_excel_elt(tmp_path / "d.xlsx")
     assert res["success"] is False
     assert res["error_code"] == "unsafe_path"
 
@@ -1227,9 +1227,9 @@ def test_preview_shipment_excel_elt_duplicate_and_ledger_risk(tmp_path, monkeypa
             "ledger_note_count": 0,
         },
     )
-    monkeypatch.setattr(f"{SEC}.tenant_key_for_etl", lambda: "tenant:1")
+    monkeypatch.setattr(f"{SEC}.tenant_key_for_elt", lambda: "tenant:1")
     monkeypatch.setattr(f"{MOD}._is_fingerprint_imported", lambda a, b: True)
-    res = preview_shipment_excel_etl(tmp_path / "d.xlsx")
+    res = preview_shipment_excel_elt(tmp_path / "d.xlsx")
     assert res["duplicate_note_count"] == 1
     assert res["ledger_risk"] is True
 
@@ -1241,7 +1241,7 @@ def test_preview_shipment_excel_elt_duplicate_and_ledger_risk(tmp_path, monkeypa
 
 def _patch_execute(monkeypatch, tmp_path, profile):
     monkeypatch.setattr(f"{MOD}.get_shipment_elt_profile", lambda pid=None: profile)
-    monkeypatch.setattr(f"{SEC}.tenant_key_for_etl", lambda: "tenant:1")
+    monkeypatch.setattr(f"{SEC}.tenant_key_for_elt", lambda: "tenant:1")
     monkeypatch.setattr(f"{MOD}._is_fingerprint_imported", lambda a, b: False)
     monkeypatch.setattr(f"{MOD}._record_fingerprint_now", lambda *a, **k: None)
     monkeypatch.setattr(f"{FP}.delete_fingerprint", lambda *a, **k: None)
@@ -1249,7 +1249,7 @@ def _patch_execute(monkeypatch, tmp_path, profile):
 
 def test_execute_direct_denied(monkeypatch, delivery_profile):
     monkeypatch.setattr(f"{SEC}.direct_execute_allowed", lambda: False)
-    res = execute_shipment_excel_etl("x.xlsx", direct=True, dry_run=False)
+    res = execute_shipment_excel_elt("x.xlsx", direct=True, dry_run=False)
     assert res["success"] is False
     assert res["error_code"] == "direct_execute_denied"
 
@@ -1263,13 +1263,13 @@ def test_execute_unsafe_path(monkeypatch, delivery_profile, tmp_path):
         raise ShipmentEltPathError("bad")
 
     monkeypatch.setattr(f"{SEC}.resolve_elt_path", _raise)
-    res = execute_shipment_excel_etl("x.xlsx")
+    res = execute_shipment_excel_elt("x.xlsx")
     assert res["error_code"] == "unsafe_path"
 
 
 def test_execute_missing_path(monkeypatch, delivery_profile, tmp_path):
     _patch_execute(monkeypatch, tmp_path, delivery_profile)
-    res = execute_shipment_excel_etl(None)
+    res = execute_shipment_excel_elt(None)
     assert res["error_code"] == "missing_path"
 
 
@@ -1284,7 +1284,7 @@ def test_execute_parsed_not_success(monkeypatch, delivery_profile, tmp_path):
             "notes": [],
         },
     )
-    res = execute_shipment_excel_etl("d.xlsx")
+    res = execute_shipment_excel_elt("d.xlsx")
     assert res["success"] is False
 
 
@@ -1292,27 +1292,27 @@ def test_execute_ledger_confirm_required(monkeypatch, delivery_profile, tmp_path
     _patch_execute(monkeypatch, tmp_path, delivery_profile)
     note = _delivery_note()
     note["source_kind"] = "shipment_ledger"
-    res = execute_shipment_excel_etl(None, notes=[note], confirm_ledger=False)
+    res = execute_shipment_excel_elt(None, notes=[note], confirm_ledger=False)
     assert res["error_code"] == "ledger_confirm_required"
 
 
 def test_execute_no_notes(monkeypatch, delivery_profile, tmp_path):
     _patch_execute(monkeypatch, tmp_path, delivery_profile)
-    res = execute_shipment_excel_etl(None, notes=[])
+    res = execute_shipment_excel_elt(None, notes=[])
     assert res["error_code"] == "no_delivery_notes"
 
 
 def test_execute_unsupported_profile_target(monkeypatch, delivery_profile, tmp_path):
     _patch_execute(monkeypatch, tmp_path, delivery_profile)
     note = _delivery_note(profile_target="preview_only")
-    res = execute_shipment_excel_etl(None, notes=[note], import_shipments=True)
+    res = execute_shipment_excel_elt(None, notes=[note], import_shipments=True)
     assert res["error_code"] == "unsupported_profile_target"
 
 
 def test_execute_dry_run_with_duplicates(monkeypatch, delivery_profile, tmp_path):
     _patch_execute(monkeypatch, tmp_path, delivery_profile)
     monkeypatch.setattr(f"{MOD}._is_fingerprint_imported", lambda a, b: True)
-    res = execute_shipment_excel_etl(
+    res = execute_shipment_excel_elt(
         "d.xlsx", notes=[_delivery_note()], dry_run=True, import_shipments=True
     )
     assert res["success"] is True
@@ -1327,7 +1327,7 @@ def test_execute_product_import_failed(monkeypatch, delivery_profile, tmp_path):
         "app.domain.shared_services.tools_workflow_registered._execute_excel_import_records",
         lambda records: {"success": False, "message": "导入失败"},
     )
-    res = execute_shipment_excel_etl(
+    res = execute_shipment_excel_elt(
         "d.xlsx", notes=[_delivery_note()], import_products=True, import_shipments=False
     )
     assert res["error_code"] == "product_import_failed"
@@ -1338,7 +1338,7 @@ def test_execute_success(monkeypatch, delivery_profile, tmp_path):
     svc = MagicMock()
     svc.create_shipment.return_value = {"success": True, "shipment": {"id": 1}}
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: svc)
-    res = execute_shipment_excel_etl(
+    res = execute_shipment_excel_elt(
         "d.xlsx",
         notes=[_delivery_note()],
         idempotent=True,
@@ -1358,7 +1358,7 @@ def test_execute_missing_unit_or_items(monkeypatch, delivery_profile, tmp_path):
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: svc)
     note = _delivery_note()
     note["unit_name"] = ""
-    res = execute_shipment_excel_etl(
+    res = execute_shipment_excel_elt(
         "d.xlsx", notes=[note], import_products=False, import_shipments=True
     )
     assert res["success"] is False
@@ -1372,7 +1372,7 @@ def test_execute_shipment_service_unavailable(monkeypatch, delivery_profile, tmp
         raise OSError("no svc")
 
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", boom)
-    res = execute_shipment_excel_etl(
+    res = execute_shipment_excel_elt(
         "d.xlsx", notes=[_delivery_note()], import_products=False, import_shipments=True
     )
     assert res["success"] is False
@@ -1389,7 +1389,7 @@ def test_execute_compensate_on_failure(monkeypatch, delivery_profile, tmp_path):
     svc.cancel_shipment.return_value = {"success": True}
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: svc)
     notes = [_delivery_note(), _delivery_note(order_number="O-2")]
-    res = execute_shipment_excel_etl(
+    res = execute_shipment_excel_elt(
         "d.xlsx",
         notes=notes,
         import_products=False,
@@ -1413,7 +1413,7 @@ def test_execute_compensate_delete_fallback(monkeypatch, delivery_profile, tmp_p
     svc.delete_shipment.return_value = {"success": True}
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: svc)
     notes = [_delivery_note(), _delivery_note(order_number="O-2")]
-    res = execute_shipment_excel_etl(
+    res = execute_shipment_excel_elt(
         "d.xlsx", notes=notes, import_products=False, import_shipments=True
     )
     assert res["compensated"] == [1]
@@ -1430,7 +1430,7 @@ def test_execute_compensate_error(monkeypatch, delivery_profile, tmp_path):
     svc.delete_shipment.return_value = {"success": False, "message": "del fail"}
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: svc)
     notes = [_delivery_note(), _delivery_note(order_number="O-2")]
-    res = execute_shipment_excel_etl(
+    res = execute_shipment_excel_elt(
         "d.xlsx", notes=notes, import_products=False, import_shipments=True
     )
     assert len(res["compensate_errors"]) == 1
@@ -1451,7 +1451,7 @@ def test_execute_compensate_exception(monkeypatch, delivery_profile, tmp_path):
     svc.cancel_shipment.side_effect = cancel_boom
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: svc)
     notes = [_delivery_note(), _delivery_note(order_number="O-2")]
-    res = execute_shipment_excel_etl(
+    res = execute_shipment_excel_elt(
         "d.xlsx", notes=notes, import_products=False, import_shipments=True
     )
     assert len(res["compensate_errors"]) == 1
@@ -1467,7 +1467,7 @@ def test_execute_partial_no_compensate(monkeypatch, delivery_profile, tmp_path):
     ]
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: svc)
     notes = [_delivery_note(), _delivery_note(order_number="O-2")]
-    res = execute_shipment_excel_etl(
+    res = execute_shipment_excel_elt(
         "d.xlsx",
         notes=notes,
         import_products=False,
@@ -1489,7 +1489,7 @@ def test_execute_record_fingerprint_raises(monkeypatch, delivery_profile, tmp_pa
     svc = MagicMock()
     svc.create_shipment.return_value = {"success": True, "shipment": {"id": 1}}
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: svc)
-    res = execute_shipment_excel_etl(
+    res = execute_shipment_excel_elt(
         "d.xlsx", notes=[_delivery_note()], import_products=False, import_shipments=True
     )
     assert res["success"] is True
@@ -1502,7 +1502,7 @@ def test_execute_force_shipment_target(monkeypatch, delivery_profile, tmp_path):
     svc.create_shipment.return_value = {"success": True, "shipment": {"id": 1}}
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: svc)
     note = _delivery_note(profile_target="preview_only")
-    res = execute_shipment_excel_etl(
+    res = execute_shipment_excel_elt(
         "d.xlsx",
         notes=[note],
         direct=True,
@@ -1520,7 +1520,7 @@ def test_execute_direct_allowed_success(monkeypatch, delivery_profile, tmp_path)
     svc = MagicMock()
     svc.create_shipment.return_value = {"success": True, "shipment": {"id": 1}}
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: svc)
-    res = execute_shipment_excel_etl(
+    res = execute_shipment_excel_elt(
         "d.xlsx",
         notes=[_delivery_note()],
         direct=True,

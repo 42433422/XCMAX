@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+from app.application.elt_env import elt_getenv, reject_legacy_elt_env
 import hashlib
 import json
 import logging
@@ -158,7 +159,7 @@ _SEED: dict[str, Any] = {
 
 
 def _kb_path() -> Path:
-    override = str(os.environ.get("FHD_EXCEL_ETL_KB_PATH") or "").strip()
+    override = str(elt_getenv("FHD_EXCEL_ELT_KB_PATH") or "").strip()
     if override:
         return Path(override).expanduser().resolve()
     try:

@@ -2,17 +2,19 @@
 
 from fastapi import HTTPException, Request
 
+from app.application.elt_env import reject_legacy_elt_env
 from app.mod_sdk.product_skus import resolve_product_sku
 from app.utils.deployment import deployment_is_production, deployment_is_staging, env_flag
 
 
 def _shipment_elt_must_check() -> bool:
+    reject_legacy_elt_env()
     enterprise = resolve_product_sku() == "enterprise"
     return bool(
         enterprise
         or deployment_is_production()
         or deployment_is_staging()
-        or env_flag("FHD_SHIPMENT_ETL_REQUIRE_RBAC")
+        or env_flag("FHD_SHIPMENT_ELT_REQUIRE_RBAC")
     )
 
 

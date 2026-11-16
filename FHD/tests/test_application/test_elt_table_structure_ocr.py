@@ -7,7 +7,7 @@ from app.application.elt.table_structure_ocr import (
     html_to_grid,
     recognize_table_structures,
 )
-from app.application.shipment_excel_etl_ocr import tables_to_workbook_path
+from app.application.shipment_excel_elt_ocr import tables_to_workbook_path
 
 _TABLE_HTML = """
 <table>

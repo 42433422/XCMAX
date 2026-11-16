@@ -17,8 +17,8 @@ from app.domain.app_pure.excel_elt_kb import reset_excel_elt_kb_for_tests
 
 
 def test_universal_profile_loads_from_kb(tmp_path, monkeypatch):
-    monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))
-    monkeypatch.delenv("FHD_EXCEL_ETL_ALLOW_BUILTIN", raising=False)
+    monkeypatch.setenv("FHD_EXCEL_ELT_KB_PATH", str(tmp_path / "kb.json"))
+    monkeypatch.delenv("FHD_EXCEL_ELT_ALLOW_BUILTIN", raising=False)
     reset_excel_elt_kb_for_tests(tmp_path / "kb.json")
     clear_profile_cache()
     prof = get_shipment_elt_profile("universal")
@@ -32,7 +32,7 @@ def test_universal_profile_loads_from_kb(tmp_path, monkeypatch):
 def test_custom_profile_dir_switches_column_aliases(tmp_path, monkeypatch):
     """换 YAML 列别名即可解析非默认表头，无需改引擎。"""
     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
-    monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))
+    monkeypatch.setenv("FHD_EXCEL_ELT_KB_PATH", str(tmp_path / "kb.json"))
     reset_excel_elt_kb_for_tests(tmp_path / "kb.json")
     clear_profile_cache()
     universal = get_shipment_elt_profile("universal")
@@ -120,7 +120,7 @@ def test_custom_profile_dir_switches_column_aliases(tmp_path, monkeypatch):
 
     profile_path = tmp_path / "alt_headers.yaml"
     profile_path.write_text(yaml.safe_dump(data, allow_unicode=True), encoding="utf-8")
-    monkeypatch.setenv("FHD_SHIPMENT_ETL_PROFILE_DIR", str(tmp_path))
+    monkeypatch.setenv("FHD_SHIPMENT_ELT_PROFILE_DIR", str(tmp_path))
     clear_profile_cache()
 
     alt = get_shipment_elt_profile("alt_headers")
@@ -169,7 +169,7 @@ def test_custom_profile_dir_switches_column_aliases(tmp_path, monkeypatch):
 
 
 def test_unknown_profile_raises(tmp_path, monkeypatch):
-    monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))
+    monkeypatch.setenv("FHD_EXCEL_ELT_KB_PATH", str(tmp_path / "kb.json"))
     reset_excel_elt_kb_for_tests(tmp_path / "kb.json")
     clear_profile_cache()
     try:
@@ -180,8 +180,8 @@ def test_unknown_profile_raises(tmp_path, monkeypatch):
 
 
 def test_load_example_yaml_when_allow_builtin(tmp_path, monkeypatch):
-    monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))
-    monkeypatch.setenv("FHD_EXCEL_ETL_ALLOW_BUILTIN", "1")
+    monkeypatch.setenv("FHD_EXCEL_ELT_KB_PATH", str(tmp_path / "kb.json"))
+    monkeypatch.setenv("FHD_EXCEL_ELT_ALLOW_BUILTIN", "1")
     reset_excel_elt_kb_for_tests(tmp_path / "kb.json")
     clear_profile_cache()
     path = Path("resources/config/shipment_elt/examples/default_delivery.yaml")

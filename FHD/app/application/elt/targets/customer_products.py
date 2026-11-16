@@ -339,7 +339,7 @@ class CustomerProductsAdapter(CustomerProductPreviewMixin, TargetAdapter):
                 "customer_name": customer.unit_name,
                 "product_unit": product.unit,
             },
-            "_etl": {
+            "_elt": {
                 "customer_created": customer_created,
                 "customer_updated": customer_updated,
                 "customer_before": customer_before,
@@ -355,7 +355,7 @@ class CustomerProductsAdapter(CustomerProductPreviewMixin, TargetAdapter):
 
     def rollback_row(self, db, *, match_ref, before, after, context):
         customer_id, product_id = self._parse_match_ref(match_ref)
-        metadata = after.get("_etl") if isinstance(after.get("_etl"), dict) else {}
+        metadata = after.get("_elt") if isinstance(after.get("_elt"), dict) else {}
         product_after = after.get("product") if isinstance(after.get("product"), dict) else {}
         product_before = (
             metadata.get("product_before")

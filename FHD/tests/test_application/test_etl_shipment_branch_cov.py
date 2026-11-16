@@ -568,7 +568,7 @@ _NOTE = {
 class TestShipmentCompatParser:
     def _patched_preview(self, monkeypatch, result):
         monkeypatch.setattr(
-            "app.application.shipment_excel_elt_app_service.preview_shipment_excel_etl",
+            "app.application.shipment_excel_elt_app_service.preview_shipment_excel_elt",
             lambda *a, **k: result,
         )
 
@@ -597,7 +597,7 @@ class TestShipmentCompatParser:
             raise RuntimeError("preview down")
 
         monkeypatch.setattr(
-            "app.application.shipment_excel_elt_app_service.preview_shipment_excel_etl", _boom
+            "app.application.shipment_excel_elt_app_service.preview_shipment_excel_elt", _boom
         )
         path = tmp_path / "a.xlsx"
         path.write_text("x")

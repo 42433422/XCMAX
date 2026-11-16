@@ -130,7 +130,7 @@ class ImportCoordinator:
         if direct and not dry_run and not security.direct_execute_allowed():
             return {
                 "success": False,
-                "message": "无预览直写未开启。请设置 FHD_EXCEL_ETL_ALLOW_DIRECT=1 （或 FHD_SHIPMENT_ETL_ALLOW_DIRECT=1）并确认权限后再执行。",
+                "message": "无预览直写未开启。请设置 FHD_EXCEL_ELT_ALLOW_DIRECT=1 （或 FHD_SHIPMENT_ELT_ALLOW_DIRECT=1）并确认权限后再执行。",
                 "error_code": "direct_execute_denied",
             }
         resolved_profile = self._ports.resolve_profile(profile, profile_id)
@@ -172,7 +172,7 @@ class ImportCoordinator:
         )
         if rejected is not None:
             return rejected
-        tenant = security.tenant_key_for_etl()
+        tenant = security.tenant_key_for_elt()
         candidates, duplicates = self._deduplicate(notes, tenant=tenant, idempotent=idempotent)
         if dry_run:
             return {
@@ -188,7 +188,7 @@ class ImportCoordinator:
                 "skipped_duplicates": duplicates,
                 "ledger_available_count": ledger_available,
                 "closed_loop": False,
-                "kind": "shipment_delivery_etl",
+                "kind": "shipment_delivery_elt",
             }
         product_result: dict[str, Any] = {"success": True, "skipped": True}
         if import_products and candidates:
@@ -247,7 +247,7 @@ class ImportCoordinator:
             "idempotent": idempotent,
             "dry_run": False,
             "direct": bool(direct),
-            "kind": "shipment_delivery_etl",
+            "kind": "shipment_delivery_elt",
             "audit": {
                 "tenant_key": tenant,
                 "file_name": file_name,
