@@ -48,8 +48,7 @@ export const ADMIN_HOST_ROUTE_RECORDS: RouteRecordRaw[] = [
   {
     path: '/duty-time-architecture',
     name: 'duty-time-architecture',
-    component: () => import('./views/DutyTimeArchitectureView.vue'),
-    meta: { title: '同时完成时间架构', requiresAdminAccount: true, hostAdmin: true },
+    redirect: { name: 'xcmax-admin', query: { tab: 'overview' } },
   },
   {
     path: '/duty-roster-graph',

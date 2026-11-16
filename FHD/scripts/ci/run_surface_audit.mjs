@@ -453,7 +453,7 @@ async function prepareAuditPage(page, pageDef, auditAuth) {
   if (pageDef.admin) {
     try {
       await page.waitForSelector(
-        '#view-xcmax-admin, #view-server-functions, #view-automation-policy, #view-duty-roster-graph, #view-duty-time-architecture, .xcmax-admin-view, .server-functions-view',
+        '#view-xcmax-admin, #view-server-functions, #view-automation-policy, #view-duty-roster-graph, .xcmax-admin-view, .server-functions-view',
         { timeout: 12000 },
       )
     } catch {
@@ -697,7 +697,7 @@ async function unlockAdminDigestOnPage(page, apiBase, auditAuth, opts = {}) {
   try {
     const adminReady = marketAdmin
       ? '.wb-sidebar-admin-nav, #app .app-shell'
-      : '#view-xcmax-admin, #view-server-functions, #view-automation-policy, #view-duty-roster-graph, #view-duty-time-architecture, .xcmax-admin-view, .server-functions-view'
+      : '#view-xcmax-admin, #view-server-functions, #view-automation-policy, #view-duty-roster-graph, .xcmax-admin-view, .server-functions-view'
     await page.waitForSelector(adminReady, { timeout: 8000 })
     return true
   } catch {

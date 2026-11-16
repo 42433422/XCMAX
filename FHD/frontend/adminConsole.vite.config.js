@@ -39,10 +39,8 @@ function modViewsDir(modId) {
 const adminModuleAliases = [
   'constants/adminOperatorNav.ts',
   'constants/personnelModApi.ts',
-  'constants/xcmaxDashboardEmbed.ts',
   'views/XCmaxAdminView.vue',
   'views/AutomationPolicyView.vue',
-  'views/DutyTimeArchitectureView.vue',
   'views/DutyRosterGraphView.vue',
   'views/ServerFunctionsView.vue',
   'views/ApprovalHubView.vue',

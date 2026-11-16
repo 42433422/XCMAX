@@ -4,17 +4,6 @@
       <div>
         <h2>自动化方针</h2>
       </div>
-      <div class="header-actions">
-        <a
-          class="btn"
-          :href="openUrl"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <i class="fa fa-external-link" aria-hidden="true"></i>
-          网页打开完整图谱
-        </a>
-      </div>
     </header>
 
     <div v-if="loadError" class="admin-card policy-banner" role="alert">
@@ -85,9 +74,6 @@ import {
   parseAutomationPolicyDoc,
   type AutomationPolicyDoc,
 } from '../../utils/automationPolicyLines'
-import { xcmaxAutomationPolicyOpenUrl } from '@/constants/xcmaxDashboardEmbed'
-
-const openUrl = xcmaxAutomationPolicyOpenUrl()
 const loading = ref(true)
 const loadError = ref('')
 const doc = ref<AutomationPolicyDoc | null>(null)

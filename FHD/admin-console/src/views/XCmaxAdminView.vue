@@ -266,12 +266,6 @@
     <div v-show="activeTab === 'automation-policy'" class="page-content admin-tab-panel">
       <AutomationPolicyPanel />
     </div>
-    <div v-show="activeTab === 'duty-time-architecture'" class="page-content admin-tab-panel">
-      <div class="page-header">
-        <h2>同时完成时间架构</h2>
-      </div>
-      <XcmaxDashboardEmbed :src="timeArchEmbedUrl" title="同时完成时间架构" />
-    </div>
     <AdminDeployUpdateModal v-model="deployModalOpen" @done="handleDeployDone" />
   </div>
 </template>
@@ -291,10 +285,8 @@ import XCmaxAdminDutyTab from '@/components/admin/XCmaxAdminDutyTab.vue'
 import XCmaxAdminAutonomyTab from '@/components/admin/XCmaxAdminAutonomyTab.vue'
 import XCmaxAdminOrdersTab from '@/components/admin/XCmaxAdminOrdersTab.vue'
 import AdminReleaseStatusCard from '../components/admin/AdminReleaseStatusCard.vue'
-import XcmaxDashboardEmbed from '@/components/admin/XcmaxDashboardEmbed.vue'
 import AutomationPolicyPanel from '@/components/admin/AutomationPolicyPanel.vue'
 import AdminDeployUpdateModal from '@host/components/admin/AdminDeployUpdateModal.vue'
-import { xcmaxDutyTimeArchitectureEmbedUrl } from '@/constants/xcmaxDashboardEmbed'
 import { useXcmaxOverview } from './xcmaxAdmin/useXcmaxOverview'
 import { useXcmaxSync } from './xcmaxAdmin/useXcmaxSync'
 import { useXcmaxAutonomyHealth } from './xcmaxAdmin/useXcmaxAutonomyHealth'
@@ -306,16 +298,15 @@ const adminTabs = [
   { id: 'infra', label: '基础设施' },
   { id: 'duty', label: '编制与调度' },
   { id: 'automation-policy', label: '自动化方针' },
-  { id: 'duty-time-architecture', label: '同时完成时间架构' },
 ]
 const route = useRoute()
 const activeTab = ref('overview')
-const timeArchEmbedUrl = xcmaxDutyTimeArchitectureEmbedUrl()
 
 const TAB_IDS = new Set(adminTabs.map((t) => t.id))
 function applyTabFromRoute() {
   const tab = String(route.query.tab || '').trim()
-  if (tab && TAB_IDS.has(tab)) activeTab.value = tab
+  if (tab === 'duty-time-architecture') activeTab.value = 'overview'
+  else if (tab && TAB_IDS.has(tab)) activeTab.value = tab
 }
 watch(() => route.query.tab, applyTabFromRoute, { immediate: true })
 

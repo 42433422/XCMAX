@@ -7,7 +7,6 @@ const ADMIN_PAGES = [
   '/delivery-center',
   '/founder-autonomy',
   '/automation-policy',
-  '/duty-time-architecture',
   '/duty-roster-graph',
   '/server-functions',
   '/autonomy-approval-hub',

@@ -211,7 +211,6 @@ const viewTitlesBase = {
   'xcmax-admin': '服务器后台总览',
   'delivery-center': '客户交付中心',
   'automation-policy': '自动化方针',
-  'duty-time-architecture': '同时完成时间架构',
   'duty-roster-graph': '员工可视化',
   'server-functions': '服务器功能模块',
 }
