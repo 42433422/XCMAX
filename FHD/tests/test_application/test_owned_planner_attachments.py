@@ -111,6 +111,24 @@ def test_legacy_paths_never_become_owned_artifacts():
     )
 
 
+def test_unregistered_legacy_upload_is_never_adopted(owned, monkeypatch, tmp_path):
+    context, _ = owned
+    shared = tmp_path / "uploads" / "foreign.csv"
+    shared.parent.mkdir()
+    shared.write_text("secret,42\n", encoding="utf-8")
+    monkeypatch.setattr(
+        "app.application.tools.workflow_spreadsheet_scope.get_app_data_dir",
+        lambda: str(tmp_path),
+    )
+    from app.application.tools.workflow_spreadsheet_scope import resolve_owned_upload_path
+    from app.db.session import get_db
+
+    with tenant_scope(int(context["tenant_id"])):
+        assert resolve_owned_upload_path("uploads/foreign.csv", context) == "uploads/foreign.csv"
+        with get_db() as db:
+            assert db.query(EltUpload).filter(EltUpload.storage_path == str(shared)).count() == 0
+
+
 def test_registered_upload_round_trip_and_missing_tenant(owned):
     import io
 

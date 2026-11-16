@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 
 from app.application.task_conversation_store import (
     durable_user_id,
@@ -432,17 +433,15 @@ def conversations_delete(
     }
 
 
-@router.delete("/conversations/{conversation_id}/messages/{message_id}")
+@router.delete("/conversations/{conversation_id}/messages/{message_id}", response_model=None)
 def conversations_delete_message(
     request: Request,
     conversation_id: str,
     message_id: int,
     user_id: str = Query(default="default"),
     mod_id: str = Query(default=""),
-) -> dict:
+) -> dict | JSONResponse:
     """撤回一条用户消息及其之后的所有回复（撤回编辑）。"""
-    from fastapi.responses import JSONResponse
-
     cid = str(conversation_id or "").strip()
     numeric_user_id = durable_user_id(_xcagi_request_user_id(request, user_id))
     if numeric_user_id is None:

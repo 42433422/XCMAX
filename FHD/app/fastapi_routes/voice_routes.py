@@ -748,7 +748,9 @@ async def voice_stream(ws: WebSocket):
                 state["done"] = True
                 await send_json({"type": "final", "text": state["text"]})
                 return
-        except (WebSocketDisconnect, RECOVERABLE_ERRORS):
+        except WebSocketDisconnect:
+            return
+        except RECOVERABLE_ERRORS:
             return
 
     tasks = [asyncio.create_task(pump_upstream()), asyncio.create_task(pump_client())]

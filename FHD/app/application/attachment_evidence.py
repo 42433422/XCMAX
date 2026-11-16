@@ -107,10 +107,13 @@ def _message_content(payload: Any) -> str:
     choices = payload.get("choices")
     if isinstance(choices, list) and choices and isinstance(choices[0], dict):
         message = choices[0].get("message")
-        if isinstance(message, dict) and isinstance(message.get("content"), str):
-            return message["content"]
-    if isinstance(payload.get("content"), str):
-        return payload["content"]
+        if isinstance(message, dict):
+            content = message.get("content")
+            if isinstance(content, str):
+                return content
+    content = payload.get("content")
+    if isinstance(content, str):
+        return content
     return ""
 
 
@@ -287,7 +290,8 @@ async def collect_evidence(
 
     for call in calls[: max(1, limit_calls)]:
         tool = str(call.get("tool") or "")
-        args = call.get("args") if isinstance(call.get("args"), dict) else {}
+        raw_args = call.get("args")
+        args = raw_args if isinstance(raw_args, dict) else {}
         started = time.perf_counter()
         try:
             output = execute_tool(tool, args, store)

@@ -72,7 +72,7 @@ def _build_mel_filterbank(
     slopes = np.expand_dims(filter_freqs, 0) - np.expand_dims(fft_freqs, 1)
     down_slopes = -slopes[:, :-2] / filter_diff[:-1]
     up_slopes = slopes[:, 2:] / filter_diff[1:]
-    mel_filters = np.maximum(np.zeros(1), np.minimum(down_slopes, up_slopes))
+    mel_filters: np.ndarray = np.maximum(np.zeros(1), np.minimum(down_slopes, up_slopes))
     enorm = 2.0 / (filter_freqs[2 : num_mel_filters + 2] - filter_freqs[:num_mel_filters])
     mel_filters *= np.expand_dims(enorm, 0)
     return mel_filters
@@ -120,7 +120,8 @@ def compute_whisper_log_mel_features(audio: np.ndarray, *, do_normalize: bool = 
     mel_spec = np.maximum(_MEL_FLOOR, _MEL_FILTERS.T @ magnitudes)
     log_spec = np.log10(mel_spec)[:, :-1]
     log_spec = np.maximum(log_spec, log_spec.max() - 8.0)
-    return ((log_spec + 4.0) / 4.0).astype(np.float32)
+    result: np.ndarray = ((log_spec + 4.0) / 4.0).astype(np.float32)
+    return result
 
 
 def _load_session() -> Any:

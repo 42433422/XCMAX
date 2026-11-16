@@ -48,6 +48,7 @@ vi.mock('@/stores/workflowAiEmployees', () => ({
     hydrateFromMods: () => undefined,
     pruneOrphanWorkflowEmployeeToggles: () => undefined,
     loadRegistry: (...a: unknown[]) => mockWfStoreLoadRegistry(...a),
+    ensureEnabledKeys: () => undefined,
     registryEntries: [],
     assignHostMod: (...a: unknown[]) => mockWfStoreAssignHostMod(...a),
     enableEmployees: (...a: unknown[]) => mockWfStoreEnableEmployees(...a),
@@ -60,6 +61,7 @@ vi.mock('@/utils/enterpriseModStackApi', () => ({
 
 vi.mock('@/utils/workflowEmployeeScope', () => ({
   filterModsForEnterpriseWorkflowRegistry: (...a: unknown[]) => mockFilterModsForEnterpriseWorkflowRegistry(...a),
+  harvestOfficialCarrierEmployeesForStack: vi.fn(() => []),
 }))
 
 vi.mock('@/utils/modWorkflowEmployees', () => ({

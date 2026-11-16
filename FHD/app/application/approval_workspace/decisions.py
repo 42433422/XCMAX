@@ -415,6 +415,7 @@ class ApprovalDecisions:
             # The restored database may predate this request; merge its identity after restore.
             db.expunge(req)
             req = db.merge(req)
+        include_waiting_decision = False
         status_before = req.status
         safe_code, safe_message = bounded_outcome["code"], bounded_outcome["message"]
         # 工具超时但结果未知：审批放行有效，不能报「执行失败、审批已取消」。
@@ -455,8 +456,8 @@ class ApprovalDecisions:
                 "workflow_executed": False,
                 "nodes_executed": 0,
                 "nodes_total": 1,
-                **({"waiting_user_decision": True} if waiting_decision else {}),
             }
+            include_waiting_decision = waiting_decision
         else:
             persist_outcome(req, **bounded_outcome)
             req.status = bounded_outcome["status"]
@@ -523,7 +524,14 @@ class ApprovalDecisions:
         if _execution_success and notification is not None:
             self.effects.notify(*notification)
         data = self.view(req, include_records=True)
-        data["workflow_execution"] = bounded_outcome
+        data["workflow_execution"] = {
+            **bounded_outcome,
+            **(
+                {"waiting_user_decision": True}
+                if include_waiting_decision
+                else {}
+            ),
+        }
         if handed_off:
             data["workflow_execution"]["execution_accepted"] = True
             if (workflow_execution or {}).get("waiting_approval"):

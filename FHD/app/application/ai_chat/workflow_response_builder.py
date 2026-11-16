@@ -475,7 +475,8 @@ class AIChatWorkflowResponseMixin:
             return [line, f"    · 结果预览: {preview}"] if preview else [line]
 
         if item.tool_id == "dataset_rag":
-            chunks = out.get("chunks") if isinstance(out.get("chunks"), list) else []
+            raw_chunks = out.get("chunks")
+            chunks = raw_chunks if isinstance(raw_chunks, list) else []
             answer = str(out.get("answer") or "").strip()
             line = f"- {item.node_id}: 成功（知识库检索到 {len(chunks)} 条相关记录）"
             if answer:

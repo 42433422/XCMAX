@@ -299,7 +299,7 @@ def _parse_workbook(path: Path, max_rows: int, target_type: str) -> ParsedDatase
                         ):
                             use_region = False
                     row_headers = headers
-                    if use_region:
+                    if use_region and table is not None:
                         row_headers = list(table.headers)
                         values = values[: len(row_headers)]
                     else:

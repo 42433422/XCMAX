@@ -12,7 +12,7 @@ from app.application.elt.result_export import write_xlsx_result
 from app.application.elt.service_support import dump_json
 from app.db.models.elt import EltRun, EltUpload
 from app.infrastructure.tenant_scope import tenant_scope
-from tests.test_routes.test_etl_sources import source_client as source_client
+from tests.test_routes.test_elt_sources import source_client as source_client
 
 
 @pytest.fixture

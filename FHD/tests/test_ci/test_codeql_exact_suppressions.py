@@ -205,13 +205,14 @@ def test_ast_fingerprint_normalizes_only_empty_new_type_parameters():
     assert fingerprint(legacy) != fingerprint(modern)
 
 
-# Reviewed 2026-11-13 against exact main 25ed2151: single-component / dir_fd
-# sinks whose guards CodeQL cannot model.
+# artifact_files was reviewed 2026-11-13; the other modules were re-reviewed
+# 2026-11-16 on the final PR #3245 sources. These single-component / dir_fd
+# sinks have guards that CodeQL cannot model.
 _REVIEWED_FILE_SINKS = {
     "FHD/app/application/agent_orchestrator/artifact_files.py": (73, 96, 97, 105, 107, 129),
     "FHD/app/application/employee_runtime/workspace_io.py": (57, 91),
-    "FHD/app/application/tools/workflow_spreadsheet_scope.py": (146,),
-    "FHD/app/application/shipment_excel_etl_security.py": (459,),
+    "FHD/app/application/tools/workflow_spreadsheet_scope.py": (181,),
+    "FHD/app/application/shipment_excel_elt_security.py": (458,),
 }
 
 

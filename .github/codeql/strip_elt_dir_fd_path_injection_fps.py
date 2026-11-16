@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Drop known-safe py/path-injection results from CodeQL SARIF.
 
-1) shipment_excel_etl_security.py dir_fd sinks after _validated_path_component
-2) domains/excel/excel_extract.py sinks after resolve_etl_path
+1) shipment_excel_elt_security.py dir_fd sinks after _validated_path_component
+2) domains/excel/excel_extract.py sinks after resolve_elt_path
 3) artifact_files.py, workspace_io.py, workflow_spreadsheet_scope.py sinks
    whose single-component/basename guards CodeQL cannot model
 
@@ -21,7 +21,7 @@ from pathlib import Path
 
 SAFE_RULE = "py/path-injection"
 SAFE_PATH_SUFFIXES = (
-    "FHD/app/application/shipment_excel_etl_security.py",
+    "FHD/app/application/shipment_excel_elt_security.py",
     "FHD/app/fastapi_routes/domains/excel/excel_extract.py",
     "FHD/app/application/agent_orchestrator/artifact_files.py",
     "FHD/app/application/employee_runtime/workspace_io.py",
@@ -37,41 +37,43 @@ SAFE_LINES_BY_SUFFIX = {
         316,
     },
 }
-# Independently reviewed 2026-11-13 against exact main 25ed2151: every sink is
-# either a dir_fd/NOfollow open of one validated component, a constant anchor,
-# or a write inside a freshly created temporary directory. Pin the complete
-# module AST so any semantic change disables the suppression (fail closed).
+# Independent reviews: artifact_files 2026-11-13; the other three modules
+# re-reviewed 2026-11-16 on the final PR #3245 sources. Every sink is either a
+# dir_fd/NOfollow open of one validated component, a constant anchor, or a write
+# inside a freshly created temporary directory. Pin the complete module AST so
+# any semantic change disables the suppression (fail closed).
 _REVIEWED_FILE_SINKS: dict[str, tuple[str, frozenset[int]]] = {
     "FHD/app/application/agent_orchestrator/artifact_files.py": (
         "0ac15ca38895f00655ebb7e624e269312ff301558aff702d863f69903324c7da",
         frozenset({73, 96, 97, 105, 107, 129}),
     ),
     "FHD/app/application/employee_runtime/workspace_io.py": (
-        "dc650bee3a8bc90eb7752867594d4baf9fdf2fbfc91c665152a3277bbe639108",
+        "bf00f63ee9fe4b98ec9ba6c30b344c8919a6c103c8d0431fe64794cbd53490db",
         frozenset({57, 91}),
     ),
     "FHD/app/application/tools/workflow_spreadsheet_scope.py": (
         # Re-reviewed: owner+tenant upload lookup only; same TemporaryDirectory basename sink.
-        "27afea5a69fd3218f02d267d580e7e6e86a531b1e3693d85172eb12a9ee5920f",
-        frozenset({146}),
+        "7060e633bb5cdf23ff590a0b62b0207685156a18cdd45b03c8b5c96532614f67",
+        frozenset({181}),
     ),
-    "FHD/app/application/shipment_excel_etl_security.py": (
-        "aac6bbbf5b9a0433ec5057fdf8d0786ebb8e18c3a5d44599280663bb72c85940",
-        frozenset({459}),
+    "FHD/app/application/shipment_excel_elt_security.py": (
+        "2d13ca41715ea352a7c2b66965e17bf9699706d8d32a34e90e656b6fe719a13b",
+        frozenset({458}),
     ),
 }
 
 
-# Independently path-reviewed by dot security_code_audit (2026-11-09). Never regenerate
-# these automatically: a code/guard change needs a new independent review.
+# Shipment dir_fd sinks were independently re-reviewed 2026-11-16 on the final
+# PR #3245 sources. Never regenerate these automatically: a code/guard change
+# needs a new independent review.
 # Hash the COMPLETE module AST, not just sink text: this pins directory walking,
 # ownership/root validation, component barriers, flags, and cleanup dependencies.
 # Blank lines/comments may move; every semantic AST change fails closed.
-_REVIEWED_URI = "FHD/app/application/shipment_excel_etl_security.py"
-_REVIEWED_MODULE = "aac6bbbf5b9a0433ec5057fdf8d0786ebb8e18c3a5d44599280663bb72c85940"
+_REVIEWED_URI = "FHD/app/application/shipment_excel_elt_security.py"
+_REVIEWED_MODULE = "2d13ca41715ea352a7c2b66965e17bf9699706d8d32a34e90e656b6fe719a13b"
 _REVIEWED_CALLS = {
-    "open_etl_input_file": "19094ef1cb8443339fcb23be54c51abecea8fa5a11b3f844c05b620d285aa9d8",
-    "_open_etl_output_under_root": "8b0fd8e35e3a7cb7ad1a91e048c74b1ee1260d9adb7f18dd7d242ef800f16b31",
+    "open_elt_input_file": "19094ef1cb8443339fcb23be54c51abecea8fa5a11b3f844c05b620d285aa9d8",
+    "_open_elt_output_under_root": "8b0fd8e35e3a7cb7ad1a91e048c74b1ee1260d9adb7f18dd7d242ef800f16b31",
 }
 
 
@@ -205,7 +207,7 @@ def keep_result(result: dict, *, source_root: Path | None = None) -> bool:
 def main(argv: list[str]) -> int:
     if len(argv) != 2:
         print(
-            "usage: strip_etl_dir_fd_path_injection_fps.py <sarif-file>",
+            "usage: strip_elt_dir_fd_path_injection_fps.py <sarif-file>",
             file=sys.stderr,
         )
         return 2

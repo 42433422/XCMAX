@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from app.application.attachment_artifacts.models import SheetInfo
@@ -230,7 +231,7 @@ TOOL_SPECS: list[dict[str, Any]] = [
     },
 ]
 
-_HANDLERS = {
+_HANDLERS: dict[str, Callable[..., dict[str, Any]]] = {
     "list_attachments": list_attachments,
     "describe_attachment": describe_attachment,
     "read_slice": read_slice,

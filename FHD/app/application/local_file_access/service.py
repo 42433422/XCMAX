@@ -6,7 +6,7 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from app.application.local_file_access.paths import (
     LocalFilePathError,
@@ -96,7 +96,7 @@ def get_grant(*, owner_id: int, tenant: int, grant_id: int) -> LocalFileGrant:
         if row is None:
             raise LocalFileAccessError("local_file_grant_not_found", "授权不存在或不属于当前账号")
         db.expunge(row)
-        return row
+        return cast(LocalFileGrant, row)
 
 
 def create_grant(
@@ -210,12 +210,13 @@ def assert_readable(grant: LocalFileGrant, candidate: str | os.PathLike[str]) ->
 
 def pending_documents(*, owner_id: int, tenant: int, grant_id: int) -> int:
     with tenant_scope(tenant), get_db() as db:
-        return (
+        return cast(
+            int,
             db.query(LocalFileDocument)
             .filter(
                 LocalFileDocument.grant_id == int(grant_id),
                 LocalFileDocument.owner_user_id == int(owner_id),
                 LocalFileDocument.status != "deleted",
             )
-            .count()
+            .count(),
         )

@@ -525,8 +525,6 @@ def _trusted_base_roots() -> list[Path]:
                 app_data / "temp_excel",
                 app_data / "outputs",
                 app_data / "templates" / "reviewed_excel",
-                # ELT 上传件与切分出的模板文件都在受管目录内，属于服务端自有资产。
-                app_data / "elt" / "uploads",
                 Path(get_upload_dir()),
                 Path(get_data_dir()),
                 Path(get_shipment_output_dir()),

@@ -201,7 +201,8 @@ def _wait_timeout(params: dict[str, Any], runtime_context: dict[str, Any], cap: 
 
 def _batch_result_text(action: str, label: str, out: dict[str, Any]) -> str:
     """单个文件的收口说明；预演/执行共用，供进度提示与执行链复用。"""
-    data = out.get("data") if isinstance(out.get("data"), dict) else {}
+    raw_data = out.get("data")
+    data = raw_data if isinstance(raw_data, dict) else {}
     if not out.get("success"):
         return f"「{label}」{action}失败：{out.get('message') or '未知原因'}"
     if action == "预演":
@@ -226,6 +227,8 @@ def _wait(service, run_id: str, owner_id: int, *, pending: set[str], timeout: fl
         with get_db() as db:
             db.expire_all()
             data = service.get_run(db, run_id=run_id, owner_user_id=owner_id)
+        if not isinstance(data, dict):
+            return {}
         if str(data.get("status") or "") not in pending:
             return data
         if time.monotonic() >= deadline:
@@ -490,6 +493,7 @@ def _register_header_template(data: dict[str, Any], owner_id: int) -> dict[str, 
 
             workbook = Workbook()
             sheet = workbook.active
+            assert sheet is not None
             sheet.title = name[:31] or "Sheet1"
             sheet.append(headers)
             digest = hashlib.sha1("|".join(headers).encode("utf-8")).hexdigest()[:12]
@@ -899,7 +903,8 @@ def _read_head_rows(path: str, suffix: str, owner_id: int) -> tuple[str, list[li
 
             with open_elt_input_file(source, owner_user_id=owner_id) as stream:
                 workbook = load_workbook(stream, read_only=True, data_only=True, keep_links=False)
-                best_sheet, best_rows = "", []
+                best_sheet = ""
+                best_rows: list[list[str]] = []
                 try:
                     for worksheet in workbook.worksheets[:8]:
                         rows = []
@@ -1125,7 +1130,8 @@ def _preview(params: dict, runtime_context: dict) -> dict:
     ):
         executed = _execute({"run_id": run_id}, runtime_context)
         if executed.get("success"):
-            data = executed.get("data") if isinstance(executed.get("data"), dict) else {}
+            raw_data = executed.get("data")
+            data = raw_data if isinstance(raw_data, dict) else {}
             data["preview"] = summary
             executed["data"] = data
             executed["preview"] = True
@@ -1317,8 +1323,11 @@ def _execute_linked_companion(service, actor, data: dict) -> dict[str, Any]:
     """
     from app.application.elt.errors import EltError
 
-    details = data.get("details") if isinstance(data.get("details"), dict) else {}
+    raw_details = data.get("details")
+    details = raw_details if isinstance(raw_details, dict) else {}
     link = details.get("linked_customer_products_preview") or {}
+    if not isinstance(link, dict):
+        return {}
     run_id = str(link.get("run_id") or "")
     if not run_id or str(link.get("status") or "") != "preview_ready":
         return {}

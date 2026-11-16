@@ -66,7 +66,8 @@ def _manifest_identity(manifest: dict[str, Any]) -> dict[str, Any]:
 
 
 def _display_label(manifest: dict[str, Any], pack_id: str) -> str:
-    employee = manifest.get("employee") if isinstance(manifest.get("employee"), dict) else {}
+    raw_employee = manifest.get("employee")
+    employee = raw_employee if isinstance(raw_employee, dict) else {}
     identity = _manifest_identity(manifest)
     for raw in (
         employee.get("label"),

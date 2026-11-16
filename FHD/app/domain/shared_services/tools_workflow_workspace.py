@@ -59,7 +59,7 @@ def _registered_router_template_preview(
 
     svc = get_template_app_service()
     tenant_raw = runtime_context.get("tenant_id")
-    tenant_id = int(tenant_raw) if str(tenant_raw or "").isdigit() else None
+    tenant_id = int(str(tenant_raw)) if str(tenant_raw or "").isdigit() else None
     if action in ("list", "query"):
         # 规划器在后台执行时没有请求上下文，必须显式带入租户，否则模板库 fail-closed。
         result = svc.get_templates(tenant_id=tenant_id)

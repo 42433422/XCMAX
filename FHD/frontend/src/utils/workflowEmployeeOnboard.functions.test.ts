@@ -19,6 +19,7 @@ vi.mock('@/stores/workflowAiEmployees', () => ({
     hydrateFromMods: vi.fn(),
     pruneOrphanWorkflowEmployeeToggles: vi.fn(),
     loadRegistry: vi.fn().mockResolvedValue(undefined),
+    ensureEnabledKeys: vi.fn(),
     registryEntries: [],
     assignHostMod: vi.fn(),
     enableEmployees: vi.fn(() => []),
@@ -34,6 +35,7 @@ vi.mock('@/utils/enterpriseModStackApi', () => ({
 
 vi.mock('@/utils/workflowEmployeeScope', () => ({
   filterModsForEnterpriseWorkflowRegistry: vi.fn(() => []),
+  harvestOfficialCarrierEmployeesForStack: vi.fn(() => []),
 }))
 
 vi.mock('@/utils/modWorkflowEmployees', () => ({

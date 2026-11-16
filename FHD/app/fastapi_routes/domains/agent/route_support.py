@@ -193,9 +193,10 @@ def task_scope_matches(
             return True
         return all(run_owned_by(run, principal) for run in runs)
     # 列表页只做一次运行扫描；逐任务查询会让 200 条历史各自重扫全部运行。
-    run_scopes = scopes
-    runs = [scope for scope in run_scopes.get(task.task_id, ()) if scope[1] == task.tenant_id]
-    if not runs:
+    matching_scopes = [
+        scope for scope in scopes.get(task.task_id, ()) if scope[1] == task.tenant_id
+    ]
+    if not matching_scopes:
         # Legacy tasks without execution records have no authenticated Mod binding.
         # 任务在上方已通过「用户 + 租户」归属校验；不应仅因请求头携带 active-mod
         # 就把用户**自己**的历史任务隐藏（前端 window.fetch 补丁总会注入该头，
@@ -206,7 +207,7 @@ def task_scope_matches(
         (not run_mod or run_mod == requested_mod)
         and run_user == principal.user_id
         and run_tenant == principal.tenant_id
-        for run_user, run_tenant, run_mod in runs
+        for run_user, run_tenant, run_mod in matching_scopes
     )
 
 

@@ -26,7 +26,8 @@ def _sample_value_for_property(key: str, prop: dict[str, Any]) -> Any:
     if expected_type == "object":
         return {"sample": True}
     if expected_type == "array":
-        items = prop.get("items") if isinstance(prop.get("items"), dict) else {}
+        raw_items = prop.get("items")
+        items = raw_items if isinstance(raw_items, dict) else {}
         if str(items.get("type") or "").strip() == "string":
             return [f"sample_{key}"]
         return [{"sample": True}]

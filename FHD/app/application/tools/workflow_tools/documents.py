@@ -29,7 +29,7 @@ def _fill_from_template(args: Payload, runtime_context: Payload | None) -> Paylo
             if isinstance(args.get("field_mapping"), dict)
             else None,
             output_name=str(args.get("output_name") or "").strip() or None,
-            tenant_id=int(tenant_raw) if str(tenant_raw or "").isdigit() else None,
+            tenant_id=int(str(tenant_raw)) if str(tenant_raw or "").isdigit() else None,
             workspace_root=str((runtime_context or {}).get("workspace_root") or "") or None,
             runtime_context=runtime_context,
         )

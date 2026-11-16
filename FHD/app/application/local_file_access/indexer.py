@@ -11,7 +11,7 @@ import logging
 import queue
 import threading
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from app.application.local_file_access.extract import extract_text
 from app.application.local_file_access.paths import iter_candidate_files
@@ -91,7 +91,7 @@ def _load_grant(grant_id: int, owner_id: int, tenant: int) -> LocalFileGrant | N
         if row is None:
             return None
         db.expunge(row)
-        return row
+        return cast(LocalFileGrant, row)
 
 
 def _mark_status(
@@ -291,7 +291,7 @@ def _existing_document(
         if row is None:
             return None
         db.expunge(row)
-        return row
+        return cast(LocalFileDocument, row)
 
 
 def _touch_document(document_pk: int, owner_id: int, tenant: int, size: int, mtime_ns: int) -> None:

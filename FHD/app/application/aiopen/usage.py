@@ -41,7 +41,7 @@ class UsageLedger:
             return
         try:
             with path.open("r", encoding="utf-8") as handle:
-                for line in handle.readlines()[-self._rows.maxlen or 0 :]:
+                for line in handle.readlines()[-(self._rows.maxlen or 0) :]:
                     try:
                         row = json.loads(line)
                     except ValueError:

@@ -408,9 +408,9 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         sink = {}
         # 工具执行线程会把起止记录推进本队列，心跳时转成 tool_call 事件，
         # 前端据此实时长出「执行链」，不必等整轮结束回填。
-        tool_records = _ToolRecordQueue()
-        notes = _StreamNoteQueue()
-        deltas = _StreamNoteQueue()
+        tool_records: _ToolRecordQueue | None = _ToolRecordQueue()
+        notes: _StreamNoteQueue | None = _StreamNoteQueue()
+        deltas: _StreamNoteQueue | None = _StreamNoteQueue()
         streamed: list[str] = []
         try:
             from app.infrastructure.chat_stream_lifetime import (
@@ -420,6 +420,9 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
             )
             from app.utils.operational_errors import BOUNDARY_ERRORS
 
+            assert tool_records is not None
+            assert notes is not None
+            assert deltas is not None
             watch_stream_tool_records(tool_records.push)
             watch_stream_notes(notes.push)
             watch_stream_deltas(deltas.push)

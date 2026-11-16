@@ -159,8 +159,11 @@ def rank_templates(
     result = _ask(messages, schema=_RANK_SCHEMA, lane="template_match")
     if not result.used_llm or result.degraded or not isinstance(result.data, dict):
         return None
+    raw_index = result.data.get("index")
+    if raw_index is None:
+        return None
     try:
-        index = int(result.data.get("index"))
+        index = int(raw_index)
         confidence = float(result.data.get("confidence") or 0)
     except (TypeError, ValueError):
         return None
@@ -246,9 +249,10 @@ def propose_import_template(
     target = str(data.get("target_type") or "").strip()
     if target not in {str(item.get("type") or "") for item in targets}:
         return None
+    raw_index = data.get("template_index")
     try:
         confidence = float(data.get("confidence") or 0)
-        index = int(data.get("template_index") if data.get("template_index") is not None else -1)
+        index = int(raw_index) if raw_index is not None else -1
     except (TypeError, ValueError):
         return None
     if confidence < minimum_confidence:

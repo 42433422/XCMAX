@@ -1,7 +1,7 @@
 """Deprecated ETL import paths kept importable for Mods built before the ETL → ELT rename.
 
 New code must import ``app.*.elt_*`` directly; this module only re-points old
-``app.*.elt_*`` imports at the renamed implementation and exposes the previous
+``app.*.etl_*`` imports at the renamed implementation and exposes the previous
 symbol names (e.g. ``ShipmentEtlProfile``) on the same module object.
 """
 
@@ -18,7 +18,7 @@ def _legacy_symbols(module) -> dict[str, object]:
         if name.startswith("_"):
             continue
         if "Elt" in name or re.search(r"(?<![A-Za-z0-9])elt_", name):
-            old = name.replace("Elt", "Etl").replace("elt_", "elt_")
+            old = name.replace("Elt", "Etl").replace("elt_", "etl_")
             if not hasattr(module, old):
                 legacy[old] = value
     return legacy

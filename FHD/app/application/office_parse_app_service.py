@@ -399,7 +399,8 @@ def _plan_from_preview(
 
 
 def _is_template_candidate(parsed: dict[str, Any]) -> bool:
-    detection = parsed.get("detection") if isinstance(parsed.get("detection"), dict) else {}
+    raw_detection = parsed.get("detection")
+    detection = raw_detection if isinstance(raw_detection, dict) else {}
     return str(detection.get("document_type") or "") == "recipe_sheet"
 
 
@@ -412,7 +413,8 @@ def _save_template_candidate(
     )
     from app.infrastructure.tenant_scope import tenant_scope
 
-    detection = parsed.get("detection") if isinstance(parsed.get("detection"), dict) else {}
+    raw_detection = parsed.get("detection")
+    detection = raw_detection if isinstance(raw_detection, dict) else {}
     template_name = str(detection.get("sheet_name") or path.stem or "生产模板").strip()
     headers = [str(item).strip() for item in (parsed.get("headers") or []) if str(item).strip()]
     field_override = (

@@ -11,9 +11,9 @@ import hashlib
 import json
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
-from sqlalchemy import func
+from sqlalchemy import Table, func
 from sqlalchemy.exc import OperationalError
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
@@ -190,16 +190,26 @@ def _insert_chunk(db, chunk: list[dict[str, Any]]) -> int:
     """
     from app.db.models.elt import EltDynamicRow
 
-    table = EltDynamicRow.__table__
-    if db.get_bind().dialect.name == "postgresql":
-        from sqlalchemy.dialects.postgresql import insert as dialect_insert
-    else:
-        from sqlalchemy.dialects.sqlite import insert as dialect_insert
+    table = cast(Table, EltDynamicRow.__table__)
     try:
-        result = db.execute(
-            dialect_insert(table).on_conflict_do_nothing(index_elements=["table_id", "row_hash"]),
-            chunk,
-        )
+        if db.get_bind().dialect.name == "postgresql":
+            from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+
+            result = db.execute(
+                postgresql_insert(table).on_conflict_do_nothing(
+                    index_elements=["table_id", "row_hash"]
+                ),
+                chunk,
+            )
+        else:
+            from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+
+            result = db.execute(
+                sqlite_insert(table).on_conflict_do_nothing(
+                    index_elements=["table_id", "row_hash"]
+                ),
+                chunk,
+            )
         db.commit()
         return int(result.rowcount or 0)
     except OperationalError:
