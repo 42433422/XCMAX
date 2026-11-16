@@ -783,6 +783,21 @@ def test_template_permissions_use_elt_codes(monkeypatch):
     assert get_tool_action_spec("document_template", "clear").permission == "elt.template.manage"
 
 
+def test_template_permissions_match_seeded_elt_codes(monkeypatch):
+    """模板工具声明的权限必须真实存在于种子权限，否则改名后无人能通过鉴权。"""
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    from app.db.models.permission import DEFAULT_PERMISSIONS
+
+    seeded = {item["code"] for item in DEFAULT_PERMISSIONS}
+    for tool_id, action in (
+        ("template_preview", "list"),
+        ("template_preview", "create"),
+        ("document_template", "delete"),
+        ("document_template", "clear"),
+    ):
+        assert get_tool_action_spec(tool_id, action).permission in seeded
+
+
 def test_business_clear_permissions_use_edit_codes(monkeypatch):
     monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
     assert get_tool_action_spec("customers", "clear").permission == "customer.edit"

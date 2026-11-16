@@ -539,6 +539,7 @@ class TestInitDbRuntimeAuthBootstrap:
             "pg": 0,
             "prefs": 0,
             "neuro": 0,
+            "local": 0,
             "im": 0,
             "ledger": 0,
             "conversation": 0,
@@ -548,8 +549,8 @@ class TestInitDbRuntimeAuthBootstrap:
 
         # Mock every bootstrap helper the postgres branch calls so no real
         # PostgreSQL connection (port 5432) is attempted; the branch fans out to
-        # ensure_postgresql_auth_bootstrap + ensure_user_preferences_bootstrap +
-        # ensure_neuro_event_log_bootstrap + ensure_erp_bootstrap.
+        # ensure_postgresql_auth_bootstrap + every RuntimeBootstrap ``common`` step
+        # (user preferences, neuro event log, local file index, ...) + erp.
         def fake_pg(engine, *, database_url=None):
             called["pg"] += 1
 
@@ -558,6 +559,9 @@ class TestInitDbRuntimeAuthBootstrap:
 
         def fake_neuro(engine, *, database_url=None, swallow_errors=True):
             called["neuro"] += 1
+
+        def fake_local(engine, *, database_url=None, swallow_errors=True):
+            called["local"] += 1
 
         def fake_ledger(engine, *, database_url=None, swallow_errors=True):
             called["ledger"] += 1
@@ -577,6 +581,7 @@ class TestInitDbRuntimeAuthBootstrap:
         monkeypatch.setattr("app.db.init_db.ensure_postgresql_auth_bootstrap", fake_pg)
         monkeypatch.setattr("app.db.init_db.ensure_user_preferences_bootstrap", fake_prefs)
         monkeypatch.setattr("app.db.init_db.ensure_neuro_event_log_bootstrap", fake_neuro)
+        monkeypatch.setattr("app.db.init_db.ensure_local_file_bootstrap", fake_local)
         monkeypatch.setattr("app.db.init_db.ensure_sqlite_im_bootstrap", fake_im)
         monkeypatch.setattr("app.db.init_db.ensure_employee_run_log_bootstrap", fake_ledger)
         monkeypatch.setattr("app.db.init_db.ensure_ai_conversation_bootstrap", fake_conversation)
@@ -588,6 +593,7 @@ class TestInitDbRuntimeAuthBootstrap:
             "pg": 1,
             "prefs": 1,
             "neuro": 1,
+            "local": 1,
             "im": 1,
             "ledger": 1,
             "conversation": 1,

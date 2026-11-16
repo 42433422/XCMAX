@@ -13,6 +13,7 @@ both backends.
 from __future__ import annotations
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision = "2026_11_13_elt_table_rename"
@@ -38,13 +39,14 @@ TABLE_PAIRS = (
 )
 
 
-def _rename_indexes(bind, table: str) -> None:
+def _rename_indexes(bind, table: str, *, reverse: bool = False) -> None:
     inspector = sa.inspect(bind)
     if table not in inspector.get_table_names():
         return
+    old_token, new_token = ("_elt_", "_etl_") if reverse else ("_etl_", "_elt_")
     for index in inspector.get_indexes(table):
         name = str(index.get("name") or "")
-        new_name = name.replace("_etl_", "_elt_")
+        new_name = name.replace(old_token, new_token)
         if not name or new_name == name:
             continue
         dialect = bind.dialect.name
@@ -60,15 +62,16 @@ def _rename_indexes(bind, table: str) -> None:
             )
 
 
-def _rename_unique_constraints(bind, table: str) -> None:
+def _rename_unique_constraints(bind, table: str, *, reverse: bool = False) -> None:
     if bind.dialect.name != "postgresql":
         return
     inspector = sa.inspect(bind)
     if table not in inspector.get_table_names():
         return
+    old_token, new_token = ("_elt_", "_etl_") if reverse else ("_etl_", "_elt_")
     for constraint in inspector.get_unique_constraints(table):
         name = str(constraint.get("name") or "")
-        new_name = name.replace("_etl_", "_elt_")
+        new_name = name.replace(old_token, new_token)
         if not name or new_name == name:
             continue
         op.execute(f'ALTER TABLE "{table}" RENAME CONSTRAINT "{name}" TO "{new_name}"')
@@ -85,7 +88,9 @@ def _rename_permissions(bind) -> None:
     inspector = sa.inspect(bind)
     if "permissions" not in inspector.get_table_names():
         return
-    op.execute("UPDATE permissions SET code = replace(code, 'etl.', 'elt.') WHERE code LIKE 'etl.%'")
+    op.execute(
+        "UPDATE permissions SET code = replace(code, 'etl.', 'elt.') WHERE code LIKE 'etl.%'"
+    )
     op.execute("UPDATE permissions SET module = 'elt' WHERE module = 'etl'")
 
 
@@ -114,9 +119,11 @@ def downgrade() -> None:
     bind = op.get_bind()
     _rename_tables(tuple((new, old) for old, new in TABLE_PAIRS))
     for old, _new in TABLE_PAIRS:
-        _rename_indexes(bind, old)
-        _rename_unique_constraints(bind, old)
+        _rename_indexes(bind, old, reverse=True)
+        _rename_unique_constraints(bind, old, reverse=True)
     inspector = sa.inspect(bind)
     if "permissions" in inspector.get_table_names():
-        op.execute("UPDATE permissions SET code = replace(code, 'elt.', 'etl.') WHERE code LIKE 'elt.%'")
+        op.execute(
+            "UPDATE permissions SET code = replace(code, 'elt.', 'etl.') WHERE code LIKE 'elt.%'"
+        )
         op.execute("UPDATE permissions SET module = 'etl' WHERE module = 'elt'")

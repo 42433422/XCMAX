@@ -154,7 +154,7 @@ def test_archive_migration_matches_models_and_preserves_data_on_downgrade(monkey
     from sqlalchemy import inspect, text
 
     migration_path = (
-        Path(__file__).parents[2] / "alembic" / "versions" / "2026_10_29_elt_archive.py"
+        Path(__file__).parents[2] / "alembic" / "versions" / "2026_10_29_etl_archive.py"
     )
     spec = importlib.util.spec_from_file_location("elt_archive_migration", migration_path)
     migration = importlib.util.module_from_spec(spec)
