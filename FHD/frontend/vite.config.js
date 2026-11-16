@@ -102,14 +102,14 @@ export default defineConfig(({ mode }) => {
           replacement: path.resolve(__dirname, '../mods/bridge/xcagi-customer-service-bridge/frontend'),
         },
         { find: 'vue-router', replacement: path.resolve(__dirname, 'node_modules/vue-router') },
-        // 模板库原件预览（mod 内动态 import 需显式指向宿主依赖）
+        // 模板库原件预览：mod 内动态 import 须指向包入口文件，Windows 读目录别名报 Access is denied。
         {
           find: '@vue-office/docx',
-          replacement: path.resolve(__dirname, 'node_modules/@vue-office/docx'),
+          replacement: path.resolve(__dirname, 'node_modules/@vue-office/docx/lib/index.js'),
         },
         {
           find: '@vue-office/pptx',
-          replacement: path.resolve(__dirname, 'node_modules/@vue-office/pptx'),
+          replacement: path.resolve(__dirname, 'node_modules/@vue-office/pptx/lib/index.js'),
         },
         { find: 'pinia', replacement: path.resolve(__dirname, 'node_modules/pinia') },
         { find: 'element-plus', replacement: path.resolve(__dirname, 'node_modules/element-plus') },
