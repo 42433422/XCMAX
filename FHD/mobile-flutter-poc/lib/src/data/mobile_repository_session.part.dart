@@ -8,6 +8,8 @@ ModInfo? _enterpriseDirectoryMod(List<Map<String, Object?>> rows) {
     final packId = (row['pack_id'] ?? '').toString().trim();
     if (packId.isEmpty) continue;
     final label = (row['label'] ?? packId).toString().trim().ifEmpty(packId);
+    // 与桌面端一致：按通讯录顺序从头像池取图，避免整列撞图。
+    final avatarIndex = employees.length % employeeAvatarPool.length;
     employees.add(
       WorkflowEmployeeInfo(
         id: packId,
@@ -28,7 +30,7 @@ ModInfo? _enterpriseDirectoryMod(List<Map<String, Object?>> rows) {
         marketMaterialCategory: '',
         marketLicenseScope: '',
         marketSecurityLevel: '',
-        marketAvatar: null,
+        marketAvatar: employeeAvatarPool[avatarIndex],
       ),
     );
   }
