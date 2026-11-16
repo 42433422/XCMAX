@@ -1,5 +1,5 @@
 {
-  "lines": 2436445,
+  "lines": 2436516,
   "updated": "2026-11-16",
-  "note": "CI 收口：18 处 broad except 改为命名边界 BOUNDARY_ERRORS 并补导入（+23 行，涉及 11 个附件/解析/ELT/Memory 文件）；无新增文档。批准：维持 broad-except 闸门为 0。"
+  "note": "同步 main：本地数据库备份计划、规划器及测试 +208 行；员工目录与 TTS 冲突组合及回归 +192 行；删除旧聊天目录/模板/渲染模块 -308 行，能力页重生成后门禁净增 71 行。用户批准完整集成 main 并构建 Windows/macOS 安装包。"
 }
