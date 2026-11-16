@@ -1,6 +1,23 @@
 import '../models/conversation.dart';
 import 'pinned_ids.dart';
 
+/// 小C 头像分两版：管理端（管理员/管理门户）用男版，企业端用女版。
+class AppAvatarVariant {
+  const AppAvatarVariant._();
+
+  static bool _enterpriseAssistant = false;
+
+  static bool get enterpriseAssistant => _enterpriseAssistant;
+
+  static void useEnterpriseAssistant(bool value) {
+    _enterpriseAssistant = value;
+  }
+
+  static String get assistantAsset => _enterpriseAssistant
+      ? 'assets/avatars/avatar_assistant_enterprise.png'
+      : 'assets/avatars/avatar_assistant.png';
+}
+
 enum AppAvatarFallback {
   user,
   assistant,
@@ -33,7 +50,6 @@ enum AppAvatarFallback {
   empIntakeDispatcher,
   empTaskRouterOfficer,
   empGithubPrGatekeeper,
-  empUserCustomerServiceOfficer,
   empEnterpriseAdoptionOfficer,
   empDeliveryReceiptOfficer,
   empMobileAndroidReleaseOfficer,
@@ -73,8 +89,10 @@ extension AppAvatarFallbackX on AppAvatarFallback {
       case AppAvatarFallback.user:
         return 'assets/avatars/avatar_default_user.png';
       case AppAvatarFallback.assistant:
-        return 'assets/avatars/avatar_assistant.png';
+        return AppAvatarVariant.assistantAsset;
       case AppAvatarFallback.customerService:
+        // 专属客服属管理端入口，固定使用管理端小C头像。
+        return 'assets/avatars/avatar_assistant.png';
       case AppAvatarFallback.aiEmployee:
         return 'assets/avatars/avatar_default_ai_employee.png';
       case AppAvatarFallback.empSiteContentEditor:
@@ -131,8 +149,6 @@ extension AppAvatarFallbackX on AppAvatarFallback {
         return 'assets/avatars/avatar_emp_task_router_officer.png';
       case AppAvatarFallback.empGithubPrGatekeeper:
         return 'assets/avatars/avatar_emp_github_pr_gatekeeper.png';
-      case AppAvatarFallback.empUserCustomerServiceOfficer:
-        return 'assets/avatars/avatar_emp_user_customer_service_officer.png';
       case AppAvatarFallback.empEnterpriseAdoptionOfficer:
         return 'assets/avatars/avatar_emp_enterprise_adoption_officer.png';
       case AppAvatarFallback.empDeliveryReceiptOfficer:
@@ -228,8 +244,8 @@ const _employeeAvatarFallbacks = <String, AppAvatarFallback>{
   'intake-dispatcher': AppAvatarFallback.empIntakeDispatcher,
   'task-router-officer': AppAvatarFallback.empTaskRouterOfficer,
   'github-pr-gatekeeper': AppAvatarFallback.empGithubPrGatekeeper,
-  'user-customer-service-officer':
-      AppAvatarFallback.empUserCustomerServiceOfficer,
+  // 企业端客户客服统一使用管理端小C头像。
+  'user-customer-service-officer': AppAvatarFallback.assistant,
   'enterprise-adoption-officer': AppAvatarFallback.empEnterpriseAdoptionOfficer,
   'delivery-receipt-officer': AppAvatarFallback.empDeliveryReceiptOfficer,
   'mobile-android-release-officer':

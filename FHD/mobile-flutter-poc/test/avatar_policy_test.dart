@@ -122,6 +122,10 @@ void main() {
       employeeAvatarFallback(employeeId: 'avatar-generation-employee'),
       AppAvatarFallback.empAvatarGenerationEmployee,
     );
+    expect(
+      employeeAvatarFallback(employeeId: 'user-customer-service-officer'),
+      AppAvatarFallback.assistant,
+    );
   });
 
   test('all Flutter avatar fallbacks resolve to bundled assets', () {
@@ -134,10 +138,31 @@ void main() {
       'assets/avatars/avatar_default_user.png',
     );
     expect(
+      AppAvatarFallback.customerService.assetPath,
+      'assets/avatars/avatar_assistant.png',
+    );
+    expect(
       AppAvatarFallback.values.any(
         (fallback) => fallback.assetPath.contains('avatar_admin_profile'),
       ),
       isFalse,
+    );
+  });
+
+  test('enterprise account uses the enterprise 小C avatar', () {
+    addTearDown(() => AppAvatarVariant.useEnterpriseAssistant(false));
+    AppAvatarVariant.useEnterpriseAssistant(true);
+    expect(
+      AppAvatarFallback.assistant.assetPath,
+      'assets/avatars/avatar_assistant_enterprise.png',
+    );
+    expect(
+      AppAvatarFallback.customerService.assetPath,
+      'assets/avatars/avatar_assistant.png',
+    );
+    expect(
+      AppAvatarFallback.aiEmployee.assetPath,
+      'assets/avatars/avatar_default_ai_employee.png',
     );
   });
 

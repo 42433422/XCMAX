@@ -1,5 +1,52 @@
 part of 'mobile_repository.dart';
 
+/// 企业端员工列表直接消费统一员工目录（与桌面端员工工作台、信息页同源），
+/// 不再从 mod 编制里二次筛选。
+ModInfo? _enterpriseDirectoryMod(List<Map<String, Object?>> rows) {
+  final employees = <WorkflowEmployeeInfo>[];
+  for (final row in rows) {
+    final packId = (row['pack_id'] ?? '').toString().trim();
+    if (packId.isEmpty) continue;
+    final label = (row['label'] ?? packId).toString().trim().ifEmpty(packId);
+    employees.add(
+      WorkflowEmployeeInfo(
+        id: packId,
+        label: label,
+        panelTitle: label,
+        panelSummary: (row['description'] ?? '').toString().trim(),
+        apiBasePath: '/api/admin/employees/$packId',
+        phoneChannel: 'admin-duty',
+        workflowPlaceholder: false,
+        profileSource: (row['runtime_kind'] ?? 'employee_pack').toString(),
+        marketConnected: false,
+        marketPkgId: '',
+        marketName: '',
+        marketDescription: '',
+        marketVersion: '',
+        marketAuthor: '',
+        marketIndustry: '',
+        marketMaterialCategory: '',
+        marketLicenseScope: '',
+        marketSecurityLevel: '',
+        marketAvatar: null,
+      ),
+    );
+  }
+  if (employees.isEmpty) return null;
+  return ModInfo(
+    id: adminDutyModId,
+    name: '企业员工',
+    version: 'local',
+    description: '${employees.length} 位可执行 AI 员工，来自统一员工目录。',
+    author: 'XCAGI',
+    primary: true,
+    industry: const ModIndustry(id: '企业', name: '企业'),
+    avatarUrl: null,
+    frontendMenu: const [],
+    workflowEmployees: employees,
+  );
+}
+
 abstract class _RepoSessionBase extends _RepoRootBase {
   _RepoSessionBase({
     MobileApiClient? client,
@@ -112,6 +159,24 @@ abstract class _RepoSessionBase extends _RepoRootBase {
       final mods = [_normalizeAdminDutyMod(home.toAdminModInfo())];
       await _cacheModInfos(mods);
       return mods;
+    }
+
+    MobileEnvelope<List<Map<String, Object?>>>? directory;
+    try {
+      directory = await _client.employeeDirectory();
+    } catch (_) {
+      // 目录接口不可用时回退到 mod 清单，避免 AI 员工页整体失败。
+      directory = null;
+    }
+    if (directory != null && directory.success) {
+      final mod = _enterpriseDirectoryMod(
+        directory.data ?? const <Map<String, Object?>>[],
+      );
+      if (mod != null) {
+        final mods = [mod];
+        await _cacheModInfos(mods);
+        return mods;
+      }
     }
 
     final response = await _client.mobileMods();
