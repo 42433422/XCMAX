@@ -222,7 +222,7 @@ def attach_template_ingest_to_elt_result(
     save_as_template: bool,
     template_name: str = "",
     template_scope: str = "",
-    source: str = "shipment_excel_etl",
+    source: str = "shipment_excel_elt",
 ) -> dict[str, Any]:
     """ETL 成功后可选写入模版库；失败不覆盖业务 ETL 主结果。"""
     out = dict(result or {})

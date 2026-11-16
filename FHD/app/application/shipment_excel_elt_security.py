@@ -989,7 +989,7 @@ def _open_elt_output_under_root(path: Path, root: Path) -> Iterator[BinaryIO]:
                 os.close(parent_fd)
 
 
-def tenant_key_for_etl() -> str:
+def tenant_key_for_elt() -> str:
     try:
         from app.infrastructure.tenant_scope import current_tenant_id
 

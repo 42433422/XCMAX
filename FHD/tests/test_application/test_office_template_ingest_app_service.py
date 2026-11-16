@@ -140,7 +140,7 @@ def test_shipment_elt_source_tags_template_type_as_shipment() -> None:
         data, code = ingest_office_bytes_to_template_library(
             file_body=b"fake",
             filename="ship.xlsx",
-            source="shipment_excel_etl",
+            source="shipment_excel_elt",
         )
     assert code == 200
     assert data["ingested"] is True

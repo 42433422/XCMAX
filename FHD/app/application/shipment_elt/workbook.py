@@ -372,7 +372,7 @@ def preview(
     from app.application.shipment_excel_elt_security import (
         ShipmentEltPathError,
         resolve_elt_path,
-        tenant_key_for_etl,
+        tenant_key_for_elt,
     )
 
     try:
@@ -394,7 +394,7 @@ def preview(
     if not parsed.get("success"):
         return parsed
     notes = parsed.get("notes") or []
-    tenant_key = tenant_key_for_etl()
+    tenant_key = tenant_key_for_elt()
     for note in notes:
         fingerprint = str(note.get("fingerprint") or "")
         note["already_imported"] = bool(fingerprint and contains(tenant_key, fingerprint))

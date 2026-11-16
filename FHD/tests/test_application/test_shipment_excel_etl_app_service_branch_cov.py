@@ -1190,7 +1190,7 @@ def test_preview_shipment_excel_elt_happy(tmp_path, monkeypatch):
             "ledger_note_count": 0,
         },
     )
-    monkeypatch.setattr(f"{SEC}.tenant_key_for_etl", lambda: "tenant:1")
+    monkeypatch.setattr(f"{SEC}.tenant_key_for_elt", lambda: "tenant:1")
     monkeypatch.setattr(f"{MOD}._is_fingerprint_imported", lambda a, b: False)
     res = preview_shipment_excel_elt(tmp_path / "d.xlsx")
     assert res["success"] is True
@@ -1227,7 +1227,7 @@ def test_preview_shipment_excel_elt_duplicate_and_ledger_risk(tmp_path, monkeypa
             "ledger_note_count": 0,
         },
     )
-    monkeypatch.setattr(f"{SEC}.tenant_key_for_etl", lambda: "tenant:1")
+    monkeypatch.setattr(f"{SEC}.tenant_key_for_elt", lambda: "tenant:1")
     monkeypatch.setattr(f"{MOD}._is_fingerprint_imported", lambda a, b: True)
     res = preview_shipment_excel_elt(tmp_path / "d.xlsx")
     assert res["duplicate_note_count"] == 1
@@ -1241,7 +1241,7 @@ def test_preview_shipment_excel_elt_duplicate_and_ledger_risk(tmp_path, monkeypa
 
 def _patch_execute(monkeypatch, tmp_path, profile):
     monkeypatch.setattr(f"{MOD}.get_shipment_elt_profile", lambda pid=None: profile)
-    monkeypatch.setattr(f"{SEC}.tenant_key_for_etl", lambda: "tenant:1")
+    monkeypatch.setattr(f"{SEC}.tenant_key_for_elt", lambda: "tenant:1")
     monkeypatch.setattr(f"{MOD}._is_fingerprint_imported", lambda a, b: False)
     monkeypatch.setattr(f"{MOD}._record_fingerprint_now", lambda *a, **k: None)
     monkeypatch.setattr(f"{FP}.delete_fingerprint", lambda *a, **k: None)

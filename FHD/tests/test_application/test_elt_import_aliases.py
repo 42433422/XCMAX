@@ -53,7 +53,7 @@ def test_empty_upgrade_has_only_elt_run_tables(_db_url, monkeypatch):
         heads = list(
             engine.connect().execute(text("SELECT version_num FROM alembic_version")).scalars()
         )
-        assert heads == ["2026_11_16_elt_permission_cutover"]
+        assert heads == ["2026_11_16_elt_value_cutover"]
     finally:
         engine.dispose()
 

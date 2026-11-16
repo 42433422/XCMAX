@@ -358,7 +358,7 @@ class ShipmentAdapter(TargetAdapter):
             ShipmentEltImportFingerprint.tenant_key == tenant_key,
             or_(
                 ShipmentEltImportFingerprint.source_kind.is_(None),
-                ShipmentEltImportFingerprint.source_kind != "general_etl",
+                ShipmentEltImportFingerprint.source_kind != "general_elt",
             ),
         )
         if order_no:
@@ -503,7 +503,7 @@ class ShipmentAdapter(TargetAdapter):
                 unit_name=obj.purchase_unit,
                 order_number=optional_text(data.get("external_order_no")),
                 file_name=str(context.get("file_name") or ""),
-                source_kind="general_etl",
+                source_kind="general_elt",
                 meta_json=json.dumps({"run_id": context.get("run_id")}),
             )
         )

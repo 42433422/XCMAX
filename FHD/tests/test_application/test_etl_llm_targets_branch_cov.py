@@ -1753,7 +1753,7 @@ def test_shipment_preview_branches(session):
             fingerprint=fp,
             shipment_id=owner.id,
             unit_name="客户A",
-            source_kind="general_etl",
+            source_kind="general_elt",
         )
     )
     session.flush()
@@ -2008,8 +2008,8 @@ def test_customer_products_execute(session):
         allowed_update_fields=set(),
         context={},
     )
-    assert r["after"]["_etl"]["customer_created"] is True
-    assert r["after"]["_etl"]["product_created"] is True
+    assert r["after"]["_elt"]["customer_created"] is True
+    assert r["after"]["_elt"]["product_created"] is True
 
     # new with existing product -> ELT_MATCH_CHANGED
     prod = _make_cp_product(session, "已有漆", "EM1", unit="客户A")
@@ -2050,7 +2050,7 @@ def test_customer_products_execute(session):
         allowed_update_fields={"specification"},
         context={},
     )
-    assert r2["after"]["_etl"]["product_updated"] is True
+    assert r2["after"]["_elt"]["product_updated"] is True
 
 
 def test_customer_products_parse_match_ref():
@@ -2091,7 +2091,7 @@ def test_customer_products_rollback(session):
         allowed_update_fields=set(),
         context={},
     )
-    r2["after"]["_etl"]["customer_created"] = True
+    r2["after"]["_elt"]["customer_created"] = True
     with pytest.raises(EltError) as ex:
         a.rollback_row(session, match_ref=r2["match_ref"], before={}, after=r2["after"], context={})
     assert ex.value.code == "ELT_ROLLBACK_CONCURRENT_CHANGE"
@@ -2148,7 +2148,7 @@ def test_customer_products_execute_customer_update(session):
         allowed_update_fields={"contact_person"},
         context={},
     )
-    assert r["after"]["_etl"]["customer_updated"] is True
+    assert r["after"]["_elt"]["customer_updated"] is True
     session.flush()
     session.expire_all()
     assert cust.contact_person == "新"
@@ -2174,7 +2174,7 @@ def test_customer_products_execute_product_update_loop(session):
         allowed_update_fields={"specification", "price"},
         context={},
     )
-    assert r["after"]["_etl"]["product_updated"] is True
+    assert r["after"]["_elt"]["product_updated"] is True
     session.flush()
     session.expire_all()
     assert prod.specification == "V2" and prod.price == Decimal("5")
@@ -2207,7 +2207,7 @@ def test_customer_products_rollback_product_missing(session):
             session,
             match_ref=json.dumps({"customer_id": None, "product_id": 999}),
             before={},
-            after={"product": {}, "_etl": {"product_created": True}},
+            after={"product": {}, "_elt": {"product_created": True}},
             context={},
         )
     assert ex.value.code == "ELT_ROLLBACK_TARGET_MISSING"
@@ -2227,7 +2227,7 @@ def test_customer_products_rollback_product_updated(session):
         before={},
         after={
             "product": {"specification": "V9"},
-            "_etl": {"product_updated": True, "product_before": {"specification": "V1"}},
+            "_elt": {"product_updated": True, "product_before": {"specification": "V1"}},
         },
         context={},
     )
@@ -2249,7 +2249,7 @@ def test_customer_products_rollback_customer_updated(session):
         before={},
         after={
             "customer": {"contact_person": "后"},
-            "_etl": {"customer_updated": True, "customer_before": {"contact_person": "前"}},
+            "_elt": {"customer_updated": True, "customer_before": {"contact_person": "前"}},
         },
         context={},
     )
@@ -2267,7 +2267,7 @@ def test_customer_products_rollback_customer_created_missing(session):
             session,
             match_ref=json.dumps({"customer_id": 999, "product_id": None}),
             before={},
-            after={"customer": {}, "_etl": {"customer_created": True}},
+            after={"customer": {}, "_elt": {"customer_created": True}},
             context={},
         )
     assert ex.value.code == "ELT_ROLLBACK_TARGET_MISSING"
@@ -2285,7 +2285,7 @@ def test_customer_products_rollback_customer_created_modified(session):
             session,
             match_ref=json.dumps({"customer_id": cust.id, "product_id": None}),
             before={},
-            after={"customer": {"contact_person": "原始"}, "_etl": {"customer_created": True}},
+            after={"customer": {"contact_person": "原始"}, "_elt": {"customer_created": True}},
             context={},
         )
     assert ex.value.code == "ELT_ROLLBACK_CONCURRENT_CHANGE"
@@ -2971,6 +2971,6 @@ def test_customer_products_linked_companion_reuses_product(session):
         context={"linked_companion": True},
     )
 
-    assert result["after"]["_etl"]["customer_created"] is True
-    assert result["after"]["_etl"]["product_created"] is False
+    assert result["after"]["_elt"]["customer_created"] is True
+    assert result["after"]["_elt"]["product_created"] is False
     assert json.loads(result["match_ref"])["product_id"] == product.id
