@@ -46,12 +46,15 @@ class NativeRecordEditor extends StatefulWidget {
       required this.title,
       required this.fields,
       required this.save,
+      this.onUncertainSave,
       this.initial = const {}});
   final NativeWorkspaceSession session;
   final String title;
   final List<NativeFormField> fields;
   final Map<String, Object?> initial;
   final Future<void> Function(Map<String, Object?>) save;
+  // Opt in for non-idempotent writes: an error is not proof of no commit.
+  final VoidCallback? onUncertainSave;
   @override
   State<NativeRecordEditor> createState() => _NativeRecordEditorState();
 }
@@ -59,7 +62,7 @@ class NativeRecordEditor extends StatefulWidget {
 class _NativeRecordEditorState extends State<NativeRecordEditor> {
   final _form = GlobalKey<FormState>();
   late final Map<String, TextEditingController> _fields;
-  bool _busy = false;
+  bool _busy = false, _outcomeUnknown = false;
   String? _error;
   @override
   void initState() {
@@ -91,7 +94,10 @@ class _NativeRecordEditorState extends State<NativeRecordEditor> {
   }
 
   Future<void> _save() async {
-    if (_busy || !widget.session.active || !_form.currentState!.validate()) {
+    if (_busy ||
+        _outcomeUnknown ||
+        !widget.session.active ||
+        !_form.currentState!.validate()) {
       return;
     }
     setState(() {
@@ -104,9 +110,13 @@ class _NativeRecordEditorState extends State<NativeRecordEditor> {
       });
       if (mounted && widget.session.active) Navigator.pop(context, true);
     } catch (error) {
+      if (widget.session.active) widget.onUncertainSave?.call();
       if (mounted && widget.session.active) {
         setState(() {
-          _error = mobileErrorText(error);
+          _outcomeUnknown = widget.onUncertainSave != null;
+          _error = _outcomeUnknown
+              ? '保存结果未知，可能已提交。请先核对出入库流水，不要重复保存；输入已保留。'
+              : mobileErrorText(error);
         });
       }
     } finally {
@@ -119,7 +129,9 @@ class _NativeRecordEditorState extends State<NativeRecordEditor> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) => PopScope(
+      canPop: !_busy,
+      child: Scaffold(
       backgroundColor: AppTheme.colors(context).page,
       body: SafeArea(
           child: Column(children: [
@@ -141,7 +153,7 @@ class _NativeRecordEditorState extends State<NativeRecordEditor> {
                                 ? TextFormField(
                                     key: ValueKey(field.key),
                                     controller: _fields[field.key],
-                                    enabled: !_busy,
+                                    enabled: !_busy && !_outcomeUnknown,
                                     validator: field.validate,
                                     keyboardType: field.number
                                         ? const TextInputType.numberWithOptions(
@@ -168,7 +180,7 @@ class _NativeRecordEditorState extends State<NativeRecordEditor> {
                                                 overflow:
                                                     TextOverflow.ellipsis))
                                     ],
-                                    onChanged: _busy
+                                    onChanged: _busy || _outcomeUnknown
                                         ? null
                                         : (value) {
                                             _fields[field.key]!.text =
@@ -181,8 +193,10 @@ class _NativeRecordEditorState extends State<NativeRecordEditor> {
                             padding: const EdgeInsets.only(bottom: 16),
                             child: Text(_error!)),
                       FilledButton(
-                          onPressed: _busy ? null : _save,
-                          child: Text(_busy ? '正在保存…' : '保存')),
+                          onPressed: _busy || _outcomeUnknown ? null : _save,
+                          child: Text(_busy
+                              ? '正在保存…'
+                              : _outcomeUnknown ? '待核对流水' : '保存')),
                     ]))),
-      ])));
+      ]))));
 }

@@ -112,9 +112,10 @@ class _ApprovalFlowFormState extends State<_ApprovalFlowForm> {
       _error = null;
     });
     final flow = <String, Object?>{
-      for (final e in _fields.entries) e.key: e.value.text.trim(),
+      for (final e in _fields.entries)
+        if (!_editing || e.key != 'flow_key') e.key: e.value.text.trim(),
       'business_type': _business,
-      'is_active': _active
+      if (!_editing) 'is_active': _active
     };
     try {
       await widget.session.request(
@@ -173,8 +174,13 @@ class _ApprovalFlowFormState extends State<_ApprovalFlowForm> {
                                 key: ValueKey(e.key),
                                 controller: _fields[e.key],
                                 enabled: !_busy,
+                                readOnly: _editing && e.key == 'flow_key',
                                 maxLines: e.key == 'description' ? 3 : 1,
-                                decoration: InputDecoration(labelText: e.value),
+                                decoration: InputDecoration(
+                                    labelText: e.value,
+                                    helperText: _editing && e.key == 'flow_key'
+                                        ? '流程标识创建后不可修改'
+                                        : null),
                                 validator: (v) => e.key != 'description' &&
                                         (v == null || v.trim().isEmpty)
                                     ? '请填写${e.value}'
@@ -199,8 +205,11 @@ class _ApprovalFlowFormState extends State<_ApprovalFlowForm> {
                       SwitchListTile(
                           contentPadding: EdgeInsets.zero,
                           title: const Text('启用流程'),
+                          subtitle: _editing
+                              ? const Text('仅显示状态；请返回流程管理单独启用或停用')
+                              : null,
                           value: _active,
-                          onChanged: _busy
+                          onChanged: _busy || _editing
                               ? null
                               : (v) => setState(() {
                                     _active = v;

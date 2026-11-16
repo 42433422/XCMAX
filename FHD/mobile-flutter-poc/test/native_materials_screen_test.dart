@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xcagi_flutter_poc/src/api/mobile_api.dart';
@@ -14,7 +15,7 @@ class MaterialApi extends MobileApiClient {
                 .copyWith(userId: 1, accessToken: 'one')));
   final writes = <({String path, Map<String, Object?>? body})>[];
   final reads = <({String path, Map<String, String> query})>[];
-  bool fail = false;
+  bool fail = false, paginated = false, repeatProductPage = false;
   Completer<Map<String, Object?>>? saving;
   @override
   Future<Map<String, Object?>> workspaceRequest(String path,
@@ -37,12 +38,25 @@ class MaterialApi extends MobileApiClient {
         'data': {'id': '考勤'}
       };
     }
+    if (path == 'api/products/list') {
+      return {'success': true, 'total': 2,
+        'data': query['page'] == '2'
+            ? [{'id': repeatProductPage ? 71 : 72, 'name': '第二页产品'}]
+            : [{'id': 71, 'name': '测试资源'}]};
+    }
+    if (path == 'api/inventory/transactions' && paginated) {
+      return {'success': true, 'total': 21,
+        'data': [{'id': 5, 'product_name': query['page'] == '2' ? '旧流水' : '新流水'}]};
+    }
     if (path == 'api/materials') {
       return {
         'success': true,
         'categories': ['资源'],
+        'total': paginated ? 21 : 1,
         'data': [
-          {'id': 1, 'name': '测试资源', 'quantity': 4, 'price': 8, 'min_stock': 5}
+          {'id': 1, 'name': query['page'] == '2' ? '第二页材料' : '测试资源',
+            'quantity': 4, 'unit_price': 8, 'min_stock': 5,
+            'material_code': 'MAT-1', 'specification': '规格A'}
         ]
       };
     }
@@ -117,7 +131,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('入库'));
     await tester.pumpAndSettle();
-    for (final entry in {'product_id': '测试资源', 'warehouse_id': '主仓库'}.entries) {
+    for (final entry in {'product_id': '第二页产品', 'warehouse_id': '主仓库'}.entries) {
       await tester.tap(find.byKey(ValueKey(entry.key)));
       await tester.pumpAndSettle();
       await tester.tap(find.text(entry.value).last);
@@ -134,8 +148,9 @@ void main() {
     await tester.tap(find.text('保存'));
     await tester.pump();
     expect(api.writes.single.path, 'api/inventory/in');
+    expect(api.reads.where((r) => r.path == 'api/products/list').map((r) => r.query['page']), ['1', '2']);
     expect(api.writes.single.body, {
-      'product_id': 1,
+      'product_id': 72,
       'warehouse_id': 2,
       'quantity': 3,
       'batch_no': '',
@@ -146,6 +161,142 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('正在保存…'), findsNothing);
   });
+  testWidgets('materials and transactions page forward and reset on search', (tester) async {
+    final api = MaterialApi()..paginated = true;
+    await show(tester, api);
+    await scroll(tester, find.text('下一页'));
+    await tester.tap(find.text('下一页'));
+    await tester.pumpAndSettle();
+    expect(api.reads.last.query['page'], '2');
+    expect(find.text('第二页材料'), findsOneWidget);
+    expect(tester.widget<TextButton>(find.widgetWithText(TextButton, '下一页')).onPressed, isNull);
+    await scroll(tester, find.byType(TextField).first);
+    await tester.enterText(find.byType(TextField).first, '新搜索');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+    expect(api.reads.last.query, containsPair('page', '1'));
+    await tester.tap(find.text('调拨'));
+    await tester.pumpAndSettle();
+    await scroll(tester, find.text('下一页'));
+    await tester.tap(find.text('下一页'));
+    await tester.pumpAndSettle();
+    expect(api.reads.last.path, 'api/inventory/transactions');
+    expect(api.reads.last.query['page'], '2');
+    expect(find.text('旧流水'), findsOneWidget);
+    await tester.tap(find.text('上一页'));
+    await tester.pumpAndSettle();
+    expect(api.reads.last.query['page'], '1');
+  });
+
+  testWidgets('repeated product page fails closed without inventory write', (tester) async {
+    final api = MaterialApi()..repeatProductPage = true;
+    await show(tester, api);
+    await tester.tap(find.text('调拨'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('入库'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('product_id')), findsNothing);
+    expect(api.reads.where((r) => r.path == 'api/products/list'), hasLength(2));
+    expect(api.writes, isEmpty);
+  });
+
+  testWidgets('material canonical fields round trip without losing values', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 1800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final api = MaterialApi();
+    await show(tester, api);
+    await scroll(tester, find.text('编辑'));
+    await tester.tap(find.text('编辑'));
+    await tester.pumpAndSettle();
+    for (final entry in {'material_code': 'MAT-1', 'specification': '规格A', 'unit_price': '8'}.entries) {
+      final field = tester.widget<TextFormField>(find.byKey(ValueKey(entry.key)));
+      expect(field.controller!.text, entry.value);
+    }
+    await tester.enterText(find.byKey(const ValueKey('material_code')), 'MAT-2');
+    await tester.ensureVisible(find.text('保存'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+    expect(api.writes.single.path, 'api/materials/1');
+    expect(api.writes.single.body, containsPair('material_code', 'MAT-2'));
+    expect(api.writes.single.body, containsPair('specification', '规格A'));
+    expect(api.writes.single.body, containsPair('unit_price', 8));
+    for (final wrong in ['code', 'spec', 'price']) {
+      expect(api.writes.single.body!.containsKey(wrong), isFalse);
+    }
+  });
+
+  for (final incoming in [true, false]) {
+    testWidgets(
+      'uncertain ${incoming ? 'in' : 'out'} receipt never invites a second write',
+      (tester) async {
+        final api = MaterialApi()..saving = Completer();
+        await show(tester, api);
+        await tester.tap(find.text('调拨'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(incoming ? '入库' : '出库'));
+        await tester.pumpAndSettle();
+        for (final entry in {
+          'product_id': '测试资源',
+          'warehouse_id': '主仓库',
+        }.entries) {
+          await tester.tap(find.byKey(ValueKey(entry.key)));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text(entry.value).last);
+          await tester.pumpAndSettle();
+        }
+        await tester.enterText(find.byKey(const ValueKey('quantity')), '3');
+        await scroll(tester, find.text('保存'));
+        await tester.tap(find.text('保存'));
+        await tester.pump();
+        expect(api.writes, hasLength(1));
+        await tester.binding.handlePopRoute();
+        await tester.pump();
+        expect(find.text('正在保存…'), findsOneWidget);
+        // The synthetic server accepted the write, but its receipt never arrived.
+        api.saving!.completeError(
+          incoming
+              ? TimeoutException('receipt lost after commit')
+              : const SocketException('response connection closed'),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byType(FilledButton).last);
+        await tester.pumpAndSettle();
+        expect(api.writes, hasLength(1));
+        expect(find.textContaining('保存结果未知'), findsOneWidget);
+        final save = find.widgetWithText(FilledButton, '待核对流水');
+        expect(tester.widget<FilledButton>(save).onPressed, isNull);
+        await tester.tap(save);
+        await tester.pumpAndSettle();
+        expect(api.writes, hasLength(1));
+        final quantity = tester.widget<TextFormField>(
+          find.byKey(const ValueKey('quantity')),
+        );
+        expect(quantity.controller!.text, '3');
+        expect(quantity.enabled, isFalse);
+        Navigator.of(tester.element(save)).pop();
+        await tester.pumpAndSettle();
+        expect(find.textContaining('上次库存操作结果未知'), findsOneWidget);
+        await tester.tap(find.byTooltip('刷新'));
+        await tester.pumpAndSettle();
+        expect(
+          tester
+              .widget<FilledButton>(find.widgetWithText(FilledButton, '入库'))
+              .onPressed,
+          isNull,
+        );
+        expect(
+          tester
+              .widget<OutlinedButton>(find.widgetWithText(OutlinedButton, '出库'))
+              .onPressed,
+          isNull,
+        );
+        expect(api.reads.last.path, 'api/inventory/transactions');
+        expect(api.writes, hasLength(1));
+      },
+    );
+  }
+
   testWidgets(
       'failed resource refresh disables writes and account change clears forms',
       (tester) async {

@@ -58,6 +58,84 @@ class ApprovalApi extends MobileApiClient {
   }
 }
 
+class FlowApi extends ApprovalApi {
+  Map<String, Object?> flow = {
+    'id': 8,
+    'flow_name': '现有流程',
+    'flow_key': 'existing_flow',
+    'description': '原描述',
+    'business_type': 'general',
+    'is_active': false,
+  };
+  @override
+  Future<Map<String, Object?>> workspaceRequest(
+    String path, {
+    String method = 'GET',
+    Map<String, String> query = const {},
+    Map<String, Object?>? body,
+    required int expectedGeneration,
+    required String expectedBase,
+    String activeModId = '',
+  }) async {
+    if (!path.contains('/flows')) {
+      return super.workspaceRequest(
+        path,
+        method: method,
+        query: query,
+        body: body,
+        expectedGeneration: expectedGeneration,
+        expectedBase: expectedBase,
+        activeModId: activeModId,
+      );
+    }
+    expect(activeModId, 'xcagi-approval-bridge');
+    calls.add((path: path, method: method, query: query, body: body));
+    if (method == 'GET') {
+      return {
+        'success': true,
+        'data': path.endsWith('/flows')
+            ? [Map<String, Object?>.from(flow)]
+            : {...flow, 'nodes': <Object>[]},
+      };
+    }
+    final result = await (decision?.future ?? Future.value({'success': true}));
+    if (result['success'] == true) {
+      // Mirror the backend's distinct update and activation contracts.
+      if (method == 'PUT') {
+        for (final key in ['flow_name', 'description', 'business_type']) {
+          if (body!.containsKey(key)) flow[key] = body[key];
+        }
+      } else if (method == 'PATCH' && path.endsWith('/active')) {
+        flow['is_active'] = body!['is_active'];
+      }
+    }
+    return result;
+  }
+}
+
+Future<void> editFlow(WidgetTester tester, FlowApi api) async {
+  await show(tester, api);
+  await tester.tap(find.text('流程管理'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('编辑流程'));
+  await tester.pumpAndSettle();
+}
+
+Future<void> saveFlow(WidgetTester tester) async {
+  await tester.scrollUntilVisible(
+    find.text('保存流程'),
+    200,
+    scrollable: find
+        .descendant(
+          of: find.byType(ListView).last,
+          matching: find.byType(Scrollable),
+        )
+        .first,
+  );
+  await tester.tap(find.text('保存流程'));
+  await tester.pump();
+}
+
 Future<void> show(WidgetTester tester, ApprovalApi api) async {
   final repo = MobileRepository(client: api);
   addTearDown(() async {
@@ -71,6 +149,111 @@ Future<void> show(WidgetTester tester, ApprovalApi api) async {
 }
 
 void main() {
+  testWidgets(
+    'existing flow saves only editable fields and refills after receipt',
+    (tester) async {
+      final api = FlowApi()..decision = Completer();
+      await editFlow(tester, api);
+      final key = tester.widget<TextFormField>(
+        find.byKey(const ValueKey('flow_key')),
+      );
+      expect(tester.widget<TextField>(find.descendant(
+          of: find.byKey(const ValueKey('flow_key')),
+          matching: find.byType(TextField))).readOnly, isTrue);
+      expect(key.controller!.text, 'existing_flow');
+      final active = tester.widget<SwitchListTile>(find.byType(SwitchListTile));
+      expect(active.onChanged, isNull);
+      expect(active.value, isFalse);
+      await tester.enterText(find.byKey(const ValueKey('flow_name')), '更新名称');
+      await saveFlow(tester);
+      expect(find.text('编辑审批流程'), findsOneWidget);
+      final writes = api.calls.where((c) => c.method != 'GET').toList();
+      expect(writes, hasLength(1));
+      expect(writes.single.method, 'PUT');
+      expect(writes.single.path, 'api/mod/xcagi-approval-bridge/flows/8');
+      expect(writes.single.body, {
+        'flow_name': '更新名称',
+        'description': '原描述',
+        'business_type': 'general',
+      });
+      api.decision!.complete({'success': true});
+      await tester.pumpAndSettle();
+      expect(find.text('编辑审批流程'), findsNothing);
+      expect(find.text('更新名称'), findsOneWidget);
+      await tester.tap(find.text('编辑流程'));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<TextFormField>(find.byKey(const ValueKey('flow_name')))
+            .controller!
+            .text,
+        '更新名称',
+      );
+      expect(
+        tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value,
+        isFalse,
+      );
+    },
+  );
+
+  testWidgets(
+    'failed flow save preserves draft without activation side effect',
+    (tester) async {
+      final api = FlowApi()..decision = Completer();
+      await editFlow(tester, api);
+      await tester.enterText(find.byKey(const ValueKey('flow_name')), '未保存草稿');
+      await saveFlow(tester);
+      api.decision!.complete({'success': false, 'message': '保存被拒绝'});
+      await tester.pumpAndSettle();
+      expect(find.text('编辑审批流程'), findsOneWidget);
+      expect(find.text('当前账号没有权限，请切换账号或重新绑定'), findsOneWidget);
+      expect(api.flow['flow_name'], '现有流程');
+      expect(api.calls.where((c) => c.method == 'PATCH'), isEmpty);
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('flow_name')),
+        -200,
+        scrollable: find
+            .descendant(
+              of: find.byType(ListView).last,
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      expect(
+        tester
+            .widget<TextFormField>(find.byKey(const ValueKey('flow_name')))
+            .controller!
+            .text,
+        '未保存草稿',
+      );
+    },
+  );
+
+  testWidgets(
+    'activation is a separate confirmed PATCH and waits for receipt',
+    (tester) async {
+      final api = FlowApi()..decision = Completer();
+      await show(tester, api);
+      await tester.tap(find.text('流程管理'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('启用'));
+      await tester.pumpAndSettle();
+      expect(api.calls.where((c) => c.method != 'GET'), isEmpty);
+      await tester.tap(find.text('确认'));
+      await tester.pump();
+      final write = api.calls.singleWhere((c) => c.method != 'GET');
+      expect(write.method, 'PATCH');
+      expect(write.path, 'api/mod/xcagi-approval-bridge/flows/8/active');
+      expect(write.body, {'is_active': true});
+      expect(api.flow['is_active'], isFalse);
+      api.decision!.complete({'success': true});
+      await tester.pumpAndSettle();
+      expect(api.flow['is_active'], isTrue);
+      expect(find.text('停用'), findsOneWidget);
+    },
+  );
+
+
   testWidgets(
       'approval uses local validated identity, scoped native pages and pagination',
       (tester) async {

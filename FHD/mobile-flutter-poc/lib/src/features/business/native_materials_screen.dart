@@ -27,8 +27,9 @@ class _NativeMaterialsScreenState extends State<NativeMaterialsScreen> {
   List<String> _categories = [];
   List<Map<String, Object?>> _rows = [];
   Map<String, Object?>? _warehouse;
-  bool _loading = true, _busy = false;
-  int _ticket = 0;
+  bool _loading = true, _busy = false, _movementOutcomeUnknown = false;
+  int _ticket = 0, _page = 1;
+  bool _hasNextPage = false;
   String? _error;
   bool get _enabled => _session.active && !_loading && !_busy && _error == null;
   static const _paths = {
@@ -79,7 +80,7 @@ class _NativeMaterialsScreenState extends State<NativeMaterialsScreen> {
     super.dispose();
   }
 
-  Future<void> _load() async {
+  Future<void> _load({int page = 1}) async {
     if (!_session.active) return;
     final ticket = ++_ticket, tab = _tab;
     setState(() {
@@ -93,12 +94,18 @@ class _NativeMaterialsScreenState extends State<NativeMaterialsScreen> {
           'search': _search.text.trim(),
         if (tab == 'materials' && _category.isNotEmpty) 'category': _category,
         if (tab == 'locations') 'warehouse_id': '${_warehouse!['id']}',
-        if (tab == 'transactions') 'per_page': '100',
+        if (tab == 'materials' || tab == 'transactions') ...{
+          'page': '$page',
+          'per_page': '20',
+        },
       });
       if (mounted && _session.active && ticket == _ticket) {
         setState(() {
           _industry = '${_map(industry['data'])['id'] ?? ''}';
           _rows = _maps(result['data']);
+          _page = page;
+          final total = int.tryParse('${result['total']}');
+          _hasNextPage = total != null ? page * 20 < total : _rows.length == 20;
           if (tab == 'materials' && result['categories'] is List) {
             _categories = (result['categories'] as List)
                 .map((v) => '$v')
@@ -193,34 +200,61 @@ class _NativeMaterialsScreenState extends State<NativeMaterialsScreen> {
     }
   }
 
+  Future<Map<String, Object?>> _inventoryProducts() async {
+    final rows = <Map<String, Object?>>[];
+    final seen = <String>{};
+    // Inventory ledger IDs refer to Product, never Material. Read every page
+    // before offering a selection; fail closed if the catalog cannot be loaded.
+    for (var page = 1; page <= 100; page++) {
+      final result = await _session.request('api/products/list', query: {
+        'page': '$page', 'per_page': '100',
+      });
+      final batch = _maps(result['data']);
+      if (batch.length > 100 || batch.any((row) =>
+          row['id'] == null || !seen.add('${row['id']}'))) {
+        throw StateError('产品目录分页异常，请稍后重试');
+      }
+      rows.addAll(batch);
+      final total = int.tryParse('${result['total']}');
+      if (total != null ? rows.length >= total : batch.length < 100) {
+        return {'data': rows};
+      }
+      if (batch.isEmpty) break;
+    }
+    throw StateError('产品目录未完整读取，请稍后重试');
+  }
+
   Future<void> _move(bool incoming) async {
-    if (!_enabled) return;
+    if (!_enabled || _movementOutcomeUnknown) return;
     setState(() {
       _busy = true;
     });
     try {
       final values = await Future.wait([
-        _session.request('api/materials'),
+        _inventoryProducts(),
         _session.request('api/inventory/warehouses')
       ]);
       if (!mounted || !_session.active) return;
       final products = {
             for (final r in _maps(values[0]['data']))
               if (r['id'] != null)
-                '${r['id']}': '${r['name'] ?? r['code'] ?? r['id']}'
+                '${r['id']}': '${r['name'] ?? r['model_number'] ?? r['code'] ?? r['id']}'
           },
           warehouses = {
             for (final r in _maps(values[1]['data']))
               if (r['id'] != null)
                 '${r['id']}': '${r['name'] ?? r['code'] ?? r['id']}'
           };
-      if (products.isEmpty || warehouses.isEmpty) throw StateError('请先添加资源和仓库');
+      if (products.isEmpty || warehouses.isEmpty) throw StateError('请先添加产品和仓库');
       final changed = await Navigator.push<bool>(
           context,
           MaterialPageRoute(
               builder: (_) => NativeRecordEditor(
                   session: _session,
                   title: incoming ? '入库' : '出库',
+                  onUncertainSave: () {
+                    if (mounted) setState(() => _movementOutcomeUnknown = true);
+                  },
                   fields: [
                     NativeFormField('product_id', '产品',
                         required: true,
@@ -392,15 +426,19 @@ class _NativeMaterialsScreenState extends State<NativeMaterialsScreen> {
                                   if (_tab == 'transactions') ...[
                                     FilledButton(
                                         onPressed:
-                                            _enabled ? () => _move(true) : null,
+                                            _enabled && !_movementOutcomeUnknown
+                                                ? () => _move(true) : null,
                                         child: const Text('入库')),
                                     OutlinedButton(
-                                        onPressed: _enabled
+                                        onPressed: _enabled && !_movementOutcomeUnknown
                                             ? () => _move(false)
                                             : null,
                                         child: const Text('出库'))
                                   ],
                                 ])),
+                        if (_movementOutcomeUnknown)
+                          const ListTile(
+                              title: Text('上次库存操作结果未知。请先核对出入库流水，确认未入账后再重新打开页面操作；刷新不会重新提交。')),
                         if (_error != null)
                           ListTile(
                               title: Text(_error!),
@@ -472,6 +510,18 @@ class _NativeMaterialsScreenState extends State<NativeMaterialsScreen> {
                                                   child: const Text('管理库位')),
                                           ]),
                                       ]))),
+                        if (_tab == 'materials' || _tab == 'transactions')
+                          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                            TextButton(
+                                onPressed: _enabled && _page > 1
+                                    ? () => _load(page: _page - 1) : null,
+                                child: const Text('上一页')),
+                            Text('第 $_page 页'),
+                            TextButton(
+                                onPressed: _enabled && _hasNextPage
+                                    ? () => _load(page: _page + 1) : null,
+                                child: const Text('下一页')),
+                          ]),
                       ]))),
         ],
       ])));
@@ -498,10 +548,11 @@ String _display(String key, Object? value) => key == 'status'
 const _labels = {
   'code': '编码',
   'category': '分类',
-  'spec': '规格',
+  'specification': '规格',
+  'material_code': '编码',
   'quantity': '数量',
   'unit': '单位',
-  'price': '单价',
+  'unit_price': '单价',
   'supplier': '供应商',
   'type': '类型',
   'address': '地址',
@@ -520,14 +571,14 @@ const _labels = {
 };
 const _fields = <String, List<NativeFormField>>{
   'materials': [
-    NativeFormField('code', '编码'),
+    NativeFormField('material_code', '编码'),
     NativeFormField('name', '名称', required: true),
     NativeFormField('category', '分类'),
-    NativeFormField('spec', '规格'),
+    NativeFormField('specification', '规格'),
     NativeFormField('unit', '单位', defaultValue: '个'),
     NativeFormField('quantity', '库存',
         number: true, minimum: 0, defaultValue: 0),
-    NativeFormField('price', '单价', number: true, minimum: 0, defaultValue: 0),
+    NativeFormField('unit_price', '单价', number: true, minimum: 0, defaultValue: 0),
     NativeFormField('supplier', '供应商')
   ],
   'warehouses': [

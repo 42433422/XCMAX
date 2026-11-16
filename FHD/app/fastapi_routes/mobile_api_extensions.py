@@ -533,10 +533,7 @@ mobile_nav_menu = _workspace.mobile_nav_menu
 extension_router.include_router(_workspace.router)
 
 
-def _mobile_task_orchestrator() -> Any:
-    from app.application.agent_orchestrator import AgentOrchestrator
-
-    return AgentOrchestrator()
+_mobile_task_orchestrator = backends.task_orchestrator
 
 
 def _mobile_tasks_list(

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
@@ -29,8 +30,8 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
   late final NativeWorkspaceSession _session;
   Timer? _timer;
   Map<String, Object?>? _task;
-  String? _error, _message;
-  bool _loading = false, _busy = false, _stale = true;
+  String? _error, _message, _answeredContext;
+  bool _loading = false, _busy = false, _stale = true, _reading = false;
   static const _base = 'api/mobile/v1/workspace/agent';
   String get _path => '$_base/tasks/${Uri.encodeComponent(widget.taskId)}';
 
@@ -95,6 +96,15 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
         _stale = false;
         _error = null;
       });
+      if (task['attention_state'] == 'result_unread' && !_reading) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted &&
+              _session.active &&
+              ModalRoute.of(context)?.isCurrent == true) {
+            unawaited(_markRead());
+          }
+        });
+      }
       return task;
     } catch (error) {
       if (mounted && _session.active) {
@@ -113,29 +123,159 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
     }
   }
 
-  Future<void> _action(String action) async {
+  Future<void> _markRead() async {
+    if (_reading || _task?['attention_state'] != 'result_unread') return;
+    _reading = true;
+    final displayed = _task;
+    try {
+      await _session.request('$_path/read', method: 'POST', body: {});
+      if (mounted && _session.active && identical(_task, displayed)) {
+        setState(() {
+          _task = {...?_task, 'attention_state': ''};
+          if (_message?.startsWith('已读状态未同步') == true) _message = null;
+        });
+      }
+    } catch (error) {
+      if (mounted && _session.active) {
+        setState(() {
+          _message = '已读状态未同步，请刷新重试：${mobileErrorText(error)}';
+        });
+      }
+    } finally {
+      _reading = false;
+    }
+  }
+
+  Map<String, Object?> _question(Map<String, Object?> task) =>
+      _map(_map(_map(task['active_run'])['final_output'])['clarification']);
+
+  String _clarificationContext(Map<String, Object?> task) => jsonEncode([
+        task['active_run_id'],
+        _question(task),
+        _maps(_map(task['active_run'])['steps']),
+      ]);
+
+  Future<void> _clarify() async {
     if (_busy || _stale || !_session.active) return;
-    if (['cancel', 'retry', 'approve'].contains(action)) {
-      final yes = await showDialog<bool>(
+    setState(() {
+      _busy = true;
+    });
+    final answers = <String, String>{};
+    try {
+      final task = await _load();
+      if (task == null || _map(task['capabilities'])['approve'] != true) {
+        throw StateError('任务状态已变化');
+      }
+      final question = _question(task),
+          fields = _maps(_question(task)['fields']);
+      final runId = '${task['active_run_id'] ?? ''}',
+          stepId = '${question['step_id'] ?? ''}';
+      final waiting = _maps(_map(task['active_run'])['steps']).where((step) =>
+          step['step_id'] == stepId &&
+          step['status'] == 'waiting_user' &&
+          step['tool_id'] == 'clarify' &&
+          step['action'] == 'ask');
+      if (waiting.length != 1 ||
+          runId.isEmpty ||
+          stepId.isEmpty ||
+          fields.isEmpty ||
+          fields.any((f) =>
+              '${f['key'] ?? ''}'.isEmpty ||
+              !['string', 'number', 'integer'].contains(f['type'])) ||
+          fields.map((f) => f['key']).toSet().length != fields.length) {
+        throw StateError('此问题需要补充明细，请打开任务对话查看');
+      }
+      final signature = _clarificationContext(task),
+          form = GlobalKey<FormState>();
+      if (_answeredContext == signature) throw StateError('已提交此问题，请等待任务状态更新');
+      if (!mounted || !_session.active) return;
+      final parameters = await showDialog<Map<String, Object?>>(
           context: context,
           builder: (context) => AlertDialog(
-                title: Text('${_actions[action]}？'),
-                content: Text(action == 'approve'
-                    ? '将批准当前等待确认的步骤并继续执行。请先核对下方执行内容。'
-                    : action == 'retry'
-                        ? '将重新尝试这项任务。'
-                        : '将请求停止这项任务，已经完成的操作不会撤销。'),
+                title: const Text('补充任务信息'),
+                content: SingleChildScrollView(
+                    child: Form(
+                        key: form,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('${question['question'] ?? '请补充执行所需的信息'}'),
+                            for (final field in fields)
+                              TextFormField(
+                                onChanged: (value) =>
+                                    answers['${field['key']}'] = value,
+                                decoration: InputDecoration(
+                                    labelText:
+                                        '${field['label'] ?? field['key']}'),
+                                keyboardType: field['type'] == 'string'
+                                    ? TextInputType.text
+                                    : const TextInputType.numberWithOptions(
+                                        decimal: true, signed: true),
+                                validator: (value) {
+                                  if (value == null || value.trim().isEmpty) { return '请填写此项'; }
+                                  if (field['type'] != 'string') {
+                                    final number = num.tryParse(value.trim());
+                                    if (number == null ||
+                                        !number.isFinite ||
+                                        (field['type'] == 'integer' &&
+                                            int.tryParse(value.trim()) == null)) {
+                                      return '请填写有效的${field['type'] == 'integer' ? '整数' : '数字'}';
+                                    }
+                                  }
+                                  return null;
+                                },
+                              ),
+                          ],
+                        ))),
                 actions: [
                   TextButton(
-                      onPressed: () => Navigator.pop(context, false),
+                      onPressed: () => Navigator.pop(context),
                       child: const Text('返回')),
                   FilledButton(
-                      onPressed: () => Navigator.pop(context, true),
-                      child: const Text('确认'))
+                      onPressed: () {
+                        if (form.currentState?.validate() != true) return;
+                        Navigator.pop(context, <String, Object?>{
+                          for (final field in fields)
+                            '${field['key']}': field['type'] == 'string'
+                                ? answers['${field['key']}']!.trim()
+                                : field['type'] == 'integer' ? int.parse(answers['${field['key']}']!.trim()) : num.parse(answers['${field['key']}']!.trim()),
+                        });
+                      },
+                      child: const Text('补充信息并继续')),
                 ],
               ));
-      if (yes != true || !mounted || !_session.active) return;
+      if (parameters == null || !mounted || !_session.active) return;
+      final current = await _load();
+      if (current == null ||
+          _clarificationContext(current) != signature ||
+          _map(current['capabilities'])['approve'] != true) {
+        throw StateError('待回答问题已变化，请重新打开填写');
+      }
+      _answeredContext = signature;
+      await _session.request(
+          '$_base/runs/${Uri.encodeComponent(runId)}/clarification',
+          method: 'POST',
+          body: {'step_id': stepId, 'parameters': parameters});
+      await _load();
+    } catch (error) {
+      if (error is MobileApiException &&
+          error.statusCode >= 400 &&
+          error.statusCode < 500) { _answeredContext = null; }
+      if (mounted && _session.active) {
+        setState(() {
+          _error = '${mobileErrorText(error)}。请刷新核对，勿重复提交。';
+          _stale = true;
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() { _busy = false; });
+      }
     }
+  }
+
+  Future<void> _action(String action) async {
+    if (_busy || _stale || !_session.active) return;
     setState(() {
       _busy = true;
       _message = null;
@@ -149,27 +289,93 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
           '${task['active_run_id'] ?? _map(task['active_run'])['run_id'] ?? ''}';
       if (runId.isEmpty) throw StateError('任务还没有可操作的执行记录');
       final path = '$_base/runs/${Uri.encodeComponent(runId)}';
+      String? grant;
+      Map<String, Object?> step = {};
       if (action == 'approve') {
-        Future<void> approve() async {
-          final snapshot = await _session.request(path);
-          final grant = '${_map(snapshot['approval'])['grant'] ?? ''}';
-          if (grant.isEmpty) throw StateError('当前步骤没有可用的确认凭证，请刷新');
-          await _session.request('$path/continue',
-              method: 'POST', body: {'approval_grant': grant});
+        if (_question(task).isNotEmpty) throw StateError('请先补充任务信息');
+        final snapshot = await _session.request(path);
+        final approval = _map(snapshot['approval']);
+        final run = _map(snapshot['data']);
+        if (_map(_map(run['final_output'])['clarification']).isNotEmpty) {
+          throw StateError('请先补充任务信息');
         }
-
-        try {
-          await approve();
-        } on MobileApiException catch (error) {
-          if (error.statusCode != 403) rethrow;
-          await approve();
+        final matches = _maps(run['steps'])
+            .where(
+              (candidate) =>
+                  candidate['step_id'] == approval['step_id'] &&
+                  candidate['status'] == 'waiting_user',
+            )
+            .toList();
+        grant = '${approval['grant'] ?? ''}';
+        if (grant.isEmpty ||
+            approval['run_id'] != runId ||
+            run['run_id'] != runId ||
+            matches.length != 1) {
+          throw StateError('当前步骤没有可用的确认凭证，请刷新');
         }
+        step = matches.single;
+      }
+      if (!mounted || !_session.active) return;
+      if (['cancel', 'retry', 'approve'].contains(action)) {
+        final yes = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text('${_actions[action]}？'),
+            content: action == 'approve'
+                ? SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('仅批准以下步骤；内容变化后须重新确认。'),
+                        Text('${step['description'] ?? step['action'] ?? ''}'),
+                        Text('工具：${step['tool_id']} · 动作：${step['action']}'),
+                        if (step['risk'] != null) Text('风险：${step['risk']}'),
+                        ..._values(_map(step['params'])),
+                      ],
+                    ),
+                  )
+                : Text(
+                    action == 'retry' ? '将重新尝试这项任务。' : '将请求停止这项任务，已经完成的操作不会撤销。',
+                  ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('返回'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('确认'),
+              ),
+            ],
+          ),
+        );
+        if (yes != true || !mounted || !_session.active) return;
+        final current = await _load();
+        final currentRun =
+            '${current?['active_run_id'] ?? _map(current?['active_run'])['run_id'] ?? ''}';
+        if (current == null ||
+            currentRun != runId ||
+            _map(current['capabilities'])[action] != true) {
+          throw StateError('任务状态已变化，请重新核对并确认');
+        }
+      }
+      if (action == 'approve') {
+        // The server binds this exact pre-confirmation grant to run, step and
+        // parameters. Never replace a rejected grant using an earlier click.
+        await _session.request(
+          '$path/continue',
+          method: 'POST',
+          body: {'approval_grant': grant},
+        );
       } else {
-        await _session.request('$path/$action',
-            method: 'POST',
-            body: action == 'resume'
-                ? {'runtime_context': <String, Object?>{}}
-                : {});
+        await _session.request(
+          '$path/$action',
+          method: 'POST',
+          body: action == 'resume'
+              ? {'runtime_context': <String, Object?>{}}
+              : {},
+        );
       }
       if (mounted && _session.active) {
         setState(() {
@@ -180,7 +386,7 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
     } catch (error) {
       if (mounted && _session.active) {
         setState(() {
-          _error = '${mobileErrorText(error)}。请刷新核对状态，避免重复提交。';
+          _error = '${mobileErrorText(error)}。请刷新核对状态并重新确认，避免重复提交。';
           _stale = true;
         });
       }
@@ -275,14 +481,16 @@ class _NativeTaskWorkspaceScreenState extends State<NativeTaskWorkspaceScreen>
                           const SizedBox(height: 12),
                           Wrap(spacing: 8, runSpacing: 8, children: [
                             for (final action in _actions.entries)
-                              if (_map(task['capabilities'])[action.key] ==
-                                  true)
+                              if (_map(task['capabilities'])[action.key] == true &&
+                                  (action.key != 'approve' || _question(task).isEmpty))
                                 OutlinedButton(
                                     onPressed: _stale || _busy || _loading
                                         ? null
                                         : () => _action(action.key),
                                     child: Text(action.value))
                           ]),
+                          if (_question(task).isNotEmpty && _map(task['capabilities'])['approve'] == true)
+                            OutlinedButton(onPressed: _stale || _busy || _loading || _answeredContext == _clarificationContext(task) ? null : _clarify, child: const Text('补充任务信息')),
                           if (active.isNotEmpty) ..._runWidgets(active),
                           if (runs.length > 1) ...[
                             const WeSectionCaption('执行历史'),
