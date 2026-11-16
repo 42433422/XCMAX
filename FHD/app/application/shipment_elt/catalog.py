@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from app.application.elt_env import elt_getenv, reject_legacy_elt_env
 import logging
 from collections.abc import Callable
 
+from app.application.elt_env import elt_getenv
 from app.application.shipment_elt_profile import (
     ShipmentEltProfile,
 )
@@ -41,8 +41,6 @@ def _profiles_for_parse(
         return [profile]
     raw = str(profile_id or "").strip()
     if not raw:
-        import os
-
         raw = (
             str(elt_getenv("FHD_EXCEL_ELT_PROFILE") or "").strip()
             or str(elt_getenv("FHD_SHIPMENT_ELT_PROFILE") or "").strip()

@@ -362,11 +362,11 @@
       "review_owner": "@42433422"
     },
     "FHD/app/application/shipment_excel_elt_security.py": {
-      "base_file": null,
-      "base_blob": null,
-      "head_blob": "d0394b98a541ede75df78219eaf7a41b4ba837c0",
-      "before_lines": 0,
-      "after_lines": 1017,
+      "base_file": "FHD/app/application/shipment_excel_etl_security.py",
+      "base_blob": "2e8d2f425dfc0151711b6e7dbb015f0797088643",
+      "head_blob": "98ab80a8adf3b006b85722775c2272d8451cc1a4",
+      "before_lines": 1011,
+      "after_lines": 1018,
       "reason": "Review request only: Introduce the ELT-named security module with canonical-root checks, owner-pinned no-follow file opening, atomic output publication and default-off execution gates.",
       "boundary": "Only managed roots and narrowly configured workspaces are trusted, secure output fails closed without platform handle support, and uploads remain pinned to tenant and owner directories.",
       "validation": "Requires test_shipment_excel_etl_production_ready.py and test_shipment_result_security.py regressions for traversal, symlink swaps, atomic replacement, cleanup and default-off gates.",

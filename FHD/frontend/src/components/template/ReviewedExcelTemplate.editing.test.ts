@@ -305,8 +305,8 @@ describe('整理要求与重试路径', () => {
 describe('旧版 XLS 与选择入口', () => {
   it('旧版 XLS 先确认有限用途转换再上传', async () => {
     Object.defineProperty(File.prototype, 'arrayBuffer', { configurable: true, value: async () => new Uint8Array([1]).buffer })
-    vi.spyOn(globalThis.crypto.subtle, 'digest').mockResolvedValueOnce(new Uint8Array(32).fill(0x0a).buffer as ArrayBuffer)
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(true)
+    vi.spyOn(globalThis.crypto.subtle, 'digest').mockResolvedValue(new Uint8Array(32).fill(0x0a).buffer as ArrayBuffer)
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
     mockClassifications({ 'legacy.xls': classification('legacy.xls', [sheet([region('A1:B2')])]) })
     await stageFiles(['legacy.xls']); await start()
     const form = api.archiveClassifyExcel.mock.calls[0][0] as FormData
@@ -314,11 +314,17 @@ describe('旧版 XLS 与选择入口', () => {
     expect(form.get('legacy_source_sha256')).toBe('0a'.repeat(32))
     expect(confirm).toHaveBeenCalledWith(expect.stringContaining('legacy.xls'))
     expect(regions()).toHaveLength(1)
-    // 取消有限用途转换后该文件不进入分类结果，并明确提示未上传
-    vi.spyOn(globalThis.crypto.subtle, 'digest').mockResolvedValueOnce(new Uint8Array(32).fill(0x0b).buffer as ArrayBuffer)
-    vi.spyOn(window, 'confirm').mockReturnValueOnce(false)
+    delete (File.prototype as unknown as Record<string, unknown>).arrayBuffer
+  })
+
+  it('取消旧 XLS 有限用途转换后不上传并明确提示', async () => {
+    Object.defineProperty(File.prototype, 'arrayBuffer', { configurable: true, value: async () => new Uint8Array([1]).buffer })
+    vi.spyOn(globalThis.crypto.subtle, 'digest').mockResolvedValue(new Uint8Array(32).fill(0x0b).buffer as ArrayBuffer)
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    mockClassifications({ 'legacy.xls': classification('legacy.xls', [sheet([region('A1:B2')])]) })
     await stageFiles(['legacy.xls']); await start()
-    expect(api.archiveClassifyExcel).toHaveBeenCalledTimes(1)
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('legacy.xls'))
+    expect(api.archiveClassifyExcel).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('已取消旧 XLS 有限用途转换；未上传。')
     delete (File.prototype as unknown as Record<string, unknown>).arrayBuffer
   })

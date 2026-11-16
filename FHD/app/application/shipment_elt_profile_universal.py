@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from app.application.elt_env import elt_getenv, reject_legacy_elt_env
-import os
 from typing import Any
 
+from app.application.elt_env import elt_getenv
 from app.application.shipment_elt_profile import ShipmentEltProfile, parse_profile_dict
 from app.domain.app_pure.excel_elt_kb import get_excel_elt_kb
 

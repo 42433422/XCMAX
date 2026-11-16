@@ -74,7 +74,7 @@ E0=官方资料，只用于选择参考和定义能力；E1=源码/静态证据�
 | 01 | 依赖注入与分层 | [SAP BTP](https://help.sap.com/docs/btp/sap-business-technology-platform/developing-applications-and-services) | [Mendix Platform](https://www.mendix.com/evaluation-guide/architecture/openness-extensibility/) | [OutSystems](https://www.outsystems.com/blog/posts/building-composable-architecture) | [Spring Framework](https://github.com/spring-projects/spring-framework) |
 | 02 | ERP 订单与资金闭环 | [SAP S/4HANA Cloud Public Edition](https://www.sap.com/products/erp/s4hana.html) | [Oracle Fusion Cloud ERP](https://www.oracle.com/erp/) | [Microsoft Dynamics 365 Finance](https://www.microsoft.com/en-us/dynamics-365/products/finance) | [ERPNext](https://github.com/frappe/erpnext) |
 | 03 | Agent 编排与审批 | [Microsoft Copilot Studio](https://www.microsoft.com/en-us/microsoft-365-copilot/microsoft-copilot-studio) | [Salesforce Agentforce](https://www.salesforce.com/agentforce/) | [UiPath Maestro](https://www.uipath.com/product/maestro) | [LangGraph OSS](https://github.com/langchain-ai/langgraph) |
-| 04 | ETL 与业务文件处理 | [Informatica IDMC](https://www.informatica.com/platform.html) | [Qlik Talend Cloud](https://www.qlik.com/us/products/qlik-talend-cloud) | [Microsoft Fabric Data Factory](https://learn.microsoft.com/en-us/fabric/data-factory/data-factory-overview) | [Apache NiFi](https://github.com/apache/nifi) |
+| 04 | ELT 与业务文件处理 | [Informatica IDMC](https://www.informatica.com/platform.html) | [Qlik Talend Cloud](https://www.qlik.com/us/products/qlik-talend-cloud) | [Microsoft Fabric Data Factory](https://learn.microsoft.com/en-us/fabric/data-factory/data-factory-overview) | [Apache NiFi](https://github.com/apache/nifi) |
 | 05 | AI 意图与工具路由 | [Google Dialogflow CX](https://docs.cloud.google.com/dialogflow/cx/docs) | [Amazon Lex V2](https://docs.aws.amazon.com/lexv2/latest/dg/what-is.html) | [IBM watsonx Orchestrate（助手能力）](https://www.ibm.com/products/watsonx-orchestrate) | [Rasa Open Source](https://github.com/RasaHQ/rasa) |
 | 06 | NeuroBus 事件内核 | [Confluent Cloud](https://docs.confluent.io/cloud/current/overview.html) | [Solace Event Broker](https://solace.com/products/event-broker/) | [Amazon EventBridge](https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-what-is.html) | [Apache Kafka](https://github.com/apache/kafka) |
 | 07 | Mod SDK 与行业模块 | [Salesforce Platform（官网现称 Headless 360）](https://www.salesforce.com/platform/) | [Atlassian Forge](https://developer.atlassian.com/platform/forge/) | [Shopify App Platform](https://help.shopify.com/en/partners/build-integrate/making-apps) | [Odoo Community](https://github.com/odoo/odoo) |
@@ -178,9 +178,9 @@ LangGraph OSS 与付费平台能力分开；真实模型和跨 worker 场景必�
 - `agent-orchestration-C2`（参照 Salesforce Agentforce）：主体、数据权限与动作授权贯穿每个工具调用。
 - `agent-orchestration-C3`（参照 UiPath Maestro）：人、Agent 与确定性流程协作有端到端执行回执。
 
-### 04 ETL 与业务文件处理 (`etl`)
+### 04 ELT 与业务文件处理 (`etl`)
 
-XCMAX 范围：`FHD/app/application/etl/`。
+XCMAX 范围：`FHD/app/application/elt/`。
 
 NiFi 的数据流能力不直接等同于 ERP 撤销；撤销与业务关联是 XCMAX 额外必选约束。
 

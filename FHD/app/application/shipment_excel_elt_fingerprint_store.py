@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from app.application.elt_env import elt_getenv, reject_legacy_elt_env
 import logging
 import sqlite3
 import threading
@@ -12,6 +11,7 @@ from typing import Any, cast
 
 from sqlalchemy import Table
 
+from app.application.elt_env import elt_getenv
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -69,7 +69,6 @@ def _ensure_orm_table() -> bool:
 
 
 def _use_orm_backend() -> bool:
-    import os
 
     mode = elt_getenv("FHD_SHIPMENT_ELT_FINGERPRINT_BACKEND", default="auto").strip().lower()
     if mode in {"legacy", "sqlite", "file"}:

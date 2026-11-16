@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from app.application.elt_env import elt_getenv, reject_legacy_elt_env
-import os
 import re
 from typing import Any
 
+from app.application.elt_env import elt_getenv
 from app.application.shipment_elt_profile import (
     ShipmentEltProfile,
     column_rule_matches,
