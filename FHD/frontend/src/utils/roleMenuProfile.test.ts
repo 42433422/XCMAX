@@ -41,7 +41,7 @@ describe('roleMenuProfile', () => {
     expect(canShowCoreMenuKey(denied, 'business-docking')).toBe(false)
     expect(canShowCoreMenuKey(denied, 'products')).toBe(false)
     expect(canShowCoreMenuKey(denied, 'chat')).toBe(false)
-    expect(canShowCoreMenuKey(buildRoleMenuProfile({ ...member, permissions: ['etl.read'] }), 'business-docking')).toBe(true)
+    expect(canShowCoreMenuKey(buildRoleMenuProfile({ ...member, permissions: ['elt.read'] }), 'business-docking')).toBe(true)
   })
 
   it('keeps industry business entries visible for an enterprise founder with a tenant', () => {

@@ -38,6 +38,13 @@ interface Window {
     setBadge: (count: number) => Promise<void>
     getAutoLaunch?: () => Promise<boolean>
     setAutoLaunch?: (enabled: boolean) => Promise<{ ok: boolean; reason?: string }>
+    /** 本机文件（只读）授权：原生目录/文件选择与 macOS 权限探测。 */
+    chooseDirectory?: () => Promise<{ canceled: boolean; paths: string[] }>
+    chooseFiles?: () => Promise<{ canceled: boolean; paths: string[] }>
+    getFullDiskAccessStatus?: () => Promise<{
+      status: 'granted' | 'denied' | 'unknown' | 'not_required'
+    }>
+    openPrivacySettings?: () => Promise<{ ok: boolean; reason?: string }>
     /** @returns pending xcagi:// deep link URL once, or null. */
     consumeDeepLink?: () => Promise<string | null>
     onDeepLink?: (callback: (url: string) => void) => () => void

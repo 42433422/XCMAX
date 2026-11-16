@@ -21,6 +21,29 @@ const TERMINAL_EVENT_TYPES = new Set(['run.completed', 'run.failed', 'planner.bl
 /** 视为「只读查询」的工具 action（答案优先，不创建任务面板行）。 */
 const READONLY_QUERY_ACTIONS = new Set(['query', 'list', 'search', 'read', 'get', 'count'])
 
+/** 会改动模板库的工具；对话里改完模板后，已打开的模板库页必须刷新。 */
+const TEMPLATE_MUTATING_TOOLS = new Set(['document_template', 'elt_import', 'template_preview'])
+const TEMPLATE_MUTATING_ACTIONS = new Set([
+  'create',
+  'update',
+  'delete',
+  'clear',
+  'save',
+  'import',
+  'execute',
+  'replace',
+  'upload',
+])
+
+function isTemplateMutationEvent(event: AgentRunEvent): boolean {
+  if (event.event_type !== 'tool.completed') return false
+  const data = asRecord(event.data)
+  const toolId = asString(data.tool_id).trim().toLowerCase()
+  if (!TEMPLATE_MUTATING_TOOLS.has(toolId)) return false
+  const action = asString(data.action).trim().toLowerCase()
+  return !action || TEMPLATE_MUTATING_ACTIONS.has(action)
+}
+
 /**
  * 单次只读查询工具（如 customers.query）成功后，不创建「智能任务」任务面板行。
  * 与 agentRunTraceModel.isTrivialChatTrace 语义对齐：答案正文为主，避免剧场抢视线。
@@ -133,6 +156,8 @@ export function buildAgentRunTaskUpdate(params: {
 export function useAgentRunEventSync(options: UseAgentRunEventSyncOptions) {
   const lastEventByRunId = new Map<string, string>()
   const eventsByRunId = new Map<string, AgentRunEvent[]>()
+  // 模板库页可能一直开着；对话里改了模板就通知它刷新一次，已通知过的事件不重复触发。
+  const notifiedTemplateEvents = new Set<string>()
   let lastIdentity = ''
 
   function mergeEvents(runId: string, incoming: AgentRunEvent[]): AgentRunEvent[] {
@@ -147,6 +172,20 @@ export function useAgentRunEventSync(options: UseAgentRunEventSyncOptions) {
     })
     eventsByRunId.set(runId, merged)
     return merged
+  }
+
+  function notifyTemplateMutation(incoming: AgentRunEvent[]): void {
+    let changed = false
+    for (const event of incoming) {
+      if (!isTemplateMutationEvent(event)) continue
+      const key = asString(event.event_id).trim() || `${event.event_type}:${event.message || ''}`
+      if (notifiedTemplateEvents.has(key)) continue
+      notifiedTemplateEvents.add(key)
+      changed = true
+    }
+    if (changed && typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('xcagi:templates-updated', { detail: { source: 'agent-run' } }))
+    }
   }
 
   function syncTaskPanel(runId: string, userText: string, events: AgentRunEvent[], messageRef: string): void {
@@ -178,6 +217,7 @@ export function useAgentRunEventSync(options: UseAgentRunEventSyncOptions) {
       const incoming = Array.isArray(response?.data) ? response.data : []
       if (!incoming.length) return
       const events = mergeEvents(normalizedRunId, incoming)
+      notifyTemplateMutation(incoming)
       const last = incoming[incoming.length - 1]
       if (last?.event_id) {
         lastEventByRunId.set(normalizedRunId, last.event_id)

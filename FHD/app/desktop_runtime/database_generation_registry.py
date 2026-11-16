@@ -51,7 +51,7 @@ def _main_file(db: sqlite3.Connection) -> tuple[str, int, int]:
 
 def _generation(db: sqlite3.Connection) -> str:
     # Provisioning is intentionally separate. Never infer or create a generation.
-    rows = db.execute("SELECT generation_id FROM main.etl_database_generation").fetchall()
+    rows = db.execute("SELECT generation_id FROM main.elt_database_generation").fetchall()
     if len(rows) != 1 or not isinstance(rows[0][0], str):
         raise GenerationObservationError("database generation is unavailable")
     value = rows[0][0]
@@ -84,7 +84,7 @@ def _scope(context: dict) -> tuple[str, str, str]:
 
 
 def _validate_registry(db: sqlite3.Connection) -> None:
-    columns = db.execute('PRAGMA main.table_xinfo("etl_generation_observations")').fetchall()
+    columns = db.execute('PRAGMA main.table_xinfo("elt_generation_observations")').fetchall()
     expected = [
         ("user_id", "TEXT", 1, 1),
         ("tenant_id", "TEXT", 1, 2),
@@ -97,10 +97,10 @@ def _validate_registry(db: sqlite3.Connection) -> None:
     if (
         [(row[1], row[2].upper(), row[3], row[5]) for row in columns] != expected
         or any(row[4] is not None or row[6] != 0 for row in columns)
-        or db.execute('PRAGMA main.foreign_key_list("etl_generation_observations")').fetchall()
+        or db.execute('PRAGMA main.foreign_key_list("elt_generation_observations")').fetchall()
     ):
         raise GenerationObservationError("host observation schema is incompatible")
-    indexes = db.execute('PRAGMA main.index_list("etl_generation_observations")').fetchall()
+    indexes = db.execute('PRAGMA main.index_list("elt_generation_observations")').fetchall()
     if len(indexes) != 1 or indexes[0][2:5] != (1, "pk", 0):
         raise GenerationObservationError("host observation schema is incompatible")
     quoted_index = '"' + indexes[0][1].replace('"', '""') + '"'
@@ -113,7 +113,7 @@ def _validate_registry(db: sqlite3.Connection) -> None:
         raise GenerationObservationError("host observation schema is incompatible")
     definition = db.execute(
         "SELECT sql FROM main.sqlite_master WHERE type='table' AND name=?",
-        ("etl_generation_observations",),
+        ("elt_generation_observations",),
     ).fetchone()
     if not definition or re.search(
         r"\bCHECK\s*\(|\bON\s+CONFLICT\b", definition[0] or "", re.IGNORECASE
@@ -123,7 +123,7 @@ def _validate_registry(db: sqlite3.Connection) -> None:
         "SELECT name FROM main.sqlite_master WHERE type='trigger' AND tbl_name=? "
         "UNION ALL SELECT name FROM temp.sqlite_master WHERE "
         "(type='trigger' AND tbl_name=?) OR (type='table' AND name=?) LIMIT 1",
-        ("etl_generation_observations",) * 3,
+        ("elt_generation_observations",) * 3,
     ).fetchone()
     if objects:
         raise GenerationObservationError("host observation schema is incompatible")
@@ -160,14 +160,14 @@ def observe_generation(
         started = True
         _validate_registry(host)
         existing = host.execute(
-            "SELECT generation, path_digest, device, inode FROM main.etl_generation_observations "
+            "SELECT generation, path_digest, device, inode FROM main.elt_generation_observations "
             "WHERE user_id=? AND tenant_id=? AND mod_id=?",
             (user, tenant, mod),
         ).fetchone()
         expected = (identity.generation, identity.path_digest, identity.device, identity.inode)
         if existing is None:
             host.execute(
-                "INSERT INTO main.etl_generation_observations "
+                "INSERT INTO main.elt_generation_observations "
                 "(user_id,tenant_id,mod_id,generation,path_digest,device,inode) VALUES (?,?,?,?,?,?,?)",
                 (user, tenant, mod, *expected),
             )
@@ -192,7 +192,7 @@ def observe_generation(
 # V1 only invalidates trust; V2 is reserved for explicitly enrolled fresh sources.
 # The permanent cooperative lock is separate from the atomically replaced JSON.
 _active_restores: ContextVar[frozenset[str]] = ContextVar(
-    "etl_active_restore_epochs", default=frozenset()
+    "elt_active_restore_epochs", default=frozenset()
 )
 
 
@@ -225,7 +225,7 @@ def _epoch_paths(target: Path, data_root, *, create: bool):
     root = get_desktop_data_dir(data_root)
     if _owned_profile is not None and root != _owned_profile[0]:
         raise GenerationObservationError("host lifecycle root differs from the factory profile")
-    directory = root / "config" / "etl-recovery"
+    directory = root / "config" / "elt-recovery"
     try:
         target_info = target.lstat()
     except FileNotFoundError:
@@ -794,7 +794,7 @@ def owned_source_lifecycle(*, data_root=None, host_target=None, legacy_restore=F
         _ensure_epoch_directory(config)
         unknown = False
         if legacy_restore and not marker.exists():
-            directory = config / "etl-recovery"
+            directory = config / "elt-recovery"
             try:
                 info = directory.lstat()
                 if (
@@ -848,7 +848,7 @@ def _require_owned_lifecycle(data_root):
         raise GenerationObservationError("owned-source lifecycle authority is unavailable")
 
 
-OWNED_SOURCE_SCHEMA = """CREATE TABLE etl_owned_source (
+OWNED_SOURCE_SCHEMA = """CREATE TABLE elt_owned_source (
     owner_id TEXT NOT NULL, tenant_id TEXT NOT NULL, mod_id TEXT NOT NULL,
     source_id TEXT NOT NULL, epoch TEXT NOT NULL
 )"""
@@ -922,14 +922,14 @@ def validate_owned_database(conn, target: Path, expected: OwnedSource, *, data_r
     definitions = dict(
         conn.execute(
             "SELECT name,sql FROM main.sqlite_master WHERE type='table' "
-            "AND name IN ('etl_owned_source','etl_database_generation')"
+            "AND name IN ('elt_owned_source','elt_database_generation')"
         ).fetchall()
     )
     compact = lambda sql: re.sub(r"\s+", "", sql).lower()
     if {name: compact(sql) for name, sql in definitions.items()} != {
-        "etl_owned_source": compact(OWNED_SOURCE_SCHEMA),
-        "etl_database_generation": compact(
-            "CREATE TABLE etl_database_generation (generation_id TEXT NOT NULL)"
+        "elt_owned_source": compact(OWNED_SOURCE_SCHEMA),
+        "elt_database_generation": compact(
+            "CREATE TABLE elt_database_generation (generation_id TEXT NOT NULL)"
         ),
     }:
         raise GenerationObservationError("owned source schema changed")
@@ -937,7 +937,7 @@ def validate_owned_database(conn, target: Path, expected: OwnedSource, *, data_r
         actual != (str(target.resolve(strict=True)), expected.device, expected.inode)
         or any(row[1] not in {"main", "temp"} for row in rows)
         or _generation(conn) != expected.epoch
-        or conn.execute("SELECT * FROM main.etl_owned_source").fetchall()
+        or conn.execute("SELECT * FROM main.elt_owned_source").fetchall()
         != [
             (
                 expected.owner_id,
@@ -949,10 +949,10 @@ def validate_owned_database(conn, target: Path, expected: OwnedSource, *, data_r
         ]
         or conn.execute(
             "SELECT 1 FROM main.sqlite_master WHERE type='trigger' AND tbl_name IN "
-            "('etl_owned_source','etl_database_generation') UNION ALL "
+            "('elt_owned_source','elt_database_generation') UNION ALL "
             "SELECT 1 FROM temp.sqlite_master WHERE type IN ('table','trigger') AND "
-            "(name IN ('etl_owned_source','etl_database_generation') OR "
-            "tbl_name IN ('etl_owned_source','etl_database_generation')) LIMIT 1"
+            "(name IN ('elt_owned_source','elt_database_generation') OR "
+            "tbl_name IN ('elt_owned_source','elt_database_generation')) LIMIT 1"
         ).fetchone()
     ):
         raise GenerationObservationError("owned database identity changed")
@@ -1031,11 +1031,11 @@ def enroll_owned_source(
             conn.execute("BEGIN IMMEDIATE")
             conn.execute(OWNED_SOURCE_SCHEMA)
             conn.execute(
-                "INSERT INTO etl_owned_source VALUES (?,?,?,?,?)",
+                "INSERT INTO elt_owned_source VALUES (?,?,?,?,?)",
                 (source.owner_id, tenant, mod, source.source_id, source.epoch),
             )
-            conn.execute("CREATE TABLE etl_database_generation (generation_id TEXT NOT NULL)")
-            conn.execute("INSERT INTO etl_database_generation VALUES (?)", (source.epoch,))
+            conn.execute("CREATE TABLE elt_database_generation (generation_id TEXT NOT NULL)")
+            conn.execute("INSERT INTO elt_database_generation VALUES (?)", (source.epoch,))
             for statement, parameters in statements:
                 conn.execute(statement, parameters)
             conn.commit()

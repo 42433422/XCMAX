@@ -160,7 +160,7 @@ def extract_pdf_document_text(file_path: str) -> dict[str, Any]:
 
 
 def _ocr_pdf_plaintext(file_path: str) -> dict[str, Any]:
-    from app.application.shipment_excel_etl_ocr import ocr_source_to_workbook
+    from app.application.shipment_excel_elt_ocr import ocr_source_to_workbook
 
     result = ocr_source_to_workbook(file_path)
     if not result.get("success"):
@@ -279,7 +279,7 @@ def _maybe_pdf_page_image_bytes(file_path: str) -> bytes | None:
 
         from PIL import Image
 
-        from app.application.shipment_excel_etl_ocr import _load_image_arrays
+        from app.application.shipment_excel_elt_ocr import _load_image_arrays
 
         images = _load_image_arrays(Path(file_path))
         if not images:

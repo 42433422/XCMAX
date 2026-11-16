@@ -100,10 +100,14 @@ def test_delivery_merge_preserves_both_upgrade_histories():
     config = Config(str(root / "alembic.ini"))
     config.set_main_option("script_location", str(root / "alembic"))
     scripts = ScriptDirectory.from_config(config)
-    assert scripts.get_heads() == ["2026_11_15_delivery_slices_merge"]
-    assert set(scripts.get_revision(scripts.get_current_head()).down_revision) == {
+    heads = scripts.get_heads()
+    assert len(heads) == 1
+    assert set(scripts.get_revision("2026_11_15_delivery_slices_merge").down_revision) == {
         "2026_11_15_stock_posting_key",
         "2026_11_15_etl_source_slices",
+    }
+    assert "2026_11_15_delivery_slices_merge" in {
+        revision.revision for revision in scripts.walk_revisions(head=heads[0])
     }
     assert (
         scripts.get_revision("2026_11_15_stock_posting_key").down_revision
@@ -122,5 +126,14 @@ def test_delivery_merge_preserves_both_upgrade_histories():
         "2026_11_11_sales_create_perm",
         "2026_11_11_etl_source_slice",
     }
-    for parent in merge.down_revision:
-        assert scripts.get_revision(parent).down_revision == "2026_11_11_agent_permissions"
+    # Both branches start from the same permission base; only the ELT branch
+    # passes through the table rename before its source-slice DDL.
+    assert scripts.get_revision("2026_11_11_sales_create_perm").down_revision == (
+        "2026_11_11_agent_permissions"
+    )
+    assert scripts.get_revision("2026_11_11_etl_source_slice").down_revision == (
+        "2026_11_13_elt_table_rename"
+    )
+    assert scripts.get_revision("2026_11_13_elt_table_rename").down_revision == (
+        "2026_11_11_agent_permissions"
+    )

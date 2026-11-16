@@ -212,14 +212,11 @@ describe('useMessengerEntries 纯函数', () => {
     expect(normalizeDutyEmployee({})).toBeNull()
   })
 
-  it('客户侧精选 7 名可切换员工并保留独立头像与职责', () => {
-    const entries = curatedDutyEmployees(fallbackDutyEmployees())
-    const unavailable = curatedDutyEmployees([])
-    expect(entries).toHaveLength(7)
-    expect(new Set(entries.map((entry) => pinnedAvatarText(entry))).size).toBe(7)
-    expect(entries.every((entry) => Boolean(entry.description))).toBe(true)
-    expect(entries.map((entry) => entry.id)).toContain('workflow-automator')
-    expect(unavailable).toHaveLength(7)
-    expect(unavailable.every((entry) => entry.status === 'planned')).toBe(true)
+  it('客户端不再内置员工名单，通讯录只来自接口', () => {
+    expect(fallbackDutyEmployees()).toEqual([])
+    expect(curatedDutyEmployees([])).toEqual([])
+    const provided = [normalizeDutyEmployee({ id: 'workflow-automator', name: '流程自动化员工' })]
+      .filter((row): row is NonNullable<typeof row> => Boolean(row))
+    expect(curatedDutyEmployees(provided).map((entry) => entry.id)).toEqual(['workflow-automator'])
   })
 })

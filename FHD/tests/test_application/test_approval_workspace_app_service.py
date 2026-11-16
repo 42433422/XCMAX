@@ -2880,6 +2880,55 @@ def test_approval_workspace_reports_next_approval_without_claiming_completion():
     assert "后续步骤等待审批" in body["message"]
 
 
+def test_approval_workspace_reports_user_decision_instead_of_cancelling():
+    """预演要求人工确认时，审批应标记通过并原样带回问题，而不是「审批已取消」。"""
+    db = MagicMock()
+    req = Mock()
+    req.status = ApprovalStatus.PENDING.value
+    req.id = 1
+    req.request_no = "first"
+    req.business_data = "{}"
+    req.applicant_id = None
+    req.current_node_order = 0
+    question = "预演完成：目标「abnormal」，13 行源数据未通过校验"
+    with (
+        patch(
+            "app.application.approval_workspace_app_service._can_review_ai_workflow_request",
+            return_value=True,
+        ),
+        patch(
+            "app.application.approval_workspace_app_service._has_pending_ai_workflow",
+            return_value=True,
+        ),
+        patch(
+            "app.application.approval_workspace_app_service._ai_workflow_audit_node",
+            return_value=SimpleNamespace(id=9, node_name="审批", node_order=1),
+        ),
+        patch(
+            "app.application.approval_workspace_app_service._resume_pending_ai_workflow_after_approval",
+            return_value={
+                "success": False,
+                "workflow_executed": False,
+                "execution_accepted": True,
+                "waiting_user_decision": True,
+                "message": question,
+            },
+        ),
+        patch("app.application.approval_workspace_app_service._request_to_dict", return_value={}),
+        patch("app.application.approval_workspace_app_service._audit"),
+    ):
+        response = _approve_ai_workflow_request_without_node(
+            db, req=req, actor=1, approver_name="reviewer", opinion="同意"
+        )
+    body = json.loads(response.body)
+    assert response.status_code == 202
+    assert body["accepted"] is True
+    assert body["data"]["workflow_execution"]["code"] == "waiting_user_decision"
+    assert body["data"]["workflow_execution"]["waiting_user_decision"] is True
+    assert question in body["message"]
+    assert "审批已取消" not in body["message"]
+
+
 def test_concurrent_approval_conflict_does_not_cancel_request():
     db = MagicMock()
     req = Mock(

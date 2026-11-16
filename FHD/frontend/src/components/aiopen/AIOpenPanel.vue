@@ -133,6 +133,15 @@
               <code class="aiopen-endpoint-code">{{ mcpUrl }}</code>
               <button class="btn btn-secondary btn-sm" type="button" @click="copyText(mcpUrl)">MCP</button>
             </div>
+            <div v-if="usage" class="aiopen-usage">
+              <p class="aiopen-usage-title">
+                近 {{ usage.days }} 天调用 {{ usage.calls }} 次 · 失败 {{ usage.errors }} 次 · 平均 {{ usage.avg_duration_ms }}ms
+              </p>
+              <p v-if="usageRecent.length" class="aiopen-usage-recent">
+                最近：{{ usageRecent[0].tool || '—' }} · {{ usageRecent[0].status === 'ok' ? '成功' : '失败' }} ·
+                用量数据来自本机计量文件
+              </p>
+            </div>
             <div class="aiopen-tools">
               <div v-for="tool in friendlyTools" :key="tool.name" class="aiopen-tool-item">
                 <span>{{ tool.label }}</span>
@@ -214,6 +223,8 @@ const {
   routes,
   remoteControlEnabled,
   keys,
+  usage,
+  usageRecent,
   newKey,
   accessResult,
   panelError,

@@ -98,10 +98,10 @@ def test_upgrade_preserves_business_data_readback(tmp_path):
     mod = _harness_mod()
     h = mod.ContinuityHarness(data_dir=tmp_path)
     h.write_business("attendance_days", 22)
-    h.write_business("etl_batch_id", "batch-42")
+    h.write_business("elt_batch_id", "batch-42")
     before = {
         "attendance_days": h.read_business("attendance_days"),
-        "etl_batch_id": h.read_business("etl_batch_id"),
+        "elt_batch_id": h.read_business("elt_batch_id"),
     }
     report = h.simulate_upgrade("1.0.0.7")
     assert report["version"] == "1.0.0.7"
@@ -109,4 +109,4 @@ def test_upgrade_preserves_business_data_readback(tmp_path):
     h2 = mod.ContinuityHarness(data_dir=tmp_path)
     assert h2.app_version == "1.0.0.7"
     assert h2.read_business("attendance_days") == before["attendance_days"]
-    assert h2.read_business("etl_batch_id") == before["etl_batch_id"]
+    assert h2.read_business("elt_batch_id") == before["elt_batch_id"]

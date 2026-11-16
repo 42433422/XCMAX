@@ -32,12 +32,12 @@ vi.mock('@/composables/useTutorialCatalog', () => ({
   useTutorialCatalog: () => ({ registerTour: vi.fn() }),
 }))
 
-function mountModStore() {
+function mountModStore(path = '/mod-store') {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [{ path: '/mod-store', component: ModStore }],
   })
-  return router.push('/mod-store').then(() =>
+  return router.push(path).then(() =>
     router.isReady().then(() =>
       mount(ModStore, {
         global: {
@@ -56,7 +56,7 @@ describe('ModStore deep', () => {
   })
 
   it('loads catalog on mount', async () => {
-    const wrapper = await mountModStore()
+    const wrapper = await mountModStore('/mod-store?tab=ai_employee')
     await vi.waitFor(() => expect(fetchMarketCatalog).toHaveBeenCalled(), { timeout: 3000 })
     expect(wrapper.find('.mod-store').exists()).toBe(true)
     expect(wrapper.text()).toContain('AI 员工市场')

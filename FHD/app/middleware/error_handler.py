@@ -181,7 +181,25 @@ def register_exception_handlers(app: FastAPI) -> None:
                 "HTTP Exception %s: %s - Path: %s", exc.status_code, exc.detail, request.url.path
             )
         detail = exc.detail
-        message = str(detail)
+        # 结构化 detail（如 {"code","message"}）不能被 str() 成 Python repr 直接显示在界面上。
+        detail_code = ""
+        if isinstance(detail, dict):
+            raw_code = detail.get("code")
+            detail_code = raw_code[:64] if isinstance(raw_code, str) else ""
+            raw_message = detail.get("message")
+            # 有的依赖把 message 再包一层 {"code","message"}，同样只取文案。
+            if isinstance(raw_message, dict):
+                nested_code = raw_message.get("code")
+                if not detail_code and isinstance(nested_code, str):
+                    detail_code = nested_code[:64]
+                raw_message = raw_message.get("message")
+            message = (
+                str(raw_message)
+                if isinstance(raw_message, str) and raw_message.strip()
+                else "请求失败"
+            )
+        else:
+            message = str(detail)
         redacted = redact_log_text(message)
         if not context and ("Traceback" in message or "\n" in message):
             message = "请求失败"
@@ -194,7 +212,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             },
             content={
                 "success": False,
-                "error_code": f"http_{exc.status_code}",
+                "error_code": detail_code or f"http_{exc.status_code}",
                 "message": message,
                 **(_elt_model_error(exc.detail) if context else {}),
                 "path": request.url.path,

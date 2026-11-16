@@ -12,6 +12,12 @@
             @click="onAvatarClick"
           >
             <img v-if="profileAvatarUrl" :src="profileAvatarUrl" alt="" class="settings-profile__avatar-img" />
+            <img
+              v-else-if="isLoggedIn"
+              :src="defaultUserAvatarSrc"
+              alt=""
+              class="settings-profile__avatar-img settings-profile__avatar-img--default"
+            />
             <span v-else-if="avatarInitial" class="settings-profile__avatar-letter">{{ avatarInitial }}</span>
             <i v-else class="fa fa-user" aria-hidden="true"></i>
             <span v-if="isLoggedIn" class="settings-profile__avatar-hint">{{ $t('settings.changeAvatarShort') }}</span>
@@ -42,6 +48,22 @@
               {{ $t('settings.login') }}
             </router-link>
           </div>
+
+          <nav class="settings-nav" aria-label="设置分区">
+            <a
+              v-for="group in SETTINGS_GROUPS"
+              :key="group.id"
+              :href="`#${group.id}`"
+              class="settings-nav__item"
+              :class="{ 'is-active': activeGroup === group.id }"
+              :aria-current="activeGroup === group.id ? 'true' : undefined"
+              @click.prevent="goGroup(group.id)"
+            >
+              <i v-if="!group.iconSrc" class="fa settings-nav__icon" :class="group.icon" aria-hidden="true"></i>
+              <img v-else class="settings-nav__icon settings-nav__icon--art" :src="group.iconSrc" alt="" />
+              <span class="settings-nav__label">{{ group.label }}</span>
+            </a>
+          </nav>
         </aside>
 
         <div class="settings-layout__main">
@@ -50,10 +72,12 @@
           </header>
 
           <div class="settings-list">
-            <details v-if="isLoggedIn" id="settings-profile-home" class="settings-card" data-tutorial-id="settings-profile-home" open>
+            <section id="settings-group-account" class="settings-group" aria-labelledby="settings-group-account-title">
+              <h2 id="settings-group-account-title" class="settings-group__title">账号</h2>
+            <details v-if="isLoggedIn" id="settings-profile-home" class="settings-card" data-tutorial-id="settings-profile-home">
               <summary class="settings-row">
-                <span class="settings-row__icon settings-row__icon--indigo" aria-hidden="true">
-                  <i class="fa fa-id-card"></i>
+                <span class="settings-row__icon settings-row__icon--art" aria-hidden="true">
+                  <img class="settings-row__icon-art" :src="settingsProfileArtSrc" alt="" />
                 </span>
                 <span class="settings-row__label">{{ $t('settings.profileHome') }}</span>
                 <span class="settings-row__meta">{{ profileHomeSummary }}</span>
@@ -108,18 +132,21 @@
 
             <router-link v-if="canManageTenantRoles" class="settings-card settings-row settings-rbac-link"
               :to="{ name: 'tenant-roles' }">
-              <span class="settings-row__icon settings-row__icon--indigo" aria-hidden="true">
-                <i class="fa fa-shield"></i>
+              <span class="settings-row__icon settings-row__icon--art" aria-hidden="true">
+                <img class="settings-row__icon-art" :src="settingsRolesArtSrc" alt="" />
               </span>
               <span class="settings-row__label">角色与权限</span>
               <span class="settings-row__meta">管理本企业的角色、权限和用户分配</span>
               <span class="settings-row__arrow" aria-hidden="true"></span>
             </router-link>
+            </section>
 
-            <details id="settings-model-payment" class="settings-card" data-tutorial-id="settings-model-payment" open>
+            <section id="settings-group-intelligence" class="settings-group" aria-labelledby="settings-group-intelligence-title">
+              <h2 id="settings-group-intelligence-title" class="settings-group__title">智能与数据</h2>
+            <details id="settings-model-payment" class="settings-card" data-tutorial-id="settings-model-payment">
               <summary class="settings-row">
-                <span class="settings-row__icon settings-row__icon--blue" aria-hidden="true">
-                  <i class="fa fa-credit-card"></i>
+                <span class="settings-row__icon settings-row__icon--art" aria-hidden="true">
+                  <img class="settings-row__icon-art" :src="settingsModelServiceArtSrc" alt="" />
                 </span>
                 <span class="settings-row__label">{{ $t('settings.modelService') }}</span>
                 <span class="settings-row__meta">{{ $t('settings.modelServiceMeta') }}</span>
@@ -188,7 +215,10 @@
               :start-memory-v2-edit="startMemoryV2Edit" :delete-memory-v2="deleteMemoryV2"
               v-model:memory-v2-status-filter="memoryV2StatusFilter" v-model:memory-v2-type-filter="memoryV2TypeFilter"
             />
+            </section>
 
+            <section id="settings-group-system" class="settings-group" aria-labelledby="settings-group-system-title">
+              <h2 id="settings-group-system-title" class="settings-group__title">系统与外观</h2>
             <SettingsBasicCard
               :basic-settings-summary="basicSettingsSummary" :sidebar-theme-options="sidebarThemeOptions"
               :on-sidebar-theme-change="onSidebarThemeChange" :show-company-brand-editor="showCompanyBrandEditor"
@@ -216,7 +246,10 @@
               v-model:deployment-mode="deploymentMode" v-model:postgres-url-draft="postgresUrlDraft"
               v-model:host-pack-expanded="hostPackExpanded"
             />
+            </section>
 
+            <section id="settings-group-about" class="settings-group" aria-labelledby="settings-group-about-title">
+              <h2 id="settings-group-about-title" class="settings-group__title">关于</h2>
             <SettingsVersionsCard
               :loading-versions="loadingVersions" :versions-error="versionsError" :versions="versions"
               :sample-count="sampleCount" :sample-count-warning="sampleCountWarning"
@@ -229,6 +262,7 @@
               :auto-launch-message="autoLaunchMessage" :on-check-for-updates="onCheckForUpdates"
               :on-auto-launch-change="onAutoLaunchChange"
             />
+            </section>
 
           </div>
         </div>
@@ -238,7 +272,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onActivated, watch, nextTick } from 'vue'
+import { computed, onBeforeUnmount, onMounted, onActivated, ref, watch, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { readStoredSidebarTheme, applySidebarTheme } from '@/utils/sidebarTheme'
 import HostModBridgeView from '@/components/HostModBridgeView.vue'
@@ -255,6 +289,14 @@ import SettingsBasicCard from './settings-view/SettingsBasicCard.vue'
 import SettingsVersionsCard from './settings-view/SettingsVersionsCard.vue'
 import SettingsAboutCard from './settings-view/SettingsAboutCard.vue'
 import SettingsPlatformModelCard from './settings-view/SettingsPlatformModelCard.vue'
+import settingsProfileArtSrc from '@/assets/icons/settings/r1c1.png'
+import settingsRolesArtSrc from '@/assets/icons/settings/r1c2.png'
+import defaultUserAvatarSrc from '@/assets/avatars/user-default.png'
+import navAccountArtSrc from '@/assets/icons/settings/r1c1.png'
+import navIntelligenceArtSrc from '@/assets/icons/settings/r1c4.png'
+import navSystemArtSrc from '@/assets/icons/settings/r2c2.png'
+import navAboutArtSrc from '@/assets/icons/settings/r5c1.png'
+import settingsModelServiceArtSrc from '@/assets/icons/settings/r1c3.png'
 
 const route = useRoute()
 const accountProfile = useAccountProfileStore()
@@ -490,6 +532,70 @@ function prepareSettingsPage() {
     persyLoading.value = false
   })
 }
+
+const SETTINGS_GROUPS = [
+  { id: 'settings-group-account', label: '账号', icon: 'fa-user-o', iconSrc: navAccountArtSrc },
+  { id: 'settings-group-intelligence', label: '智能与数据', icon: 'fa-cubes', iconSrc: navIntelligenceArtSrc },
+  { id: 'settings-group-system', label: '系统与外观', icon: 'fa-sliders', iconSrc: navSystemArtSrc },
+  { id: 'settings-group-about', label: '关于', icon: 'fa-info-circle', iconSrc: navAboutArtSrc },
+]
+const activeGroup = ref(SETTINGS_GROUPS[0].id)
+let scrollSpyFrame = 0
+
+function resolveGroupFromScroll(): string {
+  const groups = SETTINGS_GROUPS.map(group => document.getElementById(group.id)).filter(
+    (el): el is HTMLElement => Boolean(el),
+  )
+  if (!groups.length) return activeGroup.value
+  let current = groups[0].id
+  for (const el of groups) {
+    if (el.getBoundingClientRect().top <= 140) current = el.id
+  }
+  return current
+}
+
+function onSettingsScroll() {
+  if (scrollSpyFrame) return
+  scrollSpyFrame = window.requestAnimationFrame(() => {
+    scrollSpyFrame = 0
+    activeGroup.value = resolveGroupFromScroll()
+  })
+}
+
+function goGroup(id: string) {
+  activeGroup.value = id
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  try {
+    history.replaceState(null, '', `#${id}`)
+  } catch {
+    /* 忽略 hash 写入失败 */
+  }
+}
+
+function setupGroupSpy() {
+  if (typeof document === 'undefined' || typeof window === 'undefined') return
+  // 滚动容器可能是页面自身或内层内容区，捕获阶段监听可覆盖两种情况。
+  document.addEventListener?.('scroll', onSettingsScroll, { passive: true, capture: true })
+  window.addEventListener?.('resize', onSettingsScroll, { passive: true })
+  activeGroup.value = resolveGroupFromScroll()
+  const hashId = String(window.location?.hash || '').replace(/^#/, '')
+  if (SETTINGS_GROUPS.some(group => group.id === hashId)) {
+    nextTick(() => goGroup(hashId))
+  }
+}
+
+function teardownGroupSpy() {
+  if (typeof document === 'undefined' || typeof window === 'undefined') return
+  document.removeEventListener?.('scroll', onSettingsScroll, { capture: true } as EventListenerOptions)
+  window.removeEventListener?.('resize', onSettingsScroll)
+  if (scrollSpyFrame) {
+    window.cancelAnimationFrame?.(scrollSpyFrame)
+    scrollSpyFrame = 0
+  }
+}
+
+onMounted(setupGroupSpy)
+onBeforeUnmount(teardownGroupSpy)
 
 onMounted(() => {
   sidebarThemePreset.value = readStoredSidebarTheme()

@@ -36,6 +36,12 @@ class UnifiedTaskPlanMixin:
     def list_task_runs(self, *, user_id: str, task_id: str) -> list[AgentRun]:
         return cast("list[AgentRun]", self._repo.list_task_runs(user_id=user_id, task_id=task_id))
 
+    def list_run_scopes(self, *, user_id: str) -> dict[str, list[tuple[str, str, str]]]:
+        return cast(
+            "dict[str, list[tuple[str, str, str]]]",
+            self._repo.list_run_scopes(user_id=user_id),
+        )
+
     def get_task(
         self,
         *,

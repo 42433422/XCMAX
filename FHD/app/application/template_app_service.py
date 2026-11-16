@@ -43,23 +43,80 @@ class TemplateApplicationService:
     ):
         self._template_service = template_service
 
-    def get_templates(self, category: str | None = None) -> dict[str, Any]:
+    def get_templates(
+        self, category: str | None = None, tenant_id: int | None = None
+    ) -> dict[str, Any]:
         """
         获取模板列表用例
 
         Args:
             category: 模板分类
+            tenant_id: 后台执行时显式携带的租户
 
         Returns:
             模板列表
         """
         from app.application.reviewed_excel_template_blocks import collapse_listed_templates
+        from app.infrastructure.tenant_scope import tenant_scope
 
-        if category and category != "all":
-            rows = self._template_service.list_by_type(category) or []
-            return {"templates": collapse_listed_templates(merge_starter_templates(rows, category))}
-        rows = self._template_service.list_templates() or []
-        return {"templates": collapse_listed_templates(merge_starter_templates(rows))}
+        with tenant_scope(tenant_id):
+            if category and category != "all":
+                rows = self._template_service.list_by_type(category) or []
+                return {
+                    "templates": collapse_listed_templates(merge_starter_templates(rows, category))
+                }
+            rows = self._template_service.list_templates() or []
+            return {"templates": collapse_listed_templates(merge_starter_templates(rows))}
+
+    def hide_templates(self, *, ids: list[str], paths: list[str]) -> int:
+        from app.infrastructure.templates.template_preferences import hide_templates
+
+        return hide_templates(ids=ids, paths=paths)
+
+    def purge_archive_assets(self) -> int:
+        """仅清理当前请求账号与租户的审阅归档资产。"""
+        from app.application.elt.errors import EltError
+        from app.db.models.elt_archive import EltArchiveAsset, EltArchiveVersion
+        from app.db.session import get_db
+        from app.domain.context.current_request import get_current_request
+        from app.infrastructure.tenant_scope import tenant_scope
+
+        request = get_current_request()
+        user = getattr(getattr(request, "state", None), "user", None)
+        tenant_id = getattr(user, "tenant_id", None)
+        owner_id = getattr(user, "id", None)
+        if tenant_id is None or owner_id is None:
+            return 0
+        tenant, owner = int(tenant_id), int(owner_id)
+        try:
+            with tenant_scope(tenant), get_db() as db:
+                asset_ids = [
+                    row[0]
+                    for row in db.query(EltArchiveAsset.id)
+                    .filter(
+                        EltArchiveAsset.tenant_id == tenant,
+                        EltArchiveAsset.owner_user_id == owner,
+                    )
+                    .all()
+                ]
+                if not asset_ids:
+                    return 0
+                db.query(EltArchiveVersion).filter(
+                    EltArchiveVersion.tenant_id == tenant,
+                    EltArchiveVersion.asset_id.in_(asset_ids),
+                ).delete(synchronize_session=False)
+                removed = (
+                    db.query(EltArchiveAsset)
+                    .filter(
+                        EltArchiveAsset.tenant_id == tenant,
+                        EltArchiveAsset.owner_user_id == owner,
+                    )
+                    .delete(synchronize_session=False)
+                )
+                db.commit()
+                return int(removed or 0)
+        except (EltError, RuntimeError, ValueError):
+            return 0
 
     def get_template(self, template_id: int) -> dict[str, Any]:
         """

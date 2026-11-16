@@ -26,7 +26,7 @@ from openpyxl.worksheet.worksheet import Worksheet
 from app.application.elt.errors import EltError
 from app.application.elt.parser_structure import clean_cell_text, semantic_key
 from app.application.elt.service_support import (
-    ETL_SHIPMENT_DOCUMENT_TEMPLATE_DESCRIPTION,
+    ELT_SHIPMENT_DOCUMENT_TEMPLATE_DESCRIPTION,
     load_json,
 )
 from app.application.elt.transforms import neutralize_spreadsheet_formula
@@ -274,7 +274,7 @@ def save_stable_workbook(workbook: Workbook, destination: Path) -> str:
             entry.external_attr = info.external_attr
             target.writestr(entry, payload)
     body = fixed.getvalue()
-    from app.application.shipment_excel_etl_security import open_shipment_result_file
+    from app.application.shipment_excel_elt_security import open_shipment_result_file
 
     with open_shipment_result_file(destination) as stream:
         stream.write(body)
@@ -353,7 +353,7 @@ def resolve_owned_shipment_layout(
                 EltTemplate.tenant_id == int(tenant_id),
                 EltTemplate.owner_user_id == int(owner_user_id),
                 EltTemplate.is_active.is_(True),
-                EltTemplate.description == ETL_SHIPMENT_DOCUMENT_TEMPLATE_DESCRIPTION,
+                EltTemplate.description == ELT_SHIPMENT_DOCUMENT_TEMPLATE_DESCRIPTION,
                 EltTemplate.target_type == "shipment_records",
             )
             .first()
@@ -408,7 +408,7 @@ def _committed_rows(db: Any, run: Any) -> list[dict[str, Any]]:
             payload = json.loads(row.parsed_data or "{}")
         except ValueError:
             continue
-        if isinstance(payload, dict) and str(payload.get("etl_run_id") or "") == run_id:
+        if isinstance(payload, dict) and str(payload.get("elt_run_id") or "") == run_id:
             selected.append(row.to_dict())
     return selected
 
@@ -551,8 +551,8 @@ def write_committed_shipment_workbook(db: Any, run: Any) -> dict[str, str] | Non
     run_id = str(getattr(run, "id", "") or "")
     if not run_id or "/" in run_id or "\\" in run_id or run_id in {".", ".."}:
         return None
-    root = (Path(get_app_data_dir()).resolve() / "etl" / "exports").resolve()
-    destination = (root / f"etl-{run_id}.xlsx").resolve()
+    root = (Path(get_app_data_dir()).resolve() / "elt" / "exports").resolve()
+    destination = (root / f"elt-{run_id}.xlsx").resolve()
     if root not in destination.parents:
         return None
     layout = _saved_layout_path(db, run)

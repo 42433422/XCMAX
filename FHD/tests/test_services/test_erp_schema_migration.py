@@ -94,6 +94,11 @@ def _tables(url: str) -> set[str]:
         engine.dispose()
 
 
+def _run_rows_table(url: str) -> str:
+    tables = _tables(url)
+    return "elt_run_rows" if "elt_run_rows" in tables else "etl_run_rows"
+
+
 def _columns(url: str, table: str) -> set[str]:
     from sqlalchemy import create_engine, inspect
 
@@ -358,7 +363,7 @@ class TestAlembicForwardUpgrade:
                     )
                 )
             command.upgrade(cfg, "head")
-            assert "source_slice" in _columns(_db_url, "etl_run_rows")
+            assert "source_slice" in _columns(_db_url, _run_rows_table(_db_url))
             grant = text(
                 "SELECT count(*) FROM role_permissions rp JOIN permissions p "
                 "ON p.id = rp.permission_id WHERE rp.role_id = 901 "
@@ -373,7 +378,7 @@ class TestAlembicForwardUpgrade:
                 ).scalars().all() == [ancestor]
                 # Permission downgrade deliberately preserves explicit/previous grants.
                 assert connection.execute(grant).scalar_one() == 1
-            assert "source_slice" not in _columns(_db_url, "etl_run_rows")
+            assert "source_slice" not in _columns(_db_url, _run_rows_table(_db_url))
             assert "sales_orders" in _tables(_db_url)
             command.upgrade(cfg, "head")
             with engine.connect() as connection:
@@ -384,7 +389,7 @@ class TestAlembicForwardUpgrade:
                 assert connection.execute(
                     text("SELECT version_num FROM alembic_version")
                 ).scalars().all() == [ScriptDirectory.from_config(cfg).get_current_head()]
-            assert "source_slice" in _columns(_db_url, "etl_run_rows")
+            assert "source_slice" in _columns(_db_url, _run_rows_table(_db_url))
             assert _tables(_db_url) >= _ERP_TABLES
         finally:
             engine.dispose()

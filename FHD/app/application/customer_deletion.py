@@ -34,7 +34,7 @@ def delete_customers(session, ids, *, force=False, runtime_context=None) -> dict
     from app.db.models.product import Product
     from app.db.models.purchase_unit import PurchaseUnit
     from app.db.models.shipment import ShipmentRecord
-    from app.db.models.shipment_etl_fingerprint import ShipmentEtlImportFingerprint
+    from app.db.models.shipment_elt_fingerprint import ShipmentEltImportFingerprint
 
     if not ids or any(type(value) is not int or value <= 0 for value in ids):
         return {"success": False, "message": "客户 ID 必须为非空正整数列表", "deleted_count": 0}
@@ -145,10 +145,10 @@ def delete_customers(session, ids, *, force=False, runtime_context=None) -> dict
         if force:
             if shipments is not None:
                 shipment_ids = [row[0] for row in shipments.with_entities(ShipmentRecord.id).all()]
-                if shipment_ids and inspector.has_table(ShipmentEtlImportFingerprint.__tablename__):
-                    session.query(ShipmentEtlImportFingerprint).filter(
-                        ShipmentEtlImportFingerprint.tenant_key == f"tenant:{unit.tenant_id}",
-                        ShipmentEtlImportFingerprint.shipment_id.in_(shipment_ids),
+                if shipment_ids and inspector.has_table(ShipmentEltImportFingerprint.__tablename__):
+                    session.query(ShipmentEltImportFingerprint).filter(
+                        ShipmentEltImportFingerprint.tenant_key == f"tenant:{unit.tenant_id}",
+                        ShipmentEltImportFingerprint.shipment_id.in_(shipment_ids),
                     ).delete(synchronize_session=False)
                 shipments.delete(synchronize_session=False)
             if products is not None:

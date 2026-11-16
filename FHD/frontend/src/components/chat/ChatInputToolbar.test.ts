@@ -90,6 +90,16 @@ describe('ChatInputToolbar', () => {
     expect(wrapper.emitted('trigger-upload')).toBeUndefined()
   })
 
+  it('only keeps the attachment input so folder upload is not duplicated', () => {
+    const wrapper = mountToolbar()
+    const inputs = wrapper.findAll('input[type="file"]')
+    expect(inputs.length).toBe(1)
+    expect(inputs[0].attributes('webkitdirectory')).toBeUndefined()
+    expect(wrapper.findAll('.toolbar-btn').some((b) => b.text().includes('chat.uploadFolder'))).toBe(
+      false,
+    )
+  })
+
   it('emits register-excel-input on mount', () => {
     const wrapper = mountToolbar()
     const registered = wrapper.emitted('register-excel-input') || []
@@ -137,7 +147,7 @@ describe('ChatInputToolbar', () => {
     const wrapper = mountToolbar()
     const input = wrapper.find('input[type="file"]')
     expect(input.attributes('accept')).toContain('.xlsx')
-    expect(input.attributes('accept')).toContain('image/jpeg')
+    expect(input.attributes('accept')).toContain('.jpg')
     expect(input.attributes('accept')).toContain('.pdf')
   })
 

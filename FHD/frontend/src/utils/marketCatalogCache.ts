@@ -17,7 +17,8 @@ function storageKey(key: string): string {
 }
 
 export function buildMarketCatalogCacheKey(tab: string, q = ''): string {
-  return `${tab}:${q.trim()}`
+  // v2：市场拉取上限由 80 提升到 200，旧缓存键作废，避免继续显示截断结果。
+  return `v2:${tab}:${q.trim()}`
 }
 
 export function readMarketCatalogCache(key: string, ttlMs = DEFAULT_TTL_MS): MarketCatalogCacheEntry | null {

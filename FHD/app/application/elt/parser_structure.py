@@ -16,6 +16,7 @@ _AUXILIARY_SHEET_RE = re.compile(
     re.I,
 )
 _TOTAL_RE = re.compile(r"^(合计|总计|小计|汇总)(?:\s|[:：]|$)", re.I)
+_TOTAL_PREFIX_RE = re.compile(r"^(合计|总计|小计|汇总|共计|累计)")
 _NOTE_RE = re.compile(r"^(备注|说明|制表|审核|签字|签名)(?:\s|[:：]|$)", re.I)
 _CONTRACT_RE = re.compile(r"^(本合同|本协议|合同条款|协议条款|条款[:：])")
 _NUMBER_RE = re.compile(
@@ -323,6 +324,9 @@ def is_footer_or_note_row(values: Iterable[Any]) -> bool:
     first_two = " ".join(cells[:2])
     if _TOTAL_RE.match(first_two):
         return True
+    # 「合   计」常用空格排版，压缩空白后再按合计前缀判断。
+    if _TOTAL_PREFIX_RE.match(re.sub(r"\s+", "", first_two)):
+        return True
     return len(cells) <= 2 and bool(_NOTE_RE.match(first_two) or _CONTRACT_RE.match(first_two))
 
 
@@ -340,10 +344,39 @@ def is_auxiliary_sheet_name(name: str) -> bool:
     return bool(_AUXILIARY_SHEET_RE.search(clean_cell_text(name)))
 
 
+def probe_sheet_rows(
+    worksheet: Any,
+    *,
+    limit: int = 60,
+    scan_limit: int = 2000,
+) -> tuple[list[list[Any]], int]:
+    """取工作表开头的有效行，返回 ``(rows, 首行绝对行号)``。
+
+    报表模板常在真实表格前留几百行带格式的空白占位；只读前 60 行会看到全空，
+    进而把整表判成「没有表格」。这里跳过表前的整片空行，并对扫描行数设上限，
+    保证大文件也不会被拖慢。
+    """
+    rows: list[list[Any]] = []
+    first_row_number = 1
+    started = False
+    for index, values in enumerate(worksheet.iter_rows(values_only=True)):
+        if index >= scan_limit or len(rows) >= limit:
+            break
+        row = list(values)
+        if not started:
+            if all(value in (None, "") for value in row):
+                continue
+            started = True
+            first_row_number = index + 1
+        rows.append(row)
+    return rows, first_row_number
+
+
 __all__ = [
     "TableLayout",
     "clean_cell_text",
     "detect_table_layout",
+    "probe_sheet_rows",
     "header_match_score",
     "header_semantic_keys",
     "business_note_text",

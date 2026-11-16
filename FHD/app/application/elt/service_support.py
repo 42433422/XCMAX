@@ -25,8 +25,10 @@ READ_ONLY_MODE = 0o400
 # A delivery layout is a private printing resource, not an ETL field-mapping
 # template. It shares owner-scoped ETL persistence so document resolution can
 # enforce tenant + owner isolation, but it must not be selectable for import.
-ETL_SHIPMENT_DOCUMENT_TEMPLATE_DESCRIPTION = "ELT_SHIPMENT_DOCUMENT_TEMPLATE"
-EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="fhd-etl")
+ELT_SHIPMENT_DOCUMENT_TEMPLATE_DESCRIPTION = "ELT_SHIPMENT_DOCUMENT_TEMPLATE"
+# 预演与执行共用这个池。批量导入时文件多，2 个线程会让执行排在预演后面，
+# 表现为「状态 executing 但进度一直是 0」。4 个线程足够并发且不放大锁竞争。
+EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="fhd-etl")
 SUBMITTED: set[str] = set()
 SUBMITTED_LOCK = threading.Lock()
 SENSITIVE_WEBHOOK_HEADER_PARTS = (
@@ -105,8 +107,27 @@ def safe_error(exc: Exception) -> tuple[str, str]:
     ):
         logger.warning("ETL source file unreadable: %s", type(exc).__name__)
         return "ELT_FILE_CORRUPTED", "文件已损坏、加密或无法解压，未导入任何数据，请重新导出后上传"
+    if _is_schema_outdated(exc):
+        logger.error("ETL schema outdated: %s", exc)
+        return (
+            "ELT_SCHEMA_OUTDATED",
+            "数据库结构过旧，缺少必要字段，请重启应用完成自动升级后再试；若仍失败请联系技术支持",
+        )
     logger.exception("ETL operation failed")
     return "ELT_INTERNAL_ERROR", "ETL 处理失败，请检查文件或稍后重试"
+
+
+def _is_schema_outdated(exc: Exception) -> bool:
+    """缺列/缺表属于数据库结构落后，不能提示用户去检查文件。"""
+    from sqlalchemy.exc import OperationalError, ProgrammingError
+
+    if not isinstance(exc, (OperationalError, ProgrammingError)):
+        return False
+    message = str(getattr(exc, "orig", exc)).lower()
+    return any(
+        marker in message
+        for marker in ("no such column", "has no column named", "no such table", "no column named")
+    )
 
 
 def sanitize_webhook_headers(headers: dict[str, Any]) -> dict[str, str]:

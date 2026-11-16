@@ -75,6 +75,8 @@ export function useAiOpenPanelState(options: { cursorEnabled: Ref<boolean>; curs
   const routes = ref<AiopenWhitelistRoute[]>([])
   const remoteControlEnabled = ref(false)
   const keys = ref<Array<Record<string, unknown>>>([])
+  const usage = ref<Record<string, unknown> | null>(null)
+  const usageRecent = ref<Array<Record<string, unknown>>>([])
   const newKey = ref('')
   const accessResult = ref('')
   const panelError = ref('')
@@ -193,6 +195,8 @@ export function useAiOpenPanelState(options: { cursorEnabled: Ref<boolean>; curs
     routes,
     remoteControlEnabled,
     keys,
+    usage,
+    usageRecent,
     newKey,
     accessResult,
     panelError,

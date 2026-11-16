@@ -156,7 +156,7 @@ def test_archive_migration_matches_models_and_preserves_data_on_downgrade(monkey
     migration_path = (
         Path(__file__).parents[2] / "alembic" / "versions" / "2026_10_29_etl_archive.py"
     )
-    spec = importlib.util.spec_from_file_location("etl_archive_migration", migration_path)
+    spec = importlib.util.spec_from_file_location("elt_archive_migration", migration_path)
     migration = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)
     engine = create_engine("sqlite://")
@@ -183,14 +183,14 @@ def test_archive_migration_matches_models_and_preserves_data_on_downgrade(monkey
                 assert actual.get_foreign_keys(name) == expected.get_foreign_keys(name)
             connection.execute(
                 text(
-                    "INSERT INTO etl_archive_quotas (tenant_id, limit_bytes, reserved_bytes) "
+                    "INSERT INTO elt_archive_quotas (tenant_id, limit_bytes, reserved_bytes) "
                     "VALUES (1, 10, 4)"
                 )
             )
             migration.downgrade()
             assert (
                 connection.execute(
-                    text("SELECT reserved_bytes FROM etl_archive_quotas WHERE tenant_id = 1")
+                    text("SELECT reserved_bytes FROM elt_archive_quotas WHERE tenant_id = 1")
                 ).scalar_one()
                 == 4
             )

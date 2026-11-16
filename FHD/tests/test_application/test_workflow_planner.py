@@ -43,6 +43,8 @@ def test_employee_discovery_uses_verified_actor_and_replaces_client_catalog(
             "employee_pack_tools": [
                 {"pack_id": "known-report-worker", "runtime_ok": True},
                 {"pack_id": "broken-worker", "runtime_ok": False},
+                # 宿主管理员工：非平台管理员不可执行，不能出现在规划器选项里。
+                {"pack_id": "user-customer-service-officer", "runtime_ok": True},
             ]
         },
     )
@@ -408,6 +410,26 @@ class TestPlanWithLLM:
         assert result["success"] is True
         assert result["response"] == "你好，我可以帮你查询业务数据。"
         assert result["data"]["workflow_runtime"] == "xcagi-langgraph"
+
+    def test_reply_plan_failure_declares_no_business_write(self):
+        from app.application.ai_chat.planned_workflow_dispatch import PlannedWorkflowDispatch
+        from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+
+        plan = PlanGraph(
+            plan_id="plan-1",
+            intent="chat",
+            nodes=[
+                WorkflowNode(node_id="n1", tool_id="conversation", action="reply"),
+                WorkflowNode(node_id="n2", tool_id="conversation", action="reply"),
+            ],
+        )
+        result = PlannedWorkflowDispatch._execute_reply_plan(
+            plan, {"turn_id": "turn-1", "idempotency_key": "turn-1"}
+        )
+        assert result["success"] is False
+        assert result["execution"]["effect"] == "none"
+        assert result["execution"]["committed"] is False
+        assert result["execution"]["idempotency_key"] == "turn-1"
 
     def test_llm_http_error_returns_none(self):
         mock_response = Mock()

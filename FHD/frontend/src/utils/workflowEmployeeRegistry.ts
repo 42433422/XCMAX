@@ -33,9 +33,10 @@ export function mergeModManifestEntries(
 
   for (const m of filterWorkflowRegistrySourceMods(mods)) {
     const declaringModId = String(m.id || '').trim()
+    const allowNonDesk = m.directory_sourced === true
     for (const e of m.workflow_employees || []) {
       const id = String(e?.id || '').trim()
-      if (!id || isNonWorkflowDeskEmployeeId(id)) continue
+      if (!id || (!allowNonDesk && isNonWorkflowDeskEmployeeId(id))) continue
       const explicitHost = String(e.host_mod_id || e.enterprise_mod_id || '').trim()
       const resolvedHost = explicitHost || declaringModId
       if (baseMap.has(id)) {
@@ -54,6 +55,7 @@ export function mergeModManifestEntries(
         source: 'mod_manifest',
         carrierModId: declaringModId || undefined,
         hostModId: resolvedHost || undefined,
+        prompt_only: e.prompt_only === true,
       })
     }
   }

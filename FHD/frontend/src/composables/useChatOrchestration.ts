@@ -45,6 +45,7 @@ import agentRunsApi from '@/api/agentRuns'
 import { approvalCardId, parseApprovalCardFromPayload } from '@/utils/chatApprovalCard'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
 import { approvalApi } from '@/api/approval'
+import chatApi from '@/api/chat'
 import { getRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
 import { lastChatModelRoute } from '@/utils/chatModelRoute'
 import { plainTextFromChatHtml } from '@/utils/sanitizeHtml'
@@ -69,7 +70,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     syncFromServer,
     queueVoice,
     clearVoiceQueue,
-  } = useChatMessages(sessionId)
+  } = useChatMessages(sessionId, { isBusy: () => isLoading.value })
   const CHAT_TTS_ENABLED_KEY = 'xcagi_chat_tts_enabled'
   const ttsEnabled = ref(localStorage.getItem(CHAT_TTS_ENABLED_KEY) !== '0')
   function setTtsEnabled(enabled: boolean) {
@@ -169,6 +170,14 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     linkedExcelSheet,
     linkedExcelAllSheets,
     multimodalPendingCount,
+    multimodalStaging,
+    artifactStaging,
+    unsupportedStaging,
+    stageArtifactFiles,
+    noteUnsupportedFiles,
+    removeArtifactFile,
+    removeMultimodalFile,
+    dismissUnsupportedFile,
     excelSheetOptions,
     resolveExcelAnalysisContextForRequest,
     injectExcelContextPayload,
@@ -249,8 +258,11 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     onIdentityChange: () => {
       pendingDbWriteChatRetryMessages.value = null
       plannerWriteUnlockResumeDraft.value = ''
-      chatSessionActivity.cancelAll()
       chatRequest.cancelPendingChatBatch()
+      // 身份刷新会短暂让 owner 缺失；此时取消会让后端已经成功的一轮在前端显示成失败
+      // （network error / 回复丢失）。仍有进行中的轮次时交给 requestScope.isCurrent 自然收尾。
+      if (chatSessionActivity.runningIds.value.size || chatSessionActivity.streamingIds.value.size) return
+      chatSessionActivity.cancelAll()
       chatSessionActivity.runningIds.value.clear()
       chatSessionActivity.streamingIds.value.clear()
       clearVoiceQueue()
@@ -396,6 +408,8 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     linkedExcelAllSheets,
     linkedExcelSheet,
     onMultimodalFileChange,
+    stageArtifactFiles,
+    noteUnsupportedFiles,
     taskList,
     createTaskId,
     upsertTask,
@@ -498,6 +512,12 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     generation.setLoading(true)
     const turnId = createBusinessHarnessId('turn')
     addMessage(message, 'user', { turnId })
+    // 本轮若因视图/身份已过期而没有真正发出请求，要撤回刚插入的用户消息，
+    // 否则会留下一条永远没有回复、并在每次同步时被追加到末尾的“幽灵提问”。
+    const rollbackUnsentUser = () => {
+      const index = messages.value.findIndex(item => item.role === 'user' && item.turnId === turnId)
+      if (index >= 0) messages.value.splice(index, 1)
+    }
     const requestScope = {
       identity: resolveChatIdentity(String(modsStore.activeModId || '')),
       signal: generation.signal,
@@ -515,9 +535,9 @@ export function useChatOrchestration(options: UseChatViewOptions) {
         return
       }
       const isCurrent = localScope.isCurrent
-      if (!isCurrent()) return
+      if (!isCurrent()) { rollbackUnsentUser(); return }
       const previewModified = await handleShipmentModify(message, localScope.isCurrent)
-      if (!isCurrent()) return
+      if (!isCurrent()) { rollbackUnsentUser(); return }
       if (previewModified) {
         await saveMessage('user', message, taskSessionId)
         await refreshHistorySessions()
@@ -525,7 +545,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       }
 
       const printHandled = await handleStartPrintCommand(message, localScope)
-      if (!isCurrent()) return
+      if (!isCurrent()) { rollbackUnsentUser(); return }
       if (printHandled) {
         await saveMessage('user', message, taskSessionId)
         await refreshHistorySessions()
@@ -654,6 +674,63 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   const confirmWorkflowFromCard = (cardId: string) => controlWorkflowFromCard(cardId, 'confirm')
   const cancelWorkflowFromCard = (cardId: string) => controlWorkflowFromCard(cardId, 'cancel')
 
+  /** 撤回一条用户消息及其之后的回复，供「撤回编辑」使用。 */
+  async function recallUserMessage(index: number): Promise<{ ok: boolean; text: string; message?: string }> {
+    const message = messages.value[index]
+    if (!message || message.role !== 'user') return { ok: false, text: '', message: '只能撤回自己发送的消息。' }
+    if (isLoading.value || isExecuting.value) return { ok: false, text: '', message: '当前对话正在处理，请稍后再撤回。' }
+    const text = plainTextFromChatHtml(message.content).trim()
+    const persistenceId = String(message.persistence?.id || '')
+    if (persistenceId.startsWith('server:')) {
+      const messageId = Number(persistenceId.slice('server:'.length))
+      if (Number.isSafeInteger(messageId) && messageId > 0) {
+        try {
+          const result = await chatApi.deleteMessagesFrom(String(sessionId.value || ''), messageId)
+          if (!result?.success) return { ok: false, text, message: String(result?.message || '撤回服务端消息失败。') }
+        } catch {
+          return { ok: false, text, message: '撤回服务端消息失败，请稍后重试。' }
+        }
+      }
+    }
+    messages.value = messages.value.slice(0, index)
+    return { ok: true, text }
+  }
+
+  /** 失败卡片：按本轮幂等键向后端核对，确认这轮到底有没有写入。 */
+  async function reconcileTurnMessage(index: number): Promise<{ ok: boolean; message?: string }> {
+    const message = messages.value[index]
+    const turnId = String(message?.turnId || '').trim()
+    if (!message || !turnId) return { ok: false, message: '缺少本轮编号，无法核对。' }
+    try {
+      const result = (await chatApi.reconcileTurn(turnId)) as {
+        success?: boolean
+        message?: string
+        execution?: {
+          idempotency_key?: string
+          intent?: string
+          effect?: string
+          committed?: boolean
+        }
+      } | null
+      const execution = result?.execution
+      if (!result?.success || !execution) {
+        return { ok: false, message: String(result?.message || '核对失败，请稍后重试。') }
+      }
+      messages.value[index] = {
+        ...message,
+        execution: {
+          idempotencyKey: String(execution.idempotency_key || turnId),
+          intent: String(execution.intent || 'chat_turn'),
+          committed: execution.committed === true,
+          effect: String(execution.effect || 'unknown'),
+        },
+      }
+      return { ok: true }
+    } catch {
+      return { ok: false, message: '核对失败，请稍后重试。' }
+    }
+  }
+
   async function syncSessionMessages(options: { required?: boolean; isCurrent?: () => boolean } = {}): Promise<void> {
     if (isLoading.value || isExecuting.value) {
       if (options.required) throw new Error('当前会话正在处理，请稍后重试')
@@ -731,6 +808,12 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     excelAnalyzeUploading,
     excelAnalyzeInputRef,
     multimodalPendingCount,
+    multimodalStaging,
+    artifactStaging,
+    unsupportedStaging,
+    removeArtifactFile,
+    removeMultimodalFile,
+    dismissUnsupportedFile,
     excelSheetOptions,
     linkedExcelSheet,
     linkedExcelAllSheets,
@@ -744,6 +827,8 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     retryModelOnly: (message: string, turnId: string) => sendMessage(message, { retryOf: turnId, idempotencyKey: turnId }),
     confirmDestructive: (message: string, idempotencyKey: string) => sendMessage(message, { destructiveConfirmed: true, idempotencyKey }),
     stopReply,
+    recallUserMessage,
+    reconcileTurnMessage,
     confirmWorkflowFromCard,
     cancelWorkflowFromCard,
     confirmTask,
@@ -766,6 +851,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     bindAllExcelSheetsToChat,
     toggleTaskExpanded,
     setTaskFilter,
+    removeTask,
     ...agentTaskRuntime,
     jumpToTaskMessage,
     handleAutoAction,

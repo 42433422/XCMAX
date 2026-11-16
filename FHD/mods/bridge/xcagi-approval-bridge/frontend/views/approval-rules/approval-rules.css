@@ -1,19 +1,25 @@
-/* 拆分自 ApprovalRulesView.vue（原 <style scoped> 块逐字迁移，行为不变）；
-   入口与各子组件均以 <style scoped src="./approval-rules.css"> 引用。 */
+/* 审批流程规则页：与审批工作台保持同一套面板视觉（细边框卡片 + 表格化列表 + 右侧表单）。 */
 .approval-rules-view {
-  padding: 20px;
-  max-width: 900px;
-  margin: 0 auto;
+  padding: 24px 28px 32px;
+  background: #f5f7fa;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.view-header {
+  margin-bottom: 20px;
 }
 
 .view-header h2 {
-  margin: 0 0 5px 0;
-  color: #333;
+  margin: 0 0 6px 0;
+  font-size: 22px;
+  color: #1f2937;
 }
 
 .subtitle {
-  margin: 0 0 20px 0;
-  color: #666;
+  margin: 0;
+  color: #6b7280;
   font-size: 14px;
 }
 
@@ -31,276 +37,456 @@
 
 .rules-container {
   background: #fff;
-  border-radius: 8px;
-  padding: 20px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  border: 1px solid #ebeef5;
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(31, 41, 55, 0.04);
+  overflow: hidden;
 }
 
 .rules-header {
-  margin-bottom: 20px;
-  padding-bottom: 15px;
-  border-bottom: 1px solid #eee;
-}
-
-.toggle-label {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+  border-bottom: 1px solid #f0f2f5;
+}
+
+.rules-header__text h3 {
+  margin: 0 0 4px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.rules-header__text p {
+  margin: 0;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.toggle-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: #4b5563;
   cursor: pointer;
+  user-select: none;
 }
 
 .toggle-switch {
-  width: 50px;
-  height: 26px;
-  background: #ccc;
-  border-radius: 13px;
+  width: 42px;
+  height: 22px;
+  background: #dcdfe6;
+  border-radius: 11px;
   position: relative;
-  transition: background 0.3s;
+  transition: background 0.2s;
+  flex-shrink: 0;
 }
 
 .toggle-switch.active {
-  background: #4CAF50;
+  background: #2563eb;
 }
 
 .toggle-slider {
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
   background: #fff;
   border-radius: 50%;
   position: absolute;
   top: 2px;
   left: 2px;
-  transition: transform 0.3s;
+  transition: transform 0.2s;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
 }
 
 .toggle-switch.active .toggle-slider {
-  transform: translateX(24px);
+  transform: translateX(20px);
+}
+
+/* 左侧规则表 + 右侧添加表单 */
+.rules-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  align-items: start;
+}
+
+.rules-list-wrap {
+  min-width: 0;
+}
+
+.rules-table-head,
+.rule-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) 96px minmax(0, 1.4fr) 88px;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 20px;
+}
+
+.rules-table-head {
+  background: #fafbfc;
+  border-bottom: 1px solid #f0f2f5;
+  font-size: 12px;
+  color: #909399;
+}
+
+.rules-table-head .align-right {
+  text-align: right;
+}
+
+.rules-list {
+  padding: 4px 0;
 }
 
 .rule-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 15px;
-  background: #f9f9f9;
-  border-radius: 6px;
-  margin-bottom: 10px;
+  border-bottom: 1px solid #f2f4f7;
+  transition: background 0.15s;
 }
 
-.rule-info {
-  flex: 1;
+.rule-item:last-child {
+  border-bottom: none;
 }
 
-.rule-main {
+.rule-item:hover {
+  background: #f8fafc;
+}
+
+.rule-cell {
+  min-width: 0;
+}
+
+.rule-action-cell {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 5px;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .rule-action {
-  font-weight: 600;
-  color: #333;
-}
-
-.rule-trigger {
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-}
-
-.rule-trigger.always {
-  background: #ffebee;
-  color: #c62828;
-}
-
-.rule-trigger.conditional {
-  background: #fff3e0;
-  color: #ef6c00;
-}
-
-.rule-trigger.never {
-  background: #e8f5e9;
-  color: #2e7d32;
-}
-
-.rule-description {
-  color: #666;
   font-size: 14px;
-  margin-bottom: 3px;
+  font-weight: 500;
+  color: #1f2937;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .rule-path {
-  color: #999;
   font-size: 12px;
+  color: #9ca3af;
   font-family: monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rule-trigger {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.rule-trigger.always {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.rule-trigger.conditional {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.rule-trigger.never {
+  background: #d1fae5;
+  color: #047857;
+}
+
+.rule-description {
+  font-size: 13px;
+  color: #6b7280;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .rule-actions {
   display: flex;
+  justify-content: flex-end;
   gap: 8px;
 }
 
 .rule-actions button {
-  padding: 6px 10px;
+  width: 28px;
+  height: 28px;
   border: none;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  transition: all 0.15s;
 }
 
 .btn-edit {
-  background: #e3f2fd;
-  color: #1565c0;
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.btn-edit:hover {
+  background: #2563eb;
+  color: #fff;
 }
 
 .btn-delete {
-  background: #ffebee;
-  color: #c62828;
+  background: #fef2f2;
+  color: #dc2626;
 }
 
+.btn-delete:hover {
+  background: #dc2626;
+  color: #fff;
+}
+
+.rules-empty {
+  padding: 32px 20px;
+  text-align: center;
+  font-size: 13px;
+  color: #9ca3af;
+}
+
+/* 添加新规则（右侧栏） */
 .add-rule-section {
-  margin-top: 25px;
-  padding-top: 20px;
-  border-top: 1px dashed #ddd;
+  padding: 16px 20px 20px;
+  border-left: 1px solid #f0f2f5;
+  background: #fcfcfd;
+  position: sticky;
+  top: 0;
 }
 
 .add-rule-section h3 {
-  margin: 0 0 15px 0;
-  font-size: 16px;
+  margin: 0 0 14px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2937;
 }
 
 .add-form {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .form-group {
   display: flex;
   flex-direction: column;
-}
-
-.form-group.full-width {
-  grid-column: 1 / -1;
+  gap: 5px;
+  min-width: 0;
 }
 
 .form-group label {
-  font-size: 13px;
-  color: #666;
-  margin-bottom: 5px;
+  font-size: 12px;
+  color: #6b7280;
 }
 
 .form-group select,
 .form-group input {
-  padding: 8px 12px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 14px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #dcdfe6;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #1f2937;
+  background: #fff;
+  transition: border-color 0.15s;
+}
+
+.form-group select:focus,
+.form-group input:focus {
+  outline: none;
+  border-color: #2563eb;
 }
 
 .btn-add {
-  grid-column: 1 / -1;
-  padding: 10px;
-  background: #4CAF50;
-  color: white;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 9px 14px;
+  background: #2563eb;
+  color: #fff;
   border: none;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13px;
+  transition: background 0.15s;
+}
+
+.btn-add:hover:not(:disabled) {
+  background: #1d4ed8;
 }
 
 .btn-add:disabled {
-  background: #ccc;
+  background: #c0c4cc;
   cursor: not-allowed;
 }
 
 .no-rules {
   text-align: center;
-  padding: 40px;
-  color: #666;
+  padding: 48px 20px;
+  color: #6b7280;
 }
 
 .no-rules i {
-  font-size: 48px;
-  color: #4CAF50;
-  margin-bottom: 15px;
+  font-size: 40px;
+  color: #059669;
+  margin-bottom: 12px;
 }
 
+/* 待审批请求 */
 .pending-approvals {
-  margin-top: 25px;
+  margin-top: 16px;
   background: #fff;
-  border-radius: 8px;
-  padding: 20px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  border: 1px solid #ebeef5;
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(31, 41, 55, 0.04);
+  overflow: hidden;
 }
 
 .pending-approvals h3 {
-  margin: 0 0 15px 0;
-  color: #333;
+  margin: 0;
+  padding: 16px 20px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2937;
+  border-bottom: 1px solid #f0f2f5;
+}
+
+.pending-list {
+  padding: 8px 12px;
 }
 
 .pending-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 15px;
-  background: #fff3e0;
-  border-radius: 6px;
-  margin-bottom: 10px;
+  gap: 12px;
+  padding: 12px 8px;
+  border-bottom: 1px solid #f2f4f7;
+}
+
+.pending-item:last-child {
+  border-bottom: none;
 }
 
 .pending-info {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
 }
 
 .pending-action {
-  font-weight: 600;
-  color: #e65100;
+  font-size: 14px;
+  font-weight: 500;
+  color: #1f2937;
 }
 
 .pending-time {
   font-size: 12px;
-  color: #999;
+  color: #9ca3af;
 }
 
 .pending-actions {
   display: flex;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .pending-actions button {
-  padding: 6px 12px;
+  padding: 6px 14px;
   border: none;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
   font-size: 13px;
+  transition: opacity 0.15s;
+}
+
+.pending-actions button:hover {
+  opacity: 0.85;
 }
 
 .btn-approve {
-  background: #4CAF50;
+  background: #059669;
   color: white;
 }
 
 .btn-reject {
-  background: #f44336;
+  background: #dc2626;
   color: white;
 }
 
 .btn-cancel {
   padding: 8px 16px;
-  background: #eee;
+  background: #f3f4f6;
+  color: #4b5563;
   border: none;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
 }
 
 .btn-save {
   padding: 8px 16px;
-  background: #4CAF50;
+  background: #2563eb;
   color: white;
   border: none;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
+}
+
+@media (max-width: 1100px) {
+  .rules-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .add-rule-section {
+    border-left: none;
+    border-top: 1px solid #f0f2f5;
+    position: static;
+  }
+
+  .rules-table-head,
+  .rule-item {
+    grid-template-columns: minmax(0, 1.2fr) 88px minmax(0, 1fr) 80px;
+    gap: 12px;
+    padding: 12px 16px;
+  }
+}
+
+@media (max-width: 760px) {
+  .approval-rules-view {
+    padding: 16px;
+  }
+
+  .rules-table-head {
+    display: none;
+  }
+
+  .rule-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 6px;
+  }
+
+  .rule-description {
+    grid-column: 1 / -1;
+  }
+
+  .rule-actions {
+    grid-column: 2;
+    grid-row: 1;
+  }
 }

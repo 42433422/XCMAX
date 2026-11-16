@@ -17,7 +17,7 @@ from app.db.models.elt import EltRun, EltUpload
 from app.db.models.elt_archive import EltArchiveQuota, EltArchiveVersion
 from app.fastapi_routes.reviewed_excel_template import _source
 from app.infrastructure.tenant_scope import tenant_scope
-from tests.fixtures.etl_template.legacy_biff import fixture, record
+from tests.fixtures.elt_template.legacy_biff import fixture, record
 from tests.test_application.test_reviewed_excel_template import review_store as _review_store
 
 review_store = _review_store
@@ -273,7 +273,7 @@ def test_http_preview_download_allowed_but_formal_save_blocked_by_server_lineage
 
 
 def test_normal_xlsx_path_unchanged():
-    from tests.fixtures.etl_template.sources.generate import sample
+    from tests.fixtures.elt_template.sources.generate import sample
 
     body = sample()
     out, review = legacy.prepare_archive_workbook(body)
@@ -448,7 +448,7 @@ def test_convert_xls_to_xlsx_for_slice_enters_inspect_path():
 
 
 def test_ensure_slice_workbook_passthrough_and_convert():
-    from tests.fixtures.etl_template.sources.generate import sample
+    from tests.fixtures.elt_template.sources.generate import sample
 
     xlsx = sample()
     out, receipt = legacy.ensure_slice_workbook(xlsx)

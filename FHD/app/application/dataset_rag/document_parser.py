@@ -11,6 +11,34 @@ from app.infrastructure.rag.semantic_chunker import Chunk
 from app.utils.security.safe_download_path import resolve_under_allowed_dirs
 
 
+def _table_to_markdown(rows: Any, *, max_rows: int = 200) -> str:
+    """Serialize table rows to Markdown without adding a table-parsing dependency."""
+    all_rows = list(rows or [])
+    cleaned: list[list[str]] = []
+    for row in all_rows[:max_rows]:
+        cells = [" ".join(str(cell or "").split()) for cell in (row or [])]
+        if any(cells):
+            cleaned.append(cells)
+    if not cleaned:
+        return ""
+    width = max(len(row) for row in cleaned)
+    for row in cleaned:
+        row.extend([""] * (width - len(row)))
+
+    def escape(value: str) -> str:
+        return value.replace("|", "\\|")
+
+    lines = [
+        "| " + " | ".join(escape(cell) for cell in cleaned[0]) + " |",
+        "| " + " | ".join(["---"] * width) + " |",
+    ]
+    for row in cleaned[1:]:
+        lines.append("| " + " | ".join(escape(cell) for cell in row) + " |")
+    if len(all_rows) > max_rows:
+        lines.append(f"\n（表格已截断，仅保留前 {max_rows} 行）")
+    return "\n".join(lines)
+
+
 class DocumentParser:
     """Resolve admitted paths, decode document formats, and segment text."""
 
@@ -34,6 +62,12 @@ class DocumentParser:
         return self._default_roots()
 
     def _extract_file_text(self, path: Path) -> tuple[str, str, dict[str, Any]]:
+        """按格式路由：复杂文档优先 Docling，表格与文本保持原实现。"""
+        from app.application.document_parsing.router import parse_document
+
+        return parse_document(path, lambda: self._extract_legacy_file_text(path))
+
+    def _extract_legacy_file_text(self, path: Path) -> tuple[str, str, dict[str, Any]]:
         if not path.exists() or not path.is_file():
             raise ValueError(f"file not found: {path}")
         suffix = path.suffix.lower()
@@ -41,29 +75,80 @@ class DocumentParser:
             return self._extract_pdf_text(path)
         if suffix == ".docx":
             return self._extract_docx_text(path)
+        if suffix == ".pptx":
+            return self._extract_pptx_text(path)
         if suffix in {".xlsx", ".xls"}:
             return self._extract_excel_text(path)
         if suffix in {".txt", ".md", ".csv", ".json", ".log"}:
-            return (
-                path.read_text(encoding="utf-8", errors="replace"),
-                "text_file",
-                {"extension": suffix},
-            )
+            text, encoding = self._read_text_with_fallback(path)
+            return (text, "text_file", {"extension": suffix, "encoding": encoding})
         raise ValueError(f"unsupported document type: {suffix or '<none>'}")
+
+    def _read_text_with_fallback(self, path: Path) -> tuple[str, str]:
+        """Read text without adding chardet: UTF-8 first, then GB18030, then lossy UTF-8."""
+        raw = path.read_bytes()
+        for encoding in ("utf-8-sig", "gb18030", "utf-16"):
+            try:
+                return raw.decode(encoding), encoding
+            except UnicodeDecodeError:
+                continue
+        return raw.decode("utf-8", errors="replace"), "utf-8(replace)"
 
     def _extract_pdf_text(self, path: Path) -> tuple[str, str, dict[str, Any]]:
         try:
             import pdfplumber
         except ImportError as exc:
             raise RuntimeError("pdfplumber is required to ingest PDF documents") from exc
+        max_pages = 500
+        max_tables = 50
+        max_table_rows = 200
         pages: list[str] = []
+        table_count = 0
+        empty_pages: list[int] = []
         with pdfplumber.open(str(path)) as pdf:
-            for index, page in enumerate(pdf.pages, start=1):
+            all_pages = pdf.pages
+            page_count = len(all_pages)
+            for index, page in enumerate(all_pages[:max_pages], start=1):
                 page_text = (page.extract_text() or "").strip()
-                if page_text:
-                    pages.append(f"[page {index}]\n{page_text}")
-            page_count = len(pdf.pages)
-        return ("\n\n".join(pages), "pdfplumber", {"extension": ".pdf", "page_count": page_count})
+                tables: list[str] = []
+                if table_count < max_tables:
+                    try:
+                        raw_tables = page.extract_tables() or []
+                    except (ValueError, TypeError):
+                        raw_tables = []
+                    for rows in raw_tables:
+                        if table_count >= max_tables:
+                            break
+                        markdown = _table_to_markdown(rows, max_rows=max_table_rows)
+                        if markdown:
+                            tables.append(f"[table {table_count + 1}]\n{markdown}")
+                            table_count += 1
+                if page_text or tables:
+                    block = [f"[page {index}]"]
+                    if page_text:
+                        block.append(page_text)
+                    block.extend(tables)
+                    pages.append("\n".join(block))
+                else:
+                    empty_pages.append(index)
+        if not pages:
+            raise ValueError(
+                "PDF 未检测到可提取文本，可能是扫描件；当前版本未启用 OCR，请提供文本版 PDF 或先做 OCR"
+            )
+        metadata: dict[str, Any] = {
+            "extension": ".pdf",
+            "page_count": page_count,
+            "table_count": table_count,
+            "pages_without_text": len(empty_pages),
+        }
+        warnings: list[str] = []
+        if page_count > max_pages:
+            warnings.append(f"仅解析前 {max_pages} 页（共 {page_count} 页）")
+        if empty_pages:
+            warnings.append(f"{len(empty_pages)} 页未提取到文本，可能为图片页")
+        if warnings:
+            metadata["parser_warnings"] = warnings
+        return ("\n\n".join(pages), "pdfplumber", metadata)
 
     def _extract_docx_text(self, path: Path) -> tuple[str, str, dict[str, Any]]:
         try:
@@ -71,13 +156,89 @@ class DocumentParser:
         except ImportError as exc:
             raise RuntimeError("python-docx is required to ingest DOCX documents") from exc
         doc = Document(str(path))
-        parts: list[str] = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
+        parts: list[str] = []
+        header_count = 0
+        footer_count = 0
+        for section in doc.sections:
+            for paragraph in section.header.paragraphs:
+                text = paragraph.text.strip()
+                if text:
+                    parts.append(f"[页眉] {text}")
+                    header_count += 1
+            for paragraph in section.footer.paragraphs:
+                text = paragraph.text.strip()
+                if text:
+                    parts.append(f"[页脚] {text}")
+                    footer_count += 1
+        for paragraph in doc.paragraphs:
+            text = paragraph.text.strip()
+            if text:
+                parts.append(text)
+        table_count = 0
         for table in doc.tables:
-            for row in table.rows:
-                cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
-                if cells:
-                    parts.append(" | ".join(cells))
-        return ("\n".join(parts), "python-docx", {"extension": ".docx"})
+            rows = [[cell.text.strip() for cell in row.cells] for row in table.rows]
+            markdown = _table_to_markdown(rows)
+            if markdown:
+                table_count += 1
+                parts.append(f"[table {table_count}]\n{markdown}")
+        return (
+            "\n".join(parts),
+            "python-docx",
+            {
+                "extension": ".docx",
+                "paragraph_count": len(doc.paragraphs),
+                "table_count": table_count,
+                "header_paragraph_count": header_count,
+                "footer_paragraph_count": footer_count,
+            },
+        )
+
+    def _extract_pptx_text(self, path: Path) -> tuple[str, str, dict[str, Any]]:
+        try:
+            from pptx import Presentation
+        except ImportError as exc:
+            raise RuntimeError("python-pptx is required to ingest PPTX documents") from exc
+        presentation = Presentation(str(path))
+        parts: list[str] = []
+        table_count = 0
+        slide_count = 0
+
+        def collect_shapes(shapes: Any, slide_index: int) -> None:
+            nonlocal table_count
+            for shape in shapes:
+                if getattr(shape, "shape_type", None) == 6 and hasattr(shape, "shapes"):
+                    collect_shapes(shape.shapes, slide_index)
+                    continue
+                if getattr(shape, "has_text_frame", False):
+                    text = str(getattr(shape, "text", "") or "").strip()
+                    if text:
+                        parts.append(text)
+                if getattr(shape, "has_table", False):
+                    rows = [
+                        [str(cell.text or "").strip() for cell in row.cells]
+                        for row in shape.table.rows
+                    ]
+                    markdown = _table_to_markdown(rows)
+                    if markdown:
+                        table_count += 1
+                        parts.append(f"[slide {slide_index} table {table_count}]\n{markdown}")
+
+        for index, slide in enumerate(presentation.slides, start=1):
+            slide_count += 1
+            parts.append(f"[slide {index}]")
+            collect_shapes(slide.shapes, index)
+            notes_text = ""
+            if getattr(slide, "has_notes_slide", False):
+                notes_frame = getattr(slide.notes_slide, "notes_text_frame", None)
+                if notes_frame is not None:
+                    notes_text = str(getattr(notes_frame, "text", "") or "").strip()
+            if notes_text:
+                parts.append(f"[备注 {index}] {notes_text}")
+        return (
+            "\n".join(parts),
+            "python-pptx",
+            {"extension": ".pptx", "slide_count": slide_count, "table_count": table_count},
+        )
 
     def _extract_excel_text(self, path: Path) -> tuple[str, str, dict[str, Any]]:
         suffix = path.suffix.lower()

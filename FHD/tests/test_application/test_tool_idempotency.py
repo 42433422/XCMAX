@@ -31,6 +31,39 @@ def claims(tmp_path, monkeypatch):
     permissions.clear_idempotent_replay_for_tests()
 
 
+def test_reconcile_turn_effect_reports_committed(claims):
+    key, replay = _begin()
+    assert replay is None
+    permissions.finish_idempotent_replay(key, {"success": True, "data": {"ok": True}})
+
+    result = permissions.reconcile_turn_effect(tenant_id="421", idempotency_key="same-call")
+
+    assert result["effect"] == "committed"
+    assert result["committed"] is True
+    assert result["records"] == 1
+
+
+def test_reconcile_turn_effect_none_without_records(claims):
+    result = permissions.reconcile_turn_effect(tenant_id="421", idempotency_key="unknown-turn")
+
+    assert result == {
+        "effect": "none",
+        "committed": False,
+        "records": 0,
+        "in_flight": 0,
+        "unknown": 0,
+    }
+
+
+def test_reconcile_turn_effect_unknown_while_inflight(claims):
+    _begin()
+
+    result = permissions.reconcile_turn_effect(tenant_id="421", idempotency_key="same-call")
+
+    assert result["effect"] == "unknown"
+    assert result["in_flight"] == 1
+
+
 def _process_claim(path, sender, barrier, release, mode):
     os.environ["XCAGI_TOOL_IDEMPOTENCY_PATH"] = str(path)
     permissions.drop_process_idempotency_memory()

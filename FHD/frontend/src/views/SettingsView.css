@@ -22,10 +22,10 @@
 
 .settings-layout {
   display: grid;
-  grid-template-columns: var(--settings-profile-width) minmax(0, var(--settings-main-max));
+  grid-template-columns: var(--settings-profile-width) minmax(0, 1fr);
   gap: 32px;
   align-items: start;
-  max-width: calc(var(--settings-profile-width) + var(--settings-main-max) + 32px);
+  max-width: 1080px;
   margin: 0 auto;
   padding: 24px 20px 48px;
 }
@@ -390,6 +390,90 @@
   gap: 12px;
 }
 
+/* 分区导航：沿用 shadcn / Supabase 设置页的「左侧分区 + 右侧内容」模式 */
+.settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--settings-card-border);
+}
+
+.settings-nav__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #475569;
+  text-decoration: none;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.settings-nav__item:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.settings-nav__item.is-active {
+  background: #eff6ff;
+  color: #0b72d9;
+  font-weight: 600;
+}
+
+.settings-nav__icon {
+  width: 16px;
+  text-align: center;
+  font-size: 13px;
+}
+
+/* 分区导航插画图标 */
+.settings-nav__icon--art {
+  width: 18px;
+  height: 18px;
+  font-size: 0;
+  border-radius: 5px;
+  object-fit: contain;
+  display: block;
+}
+
+.settings-group {
+  scroll-margin-top: 16px;
+}
+
+.settings-group + .settings-group {
+  margin-top: 28px;
+}
+
+.settings-group__title {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+  letter-spacing: 0.02em;
+  scroll-margin-top: 16px;
+}
+
+@media (max-width: 1023px) {
+  .settings-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  .settings-nav__item {
+    border: 1px solid var(--settings-card-border);
+  }
+}
+
 .settings-card {
   margin: 0;
   border: 1px solid var(--settings-card-border);
@@ -414,7 +498,7 @@
 
 .settings-row {
   display: grid;
-  grid-template-columns: var(--settings-icon-size) 1fr auto auto;
+  grid-template-columns: var(--settings-icon-size) minmax(0, 1fr) minmax(0, auto) auto;
   align-items: center;
   gap: 12px;
   min-height: 56px;
@@ -482,6 +566,19 @@
   background: linear-gradient(145deg, #94a3b8, #64748b);
 }
 
+/* 插画图标：图标自带圆角底板，去掉渐变方块底 */
+.settings-row__icon--art {
+  background: none;
+}
+
+.settings-row__icon-art {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border-radius: 10px;
+  object-fit: contain;
+}
+
 .settings-row__label {
   font-size: 15px;
   font-weight: 500;
@@ -517,7 +614,7 @@
 .settings-row__meta {
   font-size: 13px;
   color: #9ca3af;
-  max-width: 42%;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -530,7 +627,7 @@
   padding: 4px 10px;
   border-radius: 999px;
   background: #f3f4f6;
-  max-width: 46%;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1761,11 +1858,6 @@ select.settings-item__control,
   .settings-profile__btn {
     width: auto;
     min-width: 88px;
-  }
-
-  .settings-row__meta,
-  .settings-row__pill {
-    max-width: 34%;
   }
 
   .settings-item {

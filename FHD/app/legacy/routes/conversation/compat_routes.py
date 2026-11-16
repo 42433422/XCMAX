@@ -5,12 +5,17 @@ XCAGI 前端兼容 API — AI 聊天路由（统一对话 / 流式 / 批量）�
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
+import time
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from app.application import chat_stream_replay
 from app.application.planner_compat_service import (
+    _prepare_compat_chat_body,
     compat_chat_stream_async,
     execute_compat_chat,
     execute_compat_chat_batch,
@@ -106,15 +111,87 @@ def conversation_follow_platform(
     return {"ok": True}
 
 
-async def _chat_stream_with_slot_release(
-    request: Request, body: XcagiCompatChatBody, *, ai_tier: str
-):
-    from app.middleware.chat_stream_limit import release_chat_stream_slot
+def _sse_response(events) -> StreamingResponse:
+    return StreamingResponse(
+        events,
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
+
+def _sse_payloads(chunk: bytes) -> list[dict]:
+    """从后端产出的 SSE 字节块中取出 data 事件（其它内容不进回放缓冲）。"""
+    if not isinstance(chunk, (bytes, bytearray)) or not bytes(chunk).startswith(b"data"):
+        return []
+    payloads: list[dict] = []
+    for event in bytes(chunk).split(b"\n\n"):
+        for line in event.splitlines():
+            if not line.startswith(b"data: "):
+                continue
+            try:
+                item = json.loads(line[6:])
+            except (ValueError, UnicodeError):
+                continue
+            if isinstance(item, dict):
+                payloads.append(item)
+    return payloads
+
+
+def _replay_line(row: dict) -> bytes:
+    payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+    seq = str(row.get("seq") or 0).encode()
+    return b"id: " + seq + b"\ndata: " + json.dumps(payload, ensure_ascii=False).encode() + b"\n\n"
+
+
+async def _follow_replay(turn_id: str, after: int = 0, *, idle_timeout: float = 600.0):
+    """从回放缓冲跟随一个 turn，直到它落终态；客户端断开只会停止本协程。"""
+    cursor = max(0, int(after))
+    deadline = time.monotonic() + idle_timeout
+    idle_ticks = 0
+    while True:
+        rows = chat_stream_replay.events_after(turn_id, cursor)
+        for row in rows:
+            cursor = max(cursor, int(row.get("seq") or 0))
+            yield _replay_line(row)
+        if chat_stream_replay.finish_status(turn_id):
+            for row in chat_stream_replay.events_after(turn_id, cursor):
+                yield _replay_line(row)
+            return
+        if time.monotonic() > deadline:
+            yield b": replay idle timeout\n\n"
+            return
+        idle_ticks += 1
+        if idle_ticks % 150 == 0:
+            yield b": ping\n\n"
+        await asyncio.sleep(0.1)
+
+
+async def _produce_replay(
+    request: Request, body: XcagiCompatChatBody, *, ai_tier: str, turn_id: str
+) -> None:
+    """后台消费真实事件流并写入回放缓冲；与 HTTP 连接生命周期无关。"""
+    from app.middleware.chat_stream_limit import release_chat_stream_slot
+    from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+    status = "done"
     try:
         async for chunk in compat_chat_stream_async(request, body, ai_tier=ai_tier):
-            yield chunk
+            for payload in _sse_payloads(chunk):
+                chat_stream_replay.append(turn_id, payload)
+    except asyncio.CancelledError:
+        status = "aborted"
+        raise
+    except RECOVERABLE_ERRORS as exc:
+        status = "error"
+        message = str(exc).strip() or exc.__class__.__name__
+        chat_stream_replay.append(turn_id, {"type": "error", "message": message})
+        logger.warning("chat stream producer failed", exc_info=True)
     finally:
+        chat_stream_replay.mark_finished(turn_id, status)
         release_chat_stream_slot()
 
 
@@ -123,9 +200,20 @@ async def _chat_stream_with_slot_release(
 async def ai_unified_chat_stream(request: Request, body: XcagiCompatChatBody):
     from app.middleware.chat_stream_limit import acquire_chat_stream_slot
 
-    if not acquire_chat_stream_slot():
-        from fastapi.responses import JSONResponse
+    body = _prepare_compat_chat_body(request, body)
+    turn_id = str((body.context or {}).get("turn_id") or "")
+    assert_p2_elevated_claim_or_raise(request)
+    tier = resolve_ai_tier(request)
 
+    # 同一 turn 仍在生产：本次连接只跟随，不重复执行（断线重连）。
+    if not chat_stream_replay.claim_runner(turn_id):
+        return _sse_response(_follow_replay(turn_id))
+    # 已结束的 turn 再次 POST 视为重试：清掉旧回放，重新执行。
+    chat_stream_replay.clear(turn_id)
+    chat_stream_replay.claim_runner(turn_id)
+
+    if not acquire_chat_stream_slot():
+        chat_stream_replay.release_runner(turn_id)
         return JSONResponse(
             status_code=429,
             content={
@@ -134,17 +222,19 @@ async def ai_unified_chat_stream(request: Request, body: XcagiCompatChatBody):
                 "message": "流式对话并发已满，请稍后重试",
             },
         )
-    assert_p2_elevated_claim_or_raise(request)
-    tier = resolve_ai_tier(request)
-    return StreamingResponse(
-        _chat_stream_with_slot_release(request, body, ai_tier=tier),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    )
+    asyncio.create_task(_produce_replay(request, body, ai_tier=tier, turn_id=turn_id))
+    return _sse_response(_follow_replay(turn_id))
+
+
+@router.get("/ai/chat/stream/resume")
+async def ai_chat_stream_resume(
+    turn_id: str = Query(..., min_length=1),
+    after: int = Query(0, ge=0),
+):
+    """断线后按 ``turn_id`` + 最后事件序号继续读取；已结束则直接回放终态。"""
+    if not chat_stream_replay.has_replay(turn_id) and not chat_stream_replay.finish_status(turn_id):
+        raise HTTPException(status_code=404, detail="没有可续传的流")
+    return _sse_response(_follow_replay(turn_id, after))
 
 
 @router.post("/ai/chat")

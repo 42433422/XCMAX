@@ -21,6 +21,7 @@
         :sidebar-item-title="sidebarItemTitle"
         :sidebar-item-preview="sidebarItemPreview"
         :sidebar-item-avatar-text="sidebarItemAvatarText"
+        :sidebar-item-avatar-src="sidebarItemAvatarSrc"
         :sidebar-item-super-avatar-src="sidebarItemSuperAvatarSrc"
         :sidebar-item-unread="sidebarItemUnread"
         @open-contact-picker="openContactPicker"
@@ -68,6 +69,7 @@
       <ConversationChat
         v-else-if="activeConversationId"
         :active-title="activeTitle"
+        :active-avatar-src="activeAvatarSrc"
         :has-more-history="hasMoreHistory"
         :busy="busy || (isCustomerEnterpriseCs() && enterpriseCsUnconfirmed)"
         :messages="messages"
@@ -104,7 +106,7 @@
 </template>
 
 <script setup lang="ts">
-import { defineAsyncComponent, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import {
   createDirectConversation,
   fetchCsInbox,
@@ -141,6 +143,7 @@ import {
   systemEntryDispatch,
   systemEntryIdentity,
   systemEntryStatusLabel,
+  conversationAvatarSrc,
   type DutyEmployeeEntry,
   type ExternalAppEntry,
   type SystemEmployeeEntry,
@@ -333,6 +336,7 @@ const {
   sidebarItemTitle,
   sidebarItemPreview,
   sidebarItemAvatarText,
+  sidebarItemAvatarSrc,
   sidebarItemSuperAvatarSrc,
   sidebarItemUnread,
   selectSidebarItem,
@@ -347,6 +351,12 @@ const {
   isAdminCustomerServiceConsole,
   selectConversation,
   activatePinnedEntry,
+})
+
+/** 会话头部头像与列表一致：账号池持久化头像，企业专属客服使用管理端小C头像。 */
+const activeAvatarSrc = computed(() => {
+  const conv = conversations.value.find((c) => c.id === activeConversationId.value)
+  return conv ? conversationAvatarSrc(conv) : null
 })
 
 // 以普通对象包装传给子组件的 DOM ref，避免模板顶层 ref 自动解包导致 `:scroll-el="scrollEl"`

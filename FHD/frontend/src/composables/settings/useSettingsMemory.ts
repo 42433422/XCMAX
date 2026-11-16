@@ -3,7 +3,6 @@ import { useI18n } from 'vue-i18n'
 import type { User } from '@/api/auth'
 import { memoryV2Api, type MemoryV2Record, type MemoryV2Status, type MemoryV2Summary, type MemoryV2Type } from '@/api/memoryV2'
 import { butlerProfileApi, type ButlerProfileView } from '@/api/butlerProfile'
-import { resolveModeScopedChatUserId } from '@/composables/useChatDbTokenGate'
 import { appAlert, appConfirm } from '@/utils/appDialog'
 import { errorMessage } from './utils'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
@@ -52,7 +51,11 @@ export function useSettingsMemory(localUser: Ref<User | null>) {
   const persyError = ref('')
   let profileRequest = 0
 
-  const persyUserId = computed(() => { void productReadAccountEpoch.value; return resolveModeScopedChatUserId() })
+  const persyUserId = computed(() => {
+    void productReadAccountEpoch.value
+    const accountId = Number(localUser.value?.id)
+    return Number.isSafeInteger(accountId) && accountId > 0 ? String(accountId) : '1'
+  })
 
   const persyFoldMeta = computed(() => {
     if (!persyProfile.value) return t('settings.persyFoldMetaEmpty')

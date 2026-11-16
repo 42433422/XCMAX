@@ -151,8 +151,13 @@ def merge_starter_templates(
     existing = list(templates or [])
     existing_ids = {str(row.get("id") or "") for row in existing if isinstance(row, dict)}
     requested = str(category or "all").strip().lower()
+    from app.infrastructure.templates.template_preferences import hidden_template_ids
+
+    hidden = hidden_template_ids()
     for raw in STARTER_TEMPLATES:
         if raw["id"] in existing_ids:
+            continue
+        if raw["id"] in hidden:
             continue
         if requested not in {"", "all"} and requested not in {
             str(raw.get("category") or "").lower(),

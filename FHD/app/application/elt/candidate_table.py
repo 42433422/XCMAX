@@ -394,6 +394,61 @@ def dataset_from_business_rows(items: list[dict]) -> ParsedDataset | None:
     )
 
 
+def dynamic_table_candidate(
+    source: str | Path | bytes | bytearray,
+    *,
+    allow_model: bool = True,
+) -> tuple[ParsedDataset, dict] | None:
+    """AI 推断没有固定业务目标的表格结构，返回整表候选与结构说明。
+
+    这里不写库：结构随预演草稿保存，执行时复用同一张通用表。模型不可用、
+    内容不是表格、或表头不足两列时返回 ``None``，调用方仍可正常归档。
+    """
+    if not allow_model:
+        return None
+    from app.application.elt.llm_assist import advise_table_schema, elt_llm_enabled
+    from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+    if not elt_llm_enabled():
+        return None
+    try:
+        table = read_candidate_table(source)
+    except EltError:
+        return None
+    headers = [str(header) for header in table.headers if str(header).strip()]
+    if len(headers) < 2 or not table.rows:
+        return None
+    samples: dict[str, list[str]] = {}
+    for header in headers:
+        values: list[str] = []
+        for row in table.rows[:5]:
+            value = row.values.get(header)
+            if value in (None, ""):
+                continue
+            text = str(value)[:160]
+            if text not in values:
+                values.append(text)
+            if len(values) >= 3:
+                break
+        samples[header] = values
+    try:
+        result = advise_table_schema(headers=table.headers, samples=samples)
+    except RECOVERABLE_ERRORS:
+        return None
+    data = result.data if isinstance(result.data, dict) else {}
+    if not result.used_llm or result.degraded or not data.get("is_table"):
+        return None
+    columns = data.get("columns") or []
+    if not columns:
+        return None
+    return table, {
+        "table_name": str(data.get("table_name") or "")[:40],
+        "columns": columns,
+        "dedupe_keys": data.get("dedupe_keys") or [],
+        "headers": headers,
+    }
+
+
 def confirmed_business_table(
     source: str | Path | bytes | bytearray,
 ) -> tuple[ParsedDataset, str] | None:

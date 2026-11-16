@@ -293,25 +293,30 @@ class CustomerProductsAdapter(CustomerProductPreviewMixin, TargetAdapter):
         product_before = model_values(product, ProductAdapter.fields) if product else {}
         if action == "new":
             if product is not None:
-                raise EltError(
-                    "ELT_MATCH_CHANGED",
-                    "关联产品在预演后已存在，请重新预演",
-                    status_code=409,
+                # 附表预演与主运行共享同一份产品数据：主运行先写入时，附表执行
+                # 应复用已存在的产品继续建立客户-产品关系，而不是整批回滚。
+                # 普通预演仍保持严格校验，避免静默覆盖别人新建的产品。
+                if not context.get("linked_companion"):
+                    raise EltError(
+                        "ELT_MATCH_CHANGED",
+                        "关联产品在预演后已存在，请重新预演",
+                        status_code=409,
+                    )
+            else:
+                product = Product(
+                    tenant_id=tenant_id_for_write(),
+                    unit=str(product_data["unit"]),
+                    model_number=optional_text(product_data.get("model_number")),
+                    name=str(product_data.get("name") or ""),
+                    specification=optional_text(product_data.get("specification")),
+                    price=decimal_or_none(product_data.get("price")),
+                    category=optional_text(product_data.get("category")),
+                    brand=optional_text(product_data.get("brand")),
+                    description=optional_text(product_data.get("description")),
                 )
-            product = Product(
-                tenant_id=tenant_id_for_write(),
-                unit=str(product_data["unit"]),
-                model_number=optional_text(product_data.get("model_number")),
-                name=str(product_data.get("name") or ""),
-                specification=optional_text(product_data.get("specification")),
-                price=decimal_or_none(product_data.get("price")),
-                category=optional_text(product_data.get("category")),
-                brand=optional_text(product_data.get("brand")),
-                description=optional_text(product_data.get("description")),
-            )
-            db.add(product)
-            db.flush()
-            product_created = True
+                db.add(product)
+                db.flush()
+                product_created = True
         elif product is None:
             raise EltError(
                 "ELT_MATCH_DISAPPEARED",
@@ -334,7 +339,7 @@ class CustomerProductsAdapter(CustomerProductPreviewMixin, TargetAdapter):
                 "customer_name": customer.unit_name,
                 "product_unit": product.unit,
             },
-            "_etl": {
+            "_elt": {
                 "customer_created": customer_created,
                 "customer_updated": customer_updated,
                 "customer_before": customer_before,
@@ -350,7 +355,7 @@ class CustomerProductsAdapter(CustomerProductPreviewMixin, TargetAdapter):
 
     def rollback_row(self, db, *, match_ref, before, after, context):
         customer_id, product_id = self._parse_match_ref(match_ref)
-        metadata = after.get("_etl") if isinstance(after.get("_etl"), dict) else {}
+        metadata = after.get("_elt") if isinstance(after.get("_elt"), dict) else {}
         product_after = after.get("product") if isinstance(after.get("product"), dict) else {}
         product_before = (
             metadata.get("product_before")

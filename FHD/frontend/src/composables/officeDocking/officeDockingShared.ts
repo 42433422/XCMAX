@@ -14,9 +14,9 @@ export type OfficeDockingIntentId =
   | 'customer_product'
   | 'generic_table'
   | 'document'
-export type OfficeDockingDatabaseAction = '' | 'attendance_import' | 'shipment_etl_execute' | 'customer_product_import'
+export type OfficeDockingDatabaseAction = '' | 'attendance_import' | 'shipment_elt_execute' | 'customer_product_import'
 
-export type ShipmentEtlNotePreview = {
+export type ShipmentEltNotePreview = {
   sheet_name?: string
   unit_name?: string
   item_count?: number
@@ -25,10 +25,10 @@ export type ShipmentEtlNotePreview = {
   [key: string]: unknown
 }
 
-export type ShipmentEtlPreview = {
+export type ShipmentEltPreview = {
   success?: boolean
   note_count?: number
-  notes?: ShipmentEtlNotePreview[]
+  notes?: ShipmentEltNotePreview[]
   message?: string
   product_records?: Record<string, unknown>[]
   duplicate_note_count?: number
@@ -60,7 +60,7 @@ export type ChatOfficeDockingReviewItem = {
   outputFiles: OfficeEmployeeOutputFile[]
   knowledgeText: string
   excelAnalysis?: Record<string, unknown>
-  shipmentEtlPreview?: ShipmentEtlPreview
+  shipmentEtlPreview?: ShipmentEltPreview
   fieldNames: string[]
   sampleRows: Record<string, unknown>[]
   rowCount: number

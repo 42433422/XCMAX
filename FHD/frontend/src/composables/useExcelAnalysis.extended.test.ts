@@ -133,6 +133,58 @@ describe('useExcelAnalysis - extended', () => {
     expect(api.excelAnalyzeUploading.value).toBe(false)
   })
 
+  it('hands folder workbooks to the composer chips without analyzing or messaging', async () => {
+    const onAnalyzeDone = vi.fn()
+    const onStageArtifacts = vi.fn(async () => 2)
+    const api = useExcelAnalysis(makeMessages(), { onAnalyzeDone, onStageArtifacts })
+    const inputs = [
+      new File(['a'], 'a.xlsx'),
+      new File(['b'], 'b.xlsm'),
+      new File(['lock'], '~$c.xlsx'),
+    ]
+    const input = { files: inputs, value: '' } as unknown as HTMLInputElement
+    await api.onExcelAnalyzeFileChange({ target: input } as unknown as Event)
+
+    expect(onStageArtifacts).toHaveBeenCalledTimes(1)
+    expect((onStageArtifacts.mock.calls[0] as unknown as [File[]])[0].map((f) => f.name)).toEqual([
+      'a.xlsx',
+      'b.xlsm',
+    ])
+    expect(global.fetch).not.toHaveBeenCalled()
+    expect(onAnalyzeDone).not.toHaveBeenCalled()
+    expect(addMessage).not.toHaveBeenCalled()
+  })
+
+  it('reports legacy .xls files as skipped instead of dropping them silently', async () => {
+    const onUnsupportedFiles = vi.fn()
+    const onStageArtifacts = vi.fn(async () => 1)
+    const api = useExcelAnalysis(makeMessages(), { onStageArtifacts, onUnsupportedFiles })
+    const inputs = [new File(['a'], 'a.xlsx'), new File(['old'], '大桶商标.xls')]
+    const input = { files: inputs, value: '' } as unknown as HTMLInputElement
+    await api.onExcelAnalyzeFileChange({ target: input } as unknown as Event)
+
+    expect(onUnsupportedFiles).toHaveBeenCalledWith(['大桶商标.xls'])
+    const staged = (onStageArtifacts.mock.calls[0] as unknown as [File[]])[0]
+    expect(staged.map((f) => f.name)).toEqual(['a.xlsx'])
+  })
+
+  it('splits a mixed folder into composer chips and multimodal staging', async () => {
+    const cb = vi.fn()
+    const onStageArtifacts = vi.fn(async () => 1)
+    const api = useExcelAnalysis(makeMessages(), { onStageArtifacts })
+    api.setOnMultimodalFileChangeCallback(cb)
+    const excel = new File(['a'], 'a.xlsx')
+    const image = new File(['png'], 'shot.png', { type: 'image/png' })
+    const input = { files: [excel, image], value: '' } as unknown as HTMLInputElement
+    await api.onExcelAnalyzeFileChange({ target: input } as unknown as Event)
+
+    expect(global.fetch).not.toHaveBeenCalled()
+    expect(onStageArtifacts).toHaveBeenCalledTimes(1)
+    expect(cb).toHaveBeenCalledTimes(1)
+    const staged = (cb.mock.calls[0][0] as { target: { files: File[] } }).target.files
+    expect(staged.map((f) => f.name)).toEqual(['shot.png'])
+  })
+
   it('does not publish an Excel result after its captured conversation is no longer current', async () => {
     let resolve!: (value: Response) => void
     vi.mocked(global.fetch).mockReturnValue(new Promise(r => { resolve = r }))

@@ -438,7 +438,6 @@ describe('workspace startup readiness', () => {
     await settle()
     expect(boot.startupError.value).toBe('')
     expect(boot.appReady.value).toBe(true)
-    expect(boot.appReady.value).toBe(true)
   })
 
   it('only releases the newest of consecutive retries', async () => {

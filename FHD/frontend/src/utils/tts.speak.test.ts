@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({
   offline: { synthesizeOffline: vi.fn(), playOfflinePcm: vi.fn(), ensureOfflineReady: vi.fn(),
     isOfflineReady: vi.fn(), isOfflineLoading: vi.fn(), getOfflineProgress: vi.fn(), stopOffline: vi.fn() },
 }))
-vi.mock('./apiBase', () => ({ apiFetch: mocks.apiFetch }))
+vi.mock('./apiBase', () => ({ apiFetch: mocks.apiFetch, getApiBase: () => '' }))
 vi.mock('./csrfCookie', () => ({ readCsrfTokenFromCookie: mocks.csrf }))
 vi.mock('./offlineTts', () => mocks.offline)
 vi.mock('@/composables/useAppToast', () => ({ showAppToast: mocks.toast }))
@@ -29,7 +29,9 @@ class AudioFixture {
   })
   constructor(public src: string) { audio.push(this) }
 }
-const success = () => ({ ok: true, status: 200, json: async () => ({ success: true, data: { audioBase64: 'data:audio/mp3;base64,AAAA' } }) })
+const success = () => ({ ok: true, status: 200, arrayBuffer: async () => new ArrayBuffer(4) })
+const callText = (call: unknown[]) => new URL(String(call[0]), 'http://local').searchParams.get('text') || ''
+const callParam = (call: unknown[], key: string) => new URL(String(call[0]), 'http://local').searchParams.get(key) || ''
 function deferred<T>() {
   let resolve!: (value: T) => void
   const promise = new Promise<T>((done) => { resolve = done })
@@ -74,6 +76,22 @@ describe('TTS speech dispatch and playback', () => {
     expect(mocks.offline.synthesizeOffline).not.toHaveBeenCalled()
     expect(onError).toHaveBeenCalledOnce()
   })
+  it('splits a long reply into chunks and plays them in order', async () => {
+    tts.setEngineMode('online')
+    await tts.speakText('第一句内容需要足够长才能单独成块。第二句内容也需要足够长才能单独成块。')
+    const bodies = mocks.apiFetch.mock.calls.map(callText) as string[]
+    expect(bodies.length).toBeGreaterThan(1)
+    expect(audio).toHaveLength(bodies.length)
+    // 首块保持短以便快速出声；所有块拼接后不丢正文。
+    expect(bodies[0].length).toBeLessThanOrEqual(14)
+    expect(bodies.join('')).toBe('第一句内容需要足够长才能单独成块第二句内容也需要足够长才能单独成块')
+  })
+  it('keeps a short reply in a single synthesis request', async () => {
+    tts.setEngineMode('online')
+    await tts.speakText('好的，马上处理。')
+    expect(mocks.apiFetch).toHaveBeenCalledTimes(1)
+    expect(audio).toHaveLength(1)
+  })
   it('finishes empty text without making a speech request', async () => {
     const onEnd = vi.fn()
     await tts.speakText('  ', { onEnd })
@@ -85,22 +103,21 @@ describe('TTS speech dispatch and playback', () => {
     tts.setEngineMode(mode); tts.setSpeechRate(1.5); tts.setOnlineVoiceId('zh-CN-YunxiNeural')
     const onEnd = vi.fn(), onError = vi.fn()
     await tts.speakText('  在线朗读  ', { onEnd, onError })
-    expect(mocks.apiFetch).toHaveBeenCalledWith('/api/tts', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: expect.any(AbortSignal),
-      body: JSON.stringify({ text: '在线朗读', lang: 'zh', voice: 'zh-CN-YunxiNeural', rate: '+50%' }),
-    })
-    expect(audio[0].src).toBe('data:audio/mp3;base64,AAAA')
+    const call = mocks.apiFetch.mock.calls[0]
+    expect(String(call[0])).toContain('/api/tts/audio?')
+    expect(callParam(call, 'text')).toBe('在线朗读')
+    expect(callParam(call, 'voice')).toBe('zh-CN-YunxiNeural')
+    expect(callParam(call, 'rate')).toBe('+50%')
+    expect(audio[0].src).toBe(String(call[0]))
     expect(audio[0].play).toHaveBeenCalledOnce()
     expect(onEnd).toHaveBeenCalledOnce(); expect(onError).not.toHaveBeenCalled()
     expect(mocks.toast).not.toHaveBeenCalled()
     expect(speech.speak).not.toHaveBeenCalled(); expect(mocks.offline.synthesizeOffline).not.toHaveBeenCalled()
   })
   it.each([
-    ['network', () => Promise.reject(new Error('network')), 'network'],
-    ['server message', async () => ({ ok: false, status: 503, json: async () => ({ message: 'unavailable' }) }), 'unavailable'],
-    ['invalid JSON', async () => ({ ok: false, status: 502, json: async () => { throw new Error('invalid') } }), '在线 TTS 失败（HTTP 502）'],
-    ['missing audio', async () => ({ ok: true, json: async () => ({ success: true }) }), '在线 TTS 响应缺少音频'],
-    ['invalid audio', async () => ({ ok: true, json: async () => ({ success: true, data: { audioBase64: 42 } }) }), '在线 TTS 响应缺少音频'],
+    ['network', () => Promise.reject(new Error('network'))],
+    ['server message', async () => ({ ok: false, status: 503, json: async () => ({ message: 'unavailable' }) })],
+    ['invalid JSON', async () => ({ ok: false, status: 502, json: async () => { throw new Error('invalid') } })],
   ])('falls back to system speech when synthesis fails: %s', async (_label, response) => {
     mocks.apiFetch.mockImplementation(response as () => Promise<unknown>)
     const onEnd = vi.fn(), onError = vi.fn()
@@ -110,13 +127,12 @@ describe('TTS speech dispatch and playback', () => {
     expect(mocks.toast).not.toHaveBeenCalled()
     expect(onEnd).toHaveBeenCalledOnce()
   })
-  it.each(['success', 'failure'])('primes absent CSRF with best-effort health request (%s)', async (mode) => {
-    mocks.csrf.mockReturnValue('')
-    if (mode === 'failure') mocks.apiFetch.mockRejectedValueOnce(new Error('health offline'))
-    else mocks.apiFetch.mockResolvedValueOnce({ ok: true })
+  it('流式端点用 GET 预热，不再走 CSRF 与 POST', async () => {
     await tts.speakText('冷启动')
-    expect(mocks.apiFetch).toHaveBeenNthCalledWith(1, '/api/health', { method: 'GET', timeoutMs: 5000, signal: expect.any(AbortSignal) })
-    expect(mocks.apiFetch.mock.calls[1][0]).toBe('/api/tts')
+    const call = mocks.apiFetch.mock.calls[0]
+    expect(String(call[0])).toContain('/api/tts/audio?')
+    expect((call[1] as { method?: string }).method).toBe('GET')
+    expect((call[1] as { body?: unknown }).body).toBeUndefined()
     expect(audio[0].play).toHaveBeenCalledOnce()
   })
   it.each(['error', 'reject'] as const)('reports audio %s and clears its playback handle', async (mode) => {
@@ -145,18 +161,11 @@ describe('TTS speech dispatch and playback', () => {
   it.each([[0.75, '-25%'], [1, '+0%'], [1.5, '+50%']] as const)('formats rate %s as %s', async (rate, expected) => {
     tts.setSpeechRate(rate)
     await tts.speakText('速率测试')
-    expect(JSON.parse(mocks.apiFetch.mock.calls[0][1].body).rate).toBe(expected)
+    expect(callParam(mocks.apiFetch.mock.calls[0], 'rate')).toBe(expected)
   })
-  it.each(['health', 'post', 'json'] as const)('cancels during %s and ignores a late result', async (stage) => {
+  it('cancels a pending warm request and ignores a late result', async () => {
     const late = deferred<unknown>(), started = deferred<void>()
-    mocks.csrf.mockReturnValue(stage === 'health' ? '' : 'csrf-token')
-    mocks.apiFetch.mockImplementation(async () => {
-      if (stage === 'health' || stage === 'post') {
-        started.resolve()
-        return late.promise
-      }
-      return { ...success(), json: () => { started.resolve(); return late.promise } }
-    })
+    mocks.apiFetch.mockImplementation(async () => { started.resolve(); return late.promise })
     const onEnd = vi.fn(), onError = vi.fn()
     const speaking = tts.speakText('取消请求', { onEnd, onError })
     await started.promise
@@ -164,7 +173,7 @@ describe('TTS speech dispatch and playback', () => {
     expect(signal.aborted).toBe(false)
     tts.stopSpeaking()
     expect(signal.aborted).toBe(true)
-    late.resolve(stage === 'json' ? await success().json() : success())
+    late.resolve(success())
     await speaking
     expect(audio).toHaveLength(0)
     expect(mocks.apiFetch).toHaveBeenCalledTimes(1)
@@ -206,14 +215,12 @@ describe('TTS speech dispatch and playback', () => {
     audio[0].onended?.(); await speaking
     expect(onEnd).toHaveBeenCalledOnce(); expect(mocks.toast).not.toHaveBeenCalled()
   })
-  it.each(['health', 'post', 'json'] as const)('falls back after timed out %s', async (stage) => {
+  it('falls back after a timed out synthesis', async () => {
     vi.useFakeTimers()
-    mocks.csrf.mockReturnValue(stage === 'health' ? '' : 'csrf-token')
     let requestSignal: AbortSignal
     mocks.apiFetch.mockImplementation(async (_url, init) => {
       requestSignal = init.signal
-      const pending = abortable(new Promise<never>(() => {}), requestSignal)
-      return stage === 'json' ? { ...success(), json: () => pending } : pending
+      return abortable(new Promise<never>(() => {}), requestSignal)
     })
     const onEnd = vi.fn(), onError = vi.fn()
     const speaking = tts.speakText('慢合成', { onEnd, onError })
@@ -239,22 +246,12 @@ describe('TTS speech dispatch and playback', () => {
     expect(audio[0].pause).toHaveBeenCalledOnce(); expect(audio[0].src).toBe('')
     expect(mocks.toast).not.toHaveBeenCalled()
   })
-  it('shares the synthesis deadline across health, POST and response-body reads', async () => {
-    vi.useFakeTimers(); mocks.csrf.mockReturnValue('')
-    const health = deferred<unknown>(), post = deferred<unknown>()
-    mocks.apiFetch.mockImplementation((url) => url === '/api/health' ? health.promise : post.promise)
-    const onEnd = vi.fn(), onError = vi.fn()
-    const speaking = tts.speakText('总预算', { onEnd, onError })
-    await vi.advanceTimersByTimeAsync(4_000)
-    health.resolve({ ok: true }); await vi.advanceTimersByTimeAsync(20_000)
-    const signal = mocks.apiFetch.mock.calls[1][1].signal as AbortSignal
-    post.resolve({ ...success(), json: () => abortable(new Promise<never>(() => {}), signal) })
-    await vi.advanceTimersByTimeAsync(5_999)
-    expect(onEnd).not.toHaveBeenCalled()
-    await vi.advanceTimersByTimeAsync(1); await speaking
-    expect(speech.speak).toHaveBeenCalledOnce()
-    expect(onError).not.toHaveBeenCalled()
-    expect(onEnd).toHaveBeenCalledOnce(); expect(audio).toHaveLength(0)
+  it('reuses a warmed URL instead of re-synthesizing it', async () => {
+    await tts.speakText('重复播报')
+    await tts.speakText('重复播报')
+    expect(mocks.apiFetch).toHaveBeenCalledTimes(1)
+    expect(audio).toHaveLength(2)
+    expect(audio[0].src).toBe(audio[1].src)
   })
   it('uses ready offline audio when the online request fails', async () => {
     mocks.offline.isOfflineReady.mockReturnValue(true)
@@ -422,6 +419,13 @@ describe('TTS speech dispatch and playback', () => {
     expect(onEnd).toHaveBeenCalledOnce()
     expect(mocks.toast).toHaveBeenCalledExactlyOnceWith('语音播放被浏览器阻止，请点击朗读按钮重试。')
   })
+  it('preserves silent error handling and reports incomplete playback', async () => {
+    playback = 'blocked'
+    const onError = vi.fn()
+    await expect(tts.speakText('静默失败', { onError, silent: true })).resolves.toBe(false)
+    expect(onError).not.toHaveBeenCalled()
+    expect(mocks.toast).not.toHaveBeenCalled()
+  })
   it.each(['success', 'synthesis failure', 'playback failure'])('uses offline synthesis and preserves completion on %s', async (mode) => {
     tts.setEngineMode('offline'); mocks.offline.isOfflineReady.mockReturnValue(true)
     if (mode === 'synthesis failure') mocks.offline.synthesizeOffline.mockRejectedValueOnce(new Error(mode))
@@ -561,15 +565,23 @@ describe('voice loading and offline warmup', () => {
 describe('TTS long-reply sentence continuity', () => {
   const longReply = '第一句已经说完。第二句接着往下。第三句还要继续。第四句才是结尾。'
   const sentences = ['第一句已经说完。', '第二句接着往下。', '第三句还要继续。', '第四句才是结尾。']
-  const requested = () => mocks.apiFetch.mock.calls.map((call: [string, { body: string }]) => JSON.parse(call[1].body).text)
+  const onlineSentences = ['第一句已经说完', '第二句接着往下', '第三句还要继续', '第四句才是结尾']
+  const requested = () => mocks.apiFetch.mock.calls.map(callText)
   it('requests online audio for every sentence and does not stop after the second', async () => {
     expect(tts.splitTextForSpeech(longReply)).toEqual(sentences)
     expect(tts.splitTextForSpeech('只有一句')).toEqual(['只有一句'])
     tts.setEngineMode('auto')
     const onEnd = vi.fn()
     await tts.speakText(longReply, { onEnd })
-    expect(requested()).toEqual(sentences)
+    expect(requested()).toEqual(onlineSentences)
     expect(audio).toHaveLength(4)
+    expect(onEnd).toHaveBeenCalledOnce()
+  })
+  it('starts once and completes only after every sentence finishes', async () => {
+    tts.setEngineMode('online')
+    const onStart = vi.fn(), onEnd = vi.fn()
+    await expect(tts.speakText(longReply, { onStart, onEnd })).resolves.toBe(true)
+    expect(onStart).toHaveBeenCalledOnce()
     expect(onEnd).toHaveBeenCalledOnce()
   })
   it('falls back to system voice for every remaining sentence', async () => {
@@ -589,8 +601,8 @@ describe('TTS long-reply sentence continuity', () => {
     audio[0].onended?.()
     await vi.waitFor(() => expect(audio).toHaveLength(2))
     tts.stopSpeaking()
-    await pending
-    expect(requested()).toEqual(sentences.slice(0, 2))
+    await expect(pending).resolves.toBe(false)
+    expect(requested()).toEqual(onlineSentences.slice(0, 2))
     expect(audio).toHaveLength(2)
   })
 })

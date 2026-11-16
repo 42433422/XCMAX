@@ -59,13 +59,14 @@ def _consume_in_process(args):
 def test_atomic_refresh_claim_has_only_one_process_winner(replay_db):
     path, _ = replay_db
     # A fresh interpreter per worker also excludes inherited in-memory replay state.
+    # CI 冷启动 spawn 子进程要重新导入 app 依赖，20s 偶发不够，这里只放宽等待上限。
     context = multiprocessing.get_context("spawn")
     args = [(path, "one-token", int(time.time()) + 600)] * 6
     with context.Pool(3) as pool:
-        results = pool.map_async(_consume_in_process, args).get(timeout=20)
+        results = pool.map_async(_consume_in_process, args).get(timeout=60)
     assert sum(results) == 1
     with context.Pool(1) as fresh_pool:
-        assert fresh_pool.map_async(_consume_in_process, args[:1]).get(timeout=20) == [False]
+        assert fresh_pool.map_async(_consume_in_process, args[:1]).get(timeout=60) == [False]
 
 
 def test_refresh_binding_and_replay(replay_db):

@@ -6,7 +6,7 @@ const props = defineProps<{ tm: ApprovalWorkspaceCtx }>()
 
 const {
   visiblePendingRequests: pendingRequests, fullListType, viewDetails, approve, reject, viewAll,
-  getBusinessIcon, formatTime,
+  getBusinessIcon, getBusinessLabel, formatRequestTitle, formatTime,
 } = props.tm
 </script>
 
@@ -14,7 +14,7 @@ const {
     <!-- 待审批列表 -->
     <div class="section">
       <div class="section-header">
-        <h3>待我审批</h3>
+        <h3>待我审批<span class="section-count">{{ pendingRequests.length }}</span></h3>
         <button v-if="!fullListType" class="btn-link" @click="viewAll('pending')">查看全部</button>
       </div>
       <div class="request-list" data-tutorial-id="approval-pending-list">
@@ -29,8 +29,10 @@ const {
               <i :class="getBusinessIcon(item.business_type)"></i>
             </div>
             <div class="request-info">
-              <div class="request-title">{{ item.title }}</div>
+              <div class="request-title" :title="item.title">{{ formatRequestTitle(item) }}</div>
               <div class="request-meta">
+                <span class="request-status pending">待审批</span>
+                <span class="request-type">{{ getBusinessLabel(item.business_type) }}</span>
                 <span class="request-no">{{ item.request_no }}</span>
                 <span class="request-time">{{ formatTime(item.created_at) }}</span>
               </div>
@@ -51,6 +53,7 @@ const {
             >
               <i class="fa fa-times"></i>
             </button>
+            <i class="fa fa-angle-right row-chevron"></i>
           </div>
         </div>
         <div v-if="pendingRequests.length === 0" class="empty-state">

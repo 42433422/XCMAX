@@ -32,7 +32,11 @@ export function useChatResponseAttach(deps: UseChatResponseAttachDeps) {
     for (let i = messages.value.length - 1; i >= 0; i -= 1) {
       const msg = messages.value[i]
       if (msg?.role === 'ai') {
-        msg.thinkingSteps = thinkingSteps
+        // 流式期间已累积的过程说明保留，只补上服务端最终思考步骤。
+        const streamed = String(msg.thinkingSteps || '').trim()
+        msg.thinkingSteps = streamed && !streamed.includes(thinkingSteps)
+          ? `${streamed}\n${thinkingSteps}`
+          : streamed || thinkingSteps
         break
       }
     }

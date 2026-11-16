@@ -1096,14 +1096,14 @@ describe('SettingsView functions – runPersyInfer', () => {
 describe('SettingsView functions – persyUserId computed', () => {
   beforeEach(resetSettingsTest)
 
-  it('无聊天会话时返回普通模式默认会话键', async () => {
+  it('无登录用户时回退到默认账号键', async () => {
     const wrapper = await mountSettings()
     const vm = wrapper.vm as any
-    expect(vm.persyUserId).toBe('web_normal_default')
+    expect(vm.persyUserId).toBe('1')
     wrapper.unmount()
   })
 
-  it('不再使用登录用户的数字 id', async () => {
+  it('使用登录用户的稳定账号 id，而不是按会话分片', async () => {
     mockAuthApiGetCurrentUser.mockResolvedValue({
       success: true,
       data: {
@@ -1122,11 +1122,11 @@ describe('SettingsView functions – persyUserId computed', () => {
     await nextTick()
     await nextTick()
     const vm = wrapper.vm as any
-    expect(vm.persyUserId).toBe('web_normal_default')
+    expect(vm.persyUserId).toBe('42')
     wrapper.unmount()
   })
 
-  it('登录用户 id 无效时仍使用聊天会话键', async () => {
+  it('登录用户 id 无效时回退到默认账号键', async () => {
     mockAuthApiGetCurrentUser.mockResolvedValue({
       success: true,
       data: {
@@ -1145,11 +1145,11 @@ describe('SettingsView functions – persyUserId computed', () => {
     await nextTick()
     await nextTick()
     const vm = wrapper.vm as any
-    expect(vm.persyUserId).toBe('web_normal_default')
+    expect(vm.persyUserId).toBe('1')
     wrapper.unmount()
   })
 
-  it('登录用户 id 为负数时仍使用聊天会话键', async () => {
+  it('登录用户 id 为负数时回退到默认账号键', async () => {
     mockAuthApiGetCurrentUser.mockResolvedValue({
       success: true,
       data: {
@@ -1168,7 +1168,7 @@ describe('SettingsView functions – persyUserId computed', () => {
     await nextTick()
     await nextTick()
     const vm = wrapper.vm as any
-    expect(vm.persyUserId).toBe('web_normal_default')
+    expect(vm.persyUserId).toBe('1')
     wrapper.unmount()
   })
 })

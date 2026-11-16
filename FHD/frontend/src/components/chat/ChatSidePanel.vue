@@ -54,6 +54,7 @@
       @switch-view="(view) => $emit('switch-view', view)"
       @set-task-filter="(filter) => $emit('set-task-filter', filter)"
       @clear-task-history="$emit('clear-task-history')"
+      @remove-task="(id) => $emit('remove-task', id)"
       @toggle-task-expanded="(id) => $emit('toggle-task-expanded', id)"
       @select-task="(task) => $emit('select-task', task)"
       @open-shipment-records="$emit('open-shipment-records')"
@@ -139,6 +140,7 @@ const emit = defineEmits<{
   'switch-view': [view: string]
   'set-task-filter': [filter: TaskFilter]
   'clear-task-history': []
+  'remove-task': [id: string]
   'toggle-task-expanded': [id: string]
   'select-task': [task: TaskItem]
   'open-shipment-records': []

@@ -164,6 +164,91 @@ def test_empty_customer_query_reports_zero():
     assert "客户总数：0；本次显示 0 条" in lines[0]
 
 
+def test_knowledge_query_reply_answers_from_retrieval_not_plan_dump():
+    """TODO 最后一步是「根据检索结果作答」，不能只回「n1: 成功」的执行计划。"""
+    from types import SimpleNamespace
+
+    from app.application.ai_chat.workflow_response_builder import AIChatWorkflowResponseMixin
+
+    node = SimpleNamespace(
+        node_id="n1",
+        tool_id="dataset_rag",
+        action="query",
+        description="在文档库中检索白浆加工费相关记录",
+        risk="low",
+        params={"dataset_id": "office-docking", "query": "白浆加工费"},
+    )
+    plan = SimpleNamespace(
+        intent="查询白浆加工费",
+        plan_id="internal-plan",
+        nodes=[node],
+        todo_steps=["检索文档库中关于白浆加工费的记录", "根据检索结果确认白浆加工费金额并作答"],
+        metadata={},
+    )
+    step = SimpleNamespace(
+        status="completed",
+        tool_id="dataset_rag",
+        action="query",
+        node_id="n1",
+        output={
+            "success": True,
+            "query": "白浆加工费",
+            "answer": "730浆加工费 1 件 1176 元，折后 940.8 元。",
+            "chunks": [
+                {
+                    "text": "R335 | 46119 | 730浆加工费 | 1 | 1176",
+                    "source": "hybrid",
+                    "source_url": "邻居贾总.xlsx",
+                    "metadata": {"source": "邻居贾总.xlsx"},
+                }
+            ],
+        },
+        duration_ms=1,
+    )
+    run = SimpleNamespace(
+        status="completed",
+        run_id="internal-run",
+        steps=[step],
+        metadata={},
+        artifacts=[],
+        tool_calls=[],
+    )
+    builder = AIChatWorkflowResponseMixin()
+    reply = builder._format_agent_run_response(
+        plan, run, thinking_steps="工作编排", user_message="白浆加工费多少你知道不"
+    )
+    assert reply["response"].startswith("730浆加工费 1 件 1176 元")
+    assert "来源：邻居贾总.xlsx" in reply["response"]
+    assert reply["response"] != "- n1: 成功"
+    assert "计划ID: internal-plan" not in reply["response"]
+
+
+def test_knowledge_query_answer_uses_model_synthesis_when_available():
+    from types import SimpleNamespace
+
+    from app.application.ai_chat.workflow_response_builder import AIChatWorkflowResponseMixin
+
+    class Planner:
+        def complete_messages(self, **_kwargs):
+            return {
+                "choices": [
+                    {"message": {"content": "白浆加工费按 1 件 1176 元计，折后 940.8 元。"}}
+                ]
+            }
+
+    builder = AIChatWorkflowResponseMixin()
+    builder.workflow_planner = Planner()
+    step = SimpleNamespace(
+        output={
+            "answer": "730浆加工费 | 1 | 1176 | 0.8 | 940.8",
+            "chunks": [{"text": "R335 | 730浆加工费 | 1 | 1176", "source_url": "邻居贾总.xlsx"}],
+        }
+    )
+    answer = builder._knowledge_answer(step, "白浆加工费多少")
+    assert answer.startswith("白浆加工费按 1 件 1176 元计")
+    assert "来源：邻居贾总.xlsx" in answer
+
+
 def test_customer_reply_does_not_echo_internal_memory_or_plan():
     from types import SimpleNamespace
 

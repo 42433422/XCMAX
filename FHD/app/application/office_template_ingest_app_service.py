@@ -68,6 +68,7 @@ def _build_create_payload_from_analyze(
     template_name: str = "",
     template_scope: str = "",
     source: str = "office_upload",
+    field_override: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     preview = analyzed.get("preview_data") if isinstance(analyzed.get("preview_data"), dict) else {}
     analyzed_type = str(analyzed.get("template_type") or "").strip()
@@ -87,7 +88,9 @@ def _build_create_payload_from_analyze(
             template_scope=scope, analyzed_type=analyzed_type, source=source
         ),
         "business_scope": scope,
-        "fields": analyzed.get("fields") if isinstance(analyzed.get("fields"), list) else [],
+        "fields": field_override
+        if field_override
+        else (analyzed.get("fields") if isinstance(analyzed.get("fields"), list) else []),
         "preview_data": preview,
         "category": _category_from_filename(filename, analyzed_type),
         "source": str(source or "office_upload").strip() or "office_upload",
@@ -103,6 +106,7 @@ def ingest_office_bytes_to_template_library(
     template_name: str = "",
     template_scope: str = "",
     source: str = "office_upload",
+    field_override: list[dict[str, Any]] | None = None,
 ) -> tuple[dict[str, Any], int]:
     """解析办公文件字节并写入模版库 ``templates`` 表。"""
     from app.legacy.routes.document_templates_compat import (
@@ -134,6 +138,7 @@ def ingest_office_bytes_to_template_library(
         template_name=template_name,
         template_scope=template_scope,
         source=source,
+        field_override=field_override,
     )
     try:
         created, create_code = run_archive_template_create(create_payload)
@@ -210,14 +215,14 @@ def ingest_office_path_to_template_library(
     )
 
 
-def attach_template_ingest_to_etl_result(
+def attach_template_ingest_to_elt_result(
     result: dict[str, Any],
     *,
     file_path: str | Path | None,
     save_as_template: bool,
     template_name: str = "",
     template_scope: str = "",
-    source: str = "shipment_excel_etl",
+    source: str = "shipment_excel_elt",
 ) -> dict[str, Any]:
     """ETL 成功后可选写入模版库；失败不覆盖业务 ETL 主结果。"""
     out = dict(result or {})

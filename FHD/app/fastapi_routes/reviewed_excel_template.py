@@ -153,9 +153,9 @@ def _draft_with_structural_index(draft: dict, body: bytes) -> dict:
 
 
 router = APIRouter(route_class=ReviewedExcelRoute)
-_manage = require_permission("etl.template.manage")
-_execute = require_permission("etl.execute")
-_read = require_permission("etl.read")
+_manage = require_permission("elt.template.manage")
+_execute = require_permission("elt.execute")
+_read = require_permission("elt.read")
 _archive_admin = require_permission("admin.manage_users")
 
 
@@ -968,12 +968,12 @@ async def _lookup_market_call(call_id, owner, model_session):
     if not call_id:
         return None
     from app.application.elt.llm_session_provider import (
-        bind_etl_llm_owner,
+        bind_elt_llm_owner,
         current_owner_market_provider,
-        reset_etl_llm_owner,
+        reset_elt_llm_owner,
     )
 
-    token = bind_etl_llm_owner(int(owner))
+    token = bind_elt_llm_owner(int(owner))
     try:
         with bind_model_session(model_session):
             provider = current_owner_market_provider(timeout_seconds=15.0)
@@ -981,7 +981,7 @@ async def _lookup_market_call(call_id, owner, model_session):
             return None
         return await provider.lookup_call(str(call_id))
     finally:
-        reset_etl_llm_owner(token)
+        reset_elt_llm_owner(token)
 
 
 def _settle_failed_step(
@@ -2483,24 +2483,25 @@ def reviewed_excel_intake_preview(
                 confirmed_business_table,
                 dataset_from_business_rows,
                 dataset_from_document_text,
+                dynamic_table_candidate,
                 read_delivery_note_business,
             )
             from app.application.elt.llm_assist import (
                 advise_business_import,
                 audit_intake_calls,
-                etl_llm_enabled,
+                elt_llm_enabled,
             )
 
             original_text = workbook_text(archived)
             from app.application.elt.llm_session_provider import (
-                bind_etl_llm_owner,
-                reset_etl_llm_owner,
+                bind_elt_llm_owner,
+                reset_elt_llm_owner,
             )
 
             # Identity can already see the account model. Bind that same session
             # so these two lanes resolve it; each lane still has its own circuit.
             model_session = require_model_session(request, tenant, owner)
-            owner_token = bind_etl_llm_owner(owner)
+            owner_token = bind_elt_llm_owner(owner)
 
             def record_intake_call(call_id, lane, status):
                 nonlocal old_draft
@@ -2519,9 +2520,10 @@ def reviewed_excel_intake_preview(
                 with bind_model_session(model_session), audit_intake_calls(record_intake_call):
                     model_started = True
                     business_llm = (
-                        advise_business_import(original_text) if etl_llm_enabled() else None
+                        advise_business_import(original_text) if elt_llm_enabled() else None
                     )
                     ai_table = None
+                    dynamic_schema: dict[str, Any] | None = None
                     if (
                         business_llm is not None
                         and business_llm.used_llm
@@ -2543,13 +2545,23 @@ def reviewed_excel_intake_preview(
                         confirmed = confirmed_business_table(path) or confirmed_business_table(
                             archived
                         )
-                        if confirmed is None:
+                        dynamic = (
+                            None
+                            if confirmed is not None
+                            else dynamic_table_candidate(path) or dynamic_table_candidate(archived)
+                        )
+                        if confirmed is not None:
+                            chosen_table, target_type = confirmed
+                            detection_reason = "candidate_headers"
+                        elif dynamic is not None:
+                            # 没有固定业务表时由模型推断结构，写入通用表而不是报错。
+                            chosen_table, dynamic_schema = dynamic
+                            target_type = "dynamic_table"
+                            detection_reason = "ai_table_schema"
+                        else:
                             chosen_table = dataset_from_document_text(original_text, name.strip())
                             target_type = "knowledge"
                             detection_reason = "archived_document"
-                        else:
-                            chosen_table, target_type = confirmed
-                            detection_reason = "candidate_headers"
                     from app.application.elt.auto_ingest_service import row_coverage
 
                     detection = {
@@ -2589,7 +2601,7 @@ def reviewed_excel_intake_preview(
                         source_text=original_text,
                     )
             finally:
-                reset_etl_llm_owner(owner_token)
+                reset_elt_llm_owner(owner_token)
             preview_started = True
             business = service.create_preview(
                 db,
@@ -2597,6 +2609,7 @@ def reviewed_excel_intake_preview(
                 upload_id=upload["upload_id"],
                 target_type=target_type,
                 source_dataset=chosen_table,
+                dynamic_schema=dynamic_schema,
             )
             plan = {
                 "run_id": business["id"],

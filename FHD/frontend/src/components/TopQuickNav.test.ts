@@ -8,9 +8,15 @@ import TopQuickNav from './TopQuickNav.vue'
 
 const searchProducts = vi.hoisted(() => vi.fn(async () => ({ success: true, data: [] })))
 const getCustomers = vi.hoisted(() => vi.fn(async () => ({ success: true, data: [] })))
+const searchOrders = vi.hoisted(() => vi.fn(async () => ({ success: true, data: [] })))
+const fetchEmployeeDirectory = vi.hoisted(() => vi.fn(async () => []))
+const listTemplates = vi.hoisted(() => vi.fn(async () => ({ success: true, templates: [] })))
 
 vi.mock('@/api/products', () => ({ default: { searchProducts } }))
 vi.mock('@/api/customers', () => ({ default: { getCustomers } }))
+vi.mock('@/api/orders', () => ({ default: { searchOrders } }))
+vi.mock('@/api/employeeDirectory', () => ({ fetchEmployeeDirectory }))
+vi.mock('@/api/templatePreview', () => ({ default: { listTemplates }, templatePreviewApi: { listTemplates } }))
 const modsStore = reactive({ activeModId: 'mod-a' })
 vi.mock('@/stores/mods', () => ({ useModsStore: () => modsStore }))
 
@@ -269,5 +275,43 @@ describe('TopQuickNav', () => {
       expect(optionNames().join()).not.toContain('旧租户产品')
       expect((input.element as HTMLInputElement).value).toBe('')
     })
+  })
+
+  it('订单与员工也纳入全线搜索并可跳转', async () => {
+    searchOrders.mockResolvedValue({
+      success: true,
+      data: [{ order_number: 'SO-001', customer_name: '华星客户' }],
+    })
+    fetchEmployeeDirectory.mockResolvedValue([
+      { pack_id: 'emp_cs', label: '客服员工', department: '客服' },
+    ] as never)
+    const wrapper = await mountNav()
+    const input = wrapper.find('input')
+    const waitRecords = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 300))
+      await flushPromises()
+    }
+    const clickOption = async (label: string) => {
+      const option = [...document.querySelectorAll('.top-quick-nav__option')].find((node) => (node.textContent || '').includes(label))
+      option?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+      await flushPromises()
+    }
+
+    await input.setValue('SO-001')
+    await waitRecords()
+    expect(optionNames().join()).toContain('SO-001 · 华星客户')
+    await clickOption('SO-001')
+    expect(activeRouter.currentRoute.value.path).toContain('/orders')
+    expect(activeRouter.currentRoute.value.query).toMatchObject({ keyword: 'SO-001' })
+
+    await input.trigger('focus')
+    await input.setValue('客服')
+    await waitRecords()
+    await clickOption('客服员工')
+    expect(wrapper.emitted('select')?.at(-1)).toEqual(['employee-workflow'])
+
+    searchOrders.mockResolvedValue({ success: true, data: [] })
+    fetchEmployeeDirectory.mockResolvedValue([])
+    wrapper.unmount()
   })
 })

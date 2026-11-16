@@ -81,6 +81,20 @@ export default defineConfig(({ mode }) => {
           find: '@admin-console-inject/views/DutyRosterGraphView.vue',
           replacement: path.resolve(__dirname, './src/views/adminDutyRosterGraphView.stub.vue'),
         },
+        // 依赖宿主编制的管理端组件：企业/通用构建统一替换为空组件，防止平台内部
+        // 员工名单进入企业产物（真实组件只在 admin-console 构建中注入）。
+        {
+          find: '@admin-console-inject/workflow/DutyRosterWorkflowLoopView.vue',
+          replacement: path.resolve(__dirname, './src/components/adminOnlyStub.vue'),
+        },
+        {
+          find: '@admin-console-inject/workflow/SelfEvolutionLoopRuntimePanel.vue',
+          replacement: path.resolve(__dirname, './src/components/adminOnlyStub.vue'),
+        },
+        {
+          find: '@admin-console-inject/employeeWorkspace/EmployeeWorkspaceLoopConsole.vue',
+          replacement: path.resolve(__dirname, './src/components/adminOnlyStub.vue'),
+        },
         { find: '@', replacement: path.resolve(__dirname, './src') },
         // 客服桥接 Mod 自有组件/composable 别名（其物理视图不得用 ../ 相对导入）
         {
@@ -88,6 +102,15 @@ export default defineConfig(({ mode }) => {
           replacement: path.resolve(__dirname, '../mods/bridge/xcagi-customer-service-bridge/frontend'),
         },
         { find: 'vue-router', replacement: path.resolve(__dirname, 'node_modules/vue-router') },
+        // 模板库原件预览（mod 内动态 import 需显式指向宿主依赖）
+        {
+          find: '@vue-office/docx',
+          replacement: path.resolve(__dirname, 'node_modules/@vue-office/docx'),
+        },
+        {
+          find: '@vue-office/pptx',
+          replacement: path.resolve(__dirname, 'node_modules/@vue-office/pptx'),
+        },
         { find: 'pinia', replacement: path.resolve(__dirname, 'node_modules/pinia') },
         { find: 'element-plus', replacement: path.resolve(__dirname, 'node_modules/element-plus') },
         { find: 'xlsx', replacement: path.resolve(__dirname, 'node_modules/xlsx') },

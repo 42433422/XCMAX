@@ -58,14 +58,14 @@ def ensure_sqlite_elt_bootstrap(
             )
             Base.metadata.create_all(real_engine, tables=missing, checkfirst=True)
         # create_all does not add columns to an existing packaged desktop database.
-        columns = {item["name"] for item in inspect(real_engine).get_columns("etl_runs")}
+        columns = {item["name"] for item in inspect(real_engine).get_columns("elt_runs")}
         with real_engine.begin() as connection:
             for name, ddl in (
-                ("operation_kind", "ALTER TABLE etl_runs ADD COLUMN operation_kind VARCHAR(16)"),
-                ("operation_token", "ALTER TABLE etl_runs ADD COLUMN operation_token VARCHAR(36)"),
+                ("operation_kind", "ALTER TABLE elt_runs ADD COLUMN operation_kind VARCHAR(16)"),
+                ("operation_token", "ALTER TABLE elt_runs ADD COLUMN operation_token VARCHAR(36)"),
                 (
                     "operation_lease_until",
-                    "ALTER TABLE etl_runs ADD COLUMN operation_lease_until DATETIME",
+                    "ALTER TABLE elt_runs ADD COLUMN operation_lease_until DATETIME",
                 ),
             ):
                 if name not in columns:

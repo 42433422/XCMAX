@@ -220,7 +220,7 @@ class TutorialBusinessVerifierMixin:
         ok, refs, counts = self._closed_loop_result(db, run)
         return ok, "verification_passed" if ok else "sales_result_not_ready", refs, counts
 
-    def _etl_rows(self, db: Session, run: TutorialRun) -> list[EltRun]:
+    def _elt_rows(self, db: Session, run: TutorialRun) -> list[EltRun]:
         with tenant_scope(run.workspace.tutorial_tenant_id):
             return cast(
                 list[EltRun],
@@ -232,8 +232,8 @@ class TutorialBusinessVerifierMixin:
                 .all(),
             )
 
-    def _verify_etl_preview(self, db: Session, run: TutorialRun, _context: dict[str, Any]):
-        runs = self._etl_rows(db, run)
+    def _verify_elt_preview(self, db: Session, run: TutorialRun, _context: dict[str, Any]):
+        runs = self._elt_rows(db, run)
         previews = [item for item in runs if item.status in {"preview_ready", "completed"}]
         row_count = 0
         if previews:
@@ -242,13 +242,13 @@ class TutorialBusinessVerifierMixin:
         ok = bool(previews) and row_count > 0
         return (
             ok,
-            "verification_passed" if ok else "etl_preview_not_ready",
-            [{"type": "etl_run", "id": previews[0].id}] if ok else [],
+            "verification_passed" if ok else "elt_preview_not_ready",
+            [{"type": "elt_run", "id": previews[0].id}] if ok else [],
             {"preview_run_count": len(previews), "preview_row_count": row_count},
         )
 
-    def _verify_etl_completed(self, db: Session, run: TutorialRun, _context: dict[str, Any]):
-        runs = self._etl_rows(db, run)
+    def _verify_elt_completed(self, db: Session, run: TutorialRun, _context: dict[str, Any]):
+        runs = self._elt_rows(db, run)
         completed = [item for item in runs if item.status == "completed"]
         successful = 0
         referenced = 0
@@ -262,8 +262,8 @@ class TutorialBusinessVerifierMixin:
         ok = bool(completed) and successful > 0 and referenced > 0
         return (
             ok,
-            "verification_passed" if ok else "etl_result_not_ready",
-            [{"type": "etl_run", "id": completed[0].id}] if ok else [],
+            "verification_passed" if ok else "elt_result_not_ready",
+            [{"type": "elt_run", "id": completed[0].id}] if ok else [],
             {
                 "completed_run_count": len(completed),
                 "successful_row_count": successful,
@@ -348,4 +348,4 @@ class TutorialBusinessVerifierMixin:
     def _verify_trace_import(self, db: Session, run: TutorialRun, context: dict[str, Any]):
         if not self._visited(context, {"business-docking"}, require_target=True):
             return False, "trace_view_required", [], {}
-        return self._verify_etl_completed(db, run, context)
+        return self._verify_elt_completed(db, run, context)

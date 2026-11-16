@@ -19,6 +19,7 @@ const mockModsStoreModsForUi = vi.fn(() => [])
 const mockWfStoreRefreshRegistry = vi.fn(async () => {})
 const mockWfStoreAssignHostMod = vi.fn()
 const mockWfStoreEnableEmployees = vi.fn(() => [])
+const mockWfStoreLoadRegistry = vi.fn(async () => undefined)
 
 vi.mock('@/api/modStore', () => ({
   reloadEmployeePacks: (...a: unknown[]) => mockReloadEmployeePacks(...a),
@@ -35,12 +36,20 @@ vi.mock('@/stores/mods', () => ({
     get modsForUi() {
       return mockModsStoreModsForUi()
     },
+    get modsForWorkflowUi() {
+      return mockModsStoreModsForUi()
+    },
   }),
 }))
 
 vi.mock('@/stores/workflowAiEmployees', () => ({
   useWorkflowAiEmployeesStore: () => ({
     refreshRegistry: (...a: unknown[]) => mockWfStoreRefreshRegistry(...a),
+    hydrateFromMods: () => undefined,
+    pruneOrphanWorkflowEmployeeToggles: () => undefined,
+    loadRegistry: (...a: unknown[]) => mockWfStoreLoadRegistry(...a),
+    ensureEnabledKeys: () => undefined,
+    registryEntries: [],
     assignHostMod: (...a: unknown[]) => mockWfStoreAssignHostMod(...a),
     enableEmployees: (...a: unknown[]) => mockWfStoreEnableEmployees(...a),
   }),
@@ -52,6 +61,7 @@ vi.mock('@/utils/enterpriseModStackApi', () => ({
 
 vi.mock('@/utils/workflowEmployeeScope', () => ({
   filterModsForEnterpriseWorkflowRegistry: (...a: unknown[]) => mockFilterModsForEnterpriseWorkflowRegistry(...a),
+  harvestOfficialCarrierEmployeesForStack: vi.fn(() => []),
 }))
 
 vi.mock('@/utils/modWorkflowEmployees', () => ({
@@ -448,7 +458,7 @@ describe('workflowEmployeeOnboard – 覆盖率补齐', () => {
       await autoOnboardInstalledMarketItem(item)
 
       expect(mockModsStoreRefresh).toHaveBeenCalled()
-      expect(mockWfStoreRefreshRegistry).toHaveBeenCalled()
+      expect(mockWfStoreLoadRegistry).toHaveBeenCalled()
     })
 
     it('两次调用 resolveEnterpriseModStack（初始 + refresh 后）', async () => {
@@ -591,7 +601,7 @@ describe('workflowEmployeeOnboard – 覆盖率补齐', () => {
       await autoOnboardWorkflowEmployeesFromMods([{ id: 'mod-1', name: 'Mod1', workflow_employees: [{ id: 'wf-1', label: 'WF1' }] }])
 
       expect(mockModsStoreRefresh).toHaveBeenCalled()
-      expect(mockWfStoreRefreshRegistry).toHaveBeenCalled()
+      expect(mockWfStoreLoadRegistry).toHaveBeenCalled()
     })
 
     it('mod 为 undefined 元素时被跳过', async () => {

@@ -13,8 +13,8 @@ describe('marketCatalogCache', () => {
   })
 
   it('builds stable keys', () => {
-    expect(buildMarketCatalogCacheKey('office', '  ')).toBe('office:')
-    expect(buildMarketCatalogCacheKey('office', 'excel')).toBe('office:excel')
+    expect(buildMarketCatalogCacheKey('office', '  ')).toBe('v2:office:')
+    expect(buildMarketCatalogCacheKey('office', 'excel')).toBe('v2:office:excel')
   })
 
   it('round-trips cache entries', () => {

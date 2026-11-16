@@ -62,8 +62,8 @@ it('shows templates saved from ETL after returning to a retained library, and re
 
   await router.push('/etl')
   templates = [...templates, { id: 2, name: '生产单清理模板' }]
-  window.dispatchEvent(new CustomEvent('xcagi:templates-updated', { detail: { source: 'etl-center' } }))
-  window.dispatchEvent(new CustomEvent('xcagi:templates-updated', { detail: { source: 'etl-center' } }))
+  window.dispatchEvent(new CustomEvent('xcagi:templates-updated', { detail: { source: 'elt-center' } }))
+  window.dispatchEvent(new CustomEvent('xcagi:templates-updated', { detail: { source: 'elt-center' } }))
   await flushPromises()
   expect(listTemplates).toHaveBeenCalledTimes(1)
   await router.push('/templates')

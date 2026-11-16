@@ -1,8 +1,8 @@
 <template>
-  <details class="settings-card" data-tutorial-id="settings-basic" open>
+  <details class="settings-card" data-tutorial-id="settings-basic">
     <summary class="settings-row">
-      <span class="settings-row__icon settings-row__icon--green" aria-hidden="true">
-        <i class="fa fa-sliders"></i>
+      <span class="settings-row__icon settings-row__icon--art" aria-hidden="true">
+        <img class="settings-row__icon-art" :src="basicArtSrc" alt="" />
       </span>
       <span class="settings-row__label">{{ $t('settings.basicSettings') }}</span>
       <span class="settings-row__meta">{{ basicSettingsSummary }}</span>
@@ -12,8 +12,8 @@
     <div class="settings-card__body settings-card__body--list">
       <div class="settings-item-list">
         <div class="settings-item">
-          <span class="settings-item__icon settings-row__icon--cyan" aria-hidden="true">
-            <i class="fa fa-columns"></i>
+          <span class="settings-item__icon settings-row__icon--art" aria-hidden="true">
+            <img class="settings-row__icon-art" :src="sidebarThemeArtSrc" alt="" />
           </span>
           <label class="settings-item__label" for="settings-sidebar-theme">{{ $t('settings.sidebarTheme') }}</label>
           <select
@@ -29,8 +29,8 @@
         </div>
 
         <div v-if="showCompanyBrandEditor" class="settings-item">
-          <span class="settings-item__icon settings-row__icon--amber" aria-hidden="true">
-            <i class="fa fa-building"></i>
+          <span class="settings-item__icon settings-row__icon--art" aria-hidden="true">
+            <img class="settings-row__icon-art" :src="companyBrandArtSrc" alt="" />
           </span>
           <label class="settings-item__label" for="settings-company-brand">{{ $t('settings.companyBrand') }}</label>
           <div class="settings-item__control-group">
@@ -54,8 +54,8 @@
         </div>
 
         <div class="settings-item">
-          <span class="settings-item__icon settings-row__icon--indigo" aria-hidden="true">
-            <i class="fa fa-user-circle"></i>
+          <span class="settings-item__icon settings-row__icon--art" aria-hidden="true">
+            <img class="settings-row__icon-art" :src="assistantNameArtSrc" alt="" />
           </span>
           <label class="settings-item__label" for="settings-assistant-name">{{ $t('settings.assistantName') }}</label>
           <input
@@ -70,8 +70,8 @@
         </div>
 
         <div class="settings-item">
-          <span class="settings-item__icon settings-row__icon--indigo" aria-hidden="true">
-            <i class="fa fa-language"></i>
+          <span class="settings-item__icon settings-row__icon--art" aria-hidden="true">
+            <img class="settings-row__icon-art" :src="languageArtSrc" alt="" />
           </span>
           <label class="settings-item__label" for="settings-locale">{{ $t('settings.language') }}</label>
           <select
@@ -86,32 +86,32 @@
         </div>
 
         <div class="settings-item settings-item--readonly">
-          <span class="settings-item__icon settings-row__icon--slate" aria-hidden="true">
-            <i class="fa fa-desktop"></i>
+          <span class="settings-item__icon settings-row__icon--art" aria-hidden="true">
+            <img class="settings-row__icon-art" :src="systemNameArtSrc" alt="" />
           </span>
           <span class="settings-item__label">{{ $t('settings.systemName') }}</span>
           <span class="settings-item__value">{{ systemDisplayName }}</span>
         </div>
 
         <div v-if="desktopDatabaseVisible" class="settings-item settings-item--readonly">
-          <span class="settings-item__icon settings-row__icon--slate" aria-hidden="true">
-            <i class="fa fa-database"></i>
+          <span class="settings-item__icon settings-row__icon--art" aria-hidden="true">
+            <img class="settings-row__icon-art" :src="dataStorageArtSrc" alt="" />
           </span>
           <span class="settings-item__label">{{ $t('settings.dataStorage') }}</span>
           <span class="settings-item__value">{{ databaseStorageLabel }}</span>
         </div>
 
         <div v-if="desktopDatabaseVisible" class="settings-item settings-item--readonly">
-          <span class="settings-item__icon settings-row__icon--slate" aria-hidden="true">
-            <i class="fa fa-folder-open-o"></i>
+          <span class="settings-item__icon settings-row__icon--art" aria-hidden="true">
+            <img class="settings-row__icon-art" :src="dbPathArtSrc" alt="" />
           </span>
           <span class="settings-item__label">{{ $t('settings.dbPath') }}</span>
           <span class="settings-item__value settings-item__value--mono" :title="currentDbPath">{{ currentDbPath }}</span>
         </div>
 
         <div class="settings-item">
-          <span class="settings-item__icon settings-row__icon--violet" aria-hidden="true">
-            <i class="fa fa-cloud"></i>
+          <span class="settings-item__icon settings-row__icon--art" aria-hidden="true">
+            <img class="settings-row__icon-art" :src="aiDeployArtSrc" alt="" />
           </span>
           <label class="settings-item__label" for="settings-ai-mode">{{ $t('settings.aiDeployMode') }}</label>
           <select
@@ -133,16 +133,16 @@
         </div>
 
         <div class="settings-item settings-item--readonly">
-          <span class="settings-item__icon settings-row__icon--cyan" aria-hidden="true">
-            <i class="fa fa-random"></i>
+          <span class="settings-item__icon settings-row__icon--art" aria-hidden="true">
+            <img class="settings-row__icon-art" :src="networkPerfArtSrc" alt="" />
           </span>
           <span class="settings-item__label">{{ $t('settings.networkPerf') }}</span>
           <span class="settings-item__value">{{ deploymentModeBadge }}</span>
         </div>
 
         <div v-if="performanceModeSelected" class="settings-item settings-item--stacked">
-          <span class="settings-item__icon settings-row__icon--slate" aria-hidden="true">
-            <i class="fa fa-database"></i>
+          <span class="settings-item__icon settings-row__icon--art" aria-hidden="true">
+            <img class="settings-row__icon-art" :src="postgresArtSrc" alt="" />
           </span>
           <label class="settings-item__label" for="settings-postgres-url">{{ $t('settings.postgresConnection') }}</label>
           <input
@@ -178,8 +178,8 @@
 
       <details class="settings-card settings-card--nested" data-tutorial-id="settings-mobile-pairing" open>
         <summary class="settings-row settings-row--nested">
-          <span class="settings-row__icon settings-row__icon--cyan" aria-hidden="true">
-            <i class="fa fa-qrcode"></i>
+          <span class="settings-row__icon settings-row__icon--art" aria-hidden="true">
+            <img class="settings-row__icon-art" :src="mobilePairingArtSrc" alt="" />
           </span>
           <span class="settings-row__label">{{ $t('settings.mobilePairing') }}</span>
           <span class="settings-row__meta">{{ $t('settings.mobilePairingMeta') }}</span>
@@ -192,8 +192,8 @@
 
       <details v-if="!clientModsUiOff" class="settings-card settings-card--nested" data-tutorial-id="settings-extensions">
         <summary class="settings-row settings-row--nested">
-          <span class="settings-row__icon settings-row__icon--orange" aria-hidden="true">
-            <i class="fa fa-puzzle-piece"></i>
+          <span class="settings-row__icon settings-row__icon--art" aria-hidden="true">
+            <img class="settings-row__icon-art" :src="extensionsArtSrc" alt="" />
           </span>
           <span class="settings-row__label">{{ $t('settings.extensions') }}</span>
           <span class="settings-row__meta">{{ modSettingsFoldMeta }}</span>
@@ -315,6 +315,19 @@ import type { DeploymentModeId } from '@/constants/deploymentModes.generated'
 import type { ModInfo } from '@/types/modInfo'
 import { isProtectedClientModId } from '@/constants/protectedMods'
 import MobilePairingQrCard from '@/components/settings/MobilePairingQrCard.vue'
+import basicArtSrc from '@/assets/icons/settings/r2c2.png'
+import sidebarThemeArtSrc from '@/assets/icons/settings/r2c3.png'
+import companyBrandArtSrc from '@/assets/icons/settings/r3c1.png'
+import assistantNameArtSrc from '@/assets/icons/settings/r2c1.png'
+import languageArtSrc from '@/assets/icons/settings/r3c2.png'
+import systemNameArtSrc from '@/assets/icons/settings/r2c4.png'
+import dataStorageArtSrc from '@/assets/icons/settings/r3c4.png'
+import dbPathArtSrc from '@/assets/icons/settings/r4c1.png'
+import aiDeployArtSrc from '@/assets/icons/settings/r4c2.png'
+import networkPerfArtSrc from '@/assets/icons/settings/r3c3.png'
+import postgresArtSrc from '@/assets/icons/settings/r1c3.png'
+import mobilePairingArtSrc from '@/assets/icons/settings/r4c4.png'
+import extensionsArtSrc from '@/assets/icons/settings/r5c1.png'
 
 defineProps<{
   basicSettingsSummary: string

@@ -166,11 +166,11 @@ def parse_delivery_note_with_compat_profile(
     }:
         return None
     try:
-        from app.application.shipment_excel_etl_app_service import (
-            preview_shipment_excel_etl,
+        from app.application.shipment_excel_elt_app_service import (
+            preview_shipment_excel_elt,
         )
 
-        result = preview_shipment_excel_etl(
+        result = preview_shipment_excel_elt(
             path,
             include_ledger=False,
             profile_id=compatibility_preset_id,

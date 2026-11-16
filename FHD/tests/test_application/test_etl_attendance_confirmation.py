@@ -25,7 +25,7 @@ EMPTY = "ELT_ATTENDANCE_EMPTY_SELECTION"
 @pytest.fixture
 def attendance_store(preview_store, tmp_path, monkeypatch):
     store = preview_store
-    monkeypatch.setenv("FHD_ETL_LLM", "off")
+    monkeypatch.setenv("FHD_ELT_LLM", "off")
     store.workbook = tmp_path / "synthetic-attendance.xlsx"
     workbook = Workbook()
     sheet = workbook.active
@@ -194,7 +194,7 @@ def test_attendance_batch_all_skipped_still_returns_verified_workbook(attendance
     assert result["executed"] == receipt["executed"] == 0
     assert receipt["idempotent_replay"] is True
     output = Path(receipt["output_path"])
-    assert output.name == receipt["file_name"] == "etl-all-skipped.xlsx"
+    assert output.name == receipt["file_name"] == "elt-all-skipped.xlsx"
     assert hashlib.sha256(output.read_bytes()).hexdigest() == receipt["sha256"]
     workbook = load_workbook(output, read_only=True)
     try:

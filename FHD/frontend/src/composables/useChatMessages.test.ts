@@ -7,7 +7,7 @@ import { ref, nextTick } from 'vue'
 import { lastChatModelRoute, recordChatModelRoute, type ChatModelRoute } from '@/utils/chatModelRoute'
 import { invalidateEnterpriseSessionCache } from '@/utils/authSessionCache'
 import { setActivePinia, createPinia } from 'pinia'
-import { chatMessageExtrasFromServerRow, useChatMessages, queueVoice, clearVoiceQueue } from './useChatMessages'
+import { chatMessageExtrasFromServerRow, useChatMessages, queueVoice, clearVoiceQueue, resetChatMessageStores } from './useChatMessages'
 
 vi.mock('@/api/chat', () => ({
   default: {
@@ -53,6 +53,11 @@ vi.mock('@/utils/tts', () => ({
   stopSpeaking: vi.fn(),
   cleanTextForSpeech: (text: string) => text,
 }))
+
+// 每个用例都从空的模块级单例开始，避免上一个用例的会话内存态串场。
+beforeEach(() => {
+  resetChatMessageStores()
+})
 
 describe('useChatMessages', () => {
   let messages: ReturnType<typeof useChatMessages>
@@ -142,6 +147,15 @@ describe('useChatMessages', () => {
 
     const restored = useChatMessages(ref('session-1'))
     expect(restored.messages.value.at(-1)?.approvalCard?.status).toBe('confirmed')
+  })
+
+  it('shares one messages source per session key across views', () => {
+    const main = useChatMessages(ref('shared-session'))
+    const floating = useChatMessages(ref('shared-session'))
+    main.addMessage('来自主对话页', 'user')
+    expect(floating.messages.value.at(-1)?.content).toContain('来自主对话页')
+    floating.addMessage('来自悬浮窗', 'ai')
+    expect(main.messages.value.at(-1)?.content).toContain('来自悬浮窗')
   })
 
   it('lastMessage returns last message', () => {
@@ -817,6 +831,8 @@ it('retires only cached streaming placeholders after refresh while preserving un
   first.messages.value[idx]!.routeMetadata = route
   await nextTick()
   expect(first.messages.value[idx]?.streamingShell).toBe(true)
+  // 模拟整页刷新：模块级单例清空后重新从本机缓存恢复。
+  resetChatMessageStores()
   const reopened = useChatMessages(ref('refresh-stream'))
   expect(reopened.messages.value.at(-1)?.streamingShell).toBeUndefined()
   expect(reopened.messages.value.at(-1)?.content).toContain('未收到完成回执')

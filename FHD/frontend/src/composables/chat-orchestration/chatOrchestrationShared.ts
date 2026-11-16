@@ -18,6 +18,34 @@ export type ChatOrchestrationAddAndSaveMessage = (
 /** Local async work may update only its original visible round; receipts may be saved to its original owner/session. */
 export type ChatLocalScope = { sessionId: string; isCurrent: () => boolean; isOwnerCurrent: () => boolean }
 
+/** 本轮工具执行轨迹（后端 ``trace`` 事件），只用于气泡展示，不进入落库格式。 */
+export interface ChatTraceItem {
+  tool: string
+  args?: Record<string, unknown>
+  ok: boolean
+  ms: number
+  summary?: string
+}
+
+/** 归一化后端 trace 条目；非法条目直接丢弃，避免脏数据进入渲染层。 */
+export function normalizeChatTraceItems(raw: unknown): ChatTraceItem[] {
+  return asArray<unknown>(raw)
+    .map((item) => {
+      const row = asRecord(item)
+      const tool = asString(row.tool).trim()
+      if (!tool) return null
+      const args = asRecord(row.args)
+      return {
+        tool,
+        ...(Object.keys(args).length ? { args } : {}),
+        ok: row.ok !== false,
+        ms: Number.isFinite(Number(row.ms)) ? Math.max(0, Math.round(Number(row.ms))) : 0,
+        ...(asString(row.summary).trim() ? { summary: asString(row.summary) } : {}),
+      } as ChatTraceItem
+    })
+    .filter((item): item is ChatTraceItem => item !== null)
+}
+
 /** A transport-level success cannot override an unknown tool or run outcome. */
 export function requiresTurnReconciliation(value: unknown): boolean {
   const pending: Array<{ value: unknown; depth: number }> = [{ value, depth: 0 }]

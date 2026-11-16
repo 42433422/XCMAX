@@ -8,6 +8,7 @@ import {
   type LinkedExcelSheet,
 } from './useChatPersistence'
 import { filesToMultimodalRows, type MultimodalAttachmentRow } from '@/utils/multimodalAttachments'
+import { removeChatArtifactId, uploadChatArtifactsDetailed } from '@/utils/chatArtifactContext'
 import { resolveChatIdentity } from '@/utils/chatStorageKeys'
 
 export interface UseChatExcelContextDeps {
@@ -25,7 +26,13 @@ export function useChatExcelContext(deps: UseChatExcelContextDeps) {
   const linkedExcelSheet = ref<LinkedExcelSheet | null>(null)
   const linkedExcelAllSheets = ref(false)
   const multimodalStaging = ref<MultimodalAttachmentRow[]>([])
-  const multimodalPendingCount = computed(() => multimodalStaging.value.length)
+  /** 已上传成后端工件的文件（如整批 Excel）：在输入框以芯片展示，发送时随 artifact_ids 提交。 */
+  const artifactStaging = ref<Array<{ filename: string; artifact_id: string }>>([])
+  /** 后端暂不支持、已被跳过的文件（如 .xls）：在输入框明确提示，避免静默丢失。 */
+  const unsupportedStaging = ref<string[]>([])
+  const multimodalPendingCount = computed(
+    () => multimodalStaging.value.length + artifactStaging.value.length,
+  )
   const scopeKey = () => JSON.stringify([sessionId.value, (deps.getIdentity || resolveChatIdentity)()])
   let activeScope = scopeKey(), revision = 0
   function syncScope() {
@@ -37,6 +44,8 @@ export function useChatExcelContext(deps: UseChatExcelContextDeps) {
     linkedExcelSheet.value = null
     linkedExcelAllSheets.value = false
     multimodalStaging.value = []
+    artifactStaging.value = []
+    unsupportedStaging.value = []
   }
   watch(scopeKey, syncScope, { flush: 'sync' })
   if (getCurrentScope()) onScopeDispose(() => { revision += 1 })
@@ -105,6 +114,9 @@ export function useChatExcelContext(deps: UseChatExcelContextDeps) {
 
   function consumeMultimodalIntoPlannerContext(contextPayload: Record<string, unknown>, contextParts: string[]) {
     syncScope()
+    // 工件已随 artifact_ids 提交，本轮芯片一并收起；发送失败时仍可从后端工件重新提问。
+    artifactStaging.value = []
+    unsupportedStaging.value = []
     const rows = multimodalStaging.value
     if (!rows.length) return
     contextPayload.multimodal_attachments = rows.map((r) => ({ ...r }))
@@ -112,20 +124,60 @@ export function useChatExcelContext(deps: UseChatExcelContextDeps) {
     multimodalStaging.value = []
   }
 
+  /** 整批 Excel 等文件：上传成后端工件，并在输入框逐个显示可移除的芯片。 */
+  async function stageArtifactFiles(list: File[]): Promise<number> {
+    if (!list.length) return 0
+    syncScope()
+    const uploaded = await uploadChatArtifactsDetailed(list)
+    if (!uploaded.length) return 0
+    artifactStaging.value = [
+      ...artifactStaging.value,
+      ...uploaded.map((row) => ({ filename: row.name, artifact_id: row.id })),
+    ].slice(-50)
+    return uploaded.length
+  }
+
+  function removeArtifactFile(artifactId: string) {
+    removeChatArtifactId(artifactId)
+    artifactStaging.value = artifactStaging.value.filter((row) => row.artifact_id !== artifactId)
+  }
+
+  function removeMultimodalFile(row: MultimodalAttachmentRow) {
+    const index = multimodalStaging.value.indexOf(row)
+    if (index >= 0) multimodalStaging.value.splice(index, 1)
+  }
+
+  function noteUnsupportedFiles(names: string[]) {
+    const merged = [...unsupportedStaging.value]
+    for (const name of names) {
+      const value = String(name || '').trim()
+      if (value && !merged.includes(value)) merged.push(value)
+    }
+    unsupportedStaging.value = merged.slice(-20)
+  }
+
+  function dismissUnsupportedFile(name: string) {
+    unsupportedStaging.value = unsupportedStaging.value.filter((item) => item !== name)
+  }
+
   async function stageMultimodalFiles(list: File[]) {
     if (!list.length) return
     syncScope()
+    // 额外登记后端工件（失败静默）：对话侧可用 artifact_id 取数，不影响现有解析与摘要。
+    void uploadChatArtifactsDetailed(list)
     const capturedScope = activeScope, capturedRevision = revision
     const isCurrent = deps.captureIsCurrent?.() || (() => true)
-    const res = await filesToMultimodalRows(list)
+    const res = await filesToMultimodalRows(list, { skipUnsupported: list.length > 1 })
     if (capturedRevision !== revision || capturedScope !== scopeKey() || !isCurrent()) return
     if (!res.ok) {
       await addAndSaveMessage(`[附件] ${res.error}`, 'ai')
       return
     }
-    multimodalStaging.value = [...multimodalStaging.value, ...res.rows].slice(-6)
+    multimodalStaging.value = [...multimodalStaging.value, ...res.rows].slice(-50)
+    const names = res.rows.slice(0, 5).map((r) => r.filename).join('、')
+    const suffix = res.rows.length > 5 ? ` 等 ${res.rows.length} 个文件` : ''
     await addAndSaveMessage(
-      `[附件] 已加入 ${res.rows.length} 个文件（${res.rows.map((r) => r.filename).join('、')}），发送下一条消息时将一并提交给模型。`,
+      `[附件] 已加入 ${res.rows.length} 个文件（${names}${suffix}），发送下一条消息时将一并提交给模型。`,
       'ai',
     )
   }
@@ -202,7 +254,14 @@ export function useChatExcelContext(deps: UseChatExcelContextDeps) {
     linkedExcelSheet,
     linkedExcelAllSheets,
     multimodalStaging,
+    artifactStaging,
+    unsupportedStaging,
     multimodalPendingCount,
+    stageArtifactFiles,
+    removeArtifactFile,
+    removeMultimodalFile,
+    noteUnsupportedFiles,
+    dismissUnsupportedFile,
     excelSheetOptions,
     resolveExcelAnalysisContextForRequest,
     injectExcelContextPayload,

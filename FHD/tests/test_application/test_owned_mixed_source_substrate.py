@@ -14,11 +14,11 @@ from sqlalchemy.orm import Session, sessionmaker
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 PERMISSIONS = [
-    "etl.execute",
+    "elt.execute",
     "product.edit",
     "dataset.read",
     "dataset.write",
-    "etl.template.manage",
+    "elt.template.manage",
 ]
 
 
@@ -62,7 +62,7 @@ def test_private_models_leave_host_base_and_default_bootstrap_unchanged(tmp_path
     from app.db.models.product_edit_claim import ProductEditClaimBase
     from app.desktop_runtime import database_generation_registry as g
 
-    private = {"product_price_history", "etl_price_dimensions", "agent_product_edit_claims"}
+    private = {"product_price_history", "elt_price_dimensions", "agent_product_edit_claims"}
     assert not private.intersection(Base.metadata.tables)
     assert set(OwnedSourceBase.metadata.tables) == private - {"agent_product_edit_claims"}
     assert set(ProductEditClaimBase.metadata.tables) == {"agent_product_edit_claims"}
@@ -283,7 +283,7 @@ def test_source_generation_and_head_tampering_fail_closed(host, tamper):
     else:
         with sqlite3.connect(factory.target) as db:
             if tamper == "epoch":
-                db.execute("UPDATE etl_database_generation SET generation_id='bad'")
+                db.execute("UPDATE elt_database_generation SET generation_id='bad'")
             elif tamper == "schema":
                 db.execute("CREATE TABLE surprise(value TEXT)")
             else:
@@ -384,7 +384,7 @@ def test_nested_guard_exception_restores_ownership(host):
     with pytest.raises(RuntimeError, match="test-error"):
         with factory.guard(), factory.guard():
             with factory() as db:
-                assert db.info["etl_owned_source"] == factory.binding
+                assert db.info["elt_owned_source"] == factory.binding
             raise RuntimeError("test-error")
     with pytest.raises(g.GenerationObservationError, match="held target"):
         g._owned_lock(factory.target, None)

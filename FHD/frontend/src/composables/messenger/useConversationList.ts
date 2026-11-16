@@ -7,6 +7,7 @@
  */
 import { computed, type Ref } from 'vue'
 import { type ImContact, type ImConversationSummary } from '@/api/im'
+import { EMPLOYEE_AVATAR_POOL } from '@/utils/employeeAvatar'
 import {
   CLAUDE_SUPER_EMPLOYEE_ENTRY,
   CODEX_SUPER_EMPLOYEE_ENTRY,
@@ -14,6 +15,7 @@ import {
   KELLAI_CUSTOMER_IM_ENTRY,
   SUPER_CLI_TOOLS,
   avatarText,
+  conversationAvatarSrc,
   isAiGroupChatEntry,
   isDutyEmployeeEntry,
   isEnterpriseDedicatedContact,
@@ -21,6 +23,7 @@ import {
   isExternalAppEntry,
   isSuperEmployeeEntry,
   pinnedAvatarText,
+  pinnedContactAvatarSrc,
   pinnedEntryPreview,
   superCliToolLabel,
   superEmployeeAvatarKey,
@@ -75,7 +78,11 @@ export function useConversationList(params: UseConversationListParams) {
     if (isAdminCustomerServiceConsole.value) {
       return [CODEX_SUPER_EMPLOYEE_ENTRY, CURSOR_SUPER_EMPLOYEE_ENTRY, CLAUDE_SUPER_EMPLOYEE_ENTRY, ...dutyEmployees.value]
     }
-    return [...dutyEmployees.value, ...contacts.value.filter((c) => isEnterpriseDedicatedContact(c))]
+    // 企业专属客服固定顶置，其余编制员工排在其后。
+    return [
+      ...contacts.value.filter((c) => isEnterpriseDedicatedContact(c)),
+      ...dutyEmployees.value,
+    ]
   })
 
   const externalChannelEntries = computed<ExternalAppEntry[]>(() => [
@@ -185,7 +192,7 @@ export function useConversationList(params: UseConversationListParams) {
   function sidebarItemPreview(item: ImSidebarListItem): string {
     if (item.kind === 'conversation' && item.conversation.is_cs_inbox) {
       const conversation = item.conversation
-      if (conversation.cs_status === 'human_pending') return `待人工 · ${conversation.cs_transfer_reason || '需要人工处理'}`
+      if (conversation.cs_status === 'human_pending') return '人工已介入'
       if (conversation.cs_status === 'human_active') return '人工处理中'
       if (conversation.cs_status === 'ai_processing') return 'AI 正在处理'
       return conversation.cs_summary ? `AI接待 · ${conversation.cs_summary}` : 'AI自动接待中'
@@ -195,6 +202,23 @@ export function useConversationList(params: UseConversationListParams) {
 
   function sidebarItemAvatarText(item: ImSidebarListItem): string {
     return item.kind === 'pinned' ? pinnedAvatarText(item.entry) : avatarText(item.conversation.title)
+  }
+
+  /** 账号池持久化头像（企业专属客服走管理端小C头像）。 */
+  function sidebarItemAvatarSrc(item: ImSidebarListItem): string | null {
+    if (item.kind === 'pinned') {
+      const src = pinnedContactAvatarSrc(item.entry)
+      if (src) return src
+      // 编制员工共用 pack_id，按通讯录顺序取唯一头像，避免整列撞图。
+      if (isDutyEmployeeEntry(item.entry) && EMPLOYEE_AVATAR_POOL.length) {
+        const index = dutyEmployees.value.findIndex(
+          (row) => row.id === item.entry.id && row.display_name === item.entry.display_name,
+        )
+        return EMPLOYEE_AVATAR_POOL[(index < 0 ? 0 : index) % EMPLOYEE_AVATAR_POOL.length]
+      }
+      return null
+    }
+    return conversationAvatarSrc(item.conversation)
   }
 
   function sidebarItemSuperAvatarSrc(item: ImSidebarListItem): string | null {
@@ -230,6 +254,7 @@ export function useConversationList(params: UseConversationListParams) {
     sidebarItemTitle,
     sidebarItemPreview,
     sidebarItemAvatarText,
+    sidebarItemAvatarSrc,
     sidebarItemSuperAvatarSrc,
     sidebarItemUnread,
     selectSidebarItem,

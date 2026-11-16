@@ -273,7 +273,7 @@ def test_completed_run_writes_a_downloadable_snapshot(tmp_path, monkeypatch):
                 unit_price=9,
                 amount=1260,
                 status="pending",
-                parsed_data=json.dumps({"etl_run_id": "run-1"}),
+                parsed_data=json.dumps({"elt_run_id": "run-1"}),
             )
         )
         session.commit()
@@ -289,9 +289,9 @@ def test_completed_run_writes_a_downloadable_snapshot(tmp_path, monkeypatch):
         )
         produced = write_committed_shipment_workbook(session, run)
         assert produced is not None
-        saved = tmp_path / "etl" / "exports" / "etl-run-1.xlsx"
+        saved = tmp_path / "elt" / "exports" / "elt-run-1.xlsx"
         assert saved.is_file()
-        assert produced["file_name"] == "etl-run-1.xlsx"
+        assert produced["file_name"] == "elt-run-1.xlsx"
         assert produced["sha256"]
         workbook = load_workbook(saved, data_only=False)
         assert workbook["送货单"]["D4"].value == "PE白底漆"
@@ -415,8 +415,8 @@ def test_submission_without_layout_downloads_every_preview_row(tmp_path, monkeyp
                 summary_json="{}",
             ),
         )
-        assert produced["file_name"] == "etl-run-trace.xlsx"
-        book = load_workbook(tmp_path / "etl" / "exports" / "etl-run-trace.xlsx")
+        assert produced["file_name"] == "elt-run-trace.xlsx"
+        book = load_workbook(tmp_path / "elt" / "exports" / "elt-run-trace.xlsx")
         sheet = book.active
         assert sheet["A2"].value in (None, "") and sheet["B2"].value in (None, "")
         assert sheet["D2"].value == "error" and sheet["E2"].value == "乙"

@@ -273,6 +273,9 @@ def run_archive_template_delete(
             ).fetchone()
             if not row:
                 return {"success": False, "message": "模板不存在"}, 404
+            # Recoverable removal: hide the owned row for this tenant without
+            # destroying asset bytes, so existing references stay valid and the
+            # scanner keeps the matching fs alias hidden while the row is inactive.
             db.execute(
                 text(
                     f"UPDATE templates SET is_active = 0, updated_at = :updated_at "
@@ -284,7 +287,7 @@ def run_archive_template_delete(
         return {
             "success": True,
             "message": "模板删除成功",
-            "deleted": {"id": template_id, "db_id": db_id},
+            "deleted": {"id": template_id, "db_id": db_id, "soft_deleted": True},
         }, 200
 
     return {"success": False, "message": f"暂不支持删除该模板类型: {template_id}"}, 400

@@ -31,6 +31,9 @@ from app.application.agent_orchestrator.tool_spec_data.constants import (
 from app.application.agent_orchestrator.tool_spec_data.contract_samples import _default_fixture
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
+# 批量文件的数组参数超出上限时按上限截断，而不是让整轮计划失败。
+_TRUNCATABLE_BATCH_KEYS = frozenset({"file_paths", "run_ids"})
+
 RiskLevel = Literal["low", "medium", "high"]
 
 
@@ -127,12 +130,12 @@ def _special_permission(tool_id: str, action: str) -> str:
         return "product.view"
     if tool_id == "shipment_records" and action in {"query", "list"}:
         return "shipment.view"
+    if tool_id == "shipment_orders" and action in {"generate", "generate_batch"}:
+        return "shipment.create"
     if tool_id == "materials" and action in {"list", "query"}:
         return "material.view"
     if tool_id == "materials" and action in {"create", "update", "delete", "batch_delete", "clear"}:
         return "material.edit"
-    if tool_id == "shipment_orders" and action in {"generate", "generate_batch"}:
-        return "shipment.create"
     if (tool_id, action) == ("customers", "query"):
         return "customer.view"
     if tool_id == "customers" and action in {
@@ -155,9 +158,9 @@ def _special_permission(tool_id: str, action: str) -> str:
             return DATASET_RAG_READ_PERMISSION
         return DATASET_RAG_WRITE_PERMISSION
     if tool_id == "template_preview" and action in {"list", "query", "view"}:
-        return "etl.read"
+        return "elt.read"
     if tool_id in {"template_preview", "document_template"}:
-        return "etl.template.manage"
+        return "elt.template.manage"
     if tool_id == "excel_analysis" and action in {"read", "structure", "query", "statistics"}:
         return "tool.excel_analysis.read"
     fixed = PERMISSION_OVERRIDES.get(tool_id)
@@ -512,6 +515,13 @@ def _validate_schema_payload(
             # has completed and the reference has been resolved.
             continue
         expected_type = str(prop.get("type") or "").strip()
+        if expected_type == "array" and isinstance(value, str) and value.strip():
+            # 模型常把一组 id 写成逗号/分号分隔的字符串；这里拆成数组，
+            # 否则会被类型校验拦成「字段 xxx 类型错误，应为 array」。
+            payload[key] = [
+                part.strip() for part in re.split(r"[,;，；\s]+", value) if part.strip()
+            ]
+            value = payload[key]
         if (
             expected_type == "string"
             and key == "reference_id"
@@ -544,7 +554,12 @@ def _validate_schema_payload(
             if "minItems" in prop and len(value) < int(prop["minItems"]):
                 return False, f"{subject} 字段 {key} 数量不足"
             if "maxItems" in prop and len(value) > int(prop["maxItems"]):
-                return False, f"{subject} 字段 {key} 数量超限"
+                # 批量文件/预演编号超出上限时截断而不是整轮失败：
+                # 模型可能把所有附件一次列全，工具本身也按同一上限处理。
+                if key in _TRUNCATABLE_BATCH_KEYS:
+                    del value[int(prop["maxItems"]) :]
+                else:
+                    return False, f"{subject} 字段 {key} 数量超限"
             raw_items = prop.get("items")
             item_schema = raw_items if isinstance(raw_items, dict) else {}
             item_type = str(item_schema.get("type") or "")

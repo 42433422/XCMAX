@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.application.elt.errors import EltError, EltNotFound
 from app.application.elt.service_support import (
-    ETL_SHIPMENT_DOCUMENT_TEMPLATE_DESCRIPTION,
+    ELT_SHIPMENT_DOCUMENT_TEMPLATE_DESCRIPTION,
     dump_json,
     load_json,
     new_id,
@@ -123,7 +123,7 @@ class TemplateServiceMixin:
                 EltTemplate.is_active.is_(True),
                 or_(
                     EltTemplate.description.is_(None),
-                    EltTemplate.description != ETL_SHIPMENT_DOCUMENT_TEMPLATE_DESCRIPTION,
+                    EltTemplate.description != ELT_SHIPMENT_DOCUMENT_TEMPLATE_DESCRIPTION,
                 ),
             )
             .order_by(EltTemplate.updated_at.desc())

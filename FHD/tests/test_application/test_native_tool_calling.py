@@ -130,7 +130,7 @@ def test_generate_falls_back_when_completion_rejects_tools(monkeypatch) -> None:
 
     monkeypatch.setenv("XCAGI_PLAN_TOOL_CALLS", "1")
     generator = LlmPlanGeneration(Conversation(), completion, lambda: None)
-    plan = generator.generate("p1", "u1", "你好", _registry(), {})
+    plan = generator.generate("p1", "u1", "查询产品", _registry(), {})
 
     assert plan is not None
     assert plan.metadata["response_mode"] == "reply"

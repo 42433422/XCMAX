@@ -15,6 +15,8 @@ export type WorkflowEmployeeDeskRow = {
   enabled: boolean
   hostModId?: string
   carrierModId?: string
+  /** 仅提示词、无本地运行时的对话型员工 */
+  promptOnly?: boolean
   snapshot?: WorkflowEmployeeSpaceSnapshot
   session?: WorkflowEmployeeSession
 }
@@ -61,6 +63,15 @@ export function useNowMsTicker(intervalMs = 30000) {
   return nowMs
 }
 
+/** 员工与状态：对话型员工没有副窗快照，用上岗状态表达。 */
+export function resolveDeskStatusLine(row: WorkflowEmployeeDeskRow): string {
+  if (row.promptOnly) return row.enabled ? '待命' : '待召唤'
+  if (!row.enabled) return '副窗未启用'
+  const s = row.snapshot
+  if (!s) return '暂无快照'
+  return s.stage || s.progressLabel || s.hintLine || '待命'
+}
+
 export function useWorkflowEmployeeDesks() {
   const wfEmp = useWorkflowAiEmployeesStore()
   const spaceStore = useWorkflowEmployeeSpaceStore()
@@ -89,6 +100,7 @@ export function useWorkflowEmployeeDesks() {
         enabled: en,
         hostModId: entry?.hostModId,
         carrierModId: entry?.carrierModId,
+        promptOnly: entry?.prompt_only === true,
         snapshot: snap,
         session: sess,
       }
@@ -98,13 +110,11 @@ export function useWorkflowEmployeeDesks() {
   const onDutyDesks = computed<WorkflowEmployeeDeskRow[]>(() => desks.value.filter((d) => d.enabled))
 
   function statusLine(row: WorkflowEmployeeDeskRow): string {
-    if (!row.enabled) return '副窗未启用'
-    const s = row.snapshot
-    if (!s) return '暂无快照'
-    return s.stage || s.progressLabel || s.hintLine || '待命'
+    return resolveDeskStatusLine(row)
   }
 
   function ariaLabel(row: WorkflowEmployeeDeskRow): string {
+    if (row.promptOnly) return `员工 ${row.shortName}。${row.enabled ? '已上岗，待召唤' : '待召唤'}`
     const state = !row.enabled ? '副窗未启用' : row.snapshot ? statusLine(row) : '等待活动'
     return `员工 ${row.shortName}。${state}`
   }

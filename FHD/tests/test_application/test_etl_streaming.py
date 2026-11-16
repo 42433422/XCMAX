@@ -165,7 +165,7 @@ def test_worker_closes_temporary_rows_on_terminal_outcome(preview_store, monkeyp
     from app.application.elt import parsers
 
     store, created = preview_store, []
-    monkeypatch.setenv("FHD_ETL_LLM", "off")
+    monkeypatch.setenv("FHD_ELT_LLM", "off")
 
     class ObservedRows(parser_types.ParsedRows):
         def __init__(self, *args):

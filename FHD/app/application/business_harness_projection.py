@@ -30,11 +30,62 @@ _FACT_LABELS = {
     "created": "新增",
     "updated": "更新",
     "deleted": "删除",
+    "deleted_documents": "删除文档",
+    "deleted_chunks": "删除分块",
+    "deleted_templates": "删除模板",
+    "deleted_memories": "删除记忆",
+    "skipped_templates": "跳过模板",
     "count": "数量",
     "total": "合计",
     "row_count": "明细行数",
     "amount_total": "金额合计",
 }
+
+
+def completed_deliverable_lines(run: Any) -> list[str]:
+    """已完成节点产出的可下载文件；必须写进回复，否则用户拿不到真实文件。"""
+    lines: list[str] = []
+    seen: set[str] = set()
+    for step in getattr(run, "steps", []) or []:
+        if str(getattr(step, "status", "") or "") != "completed":
+            continue
+        output = getattr(step, "output", None)
+        if not isinstance(output, dict):
+            continue
+        url = str(output.get("download_url") or "").strip()
+        name = str(output.get("file_name") or "").strip()
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        lines.append(
+            f"- 已生成《{name}》：[{name}]({url})（一次性有效，请及时下载）"
+            if name
+            else f"- [下载文件]({url})（一次性有效，请及时下载）"
+        )
+    return lines
+
+
+def _thinking_steps(run: Any) -> str:
+    """把已执行的工具节点还原成「思考过程」行，避免只回一句通用完成语。"""
+    lines: list[str] = []
+    for step in getattr(run, "steps", []) or []:
+        tool = str(getattr(step, "tool_id", "") or "").strip()
+        action = str(getattr(step, "action", "") or "").strip()
+        if not tool:
+            continue
+        name = f"{tool}.{action}" if action else tool
+        status = str(getattr(step, "status", "") or "")
+        if status == "failed":
+            lines.append(f"[工具未成功:{name}]")
+            continue
+        lines.append(f"[正在调用工具:{name}]")
+        if status == "completed":
+            lines.append("[工具已返回]")
+    unique: list[str] = []
+    for line in lines:
+        if line not in unique:
+            unique.append(line)
+    return "\n".join(unique)
 
 
 def _message_for_result(result: dict[str, Any], approval_request_id: str) -> str:
@@ -229,16 +280,21 @@ def project_terminal_run_to_conversation(
                 "ui": {
                     "workflowAction": "business_harness_terminal",
                     "businessResult": result,
+                    "thinkingSteps": _thinking_steps(run),
                 },
             },
             ensure_ascii=False,
             default=str,
         )[:12000]
+        content = _message_for_result(result, approval_request_id)
+        deliverables = completed_deliverable_lines(run)
+        if deliverables and str(result.get("status") or "") == "completed":
+            content = "\n".join([content, *deliverables])
         return get_conversation_service().save_message(
             session_id=session_id,
             user_id=str(run.user_id or ""),
             role="assistant",
-            content=_message_for_result(result, approval_request_id)[:8000],
+            content=content[:8000],
             intent="business_harness_result",
             metadata=metadata,
             idempotency_key=projection_key,

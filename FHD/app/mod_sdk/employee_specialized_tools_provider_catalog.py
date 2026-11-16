@@ -131,8 +131,8 @@ _PROVIDER_PROFILES: list[dict[str, Any]] = [
         "base_url_env": "MIMO_BASE_URL",
         "base_url_default": "https://token-plan-cn.xiaomimimo.com/v1",
         "model_env": "MIMO_MODEL",
-        "default_model": "mimo-v2.5-pro",
-        "ping_model": "mimo-v2.5-pro",
+        "default_model": "mimo-v2.6-flash",
+        "ping_model": "mimo-v2.6-flash",
         "billing_endpoints": [],
     },
 ]

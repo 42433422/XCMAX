@@ -62,7 +62,7 @@ def test_default_archive_root_under_desktop_state_business_archive(tmp_path, mon
     root = default_archive_root()
     assert root.name == "business-archive"
     assert root.parent == (tmp_path / "state").resolve() or root.parent.name == "state"
-    assert "etl" not in root.parts or root.parts[-1] == "business-archive"
+    assert "elt" not in root.parts or root.parts[-1] == "business-archive"
     assert root.as_posix().endswith("business-archive")
 
 

@@ -577,8 +577,8 @@ class TestProviderProfiles:
             "XIAOMI_MIMO_API_KEY",
         ]
         assert "token-plan-cn.xiaomimimo.com" in mimo["base_url_default"]
-        assert mimo["default_model"] == "mimo-v2.5-pro"
-        assert mimo["ping_model"] == "mimo-v2.5-pro"
+        assert mimo["default_model"] == "mimo-v2.6-flash"
+        assert mimo["ping_model"] == "mimo-v2.6-flash"
 
     def test_minimax_has_exact_token_plan_quota_endpoint(self):
         minimax = next(p for p in _PROVIDER_PROFILES if p["name"] == "minimax")

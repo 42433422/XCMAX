@@ -30,6 +30,11 @@ def retry_manages_transport_error(error: Exception) -> bool:
     return _TRANSPORT_RETRY_SCOPE.get() and isinstance(error, _RETRYABLE)
 
 
+def is_transport_error(error: BaseException) -> bool:
+    """该异常是否属于可重试的传输类错误（不依赖当前重试作用域）。"""
+    return isinstance(error, _RETRYABLE)
+
+
 @dataclass(frozen=True)
 class RetryPolicy:
     max_attempts: int = 2
@@ -85,4 +90,4 @@ def call_with_retry(
         _TRANSPORT_RETRY_SCOPE.reset(token)
 
 
-__all__ = ["RetryPolicy", "call_with_retry", "planner_retry_policy"]
+__all__ = ["RetryPolicy", "call_with_retry", "is_transport_error", "planner_retry_policy"]

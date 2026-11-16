@@ -252,6 +252,23 @@ class ShipmentAdapter(TargetAdapter):
         ).hexdigest()
 
     @staticmethod
+    def _fingerprint_owner_exists(db, shipment_id: Any) -> bool:
+        """指纹指向的运单已不存在时，这条「重复」是陈旧记录，不应再阻断导入。
+
+        清空/删除订单后若不清指纹，同一批文件会被永久判重而无法重新入库。
+        """
+        try:
+            sid = int(shipment_id or 0)
+        except (TypeError, ValueError):
+            return False
+        if sid <= 0:
+            return False
+        record = db.get(ShipmentRecord, sid)
+        return record is not None and int(getattr(record, "tenant_id", 0) or 0) == int(
+            tenant_id_for_write()
+        )
+
+    @staticmethod
     def _belongs_to_current_run(record: ShipmentRecord, run_id: Any) -> bool:
         """Allow distinct delivery lines of one external order in one ETL run."""
 
@@ -262,7 +279,7 @@ class ShipmentAdapter(TargetAdapter):
             parsed = json.loads(str(record.parsed_data or "{}"))
         except (TypeError, ValueError):
             return False
-        return isinstance(parsed, dict) and str(parsed.get("etl_run_id") or "") == expected
+        return isinstance(parsed, dict) and str(parsed.get("elt_run_id") or "") == expected
 
     @staticmethod
     def _ensure_purchase_unit(db, name: str) -> None:
@@ -297,18 +314,18 @@ class ShipmentAdapter(TargetAdapter):
         if issues:
             return PreviewDecision("error", issues=issues, reason="validation_failed")
         fingerprint = self._fingerprint(data, context)
-        from app.db.models.shipment_etl_fingerprint import ShipmentEtlImportFingerprint
+        from app.db.models.shipment_elt_fingerprint import ShipmentEltImportFingerprint
 
         tenant_key = f"tenant:{tenant_id_for_write()}"
         existing_fp = (
-            db.query(ShipmentEtlImportFingerprint)
+            db.query(ShipmentEltImportFingerprint)
             .filter(
-                ShipmentEtlImportFingerprint.tenant_key == tenant_key,
-                ShipmentEtlImportFingerprint.fingerprint == fingerprint,
+                ShipmentEltImportFingerprint.tenant_key == tenant_key,
+                ShipmentEltImportFingerprint.fingerprint == fingerprint,
             )
             .first()
         )
-        if existing_fp:
+        if existing_fp and self._fingerprint_owner_exists(db, existing_fp.shipment_id):
             return PreviewDecision(
                 "skip",
                 match_ref=str(existing_fp.shipment_id or ""),
@@ -317,42 +334,44 @@ class ShipmentAdapter(TargetAdapter):
         legacy_note_fingerprint = str(data.get("legacy_note_fingerprint") or "").strip()
         if legacy_note_fingerprint:
             legacy_note_match = (
-                db.query(ShipmentEtlImportFingerprint)
+                db.query(ShipmentEltImportFingerprint)
                 .filter(
-                    ShipmentEtlImportFingerprint.tenant_key == tenant_key,
-                    ShipmentEtlImportFingerprint.fingerprint == legacy_note_fingerprint,
+                    ShipmentEltImportFingerprint.tenant_key == tenant_key,
+                    ShipmentEltImportFingerprint.fingerprint == legacy_note_fingerprint,
                     or_(
-                        ShipmentEtlImportFingerprint.source_kind.is_(None),
-                        ShipmentEtlImportFingerprint.source_kind != "general_etl_legacy_note",
+                        ShipmentEltImportFingerprint.source_kind.is_(None),
+                        ShipmentEltImportFingerprint.source_kind != "general_elt_legacy_note",
                     ),
                 )
                 .first()
             )
-            if legacy_note_match:
+            if legacy_note_match and self._fingerprint_owner_exists(
+                db, legacy_note_match.shipment_id
+            ):
                 return PreviewDecision(
                     "skip",
                     match_ref=str(legacy_note_match.shipment_id or ""),
                     reason="legacy_note_fingerprint_duplicate",
                 )
         order_no = str(data.get("external_order_no") or "").strip()
-        legacy_query = db.query(ShipmentEtlImportFingerprint).filter(
-            ShipmentEtlImportFingerprint.tenant_key == tenant_key,
+        legacy_query = db.query(ShipmentEltImportFingerprint).filter(
+            ShipmentEltImportFingerprint.tenant_key == tenant_key,
             or_(
-                ShipmentEtlImportFingerprint.source_kind.is_(None),
-                ShipmentEtlImportFingerprint.source_kind != "general_etl",
+                ShipmentEltImportFingerprint.source_kind.is_(None),
+                ShipmentEltImportFingerprint.source_kind != "general_elt",
             ),
         )
         if order_no:
             legacy_query = legacy_query.filter(
-                ShipmentEtlImportFingerprint.order_number == order_no
+                ShipmentEltImportFingerprint.order_number == order_no
             )
         else:
             legacy_query = legacy_query.filter(
-                ShipmentEtlImportFingerprint.file_name == str(context.get("file_name") or ""),
-                ShipmentEtlImportFingerprint.unit_name == str(data.get("purchase_unit") or ""),
+                ShipmentEltImportFingerprint.file_name == str(context.get("file_name") or ""),
+                ShipmentEltImportFingerprint.unit_name == str(data.get("purchase_unit") or ""),
             )
         legacy_match = legacy_query.first()
-        if legacy_match:
+        if legacy_match and self._fingerprint_owner_exists(db, legacy_match.shipment_id):
             return PreviewDecision(
                 "skip",
                 match_ref=str(legacy_match.shipment_id or ""),
@@ -432,8 +451,8 @@ class ShipmentAdapter(TargetAdapter):
         self._ensure_purchase_unit(db, str(data.get("purchase_unit") or ""))
         parsed = {
             "external_order_no": data.get("external_order_no"),
-            "etl_run_id": context.get("run_id"),
-            "etl_fingerprint": fingerprint,
+            "elt_run_id": context.get("run_id"),
+            "elt_fingerprint": fingerprint,
         }
         quantity_kg = float(decimal_or_zero(data.get("quantity_kg")))
         quantity_tins = integer_or_zero(data.get("quantity_tins"))
@@ -454,17 +473,37 @@ class ShipmentAdapter(TargetAdapter):
         )
         db.add(obj)
         db.flush()
-        from app.db.models.shipment_etl_fingerprint import ShipmentEtlImportFingerprint
+        from app.db.models.shipment_elt_fingerprint import ShipmentEltImportFingerprint
+
+        # 预演允许越过指向已删除运单的陈旧指纹；这里是唯一键写入点，必须先清掉
+        # 旧行，否则同一内容会因为 (tenant_key, fingerprint) 唯一约束再次失败。
+        tenant_key = f"tenant:{tenant_id_for_write()}"
+        stale_rows = (
+            db.query(ShipmentEltImportFingerprint)
+            .filter(
+                ShipmentEltImportFingerprint.tenant_key == tenant_key,
+                ShipmentEltImportFingerprint.fingerprint == fingerprint,
+            )
+            .all()
+        )
+        stale_ids = [
+            row.id for row in stale_rows if not self._fingerprint_owner_exists(db, row.shipment_id)
+        ]
+        if stale_ids:
+            db.query(ShipmentEltImportFingerprint).filter(
+                ShipmentEltImportFingerprint.id.in_(stale_ids)
+            ).delete(synchronize_session=False)
+            db.flush()
 
         db.add(
-            ShipmentEtlImportFingerprint(
+            ShipmentEltImportFingerprint(
                 tenant_key=f"tenant:{tenant_id_for_write()}",
                 fingerprint=fingerprint,
                 shipment_id=obj.id,
                 unit_name=obj.purchase_unit,
                 order_number=optional_text(data.get("external_order_no")),
                 file_name=str(context.get("file_name") or ""),
-                source_kind="general_etl",
+                source_kind="general_elt",
                 meta_json=json.dumps({"run_id": context.get("run_id")}),
             )
         )
@@ -480,8 +519,8 @@ class ShipmentAdapter(TargetAdapter):
         if obj:
             assert_snapshot_unchanged(obj, after, "发货记录")
             db.delete(obj)
-        from app.db.models.shipment_etl_fingerprint import ShipmentEtlImportFingerprint
+        from app.db.models.shipment_elt_fingerprint import ShipmentEltImportFingerprint
 
-        db.query(ShipmentEtlImportFingerprint).filter(
-            ShipmentEtlImportFingerprint.shipment_id == int(match_ref)
+        db.query(ShipmentEltImportFingerprint).filter(
+            ShipmentEltImportFingerprint.shipment_id == int(match_ref)
         ).delete(synchronize_session=False)

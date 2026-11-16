@@ -3,14 +3,28 @@ import { ref, useId } from 'vue'
 import { useDialogFocus } from '@/composables/useDialogFocus'
 import ExcelPreview from '@/components/template/ExcelPreview.vue'
 import LabelPreview from '@/components/template/LabelPreview.vue'
+import TpOfficePreview from './TpOfficePreview.vue'
 import type { TemplatePreviewCtx } from './assemble'
+import type { TplRecord } from './tpTemplateMeta'
 
 const props = defineProps<{ tp: TemplatePreviewCtx }>()
+
+const OFFICE_CATEGORY_TO_KIND = { word: 'docx', pptx: 'pptx', pdf: 'pdf' } as const
+
+function isOfficeCategory(tpl: TplRecord | null): boolean {
+  const category = String(tpl?.category || '').trim().toLowerCase()
+  return category in OFFICE_CATEGORY_TO_KIND
+}
+
+function officePreviewKind(tpl: TplRecord | null): 'docx' | 'pptx' | 'pdf' {
+  const category = String(tpl?.category || '').trim().toLowerCase()
+  return OFFICE_CATEGORY_TO_KIND[category as keyof typeof OFFICE_CATEGORY_TO_KIND] || 'pdf'
+}
 
 const {
   showPreviewModal, closePreviewModal, previewingTemplate,
   canPreviewVirtualTemplate, getTemplateFields, getTemplateSampleRows, getExcelPreviewTitle,
-  getTemplateGridData,
+  getTemplateGridData, getTemplateCategoryLabel, isGridTemplateCategory,
 } = props.tp
 const panel = ref<HTMLElement | null>(null)
 const titleId = useId()
@@ -27,7 +41,7 @@ useDialogFocus(panel, () => showPreviewModal.value, closePreviewModal)
         <div class="modal-body">
           <div class="preview-modal-content">
             <ExcelPreview
-              v-if="previewingTemplate?.category === 'excel' && (!previewingTemplate?.virtual || canPreviewVirtualTemplate(previewingTemplate))"
+              v-if="isGridTemplateCategory(previewingTemplate) && (!previewingTemplate?.virtual || canPreviewVirtualTemplate(previewingTemplate))"
               :fields="getTemplateFields(previewingTemplate, 'excel')"
               :sample-rows="getTemplateSampleRows(previewingTemplate)"
               :title="getExcelPreviewTitle(previewingTemplate)"
@@ -35,16 +49,20 @@ useDialogFocus(panel, () => showPreviewModal.value, closePreviewModal)
               :rows="8"
               :columns="6"
             />
-            <div v-else-if="previewingTemplate?.category === 'excel' && previewingTemplate?.virtual" class="virtual-template-preview">
+            <div v-else-if="isGridTemplateCategory(previewingTemplate) && previewingTemplate?.virtual" class="virtual-template-preview">
               <div class="virtual-template-title">该模板尚未上传</div>
-              <div class="virtual-template-terms">请点击「快速创建」上传 Excel 或 Word 模板并完成必备词条配置。</div>
+              <div class="virtual-template-terms">请点击「快速创建」上传 Excel、Word、PPT、PDF 或 CSV 模板并完成必备词条配置。</div>
             </div>
-            <div v-else-if="previewingTemplate?.category === 'word'" class="virtual-template-preview">
-              <div class="virtual-template-title">Word 模板</div>
+            <div v-else-if="isOfficeCategory(previewingTemplate)" class="virtual-template-preview">
+              <div class="virtual-template-title">{{ getTemplateCategoryLabel(previewingTemplate) }} 模板</div>
               <div class="virtual-template-terms muted" style="font-size:13px;">
                 {{ previewingTemplate?.filename || previewingTemplate?.name }}<br>
                 <span v-if="previewingTemplate?.file_path || previewingTemplate?.path">路径：{{ previewingTemplate?.file_path || previewingTemplate?.path }}</span>
               </div>
+              <TpOfficePreview
+                :template-id="String(previewingTemplate?.id || previewingTemplate?.db_id || '')"
+                :kind="officePreviewKind(previewingTemplate)"
+              />
             </div>
             <LabelPreview v-else-if="previewingTemplate?.category === 'label'" :fields="getTemplateFields(previewingTemplate, 'label')" :width="400" :height="280" />
           </div>

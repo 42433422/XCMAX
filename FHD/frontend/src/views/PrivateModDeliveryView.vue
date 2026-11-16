@@ -3,7 +3,7 @@
     <header class="private-mod-delivery-page__header">
       <button type="button" class="private-mod-delivery-page__back" @click="goBack">返回 AI 生态</button>
       <div>
-        <div class="private-mod-delivery-page__eyebrow">生产员工</div>
+        <div class="private-mod-delivery-page__eyebrow">私有交付</div>
         <h1>客户私有 Mod 生产中心</h1>
       </div>
     </header>

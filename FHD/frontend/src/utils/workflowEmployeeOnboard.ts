@@ -6,7 +6,7 @@ import { defaultHostModIdForMarketEmployee } from '@/constants/enterpriseModStac
 import { useModsStore } from '@/stores/mods'
 import { useWorkflowAiEmployeesStore } from '@/stores/workflowAiEmployees'
 import { resolveEnterpriseModStack } from '@/utils/enterpriseModStackApi'
-import { filterModsForEnterpriseWorkflowRegistry } from '@/utils/workflowEmployeeScope'
+import { syncEnterpriseWorkflowRegistry } from '@/utils/syncEnterpriseWorkflowRegistry'
 import {
   filterWorkflowRegistrySourceMods,
   isNonWorkflowDeskEmployeeId,
@@ -93,11 +93,17 @@ export async function autoOnboardInstalledMarketItem(item: MarketInstallCatalogI
   const modsStore = useModsStore()
   await modsStore.refresh()
   const wfStore = useWorkflowAiEmployeesStore()
-  stack = await resolveEnterpriseModStack()
-  await wfStore.refreshRegistry(filterModsForEnterpriseWorkflowRegistry(modsStore.modsForUi, stack))
+  stack = await syncEnterpriseWorkflowRegistry({ forceDirectory: true })
 
-  const mod = resolveInstalledMod(modsStore.modsForUi, item)
+  const mod = resolveInstalledMod(modsStore.modsForWorkflowUi, item)
   const idSet = new Set<string>([...collectDeskEmployeeIdsFromCatalogItem(item), ...collectEmployeeIdsFromMod(mod)])
+  // 市场目录行不一定带 employee/workflow_employees 字段；以统一员工目录反查兜底。
+  const pkgId = String(item.pkg_id || item.id || '').trim()
+  if (!idSet.size && pkgId) {
+    for (const entry of wfStore.registryEntries) {
+      if (String(entry.carrierModId || '') === pkgId || entry.id === pkgId) idSet.add(entry.id)
+    }
+  }
   const ids = [...idSet]
 
   if (ids.length) {
@@ -118,8 +124,7 @@ export async function autoOnboardWorkflowEmployeesFromMods(mods: ModWithWorkflow
   const modsStore = useModsStore()
   await modsStore.refresh()
   const wfStore = useWorkflowAiEmployeesStore()
-  const stack = await resolveEnterpriseModStack()
-  await wfStore.refreshRegistry(filterModsForEnterpriseWorkflowRegistry(modsStore.modsForUi, stack))
+  await syncEnterpriseWorkflowRegistry({ forceDirectory: true })
   const ids: string[] = []
   for (const m of filterWorkflowRegistrySourceMods(mods)) {
     for (const id of collectEmployeeIdsFromMod(m)) ids.push(id)

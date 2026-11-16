@@ -62,7 +62,7 @@ def test_dead_worker_without_business_receipt_becomes_unknown(batch, monkeypatch
             tool_id="data_docking", action="auto_ingest", params={"batch_id": "batch"}
         )
     assert retry["success"] is False
-    assert retry["error"] == "ETL_AUTO_INGEST_NOT_PENDING"
+    assert retry["error"] == "ELT_AUTO_INGEST_NOT_PENDING"
     launch.assert_not_called()
 
 
@@ -243,7 +243,7 @@ def test_cross_process_stale_pending_never_replays_completed_dispatch(batch, mon
         if settled == "applied":
             assert receipt["already_released"] is True
         else:
-            assert receipt["error"] == "ETL_AUTO_INGEST_NOT_PENDING"
+            assert receipt["error"] == "ELT_AUTO_INGEST_NOT_PENDING"
         handle = ais.liveness.acquire(ais._ledger_path(1), "batch")
         ais.liveness.release(handle)
     finally:

@@ -47,7 +47,7 @@ class KnowledgeAdapter(TargetAdapter):
 
     @staticmethod
     def _source_label(data: dict[str, Any], context: dict[str, Any]) -> str:
-        return str(data.get("source_key") or context.get("file_name") or "etl-import")
+        return str(data.get("source_key") or context.get("file_name") or "elt-import")
 
     def _documents(self, context: dict[str, Any]) -> list[dict[str, Any]]:
         cache = context.setdefault("_preview_cache", {})
@@ -187,7 +187,7 @@ class KnowledgeAdapter(TargetAdapter):
         scoped_hash = hashlib.sha256(
             f"{tenant_key}:{source_fingerprint or stable}".encode()
         ).hexdigest()
-        document_id = f"etl-{scoped_hash}"
+        document_id = f"elt-{scoped_hash}"
         # Preview caches never authorize an execution. A retry may reuse only
         # this run's own receipt; another run's duplicate must be re-previewed.
         fresh_context = {key: value for key, value in context.items() if key != "_preview_cache"}
@@ -196,7 +196,7 @@ class KnowledgeAdapter(TargetAdapter):
         )
         own_retry = (
             decision.reason in {"duplicate_content_hash", "duplicate_source_fingerprint"}
-            and str(((decision.before or {}).get("metadata") or {}).get("etl_run_id") or "")
+            and str(((decision.before or {}).get("metadata") or {}).get("elt_run_id") or "")
             == run_id
             and str(((decision.before or {}).get("metadata") or {}).get("content_hash") or "")
             == stable
@@ -223,7 +223,7 @@ class KnowledgeAdapter(TargetAdapter):
             document_id=document_id,
             tenant_id=tenant_key,
             metadata={
-                "etl_run_id": run_id,
+                "elt_run_id": run_id,
                 "content_hash": stable,
                 **({"source_fingerprint": source_fingerprint} if source_fingerprint else {}),
             },
@@ -279,7 +279,7 @@ class KnowledgeAdapter(TargetAdapter):
             dataset_id="office-docking",
             document_id=match_ref,
             expected_version=version,
-            expected_metadata={"etl_run_id": run_id, "content_hash": content_hash},
+            expected_metadata={"elt_run_id": run_id, "content_hash": content_hash},
             access_context=DatasetAccessContext(
                 actor_id=str(context.get("owner_user_id") or ""),
                 tenant_id=str(tenant_id_for_write()),

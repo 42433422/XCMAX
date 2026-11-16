@@ -7,7 +7,7 @@ from app.application.elt.table_structure_ocr import (
     html_to_grid,
     recognize_table_structures,
 )
-from app.application.shipment_excel_etl_ocr import tables_to_workbook_path
+from app.application.shipment_excel_elt_ocr import tables_to_workbook_path
 
 _TABLE_HTML = """
 <table>
@@ -76,6 +76,7 @@ def test_tables_to_workbook_path_writes_each_table_with_merges(tmp_path, monkeyp
             grid=[["客户", "数量", "数量"], ["", "桶数", "公斤"], ["张三", "3", "90"]],
             merges=[(1, 1, 2, 1), (1, 2, 1, 3)],
             page=2,
+            meta_lines=["客户：李四"],
         ),
     ]
 
@@ -92,7 +93,11 @@ def test_tables_to_workbook_path_writes_each_table_with_merges(tmp_path, monkeyp
         first = workbook["OCR_1"]
         assert first["A1"].value == "客户：张三"
         assert first["A2"].value == "客户"
+        assert not list(first.merged_cells.ranges)
         second = workbook["OCR_2"]
-        assert sorted(str(item) for item in second.merged_cells.ranges) == ["A1:A2", "B1:C1"]
+        # 每张表自带 meta 行，合并区域随之下移一行
+        assert second["A1"].value == "客户：李四"
+        assert second["A2"].value == "客户"
+        assert sorted(str(item) for item in second.merged_cells.ranges) == ["A2:A3", "B2:C2"]
     finally:
         workbook.close()

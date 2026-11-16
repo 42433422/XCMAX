@@ -774,7 +774,29 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
                     }
                 ],
             ),
-        )
+        ),
+        _sample(
+            "generate_from_template",
+            {
+                "template_id": "db:46",
+                "file_path": "@uploads/明细.xlsx",
+                "sheet_name": "宗南",
+                "output_name": "宗南家私生产打印单.xlsx",
+            },
+            _success(
+                message="已按模板《生产打印单》写入 10 行真实数据。",
+                file_name="宗南家私生产打印单.xlsx",
+                download_url="/api/ai/kitten/document/pickup/token",
+                pickup_token="token",
+                artifacts=[
+                    {
+                        "artifact_type": "office_document",
+                        "name": "宗南家私生产打印单.xlsx",
+                        "source": "generate_office_document",
+                    }
+                ],
+            ),
+        ),
     ],
     ("excel_vector_index", "execute"): [
         _sample(

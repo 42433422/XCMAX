@@ -3,11 +3,12 @@ import { nextTick, ref } from 'vue'
 import { useSuperEmployeeDispatch, type UseSuperEmployeeDispatchParams } from '../useSuperEmployeeDispatch'
 import * as entries from '../useMessengerEntries'
 
-const m = vi.hoisted(() => ({ admin: false, get: vi.fn(), post: vi.fn(), ssot: vi.fn(), toast: vi.fn(),
+const m = vi.hoisted(() => ({ admin: false, get: vi.fn(), post: vi.fn(), ssot: vi.fn(), directory: vi.fn(), toast: vi.fn(),
   codexFetch: vi.fn(), codexSend: vi.fn(), claudeFetch: vi.fn(), claudeSend: vi.fn(), cursorFetch: vi.fn(), cursorSend: vi.fn() }))
 vi.mock('@/api', () => ({ default: { get: m.get, post: m.post } }))
 vi.mock('@/utils/adminConsoleUrl', () => ({ isAdminConsoleSpa: () => m.admin }))
 vi.mock('@/utils/platformShellApi', () => ({ fetchEmployeeSsot: m.ssot }))
+vi.mock('@/api/employeeDirectory', () => ({ fetchEmployeeDirectory: m.directory }))
 vi.mock('@/composables/useAppToast', () => ({ showAppToast: m.toast }))
 vi.mock('@/api/codexSuperEmployee', () => ({ fetchCodexSuperEmployeeMessages: m.codexFetch, sendCodexSuperEmployeeMessage: m.codexSend }))
 vi.mock('@/api/claudeSuperEmployee', () => ({ fetchClaudeSuperEmployeeMessages: m.claudeFetch, sendClaudeSuperEmployeeMessage: m.claudeSend }))
@@ -25,9 +26,10 @@ function setup(admin = true) {
 }
 beforeEach(() => {
   vi.useFakeTimers(); vi.setSystemTime(1000)
-  for (const fn of [m.get, m.post, m.ssot, m.toast, m.codexFetch, m.codexSend, m.claudeFetch, m.claudeSend, m.cursorFetch, m.cursorSend]) fn.mockReset()
+  for (const fn of [m.get, m.post, m.ssot, m.directory, m.toast, m.codexFetch, m.codexSend, m.claudeFetch, m.claudeSend, m.cursorFetch, m.cursorSend]) fn.mockReset()
   for (const fetch of [m.codexFetch, m.claudeFetch, m.cursorFetch]) fetch.mockResolvedValue([])
   m.ssot.mockResolvedValue({}); m.get.mockResolvedValue({}); m.post.mockResolvedValue({ data: { message: 'done' } })
+  m.directory.mockResolvedValue([])
 })
 afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks() })
 
@@ -134,15 +136,32 @@ describe('super employee dispatch and conversation transitions', () => {
     const { p, s } = setup(mode !== 'enterprise')
     if (mode === 'ssot' || mode === 'enterprise') m.ssot.mockResolvedValue({ contacts: [{ employee_id: 'intake-dispatcher', display_name: 'Dispatch', installed: true }] })
     else m.ssot.mockRejectedValue(new Error('offline'))
+    if (mode === 'enterprise') {
+      m.directory.mockResolvedValue([
+        { pack_id: 'csv-generate-employee', label: 'CSV 生成员', description: '', area: '', department: '', runtime_ok: true, handlers: [] },
+        { pack_id: 'excel-qc-employee', label: 'Excel 质检员', description: '', area: '', department: '', runtime_ok: true, handlers: [] },
+      ])
+    }
     if (mode === 'error') m.get.mockRejectedValue(new Error('directory failed'))
     else if (mode !== 'missing') m.get.mockResolvedValue({ data: { [mode]: [{ id: 'worker', name: 'Worker' }, {}, { id: 'worker' }] } })
     await s.loadDutyEmployees()
+    if (mode === 'enterprise') {
+      expect(p.dutyEmployees.value.map((row) => row.id)).toEqual(['csv-generate-employee', 'excel-qc-employee'])
+      expect(m.ssot).not.toHaveBeenCalled()
+      expect(m.get).not.toHaveBeenCalled()
+      expect(p.imApiReachable.value).toBe(true)
+      return
+    }
+    if (mode === 'missing' || mode === 'error') {
+      // 客户端不再内置员工兜底：接口缺失/失败时通讯录为空，只提示错误。
+      expect(p.dutyEmployees.value).toEqual([])
+      if (mode === 'error') expect(m.toast).toHaveBeenCalledWith(expect.any(String), 'warning')
+      return
+    }
     expect(p.dutyEmployees.value.length).toBeGreaterThan(0)
     if (mode === 'items' || mode === 'employees') expect(p.dutyEmployees.value.map((row) => row.id)).toEqual(['worker'])
     if (mode === 'ssot') expect(p.dutyEmployees.value[0].id).toBe('intake-dispatcher')
-    if (mode === 'enterprise') { expect(p.dutyEmployees.value).toHaveLength(7); expect(m.get).not.toHaveBeenCalled() }
-    if (mode === 'error') expect(m.toast).toHaveBeenCalledWith(expect.any(String), 'warning')
-    else expect(p.imApiReachable.value).toBe(true)
+    expect(p.imApiReachable.value).toBe(true)
   })
   it('streams pending dispatches and replaces the placeholder when polling receives a result', async () => {
     const { p, s } = setup()

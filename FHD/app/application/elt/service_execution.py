@@ -91,6 +91,7 @@ class ExecutionServiceMixin(RollbackServiceMixin):
         confirmed: bool,
         valid_rows_only: bool,
         preview_revision: str | None = None,
+        accept_suggested: bool = False,
     ) -> dict[str, Any]:
         run = self._owned_run(db, run_id, owner_user_id)
         if not confirmed:
@@ -120,7 +121,8 @@ class ExecutionServiceMixin(RollbackServiceMixin):
             pending_mappings = _unconfirmed_mappings(
                 load_json(run.draft_json, {}).get("field_mappings")
             )
-            if pending_mappings:
+            # 用户一次性接受 AI 建议映射时不逐字段确认；错误行仍按原规则拦截。
+            if pending_mappings and not accept_suggested:
                 names = "、".join(
                     str(item.get("target") or item.get("source") or "字段")
                     for item in pending_mappings[:8]
@@ -347,6 +349,21 @@ class ExecutionServiceMixin(RollbackServiceMixin):
                                     "slice_id": (provenance.get("slice") or {}).get("slice_id"),
                                     "validation_result": load_json(row.validation_json, []),
                                 }
+                            elif run.target_type == "dynamic_table" and isinstance(payload, dict):
+                                # 通用表按 sheet / 区块分表：把来源坐标带进批次，适配器据此建多张表。
+                                from app.application.elt.targets.dynamic import PARTITION_MARKER
+
+                                provenance = load_json(row.provenance_json, {})
+                                payload = {
+                                    **payload,
+                                    PARTITION_MARKER: {
+                                        "sheet": str(row.source_sheet or ""),
+                                        "table_id": str(provenance.get("table_id") or ""),
+                                        "table_title": str(provenance.get("table_title") or ""),
+                                        "table_range": str(provenance.get("table_range") or ""),
+                                        "row": int(row.source_row or 0),
+                                    },
+                                }
                             yield payload
 
                 external_started = True
@@ -504,10 +521,10 @@ class ExecutionServiceMixin(RollbackServiceMixin):
     @staticmethod
     def _record_execution_metrics(run: EltRun, started_at: float, status: str) -> None:
         try:
-            from app.utils.metrics import etl_run_duration_seconds, etl_runs_total
+            from app.utils.metrics import elt_run_duration_seconds, elt_runs_total
 
-            etl_runs_total.labels("execute", run.target_type, status).inc()
-            etl_run_duration_seconds.labels("execute", run.target_type).observe(
+            elt_runs_total.labels("execute", run.target_type, status).inc()
+            elt_run_duration_seconds.labels("execute", run.target_type).observe(
                 max(0.0, time.monotonic() - started_at)
             )
         except RECOVERABLE_ERRORS:
@@ -658,9 +675,9 @@ class ExecutionServiceMixin(RollbackServiceMixin):
         db.commit()
         unbind_owner(db)
         try:
-            from app.utils.metrics import etl_retries_total
+            from app.utils.metrics import elt_retries_total
 
-            etl_retries_total.labels(run.target_type).inc()
+            elt_retries_total.labels(run.target_type).inc()
         except RECOVERABLE_ERRORS:
             logger.debug("ETL retry metrics unavailable", exc_info=True)
         if rerun_parse:

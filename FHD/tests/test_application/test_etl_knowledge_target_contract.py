@@ -21,7 +21,7 @@ def test_knowledge_validation_hash_and_source_fallbacks() -> None:
     assert adapter._content_hash({}, {"file_sha256": "sha"}) == "sha"
     assert adapter._source_label({"source_key": "s"}, {}) == "s"
     assert adapter._source_label({}, {"file_name": "a.pdf"}) == "a.pdf"
-    assert adapter._source_label({}, {}) == "etl-import"
+    assert adapter._source_label({}, {}) == "elt-import"
 
 
 def test_documents_status_cache_success_and_rejects_invalid_inventory() -> None:
@@ -145,7 +145,7 @@ def test_execute_row_rejects_untrusted_path_and_handles_service_results() -> Non
             context={"owner_user_id": 9, "run_id": "r"},
         )
 
-    expected_id = "etl-" + hashlib.sha256(b"7:abcdef").hexdigest()
+    expected_id = "elt-" + hashlib.sha256(b"7:abcdef").hexdigest()
     service.status.return_value = {
         "success": True,
         "documents": [{"document_id": "old", "source": "s", "version": 1}],
@@ -173,7 +173,7 @@ def test_execute_row_rejects_untrusted_path_and_handles_service_results() -> Non
     assert result["match_ref"] == expected_id
     assert result["after"]["version"] == 2
     kwargs = service.ingest_document.call_args.kwargs
-    assert kwargs["tenant_id"] == "7" and kwargs["metadata"]["etl_run_id"] == "r"
+    assert kwargs["tenant_id"] == "7" and kwargs["metadata"]["elt_run_id"] == "r"
 
 
 def test_rollback_row_success_and_failure() -> None:

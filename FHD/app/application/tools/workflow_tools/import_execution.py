@@ -105,6 +105,26 @@ class ImportExecutor:
             if read_meta:
                 preview["read_options"] = read_meta
             return preview
+        if not records:
+            # 未映射到任何行说明工作表/表头选择不对，尚未发生写入，必须给出可重试的确定失败，
+            # 而不是 unknown，否则上层会误报「工具超时、结果未知」并禁止重试。
+            return {
+                "success": False,
+                "preview": False,
+                "import_type": "products",
+                "imported": 0,
+                "failed": 0,
+                "pending": 0,
+                "outcome": "failed",
+                "outcome_unknown": False,
+                "reconciliation_required": False,
+                "requires_reconciliation": False,
+                "retryable": True,
+                "safe_to_retry": True,
+                "error_code": "no_mappable_rows",
+                "message": "当前工作表没有识别到产品行（缺少产品名称/型号列），请指定工作表与表头行后重试。",
+                "skipped_clause_like_rows": skipped,
+            }
         imported = failed = 0
         write_in_flight = created_customer = False
         success = False

@@ -17,7 +17,6 @@ _DOCK_ALIASES = frozenset(
         "business_docking",
         "data_docking",
         "elt",
-        "etl",
         "reviewed_excel",
         "office_docking",
     }

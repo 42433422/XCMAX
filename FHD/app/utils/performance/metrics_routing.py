@@ -18,7 +18,7 @@ def document_type(path: str) -> str | None:
     normalized = path.lower()
     if "/ocr" in normalized:
         return "ocr"
-    if "/etl" in normalized or "/import/" in normalized or normalized.endswith("/import"):
+    if "/elt" in normalized or "/import/" in normalized or normalized.endswith("/import"):
         return "excel"
     if "/documents/upload" in normalized:
         return "document"

@@ -801,8 +801,8 @@ def test_data_import_verifiers_require_preview_rows_and_persisted_mixed_results(
         )
         db.add(upload)
         db.flush()
-        etl_run = EltRun(
-            id="tutorial-etl-run-1",
+        elt_run = EltRun(
+            id="tutorial-elt-run-1",
             owner_user_id=users[0].id,
             upload_id=upload.id,
             target_type="customer_product",
@@ -813,10 +813,10 @@ def test_data_import_verifiers_require_preview_rows_and_persisted_mixed_results(
             total_rows=2,
             processed_rows=2,
         )
-        db.add(etl_run)
+        db.add(elt_run)
         db.flush()
         success_row = EltRunRow(
-            run_id=etl_run.id,
+            run_id=elt_run.id,
             owner_user_id=users[0].id,
             source_sheet="教学客户产品",
             source_row=2,
@@ -829,7 +829,7 @@ def test_data_import_verifiers_require_preview_rows_and_persisted_mixed_results(
             after_json=json.dumps({"customer": "教学客户C", "product": "教学产品C"}),
         )
         error_row = EltRunRow(
-            run_id=etl_run.id,
+            run_id=elt_run.id,
             owner_user_id=users[0].id,
             source_sheet="教学客户产品",
             source_row=3,
@@ -857,12 +857,12 @@ def test_data_import_verifiers_require_preview_rows_and_persisted_mixed_results(
     }
 
     with tenant_scope(tenant_id):
-        etl_run.status = "completed"
-        etl_run.stage = "completed"
-        etl_run.progress = 100
-        etl_run.executed_rows = 1
-        etl_run.error_rows = 1
-        etl_run.executed_at = now
+        elt_run.status = "completed"
+        elt_run.stage = "completed"
+        elt_run.progress = 100
+        elt_run.executed_rows = 1
+        elt_run.error_rows = 1
+        elt_run.executed_at = now
         success_row.execution_status = "success"
         success_row.match_ref = "customer:501|product:601"
         error_row.execution_status = "failed"

@@ -34,15 +34,14 @@ describe('useDutyRoster', () => {
     expect(typeof roster.ensureLoaded).toBe('function')
   })
 
-  it('returns fallback areas when no data loaded', () => {
+  it('returns empty areas when no data loaded (宿主编制不再内置)', () => {
     const roster = useDutyRoster()
-    const areas = roster.areas.value
-    expect(Object.keys(areas).length).toBeGreaterThan(0)
+    expect(roster.areas.value).toEqual({})
   })
 
-  it('returns fallback allPlannedIds when no data loaded', () => {
+  it('returns an empty allPlannedIds when no data loaded', () => {
     const roster = useDutyRoster()
-    expect(roster.allPlannedIds.value.size).toBeGreaterThan(0)
+    expect(roster.allPlannedIds.value.size).toBe(0)
   })
 
   it('ensureLoaded fetches duty roster from API', async () => {
@@ -67,15 +66,15 @@ describe('useDutyRoster', () => {
     expect(roster.error.value).toBeNull()
   })
 
-  it('ensureLoaded handles API error and keeps fallback', async () => {
+  it('ensureLoaded handles API error and keeps an empty roster', async () => {
     getDutyRosterMock.mockRejectedValue(new Error('network'))
     const roster = useDutyRoster()
     await roster.ensureLoaded()
     expect(roster.loading.value).toBe(false)
     expect(roster.error.value).toBeInstanceOf(Error)
     expect(roster.error.value?.message).toBe('network')
-    // fallback 数据仍可用
-    expect(Object.keys(roster.areas.value).length).toBeGreaterThan(0)
+    // 失败时保持空编制，不回退到宿主内置名单
+    expect(roster.areas.value).toEqual({})
   })
 
   it('ensureLoaded handles non-Error rejection', async () => {
@@ -126,8 +125,8 @@ describe('useDutyRoster', () => {
     const roster = useDutyRoster()
     await roster.ensureLoaded()
     expect(roster.error.value).toBeNull()
-    // fallback 仍可用
-    expect(Object.keys(roster.areas.value).length).toBeGreaterThan(0)
+    expect(roster.areas.value).toEqual({})
+    expect(roster.allPlannedIds.value.size).toBe(0)
   })
 
   it('handles response with empty all_planned_ids', async () => {
@@ -142,8 +141,8 @@ describe('useDutyRoster', () => {
     getDutyRosterMock.mockResolvedValue({ data })
     const roster = useDutyRoster()
     await roster.ensureLoaded()
-    // 空 all_planned_ids 时回退到 FALLBACK_IDS
-    expect(roster.allPlannedIds.value.size).toBeGreaterThan(0)
+    // 空编制就是空，不能回退到宿主内置名单
+    expect(roster.allPlannedIds.value.size).toBe(0)
   })
 
   it('ensureLoaded reuses in-flight promise', async () => {

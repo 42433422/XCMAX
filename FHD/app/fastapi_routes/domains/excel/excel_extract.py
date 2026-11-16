@@ -11,10 +11,10 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, File, Form, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 
-from app.application.shipment_excel_etl_security import (
-    ShipmentEtlPathError,
-    resolve_etl_output_path,
-    resolve_etl_path,
+from app.application.shipment_excel_elt_security import (
+    ShipmentEltPathError,
+    resolve_elt_output_path,
+    resolve_elt_path,
 )
 from app.infrastructure.auth.business_scope_gate import require_scoped_business_permission
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -61,7 +61,7 @@ def _extract_from_excel(file_path, sheet_name=None, header_row=1) -> tuple[dict,
         from openpyxl import load_workbook
         from openpyxl.utils import get_column_letter
 
-        safe_file_path = resolve_etl_path(file_path)
+        safe_file_path = resolve_elt_path(file_path)
         if not safe_file_path.is_file():
             return {"success": False, "message": "文件不存在"}, 404
 
@@ -103,7 +103,7 @@ def _extract_from_excel(file_path, sheet_name=None, header_row=1) -> tuple[dict,
             "total_rows": len(rows),
         }, 200
 
-    except ShipmentEtlPathError:
+    except ShipmentEltPathError:
         return {"success": False, "message": "文件不存在"}, 404
     except RECOVERABLE_ERRORS:
         logger.exception("提取 Excel 数据失败")
@@ -122,7 +122,7 @@ def _generate_excel(data, filename=None, sheet_name="Sheet1") -> tuple[dict, int
         safe_name = secure_filename(str(filename))
         if not safe_name:
             return {"success": False, "message": "文件名无效"}, 400
-        file_path = resolve_etl_output_path(Path(TEMP_EXCEL_DIR) / safe_name)
+        file_path = resolve_elt_output_path(Path(TEMP_EXCEL_DIR) / safe_name)
 
         wb = Workbook()
         ws = wb.active
@@ -153,7 +153,7 @@ def _generate_excel(data, filename=None, sheet_name="Sheet1") -> tuple[dict, int
             "rows": len(data),
         }, 200
 
-    except ShipmentEtlPathError:
+    except ShipmentEltPathError:
         return {"success": False, "message": "输出路径无效"}, 400
     except RECOVERABLE_ERRORS:
         logger.exception("生成 Excel 文件失败")
@@ -167,7 +167,7 @@ def _extract_attendance_detail_roster(
     try:
         from openpyxl import load_workbook
 
-        safe_file_path = resolve_etl_path(file_path)
+        safe_file_path = resolve_elt_path(file_path)
         if not safe_file_path.is_file():
             return {"success": False, "message": "文件不存在"}, 404
 
@@ -221,7 +221,7 @@ def _extract_attendance_detail_roster(
             }, 200
         finally:
             wb.close()
-    except ShipmentEtlPathError:
+    except ShipmentEltPathError:
         return {"success": False, "message": "文件不存在"}, 404
     except RECOVERABLE_ERRORS:
         logger.exception("考勤明细人员提取失败")
@@ -264,7 +264,7 @@ async def extract_upload(
         if not upload_name:
             return JSONResponse({"success": False, "message": "文件名无效"}, status_code=400)
         filename = f"extract_{timestamp}_{upload_name}"
-        file_path = resolve_etl_output_path(Path(TEMP_EXCEL_DIR) / filename)
+        file_path = resolve_elt_output_path(Path(TEMP_EXCEL_DIR) / filename)
         body = await excel_file.read()
         with open(file_path, "wb") as f:
             f.write(body)
@@ -477,23 +477,23 @@ from app.fastapi_routes.domains.excel.excel_extract_shipment import (
     get_preview as get_preview,
 )
 from app.fastapi_routes.domains.excel.excel_extract_shipment import (
-    shipment_etl_batch_execute as shipment_etl_batch_execute,
+    shipment_elt_batch_execute as shipment_elt_batch_execute,
 )
 from app.fastapi_routes.domains.excel.excel_extract_shipment import (
-    shipment_etl_batch_preview as shipment_etl_batch_preview,
+    shipment_elt_batch_preview as shipment_elt_batch_preview,
 )
 from app.fastapi_routes.domains.excel.excel_extract_shipment import (
-    shipment_etl_execute as shipment_etl_execute,
+    shipment_elt_execute as shipment_elt_execute,
 )
 from app.fastapi_routes.domains.excel.excel_extract_shipment import (
-    shipment_etl_generate_template as shipment_etl_generate_template,
+    shipment_elt_generate_template as shipment_elt_generate_template,
 )
 from app.fastapi_routes.domains.excel.excel_extract_shipment import (
-    shipment_etl_ocr_preview as shipment_etl_ocr_preview,
+    shipment_elt_ocr_preview as shipment_elt_ocr_preview,
 )
 from app.fastapi_routes.domains.excel.excel_extract_shipment import (
-    shipment_etl_preview as shipment_etl_preview,
+    shipment_elt_preview as shipment_elt_preview,
 )
 from app.fastapi_routes.domains.excel.excel_extract_shipment import (
-    shipment_etl_regenerate as shipment_etl_regenerate,
+    shipment_elt_regenerate as shipment_elt_regenerate,
 )

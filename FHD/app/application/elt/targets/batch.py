@@ -304,10 +304,14 @@ class AttendanceAdapter(TargetAdapter):
 
 
 class AbnormalAdapter(TargetAdapter):
-    """Unconfirmed templates stay abnormal and are not written to a business table."""
+    """No fixed business table: finish normally and report, never block the batch.
+
+    「未确认模板」不是错误。数据已经进入知识库/模版库；业务侧如实说明没有固定
+    业务表，既不写业务行，也不把整批行标成错误挡住执行。
+    """
 
     type = "abnormal"
-    label = "未确认模板"
+    label = "未匹配固定业务表"
     reversible = False
     fields = ()
     default_match_keys = ()
@@ -315,14 +319,14 @@ class AbnormalAdapter(TargetAdapter):
     def preview(self, db, data, *, allowed_update_fields, context):
         del db, data, allowed_update_fields, context
         return PreviewDecision(
-            "error",
-            reason="unconfirmed_template",
+            "skip",
+            reason="no_business_table",
             issues=[
                 {
-                    "code": "ELT_TEMPLATE_UNCONFIRMED",
+                    "code": "ELT_NO_BUSINESS_TABLE",
                     "field": "template",
-                    "severity": "error",
-                    "message": "模板未确认，不能强制匹配到业务表",
+                    "severity": "info",
+                    "message": "未匹配到固定业务表，未写入业务行；文件已归档到模版库",
                 }
             ],
         )
@@ -330,8 +334,15 @@ class AbnormalAdapter(TargetAdapter):
     def execute_batch(
         self, rows: Iterable[dict[str, Any]], context: dict[str, Any]
     ) -> dict[str, Any]:
-        del rows, context
-        raise EltError("ELT_TEMPLATE_UNCONFIRMED", "模板未确认，不能写入")
+        del rows
+        return {
+            "receipt": {
+                "message": "未匹配到固定业务表，未写入业务行；文件已归档到模版库",
+                "reversible": False,
+                "executed": 0,
+            },
+            "executed": 0,
+        }
 
 
 class ExportAdapter(TargetAdapter):
@@ -343,10 +354,10 @@ class ExportAdapter(TargetAdapter):
     def execute_batch(
         self, rows: Iterable[dict[str, Any]], context: dict[str, Any]
     ) -> dict[str, Any]:
-        root = Path(get_app_data_dir()).resolve() / "etl" / "exports"
+        root = Path(get_app_data_dir()).resolve() / "elt" / "exports"
         root.mkdir(parents=True, exist_ok=True)
         suffix = ".csv" if self.type == "export_csv" else ".xlsx"
-        path = root / f"etl-{context['run_id']}{suffix}"
+        path = root / f"elt-{context['run_id']}{suffix}"
         iterator = iter(rows)
         first = next(iterator, None)
         headers = list(context.get("output_headers") or (list(first) if first else []))

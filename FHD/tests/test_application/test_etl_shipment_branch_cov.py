@@ -1,6 +1,6 @@
 """ETL 发货/转换模块行为测试（分支覆盖补测）。
 
-覆盖 app/application/etl/ 下 8 个模块：
+覆盖 app/application/elt/ 下 8 个模块：
   shipment_compat_parser / shipment_preview_fallback / shipment_template_extractor
   parser_shipment_history / target_detection / transforms / mapping_assist / product_identity
 """
@@ -309,7 +309,7 @@ class TestTargetDetection:
     def test_knowledge_only_suffix(self, tmp_path):
         path = tmp_path / "a.docx"
         path.write_text("x")
-        out = target_detection.detect_etl_target(path)
+        out = target_detection.detect_elt_target(path)
         assert out["target_type"] == "knowledge"
         assert out["confidence"] == 1.0
 
@@ -327,7 +327,7 @@ class TestTargetDetection:
         for content, expected in cases:
             path = tmp_path / "f.csv"
             path.write_text(content, encoding="utf-8")
-            out = target_detection.detect_etl_target(path)
+            out = target_detection.detect_elt_target(path)
             assert out["target_type"] == expected, content
 
     def test_xlsx_detection(self, tmp_path):
@@ -340,20 +340,42 @@ class TestTargetDetection:
         ws.append(["产品名称", "数量"])
         wb.save(path)
         wb.close()
-        out = target_detection.detect_etl_target(path)
+        out = target_detection.detect_elt_target(path)
         assert out["target_type"] == "shipment_records"
+
+    def test_xlsx_prefers_business_sheet_over_first_sheet_notes(self, tmp_path):
+        from openpyxl import Workbook
+
+        path = tmp_path / "multi.xlsx"
+        wb = Workbook()
+        notes = wb.active
+        notes.title = "25年"
+        notes.append(["45715", "46", "新款"])
+        notes.append(["客户备注：从8/3单价以报价表为准"])
+        delivery = wb.create_sheet("宗南")
+        delivery.append(["名称：宗南家私"])
+        delivery.append([])
+        delivery.append(["产 品 型 号", None, None, "产 品 名 称", "数 量 / 件", "规格/KG"])
+        delivery.append(["6821AA", None, None, "PE白底漆", 1, 600])
+        delivery.append([])
+        delivery.append(["1. 本送货单一式四联，白色联为存根联。"])
+        wb.save(path)
+        wb.close()
+        out = target_detection.detect_elt_target(path)
+        assert out["target_type"] == "shipment_records"
+        assert out["sheet_name"] == "宗南"
 
     def test_filename_delivery(self, tmp_path):
         path = tmp_path / "发货单.pdf"
         path.write_text("x")
-        out = target_detection.detect_etl_target(path, suffix=".pdf")
+        out = target_detection.detect_elt_target(path, suffix=".pdf")
         assert out["target_type"] == "shipment_records"
         assert out["reason"] == "delivery_filename"
 
     def test_unknown_suffix(self, tmp_path):
         path = tmp_path / "other.pdf"
         path.write_text("x")
-        out = target_detection.detect_etl_target(path)
+        out = target_detection.detect_elt_target(path)
         assert out["target_type"] == "abnormal"
         assert out["reason"] == "manual_review_required"
 
@@ -546,7 +568,7 @@ _NOTE = {
 class TestShipmentCompatParser:
     def _patched_preview(self, monkeypatch, result):
         monkeypatch.setattr(
-            "app.application.shipment_excel_etl_app_service.preview_shipment_excel_etl",
+            "app.application.shipment_excel_elt_app_service.preview_shipment_excel_elt",
             lambda *a, **k: result,
         )
 
@@ -575,7 +597,7 @@ class TestShipmentCompatParser:
             raise RuntimeError("preview down")
 
         monkeypatch.setattr(
-            "app.application.shipment_excel_etl_app_service.preview_shipment_excel_etl", _boom
+            "app.application.shipment_excel_elt_app_service.preview_shipment_excel_elt", _boom
         )
         path = tmp_path / "a.xlsx"
         path.write_text("x")
@@ -1150,7 +1172,7 @@ class TestShipmentPreviewFallback:
 
     def test_safe_owned_upload_path(self, tmp_path, monkeypatch):
         mod = shipment_preview_fallback
-        root = Path(tmp_path) / "etl" / "uploads" / "1" / "7"
+        root = Path(tmp_path) / "elt" / "uploads" / "1" / "7"
         root.mkdir(parents=True)
         f = root / "del.xlsx"
         f.write_text("x")
@@ -1549,7 +1571,7 @@ class TestShipmentPreviewFallback:
         out = mod.materialize_preview_layout_candidate(owner_user_id=1, unit_name="甲")
         assert out is not None
         assert out["path"]
-        assert out["source"] == "etl_preview_candidate"
+        assert out["source"] == "elt_preview_candidate"
 
         # recoverable error -> None
         def _boom(*a, **k):

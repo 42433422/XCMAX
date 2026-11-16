@@ -492,6 +492,8 @@ class TestExecuteRegisteredWorkflowTool:
             "dataset_rag",
             "memory_v2",
             "system_maintenance",
+            "elt_import",
+            "import_excel_to_database",
         }
         assert set(_REGISTERED_WORKFLOW_ROUTERS.keys()) == expected_keys
 

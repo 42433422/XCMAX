@@ -35,7 +35,10 @@
                 <div style="display:flex; align-items:center; gap:10px;">
                   <div
                     class="data-source-card-icon-slot"
-                    :class="'is-' + (source.category || 'generic')"
+                    :class="[
+                      'is-' + (source.category || 'generic'),
+                      { 'has-art': dataSourceHasArtIcon(source.icon || source.id) },
+                    ]"
                     aria-hidden="true"
                   >
                     <span
@@ -70,7 +73,7 @@
           </button>
         </div>
         <div v-if="isSelectedSourcePlanned" class="muted" style="margin-top:8px">该数据源还在规划中，暂无可用操作。</div>
-        <div class="muted" style="margin-top:8px; font-size:12px">图标为本应用自制单色字形，仅用于功能区分，不代表对应品牌的官方授权。</div>
+        <div class="muted" style="margin-top:8px; font-size:12px">图标仅用于功能区分，不代表对应品牌的官方授权。</div>
       </div>
 
       <div class="card">
@@ -147,7 +150,7 @@ import { computed, onMounted, reactive, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import privateDbAssistantApi, { type PrivateDbContact, type PrivateDbSource } from '@/api/privateDbAssistant';
 import { appAlert } from '@/utils/appDialog';
-import { dataSourceIconMarkup } from '@/utils/dataSourceIcons';
+import { dataSourceHasArtIcon, dataSourceIconMarkup } from '@/utils/dataSourceIcons';
 
 const STORAGE_KEY = 'xcagi_private_db_assistant_source';
 

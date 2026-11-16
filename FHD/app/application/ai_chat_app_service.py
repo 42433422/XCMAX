@@ -216,7 +216,6 @@ class AIChatApplicationService(
             "chat_office_docking",
             "business_docking",
             "elt",
-            "etl",
         }:
             channel = BUSINESS_DOCKING
         context = tag_mapping(context, channel=channel)
@@ -245,6 +244,9 @@ class AIChatApplicationService(
             prepared = prepare_chat_turn(message, context)
             if prepared is not None:
                 return prepared
+            from app.infrastructure.chat_stream_lifetime import publish_stream_note
+
+            publish_stream_note("正在分析你的需求…")
             try:
                 return self._process_chat_impl(user_id, message, context, source, file_context)
             except RECOVERABLE_ERRORS:

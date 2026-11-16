@@ -105,7 +105,20 @@ vi.mock('@/constants/officeEmployeePack', () => ({
   isOfficeAuxPack1Pkg: (...args: unknown[]) => mockIsOfficeAuxPack1Pkg(...(args as [string])),
   isOfficeEmployeePkg: (...args: unknown[]) => mockIsOfficeEmployeePkg(...(args as [string])),
   OFFICE_AUX_PACK_1_COLLECTION: 'office_employee_aux_pack_1',
+  OFFICE_AUX_PACK_1_PKG_IDS: ['json-report-employee', 'chart-bar-employee', 'chart-line-employee', 'chart-pie-employee', 'chart-dashboard-employee'],
   OFFICE_EMPLOYEE_COLLECTION: 'office_employee_pack',
+  OFFICE_EMPLOYEE_PKG_IDS: [
+    'excel-generate-employee',
+    'excel-full-read-employee',
+    'csv-generate-employee',
+    'csv-full-read-employee',
+    'pdf-generate-employee',
+    'pdf-full-read-employee',
+    'ppt-generate-employee',
+    'ppt-full-read-employee',
+    'word-generate-employee',
+    'word-full-read-employee',
+  ],
 }))
 
 vi.mock('@/composables/useTutorialCatalog', () => ({
@@ -1575,8 +1588,8 @@ describe('ModStore.coverage – 模板条件渲染分支', () => {
     expect(text).toContain('安装')
     // M1 有更新
     expect(text).toContain('更新')
-    // M1 source=remote → 网页查看
-    expect(text).toContain('网页查看')
+    // 招聘市场式卡片：远端条目通过「详情」进入网页信息
+    expect(text).toContain('详情')
     wrapper.unmount()
   })
 
@@ -1596,7 +1609,7 @@ describe('ModStore.coverage – 模板条件渲染分支', () => {
     wrapper.unmount()
   })
 
-  it('渲染：enterpriseLayerLabel 非空时显示标签', async () => {
+  it('渲染：企业层级标签移入详情，不在卡片上堆叠', async () => {
     mockResolveEnterpriseOrgLayerForCatalogItem.mockReturnValue({
       code: 'L2',
       label: '战术层',
@@ -1613,7 +1626,7 @@ describe('ModStore.coverage – 模板条件渲染分支', () => {
     })
     const { wrapper } = await mountModStore({ tab: 'all' })
     await waitForAsync()
-    expect(wrapper.text()).toContain('L2 战术层')
+    expect(wrapper.text()).not.toContain('L2 战术层')
     wrapper.unmount()
   })
 

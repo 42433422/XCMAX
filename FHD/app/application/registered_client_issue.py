@@ -8,7 +8,10 @@ from typing import Any
 def submit_client_product_issue(message: str, context: dict[str, Any]) -> dict[str, Any]:
     from starlette.requests import Request
 
-    from app.application.client_product_issue_intake import looks_like_issue_report
+    from app.application.client_product_issue_intake import (
+        looks_like_issue_report,
+        report_message_with_context,
+    )
     from app.application.employee_runtime.agent_runner import _run_async
     from app.db import HostSessionLocal
     from app.db.models.user import Session as UserSession
@@ -24,6 +27,9 @@ def submit_client_product_issue(message: str, context: dict[str, Any]) -> dict[s
         tenant_id = int(context.get("tenant_id") or 0)
         if tenant_id <= 0 or int(actor.tenant_id or 0) != tenant_id:
             raise AgentModAuthorizationError("tenant mismatch")
+        # 续办式请求（「继续提交原来的工单」）自身不含问题描述，先用本会话的
+        # 用户原话补齐，与聊天流入口保持同一套判定。
+        message = report_message_with_context(message, context)
         if not looks_like_issue_report(message):
             return {"success": False, "message": "原始请求未明确提出产品问题，未提交工单。"}
         with HostSessionLocal() as db:

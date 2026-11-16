@@ -34,7 +34,7 @@ def replay_store(tmp_path, monkeypatch):
         "_submit_preview",
         lambda run_id, _tenant, owner: service._preview_worker(run_id, owner),
     )
-    monkeypatch.setenv("FHD_ETL_LLM", "off")
+    monkeypatch.setenv("FHD_ELT_LLM", "off")
     with tenant_scope(1), factory() as db:
         upload = EltUpload(
             id="original-upload",

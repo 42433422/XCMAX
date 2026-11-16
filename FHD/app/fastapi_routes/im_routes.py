@@ -14,7 +14,7 @@ from fastapi import (
     Request,
     WebSocket,
 )
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from app.application.ai_group_chat_service import (
     AiGroupChatService as AiGroupChatService,
@@ -253,6 +253,25 @@ def im_list_contacts(
         return JSONResponse({"success": False, "message": _IM_UNAVAILABLE}, status_code=500)
     finally:
         db.close()
+
+
+@router.get("/api/im/users/{user_id}/avatar")
+def im_user_avatar(
+    user_id: int,
+    _user: CurrentUser = Depends(require_identified_user),
+):
+    """读取账号池中指定用户的持久化头像（需登录，避免匿名枚举）。"""
+    from app.utils.path_io.user_avatar_storage import (
+        avatar_file_for_user,
+        media_type_for_path,
+    )
+
+    if int(user_id) <= 0:
+        return JSONResponse({"success": False, "message": "user_id 无效"}, status_code=400)
+    path = avatar_file_for_user(int(user_id))
+    if path is None:
+        return JSONResponse({"success": False, "message": "未设置头像"}, status_code=404)
+    return FileResponse(path, media_type=media_type_for_path(path))
 
 
 @router.get("/api/im/unread-total")

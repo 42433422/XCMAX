@@ -13,9 +13,10 @@ import {
 function collectManifestWorkflowEmployeeIds(mods: ModWithWorkflowEmployees[] | undefined): Set<string> {
   const ids = new Set<string>()
   for (const m of filterWorkflowRegistrySourceMods(mods)) {
+    const allowNonDesk = m.directory_sourced === true
     for (const e of m.workflow_employees || []) {
       const id = String(e?.id || '').trim()
-      if (id && !isNonWorkflowDeskEmployeeId(id)) ids.add(id)
+      if (id && (allowNonDesk || !isNonWorkflowDeskEmployeeId(id))) ids.add(id)
     }
   }
   return ids

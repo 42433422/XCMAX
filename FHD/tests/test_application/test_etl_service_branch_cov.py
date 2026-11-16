@@ -36,7 +36,7 @@ from app.application.elt.service_execution import ExecutionServiceMixin
 from app.application.elt.service_history import HistoryServiceMixin
 from app.application.elt.service_preview import PreviewServiceMixin
 from app.application.elt.service_shipment_templates import (
-    ETL_SHIPMENT_DOCUMENT_TEMPLATE_DESCRIPTION,
+    ELT_SHIPMENT_DOCUMENT_TEMPLATE_DESCRIPTION,
     ShipmentTemplateServiceMixin,
     _safe_template_name,
     _selected_shipment_region,
@@ -72,7 +72,7 @@ from app.db.models.elt import (
 )
 from app.infrastructure.tenant_scope import reset_current_tenant_id, set_current_tenant_id
 
-ETL_TABLES = [
+ELT_TABLES = [
     EltUpload.__table__,
     EltTemplate.__table__,
     EltTemplateVersion.__table__,
@@ -209,9 +209,9 @@ class _TestService(
 
 
 @pytest.fixture
-def etl_db():
+def elt_db():
     engine = _make_engine()
-    Base.metadata.create_all(bind=engine, tables=ETL_TABLES)
+    Base.metadata.create_all(bind=engine, tables=ELT_TABLES)
     factory = sessionmaker(bind=engine)
     db = factory()
     token = set_current_tenant_id(1)
@@ -222,8 +222,8 @@ def etl_db():
 
 
 @pytest.fixture
-def etl_factory(etl_db):
-    engine = etl_db.bind
+def elt_factory(elt_db):
+    engine = elt_db.bind
 
     def _new_session():
         return sessionmaker(bind=engine)()
@@ -232,15 +232,15 @@ def etl_factory(etl_db):
 
 
 @pytest.fixture
-def same_session(etl_factory, monkeypatch):
+def same_session(elt_factory, monkeypatch):
     # 让后台 worker 的 new_session() 指向同一内存 DB，避免连真实 postgres。
     for mod in (
         "app.application.elt.service_execution",
         "app.application.elt.service_preview",
         "app.application.elt.service_draft",
     ):
-        monkeypatch.setattr(f"{mod}.new_session", etl_factory)
-    return etl_factory
+        monkeypatch.setattr(f"{mod}.new_session", elt_factory)
+    return elt_factory
 
 
 @pytest.fixture
@@ -272,19 +272,19 @@ def no_background(monkeypatch):
 
 
 @pytest.fixture
-def mock_etl_metrics(monkeypatch):
+def mock_elt_metrics(monkeypatch):
     """metrics.py 缺少 ETL 指标定义，import 会抛 ImportError 被 except 吞掉。
     这里把缺失的指标名补到真实模块上，覆盖 *_metrics 的记录分支。"""
     import app.utils.metrics as metrics_mod
 
     for name in (
-        "etl_run_duration_seconds",
-        "etl_runs_total",
-        "etl_manual_corrections_total",
-        "etl_retries_total",
-        "etl_rollbacks_total",
-        "etl_llm_degradations_total",
-        "etl_rows_total",
+        "elt_run_duration_seconds",
+        "elt_runs_total",
+        "elt_manual_corrections_total",
+        "elt_retries_total",
+        "elt_rollbacks_total",
+        "elt_llm_degradations_total",
+        "elt_rows_total",
     ):
         counter = MagicMock()
         counter.labels.return_value = counter
@@ -574,10 +574,10 @@ class TestServiceUploads:
             "账目/合成资料.XLSX",
         ],
     )
-    def test_save_upload_success(self, etl_db, svc, app_data, fake_adapter, file_name):
+    def test_save_upload_success(self, elt_db, svc, app_data, fake_adapter, file_name):
         body = _workbook_bytes()
         info = svc.save_upload(
-            etl_db,
+            elt_db,
             owner_user_id=1,
             file_name=file_name,
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -587,9 +587,9 @@ class TestServiceUploads:
         assert info["size_bytes"] == len(body)
         assert info["sha256"] == hashlib.sha256(body).hexdigest()
         assert info["suffix"] == ".xlsx"
-        stored = etl_db.query(EltUpload).one()
+        stored = elt_db.query(EltUpload).one()
         destination = Path(stored.storage_path)
-        assert destination == app_data / "etl" / "uploads" / "1" / "1" / f"{info['upload_id']}.xlsx"
+        assert destination == app_data / "elt" / "uploads" / "1" / "1" / f"{info['upload_id']}.xlsx"
         assert destination.read_bytes() == body
         assert destination.stat().st_mode & 0o222 == 0
         assert list(app_data.rglob("*xlsx")) == [destination]
@@ -609,7 +609,7 @@ class TestServiceUploads:
         ],
     )
     def test_save_upload_rejects_mismatched_or_unreadable_content(
-        self, etl_db, svc, app_data, fake_adapter, file_name, content_type, body, code
+        self, elt_db, svc, app_data, fake_adapter, file_name, content_type, body, code
     ):
         workbook = _workbook_bytes()
         body = {
@@ -621,7 +621,7 @@ class TestServiceUploads:
         }.get(body, body)
         with pytest.raises(EltError) as ei:
             svc.save_upload(
-                etl_db,
+                elt_db,
                 owner_user_id=1,
                 file_name=file_name,
                 content_type=content_type,
@@ -630,31 +630,31 @@ class TestServiceUploads:
         assert ei.value.code == code
         assert ei.value.message
         assert not list(app_data.rglob("*.*"))
-        assert etl_db.query(EltUpload).count() == 0
+        assert elt_db.query(EltUpload).count() == 0
 
     @pytest.mark.parametrize(
         "file_name", ["a.exe", "a.xlsx.exe", "../../config", "../a.xlsx/../../payload.py"]
     )
-    def test_save_upload_unsupported_suffix(self, etl_db, svc, app_data, fake_adapter, file_name):
+    def test_save_upload_unsupported_suffix(self, elt_db, svc, app_data, fake_adapter, file_name):
         with pytest.raises(EltError) as ei:
             svc.save_upload(
-                etl_db,
+                elt_db,
                 owner_user_id=1,
                 file_name=file_name,
                 content_type=None,
                 stream=io.BytesIO(b"x"),
             )
         assert ei.value.code == "ELT_FILE_TYPE_UNSUPPORTED"
-        assert not (app_data / "etl").exists()
-        assert etl_db.query(EltUpload).count() == 0
+        assert not (app_data / "elt").exists()
+        assert elt_db.query(EltUpload).count() == 0
 
     @pytest.mark.parametrize("symlink", [False, True])
     def test_save_upload_never_removes_an_existing_destination(
-        self, etl_db, svc, app_data, monkeypatch, symlink
+        self, elt_db, svc, app_data, monkeypatch, symlink
     ):
         upload_id = str(uuid.uuid4())
         monkeypatch.setattr("app.application.elt.service_uploads.new_id", lambda: upload_id)
-        root = app_data / "etl" / "uploads" / "1" / "1"
+        root = app_data / "elt" / "uploads" / "1" / "1"
         root.mkdir(parents=True)
         destination = root / f"{upload_id}.xlsx"
         original = app_data / "existing.xlsx" if symlink else destination
@@ -666,7 +666,7 @@ class TestServiceUploads:
                 pytest.skip("symbolic links are unavailable")
         with pytest.raises(EltError if symlink else FileExistsError) as error:
             svc.save_upload(
-                etl_db,
+                elt_db,
                 owner_user_id=1,
                 file_name="../../existing.XLSX",
                 content_type=None,
@@ -676,37 +676,37 @@ class TestServiceUploads:
             assert error.value.code == "ELT_UPLOAD_PATH_INVALID"
             assert destination.is_symlink()
         assert original.read_bytes() == b"existing customer file"
-        assert etl_db.query(EltUpload).count() == 0
+        assert elt_db.query(EltUpload).count() == 0
 
-    def test_save_upload_empty_file(self, etl_db, svc, app_data, fake_adapter):
+    def test_save_upload_empty_file(self, elt_db, svc, app_data, fake_adapter):
         with pytest.raises(EltError) as ei:
             svc.save_upload(
-                etl_db,
+                elt_db,
                 owner_user_id=1,
                 file_name="empty.xlsx",
                 content_type=None,
                 stream=io.BytesIO(b""),
             )
         assert ei.value.code == "ELT_FILE_EMPTY"
-        assert list((app_data / "etl" / "uploads" / "1" / "1").iterdir()) == []
+        assert list((app_data / "elt" / "uploads" / "1" / "1").iterdir()) == []
 
-    def test_save_upload_too_large(self, etl_db, svc, app_data, fake_adapter):
+    def test_save_upload_too_large(self, elt_db, svc, app_data, fake_adapter):
         big = io.BytesIO(b"x" * (MAX_FILE_BYTES + 1))
         with pytest.raises(EltError) as ei:
             svc.save_upload(
-                etl_db,
+                elt_db,
                 owner_user_id=1,
                 file_name="big.xlsx",
                 content_type=None,
                 stream=big,
             )
         assert ei.value.code == "ELT_FILE_TOO_LARGE"
-        assert list((app_data / "etl" / "uploads" / "1" / "1").iterdir()) == []
+        assert list((app_data / "elt" / "uploads" / "1" / "1").iterdir()) == []
 
-    def test_save_upload_invalid_batch_id(self, etl_db, svc, app_data, fake_adapter):
+    def test_save_upload_invalid_batch_id(self, elt_db, svc, app_data, fake_adapter):
         with pytest.raises(EltError):
             svc.save_upload(
-                etl_db,
+                elt_db,
                 owner_user_id=1,
                 file_name="a.xlsx",
                 content_type=None,
@@ -714,23 +714,23 @@ class TestServiceUploads:
                 batch_id="bad",
             )
 
-    def test_owned_upload_expired_and_missing(self, etl_db, svc, app_data, fake_adapter):
+    def test_owned_upload_expired_and_missing(self, elt_db, svc, app_data, fake_adapter):
         _make_upload(
-            etl_db,
+            elt_db,
             id="exp",
             storage_path="",
             expires_at=datetime.now(UTC) - timedelta(days=1),
         )
         with pytest.raises(EltError) as ei:
-            svc._owned_upload(etl_db, "exp", 1)
+            svc._owned_upload(elt_db, "exp", 1)
         assert ei.value.code == "ELT_UPLOAD_EXPIRED"
 
-    def test_owned_upload_record_not_found(self, etl_db, svc, app_data, fake_adapter):
+    def test_owned_upload_record_not_found(self, elt_db, svc, app_data, fake_adapter):
         with pytest.raises(EltNotFound):
-            svc._owned_upload_record(etl_db, "nope", 1)
+            svc._owned_upload_record(elt_db, "nope", 1)
 
-    def test_upload_dict(self, etl_db, svc, app_data, fake_adapter):
-        up = _make_upload(etl_db, id="u9", file_name="x.csv", suffix=".csv")
+    def test_upload_dict(self, elt_db, svc, app_data, fake_adapter):
+        up = _make_upload(elt_db, id="u9", file_name="x.csv", suffix=".csv")
         d = svc.upload_dict(up)
         assert d["upload_id"] == "u9"
         assert d["relative_path"] == "x.csv"
@@ -742,9 +742,9 @@ class TestServiceUploads:
 
 
 class TestServiceTemplates:
-    def test_create_template(self, etl_db, svc, fake_adapter):
+    def test_create_template(self, elt_db, svc, fake_adapter):
         tpl = svc.create_template(
-            etl_db,
+            elt_db,
             owner_user_id=1,
             name="  我的模板  ",
             target_type="shipment_records",
@@ -759,10 +759,10 @@ class TestServiceTemplates:
         assert tpl["current_version"] == 1
         assert tpl["version"]["number"] == 1
 
-    def test_create_template_empty_name(self, etl_db, svc, fake_adapter):
+    def test_create_template_empty_name(self, elt_db, svc, fake_adapter):
         with pytest.raises(EltError) as ei:
             svc.create_template(
-                etl_db,
+                elt_db,
                 owner_user_id=1,
                 name="   ",
                 target_type="shipment_records",
@@ -770,10 +770,10 @@ class TestServiceTemplates:
             )
         assert ei.value.code == "ELT_TEMPLATE_NAME_REQUIRED"
 
-    def test_update_template(self, etl_db, svc, fake_adapter):
-        tpl, _ = _make_template(etl_db, name="old")
+    def test_update_template(self, elt_db, svc, fake_adapter):
+        tpl, _ = _make_template(elt_db, name="old")
         upd = svc.update_template(
-            etl_db,
+            elt_db,
             template_id=tpl.id,
             owner_user_id=1,
             draft={
@@ -789,22 +789,22 @@ class TestServiceTemplates:
         assert upd["current_version"] == 2
         assert upd["version"]["number"] == 2
 
-    def test_list_get_versions_delete(self, etl_db, svc, fake_adapter):
-        tpl, ver = _make_template(etl_db, name="t1")
-        lst = svc.list_templates(etl_db, owner_user_id=1)
+    def test_list_get_versions_delete(self, elt_db, svc, fake_adapter):
+        tpl, ver = _make_template(elt_db, name="t1")
+        lst = svc.list_templates(elt_db, owner_user_id=1)
         assert any(t["id"] == tpl.id for t in lst)
-        got = svc.get_template(etl_db, template_id=tpl.id, owner_user_id=1)
+        got = svc.get_template(elt_db, template_id=tpl.id, owner_user_id=1)
         assert got["id"] == tpl.id
-        versions = svc.template_versions(etl_db, template_id=tpl.id, owner_user_id=1)
+        versions = svc.template_versions(elt_db, template_id=tpl.id, owner_user_id=1)
         assert len(versions) == 1
-        svc.delete_template(etl_db, template_id=tpl.id, owner_user_id=1)
-        assert etl_db.get(EltTemplate, tpl.id).is_active is False
+        svc.delete_template(elt_db, template_id=tpl.id, owner_user_id=1)
+        assert elt_db.get(EltTemplate, tpl.id).is_active is False
 
-    def test_owned_template_not_found(self, etl_db, svc, fake_adapter):
+    def test_owned_template_not_found(self, elt_db, svc, fake_adapter):
         with pytest.raises(EltNotFound):
-            svc._owned_template(etl_db, "nope", 1)
+            svc._owned_template(elt_db, "nope", 1)
 
-    def test_current_version_missing(self, etl_db, svc, fake_adapter):
+    def test_current_version_missing(self, elt_db, svc, fake_adapter):
         tpl = EltTemplate(
             id=_nid(),
             tenant_id=1,
@@ -813,14 +813,14 @@ class TestServiceTemplates:
             target_type="shipment_records",
             current_version=99,
         )
-        etl_db.add(tpl)
-        etl_db.commit()
+        elt_db.add(tpl)
+        elt_db.commit()
         with pytest.raises(EltError) as ei:
-            svc._current_version(etl_db, tpl, 1)
+            svc._current_version(elt_db, tpl, 1)
         assert ei.value.code == "ELT_TEMPLATE_VERSION_MISSING"
 
-    def test_template_dict(self, etl_db, svc, fake_adapter):
-        tpl, ver = _make_template(etl_db)
+    def test_template_dict(self, elt_db, svc, fake_adapter):
+        tpl, ver = _make_template(elt_db)
         d = svc.template_dict(tpl, ver)
         assert d["id"] == tpl.id
         assert d["version"]["field_mappings"] == []
@@ -832,13 +832,13 @@ class TestServiceTemplates:
 
 
 class TestServiceTargets:
-    def test_create_target_config(self, etl_db, svc, monkeypatch, fake_adapter):
+    def test_create_target_config(self, elt_db, svc, monkeypatch, fake_adapter):
         monkeypatch.setattr(
             "app.application.elt.service_targets.store_webhook_secret",
             lambda uid, secret: f"ref-{secret}",
         )
         cfg = svc.create_target_config(
-            etl_db,
+            elt_db,
             owner_user_id=1,
             name="hook",
             endpoint_url="https://x.com/hook",
@@ -849,7 +849,7 @@ class TestServiceTargets:
         assert cfg["has_secret"] is True
 
     def test_create_target_config_invalid_rolls_back_secret(
-        self, etl_db, svc, monkeypatch, fake_adapter
+        self, elt_db, svc, monkeypatch, fake_adapter
     ):
         deleted = []
         monkeypatch.setattr(
@@ -862,12 +862,12 @@ class TestServiceTargets:
         )
         with pytest.raises(EltError) as ei:
             svc.create_target_config(
-                etl_db, owner_user_id=1, name="", endpoint_url="", headers={}, secret="s"
+                elt_db, owner_user_id=1, name="", endpoint_url="", headers={}, secret="s"
             )
         assert ei.value.code == "ELT_TARGET_CONFIG_INVALID"
         assert deleted == ["ref-s"]
 
-    def test_list_update_delete_target_config(self, etl_db, svc, monkeypatch, fake_adapter):
+    def test_list_update_delete_target_config(self, elt_db, svc, monkeypatch, fake_adapter):
         monkeypatch.setattr(
             "app.application.elt.service_targets.store_webhook_secret",
             lambda uid, secret: f"ref-{secret}",
@@ -877,11 +877,11 @@ class TestServiceTargets:
             lambda *a: None,
         )
         cfg = svc.create_target_config(
-            etl_db, owner_user_id=1, name="h", endpoint_url="https://x.com", headers={}, secret=None
+            elt_db, owner_user_id=1, name="h", endpoint_url="https://x.com", headers={}, secret=None
         )
-        assert svc.list_target_configs(etl_db, owner_user_id=1)
+        assert svc.list_target_configs(elt_db, owner_user_id=1)
         upd = svc.update_target_config(
-            etl_db,
+            elt_db,
             config_id=cfg["id"],
             owner_user_id=1,
             name="h2",
@@ -890,11 +890,11 @@ class TestServiceTargets:
             secret=None,
         )
         assert upd["name"] == "h2"
-        svc.delete_target_config(etl_db, config_id=cfg["id"], owner_user_id=1)
+        svc.delete_target_config(elt_db, config_id=cfg["id"], owner_user_id=1)
         with pytest.raises(EltNotFound):
-            svc._owned_target_config(etl_db, cfg["id"], 1)
+            svc._owned_target_config(elt_db, cfg["id"], 1)
 
-    def test_target_config_for_test(self, etl_db, svc, fake_adapter):
+    def test_target_config_for_test(self, elt_db, svc, fake_adapter):
         cfg = EltTargetConfig(
             id=_nid(),
             tenant_id=1,
@@ -905,79 +905,79 @@ class TestServiceTargets:
             headers_json="{}",
             is_active=True,
         )
-        etl_db.add(cfg)
-        etl_db.commit()
-        res = svc.target_config_for_test(etl_db, config_id=cfg.id, owner_user_id=1)
+        elt_db.add(cfg)
+        elt_db.commit()
+        res = svc.target_config_for_test(elt_db, config_id=cfg.id, owner_user_id=1)
         assert res["success"] is True
 
-    def test_download_path(self, etl_db, svc, app_data, fake_adapter):
-        run = _make_run(etl_db, target_type="export_xlsx", status="completed")
+    def test_download_path(self, elt_db, svc, app_data, fake_adapter):
+        run = _make_run(elt_db, target_type="export_xlsx", status="completed")
         run.receipt_json = dump_json({"file_name": "out.xlsx"})
-        etl_db.commit()
-        p = app_data / "etl" / "exports"
+        elt_db.commit()
+        p = app_data / "elt" / "exports"
         p.mkdir(parents=True)
         f = p / "out.xlsx"
         f.write_bytes(b"x")
-        path = svc.download_path(etl_db, run_id=run.id, owner_user_id=1)
+        path = svc.download_path(elt_db, run_id=run.id, owner_user_id=1)
         assert path.is_file()
 
-    def test_download_path_wrong_type(self, etl_db, svc, app_data, fake_adapter):
-        run = _make_run(etl_db, target_type="shipment_records", status="completed")
+    def test_download_path_wrong_type(self, elt_db, svc, app_data, fake_adapter):
+        run = _make_run(elt_db, target_type="shipment_records", status="completed")
         with pytest.raises(EltNotFound):
-            svc.download_path(etl_db, run_id=run.id, owner_user_id=1)
+            svc.download_path(elt_db, run_id=run.id, owner_user_id=1)
 
-    def test_download_path_shipment_result(self, etl_db, svc, app_data, fake_adapter):
-        run = _make_run(etl_db, target_type="shipment_records", status="completed")
-        run.receipt_json = dump_json({"file_name": "etl-shipment.xlsx", "sha256": "abc"})
-        etl_db.commit()
-        folder = app_data / "etl" / "exports"
+    def test_download_path_shipment_result(self, elt_db, svc, app_data, fake_adapter):
+        run = _make_run(elt_db, target_type="shipment_records", status="completed")
+        run.receipt_json = dump_json({"file_name": "elt-shipment.xlsx", "sha256": "abc"})
+        elt_db.commit()
+        folder = app_data / "elt" / "exports"
         folder.mkdir(parents=True, exist_ok=True)
-        target = folder / "etl-shipment.xlsx"
+        target = folder / "elt-shipment.xlsx"
         target.write_bytes(b"delivery-note")
-        path = svc.download_path(etl_db, run_id=run.id, owner_user_id=1)
+        path = svc.download_path(elt_db, run_id=run.id, owner_user_id=1)
         assert path.read_bytes() == b"delivery-note"
         with pytest.raises(EltNotFound):
-            svc.download_path(etl_db, run_id=run.id, owner_user_id=2)
+            svc.download_path(elt_db, run_id=run.id, owner_user_id=2)
 
     def test_attendance_download_matches_bytes_and_denies_other_owner(
-        self, etl_db, svc, app_data, fake_adapter
+        self, elt_db, svc, app_data, fake_adapter
     ):
         payload = b"attendance-xlsx-bytes"
-        run = _make_run(etl_db, target_type="attendance", status="completed")
+        run = _make_run(elt_db, target_type="attendance", status="completed")
         run.receipt_json = dump_json(
-            {"file_name": "etl-attendance.xlsx", "sha256": hashlib.sha256(payload).hexdigest()}
+            {"file_name": "elt-attendance.xlsx", "sha256": hashlib.sha256(payload).hexdigest()}
         )
-        etl_db.commit()
-        folder = app_data / "etl" / "exports"
+        elt_db.commit()
+        folder = app_data / "elt" / "exports"
         folder.mkdir(parents=True)
-        target = folder / "etl-attendance.xlsx"
+        target = folder / "elt-attendance.xlsx"
         target.write_bytes(payload)
-        path = svc.download_path(etl_db, run_id=run.id, owner_user_id=1)
+        path = svc.download_path(elt_db, run_id=run.id, owner_user_id=1)
         assert path.read_bytes() == payload
         assert hashlib.sha256(path.read_bytes()).hexdigest() == hashlib.sha256(payload).hexdigest()
         with pytest.raises(EltNotFound):
-            svc.download_path(etl_db, run_id=run.id, owner_user_id=2)
+            svc.download_path(elt_db, run_id=run.id, owner_user_id=2)
         token = set_current_tenant_id(2)
         try:
             with pytest.raises(EltNotFound):
-                svc.download_path(etl_db, run_id=run.id, owner_user_id=1)
+                svc.download_path(elt_db, run_id=run.id, owner_user_id=1)
         finally:
             reset_current_tenant_id(token)
         target.unlink()
         with pytest.raises(EltNotFound):
-            svc.download_path(etl_db, run_id=run.id, owner_user_id=1)
+            svc.download_path(elt_db, run_id=run.id, owner_user_id=1)
 
-    def test_export_error_rows(self, etl_db, svc, app_data, fake_adapter):
-        run = _make_run(etl_db)
-        _make_row(etl_db, run_id=run.id, id_seq=1, final_action="error")
-        path = svc.export_error_rows(etl_db, run_id=run.id, owner_user_id=1)
+    def test_export_error_rows(self, elt_db, svc, app_data, fake_adapter):
+        run = _make_run(elt_db)
+        _make_row(elt_db, run_id=run.id, id_seq=1, final_action="error")
+        path = svc.export_error_rows(elt_db, run_id=run.id, owner_user_id=1)
         assert path.is_file()
         content = path.read_text(encoding="utf-8-sig")
         assert "source_sheet" in content
 
-    def test_owned_run_not_found(self, etl_db, svc, fake_adapter):
+    def test_owned_run_not_found(self, elt_db, svc, fake_adapter):
         with pytest.raises(EltNotFound):
-            svc._owned_run(etl_db, "nope", 1)
+            svc._owned_run(elt_db, "nope", 1)
 
 
 # ---------------------------------------------------------------------------
@@ -986,78 +986,78 @@ class TestServiceTargets:
 
 
 class TestServiceHistory:
-    def test_get_run(self, etl_db, svc, app_data, fake_adapter):
-        up = _make_upload(etl_db, id="up1", file_name="f.xlsx")
-        run = _make_run(etl_db, upload_id="up1")
-        d = svc.get_run(etl_db, run_id=run.id, owner_user_id=1)
+    def test_get_run(self, elt_db, svc, app_data, fake_adapter):
+        up = _make_upload(elt_db, id="up1", file_name="f.xlsx")
+        run = _make_run(elt_db, upload_id="up1")
+        d = svc.get_run(elt_db, run_id=run.id, owner_user_id=1)
         assert d["id"] == run.id
         assert d["file_name"] == "f.xlsx"
 
-    def test_get_run_marks_interrupted_when_stale(self, etl_db, svc, app_data, fake_adapter):
-        up = _make_upload(etl_db, id="up1")
-        run = _make_run(etl_db, upload_id="up1", status="executing")
+    def test_get_run_marks_interrupted_when_stale(self, elt_db, svc, app_data, fake_adapter):
+        up = _make_upload(elt_db, id="up1")
+        run = _make_run(elt_db, upload_id="up1", status="executing")
         run.updated_at = datetime.now(UTC) - timedelta(minutes=30)
-        etl_db.commit()
-        d = svc.get_run(etl_db, run_id=run.id, owner_user_id=1)
+        elt_db.commit()
+        d = svc.get_run(elt_db, run_id=run.id, owner_user_id=1)
         assert d["status"] == "interrupted"
-        assert etl_db.get(EltRun, run.id).status == "interrupted"
+        assert elt_db.get(EltRun, run.id).status == "interrupted"
 
-    def test_list_runs_with_batch(self, etl_db, svc, app_data, fake_adapter):
-        up = _make_upload(etl_db, id="up1", file_name="f.xlsx", batch_id=str(uuid.uuid4()))
-        _make_run(etl_db, upload_id="up1")
-        rows = svc.list_runs(etl_db, owner_user_id=1, batch_id=up.batch_id)
+    def test_list_runs_with_batch(self, elt_db, svc, app_data, fake_adapter):
+        up = _make_upload(elt_db, id="up1", file_name="f.xlsx", batch_id=str(uuid.uuid4()))
+        _make_run(elt_db, upload_id="up1")
+        rows = svc.list_runs(elt_db, owner_user_id=1, batch_id=up.batch_id)
         assert len(rows) == 1
 
-    def test_list_runs_limit_clamp(self, etl_db, svc, app_data, fake_adapter):
-        _make_run(etl_db, upload_id="up1")
-        rows = svc.list_runs(etl_db, owner_user_id=1, limit=0)
+    def test_list_runs_limit_clamp(self, elt_db, svc, app_data, fake_adapter):
+        _make_run(elt_db, upload_id="up1")
+        rows = svc.list_runs(elt_db, owner_user_id=1, limit=0)
         assert isinstance(rows, list)
 
-    def test_cleanup_retention(self, etl_db, svc, app_data, fake_adapter):
-        old_file = app_data / "etl" / "uploads" / "old.xlsx"
+    def test_cleanup_retention(self, elt_db, svc, app_data, fake_adapter):
+        old_file = app_data / "elt" / "uploads" / "old.xlsx"
         old_file.parent.mkdir(parents=True)
         old_file.write_bytes(b"x")
         up = _make_upload(
-            etl_db,
+            elt_db,
             id="exp",
             storage_path=str(old_file),
             expires_at=datetime.now(UTC) - timedelta(days=1),
         )
-        run = _make_run(etl_db, upload_id="exp")
+        run = _make_run(elt_db, upload_id="exp")
         run.created_at = datetime.now(UTC) - timedelta(days=200)
         run.reversible = True
-        etl_db.commit()
-        _make_row(etl_db, run_id=run.id, id_seq=1)
-        res = svc.cleanup_retention(etl_db, owner_user_id=1)
+        elt_db.commit()
+        _make_row(elt_db, run_id=run.id, id_seq=1)
+        res = svc.cleanup_retention(elt_db, owner_user_id=1)
         assert res["removed_upload_files"] >= 1
         assert not old_file.exists()
-        assert etl_db.get(EltRun, run.id).rollback_status == "expired"
+        assert elt_db.get(EltRun, run.id).rollback_status == "expired"
 
-    def test_run_dict(self, etl_db, svc, app_data, fake_adapter):
-        run = _make_run(etl_db)
+    def test_run_dict(self, elt_db, svc, app_data, fake_adapter):
+        run = _make_run(elt_db)
         d = svc.run_dict(run, file_name="f.xlsx", batch_id="b1", relative_path="r")
         assert d["file_name"] == "f.xlsx"
         assert d["batch_id"] == "b1"
         assert d["error"] is None
 
-    def test_get_rows(self, etl_db, svc, app_data, fake_adapter):
-        run = _make_run(etl_db)
-        _make_row(etl_db, run_id=run.id, id_seq=1, final_action="new")
-        _make_row(etl_db, run_id=run.id, id_seq=2, final_action="error")
-        res = svc.get_rows(etl_db, run_id=run.id, owner_user_id=1, page=1, page_size=10)
+    def test_get_rows(self, elt_db, svc, app_data, fake_adapter):
+        run = _make_run(elt_db)
+        _make_row(elt_db, run_id=run.id, id_seq=1, final_action="new")
+        _make_row(elt_db, run_id=run.id, id_seq=2, final_action="error")
+        res = svc.get_rows(elt_db, run_id=run.id, owner_user_id=1, page=1, page_size=10)
         assert res["total"] == 2
         res2 = svc.get_rows(
-            etl_db, run_id=run.id, owner_user_id=1, page=0, page_size=10, action="new"
+            elt_db, run_id=run.id, owner_user_id=1, page=0, page_size=10, action="new"
         )
         assert res2["total"] == 1
         assert res2["page"] == 1
 
-    def test_row_dict(self, etl_db, svc, app_data, fake_adapter):
-        run = _make_run(etl_db)
-        row = _make_row(etl_db, run_id=run.id, id_seq=1, execution_status="failed")
+    def test_row_dict(self, elt_db, svc, app_data, fake_adapter):
+        run = _make_run(elt_db)
+        row = _make_row(elt_db, run_id=run.id, id_seq=1, execution_status="failed")
         row.execution_error_code = "E1"
         row.execution_error_message = "m"
-        etl_db.commit()
+        elt_db.commit()
         d = svc.row_dict(row)
         assert d["execution_error"]["code"] == "E1"
 
@@ -1068,25 +1068,25 @@ class TestServiceHistory:
 
 
 class TestServiceDraft:
-    def test_update_draft_overrides_only(self, etl_db, svc, app_data, fake_adapter):
-        _make_upload(etl_db, id="up-1")
-        run = _make_run(etl_db)
-        _make_row(etl_db, run_id=run.id, id_seq=1, final_action="new")
-        d = svc.update_draft(etl_db, run_id=run.id, owner_user_id=1, patch={"row_overrides": {}})
+    def test_update_draft_overrides_only(self, elt_db, svc, app_data, fake_adapter):
+        _make_upload(elt_db, id="up-1")
+        run = _make_run(elt_db)
+        _make_row(elt_db, run_id=run.id, id_seq=1, final_action="new")
+        d = svc.update_draft(elt_db, run_id=run.id, owner_user_id=1, patch={"row_overrides": {}})
         assert d["id"] == run.id
 
-    def test_update_draft_not_editable(self, etl_db, svc, app_data, fake_adapter):
-        run = _make_run(etl_db, status="executing")
+    def test_update_draft_not_editable(self, elt_db, svc, app_data, fake_adapter):
+        run = _make_run(elt_db, status="executing")
         with pytest.raises(EltConflict):
-            svc.update_draft(etl_db, run_id=run.id, owner_user_id=1, patch={"field_mappings": []})
+            svc.update_draft(elt_db, run_id=run.id, owner_user_id=1, patch={"field_mappings": []})
 
     def test_update_draft_validates_and_submits(
-        self, etl_db, svc, app_data, fake_adapter, no_background
+        self, elt_db, svc, app_data, fake_adapter, no_background
     ):
-        _make_upload(etl_db, id="up-1")
-        run = _make_run(etl_db)
+        _make_upload(elt_db, id="up-1")
+        run = _make_run(elt_db)
         d = svc.update_draft(
-            etl_db,
+            elt_db,
             run_id=run.id,
             owner_user_id=1,
             patch={
@@ -1105,7 +1105,7 @@ class TestServiceDraft:
         assert d["id"] == run.id
         assert run.status == "previewing"
 
-    def test_validate_draft_branches(self, etl_db, svc, fake_adapter):
+    def test_validate_draft_branches(self, elt_db, svc, fake_adapter):
         adapter = _FakeAdapter()
         good = {
             "field_mappings": [
@@ -1154,75 +1154,75 @@ class TestServiceDraft:
             with pytest.raises(EltError):
                 svc._validate_draft(draft, adapter)
 
-    def test_apply_row_overrides(self, etl_db, svc, app_data, fake_adapter):
-        run = _make_run(etl_db)
-        row = _make_row(etl_db, run_id=run.id, id_seq=1, final_action="new", match_ref=None)
-        svc._apply_row_overrides(etl_db, run.id, 1, {"1": "skip"})
-        assert etl_db.get(EltRunRow, 1).final_action == "skip"
-        assert etl_db.get(EltRunRow, 1).action_overridden is True
+    def test_apply_row_overrides(self, elt_db, svc, app_data, fake_adapter):
+        run = _make_run(elt_db)
+        row = _make_row(elt_db, run_id=run.id, id_seq=1, final_action="new", match_ref=None)
+        svc._apply_row_overrides(elt_db, run.id, 1, {"1": "skip"})
+        assert elt_db.get(EltRunRow, 1).final_action == "skip"
+        assert elt_db.get(EltRunRow, 1).action_overridden is True
 
-    def test_apply_row_overrides_errors(self, etl_db, svc, app_data, fake_adapter):
-        run = _make_run(etl_db)
-        _make_row(etl_db, run_id=run.id, id_seq=1, final_action="new")
+    def test_apply_row_overrides_errors(self, elt_db, svc, app_data, fake_adapter):
+        run = _make_run(elt_db)
+        _make_row(elt_db, run_id=run.id, id_seq=1, final_action="new")
         with pytest.raises(EltError):
-            svc._apply_row_overrides(etl_db, run.id, 1, {"1": "bogus_action"})
+            svc._apply_row_overrides(elt_db, run.id, 1, {"1": "bogus_action"})
         with pytest.raises(EltNotFound):
-            svc._apply_row_overrides(etl_db, run.id, 1, {"999": "skip"})
+            svc._apply_row_overrides(elt_db, run.id, 1, {"999": "skip"})
         # already executed
         row2 = _make_row(
-            etl_db, run_id=run.id, id_seq=2, final_action="new", execution_status="success"
+            elt_db, run_id=run.id, id_seq=2, final_action="new", execution_status="success"
         )
         with pytest.raises(EltConflict):
-            svc._apply_row_overrides(etl_db, run.id, 1, {"2": "skip"})
+            svc._apply_row_overrides(elt_db, run.id, 1, {"2": "skip"})
         # invalid row
-        row3 = _make_row(etl_db, run_id=run.id, id_seq=3, final_action="new")
+        row3 = _make_row(elt_db, run_id=run.id, id_seq=3, final_action="new")
         row3.validation_json = dump_json([{"code": "E"}])
-        etl_db.commit()
+        elt_db.commit()
         with pytest.raises(EltConflict):
-            svc._apply_row_overrides(etl_db, run.id, 1, {"3": "skip"})
+            svc._apply_row_overrides(elt_db, run.id, 1, {"3": "skip"})
         # update requires match
-        row4 = _make_row(etl_db, run_id=run.id, id_seq=4, final_action="new", match_ref=None)
+        row4 = _make_row(elt_db, run_id=run.id, id_seq=4, final_action="new", match_ref=None)
         with pytest.raises(EltConflict):
-            svc._apply_row_overrides(etl_db, run.id, 1, {"4": "update"})
+            svc._apply_row_overrides(elt_db, run.id, 1, {"4": "update"})
         # new forced when match exists
-        row5 = _make_row(etl_db, run_id=run.id, id_seq=5, final_action="new", match_ref="m")
+        row5 = _make_row(elt_db, run_id=run.id, id_seq=5, final_action="new", match_ref="m")
         with pytest.raises(EltConflict):
-            svc._apply_row_overrides(etl_db, run.id, 1, {"5": "new"})
+            svc._apply_row_overrides(elt_db, run.id, 1, {"5": "new"})
         # update requires allowed_update_fields
-        row6 = _make_row(etl_db, run_id=run.id, id_seq=6, final_action="new", match_ref="m")
+        row6 = _make_row(elt_db, run_id=run.id, id_seq=6, final_action="new", match_ref="m")
         with pytest.raises(EltConflict):
-            svc._apply_row_overrides(etl_db, run.id, 1, {"6": "update"})
+            svc._apply_row_overrides(elt_db, run.id, 1, {"6": "update"})
 
-    def test_set_run_counts(self, etl_db, svc, app_data, fake_adapter):
-        run = _make_run(etl_db)
+    def test_set_run_counts(self, elt_db, svc, app_data, fake_adapter):
+        run = _make_run(elt_db)
         svc._set_run_counts(run, {"new": 1, "update": 2, "skip": 3, "error": 4})
         assert run.new_rows == 1
         assert run.error_rows == 4
 
-    def test_update_draft_applies_overrides(self, etl_db, svc, app_data, fake_adapter):
-        _make_upload_file(app_data, etl_db, id="up-1")
-        run = _make_run(etl_db)
-        _make_row(etl_db, run_id=run.id, id_seq=1, final_action="new")
+    def test_update_draft_applies_overrides(self, elt_db, svc, app_data, fake_adapter):
+        _make_upload_file(app_data, elt_db, id="up-1")
+        run = _make_run(elt_db)
+        _make_row(elt_db, run_id=run.id, id_seq=1, final_action="new")
         d = svc.update_draft(
-            etl_db, run_id=run.id, owner_user_id=1, patch={"row_overrides": {"1": "skip"}}
+            elt_db, run_id=run.id, owner_user_id=1, patch={"row_overrides": {"1": "skip"}}
         )
         assert d["id"] == run.id
-        assert etl_db.get(EltRunRow, 1).final_action == "skip"
+        assert elt_db.get(EltRunRow, 1).final_action == "skip"
 
     def test_record_correction_metrics(
-        self, etl_db, svc, app_data, fake_adapter, no_background, mock_etl_metrics
+        self, elt_db, svc, app_data, fake_adapter, no_background, mock_elt_metrics
     ):
-        _make_upload_file(app_data, etl_db, id="up-1")
-        run = _make_run(etl_db)
-        _make_row(etl_db, run_id=run.id, id_seq=1, final_action="new")
+        _make_upload_file(app_data, elt_db, id="up-1")
+        run = _make_run(elt_db)
+        _make_row(elt_db, run_id=run.id, id_seq=1, final_action="new")
         svc.update_draft(
-            etl_db, run_id=run.id, owner_user_id=1, patch={"row_overrides": {"1": "skip"}}
+            elt_db, run_id=run.id, owner_user_id=1, patch={"row_overrides": {"1": "skip"}}
         )
-        svc.update_draft(etl_db, run_id=run.id, owner_user_id=1, patch={"field_mappings": []})
-        metric = mock_etl_metrics.etl_manual_corrections_total
+        svc.update_draft(elt_db, run_id=run.id, owner_user_id=1, patch={"field_mappings": []})
+        metric = mock_elt_metrics.elt_manual_corrections_total
         assert metric.labels.called
 
-    def test_submit_revalidation_dedup(self, etl_db, svc, app_data, fake_adapter, monkeypatch):
+    def test_submit_revalidation_dedup(self, elt_db, svc, app_data, fake_adapter, monkeypatch):
         from app.application.elt import service_draft as draft_mod
 
         submitted = []
@@ -1230,7 +1230,7 @@ class TestServiceDraft:
             "app.application.elt.service_support.EXECUTOR.submit",
             lambda fn, *a, **k: submitted.append(fn),
         )
-        run = _make_run(etl_db)
+        run = _make_run(elt_db)
         svc._submit_revalidation(run.id, 1, 1)
         first = len(submitted)
         svc._submit_revalidation(run.id, 1, 1)  # dedup -> no second submit
@@ -1241,10 +1241,10 @@ class TestServiceDraft:
         assert draft_mod is not None
 
     def test_revalidate_existing_rows(
-        self, etl_db, svc, app_data, fake_adapter, monkeypatch, mock_etl_metrics
+        self, elt_db, svc, app_data, fake_adapter, monkeypatch, mock_elt_metrics
     ):
-        _make_upload(etl_db, id="up-1")
-        run = _make_run(etl_db, status="previewing")
+        _make_upload(elt_db, id="up-1")
+        run = _make_run(elt_db, status="previewing")
         run.total_rows = 4
         run.draft_json = dump_json(
             {
@@ -1254,13 +1254,13 @@ class TestServiceDraft:
                 "ocr_confirmed": False,
             }
         )
-        etl_db.commit()
-        _make_row(etl_db, run_id=run.id, id_seq=1, final_action="new", execution_status="success")
-        _make_row(etl_db, run_id=run.id, id_seq=2, final_action="new", execution_status=None)
-        _make_row(etl_db, run_id=run.id, id_seq=3, final_action="new", execution_status=None)
-        r4 = _make_row(etl_db, run_id=run.id, id_seq=4, final_action="new", execution_status=None)
+        elt_db.commit()
+        _make_row(elt_db, run_id=run.id, id_seq=1, final_action="new", execution_status="success")
+        _make_row(elt_db, run_id=run.id, id_seq=2, final_action="new", execution_status=None)
+        _make_row(elt_db, run_id=run.id, id_seq=3, final_action="new", execution_status=None)
+        r4 = _make_row(elt_db, run_id=run.id, id_seq=4, final_action="new", execution_status=None)
         r4.provenance_json = dump_json({"ocr": True})
-        etl_db.commit()
+        elt_db.commit()
 
         def _fake_apply_mapping(source, mappings):
             if source.get("order_number") == "O2":
@@ -1276,11 +1276,11 @@ class TestServiceDraft:
                 else []
             ),
         )
-        svc._revalidate_existing_rows(etl_db, run.id, 1)
-        assert etl_db.get(EltRun, run.id).status == "preview_ready"
-        assert etl_db.get(EltRunRow, 2).final_action == "error"
-        assert etl_db.get(EltRunRow, 3).final_action == "new"
-        assert etl_db.get(EltRunRow, 4).final_action == "error"
+        svc._revalidate_existing_rows(elt_db, run.id, 1)
+        assert elt_db.get(EltRun, run.id).status == "preview_ready"
+        assert elt_db.get(EltRunRow, 2).final_action == "error"
+        assert elt_db.get(EltRunRow, 3).final_action == "new"
+        assert elt_db.get(EltRunRow, 4).final_action == "error"
 
 
 # ---------------------------------------------------------------------------
@@ -1289,38 +1289,38 @@ class TestServiceDraft:
 
 
 class TestServiceExecution:
-    def test_execute_requires_confirmation(self, etl_db, svc, app_data, fake_adapter):
-        run = _make_run(etl_db)
+    def test_execute_requires_confirmation(self, elt_db, svc, app_data, fake_adapter):
+        run = _make_run(elt_db)
         with pytest.raises(EltError) as ei:
             svc.execute(
-                etl_db, run_id=run.id, owner_user_id=1, confirmed=False, valid_rows_only=False
+                elt_db, run_id=run.id, owner_user_id=1, confirmed=False, valid_rows_only=False
             )
         assert ei.value.code == "ELT_CONFIRMATION_REQUIRED"
 
-    def test_execute_requires_preview_ready(self, etl_db, svc, app_data, fake_adapter):
-        run = _make_run(etl_db, status="queued")
+    def test_execute_requires_preview_ready(self, elt_db, svc, app_data, fake_adapter):
+        run = _make_run(elt_db, status="queued")
         with pytest.raises(EltConflict):
             svc.execute(
-                etl_db, run_id=run.id, owner_user_id=1, confirmed=True, valid_rows_only=False
+                elt_db, run_id=run.id, owner_user_id=1, confirmed=True, valid_rows_only=False
             )
 
-    def test_execute_blocks_invalid_rows(self, etl_db, svc, app_data, fake_adapter):
-        run = _make_run(etl_db)
+    def test_execute_blocks_invalid_rows(self, elt_db, svc, app_data, fake_adapter):
+        run = _make_run(elt_db)
         run.total_rows = 3
         run.error_rows = 3
-        etl_db.commit()
+        elt_db.commit()
         with pytest.raises(EltConflict) as ei:
             svc.execute(
-                etl_db, run_id=run.id, owner_user_id=1, confirmed=True, valid_rows_only=False
+                elt_db, run_id=run.id, owner_user_id=1, confirmed=True, valid_rows_only=False
             )
         assert ei.value.code == "ELT_INVALID_ROWS_BLOCKED"
 
-    def test_execute_success(self, etl_db, svc, app_data, fake_adapter, no_background):
-        up = _make_upload_file(app_data, etl_db, id="upx", file_name="a.xlsx")
-        run = _make_run(etl_db, upload_id="upx", target_type="webhook")
+    def test_execute_success(self, elt_db, svc, app_data, fake_adapter, no_background):
+        up = _make_upload_file(app_data, elt_db, id="upx", file_name="a.xlsx")
+        run = _make_run(elt_db, upload_id="upx", target_type="webhook")
         run.total_rows = 1
         run.draft_json = dump_json({"target_config_id": "cfg1"})
-        etl_db.commit()
+        elt_db.commit()
         cfg = EltTargetConfig(
             id="cfg1",
             tenant_id=1,
@@ -1331,13 +1331,13 @@ class TestServiceExecution:
             headers_json="{}",
             is_active=True,
         )
-        etl_db.add(cfg)
-        etl_db.commit()
-        publish_preview(etl_db, run)
-        etl_db.commit()
+        elt_db.add(cfg)
+        elt_db.commit()
+        publish_preview(elt_db, run)
+        elt_db.commit()
         reviewed_revision = preview_revision(run)
         d = svc.execute(
-            etl_db,
+            elt_db,
             run_id=run.id,
             owner_user_id=1,
             confirmed=True,
@@ -1347,17 +1347,17 @@ class TestServiceExecution:
         assert d["id"] == run.id
         assert run.status == "executing"
 
-    def test_execute_success_non_webhook(self, etl_db, svc, app_data, fake_adapter, no_background):
-        up = _make_upload_file(app_data, etl_db, id="upx", file_name="a.xlsx")
-        run = _make_run(etl_db, upload_id="upx", target_type="shipment_records")
+    def test_execute_success_non_webhook(self, elt_db, svc, app_data, fake_adapter, no_background):
+        up = _make_upload_file(app_data, elt_db, id="upx", file_name="a.xlsx")
+        run = _make_run(elt_db, upload_id="upx", target_type="shipment_records")
         run.total_rows = 1
         run.draft_json = dump_json({"field_mappings": []})
-        etl_db.commit()
-        publish_preview(etl_db, run)
-        etl_db.commit()
+        elt_db.commit()
+        publish_preview(elt_db, run)
+        elt_db.commit()
         reviewed_revision = preview_revision(run)
         d = svc.execute(
-            etl_db,
+            elt_db,
             run_id=run.id,
             owner_user_id=1,
             confirmed=True,
@@ -1367,78 +1367,78 @@ class TestServiceExecution:
         assert d["id"] == run.id
         assert run.status == "executing"
 
-    def test_retry_not_allowed(self, etl_db, svc, app_data, fake_adapter):
-        run = _make_run(etl_db, status="preview_ready")
+    def test_retry_not_allowed(self, elt_db, svc, app_data, fake_adapter):
+        run = _make_run(elt_db, status="preview_ready")
         with pytest.raises(EltConflict):
-            svc.retry(etl_db, run_id=run.id, owner_user_id=1)
+            svc.retry(elt_db, run_id=run.id, owner_user_id=1)
 
-    def test_retry_already_rolled_back(self, etl_db, svc, app_data, fake_adapter):
-        run = _make_run(etl_db, status="failed")
+    def test_retry_already_rolled_back(self, elt_db, svc, app_data, fake_adapter):
+        run = _make_run(elt_db, status="failed")
         run.rollback_status = "completed"
-        etl_db.commit()
+        elt_db.commit()
         with pytest.raises(EltConflict):
-            svc.retry(etl_db, run_id=run.id, owner_user_id=1)
+            svc.retry(elt_db, run_id=run.id, owner_user_id=1)
 
     def test_retry_rerun_parse_and_revalidation(
-        self, etl_db, svc, app_data, fake_adapter, no_background, mock_etl_metrics
+        self, elt_db, svc, app_data, fake_adapter, no_background, mock_elt_metrics
     ):
-        _make_upload(etl_db, id="up-1")
-        run = _make_run(etl_db, status="failed")
+        _make_upload(elt_db, id="up-1")
+        run = _make_run(elt_db, status="failed")
         run.executed_rows = 0
         run.total_rows = 0
-        etl_db.commit()
-        svc.retry(etl_db, run_id=run.id, owner_user_id=1)
+        elt_db.commit()
+        svc.retry(elt_db, run_id=run.id, owner_user_id=1)
         assert run.stage == "parsing"
 
-        run2 = _make_run(etl_db, id=_nid(), status="interrupted")
+        run2 = _make_run(elt_db, id=_nid(), status="interrupted")
         run2.executed_rows = 5
         run2.total_rows = 5
-        etl_db.commit()
-        _make_row(etl_db, run_id=run2.id, id_seq=1)
-        svc.retry(etl_db, run_id=run2.id, owner_user_id=1)
+        elt_db.commit()
+        _make_row(elt_db, run_id=run2.id, id_seq=1)
+        svc.retry(elt_db, run_id=run2.id, owner_user_id=1)
         assert run2.stage == "validating"
 
-    def test_rollback_gates(self, etl_db, svc, app_data, fake_adapter):
-        run = _make_run(etl_db, status="preview_ready")
+    def test_rollback_gates(self, elt_db, svc, app_data, fake_adapter):
+        run = _make_run(elt_db, status="preview_ready")
         with pytest.raises(EltConflict):
-            svc.rollback(etl_db, run_id=run.id, owner_user_id=1)
-        run2 = _make_run(etl_db, id=_nid(), status="completed")
+            svc.rollback(elt_db, run_id=run.id, owner_user_id=1)
+        run2 = _make_run(elt_db, id=_nid(), status="completed")
         run2.reversible = False
-        etl_db.commit()
+        elt_db.commit()
         with pytest.raises(EltConflict):
-            svc.rollback(etl_db, run_id=run2.id, owner_user_id=1)
-        run3 = _make_run(etl_db, id=_nid(), status="completed")
+            svc.rollback(elt_db, run_id=run2.id, owner_user_id=1)
+        run3 = _make_run(elt_db, id=_nid(), status="completed")
         run3.rollback_status = "completed"
-        etl_db.commit()
+        elt_db.commit()
         with pytest.raises(EltConflict):
-            svc.rollback(etl_db, run_id=run3.id, owner_user_id=1)
+            svc.rollback(elt_db, run_id=run3.id, owner_user_id=1)
 
-    def test_rollback_empty(self, etl_db, svc, app_data, fake_adapter):
-        _make_upload(etl_db, id="up-1")
-        run = _make_run(etl_db, status="completed")
+    def test_rollback_empty(self, elt_db, svc, app_data, fake_adapter):
+        _make_upload(elt_db, id="up-1")
+        run = _make_run(elt_db, status="completed")
         with pytest.raises(EltConflict) as ei:
-            svc.rollback(etl_db, run_id=run.id, owner_user_id=1)
+            svc.rollback(elt_db, run_id=run.id, owner_user_id=1)
         assert ei.value.code == "ELT_ROLLBACK_EMPTY"
 
-    def test_rollback_batch_success(self, etl_db, svc, app_data, fake_adapter, mock_etl_metrics):
-        up = _make_upload_file(app_data, etl_db, id="upx", file_name="a.xlsx")
-        run = _make_run(etl_db, upload_id="upx", status="completed")
-        _make_row(etl_db, run_id=run.id, id_seq=1, execution_status="success")
-        d = svc.rollback(etl_db, run_id=run.id, owner_user_id=1)
+    def test_rollback_batch_success(self, elt_db, svc, app_data, fake_adapter, mock_elt_metrics):
+        up = _make_upload_file(app_data, elt_db, id="upx", file_name="a.xlsx")
+        run = _make_run(elt_db, upload_id="upx", status="completed")
+        _make_row(elt_db, run_id=run.id, id_seq=1, execution_status="success")
+        d = svc.rollback(elt_db, run_id=run.id, owner_user_id=1)
         assert d is not None
         assert run.rollback_status == "completed"
-        assert etl_db.get(EltRunRow, 1).execution_status == "rolled_back"
+        assert elt_db.get(EltRunRow, 1).execution_status == "rolled_back"
 
-    def test_rollback_row_failure_path(self, etl_db, svc, app_data, fake_adapter, mock_etl_metrics):
+    def test_rollback_row_failure_path(self, elt_db, svc, app_data, fake_adapter, mock_elt_metrics):
         del fake_adapter.rollback_batch  # go row path
-        up = _make_upload_file(app_data, etl_db, id="upx", file_name="a.xlsx")
-        run = _make_run(etl_db, upload_id="upx", status="completed")
-        _make_row(etl_db, run_id=run.id, id_seq=1, execution_status="success")
-        d = svc.rollback(etl_db, run_id=run.id, owner_user_id=1)
+        up = _make_upload_file(app_data, elt_db, id="upx", file_name="a.xlsx")
+        run = _make_run(elt_db, upload_id="upx", status="completed")
+        _make_row(elt_db, run_id=run.id, id_seq=1, execution_status="success")
+        d = svc.rollback(elt_db, run_id=run.id, owner_user_id=1)
         assert run.rollback_status == "completed"
 
     def test_rollback_failure_sets_error(
-        self, etl_db, svc, app_data, fake_adapter, mock_etl_metrics
+        self, elt_db, svc, app_data, fake_adapter, mock_elt_metrics
     ):
         del fake_adapter.rollback_batch  # go row path
 
@@ -1446,22 +1446,22 @@ class TestServiceExecution:
             raise RuntimeError("boom")
 
         fake_adapter.rollback_row = _boom
-        up = _make_upload_file(app_data, etl_db, id="upx", file_name="a.xlsx")
-        run = _make_run(etl_db, upload_id="upx", status="completed")
-        _make_row(etl_db, run_id=run.id, id_seq=1, execution_status="success")
+        up = _make_upload_file(app_data, elt_db, id="upx", file_name="a.xlsx")
+        run = _make_run(elt_db, upload_id="upx", status="completed")
+        _make_row(elt_db, run_id=run.id, id_seq=1, execution_status="success")
         with pytest.raises(EltError):
-            svc.rollback(etl_db, run_id=run.id, owner_user_id=1)
+            svc.rollback(elt_db, run_id=run.id, owner_user_id=1)
         assert run.rollback_status == "failed"
 
     def test_execute_worker_batch_success(
-        self, etl_db, svc, app_data, fake_adapter, same_session, mock_etl_metrics
+        self, elt_db, svc, app_data, fake_adapter, same_session, mock_elt_metrics
     ):
-        up = _make_upload_file(app_data, etl_db, id="upx", file_name="a.xlsx")
-        run = _make_run(etl_db, upload_id="upx", status="executing")
+        up = _make_upload_file(app_data, elt_db, id="upx", file_name="a.xlsx")
+        run = _make_run(elt_db, upload_id="upx", status="executing")
         fake_adapter.type = "webhook"
         run.target_type = "webhook"
         run.draft_json = dump_json({"field_mappings": [], "target_config_id": "cfg1"})
-        etl_db.commit()
+        elt_db.commit()
         cfg = EltTargetConfig(
             id="cfg1",
             tenant_id=1,
@@ -1472,55 +1472,55 @@ class TestServiceExecution:
             headers_json="{}",
             is_active=True,
         )
-        etl_db.add(cfg)
-        etl_db.commit()
-        _make_row(etl_db, run_id=run.id, id_seq=1, final_action="new", execution_status=None)
-        _confirm_worker_preview(etl_db, run)
+        elt_db.add(cfg)
+        elt_db.commit()
+        _make_row(elt_db, run_id=run.id, id_seq=1, final_action="new", execution_status=None)
+        _confirm_worker_preview(elt_db, run)
         svc._execute_worker(run.id, 1, False)
-        etl_db.expire_all()
-        assert etl_db.get(EltRun, run.id).status == "completed"
+        elt_db.expire_all()
+        assert elt_db.get(EltRun, run.id).status == "completed"
 
     def test_execute_worker_batch_failure(
-        self, etl_db, svc, app_data, fake_adapter, same_session, mock_etl_metrics
+        self, elt_db, svc, app_data, fake_adapter, same_session, mock_elt_metrics
     ):
-        up = _make_upload_file(app_data, etl_db, id="upx", file_name="a.xlsx")
-        run = _make_run(etl_db, upload_id="upx", status="executing")
+        up = _make_upload_file(app_data, elt_db, id="upx", file_name="a.xlsx")
+        run = _make_run(elt_db, upload_id="upx", status="executing")
         fake_adapter.fail_execute_batch = True
-        _make_row(etl_db, run_id=run.id, id_seq=1, final_action="new", execution_status=None)
-        _confirm_worker_preview(etl_db, run)
+        _make_row(elt_db, run_id=run.id, id_seq=1, final_action="new", execution_status=None)
+        _confirm_worker_preview(elt_db, run)
         svc._execute_worker(run.id, 1, False)
-        etl_db.expire_all()
-        assert etl_db.get(EltRun, run.id).status == "outcome_unknown"
-        assert etl_db.get(EltRun, run.id).error_code == "ELT_OUTCOME_UNKNOWN"
+        elt_db.expire_all()
+        assert elt_db.get(EltRun, run.id).status == "outcome_unknown"
+        assert elt_db.get(EltRun, run.id).error_code == "ELT_OUTCOME_UNKNOWN"
 
     def test_execute_rows_success(
-        self, etl_db, svc, app_data, fake_adapter, same_session, mock_etl_metrics
+        self, elt_db, svc, app_data, fake_adapter, same_session, mock_elt_metrics
     ):
-        up = _make_upload_file(app_data, etl_db, id="upx", file_name="a.xlsx")
-        run = _make_run(etl_db, upload_id="upx", status="executing")
+        up = _make_upload_file(app_data, elt_db, id="upx", file_name="a.xlsx")
+        run = _make_run(elt_db, upload_id="upx", status="executing")
         del fake_adapter.execute_batch
-        _make_row(etl_db, run_id=run.id, id_seq=1, final_action="new", execution_status=None)
-        _make_row(etl_db, run_id=run.id, id_seq=2, final_action="update", execution_status=None)
-        _confirm_worker_preview(etl_db, run)
+        _make_row(elt_db, run_id=run.id, id_seq=1, final_action="new", execution_status=None)
+        _make_row(elt_db, run_id=run.id, id_seq=2, final_action="update", execution_status=None)
+        _confirm_worker_preview(elt_db, run)
         svc._execute_worker(run.id, 1, False)
-        etl_db.expire_all()
-        assert etl_db.get(EltRun, run.id).status == "completed"
+        elt_db.expire_all()
+        assert elt_db.get(EltRun, run.id).status == "completed"
 
     def test_execute_rows_failure_replays_completed(
-        self, etl_db, svc, app_data, fake_adapter, same_session, mock_etl_metrics
+        self, elt_db, svc, app_data, fake_adapter, same_session, mock_elt_metrics
     ):
-        up = _make_upload_file(app_data, etl_db, id="upx", file_name="a.xlsx")
-        run = _make_run(etl_db, upload_id="upx", status="executing")
+        up = _make_upload_file(app_data, elt_db, id="upx", file_name="a.xlsx")
+        run = _make_run(elt_db, upload_id="upx", status="executing")
         del fake_adapter.execute_batch
         # row O2 fails; row O1 succeeds and gets replayed successfully
         fake_adapter.fail_for_value = "O2"
-        _make_row(etl_db, run_id=run.id, id_seq=1, final_action="new", execution_status=None)
-        _make_row(etl_db, run_id=run.id, id_seq=2, final_action="new", execution_status=None)
-        _confirm_worker_preview(etl_db, run)
+        _make_row(elt_db, run_id=run.id, id_seq=1, final_action="new", execution_status=None)
+        _make_row(elt_db, run_id=run.id, id_seq=2, final_action="new", execution_status=None)
+        _confirm_worker_preview(elt_db, run)
         svc._execute_worker(run.id, 1, False)
-        etl_db.expire_all()
-        assert etl_db.get(EltRun, run.id).status == "failed"
-        assert etl_db.get(EltRunRow, 1).execution_status == "success"
+        elt_db.expire_all()
+        assert elt_db.get(EltRun, run.id).status == "failed"
+        assert elt_db.get(EltRunRow, 1).execution_status == "success"
 
 
 # ---------------------------------------------------------------------------
@@ -1529,55 +1529,55 @@ class TestServiceExecution:
 
 
 class TestServicePreview:
-    def test_create_preview_simple(self, etl_db, svc, app_data, fake_adapter, no_background):
-        up = _make_upload_file(app_data, etl_db, id="upx", file_name="a.xlsx")
+    def test_create_preview_simple(self, elt_db, svc, app_data, fake_adapter, no_background):
+        up = _make_upload_file(app_data, elt_db, id="upx", file_name="a.xlsx")
         fake_adapter.type = "shipment_records"
         run = svc.create_preview(
-            etl_db,
+            elt_db,
             owner_user_id=1,
             upload_id="upx",
             target_type="shipment_records",
         )
         assert run["id"]
-        assert etl_db.query(EltRun).filter(EltRun.upload_id == "upx").count() >= 1
+        assert elt_db.query(EltRun).filter(EltRun.upload_id == "upx").count() >= 1
 
     def test_create_preview_auto_detection(
-        self, etl_db, svc, app_data, fake_adapter, no_background, monkeypatch
+        self, elt_db, svc, app_data, fake_adapter, no_background, monkeypatch
     ):
-        up = _make_upload_file(app_data, etl_db, id="upx", file_name="a.xlsx")
+        up = _make_upload_file(app_data, elt_db, id="upx", file_name="a.xlsx")
         detect = MagicMock(return_value={"target_type": "shipment_records"})
         monkeypatch.setattr(
-            "app.application.elt.target_detection.detect_etl_target",
+            "app.application.elt.target_detection.detect_elt_target",
             detect,
         )
         fake_adapter.type = "shipment_records"
-        run = svc.create_preview(etl_db, owner_user_id=1, upload_id="upx", target_type="auto")
+        run = svc.create_preview(elt_db, owner_user_id=1, upload_id="upx", target_type="auto")
         assert run["id"]
         detect.assert_called_once_with(
             up.storage_path, suffix=up.suffix, owner_user_id=up.owner_user_id
         )
 
     def test_create_preview_knowledge_only_rejected(
-        self, etl_db, svc, app_data, fake_adapter, no_background
+        self, elt_db, svc, app_data, fake_adapter, no_background
     ):
-        up = _make_upload_file(app_data, etl_db, id="upx", file_name="a.docx", suffix=".docx")
+        up = _make_upload_file(app_data, elt_db, id="upx", file_name="a.docx", suffix=".docx")
         fake_adapter.type = "shipment_records"
         with pytest.raises(EltError) as ei:
             svc.create_preview(
-                etl_db, owner_user_id=1, upload_id="upx", target_type="shipment_records"
+                elt_db, owner_user_id=1, upload_id="upx", target_type="shipment_records"
             )
         assert ei.value.code == "ELT_KNOWLEDGE_ONLY_FILE"
 
     def test_create_preview_shipment_template_conflict(
-        self, etl_db, svc, app_data, fake_adapter, no_background
+        self, elt_db, svc, app_data, fake_adapter, no_background
     ):
-        up = _make_upload_file(app_data, etl_db, id="upx", file_name="a.xlsx")
-        tpl, _ = _make_template(etl_db, id="tpl1", name="发货版式", target_type="shipment_records")
-        tpl.description = ETL_SHIPMENT_DOCUMENT_TEMPLATE_DESCRIPTION
-        etl_db.commit()
+        up = _make_upload_file(app_data, elt_db, id="upx", file_name="a.xlsx")
+        tpl, _ = _make_template(elt_db, id="tpl1", name="发货版式", target_type="shipment_records")
+        tpl.description = ELT_SHIPMENT_DOCUMENT_TEMPLATE_DESCRIPTION
+        elt_db.commit()
         with pytest.raises(EltError) as ei:
             svc.create_preview(
-                etl_db,
+                elt_db,
                 owner_user_id=1,
                 upload_id="upx",
                 target_type="shipment_records",
@@ -1586,13 +1586,13 @@ class TestServicePreview:
         assert ei.value.code == "ELT_SHIPMENT_TEMPLATE_NOT_IMPORT_TEMPLATE"
 
     def test_create_preview_template_target_mismatch(
-        self, etl_db, svc, app_data, fake_adapter, no_background
+        self, elt_db, svc, app_data, fake_adapter, no_background
     ):
-        up = _make_upload_file(app_data, etl_db, id="upx", file_name="a.xlsx")
-        _make_template(etl_db, id="tpl1", name="t", target_type="customers")
+        up = _make_upload_file(app_data, elt_db, id="upx", file_name="a.xlsx")
+        _make_template(elt_db, id="tpl1", name="t", target_type="customers")
         with pytest.raises(EltError):
             svc.create_preview(
-                etl_db,
+                elt_db,
                 owner_user_id=1,
                 upload_id="upx",
                 target_type="shipment_records",
@@ -1600,15 +1600,15 @@ class TestServicePreview:
             )
 
     def test_create_preview_template_preset_conflict(
-        self, etl_db, svc, app_data, fake_adapter, no_background, monkeypatch
+        self, elt_db, svc, app_data, fake_adapter, no_background, monkeypatch
     ):
-        up = _make_upload_file(app_data, etl_db, id="upx", file_name="a.xlsx")
-        tpl, ver = _make_template(etl_db, id="tpl1", name="t", target_type="shipment_records")
+        up = _make_upload_file(app_data, elt_db, id="upx", file_name="a.xlsx")
+        tpl, ver = _make_template(elt_db, id="tpl1", name="t", target_type="shipment_records")
         ver.source_features_json = dump_json({"compatibility_preset_id": "preset-a"})
-        etl_db.commit()
+        elt_db.commit()
         with pytest.raises(EltError):
             svc.create_preview(
-                etl_db,
+                elt_db,
                 owner_user_id=1,
                 upload_id="upx",
                 target_type="shipment_records",
@@ -1616,7 +1616,7 @@ class TestServicePreview:
                 compatibility_preset_id="preset-b",
             )
 
-    def test_suggest_mappings_dynamic(self, etl_db, svc, fake_adapter):
+    def test_suggest_mappings_dynamic(self, elt_db, svc, fake_adapter):
         fake_adapter.allow_dynamic_fields = True
         ds = _FakeDataset()
         ds.headers = ["order_number", "product_model"]
@@ -1625,9 +1625,9 @@ class TestServicePreview:
         assert all(m["source"] == m["target"] for m in mappings)
         assert all(m["transforms"] == [{"op": "trim"}] for m in mappings)
 
-    def test_suggest_mappings_static(self, etl_db, svc, fake_adapter, monkeypatch):
+    def test_suggest_mappings_static(self, elt_db, svc, fake_adapter, monkeypatch):
         monkeypatch.setattr(
-            "app.domain.app_pure.excel_etl_kb.get_excel_etl_kb",
+            "app.domain.app_pure.excel_elt_kb.get_excel_elt_kb",
             lambda: SimpleNamespace(synonyms=lambda: {"order_number": ["订单号"]}),
         )
         ds = _FakeDataset()
@@ -1637,19 +1637,19 @@ class TestServicePreview:
 
     def test_preview_worker_success(
         self,
-        etl_db,
+        elt_db,
         svc,
         app_data,
         fake_adapter,
         same_session,
         no_background,
         monkeypatch,
-        mock_etl_metrics,
+        mock_elt_metrics,
     ):
-        up = _make_upload_file(app_data, etl_db, id="upx", file_name="a.xlsx")
-        run = _make_run(etl_db, upload_id="upx", status="queued")
+        up = _make_upload_file(app_data, elt_db, id="upx", file_name="a.xlsx")
+        run = _make_run(elt_db, upload_id="upx", status="queued")
         run.draft_json = dump_json({"field_mappings": [], "ocr_confirmed": True})
-        etl_db.commit()
+        elt_db.commit()
         dataset = _FakeDataset()
         monkeypatch.setattr(
             "app.application.elt.service_preview.parse_file",
@@ -1661,47 +1661,47 @@ class TestServicePreview:
         )
         svc._preview_worker(run.id, 1)
         assert dataset.rows.closed
-        etl_db.expire_all()
-        assert etl_db.get(EltRun, run.id).status == "preview_ready"
+        elt_db.expire_all()
+        assert elt_db.get(EltRun, run.id).status == "preview_ready"
 
     def test_preview_worker_failure(
         self,
-        etl_db,
+        elt_db,
         svc,
         app_data,
         fake_adapter,
         same_session,
         no_background,
         monkeypatch,
-        mock_etl_metrics,
+        mock_elt_metrics,
     ):
-        up = _make_upload_file(app_data, etl_db, id="upx", file_name="a.xlsx")
-        run = _make_run(etl_db, upload_id="upx", status="queued")
-        etl_db.commit()
+        up = _make_upload_file(app_data, elt_db, id="upx", file_name="a.xlsx")
+        run = _make_run(elt_db, upload_id="upx", status="queued")
+        elt_db.commit()
 
         def _boom(*a, **k):
             raise RuntimeError("boom")
 
         monkeypatch.setattr("app.application.elt.service_preview.parse_file", _boom)
         svc._preview_worker(run.id, 1)
-        etl_db.expire_all()
-        assert etl_db.get(EltRun, run.id).status == "failed"
+        elt_db.expire_all()
+        assert elt_db.get(EltRun, run.id).status == "failed"
 
     def test_preview_worker_rich(
         self,
-        etl_db,
+        elt_db,
         svc,
         app_data,
         fake_adapter,
         same_session,
         no_background,
         monkeypatch,
-        mock_etl_metrics,
+        mock_elt_metrics,
     ):
-        up = _make_upload_file(app_data, etl_db, id="upx", file_name="a.xlsx")
-        run = _make_run(etl_db, upload_id="upx", target_type="shipment_records", status="queued")
+        up = _make_upload_file(app_data, elt_db, id="upx", file_name="a.xlsx")
+        run = _make_run(elt_db, upload_id="upx", target_type="shipment_records", status="queued")
         run.draft_json = dump_json({"compatibility_preset_id": "preset-a", "ocr_confirmed": False})
-        etl_db.commit()
+        elt_db.commit()
 
         rows = [
             SimpleNamespace(values={"order_number": "O1"}, provenance={}, row_number=1, sheet="S1"),
@@ -1744,16 +1744,16 @@ class TestServicePreview:
             ),
         )
         monkeypatch.setattr(
-            "app.domain.app_pure.excel_etl_kb.get_excel_etl_kb",
+            "app.domain.app_pure.excel_elt_kb.get_excel_elt_kb",
             lambda: SimpleNamespace(synonyms=lambda: {}),
         )
         svc._preview_worker(run.id, 1)
         assert ds.rows.closed
-        etl_db.expire_all()
-        assert etl_db.get(EltRun, run.id).status == "preview_ready"
-        assert etl_db.get(EltRun, run.id).error_rows == 1
+        elt_db.expire_all()
+        assert elt_db.get(EltRun, run.id).status == "preview_ready"
+        assert elt_db.get(EltRun, run.id).error_rows == 1
 
-    def test_suggest_mappings_field_types(self, etl_db, svc, fake_adapter, monkeypatch):
+    def test_suggest_mappings_field_types(self, elt_db, svc, fake_adapter, monkeypatch):
         class _NumDateAdapter:
             type = "x"
             fields = (
@@ -1766,7 +1766,7 @@ class TestServicePreview:
             default_match_keys = ()
 
         monkeypatch.setattr(
-            "app.domain.app_pure.excel_etl_kb.get_excel_etl_kb",
+            "app.domain.app_pure.excel_elt_kb.get_excel_elt_kb",
             lambda: SimpleNamespace(synonyms=lambda: {}),
         )
         ds = _FakeDataset()
@@ -1778,7 +1778,7 @@ class TestServicePreview:
         assert by_target["i"]["transforms"] == [{"op": "cast", "type": "integer"}]
         assert by_target["s"]["transforms"] == [{"op": "trim"}]
 
-    def test_suggest_mappings_knowledge(self, etl_db, svc, fake_adapter, monkeypatch):
+    def test_suggest_mappings_knowledge(self, elt_db, svc, fake_adapter, monkeypatch):
         class _KnowledgeAdapter:
             type = "knowledge"
             fields = (TargetField("document_path", "路径", required=True),)
@@ -1786,7 +1786,7 @@ class TestServicePreview:
             default_match_keys = ()
 
         monkeypatch.setattr(
-            "app.domain.app_pure.excel_etl_kb.get_excel_etl_kb",
+            "app.domain.app_pure.excel_elt_kb.get_excel_elt_kb",
             lambda: SimpleNamespace(synonyms=lambda: {}),
         )
         ds = _FakeDataset()
@@ -1800,20 +1800,20 @@ class TestServicePreview:
             for m in mappings
         )
 
-    def test_suggest_mappings_synonym_error(self, etl_db, svc, fake_adapter, monkeypatch):
+    def test_suggest_mappings_synonym_error(self, elt_db, svc, fake_adapter, monkeypatch):
         def _boom(*a, **k):
             raise RuntimeError("boom")
 
-        monkeypatch.setattr("app.domain.app_pure.excel_etl_kb.get_excel_etl_kb", _boom)
+        monkeypatch.setattr("app.domain.app_pure.excel_elt_kb.get_excel_elt_kb", _boom)
         ds = _FakeDataset()
         ds.headers = ["order_number"]
         mappings = svc._suggest_mappings(ds, fake_adapter)
         assert isinstance(mappings, list)
 
     def test_update_linked_companion_summary(
-        self, etl_db, etl_factory, svc, app_data, fake_adapter
+        self, elt_db, elt_factory, svc, app_data, fake_adapter
     ):
-        parent = _make_run(etl_db, id="par", status="preview_ready")
+        parent = _make_run(elt_db, id="par", status="preview_ready")
         parent.summary_json = dump_json(
             {
                 "linked_customer_products_preview": {
@@ -1822,31 +1822,31 @@ class TestServicePreview:
                 }
             }
         )
-        etl_db.commit()
+        elt_db.commit()
         child = _make_run(
-            etl_db, id="child1", target_type="customer_products", status="preview_ready"
+            elt_db, id="child1", target_type="customer_products", status="preview_ready"
         )
         child.tenant_id = 1
         child.summary_json = dump_json({"linked_from_shipment_preview": "par"})
-        etl_db.commit()
+        elt_db.commit()
         assert "_preview_review" not in load_json(parent.summary_json, {})
-        with etl_factory() as other:
+        with elt_factory() as other:
             current = other.get(EltRun, "par")
             details = load_json(current.summary_json, {})
             details["_preview_review"] = {"nonce": "new-preview", "revision": "a" * 64}
             current.summary_json = dump_json(details)
             other.commit()
-        svc._update_linked_companion_summary(etl_db, child, status="preview_ready")
-        parent = etl_db.get(EltRun, "par")
+        svc._update_linked_companion_summary(elt_db, child, status="preview_ready")
+        parent = elt_db.get(EltRun, "par")
         link = json.loads(parent.summary_json)["linked_customer_products_preview"]
         assert link["status"] == "preview_ready"
         assert load_json(parent.summary_json, {})["_preview_review"]["revision"] == "a" * 64
 
-    def test_update_linked_no_parent(self, etl_db, svc, app_data, fake_adapter):
-        child = _make_run(etl_db, id="child1")
+    def test_update_linked_no_parent(self, elt_db, svc, app_data, fake_adapter):
+        child = _make_run(elt_db, id="child1")
         child.summary_json = dump_json({})
-        etl_db.commit()
-        svc._update_linked_companion_summary(etl_db, child, status="preview_ready")  # no raise
+        elt_db.commit()
+        svc._update_linked_companion_summary(elt_db, child, status="preview_ready")  # no raise
 
 
 # ---------------------------------------------------------------------------
@@ -1941,30 +1941,30 @@ class TestShipmentTemplateHelpers:
 
 
 class TestShipmentTemplateService:
-    def test_save_run_shipment_template_target_required(self, etl_db, svc, app_data, fake_adapter):
-        run = _make_run(etl_db, target_type="customers", status="preview_ready")
+    def test_save_run_shipment_template_target_required(self, elt_db, svc, app_data, fake_adapter):
+        run = _make_run(elt_db, target_type="customers", status="preview_ready")
         with pytest.raises(EltError):
-            svc.save_run_shipment_template(etl_db, run_id=run.id, owner_user_id=1)
+            svc.save_run_shipment_template(elt_db, run_id=run.id, owner_user_id=1)
 
-    def test_save_run_shipment_template_status_required(self, etl_db, svc, app_data, fake_adapter):
-        run = _make_run(etl_db, target_type="shipment_records", status="queued")
+    def test_save_run_shipment_template_status_required(self, elt_db, svc, app_data, fake_adapter):
+        run = _make_run(elt_db, target_type="shipment_records", status="queued")
         with pytest.raises(EltError):
-            svc.save_run_shipment_template(etl_db, run_id=run.id, owner_user_id=1)
+            svc.save_run_shipment_template(elt_db, run_id=run.id, owner_user_id=1)
 
-    def test_save_run_shipment_template_region_not_found(self, etl_db, svc, app_data, fake_adapter):
-        _make_upload_file(app_data, etl_db, id="up-1", file_name="a.xlsx")
-        run = _make_run(etl_db, target_type="shipment_records", status="preview_ready")
+    def test_save_run_shipment_template_region_not_found(self, elt_db, svc, app_data, fake_adapter):
+        _make_upload_file(app_data, elt_db, id="up-1", file_name="a.xlsx")
+        run = _make_run(elt_db, target_type="shipment_records", status="preview_ready")
         run.source_features_json = dump_json({"regions": []})
-        etl_db.commit()
+        elt_db.commit()
         with pytest.raises(EltError) as ei:
-            svc.save_run_shipment_template(etl_db, run_id=run.id, owner_user_id=1)
+            svc.save_run_shipment_template(elt_db, run_id=run.id, owner_user_id=1)
         assert ei.value.code == "ELT_SHIPMENT_TEMPLATE_REGION_NOT_FOUND"
 
     def test_save_run_shipment_template_reuse_existing_by_region(
-        self, etl_db, svc, app_data, fake_adapter
+        self, elt_db, svc, app_data, fake_adapter
     ):
-        _make_upload_file(app_data, etl_db, id="up-1", file_name="a.xlsx")
-        run = _make_run(etl_db, target_type="shipment_records", status="preview_ready")
+        _make_upload_file(app_data, elt_db, id="up-1", file_name="a.xlsx")
+        run = _make_run(elt_db, target_type="shipment_records", status="preview_ready")
         run.source_features_json = dump_json(
             {"regions": [{"id": "r1", "status": "selected", "sheet": "A", "header_row": 1}]}
         )
@@ -1975,15 +1975,15 @@ class TestShipmentTemplateService:
                 }
             }
         )
-        etl_db.commit()
-        result = svc.save_run_shipment_template(etl_db, run_id=run.id, owner_user_id=1)
+        elt_db.commit()
+        result = svc.save_run_shipment_template(elt_db, run_id=run.id, owner_user_id=1)
         assert result["template_id"] == "etl:t1"
 
     def test_save_run_shipment_template_reuse_existing_scalar(
-        self, etl_db, svc, app_data, fake_adapter
+        self, elt_db, svc, app_data, fake_adapter
     ):
-        _make_upload_file(app_data, etl_db, id="up-1", file_name="a.xlsx")
-        run = _make_run(etl_db, target_type="shipment_records", status="preview_ready")
+        _make_upload_file(app_data, elt_db, id="up-1", file_name="a.xlsx")
+        run = _make_run(elt_db, target_type="shipment_records", status="preview_ready")
         run.source_features_json = dump_json(
             {"regions": [{"id": "r1", "status": "selected", "sheet": "A", "header_row": 1}]}
         )
@@ -1996,16 +1996,16 @@ class TestShipmentTemplateService:
                 }
             }
         )
-        etl_db.commit()
-        result = svc.save_run_shipment_template(etl_db, run_id=run.id, owner_user_id=1)
+        elt_db.commit()
+        result = svc.save_run_shipment_template(elt_db, run_id=run.id, owner_user_id=1)
         assert result["template_id"] == "etl:t2"
 
     def test_save_run_shipment_template_success(
-        self, etl_db, etl_factory, svc, app_data, fake_adapter, monkeypatch
+        self, elt_db, elt_factory, svc, app_data, fake_adapter, monkeypatch
     ):
-        up = _make_upload_file(app_data, etl_db, id="upx", file_name="a.xlsx")
+        up = _make_upload_file(app_data, elt_db, id="upx", file_name="a.xlsx")
         run = _make_run(
-            etl_db, upload_id="upx", target_type="shipment_records", status="preview_ready"
+            elt_db, upload_id="upx", target_type="shipment_records", status="preview_ready"
         )
         run.file_sha256 = "a" * 64
         run.source_features_json = dump_json(
@@ -2022,10 +2022,10 @@ class TestShipmentTemplateService:
                 ]
             }
         )
-        etl_db.commit()
+        elt_db.commit()
 
         def extract_while_review_changes(*_args, **_kwargs):
-            with etl_factory() as other:
+            with elt_factory() as other:
                 current = other.get(EltRun, run.id)
                 current.summary_json = dump_json({"_preview_review": {"revision": "b" * 64}})
                 other.commit()
@@ -2035,16 +2035,16 @@ class TestShipmentTemplateService:
             "app.application.elt.service_shipment_templates.extract_shipment_template",
             extract_while_review_changes,
         )
-        result = svc.save_run_shipment_template(etl_db, run_id=run.id, owner_user_id=1)
+        result = svc.save_run_shipment_template(elt_db, run_id=run.id, owner_user_id=1)
         assert result["source_region_id"] == "r1"
         assert result["template_id"].startswith("etl:")
         assert load_json(run.summary_json, {})["_preview_review"]["revision"] == "b" * 64
 
     def test_save_private_shipment_document_template_new_and_reuse(
-        self, etl_db, svc, app_data, fake_adapter
+        self, elt_db, svc, app_data, fake_adapter
     ):
         tpl, ver = svc._save_private_shipment_document_template(
-            etl_db,
+            elt_db,
             tenant_id=1,
             owner_user_id=1,
             requested_name="版式",
@@ -2058,7 +2058,7 @@ class TestShipmentTemplateService:
         assert ver.version == 1
         # save again -> new version
         tpl2, ver2 = svc._save_private_shipment_document_template(
-            etl_db,
+            elt_db,
             tenant_id=1,
             owner_user_id=1,
             requested_name="版式",
@@ -2085,16 +2085,16 @@ class TestService:
         assert caps["enabled"] is True
         assert "max_file_bytes" in caps["limits"]
 
-    def test_mark_interrupted_on_startup(self, etl_db, svc):
-        run = _make_run(etl_db, status="executing")
-        etl_db.commit()
+    def test_mark_interrupted_on_startup(self, elt_db, svc):
+        run = _make_run(elt_db, status="executing")
+        elt_db.commit()
         from app.application.elt.service import mark_interrupted_runs_on_startup
 
-        n = mark_interrupted_runs_on_startup(etl_db.bind)
+        n = mark_interrupted_runs_on_startup(elt_db.bind)
         assert n >= 1
-        assert etl_db.get(EltRun, run.id).status == "interrupted"
+        assert elt_db.get(EltRun, run.id).status == "interrupted"
 
-    def test_mark_interrupted_no_table(self, etl_db, svc):
+    def test_mark_interrupted_no_table(self, elt_db, svc):
         from app.application.elt.service import mark_interrupted_runs_on_startup
 
         engine = _make_engine()

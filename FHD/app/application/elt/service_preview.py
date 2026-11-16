@@ -28,7 +28,7 @@ from app.application.elt.service_preview_helpers import (
 from app.application.elt.service_preview_worker import PreviewWorkerMixin
 from app.application.elt.service_source import SourceServiceMixin
 from app.application.elt.service_support import (
-    ETL_SHIPMENT_DOCUMENT_TEMPLATE_DESCRIPTION,
+    ELT_SHIPMENT_DOCUMENT_TEMPLATE_DESCRIPTION,
     dump_json,
     load_json,
     new_id,
@@ -73,13 +73,14 @@ class PreviewServiceMixin(SourceServiceMixin, PreviewWorkerMixin):
         compatibility_preset_id: str | None = None,
         target_config_id: str | None = None,
         source_dataset: ParsedDataset | None = None,
+        dynamic_schema: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         upload = self._owned_upload(db, upload_id, owner_user_id)
         target_detection: dict[str, Any] | None = None
         if str(target_type or "").strip().lower() == "auto":
-            from app.application.elt.target_detection import detect_etl_target
+            from app.application.elt.target_detection import detect_elt_target
 
-            target_detection = detect_etl_target(
+            target_detection = detect_elt_target(
                 upload.storage_path,
                 suffix=upload.suffix,
                 owner_user_id=upload.owner_user_id,
@@ -102,10 +103,26 @@ class PreviewServiceMixin(SourceServiceMixin, PreviewWorkerMixin):
             "target_config_id": target_config_id,
             "ocr_confirmed": False,
         }
+        # 模型推断出的通用表结构随预演草稿保存，执行时据此复用同一张动态表。
+        inferred_schema = (
+            target_detection.get("dynamic_schema") if isinstance(target_detection, dict) else None
+        )
+        if isinstance(inferred_schema, dict) and inferred_schema:
+            draft["dynamic_schema"] = inferred_schema
+        elif isinstance(dynamic_schema, dict) and dynamic_schema:
+            draft["dynamic_schema"] = dynamic_schema
+        elif target_type == "dynamic_table" and source_dataset is not None:
+            # 没有模型推断时至少按表头建表，保证数据有确定落点而不是报错。
+            draft["dynamic_schema"] = {
+                "table_name": "",
+                "columns": [],
+                "dedupe_keys": [],
+                "headers": list(source_dataset.headers),
+            }
         requested_preset_id = str(compatibility_preset_id or "").strip()
         if template_id:
             template = self._owned_template(db, template_id, owner_user_id)
-            if template.description == ETL_SHIPMENT_DOCUMENT_TEMPLATE_DESCRIPTION:
+            if template.description == ELT_SHIPMENT_DOCUMENT_TEMPLATE_DESCRIPTION:
                 raise EltError(
                     "ELT_SHIPMENT_TEMPLATE_NOT_IMPORT_TEMPLATE",
                     "发货单版式仅用于开单打印，不能作为导入字段模板",
@@ -264,14 +281,14 @@ class PreviewServiceMixin(SourceServiceMixin, PreviewWorkerMixin):
     def _record_preview_metrics(run: EltRun, started_at: float, *, status: str) -> None:
         try:
             from app.utils.metrics import (
-                etl_llm_degradations_total,
-                etl_rows_total,
-                etl_run_duration_seconds,
-                etl_runs_total,
+                elt_llm_degradations_total,
+                elt_rows_total,
+                elt_run_duration_seconds,
+                elt_runs_total,
             )
 
-            etl_runs_total.labels("preview", run.target_type, status).inc()
-            etl_run_duration_seconds.labels("preview", run.target_type).observe(
+            elt_runs_total.labels("preview", run.target_type, status).inc()
+            elt_run_duration_seconds.labels("preview", run.target_type).observe(
                 max(0.0, time.monotonic() - started_at)
             )
             if status == "success":
@@ -282,10 +299,10 @@ class PreviewServiceMixin(SourceServiceMixin, PreviewWorkerMixin):
                     ("error", run.error_rows),
                 ):
                     if count:
-                        etl_rows_total.labels(run.target_type, decision).inc(count)
+                        elt_rows_total.labels(run.target_type, decision).inc(count)
                 summary = load_json(run.summary_json, {})
                 if summary.get("llm_degraded"):
-                    etl_llm_degradations_total.labels(run.target_type).inc()
+                    elt_llm_degradations_total.labels(run.target_type).inc()
         except RECOVERABLE_ERRORS:
             logger.debug("ETL preview metrics unavailable", exc_info=True)
 

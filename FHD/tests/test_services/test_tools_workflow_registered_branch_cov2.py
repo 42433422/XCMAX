@@ -1321,6 +1321,25 @@ class TestExcelAnalysisRouter:
         assert result["success"] is False
         assert "file_path" in result["message"]
 
+    def test_read_data_exposes_sheet_name_and_header_row(self):
+        with patch(
+            "app.application.tools.workflow.handle_excel_analysis",
+            return_value={
+                "success": True,
+                "sheet_name": "25年",
+                "header_row": 1,
+                "row_count": 3,
+                "columns": ["型号"],
+                "records": [],
+                "file_path": "宗南.xlsx",
+            },
+        ):
+            result = _registered_router_excel_analysis(
+                "read", {"file_path": "宗南.xlsx"}, {}, "admin", ""
+            )
+        assert result["data"]["sheet_name"] == "25年"
+        assert result["data"]["header_row"] == 1
+
     def test_delegates_action_and_params(self):
         with patch(
             "app.application.tools.workflow.handle_excel_analysis",
@@ -1977,12 +1996,19 @@ class TestPrintRouterSavePrinterSelection:
 
 class TestEmployeeRouter:
     def test_list_action(self):
-        with patch("app.mod_sdk.employee_tool_registry.build_employee_tools_status") as mock_build:
-            mock_build.return_value = {"registered_tool_count": 3}
+        employees = [{"pack_id": f"employee-{index}"} for index in range(3)]
+        with patch(
+            "app.mod_sdk.employee_directory.build_employee_directory", return_value=employees
+        ) as mock_build:
             result = _registered_router_employee("list", {}, {}, "admin", "")
         assert result["success"] is True
         assert result["status"]["registered_tool_count"] == 3
-        assert result["data"] == []
+        assert [item["employee_id"] for item in result["data"]] == [
+            "employee-0",
+            "employee-1",
+            "employee-2",
+        ]
+        mock_build.assert_called_once_with(include_prompt_only=True)
 
     def test_query_alias(self):
         with patch("app.mod_sdk.employee_tool_registry.build_employee_tools_status") as mock_build:

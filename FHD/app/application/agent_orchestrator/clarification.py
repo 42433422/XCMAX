@@ -27,6 +27,53 @@ def find_waiting_step(run: AgentRun, *, approved_step_id: str = "") -> AgentStep
     )
 
 
+def is_plan_confirmation(step: AgentStep) -> bool:
+    """计划级确认：澄清不绑定具体节点，只做「继续/取消」闸门。
+
+    ``clarify.ask`` 有两种形态：绑定 ``target_node_id`` 的用于补参数；不绑定的
+    只能是计划级确认。后者绝不能走「丢弃旧计划重新规划」的分支——旧计划可能已经
+    执行过预览步骤，重规划既不安全也无法让用户继续。
+    """
+    if (step.tool_id, step.action) != ("clarify", "ask"):
+        return False
+    if str(step.params.get("target_node_id") or "").strip():
+        return False
+    detail = step.params.get("clarification")
+    return not isinstance(detail, dict) or not detail
+
+
+def apply_plan_confirmation(run: AgentRun, *, step_id: str, confirmed: bool) -> None:
+    """把计划级确认的答复写回同一个持久化计划（不重建计划）。"""
+    step = next((item for item in run.steps if item.step_id == step_id), None)
+    if (
+        run.status != "waiting_user"
+        or step is None
+        or step.status != "waiting_user"
+        or not is_plan_confirmation(step)
+    ):
+        raise ClarificationAnswerError("当前没有等待确认的计划")
+    step.status = "completed" if confirmed else "failed"
+    step.output = {
+        **step.output,
+        "answer_confirmed": bool(confirmed),
+        "requires_confirmation": False,
+        "confirmed": bool(confirmed),
+    }
+    if not confirmed:
+        step.error = "用户取消确认"
+        run.status = "cancelled"
+        run.error = "用户取消确认"
+    else:
+        run.status = "running"
+        run.error = ""
+    run.final_output = {}
+    run.add_event(
+        "step.plan_confirmation_answered",
+        "计划级确认已答复",
+        {"step_id": step.step_id, "confirmed": bool(confirmed)},
+    )
+
+
 def apply_clarification_answer(
     run: AgentRun,
     *,

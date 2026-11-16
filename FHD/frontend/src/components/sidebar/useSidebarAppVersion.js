@@ -143,9 +143,10 @@ export function useSidebarAppVersion({ shouldShowAdminDeployStatus }) {
   }
 
   function onApiReachableEvent() {
+    const wasUnconfirmed = connection.value !== 'ready'
     markApiReachable()
     // Soft refresh health in background to resync version/degraded reasons.
-    void refreshHealthAppVersion({ respectBackoff: false })
+    if (wasUnconfirmed) void refreshHealthAppVersion({ respectBackoff: false })
   }
 
   function startHealthPolling() {

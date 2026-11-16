@@ -92,14 +92,21 @@ describe('Visible Mac conversation task panel', () => {
 
   it('lets the user filter persisted tasks and clear history, while selecting the clicked task', async () => {
     const { view } = await open({ taskList: [task], filteredTaskList: [task], activeTaskId: task.id })
-    for (const button of view.findAll('.task-filter-btn')) await button.trigger('click')
-    expect(view.emitted('set-task-filter')).toEqual([['all'], ['running'], ['blocked'], ['success'], ['failed']])
+    await view.get('.task-filter-select').setValue('running')
+    expect(view.emitted('set-task-filter')).toEqual([['running']])
     await view.get('.task-toolbar > button').trigger('click')
     await view.get('.task-list-main').trigger('click')
     expect(view.emitted('clear-task-history')).toEqual([[]])
     expect(view.emitted('select-task')).toEqual([[task]])
     expect(view.get('.task-list-item').classes()).toContain('task-list-item-active')
     expect(view.text()).toContain('time:2')
+  })
+
+  it('closes a single task without selecting it', async () => {
+    const { view } = await open({ taskList: [task], filteredTaskList: [task] })
+    await view.get('.task-list-close').trigger('click')
+    expect(view.emitted('remove-task')).toEqual([[task.id]])
+    expect(view.emitted('select-task')).toBeUndefined()
   })
 
   it.each(['failed', 'cancelled'] as const)('does not display a success-like percentage for a %s task', async (status) => {
@@ -110,7 +117,7 @@ describe('Visible Mac conversation task panel', () => {
     expect(view.text()).toContain('没有创建订单')
     await view.get('.task-list-detail button').trigger('click')
     expect(view.emitted('jump-to-task-message')).toEqual([[failed]])
-    expect(view.text()).toContain('不提供伪控制')
+    expect(view.text()).not.toContain('不提供伪控制')
   })
 
   it('opens shipment records from a persisted audit hint', async () => {

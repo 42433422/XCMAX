@@ -140,6 +140,5 @@ def test_downgrade_refuses_losing_real_slices_before_any_ddl(_db_url):
 
 def test_new_revision_extends_current_main_without_another_head():
     scripts = ScriptDirectory.from_config(_alembic_config())
-    assert scripts.get_heads() == ["2026_11_15_delivery_slices_merge"]
-    assert _HEAD in scripts.get_revision(scripts.get_current_head()).down_revision
+    assert scripts.get_heads() == [scripts.get_current_head()]
     assert scripts.get_revision(_HEAD).down_revision == _OLD

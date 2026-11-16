@@ -317,7 +317,7 @@ def test_error_row_scope_requires_explicit_choice_and_cannot_change_in_queue(
     preview_store, monkeypatch
 ):
     store = preview_store
-    monkeypatch.setenv("FHD_ETL_LLM", "off")
+    monkeypatch.setenv("FHD_ELT_LLM", "off")
     run_id = create_preview(
         store, csv="客户名称,电话\n正确客户,13000000001\n,13000000002\n".encode()
     )

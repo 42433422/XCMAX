@@ -36,6 +36,7 @@ import {
   hasAnyChineseLocalVoice,
   getTtsStatus,
   onTtsStatusChange,
+  splitSpeechChunks,
 } from './tts'
 
 describe('tts utility functions', () => {
@@ -246,6 +247,26 @@ describe('tts utility functions', () => {
       ]
       const result = pickBestChineseVoice(voices as SpeechSynthesisVoice[])
       expect(result?.name).toBe('Yunxi')
+    })
+  })
+
+  describe('splitSpeechChunks', () => {
+    it('首块保持较短以尽快出声', () => {
+      const text = '第一句话在这里说明背景。第二句话补充细节。第三句话给出结论。第四句话收尾。'
+      const chunks = splitSpeechChunks(text)
+      expect(chunks.length).toBeGreaterThan(0)
+      expect(chunks[0].length).toBeLessThanOrEqual(14)
+    })
+
+    it('后续块不再无限放大，保证起播不等待过长', () => {
+      const sentences = Array.from({ length: 8 }, (_, i) => `这是第${i + 1}句用于测试的说明文字`)
+      const chunks = splitSpeechChunks(sentences.join('。'))
+      expect(chunks.length).toBeLessThan(sentences.length)
+      expect(chunks.slice(1).every((chunk) => chunk.length <= 64)).toBe(true)
+    })
+
+    it('空文本返回空数组', () => {
+      expect(splitSpeechChunks('   ')).toEqual([])
     })
   })
 

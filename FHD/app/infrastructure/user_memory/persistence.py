@@ -103,5 +103,6 @@ class MemoryRepository:
             current = self._memory_cache.get(user_id)
             if current is not None:
                 snapshot.memory_v2_records = copy.deepcopy(current.memory_v2_records)
+                snapshot.recall_facts = copy.deepcopy(current.recall_facts)
             self._memory_cache[user_id] = snapshot
             persist()

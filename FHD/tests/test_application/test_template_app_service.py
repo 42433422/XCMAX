@@ -54,6 +54,18 @@ class TestGetTemplates:
         assert len(out["templates"]) == len(STARTER_TEMPLATES)
         assert all(row["starter"] is True for row in out["templates"])
 
+    def test_explicit_tenant_is_scoped_at_application_boundary(self) -> None:
+        from app.infrastructure.tenant_scope import current_tenant_id
+
+        seen: dict[str, int | None] = {}
+        ts = MagicMock()
+        ts.list_templates.side_effect = lambda: (
+            seen.setdefault("tenant", current_tenant_id()) and []
+        )
+        svc = _svc(ts)
+        svc.get_templates(tenant_id=42)
+        assert seen["tenant"] == 42
+
 
 class TestCrudDelegation:
     def test_get(self) -> None:

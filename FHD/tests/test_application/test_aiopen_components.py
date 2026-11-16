@@ -213,10 +213,14 @@ def test_key_registry_owns_only_injected_state_and_key_sources() -> None:
     assert registry.verify(None) is False
 
     generated = registry.generate("  local client  ")
-    assert generated == {"key": "aiopen_local-token", "label": "local client", "created_at": 42.0}
-    assert values["runtime_keys"] == {
-        "aiopen_local-token": {"label": "local client", "created_at": 42.0}
-    }
+    # 计量字段（usage/total_calls/error_calls）是配额与调用统计的预期契约，
+    # 这里只断言归属与注入来源，不锁定完整字段集。
+    assert generated["key"] == "aiopen_local-token"
+    assert generated["label"] == "local client"
+    assert generated["created_at"] == 42.0
+    assert values["runtime_keys"]["aiopen_local-token"]["label"] == "local client"
+    assert values["runtime_keys"]["aiopen_local-token"]["created_at"] == 42.0
+    assert set(values["runtime_keys"]) == {"aiopen_local-token"}
     assert registry.verify(None) is False
     assert registry.verify(generated["key"]) is True
     assert registry.revoke(generated["key"]) is True

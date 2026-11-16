@@ -45,10 +45,10 @@ _REGION_ROLES = frozenset(
 _ROW_ACTIONS = frozenset({"new", "update", "skip"})
 _SAFE_MAPPING_TRANSFORMS = frozenset({"trim", "number", "date"})
 _BUSINESS_DEADLINE: contextvars.ContextVar[float | None] = contextvars.ContextVar(
-    "etl_business_deadline", default=None
+    "elt_business_deadline", default=None
 )
 _CALL_AUDITOR: contextvars.ContextVar[Any | None] = contextvars.ContextVar(
-    "etl_intake_call_auditor", default=None
+    "elt_intake_call_auditor", default=None
 )
 
 
@@ -67,10 +67,10 @@ def audit_intake_calls(callback):
 # time).  Keep this process-local on purpose: account credentials and quota
 # state are not ETL business data and are never persisted with a run.
 LlmAssistResult = _runtime.LlmAssistResult
-clear_etl_llm_circuit = _runtime.clear_etl_llm_circuit
-etl_llm_mode = _runtime.etl_llm_mode
-etl_llm_timeout_seconds = _runtime.etl_llm_timeout_seconds
-etl_row_advice_limit = _runtime.etl_row_advice_limit
+clear_elt_llm_circuit = _runtime.clear_elt_llm_circuit
+elt_llm_mode = _runtime.elt_llm_mode
+elt_llm_timeout_seconds = _runtime.elt_llm_timeout_seconds
+elt_row_advice_limit = _runtime.elt_row_advice_limit
 _circuit_cooldown_seconds = _runtime.circuit_cooldown_seconds
 _circuit_degradation = _runtime.circuit_degradation
 _circuit_key = _runtime.circuit_key
@@ -113,7 +113,7 @@ def _bounded_structured_completion(
                 # deterministic without it, so never retry advisory output.
                 max_repairs=max_repairs,
                 timeout_seconds=timeout_seconds,
-                profile="etl",
+                profile="elt",
                 conversation_service=conversation_service,
                 provider=provider,
             )
@@ -123,7 +123,7 @@ def _bounded_structured_completion(
     worker = threading.Thread(
         target=contextvars.copy_context().run,
         args=(invoke,),
-        name="etl-llm-assist",
+        name="elt-llm-assist",
         daemon=True,
     )
     worker.start()
@@ -137,36 +137,57 @@ def _bounded_structured_completion(
     return box["result"]
 
 
-def _active_software_llm(
+def _software_llm_candidates(
     timeout_seconds: float | None = None,
-) -> tuple[bool, Any | None, Any | None]:
-    """Resolve the current user's software-account LLM, then app-wide providers."""
+) -> list[tuple[Any | None, Any | None]]:
+    """模型入口的唯一解析：按顺序给出可尝试的 provider。
+
+    当前 owner 的租户会话 token 必须排第一：它是本次导入唯一归属的凭据，
+    registry/app 级 provider 只在该 owner 没有 token 时兜底。否则某个账号的
+    预览请求会被记到另一账号的模型额度上。
+    """
+    candidates: list[tuple[Any | None, Any | None]] = []
     try:
         from app.application.elt.llm_session_provider import current_owner_market_provider
 
         market_provider = current_owner_market_provider(
             timeout_seconds=(
-                etl_llm_timeout_seconds() if timeout_seconds is None else timeout_seconds
+                elt_llm_timeout_seconds() if timeout_seconds is None else timeout_seconds
             )
         )
         if market_provider is not None:
-            return True, None, market_provider
+            candidates.append((None, market_provider))
+    except RECOVERABLE_ERRORS:
+        pass
+    try:
+        from app.domain.shared_services.ai_conversation_service import (
+            get_ai_conversation_service,
+        )
         from app.infrastructure.llm.providers.registry import get_active_provider
 
-        if get_active_provider(profile="etl") is not None:
-            return True, None, None
-        from app.domain.shared_services.ai_conversation_service import get_ai_conversation_service
-
         service = get_ai_conversation_service()
-        if get_active_provider(conversation_service=service, profile="etl") is not None:
-            return True, service, None
-        return False, None, None
+        if get_active_provider(conversation_service=service, profile="elt") is not None:
+            candidates.append((service, None))
+        elif get_active_provider(profile="elt") is not None:
+            candidates.append((None, None))
     except RECOVERABLE_ERRORS:
+        pass
+    return candidates
+
+
+def _active_software_llm(
+    timeout_seconds: float | None = None,
+) -> tuple[bool, Any | None, Any | None]:
+    """统一入口的首选 provider；``False`` 表示没有任何可用候选。"""
+    candidates = _software_llm_candidates(timeout_seconds)
+    if not candidates:
         return False, None, None
+    service, provider = candidates[0]
+    return True, service, provider
 
 
-def etl_llm_enabled() -> bool:
-    mode = etl_llm_mode()
+def elt_llm_enabled() -> bool:
+    mode = elt_llm_mode()
     if mode == "off":
         return False
     configured, _service, _provider = _active_software_llm()
@@ -182,7 +203,7 @@ def _complete(
     max_repairs: int = 0,
     timeout_seconds: float | None = None,
 ) -> LlmAssistResult:
-    mode = etl_llm_mode()
+    mode = elt_llm_mode()
     if mode == "off":
         return LlmAssistResult()
     circuit_key = _circuit_key(lane)
@@ -198,7 +219,7 @@ def _complete(
     budget = (
         timeout_seconds
         if timeout_seconds is not None
-        else etl_llm_timeout_seconds() * (1 + max(0, max_repairs))
+        else elt_llm_timeout_seconds() * (1 + max(0, max_repairs))
     )
     business_deadline = _BUSINESS_DEADLINE.get()
     if business_deadline is not None:
@@ -227,7 +248,7 @@ def _complete(
             return LlmAssistResult(
                 used_llm=False, degraded=True, degradation_code="ELT_LLM_QUEUE_TIMEOUT"
             )
-        configured, conversation_service, provider = _active_software_llm(remaining)
+        configured, first_service, first_provider = _active_software_llm(remaining)
         if not configured:
             return LlmAssistResult(
                 used_llm=False,
@@ -240,23 +261,59 @@ def _complete(
                 used_llm=False, degraded=True, degradation_code="ELT_LLM_QUEUE_TIMEOUT"
             )
         called = False
+        auditor = _CALL_AUDITOR.get()
+        call_id: str | None = None
+        attempts: list[tuple[Any | None, Any | None]] = [(first_service, first_provider)]
+        if first_provider is None:
+            # 只有 registry/app 级候选才允许在失败后继续试下一个。owner 会话凭据
+            # 失败即降级：改用别的 provider 会把本次导入记到另一账号的额度上。
+            attempts.extend(_software_llm_candidates(remaining)[1:])
         try:
             from app.application.reviewed_excel_audit import call_key
 
-            auditor = _CALL_AUDITOR.get()
-            call_id = uuid4().hex if auditor else None
-            if auditor:
-                auditor(call_id, lane, "sent")
-            with call_key(call_id):
-                called = True
-                result = _bounded_structured_completion(
-                    messages,
-                    schema=schema,
-                    max_tokens=max_tokens,
-                    timeout_seconds=budget,
-                    conversation_service=conversation_service,
-                    provider=provider,
-                    max_repairs=max_repairs,
+            result = None
+            last_error: BaseException | None = None
+            for index, (attempt_service, attempt_provider) in enumerate(attempts):
+                budget = deadline - time.monotonic()
+                if budget <= 0:
+                    break
+                call_id = uuid4().hex if auditor else None
+                if auditor:
+                    auditor(call_id, lane, "sent")
+                try:
+                    with call_key(call_id):
+                        called = True
+                        result = _bounded_structured_completion(
+                            messages,
+                            schema=schema,
+                            max_tokens=max_tokens,
+                            timeout_seconds=budget,
+                            conversation_service=attempt_service,
+                            provider=attempt_provider,
+                            max_repairs=max_repairs,
+                        )
+                except BOUNDARY_ERRORS as exc:
+                    from app.infrastructure.llm.structured_output import (
+                        StructuredOutputError,
+                    )
+
+                    last_error = exc
+                    retryable = (
+                        not isinstance(exc, StructuredOutputError)
+                        and _degradation_code(exc) == "ELT_LLM_UNAVAILABLE"
+                        and index + 1 < len(attempts)
+                    )
+                    if retryable:
+                        continue
+                    raise
+                break
+            if result is None:
+                if last_error is not None:
+                    raise last_error
+                return LlmAssistResult(
+                    used_llm=False,
+                    degraded=True,
+                    degradation_code="ELT_LLM_BUDGET_EXHAUSTED",
                 )
             if auditor:
                 auditor(call_id, lane, "answered")
@@ -293,10 +350,10 @@ def _complete(
                     lock.release()
 
                 threading.Thread(
-                    target=release_after_worker, name="etl-llm-lock-release", daemon=True
+                    target=release_after_worker, name="elt-llm-lock-release", daemon=True
                 ).start()
                 release_on_exit = False
-            _runtime.log_etl_llm_degradation(logger, code=degradation_code, lane=lane, exc=exc)
+            _runtime.log_elt_llm_degradation(logger, code=degradation_code, lane=lane, exc=exc)
             return LlmAssistResult(
                 used_llm=called,
                 degraded=True,
@@ -457,7 +514,7 @@ def advise_field_mappings(
             "role": "user",
             "content": json.dumps(
                 {
-                    "task": "suggest_etl_field_mappings",
+                    "task": "suggest_elt_field_mappings",
                     "headers": [str(item)[:160] for item in headers[:100]],
                     "samples": {
                         str(key)[:160]: [str(value)[:160] for value in values[:3]]
@@ -536,7 +593,7 @@ def advise_row_decisions(payloads: list[dict[str, Any]]) -> LlmAssistResult:
             "before": item.get("before") or {},
             "after": item.get("after") or {},
         }
-        for index, item in enumerate(payloads[: etl_row_advice_limit()])
+        for index, item in enumerate(payloads[: elt_row_advice_limit()])
     ]
     messages = [
         {
@@ -551,7 +608,7 @@ def advise_row_decisions(payloads: list[dict[str, Any]]) -> LlmAssistResult:
             "role": "user",
             "content": json.dumps(
                 {
-                    "task": "advise_etl_row_decisions",
+                    "task": "advise_elt_row_decisions",
                     "rules": [
                         "Prefer skip for duplicates",
                         "Update requires a visible before/after difference",
@@ -735,6 +792,225 @@ def business_units(source: str) -> list[str]:
     return units
 
 
+_TARGET_CLASSIFY_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["target_type", "confidence", "reason"],
+    "properties": {
+        "target_type": {
+            "type": "string",
+            "enum": [
+                "shipment_records",
+                "customers",
+                "products",
+                "customer_products",
+                "attendance",
+                "purchase_orders",
+                "knowledge",
+                "abnormal",
+            ],
+        },
+        "confidence": {"type": "number"},
+        "reason": {"type": "string"},
+    },
+}
+
+_TARGET_TYPE_HINTS = {
+    "shipment_records": "送货单/发货单/出货单的逐笔明细（有购货单位或客户、产品、数量、单价、金额）",
+    "customers": "客户/往来单位主数据（客户名称、联系人、电话、地址等，每行一个客户）",
+    "products": "产品/物料主数据（型号、名称、规格、单价，每行一个产品）",
+    "customer_products": "客户与产品关联表（同一行同时有客户和产品信息）",
+    "attendance": "考勤记录（姓名、日期、上班/下班、打卡）",
+    "purchase_orders": "采购订单（供应商、采购单号、采购明细）",
+    "knowledge": "无法安全写入业务主数据，但值得归档检索的文档（配方单、台账、合同、说明等）",
+    "abnormal": "无法判断或文件本身没有可用表格内容",
+}
+
+
+def advise_target_classification(document_text: str) -> LlmAssistResult:
+    """Classify one uploaded workbook/text file into a bounded business target.
+
+    Advisory only: the caller applies its own confidence threshold and falls
+    back to the knowledge lane. The answer must stay inside the enum, so an
+    unexpected file never invents a new write target.
+    """
+    source = str(document_text or "").strip()
+    if not source:
+        return LlmAssistResult()
+    hints = "\n".join(f"- {key}: {value}" for key, value in _TARGET_TYPE_HINTS.items())
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "你是数据导入的文件类型分类器。只返回 JSON，字段为 target_type、confidence、reason。"
+                "target_type 只能取以下枚举之一：\n"
+                f"{hints}\n"
+                "判断依据只看正文里的标题、表头和样例行，不要看文件名。"
+                "如果表格是逐笔流水/配方/工艺/财务对账，且没有明确的主数据字段，选 knowledge。"
+                "如果内容不足以判断，选 abnormal，并把 confidence 降低。"
+                "confidence 是 0 到 1 之间的小数，只有证据充分时才给 0.8 以上。"
+                "reason 用一句中文说明依据。不要输出 markdown 或额外文字。"
+            ),
+        },
+        {"role": "user", "content": source[:6000]},
+    ]
+    result = _complete(
+        messages,
+        schema=_TARGET_CLASSIFY_SCHEMA,
+        max_tokens=400,
+        lane="target_classify",
+        max_repairs=0,
+        timeout_seconds=elt_llm_timeout_seconds(),
+    )
+    if not result.used_llm or result.degraded:
+        return result
+    data = result.data if isinstance(result.data, dict) else {}
+    target = str(data.get("target_type") or "").strip()
+    if target not in _TARGET_TYPE_HINTS:
+        return LlmAssistResult(
+            used_llm=False,
+            degraded=True,
+            degradation_code="ELT_LLM_TARGET_INVALID",
+        )
+    try:
+        confidence = float(data.get("confidence") or 0)
+    except (TypeError, ValueError):
+        confidence = 0.0
+    result.data = {
+        "target_type": target,
+        "confidence": max(0.0, min(1.0, confidence)),
+        "reason": str(data.get("reason") or "")[:200],
+    }
+    return result
+
+
+_DYNAMIC_TABLE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["is_table", "table_name", "confidence", "columns"],
+    "properties": {
+        "is_table": {"type": "boolean"},
+        "table_name": {"type": "string"},
+        "confidence": {"type": "number"},
+        "columns": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["source", "type", "role"],
+                "properties": {
+                    "source": {"type": "string"},
+                    "name": {"type": "string"},
+                    "type": {
+                        "type": "string",
+                        "enum": ["string", "number", "integer", "date", "boolean"],
+                    },
+                    "role": {
+                        "type": "string",
+                        "enum": ["key", "dimension", "measure", "text", "ignore"],
+                    },
+                },
+            },
+        },
+        "dedupe_keys": {"type": "array", "items": {"type": "string"}},
+        "reason": {"type": "string"},
+    },
+}
+
+_COLUMN_TYPES = frozenset({"string", "number", "integer", "date", "boolean"})
+_COLUMN_ROLES = frozenset({"key", "dimension", "measure", "text", "ignore"})
+
+
+def advise_table_schema(*, headers: list[str], samples: dict[str, list[str]]) -> LlmAssistResult:
+    """Infer a schema for a table that matches no fixed business target.
+
+    The model may only describe the supplied columns; it never invents headers
+    and never gets write authority. A non-tabular answer returns ``is_table``
+    false so the caller finishes normally instead of forcing a wrong table.
+    """
+    bounded_headers = [str(item)[:160] for item in headers[:80] if str(item).strip()]
+    if not bounded_headers:
+        return LlmAssistResult()
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "你为一个没有固定业务表的表格推断结构。只返回 JSON。"
+                "columns 的 source 必须来自给定表头，不得编造列名。"
+                "type 依据样例值判断：string/number/integer/date/boolean。"
+                "role 取值：key（唯一标识）、dimension（分类或日期）、measure（数量金额等度量）、"
+                "text（描述备注）、ignore（空列或噪声列）。"
+                "dedupe_keys 从表头里选能唯一确定一条业务记录的列；选不出就给空数组。"
+                "如果内容不是真正的表格（纯文字、图表、只有一个标题），is_table 给 false。"
+                "table_name 用简短中文名概括这张表，不超过 40 字。"
+                "confidence 是 0 到 1 的小数。不要输出 markdown 或额外文字。"
+            ),
+        },
+        {
+            "role": "user",
+            "content": json.dumps(
+                {
+                    "task": "infer_dynamic_table_schema",
+                    "headers": bounded_headers,
+                    "samples": {
+                        str(key)[:160]: [str(value)[:160] for value in values[:3]]
+                        for key, values in list(samples.items())[:80]
+                        if str(key) in bounded_headers
+                    },
+                },
+                ensure_ascii=False,
+            ),
+        },
+    ]
+    result = _complete(
+        messages,
+        schema=_DYNAMIC_TABLE_SCHEMA,
+        max_tokens=1500,
+        lane="database",
+        max_repairs=0,
+        timeout_seconds=elt_llm_timeout_seconds(),
+    )
+    if not result.used_llm or result.degraded:
+        return result
+    data = result.data if isinstance(result.data, dict) else {}
+    allowed = set(bounded_headers)
+    columns: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for item in list(data.get("columns") or [])[:80]:
+        if not isinstance(item, dict):
+            continue
+        source = str(item.get("source") or "").strip()
+        if source not in allowed or source in seen:
+            continue
+        seen.add(source)
+        column_type = str(item.get("type") or "string")
+        role = str(item.get("role") or "text")
+        columns.append(
+            {
+                "source": source,
+                "name": str(item.get("name") or source)[:160],
+                "type": column_type if column_type in _COLUMN_TYPES else "string",
+                "role": role if role in _COLUMN_ROLES else "text",
+            }
+        )
+    try:
+        confidence = float(data.get("confidence") or 0)
+    except (TypeError, ValueError):
+        confidence = 0.0
+    dedupe_keys = [
+        key for key in (str(item) for item in data.get("dedupe_keys") or []) if key in seen
+    ]
+    result.data = {
+        "is_table": bool(data.get("is_table")) and bool(columns),
+        "table_name": str(data.get("table_name") or "")[:40],
+        "confidence": max(0.0, min(1.0, confidence)),
+        "columns": columns,
+        "dedupe_keys": dedupe_keys,
+        "reason": str(data.get("reason") or "")[:200],
+    }
+    return result
+
+
 def advise_business_import(sheet_text: str) -> LlmAssistResult:
     """Import archived sheet rows on the database line, one bounded unit at a time.
 
@@ -754,7 +1030,7 @@ def advise_business_import(sheet_text: str) -> LlmAssistResult:
         # Repairs share this unit's budget; earlier units must not consume the
         # entire deadline before later parts of the same workbook are sent.
         deadline_token = _BUSINESS_DEADLINE.set(
-            time.monotonic() + etl_llm_timeout_seconds(full_sheet=True)
+            time.monotonic() + elt_llm_timeout_seconds(full_sheet=True)
         )
         try:
             result = _advise_business_unit(unit)
@@ -806,7 +1082,7 @@ def _advise_business_unit(source: str) -> LlmAssistResult:
         # A schema repair would share this call's budget and could be cut off after
         # sending; an invalid answer is a definite failure instead.
         "max_repairs": 0,
-        "timeout_seconds": etl_llm_timeout_seconds(full_sheet=True),
+        "timeout_seconds": elt_llm_timeout_seconds(full_sheet=True),
     }
     result = _complete(messages, **call)
     rows = _business_rows(result.data, cited) if result.used_llm and not result.degraded else []
@@ -880,7 +1156,7 @@ def advise_knowledge_import(document_text: str) -> LlmAssistResult:
         },
         {"role": "user", "content": source},
     ]
-    deadline = time.monotonic() + etl_llm_timeout_seconds(full_sheet=True)
+    deadline = time.monotonic() + elt_llm_timeout_seconds(full_sheet=True)
     result = _complete(
         messages,
         schema=_KNOWLEDGE_IMPORT_SCHEMA,
@@ -924,10 +1200,12 @@ __all__ = [
     "advise_field_mappings",
     "advise_knowledge_import",
     "advise_row_decisions",
+    "advise_table_schema",
+    "advise_target_classification",
     "advise_workbook_regions",
-    "clear_etl_llm_circuit",
-    "etl_llm_enabled",
-    "etl_llm_mode",
-    "etl_llm_timeout_seconds",
-    "etl_row_advice_limit",
+    "clear_elt_llm_circuit",
+    "elt_llm_enabled",
+    "elt_llm_mode",
+    "elt_llm_timeout_seconds",
+    "elt_row_advice_limit",
 ]

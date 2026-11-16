@@ -111,6 +111,12 @@ class WorkflowApprovalPolicy:
                 item.rejected = True
                 item.reason = "denied by autonomy_guard"
             elif item.requires_approval:
+                precheck_error = precheck_approval_node(node, context)
+                if precheck_error:
+                    item.rejected = True
+                    item.reason = precheck_error
+                    decision.node_decisions.append(item)
+                    continue
                 request = self._approval_service.create_approval_request(
                     plan_id=plan.plan_id,
                     node=node,
@@ -171,4 +177,53 @@ class WorkflowApprovalPolicy:
         )
 
 
-__all__ = ["GatedNodeDecision", "GatedPlanDecision", "WorkflowApprovalPolicy"]
+def precheck_approval_node(node: Any, runtime_context: dict[str, Any] | None) -> str:
+    """在创建审批请求之前运行工具级前置校验。
+
+    返回非空字符串表示该节点不应提交审批：调用方应按「本轮未执行」回执。
+    这样前置校验不会等到审批通过、工具真正执行时才失败，也就不会留下
+    一张「已取消」的审批记录。
+    """
+    context = dict(runtime_context or {})
+    tool_id = str(getattr(node, "tool_id", "") or "")
+    action = str(getattr(node, "action", "") or "")
+    params = dict(getattr(node, "params", None) or {})
+    if (tool_id, action) == ("client_product_issue", "submit"):
+        from app.application.client_product_issue_intake import (
+            resolve_issue_report_message,
+        )
+        from app.application.tools.workflow_tools.dispatch import _resolve_user_message
+
+        # 本轮可能只是「确认 / 那你去提交一下呀」，真正的工单内容在会话前文
+        # 或计划节点的 request 里，不能因为本轮原话不含问题就拒绝受理。
+        message = resolve_issue_report_message(
+            _resolve_user_message(context, params), context, params
+        )
+        if not message:
+            return "原始请求未明确提出产品问题，本轮未提交写入。"
+    if tool_id == "employee" and action in {"execute", "context"}:
+        # 宿主管理员工/专用工具只有平台管理员可执行；在执行前就拒绝，
+        # 不创建审批单，避免出现「审批通过 → 立刻取消」的假审批。
+        from app.application.employee_runtime.loader import candidate_pack_ids
+        from app.application.employee_runtime.tool_scope import host_employee_denial
+
+        input_data = params.get("input")
+        denial = host_employee_denial(
+            candidate_pack_ids(str(params.get("employee_id") or params.get("pack_id") or "")),
+            input_data if isinstance(input_data, dict) else {},
+            context,
+        )
+        if denial:
+            return (
+                "该员工属于宿主管理员工，只有平台管理员可以调用，本轮未执行；"
+                "提交产品问题请在对话中直接说明问题现象。"
+            )
+    return ""
+
+
+__all__ = [
+    "GatedNodeDecision",
+    "GatedPlanDecision",
+    "WorkflowApprovalPolicy",
+    "precheck_approval_node",
+]

@@ -18,7 +18,7 @@ from app.fastapi_routes import market_account
 from app.fastapi_routes import reviewed_excel_template as routes
 from app.fastapi_routes.domains.auth.auth_routes import router as auth_router
 from app.fastapi_routes.template_api import router as template_router
-from tests.fixtures.etl_template.sources.generate import sample
+from tests.fixtures.elt_template.sources.generate import sample
 from tests.test_application.test_reviewed_excel_boundaries import synthetic_document_answer
 
 
@@ -68,7 +68,7 @@ def standard_login(tmp_path, monkeypatch):
             Role(
                 name="synthetic-reviewer",
                 permissions=[
-                    Permission(name=code, code=code) for code in ("etl.read", "etl.template.manage")
+                    Permission(name=code, code=code) for code in ("elt.read", "elt.template.manage")
                 ],
             )
         )

@@ -12,9 +12,9 @@
     </div>
     <div class="chat-container" data-tour="chat-thread" :style="chatPaneStyle">
       <ChatMessageList
-        :empty-intro="getIndustryPreset(currentIndustryId).scenario"
-        @fill-example="fillComposer"
         @retry-model="retryFailedModel"
+        @recall-edit="recallMessage"
+        @reconcile-turn="reconcileTurn"
         @confirm-destructive="confirmDestructiveScope"
         :session-key="messageSessionKey"
         :proactive-suggestions="proactiveSuggestionsByMessage"
@@ -28,7 +28,7 @@
         :latest-ai-message-index="latestAiMessageIndex"
         :playing-msg-idx="playingMsgIdx"
         :is-message-collapsed="isMessageCollapsed"
-        :get-collapsed-preview="getCollapsedPreview"
+        :can-collapse-message="canCollapseMessage"
         :can-speak-message="canSpeakMessage"
         :chat-messages-ref="chatRefBag.chatMessagesRef"
         @expand-message="expandMessage"
@@ -84,6 +84,7 @@
         @switch-view="emitSwitchView"
         @set-task-filter="setTaskFilter"
         @clear-task-history="clearTaskHistory"
+        @remove-task="removeTask"
         @toggle-task-expanded="toggleTaskExpanded"
         @select-task="selectTask"
         @open-shipment-records="openShipmentRecordsFromAuditTask"
@@ -127,6 +128,73 @@
         @toggle-tts="setTtsEnabled"
       />
       <ChatModelRecovery :scope-key="messageSessionKey" />
+      <div
+        v-if="artifactStaging.length || multimodalStaging.length || unsupportedStaging.length"
+        class="composer-attachments"
+        role="list"
+        aria-label="待发送附件"
+      >
+        <span
+          v-for="row in artifactStaging"
+          :key="row.artifact_id"
+          class="composer-attachment"
+          role="listitem"
+        >
+          <i class="fa fa-file-excel-o" aria-hidden="true"></i>
+          <span class="composer-attachment__name" :title="row.filename">{{ row.filename }}</span>
+          <button
+            type="button"
+            class="composer-attachment__remove"
+            :aria-label="`移除 ${row.filename}`"
+            title="移除"
+            @click="removeArtifactFile(row.artifact_id)"
+          >
+            ×
+          </button>
+        </span>
+        <span
+          v-for="(row, index) in multimodalStaging"
+          :key="`mm-${index}-${row.filename}`"
+          class="composer-attachment"
+          role="listitem"
+        >
+          <i
+            class="fa"
+            :class="row.kind === 'image' ? 'fa-picture-o' : row.kind === 'pdf' ? 'fa-file-pdf-o' : 'fa-file-text-o'"
+            aria-hidden="true"
+          ></i>
+          <span class="composer-attachment__name" :title="row.filename">{{ row.filename }}</span>
+          <button
+            type="button"
+            class="composer-attachment__remove"
+            :aria-label="`移除 ${row.filename}`"
+            title="移除"
+            @click="removeMultimodalFile(row)"
+          >
+            ×
+          </button>
+        </span>
+        <span
+          v-for="name in unsupportedStaging"
+          :key="`unsupported-${name}`"
+          class="composer-attachment composer-attachment--skipped"
+          role="listitem"
+          :title="`${name} 暂不支持导入（仅支持 .xlsx / .xlsm）`"
+        >
+          <i class="fa fa-exclamation-triangle" aria-hidden="true"></i>
+          <span class="composer-attachment__name">{{ name }}</span>
+          <span class="composer-attachment__note">已跳过</span>
+          <button
+            type="button"
+            class="composer-attachment__remove"
+            :aria-label="`忽略 ${name}`"
+            title="忽略"
+            @click="dismissUnsupportedFile(name)"
+          >
+            ×
+          </button>
+        </span>
+      </div>
       <div v-if="excelSheetOptions.length" class="sheet-link-bar">
         <button type="button" class="sheet-link-btn" :class="{ active: worksheetTemplateOpen || !!linkedExcelSheet || linkedExcelAllSheets }" @click="worksheetTemplateOpen = !worksheetTemplateOpen">
           {{ worksheetTemplateLabel }}
@@ -161,23 +229,34 @@
           aria-describedby="chat-composer-status"
           @keydown="handleKeyDown"
         ></textarea>
-        <button
-          type="button"
-          class="btn voice-input-btn"
-          :class="voiceButtonClass"
-          :disabled="voiceButtonDisabled"
-          :title="voiceButtonTitle"
-          data-tutorial-id="chat-voice-push-to-talk"
-          @mousedown.prevent="startVoiceRecording"
-          @mouseup.prevent="stopVoiceRecording(false)"
-          @mouseleave="stopVoiceRecording(true)"
-          @touchstart.prevent="startVoiceRecording"
-          @touchend.prevent="stopVoiceRecording(false)"
-          @touchcancel.prevent="stopVoiceRecording(true)"
-        >
-          <i class="fa" :class="voiceButtonIcon" aria-hidden="true"></i>
-          <span class="voice-input-btn-label">{{ voiceButtonText }}</span>
-        </button>
+        <div class="composer-voice-stack">
+          <button
+            type="button"
+            class="btn voice-call-entry-btn"
+            title="语音通话"
+            aria-label="语音通话"
+            @click="startVoiceCallFromHost"
+          >
+            <i class="fa fa-phone" aria-hidden="true"></i>
+          </button>
+          <button
+            type="button"
+            class="btn voice-input-btn"
+            :class="voiceButtonClass"
+            :disabled="voiceButtonDisabled"
+            :title="voiceButtonTitle"
+            data-tutorial-id="chat-voice-push-to-talk"
+            @mousedown.prevent="startVoiceRecording"
+            @mouseup.prevent="stopVoiceRecording(false)"
+            @mouseleave="stopVoiceRecording(true)"
+            @touchstart.prevent="startVoiceRecording"
+            @touchend.prevent="stopVoiceRecording(false)"
+            @touchcancel.prevent="stopVoiceRecording(true)"
+          >
+            <i class="fa" :class="voiceButtonIcon" aria-hidden="true"></i>
+            <span class="voice-input-btn-label">{{ voiceButtonText }}</span>
+          </button>
+        </div>
         <button v-if="isLoading" type="button" class="btn" data-testid="stop-reply" @click="stopReply()">停止回复</button>
         <button
           class="btn btn-primary send-message-btn"
@@ -219,7 +298,7 @@
       ref="officeDockingInputRef"
       type="file"
       multiple
-      accept=".xlsx,.xlsm,.xls,.csv,.docx,.doc,.pdf,.pptx,.ppt"
+      :accept="intakeAcceptAttribute('office')"
       style="display: none"
       @change="onOfficeDockingFileChange"
     />
@@ -236,7 +315,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount, onActivated, onDeactivated } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, onActivated, onDeactivated, nextTick } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useIndustryStore } from '@/stores/industry'
 import { useAgentTaskCenterStore } from '@/stores/agentTaskCenter'
@@ -253,11 +332,13 @@ import ChatHistoryModal from '@/components/chat/ChatHistoryModal.vue'
 import ChatOfficeDockingReview from '@/components/chat/ChatOfficeDockingReview.vue'
 import TaskWorkspaceContextBar from '@/components/chat/TaskWorkspaceContextBar.vue'
 import { useChatOfficeDocking } from '@/composables/useChatOfficeDocking'
+import { intakeAcceptAttribute } from '@/utils/documentIntake'
 import { useResizablePane } from '@/composables/useResizablePane'
 import { useModsStore } from '@/stores/mods'
 import { useChatView } from '@/composables/useChatView'
 import { useChatVoiceInput } from '@/composables/useChatVoiceInput'
-import { useProactiveReplySuggestions } from '@/composables/useProactiveReplySuggestions'
+import { requestVoiceCallStart, voiceChatBridge } from '@/composables/voiceCallHost'
+import { isFailedChatReply, useProactiveReplySuggestions } from '@/composables/useProactiveReplySuggestions'
 import { useChatMessageUi } from '@/composables/useChatMessageUi'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { useChatViewHost } from '@/composables/useChatViewHost'
@@ -340,6 +421,12 @@ const {
   loadingProgressText,
   excelAnalyzeUploading,
   multimodalPendingCount,
+  multimodalStaging,
+  artifactStaging,
+  unsupportedStaging,
+  removeArtifactFile,
+  removeMultimodalFile,
+  dismissUnsupportedFile,
   excelSheetOptions,
   linkedExcelSheet,
   linkedExcelAllSheets,
@@ -363,6 +450,7 @@ const {
   selectTask,
   setTaskFilter,
   clearTaskHistory,
+  removeTask,
   retryTask,
   pauseTask,
   resumeTask,
@@ -389,6 +477,33 @@ const {
   stageExcelAnalysisContext,
 } = chatViewApi
 
+/** 智能对话页只在悬浮球内通话，不展开悬浮窗面板。 */
+const startVoiceCallFromHost = () => {
+  requestVoiceCallStart({ expandPanel: false })
+}
+
+/**
+ * 通话轮复用本页的消息与发送通道，语音对话直接出现在当前对话里。
+ * 任务工作区与主对话都复用 ChatView；以「最近激活」的实例作为唯一消息源，
+ * 避免通话内容写进一个列表、用户却盯着另一个列表。
+ */
+const registerVoiceChatBridge = () => {
+  voiceChatBridge.value = {
+    messages,
+    send: (text: string) => chatSendMessage(text),
+    isLoading,
+  }
+}
+const unregisterVoiceChatBridge = () => {
+  if (voiceChatBridge.value?.messages !== messages) return
+  voiceChatBridge.value = { messages: null, send: null, isLoading: null }
+}
+onMounted(registerVoiceChatBridge)
+onActivated(registerVoiceChatBridge)
+onMounted(() => window.addEventListener('xcagi:retry-last-failed-turn', retryLastFailedTurn))
+onBeforeUnmount(unregisterVoiceChatBridge)
+onBeforeUnmount(() => window.removeEventListener('xcagi:retry-last-failed-turn', retryLastFailedTurn))
+
 const { workspaceTaskId, workspaceMode, visibleTaskList, visibleFilteredTaskList, visibleActiveTaskId, workspaceHeader } =
   useRoutedTaskWorkspace({
     props,
@@ -411,13 +526,38 @@ const { approveTaskWithFeedback, approveRunFromChat } = useTaskApprovalFeedback(
 })
 
 const messageInput = ref('')
-function fillComposer(text: string) {
-  messageInput.value = text
+async function recallMessage(index: number) {
+  if (!window.confirm('撤回这条消息及其之后的所有回复，并把内容放回输入框重新编辑？')) return
+  const result = await chatViewApi.recallUserMessage(index)
+  if (!result.ok) {
+    if (result.message) window.alert(result.message)
+    return
+  }
+  messageInput.value = result.text
   document.getElementById('messageInput')?.focus()
+}
+async function reconcileTurn(index: number) {
+  const result = await chatViewApi.reconcileTurnMessage(index)
+  if (!result.ok && result.message) window.alert(result.message)
 }
 function retryFailedModel(payload: { text: string; turnId: string }) {
   messageInput.value = ''
   void retryModelOnly(payload.text, payload.turnId)
+}
+/** 侧边栏「模型服务异常」徽标的重试入口：找回最近一次失败轮次并重发。 */
+function retryLastFailedTurn() {
+  for (let index = messages.value.length - 1; index >= 0; index--) {
+    const reply = messages.value[index]
+    if (reply.role !== 'ai' || reply.streamingShell) continue
+    if (reply.workflowAction !== 'failed' && reply.workflowAction !== 'unknown' && !isFailedChatReply(reply)) continue
+    const turnId = String(reply.turnId || '').trim()
+    const user = messages.value.slice(0, index).reverse()
+      .find(item => item.role === 'user' && (!turnId || item.turnId === turnId))
+    if (!turnId || !user) continue
+    retryFailedModel({ text: plainTextFromChatHtml(user.content), turnId })
+    return
+  }
+  showAppToast('没有可重试的失败轮次，请重新输入。', 'info')
 }
 function confirmDestructiveScope(payload: { text: string; idempotencyKey: string }) {
   void confirmDestructive(payload.text, payload.idempotencyKey)
@@ -425,12 +565,53 @@ function confirmDestructiveScope(payload: { text: string; idempotencyKey: string
 const composerDragOver = ref(false)
 let composerDragDepth = 0
 
-const COMPOSER_ACCEPT_RE = /\.(xlsx|xlsm|pdf|jpe?g|png|webp|gif)$/i
-const COMPOSER_ACCEPT_MIME = /^(image\/(jpeg|png|webp|gif)|application\/pdf)/i
+const COMPOSER_ACCEPT_RE = /\.(xlsx|xlsm|pdf|jpe?g|png|webp|gif|txt|log)$/i
+const COMPOSER_ACCEPT_MIME = /^(image\/(jpeg|png|webp|gif)|application\/pdf|text\/plain)/i
+/** 拖入文件夹时的递归扫描上限，避免误拖大目录导致卡顿。 */
+const COMPOSER_MAX_DROP_FILES = 200
 
-function filesFromDataTransfer(dt: DataTransfer | null): File[] {
-  if (!dt?.files?.length) return []
-  return Array.from(dt.files)
+async function collectEntryFiles(entry: FileSystemEntry, out: File[]): Promise<void> {
+  if (out.length >= COMPOSER_MAX_DROP_FILES) return
+  if (entry.isFile) {
+    const file = await new Promise<File | null>((resolve) => {
+      (entry as FileSystemFileEntry).file(
+        (f) => resolve(f),
+        () => resolve(null),
+      )
+    })
+    if (file) out.push(file)
+    return
+  }
+  if (!entry.isDirectory) return
+  const reader = (entry as FileSystemDirectoryEntry).createReader()
+  for (;;) {
+    const batch = await new Promise<FileSystemEntry[]>((resolve) => {
+      reader.readEntries(
+        (items) => resolve(items),
+        () => resolve([]),
+      )
+    })
+    if (!batch.length) return
+    for (const child of batch) {
+      if (out.length >= COMPOSER_MAX_DROP_FILES) return
+      await collectEntryFiles(child, out)
+    }
+  }
+}
+
+async function filesFromDataTransfer(dt: DataTransfer | null): Promise<File[]> {
+  if (!dt) return []
+  const entries = Array.from(dt.items || [])
+    .filter((item) => item.kind === 'file')
+    .map((item) => (typeof item.webkitGetAsEntry === 'function' ? item.webkitGetAsEntry() : null))
+    .filter((entry): entry is FileSystemEntry => Boolean(entry))
+  if (!entries.length) return Array.from(dt.files || [])
+  const out: File[] = []
+  for (const entry of entries) {
+    await collectEntryFiles(entry, out)
+    if (out.length >= COMPOSER_MAX_DROP_FILES) break
+  }
+  return out.length ? out : Array.from(dt.files || [])
 }
 
 function isComposerAcceptedFile(file: File): boolean {
@@ -458,11 +639,11 @@ async function onComposerDrop(e: DragEvent) {
   composerDragDepth = 0
   composerDragOver.value = false
   if (isLoading.value || excelAnalyzeUploading.value) return
-  const files = filesFromDataTransfer(e.dataTransfer)
+  const files = await filesFromDataTransfer(e.dataTransfer)
   if (!files.length) return
   const accepted = files.filter(isComposerAcceptedFile)
   if (!accepted.length) {
-    await addAndSaveMessage('[附件] 不支持的文件类型，请拖入 Excel、图片或 PDF', 'ai')
+    await addAndSaveMessage('[附件] 不支持的文件类型，请拖入 Excel、图片、PDF 或包含它们的文件夹', 'ai')
     return
   }
   // The picker snapshots these files and applies the existing session/identity guard.
@@ -549,9 +730,9 @@ const {
   playingMsgIdx,
   latestAiMessageIndex,
   isMessageCollapsed,
+  canCollapseMessage,
   expandMessage,
   collapseMessage,
-  getCollapsedPreview,
   canSpeakMessage,
   toggleMessageTts,
   batchCalculateHeights,
@@ -648,8 +829,14 @@ function chooseAllWorksheetTemplates() {
 }
 
 const sendQuick = (text: string) => {
+  // 顶部快捷按钮只填入输入框，由用户确认后再发送，避免误触直接执行。
   messageInput.value = text
-  void sendMessage()
+  void nextTick(() => {
+    const el = document.getElementById('messageInput') as HTMLTextAreaElement | null
+    if (!el) return
+    el.focus()
+    el.setSelectionRange(text.length, text.length)
+  })
 }
 
 const handleKeyDown = (e: KeyboardEvent) => {
@@ -718,6 +905,61 @@ function emitSwitchView(view: string) {
 
 .input-area {
   position: relative;
+}
+
+.composer-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 2px;
+  max-height: 96px;
+  overflow-y: auto;
+}
+
+.composer-attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 240px;
+  padding: 2px 4px 2px 8px;
+  border: 1px solid var(--app-border-subtle, #d0d5dd);
+  border-radius: 999px;
+  background: var(--app-surface-muted, #f5f7fa);
+  color: var(--app-text, #344054);
+  font-size: var(--app-font-size-caption, 12px);
+  line-height: 1.6;
+}
+
+.composer-attachment__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-attachment__remove {
+  border: none;
+  background: transparent;
+  color: var(--app-text-muted, #667085);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+.composer-attachment__remove:hover {
+  color: #b42318;
+}
+
+.composer-attachment--skipped {
+  border-color: #f7c948;
+  background: #fffaeb;
+  color: #93370d;
+}
+
+.composer-attachment__note {
+  flex: none;
+  color: #93370d;
+  font-size: 11px;
 }
 .input-area--dragover {
   outline: 2px dashed var(--xc-color-primary, #0d47a1);

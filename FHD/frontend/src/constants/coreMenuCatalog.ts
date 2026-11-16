@@ -64,7 +64,7 @@ export const CORE_MENU_ITEMS_BASE: CoreMenuCatalogItem[] = [
     key: 'ai-ecosystem',
     name: '智能生态',
     iconClass: 'fa-sitemap',
-    description: '智慧分析、AIOPEN、生产员工等应用入口',
+    description: '智慧分析、AIOPEN、私有交付等应用入口',
   },
   {
     key: 'persy-knowledge',

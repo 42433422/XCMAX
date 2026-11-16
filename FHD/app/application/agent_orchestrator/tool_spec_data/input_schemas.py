@@ -788,6 +788,43 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "confirm": {"type": "boolean"},
         },
     ),
+    ("elt_import", "preview"): _object_schema(
+        [],
+        {
+            "file_path": {
+                "type": "string",
+                "description": "已上传的单个文件名或上传记录 ID（不是本地目录路径）",
+            },
+            "file_paths": {
+                "type": "array",
+                "items": {"type": "string"},
+                "maxItems": 50,
+                "description": "已上传的多个文件名/ID（最多 50 个），与 file_path 二选一；整个目录请逐个列出或留空按本轮上传处理",
+            },
+            "valid_rows_only": {"type": "boolean"},
+            "accept_suggested": {
+                "type": "boolean",
+                "description": "用户接受 AI 建议映射时传 true，映射置信度不再阻断预演",
+            },
+        },
+    ),
+    ("elt_import", "execute"): _object_schema(
+        [],
+        {
+            "run_id": {"type": "string", "description": "单个预演编号"},
+            "run_ids": {
+                "type": "array",
+                "items": {"type": "string"},
+                "maxItems": 50,
+                "description": "整批预演编号（最多 50 个），与 run_id 二选一",
+            },
+            "valid_rows_only": {"type": "boolean"},
+            "accept_suggested": {
+                "type": "boolean",
+                "description": "用户明确接受 AI 建议映射时传 true，可免去逐字段确认",
+            },
+        },
+    ),
     ("excel_import", "execute_import"): _object_schema(
         ["pending_import_id"], {"pending_import_id": {"type": "string"}}
     ),
@@ -1029,6 +1066,13 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "prompt": {"type": "string"},
             "request": {"type": "string"},
             "output_format": {"type": "string", "enum": ["docx", "xlsx"]},
+            "template_id": {"type": "string"},
+            "template_name": {"type": "string"},
+            "file_path": {"type": "string"},
+            "sheet_name": {"type": "string"},
+            "rows": {"type": "array", "items": {"type": "object"}},
+            "field_mapping": {"type": "object"},
+            "output_name": {"type": "string"},
         },
     ),
     ("sales", "create_order"): _SALES_QUOTE_INPUT,

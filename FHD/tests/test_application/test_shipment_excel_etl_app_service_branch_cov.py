@@ -1,6 +1,6 @@
 """Branch/behaviour coverage for the shipment Excel ETL app service module.
 
-Covers ``app.application.shipment_excel_etl_app_service``:
+Covers ``app.application.shipment_excel_elt_app_service``:
   * every private helper (scoring / header detection / mapping / inference /
     buyer meta / item building / fingerprint / sheet probe / LLM assist)
   * the public entry points (parse / preview / execute / write / regenerate /
@@ -26,31 +26,31 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from openpyxl import Workbook
 
-from app.application import shipment_excel_etl_app_service as svc_mod
-from app.application import shipment_excel_etl_security as etl_security
-from app.application.shipment_etl_profile import (
+from app.application import shipment_excel_elt_app_service as svc_mod
+from app.application import shipment_excel_elt_security as elt_security
+from app.application.shipment_elt_profile import (
     CompiledMetaPatterns,
-    ShipmentEtlProfile,
+    ShipmentEltProfile,
 )
-from app.application.shipment_excel_etl_app_service import (
-    ShipmentExcelEtlApplicationService,
-    batch_execute_shipment_excel_etl,
-    batch_preview_shipment_excel_etl,
-    execute_shipment_excel_etl,
-    get_shipment_excel_etl_app_service,
+from app.application.shipment_excel_elt_app_service import (
+    ShipmentExcelEltApplicationService,
+    batch_execute_shipment_excel_elt,
+    batch_preview_shipment_excel_elt,
+    execute_shipment_excel_elt,
+    get_shipment_excel_elt_app_service,
     note_fingerprint,
     parse_delivery_notes,
-    preview_shipment_excel_etl,
+    preview_shipment_excel_elt,
     regenerate_delivery_notes_from_file,
     write_delivery_note_workbook,
     write_ledger_workbook,
 )
 
-MOD = "app.application.shipment_excel_etl_app_service"
-SEC = "app.application.shipment_excel_etl_security"
-KB = "app.domain.app_pure.excel_etl_kb"
-LLM = "app.application.shipment_excel_etl_llm"
-FP = "app.application.shipment_excel_etl_fingerprint_store"
+MOD = "app.application.shipment_excel_elt_app_service"
+SEC = "app.application.shipment_excel_elt_security"
+KB = "app.domain.app_pure.excel_elt_kb"
+LLM = "app.application.shipment_excel_elt_llm"
+FP = "app.application.shipment_excel_elt_fingerprint_store"
 
 
 # ---------------------------------------------------------------------------
@@ -154,7 +154,7 @@ def _make_profile(**overrides):
         "write": {},
     }
     base.update(overrides)
-    return ShipmentEtlProfile(**base)
+    return ShipmentEltProfile(**base)
 
 
 def _delivery_ws():
@@ -299,7 +299,7 @@ def no_llm(monkeypatch):
 
 @pytest.fixture
 def no_kb(monkeypatch):
-    monkeypatch.setattr(f"{MOD}.get_excel_etl_kb", lambda: _FakeKB())
+    monkeypatch.setattr(f"{MOD}.get_excel_elt_kb", lambda: _FakeKB())
 
 
 # ---------------------------------------------------------------------------
@@ -366,7 +366,7 @@ def test_kb_resolve_layout_hit_and_miss(monkeypatch):
             return self
 
     kb = KBHit()
-    monkeypatch.setattr(f"{MOD}.get_excel_etl_kb", lambda: kb)
+    monkeypatch.setattr(f"{MOD}.get_excel_elt_kb", lambda: kb)
     ws = _delivery_ws()
     row, mapping, fp = svc_mod._kb_resolve_layout(ws)
     assert row == 3
@@ -375,7 +375,7 @@ def test_kb_resolve_layout_hit_and_miss(monkeypatch):
     assert kb.touched is True
 
     # no memory -> miss
-    monkeypatch.setattr(f"{MOD}.get_excel_etl_kb", lambda: _FakeKB())
+    monkeypatch.setattr(f"{MOD}.get_excel_elt_kb", lambda: _FakeKB())
     row2, mapping2, fp2 = svc_mod._kb_resolve_layout(FakeWS([["x"], ["y"]]))
     assert row2 is None and mapping2 == {} and fp2 == ""
 
@@ -384,7 +384,7 @@ def test_remember_sheet_layout_branches(monkeypatch):
     captured = []
     kb = _FakeKB()
     kb.remember = lambda mem: captured.append(mem)
-    monkeypatch.setattr(f"{MOD}.get_excel_etl_kb", lambda: kb)
+    monkeypatch.setattr(f"{MOD}.get_excel_elt_kb", lambda: kb)
     prof = _make_profile()
     # empty mapping -> ""
     assert (
@@ -408,7 +408,7 @@ def test_remember_sheet_layout_branches(monkeypatch):
         def remember(self, mem):
             raise OSError("boom")
 
-    monkeypatch.setattr(f"{MOD}.get_excel_etl_kb", lambda: KBFail())
+    monkeypatch.setattr(f"{MOD}.get_excel_elt_kb", lambda: KBFail())
     assert (
         svc_mod._remember_sheet_layout(
             _delivery_ws(), header_row=3, mapping={"product_name": 2}, profile=prof
@@ -512,7 +512,7 @@ def test_infer_columns_from_samples(monkeypatch):
             ["M-02", "底漆", "20", "8"],
         ]
     )
-    monkeypatch.setitem(os.environ, "FHD_EXCEL_ETL_HEURISTIC", "1")
+    monkeypatch.setitem(os.environ, "FHD_EXCEL_ELT_HEURISTIC", "1")
     base = {"product_name": 2}
     inferred = svc_mod._infer_columns_from_samples(ws, 1, base)
     assert "model_number" in inferred
@@ -520,7 +520,7 @@ def test_infer_columns_from_samples(monkeypatch):
     assert "tin_spec" in inferred
 
     # heuristic off -> copy
-    monkeypatch.setitem(os.environ, "FHD_EXCEL_ETL_HEURISTIC", "off")
+    monkeypatch.setitem(os.environ, "FHD_EXCEL_ELT_HEURISTIC", "off")
     assert svc_mod._infer_columns_from_samples(ws, 1, base) == base
 
 
@@ -701,7 +701,7 @@ def test_note_fingerprint():
 def test_fingerprint_store_path_and_legacy(monkeypatch, tmp_path):
     monkeypatch.setattr("app.utils.path_io.path_utils.get_data_dir", lambda: tmp_path)
     path = svc_mod._fingerprint_store_path()
-    assert path.name == "shipment_etl_fingerprints.json"
+    assert path.name == "shipment_elt_fingerprints.json"
     assert svc_mod._legacy_json_has_fingerprint("x") is False
 
     path.write_text('{"entries": {"fp1": 1}}', encoding="utf-8")
@@ -719,7 +719,7 @@ def test_load_save_fingerprints(monkeypatch, tmp_path):
     svc_mod._save_fingerprints({"entries": {"a": 1}})
     assert svc_mod._load_fingerprints() == {"entries": {"a": 1}}
     # non-dict entries -> empty
-    (tmp_path / "shipment_etl_fingerprints.json").write_text('{"entries": []}', encoding="utf-8")
+    (tmp_path / "shipment_elt_fingerprints.json").write_text('{"entries": []}', encoding="utf-8")
     assert svc_mod._load_fingerprints() == {"entries": {}}
 
 
@@ -1004,7 +1004,7 @@ def test_parse_ledger_sheet_missing_order(monkeypatch, no_llm, no_kb):
 def test_parse_delivery_notes_happy(tmp_path, monkeypatch, delivery_profile, no_llm, no_kb):
     path = _write_delivery_xlsx(tmp_path / "del.xlsx")
     monkeypatch.setattr(f"{SEC}._trusted_base_roots", lambda: [tmp_path])
-    monkeypatch.setattr(f"{SEC}.resolve_etl_path", lambda *a, **k: path)
+    monkeypatch.setattr(f"{SEC}.resolve_elt_path", lambda *a, **k: path)
     monkeypatch.setattr(f"{MOD}._profiles_for_parse", lambda *a, **k: [delivery_profile])
     monkeypatch.setattr(f"{MOD}._extract_adjacent_buyer_meta", lambda ws, r: {})
     res = parse_delivery_notes(path)
@@ -1018,7 +1018,7 @@ def test_parse_delivery_notes_happy(tmp_path, monkeypatch, delivery_profile, no_
 def test_parse_delivery_notes_ledger_only(tmp_path, monkeypatch, delivery_profile, no_llm, no_kb):
     path = _write_ledger_xlsx(tmp_path / "lg.xlsx")
     monkeypatch.setattr(f"{SEC}._trusted_base_roots", lambda: [tmp_path])
-    monkeypatch.setattr(f"{SEC}.resolve_etl_path", lambda *a, **k: path)
+    monkeypatch.setattr(f"{SEC}.resolve_elt_path", lambda *a, **k: path)
     monkeypatch.setattr(f"{MOD}._profiles_for_parse", lambda *a, **k: [delivery_profile])
     res = parse_delivery_notes(path, include_ledger=True)
     assert res["success"] is True
@@ -1050,7 +1050,7 @@ def test_parse_delivery_notes_mixed_auto(tmp_path, monkeypatch, delivery_profile
     path = tmp_path / "mixed.xlsx"
     wb.save(path)
     monkeypatch.setattr(f"{SEC}._trusted_base_roots", lambda: [tmp_path])
-    monkeypatch.setattr(f"{SEC}.resolve_etl_path", lambda *a, **k: path)
+    monkeypatch.setattr(f"{SEC}.resolve_elt_path", lambda *a, **k: path)
     monkeypatch.setattr(f"{MOD}._profiles_for_parse", lambda *a, **k: [delivery_profile])
     monkeypatch.setattr(f"{MOD}._extract_adjacent_buyer_meta", lambda ws, r: {})
     res = parse_delivery_notes(path)
@@ -1073,12 +1073,12 @@ def test_parse_delivery_notes_mixed_auto(tmp_path, monkeypatch, delivery_profile
 
 
 def test_parse_delivery_notes_unsafe_path(tmp_path, monkeypatch, delivery_profile):
-    from app.application.shipment_excel_etl_security import ShipmentEtlPathError
+    from app.application.shipment_excel_elt_security import ShipmentEltPathError
 
     def _raise(*a, **k):
-        raise ShipmentEtlPathError("bad")
+        raise ShipmentEltPathError("bad")
 
-    monkeypatch.setattr(f"{SEC}.resolve_etl_path", _raise)
+    monkeypatch.setattr(f"{SEC}.resolve_elt_path", _raise)
     res = parse_delivery_notes(tmp_path / "x.xlsx")
     assert res["success"] is False
     assert res["error_code"] == "unsafe_path"
@@ -1086,7 +1086,7 @@ def test_parse_delivery_notes_unsafe_path(tmp_path, monkeypatch, delivery_profil
 
 def test_parse_delivery_notes_file_missing(tmp_path, monkeypatch, delivery_profile):
     monkeypatch.setattr(f"{SEC}._trusted_base_roots", lambda: [tmp_path])
-    monkeypatch.setattr(f"{SEC}.resolve_etl_path", lambda *a, **k: tmp_path / "nope.xlsx")
+    monkeypatch.setattr(f"{SEC}.resolve_elt_path", lambda *a, **k: tmp_path / "nope.xlsx")
     monkeypatch.setattr(f"{MOD}._profiles_for_parse", lambda *a, **k: [delivery_profile])
     res = parse_delivery_notes(tmp_path / "nope.xlsx")
     assert res["success"] is False
@@ -1095,7 +1095,7 @@ def test_parse_delivery_notes_file_missing(tmp_path, monkeypatch, delivery_profi
 
 def test_parse_delivery_notes_openpyxl_import_error(tmp_path, monkeypatch, delivery_profile):
     path = _write_delivery_xlsx(tmp_path / "d.xlsx")
-    monkeypatch.setattr(f"{SEC}.resolve_etl_path", lambda *a, **k: path)
+    monkeypatch.setattr(f"{SEC}.resolve_elt_path", lambda *a, **k: path)
     monkeypatch.setattr(f"{MOD}._profiles_for_parse", lambda *a, **k: [delivery_profile])
     monkeypatch.setitem(sys.modules, "openpyxl", None)
     try:
@@ -1109,7 +1109,7 @@ def test_parse_delivery_notes_openpyxl_import_error(tmp_path, monkeypatch, deliv
 def test_parse_delivery_notes_load_error(tmp_path, monkeypatch, delivery_profile):
     path = _write_delivery_xlsx(tmp_path / "d.xlsx")
     monkeypatch.setattr(f"{SEC}._trusted_base_roots", lambda: [tmp_path])
-    monkeypatch.setattr(f"{SEC}.resolve_etl_path", lambda *a, **k: path)
+    monkeypatch.setattr(f"{SEC}.resolve_elt_path", lambda *a, **k: path)
     monkeypatch.setattr(f"{MOD}._profiles_for_parse", lambda *a, **k: [delivery_profile])
 
     def boom(*a, **k):
@@ -1122,10 +1122,10 @@ def test_parse_delivery_notes_load_error(tmp_path, monkeypatch, delivery_profile
 
 
 def test_parse_delivery_notes_ocr_route(tmp_path, monkeypatch, delivery_profile):
-    OCR = "app.application.shipment_excel_etl_ocr"
+    OCR = "app.application.shipment_excel_elt_ocr"
     path = tmp_path / "scan.pdf"
     path.write_bytes(b"pdf")
-    monkeypatch.setattr(f"{SEC}.resolve_etl_path", lambda *a, **k: path)
+    monkeypatch.setattr(f"{SEC}.resolve_elt_path", lambda *a, **k: path)
     monkeypatch.setattr(f"{OCR}.is_ocr_source", lambda p: True)
     monkeypatch.setattr(
         f"{OCR}.parse_ocr_document",
@@ -1138,10 +1138,10 @@ def test_parse_delivery_notes_ocr_route(tmp_path, monkeypatch, delivery_profile)
 def test_parse_delivery_notes_ocr_exception_falls_back(
     tmp_path, monkeypatch, delivery_profile, no_llm, no_kb
 ):
-    OCR = "app.application.shipment_excel_etl_ocr"
+    OCR = "app.application.shipment_excel_elt_ocr"
     path = _write_delivery_xlsx(tmp_path / "d.xlsx")
     monkeypatch.setattr(f"{SEC}._trusted_base_roots", lambda: [tmp_path])
-    monkeypatch.setattr(f"{SEC}.resolve_etl_path", lambda *a, **k: path)
+    monkeypatch.setattr(f"{SEC}.resolve_elt_path", lambda *a, **k: path)
     monkeypatch.setattr(f"{MOD}._profiles_for_parse", lambda *a, **k: [delivery_profile])
     monkeypatch.setattr(f"{MOD}._extract_adjacent_buyer_meta", lambda ws, r: {})
     monkeypatch.setattr(f"{OCR}.is_ocr_source", lambda p: True)
@@ -1165,7 +1165,7 @@ def test_parse_delivery_notes_no_notes_skipped(
     path = tmp_path / "quote.xlsx"
     wb.save(path)
     monkeypatch.setattr(f"{SEC}._trusted_base_roots", lambda: [tmp_path])
-    monkeypatch.setattr(f"{SEC}.resolve_etl_path", lambda *a, **k: path)
+    monkeypatch.setattr(f"{SEC}.resolve_elt_path", lambda *a, **k: path)
     monkeypatch.setattr(f"{MOD}._profiles_for_parse", lambda *a, **k: [delivery_profile])
     res = parse_delivery_notes(path)
     assert res["success"] is True
@@ -1178,8 +1178,8 @@ def test_parse_delivery_notes_no_notes_skipped(
 # ---------------------------------------------------------------------------
 
 
-def test_preview_shipment_excel_etl_happy(tmp_path, monkeypatch):
-    monkeypatch.setattr(f"{SEC}.resolve_etl_path", lambda *a, **k: tmp_path / "d.xlsx")
+def test_preview_shipment_excel_elt_happy(tmp_path, monkeypatch):
+    monkeypatch.setattr(f"{SEC}.resolve_elt_path", lambda *a, **k: tmp_path / "d.xlsx")
     monkeypatch.setattr(
         f"{MOD}.parse_delivery_notes",
         lambda *a, **k: {
@@ -1190,9 +1190,9 @@ def test_preview_shipment_excel_etl_happy(tmp_path, monkeypatch):
             "ledger_note_count": 0,
         },
     )
-    monkeypatch.setattr(f"{SEC}.tenant_key_for_etl", lambda: "tenant:1")
+    monkeypatch.setattr(f"{SEC}.tenant_key_for_elt", lambda: "tenant:1")
     monkeypatch.setattr(f"{MOD}._is_fingerprint_imported", lambda a, b: False)
-    res = preview_shipment_excel_etl(tmp_path / "d.xlsx")
+    res = preview_shipment_excel_elt(tmp_path / "d.xlsx")
     assert res["success"] is True
     assert res["preview"] is True
     assert res["confirm_required"] is True
@@ -1201,20 +1201,20 @@ def test_preview_shipment_excel_etl_happy(tmp_path, monkeypatch):
     assert res["product_records"]
 
 
-def test_preview_shipment_excel_etl_unsafe(tmp_path, monkeypatch):
-    from app.application.shipment_excel_etl_security import ShipmentEtlPathError
+def test_preview_shipment_excel_elt_unsafe(tmp_path, monkeypatch):
+    from app.application.shipment_excel_elt_security import ShipmentEltPathError
 
     def _raise(*a, **k):
-        raise ShipmentEtlPathError("bad")
+        raise ShipmentEltPathError("bad")
 
-    monkeypatch.setattr(f"{SEC}.resolve_etl_path", _raise)
-    res = preview_shipment_excel_etl(tmp_path / "d.xlsx")
+    monkeypatch.setattr(f"{SEC}.resolve_elt_path", _raise)
+    res = preview_shipment_excel_elt(tmp_path / "d.xlsx")
     assert res["success"] is False
     assert res["error_code"] == "unsafe_path"
 
 
-def test_preview_shipment_excel_etl_duplicate_and_ledger_risk(tmp_path, monkeypatch):
-    monkeypatch.setattr(f"{SEC}.resolve_etl_path", lambda *a, **k: tmp_path / "d.xlsx")
+def test_preview_shipment_excel_elt_duplicate_and_ledger_risk(tmp_path, monkeypatch):
+    monkeypatch.setattr(f"{SEC}.resolve_elt_path", lambda *a, **k: tmp_path / "d.xlsx")
     note = _delivery_note()
     note["fingerprint"] = "fp-1"
     monkeypatch.setattr(
@@ -1227,9 +1227,9 @@ def test_preview_shipment_excel_etl_duplicate_and_ledger_risk(tmp_path, monkeypa
             "ledger_note_count": 0,
         },
     )
-    monkeypatch.setattr(f"{SEC}.tenant_key_for_etl", lambda: "tenant:1")
+    monkeypatch.setattr(f"{SEC}.tenant_key_for_elt", lambda: "tenant:1")
     monkeypatch.setattr(f"{MOD}._is_fingerprint_imported", lambda a, b: True)
-    res = preview_shipment_excel_etl(tmp_path / "d.xlsx")
+    res = preview_shipment_excel_elt(tmp_path / "d.xlsx")
     assert res["duplicate_note_count"] == 1
     assert res["ledger_risk"] is True
 
@@ -1240,8 +1240,8 @@ def test_preview_shipment_excel_etl_duplicate_and_ledger_risk(tmp_path, monkeypa
 
 
 def _patch_execute(monkeypatch, tmp_path, profile):
-    monkeypatch.setattr(f"{MOD}.get_shipment_etl_profile", lambda pid=None: profile)
-    monkeypatch.setattr(f"{SEC}.tenant_key_for_etl", lambda: "tenant:1")
+    monkeypatch.setattr(f"{MOD}.get_shipment_elt_profile", lambda pid=None: profile)
+    monkeypatch.setattr(f"{SEC}.tenant_key_for_elt", lambda: "tenant:1")
     monkeypatch.setattr(f"{MOD}._is_fingerprint_imported", lambda a, b: False)
     monkeypatch.setattr(f"{MOD}._record_fingerprint_now", lambda *a, **k: None)
     monkeypatch.setattr(f"{FP}.delete_fingerprint", lambda *a, **k: None)
@@ -1249,33 +1249,33 @@ def _patch_execute(monkeypatch, tmp_path, profile):
 
 def test_execute_direct_denied(monkeypatch, delivery_profile):
     monkeypatch.setattr(f"{SEC}.direct_execute_allowed", lambda: False)
-    res = execute_shipment_excel_etl("x.xlsx", direct=True, dry_run=False)
+    res = execute_shipment_excel_elt("x.xlsx", direct=True, dry_run=False)
     assert res["success"] is False
     assert res["error_code"] == "direct_execute_denied"
 
 
 def test_execute_unsafe_path(monkeypatch, delivery_profile, tmp_path):
-    from app.application.shipment_excel_etl_security import ShipmentEtlPathError
+    from app.application.shipment_excel_elt_security import ShipmentEltPathError
 
     _patch_execute(monkeypatch, tmp_path, delivery_profile)
 
     def _raise(*a, **k):
-        raise ShipmentEtlPathError("bad")
+        raise ShipmentEltPathError("bad")
 
-    monkeypatch.setattr(f"{SEC}.resolve_etl_path", _raise)
-    res = execute_shipment_excel_etl("x.xlsx")
+    monkeypatch.setattr(f"{SEC}.resolve_elt_path", _raise)
+    res = execute_shipment_excel_elt("x.xlsx")
     assert res["error_code"] == "unsafe_path"
 
 
 def test_execute_missing_path(monkeypatch, delivery_profile, tmp_path):
     _patch_execute(monkeypatch, tmp_path, delivery_profile)
-    res = execute_shipment_excel_etl(None)
+    res = execute_shipment_excel_elt(None)
     assert res["error_code"] == "missing_path"
 
 
 def test_execute_parsed_not_success(monkeypatch, delivery_profile, tmp_path):
     _patch_execute(monkeypatch, tmp_path, delivery_profile)
-    monkeypatch.setattr(f"{SEC}.resolve_etl_path", lambda *a, **k: tmp_path / "d.xlsx")
+    monkeypatch.setattr(f"{SEC}.resolve_elt_path", lambda *a, **k: tmp_path / "d.xlsx")
     monkeypatch.setattr(
         f"{MOD}.parse_delivery_notes",
         lambda *a, **k: {
@@ -1284,7 +1284,7 @@ def test_execute_parsed_not_success(monkeypatch, delivery_profile, tmp_path):
             "notes": [],
         },
     )
-    res = execute_shipment_excel_etl("d.xlsx")
+    res = execute_shipment_excel_elt("d.xlsx")
     assert res["success"] is False
 
 
@@ -1292,27 +1292,27 @@ def test_execute_ledger_confirm_required(monkeypatch, delivery_profile, tmp_path
     _patch_execute(monkeypatch, tmp_path, delivery_profile)
     note = _delivery_note()
     note["source_kind"] = "shipment_ledger"
-    res = execute_shipment_excel_etl(None, notes=[note], confirm_ledger=False)
+    res = execute_shipment_excel_elt(None, notes=[note], confirm_ledger=False)
     assert res["error_code"] == "ledger_confirm_required"
 
 
 def test_execute_no_notes(monkeypatch, delivery_profile, tmp_path):
     _patch_execute(monkeypatch, tmp_path, delivery_profile)
-    res = execute_shipment_excel_etl(None, notes=[])
+    res = execute_shipment_excel_elt(None, notes=[])
     assert res["error_code"] == "no_delivery_notes"
 
 
 def test_execute_unsupported_profile_target(monkeypatch, delivery_profile, tmp_path):
     _patch_execute(monkeypatch, tmp_path, delivery_profile)
     note = _delivery_note(profile_target="preview_only")
-    res = execute_shipment_excel_etl(None, notes=[note], import_shipments=True)
+    res = execute_shipment_excel_elt(None, notes=[note], import_shipments=True)
     assert res["error_code"] == "unsupported_profile_target"
 
 
 def test_execute_dry_run_with_duplicates(monkeypatch, delivery_profile, tmp_path):
     _patch_execute(monkeypatch, tmp_path, delivery_profile)
     monkeypatch.setattr(f"{MOD}._is_fingerprint_imported", lambda a, b: True)
-    res = execute_shipment_excel_etl(
+    res = execute_shipment_excel_elt(
         "d.xlsx", notes=[_delivery_note()], dry_run=True, import_shipments=True
     )
     assert res["success"] is True
@@ -1327,7 +1327,7 @@ def test_execute_product_import_failed(monkeypatch, delivery_profile, tmp_path):
         "app.domain.shared_services.tools_workflow_registered._execute_excel_import_records",
         lambda records: {"success": False, "message": "导入失败"},
     )
-    res = execute_shipment_excel_etl(
+    res = execute_shipment_excel_elt(
         "d.xlsx", notes=[_delivery_note()], import_products=True, import_shipments=False
     )
     assert res["error_code"] == "product_import_failed"
@@ -1338,7 +1338,7 @@ def test_execute_success(monkeypatch, delivery_profile, tmp_path):
     svc = MagicMock()
     svc.create_shipment.return_value = {"success": True, "shipment": {"id": 1}}
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: svc)
-    res = execute_shipment_excel_etl(
+    res = execute_shipment_excel_elt(
         "d.xlsx",
         notes=[_delivery_note()],
         idempotent=True,
@@ -1358,7 +1358,7 @@ def test_execute_missing_unit_or_items(monkeypatch, delivery_profile, tmp_path):
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: svc)
     note = _delivery_note()
     note["unit_name"] = ""
-    res = execute_shipment_excel_etl(
+    res = execute_shipment_excel_elt(
         "d.xlsx", notes=[note], import_products=False, import_shipments=True
     )
     assert res["success"] is False
@@ -1372,7 +1372,7 @@ def test_execute_shipment_service_unavailable(monkeypatch, delivery_profile, tmp
         raise OSError("no svc")
 
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", boom)
-    res = execute_shipment_excel_etl(
+    res = execute_shipment_excel_elt(
         "d.xlsx", notes=[_delivery_note()], import_products=False, import_shipments=True
     )
     assert res["success"] is False
@@ -1389,7 +1389,7 @@ def test_execute_compensate_on_failure(monkeypatch, delivery_profile, tmp_path):
     svc.cancel_shipment.return_value = {"success": True}
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: svc)
     notes = [_delivery_note(), _delivery_note(order_number="O-2")]
-    res = execute_shipment_excel_etl(
+    res = execute_shipment_excel_elt(
         "d.xlsx",
         notes=notes,
         import_products=False,
@@ -1413,7 +1413,7 @@ def test_execute_compensate_delete_fallback(monkeypatch, delivery_profile, tmp_p
     svc.delete_shipment.return_value = {"success": True}
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: svc)
     notes = [_delivery_note(), _delivery_note(order_number="O-2")]
-    res = execute_shipment_excel_etl(
+    res = execute_shipment_excel_elt(
         "d.xlsx", notes=notes, import_products=False, import_shipments=True
     )
     assert res["compensated"] == [1]
@@ -1430,7 +1430,7 @@ def test_execute_compensate_error(monkeypatch, delivery_profile, tmp_path):
     svc.delete_shipment.return_value = {"success": False, "message": "del fail"}
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: svc)
     notes = [_delivery_note(), _delivery_note(order_number="O-2")]
-    res = execute_shipment_excel_etl(
+    res = execute_shipment_excel_elt(
         "d.xlsx", notes=notes, import_products=False, import_shipments=True
     )
     assert len(res["compensate_errors"]) == 1
@@ -1451,7 +1451,7 @@ def test_execute_compensate_exception(monkeypatch, delivery_profile, tmp_path):
     svc.cancel_shipment.side_effect = cancel_boom
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: svc)
     notes = [_delivery_note(), _delivery_note(order_number="O-2")]
-    res = execute_shipment_excel_etl(
+    res = execute_shipment_excel_elt(
         "d.xlsx", notes=notes, import_products=False, import_shipments=True
     )
     assert len(res["compensate_errors"]) == 1
@@ -1467,7 +1467,7 @@ def test_execute_partial_no_compensate(monkeypatch, delivery_profile, tmp_path):
     ]
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: svc)
     notes = [_delivery_note(), _delivery_note(order_number="O-2")]
-    res = execute_shipment_excel_etl(
+    res = execute_shipment_excel_elt(
         "d.xlsx",
         notes=notes,
         import_products=False,
@@ -1489,7 +1489,7 @@ def test_execute_record_fingerprint_raises(monkeypatch, delivery_profile, tmp_pa
     svc = MagicMock()
     svc.create_shipment.return_value = {"success": True, "shipment": {"id": 1}}
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: svc)
-    res = execute_shipment_excel_etl(
+    res = execute_shipment_excel_elt(
         "d.xlsx", notes=[_delivery_note()], import_products=False, import_shipments=True
     )
     assert res["success"] is True
@@ -1502,7 +1502,7 @@ def test_execute_force_shipment_target(monkeypatch, delivery_profile, tmp_path):
     svc.create_shipment.return_value = {"success": True, "shipment": {"id": 1}}
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: svc)
     note = _delivery_note(profile_target="preview_only")
-    res = execute_shipment_excel_etl(
+    res = execute_shipment_excel_elt(
         "d.xlsx",
         notes=[note],
         direct=True,
@@ -1520,7 +1520,7 @@ def test_execute_direct_allowed_success(monkeypatch, delivery_profile, tmp_path)
     svc = MagicMock()
     svc.create_shipment.return_value = {"success": True, "shipment": {"id": 1}}
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: svc)
-    res = execute_shipment_excel_etl(
+    res = execute_shipment_excel_elt(
         "d.xlsx",
         notes=[_delivery_note()],
         direct=True,
@@ -1622,7 +1622,7 @@ def test_write_delivery_note_workbook_rejects_output_outside_trusted_roots(
 ):
     allowed_root = tmp_path / "allowed"
     allowed_root.mkdir()
-    monkeypatch.setattr(etl_security, "_trusted_base_roots", lambda: [allowed_root])
+    monkeypatch.setattr(elt_security, "_trusted_base_roots", lambda: [allowed_root])
     monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
     outside = tmp_path / "outside" / "delivery.xlsx"
 
@@ -1678,7 +1678,7 @@ def test_write_ledger_workbook_rejects_output_outside_trusted_roots(
 ):
     allowed_root = tmp_path / "allowed"
     allowed_root.mkdir()
-    monkeypatch.setattr(etl_security, "_trusted_base_roots", lambda: [allowed_root])
+    monkeypatch.setattr(elt_security, "_trusted_base_roots", lambda: [allowed_root])
     monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
     outside = tmp_path / "outside" / "ledger.xlsx"
 

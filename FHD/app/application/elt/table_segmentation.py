@@ -25,6 +25,7 @@ _DATE_RE = re.compile(
     r"^(?:19|20)?\d{2}(?:[-/.年月]\d{1,2}){1,2}(?:日)?(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?$"
 )
 _TOTAL_RE = re.compile(r"^(合计|总计|小计|汇总|共计|累计)(?:\s|[:：]|$)")
+_TOTAL_MARKERS = ("大写人民币", "人民币大写", "大写金额", "金额大写", "人民币（大写）")
 _NOTE_RE = re.compile(r"^(备注|说明|注|注意|制表|审核|签字|签名|条款|附注)(?:\s|[:：]|$)")
 _WEEKDAYS = {
     *"日一二三四五六天",
@@ -282,7 +283,12 @@ def _row_kind(sheet: _Sheet, r: int, c1: int, c2: int) -> str:
     texts = [_text(v) for v in values]
     labels = [t for v, t in zip(values, texts) if _is_label(v)]
     colon = sum(t.endswith((":", "：")) or bool(re.search(r"[:：]\s*\S", t)) for t in labels)
-    if any(_TOTAL_RE.search(t) and len(t) <= 10 for t in labels[:3]):
+    # 合计行常以「大 写 人 民 币」这类带空格的字样开头，先压缩空白再判定。
+    compact = [re.sub(r"\s+", "", t) for t in texts[:3]]
+    if any(
+        len(t) <= 12 and (_TOTAL_RE.match(t) or any(m in t for m in _TOTAL_MARKERS))
+        for t in compact
+    ):
         return "summary"
     if len(values) == 1 and _NOTE_RE.match(texts[0]):
         return "single"

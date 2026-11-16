@@ -1,7 +1,9 @@
 import multiprocessing
 import os
+import sys
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 from sqlalchemy import create_engine, event
@@ -19,6 +21,17 @@ from app.db.db_base import Base
 from app.db.models import InventoryLedger, InventoryTransaction, Product, Warehouse
 from app.db.models.agent import AgentTaskExecutionRecord
 from app.domain.shared_services.inventory_service import InventoryService
+
+# spawn 子进程要按模块名重导入本文件。必须把 FHD 根（tests/ 与 app/ 的父目录）
+# 放入 PYTHONPATH；parents[1] 只到 tests/，无法 import tests.test_application。
+_FHD_ROOT = str(Path(__file__).resolve().parents[2])
+# spawn 子进程是新解释器：同时通过 PYTHONPATH 保证它能导入 tests.* 与被测模块。
+os.environ["PYTHONPATH"] = os.pathsep.join([_FHD_ROOT, os.environ.get("PYTHONPATH", "")]).strip(
+    os.pathsep
+)
+
+if _FHD_ROOT not in sys.path:
+    sys.path.insert(0, _FHD_ROOT)
 
 
 def _inbound_paused_before_commit(
@@ -106,7 +119,7 @@ def test_takeover_cannot_cross_inventory_commit(
                 Warehouse(code="MAIN", name="主仓库", status="active"),
             ]
         )
-    ctx = multiprocessing.get_context("spawn")
+    ctx = multiprocessing.get_context("fork" if sys.platform != "win32" else "spawn")
     ready, result, release = ctx.Queue(), ctx.Queue(), ctx.Event()
     process = ctx.Process(
         target=_inbound_paused_before_commit,

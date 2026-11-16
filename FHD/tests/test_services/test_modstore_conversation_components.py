@@ -823,6 +823,37 @@ def test_server_default_cache_does_not_cross_account_credentials(request_market)
     assert accounts == ["Bearer synthetic-account", "Bearer synthetic-next-account"]
 
 
+def test_default_route_falls_back_when_market_unreachable(request_market):
+    def respond(request):
+        raise httpx.ConnectTimeout("handshake timed out")
+
+    client = request_market(respond)
+    assert client.adapter.resolve_default_route() == ("stale-local", "stale-model")
+
+
+def test_default_route_keeps_platform_rejection_authoritative(request_market):
+    def respond(request):
+        return httpx.Response(503, json={"detail": "temporarily unavailable"})
+
+    client = request_market(respond)
+    with pytest.raises(facade._transport.MarketModelError):
+        client.adapter.resolve_default_route()
+
+
+def test_route_snapshot_survives_platform_outage(request_market, tmp_path, monkeypatch):
+    monkeypatch.setenv("XCAGI_ROUTE_SNAPSHOT_PATH", str(tmp_path / "route.json"))
+
+    def healthy(request):
+        return httpx.Response(200, json={"ok": True, "provider": "openai", "model": "server"})
+
+    assert request_market(healthy).adapter.resolve_default_route() == ("openai", "server")
+
+    def down(request):
+        raise httpx.ConnectTimeout("handshake timed out")
+
+    assert request_market(down).adapter.resolve_default_route() == ("openai", "server")
+
+
 def test_explicit_session_defaults_override_host_environment(request_market):
     request_market(
         lambda request: pytest.fail("Explicit session selection must not discover defaults")

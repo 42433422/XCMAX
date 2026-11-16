@@ -12,7 +12,10 @@
 import { type ImContact, type ImConversationSummary } from '@/api/im'
 import { type SuperEmployeeAvatarKey, superEmployeeAvatarSrcForId } from '@/constants/superEmployeeAvatars'
 import { type CodexSuperEmployeeDispatch, type CodexSuperEmployeeMessage } from '@/api/codexSuperEmployee'
-import { YUANGON_AREAS, YUANGON_PKG_DESCRIPTIONS, YUANGON_PKG_ROLE_LABELS } from '@/domain/yuangonDutyRoster'
+import defaultUserAvatarSrc from '@/assets/avatars/user-default.png'
+import { publicAssetUrl } from '@/utils/publicAssetUrl'
+import { employeeAvatarUrl } from '@/utils/employeeAvatar'
+// 宿主编制（平台内部员工）不再内置到企业构建：联系人一律以接口返回为准。
 
 // ── 类型 ──────────────────────────────────────────────────────────────
 
@@ -167,27 +170,6 @@ export const AI_GROUP_CHAT_ENTRY: AiGroupChatEntry = {
 
 export const SUPER_CLI_TOOLS: SystemEmployeeEntry[] = [CODEX_SUPER_EMPLOYEE_ENTRY, CURSOR_SUPER_EMPLOYEE_ENTRY, CLAUDE_SUPER_EMPLOYEE_ENTRY]
 
-/** 面向企业用户的精选员工；完整 55 岗编制仍保留在管理端。 */
-export const CURATED_DUTY_EMPLOYEE_IDS = [
-  'user-customer-service-officer',
-  'intake-dispatcher',
-  'intent-analyst',
-  'workflow-automator',
-  'artifact-generator',
-  'quality-validator',
-  'enterprise-adoption-officer',
-] as const
-
-const CURATED_DUTY_EMPLOYEE_AVATARS: Record<string, string> = {
-  'user-customer-service-officer': '💬',
-  'intake-dispatcher': '🧭',
-  'intent-analyst': '🔎',
-  'workflow-automator': '⚙️',
-  'artifact-generator': '🧩',
-  'quality-validator': '🛡️',
-  'enterprise-adoption-officer': '📈',
-}
-
 // ── 条目类型守卫 ──────────────────────────────────────────────────────
 
 export function isCodexSuperEmployeeEntry(entry: PinnedImEntry): entry is CodexSuperEmployeeEntry {
@@ -269,6 +251,43 @@ export function pinnedAvatarText(entry: PinnedImEntry): string {
   return avatarText(entry.display_name)
 }
 
+/** 企业专属客服统一使用管理端小C头像。 */
+export const ENTERPRISE_CS_AVATAR_SRC = publicAssetUrl('ai-butler-male-avatar-v1.jpg')
+
+/** 账号池持久化头像；无自定义头像时从员工头像池按 id 稳定取图。 */
+function pooledAvatar(seed: string): string {
+  return employeeAvatarUrl(seed) || defaultUserAvatarSrc
+}
+
+export function contactAvatarSrc(contact: ImContact): string {
+  if (isEnterpriseDedicatedContact(contact)) return ENTERPRISE_CS_AVATAR_SRC
+  const stored = String(contact.avatar_url || '').trim()
+  if (stored) return stored
+  return pooledAvatar(String(contact.username || contact.display_name || contact.id || ''))
+}
+
+export function conversationAvatarSrc(conversation: ImConversationSummary): string {
+  if (isEnterpriseDedicatedConversation(conversation)) return ENTERPRISE_CS_AVATAR_SRC
+  const stored = String(conversation.avatar_url || '').trim()
+  if (stored) return stored
+  return pooledAvatar(
+    String(conversation.peer_username || conversation.title || conversation.id || ''),
+  )
+}
+
+/** 固定入口：只有普通联系人（如企业专属客服）走账号头像；编制员工在列表层按序取图。 */
+export function pinnedContactAvatarSrc(entry: PinnedImEntry): string | null {
+  if (
+    isSuperEmployeeEntry(entry) ||
+    isDutyEmployeeEntry(entry) ||
+    isExternalAppEntry(entry) ||
+    isAiGroupChatEntry(entry)
+  ) {
+    return null
+  }
+  return contactAvatarSrc(entry)
+}
+
 export function pinnedEntryPreview(entry: PinnedImEntry): string {
   if (isSuperEmployeeEntry(entry)) return entry.subtitle
   if (isDutyEmployeeEntry(entry)) return entry.subtitle
@@ -302,11 +321,11 @@ export function systemEntryDispatch(entry: SystemEmployeeEntry): string {
 }
 
 export function isEnterpriseDedicatedContact(contact: ImContact): boolean {
-  return Boolean(contact.is_enterprise_dedicated_cs) || contact.username.trim().toLowerCase() === 'enterprise-cs'
+  return Boolean(contact.is_enterprise_dedicated_cs) || String(contact.username || '').trim().toLowerCase() === 'enterprise-cs'
 }
 
 export function isEnterpriseDedicatedConversation(conversation: ImConversationSummary): boolean {
-  return Boolean(conversation.is_enterprise_dedicated_cs) || conversation.title.trim() === '企业专属客服'
+  return Boolean(conversation.is_enterprise_dedicated_cs) || String(conversation.title || '').trim() === '企业专属客服'
 }
 
 export function isCodexDispatcherMessage(message: CodexSuperEmployeeMessage): boolean {
@@ -378,18 +397,16 @@ export function isCodexDispatchStillOpen(message: CodexSuperEmployeeMessage | nu
   return !['completed', 'merged', 'failed', 'merge_conflict', 'dispatch_failed', 'dispatch_error'].includes(status)
 }
 
-export function dutyAreaLabelForId(id: string): string {
-  for (const area of Object.values(YUANGON_AREAS)) {
-    if (area.ids.includes(id)) return area.label
-  }
-  return '管理端编制'
+export function dutyAreaLabelForId(_id: string): string {
+  // 部门名只能由接口给出，客户端不再持有宿主编制映射。
+  return ''
 }
 
 export function normalizeDutyEmployee(raw: AdminEmployeeApiItem): DutyEmployeeEntry | null {
   const id = String(raw.id || '').trim()
   if (!id) return null
-  const name = String(raw.name || raw.label || raw.title || YUANGON_PKG_ROLE_LABELS[id] || id).trim()
-  const description = String(raw.panel_summary || raw.description || YUANGON_PKG_DESCRIPTIONS[id] || '').trim()
+  const name = String(raw.name || raw.label || raw.title || id).trim()
+  const description = String(raw.panel_summary || raw.description || '').trim()
   const area = String(raw.yuangon_area || raw.industry || dutyAreaLabelForId(id)).trim()
   return {
     id,
@@ -401,27 +418,14 @@ export function normalizeDutyEmployee(raw: AdminEmployeeApiItem): DutyEmployeeEn
     status: String(raw.status || 'on_duty').trim(),
     api_base_path: String(raw.api_base_path || `/api/admin/employees/${id}`).trim(),
     phone_channel: String(raw.phone_channel || 'admin-duty').trim(),
-    avatar_text: CURATED_DUTY_EMPLOYEE_AVATARS[id] || avatarText(name || id),
+    avatar_text: avatarText(name || id),
     is_duty_employee_entry: true,
   }
 }
 
 export function fallbackDutyEmployees(): DutyEmployeeEntry[] {
-  const rows: AdminEmployeeApiItem[] = []
-  for (const area of Object.values(YUANGON_AREAS)) {
-    for (const id of area.ids) {
-      rows.push({
-        id,
-        name: YUANGON_PKG_ROLE_LABELS[id] || id,
-        description: YUANGON_PKG_DESCRIPTIONS[id] || '',
-        yuangon_area: area.label,
-        status: 'on_duty',
-        api_base_path: `/api/admin/employees/${id}`,
-        phone_channel: 'admin-duty',
-      })
-    }
-  }
-  return rows.map(normalizeDutyEmployee).filter((item): item is DutyEmployeeEntry => Boolean(item))
+  // 没有接口数据时不再用内置宿主编制兜底，避免企业端看到平台内部员工。
+  return []
 }
 
 export function uniqueDutyEmployees(items: DutyEmployeeEntry[]): DutyEmployeeEntry[] {
@@ -434,20 +438,8 @@ export function uniqueDutyEmployees(items: DutyEmployeeEntry[]): DutyEmployeeEnt
 }
 
 export function curatedDutyEmployees(items: DutyEmployeeEntry[]): DutyEmployeeEntry[] {
-  const byId = new Map(uniqueDutyEmployees(items).map((item) => [item.id, item]))
-  const fallbacks = new Map(fallbackDutyEmployees().map((item) => [item.id, item]))
-  const selected: DutyEmployeeEntry[] = []
-  for (const id of CURATED_DUTY_EMPLOYEE_IDS) {
-    const current = byId.get(id)
-    const item = current || fallbacks.get(id)
-    if (!item) continue
-    selected.push({
-      ...item,
-      ...(current ? {} : { status: 'planned', subtitle: '编制员工 · 未安装' }),
-      avatar_text: CURATED_DUTY_EMPLOYEE_AVATARS[id] || item.avatar_text,
-    })
-  }
-  return selected
+  // 只展示接口返回的员工：客户端不内置宿主编制名单，避免企业端看到平台内部员工。
+  return uniqueDutyEmployees(items)
 }
 
 export function asRecord(value: unknown): Record<string, unknown> | null {

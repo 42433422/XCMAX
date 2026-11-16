@@ -12,6 +12,7 @@ import threading
 import time
 from collections.abc import AsyncIterator, Iterator
 from contextlib import aclosing, contextmanager
+from pathlib import Path
 from types import SimpleNamespace as SimpleNamespace
 from typing import Any, Dict, List, Optional, Self
 
@@ -86,6 +87,57 @@ async def _aiter_market_sse_data_payloads(response: httpx.Response) -> AsyncIter
         yield data
 
 
+_KEEPALIVE_STATES = frozenset({"processing", "accepted", "heartbeat", "ping", "keepalive"})
+_KEEPALIVE_EVENTS = frozenset({"heartbeat", "ping", "keepalive", "keep-alive", "processing"})
+
+
+def _delta_fields_have_content(holder: dict) -> bool:
+    for key in ("content", "reasoning_content"):
+        value = holder.get(key)
+        if isinstance(value, str) and value:
+            return True
+    return bool(holder.get("tool_calls"))
+
+
+def _stream_payload_carries_delta(payload: dict) -> bool:
+    delta = payload.get("delta")
+    if isinstance(delta, str) and delta:
+        return True
+    if isinstance(delta, dict) and _delta_fields_have_content(delta):
+        return True
+    if isinstance(payload.get("content"), str) and payload["content"]:
+        return True
+    if isinstance(payload.get("reasoning_content"), str) and payload["reasoning_content"]:
+        return True
+    if payload.get("tool_calls"):
+        return True
+    for choice in payload.get("choices") or []:
+        if not isinstance(choice, dict):
+            continue
+        for holder in (choice.get("delta"), choice.get("message")):
+            if isinstance(holder, dict) and _delta_fields_have_content(holder):
+                return True
+    return False
+
+
+def _stream_payload_has_content(payload: Any) -> bool:
+    """True only for real answer events; keepalive/status events never count as progress."""
+    if not isinstance(payload, dict) or not payload:
+        return False
+    if _stream_payload_carries_delta(payload):
+        return True
+    for key in ("status", "state"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip().lower() in _KEEPALIVE_STATES:
+            return False
+    if any(payload.get(key) for key in ("heartbeat", "ping", "keepalive", "keep_alive")):
+        return False
+    event = payload.get("event") or payload.get("type")
+    if isinstance(event, str) and event.strip().lower() in _KEEPALIVE_EVENTS:
+        return False
+    return True
+
+
 class ModstorePlatformAdapter:
     """Forward model requests through market routing, credentials and billing."""
 
@@ -95,12 +147,15 @@ class ModstorePlatformAdapter:
         auth_token: str | None = None,
         user_id: int | None = None,
         default_provider: str = "xiaomi",
-        default_model: str = "mimo-v2.5-pro",
+        default_model: str = "mimo-v2.6-flash",
         timeout: float = 150.0,
     ):
         """初始化市场地址、凭据、默认模型和连接超时；显式值保持原环境回退规则。"""
         self.platform_url = (
-            platform_url or os.environ.get("MODSTORE_PLATFORM_URL", "http://localhost:8000")
+            platform_url
+            or os.environ.get("XCAGI_MARKET_BASE_URL", "").strip()
+            or os.environ.get("MODSTORE_PLATFORM_URL", "").strip()
+            or "https://xiu-ci.com"
         ).rstrip("/")
         # None → env fallback; explicit "" means "no token" (session-bound isolation).
         self.auth_token = _strip_bearer_prefix(
@@ -120,6 +175,9 @@ class ModstorePlatformAdapter:
         self._route_aliases: dict[tuple[Connection, tuple[str, str]], tuple[str, str]] = {}
         self.last_route_metadata: dict[str, Any] = {}
         self._default_route_lock = threading.Lock()
+        # 平台路由发现是独立网络调用；失败时短暂回退到配置默认路由，避免拖垮整轮对话。
+        self._route_fallback_until = 0.0
+        self._route_failures = 0
         self._source = "env"
         self._client: Optional[httpx.AsyncClient] = None
         self._client_loop_id: int | None = None
@@ -147,7 +205,7 @@ class ModstorePlatformAdapter:
         platform_url = (
             kwargs.get("platform_url")
             or os.environ.get("XCAGI_MARKET_BASE_URL")
-            or os.environ.get("MODSTORE_PLATFORM_URL", "http://127.0.0.1:8765")
+            or os.environ.get("MODSTORE_PLATFORM_URL", "https://xiu-ci.com")
         ).rstrip("/")
         credential = authentication.resolve_credential(
             kwargs.get("auth_token", ""),
@@ -275,16 +333,102 @@ class ModstorePlatformAdapter:
             self.last_route_metadata = metadata
         return result
 
+    def _route_snapshot_key(self, connection: Connection) -> str:
+        return f"{getattr(connection, 'platform_url', '')}|{self.user_id or ''}"
+
+    def _route_snapshot_path(self) -> Path | None:
+        raw = os.environ.get("XCAGI_ROUTE_SNAPSHOT_PATH", "").strip()
+        if raw.lower() in {"0", "off", "none"}:
+            return None
+        if not raw:
+            # 测试默认不落盘，避免不同用例共享同一份路由快照。
+            if os.environ.get("PYTEST_CURRENT_TEST"):
+                return None
+            from app.utils.path_io.path_utils import get_app_data_dir
+
+            raw = str(Path(get_app_data_dir()) / "llm_route_snapshot.json")
+        return Path(raw)
+
+    def _load_route_snapshot(self, connection: Connection) -> dict[str, Any] | None:
+        """读取上次成功的路由快照（30 分钟内有效），用于平台不可达时继续对话。"""
+        path = self._route_snapshot_path()
+        if path is None:
+            return None
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        saved = payload.get(self._route_snapshot_key(connection))
+        if not isinstance(saved, dict):
+            return None
+        saved_at = float(saved.get("saved_at") or 0)
+        if time.time() - saved_at > 30 * 60:
+            return None
+        if not saved.get("provider") or not saved.get("model"):
+            return None
+        return saved
+
+    def _save_route_snapshot(self, connection: Connection, snapshot: dict[str, Any]) -> None:
+        path = self._route_snapshot_path()
+        if path is None:
+            return
+        try:
+            payload: dict[str, Any] = {}
+            if path.is_file():
+                loaded = json.loads(path.read_text(encoding="utf-8"))
+                payload = loaded if isinstance(loaded, dict) else {}
+            payload[self._route_snapshot_key(connection)] = {
+                key: snapshot.get(key)
+                for key in ("provider", "model", "route_source", "config_revision")
+            } | {"saved_at": time.time()}
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+            tmp.replace(path)
+        except OSError as exc:
+            logger.warning("路由快照写入失败（不影响本轮对话）: %s", exc)
+
     def resolve_default_route(self, connection: Connection | None = None) -> tuple[str, str]:
         if not self._use_account_default:
             return self.default_provider, self.default_model
         with self._default_route_lock:
             connection = connection or self._connection()
             if self._account_default is None or self._account_default[0] != connection:
-                snapshot = routing.resolve_account_route(connection, _httpx_sync_client)
+                saved = self._load_route_snapshot(connection)
+                if saved is not None:
+                    route = str(saved["provider"]), str(saved["model"])
+                    self._route_snapshots[(connection, route)] = {
+                        key: value for key, value in saved.items() if key != "saved_at"
+                    }
+                    self._account_default = (connection, route)
+                    return route
+                if time.monotonic() < self._route_fallback_until:
+                    return self.default_provider, self.default_model
+                try:
+                    snapshot = routing.resolve_account_route(connection, _httpx_sync_client)
+                except httpx.HTTPError as exc:
+                    # 仅传输层失败（握手超时/连接中断）时回退：这类失败代表根本没能
+                    # 询问平台，回退不会掩盖平台给出的业务结论。平台明确返回的拒绝
+                    # （解析失败、4xx/5xx）必须原样抛出，保持“未解析的路由不许发送”约束。
+                    self._route_failures += 1
+                    # 指数退避式的熔断冷却：30s → 60s → 120s → 300s，成功后清零。
+                    backoff = min(300, 30 * (2 ** (self._route_failures - 1)))
+                    self._route_fallback_until = time.monotonic() + backoff
+                    logger.warning(
+                        "平台默认模型路由暂不可用（连续 %s 次），%ss 内不再探测，回退到 %s/%s: %s",
+                        self._route_failures,
+                        backoff,
+                        self.default_provider,
+                        self.default_model,
+                        exc,
+                    )
+                    return self.default_provider, self.default_model
                 route = snapshot["provider"], snapshot["model"]
                 self._route_snapshots[(connection, route)] = snapshot
                 self._account_default = (connection, route)
+                self._route_fallback_until = 0.0
+                self._route_failures = 0
+                self._save_route_snapshot(connection, snapshot)
             return self._account_default[1]
 
     def follow_platform_default(self) -> None:
@@ -439,16 +583,19 @@ class ModstorePlatformAdapter:
     def _absorb_stream_payload(
         self, data: str, status_cb, pieces: list[str], ending: dict | None = None
     ) -> None:
-        # Every streamed payload, reasoning deltas included, shows the same call is still
-        # producing; the caller's wait is an idle limit, not a cap on a live answer.
-        if data and status_cb is not None:
-            status_cb()
+        # Only payloads that carry real answer content show the call is still producing;
+        # market heartbeats must never extend the caller's idle wait.
+        if not data:
+            return
         try:
             payload = json.loads(data)
         except (ValueError, TypeError):
-            if data:
-                pieces.append(str(data))
+            pieces.append(str(data))
+            if status_cb is not None:
+                status_cb()
             return
+        if _stream_payload_has_content(payload) and status_cb is not None:
+            status_cb()
         if not isinstance(payload, dict):
             return
         if ending is not None:

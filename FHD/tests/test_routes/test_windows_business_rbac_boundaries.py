@@ -10,7 +10,7 @@ from app.fastapi_routes import dataset_access
 from app.fastapi_routes.domains.excel.excel_extract import router as excel_router
 from app.fastapi_routes.knowledge_v1 import router as knowledge_router
 from app.infrastructure.auth import dependencies
-from app.infrastructure.auth import shipment_etl_access_gate as shipment_gate
+from app.infrastructure.auth import shipment_elt_access_gate as shipment_gate
 
 
 def _client(router, prefix: str = "") -> TestClient:
@@ -103,12 +103,12 @@ def test_desktop_tenant_can_query_its_own_legacy_knowledge(enterprise_desktop, m
 @pytest.mark.parametrize(
     "path",
     [
-        "/api/excel/data/shipment-etl/preview",
-        "/api/excel/data/shipment-etl/execute",
-        "/api/excel/data/shipment-etl/batch-execute",
+        "/api/excel/data/shipment-elt/preview",
+        "/api/excel/data/shipment-elt/execute",
+        "/api/excel/data/shipment-elt/batch-execute",
     ],
 )
-def test_desktop_tenant_cannot_run_unscoped_shipment_etl(
+def test_desktop_tenant_cannot_run_unscoped_shipment_elt(
     enterprise_desktop, monkeypatch, path: str
 ) -> None:
     user = SimpleNamespace(id=8, tenant_id=23, role="user", is_active=True)
@@ -131,21 +131,21 @@ def test_desktop_tenant_ocr_preview_is_not_blocked_as_unscoped(
         lambda: SimpleNamespace(has_permission=lambda *_args: True),
     )
     preview = _client(excel_router).post(
-        "/api/excel/data/shipment-etl/ocr-preview", data={"file_path": "missing.png"}
+        "/api/excel/data/shipment-elt/ocr-preview", data={"file_path": "missing.png"}
     )
     assert preview.status_code != 403
     execute = _client(excel_router).post(
-        "/api/excel/data/shipment-etl/execute", data={"file_path": "other-user.xlsx"}
+        "/api/excel/data/shipment-elt/execute", data={"file_path": "other-user.xlsx"}
     )
     assert execute.status_code == 403
 
 
-def test_desktop_shipment_etl_requires_session_even_with_user_header(
+def test_desktop_shipment_elt_requires_session_even_with_user_header(
     enterprise_desktop, monkeypatch
 ) -> None:
     monkeypatch.setattr(dependencies, "resolve_session_user", lambda _request: None)
     response = _client(excel_router).post(
-        "/api/excel/data/shipment-etl/execute",
+        "/api/excel/data/shipment-elt/execute",
         data={"notes_json": "[]"},
         headers={"X-User-ID": "8"},
     )

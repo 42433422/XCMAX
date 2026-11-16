@@ -13,10 +13,23 @@ describe('multimodalAttachments', () => {
   })
 
   it('rejects too many files', async () => {
-    const files = Array.from({ length: 7 }, (_, i) => makeFile(`f${i}.png`, 'image/png'))
+    const files = Array.from({ length: 51 }, (_, i) => makeFile(`f${i}.png`, 'image/png'))
     const r = await filesToMultimodalRows(files)
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.error).toContain('最多')
+  })
+
+  it('skips unsupported files and keeps the folder-relative path', async () => {
+    const image = makeFile('a.png', 'image/png')
+    Object.defineProperty(image, 'webkitRelativePath', { value: 'batch/a.png' })
+    const r = await filesToMultimodalRows([image, makeFile('a.exe', 'application/octet-stream')], {
+      skipUnsupported: true,
+    })
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect(r.rows).toHaveLength(1)
+      expect(r.rows[0].filename).toBe('batch/a.png')
+    }
   })
 
   it('rejects unsupported extension', async () => {

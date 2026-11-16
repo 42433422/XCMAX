@@ -66,6 +66,8 @@ class UserMemory:
     feedback_history: list[dict[str, Any]] = field(default_factory=list)
     memory_v2_records: list[dict[str, Any]] = field(default_factory=list)
     updated_at: str = field(default_factory=lambda: datetime.now().isoformat())
+    # 回合事实：按 scope+owner+归一化文本去重，由 user_memory.write/retrieve 维护。
+    recall_facts: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

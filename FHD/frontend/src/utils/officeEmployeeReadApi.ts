@@ -12,14 +12,13 @@ import { apiFetch } from '@/utils/apiBase'
 import { resolveOfficeInstalledPackIds } from '@/utils/officeToolDeskRows'
 import { fetchEmployeePlannerStatus } from '@/utils/platformShellApi'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
+import { isDocumentIntakeAllowed } from '@/utils/documentIntake'
 
 const CHAT_OFFICE_UPLOAD = '/api/platform-shell/chat-office-file-upload'
 const TUTORIAL_OFFICE_UPLOAD = '/api/platform-shell/office-sample-upload'
 const WORKSPACE_ROOT_PATH = '/api/platform-shell/workspace-root'
 const WORKSPACE_READ_FILES = '/api/platform-shell/workspace-read-files'
 const EXTRACT_GRID_UPLOAD_PATH = '/api/templates/extract-grid'
-
-const OFFICE_DOCKING_EXTENSIONS = new Set(['.xlsx', '.xlsm', '.xls', '.csv', '.docx', '.doc', '.pdf', '.pptx', '.ppt'])
 
 const EMPLOYEE_BY_EXTENSION: Record<string, string> = {
   '.xlsx': EXCEL_FULL_READ_EMPLOYEE_ID,
@@ -155,8 +154,7 @@ export type OfficeEmployeeOutputFile = {
 }
 
 export function isOfficeDockingFileSupported(fileName: string): boolean {
-  const ext = fileName.includes('.') ? `.${fileName.split('.').pop()?.toLowerCase()}` : ''
-  return OFFICE_DOCKING_EXTENSIONS.has(ext)
+  return isDocumentIntakeAllowed(fileName, 'office')
 }
 
 export function resolveOfficeReadEmployeeForFile(fileName: string): string {

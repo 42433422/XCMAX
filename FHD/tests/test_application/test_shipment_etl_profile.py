@@ -6,36 +6,36 @@ from pathlib import Path
 
 import yaml
 
-from app.application.shipment_etl_profile import (
-    ShipmentEtlProfileError,
+from app.application.shipment_elt_profile import (
+    ShipmentEltProfileError,
     clear_profile_cache,
-    get_shipment_etl_profile,
+    get_shipment_elt_profile,
     load_profile_from_path,
 )
-from app.application.shipment_excel_etl_app_service import parse_delivery_notes
-from app.domain.app_pure.excel_etl_kb import reset_excel_etl_kb_for_tests
+from app.application.shipment_excel_elt_app_service import parse_delivery_notes
+from app.domain.app_pure.excel_elt_kb import reset_excel_elt_kb_for_tests
 
 
 def test_universal_profile_loads_from_kb(tmp_path, monkeypatch):
-    monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))
-    monkeypatch.delenv("FHD_EXCEL_ETL_ALLOW_BUILTIN", raising=False)
-    reset_excel_etl_kb_for_tests(tmp_path / "kb.json")
+    monkeypatch.setenv("FHD_EXCEL_ELT_KB_PATH", str(tmp_path / "kb.json"))
+    monkeypatch.delenv("FHD_EXCEL_ELT_ALLOW_BUILTIN", raising=False)
+    reset_excel_elt_kb_for_tests(tmp_path / "kb.json")
     clear_profile_cache()
-    prof = get_shipment_etl_profile("universal")
+    prof = get_shipment_elt_profile("universal")
     assert prof.id == "universal"
     assert "model_number" in prof.columns
     assert prof.kind == "universal_document"
     # default 别名也指向通用 KB，不再绑送货单 YAML
-    assert get_shipment_etl_profile("default").id == "universal"
+    assert get_shipment_elt_profile("default").id == "universal"
 
 
 def test_custom_profile_dir_switches_column_aliases(tmp_path, monkeypatch):
     """换 YAML 列别名即可解析非默认表头，无需改引擎。"""
     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
-    monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))
-    reset_excel_etl_kb_for_tests(tmp_path / "kb.json")
+    monkeypatch.setenv("FHD_EXCEL_ELT_KB_PATH", str(tmp_path / "kb.json"))
+    reset_excel_elt_kb_for_tests(tmp_path / "kb.json")
     clear_profile_cache()
-    universal = get_shipment_etl_profile("universal")
+    universal = get_shipment_elt_profile("universal")
     data = {
         "id": "alt_headers",
         "kind": "document",
@@ -120,10 +120,10 @@ def test_custom_profile_dir_switches_column_aliases(tmp_path, monkeypatch):
 
     profile_path = tmp_path / "alt_headers.yaml"
     profile_path.write_text(yaml.safe_dump(data, allow_unicode=True), encoding="utf-8")
-    monkeypatch.setenv("FHD_SHIPMENT_ETL_PROFILE_DIR", str(tmp_path))
+    monkeypatch.setenv("FHD_SHIPMENT_ELT_PROFILE_DIR", str(tmp_path))
     clear_profile_cache()
 
-    alt = get_shipment_etl_profile("alt_headers")
+    alt = get_shipment_elt_profile("alt_headers")
     assert alt.id == "alt_headers"
     assert alt.write["seller_title"] == "ALT Factory Delivery"
 
@@ -169,26 +169,26 @@ def test_custom_profile_dir_switches_column_aliases(tmp_path, monkeypatch):
 
 
 def test_unknown_profile_raises(tmp_path, monkeypatch):
-    monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))
-    reset_excel_etl_kb_for_tests(tmp_path / "kb.json")
+    monkeypatch.setenv("FHD_EXCEL_ELT_KB_PATH", str(tmp_path / "kb.json"))
+    reset_excel_elt_kb_for_tests(tmp_path / "kb.json")
     clear_profile_cache()
     try:
-        get_shipment_etl_profile("no_such_profile_xyz")
-        raise AssertionError("expected ShipmentEtlProfileError")
-    except ShipmentEtlProfileError as exc:
+        get_shipment_elt_profile("no_such_profile_xyz")
+        raise AssertionError("expected ShipmentEltProfileError")
+    except ShipmentEltProfileError as exc:
         assert "unknown" in str(exc).lower() or "no_such" in str(exc)
 
 
 def test_load_example_yaml_when_allow_builtin(tmp_path, monkeypatch):
-    monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))
-    monkeypatch.setenv("FHD_EXCEL_ETL_ALLOW_BUILTIN", "1")
-    reset_excel_etl_kb_for_tests(tmp_path / "kb.json")
+    monkeypatch.setenv("FHD_EXCEL_ELT_KB_PATH", str(tmp_path / "kb.json"))
+    monkeypatch.setenv("FHD_EXCEL_ELT_ALLOW_BUILTIN", "1")
+    reset_excel_elt_kb_for_tests(tmp_path / "kb.json")
     clear_profile_cache()
-    path = Path("resources/config/shipment_etl/examples/default_delivery.yaml")
+    path = Path("resources/config/shipment_elt/examples/default_delivery.yaml")
     prof = load_profile_from_path(path)
     assert prof.id == "default"
     assert prof.delivery_min_score == 60
-    from app.application.shipment_etl_profile import load_all_profiles
+    from app.application.shipment_elt_profile import load_all_profiles
 
     ids = {p.id for p in load_all_profiles()}
     assert "universal" in ids

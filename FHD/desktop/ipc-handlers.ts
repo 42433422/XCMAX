@@ -1,4 +1,4 @@
-import { Notification, app, clipboard, ipcMain, shell } from 'electron'
+import { Notification, app, clipboard, dialog, ipcMain, shell } from 'electron'
 import type { IpcMainInvokeEvent } from 'electron'
 import fs from 'node:fs'
 import { networkInterfaces } from 'node:os'
@@ -196,6 +196,56 @@ export function registerDesktopIpcHandlers(): void {
     if (!p || !fs.existsSync(p)) return { ok: false, reason: 'not_found' }
     const err = await shell.openPath(p)
     return { ok: !err, reason: err || undefined }
+  })
+
+  // 本机文件（只读）授权：原生目录/文件选择与 macOS 权限探测。
+  handleTrusted('xcagi:choose-directory', async () => {
+    const options: Electron.OpenDialogOptions = {
+      title: '选择要授权 AI 只读的文件夹',
+      properties: ['openDirectory', 'createDirectory'],
+    }
+    const parent = desktopRuntime.mainWindow
+    const result = parent
+      ? await dialog.showOpenDialog(parent, options)
+      : await dialog.showOpenDialog(options)
+    return { canceled: result.canceled, paths: result.canceled ? [] : result.filePaths }
+  })
+  handleTrusted('xcagi:choose-files', async () => {
+    const options: Electron.OpenDialogOptions = {
+      title: '选择要授权 AI 只读的文件',
+      properties: ['openFile', 'multiSelections'],
+    }
+    const parent = desktopRuntime.mainWindow
+    const result = parent
+      ? await dialog.showOpenDialog(parent, options)
+      : await dialog.showOpenDialog(options)
+    return { canceled: result.canceled, paths: result.canceled ? [] : result.filePaths }
+  })
+  handleTrusted('xcagi:full-disk-access-status', () => {
+    if (process.platform !== 'darwin') return { status: 'not_required' as const }
+    const probes = [
+      `${app.getPath('home')}/Library/Application Support/com.apple.TCC/TCC.db`,
+      `${app.getPath('home')}/Library/Safari/Bookmarks.plist`,
+    ]
+    for (const probe of probes) {
+      try {
+        const fd = fs.openSync(probe, 'r')
+        fs.closeSync(fd)
+        return { status: 'granted' as const }
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException)?.code
+        if (code === 'ENOENT') continue
+        if (code === 'EACCES' || code === 'EPERM') return { status: 'denied' as const }
+      }
+    }
+    return { status: 'unknown' as const }
+  })
+  handleTrusted('xcagi:open-privacy-settings', async () => {
+    if (process.platform !== 'darwin') return { ok: false, reason: 'not_macos' }
+    await shell.openExternal(
+      'x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles',
+    )
+    return { ok: true }
   })
 
   // 开机自启开关。

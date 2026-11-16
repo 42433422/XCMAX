@@ -31,7 +31,7 @@ from app.fastapi_routes.domains.excel.excel_extract import (
 
 
 @pytest.fixture(autouse=True)
-def _configured_etl_workspace(tmp_path, monkeypatch):
+def _configured_elt_workspace(tmp_path, monkeypatch):
     """Keep fixture inputs/outputs inside operator-configured isolated roots."""
     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     named_temporary_file = tempfile.NamedTemporaryFile

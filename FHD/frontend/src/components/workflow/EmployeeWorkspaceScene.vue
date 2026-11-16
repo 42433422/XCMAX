@@ -4,10 +4,13 @@ import { useNowMsTicker, useWorkflowEmployeeDesks } from '@/composables/useWorkf
 import { YUANGONG_ENTRY_STITCH_PNG, YUANGONG_ENTRY_WORKFLOW_PNG, YUANGONG_ENTRY_WORKFLOW_SVG } from '@/constants/yuangongAssets'
 import YuangongStation from '@/components/workflow/YuangongStation.vue'
 import WorkflowEmployeeInspector from '@/components/workflow/WorkflowEmployeeInspector.vue'
-import DutyRosterWorkflowLoopView from '@/components/workflow/DutyRosterWorkflowLoopView.vue'
-import SelfEvolutionLoopRuntimePanel from '@/components/workflow/SelfEvolutionLoopRuntimePanel.vue'
-import EmployeeWorkspaceLoopConsole from '@/components/employeeWorkspace/EmployeeWorkspaceLoopConsole.vue'
+// 管理端专属：依赖宿主编制，企业构建由 @admin-console-inject 别名替换为空组件，
+// 避免把平台内部员工名单打进企业产物。
+import DutyRosterWorkflowLoopView from '@admin-console-inject/workflow/DutyRosterWorkflowLoopView.vue'
+import SelfEvolutionLoopRuntimePanel from '@admin-console-inject/workflow/SelfEvolutionLoopRuntimePanel.vue'
+import EmployeeWorkspaceLoopConsole from '@admin-console-inject/employeeWorkspace/EmployeeWorkspaceLoopConsole.vue'
 import { useDutyRoster } from '@/composables/useDutyRoster'
+import { isCustomPhaseEmployeeCarrierModId } from '@/utils/modWorkflowEmployees'
 import { workflowRegistryEntryBelongsToStack } from '@/utils/workflowEmployeeScope'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import type { EnterpriseModStack } from '@/constants/enterpriseModStack'
@@ -34,9 +37,14 @@ const enterpriseStack = ref<EnterpriseModStack | null>(null)
 const workspaceDesks = computed(() => {
   const stack = enterpriseStack.value
   const filtered = desks.value.filter((d) => {
-    // 管理端只显示平台编制员工（ALL_PLANNED_YUANGON_PKG_IDS，SSOT 派生），隔离企业 Mod 栈员工（如 attendance_ai 等）
-    if (showManagementLoopPanels.value && !ALL_PLANNED_YUANGON_PKG_IDS.value.has(d.empId)) return false
-    return workflowRegistryEntryBelongsToStack(d, stack)
+    if (showManagementLoopPanels.value) {
+      // 管理端只显示平台编制员工（ALL_PLANNED_YUANGON_PKG_IDS，SSOT 派生）且需在栈内
+      if (!ALL_PLANNED_YUANGON_PKG_IDS.value.has(d.empId)) return false
+      return workflowRegistryEntryBelongsToStack(d, stack)
+    }
+    // 企业端「已安装即上岗」：服务端 /api/mods/ 已过滤控制面与办公包，
+    // 这里只排除定制阶段载体（它们补侧栏，不是工位员工）。
+    return !isCustomPhaseEmployeeCarrierModId(d.carrierModId || d.hostModId)
   })
   return filtered
 })
@@ -167,7 +175,7 @@ onMounted(() => {
                 当前账号未同步到企业 Mod 员工工位；账号定制 Mod 开通并注册员工后，这里只显示本企业自己的工位卡片。
               </template>
             </p>
-            <router-link :to="{ name: 'workflow-visualization' }" class="ews-empty-link">
+            <router-link :to="panoramaLocation" class="ews-empty-link">
               {{ showManagementLoopPanels ? '查看流程可视化' : '进入企业全景' }}
             </router-link>
           </div>

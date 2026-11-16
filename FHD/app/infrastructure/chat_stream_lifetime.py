@@ -36,6 +36,8 @@ class StreamLifetime:
         self._workers = 0
         self._observers = []
         self._tool_observers = []
+        self._note_observers = []
+        self._delta_observers = []
         self._tool_sequence = 0
         self._tool_pending = []
         self._receipt_lock = threading.Lock()
@@ -80,6 +82,40 @@ class StreamLifetime:
     def observe_tools(self, callback):
         with self._lock:
             self._tool_observers.append(callback)
+
+    def observe_notes(self, callback):
+        with self._lock:
+            self._note_observers.append(callback)
+
+    def observe_deltas(self, callback):
+        with self._lock:
+            self._delta_observers.append(callback)
+
+    def publish_delta(self, text):
+        """推送模型已生成的正文片段；观测通道，失败不影响执行结果。"""
+        delta = str(text or "")
+        if not delta:
+            return
+        with self._lock:
+            callbacks = list(self._delta_observers)
+        for callback in callbacks:
+            try:
+                callback(delta)
+            except BOUNDARY_ERRORS:
+                logging.getLogger(__name__).debug("stream delta observer failed", exc_info=True)
+
+    def publish_note(self, text):
+        """推送一条即时思考说明；纯观测通道，失败绝不影响执行结果。"""
+        note = str(text or "").strip()
+        if not note:
+            return
+        with self._lock:
+            callbacks = list(self._note_observers)
+        for callback in callbacks:
+            try:
+                callback(note)
+            except BOUNDARY_ERRORS:  # observer boundary: never alter the run outcome
+                logging.getLogger(__name__).debug("stream note observer failed", exc_info=True)
 
     def publish_tool_record(self, record):
         with self._lock:
@@ -204,6 +240,30 @@ def publish_stream_tool_record(record):
     lifetime = current_lifetime.get()
     if lifetime is not None:
         lifetime.publish_tool_record(record)
+
+
+def watch_stream_notes(callback):
+    lifetime = current_lifetime.get()
+    if lifetime is not None:
+        lifetime.observe_notes(callback)
+
+
+def publish_stream_note(text):
+    lifetime = current_lifetime.get()
+    if lifetime is not None:
+        lifetime.publish_note(text)
+
+
+def watch_stream_deltas(callback):
+    lifetime = current_lifetime.get()
+    if lifetime is not None:
+        lifetime.observe_deltas(callback)
+
+
+def publish_stream_delta(text):
+    lifetime = current_lifetime.get()
+    if lifetime is not None:
+        lifetime.publish_delta(text)
 
 
 class StreamWorker:

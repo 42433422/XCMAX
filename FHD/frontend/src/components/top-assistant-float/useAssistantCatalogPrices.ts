@@ -21,12 +21,12 @@ export interface Status {
   preview?: { action: string; price: string; period_start: string | null; period_end: string | null; reason: string; currency: string; price_unit: string; observations: Pick<CatalogObservation, 'source_key' | 'price' | 'period_start' | 'period_end'>[] }
 }
 const PREFIX = 'xcagi-catalog-price-operation-v1:'
-const RECONCILE_PERMISSIONS = ['product.view', 'dataset.read', 'etl.execute', 'product.edit', 'dataset.write', 'etl.template.manage']
+const RECONCILE_PERMISSIONS = ['product.view', 'dataset.read', 'elt.execute', 'product.edit', 'dataset.write', 'elt.template.manage']
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 const HASH = /^[0-9a-f]{64}$/
 const object = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
 const sameSource = (a: CatalogSource, b: CatalogSource) => !!a && !!b && a.source_id === b.source_id && a.epoch === b.epoch && a.protocol === b.protocol
-const sourceValid = (s: CatalogSource) => !!s && s.protocol === 'etl-owned-mixed-v1' && ['source_id', 'epoch', 'protocol'].every(k => typeof s[k as keyof CatalogSource] === 'string' && !!s[k as keyof CatalogSource])
+const sourceValid = (s: CatalogSource) => !!s && s.protocol === 'elt-owned-mixed-v1' && ['source_id', 'epoch', 'protocol'].every(k => typeof s[k as keyof CatalogSource] === 'string' && !!s[k as keyof CatalogSource])
 const observation = (o: Pick<CatalogObservation, 'source_key' | 'price' | 'period_start' | 'period_end'>) => ({ source_key: o.source_key, price: o.price, period_start: o.period_start, period_end: o.period_end })
 /** Stable client subset; a run cannot swap approval content after a lost response. */
 async function digest(params: Record<string, unknown>) {

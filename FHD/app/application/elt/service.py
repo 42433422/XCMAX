@@ -52,7 +52,7 @@ class EltService(
 
     def capabilities(self) -> dict[str, Any]:
         try:
-            from app.application.shipment_etl_profile import list_profiles
+            from app.application.shipment_elt_profile import list_profiles
 
             compatibility_presets = list_profiles()
         except RECOVERABLE_ERRORS:
@@ -84,13 +84,13 @@ class EltService(
 
 def mark_interrupted_runs_on_startup(bind: Any) -> int:
     try:
-        if not sa_inspect(bind).has_table("etl_runs"):
+        if not sa_inspect(bind).has_table("elt_runs"):
             return 0
         with bind.begin() as connection:
             result = connection.execute(
                 text(
                     """
-                    UPDATE etl_runs
+                    UPDATE elt_runs
                     SET status = 'interrupted',
                         stage = 'interrupted',
                         error_code = 'ELT_EXECUTION_INTERRUPTED',
@@ -108,7 +108,7 @@ def mark_interrupted_runs_on_startup(bind: Any) -> int:
             )
             batch_result = connection.execute(
                 text("""
-                UPDATE etl_runs
+                UPDATE elt_runs
                 SET status = 'outcome_unknown', stage = 'outcome_unknown',
                     rollback_status = CASE WHEN operation_kind = 'batch_rollback'
                         THEN 'outcome_unknown' ELSE rollback_status END,

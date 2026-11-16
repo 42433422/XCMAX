@@ -14,7 +14,9 @@ from app.application.agent_orchestrator.budget import (
 )
 from app.application.agent_orchestrator.clarification import (
     apply_clarification_answer,
+    apply_plan_confirmation,
     find_waiting_step,
+    is_plan_confirmation,
     pause_for_clarification,
 )
 from app.application.agent_orchestrator.compensation import plan_parallel_enabled
@@ -660,6 +662,42 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         self._execute_with_durable_lease(run, runtime_context=context)
         return cast("AgentRun", self._repo.save(run))
 
+    def continue_plan_confirmation(
+        self,
+        run_id: str,
+        *,
+        answered_by: str,
+        clarification_step_id: str,
+        confirmed: bool,
+        runtime_context: dict[str, Any] | None = None,
+    ) -> AgentRun | None:
+        """把计划级确认的答复写回原计划并续跑，语义等价 interrupt 的 resume。
+
+        与 ``continue_after_clarification`` 的区别：这里没有目标节点，也不允许
+        重建计划；确认即在同一张图上继续，取消即终止。
+        """
+        run = self._repo.get(run_id)
+        if run is None or run.status != "waiting_user":
+            return cast("AgentRun | None", run)
+        if str(answered_by or "") != run.user_id:
+            return None
+        waiting_step = find_waiting_step(run, approved_step_id=clarification_step_id)
+        if waiting_step is None or not is_plan_confirmation(waiting_step):
+            return None
+        from app.application.agent_orchestrator.tool_permission import overlay_resume_context
+
+        previous = copy.deepcopy(run)
+        context = overlay_resume_context(run.metadata.get("runtime_context") or {}, runtime_context)
+        apply_plan_confirmation(run, step_id=waiting_step.step_id, confirmed=confirmed)
+        run.metadata["runtime_context"] = context
+        apply_ai_budget_metadata(run, context)
+        if not self._repo.save_if_unchanged(run, previous):
+            return None
+        if not confirmed:
+            return cast("AgentRun", self._repo.get(run_id))
+        self._execute_with_durable_lease(run, runtime_context=context)
+        return cast("AgentRun", self._repo.save(run))
+
     def reject_waiting_step(self, run_id: str, *, rejector: str, reason: str) -> AgentRun | None:
         """Stop a waiting sensitive step. Rejection records who, when, and why, and does not execute."""
         run = self._repo.get(run_id)
@@ -1172,6 +1210,17 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 stopped_for_interaction = True
                 return {"success": True, "requires_confirmation": True}
             original_params = copy.deepcopy(step.params)
+            if (
+                step.status == "waiting_user"
+                and isinstance(step.output, dict)
+                and isinstance(step.output.get("resume_params"), dict)
+                and approved in {step.step_id, step.node_id}
+            ):
+                # 用户确认后重跑暂停步骤时带上工具要求的续跑参数（如「仅写入正确行」）。
+                step.params.update(
+                    {str(key): value for key, value in step.output["resume_params"].items()}
+                )
+                step.output.pop("resume_params", None)
             if refuse_unresolved_step(run, step, outputs):
                 stopped_for_interaction = True
                 return dict(
@@ -1266,6 +1315,42 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                     self._mark_budget_exceeded(run, step, budget, node_outputs=outputs)
                     return {"success": False, "error_code": "budget_exceeded", "message": run.error}
                 self._execute_step(run, step, runtime_context=runtime_context, node_outputs=outputs)
+                decision = (
+                    step.output.get("question")
+                    if isinstance(step.output, dict)
+                    and step.output.get("requires_user_decision") is True
+                    else ""
+                )
+                if decision:
+                    # 工具返回的阻断项属于预期交互，不是失败：停在这里询问用户，
+                    # 后续依赖步骤保持未执行，避免把守卫当成「异常」。
+                    step.status = "waiting_user"
+                    run.status = "waiting_user"
+                    run.final_output = {
+                        "clarification": {
+                            "step_id": step.step_id,
+                            "question": str(decision),
+                            "requires_confirmation": True,
+                        }
+                    }
+                    run.add_event(
+                        "step.waiting_user",
+                        str(decision),
+                        {
+                            "step_id": step.step_id,
+                            "node_id": step.node_id,
+                            "tool_id": step.tool_id,
+                            "action": step.action,
+                            "reason": "requires_user_decision",
+                        },
+                    )
+                    self._repo.save(run)
+                    stopped_for_interaction = True
+                    return {
+                        "success": True,
+                        "requires_confirmation": True,
+                        "question": str(decision),
+                    }
                 if run.metadata.get("non_retryable"):
                     terminal = _verified_catalog_terminal(run, step)
                     if terminal is None:

@@ -16,7 +16,7 @@ def upgrade() -> None:
     # Keep the historical schema independent of future ORM model changes.
     metadata = sa.MetaData()
     sa.Table(
-        "etl_archive_quotas",
+        "elt_archive_quotas",
         metadata,
         sa.Column("tenant_id", sa.Integer(), primary_key=True),
         sa.Column("limit_bytes", sa.BigInteger(), nullable=False),
@@ -25,7 +25,7 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
     )
     sa.Table(
-        "etl_archive_assets",
+        "elt_archive_assets",
         metadata,
         sa.Column("id", sa.String(36), primary_key=True),
         sa.Column("owner_user_id", sa.Integer(), nullable=False),
@@ -36,16 +36,16 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.Column("tenant_id", sa.Integer(), index=True),
-        sa.Index("ix_etl_archive_owner", "tenant_id", "owner_user_id"),
+        sa.Index("ix_elt_archive_owner", "tenant_id", "owner_user_id"),
         sa.UniqueConstraint(
-            "tenant_id", "owner_user_id", "request_key", name="uq_etl_archive_request"
+            "tenant_id", "owner_user_id", "request_key", name="uq_elt_archive_request"
         ),
     )
     sa.Table(
-        "etl_archive_versions",
+        "elt_archive_versions",
         metadata,
         sa.Column("id", sa.String(36), primary_key=True),
-        sa.Column("asset_id", sa.ForeignKey("etl_archive_assets.id"), nullable=False),
+        sa.Column("asset_id", sa.ForeignKey("elt_archive_assets.id"), nullable=False),
         sa.Column("owner_user_id", sa.Integer(), nullable=False),
         sa.Column("version", sa.Integer(), nullable=False),
         sa.Column("size_bytes", sa.BigInteger(), nullable=False),
@@ -57,9 +57,9 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.Column("tenant_id", sa.Integer(), index=True),
-        sa.UniqueConstraint("asset_id", "version", name="uq_etl_archive_asset_version"),
+        sa.UniqueConstraint("asset_id", "version", name="uq_elt_archive_asset_version"),
         sa.UniqueConstraint(
-            "tenant_id", "owner_user_id", "request_key", name="uq_etl_archive_version_request"
+            "tenant_id", "owner_user_id", "request_key", name="uq_elt_archive_version_request"
         ),
     )
     metadata.create_all(op.get_bind(), checkfirst=True)

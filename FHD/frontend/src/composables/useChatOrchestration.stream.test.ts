@@ -460,7 +460,7 @@ describe('useChatOrchestration stream', () => {
       const wrapper = mount(ChatMessageList, { props: {
         messages: api.messages.value, isLoading: true, isStreamingReply: true, loadingProgressText: '',
         messageHeights: new Map(), latestAiMessageIndex: api.messages.value.length - 1, playingMsgIdx: -1,
-        isMessageCollapsed: () => false, getCollapsedPreview: () => '', canSpeakMessage: () => false,
+        isMessageCollapsed: () => false, canSpeakMessage: () => false,
       } })
       try { visible = wrapper.text() } finally { wrapper.unmount() }
       onEvent({ type: 'done', result: { success: true, response: '完成。' } })
@@ -599,7 +599,7 @@ describe('useChatOrchestration stream', () => {
     const wrapper = mount(ChatMessageList, { props: {
       messages: api.messages.value, isLoading: false, isStreamingReply: false, loadingProgressText: '',
       messageHeights: new Map(), latestAiMessageIndex: 1, playingMsgIdx: -1,
-      isMessageCollapsed: () => false, getCollapsedPreview: () => '', canSpeakMessage: () => false,
+      isMessageCollapsed: () => false, canSpeakMessage: () => false,
     } })
     return { api, sessionId, wrapper, first: api.messages.value[0].approvalCard!, second: api.messages.value[1].approvalCard! }
   }

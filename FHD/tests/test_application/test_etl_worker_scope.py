@@ -23,7 +23,7 @@ def test_preview_revalidation_and_execution_keep_mod_scope_without_worker_leak(
     preview_store, monkeypatch
 ):
     store = preview_store
-    monkeypatch.setenv("FHD_ETL_LLM", "off")
+    monkeypatch.setenv("FHD_ELT_LLM", "off")
     observed = []
     for module in (service_preview, service_draft, service_execution):
 
@@ -91,7 +91,7 @@ def test_auto_ingest_thread_keeps_confirming_mod_after_request_ends(
     service = auto_ingest_service.AutoIngestService()
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
     monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
-    owner_root = tmp_path / "etl" / "uploads" / "1" / "7"
+    owner_root = tmp_path / "elt" / "uploads" / "1" / "7"
     owner_root.mkdir(parents=True)
     source = owner_root / "confirmed.txt"
     source.write_text("confirmed")

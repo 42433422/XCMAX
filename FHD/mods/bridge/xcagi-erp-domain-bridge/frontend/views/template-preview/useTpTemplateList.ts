@@ -16,6 +16,8 @@ export function useTpTemplateList() {
   const loading = ref(false)
   const error = ref<string | null>(null)
   const activeScopeTab = ref('all')
+  /** 模板检索关键词：匹配名称、类型、业务范围、分类与原始文件名 */
+  const searchKeyword = ref('')
   /** 用于忽略过期的后台词条补全（快速连续点「刷新」时） */
   let templateListRefreshGen = 0
 
@@ -38,17 +40,40 @@ export function useTpTemplateList() {
   })
 
   const filteredTemplates = computed<TplRecord[]>(() => {
-    if (activeScopeTab.value === 'all') return exportScopedTemplates.value
-    const tab = activeScopeTab.value
-    return exportScopedTemplates.value.filter((t) => {
-      const scopeKey = getTemplateScopeKey(t)
-      if (t.category === 'word' && !scopeKey) {
-        // 未配置 business_scope 且无法推断：与「全部」一致，在各业务分组中均可看到
-        return true
-      }
-      return scopeKey === tab
-    })
+    const scoped =
+      activeScopeTab.value === 'all'
+        ? exportScopedTemplates.value
+        : exportScopedTemplates.value.filter((t) => {
+            const scopeKey = getTemplateScopeKey(t)
+            if (t.category === 'word' && !scopeKey) {
+              // 未配置 business_scope 且无法推断：与「全部」一致，在各业务分组中均可看到
+              return true
+            }
+            return scopeKey === activeScopeTab.value
+          })
+    const keyword = searchKeyword.value.trim().toLowerCase()
+    if (!keyword) return scoped
+    return scoped.filter((tpl) => templateSearchText(tpl).includes(keyword))
   })
+
+  function templateSearchText(tpl: TplRecord): string {
+    const row = tpl as unknown as Record<string, unknown>
+    return [
+      row.name,
+      row.template_type,
+      row.business_scope,
+      row.category,
+      row.filename,
+      row.original_filename,
+      row.source,
+    ]
+      .map((value) => String(value || '').toLowerCase())
+      .join(' ')
+  }
+
+  function applyRouteKeyword(routeKeywordRaw: unknown) {
+    searchKeyword.value = String(routeKeywordRaw || '').trim()
+  }
 
   function applyRouteScope(routeScopeRaw: unknown) {
     const queryScope = String(routeScopeRaw || '').trim()
@@ -187,9 +212,11 @@ export function useTpTemplateList() {
     loading,
     error,
     activeScopeTab,
+    searchKeyword,
     exportScopedTemplates,
     filteredTemplates,
     applyRouteScope,
+    applyRouteKeyword,
     refreshTemplates,
   }
 }

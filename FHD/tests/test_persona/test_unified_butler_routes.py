@@ -48,7 +48,7 @@ def test_infer_returns_persona_view():
 
 
 def test_resolve_persona_user_id_keeps_session_scoped_string():
-    """对话流写 web_normal_*；Settings 必须用同一字符串键，禁止再 int() 丢会话。"""
+    """旧客户端仍可传会话字符串键；新对话流已改用账号级键（见 owner key 测试）。"""
     req = _req()
     assert (
         misc_routes._resolve_persona_user_id(req, {"user_id": "web_normal_sess-abc"})

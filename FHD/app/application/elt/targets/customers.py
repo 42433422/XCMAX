@@ -60,7 +60,7 @@ class CustomerAdapter(TargetAdapter):
         customer_name = str(data["customer_name"])
         obj = index.get(customer_name)
         if not obj:
-            index[customer_name] = {"_etl_virtual": True, **json_safe(data)}
+            index[customer_name] = {"_elt_virtual": True, **json_safe(data)}
             return PreviewDecision("new", after=json_safe(data), reason="customer_not_found")
         if isinstance(obj, dict):
             return PreviewDecision(

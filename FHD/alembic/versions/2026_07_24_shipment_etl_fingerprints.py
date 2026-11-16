@@ -1,6 +1,6 @@
-"""shipment_etl_import_fingerprints：租户+指纹唯一约束。
+"""shipment_elt_import_fingerprints：租户+指纹唯一约束。
 
-Revision ID: 2026_07_24_shipment_etl_fingerprints
+Revision ID: 2026_07_24_shipment_elt_fingerprints
 Revises: 2026_07_21_workflow_persistence
 Create Date: 2026-07-24
 """
@@ -18,7 +18,7 @@ down_revision: str | Sequence[str] | None = "2026_07_21_workflow_persistence"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-_TABLE = "shipment_etl_import_fingerprints"
+_TABLE = "shipment_elt_import_fingerprints"
 
 _ALEMBIC_VERSION_TABLE = "alembic_version"
 _ALEMBIC_VERSION_COLUMN = "version_num"
@@ -75,10 +75,10 @@ def upgrade() -> None:
         sa.Column("meta_json", sa.Text(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
-        sa.UniqueConstraint("tenant_key", "fingerprint", name="uq_shipment_etl_tenant_fingerprint"),
+        sa.UniqueConstraint("tenant_key", "fingerprint", name="uq_shipment_elt_tenant_fingerprint"),
     )
-    op.create_index("ix_shipment_etl_fp_tenant_key", _TABLE, ["tenant_key"])
-    op.create_index("ix_shipment_etl_fp_fingerprint", _TABLE, ["fingerprint"])
+    op.create_index("ix_shipment_elt_fp_tenant_key", _TABLE, ["tenant_key"])
+    op.create_index("ix_shipment_elt_fp_fingerprint", _TABLE, ["fingerprint"])
 
 
 def downgrade() -> None:
@@ -86,6 +86,6 @@ def downgrade() -> None:
     insp = sa.inspect(bind)
     if not insp.has_table(_TABLE):
         return
-    op.drop_index("ix_shipment_etl_fp_fingerprint", table_name=_TABLE)
-    op.drop_index("ix_shipment_etl_fp_tenant_key", table_name=_TABLE)
+    op.drop_index("ix_shipment_elt_fp_fingerprint", table_name=_TABLE)
+    op.drop_index("ix_shipment_elt_fp_tenant_key", table_name=_TABLE)
     op.drop_table(_TABLE)

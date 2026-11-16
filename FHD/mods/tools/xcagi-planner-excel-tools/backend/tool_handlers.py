@@ -225,65 +225,137 @@ def _handle_import_excel_to_database(
     return _inject_source_json(raw)
 
 
-def _handle_generate_office_document(args: dict[str, Any]) -> str:
+def _document_result(
+    content: bytes,
+    fname: str,
+    fmt: str,
+    summary: str,
+    extra: dict[str, Any] | None = None,
+) -> str:
+    from app.mod_sdk.host_services import store_document_pickup
+
+    mime = (
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        if fmt == "xlsx"
+        else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+    token = store_document_pickup(content, fname, mime)
+    download_url = f"/api/ai/kitten/document/pickup/{token}"
+    metadata: dict[str, Any] = {"pickup_token": token, "generator": "generate_office_document"}
+    if extra:
+        metadata.update(extra)
+    return json.dumps(
+        _tag_source(
+            {
+                "success": True,
+                "message": (
+                    f"已生成《{fname}》。请让用户在浏览器打开以下路径下载"
+                    "（一次性有效，勿泄露 token）："
+                ),
+                "pickup_token": token,
+                "file_name": fname,
+                "download_url": download_url,
+                "artifacts": [
+                    {
+                        "artifact_type": "office_document",
+                        "name": fname,
+                        "source": "generate_office_document",
+                        "uri": download_url,
+                        "mime_type": mime,
+                        "summary": summary[:500],
+                        "preview": {
+                            "file_name": fname,
+                            "download_url": download_url,
+                            "output_format": fmt,
+                        },
+                        "metadata": metadata,
+                    }
+                ],
+                "assistant_hint": (
+                    "将 download_url 原样写入回复（可做成 Markdown 链接）；"
+                    "不要再次调用 generate_office_document，除非用户明确要求重新生成。"
+                ),
+            }
+        ),
+        ensure_ascii=False,
+    )
+
+
+def _handle_generate_office_document(
+    args: dict[str, Any],
+    workspace_root: str | None = None,
+    runtime_context: dict[str, Any] | None = None,
+) -> str:
     req = str(args.get("user_request") or args.get("prompt") or "").strip()
-    fmt = str(args.get("output_format") or "docx").lower().strip()
-    if fmt not in ("docx", "xlsx"):
-        fmt = "docx"
+    template_id = str(args.get("template_id") or "").strip()
+    template_name = str(args.get("template_name") or args.get("template") or "").strip()
+    rows = args.get("rows") or args.get("records") or args.get("data")
+    file_path = str(args.get("file_path") or args.get("source_file") or "").strip()
+    sheet_name = str(args.get("sheet_name") or "").strip() or None
+    raw_format = str(args.get("output_format") or "").lower().strip()
+    fmt = (
+        raw_format
+        if raw_format in ("docx", "xlsx")
+        else ("xlsx" if (template_id or template_name) else "docx")
+    )
+
+    if template_id or template_name:
+        if fmt != "xlsx":
+            return json.dumps(
+                _tag_source(
+                    {"success": False, "error": "template_requires_xlsx",
+                     "message": "模板填充只支持 Excel（.xlsx）模板"}
+                ),
+                ensure_ascii=False,
+            )
+        try:
+            from app.mod_sdk.host_services import fill_document_from_template
+
+            tenant_id = (runtime_context or {}).get("tenant_id")
+            filled = fill_document_from_template(
+                template_id=template_id or None,
+                template_name=template_name or None,
+                rows=rows if isinstance(rows, list) else None,
+                file_path=file_path or None,
+                sheet_name=sheet_name,
+                field_mapping=args.get("field_mapping")
+                if isinstance(args.get("field_mapping"), dict)
+                else None,
+                output_name=str(args.get("output_name") or "").strip() or None,
+                tenant_id=int(tenant_id) if str(tenant_id or "").isdigit() else None,
+                workspace_root=workspace_root,
+                runtime_context=runtime_context,
+            )
+        except BOUNDARY_ERRORS as e:
+            return json.dumps(
+                _tag_source({"success": False, "error": "template_fill_failed", "message": str(e)}),
+                ensure_ascii=False,
+            )
+        return _document_result(
+            filled["content"],
+            str(filled["file_name"]),
+            "xlsx",
+            req or f"按模板《{filled['template_name']}》生成",
+            {
+                "template_id": filled.get("template_id"),
+                "template_name": filled.get("template_name"),
+                "row_count": filled.get("row_count"),
+                "field_mapping": filled.get("field_mapping"),
+                "unmapped_labels": filled.get("unmapped_labels"),
+                "generator": "generate_office_document:template_fill",
+            },
+        )
+
     if not req:
         return json.dumps(
             _tag_source({"success": False, "error": "missing_user_request"}),
             ensure_ascii=False,
         )
     try:
-        from app.mod_sdk.host_services import generate_office_file, store_document_pickup
+        from app.mod_sdk.host_services import generate_office_file
 
         content, fname = generate_office_file(req, fmt)  # type: ignore[arg-type]
-        mime = (
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            if fmt == "xlsx"
-            else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        )
-        token = store_document_pickup(content, fname, mime)
-        download_url = f"/api/ai/kitten/document/pickup/{token}"
-        return json.dumps(
-            _tag_source(
-                {
-                    "success": True,
-                    "message": (
-                        f"已生成《{fname}》。请让用户在浏览器打开以下路径下载"
-                        "（一次性有效，勿泄露 token）："
-                    ),
-                    "pickup_token": token,
-                    "file_name": fname,
-                    "download_url": download_url,
-                    "artifacts": [
-                        {
-                            "artifact_type": "office_document",
-                            "name": fname,
-                            "source": "generate_office_document",
-                            "uri": download_url,
-                            "mime_type": mime,
-                            "summary": req[:500],
-                            "preview": {
-                                "file_name": fname,
-                                "download_url": download_url,
-                                "output_format": fmt,
-                            },
-                            "metadata": {
-                                "pickup_token": token,
-                                "generator": "generate_office_document",
-                            },
-                        }
-                    ],
-                    "assistant_hint": (
-                        "将 download_url 原样写入回复（可做成 Markdown 链接）；"
-                        "不要再次调用 generate_office_document，除非用户明确要求重新生成。"
-                    ),
-                }
-            ),
-            ensure_ascii=False,
-        )
+        return _document_result(content, fname, fmt, req)
     except BOUNDARY_ERRORS as e:
         return json.dumps(_tag_source({"success": False, "error": str(e)}), ensure_ascii=False)
 
@@ -352,6 +424,7 @@ def run_native_tool(
     *,
     workspace_root: str | None = None,
     db_write_token: str | None = None,
+    runtime_context: dict[str, Any] | None = None,
 ) -> str | None:
     """由 mod_sdk.planner_native_tools 调用；未识别的工具返回 None。"""
     tool = str(name or "").strip()
@@ -369,7 +442,7 @@ def run_native_tool(
     if tool == "import_excel_to_database":
         return _handle_import_excel_to_database(payload, workspace_root, db_write_token)
     if tool == "generate_office_document":
-        return _handle_generate_office_document(payload)
+        return _handle_generate_office_document(payload, workspace_root, runtime_context)
     if tool == "products_bulk_import":
         return _handle_products_bulk_import(payload, db_write_token)
     if tool == "excel_vector_index":

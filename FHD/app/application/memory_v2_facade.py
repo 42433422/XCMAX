@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.application.user_memory.retrieve import build_memory_context as build_memory_context
+from app.application.user_memory.retrieve import search as search
+from app.application.user_memory.write import normalize_memory_text as normalize_memory_text
+from app.application.user_memory.write import remember as remember
+
 
 def get_user_memory_service() -> Any:
     from app.domain.shared_services.user_memory_service import (

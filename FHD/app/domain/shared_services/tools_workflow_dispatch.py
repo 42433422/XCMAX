@@ -7,6 +7,9 @@ from collections.abc import Callable
 from app.domain.shared_services.tools_workflow_business_db import (
     _registered_router_business_db,
 )
+from app.domain.shared_services.tools_workflow_elt import (
+    _registered_router_elt_import,
+)
 from app.domain.shared_services.tools_workflow_erp import (
     _registered_router_customers,
     _registered_router_finance,
@@ -23,6 +26,7 @@ from app.domain.shared_services.tools_workflow_excel_ocr import (
     _registered_router_excel_analysis,
     _registered_router_excel_vector_index,
     _registered_router_generate_office_document,
+    _registered_router_import_excel_to_database,
 )
 from app.domain.shared_services.tools_workflow_excel_ocr_ops import (
     _registered_router_excel_import,
@@ -61,9 +65,12 @@ from app.domain.shared_services.tools_workflow_workspace import (
 def _registered_router_client_product_issue(action, params, runtime_context, profile, user_message):
     if action != "submit":
         return {"success": False, "message": "不支持的产品问题上报操作"}
+    from app.application.client_product_issue_intake import resolve_issue_report_message
     from app.application.registered_client_issue import submit_client_product_issue
 
-    return submit_client_product_issue(user_message, runtime_context)
+    # 与审批前置校验共用同一套取文逻辑：续办请求要从会话前文/计划参数找回问题描述。
+    resolved = resolve_issue_report_message(user_message, runtime_context, params)
+    return submit_client_product_issue(resolved or user_message, runtime_context)
 
 
 class _WorkflowRouterMap(dict):
@@ -115,6 +122,8 @@ _REGISTERED_WORKFLOW_ROUTERS: dict[str, Callable[..., dict]] = _WorkflowRouterMa
         "dataset_rag": _registered_router_dataset_rag,
         "memory_v2": _registered_router_memory_v2,
         "excel_analysis": _registered_router_excel_analysis,
+        "import_excel_to_database": _registered_router_import_excel_to_database,
+        "elt_import": _registered_router_elt_import,
         "generate_office_document": _registered_router_generate_office_document,
         "excel_vector_index": _registered_router_excel_vector_index,
         "ocr": _registered_router_ocr,

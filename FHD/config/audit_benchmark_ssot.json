@@ -407,8 +407,8 @@
     {
       "id": "etl",
       "number": 4,
-      "name": "ETL 与业务文件处理",
-      "xcmax_scope": "FHD/app/application/etl/",
+      "name": "ELT 与业务文件处理",
+      "xcmax_scope": "FHD/app/application/elt/",
       "commercial_90": [
         {
           "id": "informatica",

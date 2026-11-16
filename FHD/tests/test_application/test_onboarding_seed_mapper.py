@@ -293,11 +293,8 @@ class TestResolveModDir:
         assert result.parent.parent.parent.name == "FHD"
         assert (result / "manifest.json").is_file()
 
-    def test_mod_only_in_xcagi_mods_returns_xcagi_mods(self):
-        """attendance-industry 已迁移至 XCAGI/mods/ → fallback 到平铺导出副本。
-
-        commit a34114a0a 的核心回归测试：FHD/mods/ 找不到时必须 fallback。
-        """
+    def test_mod_resolves_from_export_copy_when_no_source(self):
+        """FHD/mods 不再保留 mutation 副本时，回退解析到 XCAGI 导出副本。"""
         result = osm._resolve_mod_dir("attendance-industry")
         assert result is not None
         assert result.name == "attendance-industry"

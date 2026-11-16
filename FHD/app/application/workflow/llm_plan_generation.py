@@ -20,12 +20,22 @@ from app.application.workflow.workflow_types import (
     WorkflowNode,
     normalize_workflow_risk,
 )
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 _MODEL_SECRET_TEXT = re.compile(
     r"(?i)(\b(?:api[_ -]?key|access[_ -]?token|refresh[_ -]?token|password|passwd|secret|密码|口令)\b\s*[:=]\s*)([^\s,;]+)|"
     r"(\bBearer\s+)[A-Za-z0-9._~+/=-]+"
 )
+# 模型偶尔在 JSON 字符串值里输出裸控制字符（\x00-\x1f），json.loads 会直接拒绝。
+_BARE_CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+
+
+def _sanitize_model_json(raw: str) -> str:
+    """清洗模型输出中的裸控制字符，保留换行与制表符，避免合法计划被误拒。"""
+    return _BARE_CONTROL_CHARS.sub("", raw)
+
+
 _MODEL_CONTEXT_PRIVATE_KEYS = (
     "authorization",
     "access_token",
@@ -118,6 +128,123 @@ class PlannerCompletion(Protocol):
     ) -> dict[str, Any] | None: ...
 
 
+# 纯闲聊/资料问答不需要业务工具：命中快路径时不再把完整工具目录塞进提示。
+_CONVERSATIONAL_MAX_CHARS = 80
+_BUSINESS_INTENT = re.compile(
+    "查|统计|汇总|报表|导出|打印|生成|创建|新建|新增|修改|更新|删除|下单|开单|订单|客户|产品|型号|"
+    "库存|仓库|发货|物流|收款|付款|退款|发票|合同|审批|员工|数据库|明细|金额|单价|数量|销售|采购|"
+    "物料|供应商|表格|excel|Excel|文件|文档|数据集|sql|SQL|附件|上传|下载|导入|审核|识别|录入|同步|"
+    "提交|扫描|图片|照片|ocr|OCR"
+)
+_LIGHT_SYSTEM = "你是平台对话助手。只输出约定 JSON。"
+
+
+class _LightReplyUnavailable(Exception):
+    """轻量轮次的模型调用已失败，不再重复调用完整规划。"""
+
+
+_LIGHT_RULES = (
+    "只输出 JSON，不要 markdown。",
+    '闲聊、解释、总结、写作和通用问答返回 {"mode":"reply","reply":"..."}。',
+    "reply 只能依据 user_message 与 context；不要假装查询过企业数据库。",
+    '只要用户需要查询或操作企业数据、生成文件、调用工具，返回 {"mode":"workflow"}，不要输出 nodes，也不要编造结果。',
+)
+
+
+def _conversational_turn(message: str, context: dict[str, Any]) -> bool:
+    text = str(message or "").strip()
+    if not text or len(text) > _CONVERSATIONAL_MAX_CHARS:
+        return False
+    if _BUSINESS_INTENT.search(text):
+        return False
+    # 企业资料/客户证据已召回，或带着附件，说明这一轮在问业务事实，交给完整规划。
+    if context.get("chat_knowledge_evidence") or context.get("chat_customer_evidence"):
+        return False
+    if context.get("multimodal_attachments") or context.get("attachments"):
+        return False
+    return True
+
+
+_JSON_ESCAPES = {
+    "n": "\n",
+    "t": "\t",
+    "r": "\r",
+    '"': '"',
+    "\\": "\\",
+    "/": "/",
+    "b": "\b",
+    "f": "\f",
+}
+
+
+def _reply_prefix(raw: str) -> str | None:
+    """从尚不完整的 JSON 里取出 reply 字符串已到达的部分。"""
+    mode = re.search(r'"mode"\s*:\s*"([^"]*)"', raw)
+    if mode and mode.group(1).strip() != "reply":
+        return None
+    # 出现 nodes 说明模型走的是工作流分支，正文不是最终回答。
+    if '"nodes"' in raw or '"tool_id"' in raw:
+        return None
+    key = re.search(r'"reply"\s*:\s*"', raw)
+    if not key:
+        return None
+    out: list[str] = []
+    index = key.end()
+    while index < len(raw):
+        char = raw[index]
+        if char == "\\":
+            if index + 1 >= len(raw):
+                break
+            nxt = raw[index + 1]
+            if nxt == "u":
+                if index + 6 > len(raw):
+                    break
+                try:
+                    out.append(chr(int(raw[index + 2 : index + 6], 16)))
+                except ValueError:
+                    pass
+                index += 6
+                continue
+            out.append(_JSON_ESCAPES.get(nxt, nxt))
+            index += 2
+            continue
+        if char == '"':
+            break
+        out.append(char)
+        index += 1
+    return "".join(out)
+
+
+async def _consume_reply_stream(stream, on_prefix: Callable[[str], None]) -> tuple[str, str]:
+    """消费模型增量，确认是普通回复后把正文前缀实时推给前端。"""
+    chunks: list[str] = []
+    emitted_text = ""
+    try:
+        async for delta in stream:
+            if not delta:
+                continue
+            chunks.append(delta)
+            prefix = _reply_prefix("".join(chunks))
+            if prefix is None or len(prefix) <= len(emitted_text):
+                continue
+            on_prefix(prefix[len(emitted_text) :])
+            emitted_text = prefix
+    except RECOVERABLE_ERRORS:  # 流中断：保留下发内容，交给已发送前缀收尾
+        logger.warning("planner reply stream interrupted", exc_info=True)
+    return "".join(chunks), emitted_text
+
+
+def _memory_digest(context: dict[str, Any]) -> dict[str, str]:
+    digest: dict[str, str] = {}
+    for key in ("user_memory_rag", "memory_v2"):
+        item = context.get(key)
+        if isinstance(item, dict):
+            summary = str(item.get("summary") or "").strip()
+            if summary:
+                digest[key] = summary[:1200]
+    return digest
+
+
 def _tool_specs(tool_registry: dict[str, Any]) -> list[dict[str, Any]]:
     from app.application.agent_orchestrator.tool_spec import build_tool_specs_v2
 
@@ -178,7 +305,7 @@ def _decode_completion(payload: dict[str, Any]) -> tuple[dict[str, Any], list[Wo
     if not raw:
         return None
     raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-    parsed = _load_model_json(raw)
+    parsed = _load_model_json(_sanitize_model_json(raw))
     if not isinstance(parsed, dict):
         return None
     mode = str(parsed.get("mode") or "workflow").strip().lower()
@@ -298,6 +425,107 @@ class LlmPlanGeneration:
         self.completion = completion
         self.http_client = http_client
 
+    def _stream_reply(
+        self, messages: list[dict[str, str]], context: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        """流式生成闲聊回复；无法流式或判定为工作流时返回 None 走原路径。"""
+        from app.application.workflow.planner_llm_gateway import stream_planner_completion
+        from app.infrastructure.chat_stream_lifetime import current_lifetime
+
+        lifetime = current_lifetime.get()
+        if lifetime is None:
+            return None
+        try:
+            stream = stream_planner_completion(
+                ai_service=self.conversation, context=context, messages=messages
+            )
+        except RECOVERABLE_ERRORS:
+            logger.debug("planner streaming unavailable", exc_info=True)
+            return None
+        if stream is None:
+            return None
+
+        def emit(delta: str) -> None:
+            lifetime.publish_delta(delta)
+
+        try:
+            from app.application.employee_runtime.agent_runner import _run_async
+
+            text, streamed = _run_async(_consume_reply_stream(stream, emit))
+        except RECOVERABLE_ERRORS:
+            logger.warning("planner streaming failed, falling back", exc_info=True)
+            return None
+        if not text.strip():
+            return None
+        if streamed and not text.rstrip().endswith("}"):
+            # 流被截断：以已下发内容为准，避免前端出现重复正文。
+            text = json.dumps({"mode": "reply", "reply": streamed}, ensure_ascii=False)
+        return {"choices": [{"message": {"content": text}}]}
+
+    def _light_reply(self, plan_id: str, message: str, context: dict[str, Any]) -> PlanGraph | None:
+        """闲聊轮次只带对话必需上下文，避免每轮重发整份工具目录。"""
+
+        from app.application.ai_chat.dialogue_memory import recent_conversation_messages
+
+        prompt: dict[str, Any] = {
+            "task": "普通对话：直接回复；需要业务工具时返回 workflow。",
+            "rules": list(_LIGHT_RULES),
+            "user_message": message,
+            "recent_messages": _model_context_value(recent_conversation_messages(context, limit=6)),
+        }
+        digest = _memory_digest(context)
+        if digest:
+            prompt["context"] = digest
+        messages = [
+            {"role": "system", "content": _LIGHT_SYSTEM},
+            {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
+        ]
+        response = self._stream_reply(messages, context)
+        if response is None:
+            from app.application.workflow.retry_policy import (
+                call_with_retry,
+                is_transport_error,
+                planner_retry_policy,
+            )
+
+            try:
+                response = call_with_retry(
+                    lambda: self.completion(
+                        ai_service=self.conversation,
+                        context=context,
+                        messages=messages,
+                        http_client_factory=self.http_client,
+                    ),
+                    policy=planner_retry_policy(),
+                )
+            except RECOVERABLE_ERRORS as exc:
+                # 传输类错误重试耗尽：轻量轮次已失败，不再重复打完整规划，交由上层 fail-closed。
+                if not is_transport_error(exc):
+                    raise
+                raise _LightReplyUnavailable from exc
+        if response is None:
+            # 模型调用本身失败：轻量轮次已经花掉一次调用，不再重复打一次完整规划。
+            raise _LightReplyUnavailable
+        decoded = _decode_completion(response)
+        if decoded is None:
+            return None
+        parsed, nodes = decoded
+        if str(parsed.get("mode") or "").strip().lower() != "reply":
+            return None
+        return PlanGraph(
+            plan_id=plan_id,
+            intent="conversation_reply",
+            todo_steps=[],
+            nodes=nodes,
+            risk_level="low",
+            metadata={
+                "planner": "llm",
+                "planning_tier": "light",
+                "response_mode": "reply",
+                "reply": parsed["reply"],
+            },
+        )
+
     def generate(
         self,
         plan_id: str,
@@ -307,6 +535,13 @@ class LlmPlanGeneration:
         context: dict[str, Any],
     ) -> PlanGraph | None:
         try:
+            if _conversational_turn(message, context):
+                try:
+                    light = self._light_reply(plan_id, message, context)
+                except _LightReplyUnavailable:
+                    return None
+                if light is not None:
+                    return light
             tool_specs = _tool_specs(select_tools_for_prompt(tool_registry, message, context))
             recent_messages: list[dict[str, Any]] = []
             from app.application.ai_chat.dialogue_memory import recent_conversation_messages
@@ -393,30 +628,32 @@ class LlmPlanGeneration:
             from app.application.workflow.retry_policy import call_with_retry, planner_retry_policy
 
             policy = planner_retry_policy()
-            try:
-                response_data = call_with_retry(
-                    lambda: self.completion(
-                        ai_service=self.conversation,
-                        context=context,
-                        messages=messages,
-                        http_client_factory=self.http_client,
-                        **extra,
-                    ),
-                    policy=policy,
-                )
-            except TypeError as exc:
-                if not extra or not unsupported_tool_parameter(exc):
-                    raise
-                # 兼容不接受额外参数的旧 completion 实现（含测试替身）。
-                response_data = call_with_retry(
-                    lambda: self.completion(
-                        ai_service=self.conversation,
-                        context=context,
-                        messages=messages,
-                        http_client_factory=self.http_client,
-                    ),
-                    policy=policy,
-                )
+            response_data = self._stream_reply(messages, context)
+            if response_data is None:
+                try:
+                    response_data = call_with_retry(
+                        lambda: self.completion(
+                            ai_service=self.conversation,
+                            context=context,
+                            messages=messages,
+                            http_client_factory=self.http_client,
+                            **extra,
+                        ),
+                        policy=policy,
+                    )
+                except TypeError as exc:
+                    if not extra or not unsupported_tool_parameter(exc):
+                        raise
+                    # 兼容不接受额外参数的旧 completion 实现（含测试替身）。
+                    response_data = call_with_retry(
+                        lambda: self.completion(
+                            ai_service=self.conversation,
+                            context=context,
+                            messages=messages,
+                            http_client_factory=self.http_client,
+                        ),
+                        policy=policy,
+                    )
             if response_data is None:
                 return None
             native_plan = plan_from_tool_calls(
@@ -550,7 +787,7 @@ class LlmPlanGeneration:
             message = first.get("message") if isinstance(first, dict) else {}
             raw = str(message.get("content") or "").strip() if isinstance(message, dict) else ""
             raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-            parsed = json.loads(raw)
+            parsed = json.loads(_sanitize_model_json(raw))
             if not isinstance(parsed, dict) or parsed.get("resolved") is not True:
                 return None
             parameters = parsed.get("parameters")

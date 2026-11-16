@@ -11,6 +11,9 @@ build/
 !desktop/build/**
 develop-eggs/
 dist/
+# 工具链模型产物不入库（仅根级 models/ 与语音模型；ORM 源码 app/db/models 不受影响）
+/models/
+app/application/voice/models/*.onnx
 downloads/
 eggs/
 .eggs/

@@ -1,7 +1,7 @@
 """通用 ETL V1 数据模型。
 
-Revision ID: 2026_07_26_general_etl_v1
-Revises: 2026_07_24_shipment_etl_fingerprints
+Revision ID: 2026_07_26_general_elt_v1
+Revises: 2026_07_24_shipment_elt_fingerprints
 Create Date: 2026-07-26
 """
 
@@ -34,15 +34,15 @@ def _timestamps() -> list[sa.Column]:
 
 
 _ETL_PERMISSIONS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
-    ("etl.read", "查看数据对接", ("viewer", "operator", "admin")),
-    ("etl.template.manage", "管理 ELT 模板", ("operator", "admin")),
-    ("etl.execute", "执行 ELT", ("operator", "admin")),
-    ("etl.rollback", "撤销 ELT", ("admin",)),
-    ("etl.target.manage", "管理 ETL 目标", ("admin",)),
+    ("elt.read", "查看数据对接", ("viewer", "operator", "admin")),
+    ("elt.template.manage", "管理 ELT 模板", ("operator", "admin")),
+    ("elt.execute", "执行 ELT", ("operator", "admin")),
+    ("elt.rollback", "撤销 ELT", ("admin",)),
+    ("elt.target.manage", "管理 ETL 目标", ("admin",)),
 )
 
 
-def _seed_etl_permissions(bind) -> None:
+def _seed_elt_permissions(bind) -> None:
     inspector = sa.inspect(bind)
     tables = set(inspector.get_table_names())
     if not {"permissions", "roles", "role_permissions"}.issubset(tables):
@@ -63,7 +63,7 @@ def _seed_etl_permissions(bind) -> None:
                     "name": name,
                     "code": code,
                     "description": "",
-                    "module": "etl",
+                    "module": "elt",
                     "created_at": datetime.utcnow(),
                 },
             )
@@ -101,15 +101,15 @@ def upgrade() -> None:
     # Squashed baseline 会用“当前” Base.metadata 创建全量 ORM 表；新库因此已经
     # 拥有本迁移的六张表。存量库从旧 head 升级时则一张都没有。
     bind = op.get_bind()
-    _seed_etl_permissions(bind)
+    _seed_elt_permissions(bind)
     existing = set(sa.inspect(bind).get_table_names())
     required = {
-        "etl_uploads",
-        "etl_templates",
-        "etl_template_versions",
-        "etl_runs",
-        "etl_run_rows",
-        "etl_target_configs",
+        "elt_uploads",
+        "elt_templates",
+        "elt_template_versions",
+        "elt_runs",
+        "elt_run_rows",
+        "elt_target_configs",
     }
     if required.issubset(existing):
         return
@@ -118,7 +118,7 @@ def upgrade() -> None:
         raise RuntimeError(f"通用 ETL 表处于不完整状态，拒绝继续迁移: {sorted(partial)}")
 
     op.create_table(
-        "etl_uploads",
+        "elt_uploads",
         sa.Column("id", sa.String(36), primary_key=True),
         *_tenant_owner_columns(),
         sa.Column("file_name", sa.String(255), nullable=False),
@@ -130,15 +130,15 @@ def upgrade() -> None:
         sa.Column("expires_at", sa.DateTime(timezone=True)),
         *_timestamps(),
     )
-    op.create_index("ix_etl_uploads_tenant_id", "etl_uploads", ["tenant_id"])
-    op.create_index("ix_etl_uploads_owner_user_id", "etl_uploads", ["owner_user_id"])
-    op.create_index("ix_etl_upload_owner", "etl_uploads", ["tenant_id", "owner_user_id"])
+    op.create_index("ix_elt_uploads_tenant_id", "elt_uploads", ["tenant_id"])
+    op.create_index("ix_elt_uploads_owner_user_id", "elt_uploads", ["owner_user_id"])
+    op.create_index("ix_elt_upload_owner", "elt_uploads", ["tenant_id", "owner_user_id"])
     op.create_index(
-        "ix_etl_upload_sha256", "etl_uploads", ["tenant_id", "owner_user_id", "sha256"]
+        "ix_elt_upload_sha256", "elt_uploads", ["tenant_id", "owner_user_id", "sha256"]
     )
 
     op.create_table(
-        "etl_templates",
+        "elt_templates",
         sa.Column("id", sa.String(36), primary_key=True),
         *_tenant_owner_columns(),
         sa.Column("name", sa.String(160), nullable=False),
@@ -148,18 +148,18 @@ def upgrade() -> None:
         sa.Column("description", sa.Text()),
         *_timestamps(),
         sa.UniqueConstraint(
-            "tenant_id", "owner_user_id", "name", name="uq_etl_template_owner_name"
+            "tenant_id", "owner_user_id", "name", name="uq_elt_template_owner_name"
         ),
     )
-    op.create_index("ix_etl_templates_tenant_id", "etl_templates", ["tenant_id"])
-    op.create_index("ix_etl_templates_owner_user_id", "etl_templates", ["owner_user_id"])
-    op.create_index("ix_etl_templates_target_type", "etl_templates", ["target_type"])
-    op.create_index("ix_etl_template_owner", "etl_templates", ["tenant_id", "owner_user_id"])
+    op.create_index("ix_elt_templates_tenant_id", "elt_templates", ["tenant_id"])
+    op.create_index("ix_elt_templates_owner_user_id", "elt_templates", ["owner_user_id"])
+    op.create_index("ix_elt_templates_target_type", "elt_templates", ["target_type"])
+    op.create_index("ix_elt_template_owner", "elt_templates", ["tenant_id", "owner_user_id"])
 
     op.create_table(
-        "etl_template_versions",
+        "elt_template_versions",
         sa.Column("id", sa.String(36), primary_key=True),
-        sa.Column("template_id", sa.String(36), sa.ForeignKey("etl_templates.id"), nullable=False),
+        sa.Column("template_id", sa.String(36), sa.ForeignKey("elt_templates.id"), nullable=False),
         *_tenant_owner_columns(),
         sa.Column("version", sa.Integer(), nullable=False),
         sa.Column("target_type", sa.String(64), nullable=False),
@@ -170,27 +170,27 @@ def upgrade() -> None:
         sa.Column("allowed_update_fields_json", sa.Text(), nullable=False, server_default="[]"),
         sa.Column("action_rules_json", sa.Text(), nullable=False, server_default="{}"),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
-        sa.UniqueConstraint("template_id", "version", name="uq_etl_template_version"),
+        sa.UniqueConstraint("template_id", "version", name="uq_elt_template_version"),
     )
-    op.create_index("ix_etl_template_versions_template_id", "etl_template_versions", ["template_id"])
-    op.create_index("ix_etl_template_versions_tenant_id", "etl_template_versions", ["tenant_id"])
+    op.create_index("ix_elt_template_versions_template_id", "elt_template_versions", ["template_id"])
+    op.create_index("ix_elt_template_versions_tenant_id", "elt_template_versions", ["tenant_id"])
     op.create_index(
-        "ix_etl_template_versions_owner_user_id", "etl_template_versions", ["owner_user_id"]
+        "ix_elt_template_versions_owner_user_id", "elt_template_versions", ["owner_user_id"]
     )
     op.create_index(
-        "ix_etl_template_version_owner",
-        "etl_template_versions",
+        "ix_elt_template_version_owner",
+        "elt_template_versions",
         ["tenant_id", "owner_user_id"],
     )
 
     op.create_table(
-        "etl_runs",
+        "elt_runs",
         sa.Column("id", sa.String(36), primary_key=True),
         *_tenant_owner_columns(),
-        sa.Column("upload_id", sa.String(36), sa.ForeignKey("etl_uploads.id"), nullable=False),
-        sa.Column("template_id", sa.String(36), sa.ForeignKey("etl_templates.id")),
+        sa.Column("upload_id", sa.String(36), sa.ForeignKey("elt_uploads.id"), nullable=False),
+        sa.Column("template_id", sa.String(36), sa.ForeignKey("elt_templates.id")),
         sa.Column(
-            "template_version_id", sa.String(36), sa.ForeignKey("etl_template_versions.id")
+            "template_version_id", sa.String(36), sa.ForeignKey("elt_template_versions.id")
         ),
         sa.Column("target_type", sa.String(64), nullable=False),
         sa.Column("status", sa.String(32), nullable=False, server_default="queued"),
@@ -225,16 +225,16 @@ def upgrade() -> None:
         "template_version_id",
         "target_type",
     ):
-        op.create_index(f"ix_etl_runs_{column}", "etl_runs", [column])
+        op.create_index(f"ix_elt_runs_{column}", "elt_runs", [column])
     op.create_index(
-        "ix_etl_run_owner_created", "etl_runs", ["tenant_id", "owner_user_id", "created_at"]
+        "ix_elt_run_owner_created", "elt_runs", ["tenant_id", "owner_user_id", "created_at"]
     )
-    op.create_index("ix_etl_run_status", "etl_runs", ["status"])
+    op.create_index("ix_elt_run_status", "elt_runs", ["status"])
 
     op.create_table(
-        "etl_run_rows",
+        "elt_run_rows",
         sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
-        sa.Column("run_id", sa.String(36), sa.ForeignKey("etl_runs.id"), nullable=False),
+        sa.Column("run_id", sa.String(36), sa.ForeignKey("elt_runs.id"), nullable=False),
         *_tenant_owner_columns(),
         sa.Column("source_sheet", sa.String(160), nullable=False, server_default=""),
         sa.Column("source_row", sa.Integer(), nullable=False),
@@ -253,20 +253,20 @@ def upgrade() -> None:
         sa.Column("execution_error_code", sa.String(64)),
         sa.Column("execution_error_message", sa.String(500)),
         *_timestamps(),
-        sa.UniqueConstraint("run_id", "source_sheet", "source_row", name="uq_etl_run_source_row"),
+        sa.UniqueConstraint("run_id", "source_sheet", "source_row", name="uq_elt_run_source_row"),
     )
-    op.create_index("ix_etl_run_rows_run_id", "etl_run_rows", ["run_id"])
-    op.create_index("ix_etl_run_rows_tenant_id", "etl_run_rows", ["tenant_id"])
-    op.create_index("ix_etl_run_rows_owner_user_id", "etl_run_rows", ["owner_user_id"])
+    op.create_index("ix_elt_run_rows_run_id", "elt_run_rows", ["run_id"])
+    op.create_index("ix_elt_run_rows_tenant_id", "elt_run_rows", ["tenant_id"])
+    op.create_index("ix_elt_run_rows_owner_user_id", "elt_run_rows", ["owner_user_id"])
     op.create_index(
-        "ix_etl_run_rows_owner", "etl_run_rows", ["tenant_id", "owner_user_id"]
+        "ix_elt_run_rows_owner", "elt_run_rows", ["tenant_id", "owner_user_id"]
     )
     op.create_index(
-        "ix_etl_run_rows_run_action", "etl_run_rows", ["run_id", "final_action"]
+        "ix_elt_run_rows_run_action", "elt_run_rows", ["run_id", "final_action"]
     )
 
     op.create_table(
-        "etl_target_configs",
+        "elt_target_configs",
         sa.Column("id", sa.String(36), primary_key=True),
         *_tenant_owner_columns(),
         sa.Column("name", sa.String(160), nullable=False),
@@ -277,27 +277,27 @@ def upgrade() -> None:
         sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()),
         *_timestamps(),
         sa.UniqueConstraint(
-            "tenant_id", "owner_user_id", "name", name="uq_etl_target_config_owner_name"
+            "tenant_id", "owner_user_id", "name", name="uq_elt_target_config_owner_name"
         ),
     )
-    op.create_index("ix_etl_target_configs_tenant_id", "etl_target_configs", ["tenant_id"])
+    op.create_index("ix_elt_target_configs_tenant_id", "elt_target_configs", ["tenant_id"])
     op.create_index(
-        "ix_etl_target_configs_owner_user_id", "etl_target_configs", ["owner_user_id"]
+        "ix_elt_target_configs_owner_user_id", "elt_target_configs", ["owner_user_id"]
     )
     op.create_index(
-        "ix_etl_target_config_owner",
-        "etl_target_configs",
+        "ix_elt_target_config_owner",
+        "elt_target_configs",
         ["tenant_id", "owner_user_id"],
     )
 
 
 def downgrade() -> None:
     for table in (
-        "etl_target_configs",
-        "etl_run_rows",
-        "etl_runs",
-        "etl_template_versions",
-        "etl_templates",
-        "etl_uploads",
+        "elt_target_configs",
+        "elt_run_rows",
+        "elt_runs",
+        "elt_template_versions",
+        "elt_templates",
+        "elt_uploads",
     ):
         op.drop_table(table)

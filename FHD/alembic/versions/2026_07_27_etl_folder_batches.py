@@ -1,7 +1,7 @@
 """Preserve folder batch and relative-path metadata for ETL uploads.
 
-Revision ID: 2026_07_27_etl_folder_batches
-Revises: 2026_07_26_general_etl_v1
+Revision ID: 2026_07_27_elt_folder_batches
+Revises: 2026_07_26_general_elt_v1
 Create Date: 2026-07-27
 """
 
@@ -18,8 +18,8 @@ down_revision: str | Sequence[str] | None = "2026_07_26_general_etl_v1"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-_TABLE = "etl_uploads"
-_BATCH_INDEX = "ix_etl_uploads_batch_id"
+_TABLE = "elt_uploads"
+_BATCH_INDEX = "ix_elt_uploads_batch_id"
 
 
 def _columns(bind) -> set[str]:

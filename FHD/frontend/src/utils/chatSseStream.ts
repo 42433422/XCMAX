@@ -1,10 +1,29 @@
 import { resolvePlannerChatStreamPath } from '@/utils/plannerChatPaths'
+import type { ChatTraceItem } from '@/composables/chat-orchestration/chatOrchestrationShared'
 
 export type PlannerSseEvent =
   | { type: 'route_metadata'; route_metadata: unknown }
+  /** 正文之前的工具执行轨迹（附件工件取数），由气泡「本轮执行」展示 */
+  | { type: 'trace'; items?: ChatTraceItem[]; turn_id?: string }
   | { type: 'model_activity' }
+  /** 即时思考说明：执行线程在规划/审批/执行节点推来的过程文本 */
+  | { type: 'thinking'; id?: string; delta: string }
   | { type: 'token'; text: string; ephemeral?: boolean }
   | { type: 'tool_progress'; label?: string; text?: string; phase?: string; run_id?: string }
+  | {
+      type: 'tool_call'
+      phase?: 'started' | 'finished'
+      node_id?: string
+      tool_id?: string
+      action?: string
+      params?: Record<string, unknown>
+      success?: boolean
+      duration_ms?: number
+      output_preview?: string
+      error?: string
+      retries?: number
+      recovery_hint?: string
+    }
   | { type: 'done'; result?: unknown }
   | { type: 'error'; result?: unknown; message?: string; status_code?: number; run_id?: string; route_metadata?: unknown; execution_outcome?: string; requires_reconciliation?: boolean }
   | { type: 'requires_token'; token_name?: string; token_description?: string; run_id?: string }

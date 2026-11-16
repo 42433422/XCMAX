@@ -247,6 +247,9 @@ class StepExecution:
                 from app.application.agent_orchestrator.tool_executor import (
                     execute_with_tool_deadline,
                 )
+                from app.application.agent_orchestrator.tool_timeouts import (
+                    tool_timeout_seconds,
+                )
 
                 with tool_call_span(
                     tool_id=step.tool_id,
@@ -258,7 +261,12 @@ class StepExecution:
                         self.executor,
                         step,
                         runtime_context=ctx,
-                        timeout_seconds=float(getattr(spec, "timeout_seconds", 0) or 0),
+                        timeout_seconds=tool_timeout_seconds(
+                            step.tool_id,
+                            step.action,
+                            dict(step.params or {}),
+                            float(getattr(spec, "timeout_seconds", 0) or 0),
+                        ),
                     )
             except RECOVERABLE_ERRORS:
                 logger.exception("agent tool execution failed")
