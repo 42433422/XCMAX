@@ -2,15 +2,14 @@
 // 单一真相源: FHD/config/duty_roster.json + mods/_employees/*/manifest.json
 // 后端派生: app/fastapi_routes/system_routes.py::get_duty_roster
 // 首次调用触发 API 请求, 后续共享同一响应 (模块级单例 cache)
-// API 不可用时回退到 yuangonDutyRoster.ts 的构建时硬编码常量
+// 宿主编制属于平台内部数据：接口只对平台管理员返回内容，未返回时一律视为空，
+// 客户端不再内置宿主编制常量（避免企业构建把宿主部门/员工名单打进产物）。
 import { ref, computed, type Ref, type ComputedRef } from 'vue'
 import { systemApi, type DutyRosterData } from '@/api/system'
-import {
-  YUANGON_AREAS as FALLBACK_AREAS,
-  ALL_PLANNED_YUANGON_PKG_IDS as FALLBACK_IDS,
-  YUANGON_PKG_ROLE_LABELS as FALLBACK_LABELS,
-  YUANGON_PKG_DESCRIPTIONS as FALLBACK_DESCRIPTIONS,
-} from '@/domain/yuangonDutyRoster'
+
+const EMPTY_AREAS: Record<string, { label: string; ids: string[] }> = {}
+const EMPTY_IDS: ReadonlySet<string> = new Set()
+const EMPTY_LABELS: Record<string, string> = {}
 
 // 模块级单例 state (多个组件共享同一请求结果)
 const reactiveState = {
@@ -56,23 +55,20 @@ async function fetchDutyRoster(force = false): Promise<DutyRosterData | null> {
 
 export function useDutyRoster() {
   const areas: ComputedRef<Record<string, { label: string; ids: string[] }>> = computed(() => {
-    return reactiveState.data.value?.areas ?? FALLBACK_AREAS
+    return reactiveState.data.value?.areas ?? EMPTY_AREAS
   })
 
   const allPlannedIds: ComputedRef<ReadonlySet<string>> = computed(() => {
     const apiIds = reactiveState.data.value?.all_planned_ids
-    if (apiIds && apiIds.length > 0) {
-      return new Set(apiIds)
-    }
-    return FALLBACK_IDS
+    return apiIds && apiIds.length > 0 ? new Set(apiIds) : EMPTY_IDS
   })
 
   const employeeLabels: ComputedRef<Record<string, string>> = computed(() => {
-    return reactiveState.data.value?.employee_labels ?? FALLBACK_LABELS
+    return reactiveState.data.value?.employee_labels ?? EMPTY_LABELS
   })
 
   const employeeDescriptions: ComputedRef<Record<string, string>> = computed(() => {
-    return reactiveState.data.value?.employee_descriptions ?? FALLBACK_DESCRIPTIONS
+    return reactiveState.data.value?.employee_descriptions ?? EMPTY_LABELS
   })
 
   const departments: ComputedRef<Record<string, unknown>> = computed(() => {

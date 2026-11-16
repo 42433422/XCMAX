@@ -114,7 +114,6 @@ class DocumentLifecycle:
             # 同一来源的重复导入必须可识别：文档级内容哈希是唯一去重键，
             # 否则每次导入都会因版本自增而新增一条文档记录。
             document_content_hash = hashlib.sha256(extracted_text.encode("utf-8")).hexdigest()
-            base_metadata["document_content_hash"] = document_content_hash
             if idempotency_key:
                 fingerprint = hashlib.sha256(
                     json.dumps(
@@ -134,35 +133,12 @@ class DocumentLifecycle:
                 ).hexdigest()
                 base_metadata["ingest_idempotency_key"] = idempotency_key
                 base_metadata["ingest_fingerprint"] = fingerprint
+            # Keep the pre-hash fingerprint contract for durable idempotency receipts.
+            base_metadata["document_content_hash"] = document_content_hash
             with self._repository.lock:
                 state = self._repository.datasets.setdefault(
                     dataset_key, _DatasetState(dataset_key)
                 )
-                # 仅对真实文件来源做内容幂等；显式版本与纯内联文本仍按版本序列处理。
-                if (
-                    file_path.strip()
-                    and not document_id.strip()
-                    and (version is None or str(version).strip() == "")
-                ):
-                    duplicate = next(
-                        (
-                            doc
-                            for doc in state.documents.values()
-                            if doc.tenant_id == tenant_key
-                            and doc.source == source_label
-                            and str((doc.metadata or {}).get("document_content_hash") or "")
-                            == document_content_hash
-                        ),
-                        None,
-                    )
-                    if duplicate is not None:
-                        return {
-                            "success": True,
-                            "dataset_id": dataset_key,
-                            "document": duplicate.to_dict(),
-                            "chunk_count": duplicate.chunk_count,
-                            "duplicate": True,
-                        }
                 document_version = _resolve_document_version(
                     state, source=source_label, tenant_id=tenant_key, requested=version
                 )
@@ -254,6 +230,34 @@ class DocumentLifecycle:
                     and latest_version != expected_source_version
                 ):
                     return {"success": False, "error_code": "dataset_source_version_conflict"}
+                # Only the latest file version is idempotent; restoring older content
+                # must create a new version. Explicit IDs/versions and inline text are unchanged.
+                if (
+                    file_path.strip()
+                    and not text.strip()
+                    and not document_id.strip()
+                    and (version is None or str(version).strip() == "")
+                ):
+                    duplicate = next(
+                        (
+                            doc
+                            for doc in state.documents.values()
+                            if doc.tenant_id == tenant_key
+                            and doc.source == source_label
+                            and doc.version == latest_version
+                            and str((doc.metadata or {}).get("document_content_hash") or "")
+                            == document_content_hash
+                        ),
+                        None,
+                    )
+                    if duplicate is not None:
+                        return {
+                            "success": True,
+                            "dataset_id": dataset_key,
+                            "document": duplicate.to_dict(),
+                            "chunk_count": duplicate.chunk_count,
+                            "duplicate": True,
+                        }
                 if version is None or str(version).strip() == "":
                     document.version = latest_version + 1
                     document.version_label = version_label.strip() or f"v{document.version}"

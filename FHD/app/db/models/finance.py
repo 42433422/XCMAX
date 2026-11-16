@@ -53,8 +53,8 @@ class FinancialTransaction(TenantScopedMixin, Base):
             "reference_type",
             "reference_id",
             unique=True,
-            postgresql_where=text("reference_type IS NOT NULL AND reference_id IS NOT NULL"),
             sqlite_where=text("reference_type IS NOT NULL AND reference_id IS NOT NULL"),
+            postgresql_where=text("reference_type IS NOT NULL AND reference_id IS NOT NULL"),
         ),
     )
 

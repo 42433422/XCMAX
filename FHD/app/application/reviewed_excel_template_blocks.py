@@ -222,7 +222,7 @@ def workbook_template_fingerprint(body: bytes) -> str:
 
 def template_file_fingerprint(path: str, *, tenant_id: int | None = None) -> str:
     """Only read bounded regular files inside this tenant's template directories."""
-    from app.application.shipment_excel_etl_security import (
+    from app.application.shipment_excel_elt_security import (
         _open_directory_under_root,
         _windows_open_relative,
     )

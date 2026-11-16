@@ -12,7 +12,7 @@ _SCRIPT = (
     Path(__file__).resolve().parents[3]
     / ".github"
     / "codeql"
-    / "strip_etl_dir_fd_path_injection_fps.py"
+    / "strip_elt_dir_fd_path_injection_fps.py"
 )
 _SCRIPT_NS = runpy.run_path(str(_SCRIPT))
 keep_result = _SCRIPT_NS["keep_result"]
@@ -26,7 +26,7 @@ def _finding(*, uri: str, line: int | None, rule: str = "py/path-injection") -> 
     }
 
 
-_SHIPMENT = "FHD/app/application/shipment_excel_etl_security.py"
+_SHIPMENT = "FHD/app/application/shipment_excel_elt_security.py"
 _EXCEL = "FHD/app/fastapi_routes/domains/excel/excel_extract.py"
 
 
@@ -86,7 +86,11 @@ def _fd_line(source, function_name):
         for node in ast.parse(source).body
         if isinstance(node, ast.FunctionDef) and node.name == function_name
     )
-    method = "open" if function_name == "open_etl_input_file" else "rename"
+    method = {
+        "open_elt_input_file": "open",
+        "_open_elt_output_under_root": "rename",
+        "_reject_output_symlink": "stat",
+    }[function_name]
     return next(
         node.lineno
         for node in ast.walk(function)
@@ -105,7 +109,9 @@ def _source_tree(tmp_path, source):
     return tmp_path
 
 
-@pytest.mark.parametrize("function", ["open_etl_input_file", "_open_etl_output_under_root"])
+@pytest.mark.parametrize(
+    "function", ["open_elt_input_file", "_open_elt_output_under_root", "_reject_output_symlink"]
+)
 def test_reviewed_fd_sinks_survive_only_nonsemantic_line_drift(tmp_path, function):
     source = "# harmless line drift\n\n" + _SOURCE
     root = _source_tree(tmp_path, source)
@@ -113,7 +119,9 @@ def test_reviewed_fd_sinks_survive_only_nonsemantic_line_drift(tmp_path, functio
     assert keep_result(finding, source_root=root) is False
 
 
-@pytest.mark.parametrize("function", ["open_etl_input_file", "_open_etl_output_under_root"])
+@pytest.mark.parametrize(
+    "function", ["open_elt_input_file", "_open_elt_output_under_root", "_reject_output_symlink"]
+)
 @pytest.mark.parametrize(
     "old,new",
     [
@@ -127,8 +135,8 @@ def test_reviewed_fd_sinks_survive_only_nonsemantic_line_drift(tmp_path, functio
         ("os.open(os.sep, directory_flags)", "os.open(os.sep, os.O_RDONLY)"),
         ("path != exports and path.is_relative_to(exports)", "True"),
         (
-            "_open_etl_output_under_root(path, root)",
-            "_open_etl_output_under_root(path, path.parent)",
+            "_open_elt_output_under_root(path, root)",
+            "_open_elt_output_under_root(path, path.parent)",
         ),
     ],
 )
@@ -147,7 +155,7 @@ def test_new_neighbor_sink_and_original_both_fail_closed(tmp_path):
     source = _SOURCE.replace(marker, "os.open(name)\n            " + marker)
     assert source != _SOURCE
     root = _source_tree(tmp_path, source)
-    line = _fd_line(source, "open_etl_input_file")
+    line = _fd_line(source, "open_elt_input_file")
     assert keep_result(_finding(uri=_SHIPMENT, line=line), source_root=root)
     assert keep_result(_finding(uri=_SHIPMENT, line=line + 1), source_root=root)
 
@@ -159,12 +167,12 @@ def test_missing_or_unparseable_source_preserves_fd_findings(tmp_path, kind):
         if kind == "encoding":
             (root / _SHIPMENT).write_bytes(b"\xff")
     assert keep_result(
-        _finding(uri=_SHIPMENT, line=_fd_line(_SOURCE, "open_etl_input_file")), source_root=tmp_path
+        _finding(uri=_SHIPMENT, line=_fd_line(_SOURCE, "open_elt_input_file")), source_root=tmp_path
     )
 
 
 def test_fd_matching_requires_exact_uri_rule_and_primary_location():
-    line = _fd_line(_SOURCE, "open_etl_input_file")
+    line = _fd_line(_SOURCE, "open_elt_input_file")
     for uri in ["other/" + _SHIPMENT, "../" + _SHIPMENT, "file:///" + _SHIPMENT]:
         assert keep_result(_finding(uri=uri, line=line))
     assert keep_result(_finding(uri=_SHIPMENT, line=line, rule="py/other"))
@@ -177,7 +185,7 @@ def test_fd_matching_requires_exact_uri_rule_and_primary_location():
 
 def test_source_change_cannot_reuse_cached_approval(tmp_path):
     root = _source_tree(tmp_path, _SOURCE)
-    finding = _finding(uri=_SHIPMENT, line=_fd_line(_SOURCE, "open_etl_input_file"))
+    finding = _finding(uri=_SHIPMENT, line=_fd_line(_SOURCE, "open_elt_input_file"))
     assert not keep_result(finding, source_root=root)
     _source_tree(tmp_path, _SOURCE.replace("os.O_NOFOLLOW", "0"))
     assert keep_result(finding, source_root=root)
@@ -205,13 +213,17 @@ def test_ast_fingerprint_normalizes_only_empty_new_type_parameters():
     assert fingerprint(legacy) != fingerprint(modern)
 
 
-# Reviewed 2026-11-13 against exact main 25ed2151: single-component / dir_fd
-# sinks whose guards CodeQL cannot model.
+# artifact_files was reviewed 2026-11-13; the other modules were re-reviewed
+# 2026-11-16 on the final PR #3245 sources. These single-component / dir_fd
+# sinks have guards that CodeQL cannot model.
 _REVIEWED_FILE_SINKS = {
     "FHD/app/application/agent_orchestrator/artifact_files.py": (73, 96, 97, 105, 107, 129),
     "FHD/app/application/employee_runtime/workspace_io.py": (57, 91),
-    "FHD/app/application/tools/workflow_spreadsheet_scope.py": (146,),
-    "FHD/app/application/shipment_excel_etl_security.py": (459,),
+    "FHD/app/application/tools/workflow_spreadsheet_scope.py": (181,),
+    "FHD/app/application/shipment_excel_elt_security.py": (459, 460, 461, 831, 971, 972, 973),
+    "FHD/app/application/attachment_artifacts/store.py": (84, 87),
+    "FHD/app/application/local_file_access/paths.py": (76, 134),
+    "FHD/app/application/agent_orchestrator/cross_module_chain.py": (83,),
 }
 
 
@@ -264,6 +276,21 @@ def test_file_suppression_fails_closed_after_semantic_change(tmp_path):
     assert changed != source
     root = _sink_source_tree(tmp_path, path, changed)
     assert keep_result(_finding(uri=path, line=73), source_root=root) is True
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "FHD/app/application/attachment_artifacts/store.py",
+        "FHD/app/application/local_file_access/paths.py",
+        "FHD/app/application/agent_orchestrator/cross_module_chain.py",
+    ],
+)
+def test_resolver_suppression_fails_closed_after_semantic_change(tmp_path, path):
+    source = (_SCRIPT.parents[2] / path).read_text(encoding="utf-8")
+    root = _sink_source_tree(tmp_path, path, source + "\nREVIEWED_GUARD = False\n")
+    for line in _REVIEWED_FILE_SINKS[path]:
+        assert keep_result(_finding(uri=path, line=line), source_root=root) is True
 
 
 def test_file_suppression_requires_parseable_source(tmp_path):

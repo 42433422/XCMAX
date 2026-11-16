@@ -7,7 +7,7 @@ const props = defineProps<{ tm: ApprovalWorkspaceCtx }>()
 const {
   visibleInitiatedRequests: initiatedRequests, fullListType, viewDetails, deleteSingle, viewAll,
   cleanupLoading, completedInitiatedCount, cleanupCompleted,
-  isFinalStatus, getBusinessIcon, getStatusLabel, formatTime,
+  isFinalStatus, getBusinessIcon, getBusinessLabel, getStatusLabel, formatRequestTitle, formatTime,
 } = props.tm
 </script>
 
@@ -15,7 +15,7 @@ const {
     <!-- 我发起的列表 -->
     <div class="section">
       <div class="section-header">
-        <h3>我发起的</h3>
+        <h3>我发起的<span class="section-count">{{ initiatedRequests.length }}</span></h3>
         <div class="section-actions">
           <button
             class="btn-link btn-cleanup"
@@ -42,11 +42,12 @@ const {
               <i :class="getBusinessIcon(item.business_type)"></i>
             </div>
             <div class="request-info">
-              <div class="request-title">{{ item.title }}</div>
+              <div class="request-title" :title="item.title">{{ formatRequestTitle(item) }}</div>
               <div class="request-meta">
                 <span class="request-status" :class="item.status">
                   {{ getStatusLabel(item.status) }}
                 </span>
+                <span class="request-type">{{ getBusinessLabel(item.business_type) }}</span>
                 <span class="request-time">{{ formatTime(item.created_at) }}</span>
               </div>
             </div>
@@ -54,7 +55,7 @@ const {
           <div class="request-right">
             <div class="request-current-node" v-if="item.current_node_name">
               <i class="fa fa-map-marker"></i>
-              {{ item.current_node_name }}
+              当前节点：{{ item.current_node_name }}
             </div>
             <button
               v-if="isFinalStatus(item.status)"
@@ -64,6 +65,7 @@ const {
             >
               <i class="fa fa-trash-o"></i>
             </button>
+            <i class="fa fa-angle-right row-chevron"></i>
           </div>
         </div>
         <div v-if="initiatedRequests.length === 0" class="empty-state">

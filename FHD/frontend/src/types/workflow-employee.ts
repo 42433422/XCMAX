@@ -15,6 +15,8 @@ export interface WorkflowEmployeeRegistryEntry {
   hostModId?: string
   /** 声明该员工的 workflow Mod id（上岗挂靠企业 Mod 后仍保留，用于栈隔离） */
   carrierModId?: string
+  /** 仅提示词、无本地运行时的对话型员工 */
+  prompt_only?: boolean
 }
 
 export interface WorkflowEmployeeRegistryV1 {

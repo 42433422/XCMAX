@@ -11,7 +11,7 @@
   },
   "employee": {
     "id": "ppt-full-read-employee",
-    "label": "PPT 生成员",
+    "label": "PPT 全量读取员",
     "capabilities": [
       "ppt.parse",
       "ppt.notes_generate",
@@ -21,8 +21,8 @@
   "workflow_employees": [
     {
       "id": "ppt-full-read-employee",
-      "label": "PPT 生成员",
-      "panel_title": "PPT 生成员",
+      "label": "PPT 全量读取员",
+      "panel_title": "PPT 全量读取员",
       "panel_summary": "上传 .pptx，全量解析并生成演讲备注；图片 VLM 识图。",
       "capabilities": [
         "ppt.parse",
@@ -42,7 +42,7 @@
       "id": "ppt-full-read-employee",
       "version": "1.0.0",
       "artifact": "employee_pack",
-      "name": "PPT 生成员",
+      "name": "PPT 全量读取员",
       "description": "制作 PPT 全量读取员工包"
     },
     "perception": {

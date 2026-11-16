@@ -119,6 +119,7 @@ def test_is_auxiliary_sheet_name():
 
 def test_is_footer_or_note_row():
     assert is_footer_or_note_row(["合计", "100"]) is True
+    assert is_footer_or_note_row(["合   计", "5"]) is True
     assert is_footer_or_note_row(["备注：测试"]) is True
     assert is_footer_or_note_row(["本合同一式两份，双方签字盖章后生效"]) is True
     assert is_footer_or_note_row(["签字"]) is True
@@ -687,7 +688,7 @@ def test_parse_file_ocr_success(tmp_path):
     ocr_out_path = _simple_products_workbook(tmp_path / "ocr_out.xlsx")
     src_pdf = tmp_path / "scan.pdf"
     src_pdf.write_bytes(b"%PDF-1.4")
-    with patch("app.application.shipment_excel_etl_ocr.ocr_source_to_workbook") as ocr_mock:
+    with patch("app.application.shipment_excel_elt_ocr.ocr_source_to_workbook") as ocr_mock:
         ocr_mock.return_value = {
             "success": True,
             "file_path": str(ocr_out_path),
@@ -707,7 +708,7 @@ def test_parse_file_ocr_failure(tmp_path):
 
     src = tmp_path / "img.pdf"
     src.write_bytes(b"pdf")
-    with patch("app.application.shipment_excel_etl_ocr.ocr_source_to_workbook") as ocr_mock:
+    with patch("app.application.shipment_excel_elt_ocr.ocr_source_to_workbook") as ocr_mock:
         ocr_mock.return_value = {"success": False, "error_code": "low_confidence"}
         with pytest.raises(EltError) as exc:
             parse_file(src, target_type="products")
@@ -873,6 +874,34 @@ def test_parse_regions_shipment_records(tmp_path, _fake_llm_advice):
     assert len(ds.rows) >= 1
     assert "source_fingerprint" in ds.rows[0].values
     assert ds.rows[0].provenance["source_kind"] == "delivery_note_region"
+
+
+def test_parse_regions_detects_headerless_ledger_sheet(tmp_path, _fake_llm_advice):
+    from openpyxl import load_workbook
+
+    from app.application.elt.parser_regions import parse_customer_product_regions
+
+    path = _delivery_workbook(tmp_path / "mixed.xlsx")
+    wb = load_workbook(path)
+    ws = wb.create_sheet("25年")
+    rows = [
+        [45715, 46, "535F", "PU哑白面固化剂", 2, 10, 20, 20, 400],
+        [45723, 24, "1871G", "PU实木透明底漆", 1, 22, 22, 13, 286],
+        [45723, 24, "309A", "PU底漆固化剂", 1, 20, 20, 15.5, 310],
+        [45730, 24, "0018#", "PU净味七分光特级白漆", 1, 25, 25, 18.5, 462.5],
+        [45731, 46, "6821AA", "PE白底漆", 2, 25, 50, 9, 450],
+    ]
+    for row in rows:
+        ws.append(row)
+    wb.save(path)
+
+    ds = parse_customer_product_regions(path, max_rows=1000, target_type="shipment_records")
+    assert ds is not None
+    ledger = [region for region in ds.source_features["regions"] if region.get("headerless")]
+    assert len(ledger) == 1
+    assert ledger[0]["sheet"] == "25年"
+    assert ledger[0]["status"] == "excluded"
+    assert ledger[0]["last_column"] == 9
 
 
 def test_parse_regions_no_target_returns_none(tmp_path, _fake_llm_advice):
@@ -1347,7 +1376,26 @@ def test_parse_file_csv_repeated_header_and_footer(tmp_path):
     assert len(ds.rows) == 1
 
 
-def test_parse_file_xlsx_regional_raises_non_etl_falls_back(tmp_path):
+def test_buyer_label_without_colon_keeps_customer_name():
+    from app.application.elt import parser_regions as pr
+
+    meta = pr._extract_meta(
+        [
+            (
+                2,
+                (
+                    "购货单位（乙方）博旺家私    联系人：李总     日期：2026年10月27日    订单编号：26-0100060A",
+                ),
+            ),
+        ],
+        max_col=20,
+    )
+    assert meta["customer_name"] == "博旺家私"
+    assert meta["contact_person"] == "李总"
+    assert meta["order_number"] == "26-0100060A"
+
+
+def test_parse_file_xlsx_regional_raises_non_elt_falls_back(tmp_path):
     from app.application.elt.parsers import ParsedDataset, ParsedRow, parse_file
 
     p = _delivery_workbook(tmp_path / "delivery.xlsx")

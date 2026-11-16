@@ -34,4 +34,21 @@ describe('critical startup font readiness', () => {
     installFonts({ load: vi.fn().mockResolvedValue([]) })
     await expect(waitForCriticalFonts()).rejects.toThrow()
   })
+
+  it('keeps waiting for a slow font download until it loads', async () => {
+    vi.useFakeTimers()
+    try {
+      let finish!: (faces: unknown[]) => void
+      installFonts({ load: vi.fn(() => new Promise<unknown[]>(resolve => { finish = resolve })) })
+      let done = false
+      const pending = waitForCriticalFonts().then(() => { done = true })
+      await vi.advanceTimersByTimeAsync(21_000)
+      expect(done).toBe(false)
+      finish([{ status: 'loaded' }])
+      await pending
+      expect(done).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

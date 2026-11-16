@@ -22,8 +22,8 @@ from app.db.models.elt import EltRun
 from app.infrastructure.tenant_scope import tenant_id_for_write
 
 LEASE_SECONDS = 300
-_SESSION_KEY = "etl_operation_owner"
-_SKIP_FENCE = "etl_internal_owner_dml"
+_SESSION_KEY = "elt_operation_owner"
+_SKIP_FENCE = "elt_internal_owner_dml"
 BATCH_KINDS = frozenset({"batch_execute", "batch_rollback"})
 _RUN_TABLE = cast("Table", EltRun.__table__)
 

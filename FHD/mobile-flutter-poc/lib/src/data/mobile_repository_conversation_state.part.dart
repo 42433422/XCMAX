@@ -137,41 +137,15 @@ class _ConversationListState {
   final int timestampMs;
 
   String get timestampText => _friendlyTimestampFromMillis(timestampMs);
-
-  Map<String, Object?> toJson() => {
-        'last_message_preview': preview,
-        'last_message_at': timestampMs,
-      };
-
-  static _ConversationListState? fromJson(Map<String, Object?> json) {
-    final timestamp = _firstPositiveInt([
-      json['last_message_at'],
-      json['timestamp_ms'],
-      json['timestamp'],
-      json['ts'],
-    ]);
-    final preview = _firstNonBlank([
-      _stringField(json, 'last_message_preview'),
-      _stringField(json, 'preview'),
-      _stringField(json, 'body'),
-    ]);
-    if (timestamp <= 0 && preview.isEmpty) return null;
-    return _ConversationListState(preview: preview, timestampMs: timestamp);
-  }
 }
 
 Future<Map<String, _ConversationListState>> _loadConversationListStates(
   MobileApiClient client, {
   Future<MobileOfflineStore?> Function()? openStore,
 }) async {
-  final session = await client.loadSession();
+  final generation = client.authGeneration;
+  final base = await client.resolveSessionBaseUrl();
   final result = <String, _ConversationListState>{};
-  for (final entry in session.conversationListStates.entries) {
-    final key = entry.key.trim();
-    if (key.isEmpty) continue;
-    final state = _ConversationListState.fromJson(entry.value);
-    if (state != null) result[key] = state;
-  }
   final store = await openStore?.call();
   if (store == null) return result;
 
@@ -191,6 +165,10 @@ Future<Map<String, _ConversationListState>> _loadConversationListStates(
       preview: preview,
       timestampMs: timestampMs,
     );
+  }
+  if (generation != client.authGeneration ||
+      base != await client.resolveSessionBaseUrl()) {
+    return {};
   }
   return result;
 }

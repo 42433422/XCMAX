@@ -37,11 +37,11 @@ from app.db.db_base import Base
 
 @pytest.fixture(autouse=True)
 def _reset_llm_circuit():
-    from app.application.elt.llm_assist import clear_etl_llm_circuit
+    from app.application.elt.llm_assist import clear_elt_llm_circuit
 
-    clear_etl_llm_circuit()
+    clear_elt_llm_circuit()
     yield
-    clear_etl_llm_circuit()
+    clear_elt_llm_circuit()
 
 
 @pytest.fixture(autouse=True)
@@ -136,48 +136,48 @@ def test_target_adapter_validate_and_defaults():
 def test_llm_assist_mode_and_limits(monkeypatch):
     from app.application.elt import llm_assist
 
-    monkeypatch.setenv("FHD_ETL_LLM", "0")
-    assert llm_assist.etl_llm_mode() == "off"
-    monkeypatch.setenv("FHD_ETL_LLM", "true")
-    assert llm_assist.etl_llm_mode() == "on"
-    monkeypatch.delenv("FHD_ETL_LLM")
-    assert llm_assist.etl_llm_mode() == "auto"
-    monkeypatch.setenv("FHD_ETL_LLM", "weird")
-    assert llm_assist.etl_llm_mode() == "auto"
+    monkeypatch.setenv("FHD_ELT_LLM", "0")
+    assert llm_assist.elt_llm_mode() == "off"
+    monkeypatch.setenv("FHD_ELT_LLM", "true")
+    assert llm_assist.elt_llm_mode() == "on"
+    monkeypatch.delenv("FHD_ELT_LLM")
+    assert llm_assist.elt_llm_mode() == "auto"
+    monkeypatch.setenv("FHD_ELT_LLM", "weird")
+    assert llm_assist.elt_llm_mode() == "auto"
 
-    monkeypatch.delenv("FHD_ETL_LLM_TIMEOUT", raising=False)
-    assert llm_assist.etl_llm_timeout_seconds() == 6.0
-    monkeypatch.setenv("FHD_ETL_LLM_TIMEOUT", "5")
-    assert llm_assist.etl_llm_timeout_seconds() == 5.0
-    monkeypatch.setenv("FHD_ETL_LLM_TIMEOUT", "99")
-    assert llm_assist.etl_llm_timeout_seconds() == 99.0
-    monkeypatch.setenv("FHD_ETL_LLM_TIMEOUT", "999")
-    assert llm_assist.etl_llm_timeout_seconds() == 180.0
-    monkeypatch.setenv("FHD_ETL_LLM_TIMEOUT", "-1")
-    assert llm_assist.etl_llm_timeout_seconds() == 1.0
-    monkeypatch.setenv("FHD_ETL_LLM_TIMEOUT", "abc")
-    assert llm_assist.etl_llm_timeout_seconds() == 6.0
-    monkeypatch.delenv("FHD_ETL_IMPORT_LLM_TIMEOUT", raising=False)
-    assert llm_assist.etl_llm_timeout_seconds(full_sheet=True) == 180.0
-    monkeypatch.setenv("FHD_ETL_IMPORT_LLM_TIMEOUT", "30")
-    assert llm_assist.etl_llm_timeout_seconds(full_sheet=True) == 30.0
-    monkeypatch.setenv("FHD_ETL_IMPORT_LLM_TIMEOUT", "999")
-    assert llm_assist.etl_llm_timeout_seconds(full_sheet=True) == 180.0
+    monkeypatch.delenv("FHD_ELT_LLM_TIMEOUT", raising=False)
+    assert llm_assist.elt_llm_timeout_seconds() == 30.0
+    monkeypatch.setenv("FHD_ELT_LLM_TIMEOUT", "5")
+    assert llm_assist.elt_llm_timeout_seconds() == 5.0
+    monkeypatch.setenv("FHD_ELT_LLM_TIMEOUT", "99")
+    assert llm_assist.elt_llm_timeout_seconds() == 99.0
+    monkeypatch.setenv("FHD_ELT_LLM_TIMEOUT", "999")
+    assert llm_assist.elt_llm_timeout_seconds() == 180.0
+    monkeypatch.setenv("FHD_ELT_LLM_TIMEOUT", "-1")
+    assert llm_assist.elt_llm_timeout_seconds() == 1.0
+    monkeypatch.setenv("FHD_ELT_LLM_TIMEOUT", "abc")
+    assert llm_assist.elt_llm_timeout_seconds() == 30.0
+    monkeypatch.delenv("FHD_ELT_IMPORT_LLM_TIMEOUT", raising=False)
+    assert llm_assist.elt_llm_timeout_seconds(full_sheet=True) == 180.0
+    monkeypatch.setenv("FHD_ELT_IMPORT_LLM_TIMEOUT", "30")
+    assert llm_assist.elt_llm_timeout_seconds(full_sheet=True) == 30.0
+    monkeypatch.setenv("FHD_ELT_IMPORT_LLM_TIMEOUT", "999")
+    assert llm_assist.elt_llm_timeout_seconds(full_sheet=True) == 180.0
 
-    monkeypatch.delenv("FHD_ETL_LLM_ROW_ADVICE_LIMIT", raising=False)
-    assert llm_assist.etl_row_advice_limit() == 20
-    monkeypatch.setenv("FHD_ETL_LLM_ROW_ADVICE_LIMIT", "5")
-    assert llm_assist.etl_row_advice_limit() == 5
-    monkeypatch.setenv("FHD_ETL_LLM_ROW_ADVICE_LIMIT", "999")
-    assert llm_assist.etl_row_advice_limit() == 100
-    monkeypatch.setenv("FHD_ETL_LLM_ROW_ADVICE_LIMIT", "bad")
-    assert llm_assist.etl_row_advice_limit() == 20
+    monkeypatch.delenv("FHD_ELT_LLM_ROW_ADVICE_LIMIT", raising=False)
+    assert llm_assist.elt_row_advice_limit() == 20
+    monkeypatch.setenv("FHD_ELT_LLM_ROW_ADVICE_LIMIT", "5")
+    assert llm_assist.elt_row_advice_limit() == 5
+    monkeypatch.setenv("FHD_ELT_LLM_ROW_ADVICE_LIMIT", "999")
+    assert llm_assist.elt_row_advice_limit() == 100
+    monkeypatch.setenv("FHD_ELT_LLM_ROW_ADVICE_LIMIT", "bad")
+    assert llm_assist.elt_row_advice_limit() == 20
 
 
 def test_degradation_log_does_not_expose_raw_model_content(caplog):
     import logging
 
-    from app.application.elt.llm_assist_runtime import log_etl_llm_degradation
+    from app.application.elt.llm_assist_runtime import log_elt_llm_degradation
 
     raw = "HEAD" + ("中" * 3000) + "TAIL"
 
@@ -189,7 +189,7 @@ def test_degradation_log_does_not_expose_raw_model_content(caplog):
 
     caplog.set_level(logging.INFO, logger="app.application.elt.llm_assist")
     log = logging.getLogger("app.application.elt.llm_assist")
-    log_etl_llm_degradation(log, code="ELT_LLM_UNAVAILABLE", lane="database", exc=Failed())
+    log_elt_llm_degradation(log, code="ELT_LLM_UNAVAILABLE", lane="database", exc=Failed())
     line = caplog.text
     assert "response_received=True" in line and "HEAD" not in line and "TAIL" not in line
 
@@ -206,7 +206,7 @@ def test_archived_sheet_import_uses_full_sheet_timeout(monkeypatch):
         return llm_assist.LlmAssistResult(data={"rows": [], "title": "", "content": ""})
 
     monkeypatch.setattr(llm_assist, "_complete", capture)
-    monkeypatch.delenv("FHD_ETL_IMPORT_LLM_TIMEOUT", raising=False)
+    monkeypatch.delenv("FHD_ELT_IMPORT_LLM_TIMEOUT", raising=False)
     llm_assist.advise_business_import("sheet")
     assert seen["lane"] == "database"
     assert seen["max_tokens"] == 8192
@@ -271,7 +271,7 @@ def test_invalid_knowledge_answer_is_audited_and_repaired_with_new_call(monkeypa
 
     events = []
     completions = []
-    monkeypatch.setenv("FHD_ETL_LLM", "true")
+    monkeypatch.setenv("FHD_ELT_LLM", "true")
     monkeypatch.setattr(llm_assist, "_active_software_llm", lambda *_: (True, object(), object()))
 
     def complete(*args, **kwargs):
@@ -295,7 +295,7 @@ def test_audit_database_failure_is_not_reported_as_model_outage(monkeypatch):
 
     from app.application.elt import llm_assist
 
-    monkeypatch.setenv("FHD_ETL_LLM", "true")
+    monkeypatch.setenv("FHD_ELT_LLM", "true")
     monkeypatch.setattr(llm_assist, "_active_software_llm", lambda *_: (True, object(), object()))
 
     def fail_audit(*_):
@@ -531,12 +531,12 @@ def test_llm_assist_degradation_code_exception_types():
 def test_llm_assist_circuit_key(monkeypatch):
     from app.application.elt import llm_assist
 
-    with patch("app.application.elt.llm_session_provider.current_etl_llm_owner", return_value=7):
+    with patch("app.application.elt.llm_session_provider.current_elt_llm_owner", return_value=7):
         assert llm_assist._circuit_key() == "owner:7"
-    with patch("app.application.elt.llm_session_provider.current_etl_llm_owner", return_value=None):
+    with patch("app.application.elt.llm_session_provider.current_elt_llm_owner", return_value=None):
         assert llm_assist._circuit_key() == "process"
     with patch(
-        "app.application.elt.llm_session_provider.current_etl_llm_owner",
+        "app.application.elt.llm_session_provider.current_elt_llm_owner",
         side_effect=RuntimeError("no ctx"),
     ):
         assert llm_assist._circuit_key() == "process"
@@ -546,11 +546,11 @@ def test_llm_assist_circuit_crud(monkeypatch):
     from app.application.elt import llm_assist
 
     assert llm_assist._circuit_degradation("ck") == ""
-    monkeypatch.setenv("FHD_ETL_LLM_FAILURE_COOLDOWN_SECONDS", "bad")
-    monkeypatch.setenv("FHD_ETL_LLM_QUOTA_COOLDOWN_SECONDS", "bad")
+    monkeypatch.setenv("FHD_ELT_LLM_FAILURE_COOLDOWN_SECONDS", "bad")
+    monkeypatch.setenv("FHD_ELT_LLM_QUOTA_COOLDOWN_SECONDS", "bad")
     llm_assist._open_circuit("ck", "ELT_LLM_UNAVAILABLE")
     assert llm_assist._circuit_degradation("ck") == "ELT_LLM_UNAVAILABLE"
-    llm_assist.clear_etl_llm_circuit()
+    llm_assist.clear_elt_llm_circuit()
     assert llm_assist._circuit_degradation("ck") == ""
 
 
@@ -578,7 +578,7 @@ def test_llm_assist_bounded_completion_success(monkeypatch):
         provider=None,
     )
     assert out.data == {"ok": True}
-    assert captured["kw"]["max_repairs"] == 0 and captured["kw"]["profile"] == "etl"
+    assert captured["kw"]["max_repairs"] == 0 and captured["kw"]["profile"] == "elt"
 
 
 def test_llm_assist_bounded_completion_error(monkeypatch):
@@ -635,7 +635,9 @@ def test_llm_assist_active_software_llm(monkeypatch):
             return_value=FakeProvider(),
         ),
     ):
-        assert llm_assist._active_software_llm() == (True, None, None)
+        configured, service, _provider = llm_assist._active_software_llm()
+        # 统一入口：registry 有 provider 时与对话链路共用同一个 service。
+        assert configured is True and service is not None
 
     # conversation service path
     with (
@@ -680,22 +682,22 @@ def test_llm_assist_active_software_llm(monkeypatch):
 def test_llm_assist_enabled(monkeypatch):
     from app.application.elt import llm_assist
 
-    monkeypatch.setenv("FHD_ETL_LLM", "off")
-    assert llm_assist.etl_llm_enabled() is False
-    monkeypatch.setenv("FHD_ETL_LLM", "auto")
+    monkeypatch.setenv("FHD_ELT_LLM", "off")
+    assert llm_assist.elt_llm_enabled() is False
+    monkeypatch.setenv("FHD_ELT_LLM", "auto")
     with patch(
         "app.application.elt.llm_assist._active_software_llm", return_value=(True, None, None)
     ):
-        assert llm_assist.etl_llm_enabled() is True
+        assert llm_assist.elt_llm_enabled() is True
     with patch(
         "app.application.elt.llm_assist._active_software_llm", return_value=(False, None, None)
     ):
-        assert llm_assist.etl_llm_enabled() is False
-    monkeypatch.setenv("FHD_ETL_LLM", "on")
+        assert llm_assist.elt_llm_enabled() is False
+    monkeypatch.setenv("FHD_ELT_LLM", "on")
     with patch(
         "app.application.elt.llm_assist._active_software_llm", return_value=(False, None, None)
     ):
-        assert llm_assist.etl_llm_enabled() is True
+        assert llm_assist.elt_llm_enabled() is True
 
 
 def _patch_complete(monkeypatch, data):
@@ -710,18 +712,18 @@ def _patch_complete(monkeypatch, data):
 def test_llm_assist_complete_off_and_not_configured(monkeypatch):
     from app.application.elt import llm_assist
 
-    monkeypatch.setenv("FHD_ETL_LLM", "off")
+    monkeypatch.setenv("FHD_ELT_LLM", "off")
     r = llm_assist._complete([], schema={}, max_tokens=1)
     assert r.used_llm is False and r.degraded is False
 
-    monkeypatch.setenv("FHD_ETL_LLM", "on")
+    monkeypatch.setenv("FHD_ELT_LLM", "on")
     with patch(
         "app.application.elt.llm_assist._active_software_llm", return_value=(False, None, None)
     ):
         r2 = llm_assist._complete([], schema={}, max_tokens=1)
         assert r2.degraded is True and r2.degradation_code == "ELT_LLM_UNAVAILABLE"
 
-    monkeypatch.setenv("FHD_ETL_LLM", "auto")
+    monkeypatch.setenv("FHD_ELT_LLM", "auto")
     with patch(
         "app.application.elt.llm_assist._active_software_llm", return_value=(False, None, None)
     ):
@@ -732,7 +734,7 @@ def test_llm_assist_complete_off_and_not_configured(monkeypatch):
 def test_llm_assist_complete_success_and_circuit(monkeypatch):
     from app.application.elt import llm_assist
 
-    monkeypatch.setenv("FHD_ETL_LLM", "on")
+    monkeypatch.setenv("FHD_ELT_LLM", "on")
     _patch_complete(monkeypatch, {"regions": []})
     with patch(
         "app.application.elt.llm_assist._active_software_llm", return_value=(True, None, None)
@@ -757,7 +759,7 @@ def test_llm_assist_complete_success_and_circuit(monkeypatch):
 def test_llm_assist_circuit_blocked_before_call(monkeypatch):
     from app.application.elt import llm_assist
 
-    monkeypatch.setenv("FHD_ETL_LLM", "on")
+    monkeypatch.setenv("FHD_ELT_LLM", "on")
     llm_assist._open_circuit("process", "ELT_LLM_UNAVAILABLE")
     # _circuit_key returns "process" when no owner
     r = llm_assist._complete([], schema={}, max_tokens=1)
@@ -768,7 +770,7 @@ def test_llm_assist_advise_workbook_regions(monkeypatch):
     from app.application.elt import llm_assist
 
     assert llm_assist.advise_workbook_regions([]).used_llm is False
-    monkeypatch.setenv("FHD_ETL_LLM", "on")
+    monkeypatch.setenv("FHD_ELT_LLM", "on")
     _patch_complete(
         monkeypatch,
         {
@@ -818,7 +820,7 @@ def test_llm_assist_advise_field_mappings(monkeypatch):
         llm_assist.advise_field_mappings(headers=["a"], samples={}, target_fields=[]).used_llm
         is False
     )
-    monkeypatch.setenv("FHD_ETL_LLM", "on")
+    monkeypatch.setenv("FHD_ELT_LLM", "on")
     _patch_complete(
         monkeypatch,
         {
@@ -869,7 +871,7 @@ def test_llm_assist_advise_row_decisions(monkeypatch):
     from app.application.elt import llm_assist
 
     assert llm_assist.advise_row_decisions([]).used_llm is False
-    monkeypatch.setenv("FHD_ETL_LLM", "on")
+    monkeypatch.setenv("FHD_ELT_LLM", "on")
     _patch_complete(
         monkeypatch,
         {
@@ -912,18 +914,18 @@ def test_session_provider_is_configured():
 def test_session_provider_owner_bind(monkeypatch):
     from app.application.elt import llm_session_provider as mod
 
-    assert mod.current_etl_llm_owner() is None
-    token = mod.bind_etl_llm_owner(42)
-    assert mod.current_etl_llm_owner() == 42
-    mod.reset_etl_llm_owner(token)
-    assert mod.current_etl_llm_owner() is None
+    assert mod.current_elt_llm_owner() is None
+    token = mod.bind_elt_llm_owner(42)
+    assert mod.current_elt_llm_owner() == 42
+    mod.reset_elt_llm_owner(token)
+    assert mod.current_elt_llm_owner() is None
 
 
 def test_current_owner_market_provider(monkeypatch):
     from app.application.elt import llm_session_provider as mod
 
     assert mod.current_owner_market_provider(timeout_seconds=1.0) is None
-    token = mod.bind_etl_llm_owner(3)
+    token = mod.bind_elt_llm_owner(3)
     try:
         with patch(
             "app.fastapi_routes.market_account.latest_session_market_token", return_value=None
@@ -935,7 +937,7 @@ def test_current_owner_market_provider(monkeypatch):
             prov = mod.current_owner_market_provider(timeout_seconds=1.0)
             assert prov.owner_user_id == 3 and prov.is_configured is True
     finally:
-        mod.reset_etl_llm_owner(token)
+        mod.reset_elt_llm_owner(token)
 
 
 def test_session_provider_chat_completion_success(monkeypatch):
@@ -1198,7 +1200,7 @@ def test_validate_compatibility_preset(monkeypatch):
         cp.validate_compatibility_preset("p", target_type="customers", upload_suffix=".csv")
     assert ex.value.code == "ELT_COMPATIBILITY_PRESET_FILE_UNSUPPORTED"
 
-    with patch("app.application.shipment_etl_profile.list_profiles", side_effect=RuntimeError("x")):
+    with patch("app.application.shipment_elt_profile.list_profiles", side_effect=RuntimeError("x")):
         with pytest.raises(EltError) as ex:
             cp.validate_compatibility_preset("p", target_type="customers", upload_suffix=".xlsx")
         assert (
@@ -1206,7 +1208,7 @@ def test_validate_compatibility_preset(monkeypatch):
         )
 
     with patch(
-        "app.application.shipment_etl_profile.list_profiles",
+        "app.application.shipment_elt_profile.list_profiles",
         return_value=[{"id": "a"}, {"id": "b"}, "junk"],
     ):
         with pytest.raises(EltError) as ex:
@@ -1329,8 +1331,8 @@ def test_helpers_uploaded_document_path(tmp_path):
 def test_helpers_webhook_url(monkeypatch):
     from app.application.elt.targets import helpers
 
-    monkeypatch.delenv("FHD_ETL_ALLOW_HTTP_WEBHOOK", raising=False)
-    monkeypatch.delenv("FHD_ETL_ALLOW_PRIVATE_WEBHOOK", raising=False)
+    monkeypatch.delenv("FHD_ELT_ALLOW_HTTP_WEBHOOK", raising=False)
+    monkeypatch.delenv("FHD_ELT_ALLOW_PRIVATE_WEBHOOK", raising=False)
 
     with pytest.raises(EltError) as ex:
         helpers.assert_safe_webhook_url("ftp://x")
@@ -1340,7 +1342,7 @@ def test_helpers_webhook_url(monkeypatch):
         helpers.assert_safe_webhook_url("http://example.com")
     assert ex.value.code == "ELT_WEBHOOK_HTTPS_REQUIRED"
 
-    monkeypatch.setenv("FHD_ETL_ALLOW_HTTP_WEBHOOK", "1")
+    monkeypatch.setenv("FHD_ELT_ALLOW_HTTP_WEBHOOK", "1")
     with patch(
         "app.application.elt.targets.helpers.socket.getaddrinfo", side_effect=OSError("dns")
     ):
@@ -1356,7 +1358,7 @@ def test_helpers_webhook_url(monkeypatch):
             helpers.assert_safe_webhook_url("http://localhost")
         assert ex.value.code == "ELT_WEBHOOK_PRIVATE_ADDRESS_FORBIDDEN"
 
-    monkeypatch.setenv("FHD_ETL_ALLOW_PRIVATE_WEBHOOK", "1")
+    monkeypatch.setenv("FHD_ELT_ALLOW_PRIVATE_WEBHOOK", "1")
     with patch(
         "app.application.elt.targets.helpers.socket.getaddrinfo",
         return_value=[("ai", 0, 0, "", ("8.8.8.8", 443))],
@@ -1467,7 +1469,7 @@ def test_customers_execute_row(session):
     )
     assert "match_ref" in r
 
-    # new with existing -> ETL_MATCH_CHANGED
+    # new with existing -> ELT_MATCH_CHANGED
     with pytest.raises(EltError) as ex:
         a.execute_row(
             session,
@@ -1508,7 +1510,7 @@ def test_customers_rollback_row(session):
     from app.application.elt.targets.customers import CustomerAdapter
 
     a = CustomerAdapter()
-    # before present, missing obj -> ETL_ROLLBACK_TARGET_MISSING
+    # before present, missing obj -> ELT_ROLLBACK_TARGET_MISSING
     with pytest.raises(EltError) as ex:
         a.rollback_row(
             session,
@@ -1706,7 +1708,7 @@ def _make_shipment_record(db, order_no, run_id):
         product_name="漆",
         quantity_kg=1.0,
         quantity_tins=1,
-        parsed_data=json.dumps({"external_order_no": order_no, "etl_run_id": run_id}),
+        parsed_data=json.dumps({"external_order_no": order_no, "elt_run_id": run_id}),
     )
     db.add(rec)
     db.flush()
@@ -1740,17 +1742,18 @@ def test_shipment_preview_branches(session):
     d3 = a.preview(session, base, allowed_update_fields=set(), context={})
     assert d3.action == "new"
 
-    # existing fingerprint -> skip
-    from app.db.models.shipment_etl_fingerprint import ShipmentEtlImportFingerprint
+    # existing fingerprint -> skip（指纹必须指向仍然存在的运单）
+    from app.db.models.shipment_elt_fingerprint import ShipmentEltImportFingerprint
 
+    owner = _make_shipment_record(session, "OTHER-1", "run-0")
     fp = a._fingerprint(base, {})
     session.add(
-        ShipmentEtlImportFingerprint(
+        ShipmentEltImportFingerprint(
             tenant_key="tenant:1",
             fingerprint=fp,
-            shipment_id=1,
+            shipment_id=owner.id,
             unit_name="客户A",
-            source_kind="general_etl",
+            source_kind="general_elt",
         )
     )
     session.flush()
@@ -1758,13 +1761,16 @@ def test_shipment_preview_branches(session):
     assert d4.action == "skip" and d4.reason == "legacy_fingerprint_duplicate"
 
     # legacy_note_fingerprint duplicate
-    session.query(ShipmentEtlImportFingerprint).filter(
-        ShipmentEtlImportFingerprint.tenant_key == "tenant:1"
+    session.query(ShipmentEltImportFingerprint).filter(
+        ShipmentEltImportFingerprint.tenant_key == "tenant:1"
     ).delete(synchronize_session=False)
     session.flush()
     session.add(
-        ShipmentEtlImportFingerprint(
-            tenant_key="tenant:1", fingerprint="legacy-note-fp", shipment_id=2, source_kind=None
+        ShipmentEltImportFingerprint(
+            tenant_key="tenant:1",
+            fingerprint="legacy-note-fp",
+            shipment_id=owner.id,
+            source_kind=None,
         )
     )
     session.flush()
@@ -1777,15 +1783,15 @@ def test_shipment_preview_branches(session):
     assert d5.action == "skip" and d5.reason == "legacy_note_fingerprint_duplicate"
 
     # legacy_query match (order_no branch)
-    session.query(ShipmentEtlImportFingerprint).filter(
-        ShipmentEtlImportFingerprint.tenant_key == "tenant:1"
+    session.query(ShipmentEltImportFingerprint).filter(
+        ShipmentEltImportFingerprint.tenant_key == "tenant:1"
     ).delete(synchronize_session=False)
     session.flush()
     session.add(
-        ShipmentEtlImportFingerprint(
+        ShipmentEltImportFingerprint(
             tenant_key="tenant:1",
             fingerprint="legacy-order",
-            shipment_id=3,
+            shipment_id=owner.id,
             order_number="SO-1",
             source_kind=None,
         )
@@ -1795,15 +1801,15 @@ def test_shipment_preview_branches(session):
     assert d6.action == "skip" and d6.reason == "legacy_source_duplicate"
 
     # legacy_query match (no order_no branch)
-    session.query(ShipmentEtlImportFingerprint).filter(
-        ShipmentEtlImportFingerprint.tenant_key == "tenant:1"
+    session.query(ShipmentEltImportFingerprint).filter(
+        ShipmentEltImportFingerprint.tenant_key == "tenant:1"
     ).delete(synchronize_session=False)
     session.flush()
     session.add(
-        ShipmentEtlImportFingerprint(
+        ShipmentEltImportFingerprint(
             tenant_key="tenant:1",
             fingerprint="legacy-file",
-            shipment_id=4,
+            shipment_id=owner.id,
             file_name="a.xlsx",
             unit_name="客户A",
             source_kind=None,
@@ -1819,8 +1825,8 @@ def test_shipment_preview_branches(session):
     assert d7.action == "skip" and d7.reason == "legacy_source_duplicate"
 
     # external order duplicate (record from another run)
-    session.query(ShipmentEtlImportFingerprint).filter(
-        ShipmentEtlImportFingerprint.tenant_key == "tenant:1"
+    session.query(ShipmentEltImportFingerprint).filter(
+        ShipmentEltImportFingerprint.tenant_key == "tenant:1"
     ).delete(synchronize_session=False)
     session.flush()
     _make_shipment_record(session, "SO-X", "other-run")
@@ -1843,7 +1849,7 @@ def test_shipment_fingerprint_and_belongs():
     assert isinstance(f2, str) and len(f2) == 64
 
     rec = MagicMock()
-    rec.parsed_data = json.dumps({"etl_run_id": "run1"})
+    rec.parsed_data = json.dumps({"elt_run_id": "run1"})
     assert a._belongs_to_current_run(rec, "run1") is True
     assert a._belongs_to_current_run(rec, "run2") is False
     rec.parsed_data = "not-json"
@@ -1874,7 +1880,7 @@ def test_shipment_execute_and_rollback(session):
     session.flush()
     assert r["match_ref"] and r["after"]["id"]
 
-    # second execute -> preview not new -> ETL_MATCH_CHANGED
+    # second execute -> preview not new -> ELT_MATCH_CHANGED
     with pytest.raises(EltError) as ex:
         a.execute_row(
             session, data, action="new", match_ref="", allowed_update_fields=set(), context=context
@@ -2002,10 +2008,10 @@ def test_customer_products_execute(session):
         allowed_update_fields=set(),
         context={},
     )
-    assert r["after"]["_etl"]["customer_created"] is True
-    assert r["after"]["_etl"]["product_created"] is True
+    assert r["after"]["_elt"]["customer_created"] is True
+    assert r["after"]["_elt"]["product_created"] is True
 
-    # new with existing product -> ETL_MATCH_CHANGED
+    # new with existing product -> ELT_MATCH_CHANGED
     prod = _make_cp_product(session, "已有漆", "EM1", unit="客户A")
     match_ref = json.dumps({"customer_id": None, "product_id": prod.id})
     with pytest.raises(EltError) as ex:
@@ -2019,7 +2025,7 @@ def test_customer_products_execute(session):
         )
     assert ex.value.code == "ELT_MATCH_CHANGED"
 
-    # product disappeared -> ETL_MATCH_DISAPPEARED
+    # product disappeared -> ELT_MATCH_DISAPPEARED
     cust = _make_cp_customer(session, "客户D")
     match_ref2 = json.dumps({"customer_id": cust.id, "product_id": 999999})
     with pytest.raises(EltError) as ex2:
@@ -2044,7 +2050,7 @@ def test_customer_products_execute(session):
         allowed_update_fields={"specification"},
         context={},
     )
-    assert r2["after"]["_etl"]["product_updated"] is True
+    assert r2["after"]["_elt"]["product_updated"] is True
 
 
 def test_customer_products_parse_match_ref():
@@ -2085,7 +2091,7 @@ def test_customer_products_rollback(session):
         allowed_update_fields=set(),
         context={},
     )
-    r2["after"]["_etl"]["customer_created"] = True
+    r2["after"]["_elt"]["customer_created"] = True
     with pytest.raises(EltError) as ex:
         a.rollback_row(session, match_ref=r2["match_ref"], before={}, after=r2["after"], context={})
     assert ex.value.code == "ELT_ROLLBACK_CONCURRENT_CHANGE"
@@ -2142,7 +2148,7 @@ def test_customer_products_execute_customer_update(session):
         allowed_update_fields={"contact_person"},
         context={},
     )
-    assert r["after"]["_etl"]["customer_updated"] is True
+    assert r["after"]["_elt"]["customer_updated"] is True
     session.flush()
     session.expire_all()
     assert cust.contact_person == "新"
@@ -2168,7 +2174,7 @@ def test_customer_products_execute_product_update_loop(session):
         allowed_update_fields={"specification", "price"},
         context={},
     )
-    assert r["after"]["_etl"]["product_updated"] is True
+    assert r["after"]["_elt"]["product_updated"] is True
     session.flush()
     session.expire_all()
     assert prod.specification == "V2" and prod.price == Decimal("5")
@@ -2201,7 +2207,7 @@ def test_customer_products_rollback_product_missing(session):
             session,
             match_ref=json.dumps({"customer_id": None, "product_id": 999}),
             before={},
-            after={"product": {}, "_etl": {"product_created": True}},
+            after={"product": {}, "_elt": {"product_created": True}},
             context={},
         )
     assert ex.value.code == "ELT_ROLLBACK_TARGET_MISSING"
@@ -2221,7 +2227,7 @@ def test_customer_products_rollback_product_updated(session):
         before={},
         after={
             "product": {"specification": "V9"},
-            "_etl": {"product_updated": True, "product_before": {"specification": "V1"}},
+            "_elt": {"product_updated": True, "product_before": {"specification": "V1"}},
         },
         context={},
     )
@@ -2243,7 +2249,7 @@ def test_customer_products_rollback_customer_updated(session):
         before={},
         after={
             "customer": {"contact_person": "后"},
-            "_etl": {"customer_updated": True, "customer_before": {"contact_person": "前"}},
+            "_elt": {"customer_updated": True, "customer_before": {"contact_person": "前"}},
         },
         context={},
     )
@@ -2261,7 +2267,7 @@ def test_customer_products_rollback_customer_created_missing(session):
             session,
             match_ref=json.dumps({"customer_id": 999, "product_id": None}),
             before={},
-            after={"customer": {}, "_etl": {"customer_created": True}},
+            after={"customer": {}, "_elt": {"customer_created": True}},
             context={},
         )
     assert ex.value.code == "ELT_ROLLBACK_TARGET_MISSING"
@@ -2279,7 +2285,7 @@ def test_customer_products_rollback_customer_created_modified(session):
             session,
             match_ref=json.dumps({"customer_id": cust.id, "product_id": None}),
             before={},
-            after={"customer": {"contact_person": "原始"}, "_etl": {"customer_created": True}},
+            after={"customer": {"contact_person": "原始"}, "_elt": {"customer_created": True}},
             context={},
         )
     assert ex.value.code == "ELT_ROLLBACK_CONCURRENT_CHANGE"
@@ -2481,7 +2487,7 @@ def test_export_csv_adapter(tmp_path, monkeypatch):
         {"run_id": "r1", "row_count": 2, "progress_callback": lambda c, t: calls.append((c, t))},
     )
     assert r["executed"] == 2 and calls and calls[-1] == (2, 2)
-    out = (tmp_path / "etl" / "exports" / "etl-r1.csv").read_text(encoding="utf-8-sig")
+    out = (tmp_path / "elt" / "exports" / "elt-r1.csv").read_text(encoding="utf-8-sig")
     assert "'=cmd" in out
 
 
@@ -2506,7 +2512,7 @@ def test_export_xlsx_adapter(tmp_path, monkeypatch):
         {"run_id": "r3", "row_count": 501, "progress_callback": lambda c, t: calls.append(c)},
     )
     assert r["executed"] == 501
-    assert (tmp_path / "etl" / "exports" / "etl-r3.xlsx").is_file()
+    assert (tmp_path / "elt" / "exports" / "elt-r3.xlsx").is_file()
     assert r["receipt"]["sha256"]
 
 
@@ -2570,7 +2576,7 @@ def test_export_xlsx_uses_committed_template(tmp_path, monkeypatch):
         ),
     }
     written = ExportXlsxAdapter().execute_batch([dict(row.values) for row in dataset.rows], context)
-    saved = load_workbook(BytesIO((tmp_path / "etl" / "exports" / "etl-result.xlsx").read_bytes()))
+    saved = load_workbook(BytesIO((tmp_path / "elt" / "exports" / "elt-result.xlsx").read_bytes()))
     result = saved.active
     assert result.title == "送货明细"
     assert [cell.value for cell in result[1]] == ["客户", "产品", "数量", "单价", "金额", "日期"]
@@ -2753,7 +2759,7 @@ def test_three_saved_document_calls_can_reach_model_concurrently(monkeypatch):
     from app.application.elt import llm_assist
 
     ready = threading.Barrier(3, timeout=3)
-    monkeypatch.setattr(llm_assist, "etl_llm_mode", lambda: "on")
+    monkeypatch.setattr(llm_assist, "elt_llm_mode", lambda: "on")
     monkeypatch.setattr(
         llm_assist, "_circuit_key", lambda lane: "synthetic-owner:parallel-integration"
     )
@@ -2785,7 +2791,7 @@ def test_queue_timeout_does_not_start_or_repeat_model_call(monkeypatch):
     lock = threading.Lock()
     lock.acquire()
     calls = []
-    monkeypatch.setattr(llm_assist, "etl_llm_mode", lambda: "on")
+    monkeypatch.setattr(llm_assist, "elt_llm_mode", lambda: "on")
     monkeypatch.setattr(llm_assist, "_circuit_degradation", lambda key: "")
     monkeypatch.setattr(llm_assist, "_owner_call_lock", lambda key: lock)
     monkeypatch.setattr(llm_assist, "_active_software_llm", lambda *_: calls.append(True))
@@ -2835,7 +2841,7 @@ def test_intake_records_call_id_before_provider_invocation(monkeypatch):
     from app.infrastructure.llm import structured_output
 
     events = []
-    monkeypatch.setattr(llm_assist, "etl_llm_mode", lambda: "on")
+    monkeypatch.setattr(llm_assist, "elt_llm_mode", lambda: "on")
     monkeypatch.setattr(llm_assist, "_active_software_llm", lambda *_: (True, None, object()))
 
     def call(*args, **kwargs):
@@ -2859,7 +2865,7 @@ def test_intake_does_not_invoke_provider_if_call_record_fails(monkeypatch):
     from app.infrastructure.llm import structured_output
 
     calls = []
-    monkeypatch.setattr(llm_assist, "etl_llm_mode", lambda: "on")
+    monkeypatch.setattr(llm_assist, "elt_llm_mode", lambda: "on")
     monkeypatch.setattr(llm_assist, "_active_software_llm", lambda *_: (True, None, object()))
     monkeypatch.setattr(
         structured_output, "complete_structured_sync", lambda *a, **kw: calls.append(True)
@@ -2896,7 +2902,7 @@ def test_business_units_have_separate_bounded_deadlines(monkeypatch):
     clock = [100.0]
     calls = []
     monkeypatch.setattr(llm_assist.time, "monotonic", lambda: clock[0])
-    monkeypatch.setattr(llm_assist, "etl_llm_timeout_seconds", lambda **kwargs: 5.0)
+    monkeypatch.setattr(llm_assist, "elt_llm_timeout_seconds", lambda **kwargs: 5.0)
     monkeypatch.setattr(llm_assist, "business_units", lambda source: ["first", "second"])
 
     def unit(source):
@@ -2930,7 +2936,7 @@ def test_timed_out_provider_keeps_account_lock_until_worker_exits(monkeypatch):
         finish.wait(2)
         return None
 
-    monkeypatch.setattr(llm_assist, "etl_llm_mode", lambda: "on")
+    monkeypatch.setattr(llm_assist, "elt_llm_mode", lambda: "on")
     monkeypatch.setattr(llm_assist, "_circuit_degradation", lambda key: "")
     monkeypatch.setattr(llm_assist, "_open_circuit", lambda *args: None)
     monkeypatch.setattr(llm_assist, "_owner_call_lock", lambda key: lock)
@@ -2946,3 +2952,25 @@ def test_timed_out_provider_keeps_account_lock_until_worker_exits(monkeypatch):
         finish.set()
     assert lock.acquire(timeout=2)
     lock.release()
+
+
+def test_customer_products_linked_companion_reuses_product(session):
+    """同文件附表执行时产品已由主运行建立：复用产品，不再整批失败。"""
+    from app.application.elt.targets.customer_products import CustomerProductsAdapter
+
+    adapter = CustomerProductsAdapter()
+    product = _make_cp_product(session, "已建漆", "LM1", unit="客户B")
+    match_ref = json.dumps({"customer_id": None, "product_id": product.id})
+
+    result = adapter.execute_row(
+        session,
+        {"customer_name": "客户B", "name": "已建漆", "model_number": "LM1"},
+        action="new",
+        match_ref=match_ref,
+        allowed_update_fields=set(),
+        context={"linked_companion": True},
+    )
+
+    assert result["after"]["_elt"]["customer_created"] is True
+    assert result["after"]["_elt"]["product_created"] is False
+    assert json.loads(result["match_ref"])["product_id"] == product.id

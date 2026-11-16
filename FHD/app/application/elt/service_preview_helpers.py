@@ -72,9 +72,9 @@ def suggest_mappings(dataset: ParsedDataset, adapter: TargetAdapter) -> list[dic
             for header in dataset.headers
         ]
     try:
-        from app.domain.app_pure.excel_etl_kb import get_excel_etl_kb
+        from app.domain.app_pure.excel_elt_kb import get_excel_elt_kb
 
-        shared_synonyms = get_excel_etl_kb().synonyms()
+        shared_synonyms = get_excel_elt_kb().synonyms()
     except RECOVERABLE_ERRORS:
         shared_synonyms = {}
     compatibility_keys = {
@@ -150,4 +150,6 @@ def row_context(run: EltRun, upload: EltUpload, source_row: int) -> dict[str, An
         "relative_path": upload.relative_path or upload.file_name,
         "upload_path": upload.storage_path,
         "source_row": source_row,
+        # 同文件附表预演：产品/客户可能已被同一文件的主运行建立，执行时应复用。
+        "linked_companion": '"linked_from_shipment_preview"' in str(run.summary_json or ""),
     }

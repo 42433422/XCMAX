@@ -1,5 +1,7 @@
 /** 聊天 UI 层消息（localStorage / 组件展示；role 用 ai 而非 API 的 assistant） */
 import type { AgentRunTraceData } from '@/utils/agentRunTraceModel'
+import type { AgentStepView } from '@/utils/agentStepChain'
+import type { ChatTraceItem } from '@/composables/chat-orchestration/chatOrchestrationShared'
 import type { ChatModelRoute } from '@/utils/chatModelRoute'
 
 export interface ChatExecutionProgressItem {
@@ -74,6 +76,10 @@ export interface UiChatMessage {
   approvalCard?: ChatApprovalCard
   /** Agent 执行时间线（Codex 风格，由事件流构建） */
   agentRunTrace?: AgentRunTraceData
+  /** 流式阶段的执行链步骤（tool_call 事件实时累积，不落库） */
+  liveSteps?: AgentStepView[]
+  /** 本轮附件工件取数轨迹（trace 事件，仅展示；历史消息允许为空） */
+  trace?: ChatTraceItem[]
   /** 附件（Excel 分析等 Mod 回传的结构化数据） */
   attachments?: Record<string, unknown>[]
   /** XCAGI Business Harness 终态业务结果。 */
@@ -85,7 +91,9 @@ export interface UiChatMessage {
     idempotencyKey: string
     intent: string
     committed: boolean
-    effect: 'none' | 'preview' | 'committed' | string
+    effect: 'none' | 'preview' | 'partial' | 'committed' | string
+    /** 后端显式执行结论：未执行 / 部分成功 / 结果未知。 */
+    outcome?: 'not_executed' | 'partial' | 'unknown' | 'succeeded' | string
     tenantId?: string
     customerCount?: number | null
     productCount?: number | null

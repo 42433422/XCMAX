@@ -12,7 +12,7 @@ Android + iOS 单代码库，对接 `/api/mobile/v1/*` 与 OpenAPI 契约。`lib
 ```bash
 cd FHD/mobile-flutter-poc
 flutter pub get
-flutter test
+env -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u http_proxy -u https_proxy -u all_proxy NO_PROXY=127.0.0.1,localhost flutter test --no-pub
 flutter run
 ```
 
@@ -30,4 +30,7 @@ flutter run
 
 详见 [`FLUTTER_UNIFICATION.md`](FLUTTER_UNIFICATION.md)。
 
-> debt19: POC only — not a production client SKU.
+> 本目录是移动端产品主线；签名安装、双端真机与升级验收状态以发布记录为准，源码或测试通过不等于已交付。
+> 测试命令仅在测试子进程中绕过代理，避免本机回环调试连接被代理拦截；不修改系统代理。
+
+离线聊天与待发队列按服务端、账号隔离。旧版未标注归属的 JSON/SQLite 缓存保留在设备上，不自动展示、迁入或重放到当前账号。

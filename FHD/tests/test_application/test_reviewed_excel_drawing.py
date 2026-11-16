@@ -116,7 +116,7 @@ def test_classifier_sends_distinct_drawing_evidence_and_rejects_forged_reference
         plan_semantic_batches,
     )
     from app.application.reviewed_excel_template import inspect_workbook
-    from tests.fixtures.etl_template.sources.generate import sample
+    from tests.fixtures.elt_template.sources.generate import sample
 
     review = inspect_workbook(sample())
     drawing = {
@@ -572,7 +572,7 @@ def assert_archive_roundtrip(store, body):
     with store.engine.begin() as conn:
         conn.execute(
             text(
-                "INSERT INTO etl_archive_quotas (tenant_id, limit_bytes, reserved_bytes) VALUES (1, 1000000, 0)"
+                "INSERT INTO elt_archive_quotas (tenant_id, limit_bytes, reserved_bytes) VALUES (1, 1000000, 0)"
             )
         )
     receipt = store.client.post(

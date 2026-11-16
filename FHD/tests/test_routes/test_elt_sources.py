@@ -41,9 +41,9 @@ def source_client(tmp_path, monkeypatch):
             db.commit()
     actor = SimpleNamespace(
         user=SimpleNamespace(id=7, tenant_id=1, is_active=True),
-        permissions={"etl.read", "etl.execute"},
+        permissions={"elt.read", "elt.execute"},
     )
-    monkeypatch.setenv("FHD_ETL_CENTER_ENABLED", "1")
+    monkeypatch.setenv("FHD_ELT_CENTER_ENABLED", "1")
     monkeypatch.setattr(etl, "resolve_product_sku", lambda: "enterprise")
     monkeypatch.setattr(dependencies, "resolve_session_user", lambda _request: actor.user)
     monkeypatch.setattr(
@@ -196,7 +196,7 @@ def test_revision_must_belong_to_requested_source(source_client):
 def test_read_permission_allows_originals_but_never_creating_or_appending(source_client):
     store = source_client
     source = create_source(store)
-    store.actor.permissions = {"etl.read"}
+    store.actor.permissions = {"elt.read"}
     assert store.client.get(f"{revision_path(source)}/content").status_code == 200
     for path, data in (
         ("/api/elt/sources", {"request_key": str(uuid4())}),
@@ -225,7 +225,7 @@ def test_read_permission_allows_originals_but_never_creating_or_appending(source
 @pytest.mark.parametrize("disabled", ["flag", "edition"])
 def test_sources_reuse_enterprise_feature_gate(source_client, monkeypatch, disabled):
     if disabled == "flag":
-        monkeypatch.setenv("FHD_ETL_CENTER_ENABLED", "0")
+        monkeypatch.setenv("FHD_ELT_CENTER_ENABLED", "0")
     else:
         monkeypatch.setattr(etl, "resolve_product_sku", lambda: "personal")
     response = source_client.client.post(

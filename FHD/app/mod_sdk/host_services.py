@@ -174,6 +174,10 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "app.domain.shared_services.service_contract_fill",
         "generate_contract_docx",
     ),
+    "fill_document_from_template": (
+        "app.domain.shared_services.kitten_ai_document.template_fill",
+        "fill_document_from_template",
+    ),
     "generate_office_file": (
         "app.domain.shared_services.kitten_ai_document.generate",
         "generate_office_file",

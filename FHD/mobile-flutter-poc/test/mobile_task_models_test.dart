@@ -65,4 +65,35 @@ void main() {
     expect(data.items.first.online, isTrue);
     expect(data.items.last.label, '家里 Windows');
   });
+
+  test('mobile navigation keeps server grouping and desktop requirement', () {
+    final item = MobileNavMenuData.fromJson(const {
+      'items': [
+        {
+          'key': 'desktop-tools',
+          'name': '电脑工具',
+          'path': '/tools',
+          'mobile_group': 'computer',
+          'requires_desktop': true,
+        },
+      ],
+    }).items.single;
+
+    expect(item.mobileGroup, 'computer');
+    expect(item.requiresDesktop, isTrue);
+    expect(item.path, '/tools');
+  });
+
+  test('legacy and custom navigation default to business without desktop', () {
+    for (final group in [null, '', '   ']) {
+      final item = MobileNavMenuItem.fromJson({
+        'key': 'mod-customer-report',
+        'source': 'mod',
+        'mobile_group': group,
+      });
+      expect(item.mobileGroup, 'business');
+      expect(item.requiresDesktop, isFalse);
+      expect(item.source, 'mod');
+    }
+  });
 }

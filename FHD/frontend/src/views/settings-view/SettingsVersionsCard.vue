@@ -1,8 +1,8 @@
 <template>
   <details class="settings-card">
     <summary class="settings-row">
-      <span class="settings-row__icon settings-row__icon--amber" aria-hidden="true">
-        <i class="fa fa-flask"></i>
+      <span class="settings-row__icon settings-row__icon--art" aria-hidden="true">
+        <img class="settings-row__icon-art" :src="versionsArtSrc" alt="" />
       </span>
       <span class="settings-row__label">{{ $t('settings.distillationVersions') }}</span>
       <span class="settings-row__meta">{{ $t('settings.trainingArtifacts') }}</span>
@@ -46,6 +46,7 @@
 
 <script setup lang="ts">
 import type { DistillationVersion } from '@/composables/settings/utils'
+import versionsArtSrc from '@/assets/icons/settings/r4c3.png'
 
 defineProps<{
   loadingVersions: boolean

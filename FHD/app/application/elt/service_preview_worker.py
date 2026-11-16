@@ -69,11 +69,11 @@ class PreviewWorkerMixin:
         self, run_id: str, owner_user_id: int, *, operation_token: str | None = None
     ) -> None:
         from app.application.elt.llm_session_provider import (
-            bind_etl_llm_owner,
-            reset_etl_llm_owner,
+            bind_elt_llm_owner,
+            reset_elt_llm_owner,
         )
 
-        llm_owner_token = bind_etl_llm_owner(owner_user_id)
+        llm_owner_token = bind_elt_llm_owner(owner_user_id)
         db = _facade().new_session()
         started_at = time.monotonic()
         operation = None
@@ -226,4 +226,4 @@ class PreviewWorkerMixin:
             finally:
                 unbind_owner(db)
                 db.close()
-                reset_etl_llm_owner(llm_owner_token)
+                reset_elt_llm_owner(llm_owner_token)

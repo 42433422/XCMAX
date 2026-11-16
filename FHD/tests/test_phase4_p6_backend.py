@@ -267,6 +267,17 @@ def test_extract_excel_paths_from_message() -> None:
     assert any(p.endswith("data.xls") for p in paths)
 
 
+def test_extract_excel_paths_ignores_evidence_sentence_prefix() -> None:
+    message = "共 22 个：26年材料总表.xlsx、26年销售明细.xlsx、宗南.xlsx、七彩乐园.xlsx"
+    paths = _extract_excel_paths_from_message(message)
+    assert paths == [
+        "26年材料总表.xlsx",
+        "26年销售明细.xlsx",
+        "宗南.xlsx",
+        "七彩乐园.xlsx",
+    ]
+
+
 def test_extract_excel_paths_from_context_all_sources() -> None:
     ctx = {
         "excel_file_path": "a.xlsx",

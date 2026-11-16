@@ -131,14 +131,14 @@ def test_owner_can_manage_tenant_roles_without_platform_privilege_or_cross_tenan
     assert "tenant.manage_roles" in listed_codes
 
     with get_host_db() as db:
-        if db.query(Permission.id).filter(Permission.code == "etl.read").first() is None:
-            db.add(Permission(code="etl.read", name="Read ETL", module="etl"))
+        if db.query(Permission.id).filter(Permission.code == "elt.read").first() is None:
+            db.add(Permission(code="elt.read", name="Read ETL", module="elt"))
     created = client.post(
         "/api/rbac/roles",
         json={
             "name": "Auditor",
             "description": "",
-            "permissions": ["etl.read"],
+            "permissions": ["elt.read"],
         },
     )
     assert created.status_code == 201

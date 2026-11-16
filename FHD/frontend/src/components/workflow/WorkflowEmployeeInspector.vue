@@ -65,11 +65,12 @@ function progressWidth(row: WorkflowEmployeeDeskRow): string {
         >
           <span class="wfe-inspector-name-row">
             <span class="wfe-inspector-short">{{ row.shortName }}</span>
+            <span v-if="row.promptOnly" class="wfe-inspector-kind">对话型</span>
             <span v-if="isBusy(row)" class="wfe-inspector-busy" aria-hidden="true">忙</span>
           </span>
           <span class="wfe-inspector-title" :title="row.panelTitle">{{ row.panelTitle }}</span>
           <span class="wfe-inspector-status">{{ statusLine(row) }}</span>
-          <span class="wfe-inspector-progress-track" aria-hidden="true">
+          <span v-if="!row.promptOnly" class="wfe-inspector-progress-track" aria-hidden="true">
             <span class="wfe-inspector-progress-bar" :style="{ width: progressWidth(row) }" />
           </span>
         </button>
@@ -79,7 +80,7 @@ function progressWidth(row: WorkflowEmployeeDeskRow): string {
           class="wfe-inspector-toggle"
           :class="{ 'wfe-inspector-toggle--on': row.enabled }"
           :aria-pressed="row.enabled"
-          :aria-label="(row.enabled ? '关闭' : '开启') + '副窗托管：' + row.shortName"
+          :aria-label="(row.enabled ? '关闭' : '开启') + (row.promptOnly ? '上岗：' : '副窗托管：') + row.shortName"
           @click="wfEmp.toggle(row.empId)"
         >
           {{ row.enabled ? '已开' : '已关' }}
@@ -135,6 +136,8 @@ function progressWidth(row: WorkflowEmployeeDeskRow): string {
   display: flex;
   align-items: stretch;
   gap: 8px;
+  /* 列表有很多员工时，flex 子项默认会被压缩成几像素高的细条（滚动区域失效）。 */
+  flex: 0 0 auto;
   border-radius: 10px;
   border: 1px solid #e5e7eb;
   background: #f9fafb;
@@ -193,6 +196,15 @@ function progressWidth(row: WorkflowEmployeeDeskRow): string {
   border-radius: 999px;
   background: #dbeafe;
   color: #1d4ed8;
+}
+
+.wfe-inspector-kind {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #f3f4f6;
+  color: #4b5563;
 }
 
 .wfe-inspector-title {

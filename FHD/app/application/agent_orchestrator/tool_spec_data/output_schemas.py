@@ -28,7 +28,41 @@ def _result(*, required=("success",), **properties: Any) -> dict[str, Any]:
     }
 
 
+_ELT_IMPORT_DATA = {
+    "type": "object",
+    "properties": {
+        "run_id": {"type": "string"},
+        "target_type": {"type": "string"},
+        "status": {"type": "string"},
+        "total_rows": {"type": "integer"},
+        "new_rows": {"type": "integer"},
+        "update_rows": {"type": "integer"},
+        "skip_rows": {"type": "integer"},
+        "error_rows": {"type": "integer"},
+        "executed_rows": {"type": "integer"},
+        "template_id": {"type": "string"},
+        "template_name": {"type": "string"},
+        "mapping_pending": {"type": "array", "items": {"type": "string"}},
+        "executable": {"type": "boolean"},
+        "error_row_details": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "sheet": {"type": "string"},
+                    "row": {"type": "integer"},
+                    "message": {"type": "string"},
+                },
+            },
+        },
+    },
+    "description": "ELT 预演/执行摘要；后续执行请引用 preview.data.run_id",
+}
+
+
 _SPECIAL_OUTPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
+    ("elt_import", "preview"): _result(data=_ELT_IMPORT_DATA),
+    ("elt_import", "execute"): _result(data=_ELT_IMPORT_DATA),
     ("sales", "query"): {
         "type": "object",
         "required": ["success", "data"],

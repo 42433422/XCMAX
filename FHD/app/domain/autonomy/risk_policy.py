@@ -12,7 +12,26 @@ import yaml
 
 from app.domain.autonomy.risk_types import MediumRiskPolicy, RiskLevel, parse_risk_level
 
-_FHD_ROOT = Path(__file__).resolve().parents[3]
+
+def _detect_fhd_root() -> Path:
+    """Locate the FHD root that actually contains policy files.
+
+    Production modules live at ``FHD/app/domain/autonomy``. Mutation runners copy
+    sources under ``FHD/mutants/`` without the config tree; walk ancestors and,
+    when inside a ``mutants`` sandbox, prefer the real FHD root above it.
+    """
+    start = Path(__file__).resolve()
+    for path in (start, *start.parents):
+        if path.name == "mutants":
+            candidate = path.parent / "config" / "risk_actions.registry.json"
+            if candidate.is_file():
+                return path.parent
+        if (path / "config" / "risk_actions.registry.json").is_file():
+            return path
+    return start.parents[3]
+
+
+_FHD_ROOT = _detect_fhd_root()
 _DEFAULT_REGISTRY_PATH = _FHD_ROOT / "config" / "risk_actions.registry.json"
 _DEFAULT_BOUNDARIES_PATH = _FHD_ROOT / "config" / "autonomy_boundaries.yaml"
 _REQUIRED_AUTONOMOUS_ACTIONS = frozenset(
@@ -173,6 +192,26 @@ class RiskPolicyCatalog:
 
     def list_code_write_tools(self) -> frozenset[str]:
         return _CODE_WRITE_TOOL_NAMES
+
+    def register_actions(
+        self,
+        tool_id: str,
+        *,
+        description: str = "",
+        actions: dict[str, Any] | None = None,
+    ) -> None:
+        """登记运行时发现的工具动作（如外部 MCP 工具），只增不改。"""
+        if not actions:
+            return
+        tools = self.registry.setdefault("tools", {})
+        tool = tools.setdefault(
+            str(tool_id),
+            {"description": str(description or ""), "availability": "shared", "actions": {}},
+        )
+        existing = tool.setdefault("actions", {})
+        for name, spec in actions.items():
+            if isinstance(spec, dict):
+                existing.setdefault(str(name), copy.deepcopy(spec))
 
     def get_action_spec(self, tool_id: str, operation: str) -> dict[str, Any] | None:
         tool = (self.registry.get("tools") or {}).get(str(tool_id))

@@ -59,6 +59,20 @@ const mockChatViewApi = {
   loadingProgressText: { value: '' },
   excelAnalyzeUploading: { value: false },
   multimodalPendingCount: { value: 0 },
+  multimodalStaging: { value: [] },
+  artifactStaging: { value: [] },
+  unsupportedStaging: { value: [] },
+  removeArtifactFile: vi.fn(),
+  removeMultimodalFile: vi.fn(),
+  dismissUnsupportedFile: vi.fn(),
+  taskControlStates: { value: {} },
+  taskSyncState: { value: {} },
+  historyHasMore: { value: false },
+  historyLoadingMore: { value: false },
+  loadMoreHistorySessions: vi.fn(),
+  retryModelOnly: vi.fn(),
+  stopReply: vi.fn(),
+  confirmWorkflowFromCard: vi.fn(),
   excelSheetOptions: { value: [] },
   linkedExcelSheet: { value: null },
   linkedExcelAllSheets: { value: false },
@@ -131,7 +145,6 @@ vi.mock('@/composables/useChatMessageUi', () => ({
     isMessageCollapsed: () => false,
     expandMessage: vi.fn(),
     collapseMessage: vi.fn(),
-    getCollapsedPreview: () => '',
     canSpeakMessage: () => false,
     toggleMessageTts: vi.fn(),
     batchCalculateHeights: vi.fn(),
@@ -402,21 +415,22 @@ describe('ChatView functions – sendQuick', () => {
     localStorage.clear()
   })
 
-  it('设置 messageInput 并触发发送', async () => {
+  it('只填入输入框，不自动发送', async () => {
     const { wrapper } = await mountChatView()
     const vm = wrapper.vm as any
     vm.sendQuick('快捷消息')
     await flushPromises()
-    expect(mockChatSendMessage).toHaveBeenCalledWith('快捷消息')
+    expect(vm.messageInput).toBe('快捷消息')
+    expect(mockChatSendMessage).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 
-  it('空字符串也能触发发送', async () => {
+  it('空字符串只填入输入框，不发送', async () => {
     const { wrapper } = await mountChatView()
     const vm = wrapper.vm as any
     vm.sendQuick('')
     await flushPromises()
-    // 空字符串 trim 后为空，不发送
+    expect(vm.messageInput).toBe('')
     expect(mockChatSendMessage).not.toHaveBeenCalled()
     wrapper.unmount()
   })

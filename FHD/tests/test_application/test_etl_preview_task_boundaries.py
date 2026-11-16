@@ -43,7 +43,7 @@ class ObservedExecutor(ThreadPoolExecutor):
     """Keep actual background execution, but make every worker exception observable."""
 
     def __init__(self):
-        super().__init__(max_workers=1, thread_name_prefix="etl-boundary-test")
+        super().__init__(max_workers=1, thread_name_prefix="elt-boundary-test")
         self.futures = []
 
     def submit(self, fn, /, *args, **kwargs):
@@ -73,8 +73,8 @@ def preview_store(tmp_path, monkeypatch):
     factory = sessionmaker(bind=engine)
     monkeypatch.setattr(db_session, "SessionLocal", factory)
     monkeypatch.setattr(service_uploads, "get_app_data_dir", lambda: str(tmp_path))
-    monkeypatch.setenv("FHD_ETL_LLM", "on")
-    monkeypatch.setenv("FHD_ETL_LLM_TIMEOUT", "2")
+    monkeypatch.setenv("FHD_ELT_LLM", "on")
+    monkeypatch.setenv("FHD_ELT_LLM_TIMEOUT", "2")
     monkeypatch.setenv("LLM_ROUTING_ORDER", "fallback")
     fallback = FallbackProvider()
     local_registry = registry.LLMProviderRegistry.__new__(registry.LLMProviderRegistry)
@@ -94,7 +94,7 @@ def preview_store(tmp_path, monkeypatch):
                 )
             )
         db.commit()
-    llm_assist.clear_etl_llm_circuit()
+    llm_assist.clear_elt_llm_circuit()
     with ObservedExecutor() as executor, tenant_scope(1):
         for module in (service_preview, service_draft, service_execution):
             monkeypatch.setattr(module, "new_session", factory)
@@ -110,7 +110,7 @@ def preview_store(tmp_path, monkeypatch):
             yield store
         finally:
             executor.shutdown(wait=True)
-            llm_assist.clear_etl_llm_circuit()
+            llm_assist.clear_elt_llm_circuit()
             engine.dispose()
 
 
@@ -127,7 +127,7 @@ def install_provider(store, monkeypatch, outcome="success"):
             raise httpx.HTTPStatusError("no configured model", request=request, response=response)
         if outcome == "invalid_json":
             content = "not a JSON response"
-        elif task == "suggest_etl_field_mappings":
+        elif task == "suggest_elt_field_mappings":
             content = json.dumps(
                 {
                     "mappings": [
@@ -220,9 +220,9 @@ def test_real_csv_preview_preserves_owner_and_deterministic_rows(
     # Invalid JSON is a definite answer, not a transport/unknown-outcome failure.
     # It must not retry that task, but the independent row-advice task may run.
     # Provider failures open the owner circuit and suppress that second task.
-    expected_tasks = ["suggest_etl_field_mappings"]
+    expected_tasks = ["suggest_elt_field_mappings"]
     if outcome in {"success", "invalid_json"}:
-        expected_tasks.append("advise_etl_row_decisions")
+        expected_tasks.append("advise_elt_row_decisions")
     assert [task for _, _, task in store.calls] == expected_tasks
     if degraded:
         code = "ELT_LLM_OUTPUT_INVALID" if outcome == "invalid_json" else "ELT_LLM_UNAVAILABLE"
@@ -277,7 +277,7 @@ def test_unexpected_parser_error_is_persisted_and_releases_preview_lease(
 
 
 def ready_preview(store, monkeypatch, *, target="customers"):
-    monkeypatch.setenv("FHD_ETL_LLM", "off")
+    monkeypatch.setenv("FHD_ELT_LLM", "off")
     run_id = create_preview(store, target=target)
     store.executor.futures[-1].result(timeout=10)
     assert snapshot(store, run_id)["status"] == "preview_ready"
@@ -288,7 +288,7 @@ def test_customer_products_csv_preview_and_confirmed_execution_persist_aggregate
     preview_store, monkeypatch
 ):
     store = preview_store
-    monkeypatch.setenv("FHD_ETL_LLM", "off")
+    monkeypatch.setenv("FHD_ELT_LLM", "off")
     csv = (
         "客户名称,产品型号,产品名称,价格\n"
         "隔离联合客户,LOCAL-1,隔离产品甲,12.50\n"

@@ -2,7 +2,7 @@
 
 Product paths reused:
 - Knowledge: KnowledgeAdapter / DatasetRag ``office-docking``
-- Business: ``detect_etl_target`` → ETL upload → preview → execute
+- Business: ``detect_elt_target`` → ETL upload → preview → execute
 - Withdraw: KnowledgeAdapter.rollback_row + EltService.rollback
 """
 
@@ -32,11 +32,11 @@ from app.application.elt.knowledge_index_meta import (
     enrich_knowledge_progress,
     is_partial_business_receipt,
 )
-from app.application.elt.target_detection import detect_etl_target
-from app.application.shipment_excel_etl_security import (
-    ShipmentEtlPathError,
-    open_etl_input_file,
-    resolve_etl_path,
+from app.application.elt.target_detection import detect_elt_target
+from app.application.shipment_excel_elt_security import (
+    ShipmentEltPathError,
+    open_elt_input_file,
+    resolve_elt_path,
 )
 from app.infrastructure.tenant_scope import tenant_id_for_write
 from app.request_active_mod_ctx import get_request_active_mod_id
@@ -61,7 +61,7 @@ def _public_batch(batch: dict[str, Any]) -> dict[str, Any]:
 
 
 def _ledger_path(tenant_id: int | str) -> Path:
-    root = Path(get_app_data_dir()).resolve() / "etl" / "auto_ingest" / str(tenant_id)
+    root = Path(get_app_data_dir()).resolve() / "elt" / "auto_ingest" / str(tenant_id)
     root.mkdir(parents=True, exist_ok=True)
     return root / "batches.json"
 
@@ -120,7 +120,7 @@ def _patch_batch(
                 for key in ("batch_id", "tenant_id", "owner_user_id", "mod_id")
             ):
                 raise EltError(
-                    "ETL_AUTO_INGEST_SCOPE_CHANGED", "批次身份已变化，停止归并回执", status_code=409
+                    "ELT_AUTO_INGEST_SCOPE_CHANGED", "批次身份已变化，停止归并回执", status_code=409
                 )
             status = batch.get("status")
             # A progress read can mark a still-previewing run awaiting confirmation
@@ -206,14 +206,14 @@ def workbook_text(source: bytes | bytearray) -> str:
 def _extract_text(path: Path, *, owned_upload_user_id: int | None = None) -> str:
     suffix = path.suffix.lower()
     if suffix in {".xlsx", ".xlsm"}:
-        with open_etl_input_file(path, owner_user_id=owned_upload_user_id) as stream:
+        with open_elt_input_file(path, owner_user_id=owned_upload_user_id) as stream:
             workbook = load_workbook(stream, read_only=True, data_only=True, keep_links=False)
             try:
                 return _workbook_lines(workbook)
             finally:
                 workbook.close()
     with (
-        open_etl_input_file(path, owner_user_id=owned_upload_user_id) as stream,
+        open_elt_input_file(path, owner_user_id=owned_upload_user_id) as stream,
         io.TextIOWrapper(stream, encoding="utf-8", errors="replace") as text,
     ):
         return text.read()
@@ -224,25 +224,25 @@ def _resolve_auto_ingest_source(
 ) -> Path:
     """Jail auto-ingest inputs under ETL trusted roots (CodeQL path-injection).
 
-    Staged intake uploads live under ``etl/uploads/<tenant>/<owner>`` and require
-    ``owner_user_id`` so open_etl_input_file pins that owned root. Public auto-ingest
-    must omit owner and stay on resolve_etl_path trusted roots only.
+    Staged intake uploads live under ``elt/uploads/<tenant>/<owner>`` and require
+    ``owner_user_id`` so open_elt_input_file pins that owned root. Public auto-ingest
+    must omit owner and stay on resolve_elt_path trusted roots only.
     """
     import os
 
     try:
         if owner_user_id is not None:
             path = Path(os.path.normpath(str(source_path)))
-            with open_etl_input_file(path, owner_user_id=owner_user_id):
+            with open_elt_input_file(path, owner_user_id=owner_user_id):
                 return path
-        path = resolve_etl_path(source_path)
-        with open_etl_input_file(path):
+        path = resolve_elt_path(source_path)
+        with open_elt_input_file(path):
             return path
     except (FileNotFoundError, IsADirectoryError) as exc:
-        raise EltError("ETL_AUTO_INGEST_SOURCE_MISSING", "自动入库找不到源文件") from exc
-    except ShipmentEtlPathError as exc:
+        raise EltError("ELT_AUTO_INGEST_SOURCE_MISSING", "自动入库找不到源文件") from exc
+    except ShipmentEltPathError as exc:
         raise EltError(
-            "ETL_AUTO_INGEST_PATH_INVALID",
+            "ELT_AUTO_INGEST_PATH_INVALID",
             f"自动入库路径无效：{exc}",
         ) from exc
 
@@ -275,7 +275,7 @@ class AutoIngestService:
     def detect_target(
         path: Path, labels: list[str] | None = None, *, owned_upload_user_id: int | None = None
     ) -> dict[str, Any]:
-        detection = detect_etl_target(
+        detection = detect_elt_target(
             path, suffix=path.suffix.lower(), owner_user_id=owned_upload_user_id
         )
         label_blob = " ".join(labels or [])
@@ -313,7 +313,7 @@ class AutoIngestService:
         source_text: str | None = None,
         allow_model: bool = True,
     ) -> dict[str, Any]:
-        from app.application.elt.llm_assist import advise_knowledge_import, etl_llm_enabled
+        from app.application.elt.llm_assist import advise_knowledge_import, elt_llm_enabled
         from app.application.elt.service_support import dump_json
         from app.application.elt.targets.knowledge import KnowledgeAdapter
 
@@ -333,7 +333,7 @@ class AutoIngestService:
         degraded = False
         degradation_code = ""
         model_applied = False
-        if allow_model and etl_llm_enabled():
+        if allow_model and elt_llm_enabled():
             assist = advise_knowledge_import(raw_text)
             assist_used = bool(assist.used_llm)
             degraded = bool(assist.degraded)
@@ -433,7 +433,7 @@ class AutoIngestService:
         )
 
         def candidate_sha256() -> str:
-            with open_etl_input_file(path, owner_user_id=owned_upload_user_id) as stream:
+            with open_elt_input_file(path, owner_user_id=owned_upload_user_id) as stream:
                 return hashlib.sha256(stream.read()).hexdigest()
 
         if (
@@ -507,7 +507,7 @@ class AutoIngestService:
         prepared_plan: dict[str, Any] | None = None,
         owned_upload_user_id: int | None = None,
     ) -> dict[str, Any]:
-        # Prepared intake uploads are under etl/uploads; pin with owner after ownership checks.
+        # Prepared intake uploads are under elt/uploads; pin with owner after ownership checks.
         resolve_owner = owned_upload_user_id
         if resolve_owner is None and prepared_plan is not None:
             resolve_owner = owner_user_id
@@ -709,7 +709,7 @@ class AutoIngestService:
             )
             if isinstance(exc, EltError):
                 raise
-            raise EltError("ETL_AUTO_INGEST_FAILED", f"自动入库失败：{type(exc).__name__}") from exc
+            raise EltError("ELT_AUTO_INGEST_FAILED", f"自动入库失败：{type(exc).__name__}") from exc
 
     def _launch_worker(self, batch: dict[str, Any]) -> None:
         guard = batch.pop("_worker_guard", None)
@@ -829,7 +829,7 @@ class AutoIngestService:
             ledger = _load_ledger(tenant_id)
             batch = (ledger.get("batches") or {}).get(batch_id)
             if not isinstance(batch, dict) or int(batch.get("tenant_id") or 0) != int(tenant_id):
-                raise EltError("ETL_AUTO_INGEST_NOT_FOUND", "入库批次不存在", status_code=404)
+                raise EltError("ELT_AUTO_INGEST_NOT_FOUND", "入库批次不存在", status_code=404)
             batch = self._refresh_business(dict(batch))
             status = str(batch.get("status") or "")
             if status in {
@@ -847,7 +847,7 @@ class AutoIngestService:
                 }
             if status != "awaiting_approval":
                 raise EltError(
-                    "ETL_AUTO_INGEST_NOT_PENDING", "该批次不在待审批写入", status_code=409
+                    "ELT_AUTO_INGEST_NOT_PENDING", "该批次不在待审批写入", status_code=409
                 )
             guard = liveness.acquire(_ledger_path(tenant_id), batch_id)
             transferred = False
@@ -862,7 +862,7 @@ class AutoIngestService:
                     batch.get(key) != expected.get(key) for key in identity
                 ):
                     raise EltError(
-                        "ETL_AUTO_INGEST_FORBIDDEN", "批次身份已变化，未执行", status_code=403
+                        "ELT_AUTO_INGEST_FORBIDDEN", "批次身份已变化，未执行", status_code=403
                     )
                 status = str(batch.get("status") or "")
                 if status in {
@@ -880,7 +880,7 @@ class AutoIngestService:
                     }
                 if status != "awaiting_approval" or batch != expected:
                     raise EltError(
-                        "ETL_AUTO_INGEST_NOT_PENDING", "批次已变化，未重复提交", status_code=409
+                        "ELT_AUTO_INGEST_NOT_PENDING", "批次已变化，未重复提交", status_code=409
                     )
                 batch.update(status="running", worker_protocol=1, updated_at=_utcnow())
                 ledger["batches"][batch_id] = batch
@@ -1150,16 +1150,16 @@ class AutoIngestService:
             return None
         if owner_user_id is not None:
             if int(item.get("owner_user_id") or 0) != owner_user_id:
-                raise EltError("ETL_AUTO_INGEST_FORBIDDEN", "无权查看该批次", status_code=403)
+                raise EltError("ELT_AUTO_INGEST_FORBIDDEN", "无权查看该批次", status_code=403)
             return _public_batch(self._refresh_business(dict(item)))
         return _public_batch(dict(item))
 
     def get_progress(self, *, tenant_id: int, owner_user_id: int, batch_id: str) -> dict[str, Any]:
         batch = self.get_batch(tenant_id=tenant_id, batch_id=batch_id, owner_user_id=owner_user_id)
         if batch is None:
-            raise EltError("ETL_AUTO_INGEST_NOT_FOUND", "入库批次不存在", status_code=404)
+            raise EltError("ELT_AUTO_INGEST_NOT_FOUND", "入库批次不存在", status_code=404)
         if int(batch.get("owner_user_id") or 0) != int(owner_user_id):
-            raise EltError("ETL_AUTO_INGEST_FORBIDDEN", "无权查看该批次", status_code=403)
+            raise EltError("ELT_AUTO_INGEST_FORBIDDEN", "无权查看该批次", status_code=403)
         kb = (
             batch.get("kb_progress")
             if isinstance(batch.get("kb_progress"), dict)
@@ -1190,7 +1190,7 @@ class AutoIngestService:
             ledger = _load_ledger(tenant_id)
             batch = (ledger.get("batches") or {}).get(batch_id)
             if not isinstance(batch, dict):
-                raise EltError("ETL_AUTO_INGEST_NOT_FOUND", "入库批次不存在", status_code=404)
+                raise EltError("ELT_AUTO_INGEST_NOT_FOUND", "入库批次不存在", status_code=404)
             if batch.get("mod_id") != get_request_active_mod_id():
                 raise EltError(
                     "ELT_AUTO_INGEST_FORBIDDEN",
@@ -1199,13 +1199,13 @@ class AutoIngestService:
                 )
             if int(batch.get("owner_user_id") or 0) != int(owner_user_id):
                 raise EltError(
-                    "ETL_AUTO_INGEST_FORBIDDEN", "只能撤回自己的入库批次", status_code=403
+                    "ELT_AUTO_INGEST_FORBIDDEN", "只能撤回自己的入库批次", status_code=403
                 )
             if batch.get("status") == "withdrawn":
                 return batch
             if batch.get("status") not in {"applied", "partial", "completed_empty"}:
                 raise EltError(
-                    "ETL_AUTO_INGEST_BAD_STATE",
+                    "ELT_AUTO_INGEST_BAD_STATE",
                     f"当前状态不可撤回：{batch.get('status')}",
                     status_code=400,
                 )
@@ -1272,7 +1272,7 @@ class AutoIngestService:
             # preview. Skipping it has no write side effect and avoids duplicates.
             if (
                 decision.reason == "duplicate_source_fingerprint"
-                and str(((decision.before or {}).get("metadata") or {}).get("etl_run_id") or "")
+                and str(((decision.before or {}).get("metadata") or {}).get("elt_run_id") or "")
                 != run_id
             ):
                 return {
@@ -1389,7 +1389,7 @@ class AutoIngestService:
                     "ELT_PREVIEW_STALE", "已确认的业务预演已变化，未执行", status_code=409
                 )
         else:
-            with open_etl_input_file(path):
+            with open_elt_input_file(path):
                 pass
             raise EltError(
                 "ELT_CANDIDATE_REQUIRED",

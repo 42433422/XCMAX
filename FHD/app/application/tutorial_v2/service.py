@@ -142,7 +142,7 @@ class TutorialV2Service(
                 if "tenant_id" not in table.c:
                     continue
                 db.execute(table.delete().where(table.c.tenant_id == tenant_id))
-            upload_root = (Path(get_app_data_dir()).resolve() / "etl" / "uploads").resolve()
+            upload_root = (Path(get_app_data_dir()).resolve() / "elt" / "uploads").resolve()
             tenant_upload_root = (upload_root / str(tenant_id)).resolve()
             if upload_root in tenant_upload_root.parents and tenant_upload_root.is_dir():
                 shutil.rmtree(tenant_upload_root)
@@ -424,8 +424,8 @@ class TutorialV2Service(
             "sales_waiting_approval": self._verify_sales_waiting,
             "sales_approval_reviewed": self._verify_sales_approval_reviewed,
             "sales_closed_loop": self._verify_sales_closed_loop,
-            "etl_preview": self._verify_etl_preview,
-            "etl_completed": self._verify_etl_completed,
+            "elt_preview": self._verify_elt_preview,
+            "elt_completed": self._verify_elt_completed,
             "trace_task": self._verify_trace_task,
             "trace_approval": self._verify_trace_approval,
             "trace_order": self._verify_trace_order,

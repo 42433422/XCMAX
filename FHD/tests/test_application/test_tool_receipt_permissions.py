@@ -10,7 +10,7 @@ _CASES = [
     ("materials", action, "material.edit")
     for action in ("create", "update", "delete", "batch_delete", "clear")
 ] + [
-    ("document_template", action, "etl.template.manage")
+    ("document_template", action, "elt.template.manage")
     for action in ("create", "update", "delete", "clear", "ingest", "upload")
 ]
 
@@ -30,7 +30,7 @@ def test_read_or_receipt_permission_cannot_authorize_business_mutations(
     trusted_actor, tool, action, grant, kind
 ):
     permissions = (
-        ["material.view", "etl.read"] if kind == "read-only" else [f"tool.{tool}.{action}"]
+        ["material.view", "elt.read"] if kind == "read-only" else [f"tool.{tool}.{action}"]
     )
     actor = trusted_actor(permissions=permissions)
     result = actor_tool_denial(tool, action, actor.context)

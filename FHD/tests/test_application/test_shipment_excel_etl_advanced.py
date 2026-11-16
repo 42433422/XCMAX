@@ -7,32 +7,32 @@ from pathlib import Path
 
 import pytest
 
-from app.application.shipment_etl_profile import clear_profile_cache
-from app.application.shipment_excel_etl_app_service import (
-    execute_shipment_excel_etl,
+from app.application.shipment_elt_profile import clear_profile_cache
+from app.application.shipment_excel_elt_app_service import (
+    execute_shipment_excel_elt,
     parse_delivery_notes,
     write_delivery_note_workbook,
     write_ledger_workbook,
 )
-from app.application.shipment_excel_etl_ocr import (
+from app.application.shipment_excel_elt_ocr import (
     _load_image_arrays,
     grid_to_workbook_path,
     text_blocks_to_grid,
 )
-from app.application.shipment_excel_etl_security import direct_execute_allowed
-from app.domain.app_pure.excel_etl_kb import reset_excel_etl_kb_for_tests
+from app.application.shipment_excel_elt_security import direct_execute_allowed
+from app.domain.app_pure.excel_elt_kb import reset_excel_elt_kb_for_tests
 
 
 @pytest.fixture(autouse=True)
 def _kb(tmp_path, monkeypatch):
     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
-    monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))
-    monkeypatch.setenv("FHD_EXCEL_ETL_DEFAULT_TARGET", "shipment")
-    monkeypatch.setenv("FHD_SHIPMENT_ETL_LLM", "0")
-    monkeypatch.delenv("FHD_EXCEL_ETL_ALLOW_BUILTIN", raising=False)
-    monkeypatch.delenv("FHD_EXCEL_ETL_ALLOW_DIRECT", raising=False)
-    monkeypatch.delenv("FHD_SHIPMENT_ETL_ALLOW_DIRECT", raising=False)
-    reset_excel_etl_kb_for_tests(tmp_path / "kb.json")
+    monkeypatch.setenv("FHD_EXCEL_ELT_KB_PATH", str(tmp_path / "kb.json"))
+    monkeypatch.setenv("FHD_EXCEL_ELT_DEFAULT_TARGET", "shipment")
+    monkeypatch.setenv("FHD_SHIPMENT_ELT_LLM", "0")
+    monkeypatch.delenv("FHD_EXCEL_ELT_ALLOW_BUILTIN", raising=False)
+    monkeypatch.delenv("FHD_EXCEL_ELT_ALLOW_DIRECT", raising=False)
+    monkeypatch.delenv("FHD_SHIPMENT_ELT_ALLOW_DIRECT", raising=False)
+    reset_excel_elt_kb_for_tests(tmp_path / "kb.json")
     clear_profile_cache()
     yield
     clear_profile_cache()
@@ -230,14 +230,14 @@ def test_direct_execute_requires_env(tmp_path, monkeypatch):
         path,
     )
     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
-    denied = execute_shipment_excel_etl(path, direct=True, dry_run=True, workspace_root=tmp_path)
+    denied = execute_shipment_excel_elt(path, direct=True, dry_run=True, workspace_root=tmp_path)
     # dry_run 仍检查 direct 开关（非 dry 才拦）；确认非 dry 被拒
-    denied2 = execute_shipment_excel_etl(path, direct=True, dry_run=False, workspace_root=tmp_path)
+    denied2 = execute_shipment_excel_elt(path, direct=True, dry_run=False, workspace_root=tmp_path)
     assert denied2["success"] is False
     assert denied2["error_code"] == "direct_execute_denied"
     assert direct_execute_allowed() is False
 
-    monkeypatch.setenv("FHD_EXCEL_ETL_ALLOW_DIRECT", "1")
+    monkeypatch.setenv("FHD_EXCEL_ELT_ALLOW_DIRECT", "1")
     assert direct_execute_allowed() is True
 
     class _Fake:
@@ -249,18 +249,18 @@ def test_direct_execute_requires_env(tmp_path, monkeypatch):
         "app.domain.shared_services.tools_workflow_registered._execute_excel_import_records",
         lambda records: {"success": True, "imported": len(records)},
     )
-    monkeypatch.setenv("FHD_SHIPMENT_ETL_FINGERPRINT_BACKEND", "legacy")
+    monkeypatch.setenv("FHD_SHIPMENT_ELT_FINGERPRINT_BACKEND", "legacy")
     fp = tmp_path / "fp.sqlite3"
     monkeypatch.setattr(
-        "app.application.shipment_excel_etl_fingerprint_store._legacy_db_path",
+        "app.application.shipment_excel_elt_fingerprint_store._legacy_db_path",
         lambda: fp,
     )
     monkeypatch.setattr(
-        "app.application.shipment_excel_etl_fingerprint_store._db_path",
+        "app.application.shipment_excel_elt_fingerprint_store._db_path",
         lambda: fp,
     )
     # 默认 target 已是 shipment（fixture）；验证直写成功
-    ok = execute_shipment_excel_etl(
+    ok = execute_shipment_excel_elt(
         path,
         direct=True,
         force_shipment_target=True,
@@ -273,7 +273,7 @@ def test_direct_execute_requires_env(tmp_path, monkeypatch):
 
 
 def test_direct_promotes_preview_only_target(tmp_path, monkeypatch):
-    monkeypatch.setenv("FHD_EXCEL_ETL_DEFAULT_TARGET", "preview_only")
+    monkeypatch.setenv("FHD_EXCEL_ELT_DEFAULT_TARGET", "preview_only")
     clear_profile_cache()
     path = tmp_path / "p.xlsx"
     write_delivery_note_workbook(
@@ -298,7 +298,7 @@ def test_direct_promotes_preview_only_target(tmp_path, monkeypatch):
         path,
     )
     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
-    monkeypatch.setenv("FHD_EXCEL_ETL_ALLOW_DIRECT", "1")
+    monkeypatch.setenv("FHD_EXCEL_ELT_ALLOW_DIRECT", "1")
 
     class _Fake:
         def create_shipment(self, *a, **k):
@@ -310,21 +310,21 @@ def test_direct_promotes_preview_only_target(tmp_path, monkeypatch):
         lambda records: {"success": True, "imported": len(records)},
     )
     fp = tmp_path / "fp2.sqlite3"
-    monkeypatch.setenv("FHD_SHIPMENT_ETL_FINGERPRINT_BACKEND", "legacy")
+    monkeypatch.setenv("FHD_SHIPMENT_ELT_FINGERPRINT_BACKEND", "legacy")
     monkeypatch.setattr(
-        "app.application.shipment_excel_etl_fingerprint_store._legacy_db_path",
+        "app.application.shipment_excel_elt_fingerprint_store._legacy_db_path",
         lambda: fp,
     )
     monkeypatch.setattr(
-        "app.application.shipment_excel_etl_fingerprint_store._db_path",
+        "app.application.shipment_excel_elt_fingerprint_store._db_path",
         lambda: fp,
     )
     # 不 force → preview_only 挡入库
-    blocked = execute_shipment_excel_etl(path, direct=True, workspace_root=tmp_path)
+    blocked = execute_shipment_excel_elt(path, direct=True, workspace_root=tmp_path)
     assert blocked["success"] is False
     assert blocked["error_code"] == "unsupported_profile_target"
     # force → 提升 target 后入库
-    ok = execute_shipment_excel_etl(
+    ok = execute_shipment_excel_elt(
         path, direct=True, force_shipment_target=True, workspace_root=tmp_path
     )
     assert ok["success"] is True

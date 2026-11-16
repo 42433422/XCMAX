@@ -1,0 +1,254 @@
+/* 执行链：与 AgentRunTrace 同一视觉语言（无边框、单行摘要、展开才见细节） */
+.asc-chain {
+  --asc-fg: #374151;
+  --asc-muted: #9ca3af;
+  --asc-border: #e5e7eb;
+  --asc-subtle: #f8fafc;
+  --asc-blue: #2563eb;
+  --asc-green: #16a36a;
+  --asc-red: #dc3b3b;
+  --asc-amber: #b45309;
+  margin: 2px 0 6px;
+  color: var(--asc-fg);
+}
+
+.asc-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  color: var(--asc-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.asc-summary::-webkit-details-marker {
+  display: none;
+}
+
+.asc-icon {
+  flex-shrink: 0;
+  font-size: 11px;
+}
+
+.asc-title {
+  color: #4b5563;
+  font-weight: 500;
+}
+
+.asc-count,
+.asc-duration {
+  font-size: 11px;
+  color: var(--asc-muted);
+}
+
+.asc-pill {
+  padding: 0 6px;
+  border-radius: 9px;
+  font-size: 10px;
+  line-height: 16px;
+  background: #eef2f7;
+  color: #64748b;
+}
+
+.asc-pill.is-running {
+  background: #e8f0fe;
+  color: var(--asc-blue);
+}
+
+.asc-pill.is-success {
+  background: #e7f6ef;
+  color: var(--asc-green);
+}
+
+.asc-pill.is-failed,
+.asc-pill.is-blocked {
+  background: #fdecec;
+  color: var(--asc-red);
+}
+
+.asc-pill.is-waiting {
+  background: #fdf3e3;
+  color: var(--asc-amber);
+}
+
+.asc-chevron {
+  margin-left: auto;
+  font-size: 12px;
+  transition: transform 0.15s ease;
+}
+
+.asc-chain[open] .asc-chevron {
+  transform: rotate(180deg);
+}
+
+.asc-steps {
+  margin: 4px 0 0;
+  padding: 0 0 0 2px;
+  list-style: none;
+}
+
+.asc-step {
+  position: relative;
+  padding-left: 10px;
+  font-size: 12px;
+}
+
+/* 步骤之间的竖向连接线，形成「链条」观感 */
+.asc-step::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 4px;
+  bottom: 4px;
+  width: 1px;
+  background: var(--asc-border);
+}
+
+.asc-step:last-child::before {
+  bottom: auto;
+  height: 14px;
+}
+
+.asc-step-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  list-style: none;
+  cursor: pointer;
+  color: var(--asc-fg);
+}
+
+.asc-step-row.is-static {
+  cursor: default;
+}
+
+.asc-step-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.asc-step-icon {
+  flex-shrink: 0;
+  width: 12px;
+  font-size: 11px;
+  color: var(--asc-muted);
+}
+
+.asc-step-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+}
+
+.asc-step-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asc-step-subtitle {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--asc-muted);
+}
+
+.asc-badge {
+  flex-shrink: 0;
+  padding: 0 5px;
+  border-radius: 8px;
+  font-size: 10px;
+  line-height: 15px;
+  background: #fdf3e3;
+  color: var(--asc-amber);
+}
+
+.asc-step-duration {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--asc-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.asc-step-status {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--asc-muted);
+}
+
+.asc-step.is-success .asc-step-status {
+  color: var(--asc-green);
+}
+
+.asc-step.is-failed .asc-step-status,
+.asc-step.is-blocked .asc-step-status {
+  color: var(--asc-red);
+}
+
+.asc-step.is-waiting .asc-step-status {
+  color: var(--asc-amber);
+}
+
+.asc-step.is-running .asc-step-status {
+  color: var(--asc-blue);
+}
+
+.asc-step-chevron {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--asc-muted);
+  transition: transform 0.15s ease;
+}
+
+.asc-step-details[open] .asc-step-chevron {
+  transform: rotate(90deg);
+}
+
+.asc-step-body {
+  margin: 2px 0 6px 18px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--asc-subtle);
+}
+
+.asc-section + .asc-section {
+  margin-top: 6px;
+}
+
+.asc-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 2px;
+  font-size: 11px;
+  color: var(--asc-muted);
+}
+
+.asc-section pre {
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #334155;
+}
+
+.asc-section.is-error .asc-label,
+.asc-section.is-error pre {
+  color: var(--asc-red);
+}
+
+.asc-section p {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #475569;
+}

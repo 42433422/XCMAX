@@ -290,7 +290,39 @@ def check_drift() -> int:
     return 0
 
 
+def check_navigation_catalog() -> int:
+    data = json.loads((ROOT / "config/core_navigation.json").read_text(encoding="utf-8"))
+    errors = []
+    if data.get("version") != 1:
+        errors.append("unsupported navigation catalog version")
+    for section in ("core", "industry", "admin_workflow_children"):
+        rows = data[section]
+        if len({row["key"] for row in rows}) != len(rows):
+            errors.append(f"duplicate keys in {section}")
+        for row in rows:
+            if not row["path"].startswith("/") or row["path"].startswith("//"):
+                errors.append(f"invalid path: {row['key']}")
+            if "mobile_group" in row and (
+                row["mobile_group"] not in {"tasks", "business", "data", "computer"}
+                or not isinstance(row.get("requires_desktop"), bool)
+            ):
+                errors.append(f"invalid mobile metadata: {row['key']}")
+    for consumer in (
+        "frontend/src/constants/coreMenuCatalog.ts",
+        "app/fastapi_routes/mobile_extensions/navigation_constants.py",
+    ):
+        if "config/core_navigation.json" not in (ROOT / consumer).read_text(encoding="utf-8"):
+            errors.append(f"catalog consumer disconnected: {consumer}")
+    for error in errors:
+        print(f"navigation-catalog: {error}")
+    if not errors:
+        print("navigation-catalog: OK")
+    return int(bool(errors))
+
+
 def run(action: str, domain: dict[str, Any], *, dry_run: bool = True) -> int:
+    if action == "check-navigation":
+        return check_navigation_catalog()
     if action == "check":
         return check_drift()
     if action == "sync":

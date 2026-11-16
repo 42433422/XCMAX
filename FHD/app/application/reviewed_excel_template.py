@@ -303,6 +303,7 @@ def _template_platform_complete(
     """Template route through the software platform default model (market session)."""
     import asyncio
     import logging
+    import time
 
     import httpx
 
@@ -316,22 +317,22 @@ def _template_platform_complete(
 
     try:
         from app.application.elt import llm_assist
-        from app.application.elt.llm_assist_runtime import etl_llm_mode
+        from app.application.elt.llm_assist_runtime import elt_llm_mode
         from app.application.elt.llm_session_provider import (
-            bind_etl_llm_owner,
+            bind_elt_llm_owner,
             current_owner_market_provider,
-            reset_etl_llm_owner,
+            reset_elt_llm_owner,
         )
         from app.application.reviewed_excel_budget import template_timeout_seconds
         from app.infrastructure.llm.structured_output import extract_json
     except ImportError:
         raise ModelRequestNotSent("平台模型组件未就绪；未调用模型") from None
 
-    if llm_assist.etl_llm_mode() == "off" or etl_llm_mode() == "off":
+    if llm_assist.elt_llm_mode() == "off" or elt_llm_mode() == "off":
         raise ModelRequestNotSent("模板平台模型已关闭；未调用模型")
     token = None
     if owner_id is not None:
-        token = bind_etl_llm_owner(int(owner_id))
+        token = bind_elt_llm_owner(int(owner_id))
     try:
         timeout_seconds = template_timeout_seconds()
         try:
@@ -341,11 +342,18 @@ def _template_platform_complete(
         except INFRA_TRANSIENT:
             raise ModelRequestNotSent("平台模型初始化失败；未调用模型") from None
         from app.application.reviewed_excel_audit import current_call_id
-        from app.application.reviewed_excel_budget import template_first_byte_seconds
+        from app.application.reviewed_excel_budget import (
+            template_call_max_seconds,
+            template_first_byte_seconds,
+        )
 
         audit_callback = response_capture()
         call_id = current_call_id()
         first_byte_seconds = min(template_first_byte_seconds(), timeout_seconds)
+        # One absolute cap per platform call: activity cannot extend it, and every
+        # attempt (including same-key recovery) shares the same deadline.
+        max_seconds = template_call_max_seconds()
+        deadline = time.monotonic() + max_seconds
         seen = {"on": False}
 
         def _still_processing() -> None:
@@ -366,12 +374,18 @@ def _template_platform_complete(
                 )
             )
             try:
-                # The first event has its own deadline; later events reset an idle wait.
+                # The first event has its own deadline; later events extend only the
+                # idle wait between events, never the absolute cap of the call.
                 wait = first_byte_seconds
                 while True:
-                    done, _pending = await asyncio.wait({task}, timeout=wait)
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        break
+                    done, _pending = await asyncio.wait({task}, timeout=min(wait, remaining))
                     if task in done:
                         return task.result()
+                    if deadline - time.monotonic() <= 0:
+                        break
                     if not seen["on"]:
                         break
                     seen["on"] = False
@@ -381,6 +395,11 @@ def _template_platform_complete(
                     await task
                 except asyncio.CancelledError:
                     pass
+                if time.monotonic() >= deadline:
+                    raise ReviewedExcelError(
+                        f"平台模型生成超时（已超过 {max_seconds:g} 秒），"
+                        "已中断本次生成；可重新发起该文件的生成"
+                    )
                 raise TimeoutError
             finally:
                 if not task.done():
@@ -513,7 +532,7 @@ def _template_platform_complete(
             ) from None
     finally:
         if token is not None:
-            reset_etl_llm_owner(token)
+            reset_elt_llm_owner(token)
 
 
 def _template_llm_complete(
@@ -1444,7 +1463,7 @@ def refine_proposal(
     import json
     import logging
 
-    from app.application.elt.llm_session_provider import bind_etl_llm_owner, reset_etl_llm_owner
+    from app.application.elt.llm_session_provider import bind_elt_llm_owner, reset_elt_llm_owner
     from app.utils.operational_errors import RECOVERABLE_ERRORS
 
     base = make_proposals(review)
@@ -1822,7 +1841,7 @@ def refine_proposal(
             )
         return validated
 
-    token = bind_etl_llm_owner(owner_id)
+    token = bind_elt_llm_owner(owner_id)
     try:
         validated = ask_until_valid(ask, messages, judge)
         audit_messages = []
@@ -1918,7 +1937,7 @@ def refine_proposal(
                     # unknown call or imply that its audit succeeded.
                     audit_degraded = True
     finally:
-        reset_etl_llm_owner(token)
+        reset_elt_llm_owner(token)
     output_tokens = budget["tokens"]
     if initial:
         base["candidates"] = validated

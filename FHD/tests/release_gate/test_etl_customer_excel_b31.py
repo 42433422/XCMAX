@@ -10,8 +10,8 @@ pytestmark = pytest.mark.release_gate
 
 
 def test_etl_release_gate_stays_blocked_without_customer_original(monkeypatch):
-    monkeypatch.delenv("XCAGI_ETL_CUSTOMER_EXCEL", raising=False)
-    monkeypatch.delenv("XCAGI_ETL_MANUAL_BASELINE", raising=False)
+    monkeypatch.delenv("XCAGI_ELT_CUSTOMER_EXCEL", raising=False)
+    monkeypatch.delenv("XCAGI_ELT_MANUAL_BASELINE", raising=False)
     report = release_status()
     assert report["id"] == "B31"
     assert report["status"] == "BLOCKED"

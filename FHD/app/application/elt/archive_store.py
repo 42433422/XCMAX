@@ -377,7 +377,7 @@ def _decrypt_or_migrate(
             return _archive_cipher(archive_root).decrypt(token)
         except InvalidToken as exc:
             raise ArchivePolicyError("归档原件解密失败") from exc
-    # Legacy plaintext under old etl/archive (or pre-encrypt writes): verify then
+    # Legacy plaintext under old elt/archive (or pre-encrypt writes): verify then
     # transparently re-encrypt on read when the digest matches.
     if hashlib.sha256(disk).hexdigest() != version.sha256 or len(disk) != version.size_bytes:
         raise ArchivePolicyError("归档原件校验失败")

@@ -5,9 +5,20 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "2026_11_11_etl_source_slice"
-down_revision = "2026_11_11_agent_permissions"
+# 原本与改名迁移并列，形成多 head 导致 upgrade 卡死；改为接在改名之后，保证表名已是 elt_run_rows。
+down_revision = "2026_11_13_elt_table_rename"
 branch_labels = None
 depends_on = None
+
+
+def _run_rows_table() -> str | None:
+    """取当前的运行行表名：改名迁移跑过就是 elt_run_rows，否则用历史名。"""
+    names = set(sa.inspect(op.get_bind()).get_table_names())
+    if "elt_run_rows" in names:
+        return "elt_run_rows"
+    if "etl_run_rows" in names:
+        return "etl_run_rows"
+    return None
 
 
 def _names(table: str) -> tuple[set[str], set[str], set[str]]:
@@ -19,8 +30,11 @@ def _names(table: str) -> tuple[set[str], set[str], set[str]]:
 
 
 def upgrade():
-    columns, uniques, indexes = _names("etl_run_rows")
-    with op.batch_alter_table("etl_run_rows") as batch:
+    table = _run_rows_table()
+    if table is None:
+        return
+    columns, uniques, indexes = _names(table)
+    with op.batch_alter_table(table) as batch:
         if "source_slice" not in columns:
             batch.add_column(
                 sa.Column("source_slice", sa.Integer(), nullable=False, server_default="0")
@@ -37,8 +51,11 @@ def upgrade():
 
 
 def downgrade():
-    columns, uniques, indexes = _names("etl_run_rows")
-    with op.batch_alter_table("etl_run_rows") as batch:
+    table = _run_rows_table()
+    if table is None:
+        return
+    columns, uniques, indexes = _names(table)
+    with op.batch_alter_table(table) as batch:
         if "uq_etl_run_source_slice" in uniques:
             batch.drop_constraint("uq_etl_run_source_slice", type_="unique")
         if "uq_etl_run_source_row" not in uniques and "uq_etl_run_source_row" not in indexes:

@@ -13,37 +13,56 @@ const {
 <template>
     <div class="rules-container">
       <div class="rules-header">
-        <div class="enable-toggle">
-          <label class="toggle-label">
-            <span>启用审批功能</span>
-            <div class="toggle-switch" :class="{ active: enabled }" @click="toggleEnabled">
-              <div class="toggle-slider"></div>
-            </div>
-          </label>
+        <div class="rules-header__text">
+          <h3>审批规则</h3>
+          <p>共 {{ rules.length }} 条规则，命中后需人工审批</p>
         </div>
+        <label class="toggle-label">
+          <span>启用审批功能</span>
+          <span
+            class="toggle-switch"
+            :class="{ active: enabled }"
+            role="switch"
+            :aria-checked="enabled"
+            @click="toggleEnabled"
+          >
+            <span class="toggle-slider"></span>
+          </span>
+        </label>
       </div>
 
-      <div class="rules-list" v-if="enabled">
-        <div class="rule-item" v-for="(rule, index) in rules" :key="index">
-          <div class="rule-info">
-            <div class="rule-main">
-              <span class="rule-action">{{ getActionLabel(rule.tool_id, rule.action) }}</span>
-              <span class="rule-trigger" :class="rule.trigger">{{ getTriggerLabel(rule.trigger) }}</span>
+      <div class="rules-layout" v-if="enabled">
+        <section class="rules-list-wrap">
+          <div class="rules-table-head">
+            <span>业务操作</span>
+            <span>触发方式</span>
+            <span>说明</span>
+            <span class="align-right">操作</span>
+          </div>
+          <div class="rules-list">
+            <div class="rule-item" v-for="(rule, index) in rules" :key="index">
+              <div class="rule-cell rule-action-cell">
+                <span class="rule-action">{{ getActionLabel(rule.tool_id, rule.action) }}</span>
+                <span class="rule-path">{{ rule.tool_id }} / {{ rule.action }}</span>
+              </div>
+              <div class="rule-cell">
+                <span class="rule-trigger" :class="rule.trigger">{{ getTriggerLabel(rule.trigger) }}</span>
+              </div>
+              <div class="rule-cell rule-description">{{ rule.description || '无描述' }}</div>
+              <div class="rule-cell rule-actions">
+                <button class="btn-edit" @click="editRule(index)" title="编辑">
+                  <i class="fa fa-pencil"></i>
+                </button>
+                <button class="btn-delete" @click="deleteRule(index)" title="删除">
+                  <i class="fa fa-trash"></i>
+                </button>
+              </div>
             </div>
-            <div class="rule-description">{{ rule.description || '无描述' }}</div>
-            <div class="rule-path">{{ rule.tool_id }} / {{ rule.action }}</div>
+            <div v-if="rules.length === 0" class="rules-empty">暂无规则，请在右侧添加。</div>
           </div>
-          <div class="rule-actions">
-            <button class="btn-edit" @click="editRule(index)" title="编辑">
-              <i class="fa fa-pencil"></i>
-            </button>
-            <button class="btn-delete" @click="deleteRule(index)" title="删除">
-              <i class="fa fa-trash"></i>
-            </button>
-          </div>
-        </div>
+        </section>
 
-        <div class="add-rule-section">
+        <aside class="add-rule-section">
           <h3>添加新规则</h3>
           <div class="add-form">
             <div class="form-group">
@@ -74,7 +93,7 @@ const {
                 <option value="never">从不审批</option>
               </select>
             </div>
-            <div class="form-group full-width">
+            <div class="form-group">
               <label>描述</label>
               <input type="text" v-model="newRule.description" placeholder="规则描述" />
             </div>
@@ -82,7 +101,7 @@ const {
               <i class="fa fa-plus"></i> 添加规则
             </button>
           </div>
-        </div>
+        </aside>
       </div>
 
       <div class="no-rules" v-else>

@@ -1,7 +1,9 @@
 import 'dart:async';
 
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:webview_flutter_android/webview_flutter_android.dart';
 
 import '../../api/mobile_api.dart';
 import '../../api/mobile_session_store.dart';
@@ -10,6 +12,10 @@ import '../../theme/app_theme.dart';
 import '../../widgets/we_ui.dart';
 
 typedef MobileWebUrlOverride = bool Function(String nextUrl);
+typedef MobileWebFilePicker = Future<List<XFile>> Function({
+  required List<XTypeGroup> acceptedTypeGroups,
+  required bool multiple,
+});
 
 class DesktopToolWebViewScreen extends StatefulWidget {
   const DesktopToolWebViewScreen({
@@ -20,6 +26,7 @@ class DesktopToolWebViewScreen extends StatefulWidget {
     this.api,
     this.onUrlOverride,
     this.externalUrlLauncher = launchExternalUrl,
+    this.filePicker = _openWebFiles,
   });
 
   final String title;
@@ -28,6 +35,7 @@ class DesktopToolWebViewScreen extends StatefulWidget {
   final MobileApiClient? api;
   final MobileWebUrlOverride? onUrlOverride;
   final ExternalUrlLauncher externalUrlLauncher;
+  final MobileWebFilePicker filePicker;
 
   @override
   State<DesktopToolWebViewScreen> createState() =>
@@ -35,44 +43,236 @@ class DesktopToolWebViewScreen extends StatefulWidget {
 }
 
 class _DesktopToolWebViewScreenState extends State<DesktopToolWebViewScreen> {
-  late final WebViewController _controller;
+  WebViewController? _controller;
   late final MobileApiClient _api;
+  String? _error;
+  var _loading = true;
+  var _loadId = 0;
+  int? _pageGeneration;
+  String? _pageConnection;
+  StreamSubscription<MobileSessionData>? _sessionSubscription;
 
   @override
   void initState() {
     super.initState();
     _api = widget.api ?? MobileApiClient(config: widget.config);
-    final uri = _resolveDesktopUri(widget.path, config: widget.config);
-    _controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onNavigationRequest: (request) {
-            final handled = widget.onUrlOverride?.call(request.url) ?? false;
-            if (handled) return NavigationDecision.prevent;
-            if (_isMobileWebViewUrlAllowed(request.url)) {
-              return NavigationDecision.navigate;
-            }
-            final uri = Uri.tryParse(request.url);
-            if (uri != null) {
-              unawaited(widget.externalUrlLauncher(uri));
-            }
-            return NavigationDecision.prevent;
-          },
-          onPageFinished: (_) =>
-              _injectMobileWebTokens(_controller, uri, widget.config, _api),
-        ),
-      )
-      ..setUserAgent(_mobileUserAgent);
-    _loadRequest(uri);
+    _sessionSubscription = _api.sessionChanges.listen((session) {
+      if (mounted &&
+          _pageGeneration != null &&
+          (_pageGeneration != _api.authGeneration ||
+              (_pageConnection != null &&
+                  _pageConnection != _connectionKey(session)))) {
+        ++_loadId;
+        setState(() {
+          _controller = null;
+          _loading = false;
+          _error = _pageGeneration != _api.authGeneration
+              ? '账号已切换，请重新打开页面'
+              : '连接已切换，请重新打开页面';
+        });
+      }
+    });
+    unawaited(_load());
   }
 
-  Future<void> _loadRequest(Uri uri) async {
-    final session = await _api.loadSession();
-    await _controller.loadRequest(
-      uri,
-      headers: _mobileWebHeaders(widget.config, uri, session: session),
-    );
+  @override
+  void dispose() {
+    _sessionSubscription?.cancel();
+    if (widget.api == null) _api.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final loadId = ++_loadId;
+    setState(() {
+      _error = null;
+      _loading = true;
+      _controller = null;
+      _pageConnection = null;
+    });
+    try {
+      final generation = _api.authGeneration;
+      _pageGeneration = generation;
+      final initialSession = await _api.loadSession();
+      _pageConnection = _connectionKey(initialSession);
+      final base = await _api.resolveSessionBaseUrl();
+      final config = MobileApiConfig(
+          baseUrl: base, modstoreBaseUrl: widget.config.modstoreBaseUrl);
+      final uri = _resolveDesktopUri(widget.path, config: config);
+      final session = await _api.loadSession();
+      if (!mounted || loadId != _loadId) return;
+      if (generation != _api.authGeneration) throw StateError('账号已切换，请重新打开');
+      if (_pageConnection != _connectionKey(session)) {
+        throw StateError('连接已切换，请重新打开');
+      }
+      final fhd = _isFhdTarget(uri, config);
+      final publicRegistration = fhd &&
+          uri.path == _normalizedBaseUri(base).resolve('login/register').path;
+      final token = fhd
+          ? _firstNonBlank([session.accessToken, session.sessionId])
+          : session.marketAccessToken.trim();
+      if (!publicRegistration && token.isEmpty) throw StateError('请先登录再打开业务页面');
+      bool allowed(Uri next) => publicRegistration
+          ? _sameOrigin(next, uri) && next.path == uri.path
+          : fhd
+              ? _isFhdTarget(next, config)
+              : _isMarketTarget(next, config) && !_isFhdTarget(next, config);
+      if (!allowed(uri)) throw StateError('该链接不属于当前连接，请返回后重新选择');
+      final controller = WebViewController();
+      var bootstrapping = true;
+      final platform = controller.platform;
+      if (platform is AndroidWebViewController) {
+        var selectingFiles = false;
+        final connection = _pageConnection;
+        bool active() =>
+            mounted &&
+            !bootstrapping &&
+            _error == null &&
+            identical(_controller, controller) &&
+            loadId == _loadId &&
+            generation == _api.authGeneration;
+        Future<Uri?> trustedPage() async {
+          if (!active()) return null;
+          final session = await _api.loadSession();
+          if (_connectionKey(session) != connection ||
+              await _api.resolveSessionBaseUrl() != base) {
+            return null;
+          }
+          final current = Uri.tryParse(await controller.currentUrl() ?? '');
+          return active() && current != null && allowed(current)
+              ? current
+              : null;
+        }
+
+        await platform.setOnShowFileSelector((params) async {
+          if (selectingFiles || params.mode == FileSelectorMode.save) return [];
+          selectingFiles = true;
+          try {
+            final page = await trustedPage();
+            if (page == null) return [];
+            final multiple = params.mode == FileSelectorMode.openMultiple;
+            final files = await widget.filePicker(
+                acceptedTypeGroups: _webFileTypes(params.acceptTypes),
+                multiple: multiple);
+            if (page != await trustedPage()) return [];
+            return (multiple ? files : files.take(1))
+                .map(_webFileUri)
+                .whereType<String>()
+                .toList(growable: false);
+          } catch (_) {
+            return [];
+          } finally {
+            selectingFiles = false;
+          }
+        });
+      }
+      await controller.setJavaScriptMode(JavaScriptMode.unrestricted);
+      await controller.setNavigationDelegate(NavigationDelegate(
+        onNavigationRequest: (request) {
+          final next = Uri.tryParse(request.url);
+          if (loadId != _loadId || generation != _api.authGeneration) {
+            return NavigationDecision.prevent;
+          }
+          if (next != null &&
+              _sameOrigin(next, uri) &&
+              (widget.onUrlOverride?.call(request.url) ?? false)) {
+            return NavigationDecision.prevent;
+          }
+          if (next != null &&
+              allowed(next) &&
+              generation == _api.authGeneration) {
+            return NavigationDecision.navigate;
+          }
+          if (next != null &&
+              (next.scheme == 'https' || next.scheme == 'http')) {
+            unawaited(widget.externalUrlLauncher(next));
+          }
+          return NavigationDecision.prevent;
+        },
+        onPageFinished: (url) async {
+          if (!mounted ||
+              loadId != _loadId ||
+              generation != _api.authGeneration) {
+            return;
+          }
+          if (bootstrapping) {
+            try {
+              final ready = await _injectMobileWebTokens(
+                  controller, uri, config, _api, generation,
+                  publicRegistration: publicRegistration);
+              if (!mounted ||
+                  loadId != _loadId ||
+                  generation != _api.authGeneration) {
+                return;
+              }
+              if (!ready) throw StateError('登录同步失败');
+              bootstrapping = false;
+              await controller.loadRequest(uri,
+                  headers: publicRegistration
+                      ? const {}
+                      : _mobileWebHeaders(config, uri, session: session));
+            } catch (_) {
+              if (mounted && loadId == _loadId) {
+                setState(() {
+                  _loading = false;
+                  _error = '登录状态同步失败，请重试';
+                });
+              }
+            }
+            return;
+          }
+          final current = Uri.tryParse(await controller.currentUrl() ?? '');
+          final finished = Uri.tryParse(url);
+          if (current == null || current != finished || !allowed(current)) {
+            return;
+          }
+          try {
+            if (!publicRegistration) {
+              await _injectMobileWebTokens(
+                  controller, current, config, _api, generation);
+            }
+          } catch (_) {
+            if (mounted && loadId == _loadId) {
+              setState(() => _error = '登录状态同步失败，请重试');
+            }
+          }
+          if (mounted && loadId == _loadId) setState(() => _loading = false);
+        },
+        onWebResourceError: (error) {
+          if (error.isForMainFrame == false || !mounted || loadId != _loadId) {
+            return;
+          }
+          setState(() {
+            _loading = false;
+            _error = '页面加载失败，请检查当前连接后重试';
+          });
+        },
+      ));
+      await controller.setUserAgent(_mobileUserAgent);
+      if (_isFhdTarget(uri, config)) {
+        await WebViewCookieManager().setCookie(WebViewCookie(
+          name: 'session_id',
+          value: publicRegistration ? '' : token,
+          domain: uri.host,
+          path: _normalizedBaseUri(base).path,
+        ));
+      }
+      if (!mounted || loadId != _loadId || generation != _api.authGeneration) {
+        return;
+      }
+      setState(() => _controller = controller);
+      // Prepare only this origin's auth state before any application script runs.
+      await controller.loadHtmlString(
+          '<!doctype html><html><head><meta charset="utf-8"></head><body></body></html>',
+          baseUrl: uri.toString());
+    } catch (_) {
+      if (mounted && loadId == _loadId) {
+        setState(() {
+          _loading = false;
+          _error = '无法打开页面，请检查登录与当前连接后重试';
+        });
+      }
+    }
   }
 
   @override
@@ -81,106 +281,94 @@ class _DesktopToolWebViewScreenState extends State<DesktopToolWebViewScreen> {
     return Scaffold(
       backgroundColor: colors.page,
       body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
+          bottom: false,
+          child: Column(children: [
             WeTopBar(
-              title: widget.title,
-              showBack: true,
-              onBack: () => Navigator.of(context).maybePop(),
-              actions: [
-                IconButton(
-                  onPressed: () => _controller.reload(),
-                  icon: const Icon(Icons.refresh, size: 22),
-                  tooltip: '刷新',
-                  color: colors.textPrimary,
-                ),
-              ],
-            ),
-            Expanded(child: WebViewWidget(controller: _controller)),
-          ],
-        ),
-      ),
+                title: widget.title,
+                showBack: true,
+                onBack: () => Navigator.of(context).maybePop(),
+                actions: [
+                  IconButton(
+                      onPressed: _load,
+                      icon: const Icon(Icons.refresh, size: 22),
+                      tooltip: '刷新')
+                ]),
+            if (_loading) const LinearProgressIndicator(),
+            Expanded(
+                child: _error != null
+                    ? Center(
+                        child:
+                            Column(mainAxisSize: MainAxisSize.min, children: [
+                        Text(_error!, textAlign: TextAlign.center),
+                        TextButton(onPressed: _load, child: const Text('重试')),
+                      ]))
+                    : _controller == null
+                        ? const SizedBox.shrink()
+                        : WebViewWidget(controller: _controller!)),
+          ])),
     );
   }
 }
 
-class ModWebViewScreen extends StatefulWidget {
-  const ModWebViewScreen({
-    super.key,
-    required this.modId,
-    this.title,
-    this.config = const MobileApiConfig(),
-    this.api,
-  });
-
+class ModWebViewScreen extends StatelessWidget {
+  const ModWebViewScreen(
+      {super.key,
+      required this.modId,
+      this.title,
+      this.config = const MobileApiConfig(),
+      this.api});
   final String modId;
   final String? title;
   final MobileApiConfig config;
   final MobileApiClient? api;
 
   @override
-  State<ModWebViewScreen> createState() => _ModWebViewScreenState();
+  Widget build(BuildContext context) => DesktopToolWebViewScreen(
+      title: title ?? 'Mod',
+      path: '/mod/${Uri.encodeComponent(modId.trim())}/',
+      config: config,
+      api: api);
 }
 
-class _ModWebViewScreenState extends State<ModWebViewScreen> {
-  late final WebViewController _controller;
-  late final MobileApiClient _api;
-  late final Uri _uri;
+Future<List<XFile>> _openWebFiles({
+  required List<XTypeGroup> acceptedTypeGroups,
+  required bool multiple,
+}) async {
+  if (multiple) return openFiles(acceptedTypeGroups: acceptedTypeGroups);
+  final file = await openFile(acceptedTypeGroups: acceptedTypeGroups);
+  return file == null ? [] : [file];
+}
 
-  @override
-  void initState() {
-    super.initState();
-    _api = widget.api ?? MobileApiClient(config: widget.config);
-    _uri = _resolveModUri(widget.modId, config: widget.config);
-    _controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onPageFinished: (_) =>
-              _injectMobileWebTokens(_controller, _uri, widget.config, _api),
-        ),
-      )
-      ..setUserAgent(_mobileUserAgent);
-    _loadRequest();
-  }
+List<XTypeGroup> _webFileTypes(List<String> acceptTypes) {
+  final types = acceptTypes
+      .expand((value) => value.split(','))
+      .map((value) => value.trim().toLowerCase())
+      .toSet();
+  if (types.contains('*/*')) return const [];
+  final extensions = types
+      .where((type) => RegExp(r'^\.[a-z0-9][a-z0-9._+-]*$').hasMatch(type))
+      .map((type) => type.substring(1))
+      .toList();
+  final mimeTypes = types
+      .where((type) =>
+          RegExp(r'^[a-z0-9!#$&^_.+-]+/[a-z0-9!#$&^_.+*-]+$').hasMatch(type))
+      .toList();
+  return extensions.isEmpty && mimeTypes.isEmpty
+      ? const []
+      : [XTypeGroup(extensions: extensions, mimeTypes: mimeTypes)];
+}
 
-  Future<void> _loadRequest() async {
-    final session = await _api.loadSession();
-    await _controller.loadRequest(
-      _uri,
-      headers: _mobileWebHeaders(widget.config, _uri, session: session),
-    );
+String? _webFileUri(XFile file) {
+  final path = file.path;
+  if (path.startsWith('/')) return Uri.file(path).toString();
+  final uri = Uri.tryParse(path);
+  if (uri == null || !uri.path.startsWith('/') || uri.userInfo.isNotEmpty) {
+    return null;
   }
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = AppTheme.colors(context);
-    return Scaffold(
-      backgroundColor: colors.page,
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            WeTopBar(
-              title: widget.title ?? 'Mod',
-              showBack: true,
-              onBack: () => Navigator.of(context).maybePop(),
-              actions: [
-                IconButton(
-                  onPressed: () => _controller.reload(),
-                  icon: const Icon(Icons.refresh, size: 22),
-                  tooltip: '刷新',
-                  color: colors.textPrimary,
-                ),
-              ],
-            ),
-            Expanded(child: WebViewWidget(controller: _controller)),
-          ],
-        ),
-      ),
-    );
-  }
+  return (uri.scheme == 'content' && uri.host.isNotEmpty) ||
+          (uri.scheme == 'file' && uri.host.isEmpty)
+      ? uri.toString()
+      : null;
 }
 
 Uri _resolveDesktopUri(
@@ -226,34 +414,47 @@ Map<String, String> _mobileWebHeaders(
 }) {
   final headers = <String, String>{'X-XCAGI-Client': 'android'};
   final bearer = _firstNonBlank([config.accessToken, session.accessToken]);
-  if (bearer.isNotEmpty && !_shouldInjectMarketTokens(uri)) {
+  if (bearer.isNotEmpty && _isFhdTarget(uri, config)) {
     headers['Authorization'] = 'Bearer $bearer';
   }
   return headers;
 }
 
-Future<void> _injectMobileWebTokens(
+Future<bool> _injectMobileWebTokens(
   WebViewController controller,
   Uri uri,
   MobileApiConfig config,
   MobileApiClient api,
-) async {
+  int generation, {
+  bool publicRegistration = false,
+}) async {
   final session = await api.loadSession();
-  final injectMarket = _shouldInjectMarketTokens(uri) &&
+  if (generation != api.authGeneration ||
+      await api.resolveSessionBaseUrl() != config.baseUrl ||
+      generation != api.authGeneration) {
+    return false;
+  }
+  final injectMarket = !_isFhdTarget(uri, config) &&
+      _isMarketTarget(uri, config) &&
       _firstNonBlank([
         config.marketAccessToken,
         session.marketAccessToken,
       ]).isNotEmpty;
-  final injectFhd = _shouldInjectFhdSession(uri) &&
+  final injectFhd = !publicRegistration &&
+      _isFhdTarget(uri, config) &&
       _firstNonBlank([
         config.accessToken,
         config.sessionId,
         session.accessToken,
         session.sessionId,
       ]).isNotEmpty;
-  if (!injectMarket && !injectFhd) return;
-  await controller.runJavaScript(
+  if (!publicRegistration && !injectMarket && !injectFhd) return false;
+  final result = await controller.runJavaScriptReturningResult(
     _buildTokenInjectScript(
+      origin: uri.origin,
+      pathPrefix: _isFhdTarget(uri, config)
+          ? _normalizedBaseUri(config.baseUrl).path
+          : '/',
       accessToken: injectMarket
           ? _firstNonBlank([
               config.marketAccessToken,
@@ -266,6 +467,8 @@ Future<void> _injectMobileWebTokens(
               session.marketRefreshToken,
             ])
           : '',
+      prepareFhd: _isFhdTarget(uri, config),
+      fhdRefreshToken: injectFhd ? session.refreshToken : '',
       fhdAccessToken: injectFhd
           ? _firstNonBlank([
               config.accessToken,
@@ -276,64 +479,97 @@ Future<void> _injectMobileWebTokens(
           : '',
     ),
   );
+  return result == true || result == 'true';
 }
 
 String _buildTokenInjectScript({
   required String accessToken,
   required String refreshToken,
   required String fhdAccessToken,
+  String? origin,
+  String pathPrefix = '/',
+  bool prepareFhd = false,
+  String fhdRefreshToken = '',
 }) {
   String esc(String value) {
-    return value.replaceAll(r'\', r'\\').replaceAll("'", r"\'");
+    return value
+        .replaceAll(r'\', r'\\')
+        .replaceAll("'", r"\'")
+        .replaceAll('\n', r'\n')
+        .replaceAll('\r', r'\r')
+        .replaceAll('\u2028', r'\u2028')
+        .replaceAll('\u2029', r'\u2029');
   }
 
   final refreshLine = refreshToken.trim().isEmpty
-      ? ''
+      ? (accessToken.isEmpty
+          ? ''
+          : "localStorage.removeItem('modstore_refresh_token');")
       : "localStorage.setItem('modstore_refresh_token','${esc(refreshToken)}');";
-  final fhdLine = fhdAccessToken.trim().isEmpty
+  final fhdLine = fhdAccessToken.trim().isEmpty && !prepareFhd
       ? ''
-      : "document.cookie = 'session_id=${esc(fhdAccessToken)}; path=/; SameSite=Lax';";
+      : "document.cookie = 'session_id=${esc(fhdAccessToken)}; path=${esc(pathPrefix)}; SameSite=Lax';";
   return """
     (function() {
       try {
-        localStorage.setItem('modstore_token','${esc(accessToken)}');
+        ${origin == null ? '' : "if (location.origin !== '${esc(origin)}' || !location.pathname.startsWith('${esc(pathPrefix)}')) return false;"}
+        ${accessToken.isEmpty ? '' : "localStorage.setItem('modstore_token','${esc(accessToken)}');"}
         $refreshLine
         $fhdLine
+        ${!prepareFhd ? '' : fhdRefreshToken.isEmpty ? "localStorage.removeItem('xcagi_stability_refresh');" : "localStorage.setItem('xcagi_stability_refresh','${esc(fhdRefreshToken)}');"}
         window.__XCAGI_CLIENT__ = 'android';
         document.documentElement.classList.add('xcagi-client-android');
         window.dispatchEvent(new Event('xcagi-client-ready'));
-      } catch (e) {}
+        return true;
+      } catch (e) { return false; }
     })();
   """;
 }
 
-bool _shouldInjectMarketTokens(Uri uri) {
-  return uri.toString().toLowerCase().contains('xiu-ci.com');
+String _connectionKey(MobileSessionData session) =>
+    '${session.serverMode}|${session.fhdHost}|${session.localBaseUrl}';
+
+bool _sameOrigin(Uri a, Uri b) =>
+    (a.scheme == 'http' || a.scheme == 'https') &&
+    a.userInfo.isEmpty &&
+    a.scheme == b.scheme &&
+    a.host == b.host &&
+    a.port == b.port;
+
+bool _isFhdTarget(Uri uri, MobileApiConfig config) {
+  final base = _normalizedBaseUri(config.baseUrl);
+  return _sameOrigin(uri, base) &&
+      (uri.path == base.path.replaceFirst(RegExp(r'/$'), '') ||
+          uri.path.startsWith(base.path));
 }
+
+bool _isMarketTarget(Uri uri, MobileApiConfig config) =>
+    _sameOrigin(uri, Uri.parse(config.modstoreBaseUrl));
+
+bool _shouldInjectMarketTokens(Uri uri) =>
+    _isMarketTarget(uri, const MobileApiConfig()) &&
+    !_isFhdTarget(uri, const MobileApiConfig());
 
 const _mobileWebViewAllowedHosts = {'xiu-ci.com', 'www.xiu-ci.com'};
 
 bool _isMobileWebViewUrlAllowed(String rawUrl, {String? extraLanHost}) {
   final uri = Uri.tryParse(rawUrl);
-  final host = uri?.host.toLowerCase();
-  if (host == null || host.isEmpty) return false;
-  for (final allowed in _mobileWebViewAllowedHosts) {
-    if (host == allowed || host.endsWith('.$allowed')) return true;
+  if (uri == null ||
+      uri.userInfo.isNotEmpty ||
+      (uri.scheme != 'http' && uri.scheme != 'https')) {
+    return false;
   }
-  final lan = extraLanHost?.split(':').first.trim().toLowerCase();
-  if (lan != null && lan.isNotEmpty && host == lan) return true;
-  return host == '127.0.0.1' || host.startsWith('192.168.');
+  if (uri.scheme == 'https' && _mobileWebViewAllowedHosts.contains(uri.host)) {
+    return true;
+  }
+  if (extraLanHost == null) return false;
+  final base = Uri.tryParse(
+      extraLanHost.contains('://') ? extraLanHost : 'http://$extraLanHost');
+  return base != null && _sameOrigin(uri, base);
 }
 
-bool _shouldInjectFhdSession(Uri uri) {
-  if (_shouldInjectMarketTokens(uri)) return false;
-  final lower = uri.toString().toLowerCase();
-  return lower.startsWith('http://') &&
-      (lower.contains('127.0.0.1') ||
-          lower.contains('192.168.') ||
-          lower.contains('10.') ||
-          lower.contains('localhost'));
-}
+bool _shouldInjectFhdSession(Uri uri) =>
+    _isFhdTarget(uri, const MobileApiConfig());
 
 bool isMobileRegisterCompleteUrl(String rawUrl) {
   final uri = Uri.tryParse(rawUrl);

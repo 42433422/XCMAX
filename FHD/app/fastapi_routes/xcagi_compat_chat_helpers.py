@@ -187,7 +187,7 @@ from app.fastapi_routes.xcagi_compat_chat_models import (
 )
 
 _EXCEL_PATH_PATTERN = re.compile(
-    r"@?([^\s'\"<>]+?\.(?:xlsx|xlsm|xls))(?=$|[\s,，。.!！?？])",
+    r"@?([^\s'\"<>、，,;；:：]+?\.(?:xlsx|xlsm|xls))(?=$|[\s,，。.!！?？、;；])",
     re.IGNORECASE,
 )
 
@@ -353,6 +353,9 @@ def _sse_chunk_reports_running_tool(item: object) -> bool:
             and payload.get("type") == "tool_progress"
             and payload.get("phase") == "running"
         ):
+            return True
+        # 结构化工具事件同样证明执行仍在推进，需要重置对话预算。
+        if isinstance(payload, dict) and payload.get("type") == "tool_call":
             return True
     return False
 

@@ -67,6 +67,7 @@ def _all_mocks(**extra: Any):
     """
     defaults = {
         "verify_api_key": True,
+        "authorize_api_key": {"ok": True},
         "aiopen_manifest": _MOCK_MANIFEST_DATA,
         "invoke_tool": AsyncMock(return_value={"success": True, "message": "ok"}),
         "generate_api_key": {"key": "test-key", "label": ""},
@@ -92,6 +93,7 @@ def _all_mocks(**extra: Any):
     # in the real module, so we must wrap the value in a MagicMock).
     _wrap_as_return: set[str] = {
         "verify_api_key",
+        "authorize_api_key",
         "revoke_api_key",
         "list_api_keys",
         "aiopen_manifest",
@@ -312,14 +314,16 @@ def test_mcp_post_notification_unknown_method_returns_202(client):
 
 
 # ===========================================================================
-# 7. aiopen_mcp_get – verify_api_key fails → 401
+# 7. aiopen_mcp_get – authorize_api_key denies → 401
 #    Lines 359-360
 # ===========================================================================
 
 
 def test_mcp_get_unauthorized():
     """GET /api/aiopen/mcp with bad key must return 401."""
-    with _all_mocks(verify_api_key=False):
+    with _all_mocks(
+        authorize_api_key={"ok": False, "code": "AIOPEN_KEY_INVALID", "message": "invalid"}
+    ):
         c = _make_client()
         resp = c.get("/api/aiopen/mcp", headers={"X-AIOPEN-Key": "bad"})
     assert resp.status_code == 401

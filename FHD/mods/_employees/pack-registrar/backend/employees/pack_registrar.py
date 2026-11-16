@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from app.mod_sdk.employee_failure import _failed
+
 _SEMVER = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 
 
@@ -48,18 +50,6 @@ def run(payload: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
             "input.checks.sha256",
             "input.checks.quality_score",
         ],
-        "read_only": True,
-        "side_effects": [],
-    }
-
-
-def _failed(message: str, code: str) -> dict[str, Any]:
-    return {
-        "ok": False,
-        "status": "failed",
-        "summary": message,
-        "error_code": code,
-        "evidence": [],
         "read_only": True,
         "side_effects": [],
     }

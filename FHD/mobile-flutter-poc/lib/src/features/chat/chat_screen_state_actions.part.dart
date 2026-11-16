@@ -1,7 +1,88 @@
 part of 'chat_screen.dart';
 
 // 工具面板、页面导航、语音输入与 git 操作入口。
-abstract class _ChatStateActions extends _ChatStateMessaging {
+abstract class _ChatStateActions extends _ChatAttachmentActions {
+  Future<void> _openTools() async {
+    if (_showToolPanel) return;
+    FocusScope.of(context).unfocus();
+    setState(() => _showToolPanel = true);
+    try {
+      final scope = await _currentToolScope();
+      if (!mounted) return;
+      final duration = AppTheme.motionDuration(context, milliseconds: 220);
+      final action = await WoltModalSheet.show<_ChatToolAction>(
+        context: context,
+        modalTypeBuilder: (context) => MediaQuery.sizeOf(context).width < 600
+            ? WoltBottomSheetType(
+                transitionDuration: duration,
+                reverseTransitionDuration: duration,
+              )
+            : WoltDialogType(
+                transitionDuration: duration,
+                reverseTransitionDuration: duration,
+              ),
+        pageListBuilder: (sheetContext) => [
+          WoltModalSheetPage(
+            backgroundColor: AppTheme.colors(sheetContext).surface,
+            topBarTitle: const Text('聊天工具'),
+            isTopBarLayerAlwaysVisible: true,
+            trailingNavBarWidget: IconButton(
+              tooltip: '关闭工具',
+              onPressed: () => Navigator.of(sheetContext).pop(),
+              icon: const Icon(Icons.close),
+            ),
+            child: _ChatToolCardPanel(actions: [
+              for (final action in _toolActions())
+                _ChatToolAction(
+                  icon: action.icon,
+                  title: action.title,
+                  onTap: () => Navigator.of(sheetContext).pop(action),
+                ),
+            ]),
+          ),
+        ],
+      );
+      if (!mounted || action == null) return;
+      final current = await _currentToolScope();
+      if (!mounted) return;
+      if (current != scope) {
+        _showMessage('账号或连接已切换，请重新打开工具');
+        return;
+      }
+      action.onTap();
+    } catch (error) {
+      if (mounted) _showMessage('工具暂时不可用：${mobileErrorText(error)}');
+    } finally {
+      if (mounted) setState(() => _showToolPanel = false);
+    }
+  }
+
+  Future<Object?> _currentToolScope() async {
+    final client = _repository?.client;
+    if (client == null) return null;
+    final base = await client.resolveSessionBaseUrl();
+    final session = await client.loadSession();
+    return (
+      client,
+      client.authGeneration,
+      base,
+      session.userId,
+      session.username,
+      session.accountKind,
+      session.accessToken,
+      session.marketAccessToken,
+      session.sessionId,
+      session.relayAccountId,
+      session.relayTenantId,
+      session.relayDesktopId,
+      session.relaySessionToken,
+      session.serverMode,
+      session.fhdHost,
+      session.localBaseUrl,
+      session.relayBaseUrl
+    );
+  }
+
   Future<void> _startVoiceInput() async {
     setState(() => _showToolPanel = false);
     final granted = await const AndroidRecordAudioPermission().ensureGranted();
@@ -55,7 +136,7 @@ abstract class _ChatStateActions extends _ChatStateMessaging {
       return;
     }
 
-    setState(() => _showToolPanel = !_showToolPanel);
+    _openTools();
   }
 
   void _sendTaskDispatch() {
@@ -162,16 +243,6 @@ abstract class _ChatStateActions extends _ChatStateMessaging {
         onTap: _clearChat,
       ),
       _ChatToolAction(
-        icon: Icons.qr_code_scanner,
-        title: 'OCR 识别',
-        onTap: () {
-          setState(() => _showToolPanel = false);
-          Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const OcrScreen()));
-        },
-      ),
-      _ChatToolAction(
         icon: AppIcons.mic,
         title: '语音输入',
         onTap: _startVoiceInput,
@@ -243,6 +314,15 @@ abstract class _ChatStateActions extends _ChatStateMessaging {
   List<_ChatToolAction> _sharedToolActions() {
     return [
       _ChatToolAction(
+          icon: Icons.attach_file,
+          title: widget.conversation.type == ConversationType.pinnedAssistant
+              ? '添加文件'
+              : '文件交给小C',
+          onTap: _pickAttachments),
+      if (widget.conversation.type == ConversationType.pinnedAssistant)
+        _ChatToolAction(
+            icon: Icons.camera_alt, title: '拍照上传', onTap: _takeAttachmentPhoto),
+      _ChatToolAction(
         icon: Icons.group,
         title: '任务派工',
         onTap: _sendTaskDispatch,
@@ -263,7 +343,13 @@ abstract class _ChatStateActions extends _ChatStateMessaging {
   Widget? _composerTopContent(List<String> branches, String? branch) {
     final gitBar = _gitActionBar(branches, branch);
     final reply = _replyTo;
-    if (gitBar == null && reply == null) return null;
+    if (gitBar == null &&
+        reply == null &&
+        _attachments.isEmpty &&
+        _failedAttachments.isEmpty &&
+        !_uploading) {
+      return null;
+    }
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -273,6 +359,7 @@ abstract class _ChatStateActions extends _ChatStateMessaging {
             onCancel: () => setState(() => _replyTo = null),
           ),
         if (gitBar != null) gitBar,
+        _attachmentList(),
       ],
     );
   }

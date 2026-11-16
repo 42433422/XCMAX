@@ -11,7 +11,7 @@ export const hostViewGlob = {
   ...import.meta.glob('../views/AIEcosystemView.vue'),
   ...import.meta.glob('../views/OtherToolsView.vue'),
   ...import.meta.glob('../views/EmployeeWorkspaceView.vue'),
-  ...import.meta.glob('../views/WorkflowVisualizationView.vue'),
+  // 流程可视化（六部门编制图）属管理端专属，不进入通用/企业构建。
   ...import.meta.glob('../views/SettingsView.vue'),
   ...import.meta.glob('../views/ImMessengerView.vue'),
   ...import.meta.glob('../views/ModStore.vue'),

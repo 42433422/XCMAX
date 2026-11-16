@@ -108,6 +108,16 @@ def test_spoken_business_question_does_not_enter_defect_intake():
     assert looks_like_issue_report("请提交产品问题工单")
 
 
+def test_polite_request_to_submit_ticket_is_intake_not_usage_question():
+    # 语音里「你能不能给我提交个工单」是请求，不是询问怎么提交。
+    assert looks_like_issue_report(
+        "嗯，就是你能不能给我管理端去提交个工单啊？就是你给你们老板提个工单，"
+        "就是这个电话按钮，它就是个按钮，没跟底下那个感觉有点不太适合。"
+    )
+    # 真正询问用法时仍然不能自动建单。
+    assert not looks_like_issue_report("能不能告诉我怎么提交工单？")
+
+
 def test_report_classifier_does_not_escalate_usage_question_or_bad_json():
     client, _ = _client(
         '{"type":"usage_question","confidence":0.99,"expected":"",'
@@ -238,6 +248,26 @@ def test_intake_still_creates_work_order_when_client_version_is_unresolvable(
     assert result["state"] == "ROUTED", "版本未知不得阻断建单"
     assert calls[0]["product_version"] == "unknown"
     assert calls[1]["product_version"] == "unknown"
+
+
+def test_text_only_report_is_accepted_without_a_support_bundle(intake_env, monkeypatch):
+    """没有截图/日志也要建单：文字说明足够的缺陷先受理，附件只负责升级为完整工单。"""
+    from app.application import client_product_issue_intake as intake
+    from app.desktop_runtime import support_bundle
+
+    monkeypatch.setattr(support_bundle, "build_evidence_ref", lambda **_: None)
+    posted = []
+
+    async def remote(token, route, *, method="GET", payload=None):
+        posted.append((route, payload))
+        return {"success": True, "ticket_id": 31, "ticket_no": "CI-text-31"}
+
+    monkeypatch.setattr(intake, "custom_delivery_remote_json", remote)
+    result = _submit_issue(customer_message="主页那个电话按键不明显", actual="几乎看不清")
+    assert result["state"] == "RECEIVED"
+    assert result["owner_ticket_no"] == "CI-text-31"
+    assert result["missing_evidence"] == ["support_bundle"]
+    assert len(posted) == 1 and posted[0][0].endswith("issues/intake")
 
 
 def test_repeat_report_reuses_existing_ticket_when_market_refuses_replay(intake_env, monkeypatch):
@@ -470,6 +500,78 @@ def test_plain_support_request_is_received_before_model_or_business_query(
         )
     ]
     model.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "继续提交原来的工单。",
+        "重新提交之前的工单",
+        "再提交上次那个工单",
+    ],
+)
+def test_resuming_a_previous_ticket_is_intake(message):
+    assert looks_like_issue_report(message)
+
+
+def test_resumed_ticket_inherits_the_previous_customer_words():
+    from app.application.client_product_issue_intake import report_message_with_context
+
+    prior = "就是你们主页那个电话按键不是很明显，你去给他说一下。"
+    context = {
+        "conversation_id": "same-chat",
+        "recent_messages": [
+            {"role": "user", "content": prior},
+            {"role": "assistant", "content": "好的，我继续帮你提交。"},
+            {"role": "user", "content": "继续提交原来的工单。"},
+        ],
+    }
+    merged = report_message_with_context("继续提交原来的工单。", context)
+    assert prior in merged and "继续提交原来的工单。" in merged
+
+
+def test_registration_marker_does_not_scan_unbounded_repetition():
+    """登记确认语只在邻近出现；超长间隔不得让正则回溯到任意长度。"""
+    from app.application.client_product_issue_intake import _ALREADY_REGISTERED_RE
+
+    far_apart = "工单" + "甲" * 1500 + "已受理"
+    assert _ALREADY_REGISTERED_RE.search(far_apart) is None
+    assert _ALREADY_REGISTERED_RE.search("工单 A-1024 已受理") is not None
+
+
+def test_confirmation_turn_resolves_the_earlier_customer_words():
+    """「那你去提交一下呀 / 确认」本身不含问题，要能从会话前文找回工单正文。"""
+    from app.application.client_product_issue_intake import resolve_issue_report_message
+
+    context = {
+        "conversation_id": "same-chat",
+        "recent_messages": [
+            {"role": "user", "content": "就是你们主页那个电话按键不是很明显，你去给他说一下。"},
+            {"role": "assistant", "content": "好的，我继续帮你提交。"},
+            {"role": "user", "content": "确认,确认。"},
+        ],
+    }
+    resolved = resolve_issue_report_message(
+        "原始请求：那你去提交一下呀。\n用户补充：确认,确认。", context
+    )
+    assert "电话按键" in resolved
+
+
+def test_plan_request_text_is_the_last_resort():
+    from app.application.client_product_issue_intake import resolve_issue_report_message
+
+    resolved = resolve_issue_report_message(
+        "那你去提交一下呀。",
+        {},
+        {"request": "重新提交原「主页电话按键不明显」问题工单：用户已确认，上次执行失败。"},
+    )
+    assert resolved
+
+
+def test_a_turn_without_any_problem_description_stays_rejected():
+    from app.application.client_product_issue_intake import resolve_issue_report_message
+
+    assert resolve_issue_report_message("你好", {}, {"task": "打个招呼"}) == ""
 
 
 @pytest.mark.parametrize(

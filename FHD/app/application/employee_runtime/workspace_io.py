@@ -33,7 +33,7 @@ def workspace_directory(workspace: str | Path, directory: str | Path, *, create=
     root, target = Path(os.path.abspath(workspace)), Path(os.path.abspath(directory))
     target.relative_to(root)
     if _WINDOWS:
-        from app.application.shipment_excel_etl_security import (
+        from app.application.shipment_excel_elt_security import (
             _windows_open_anchor,
             _windows_open_relative,
         )
@@ -80,7 +80,7 @@ def workspace_file(parent_fd: int, name: str, flags: int, mode: str):
     if _WINDOWS:
         if flags != os.O_RDONLY or mode != "r":
             raise OSError(errno.ENOTSUP, "Windows workspace ledger writes are unavailable")
-        from app.application.shipment_excel_etl_security import _windows_open_relative
+        from app.application.shipment_excel_elt_security import _windows_open_relative
 
         fd = _windows_open_relative(
             parent_fd, component(name), directory=False, create=False, for_input=True
@@ -107,7 +107,7 @@ def workspace_file(parent_fd: int, name: str, flags: int, mode: str):
 
 def workspace_names(parent_fd: int) -> list[str]:
     if _WINDOWS:
-        from app.application.shipment_etl.directory_listing import list_directory_names
+        from app.application.shipment_elt.directory_listing import list_directory_names
 
         return list_directory_names(parent_fd)
     return os.listdir(parent_fd)

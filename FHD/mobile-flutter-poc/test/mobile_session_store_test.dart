@@ -84,6 +84,7 @@ void main() {
           },
           cachedModInfos: [
             {
+              '_mobile_cache_base_url': 'https://xiu-ci.com/fhd-api/',
               'id': 'avatar-mod',
               'name': '头像生成',
               'workflow_employees': [
@@ -243,7 +244,8 @@ void main() {
     () async {
       final store = MemoryMobileSessionStore();
       final client = MobileApiClient(
-        sessionStore: store, credentialCipher: const _FakeCredentialCipher(),
+        sessionStore: store,
+        credentialCipher: const _FakeCredentialCipher(),
       );
 
       await client.saveLoginPreferences(
@@ -392,7 +394,8 @@ void main() {
         ),
       );
       final client = MobileApiClient(
-        sessionStore: store, credentialCipher: const _FakeCredentialCipher(),
+        sessionStore: store,
+        credentialCipher: const _FakeCredentialCipher(),
       );
 
       await client.clearActiveAuth();
@@ -642,7 +645,7 @@ void main() {
   );
 
   test(
-    'MobileRepository loads cached normal chat like Flutter loadCachedChat',
+    'MobileRepository preserves but does not adopt legacy unscoped chat',
     () async {
       final store = MemoryMobileSessionStore(
         const MobileSessionData(
@@ -680,11 +683,9 @@ void main() {
         ),
       );
 
-      expect(messages, hasLength(2));
-      expect(messages.first.role, ChatRole.user);
-      expect(messages.first.body, '昨天说到哪了');
-      expect(messages.last.role, ChatRole.assistant);
-      expect(messages.last.body, '继续处理回访记录');
+      expect(messages, isEmpty);
+      expect((await store.load()).cachedChatMessages['pinned:assistant'],
+          hasLength(2));
     },
   );
 
@@ -838,12 +839,9 @@ void main() {
       expect(reply, 'Trae 中继回复');
       expect(api.lastRelayId, 'fresh-relay');
       expect(api.lastKind, 'trae.invoke');
-      expect(
-        api.lastPayload?['workspace_root'],
-        '/Users/a4243342/Desktop/XCMAX',
-      );
+      expect(api.lastPayload?.containsKey('workspace_root'), isFalse);
       final context = api.lastPayload?['context'] as Map<String, Object?>?;
-      expect(context?['workspace_root'], '/Users/a4243342/Desktop/XCMAX');
+      expect(context?.containsKey('workspace_root'), isFalse);
       expect(context?['conversation_id'], 'pinned:trae');
     },
   );
@@ -1024,54 +1022,60 @@ void main() {
       );
 
       expect(reply, '普通回复');
-      final cached =
-          await (await _sharedStore()).cachedMessages('pinned:assistant');
+      final cached = await (await _sharedStore()).cachedMessages(
+        'pinned:assistant',
+      );
       expect(cached, hasLength(2));
       expect(cached[0]['role'], 'user');
       expect(cached[1]['role'], 'assistant');
     },
   );
 
-  test('MobileRepository routes employee chat to mobile employee SSE',
-      () async {
-    final store = MemoryMobileSessionStore(const MobileSessionData(userId: 1));
-    final api = _EmployeeChatRoutingApi(store);
-    final repository = MobileRepository(client: api);
+  test(
+    'MobileRepository routes employee chat to mobile employee SSE',
+    () async {
+      final store = MemoryMobileSessionStore(
+        const MobileSessionData(userId: 1),
+      );
+      final api = _EmployeeChatRoutingApi(store);
+      final repository = MobileRepository(client: api);
 
-    final tokens = <String>[];
-    final reply = await repository.streamMessage(
-      conversation: const ConversationItem(
-        id: 'employee:admin-duty-employees:site-content-editor',
-        type: ConversationType.aiTask,
-        title: '内容运营员工',
-        subtitle: '',
-        timestampText: '',
-      ),
-      body: '更新首页文案',
-      userId: 7,
-      onToken: tokens.add,
-    );
+      final tokens = <String>[];
+      final reply = await repository.streamMessage(
+        conversation: const ConversationItem(
+          id: 'employee:admin-duty-employees:site-content-editor',
+          type: ConversationType.aiTask,
+          title: '内容运营员工',
+          subtitle: '',
+          timestampText: '',
+        ),
+        body: '更新首页文案',
+        userId: 7,
+        onToken: tokens.add,
+      );
 
-    expect(reply, '员工回复');
-    expect(tokens, ['员工']);
-    expect(api.genericChatCalled, isFalse);
-    expect(api.capturedMessage, '更新首页文案');
-    expect(api.capturedEmployeeId, 'site-content-editor');
-    expect(api.capturedModId, 'admin-duty-employees');
-    expect(
-      api.capturedConversationId,
-      'employee:admin-duty-employees:site-content-editor',
-    );
-    expect(api.capturedUserId, 7);
+      expect(reply, '员工回复');
+      expect(tokens, ['员工']);
+      expect(api.genericChatCalled, isFalse);
+      expect(api.capturedMessage, '更新首页文案');
+      expect(api.capturedEmployeeId, 'site-content-editor');
+      expect(api.capturedModId, 'admin-duty-employees');
+      expect(
+        api.capturedConversationId,
+        'employee:admin-duty-employees:site-content-editor',
+      );
+      expect(api.capturedUserId, 7);
 
-    final cached = await (await _sharedStore()).cachedMessages(
-        'employee:admin-duty-employees:site-content-editor');
-    expect(cached, hasLength(2));
-    expect(cached[0]['role'], 'user');
-    expect(cached[0]['body'], '更新首页文案');
-    expect(cached[1]['role'], 'assistant');
-    expect(cached[1]['body'], '员工回复');
-  });
+      final cached = await (await _sharedStore()).cachedMessages(
+        'employee:admin-duty-employees:site-content-editor',
+      );
+      expect(cached, hasLength(2));
+      expect(cached[0]['role'], 'user');
+      expect(cached[0]['body'], '更新首页文案');
+      expect(cached[1]['role'], 'assistant');
+      expect(cached[1]['body'], '员工回复');
+    },
+  );
 
   test(
     'MobileRepository enterprise conversations parse Flutter mobile mods',
@@ -1119,6 +1123,7 @@ void main() {
           accountKind: 'enterprise',
           cachedModInfos: [
             {
+              '_mobile_cache_base_url': 'https://xiu-ci.com/fhd-api/',
               'id': 'cached-avatar-mod',
               'name': '缓存头像包',
               'version': '1.0.0',
@@ -1166,6 +1171,7 @@ void main() {
           accountKind: 'enterprise',
           cachedModInfos: [
             {
+              '_mobile_cache_base_url': 'https://xiu-ci.com/fhd-api/',
               'id': 'cached-avatar-mod',
               'name': '缓存头像包',
               'workflow_employees': [
@@ -1186,6 +1192,7 @@ void main() {
           },
         ),
       );
+      await _seedScopedPreviews(store);
       final repository = MobileRepository(
         client: _FailingModsApi(store: store),
       );
@@ -1215,6 +1222,7 @@ void main() {
           accountKind: 'admin',
           cachedModInfos: [
             {
+              '_mobile_cache_base_url': 'https://xiu-ci.com/fhd-api/',
               'id': 'admin-duty',
               'name': '系统 AI 员工',
               'workflow_employees': [
@@ -1268,6 +1276,7 @@ void main() {
           accountKind: 'enterprise',
           cachedModInfos: [
             {
+              '_mobile_cache_base_url': 'https://xiu-ci.com/fhd-api/',
               'id': 'sort-mod',
               'name': '排序员工包',
               'workflow_employees': [
@@ -1298,6 +1307,7 @@ void main() {
           },
         ),
       );
+      await _seedScopedPreviews(store);
       final repository = MobileRepository(
         client: _FailingModsApi(store: store),
       );
@@ -1333,6 +1343,7 @@ void main() {
           },
         ),
       );
+      await _seedScopedPreviews(store);
       final repository = MobileRepository(
         client: _FailingModsApi(store: store),
       );
@@ -1395,6 +1406,7 @@ void main() {
           accountKind: 'enterprise',
           cachedModInfos: [
             {
+              '_mobile_cache_base_url': 'https://xiu-ci.com/fhd-api/',
               'id': 'cached-avatar-mod',
               'name': '缓存头像包',
               'workflow_employees': [
@@ -1446,6 +1458,7 @@ void main() {
           accountKind: 'admin',
           cachedModInfos: [
             {
+              '_mobile_cache_base_url': 'https://xiu-ci.com/fhd-api/',
               'id': 'admin-duty',
               'workflow_employees': [
                 {
@@ -1498,6 +1511,46 @@ void main() {
       expect(api.mobileModsCalls, 1);
       expect(employees.single.employeeId, 'avatar-generation-employee');
       expect(employees.single.name, '头像生成员工');
+    },
+  );
+
+  test(
+    'MobileRepository AI employee page prefers platform employee directory',
+    () async {
+      final api = _EmployeeDirectoryApi();
+      final repository = MobileRepository(client: api);
+
+      final employees = await repository.loadAiEmployees();
+
+      expect(api.mobileModsCalls, 0);
+      expect(employees.map((employee) => employee.employeeId), [
+        'excel-generate-employee',
+        'word-full-read-employee',
+      ]);
+      expect(employees.first.name, 'Excel 生成员');
+    },
+  );
+
+  for (final status in [401, 403]) {
+    test('employee directory denial $status does not fall back to old roster',
+        () async {
+      final api = _EmployeeDirectoryApi()..deniedStatus = status;
+      await expectLater(MobileRepository(client: api).loadAiEmployees(),
+          throwsA(isA<MobileApiException>()));
+      expect(api.mobileModsCalls, 0);
+    });
+  }
+
+  test(
+    'authoritative empty employee directory clears cached employees',
+    () async {
+      final api = _EmployeeDirectoryApi();
+      final repository = MobileRepository(client: api);
+      expect(await repository.loadAiEmployees(), hasLength(2));
+      api.empty = true;
+      expect(await repository.loadAiEmployees(), isEmpty);
+      expect(api.mobileModsCalls, 0);
+      expect(api.cached, isEmpty);
     },
   );
 
@@ -1914,6 +1967,16 @@ class _EnterpriseModsApi extends MobileApiClient {
       : super(sessionStore: store ?? MemoryMobileSessionStore());
 
   @override
+  Future<MobileEnvelope<List<Map<String, Object?>>>> employeeDirectory() async {
+    return const MobileEnvelope<List<Map<String, Object?>>>(
+      success: false,
+      message: 'offline',
+      data: null,
+      raw: {'success': false, 'message': 'offline'},
+    );
+  }
+
+  @override
   Future<MobileEnvelope<Map<String, Object?>>> mobileMods() async {
     return const MobileEnvelope<Map<String, Object?>>(
       success: true,
@@ -1949,9 +2012,89 @@ class _EnterpriseModsApi extends MobileApiClient {
   }
 }
 
+class _EmployeeDirectoryApi extends MobileApiClient {
+  _EmployeeDirectoryApi() : super(sessionStore: MemoryMobileSessionStore());
+
+  var mobileModsCalls = 0;
+  var empty = false;
+  int? deniedStatus;
+  List<Map<String, Object?>> cached = [];
+
+  @override
+  Future<void> cacheModInfos(
+    List<Map<String, Object?>> mods, {
+    int? authGeneration,
+    MobileSessionData? expectedSession,
+    String? expectedBaseUrl,
+  }) async {
+    cached = mods;
+  }
+
+  @override
+  Future<MobileSessionData> loadSession({bool forceReload = false}) async {
+    return const MobileSessionData(accountKind: 'enterprise');
+  }
+
+  @override
+  Future<MobileEnvelope<List<Map<String, Object?>>>> employeeDirectory() async {
+    if (deniedStatus != null) {
+      throw MobileApiException(
+          statusCode: deniedStatus!, message: 'denied', body: {});
+    }
+    if (empty) {
+      return const MobileEnvelope(
+        success: true,
+        message: '',
+        data: [],
+        raw: {},
+      );
+    }
+    return const MobileEnvelope<List<Map<String, Object?>>>(
+      success: true,
+      message: '',
+      data: [
+        {
+          'pack_id': 'excel-generate-employee',
+          'label': 'Excel 生成员',
+          'description': '生成 Excel 文件',
+          'runtime_kind': 'direct_python',
+        },
+        {
+          'pack_id': 'word-full-read-employee',
+          'label': 'Word 全量读取员',
+          'description': '读取 Word 全文',
+          'runtime_kind': 'direct_python',
+        },
+      ],
+      raw: {'success': true},
+    );
+  }
+
+  @override
+  Future<MobileEnvelope<Map<String, Object?>>> mobileMods() async {
+    mobileModsCalls += 1;
+    return const MobileEnvelope<Map<String, Object?>>(
+      success: false,
+      message: 'unused',
+      data: {},
+      raw: {'success': false},
+    );
+  }
+}
+
 class _FailingModsApi extends MobileApiClient {
   _FailingModsApi({required MobileSessionStore store})
       : super(sessionStore: store);
+
+  @override
+  Future<MobileEnvelope<List<Map<String, Object?>>>> employeeDirectory() async {
+    return const MobileEnvelope<List<Map<String, Object?>>>(
+      success: false,
+      message: 'offline',
+      data: null,
+      raw: {'success': false, 'message': 'offline'},
+    );
+  }
 
   @override
   Future<MobileEnvelope<Map<String, Object?>>> mobileMods() async {
@@ -2008,5 +2151,18 @@ class _FakeCredentialCipher extends PlatformCredentialCipher {
     if (stored.isEmpty) return '';
     if (!stored.startsWith('enc:v1:')) return stored;
     return stored.substring('enc:v1:'.length);
+  }
+}
+
+Future<void> _seedScopedPreviews(MemoryMobileSessionStore sessions) async {
+  final store = await _sharedStore();
+  for (final entry in (await sessions.load()).conversationListStates.entries) {
+    final text = '${entry.value['last_message_preview']}';
+    await store.appendMessage(entry.key, {
+      'id': entry.key,
+      'role': text.startsWith('我: ') ? 'user' : 'assistant',
+      'body': text.replaceFirst(RegExp(r'^我: '), ''),
+      'ts': entry.value['last_message_at'],
+    });
   }
 }

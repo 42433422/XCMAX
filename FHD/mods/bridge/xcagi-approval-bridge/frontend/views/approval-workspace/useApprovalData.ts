@@ -21,6 +21,7 @@ export function useApprovalData(deps: { viewDetails: (requestId: number) => Prom
   // 请求列表
   const pendingRequests = ref<ApprovalRequest[]>([])
   const initiatedRequests = ref<ApprovalRequest[]>([])
+  const loading = ref(false)
   const fullListType = ref<'pending' | 'initiated' | ''>('')
   const fullListPage = ref(1)
   const fullListPageCount = ref(1)
@@ -102,6 +103,7 @@ export function useApprovalData(deps: { viewDetails: (requestId: number) => Prom
     if (!active || !userId) return
     const isCurrent = () => request === dashboardRequest && isCurrentAccount(scope) && userId === getCurrentUserId()
 
+    loading.value = true
     try {
       const [pendingRes, myRes] = await Promise.all([
         approvalApi.getPendingApprovals(userId),
@@ -134,6 +136,8 @@ export function useApprovalData(deps: { viewDetails: (requestId: number) => Prom
       if (isCurrent() && fullListType.value) await loadFullListPage()
     } catch (error) {
       if (isCurrent()) fullListError.value = error instanceof Error ? error.message : '审批列表加载失败，请重试'
+    } finally {
+      if (isCurrent()) loading.value = false
     }
   }
 
@@ -148,7 +152,7 @@ export function useApprovalData(deps: { viewDetails: (requestId: number) => Prom
     } catch (error) {
       if (isCurrent()) fullListError.value = error instanceof Error ? error.message : '登录会话无效，请重新登录后重试'
     } finally {
-      if (isCurrent()) fullListLoading.value = false
+      if (isCurrent()) { fullListLoading.value = false; loading.value = false }
     }
   }
 
@@ -160,13 +164,14 @@ export function useApprovalData(deps: { viewDetails: (requestId: number) => Prom
     pendingRequests.value = initiatedRequests.value = []
     stats.value = { pending: 0, initiated: 0, approved: 0, rejected: 0 }
     deepLinkOpened.value = false
+    loading.value = false
     deps.closeDetails()
     void reloadAccount()
   }, { flush: 'sync' })
   onScopeDispose(() => { active = false; fullListRequest++; dashboardRequest++; sessionRequest++ })
 
   return {
-    stats, pendingRequests, initiatedRequests,
+    stats, pendingRequests, initiatedRequests, loading,
     fullListType, fullListPage, fullListPageCount, fullListLoading, fullListError,
     visiblePendingRequests, visibleInitiatedRequests, viewAll, loadFullListPage, closeFullList,
     currentUserId, deepLinkOpened, getCurrentUserId, reloadAccount, loadData,

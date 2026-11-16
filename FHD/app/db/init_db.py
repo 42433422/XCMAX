@@ -310,6 +310,15 @@ def ensure_erp_bootstrap(
     _ensure_orm_group("erp", engine, database_url, swallow_errors)
 
 
+def ensure_local_file_bootstrap(
+    engine: Engine | None = None,
+    *,
+    database_url: str | None = None,
+    swallow_errors: bool = True,
+) -> None:
+    _ensure_orm_group("local_file", engine, database_url, swallow_errors)
+
+
 def ensure_postgresql_auth_bootstrap(
     engine: Engine | None = None, *, database_url: str | None = None
 ) -> None:
@@ -354,6 +363,7 @@ def ensure_runtime_auth_bootstrap(
             ensure_employee_run_log_bootstrap,
             ensure_ai_conversation_bootstrap,
             ensure_mobile_push_bootstrap,
+            ensure_local_file_bootstrap,
         ),
         sqlite_elt=ensure_sqlite_elt_bootstrap,
         erp=ensure_erp_bootstrap,

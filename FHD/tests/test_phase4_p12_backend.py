@@ -115,9 +115,9 @@ def test_parse_user_id() -> None:
 
 def test_init_defaults() -> None:
     a = ModstorePlatformAdapter()
-    assert a.platform_url == "http://localhost:8000"
+    assert a.platform_url == "https://xiu-ci.com"
     assert a.default_provider == "xiaomi"
-    assert a.default_model == "mimo-v2.5-pro"
+    assert a.default_model == "mimo-v2.6-flash"
     assert a.auth_token == ""
 
 
@@ -162,7 +162,7 @@ def test_resolve_provider_model_defaults() -> None:
     a = ModstorePlatformAdapter(platform_url="http://h")
     prov, model = a._resolve_provider_model()
     assert prov == "xiaomi"
-    assert model == "mimo-v2.5-pro"
+    assert model == "mimo-v2.6-flash"
 
 
 def test_resolve_provider_model_explicit() -> None:

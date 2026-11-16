@@ -20,6 +20,11 @@ def capture(monkeypatch):
     for route in (ai_open, ai_qclaw):
         monkeypatch.setattr(route, "create_chat_trace_run", recorder)
         monkeypatch.setattr(route, "verify_api_key", lambda key: key == "fixture-key")
+    monkeypatch.setattr(
+        ai_open,
+        "authorize_api_key",
+        lambda key, tool="": {"ok": key == "fixture-key", "code": "", "message": ""},
+    )
     monkeypatch.setattr(ai_open, "invoke_tool", AsyncMock(return_value={"success": True}))
     monkeypatch.setattr(ai_open, "AIOPEN_STATE", {})
     monkeypatch.setattr(ai_qclaw, "_QCLOW_RUNTIME_STATE", {})

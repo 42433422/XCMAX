@@ -79,6 +79,23 @@ class WorkflowToolDispatcher:
             return None
 
 
+def _resolve_user_message(runtime_context: dict, params: dict) -> str:
+    """审批恢复执行时运行上下文可能没带原始请求；退回计划节点里的问题描述。
+
+    问题上报类工具用这条消息做前置判断，空字符串会把合法请求误判为
+    “未明确提出产品问题”，因此必须按「原始消息 → 计划参数」的顺序兜底。
+    """
+    for key in ("message", "user_message", "user_request"):
+        text = str(runtime_context.get(key) or "").strip()
+        if text:
+            return text
+    for key in ("request", "message", "description", "task"):
+        text = str(params.get(key) or "").strip()
+        if text:
+            return text
+    return ""
+
+
 def execute_registered_workflow_tool(tool_id: str, action: str, params: dict | None = None) -> dict:
     """Authorize and execute registered tools at the application composition boundary."""
     from app.application.workflow.tool_profile import resolve_tool_execution_profile
@@ -121,7 +138,7 @@ def execute_registered_workflow_tool(tool_id: str, action: str, params: dict | N
                 "message": "当前登录身份无权在此客户数据范围执行操作",
             }
     profile = resolve_tool_execution_profile(runtime_context)
-    user_message = str(runtime_context.get("message") or "").strip()
+    user_message = _resolve_user_message(runtime_context, params)
     router = _REGISTERED_WORKFLOW_ROUTERS.get(tool_id)
     if router is not None:
         from app.infrastructure.tenant_scope import owned_tenant_scope

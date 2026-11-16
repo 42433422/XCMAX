@@ -86,10 +86,9 @@ describe('normalizeDutyRosterLoopStatus', () => {
     expect(s.extraCount).toBe(1)
   })
 
-  it('uses fallback planned count when missing', () => {
-    const s = normalizeDutyRosterLoopStatus({})
-    // plannedFallback = ALL_PLANNED_YUANGON_PKG_IDS.size
-    expect(s.plannedCount).toBeGreaterThan(0)
+  it('uses the caller-provided planned count when missing', () => {
+    expect(normalizeDutyRosterLoopStatus({}).plannedCount).toBe(0)
+    expect(normalizeDutyRosterLoopStatus({}, 7).plannedCount).toBe(7)
   })
 
   it('computes catalogRegisteredCount fallback from planned - missing', () => {
@@ -244,7 +243,7 @@ describe('normalizeDutyRosterLoopStatus', () => {
         planned_count: 'not-a-number',
       },
     })
-    expect(s.plannedCount).toBeGreaterThan(0) // fallback
+    expect(s.plannedCount).toBe(0) // 不再内置宿主编制，缺省为 0
   })
 
   it('handles employee_scheduler alias for scheduler', () => {

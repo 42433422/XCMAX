@@ -3,8 +3,8 @@
   "llm_verified": false,
   "status": "UNVERIFIED",
   "reason": "XCAGI_SKIP_INTENT_LLM=1（规则引擎口径），本报告不构成 LLM 实测验收",
-  "run_id": "42604721666",
-  "sha": "dc5f2d3eaaf8f929db3a5a9490ffaa1af47001a6",
+  "run_id": "43850727859",
+  "sha": "a018ae4b793629c0d61978f64bcdb043e2d1c1e2",
   "actor": "42433422",
-  "observed_at": "2026-11-09T18:57:12.645131+08:00"
+  "observed_at": "2026-11-16T18:41:16.463750+08:00"
 }

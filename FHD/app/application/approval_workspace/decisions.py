@@ -173,16 +173,27 @@ class ApprovalDecisions:
                 handed_off = execution_handed_off(workflow_execution)
                 if handed_off:
                     waiting_approval = bool((workflow_execution or {}).get("waiting_approval"))
-                    handoff_message = (
-                        "当前步骤已获批，后续步骤等待审批"
-                        if waiting_approval
-                        else "审批已通过，执行已交给调度器"
-                    )
+                    waiting_decision = bool((workflow_execution or {}).get("waiting_user_decision"))
+                    if waiting_approval:
+                        handoff_message = "当前步骤已获批，后续步骤等待审批"
+                    elif waiting_decision:
+                        handoff_message = (
+                            str((workflow_execution or {}).get("message") or "").strip()
+                            or "审批已通过，还需要你确认后才能继续导入。"
+                        )
+                    else:
+                        handoff_message = "审批已通过，执行已交给调度器"
                     persist_outcome(
                         req,
                         status=req.status,
                         success=False,
-                        code="waiting_approval" if waiting_approval else "queued",
+                        code=(
+                            "waiting_approval"
+                            if waiting_approval
+                            else "waiting_user_decision"
+                            if waiting_decision
+                            else "queued"
+                        ),
                         message=handoff_message,
                         workflow_executed=False,
                     )
@@ -404,16 +415,29 @@ class ApprovalDecisions:
             # The restored database may predate this request; merge its identity after restore.
             db.expunge(req)
             req = db.merge(req)
+        include_waiting_decision = False
         status_before = req.status
         safe_code, safe_message = bounded_outcome["code"], bounded_outcome["message"]
+        # 工具超时但结果未知：审批放行有效，不能报「执行失败、审批已取消」。
+        uncertain = safe_code == "outcome_unknown" and not _execution_success
         if handed_off:
             waiting_approval = bool((workflow_execution or {}).get("waiting_approval"))
-            handoff_message = (
-                "当前步骤已获批，后续步骤等待审批"
+            waiting_decision = bool((workflow_execution or {}).get("waiting_user_decision"))
+            if waiting_approval:
+                handoff_message = "当前步骤已获批，后续步骤等待审批"
+            elif waiting_decision:
+                handoff_message = str((workflow_execution or {}).get("message") or "").strip() or (
+                    "审批已通过，还需要你确认后才能继续导入。"
+                )
+            else:
+                handoff_message = "审批已通过，执行已交给调度器"
+            handoff_code = (
+                "waiting_approval"
                 if waiting_approval
-                else "审批已通过，执行已交给调度器"
+                else "waiting_user_decision"
+                if waiting_decision
+                else "queued"
             )
-            handoff_code = "waiting_approval" if waiting_approval else "queued"
             persist_outcome(
                 req,
                 status=ApprovalStatus.APPROVED.value,
@@ -433,10 +457,11 @@ class ApprovalDecisions:
                 "nodes_executed": 0,
                 "nodes_total": 1,
             }
+            include_waiting_decision = waiting_decision
         else:
             persist_outcome(req, **bounded_outcome)
             req.status = bounded_outcome["status"]
-        if _execution_success or handed_off:
+        if _execution_success or handed_off or uncertain:
             req.approved_at = datetime.now()
             req.approved_by = actor
             req.approved_by_name = approver_name
@@ -499,7 +524,10 @@ class ApprovalDecisions:
         if _execution_success and notification is not None:
             self.effects.notify(*notification)
         data = self.view(req, include_records=True)
-        data["workflow_execution"] = bounded_outcome
+        data["workflow_execution"] = {
+            **bounded_outcome,
+            **({"waiting_user_decision": True} if include_waiting_decision else {}),
+        }
         if handed_off:
             data["workflow_execution"]["execution_accepted"] = True
             if (workflow_execution or {}).get("waiting_approval"):
@@ -512,6 +540,16 @@ class ApprovalDecisions:
                     "accepted": True,
                     "data": data,
                     "message": handoff_message,
+                },
+                status_code=202,
+            )
+        if uncertain:
+            return JSONResponse(
+                {
+                    "success": False,
+                    "accepted": True,
+                    "data": data,
+                    "message": bounded_outcome["message"],
                 },
                 status_code=202,
             )

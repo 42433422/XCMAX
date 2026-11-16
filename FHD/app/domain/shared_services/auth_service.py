@@ -124,18 +124,18 @@ class AuthService(NeuroEventPublisherMixin):
                 )
             if owner_permission_for_user(user) and "tenant.manage_roles" not in codes:
                 codes.append("tenant.manage_roles")
-            return codes
+            return list(codes)
 
     def has_permission(self, user: User, permission_code: str) -> bool:
         from app.db.bootstrap.guarded import enabled
 
+        needed = str(permission_code or "")
         if enabled():
-            return permission_code in self.get_user_permissions(user)
+            return needed in self.get_user_permissions(user)
         if user.role == "admin" and user.tier == "admin" and user.tenant_id is None:
             return True
 
-        perms = self.get_user_permissions(user)
-        return permission_code in perms
+        return needed in self.get_user_permissions(user)
 
     def change_password(self, user_id: int, old_password: str, new_password: str) -> dict[str, Any]:
         with get_db() as db:

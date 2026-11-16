@@ -67,7 +67,7 @@
     <input
       ref="fileInputRef"
       type="file"
-      accept=".xlsx,.xlsm,image/jpeg,image/png,image/webp,image/gif,.pdf,application/pdf,.log,.txt,text/plain"
+      :accept="intakeAcceptAttribute('context', 'analysis')"
       multiple
       style="display: none"
       @change="onFileChange"
@@ -113,6 +113,7 @@
 import { ref, watch, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApprovalMode } from '@/composables/useApprovalMode'
+import { intakeAcceptAttribute } from '@/utils/documentIntake'
 
 useI18n()
 

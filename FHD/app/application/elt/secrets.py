@@ -44,7 +44,7 @@ def read_webhook_secret(secret_ref: str | None) -> str:
     if not ref:
         return ""
     # 仅供部署时注入轮换密钥，不允许客户端指定任意环境变量名。
-    if ref.startswith("env:FHD_ETL_WEBHOOK_SECRET_"):
+    if ref.startswith("env:FHD_ELT_WEBHOOK_SECRET_"):
         value = os.environ.get(ref[4:], "")
         if value:
             return value

@@ -63,7 +63,7 @@ jobs:
           upload: ${{ matrix.language != 'python' }}
           output: codeql-sarif-out
 
-      - name: Strip known-safe ETL dir_fd path-injection FPs (python)
+      - name: Strip known-safe ELT dir_fd path-injection FPs (python)
         if: (github.event_name != 'pull_request' || steps.paths.outputs.run == 'true') && matrix.language == 'python'
         run: |
           set -euo pipefail
@@ -74,7 +74,7 @@ jobs:
             exit 1
           fi
           for f in "${files[@]}"; do
-            python3 .github/codeql/strip_etl_dir_fd_path_injection_fps.py "$f"
+            python3 .github/codeql/strip_elt_dir_fd_path_injection_fps.py "$f"
           done
 
       - name: Upload CodeQL SARIF (python, filtered)

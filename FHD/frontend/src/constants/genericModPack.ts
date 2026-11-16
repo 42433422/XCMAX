@@ -1,3 +1,4 @@
+import navigationCatalog from '../../../config/core_navigation.json'
 /** 通用宿主发行包：安装后建议自动进入平台壳模式 */
 /** 客户 Mod 双轨策略优先 GET /api/system/host-profile → client_mod_policies */
 
@@ -160,30 +161,7 @@ export function keepHostNavKeyVisibleWhenModSidebarFacetSuppressed(
 }
 
 /** Mod 菜单 id → 宿主 core/trailing 槽位（已占用则不再插入重复项） */
-export const MOD_MENU_ID_TO_HOST_NAV_KEY: Readonly<Record<string, string>> = {
-  'mod-enterprise-customer-service': 'enterprise-customer-service',
-  'mod-internal-customer-service': 'internal-customer-service',
-  'mod-approval-hub': 'approval-hub',
-  'mod-workflow-visualization': 'workflow-visualization',
-  'mod-planner-chat': 'chat',
-  'mod-planner-ai-ecosystem': 'ai-ecosystem',
-  'mod-erp-products': 'products',
-  'mod-erp-purchase': 'purchase',
-  'mod-erp-customers': 'customers',
-  'mod-erp-orders': 'orders',
-  'mod-erp-shipment-records': 'shipment-records',
-  'mod-erp-materials': 'materials',
-  'mod-erp-traditional-mode': 'traditional-mode',
-  'mod-erp-business-docking': 'business-docking',
-  'mod-erp-data-sources': 'data-sources',
-  'mod-erp-print': 'print',
-  'mod-erp-printer-list': 'printer-list',
-  'mod-erp-template-preview': 'template-preview',
-  'mod-office-tools': 'tools',
-  'mod-office-other-tools': 'workflow-employee-space',
-  'mod-kitten-finance': 'kitten-finance',
-  'mod-lan-gate': 'lan-gate',
-}
+export const MOD_MENU_ID_TO_HOST_NAV_KEY: Readonly<Record<string, string>> = navigationCatalog.mod_aliases
 
 /** 归一化侧栏 key（兼容历史错误的 mod-mod- 双前缀） */
 export function normalizeModSidebarNavKey(key: string): string {

@@ -46,7 +46,7 @@
             data-tutorial-id="top-bar-settings"
             @click="openSettings"
           >
-            <i class="fa fa-cog" aria-hidden="true"></i>
+            <img class="top-bar-settings-btn__art" :src="settingsIconSrc" alt="" />
           </button>
           <TopAssistantFloat />
           <GlobalTaskCenter />
@@ -60,7 +60,11 @@
       </div>
     </div>
     <DocumentPreviewPictureInPicture />
-    <FloatingChatAssistant :visible="shouldShowFloatingChatAssistant" :male-avatar="adminConsoleSpa" />
+    <FloatingChatAssistant
+      :visible="shouldShowFloatingChatAssistant"
+      :male-avatar="adminConsoleSpa"
+      :expand-call-panel="!isChatSidebarActive(currentRouteName, route)"
+    />
     <VirtualCursor />
     <OnboardingTutorial />
     <TutorialOverlay v-if="!onboardingTutorialStore.active" />
@@ -88,6 +92,7 @@ import { resolveCoreNavLabel, INDUSTRY_MENU_LABELS, MENU_DEFAULT_NAMES } from '@
 import { isChatSidebarActive, normalizeSidebarActiveKey } from '@/utils/sidebarActiveKey'
 import { SIDEBAR_ROUTE_NAME_MAP } from '@/constants/sidebarRouteNameMap'
 import { isUnmatchedRoute, routeChunkErrorPath } from '@/utils/routeLoadState'
+import settingsIconSrc from '@/assets/icons/settings.png'
 import { navigateFromSidebarKey } from '@/utils/sidebarNavigation'
 import { clearAppNavIntentIfCurrent, getActiveAppNavIntent } from '@/utils/appNavigation'
 import RouteLoadingFeedback from './shell/RouteLoadingFeedback.vue'

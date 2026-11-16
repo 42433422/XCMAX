@@ -17,6 +17,7 @@ import api from '@/api'
 import { showAppToast } from '@/composables/useAppToast'
 import { productErrorMessage } from '@/utils/productErrorMessage'
 import { fetchEmployeeSsot } from '@/utils/platformShellApi'
+import { fetchEmployeeDirectory, type DirectoryEmployee } from '@/api/employeeDirectory'
 import { dutyEmployeesFromEmployeeSsot, type EmployeeSsotPayload } from '@/utils/employeeSsotContacts'
 import { type ImContact, type ImMessage } from '@/api/im'
 import {
@@ -357,10 +358,37 @@ export function useSuperEmployeeDispatch(params: UseSuperEmployeeDispatchParams)
     }
   }
 
+  function directoryEmployeeToDutyEntry(row: DirectoryEmployee): DutyEmployeeEntry {
+    const label = String(row.label || row.pack_id)
+    const department = String(row.department || '').trim()
+    return {
+      id: row.pack_id,
+      display_name: label,
+      username: row.pack_id,
+      subtitle: `${department || 'AI 员工'} · 可执行`,
+      description: String(row.description || ''),
+      area: department,
+      status: 'on_duty',
+      api_base_path: `/api/admin/employees/${row.pack_id}`,
+      phone_channel: 'admin-duty',
+      avatar_text: label.slice(0, 1),
+      is_duty_employee_entry: true,
+    }
+  }
+
   async function loadDutyEmployees(): Promise<void> {
     if (!isAdminCustomerServiceConsole.value) {
-      // The local roster is descriptive metadata, not proof that an employee is
-      // installed. Until SSOT answers, expose the curated roles as planned.
+      // 企业端员工通讯录与智能对话/员工工作台同源：统一员工目录。
+      try {
+        const rows = await fetchEmployeeDirectory({ force: true })
+        dutyEmployees.value = uniqueDutyEmployees(rows.map(directoryEmployeeToDutyEntry))
+        imApiReachable.value = true
+        return
+      } catch (e) {
+        console.warn('[im] employee-directory failed:', e)
+      }
+    }
+    if (!isAdminCustomerServiceConsole.value) {
       dutyEmployees.value = curatedDutyEmployees([])
     }
     if (!dutyEmployees.value.length) {

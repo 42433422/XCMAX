@@ -265,7 +265,7 @@ def test_template_call_passes_configured_timeout_to_http(monkeypatch, setting, e
     from app.application.elt import llm_session_provider
     from app.application.reviewed_excel_template import _template_platform_complete
 
-    monkeypatch.setenv("FHD_ETL_LLM", "on")
+    monkeypatch.setenv("FHD_ELT_LLM", "on")
     monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "https://synthetic.invalid")
     monkeypatch.delenv("FHD_TEMPLATE_LLM_TIMEOUT_SECONDS", raising=False)
     if setting is not None:
@@ -362,7 +362,7 @@ def test_audited_stream_keeps_provider_body_and_parsed_result(monkeypatch):
         "AsyncClient",
         lambda **kwargs: real_client(**(kwargs | {"transport": Transport()})),
     )
-    monkeypatch.setenv("FHD_ETL_LLM", "on")
+    monkeypatch.setenv("FHD_ELT_LLM", "on")
     monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "https://synthetic.invalid")
 
     def session_provider(*, timeout_seconds):

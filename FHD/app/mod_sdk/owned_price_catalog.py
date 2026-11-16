@@ -45,7 +45,7 @@ CATALOG_MODELS = (
 class CatalogPurpose(Enum):
     """Server-selected capability, never parsed from request/runtime context."""
 
-    ETL = "etl"
+    ELT = "elt"
     READ = "read"
 
 
@@ -57,15 +57,15 @@ def catalog_path(tenant_id: str, mod_id: str, *, mixed=False) -> Path:
     )
 
 
-def _context(principal, *, provisioning=False, mixed=False, purpose=CatalogPurpose.ETL):
+def _context(principal, *, provisioning=False, mixed=False, purpose=CatalogPurpose.ELT):
     from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context
     from app.infrastructure.auth.agent_principal import AgentPrincipal
 
     if not isinstance(principal, AgentPrincipal) or not isinstance(purpose, CatalogPurpose):
         raise ValueError("authenticated owner required")
-    required = {"etl.execute", "product.edit"}
+    required = {"elt.execute", "product.edit"}
     if mixed:
-        required |= {"dataset.read", "dataset.write", "etl.template.manage"}
+        required |= {"dataset.read", "dataset.write", "elt.template.manage"}
     if purpose is CatalogPurpose.READ:
         if provisioning:
             raise ValueError("read purpose cannot provision a catalog")
@@ -101,7 +101,7 @@ def validate_price_catalog(conn: sqlite3.Connection, *, mixed=False):
         for kind, name, sql in conn.execute(
             "SELECT type,name,sql FROM main.sqlite_master WHERE sql IS NOT NULL "
             "AND substr(name,1,7) != 'sqlite_' AND NOT "
-            "(type='table' AND name IN ('etl_owned_source','etl_database_generation'))"
+            "(type='table' AND name IN ('elt_owned_source','elt_database_generation'))"
         )
     }
     if (
@@ -146,7 +146,7 @@ def validate_catalog_scope(
     source: generations.OwnedSource,
     *,
     mixed=False,
-    purpose=CatalogPurpose.ETL,
+    purpose=CatalogPurpose.ELT,
 ):
     """Recheck scope within the caller's real target lock; never recursively acquire it."""
     generations._owned_lock(target, None)
@@ -160,7 +160,7 @@ def validate_catalog_scope(
 
 
 def resolve_owned_price_catalog(
-    principal, *, mixed=False, purpose=CatalogPurpose.ETL, lock_timeout=0
+    principal, *, mixed=False, purpose=CatalogPurpose.ELT, lock_timeout=0
 ) -> tuple[Path, generations.OwnedSource]:
     """No query-time creation, adoption, caller path, or fallback to shared ERP."""
     context = _context(principal, mixed=mixed, purpose=purpose)

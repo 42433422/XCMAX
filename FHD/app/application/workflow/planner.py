@@ -76,6 +76,11 @@ class LLMWorkflowPlanner:
         rejected = rejected_sql_plan(message, plan_id)
         if rejected is not None:
             return rejected
+        from app.application.workflow.local_database_backup_plan import local_database_backup_plan
+
+        backup = local_database_backup_plan(message, plan_id)
+        if backup is not None:
+            return backup
         profile = resolve_tool_execution_profile(context)
         registry_for_plan = _filter_tool_registry_for_profile(tool_registry, profile)
         context.pop("available_employees", None)
@@ -83,16 +88,16 @@ class LLMWorkflowPlanner:
             try:
                 from app.domain.shared_services.auth_service import get_auth_service
                 from app.infrastructure.auth.agent_mod_scope import _bound_actor
-                from app.mod_sdk.employee_tool_registry import build_employee_tools_status
+                from app.mod_sdk.employee_directory import build_employee_directory
 
                 if get_auth_service().has_permission(_bound_actor(context), "employee.list"):
+                    # 与员工工作台/通讯录共用同一目录，避免三处员工名单不一致。
                     context["available_employees"] = [
                         {
                             "employee_id": row["pack_id"],
                             "description": str(row.get("description") or "")[:200],
                         }
-                        for row in build_employee_tools_status().get("employee_pack_tools", [])
-                        if row.get("runtime_ok") and row.get("pack_id")
+                        for row in build_employee_directory()
                     ][:80]
             except RECOVERABLE_ERRORS:
                 logger.warning("authorized employee discovery unavailable", exc_info=True)

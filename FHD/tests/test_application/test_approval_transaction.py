@@ -2,6 +2,8 @@
 
 import multiprocessing
 import os
+import sys
+from pathlib import Path
 
 import pytest
 from sqlalchemy import create_engine
@@ -14,6 +16,17 @@ from app.application.agent_orchestrator.task_execution_sql_repository import (
 )
 from app.db.models.agent import AgentTaskRecord
 from app.db.models.agent_approval import AgentApprovalConsumption
+
+# spawn 子进程要按模块名重导入本文件。必须把 FHD 根（tests/ 与 app/ 的父目录）
+# 放入 PYTHONPATH；parents[1] 只到 tests/，无法 import tests.test_application。
+_FHD_ROOT = str(Path(__file__).resolve().parents[2])
+# spawn 子进程是新解释器：同时通过 PYTHONPATH 保证它能导入 tests.* 与被测模块。
+os.environ["PYTHONPATH"] = os.pathsep.join([_FHD_ROOT, os.environ.get("PYTHONPATH", "")]).strip(
+    os.pathsep
+)
+
+if _FHD_ROOT not in sys.path:
+    sys.path.insert(0, _FHD_ROOT)
 
 
 def _approve_and_exit(url, run_id, token, before_commit):
@@ -68,7 +81,9 @@ def test_process_death_preserves_atomic_approval_and_pollable_dispatch(
     AgentApprovalConsumption.__table__.create(engine)
     token = issue_approval_grant(run, principal_id="owner")["grant"]
     engine.dispose()
-    process = multiprocessing.get_context("spawn").Process(
+    # POSIX 用 fork 免去子进程重新导入测试模块；Windows 走 spawn 保持真实语义。
+    _context = "fork" if sys.platform != "win32" else "spawn"
+    process = multiprocessing.get_context(_context).Process(
         target=_approve_and_exit, args=(url, run.run_id, token, before_commit)
     )
     try:

@@ -44,6 +44,16 @@ class AppAvatar extends StatelessWidget {
   }
 
   Widget _sourceImage(String source) {
+    // 员工头像池以资源路径下发，直接按内置资源加载。
+    if (source.startsWith('assets/')) {
+      return Image.asset(
+        source,
+        fit: BoxFit.cover,
+        width: size,
+        height: size,
+        errorBuilder: (_, __, ___) => _fallbackImage(),
+      );
+    }
     final provider = appAvatarImageProviderForSource(source);
     if (provider == null) return _fallbackImage();
     return Image(

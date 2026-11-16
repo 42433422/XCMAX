@@ -62,7 +62,7 @@ def test_stale_new_preview_cannot_claim_another_runs_document(service):
         with pytest.raises(EltError) as error:
             execute("shared synthetic content", "run-b")
     assert error.value.code == "ELT_PREVIEW_STALE"
-    assert documents(service, 1)[0]["metadata"]["etl_run_id"] == "run-a"
+    assert documents(service, 1)[0]["metadata"]["elt_run_id"] == "run-a"
     assert documents(service, 1)[0]["document_id"] == first["match_ref"]
 
 

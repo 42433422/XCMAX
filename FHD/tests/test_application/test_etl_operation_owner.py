@@ -209,7 +209,7 @@ def test_second_rollback_never_runs_adapter_or_overwrites_the_first_result(store
 
 def _migration():
     path = Path(__file__).parents[2] / "alembic/versions/2026_09_05_etl_operation_lease.py"
-    spec = importlib.util.spec_from_file_location("etl_operation_lease_migration", path)
+    spec = importlib.util.spec_from_file_location("elt_operation_lease_migration", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -237,7 +237,7 @@ def test_packaged_sqlite_bootstrap_upgrades_old_columns_without_recreating_rows(
     ensure_sqlite_elt_bootstrap(engine, swallow_errors=False)
     ensure_sqlite_elt_bootstrap(engine, swallow_errors=False)
     assert {"operation_kind", "operation_token", "operation_lease_until"} <= {
-        column["name"] for column in inspect(engine).get_columns("etl_runs")
+        column["name"] for column in inspect(engine).get_columns("elt_runs")
     }
     with factory() as db:
         assert db.get(EltRun, run_id).status == "completed"

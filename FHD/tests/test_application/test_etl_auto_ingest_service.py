@@ -154,7 +154,7 @@ def test_confirmed_preview_target_waits_for_business_receipt(ledger_root, monkey
 def test_auto_ingest_writes_knowledge_and_records_business(
     rag_service, ledger_root, allow_tmp_ingest_paths, tmp_path, monkeypatch
 ):
-    xlsx = _shipment_xlsx(tmp_path / "data" / "etl" / "uploads" / "42" / "7" / "26鑫顺.xlsx")
+    xlsx = _shipment_xlsx(tmp_path / "data" / "elt" / "uploads" / "42" / "7" / "26鑫顺.xlsx")
     fake_etl = MagicMock()
     fake_etl.save_upload.return_value = {"upload_id": "up-1"}
     fake_etl.create_preview.return_value = {
@@ -204,7 +204,7 @@ def test_auto_ingest_writes_knowledge_and_records_business(
 def test_auto_ingest_withdraw_rolls_back_kb_and_business(
     rag_service, ledger_root, allow_tmp_ingest_paths, tmp_path, monkeypatch
 ):
-    xlsx = _shipment_xlsx(tmp_path / "data" / "etl" / "uploads" / "9" / "3" / "ship.xlsx")
+    xlsx = _shipment_xlsx(tmp_path / "data" / "elt" / "uploads" / "9" / "3" / "ship.xlsx")
     fake_etl = MagicMock()
     fake_etl.save_upload.return_value = {"upload_id": "up-2"}
     fake_etl.create_preview.return_value = {
@@ -253,7 +253,7 @@ def test_auto_ingest_withdraw_rolls_back_kb_and_business(
 def test_auto_ingest_progress_tracks_real_stages(
     rag_service, ledger_root, allow_tmp_ingest_paths, tmp_path, monkeypatch
 ):
-    xlsx = _shipment_xlsx(tmp_path / "data" / "etl" / "uploads" / "7" / "3" / "progress.xlsx")
+    xlsx = _shipment_xlsx(tmp_path / "data" / "elt" / "uploads" / "7" / "3" / "progress.xlsx")
     fake_etl = MagicMock()
     fake_etl.save_upload.return_value = {"upload_id": "up-p"}
     fake_etl.create_preview.return_value = {
@@ -321,7 +321,7 @@ def test_async_business_receipts_follow_actual_run_without_reexecution(
     monkeypatch.setattr("app.db.session.get_db", lambda: nullcontext(MagicMock()))
     service = AutoIngestService()
     with tenant_scope(42):
-        source = _shipment_xlsx(tmp_path / "data" / "etl" / "uploads" / "42" / "7" / "async.xlsx")
+        source = _shipment_xlsx(tmp_path / "data" / "elt" / "uploads" / "42" / "7" / "async.xlsx")
         plan = _candidate_plan(fake, monkeypatch, "run-async", source, "rev")
         fake.get_run.return_value = {
             "id": "run-async",
@@ -383,7 +383,7 @@ def test_business_failure_preserves_completed_knowledge_receipt(
     }
     fake.execute.side_effect = EltError("ELT_PREVIEW_STALE", "业务预演已变化")
     monkeypatch.setattr("app.application.elt.service.get_elt_service", lambda: fake)
-    source = _shipment_xlsx(tmp_path / "data" / "etl" / "uploads" / "42" / "7" / "error.xlsx")
+    source = _shipment_xlsx(tmp_path / "data" / "elt" / "uploads" / "42" / "7" / "error.xlsx")
     plan = _candidate_plan(fake, monkeypatch, "run-error", source, "rev")
     with tenant_scope(42), pytest.raises(EltError):
         AutoIngestService().run(
@@ -406,7 +406,7 @@ def test_business_failure_preserves_completed_knowledge_receipt(
     "reader",
     [
         ais._extract_text,
-        ais.detect_etl_target,
+        ais.detect_elt_target,
         ais._resolve_auto_ingest_source,
         AutoIngestService.detect_target,
     ],
@@ -416,7 +416,7 @@ def test_business_failure_preserves_completed_knowledge_receipt(
 def test_auto_ingest_readers_reject_untrusted_or_swapped_files(
     tmp_path, monkeypatch, reader, suffix, attack
 ):
-    from app.application import shipment_excel_etl_security as security
+    from app.application import shipment_excel_elt_security as security
     from app.application.elt.errors import EltError
 
     allowed = tmp_path / "allowed"
@@ -458,7 +458,7 @@ def test_auto_ingest_readers_reject_untrusted_or_swapped_files(
             return fd
 
         if attack == "parent_swap":
-            original_resolve = security.resolve_etl_path
+            original_resolve = security.resolve_elt_path
 
             def replace_after_resolve(*args, **kwargs):
                 resolved = original_resolve(*args, **kwargs)
@@ -466,21 +466,21 @@ def test_auto_ingest_readers_reject_untrusted_or_swapped_files(
                 parent.symlink_to(outside, target_is_directory=True)
                 return resolved
 
-            monkeypatch.setattr(security, "resolve_etl_path", replace_after_resolve)
+            monkeypatch.setattr(security, "resolve_elt_path", replace_after_resolve)
         else:
             monkeypatch.setattr(security, "_open_directory_under_root", replace_after_pin)
-    with pytest.raises((security.ShipmentEtlPathError, EltError, OSError)):
+    with pytest.raises((security.ShipmentEltPathError, EltError, OSError)):
         reader(source)
 
 
 def test_auto_ingest_csv_keeps_bom_and_newline_semantics(tmp_path, monkeypatch):
-    from app.application import shipment_excel_etl_security as security
+    from app.application import shipment_excel_elt_security as security
 
     source = tmp_path / "客户😀.csv"
     source.write_bytes("送货单,产品名称,数量\r\n商品,油漆,2\r\n".encode("utf-8-sig"))
     monkeypatch.setattr(security, "_trusted_base_roots", lambda: [tmp_path])
     monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
-    assert ais.detect_etl_target(source)["target_type"] == "shipment_records"
+    assert ais.detect_elt_target(source)["target_type"] == "shipment_records"
     assert ais._extract_text(source) == "\ufeff送货单,产品名称,数量\n商品,油漆,2\n"
 
 
@@ -491,7 +491,7 @@ def test_saved_upload_detection_preserves_owner_and_tenant_boundary(tmp_path, mo
     from sqlalchemy import create_engine
     from sqlalchemy.orm import Session
 
-    from app.application import shipment_excel_etl_security as security
+    from app.application import shipment_excel_elt_security as security
     from app.application.elt.errors import EltError, EltNotFound
     from app.application.elt.service_uploads import UploadServiceMixin
     from app.db.models.elt import EltUpload
@@ -522,31 +522,31 @@ def test_saved_upload_detection_preserves_owner_and_tenant_boundary(tmp_path, mo
             )
             source = service._owned_upload(db, receipt["upload_id"], 7)
             assert (
-                ais.detect_etl_target(source.storage_path, owner_user_id=7)["target_type"]
+                ais.detect_elt_target(source.storage_path, owner_user_id=7)["target_type"]
                 == "shipment_records"
             )
             with pytest.raises(EltError):
                 ais._resolve_auto_ingest_source(source.storage_path)
-            with pytest.raises(security.ShipmentEtlPathError):
-                ais.detect_etl_target(source.storage_path, owner_user_id=8)
-            with tenant_scope(43), pytest.raises(security.ShipmentEtlPathError):
-                ais.detect_etl_target(source.storage_path, owner_user_id=7)
+            with pytest.raises(security.ShipmentEltPathError):
+                ais.detect_elt_target(source.storage_path, owner_user_id=8)
+            with tenant_scope(43), pytest.raises(security.ShipmentEltPathError):
+                ais.detect_elt_target(source.storage_path, owner_user_id=7)
             with pytest.raises(EltNotFound):
                 service._owned_upload(db, receipt["upload_id"], 8)
             with tenant_scope(43), pytest.raises(EltNotFound):
                 service._owned_upload(db, receipt["upload_id"], 7)
-            private = tmp_path / "etl" / "auto_ingest" / "batches.csv"
+            private = tmp_path / "elt" / "auto_ingest" / "batches.csv"
             private.parent.mkdir()
             private.write_text("private")
-            with pytest.raises(security.ShipmentEtlPathError):
-                ais.detect_etl_target(private)
+            with pytest.raises(security.ShipmentEltPathError):
+                ais.detect_elt_target(private)
     finally:
         engine.dispose()
 
 
 @pytest.mark.parametrize("operation", ["validate", "upload"])
 def test_prepared_hash_and_business_upload_reject_outside_input(tmp_path, monkeypatch, operation):
-    from app.application import shipment_excel_etl_security as security
+    from app.application import shipment_excel_elt_security as security
 
     allowed = tmp_path / "allowed"
     allowed.mkdir()
@@ -555,7 +555,7 @@ def test_prepared_hash_and_business_upload_reject_outside_input(tmp_path, monkey
     monkeypatch.setattr(security, "_trusted_base_roots", lambda: [allowed])
     monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
     service = AutoIngestService()
-    with pytest.raises(security.ShipmentEtlPathError):
+    with pytest.raises(security.ShipmentEltPathError):
         if operation == "validate":
             db = MagicMock()
             run = db.query.return_value.filter.return_value.first.return_value
@@ -587,16 +587,16 @@ def test_prepared_hash_and_business_upload_reject_outside_input(tmp_path, monkey
 
 @pytest.mark.parametrize("component", ["tenant", "owner"])
 def test_owned_upload_root_swap_cannot_change_identity(tmp_path, monkeypatch, component):
-    from app.application import shipment_excel_etl_security as security
+    from app.application import shipment_excel_elt_security as security
 
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
     monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
-    tenant_root = tmp_path / "etl" / "uploads" / "42"
+    tenant_root = tmp_path / "elt" / "uploads" / "42"
     owner_root = tenant_root / "7"
     owner_root.mkdir(parents=True)
     source = owner_root / "input.csv"
     source.write_text("own")
-    victim = tmp_path / "etl" / "uploads" / "43" / "7"
+    victim = tmp_path / "elt" / "uploads" / "43" / "7"
     victim.mkdir(parents=True)
     secret = victim / "input.csv"
     secret.write_text("other tenant")
@@ -615,11 +615,11 @@ def test_owned_upload_root_swap_cannot_change_identity(tmp_path, monkeypatch, co
         return original(*args, **kwargs)
 
     monkeypatch.setattr(security, "_open_directory_under_root", swap_before_pin)
-    with tenant_scope(42), pytest.raises(security.ShipmentEtlPathError):
-        with security.open_etl_input_file(source, owner_user_id=7):
+    with tenant_scope(42), pytest.raises(security.ShipmentEltPathError):
+        with security.open_elt_input_file(source, owner_user_id=7):
             pytest.fail("a swapped tenant/owner directory must not be followed")
-    with tenant_scope(42), pytest.raises(security.ShipmentEtlPathError):
-        with security.open_etl_input_file(secret, owner_user_id=7):
+    with tenant_scope(42), pytest.raises(security.ShipmentEltPathError):
+        with security.open_elt_input_file(secret, owner_user_id=7):
             pytest.fail("canonicalizing a swapped root must not authorize another tenant")
 
 
@@ -634,7 +634,7 @@ def test_raw_auto_ingest_cannot_supply_upload_owner_or_prepared_plan(
 
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
     monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
-    source = tmp_path / "etl" / "uploads" / "43" / "8" / "private.csv"
+    source = tmp_path / "elt" / "uploads" / "43" / "8" / "private.csv"
     source.parent.mkdir(parents=True)
     source.write_text("private")
     monkeypatch.setattr(ais, "get_auto_ingest_service", AutoIngestService)
@@ -649,4 +649,4 @@ def test_raw_auto_ingest_cannot_supply_upload_owner_or_prepared_plan(
             db=MagicMock(),
             user=SimpleNamespace(id=7),
         )
-    assert error.value.code == "ETL_AUTO_INGEST_PATH_INVALID"
+    assert error.value.code == "ELT_AUTO_INGEST_PATH_INVALID"

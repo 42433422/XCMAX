@@ -14,9 +14,9 @@ from sqlalchemy.pool import NullPool
 from app.application.elt.errors import EltError
 from app.mod_sdk.owned_price_catalog import CatalogPurpose
 
-PROTOCOL = "etl-owned-sql-v1"
-MIXED_PROTOCOL = "etl-owned-mixed-v1"
-_operation_owner = ContextVar("etl_owned_operation", default=None)
+PROTOCOL = "elt-owned-sql-v1"
+MIXED_PROTOCOL = "elt-owned-mixed-v1"
+_operation_owner = ContextVar("elt_owned_operation", default=None)
 
 
 def _foreign_keys(connection, _record):
@@ -60,7 +60,7 @@ def unverified():
 class OwnedSqlSessions:
     """Every plan, upload, effect and journal uses the validated physical connection."""
 
-    def __init__(self, principal, *, mixed=False, purpose=CatalogPurpose.ETL, lock_timeout=0):
+    def __init__(self, principal, *, mixed=False, purpose=CatalogPurpose.ELT, lock_timeout=0):
         from app.application.elt.owned_sql_session import _read_only_url
         from app.mod_sdk.owned_price_catalog import resolve_owned_price_catalog
 
@@ -134,8 +134,8 @@ class OwnedSqlSessions:
             raise unverified()
         validate_owned_source(connection, self.target, self.source)
         validate_price_catalog(connection, mixed=self.mixed)
-        db.info["etl_owned_source"] = self.binding
-        db.info["etl_owned_upload_root"] = str(self.upload_root)
+        db.info["elt_owned_source"] = self.binding
+        db.info["elt_owned_upload_root"] = str(self.upload_root)
 
     @contextmanager
     def __call__(self):

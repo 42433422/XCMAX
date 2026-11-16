@@ -160,14 +160,73 @@ def test_template_timeout_rejects_invalid_configuration(value, monkeypatch):
         template_timeout_seconds()
 
 
-def test_template_timeout_is_separate_from_etl_row_limit(monkeypatch):
+def test_template_timeout_is_separate_from_elt_row_limit(monkeypatch):
     from app.application.reviewed_excel_budget import template_timeout_seconds
 
     monkeypatch.delenv("FHD_TEMPLATE_LLM_TIMEOUT_SECONDS", raising=False)
-    monkeypatch.setenv("FHD_ETL_LLM_TIMEOUT_SECONDS", "2")
+    monkeypatch.setenv("FHD_ELT_LLM_TIMEOUT_SECONDS", "2")
     assert template_timeout_seconds() == 120
     monkeypatch.setenv("FHD_TEMPLATE_LLM_TIMEOUT_SECONDS", "180")
     assert template_timeout_seconds() == 180
+
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        (None, 600),
+        ("90", 90),
+        ("30", 30),
+        ("1800", 1800),
+        ("29", 600),
+        ("1801", 600),
+        ("nan", 600),
+        ("inf", 600),
+        ("not-a-number", 600),
+    ],
+)
+def test_template_call_max_seconds_defaults_and_falls_back_on_invalid_range(
+    monkeypatch, value, expected
+):
+    from app.application.reviewed_excel_budget import template_call_max_seconds
+
+    if value is None:
+        monkeypatch.delenv("FHD_TEMPLATE_LLM_MAX_SECONDS", raising=False)
+    else:
+        monkeypatch.setenv("FHD_TEMPLATE_LLM_MAX_SECONDS", value)
+    assert template_call_max_seconds() == expected
+
+
+def test_template_call_absolute_cap_interrupts_keepalive_activity(monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+
+    from app.application.elt import llm_session_provider as sessions
+    from app.application.reviewed_excel_template import _template_platform_complete
+
+    monkeypatch.setenv("FHD_ELT_LLM", "on")
+
+    async def chat(*_args, **kwargs):
+        alive = kwargs["_processing_status"]
+        for _ in range(200):
+            alive()
+            await asyncio.sleep(0.005)
+
+    monkeypatch.setattr(
+        sessions,
+        "current_owner_market_provider",
+        lambda **_: SimpleNamespace(is_configured=True, chat_completion=chat),
+    )
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_budget.template_timeout_seconds", lambda: 0.02
+    )
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_budget.template_first_byte_seconds", lambda: 0.02
+    )
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_budget.template_call_max_seconds", lambda: 0.2
+    )
+    with pytest.raises(ReviewedExcelError, match="平台模型生成超时"):
+        _template_platform_complete([], {}, 20, owner_id=7)
 
 
 @pytest.mark.parametrize("failure_type", [RuntimeError, OSError, ImportError, TypeError])
@@ -176,24 +235,24 @@ def test_platform_initialization_failure_is_presend_and_restores_owner(monkeypat
     from app.application.reviewed_excel_audit import ModelRequestNotSent
     from app.application.reviewed_excel_template import _template_platform_complete
 
-    monkeypatch.setenv("FHD_ETL_LLM", "on")
+    monkeypatch.setenv("FHD_ELT_LLM", "on")
     calls = []
 
     def fail(**_):
-        calls.append(sessions.current_etl_llm_owner())
+        calls.append(sessions.current_elt_llm_owner())
         raise failure_type("synthetic-private-initialization-detail")
 
     monkeypatch.setattr(sessions, "current_owner_market_provider", fail)
-    token = sessions.bind_etl_llm_owner(99)
+    token = sessions.bind_elt_llm_owner(99)
     try:
         expected = TypeError if failure_type is TypeError else ModelRequestNotSent
         with pytest.raises(expected) as error:
             _template_platform_complete([], {}, 20, owner_id=7)
         if expected is ModelRequestNotSent:
             assert "未调用模型" in str(error.value) and "synthetic-private" not in str(error.value)
-        assert calls == [7] and sessions.current_etl_llm_owner() == 99
+        assert calls == [7] and sessions.current_elt_llm_owner() == 99
     finally:
-        sessions.reset_etl_llm_owner(token)
+        sessions.reset_elt_llm_owner(token)
 
 
 def test_platform_missing_component_is_presend(monkeypatch):
@@ -222,7 +281,7 @@ def test_platform_dispatch_preserves_presend_refusal_and_postsend_uncertainty(mo
     from app.application.reviewed_excel_audit import ModelRequestNotSent
     from app.application.reviewed_excel_template import _template_platform_complete
 
-    monkeypatch.setenv("FHD_ETL_LLM", "on")
+    monkeypatch.setenv("FHD_ELT_LLM", "on")
     failure = (
         ModelRequestNotSent("目标已改变；未调用模型")
         if presend
@@ -239,7 +298,7 @@ def test_platform_dispatch_preserves_presend_refusal_and_postsend_uncertainty(mo
         "current_owner_market_provider",
         lambda **_: SimpleNamespace(is_configured=True, chat_completion=fail),
     )
-    before = sessions.current_etl_llm_owner()
+    before = sessions.current_elt_llm_owner()
     with pytest.raises(ReviewedExcelError) as error:
         _template_platform_complete([], {}, 20, owner_id=7)
     if presend:
@@ -247,7 +306,7 @@ def test_platform_dispatch_preserves_presend_refusal_and_postsend_uncertainty(mo
     else:
         assert not isinstance(error.value, ModelRequestNotSent)
         assert "可能已产生费用；未自动重试" in str(error.value)
-    assert calls == [1] and sessions.current_etl_llm_owner() == before
+    assert calls == [1] and sessions.current_elt_llm_owner() == before
 
 
 def test_actual_prefix_request_sizes_are_monotone_with_fixed_edge_context():
@@ -591,7 +650,7 @@ def test_a_connection_that_never_opened_is_not_sent(monkeypatch, connected):
     from app.application.reviewed_excel_audit import ModelRequestNotSent
     from app.application.reviewed_excel_template import _template_platform_complete
 
-    monkeypatch.setenv("FHD_ETL_LLM", "on")
+    monkeypatch.setenv("FHD_ELT_LLM", "on")
     failure = httpx.ReadTimeout("synthetic") if connected else httpx.ConnectTimeout("synthetic")
     calls = []
 
@@ -628,7 +687,7 @@ def test_model_reconnect_retries_only_before_dispatch(monkeypatch):
     from app.application.elt import llm_session_provider as sessions
     from app.application.reviewed_excel_template import _template_platform_complete
 
-    monkeypatch.setenv("FHD_ETL_LLM", "on")
+    monkeypatch.setenv("FHD_ELT_LLM", "on")
     calls = []
 
     async def chat(*args, **kwargs):
@@ -669,7 +728,7 @@ def test_schema_rejection_names_each_failing_field():
     assert "S9" not in problem
 
 
-def test_elt_timeout_retains_the_running_worker_for_budget_accounting(monkeypatch):
+def test_etl_timeout_retains_the_running_worker_for_budget_accounting(monkeypatch):
     from threading import Event
 
     from app.application.elt.llm_assist import EltAssistTimeout, _bounded_structured_completion

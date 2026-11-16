@@ -10,7 +10,7 @@ from app.application.elt.service_support import dump_json, load_json
 from app.db.models.elt import EltRun, EltUpload
 from app.db.models.elt_archive import EltArchiveVersion
 from app.infrastructure.tenant_scope import tenant_scope
-from tests.fixtures.etl_template.sources.generate import sample
+from tests.fixtures.elt_template.sources.generate import sample
 from tests.test_application.test_reviewed_excel_template import review_store as _review_store
 
 review_store = _review_store
@@ -166,9 +166,9 @@ def test_failed_reclassification_keeps_original_association(
         monkeypatch.setattr(archive, "_classification_version", fail)
     else:
         monkeypatch.setattr(archive.UploadServiceMixin, "save_upload", fail)
-    uploads_before = set((review_store.root / "etl" / "uploads").rglob("*"))
+    uploads_before = set((review_store.root / "elt" / "uploads").rglob("*"))
     assert reclassify(review_store, old).status_code == 400
-    assert set((review_store.root / "etl" / "uploads").rglob("*")) == uploads_before
+    assert set((review_store.root / "elt" / "uploads").rglob("*")) == uploads_before
     with tenant_scope(1), sessionmaker(bind=review_store.engine)() as db:
         assert db.query(EltRun).count() == 1
         assert db.query(EltUpload).count() == 1

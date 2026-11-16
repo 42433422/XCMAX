@@ -214,7 +214,7 @@ def test_concurrent_expected_version_allows_only_one_new_archive_version(store):
     source, barrier = publish(store), Barrier(2)
 
     def synchronize(_connection, _cursor, statement, _parameters, _context, _many):
-        if statement.startswith("UPDATE etl_archive_assets SET"):
+        if statement.startswith("UPDATE elt_archive_assets SET"):
             barrier.wait(timeout=10)
 
     def append(body):

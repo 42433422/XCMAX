@@ -376,20 +376,20 @@ describe('useChatExcelContext — coverage ramp', () => {
       expect(callArgs).toContain('b.png')
     })
 
-    it('超过 6 个附件时截断到最近 6 个', async () => {
+    it('超过 50 个附件时截断到最近 50 个', async () => {
       const addAndSaveMessage = vi.fn().mockResolvedValue(undefined)
       const ctx = useChatExcelContext(makeDeps({ addAndSaveMessage }))
       // 先放入 4 个
       ctx.multimodalStaging.value = Array.from({ length: 4 }, (_, i) => makeRow(`old${i}.png`))
-      // 新增 4 个
-      const newRows = Array.from({ length: 4 }, (_, i) => makeRow(`new${i}.png`))
+      // 新增 50 个
+      const newRows = Array.from({ length: 50 }, (_, i) => makeRow(`new${i}.png`))
       mockFilesToMultimodalRows.mockResolvedValue({ ok: true, rows: newRows })
       await ctx.onMultimodalFileChange(makeFileInputEvent([{ name: 'new0.png' }]))
-      // 4 + 4 = 8, slice(-6) = 6
-      expect(ctx.multimodalStaging.value).toHaveLength(6)
-      // 应该保留最后 6 个（old2, old3, new0, new1, new2, new3）
-      expect(ctx.multimodalStaging.value[0].filename).toBe('old2.png')
-      expect(ctx.multimodalStaging.value[5].filename).toBe('new3.png')
+      // 4 + 50 = 54, slice(-50) = 50
+      expect(ctx.multimodalStaging.value).toHaveLength(50)
+      // 应该保留最近 50 个
+      expect(ctx.multimodalStaging.value[0].filename).toBe('new0.png')
+      expect(ctx.multimodalStaging.value[49].filename).toBe('new49.png')
     })
 
     it('清空 input 的 value', async () => {

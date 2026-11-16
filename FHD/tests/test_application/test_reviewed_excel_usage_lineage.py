@@ -13,8 +13,8 @@ from app.application.reviewed_excel_template import inspect_workbook
 from app.db.models.elt import EltRun, EltUpload
 from app.fastapi_routes import reviewed_excel_template as routes
 from app.infrastructure.tenant_scope import tenant_scope
-from tests.fixtures.etl_template.legacy_biff import fixture
-from tests.fixtures.etl_template.sources.generate import sample
+from tests.fixtures.elt_template.legacy_biff import fixture
+from tests.fixtures.elt_template.sources.generate import sample
 from tests.test_application.test_reviewed_excel_legacy import archive, convert
 from tests.test_application.test_reviewed_excel_template import review_store as _review_store
 

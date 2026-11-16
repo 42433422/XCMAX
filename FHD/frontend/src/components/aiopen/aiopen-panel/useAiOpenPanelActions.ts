@@ -22,6 +22,8 @@ export function useAiOpenPanelActions(state: AiOpenPanelState, options: { setCur
     routes,
     remoteControlEnabled,
     keys,
+    usage,
+    usageRecent,
     newKey,
     accessResult,
     panelError,
@@ -194,6 +196,19 @@ export function useAiOpenPanelActions(state: AiOpenPanelState, options: { setCur
       panelAvailable.value = false
       panelError.value = '无法连接后端（:5100）· 下方 AI 配置仍可用'
       routes.value = []
+    }
+    try {
+      const usageResult = await safeJsonRequest<{
+        success?: boolean
+        summary?: Record<string, unknown>
+        recent?: Array<Record<string, unknown>>
+      }>('/api/aiopen/usage?days=7&recent=10')
+      if (usageResult.ok && usageResult.data?.success) {
+        usage.value = usageResult.data.summary || null
+        usageRecent.value = Array.isArray(usageResult.data.recent) ? usageResult.data.recent : []
+      }
+    } catch {
+      /* 计量接口失败不影响面板主流程 */
     }
     try {
       const mf = await safeJsonRequest<AiopenManifestPayload>('/api/aiopen/manifest')

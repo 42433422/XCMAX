@@ -6,31 +6,31 @@ from pathlib import Path
 
 import pytest
 
-from app.application.shipment_etl_profile import clear_profile_cache
-from app.application.shipment_excel_etl_app_service import (
-    batch_execute_shipment_excel_etl,
-    batch_preview_shipment_excel_etl,
-    execute_shipment_excel_etl,
+from app.application.shipment_elt_profile import clear_profile_cache
+from app.application.shipment_excel_elt_app_service import (
+    batch_execute_shipment_excel_elt,
+    batch_preview_shipment_excel_elt,
+    execute_shipment_excel_elt,
     note_fingerprint,
     parse_delivery_notes,
-    preview_shipment_excel_etl,
+    preview_shipment_excel_elt,
     regenerate_delivery_notes_from_file,
     write_delivery_note_workbook,
     write_ledger_workbook,
 )
-from app.domain.app_pure.excel_etl_kb import reset_excel_etl_kb_for_tests
+from app.domain.app_pure.excel_elt_kb import reset_excel_elt_kb_for_tests
 
 SAMPLE_DIR = Path("/Users/a4243342/Desktop/新建文件夹 (4)/产品文件夹/发货单")
 
 
 @pytest.fixture(autouse=True)
-def _etl_universal_kb(tmp_path, monkeypatch):
+def _elt_universal_kb(tmp_path, monkeypatch):
     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
-    monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))
-    monkeypatch.setenv("FHD_EXCEL_ETL_DEFAULT_TARGET", "shipment")
-    monkeypatch.delenv("FHD_EXCEL_ETL_ALLOW_BUILTIN", raising=False)
-    monkeypatch.setenv("FHD_SHIPMENT_ETL_LLM", "0")
-    reset_excel_etl_kb_for_tests(tmp_path / "kb.json")
+    monkeypatch.setenv("FHD_EXCEL_ELT_KB_PATH", str(tmp_path / "kb.json"))
+    monkeypatch.setenv("FHD_EXCEL_ELT_DEFAULT_TARGET", "shipment")
+    monkeypatch.delenv("FHD_EXCEL_ELT_ALLOW_BUILTIN", raising=False)
+    monkeypatch.setenv("FHD_SHIPMENT_ELT_LLM", "0")
+    reset_excel_elt_kb_for_tests(tmp_path / "kb.json")
     clear_profile_cache()
     yield
     clear_profile_cache()
@@ -70,7 +70,7 @@ def test_preview_marks_confirm_required():
     path = SAMPLE_DIR / "国圣化工.xlsx"
     if not path.is_file():
         pytest.skip("local sample missing")
-    preview = preview_shipment_excel_etl(
+    preview = preview_shipment_excel_elt(
         path,
         include_ledger=False,
         workspace_root=SAMPLE_DIR,
@@ -246,25 +246,25 @@ def test_execute_idempotent_skips_second_run(tmp_path, monkeypatch):
         lambda records: {"success": True, "imported": len(records)},
     )
     fp_db = tmp_path / "fps.sqlite3"
-    monkeypatch.setenv("FHD_SHIPMENT_ETL_FINGERPRINT_BACKEND", "legacy")
+    monkeypatch.setenv("FHD_SHIPMENT_ELT_FINGERPRINT_BACKEND", "legacy")
     monkeypatch.setattr(
-        "app.application.shipment_excel_etl_fingerprint_store._legacy_db_path",
+        "app.application.shipment_excel_elt_fingerprint_store._legacy_db_path",
         lambda: fp_db,
     )
     monkeypatch.setattr(
-        "app.application.shipment_excel_etl_fingerprint_store._db_path",
+        "app.application.shipment_excel_elt_fingerprint_store._db_path",
         lambda: fp_db,
     )
     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
 
-    first = execute_shipment_excel_etl(path, idempotent=True, workspace_root=tmp_path)
+    first = execute_shipment_excel_elt(path, idempotent=True, workspace_root=tmp_path)
     assert first["success"] is True
     assert first["shipment_created"] == 1
     assert first["shipment_skipped"] == 0
     assert len(calls) == 1
     assert calls[0].get("external_order_number") == "IDEM-1"
 
-    second = execute_shipment_excel_etl(path, idempotent=True, workspace_root=tmp_path)
+    second = execute_shipment_excel_elt(path, idempotent=True, workspace_root=tmp_path)
     assert second["success"] is True
     assert second["shipment_created"] == 0
     assert second["shipment_skipped"] == 1
@@ -275,7 +275,7 @@ def test_ledger_requires_confirm(tmp_path, monkeypatch):
     path = tmp_path / "闭环流水客户.xlsx"
     write_ledger_workbook([], path, unit_name="闭环流水客户")
     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
-    result = execute_shipment_excel_etl(
+    result = execute_shipment_excel_elt(
         path,
         include_ledger=True,
         confirm_ledger=False,
@@ -317,7 +317,7 @@ def test_dry_run_does_not_write(tmp_path, monkeypatch):
 
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: _FakeShipmentSvc())
     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
-    out = execute_shipment_excel_etl(path, dry_run=True, workspace_root=tmp_path)
+    out = execute_shipment_excel_elt(path, dry_run=True, workspace_root=tmp_path)
     assert out["success"] is True
     assert out["dry_run"] is True
     assert out["would_create"] == 1
@@ -351,7 +351,7 @@ def test_batch_preview_and_execute(tmp_path, monkeypatch):
     write_ledger_workbook([], batch_dir / "闭环流水客户.xlsx", unit_name="闭环流水客户")
 
     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
-    preview = batch_preview_shipment_excel_etl(batch_dir, workspace_root=tmp_path)
+    preview = batch_preview_shipment_excel_elt(batch_dir, workspace_root=tmp_path)
     assert preview["success"] is True
     assert preview["file_count"] == 2
     assert preview["note_count"] >= 1
@@ -369,17 +369,17 @@ def test_batch_preview_and_execute(tmp_path, monkeypatch):
         lambda records: {"success": True, "imported": len(records)},
     )
     monkeypatch.setattr(
-        "app.application.shipment_excel_etl_fingerprint_store._legacy_db_path",
+        "app.application.shipment_excel_elt_fingerprint_store._legacy_db_path",
         lambda: tmp_path / "batch_fps.sqlite3",
     )
     monkeypatch.setattr(
-        "app.application.shipment_excel_etl_fingerprint_store._db_path",
+        "app.application.shipment_excel_elt_fingerprint_store._db_path",
         lambda: tmp_path / "batch_fps.sqlite3",
     )
-    monkeypatch.setenv("FHD_SHIPMENT_ETL_FINGERPRINT_BACKEND", "legacy")
-    monkeypatch.setenv("FHD_SHIPMENT_ETL_ALLOW_BATCH", "1")
+    monkeypatch.setenv("FHD_SHIPMENT_ELT_FINGERPRINT_BACKEND", "legacy")
+    monkeypatch.setenv("FHD_SHIPMENT_ELT_ALLOW_BATCH", "1")
 
-    executed = batch_execute_shipment_excel_etl(
+    executed = batch_execute_shipment_excel_elt(
         batch_dir,
         idempotent=True,
         # Both files are part of this successful batch; admit and confirm its
@@ -447,16 +447,16 @@ def test_execute_creates_shipment(tmp_path, monkeypatch):
         lambda records: {"success": True, "imported_count": len(records)},
     )
     monkeypatch.setattr(
-        "app.application.shipment_excel_etl_fingerprint_store._legacy_db_path",
+        "app.application.shipment_excel_elt_fingerprint_store._legacy_db_path",
         lambda: tmp_path / "exec_fps.sqlite3",
     )
     monkeypatch.setattr(
-        "app.application.shipment_excel_etl_fingerprint_store._db_path",
+        "app.application.shipment_excel_elt_fingerprint_store._db_path",
         lambda: tmp_path / "exec_fps.sqlite3",
     )
-    monkeypatch.setenv("FHD_SHIPMENT_ETL_FINGERPRINT_BACKEND", "legacy")
+    monkeypatch.setenv("FHD_SHIPMENT_ELT_FINGERPRINT_BACKEND", "legacy")
 
-    result = execute_shipment_excel_etl(path, idempotent=False, workspace_root=tmp_path)
+    result = execute_shipment_excel_elt(path, idempotent=False, workspace_root=tmp_path)
     assert result["success"] is True
     assert result["closed_loop"] is True
     assert result["shipment_created"] == 1
@@ -466,9 +466,9 @@ def test_execute_creates_shipment(tmp_path, monkeypatch):
 
 
 def test_rejects_path_outside_sandbox(tmp_path, monkeypatch):
-    monkeypatch.delenv("FHD_SHIPMENT_ETL_ALLOW_TMP", raising=False)
+    monkeypatch.delenv("FHD_SHIPMENT_ELT_ALLOW_TMP", raising=False)
     # Force empty pytest flag simulation: still under pytest so temp is allowed.
     # Use a path under /etc which is never allowed.
-    result = preview_shipment_excel_etl("/etc/hosts", workspace_root=str(tmp_path))
+    result = preview_shipment_excel_elt("/etc/hosts", workspace_root=str(tmp_path))
     assert result["success"] is False
     assert result.get("error_code") == "unsafe_path"

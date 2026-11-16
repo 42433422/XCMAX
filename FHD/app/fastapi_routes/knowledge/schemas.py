@@ -8,7 +8,7 @@ from typing import Any
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 _DATASET_UPLOAD_EXTENSIONS = frozenset(
-    {".pdf", ".docx", ".xlsx", ".xls", ".txt", ".md", ".csv", ".json", ".log"}
+    {".pdf", ".docx", ".pptx", ".xlsx", ".xls", ".txt", ".md", ".csv", ".json", ".log"}
 )
 _DATASET_UPLOAD_MAX_BYTES = 25 * 1024 * 1024
 _DATASET_INLINE_MAX_CHARS = 5_000_000

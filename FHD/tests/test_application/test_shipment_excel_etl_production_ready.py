@@ -13,14 +13,14 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.application.shipment_app_service import ShipmentApplicationService
-from app.application.shipment_excel_etl_app_service import (
-    execute_shipment_excel_etl,
+from app.application.shipment_excel_elt_app_service import (
+    execute_shipment_excel_elt,
     note_fingerprint,
-    preview_shipment_excel_etl,
+    preview_shipment_excel_elt,
     write_delivery_note_workbook,
 )
 from app.db.db_base import Base
-from app.db.models.shipment_etl_fingerprint import ShipmentEtlImportFingerprint
+from app.db.models.shipment_elt_fingerprint import ShipmentEltImportFingerprint
 from app.domain.shipment.aggregates import Shipment
 
 
@@ -66,18 +66,18 @@ class _MemoryRepo:
 
 @pytest.fixture()
 def orm_fp_db(tmp_path, monkeypatch):
-    from app.application.shipment_etl_profile import clear_profile_cache
-    from app.domain.app_pure.excel_etl_kb import reset_excel_etl_kb_for_tests
+    from app.application.shipment_elt_profile import clear_profile_cache
+    from app.domain.app_pure.excel_elt_kb import reset_excel_elt_kb_for_tests
 
-    monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))
-    monkeypatch.setenv("FHD_EXCEL_ETL_DEFAULT_TARGET", "shipment")
-    monkeypatch.setenv("FHD_SHIPMENT_ETL_LLM", "0")
-    monkeypatch.delenv("FHD_EXCEL_ETL_ALLOW_BUILTIN", raising=False)
-    reset_excel_etl_kb_for_tests(tmp_path / "kb.json")
+    monkeypatch.setenv("FHD_EXCEL_ELT_KB_PATH", str(tmp_path / "kb.json"))
+    monkeypatch.setenv("FHD_EXCEL_ELT_DEFAULT_TARGET", "shipment")
+    monkeypatch.setenv("FHD_SHIPMENT_ELT_LLM", "0")
+    monkeypatch.delenv("FHD_EXCEL_ELT_ALLOW_BUILTIN", raising=False)
+    reset_excel_elt_kb_for_tests(tmp_path / "kb.json")
     clear_profile_cache()
 
-    engine = create_engine(f"sqlite:///{tmp_path / 'etl_fp.db'}")
-    Base.metadata.create_all(bind=engine, tables=[ShipmentEtlImportFingerprint.__table__])
+    engine = create_engine(f"sqlite:///{tmp_path / 'elt_fp.db'}")
+    Base.metadata.create_all(bind=engine, tables=[ShipmentEltImportFingerprint.__table__])
     Session = sessionmaker(bind=engine)
 
     class _Ctx:
@@ -88,22 +88,22 @@ def orm_fp_db(tmp_path, monkeypatch):
         def __exit__(self, *a):
             self.db.close()
 
-    monkeypatch.setenv("FHD_SHIPMENT_ETL_FINGERPRINT_BACKEND", "orm")
+    monkeypatch.setenv("FHD_SHIPMENT_ELT_FINGERPRINT_BACKEND", "orm")
     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     monkeypatch.setattr("app.db.session.get_db", lambda: _Ctx())
     monkeypatch.setattr(
-        "app.application.shipment_excel_etl_fingerprint_store._legacy_db_path",
+        "app.application.shipment_excel_elt_fingerprint_store._legacy_db_path",
         lambda: tmp_path / "legacy_fp.sqlite3",
     )
     monkeypatch.setattr(
-        "app.application.shipment_excel_etl_fingerprint_store._ensure_orm_table",
+        "app.application.shipment_excel_elt_fingerprint_store._ensure_orm_table",
         lambda: True,
     )
     return engine
 
 
 def test_orm_fingerprint_unique_constraint(orm_fp_db):
-    from app.application.shipment_excel_etl_fingerprint_store import (
+    from app.application.shipment_excel_elt_fingerprint_store import (
         has_fingerprint,
         record_fingerprint,
     )
@@ -122,7 +122,7 @@ def test_orm_fingerprint_unique_constraint(orm_fp_db):
 
     Session = sessionmaker(bind=orm_fp_db)
     db = Session()
-    db.add(ShipmentEtlImportFingerprint(tenant_key="tenant:1", fingerprint="abc123"))
+    db.add(ShipmentEltImportFingerprint(tenant_key="tenant:1", fingerprint="abc123"))
     with pytest.raises(IntegrityError):
         db.commit()
     db.rollback()
@@ -162,7 +162,7 @@ def test_real_create_shipment_idempotent_and_order_meta(tmp_path, monkeypatch, o
         lambda records: {"success": True, "imported": len(records)},
     )
 
-    first = execute_shipment_excel_etl(path, workspace_root=tmp_path, idempotent=True)
+    first = execute_shipment_excel_elt(path, workspace_root=tmp_path, idempotent=True)
     assert first["success"] is True
     assert first["shipment_created"] == 1
     assert len(repo.items) == 1
@@ -170,7 +170,7 @@ def test_real_create_shipment_idempotent_and_order_meta(tmp_path, monkeypatch, o
     assert "external_order_number=PROD-9001" in str(saved.raw_text or "")
     assert "fingerprint=" in str(saved.raw_text or "")
 
-    second = execute_shipment_excel_etl(path, workspace_root=tmp_path, idempotent=True)
+    second = execute_shipment_excel_elt(path, workspace_root=tmp_path, idempotent=True)
     assert second["success"] is True
     assert second["shipment_created"] == 0
     assert second["shipment_skipped"] == 1
@@ -239,7 +239,7 @@ def test_compensate_on_failure_rolls_back_created(tmp_path, monkeypatch, orm_fp_
         lambda records: {"success": True, "imported": len(records)},
     )
 
-    out = execute_shipment_excel_etl(
+    out = execute_shipment_excel_elt(
         path,
         workspace_root=tmp_path,
         idempotent=True,
@@ -255,10 +255,10 @@ def test_compensate_on_failure_rolls_back_created(tmp_path, monkeypatch, orm_fp_
 
 def test_production_gates_checklist(tmp_path, monkeypatch, orm_fp_db):
     """生产上线门禁：全部通过才算可上生产。"""
-    from app.application.shipment_excel_etl_security import (
-        ShipmentEtlPathError,
+    from app.application.shipment_excel_elt_security import (
+        ShipmentEltPathError,
         batch_execute_allowed,
-        resolve_etl_path,
+        resolve_elt_path,
     )
     from app.utils.deployment import deployment_is_production
 
@@ -285,15 +285,15 @@ def test_production_gates_checklist(tmp_path, monkeypatch, orm_fp_db):
         path,
     )
     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
-    monkeypatch.delenv("FHD_SHIPMENT_ETL_ALLOW_BATCH", raising=False)
+    monkeypatch.delenv("FHD_SHIPMENT_ELT_ALLOW_BATCH", raising=False)
 
     gates = {}
 
     # 1) 路径沙箱
     try:
-        resolve_etl_path("/etc/hosts", workspace_root=tmp_path)
+        resolve_elt_path("/etc/hosts", workspace_root=tmp_path)
         gates["path_sandbox"] = False
-    except ShipmentEtlPathError:
+    except ShipmentEltPathError:
         gates["path_sandbox"] = True
 
     # 2) 批量默认关闭
@@ -307,11 +307,11 @@ def test_production_gates_checklist(tmp_path, monkeypatch, orm_fp_db):
         "app.domain.shared_services.tools_workflow_registered._execute_excel_import_records",
         lambda records: {"success": True, "imported": len(records)},
     )
-    dry = execute_shipment_excel_etl(path, dry_run=True, workspace_root=tmp_path)
+    dry = execute_shipment_excel_elt(path, dry_run=True, workspace_root=tmp_path)
     gates["dry_run"] = dry.get("dry_run") is True and len(repo.items) == 0
 
     # 4) 预览含确认与重复计数字段
-    preview = preview_shipment_excel_etl(path, workspace_root=tmp_path)
+    preview = preview_shipment_excel_elt(path, workspace_root=tmp_path)
     gates["preview_contract"] = bool(
         preview.get("success")
         and preview.get("confirm_required")
@@ -320,8 +320,8 @@ def test_production_gates_checklist(tmp_path, monkeypatch, orm_fp_db):
     )
 
     # 5) 指纹唯一 + 幂等
-    first = execute_shipment_excel_etl(path, workspace_root=tmp_path)
-    second = execute_shipment_excel_etl(path, workspace_root=tmp_path)
+    first = execute_shipment_excel_elt(path, workspace_root=tmp_path)
+    second = execute_shipment_excel_elt(path, workspace_root=tmp_path)
     gates["idempotent"] = (
         first.get("success") is True
         and first.get("shipment_created") == 1
@@ -337,8 +337,8 @@ def test_production_gates_checklist(tmp_path, monkeypatch, orm_fp_db):
     gates["fingerprint_stable"] = len(fp) >= 16
 
     # 7) ORM 表存在唯一约束
-    uq = ShipmentEtlImportFingerprint.__table_args__[0]
-    gates["db_unique"] = getattr(uq, "name", "") == "uq_shipment_etl_tenant_fingerprint"
+    uq = ShipmentEltImportFingerprint.__table_args__[0]
+    gates["db_unique"] = getattr(uq, "name", "") == "uq_shipment_elt_tenant_fingerprint"
 
     # 8) 生产环境探测函数可用（不要求当前就在 production）
     gates["deployment_probe"] = callable(deployment_is_production)
@@ -348,7 +348,7 @@ def test_production_gates_checklist(tmp_path, monkeypatch, orm_fp_db):
 
 def test_etl_path_resolver_rejects_traversal_and_symlink_escape(tmp_path, monkeypatch):
     """Resolved paths must stay under the configured root, including through links."""
-    from app.application import shipment_excel_etl_security as security
+    from app.application import shipment_excel_elt_security as security
 
     allowed = tmp_path / "allowed"
     allowed.mkdir()
@@ -367,14 +367,14 @@ def test_etl_path_resolver_rejects_traversal_and_symlink_escape(tmp_path, monkey
     monkeypatch.setattr(security, "_trusted_base_roots", lambda: [allowed])
     monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
 
-    assert security.resolve_etl_path("input.xlsx") == allowed / "input.xlsx"
+    assert security.resolve_elt_path("input.xlsx") == allowed / "input.xlsx"
     for raw in ("../outside/private.xlsx", str(secret), str(sibling_file), str(link)):
-        with pytest.raises(security.ShipmentEtlPathError):
-            security.resolve_etl_path(raw)
+        with pytest.raises(security.ShipmentEltPathError):
+            security.resolve_elt_path(raw)
 
 
 def test_etl_input_opens_only_regular_files_beneath_the_trusted_root(tmp_path, monkeypatch):
-    from app.application import shipment_excel_etl_security as security
+    from app.application import shipment_excel_elt_security as security
 
     allowed = tmp_path / "allowed"
     allowed.mkdir()
@@ -385,15 +385,15 @@ def test_etl_input_opens_only_regular_files_beneath_the_trusted_root(tmp_path, m
     monkeypatch.setattr(security, "_trusted_base_roots", lambda: [allowed])
     monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
 
-    with security.open_etl_input_file(safe_file) as stream:
+    with security.open_elt_input_file(safe_file) as stream:
         assert stream.read() == b"trusted workbook"
-    with pytest.raises(security.ShipmentEtlPathError):
-        with security.open_etl_input_file(outside):
+    with pytest.raises(security.ShipmentEltPathError):
+        with security.open_elt_input_file(outside):
             pytest.fail("an outside file must not be opened")
 
 
 def test_etl_input_accepts_non_bmp_filename(tmp_path, monkeypatch):
-    from app.application import shipment_excel_etl_security as security
+    from app.application import shipment_excel_elt_security as security
 
     allowed = tmp_path / "allowed"
     allowed.mkdir()
@@ -402,23 +402,23 @@ def test_etl_input_accepts_non_bmp_filename(tmp_path, monkeypatch):
     monkeypatch.setattr(security, "_trusted_base_roots", lambda: [allowed])
     monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
 
-    with security.open_etl_input_file(source) as stream:
+    with security.open_elt_input_file(source) as stream:
         assert stream.read() == b"trusted workbook"
 
 
 def test_etl_input_rejects_embedded_nul_component():
-    from app.application import shipment_excel_etl_security as security
+    from app.application import shipment_excel_elt_security as security
 
-    with pytest.raises(security.ShipmentEtlPathError, match="invalid component"):
+    with pytest.raises(security.ShipmentEltPathError, match="invalid component"):
         security._validated_path_component("input\x00.xlsx")
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows UTF-16 component limit")
 def test_etl_input_windows_path_component_checks_utf16_length():
-    from app.application import shipment_excel_etl_security as security
+    from app.application import shipment_excel_elt_security as security
 
     assert security._validated_path_component("😀" * 127) == "😀" * 127
-    with pytest.raises(security.ShipmentEtlPathError, match="too long"):
+    with pytest.raises(security.ShipmentEltPathError, match="too long"):
         security._validated_path_component("😀" * 128)
 
 
@@ -432,11 +432,11 @@ def test_etl_input_rejects_fifo_without_waiting(tmp_path):
     os.mkfifo(fifo)
     script = """
 import sys
-from app.application import shipment_excel_etl_security as security
+from app.application import shipment_excel_elt_security as security
 try:
-    with security.open_etl_input_file(sys.argv[1], workspace_root=sys.argv[2]):
+    with security.open_elt_input_file(sys.argv[1], workspace_root=sys.argv[2]):
         raise SystemExit('FIFO unexpectedly opened as an ETL input')
-except security.ShipmentEtlPathError:
+except security.ShipmentEltPathError:
     raise SystemExit(0)
 """
     environment = os.environ.copy()
@@ -455,7 +455,7 @@ except security.ShipmentEtlPathError:
 
 
 def test_etl_input_rejects_a_leaf_symlink_swapped_after_resolution(tmp_path, monkeypatch):
-    from app.application import shipment_excel_etl_security as security
+    from app.application import shipment_excel_elt_security as security
 
     allowed = tmp_path / "allowed"
     allowed.mkdir()
@@ -465,7 +465,7 @@ def test_etl_input_rejects_a_leaf_symlink_swapped_after_resolution(tmp_path, mon
     outside.write_bytes(b"private workbook")
     monkeypatch.setattr(security, "_trusted_base_roots", lambda: [allowed])
     monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
-    resolve = security.resolve_etl_path
+    resolve = security.resolve_elt_path
 
     def replace_after_resolve(path, **kwargs):
         resolved = resolve(path, **kwargs)
@@ -473,14 +473,14 @@ def test_etl_input_rejects_a_leaf_symlink_swapped_after_resolution(tmp_path, mon
         _create_test_symlink(source, outside)
         return resolved
 
-    monkeypatch.setattr(security, "resolve_etl_path", replace_after_resolve)
-    with pytest.raises((security.ShipmentEtlPathError, OSError)):
-        with security.open_etl_input_file(source) as stream:
+    monkeypatch.setattr(security, "resolve_elt_path", replace_after_resolve)
+    with pytest.raises((security.ShipmentEltPathError, OSError)):
+        with security.open_elt_input_file(source) as stream:
             pytest.fail(f"must not read swapped private input: {stream.read()!r}")
 
 
-def test_prepare_etl_output_path_rejects_existing_leaf_symlink(tmp_path, monkeypatch):
-    from app.application import shipment_excel_etl_security as security
+def test_prepare_elt_output_path_rejects_existing_leaf_symlink(tmp_path, monkeypatch):
+    from app.application import shipment_excel_elt_security as security
 
     allowed = tmp_path / "allowed"
     output_dir = allowed / "outputs"
@@ -492,14 +492,14 @@ def test_prepare_etl_output_path_rejects_existing_leaf_symlink(tmp_path, monkeyp
     monkeypatch.setattr(security, "_trusted_base_roots", lambda: [allowed])
     monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
 
-    with pytest.raises(security.ShipmentEtlPathError):
-        security.prepare_etl_output_path(link)
+    with pytest.raises(security.ShipmentEltPathError):
+        security.prepare_elt_output_path(link)
     assert outside.read_text(encoding="utf-8") == "private"
 
 
 def test_etl_output_resolver_rejects_symlink_escape_without_writing(tmp_path, monkeypatch):
     """An existing output alias cannot redirect a workbook write outside the root."""
-    from app.application import shipment_excel_etl_security as security
+    from app.application import shipment_excel_elt_security as security
 
     allowed = tmp_path / "allowed"
     allowed.mkdir()
@@ -510,15 +510,15 @@ def test_etl_output_resolver_rejects_symlink_escape_without_writing(tmp_path, mo
     monkeypatch.setattr(security, "_trusted_base_roots", lambda: [allowed])
     monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
 
-    with pytest.raises(security.ShipmentEtlPathError):
-        security.resolve_etl_output_path(allowed / "result.xlsx")
+    with pytest.raises(security.ShipmentEltPathError):
+        security.resolve_elt_output_path(allowed / "result.xlsx")
     assert outside.read_bytes() == b"preserve this file"
 
 
 def test_etl_output_writer_rejects_leaf_symlink_replaced_after_validation(tmp_path, monkeypatch):
     """The atomic publish check rejects a symlink inserted after validation."""
 
-    from app.application import shipment_excel_etl_security as security
+    from app.application import shipment_excel_elt_security as security
 
     allowed = tmp_path / "allowed"
     allowed.mkdir()
@@ -526,7 +526,7 @@ def test_etl_output_writer_rejects_leaf_symlink_replaced_after_validation(tmp_pa
     outside.write_bytes(b"preserve this file")
     monkeypatch.setattr(security, "_trusted_base_roots", lambda: [allowed])
     monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
-    destination = security.resolve_etl_output_path(allowed / "result.xlsx")
+    destination = security.resolve_elt_output_path(allowed / "result.xlsx")
     reject_symlink = (
         security._windows_reject_existing_reparse_leaf
         if os.name == "nt"
@@ -550,8 +550,8 @@ def test_etl_output_writer_rejects_leaf_symlink_replaced_after_validation(tmp_pa
         "_windows_reject_existing_reparse_leaf" if os.name == "nt" else "_reject_output_symlink",
         insert_leaf_link_before_publish,
     )
-    with pytest.raises(security.ShipmentEtlPathError):
-        with security.open_etl_output_file(destination) as stream:
+    with pytest.raises(security.ShipmentEltPathError):
+        with security.open_elt_output_file(destination) as stream:
             stream.write(b"replacement")
     assert inserted_link is True
     assert outside.read_bytes() == b"preserve this file"
@@ -559,7 +559,7 @@ def test_etl_output_writer_rejects_leaf_symlink_replaced_after_validation(tmp_pa
 
 def test_etl_output_writer_rejects_parent_symlink_replaced_after_validation(tmp_path, monkeypatch):
     """Directory-descriptor traversal must reject a swapped parent link."""
-    from app.application import shipment_excel_etl_security as security
+    from app.application import shipment_excel_elt_security as security
 
     allowed = tmp_path / "allowed"
     allowed.mkdir()
@@ -569,7 +569,7 @@ def test_etl_output_writer_rejects_parent_symlink_replaced_after_validation(tmp_
     outside.mkdir()
     monkeypatch.setattr(security, "_trusted_base_roots", lambda: [allowed])
     monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
-    destination = security.resolve_etl_output_path(parent / "result.xlsx")
+    destination = security.resolve_elt_output_path(parent / "result.xlsx")
     open_directory = security._open_directory_under_root
     calls = 0
 
@@ -582,14 +582,14 @@ def test_etl_output_writer_rejects_parent_symlink_replaced_after_validation(tmp_
         return open_directory(root, directory, create=create)
 
     monkeypatch.setattr(security, "_open_directory_under_root", replace_parent_before_open)
-    with pytest.raises(security.ShipmentEtlPathError):
-        with security.open_etl_output_file(destination):
+    with pytest.raises(security.ShipmentEltPathError):
+        with security.open_elt_output_file(destination):
             pytest.fail("a swapped parent symlink must not be traversed")
     assert not (outside / destination.name).exists()
 
 
 def test_etl_output_writer_atomically_overwrites_and_creates_parent(tmp_path, monkeypatch):
-    from app.application import shipment_excel_etl_security as security
+    from app.application import shipment_excel_elt_security as security
 
     allowed = tmp_path / "allowed"
     allowed.mkdir()
@@ -597,10 +597,10 @@ def test_etl_output_writer_atomically_overwrites_and_creates_parent(tmp_path, mo
     monkeypatch.setattr(security, "_trusted_base_roots", lambda: [allowed])
     monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
 
-    with security.open_etl_output_file(destination) as stream:
+    with security.open_elt_output_file(destination) as stream:
         stream.write(b"first workbook")
     assert destination.read_bytes() == b"first workbook"
-    with security.open_etl_output_file(destination) as stream:
+    with security.open_elt_output_file(destination) as stream:
         stream.write(b"replacement workbook")
     assert destination.read_bytes() == b"replacement workbook"
     assert sorted(path.name for path in destination.parent.iterdir()) == ["result.xlsx"]
@@ -609,7 +609,7 @@ def test_etl_output_writer_atomically_overwrites_and_creates_parent(tmp_path, mo
 def test_etl_output_writer_preserves_existing_file_and_cleans_temp_on_failure(
     tmp_path, monkeypatch
 ):
-    from app.application import shipment_excel_etl_security as security
+    from app.application import shipment_excel_elt_security as security
 
     allowed = tmp_path / "allowed"
     allowed.mkdir()
@@ -619,7 +619,7 @@ def test_etl_output_writer_preserves_existing_file_and_cleans_temp_on_failure(
     monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
 
     with pytest.raises(RuntimeError, match="simulated workbook failure"):
-        with security.open_etl_output_file(destination) as stream:
+        with security.open_elt_output_file(destination) as stream:
             stream.write(b"partial replacement")
             raise RuntimeError("simulated workbook failure")
 
@@ -628,7 +628,7 @@ def test_etl_output_writer_preserves_existing_file_and_cleans_temp_on_failure(
 
 
 def test_etl_output_writer_fails_closed_without_secure_platform_handles(tmp_path, monkeypatch):
-    from app.application import shipment_excel_etl_security as security
+    from app.application import shipment_excel_elt_security as security
 
     allowed = tmp_path / "allowed"
     allowed.mkdir()
@@ -637,8 +637,8 @@ def test_etl_output_writer_fails_closed_without_secure_platform_handles(tmp_path
     monkeypatch.setattr(security, "_secure_output_handles_available", lambda: False)
     monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
 
-    with pytest.raises(security.ShipmentEtlPathError, match="secure ETL output is unavailable"):
-        with security.open_etl_output_file(destination):
+    with pytest.raises(security.ShipmentEltPathError, match="secure ETL output is unavailable"):
+        with security.open_elt_output_file(destination):
             pytest.fail("must not fall back to path-based output")
     assert not destination.parent.exists()
 
@@ -646,14 +646,14 @@ def test_etl_output_writer_fails_closed_without_secure_platform_handles(tmp_path
 @pytest.mark.skipif(os.name != "nt", reason="Windows filename rules only")
 @pytest.mark.parametrize("name", ["report.xlsx:stream", "CON.xlsx", "NUL", "sample?.xlsx"])
 def test_windows_output_component_rejects_device_names_and_streams(name):
-    from app.application import shipment_excel_etl_security as security
+    from app.application import shipment_excel_elt_security as security
 
-    with pytest.raises(security.ShipmentEtlPathError):
+    with pytest.raises(security.ShipmentEltPathError):
         security._validated_path_component(name)
 
 
 def test_etl_path_resolver_does_not_trust_cwd_or_global_temp(tmp_path, monkeypatch):
-    from app.application import shipment_excel_etl_security as security
+    from app.application import shipment_excel_elt_security as security
 
     app_data = tmp_path / "app-data"
     monkeypatch.setenv("XCAGI_DATA_DIR", str(app_data))
@@ -666,15 +666,15 @@ def test_etl_path_resolver_does_not_trust_cwd_or_global_temp(tmp_path, monkeypat
     roots = security._trusted_base_roots()
     assert Path.cwd() not in roots
     assert Path(tempfile.gettempdir()) not in roots
-    with pytest.raises(security.ShipmentEtlPathError):
-        security.resolve_etl_path(private_file)
+    with pytest.raises(security.ShipmentEltPathError):
+        security.resolve_elt_path(private_file)
 
     monkeypatch.setenv("WORKSPACE_ROOT", str(Path.cwd().parent))
     assert Path.cwd().parent.resolve() not in security._trusted_base_roots()
 
 
 def test_etl_trusts_only_managed_output_and_reviewed_template_subdirectories(tmp_path, monkeypatch):
-    from app.application import shipment_excel_etl_security as security
+    from app.application import shipment_excel_elt_security as security
 
     app_data = tmp_path / "app-data"
     monkeypatch.setenv("XCAGI_DATA_DIR", str(app_data))
@@ -683,23 +683,23 @@ def test_etl_trusts_only_managed_output_and_reviewed_template_subdirectories(tmp
     roots = security._trusted_base_roots()
     assert app_data / "outputs" in roots
     assert app_data not in roots
-    output = security.resolve_etl_output_path(app_data / "outputs" / "report.xlsx")
+    output = security.resolve_elt_output_path(app_data / "outputs" / "report.xlsx")
     assert output == app_data / "outputs" / "report.xlsx"
 
     reviewed = app_data / "templates" / "reviewed_excel" / "1" / "confirmed.xlsx"
     reviewed.parent.mkdir(parents=True)
     reviewed.write_bytes(b"confirmed")
-    assert security.resolve_etl_path(reviewed) == reviewed
-    with pytest.raises(security.ShipmentEtlPathError, match="path not under allowed dirs"):
-        security.resolve_etl_path(app_data / "templates" / "private.xlsx")
+    assert security.resolve_elt_path(reviewed) == reviewed
+    with pytest.raises(security.ShipmentEltPathError, match="path not under allowed dirs"):
+        security.resolve_elt_path(app_data / "templates" / "private.xlsx")
 
     outside = tmp_path / "outside" / "report.xlsx"
-    with pytest.raises(security.ShipmentEtlPathError):
-        security.resolve_etl_output_path(outside)
+    with pytest.raises(security.ShipmentEltPathError):
+        security.resolve_elt_output_path(outside)
 
 
 def test_ocr_workbook_output_stays_in_configured_workspace(tmp_path, monkeypatch):
-    from app.application.shipment_excel_etl_ocr import grid_to_workbook_path
+    from app.application.shipment_excel_elt_ocr import grid_to_workbook_path
 
     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     output = grid_to_workbook_path(
@@ -713,13 +713,13 @@ def test_fixtures_roundtrip_still_ok(monkeypatch):
     fixture = (
         Path(__file__).resolve().parents[1]
         / "fixtures"
-        / "shipment_etl"
+        / "shipment_elt"
         / "闭环测试_送货单模板.xlsx"
     )
     if not fixture.is_file():
         pytest.skip("fixture missing")
     monkeypatch.setenv("WORKSPACE_ROOT", str(fixture.parent))
-    from app.application.shipment_excel_etl_app_service import parse_delivery_notes
+    from app.application.shipment_excel_elt_app_service import parse_delivery_notes
 
     parsed = parse_delivery_notes(fixture, include_ledger=False)
     assert parsed["success"] is True

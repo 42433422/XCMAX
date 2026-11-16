@@ -553,6 +553,9 @@ class DatasetRagApplicationService:
     def _extract_docx_text(self, path: Path) -> tuple[str, str, dict[str, Any]]:
         return self._parser._extract_docx_text(path)
 
+    def _extract_pptx_text(self, path: Path) -> tuple[str, str, dict[str, Any]]:
+        return self._parser._extract_pptx_text(path)
+
     def _extract_excel_text(self, path: Path) -> tuple[str, str, dict[str, Any]]:
         return self._parser._extract_excel_text(path)
 

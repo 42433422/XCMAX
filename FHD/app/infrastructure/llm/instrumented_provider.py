@@ -137,6 +137,14 @@ class InstrumentedProvider:
                 messages, temperature=temperature, max_tokens=max_tokens, **kwargs
             )
 
+    async def stream_chat_completion(self, messages: list[dict[str, str]], **kwargs: Any):
+        """增量透传给内层 provider；流式路径不重复做输出 guardrails。"""
+        inner = getattr(self._inner, "stream_chat_completion", None)
+        if inner is None:
+            return
+        async for delta in inner(messages, **kwargs):
+            yield delta
+
     @staticmethod
     def _record_guardrail(span, phase: str, result) -> None:
         if result.hits:

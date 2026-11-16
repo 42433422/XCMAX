@@ -1,7 +1,10 @@
 /**
  * 聊天多模态附件：转为后端 ``context.multimodal_attachments`` 所需的行结构。
- * 支持图片（jpeg/png/webp/gif）与 PDF（文本抽取由服务端 pdfplumber 完成）。
+ * 支持图片（jpeg/png/webp/gif）与 PDF（文本抽取由服务端完成）。
+ * 格式与大小规则统一来自 ``documentIntake``，不再在此单独维护白名单。
  */
+
+import { CONTEXT_MAX_BATCH_BYTES, CONTEXT_MAX_FILE_BYTES, CONTEXT_MAX_FILES, fileExtension, preflightDocuments } from './documentIntake'
 
 export type MultimodalAttachmentRow = {
   kind: 'image' | 'pdf' | 'log'
@@ -9,14 +12,6 @@ export type MultimodalAttachmentRow = {
   mime_type: string
   /** ``data:<mime>;base64,...`` */
   data_url: string
-}
-
-const MAX_FILES = 6
-const MAX_BYTES_PER_FILE = 12 * 1024 * 1024
-
-function extOf(name: string): string {
-  const i = name.lastIndexOf('.')
-  return i >= 0 ? name.slice(i).toLowerCase() : ''
 }
 
 /** 浏览器端不用 ``mime-types``（其依赖 Node ``path``，会被 Vite 外部化并告警）。 */
@@ -34,8 +29,7 @@ const EXT_TO_MIME: Record<string, string> = {
 function resolveMime(file: File): string {
   const t = (file.type || '').trim().toLowerCase()
   if (t) return t
-  const ext = extOf(file.name)
-  return EXT_TO_MIME[ext] || 'application/octet-stream'
+  return EXT_TO_MIME[fileExtension(file.name)] || 'application/octet-stream'
 }
 
 function readAsDataURL(file: File): Promise<string> {
@@ -49,31 +43,39 @@ function readAsDataURL(file: File): Promise<string> {
 
 export async function filesToMultimodalRows(
   files: FileList | File[],
+  options?: { skipUnsupported?: boolean },
 ): Promise<{ ok: true; rows: MultimodalAttachmentRow[] } | { ok: false; error: string }> {
   const arr = Array.from(files as FileList)
   if (!arr.length) return { ok: false, error: '未选择文件' }
-  if (arr.length > MAX_FILES) {
-    return { ok: false, error: `一次最多 ${MAX_FILES} 个文件` }
+  const report = preflightDocuments(arr, 'context')
+  if (arr.length > CONTEXT_MAX_FILES) {
+    return { ok: false, error: `一次最多 ${CONTEXT_MAX_FILES} 个文件` }
   }
+  for (const item of report.skipped) {
+    if (options?.skipUnsupported) continue
+    if (item.reason === 'too_large') {
+      const isBatch = item.detail.startsWith('本批')
+      const limit = isBatch ? CONTEXT_MAX_BATCH_BYTES : CONTEXT_MAX_FILE_BYTES
+      return {
+        ok: false,
+        error: isBatch
+          ? `附件总大小超过 ${Math.round(limit / (1024 * 1024))}MB 上限`
+          : `「${item.name}」超过 ${Math.round(limit / (1024 * 1024))}MB 上限`,
+      }
+    }
+    return {
+      ok: false,
+      error: `不支持的扩展名: ${fileExtension(item.name) || '(无)'}（允许: .png, .jpg, .jpeg, .webp, .gif, .pdf, .log, .txt）`,
+    }
+  }
+
   const rows: MultimodalAttachmentRow[] = []
-  for (const file of arr) {
-    if (file.size > MAX_BYTES_PER_FILE) {
-      return {
-        ok: false,
-        error: `「${file.name}」超过 ${Math.round(MAX_BYTES_PER_FILE / (1024 * 1024))}MB 上限`,
-      }
-    }
+  for (const file of report.accepted) {
     const mime = resolveMime(file)
-    const ext = extOf(file.name)
-    const allowedExt = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.pdf', '.log', '.txt'])
-    if (!allowedExt.has(ext)) {
-      return {
-        ok: false,
-        error: `不支持的扩展名: ${ext || '(无)'}（允许: ${[...allowedExt].join(', ')}）`,
-      }
-    }
+    const ext = fileExtension(file.name)
     const isLog = ext === '.log' || ext === '.txt'
     if (!isLog && mime !== 'application/pdf' && !mime.startsWith('image/')) {
+      if (options?.skipUnsupported) continue
       return { ok: false, error: `不支持的类型: ${mime}（${file.name}）` }
     }
     const dataUrl = await readAsDataURL(file)
@@ -83,10 +85,11 @@ export async function filesToMultimodalRows(
     const kind: MultimodalAttachmentRow['kind'] = isLog ? 'log' : mime === 'application/pdf' ? 'pdf' : 'image'
     rows.push({
       kind,
-      filename: file.name || (kind === 'pdf' ? 'upload.pdf' : 'image.bin'),
+      filename: String((file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name) || (kind === 'pdf' ? 'upload.pdf' : 'image.bin'),
       mime_type: mime,
       data_url: dataUrl,
     })
   }
+  if (!rows.length) return { ok: false, error: '所选文件中没有可暂存的附件（支持图片、PDF、TXT、LOG）' }
   return { ok: true, rows }
 }

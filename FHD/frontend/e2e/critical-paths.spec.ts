@@ -20,7 +20,7 @@ test.describe('P0 critical paths', () => {
     if (isFullStack()) {
       const anonymous = await request.get('/api/orders', { timeout: 20_000 })
       expect(anonymous.status(), await anonymous.text()).toBe(401)
-      expect(await anonymous.json()).toMatchObject({ success: false, error_code: 'http_401', message: expect.stringContaining('请先登录'), path: '/api/orders' })
+      expect(await anonymous.json()).toMatchObject({ success: false, error_code: 'UNAUTHORIZED', message: expect.stringContaining('请先登录'), path: '/api/orders' })
       const tenant = await page.request.get('/api/orders', { timeout: 20_000 })
       expect(tenant.status(), await tenant.text()).toBe(403)
       expect(await tenant.json()).toMatchObject({ success: false, error_code: 'http_403', message: '该旧业务接口尚未提供安全的租户数据隔离', path: '/api/orders' })

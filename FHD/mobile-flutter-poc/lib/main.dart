@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'src/app/mobile_startup_shell.dart';
@@ -16,6 +18,12 @@ class XcagiFlutterPocApp extends StatefulWidget {
 
 class _XcagiFlutterPocAppState extends State<XcagiFlutterPocApp> {
   late final MobileRepository _repository = MobileRepository();
+
+  @override
+  void dispose() {
+    unawaited(_repository.dispose());
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {

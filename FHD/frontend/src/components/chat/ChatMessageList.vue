@@ -1,19 +1,15 @@
 <template>
   <div class="chat-messages-shell">
-    <nav v-if="messages.length > CHAT_HISTORY_WINDOW" class="chat-history-navigation" aria-label="聊天历史分页">
-      <button type="button" :disabled="windowStart === 0" @click="moveWindow(-1)">更早消息</button>
-      <span role="status">第 {{ windowStart + 1 }}–{{ windowEnd }} 条，共 {{ messages.length }} 条</span>
-      <button type="button" :disabled="windowEnd === messages.length" @click="moveWindow(1)">较新消息</button>
-      <button type="button" @click="showLatest">最新消息</button>
-    </nav>
+    <Teleport to="#chat-history-nav-slot" :disabled="!historyNavTarget">
+      <nav v-if="messages.length > CHAT_HISTORY_WINDOW" :class="['chat-history-navigation', { 'is-header': historyNavTarget }]" aria-label="聊天历史分页">
+        <button type="button" :disabled="windowStart === 0" @click="moveWindow(-1)">更早消息</button>
+        <span role="status">第 {{ windowStart + 1 }}–{{ windowEnd }} 条，共 {{ messages.length }} 条</span>
+        <button type="button" :disabled="windowEnd === messages.length" @click="moveWindow(1)">较新消息</button>
+        <button type="button" @click="showLatest">最新消息</button>
+      </nav>
+    </Teleport>
     <div class="chat-messages" id="chatMessages" ref="messagesHostRef" role="list" aria-label="聊天消息"
       @scroll.passive="onScroll" @xcagi-reveal-chat-message="revealMessage">
-      <div v-if="!messages.length && !isLoading" class="message ai chat-welcome" role="listitem">
-        <h2>开始新的对话</h2>
-        <p>{{ emptyIntro || '你可以描述问题、查询资料，或说明需要协助的业务任务。' }}</p>
-        <p>可用能力以当前配置为准。点击示例只填入输入框，请检查后发送。</p>
-        <button type="button" class="btn btn-secondary" @click="$emit('fill-example', '请用一句话介绍你能做什么。仅回答，不执行操作。')">试试：介绍你能做什么</button>
-      </div>
       <div
         v-for="{ msg, idx } in visibleMessages"
         :key="presentation(msg).key"
@@ -24,12 +20,16 @@
         :class="['message', msg.role]"
         :style="{ minHeight: !isMessageCollapsed(msg, idx) && messageHeights.get(idx) ? messageHeights.get(idx) + 'px' : 'auto' }"
       >
-        <CollapsedMessagePreview
+        <MessageFold
           v-if="isMessageCollapsed(msg, idx)"
-          :preview="messagePreview(msg)"
-          expand-label="展开详情"
           @expand="$emit('expand-message', idx)"
-        />
+        >
+          <div
+            v-if="msg.role === 'ai' && shouldCondenseOrchestrationBody(msg)"
+            class="message-html"
+          >{{ receiptSummary(msg) }}</div>
+          <div v-else class="message-html" v-html="messageHtml(msg)"></div>
+        </MessageFold>
         <template v-else>
           <ChatTypingIndicator v-if="msg.role === 'ai' && msg.streamingShell" :label="msg.waitingHint || '正在思考…'" show-elapsed />
           <AgentRunTrace
@@ -37,55 +37,89 @@
             :trace="orchestrationTraceFor(msg)"
             @auto-approve-tool="approveMessage(msg)"
           />
+          <AgentStepChain
+            v-else-if="msg.role === 'ai' && stepChainFor(msg).length"
+            :steps="stepChainFor(msg)"
+          />
           <div v-if="waitingRunId(msg)" class="run-approve-row">
             <button type="button" class="run-approve-btn" data-testid="chat-run-approve" @click="$emit('approve-run', waitingRunId(msg))">
               确认执行
             </button>
           </div>
-          <div v-if="msg.role === 'ai' && shouldCondenseOrchestrationBody(msg)" class="message-orchestration-intro">
-            执行计划已整理为任务编排，展开卡片可查看工具、步骤和运行详情。
+          <details v-if="msg.role === 'ai' && hasReceiptDetails(msg)" class="message-receipt">
+            <summary>
+              <i v-if="msg.streamingShell" class="fa fa-spinner fa-spin message-receipt__spinner" aria-hidden="true"></i>
+              <i v-else class="fa fa-bolt message-receipt__icon" aria-hidden="true"></i>
+              <span class="message-receipt__status" :class="`is-${receiptStatus(msg)}`">{{ receiptStatusLabel(msg) }}</span>
+              <span class="execution-timeline__current" data-testid="chat-business-result">{{ receiptSummary(msg) }}</span>
+              <span v-if="msg.executionProgress?.length" class="execution-timeline__count">{{ msg.executionProgress.length }} 步</span>
+              <i class="fa fa-angle-down message-receipt__chevron" aria-hidden="true"></i>
+            </summary>
+            <div class="message-receipt__body">
+              <ol v-if="msg.executionProgress?.length" class="execution-timeline__list">
+                <li v-for="(item, progressIndex) in msg.executionProgress" :key="`${item.at}-${progressIndex}`" :class="`is-${item.status}`">
+                  <span class="execution-timeline__marker">{{ executionMarker(item.status) }}</span>
+                  <span>{{ item.label }}</span>
+                </li>
+              </ol>
+              <div v-if="!hasOrchestrationTrace(msg) && msg.todoSteps && msg.todoSteps.length" class="todo-panel">
+                <ul>
+                  <li v-for="(step, tIdx) in msg.todoSteps" :key="tIdx">{{ step }}</li>
+                </ul>
+              </div>
+              <div
+                v-if="showDiagnosticMetadata && (msg.workflowAction || (msg.nodeResults && msg.nodeResults.length))"
+                class="trace-panel"
+              >
+                <div class="trace-action" v-if="msg.workflowAction">
+                  {{ $t('chat.statusLabel', { status: msg.workflowAction }) }}
+                </div>
+                <ul v-if="msg.nodeResults && msg.nodeResults.length" class="trace-list">
+                  <li v-for="(nr, nIdx) in msg.nodeResults" :key="nIdx">
+                    <span :class="['trace-status', nr.success ? 'ok' : 'fail']">{{ nr.success ? $t('chat.success') : $t('chat.failed') }}</span>
+                    <span>{{ nr.node_id }} · {{ nr.tool_id }}.{{ nr.action }}</span>
+                    <span v-if="nr.retries || nr.duration_ms" class="trace-node-meta">
+                      <template v-if="nr.retries">重试 {{ nr.retries }} 次</template>
+                      <template v-if="nr.retries && nr.duration_ms"> · </template>
+                      <template v-if="nr.duration_ms">{{ nr.duration_ms }}ms</template>
+                    </span>
+                    <span v-if="nr.error || nr.message" class="trace-node-error">
+                      {{ nr.error || nr.message }}
+                    </span>
+                    <span v-if="nr.recovery_hint" class="trace-node-hint"> {{ nr.recovery_hint }} </span>
+                  </li>
+                </ul>
+              </div>
+              <div v-if="showDiagnosticMetadata && msg.contextSummary" class="context-summary">
+                {{ msg.contextSummary }}
+              </div>
+            </div>
+          </details>
+          <div v-else-if="msg.role === 'ai' && receiptSummary(msg)" class="message-receipt message-receipt--plain">
+            <i class="fa fa-bolt message-receipt__icon" aria-hidden="true"></i>
+            <span class="message-receipt__status" :class="`is-${receiptStatus(msg)}`">{{ receiptStatusLabel(msg) }}</span>
+            <span class="execution-timeline__current" data-testid="chat-business-result">{{ receiptSummary(msg) }}</span>
           </div>
+          <details
+            v-if="msg.role === 'ai' && msg.thinkingSteps"
+            class="thinking-panel message-thinking"
+            :open="msg.streamingShell"
+            :data-testid="`chat-thinking-${idx}`"
+          >
+            <summary>{{ $t('chat.viewThinkingSteps') }}</summary>
+            <pre>{{ msg.thinkingSteps }}</pre>
+          </details>
           <div
-            v-else
+            v-if="msg.role !== 'ai' || !shouldCondenseOrchestrationBody(msg)"
             class="message-html"
             v-html="messageHtml(msg)"
           ></div>
+          <ChatTurnTrace v-if="msg.role === 'ai' && msg.trace?.length" :items="msg.trace" />
           <ChatTypingIndicator v-if="msg.role === 'ai' && !msg.streamingShell && msg.waitingHint" :label="msg.waitingHint" show-elapsed />
-          <details
-            v-if="msg.role === 'ai' && !hasOrchestrationTrace(msg) && (msg.toolProgressLabel || msg.executionProgress?.length)"
-            class="execution-timeline"
-          >
-            <summary>
-              <i v-if="msg.streamingShell" class="fa fa-spinner fa-spin execution-timeline__spinner" aria-hidden="true"></i>
-              <span class="execution-timeline__current">
-                {{ msg.toolProgressLabel || latestExecutionLabel(msg) }}
-              </span>
-              <span v-if="msg.executionProgress?.length" class="execution-timeline__count"> {{ msg.executionProgress.length }} 步 </span>
-            </summary>
-            <ol v-if="msg.executionProgress?.length" class="execution-timeline__list">
-              <li v-for="(item, progressIndex) in msg.executionProgress" :key="`${item.at}-${progressIndex}`" :class="`is-${item.status}`">
-                <span class="execution-timeline__marker">{{ executionMarker(item.status) }}</span>
-                <span>{{ item.label }}</span>
-              </li>
-            </ol>
-          </details>
           <div v-if="msg.role === 'ai' && msg.shipmentDownloadUrl" class="message-shipment-actions">
             <a class="btn btn-primary btn-sm" :href="msg.shipmentDownloadUrl" download @click="$emit('shipment-download-click')">
               {{ $t('chat.downloadShipment') }}
             </a>
-          </div>
-          <div v-if="showDiagnosticMetadata && msg.role === 'ai' && msg.contextSummary" class="context-summary">
-            {{ msg.contextSummary }}
-          </div>
-          <details v-if="showDiagnosticMetadata && msg.role === 'ai' && msg.thinkingSteps" class="thinking-panel">
-            <summary>{{ $t('chat.viewThinkingSteps') }}</summary>
-            <pre>{{ msg.thinkingSteps }}</pre>
-          </details>
-          <div v-if="msg.role === 'ai' && !hasOrchestrationTrace(msg) && msg.todoSteps && msg.todoSteps.length" class="todo-panel">
-            <div class="todo-title">{{ $t('chat.executeTodo') }}</div>
-            <ul>
-              <li v-for="(step, tIdx) in msg.todoSteps" :key="tIdx">{{ step }}</li>
-            </ul>
           </div>
           <ChatApprovalInlineCard
             v-if="msg.role === 'ai' && msg.approvalCard && msg.approvalCard.status === 'pending'"
@@ -94,46 +128,9 @@
             @confirm="$emit('approval-confirm', approvalCardId(msg.approvalCard))"
             @cancel="$emit('approval-cancel', approvalCardId(msg.approvalCard))"
           />
-          <div
-            v-if="msg.role === 'ai' && businessResultText(msg)"
-            class="message-business-result"
-            data-testid="chat-business-result"
-          >
-            <div class="message-business-result__label">业务结果</div>
-            <div class="message-business-result__text">{{ businessResultText(msg) }}</div>
-          </div>
-          <div
-            v-if="showDiagnosticMetadata && msg.role === 'ai' && (msg.workflowAction || (msg.nodeResults && msg.nodeResults.length))"
-            class="trace-panel"
-          >
-            <div class="trace-title">{{ $t('chat.traceTitle') }}</div>
-            <div class="trace-stages">
-              <span class="trace-chip">{{ $t('chat.traceThinking') }}</span>
-              <span class="trace-chip">{{ $t('chat.tracePlan') }}</span>
-              <span class="trace-chip">{{ $t('chat.traceExecute') }}</span>
-            </div>
-            <div class="trace-action" v-if="msg.workflowAction">
-              {{ $t('chat.statusLabel', { status: msg.workflowAction }) }}
-            </div>
-            <ul v-if="msg.nodeResults && msg.nodeResults.length" class="trace-list">
-              <li v-for="(nr, nIdx) in msg.nodeResults" :key="nIdx">
-                <span :class="['trace-status', nr.success ? 'ok' : 'fail']">{{ nr.success ? $t('chat.success') : $t('chat.failed') }}</span>
-                <span>{{ nr.node_id }} · {{ nr.tool_id }}.{{ nr.action }}</span>
-                <span v-if="nr.retries || nr.duration_ms" class="trace-node-meta">
-                  <template v-if="nr.retries">重试 {{ nr.retries }} 次</template>
-                  <template v-if="nr.retries && nr.duration_ms"> · </template>
-                  <template v-if="nr.duration_ms">{{ nr.duration_ms }}ms</template>
-                </span>
-                <span v-if="nr.error || nr.message" class="trace-node-error">
-                  {{ nr.error || nr.message }}
-                </span>
-                <span v-if="nr.recovery_hint" class="trace-node-hint"> 恢复建议：{{ nr.recovery_hint }} </span>
-              </li>
-            </ul>
-          </div>
           <MessageCollapseLink
-            v-if="msg.role === 'ai' && idx < latestAiMessageIndex"
-            label="收起详情"
+            v-if="msg.role === 'ai' && idx < latestAiMessageIndex && canCollapseMessageOf(msg)"
+            label=""
             @collapse="$emit('collapse-message', idx)"
           />
         </template>
@@ -144,6 +141,41 @@
             <span v-if="msg.persistence.error" class="message-save-error">{{ msg.persistence.error }}</span>
           </span>
           <button v-if="msg.persistence?.request && ['failed', 'local'].includes(msg.persistence.status)" type="button" class="btn btn-secondary btn-sm" @click="$emit('retry-save', msg.persistence.id)">仅重试保存</button>
+          <button
+            v-if="msg.role === 'user' && !msg.streamingShell"
+            type="button"
+            class="message-recall-btn"
+            data-testid="chat-recall-edit"
+            title="撤回编辑"
+            aria-label="撤回编辑"
+            @click.stop="$emit('recall-edit', idx)"
+          >
+            <i class="fa fa-undo" aria-hidden="true"></i>
+          </button>
+          <button
+            v-if="msg.role === 'ai' && !msg.streamingShell && isFailedChatReply(msg) && originalRequest(idx)"
+            type="button"
+            class="message-recovery-btn"
+            data-testid="chat-retry-model"
+            title="重试本轮（不重复写入）"
+            aria-label="重试本轮（不重复写入）"
+            :disabled="isLoading"
+            @click.stop="retryModel(idx)"
+          >
+            <i class="fa fa-refresh" aria-hidden="true"></i>
+          </button>
+          <button
+            v-if="msg.role === 'ai' && !msg.streamingShell && msg.turnId && (isFailedChatReply(msg) || msg.workflowAction === 'unknown')"
+            type="button"
+            class="message-recovery-btn"
+            data-testid="chat-reconcile-turn"
+            title="核对状态"
+            aria-label="核对状态"
+            :disabled="isLoading"
+            @click.stop="$emit('reconcile-turn', idx)"
+          >
+            <i class="fa fa-check-circle-o" aria-hidden="true"></i>
+          </button>
           <button v-if="!msg.streamingShell && msg.content" type="button" class="message-copy-btn" :title="copyLabels.get(msg) || '复制正文'" :aria-label="copyLabels.get(msg) || '复制正文'" @click.stop="copyMessage(msg, $event)">
             <i class="fa fa-copy" aria-hidden="true"></i>
           </button>
@@ -159,17 +191,17 @@
             <i class="fa" :class="playingMsgIdx === idx ? 'fa-stop' : 'fa-volume-up'" aria-hidden="true"></i>
           </button>
         </div>
-        <div v-if="msg.role === 'ai' && !msg.streamingShell && msg.workflowAction === 'unknown'" class="proactive-suggestions" data-testid="chat-unknown-recovery">
-          <p>请先到任务工作区核对执行结果，避免重复提交。</p>
+        <div v-if="msg.role === 'ai' && !msg.streamingShell && msg.workflowAction === 'unknown'" class="message-recovery" data-testid="chat-unknown-recovery">
+          <p class="message-recovery__text">本轮结果未知，请先核对。</p>
         </div>
-        <div v-else-if="msg.role === 'ai' && !msg.streamingShell && isFailedChatReply(msg)" class="proactive-suggestions" data-testid="chat-error-recovery">
-          <p>{{ recoveryText(msg) }}</p>
-          <details v-if="originalRequest(idx)"><summary>查看本次原始输入</summary><p>{{ originalRequest(idx) }}</p></details>
-          <button v-if="originalRequest(idx)" type="button" class="btn btn-secondary btn-sm" :disabled="isLoading" @click="retryModel(idx)">重试模型请求（不重复写入）</button>
+        <div v-else-if="msg.role === 'ai' && !msg.streamingShell && isFailedChatReply(msg)" class="message-recovery" data-testid="chat-error-recovery">
+          <p class="message-recovery__text">{{ recoveryText(msg) }}</p>
         </div>
-        <div v-else-if="msg.role === 'ai' && !msg.streamingShell && msg.execution?.effect === 'preview' && !msg.execution.committed" class="proactive-suggestions" data-testid="chat-destructive-preview">
-          <p>上述范围尚未删除。确认后才会写入，且同一请求不会重复执行。</p>
-          <button type="button" class="btn btn-secondary btn-sm" :disabled="isLoading" @click="confirmPreview(idx)">确认删除该范围</button>
+        <div v-else-if="msg.role === 'ai' && !msg.streamingShell && msg.execution?.effect === 'preview' && !msg.execution.committed" class="message-recovery" data-testid="chat-destructive-preview">
+          <p class="message-recovery__text">尚未写入，确认后生效。</p>
+          <button type="button" class="message-recovery__action is-primary" :disabled="isLoading" @click="confirmPreview(idx)">
+            <i class="fa fa-trash-o" aria-hidden="true"></i>确认删除该范围
+          </button>
         </div>
         <div
           v-else-if="!isMessageCollapsed(msg, idx) && suggestionsFor(msg).length"
@@ -198,15 +230,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, type Ref } from 'vue'
+import { onMounted, ref, watch, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { ChatMessage } from '@/composables/useChatMessages'
 import { sanitizeChatBubbleHtml, sanitizeChatBubbleMarkdown, plainTextFromChatHtml } from '@/utils/sanitizeHtml'
 import { aiMarkdownSourceFromContent } from '@/utils/chatBubbleDisplay'
 import ChatApprovalInlineCard from '@/components/chat/ChatApprovalInlineCard.vue'
 import ChatTypingIndicator from '@/components/chat/ChatTypingIndicator.vue'
+import ChatTurnTrace from '@/components/chat/ChatTurnTrace.vue'
 import AgentRunTrace from '@/components/chat/AgentRunTrace.vue'
-import CollapsedMessagePreview from '@/components/chat/CollapsedMessagePreview.vue'
+import AgentStepChain from '@/components/chat/AgentStepChain.vue'
+import { buildLiveStep, stepsFromNodeResults, withLiveStep, type AgentStepView } from '@/utils/agentStepChain'
+import MessageFold from '@/components/chat/MessageFold.vue'
 import MessageCollapseLink from '@/components/chat/MessageCollapseLink.vue'
 import { buildApprovalCardTrace } from '@/utils/chatOrchestrationTrace'
 import { approvalCardId } from '@/utils/chatApprovalCard'
@@ -222,7 +257,6 @@ const saveLabels = { local: '本机副本 · 服务端未核实', saving: '正�
 
 const props = defineProps<{
   messages: ChatMessage[]
-  emptyIntro?: string
   sessionKey?: string
   proactiveSuggestions?: ReadonlyMap<string, readonly ProactiveReplySuggestion[]>
   isLoading: boolean
@@ -232,7 +266,8 @@ const props = defineProps<{
   latestAiMessageIndex: number
   playingMsgIdx: number
   isMessageCollapsed: (msg: ChatMessage, idx: number) => boolean
-  getCollapsedPreview: (htmlText: string) => string
+  /** 该消息是否允许折叠（超长正文才允许）；缺省视为不可折叠。 */
+  canCollapseMessage?: (msg: ChatMessage) => boolean
   canSpeakMessage: (msg: ChatMessage) => boolean
   chatMessagesRef?: Ref<HTMLElement | null>
   /** 默认不向普通用户暴露内部上下文计数；诊断界面可显式开启。 */
@@ -248,14 +283,61 @@ const emit = defineEmits<{
   'approval-cancel': [cardId: string]
   'retry-save': [id: string]
   'approve-run': [runId: string]
+  'recall-edit': [idx: number]
+  'reconcile-turn': [idx: number]
   'pick-proactive-suggestion': [item: ProactiveReplySuggestion]
-  'fill-example': [text: string]
   'retry-model': [payload: { text: string; turnId: string }]
   'confirm-destructive': [payload: { text: string; idempotencyKey: string }]
 }>()
 
 function businessResultText(message: ChatMessage): string {
   return formatBusinessResultSummary(message.businessResult)
+}
+
+function hasReceiptDetails(message: ChatMessage): boolean {
+  if (message.role !== 'ai') return false
+  if (message.executionProgress?.length) return true
+  if (!hasOrchestrationTrace(message) && message.todoSteps?.length) return true
+  // 思考步骤是用户可见的过程信息，不受诊断开关限制。
+  if (!hasOrchestrationTrace(message) && message.thinkingSteps) return true
+  if (!props.showDiagnosticMetadata) return false
+  return Boolean(
+    message.workflowAction
+    || message.nodeResults?.length
+    || message.contextSummary
+    || message.thinkingSteps,
+  )
+}
+
+type ReceiptStatus = 'running' | 'done' | 'partial' | 'unknown' | 'failed'
+
+const RECEIPT_STATUS_LABEL: Record<ReceiptStatus, string> = {
+  running: '进行中',
+  done: '已完成',
+  partial: '部分完成',
+  unknown: '待核对',
+  failed: '失败',
+}
+
+function receiptStatus(message: ChatMessage): ReceiptStatus {
+  if (message.streamingShell) return 'running'
+  const outcome = String(message.execution?.outcome || '')
+  if (outcome === 'unknown' || message.workflowAction === 'unknown') return 'unknown'
+  if (outcome === 'partial' || message.execution?.effect === 'partial') return 'partial'
+  if (isFailedChatReply(message)) return 'failed'
+  if ((message.executionProgress || []).some(item => item.status === 'failed')) return 'partial'
+  return 'done'
+}
+
+function receiptStatusLabel(message: ChatMessage): string {
+  return RECEIPT_STATUS_LABEL[receiptStatus(message)]
+}
+
+/** 回执摘要只留一句：业务结果优先，其次当前执行步骤；都没有就不占用标题行。 */
+function receiptSummary(message: ChatMessage): string {
+  if (businessResultText(message)) return businessResultText(message)
+  if (message.toolProgressLabel) return message.toolProgressLabel
+  return message.executionProgress?.length ? latestExecutionLabel(message) : ''
 }
 
 function originalRequest(index: number): string {
@@ -305,11 +387,16 @@ function approveMessage(message: ChatMessage) {
 }
 
 const messagesHostRef = ref<HTMLElement | null>(null)
+/** 顶部快捷按钮行里的分页挂载点；独立挂载（如测试）时回退到消息区顶部。 */
+const historyNavTarget = ref(false)
+onMounted(() => {
+  historyNavTarget.value = !!document.getElementById('chat-history-nav-slot')
+})
 const copyLabels = ref(new Map<ChatMessage, string>())
 const { start: windowStart, end: windowEnd, visibleMessages, moveWindow, showLatest, onScroll, revealMessage, scrollToLatestIfFollowing } =
   useChatHistoryWindow(() => props.messages, messagesHostRef, () => props.sessionKey)
 watch(() => props.proactiveSuggestions?.size, scrollToLatestIfFollowing, { flush: 'post' })
-type Presentation = { key: number; content: string; role: ChatMessage['role']; html?: string; preview?: string; canSpeak?: boolean }
+type Presentation = { key: number; content: string; role: ChatMessage['role']; html?: string; canSpeak?: boolean; foldable?: boolean }
 let presentations = new WeakMap<ChatMessage, Presentation>()
 let nextKey = 0
 function presentation(message: ChatMessage): Presentation {
@@ -324,16 +411,25 @@ function messageHtml(message: ChatMessage): string {
   return presentation(message).html ??= message.role === 'ai'
     ? sanitizeChatBubbleMarkdown(aiMarkdownSourceFromContent(message.content)) : sanitizeChatBubbleHtml(message.content)
 }
-function messagePreview(message: ChatMessage): string {
-  return presentation(message).preview ??= props.getCollapsedPreview(message.content)
-}
 function messageCanSpeak(message: ChatMessage): boolean {
   return presentation(message).canSpeak ??= props.canSpeakMessage(message)
 }
-watch([() => props.sessionKey, () => props.messages, () => props.getCollapsedPreview, () => props.canSpeakMessage], () => {
-  presentations = new WeakMap()
-  copyLabels.value.clear()
-}, { flush: 'sync' })
+function canCollapseMessageOf(message: ChatMessage): boolean {
+  // 逐条缓存：是否折叠要看正文长度，不能每帧重算整段纯文本。
+  const entry = presentation(message)
+  if (entry.foldable === undefined) {
+    entry.foldable = props.canCollapseMessage ? props.canCollapseMessage(message) : false
+  }
+  return entry.foldable
+}
+watch(
+  [() => props.sessionKey, () => props.messages, () => props.canSpeakMessage, () => props.canCollapseMessage],
+  () => {
+    presentations = new WeakMap()
+    copyLabels.value.clear()
+  },
+  { flush: 'sync' },
+)
 watch(visibleMessages, (rows) => {
   const visible = new Set(rows.map(({ msg }) => msg))
   for (const message of copyLabels.value.keys()) if (!visible.has(message)) copyLabels.value.delete(message)
@@ -360,7 +456,8 @@ function visibleBodyText(root: HTMLElement): string {
 async function copyMessage(message: ChatMessage, event: MouseEvent) {
   const container = (event.currentTarget as HTMLElement).closest('.message')
   if (!container || message.streamingShell) return
-  let body = container.querySelector<HTMLElement>('.message-html, .message-orchestration-intro')
+  let body = container.querySelector<HTMLElement>('.message-html')
+  if (!body) body = container.querySelector<HTMLElement>('.message-receipt')
   let temporary: HTMLElement | undefined
   if (!body) {
     // Render the sanitized collapsed body offscreen in its message context.
@@ -369,7 +466,7 @@ async function copyMessage(message: ChatMessage, event: MouseEvent) {
     temporary.style.position = 'fixed'
     temporary.style.left = '-10000px'
     if (message.role === 'ai' && shouldCondenseOrchestrationBody(message)) {
-      temporary.textContent = '执行计划已整理为任务编排，展开卡片可查看工具、步骤和运行详情。'
+      temporary.textContent = receiptSummary(message)
     } else {
       const html = messageHtml(message)
       temporary.append(...new DOMParser().parseFromString(html, 'text/html').body.childNodes)
@@ -421,6 +518,30 @@ function hasOrchestrationTrace(message: ChatMessage): boolean {
   return Boolean(message.agentRunTrace || approvalTraceFor(message))
 }
 
+const EMPTY_STEPS: AgentStepView[] = []
+const stepChainCache = new WeakMap<ChatMessage, { sig: string; steps: AgentStepView[] }>()
+
+/**
+ * 对话内执行链：终态步骤来自 node_results；流式阶段用进度文案挂一个「执行中」占位步骤。
+ * 没有 agentRunTrace 的普通回合也能看到链路（此前单工具成功会被整体隐藏）。
+ */
+function stepChainFor(message: ChatMessage): AgentStepView[] {
+  if (message.role !== 'ai') return EMPTY_STEPS
+  const hint = message.streamingShell ? String(message.toolProgressLabel || message.waitingHint || '').trim() : ''
+  const liveCount = message.liveSteps?.length || 0
+  const liveSignature = liveCount ? `${liveCount}:${message.liveSteps?.[liveCount - 1]?.state || ''}` : '0'
+  const sig = `${message.nodeResults?.length || 0}|${message.streamingShell ? 1 : 0}|${hint}|${liveSignature}`
+  const cached = stepChainCache.get(message)
+  if (cached && cached.sig === sig) return cached.steps
+  // 终态 node_results 是权威来源；结束后不再保留流式累积的中间步骤。
+  const steps = stepsFromNodeResults(message.nodeResults)
+  const base = steps.length ? steps : message.liveSteps || EMPTY_STEPS
+  const hasRunning = base.some((step) => step.state === 'running' || step.state === 'waiting')
+  const merged = withLiveStep(base, hint && !hasRunning ? buildLiveStep(hint) : null)
+  stepChainCache.set(message, { sig, steps: merged })
+  return merged
+}
+
 function orchestrationTraceFor(message: ChatMessage): AgentRunTraceData {
   return (
     message.agentRunTrace ||
@@ -452,24 +573,89 @@ watch(
 .proactive-suggestions__chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 14px;
 }
 .proactive-suggestions__chip {
   max-width: 100%;
   text-align: left;
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--app-border, #d0d5dd);
-  background: var(--app-surface, #fff);
-  color: var(--app-text, #1d2939);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--xc-color-primary, #0d47a1);
   font-size: var(--app-font-size-caption, 12px);
-  line-height: 1.35;
+  line-height: 1.5;
   cursor: pointer;
 }
 .proactive-suggestions__chip:hover,
 .proactive-suggestions__chip:focus-visible {
-  border-color: var(--xc-color-primary, #0d47a1);
+  text-decoration: underline;
+}
+.message-recovery {
+  padding-top: 8px;
+}
+.message-recovery__text {
+  margin: 0 0 6px;
+  color: #4b5563;
+  font-size: 12px;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.message-recovery-btn {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0.72;
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.message:hover .message-recovery-btn {
+  opacity: 0.9;
+}
+.message-recovery-btn:hover {
+  background: #eef2f7;
+  color: #2d7bd6;
+}
+.message-recovery-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.message-recovery__action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: var(--xc-color-primary, #0d47a1);
+  font-size: 12px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+.message-recovery__action i {
+  font-size: 11px;
+}
+.message-recovery__action:hover {
+  text-decoration: underline;
+}
+.message-recovery__action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.message-recovery__action.is-primary {
+  color: #b42318;
 }
 .chat-messages-shell {
   display: flex;
@@ -490,9 +676,56 @@ watch(
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 6px;
+  gap: 2px;
+  width: fit-content;
+  max-width: calc(100% - 16px);
+  margin: 6px auto;
+  padding: 3px 6px;
   font-size: 12px;
+  line-height: 1.6;
+  color: var(--app-text-muted, #64748b);
+  background: var(--app-surface-muted, rgba(248, 250, 252, 0.96));
+  border: 1px solid var(--app-border-subtle, rgba(226, 232, 240, 0.82));
+  border-radius: 999px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.chat-history-navigation.is-header {
+  /* 顶置到快捷按钮行时不再需要自身外边距 */
+  margin: 0;
+  max-width: none;
+}
+
+.chat-history-navigation span[role='status'] {
+  padding: 0 6px;
+  color: var(--app-text-muted, #64748b);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.chat-history-navigation button {
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--xc-color-primary, #0d47a1);
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 1px 8px;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.chat-history-navigation button:hover:not(:disabled) {
+  background: var(--xc-color-primary-soft, #e3eaf8);
+  border-color: var(--app-border-default, rgba(203, 213, 225, 0.8));
+}
+
+.chat-history-navigation button:disabled {
+  color: var(--app-text-muted, #64748b);
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 .message-save-status { font-size: 12px; }
 .message-save-error { display: block; color: var(--app-text-danger, #b42318); }
@@ -519,11 +752,88 @@ watch(
   align-items: center;
 }
 
-.message-orchestration-intro {
-  margin: 8px 0 2px;
+.message-receipt {
+  margin-top: 8px;
+  font-size: 13px;
   color: #6b7280;
+}
+
+.message-receipt--plain {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.message-receipt summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  color: #6b7280;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.message-receipt summary::-webkit-details-marker {
+  display: none;
+}
+
+.message-receipt__icon,
+.message-receipt__spinner {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+.message-receipt__spinner {
+  color: var(--xc-color-primary, #0d47a1);
+}
+
+.message-receipt__status {
+  flex-shrink: 0;
+  color: #4b5563;
   font-size: 12px;
-  line-height: 1.55;
+}
+
+.message-receipt__status.is-done {
+  color: #6b7280;
+}
+
+.message-receipt__status.is-partial,
+.message-receipt__status.is-unknown {
+  color: #b45309;
+}
+
+.message-receipt__status.is-failed {
+  color: #dc2626;
+}
+
+.message-receipt__status.is-running {
+  color: var(--xc-color-primary, #0d47a1);
+}
+
+.message-receipt__body {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f8fafc;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  color: #4b5563;
+}
+
+.message-receipt__chevron {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: #9ca3af;
+  transition: transform 0.15s ease;
+}
+
+.message-receipt[open] .message-receipt__chevron {
+  transform: rotate(180deg);
 }
 
 .chat-loading-row {
@@ -537,45 +847,19 @@ watch(
   font-size: 14px;
 }
 
-.execution-timeline {
-  margin-top: 10px;
-  border-top: 1px dashed #d1d5db;
-  padding-top: 8px;
-  font-size: 13px;
-  color: #374151;
-}
-
-.execution-timeline summary {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  list-style: none;
-  user-select: none;
-}
-
-.execution-timeline summary::-webkit-details-marker {
-  display: none;
-}
-
-.execution-timeline__spinner {
-  color: var(--xc-color-primary, #0d47a1);
-  font-size: 12px;
-}
-
 .execution-timeline__current {
-  font-weight: 500;
   flex: 1;
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #6b7280;
 }
 
 .execution-timeline__count {
   flex-shrink: 0;
   font-size: 12px;
-  color: #6b7280;
-  background: #f3f4f6;
-  border-radius: 999px;
-  padding: 1px 8px;
+  color: #9ca3af;
 }
 
 .execution-timeline__list {
@@ -625,26 +909,5 @@ watch(
 
 .execution-timeline__list li.is-running .execution-timeline__marker {
   color: var(--xc-color-primary, #0d47a1);
-}
-
-.message-business-result {
-  margin-top: 8px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: #f8fafc;
-  border: 1px solid #e5e7eb;
-  color: #111827;
-}
-.message-business-result__label {
-  font-size: 12px;
-  font-weight: 600;
-  color: #4b5563;
-  margin-bottom: 4px;
-}
-.message-business-result__text {
-  font-size: 13px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
 }
 </style>

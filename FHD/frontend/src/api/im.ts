@@ -8,6 +8,10 @@ export type ImConversationSummary = {
   last_message_at: string | null
   last_message_preview: string
   unread_count: number
+  /** 账号池中的持久化头像；缺失时前端回退默认头像/首字。 */
+  avatar_url?: string
+  /** 直聊对方的账号名（用于稳定取头像池图）。 */
+  peer_username?: string
   is_enterprise_dedicated_cs?: boolean
   /** 运营者客服收件箱里的「企业客户→专属客服」会话(管理端专用,走 /api/im/cs/inbox)。 */
   is_cs_inbox?: boolean
@@ -44,6 +48,8 @@ export type ImContact = {
   id: number
   display_name: string
   username: string
+  /** 账号池中的持久化头像。 */
+  avatar_url?: string
   is_enterprise_dedicated_cs?: boolean
 }
 

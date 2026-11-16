@@ -10,7 +10,9 @@
       <input :value="keyword" type="text" class="im-compose-input" placeholder="搜索姓名或账号" @input="onInput" />
       <ul v-if="filteredContacts.length" class="im-contact-list">
         <li v-for="ct in filteredContacts" :key="ct.id" class="im-contact-item" @click="$emit('select', ct)">
-          <span class="im-avatar im-avatar--sm" aria-hidden="true">{{ avatarText(ct.display_name) }}</span>
+          <span class="im-avatar im-avatar--sm" aria-hidden="true">
+            <img class="im-avatar-img" :src="contactAvatarSrc(ct)" alt="" decoding="async" draggable="false" />
+          </span>
           <div class="im-contact-main">
             <div class="im-contact-name">{{ ct.display_name }}</div>
             <div class="im-contact-sub">@{{ ct.username }}</div>
@@ -26,7 +28,7 @@
 
 <script setup lang="ts">
 import type { ImContact } from '@/api/im'
-import { avatarText } from '@/composables/messenger/useMessengerEntries'
+import { contactAvatarSrc } from '@/composables/messenger/useMessengerEntries'
 
 defineProps<{
   open: boolean
@@ -106,6 +108,15 @@ function onInput(ev: Event): void {
   min-width: 30px;
   min-height: 30px;
   font-size: 13px;
+}
+.im-avatar-img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  border-radius: inherit;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 .im-empty {
   display: flex;

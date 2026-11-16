@@ -13,7 +13,12 @@ export function relayBackendOutput(
   log: (line: string) => void, tag = 'backend',
 ): void {
   log(`[${channel}] ${data}`)
-  if (!packaged) process[channel].write(`[xcagi-${tag}] ${data}`)
+  if (packaged) return
+  try {
+    process[channel].write(`[xcagi-${tag}] ${data}`)
+  } catch {
+    // 开发态终端/日志管道已关闭（EPIPE）：转发失败不应弹出崩溃对话框。
+  }
 }
 
 function hasExited(child: StoppableChildProcess): boolean {

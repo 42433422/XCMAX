@@ -125,7 +125,7 @@ def test_csv_snapshot_mapping_database_and_real_export(database, tmp_path):
         assert all(row["flag"] is False and row["split_zero"] == "0" for row in stored)
         result = get_adapter("export_csv").execute_batch(stored, {"run_id": run_id, "row_count": 2})
     assert result["executed"] == 2
-    output = tmp_path / "private-data/etl/exports" / result["receipt"]["file_name"]
+    output = tmp_path / "private-data/elt/exports" / result["receipt"]["file_name"]
     with output.open(encoding="utf-8-sig", newline="") as stream:
         exported = list(csv.DictReader(stream))
     assert [row["label"] for row in exported] == ["SKU/0/False", "ITEM/0/False"]

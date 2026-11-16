@@ -167,7 +167,8 @@ export const useModsStore = defineStore('mods', () => {
     transportError?: boolean
   }> {
     try {
-      const response = await apiFetch('/api/mods/', { timeoutMs: DEFAULT_MOD_API_TIMEOUT_MS })
+      // no-store：装/卸 Mod 后必须立刻看到新列表，避免 304 复用旧缓存导致“装完不出现”。
+      const response = await apiFetch('/api/mods/', { timeoutMs: DEFAULT_MOD_API_TIMEOUT_MS, cache: 'no-store' })
       if (!response.ok) {
         loadError.value = `HTTP ${response.status}`
         return { ok: false }

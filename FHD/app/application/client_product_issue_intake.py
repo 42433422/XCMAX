@@ -24,16 +24,26 @@ _EXPLICIT_INTAKE_RE = re.compile(
 )
 _PLAIN_INTAKE_RE = re.compile(
     r"(?:提交|上报|反馈|建立?|创建|提|登记|报|记)(?:一?[个张条项]|一下)?(?:客服|问题|反馈|故障)?工单"
+    # 「继续提交原来的工单」是客户最常见的续办说法：提交与工单之间会插入
+    # 之前/原来/上次 等指代词，不能因此判成「没提出产品问题」。
+    r"|(?:继续|重新|再)?(?:提交|上报|反馈|补交|补报|建立?|创建)(?:一下)?"
+    r"(?:(?:之前|原来|上次|刚才|上面|上述)(?:那个|这个)?|那个|这个)的?工单"
     r"|(?:刚才|刚|上面|这个|这项|那个).{0,12}(?:记|登记)一?单"
     r"|(?:也给我|也帮我)开一张(?:吧|[。！!\s])*$"
 )
 _SOFTWARE_CONTEXT_RE = re.compile(
     r"软件|页面|界面|后台|客户端|桌面|功能|模块|交付中心|每日摘要|客服|菜单|侧栏|样式|显示|跨端|审计|自动化|审批|看板|图谱|管理端|市场总览"
 )
+# 客户描述界面观感时未必出现「问题/报错」，但续办工单需要把这些原话带上。
+_UI_SYMPTOM_RE = re.compile(
+    r"不明显|看不清|看不见|错位|遮挡|找不到|点不动|太丑|不好看|按钮|按键|字体|图标|主页|首页|入口"
+)
 _IMAGE_DATA_URL = re.compile(r"(?i)^data:image/[\w.+-]+;base64,")
 _LOG_DATA_URL = re.compile(r"(?i)^data:(?:text/plain|application/octet-stream|text/x-log);base64,")
 _ASSISTANT_ROLES = frozenset({"assistant", "ai"})
-_ALREADY_REGISTERED_RE = re.compile(r"(?:工单.*已(?:受理|登记)|已(?:受理|登记).*工单)")
+_ALREADY_REGISTERED_RE = re.compile(
+    r"(?:工单[^\n]{0,200}已(?:受理|登记)|已(?:受理|登记)[^\n]{0,200}工单)"
+)
 
 
 def looks_like_issue_report(message: str) -> bool:
@@ -64,13 +74,20 @@ def _plain_intake_match(message: str):
     if _manufacturing_intake(message):
         return None
     match = _PLAIN_INTAKE_RE.search(message or "")
-    # Asking how to submit is a usage question, not consent to create a ticket.
-    if match and not re.search(
-        r"(?:怎么|如何|哪里|在哪|能否|能不能|不要|不用|别|无需|不必|不想|暂不|不是要|已经|已)[^。！？\n]{0,12}$",
-        message[: match.start()],
+    if not match:
+        return None
+    before = (message or "")[: match.start()]
+    # 「能不能/能否」只有在没有求助对象时才是用法询问：
+    # 「能不能帮我/给我提交个工单」是明确请求，不能被当成在问怎么用。
+    asks_for_help = bool(re.search(r"(?:帮我|给我|替我|帮忙|烦请|麻烦|请你|请帮)", before[-16:]))
+    if re.search(
+        r"(?:怎么|如何|哪里|在哪|不要|不用|别|无需|不必|不想|暂不|不是要|已经|已)[^。！？\n]{0,12}$",
+        before,
     ):
-        return match
-    return None
+        return None
+    if not asks_for_help and re.search(r"(?:能否|能不能)[^。！？\n]{0,12}$", before):
+        return None
+    return match
 
 
 def _bare_intake(message: str) -> bool:
@@ -123,11 +140,67 @@ def report_message_with_context(message: str, context: dict[str, Any]) -> str:
         if item.get("role") != "user" or not content or content == message.strip():
             continue
         if not (_plain_intake_match(content) or _manufacturing_intake(content)) and (
-            _REPORT_RE.search(content) or _SOFTWARE_CONTEXT_RE.search(content)
+            _REPORT_RE.search(content)
+            or _SOFTWARE_CONTEXT_RE.search(content)
+            or _UI_SYMPTOM_RE.search(content)
         ):
             return f"此前客户说明：{content}\n本轮客户要求：{message}"
         break
     return message
+
+
+def resolve_issue_report_message(
+    message: str,
+    context: dict[str, Any],
+    params: dict[str, Any] | None = None,
+) -> str:
+    """在一轮「确认 / 你去提交一下」里找到真正可受理的问题描述。
+
+    「那你去提交一下呀」这类续办请求本身不含问题，但工单内容就在本会话前面。
+    按「本轮原话 → 最近用户原话 → 计划节点请求文本」的顺序取第一条能识别的；
+    返回空串表示这轮确实没有可受理的问题描述。
+    """
+    context = context or {}
+    candidates: list[str] = [str(message or "")]
+    recent = context.get("recent_messages")
+    for item in reversed(recent[-8:] if isinstance(recent, list) else []):
+        if isinstance(item, dict) and item.get("role") not in _ASSISTANT_ROLES:
+            text = str(item.get("content") or "").strip()[:3000]
+            if text:
+                candidates.append(text)
+    for key in ("request", "description", "task", "title"):
+        text = str((params or {}).get(key) or "").strip()
+        if text:
+            candidates.append(text)
+    for index, text in enumerate(candidates):
+        merged = report_message_with_context(text, context)
+        if looks_like_issue_report(merged):
+            return merged
+        # 同一轮已经明确要提交工单时，客户自己描述过软件现象就足以作为正文，
+        # 不必再要求这句话本身带「提交工单」字样。
+        if index > 0 and (
+            _REPORT_RE.search(merged)
+            or _SOFTWARE_CONTEXT_RE.search(merged)
+            or _UI_SYMPTOM_RE.search(merged)
+            or (_is_substantive(merged) and _semantic_product_issue(merged))
+        ):
+            return merged
+    return ""
+
+
+def _is_substantive(text: str) -> bool:
+    """「确认 / 好的 / 去吧」这类应答不能当成工单正文。"""
+    return len(re.sub(r"[\s，。！？、,.!?~；;：:]", "", str(text or ""))) >= 6
+
+
+def _semantic_product_issue(text: str) -> bool:
+    """语义路由补充「换个说法就识别不到」的缺陷描述；模型不可用时返回 False。"""
+    try:
+        from app.application.intent import best_intent
+    except ImportError:
+        return False
+    match = best_intent(text)
+    return match is not None and match.intent == "product_issue"
 
 
 def _labeled_line(message: str, label: str) -> str:
@@ -273,7 +346,11 @@ async def submit_product_issue(
     shots, customer_logs = _attached_payloads(attachments)
     evidence = build_evidence_ref(screenshots=shots, customer_logs=customer_logs)
     if not evidence:
-        return {"state": "NEEDS_MORE_EVIDENCE", "missing_evidence": ["support_bundle"]}
+        # 客户只用文字说明问题也必须受理：先建一张「待补充诊断证据」的受理单，
+        # 截图/日志只是把同一张单升级为带支持包的完整工单，不是建单前提。
+        return await _receive_pending_report(
+            request, tenant_id, customer_message, ["support_bundle"]
+        )
     bundle_path = Path(str(evidence.get("path") or ""))
     try:
         bundle = bundle_path.read_bytes()

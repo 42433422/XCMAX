@@ -4,7 +4,7 @@ import { useApprovalDetails } from './useApprovalDetails'
 import { useApprovalActions } from './useApprovalActions'
 import {
   isFinalStatus, getBusinessIcon, getBusinessLabel, getStatusLabel, getActionIcon, formatTime,
-  getWorkflowExecutionStatusLabel,
+  formatRequestTitle, getWorkflowExecutionStatusLabel,
 } from './awHelpers'
 
 /**
@@ -37,6 +37,7 @@ export function assembleApprovalWorkspace() {
     getStatusLabel,
     getActionIcon,
     formatTime,
+    formatRequestTitle,
     getWorkflowExecutionStatusLabel,
   }
 }

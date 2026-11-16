@@ -9,8 +9,8 @@
       role="combobox"
       :aria-expanded="open ? 'true' : 'false'"
       aria-controls="top-quick-nav-list"
-      aria-label="搜索功能、产品型号或客户"
-      placeholder="搜索功能、产品型号或客户"
+      aria-label="搜索功能、订单、产品、客户、员工或模板"
+      placeholder="搜索功能、订单、产品、客户、员工或模板"
       autocomplete="off"
       @focus="onFocus"
       @keydown="onKeydown"
@@ -25,7 +25,7 @@
         aria-label="功能列表"
         :style="listStyle"
       >
-        <li v-if="!filtered.length" class="top-quick-nav__empty">没有匹配的功能、产品或客户</li>
+        <li v-if="!filtered.length" class="top-quick-nav__empty">没有匹配的功能、订单、产品、客户、员工或模板</li>
         <li
           v-for="(item, idx) in filtered"
           :key="`${item.kind}-${item.key || item.id}-${idx}`"
@@ -36,8 +36,13 @@
           @mouseenter="highlightIndex = idx"
           @mousedown.prevent="choose(item)"
         >
-          <i v-if="item.iconClass" class="fa top-quick-nav__option-icon" :class="item.iconClass" aria-hidden="true"></i>
-          <span v-if="item.kind !== 'nav'" class="top-quick-nav__kind">{{ item.kind === 'product' ? '产品' : '客户' }}</span>
+          <i
+            v-if="item.iconClass || KIND_ICONS[item.kind]"
+            class="fa top-quick-nav__option-icon"
+            :class="item.iconClass || KIND_ICONS[item.kind]"
+            aria-hidden="true"
+          ></i>
+          <span v-if="item.kind !== 'nav'" class="top-quick-nav__kind">{{ KIND_LABELS[item.kind] || '' }}</span>
           <span class="top-quick-nav__option-name">{{ item.name }}</span>
         </li>
       </ul>
@@ -54,6 +59,9 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import customersApi from '@/api/customers'
 import productsApi from '@/api/products'
+import ordersApi from '@/api/orders'
+import { fetchEmployeeDirectory } from '@/api/employeeDirectory'
+import templatePreviewApi from '@/api/templatePreview'
 import { useVisibleNavItems } from '@/composables/useVisibleNavItems'
 import { useModsStore } from '@/stores/mods'
 import { pushErpPage } from '@/utils/erpPagePaths'
@@ -61,6 +69,12 @@ import { productReadScopeKey } from '@/utils/productReadAccountScope'
 
 const emit = defineEmits(['select'])
 const router = useRouter()
+
+/** 与模板库约定的交接键：跳转前写入关键词，模板库挂载后读取。 */
+const TEMPLATE_SEARCH_STORAGE_KEY = 'xcagi_template_search_keyword'
+const TEMPLATE_NAV_KEY = 'template-preview'
+const KIND_LABELS = { product: '产品', customer: '客户', order: '订单', employee: '员工', template: '模板' }
+const KIND_ICONS = { product: 'fa-cube', customer: 'fa-user-o', order: 'fa-file-text-o', employee: 'fa-id-badge', template: 'fa-file-o' }
 
 const { visibleNavItems } = useVisibleNavItems()
 const modsStore = useModsStore()
@@ -92,14 +106,27 @@ function recordName(row, keys) {
 async function lookupRecords(keyword) {
   const generation = ++recordGeneration
   const scope = recordScope.value
-  const [products, customers] = await Promise.all([
+  const [products, customers, orders, templates, employees] = await Promise.all([
     productsApi.searchProducts(keyword).catch(() => null),
     customersApi.getCustomers({ keyword, page: 1, per_page: 8 }).catch(() => null),
+    ordersApi.searchOrders(keyword).catch(() => null),
+    templatePreviewApi.listTemplates().catch(() => null),
+    fetchEmployeeDirectory().catch(() => []),
   ])
   if (generation !== recordGeneration || scope !== recordScope.value) return
   const productRows = Array.isArray(products?.data) ? products.data : []
   const customerRows = Array.isArray(customers?.data) ? customers.data : []
+  const orderRows = Array.isArray(orders?.data) ? orders.data : []
+  const templateRows = Array.isArray(templates?.templates) ? templates.templates : []
+  const employeeRows = Array.isArray(employees) ? employees : []
+  const lowered = keyword.toLowerCase()
   records.value = [
+    ...orderRows.slice(0, 8).map((row) => ({
+      kind: 'order',
+      id: row.order_number || row.id,
+      name: recordName(row, ['order_number', 'customer_name']) || '订单',
+      keyword: String(row.order_number || keyword),
+    })),
     ...productRows.slice(0, 8).map((row) => ({
       kind: 'product',
       id: row.id,
@@ -112,6 +139,34 @@ async function lookupRecords(keyword) {
       name: recordName(row, ['customer_name', 'unit_name', 'name']) || '客户',
       keyword: String(row.customer_name || row.unit_name || row.name || keyword),
     })),
+    ...employeeRows
+      .filter((row) =>
+        [row.label, row.pack_id, row.department]
+          .map((value) => String(value || '').toLowerCase())
+          .join(' ')
+          .includes(lowered),
+      )
+      .slice(0, 8)
+      .map((row) => ({
+        kind: 'employee',
+        id: row.pack_id,
+        name: recordName(row, ['label', 'department']) || '员工',
+        navKey: 'employee-workflow',
+      })),
+    ...templateRows
+      .filter((row) =>
+        [row.name, row.template_type, row.business_scope, row.category, row.filename]
+          .map((value) => String(value || '').toLowerCase())
+          .join(' ')
+          .includes(lowered),
+      )
+      .slice(0, 8)
+      .map((row) => ({
+        kind: 'template',
+        id: row.id,
+        name: String(row.name || '模板'),
+        keyword: String(row.name || keyword),
+      })),
   ]
 }
 
@@ -190,15 +245,44 @@ onBeforeUnmount(() => {
 })
 
 function choose(item) {
-  if (item?.kind === 'product' || item?.kind === 'customer') {
+  if (item?.kind === 'template') {
+    try {
+      sessionStorage.setItem(TEMPLATE_SEARCH_STORAGE_KEY, item.keyword || query.value.trim())
+    } catch {
+      /* 无 sessionStorage 时退化为不带关键词跳转 */
+    }
+    // 已在模板库页面时组件不会重新挂载，用事件即时下发关键词。
+    window.dispatchEvent(
+      new CustomEvent('xcagi:template-search', { detail: { keyword: item.keyword || query.value.trim() } }),
+    )
+    emit('select', TEMPLATE_NAV_KEY)
+    query.value = ''
+    records.value = []
+    open.value = false
+    inputRef.value?.blur?.()
+    return
+  }
+  if (item?.kind === 'product' || item?.kind === 'customer' || item?.kind === 'order') {
     if (!records.value.includes(item)) return
+    const pathByKind = { product: '/products', customer: '/customers', order: '/orders' }
     pushErpPage(router, {
-      path: item.kind === 'product' ? '/products' : '/customers',
+      path: pathByKind[item.kind],
       query: {
         keyword: item.keyword || query.value.trim(),
-        ...(item.id != null && item.id !== '' ? { focus: String(item.id) } : {}),
+        ...((item.kind === 'product' || item.kind === 'customer') && item.id != null && item.id !== ''
+          ? { focus: String(item.id) }
+          : {}),
       },
     })
+    query.value = ''
+    records.value = []
+    open.value = false
+    inputRef.value?.blur?.()
+    return
+  }
+  if (item?.kind === 'employee') {
+    if (!records.value.includes(item)) return
+    emit('select', item.navKey || 'employee-workflow')
     query.value = ''
     records.value = []
     open.value = false

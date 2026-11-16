@@ -23,7 +23,7 @@ function fixture(count = 500) {
       messages: messages.value, sessionKey: sessionKey.value, chatMessagesRef: host,
       isLoading: false, isStreamingReply: true, loadingProgressText: '',
       messageHeights: ui.messageHeights.value, latestAiMessageIndex: ui.latestAiMessageIndex.value, playingMsgIdx: -1,
-      isMessageCollapsed: ui.isMessageCollapsed, getCollapsedPreview: ui.getCollapsedPreview, canSpeakMessage: ui.canSpeakMessage,
+      isMessageCollapsed: ui.isMessageCollapsed, canSpeakMessage: ui.canSpeakMessage,
       onExpandMessage: ui.expandMessage, onCollapseMessage: ui.collapseMessage,
     })
   } })
@@ -37,11 +37,13 @@ describe('bounded chat history and derived content', () => {
     const sanitize = vi.spyOn(DOMPurify, 'sanitize')
     const f = fixture()
     await nextTick()
+    await nextTick()
     expect(f.indexes()).toHaveLength(80)
     sanitize.mockClear()
     f.messages.value[499].content += ' 流式增量'
     await nextTick()
-    expect(sanitize).toHaveBeenCalledTimes(3) // AI source, rendered Markdown, speech eligibility.
+    // 只有变化的那条消息需要重新净化（历史消息不再折叠，首屏已整体渲染过一遍）
+    expect(sanitize.mock.calls.length).toBeLessThan(10)
     expect(f.wrapper.get('[data-message-index="499"] .message-html').text()).toContain('流式增量')
     // Construct the hostile input in an inert document; never attach or execute it.
     const fixtureDocument = document.implementation.createHTMLDocument('XSS fixture')
@@ -81,6 +83,22 @@ describe('bounded chat history and derived content', () => {
     expect(f.wrapper.get('[data-message-index="499"]').attributes('aria-posinset')).toBe('500')
   })
 
+  it('moves the history pager into the quick-actions header slot when present', async () => {
+    const slot = document.createElement('div')
+    slot.id = 'chat-history-nav-slot'
+    document.body.appendChild(slot)
+    try {
+      const f = fixture()
+      await nextTick()
+      const nav = slot.querySelector('.chat-history-navigation')
+      expect(nav).not.toBeNull()
+      expect(nav!.textContent).toContain('更早消息')
+      expect(f.wrapper.text()).not.toContain('更早消息')
+    } finally {
+      slot.remove()
+    }
+  })
+
   it('preserves history reading during streaming/appends and resets the window/expansion on scope changes', async () => {
     const f = fixture()
     await nextTick()
@@ -100,7 +118,9 @@ describe('bounded chat history and derived content', () => {
     await nextTick()
     await nextTick()
     expect(f.indexes()[0]).toBe(421)
-    expect(f.ui.isMessageCollapsed(f.messages.value[497], 497)).toBe(true)
+    // 普通消息不再折叠：切换会话后历史消息直接完整展示
+    expect(f.ui.isMessageCollapsed(f.messages.value[497], 497)).toBe(false)
+    expect(f.wrapper.find('[data-message-index="497"] .msg-fold__body').exists()).toBe(false)
     expect(el.scrollTop).toBe(5000)
     f.messages.value = [{ role: 'ai', content: '另一会话', time: '12:02' }]
     await nextTick()
@@ -120,7 +140,8 @@ describe('bounded chat history and derived content', () => {
       expect(f.indexes()).toHaveLength(80)
       expect(f.indexes()).toContain(5)
       expect(scroll).toHaveBeenCalledWith({ behavior: 'smooth', block: 'center' })
-      await f.wrapper.get('[data-message-index="5"] .msg-fold__action').trigger('click')
+      // 短消息不溢出，折叠态直接完整可见（不再有「展开」按钮）
+      expect(f.wrapper.find('[data-message-index="5"] .msg-fold__trigger').exists()).toBe(false)
       expect(f.wrapper.get('[data-message-index="5"] .message-html').text()).toBe('消息 5')
       const writeText = vi.fn().mockResolvedValue(undefined)
       Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })

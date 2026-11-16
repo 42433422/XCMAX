@@ -13,7 +13,8 @@ export interface UseChatMessageUiDeps {
 export function useChatMessageUi(deps: UseChatMessageUiDeps) {
   const { messages, chatMessagesRef } = deps
 
-  const expandedMessageIndexes = ref<number[]>([])
+  /** 已展开消息的身份键（不是下标，避免历史分页后错位）。 */
+  const expandedMessageKeys = ref<string[]>([])
   const messageHeights = ref<Map<number, number>>(new Map())
   const playingMsgIdx = ref(-1)
   let speechGeneration = 0
@@ -71,42 +72,69 @@ export function useChatMessageUi(deps: UseChatMessageUiDeps) {
     return -1
   })
 
-  const isMessageCollapsed = (msg: ChatMessage, idx: number) => {
+  /**
+   * 折叠状态按消息身份保存，而不是数组下标。
+   * 历史窗口分页、消息插入都会让下标漂移，旧实现会把折叠态错挂到别的消息上。
+   */
+  function messageCollapseKey(msg: ChatMessage): string {
+    const id = String(msg?.persistence?.id || msg?.turnId || '').trim()
+    if (id) return id
+    return `${String(msg?.time || '')}|${String(msg?.content || '').slice(0, 40)}`
+  }
+
+  /**
+   * 普通对话不折叠；只有正文特别长时才折叠。
+   * 折叠的唯一目的从「历史消息统一压成摘要」改成「超长内容不刷屏」，
+   * 工具链的折叠由 AgentStepChain / AgentRunTrace 自己负责。
+   */
+  const LONG_MESSAGE_COLLAPSE_CHARS = 1200
+
+  /** 长度判定要净化整段正文，按消息+内容缓存，避免每帧重算。 */
+  const foldableCache = new WeakMap<{ content?: string }, { content: string; value: boolean }>()
+
+  /** 该消息是否允许折叠（超长正文才允许）。 */
+  const canCollapseMessage = (msg: ChatMessage) => {
     if (msg?.role !== 'ai') return false
+    if (msg.streamingShell) return false
+    const content = String(msg?.content || '')
+    let entry = foldableCache.get(msg)
+    if (!entry || entry.content !== content) {
+      const length = plainTextFromChatHtml(content).replace(/\s+/g, '').length
+      entry = { content, value: length > LONG_MESSAGE_COLLAPSE_CHARS }
+      foldableCache.set(msg, entry)
+    }
+    return entry.value
+  }
+
+  const isMessageCollapsed = (msg: ChatMessage, idx: number) => {
+    if (!canCollapseMessage(msg)) return false
     if (idx >= latestAiMessageIndex.value) return false
-    return !expandedMessageIndexes.value.includes(idx)
+    return !expandedMessageKeys.value.includes(messageCollapseKey(msg))
   }
 
   const expandMessage = (idx: number) => {
-    if (!expandedMessageIndexes.value.includes(idx)) {
-      expandedMessageIndexes.value = [...expandedMessageIndexes.value, idx]
+    const msg = messages.value[idx]
+    if (!msg) return
+    const key = messageCollapseKey(msg)
+    if (!expandedMessageKeys.value.includes(key)) {
+      expandedMessageKeys.value = [...expandedMessageKeys.value, key]
     }
   }
 
   const collapseMessage = (idx: number) => {
     if (idx >= latestAiMessageIndex.value) return
-    if (expandedMessageIndexes.value.includes(idx)) {
-      expandedMessageIndexes.value = expandedMessageIndexes.value.filter((x) => x !== idx)
+    const msg = messages.value[idx]
+    if (!msg) return
+    const key = messageCollapseKey(msg)
+    if (expandedMessageKeys.value.includes(key)) {
+      expandedMessageKeys.value = expandedMessageKeys.value.filter((x) => x !== key)
     }
   }
-
-  const getCollapsedPreview = (htmlText: string) => {
-    const text = plainTextFromChatHtml(htmlText).replace(/\s+/g, ' ').trim()
-    if (!text) return '（无内容）'
-    return text.length > 120 ? `${text.slice(0, 120)}...` : text
-  }
-
-  watch(
-    () => messages.value.length,
-    () => {
-      expandedMessageIndexes.value = expandedMessageIndexes.value.filter((idx) => idx >= 0 && idx < messages.value.length)
-    },
-  )
 
   watch(() => messages.value.length, batchCalculateHeights, { flush: 'post' })
   watch(() => messages.value[messages.value.length - 1]?.content, () => messageHeights.value.delete(messages.value.length - 1))
   watch([messages, () => deps.sessionKey?.value], () => {
-    expandedMessageIndexes.value = []
+    expandedMessageKeys.value = []
     messageHeights.value.clear()
     speakable = new WeakMap()
     stopMessageTts()
@@ -123,9 +151,9 @@ export function useChatMessageUi(deps: UseChatMessageUiDeps) {
     playingMsgIdx,
     latestAiMessageIndex,
     isMessageCollapsed,
+    canCollapseMessage,
     expandMessage,
     collapseMessage,
-    getCollapsedPreview,
     canSpeakMessage,
     toggleMessageTts,
     batchCalculateHeights,

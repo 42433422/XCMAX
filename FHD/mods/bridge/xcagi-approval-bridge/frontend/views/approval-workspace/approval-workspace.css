@@ -1,7 +1,7 @@
 /* 拆分自 ApprovalWorkspaceView.vue（原 <style scoped> 块逐字迁移，行为不变）；
    入口与各子组件均以 <style scoped src="./approval-workspace.css"> 引用。 */
 .approval-workspace-view {
-  padding: 24px;
+  padding: 24px 28px 32px;
   background: #f5f7fa;
   flex: 1 1 auto;
   min-height: 0;
@@ -9,13 +9,17 @@
 }
 
 .view-header {
-  margin-bottom: 24px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
 }
 
 .view-header h2 {
-  font-size: 24px;
+  font-size: 22px;
   color: #1f2937;
-  margin: 0 0 8px 0;
+  margin: 0 0 6px 0;
 }
 
 .view-header .subtitle {
@@ -24,32 +28,58 @@
   margin: 0;
 }
 
+.btn-toolbar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1px solid #dcdfe6;
+  border-radius: 6px;
+  background: #fff;
+  color: #4b5563;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-toolbar:hover:not(:disabled) {
+  border-color: #2563eb;
+  color: #2563eb;
+}
+
+.btn-toolbar:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 /* 统计卡片 */
 .stats-cards {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  margin-bottom: 24px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
 }
 
 .stat-card {
   background: white;
-  border-radius: 8px;
-  padding: 20px;
+  border: 1px solid #ebeef5;
+  border-radius: 10px;
+  padding: 16px 18px;
   display: flex;
   align-items: center;
-  gap: 16px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  gap: 14px;
+  box-shadow: 0 1px 2px rgba(31, 41, 55, 0.04);
 }
 
 .stat-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 8px;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 24px;
+  font-size: 18px;
+  flex-shrink: 0;
 }
 
 .stat-card.pending .stat-icon {
@@ -77,37 +107,69 @@
 }
 
 .stat-value {
-  font-size: 28px;
-  font-weight: bold;
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.1;
   color: #1f2937;
 }
 
 .stat-label {
-  font-size: 14px;
+  font-size: 13px;
   color: #6b7280;
-  margin-top: 4px;
+  margin-top: 2px;
+}
+
+/* 双栏工作区 */
+.workspace-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.workspace-columns.is-single {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 /* 区块 */
 .section {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
   background: white;
-  border-radius: 8px;
-  padding: 20px;
-  margin-bottom: 24px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border: 1px solid #ebeef5;
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(31, 41, 55, 0.04);
 }
 
 .section-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  gap: 8px;
+  padding: 14px 18px;
+  margin-bottom: 0;
+  border-bottom: 1px solid #f0f2f5;
 }
 
 .section-header h3 {
-  font-size: 18px;
+  display: inline-flex;
+  align-items: center;
+  font-size: 16px;
+  font-weight: 600;
   color: #1f2937;
   margin: 0;
+}
+
+.section-count {
+  margin-left: 8px;
+  padding: 0 7px;
+  border-radius: 10px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
 }
 
 .section-actions {
@@ -115,7 +177,14 @@
   align-items: center;
   gap: 8px;
 }
-.approval-list-pages { flex-wrap: wrap; margin-bottom: 16px; }
+.approval-list-pages {
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  background: #fff;
+  border: 1px solid #ebeef5;
+  border-radius: 10px;
+  margin-bottom: 16px;
+}
 
 .btn-link {
   background: none;
@@ -177,23 +246,49 @@
 .request-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 0;
+  padding: 4px 10px 8px;
+}
+
+.workspace-columns:not(.is-single) .request-list {
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+/* 双栏下宽度有限，当前节点与标题重复，交给完整列表展示 */
+.workspace-columns:not(.is-single) .request-current-node {
+  display: none;
+}
+
+.request-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.request-list::-webkit-scrollbar-thumb {
+  background: #dcdfe6;
+  border-radius: 3px;
 }
 
 .request-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  gap: 12px;
+  padding: 14px 8px;
+  border: none;
+  border-bottom: 1px solid #f2f4f7;
+  border-radius: 0;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background 0.15s;
+}
+
+.request-item:last-child {
+  border-bottom: none;
 }
 
 .request-item:hover {
-  border-color: #2563eb;
-  background: #f9fafb;
+  background: #f8fafc;
+  border-color: #f2f4f7;
 }
 
 .request-left {
@@ -201,35 +296,53 @@
   gap: 12px;
   align-items: center;
   flex: 1;
+  min-width: 0;
 }
 
 .request-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 8px;
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: #f3f4f6;
   color: #6b7280;
-  font-size: 18px;
+  font-size: 15px;
+  flex-shrink: 0;
 }
 
 .request-info {
   flex: 1;
+  min-width: 0;
 }
 
 .request-title {
-  font-size: 16px;
+  font-size: 15px;
+  font-weight: 500;
   color: #1f2937;
   margin-bottom: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .request-meta {
   display: flex;
-  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
   font-size: 13px;
   color: #6b7280;
+}
+
+.request-type {
+  padding: 1px 8px;
+  border-radius: 4px;
+  background: #f3f4f6;
+  color: #4b5563;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .request-no {
@@ -240,6 +353,8 @@
   padding: 2px 8px;
   border-radius: 4px;
   font-size: 12px;
+  line-height: 1.5;
+  white-space: nowrap;
 }
 
 .request-status.pending {
@@ -262,9 +377,29 @@
   color: #dc2626;
 }
 
+.request-status.withdrawn,
+.request-status.cancelled,
+.request-status.expired,
+.request-status.draft {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
 .request-actions {
   display: flex;
+  align-items: center;
   gap: 8px;
+  flex-shrink: 0;
+}
+
+.row-chevron {
+  color: #c0c4cc;
+  font-size: 16px;
+  margin-left: 2px;
+}
+
+.request-item:hover .row-chevron {
+  color: #2563eb;
 }
 
 .btn-approve, .btn-reject {
@@ -303,6 +438,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-shrink: 0;
 }
 
 .request-current-node {
@@ -337,13 +473,13 @@
 /* 空状态 */
 .empty-state {
   text-align: center;
-  padding: 40px 20px;
+  padding: 28px 20px;
   color: #9ca3af;
 }
 
 .empty-state i {
-  font-size: 48px;
-  margin-bottom: 12px;
+  font-size: 32px;
+  margin-bottom: 8px;
 }
 
 /* 弹窗（结构由宿主 Modal.vue 提供，此处仅保留详情内容样式） */
@@ -386,8 +522,24 @@
   color: #1f2937;
 }
 
+.request-payload {
+  margin: 0;
+  padding: 10px 12px;
+  max-height: 220px;
+  overflow: auto;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #374151;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
 .status-tag {
   display: inline-block;
+  align-self: flex-start;
   padding: 4px 12px;
   border-radius: 4px;
   font-size: 13px;
@@ -411,6 +563,14 @@
 .status-tag.rejected {
   background: #fee2e2;
   color: #dc2626;
+}
+
+.status-tag.withdrawn,
+.status-tag.cancelled,
+.status-tag.expired,
+.status-tag.draft {
+  background: #f3f4f6;
+  color: #6b7280;
 }
 
 /* 时间轴 */
@@ -627,4 +787,19 @@
 .btn-reject {
   background: #dc2626;
   color: white;
+}
+
+@media (max-width: 1100px) {
+  .stats-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workspace-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workspace-columns:not(.is-single) .request-list {
+    max-height: none;
+    overflow-y: visible;
+  }
 }

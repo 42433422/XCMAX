@@ -8,18 +8,18 @@ from app.db.mixins import TenantScopedMixin, TimestampMixin
 
 
 class EltArchiveQuota(TimestampMixin, TenantScopedMixin, Base):
-    __tablename__ = "etl_archive_quotas"
+    __tablename__ = "elt_archive_quotas"
     tenant_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     limit_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
     reserved_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
 
 
 class EltArchiveAsset(TimestampMixin, TenantScopedMixin, Base):
-    __tablename__ = "etl_archive_assets"
+    __tablename__ = "elt_archive_assets"
     __table_args__ = (
-        Index("ix_etl_archive_owner", "tenant_id", "owner_user_id"),
+        Index("ix_elt_archive_owner", "tenant_id", "owner_user_id"),
         UniqueConstraint(
-            "tenant_id", "owner_user_id", "request_key", name="uq_etl_archive_request"
+            "tenant_id", "owner_user_id", "request_key", name="uq_elt_archive_request"
         ),
     )
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
@@ -31,15 +31,15 @@ class EltArchiveAsset(TimestampMixin, TenantScopedMixin, Base):
 
 
 class EltArchiveVersion(TimestampMixin, TenantScopedMixin, Base):
-    __tablename__ = "etl_archive_versions"
+    __tablename__ = "elt_archive_versions"
     __table_args__ = (
-        UniqueConstraint("asset_id", "version", name="uq_etl_archive_asset_version"),
+        UniqueConstraint("asset_id", "version", name="uq_elt_archive_asset_version"),
         UniqueConstraint(
-            "tenant_id", "owner_user_id", "request_key", name="uq_etl_archive_version_request"
+            "tenant_id", "owner_user_id", "request_key", name="uq_elt_archive_version_request"
         ),
     )
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    asset_id: Mapped[str] = mapped_column(ForeignKey("etl_archive_assets.id"), nullable=False)
+    asset_id: Mapped[str] = mapped_column(ForeignKey("elt_archive_assets.id"), nullable=False)
     owner_user_id: Mapped[int] = mapped_column(Integer, nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False)
     size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)

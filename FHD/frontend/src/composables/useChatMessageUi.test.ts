@@ -41,7 +41,8 @@ describe('useChatMessageUi', () => {
     vi.mocked(speakText).mockImplementation(() => new Promise(() => {}))
     messages = ref([
       { content: 'Hello', role: 'user' },
-      { content: 'Hi there!', role: 'ai' },
+      // 只有超长正文才会折叠，折叠相关用例需要一条长消息
+      { content: '长正文'.repeat(500), role: 'ai' },
       { content: 'How are you?', role: 'user' },
       { content: 'I am fine', role: 'ai' },
     ])
@@ -56,7 +57,6 @@ describe('useChatMessageUi', () => {
     expect(typeof ui.isMessageCollapsed).toBe('function')
     expect(typeof ui.expandMessage).toBe('function')
     expect(typeof ui.collapseMessage).toBe('function')
-    expect(typeof ui.getCollapsedPreview).toBe('function')
     expect(typeof ui.canSpeakMessage).toBe('function')
     expect(typeof ui.toggleMessageTts).toBe('function')
     expect(typeof ui.batchCalculateHeights).toBe('function')
@@ -92,6 +92,14 @@ describe('useChatMessageUi', () => {
     expect(ui.isMessageCollapsed(messages.value[1], 1)).toBe(true)
   })
 
+  it('普通长度的历史消息不折叠', () => {
+    const ui = useChatMessageUi({ messages, chatMessagesRef })
+    // index 3 是短 AI 消息，且不再是最后一条 → 仍然不折叠
+    messages.value.push({ content: '最新一条', role: 'ai' })
+    expect(ui.canCollapseMessage(messages.value[3])).toBe(false)
+    expect(ui.isMessageCollapsed(messages.value[3], 3)).toBe(false)
+  })
+
   it('expandMessage adds index to expanded list', () => {
     const ui = useChatMessageUi({ messages, chatMessagesRef })
     ui.expandMessage(1)
@@ -119,6 +127,18 @@ describe('useChatMessageUi', () => {
     const ui = useChatMessageUi({ messages, chatMessagesRef })
     ui.collapseMessage(3)
     expect(ui.isMessageCollapsed(messages.value[3], 3)).toBe(false)
+  })
+
+  it('折叠状态跟随消息本身，历史窗口插入消息后不会错位', () => {
+    const ui = useChatMessageUi({ messages, chatMessagesRef })
+    const target = messages.value[1]
+    ui.expandMessage(1)
+    expect(ui.isMessageCollapsed(target, 1)).toBe(false)
+    // 前面插入一条消息，下标整体后移一位（同一数组，模拟历史窗口变化）
+    messages.value.splice(0, 0, { content: '新插入', role: 'user', time: '09:59' })
+    const shifted = messages.value[2]
+    expect(shifted).toBe(target)
+    expect(ui.isMessageCollapsed(shifted, 2)).toBe(false)
   })
 
   it('canSpeakMessage returns true for speakable content', () => {
@@ -226,19 +246,7 @@ describe('useChatMessageUi', () => {
     // Should not throw
   })
 
-  it('getCollapsedPreview returns text preview', () => {
-    const ui = useChatMessageUi({ messages, chatMessagesRef })
-    const preview = ui.getCollapsedPreview('Hello world')
-    expect(typeof preview).toBe('string')
-    expect(preview.length).toBeGreaterThan(0)
-  })
 
-  it('getCollapsedPreview returns placeholder for empty content', () => {
-    vi.mocked(cleanTextForSpeech).mockReturnValueOnce('')
-    const ui = useChatMessageUi({ messages, chatMessagesRef })
-    const preview = ui.getCollapsedPreview('')
-    expect(preview).toBe('（无内容）')
-  })
 
   it('playingMsgIdx initializes to -1', () => {
     const ui = useChatMessageUi({ messages, chatMessagesRef })

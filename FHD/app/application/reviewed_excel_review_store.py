@@ -124,7 +124,7 @@ def _source(db, run, tenant, owner):
             return rebuilt
         raise HTTPException(status_code=410, detail="来源已过期，请重新上传")
     root = (
-        Path(get_app_data_dir()).resolve() / "etl" / "uploads" / str(tenant) / str(owner)
+        Path(get_app_data_dir()).resolve() / "elt" / "uploads" / str(tenant) / str(owner)
     ).resolve()
     raw = Path(upload.storage_path or "")
     path = raw.resolve()

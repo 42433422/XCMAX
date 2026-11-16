@@ -42,3 +42,38 @@ class ModstoreProvider:
         except RECOVERABLE_ERRORS:
             record_ai_call(self.provider_id, "chat", "error", time.perf_counter() - t0)
             raise
+
+    async def stream_chat_completion(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        temperature: float = 0.7,
+        max_tokens: int = 2000,
+        **kwargs: Any,
+    ):
+        """逐段产出平台模型的正文增量（OpenAI SSE），供 SSE 生产者实时下发。"""
+        if self._adapter is None:
+            return
+        import json
+
+        stream = getattr(self._adapter, "stream_chat_completion", None)
+        if stream is None:
+            return
+        async for payload in stream(
+            messages=messages, temperature=temperature, max_tokens=max_tokens, **kwargs
+        ):
+            if not payload or payload.strip() == "[DONE]":
+                if payload.strip() == "[DONE]":
+                    break
+                continue
+            try:
+                chunk = json.loads(payload)
+            except ValueError:
+                continue
+            choices = chunk.get("choices") if isinstance(chunk, dict) else None
+            if not isinstance(choices, list) or not choices:
+                continue
+            delta = choices[0].get("delta") if isinstance(choices[0], dict) else None
+            text = delta.get("content") if isinstance(delta, dict) else None
+            if text:
+                yield str(text)

@@ -948,8 +948,10 @@ class TestEmployeeRouter:
     """_registered_router_employee 分支覆盖。"""
 
     def test_list_query(self) -> None:
-        with patch("app.mod_sdk.employee_tool_registry.build_employee_tools_status") as mock_fn:
-            mock_fn.return_value = {"registered_tool_count": 3}
+        employees = [{"pack_id": f"employee-{index}"} for index in range(3)]
+        with patch(
+            "app.mod_sdk.employee_directory.build_employee_directory", return_value=employees
+        ):
             result = _registered_router_employee("list", {}, _ctx(), "normal", "")
             assert result["success"] is True
             assert "3" in result["message"]

@@ -4,6 +4,7 @@ import type { IndustryBaselinePlan } from '@/constants/platformShell'
 import {
   filterModsForEnterpriseWorkflowRegistry,
   filterWorkflowRegistryEntriesForEnterpriseStack,
+  harvestOfficialCarrierEmployeesForStack,
   workflowHostVisibleOnPanorama,
   workflowRegistryEntryBelongsToStack,
 } from './workflowEmployeeScope'
@@ -225,4 +226,19 @@ describe('workflowEmployeeScope', () => {
     // xcagi-host-foundation-employee is an employee pack, so it's filtered out
     expect(scoped.map((m) => m.id)).toEqual(['coating-industry'])
   })
+
+  it('attaches installed official carrier employees to the enterprise stack so the four-layer graph is not empty', () => {
+    const stack = buildEnterpriseModStack(basePlan)
+    const mods = [
+      { id: 'coating-industry', workflow_employees: [] },
+      { id: 'xcagi-core-workflow-employees', workflow_employees: [{ id: 'label_print', label: '标签打印' }, { id: 'shipment_mgmt', label: '出货管理' }] },
+      { id: 'xcagi-office-employee-pack-bridge', workflow_employees: [{ id: 'excel_generate', label: 'Excel 生成' }] },
+      { id: 'lan-gate-ai-employee', workflow_employees: [{ id: 'lan_gate', label: '局域网网关' }] },
+    ]
+    const harvested = harvestOfficialCarrierEmployeesForStack(mods, stack, mods.slice(1).map((mod) => mod.id))
+    expect(harvested.map((entry) => entry.id).sort()).toEqual(['excel_generate', 'label_print', 'lan_gate', 'shipment_mgmt'])
+    expect(harvested.every((entry) => entry.hostModId === 'coating-industry' && workflowRegistryEntryBelongsToStack(entry, stack) && workflowHostVisibleOnPanorama(entry.hostModId, stack, ['coating-industry']))).toBe(true)
+    expect(filterWorkflowRegistryEntriesForEnterpriseStack(harvested, stack)).toHaveLength(4)
+  })
+
 })

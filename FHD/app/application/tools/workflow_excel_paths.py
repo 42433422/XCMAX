@@ -27,6 +27,10 @@ def resolve_safe_excel_path(workspace_root_or_file: str, file_path: str | None =
     else:
         base = Path(workspace_root_or_file).resolve()
         fp = file_path
+    # 聊天附件路径带 "@" 前缀（如 @uploads/chat/x.xlsx），按工作区相对路径解析。
+    fp = str(fp or "").strip().replace("\\", "/")
+    if fp.startswith("@"):
+        fp = fp[1:]
 
     if Path(fp).is_absolute():
         p = Path(fp).resolve()

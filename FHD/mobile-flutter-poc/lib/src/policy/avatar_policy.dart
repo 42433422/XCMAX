@@ -1,6 +1,23 @@
 import '../models/conversation.dart';
 import 'pinned_ids.dart';
 
+/// 小C 头像分两版：管理端（管理员/管理门户）用男版，企业端用女版。
+class AppAvatarVariant {
+  const AppAvatarVariant._();
+
+  static bool _enterpriseAssistant = false;
+
+  static bool get enterpriseAssistant => _enterpriseAssistant;
+
+  static void useEnterpriseAssistant(bool value) {
+    _enterpriseAssistant = value;
+  }
+
+  static String get assistantAsset => _enterpriseAssistant
+      ? 'assets/avatars/avatar_assistant_enterprise.png'
+      : 'assets/avatars/avatar_assistant.png';
+}
+
 enum AppAvatarFallback {
   user,
   assistant,
@@ -33,7 +50,6 @@ enum AppAvatarFallback {
   empIntakeDispatcher,
   empTaskRouterOfficer,
   empGithubPrGatekeeper,
-  empUserCustomerServiceOfficer,
   empEnterpriseAdoptionOfficer,
   empDeliveryReceiptOfficer,
   empMobileAndroidReleaseOfficer,
@@ -67,14 +83,75 @@ enum AppAvatarFallback {
   trae,
 }
 
+/// 员工头像池：与桌面端 `utils/employeeAvatar.ts` 同一份名单、同一排序。
+/// 桌面端按通讯录顺序取池内头像以避免撞图，移动端沿用同样规则。
+const employeeAvatarPool = <String>[
+  'assets/avatars/avatar_emp_artifact_generator.png',
+  'assets/avatars/avatar_emp_avatar_generation_employee.png',
+  'assets/avatars/avatar_emp_change_request_auditor.png',
+  'assets/avatars/avatar_emp_code_validator.png',
+  'assets/avatars/avatar_emp_daily_orchestrator.png',
+  'assets/avatars/avatar_emp_dbops_engineer.png',
+  'assets/avatars/avatar_emp_delivery_receipt_officer.png',
+  'assets/avatars/avatar_emp_deploy_release_officer.png',
+  'assets/avatars/avatar_emp_doc_knowledge_curator.png',
+  'assets/avatars/avatar_emp_ecosystem_delivery_reporter.png',
+  'assets/avatars/avatar_emp_ecosystem_investor_portal_officer.png',
+  'assets/avatars/avatar_emp_ecosystem_joint_catalog_officer.png',
+  'assets/avatars/avatar_emp_ecosystem_partner_onboard_officer.png',
+  'assets/avatars/avatar_emp_ecosystem_revenue_share_reconciler.png',
+  'assets/avatars/avatar_emp_employee_interview_assistant.png',
+  'assets/avatars/avatar_emp_employee_pack_curator.png',
+  'assets/avatars/avatar_emp_employee_pack_quality_interviewer.png',
+  'assets/avatars/avatar_emp_employee_planner.png',
+  'assets/avatars/avatar_emp_enterprise_adoption_officer.png',
+  'assets/avatars/avatar_emp_fhd_core_maintainer.png',
+  'assets/avatars/avatar_emp_flask_entry_keeper.png',
+  'assets/avatars/avatar_emp_github_pr_gatekeeper.png',
+  'assets/avatars/avatar_emp_hex_quality_assessor.png',
+  'assets/avatars/avatar_emp_host_checker.png',
+  'assets/avatars/avatar_emp_intake_dispatcher.png',
+  'assets/avatars/avatar_emp_intent_analyst.png',
+  'assets/avatars/avatar_emp_java_payment_bridge_officer.png',
+  'assets/avatars/avatar_emp_legacy_archive_curator.png',
+  'assets/avatars/avatar_emp_llm_ops_engineer.png',
+  'assets/avatars/avatar_emp_log_monitor_incident.png',
+  'assets/avatars/avatar_emp_market_frontend_dev.png',
+  'assets/avatars/avatar_emp_marketing_site_builder.png',
+  'assets/avatars/avatar_emp_miniapp_builder.png',
+  'assets/avatars/avatar_emp_mobile_android_release_officer.png',
+  'assets/avatars/avatar_emp_mobile_ios_release_officer.png',
+  'assets/avatars/avatar_emp_mods_and_eskill_curator.png',
+  'assets/avatars/avatar_emp_modstore_backend_api.png',
+  'assets/avatars/avatar_emp_nginx_config_engineer.png',
+  'assets/avatars/avatar_emp_pack_registrar.png',
+  'assets/avatars/avatar_emp_payment_billing_reconciler.png',
+  'assets/avatars/avatar_emp_push_update_context_officer.png',
+  'assets/avatars/avatar_emp_quality_validator.png',
+  'assets/avatars/avatar_emp_retention_officer.png',
+  'assets/avatars/avatar_emp_sandbox_tester.png',
+  'assets/avatars/avatar_emp_script_binder.png',
+  'assets/avatars/avatar_emp_security_secrets_guard.png',
+  'assets/avatars/avatar_emp_self_checker.png',
+  'assets/avatars/avatar_emp_seo_sitemap_curator.png',
+  'assets/avatars/avatar_emp_site_content_editor.png',
+  'assets/avatars/avatar_emp_task_router_officer.png',
+  'assets/avatars/avatar_emp_test_qa_runner.png',
+  'assets/avatars/avatar_emp_vibe_coding_maintainer.png',
+  'assets/avatars/avatar_emp_workbench_ux_stylist.png',
+  'assets/avatars/avatar_emp_workflow_automator.png',
+];
+
 extension AppAvatarFallbackX on AppAvatarFallback {
   String get assetPath {
     switch (this) {
       case AppAvatarFallback.user:
         return 'assets/avatars/avatar_default_user.png';
       case AppAvatarFallback.assistant:
-        return 'assets/avatars/avatar_assistant.png';
+        return AppAvatarVariant.assistantAsset;
       case AppAvatarFallback.customerService:
+        // 专属客服属管理端入口，固定使用管理端小C头像。
+        return 'assets/avatars/avatar_assistant.png';
       case AppAvatarFallback.aiEmployee:
         return 'assets/avatars/avatar_default_ai_employee.png';
       case AppAvatarFallback.empSiteContentEditor:
@@ -131,8 +208,6 @@ extension AppAvatarFallbackX on AppAvatarFallback {
         return 'assets/avatars/avatar_emp_task_router_officer.png';
       case AppAvatarFallback.empGithubPrGatekeeper:
         return 'assets/avatars/avatar_emp_github_pr_gatekeeper.png';
-      case AppAvatarFallback.empUserCustomerServiceOfficer:
-        return 'assets/avatars/avatar_emp_user_customer_service_officer.png';
       case AppAvatarFallback.empEnterpriseAdoptionOfficer:
         return 'assets/avatars/avatar_emp_enterprise_adoption_officer.png';
       case AppAvatarFallback.empDeliveryReceiptOfficer:
@@ -228,8 +303,8 @@ const _employeeAvatarFallbacks = <String, AppAvatarFallback>{
   'intake-dispatcher': AppAvatarFallback.empIntakeDispatcher,
   'task-router-officer': AppAvatarFallback.empTaskRouterOfficer,
   'github-pr-gatekeeper': AppAvatarFallback.empGithubPrGatekeeper,
-  'user-customer-service-officer':
-      AppAvatarFallback.empUserCustomerServiceOfficer,
+  // 企业端客户客服统一使用管理端小C头像。
+  'user-customer-service-officer': AppAvatarFallback.assistant,
   'enterprise-adoption-officer': AppAvatarFallback.empEnterpriseAdoptionOfficer,
   'delivery-receipt-officer': AppAvatarFallback.empDeliveryReceiptOfficer,
   'mobile-android-release-officer':

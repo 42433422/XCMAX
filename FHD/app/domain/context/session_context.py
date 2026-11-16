@@ -105,6 +105,14 @@ def format_recent_messages_excerpt_for_llm(runtime_context: Mapping[str, Any] | 
     if not isinstance(msgs, list) or not msgs:
         return None
     lines = ["【近期对话摘要】"]
+    summary = runtime_context.get("chat_history_summary")
+    if isinstance(owned, list) and isinstance(summary, str) and summary.strip():
+        # 长会话：窗口之外的更早对话用滚动摘要代替原文，控制模型上下文。
+        lines = [
+            "【更早对话（滚动摘要）】",
+            _sanitize_untrusted_context_line(summary, 1800),
+            "【近期对话摘要】",
+        ]
     for m in msgs[-24 if isinstance(owned, list) else -6 :]:
         if not isinstance(m, dict):
             continue

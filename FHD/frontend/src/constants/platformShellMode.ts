@@ -51,7 +51,7 @@ export const SHELL_CORE_ROUTE_NAMES = new Set([
   'login-register',
   'login-forgot-account',
   'login-forgot-password',
-  // AI 生态「生产员工」轻量页。
+  // AI 生态「私有交付」轻量页。
   'private-mod-delivery',
 ])
 

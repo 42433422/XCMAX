@@ -1,8 +1,8 @@
 <template>
   <details v-if="isLoggedIn && isLocalAdmin" class="settings-card" data-tutorial-id="settings-audit-logs">
     <summary class="settings-row">
-      <span class="settings-row__icon settings-row__icon--amber" aria-hidden="true">
-        <i class="fa fa-shield"></i>
+      <span class="settings-row__icon settings-row__icon--art" aria-hidden="true">
+        <img class="settings-row__icon-art" :src="auditArtSrc" alt="" />
       </span>
       <span class="settings-row__label">{{ $t('settings.securityAudit') }}</span>
       <span class="settings-row__meta">{{ $t('settings.auditCount', { count: auditLogsTotal }) }}</span>
@@ -46,6 +46,7 @@
 
 <script setup lang="ts">
 import type { AuditLogEntry } from '@/api/adminAudit'
+import auditArtSrc from '@/assets/icons/settings/r2c3.png'
 
 defineProps<{
   isLoggedIn: boolean

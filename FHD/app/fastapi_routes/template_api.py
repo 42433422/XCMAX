@@ -8,7 +8,9 @@ FHD compact 栈（backend.http_app）不加载完整 XCAGI 时，至少避免 40
 from __future__ import annotations
 
 import logging
+import mimetypes
 import time
+from pathlib import Path
 from typing import Any, cast
 
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Request, UploadFile
@@ -166,6 +168,45 @@ def templates_get_one(template_id: str):
     if not row:
         raise HTTPException(status_code=404, detail="模板不存在")
     return {"success": True, "template": row}
+
+
+@router.get("/api/templates/{template_id}/file", summary="读取模板原件（在线预览）")
+def templates_get_file(template_id: str):
+    """返回模板原件字节流；仅允许上传目录与租户模板库下的文件，避免路径穿越。"""
+    from fastapi.responses import FileResponse
+
+    from app.utils.path_io.path_utils import get_app_data_dir, get_upload_dir
+    from app.utils.security.safe_download_path import (
+        UnsafeDownloadPathError,
+        resolve_under_allowed_dirs,
+    )
+
+    row = _find_template_row(template_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="模板不存在")
+    raw_path = str(row.get("file_path") or "").strip()
+    if not raw_path:
+        raise HTTPException(status_code=404, detail="该模板未保存原件")
+
+    upload_root = Path(get_upload_dir())
+    # 模板原件可能落在上传目录，或租户模板库（app_data/tenants/<id>/template_library）。
+    # 行数据本身已按租户过滤，因此只允许这两类受信根，避免任意文件读取。
+    allowed_roots = [
+        upload_root / "templates",
+        upload_root,
+        Path(get_app_data_dir()) / "tenants",
+    ]
+    try:
+        path = resolve_under_allowed_dirs(raw_path, allowed_roots)
+    except UnsafeDownloadPathError:
+        raise HTTPException(status_code=403, detail="模板原件路径不可访问") from None
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="模板原件不存在")
+
+    media_type = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
+    return FileResponse(
+        path, media_type=media_type, filename=path.name, content_disposition_type="inline"
+    )
 
 
 def _tenant_scope_or_403(user: Any):

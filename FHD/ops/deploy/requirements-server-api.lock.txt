@@ -32,6 +32,7 @@ pandas==2.3.3
 numpy==2.4.6
 xlrd==2.0.2
 scikit-learn==1.9.0
+mcp==2.3.0
 json-repair==0.64.9
 openai==2.41.0
 tenacity==9.1.4
@@ -52,3 +53,5 @@ av==17.1.0
 imageio-ffmpeg==0.6.0
 socksio==1.0.0
 defusedxml==0.7.1
+semantic-router==1.1.2
+fastembed==0.9.1

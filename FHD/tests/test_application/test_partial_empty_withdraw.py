@@ -28,7 +28,7 @@ def test_duplicate_and_invalid_rows_partial_withdraws_without_empty_rollback(
     tmp_path, monkeypatch, rag_service
 ):
     assert EltService  # Import real service before candidate path fixtures replace providers.
-    source = _shipment_xlsx(tmp_path / "data/etl/uploads/42/7/mixed.xlsx")
+    source = _shipment_xlsx(tmp_path / "data/elt/uploads/42/7/mixed.xlsx")
     fake = MagicMock()
     plan = _candidate_plan(fake, monkeypatch, "r", source)
     plan["valid_rows_only"] = True
@@ -142,7 +142,7 @@ def test_all_withdraw_states_verify_business_before_knowledge(monkeypatch, batch
 def test_withdraw_recovers_after_business_commit_without_repeating_business(
     tmp_path, monkeypatch, rag_service, failure
 ):
-    source = _shipment_xlsx(tmp_path / "data/etl/uploads/42/7/recover.xlsx")
+    source = _shipment_xlsx(tmp_path / "data/elt/uploads/42/7/recover.xlsx")
     fake = MagicMock()
     plan = _candidate_plan(fake, monkeypatch, "r", source)
     receipt = {
@@ -298,7 +298,7 @@ def test_completed_rollback_requires_strict_recovery_receipt(monkeypatch, fault)
 def test_missing_memory_is_not_proof_of_durable_knowledge_delete(
     tmp_path, monkeypatch, rag_service, disk
 ):
-    source = _shipment_xlsx(tmp_path / "data/etl/uploads/42/7/durable.xlsx")
+    source = _shipment_xlsx(tmp_path / "data/elt/uploads/42/7/durable.xlsx")
     fake = MagicMock()
     plan = _candidate_plan(fake, monkeypatch, "r", source)
     fake.execute.return_value = {

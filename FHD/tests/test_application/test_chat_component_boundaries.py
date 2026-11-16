@@ -242,6 +242,107 @@ async def test_sync_error_receipt_preserves_status_and_safe_history_for_any_deta
     )
 
 
+def test_auto_approval_waits_for_user_decision_without_reporting_failure():
+    """预演需要用户确认时，自动审批已通过，不能报成审批取消/执行失败。"""
+    from contextlib import contextmanager
+
+    callbacks = Mock(spec=SessionCallbacks)
+    session = WorkflowSession({}, callbacks)
+    db = Mock()
+    db.query.return_value.filter.return_value.first.return_value = Mock()
+
+    @contextmanager
+    def fake_get_db():
+        yield db
+
+    question = "预演完成：目标「abnormal」，13 行源数据未通过校验"
+    with (
+        patch("app.db.session.get_db", fake_get_db),
+        patch(
+            "app.application.approval_workspace_app_service."
+            "_approve_ai_workflow_request_without_node",
+            return_value={
+                "success": False,
+                "accepted": True,
+                "data": {
+                    "workflow_execution": {
+                        "success": False,
+                        "waiting_user_decision": True,
+                        "message": question,
+                    }
+                },
+                "message": question,
+            },
+        ),
+    ):
+        reply = session._auto_approve_waiting_request(
+            request_id="req-auto",
+            user_id="chat:scoped-conversation",
+            runtime_context={"actor_id": 7, "user_id": "7"},
+            plan=_plan(),
+            agent_run=AgentRun(user_id="7", message="导入"),
+        )
+
+    assert reply["success"] is True
+    assert reply["data"]["action"] == "workflow_waiting"
+    assert "需要你确认" in reply["response"]
+    assert "审批已取消" not in reply["response"]
+
+
+def test_auto_approval_reply_includes_generated_file_download_url():
+    from contextlib import contextmanager
+
+    callbacks = Mock(spec=SessionCallbacks)
+    session = WorkflowSession({}, callbacks)
+    db = Mock()
+    db.query.return_value.filter.return_value.first.return_value = Mock()
+
+    @contextmanager
+    def fake_get_db():
+        yield db
+
+    run = AgentRun(user_id="7", message="生成生产表")
+    run.steps.append(
+        AgentStep(
+            node_id="n3",
+            tool_id="generate_office_document",
+            action="execute",
+            status="completed",
+            output={
+                "success": True,
+                "file_name": "宗南家私生产表.xlsx",
+                "download_url": "/api/ai/kitten/document/pickup/token-1",
+            },
+        )
+    )
+    with (
+        patch("app.db.session.get_db", fake_get_db),
+        patch(
+            "app.application.agent_orchestrator.AgentOrchestrator.get_run",
+            return_value=run,
+        ),
+        patch(
+            "app.application.approval_workspace_app_service."
+            "_approve_ai_workflow_request_without_node",
+            return_value={
+                "success": True,
+                "data": {"workflow_execution": {"success": True, "message": "AI 工作流执行完成"}},
+            },
+        ),
+    ):
+        reply = session._auto_approve_waiting_request(
+            request_id="req-file",
+            user_id="chat:scoped-conversation",
+            runtime_context={"actor_id": 7, "user_id": "7"},
+            plan=_plan(),
+            agent_run=run,
+        )
+
+    assert reply["success"] is True
+    assert "宗南家私生产表.xlsx" in reply["response"]
+    assert "/api/ai/kitten/document/pickup/token-1" in reply["response"]
+
+
 def test_history_persists_visible_business_result_on_assistant_ui() -> None:
     store = Mock(spec=ConversationStore)
     persist_chat_turn(

@@ -82,7 +82,7 @@ class ShipmentApplicationService(ShipmentDocumentWorkflowMixin):
             if not shipment.is_valid():
                 return {"success": False, "message": "发货单无效：缺少购买单位或产品"}
 
-            meta_parts = ["source=shipment_excel_etl"]
+            meta_parts = ["source=shipment_excel_elt"]
             if str(external_order_number or "").strip():
                 meta_parts.append(f"external_order_number={str(external_order_number).strip()}")
             if str(order_date or "").strip():

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import logging
+import threading
 import time
 from typing import Any, cast
 
@@ -17,6 +18,7 @@ from app.application.agent_orchestrator.runtime_dependencies import (
 )
 from app.application.agent_orchestrator.task_background import task_execution_context
 from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
+from app.infrastructure.observability.genai_spans import tool_call_span
 from app.infrastructure.observability.metrics import observe_tool_call
 from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
@@ -116,6 +118,7 @@ class StepExecution:
         self.dependencies = dependencies
         self.attach_artifacts = attach_artifacts
         self.observe = observe
+        self._admission_lock = threading.RLock()
 
     def execute_step(
         self,
@@ -132,28 +135,50 @@ class StepExecution:
         run.status = "running"
         attempt_count = step.attempt_count
         spec = self.dependencies.action_spec(step.tool_id, step.action)
-        tool_call = ToolCall(
-            step_id=step.step_id,
-            node_id=step.node_id,
-            tool_id=step.tool_id,
-            action=step.action,
-            params=copy.deepcopy(step.params or {}),
-            cost_units=int(getattr(spec, "cost_units", 0) or 0),
-            permission=str(
-                getattr(spec, "receipt_permission", getattr(spec, "permission", "")) or ""
-            ),
-            metadata={
-                "risk": step.risk,
-                "idempotent": step.idempotent,
-                "timeout_seconds": int(getattr(spec, "timeout_seconds", 0) or 0),
-                "attempt_count": attempt_count,
-            },
-        )
-        authorization_permission = getattr(spec, "permission", "")
-        if tool_call.permission != authorization_permission:
-            tool_call.metadata["authorization_permission"] = authorization_permission
-        run.tool_calls.append(tool_call)
-        self.usage.refresh_run_cost_metadata(run)
+        # Parallel scheduler prechecks can observe the same remaining credit.
+        # Reserve each in-flight call in the ordinary ledger before releasing
+        # admission; the slow tool execution remains genuinely concurrent.
+        with self._admission_lock:
+            from app.application.agent_orchestrator.budget import budget_exceeded_payload
+
+            self.usage.refresh_run_cost_metadata(run)
+            denial = budget_exceeded_payload(
+                run,
+                additional_cost_units=int(getattr(spec, "cost_units", 0) or 0),
+                scope=f"{step.tool_id}.{step.action}",
+            )
+            if denial is not None:
+                step.status = "failed"
+                step.error = str(denial["message"])
+                step.output = {"success": False, **denial, "retryable": False}
+                step.finished_at = utc_now_iso()
+                run.status, run.error = "failed", step.error
+                run.metadata["ai_cost_budget_exceeded"] = True
+                run.add_event("budget.exceeded", step.error, dict(denial))
+                self.repository.save(run)
+                return
+            tool_call = ToolCall(
+                step_id=step.step_id,
+                node_id=step.node_id,
+                tool_id=step.tool_id,
+                action=step.action,
+                params=copy.deepcopy(step.params or {}),
+                cost_units=int(getattr(spec, "cost_units", 0) or 0),
+                permission=str(
+                    getattr(spec, "receipt_permission", getattr(spec, "permission", "")) or ""
+                ),
+                metadata={
+                    "risk": step.risk,
+                    "idempotent": step.idempotent,
+                    "timeout_seconds": int(getattr(spec, "timeout_seconds", 0) or 0),
+                    "attempt_count": attempt_count,
+                },
+            )
+            authorization_permission = getattr(spec, "permission", "")
+            if tool_call.permission != authorization_permission:
+                tool_call.metadata["authorization_permission"] = authorization_permission
+            run.tool_calls.append(tool_call)
+            self.usage.refresh_run_cost_metadata(run)
         trace = self._trace(
             run,
             step,
@@ -222,13 +247,27 @@ class StepExecution:
                 from app.application.agent_orchestrator.tool_executor import (
                     execute_with_tool_deadline,
                 )
-
-                output = execute_with_tool_deadline(
-                    self.executor,
-                    step,
-                    runtime_context=ctx,
-                    timeout_seconds=float(getattr(spec, "timeout_seconds", 0) or 0),
+                from app.application.agent_orchestrator.tool_timeouts import (
+                    tool_timeout_seconds,
                 )
+
+                with tool_call_span(
+                    tool_id=step.tool_id,
+                    action=step.action,
+                    node_id=step.node_id,
+                    run_id=run.run_id,
+                ):
+                    output = execute_with_tool_deadline(
+                        self.executor,
+                        step,
+                        runtime_context=ctx,
+                        timeout_seconds=tool_timeout_seconds(
+                            step.tool_id,
+                            step.action,
+                            dict(step.params or {}),
+                            float(getattr(spec, "timeout_seconds", 0) or 0),
+                        ),
+                    )
             except RECOVERABLE_ERRORS:
                 logger.exception("agent tool execution failed")
                 output = {

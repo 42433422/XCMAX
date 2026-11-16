@@ -2,7 +2,7 @@ import { onMounted, watch } from 'vue'
 import { useModsStore } from '@/stores/mods'
 import { syncEnterpriseWorkflowRegistry } from '@/utils/syncEnterpriseWorkflowRegistry'
 
-/** 员工可视化 / 副窗 / 流程可视化：与 Mod 列表同步工作流员工注册表 */
+/** 员工可视化 / 副窗 / 流程可视化：与统一员工目录同步注册表 */
 export function useWorkflowEmployeeRegistrySync() {
   const modsStore = useModsStore()
 
@@ -14,7 +14,7 @@ export function useWorkflowEmployeeRegistrySync() {
     if (modsStore.clientModsUiOff) return
     try {
       await modsStore.initialize(true)
-      await syncEnterpriseWorkflowRegistry(modsStore.modsForWorkflowUi)
+      await syncEnterpriseWorkflowRegistry({ forceDirectory: true })
     } catch (error) {
       reportSyncError(error)
     }
@@ -22,11 +22,12 @@ export function useWorkflowEmployeeRegistrySync() {
 
   onMounted(syncRegistry)
 
+  // 装/卸 Mod 后重拉目录；目录接口自身是唯一员工来源，不再依赖 Mod 清单。
   watch(
     () => [modsStore.modsForWorkflowUi, modsStore.entitledModIds],
     () => {
       if (modsStore.clientModsUiOff) return
-      void syncEnterpriseWorkflowRegistry(modsStore.modsForWorkflowUi).catch(reportSyncError)
+      void syncEnterpriseWorkflowRegistry({ forceDirectory: true }).catch(reportSyncError)
     },
     { deep: true },
   )

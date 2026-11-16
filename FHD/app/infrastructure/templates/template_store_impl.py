@@ -287,8 +287,8 @@ class FileSystemTemplateStore(TemplateStorePort):
         return out
 
     def list_templates(self) -> list[dict]:
-        # 数据库是模板库的唯一真源。磁盘扫描仅用于导入候选与 id 解析，
-        # 不能进入列表，否则删除后文件仍在就会被重新“发现”，页面状态与库不一致。
+        # 自定义模板以数据库为准；固定 legacy 兼容项继续受租户隐藏规则控制。
+        # 磁盘扫描仅用于导入候选与 id 解析，不能让已删除的数据库模板重新出现。
         templates = self._db_templates()
         templates.extend([t for t in self._legacy_templates() if t.get("exists")])
 
@@ -302,7 +302,25 @@ class FileSystemTemplateStore(TemplateStorePort):
                 continue
             seen.add(key)
             deduped.append(tpl)
-        return deduped
+        return self._without_hidden_paths(deduped)
+
+    @staticmethod
+    def _without_hidden_paths(templates: list[dict]) -> list[dict]:
+        """内置/安装资源支持按租户隐藏，避免「清理后仍显示」。"""
+        from app.infrastructure.templates.template_preferences import hidden_template_paths
+
+        hidden = hidden_template_paths()
+        if not hidden:
+            return templates
+        runtime = get_app_data_dir()
+        hidden_keys = {template_path_key(path, runtime_root=runtime) for path in hidden}
+        kept: list[dict] = []
+        for tpl in templates:
+            path = str(tpl.get("path") or "").strip()
+            if path and template_path_key(path, runtime_root=runtime) in hidden_keys:
+                continue
+            kept.append(tpl)
+        return kept
 
     def list_by_type(self, template_type: str, active_only: bool = True) -> list[dict]:
         db_templates = [t for t in self._db_templates() if t.get("template_type") == template_type]
@@ -473,6 +491,35 @@ class FileSystemTemplateStore(TemplateStorePort):
             "template_name": target_name,
             "template_path": target_path,
         }
+
+    def update_template(self, template_id: int, template_data: dict[str, Any]) -> dict[str, Any]:
+        """更新模板元数据（当前只支持改名，用于把机器占位名换成业务名）。"""
+        name = str(template_data.get("template_name") or template_data.get("name") or "").strip()
+        if not name:
+            return {"success": False, "message": "模板名称不能为空"}
+        try:
+            from app.infrastructure.templates.tenant_scope import templates_tenant_where_sql
+
+            tenant_sql, tenant_bind = templates_tenant_where_sql()
+            with db_session.get_db() as db:
+                res = db.execute(
+                    text(
+                        f"""
+                        UPDATE templates
+                        SET template_name = :template_name, updated_at = CURRENT_TIMESTAMP
+                        WHERE id = :id AND ({tenant_sql})
+                        """
+                    ),
+                    {"id": int(template_id), "template_name": name, **tenant_bind},
+                )
+                db.commit()
+                updated = int(getattr(res, "rowcount", 0) or 0)
+            if not updated:
+                return {"success": False, "message": "模板不存在或不属于当前租户"}
+            return {"success": True, "message": "模板已更新", "id": int(template_id)}
+        except RECOVERABLE_ERRORS as e:
+            logger.error("update_template failed: %s", e, exc_info=True)
+            return {"success": False, "message": str(e)}
 
     def save_template(self, template_data: dict[str, Any]) -> dict[str, Any]:
         """将模板元数据写入 templates 表（供 POST /api/excel/templates 等使用）。"""

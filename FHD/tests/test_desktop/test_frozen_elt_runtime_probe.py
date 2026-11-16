@@ -14,7 +14,7 @@ from app.application import reviewed_excel_template
 from XCAGI import run_fastapi
 
 
-def test_elt_probe_derives_and_reads_back_without_starting_server(monkeypatch, capsys):
+def test_etl_probe_derives_and_reads_back_without_starting_server(monkeypatch, capsys):
     calls = []
     derive = reviewed_excel_template.derive_document_workbook
 
@@ -40,7 +40,7 @@ def test_elt_probe_derives_and_reads_back_without_starting_server(monkeypatch, c
     assert "XLSX inspect/derive/readback" in capsys.readouterr().out
 
 
-def test_elt_probe_fails_closed_when_xml_runtime_is_missing(monkeypatch):
+def test_etl_probe_fails_closed_when_xml_runtime_is_missing(monkeypatch):
     original_import = builtins.__import__
 
     def without_safe_xml(name, *args, **kwargs):
@@ -53,7 +53,7 @@ def test_elt_probe_fails_closed_when_xml_runtime_is_missing(monkeypatch):
         run_fastapi._verify_frozen_elt_runtime()
 
 
-def test_elt_probe_rejects_corrupt_derived_output(monkeypatch):
+def test_etl_probe_rejects_corrupt_derived_output(monkeypatch):
     derive = reviewed_excel_template.derive_document_workbook
 
     def corrupt(source, fragments, **kwargs):

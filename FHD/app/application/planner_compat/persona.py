@@ -192,6 +192,31 @@ def resolve_chat_user_id(request: Request, body: XcagiCompatChatBody) -> str:
     return "1"
 
 
+def resolve_persona_owner_id(request: Request, body: XcagiCompatChatBody) -> str:
+    """拟人 Persy 的持久化键：稳定账号 ID，而非按对话会话分片。
+
+    对话历史仍用会话级 ``body.user_id``（``web_normal_<session>``），避免串会话；
+    但人格必须跨会话、跨 Mod 持续积累，因此优先取登录会话里的本地用户 ID，
+    其次取显式 ``X-User-ID`` 头，最后才回退到旧行为。
+    """
+    try:
+        from app.infrastructure.auth.dependencies import resolve_session_user
+
+        user = resolve_session_user(request)
+        uid = getattr(user, "id", None)
+        if uid is not None and str(uid).strip():
+            return str(uid).strip()
+    except RECOVERABLE_ERRORS:
+        pass
+    try:
+        header = request.headers.get("X-User-Id") or request.headers.get("X-User-ID")
+        if header and str(header).strip().isdigit():
+            return str(header).strip()
+    except RECOVERABLE_ERRORS:
+        pass
+    return resolve_chat_user_id(request, body)
+
+
 @dataclass(frozen=True)
 class PersonaEnricher:
     conversation: Callable[[], ConversationService]
@@ -215,6 +240,7 @@ class PersonaEnricher:
             if persona is None:
                 return
             user_id = self.user_id(request, body)
+            persona_user_id = resolve_persona_owner_id(request, body)
             context = body.context or {}
             industry = context.get("industry") if isinstance(context, dict) else None
             industry = industry or self.industry(request)
@@ -226,7 +252,7 @@ class PersonaEnricher:
                 len(history),
             )
             prompt, _ = await persona.build_prompt_from_message(
-                user_id=user_id,
+                user_id=persona_user_id,
                 message=body.message,
                 history=history,
                 industry=industry,

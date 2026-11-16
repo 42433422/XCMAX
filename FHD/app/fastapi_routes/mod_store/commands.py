@@ -43,7 +43,44 @@ class LocalCommands:
             pkg_id, parsed_version = self._split(payload.get("package_file") or "")
             version = version or parsed_version
         activate = str(payload.get("activate") or "true").lower() not in {"0", "false", "no"}
-        return await self._install(pkg_id, version, activate=activate)
+        # 市场目录下载需要账号令牌；缺失时按匿名下载处理（仅公开包可用）。
+        authorization = ""
+        try:
+            from app.fastapi_routes.market_account import resolve_valid_market_access_token
+            from app.infrastructure.auth.dependencies import session_id_from_request
+
+            sid = session_id_from_request(request)
+            if sid:
+                token = (await resolve_valid_market_access_token(sid) or "").strip()
+                if token:
+                    authorization = (
+                        token if token.lower().startswith("bearer ") else f"Bearer {token}"
+                    )
+        except RECOVERABLE_ERRORS:
+            self._logger.warning("mod store install token resolve skipped", exc_info=True)
+        # 显式关闭验签仅对市场员工包生效（见 PackageInstaller.from_catalog）；其它制品仍强制验签。
+        # 注意不能走 request_payload：safe_text(False) 会被压成空串，布尔值会丢失。
+        verify_signature = True
+        try:
+            if "application/json" in (request.headers.get("content-type") or "").lower():
+                raw_body = await request.json()
+                if isinstance(raw_body, dict) and "verify_signature" in raw_body:
+                    verify_signature = str(
+                        raw_body.get("verify_signature")
+                    ).strip().lower() not in {
+                        "0",
+                        "false",
+                        "no",
+                    }
+        except RECOVERABLE_ERRORS:
+            self._logger.warning("mod store install verify_signature parse skipped", exc_info=True)
+        return await self._install(
+            pkg_id,
+            version,
+            activate=activate,
+            authorization=authorization,
+            verify_signature=verify_signature,
+        )
 
     async def install_industry_seed(self, request: Request) -> ModStoreInstallResult:
         """L2：从 industry-seeds 池安装所选行业中性 Mod；池缺失时 Catalog 兜底。"""

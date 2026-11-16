@@ -23,6 +23,7 @@ from app.application.mod_store.http_port_contracts import (
     ModPackageWriter,
 )
 from app.infrastructure.mods.artifact_constants import ARTIFACT_EMPLOYEE_PACK
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .projection import safe_text
 from .schemas import ModStoreInstallResult
@@ -82,6 +83,8 @@ class PackageInstaller:
             ok, message = self._employees().install_from_package(
                 path, verify_signature=verify_signature
             )
+            if ok:
+                self._mark_tenant_owned(path)
             return ModStoreInstallResult(success=bool(ok), message=message, data=None)
         ok, message, metadata = self._mods().install_mod_package(
             path, verify_signature=verify_signature, activate=activate
@@ -92,6 +95,17 @@ class PackageInstaller:
             else None
         )
         return ModStoreInstallResult(success=bool(ok), message=message, data=data)
+
+    def _mark_tenant_owned(self, package_path: str) -> None:
+        """商店安装成功的员工包记为本机租户自有员工，企业端才可见。"""
+        try:
+            from app.infrastructure.mods.artifact_package import peek_manifest_from_zip
+            from app.mod_sdk.tenant_employee_packs import mark_tenant_owned_pack
+
+            manifest = peek_manifest_from_zip(package_path) or {}
+            mark_tenant_owned_pack(str(manifest.get("id") or ""))
+        except RECOVERABLE_ERRORS:
+            self._logger.warning("mark tenant owned employee pack failed", exc_info=True)
 
     async def from_catalog(
         self,
@@ -147,8 +161,19 @@ class PackageInstaller:
                         detail=f"远端 Mod 包摘要不一致：expected={expected} actual={actual}",
                     )
             files.normalized = self._normalize_catalog(files.source)
+            # 显式关闭验签只对市场员工包生效：当前市场员工包未携带 META-INF 签名，
+            # 但仍要求内容与目录 sha256 一致；Mod（含可执行后端）始终强制验签。
+            install_verify = verify_signature
+            if not install_verify:
+                if self._artifact(files.normalized) == ARTIFACT_EMPLOYEE_PACK:
+                    self._logger.warning(
+                        "市场员工包未强制验签（按安装请求放行）：%s",
+                        self._artifact(files.normalized),
+                    )
+                else:
+                    install_verify = True
             return self._install(
-                files.normalized, verify_signature=verify_signature, activate=activate
+                files.normalized, verify_signature=install_verify, activate=activate
             )
 
     async def upload(self, file: UploadFile, activate: bool) -> ModStoreInstallResult:

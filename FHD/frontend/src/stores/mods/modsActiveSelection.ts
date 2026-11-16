@@ -32,7 +32,9 @@ export function useModsActiveSelection(deps: ModsActiveSelectionDeps) {
       return
     }
     if (!mods.value.length) {
-      setActiveModId('')
+      // 扩展列表刷新时会短暂为空；此时清空 activeModId 会把聊天切到「无 Mod」存储键，
+      // 并中断正在进行的对话轮次。只有本来就没选中项时才清空。
+      if (!String(activeModId.value || '').trim()) setActiveModId('')
       return
     }
     const { isAdminAccount } = resolveModsAccountContext()

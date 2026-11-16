@@ -1,3 +1,4 @@
+import navigationCatalog from '../../../config/core_navigation.json'
 import { ADMIN_OPERATOR_VISIBLE_CORE_KEYS } from '@/constants/adminOperatorNav'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 
@@ -21,22 +22,7 @@ export type AccountRoleSource = {
 }
 
 /** Host routes above are not tenant-scoped. Enterprise tenants land on these Mod pages instead of settings. */
-export const TENANT_SCOPED_BUSINESS_PATHS: Record<string, string> = {
-  products: '/mod/xcagi-erp-domain-bridge/products',
-  customers: '/mod/xcagi-erp-domain-bridge/customers',
-  orders: '/mod/xcagi-erp-domain-bridge/orders',
-  'orders-create': '/mod/xcagi-erp-domain-bridge/orders/create',
-  'shipment-records': '/mod/xcagi-erp-domain-bridge/shipment-records',
-  materials: '/mod/xcagi-erp-domain-bridge/materials',
-  inventory: '/mod/xcagi-erp-domain-bridge/inventory',
-  purchase: '/mod/xcagi-erp-domain-bridge/purchase',
-  print: '/mod/xcagi-erp-domain-bridge/print',
-  'printer-list': '/mod/xcagi-erp-domain-bridge/printer-list',
-  'template-preview': '/mod/xcagi-erp-domain-bridge/template-preview',
-  'traditional-mode': '/mod/xcagi-erp-domain-bridge/traditional-mode',
-  'approval-hub': '/mod/xcagi-approval-bridge/approval-hub/workspace',
-  tools: '/mod/xcagi-office-employee-pack-bridge/tools',
-}
+export const TENANT_SCOPED_BUSINESS_PATHS: Record<string, string> = navigationCatalog.tenant_paths
 
 export const UNSCOPED_HOST_BUSINESS_KEYS = new Set(Object.keys(TENANT_SCOPED_BUSINESS_PATHS))
 
@@ -88,7 +74,7 @@ export function buildRoleMenuProfile(source: AccountRoleSource, hasIndustryBusin
 
   if (source.localRole?.startsWith('tenant:')) {
     const visibleCoreKeys = new Set(['settings'])
-    if (source.permissions?.includes('etl.read')) visibleCoreKeys.add('business-docking')
+    if (source.permissions?.includes('elt.read')) visibleCoreKeys.add('business-docking')
     return { role: 'enterprise-user', canSeeAdminMenus: false, canSeeDeveloperMenus: false, visibleCoreKeys }
   }
 

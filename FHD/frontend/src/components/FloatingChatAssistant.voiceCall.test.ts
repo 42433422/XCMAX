@@ -33,6 +33,8 @@ vi.mock('@/utils/tts', () => ({
   speakText: vi.fn(),
   stopSpeaking: vi.fn(),
   createChineseUtterance: vi.fn(() => ({})),
+  pauseSpeaking: vi.fn(() => true),
+  resumeSpeaking: vi.fn(() => true),
 }))
 
 vi.mock('@/utils/apiBase', () => ({
@@ -142,6 +144,7 @@ describe('FloatingChatAssistant 语音通话', () => {
   })
 
   it('进入通话界面并让宿主保持可见', async () => {
+    installMicrophone(async () => mockStream())
     const wrapper = await openAssistant()
     expect(wrapper.find('.floating-chat-call-entry').attributes('title')).toBe('语音通话')
 
@@ -152,7 +155,25 @@ describe('FloatingChatAssistant 语音通话', () => {
     expect(wrapper.find('.floating-chat-messages').exists()).toBe(false)
     expect(voiceCallActive.value).toBe(true)
     expect(wrapper.get('.floating-chat-call-stage').text()).toBe('正在接通…')
-    expect(wrapper.get('.floating-chat-call-hangup').text()).toContain('挂断')
+    expect(wrapper.get('.floating-chat-ball-action--hangup').attributes('aria-label')).toBe('挂断')
+  })
+
+  it('朗读可按句暂停并继续', async () => {
+    vi.useFakeTimers()
+    installMicrophone(async () => mockStream())
+
+    const wrapper = await openAssistant()
+    await wrapper.get('.floating-chat-call-entry').trigger('click')
+    await nextTick()
+
+    const pauseButton = wrapper.get('.floating-chat-call-action')
+    expect(pauseButton.text()).toContain('暂停朗读')
+
+    await pauseButton.trigger('click')
+    expect(wrapper.get('.floating-chat-call-action').text()).toContain('继续朗读')
+
+    await wrapper.get('.floating-chat-call-action').trigger('click')
+    expect(wrapper.get('.floating-chat-call-action').text()).toContain('暂停朗读')
   })
 
   it('按 聆听 → 思考 → 说话 推进阶段并在挂断后释放通话状态', async () => {
@@ -183,7 +204,7 @@ describe('FloatingChatAssistant 语音通话', () => {
     await vi.advanceTimersByTimeAsync(1_500)
     micLevel = 0
     await vi.advanceTimersByTimeAsync(900)
-    expect(wrapper.get('.floating-chat-call-stage').text()).toBe('正在思考…')
+    expect(wrapper.get('.floating-chat-call-stage').text()).toBe('正在识别…')
 
     resolveTranscription({
       ok: true,
@@ -201,7 +222,7 @@ describe('FloatingChatAssistant 语音通话', () => {
     await vi.advanceTimersByTimeAsync(300)
     expect(wrapper.get('.floating-chat-call-stage').text()).toBe('正在聆听…')
 
-    await wrapper.get('.floating-chat-call-hangup').trigger('click')
+    await wrapper.get('.floating-chat-ball-action--hangup').trigger('click')
     await nextTick()
     expect(voiceCallActive.value).toBe(false)
     expect(wrapper.find('.floating-chat-call').exists()).toBe(false)
@@ -218,17 +239,18 @@ describe('FloatingChatAssistant 语音通话', () => {
     await vi.advanceTimersByTimeAsync(400)
     expect(wrapper.get('.floating-chat-call-stage').text()).toBe('正在聆听…')
 
-    await wrapper.findAll('.floating-chat-call-action').find(button => button.text().includes('静音'))!.trigger('click')
+    await wrapper.findAll('.floating-chat-ball-action')[0].trigger('click')
     await nextTick()
     expect(wrapper.get('.floating-chat-call-stage').text()).toBe('已静音')
 
-    await wrapper.findAll('.floating-chat-call-action').find(button => button.text().includes('取消静音'))!.trigger('click')
+    expect(wrapper.findAll('.floating-chat-ball-action')[0].attributes('aria-label')).toBe('取消静音')
+    await wrapper.findAll('.floating-chat-ball-action')[0].trigger('click')
     await vi.advanceTimersByTimeAsync(400)
     expect(wrapper.get('.floating-chat-call-stage').text()).toBe('正在聆听…')
 
-    await wrapper.findAll('.floating-chat-call-action').find(button => button.text().includes('免提开'))!.trigger('click')
+    await wrapper.findAll('.floating-chat-ball-action')[1].trigger('click')
     await nextTick()
-    expect(wrapper.findAll('.floating-chat-call-action').some(button => button.text().includes('免提关'))).toBe(true)
+    expect(wrapper.findAll('.floating-chat-ball-action')[1].attributes('aria-label')).toBe('开启免提')
   })
 
   it('合成语音失败时回退系统语音播报', async () => {
@@ -318,8 +340,10 @@ describe('FloatingChatAssistant 语音通话', () => {
     await vi.advanceTimersByTimeAsync(900)
     await flushPromises()
 
+    await vi.advanceTimersByTimeAsync(600)
+    await flushPromises()
     expect(wrapper.get('.floating-chat-call-caption.error').text()).toContain('网络有点慢')
-    expect(wrapper.find('.floating-chat-call-caption.ai').exists()).toBe(false)
+    expect(wrapper.get('.floating-chat-call-caption.ai').text()).toContain('这次没拿到回复')
     expect(vi.mocked(speakText)).toHaveBeenCalledWith(
       '网络有点慢，我没收到回复，请再说一次。',
       expect.anything(),
@@ -345,12 +369,13 @@ describe('FloatingChatAssistant 语音通话', () => {
     await vi.advanceTimersByTimeAsync(900)
     await flushPromises()
 
-    expect(vi.mocked(apiFetch)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(apiFetch)).toHaveBeenCalledTimes(2)
     expect(wrapper.get('.floating-chat-call-stage').text()).toBe('正在聆听…')
     expect(wrapper.find('.floating-chat-call-caption.ai').exists()).toBe(false)
   })
 
   it('响应 xcagi:start-voice-call 事件并在卸载时移除监听', async () => {
+    installMicrophone(async () => mockStream())
     const wrapper = mountAssistant()
     window.dispatchEvent(new Event('xcagi:start-voice-call'))
     await nextTick()

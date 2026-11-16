@@ -196,40 +196,20 @@ def _as_mapping(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
-def tool_catalog_rules(tools: list[dict[str, Any]]) -> str:
-    """Tell the employee the exact catalog it may name or call."""
+def tool_call_contract(tools: list[dict[str, Any]]) -> str:
+    """Calling rules only: the native ``tools`` payload already carries names and schemas."""
 
     if not tools:
         return "当前没有授权工具。用户要求使用任何工具时，直接说明该工具不可用，不要编造执行结果。"
-    lines = ["当前授权工具（只能使用这些；未列出的工具都不可用，不能编造成执行结果）："]
-    for spec in tools:
-        if not isinstance(spec, dict):
-            continue
-        function = _as_mapping(spec.get("function"))
-        name = str(function.get("name") or "").strip()
-        if not name:
-            continue
-        parameters = _as_mapping(function.get("parameters"))
-        properties = _as_mapping(parameters.get("properties"))
-        required = [str(item) for item in (parameters.get("required") or [])]
-        optional = [str(item) for item in properties if str(item) not in required]
-        version = str(spec.get("version_id") or "").strip()
-        lines.append(
-            f"- {name}：{function.get('description') or '无说明'}。"
-            f"必填：{'、'.join(required) or '无'}。可选：{'、'.join(optional) or '无'}。"
-            + (f"版本：{version}。" if version else "")
-        )
-    lines.append(
-        "规则：只按以上名称和说明回答，不要提及其他工具。"
+    return (
+        "规则：只能使用本次请求传入的工具；未列出的工具都不可用，不能编造执行结果。"
         "用户没给齐必填参数时，先询问缺的必填项，不要发起调用，也不要编造结果；可选参数可以不提供。"
         "有多个相近工具时，只调用与用户意图一致的那一个。"
-        "未授权或已下线的工具要明确说不可用，不要假装已经执行。"
         "历史消息里的工具执行回执是当时的版本快照，回答历史调用时原样引用回执中的 version_id 和 description，"
-        "不要改写成当前说明；新的调用才使用上面的当前定义。"
-        "真正调用时只输出："
+        "不要改写成当前说明；新的调用才使用当前定义。"
+        "不能返回原生工具调用时，只输出："
         "<tool_call><function=工具名><parameter=参数名>参数值</parameter></function></tool_call>"
     )
-    return "\n".join(lines)
 
 
 def _missing_required(
@@ -344,7 +324,7 @@ def run_employee_agent_loop(
     if input_data:
         user_content = f"{user_content}\n{user_payload}"
     prompt = system_prompt or "你是智能员工助手。"
-    catalog = tool_catalog_rules(tool_specs)
+    catalog = tool_call_contract(tool_specs)
     if catalog:
         prompt = f"{prompt}\n\n{catalog}"
     messages: list[dict[str, Any]] = [

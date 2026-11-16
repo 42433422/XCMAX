@@ -132,7 +132,7 @@ class ProductAdapter(TargetAdapter):
                 reason="product_model_ambiguous",
             )
         if not obj:
-            virtual = {"_etl_virtual": True, **json_safe(data)}
+            virtual = {"_elt_virtual": True, **json_safe(data)}
             index[match_key] = virtual
             (name_index or {}).setdefault(self._name_key(data), []).append(virtual)
             return PreviewDecision("new", after=json_safe(data), reason="product_not_found")

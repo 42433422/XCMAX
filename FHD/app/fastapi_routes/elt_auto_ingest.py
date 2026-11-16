@@ -1,4 +1,4 @@
-"""ELT auto-ingest + progress API (split from etl.py to keep router ≤20 routes)."""
+"""ELT auto-ingest + progress API (split from elt.py to keep router ≤20 routes)."""
 
 from __future__ import annotations
 
@@ -16,17 +16,17 @@ from app.mod_sdk.product_skus import resolve_product_sku
 
 
 def _feature_gate() -> None:
-    flag = str(os.environ.get("FHD_ETL_CENTER_ENABLED") or "").strip().lower()
+    flag = str(os.environ.get("FHD_ELT_CENTER_ENABLED") or "").strip().lower()
     if flag not in {"1", "true", "yes", "on"}:
         raise HTTPException(
             status_code=403,
-            detail={"code": "ETL_CENTER_DISABLED", "message": "数据对接中心尚未启用"},
+            detail={"code": "ELT_CENTER_DISABLED", "message": "数据对接中心尚未启用"},
         )
     if resolve_product_sku() != "enterprise":
         raise HTTPException(
             status_code=403,
             detail={
-                "code": "ETL_ENTERPRISE_REQUIRED",
+                "code": "ELT_ENTERPRISE_REQUIRED",
                 "message": "数据对接中心仅在企业版中提供",
             },
         )
@@ -48,9 +48,9 @@ router = APIRouter(
     dependencies=[Depends(_feature_gate), Depends(_error_boundary)],
 )
 
-_read = require_permission("etl.read")
-_execute = require_permission("etl.execute")
-_rollback = require_permission("etl.rollback")
+_read = require_permission("elt.read")
+_execute = require_permission("elt.execute")
+_rollback = require_permission("elt.rollback")
 
 
 def _user_id(user: Any) -> int:
@@ -60,7 +60,7 @@ def _user_id(user: Any) -> int:
     if value is None:
         raise HTTPException(
             status_code=401,
-            detail={"code": "ETL_USER_REQUIRED", "message": "请先登录"},
+            detail={"code": "ELT_USER_REQUIRED", "message": "请先登录"},
         )
     return int(value)
 
@@ -79,7 +79,7 @@ def auto_ingest(
     if not source_path:
         raise HTTPException(
             status_code=400,
-            detail={"code": "ETL_AUTO_INGEST_PATH_REQUIRED", "message": "source_path 必填"},
+            detail={"code": "ELT_AUTO_INGEST_PATH_REQUIRED", "message": "source_path 必填"},
         )
     raw_labels = body.get("labels")
     labels = [str(x) for x in raw_labels] if isinstance(raw_labels, list) else []
@@ -149,12 +149,12 @@ def get_auto_ingest_batch(batch_id: str, user: Any = Depends(_read)):
     if batch is None:
         raise HTTPException(
             status_code=404,
-            detail={"code": "ETL_AUTO_INGEST_NOT_FOUND", "message": "入库批次不存在"},
+            detail={"code": "ELT_AUTO_INGEST_NOT_FOUND", "message": "入库批次不存在"},
         )
     if int(batch.get("owner_user_id") or 0) != _user_id(user):
         raise HTTPException(
             status_code=403,
-            detail={"code": "ETL_AUTO_INGEST_FORBIDDEN", "message": "无权查看该批次"},
+            detail={"code": "ELT_AUTO_INGEST_FORBIDDEN", "message": "无权查看该批次"},
         )
     return {"success": True, "data": batch}
 

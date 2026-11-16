@@ -28,7 +28,7 @@ def validate_compatibility_preset(
             "兼容预设仅适用于 XLSX/XLSM 文件；其他文件请选择自动识别",
         )
     try:
-        from app.application.shipment_etl_profile import list_profiles
+        from app.application.shipment_elt_profile import list_profiles
 
         available = {
             str(item.get("id") or "").strip() for item in list_profiles() if isinstance(item, dict)

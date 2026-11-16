@@ -176,7 +176,7 @@ describe('archive selection through the actual kept-alive docking route', () => 
     expect(archive.reviewExcel).toHaveBeenCalledTimes(keptNames.length)
     expect(archive.previewReviewedIntake).not.toHaveBeenCalled()
     for (const name of keptNames) expect(wrapper.text()).toContain(name)
-    expect(wrapper.find('.etl-dropzone').exists()).toBe(false)
+    expect(wrapper.find('.elt-dropzone').exists()).toBe(false)
     expect(legacy.upload).not.toHaveBeenCalled(); expect(legacy.preview).not.toHaveBeenCalled(); expect(legacy.execute).not.toHaveBeenCalled()
   })
 })

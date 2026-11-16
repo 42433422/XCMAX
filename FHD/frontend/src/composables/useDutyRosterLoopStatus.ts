@@ -1,6 +1,6 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import xcmaxMarketProxy from '@/api/xcmaxMarketProxy'
-import { ALL_PLANNED_YUANGON_PKG_IDS } from '@/domain/yuangonDutyRoster'
+import { useDutyRoster } from '@/composables/useDutyRoster'
 
 type HealthPayload = Record<string, unknown>
 
@@ -46,11 +46,13 @@ function boolOrNull(raw: unknown): boolean | null {
   return null
 }
 
-export function normalizeDutyRosterLoopStatus(payload: HealthPayload | null | undefined): DutyRosterLoopStatus {
+export function normalizeDutyRosterLoopStatus(
+  payload: HealthPayload | null | undefined,
+  plannedFallback = 0,
+): DutyRosterLoopStatus {
   const health = objectValue(payload)
   const staffing = objectValue(health.staffing)
   const scheduler = objectValue(health.employee_scheduler ?? health.scheduler)
-  const plannedFallback = ALL_PLANNED_YUANGON_PKG_IDS.size
   const missingCatalogIds = stringArray(staffing.missing_employees)
   const hasLocalInventory = inventoryKnown(health.planned_employee_ids) && inventoryKnown(health.local_employee_pack_ids)
   const installed = new Set(stringArray(health.local_employee_pack_ids))
@@ -100,11 +102,11 @@ export function normalizeDutyRosterLoopStatus(payload: HealthPayload | null | un
   }
 }
 
-function emptyStatus(): DutyRosterLoopStatus {
+function emptyStatus(plannedCount = 0): DutyRosterLoopStatus {
   return {
     ok: false,
     source: 'loading',
-    plannedCount: ALL_PLANNED_YUANGON_PKG_IDS.size,
+    plannedCount,
     catalogRegisteredCount: 0,
     localInstalledCount: 0,
     catalogKnown: false,
@@ -123,7 +125,9 @@ function emptyStatus(): DutyRosterLoopStatus {
 }
 
 export function useDutyRosterLoopStatus(options: { autoRefreshMs?: number } = {}) {
-  const status = ref<DutyRosterLoopStatus>(emptyStatus())
+  const { allPlannedIds } = useDutyRoster()
+  const plannedCount = () => allPlannedIds.value.size
+  const status = ref<DutyRosterLoopStatus>(emptyStatus(plannedCount()))
   const loading = ref(false)
   const error = ref('')
   let timer: number | null = null
@@ -157,10 +161,15 @@ export function useDutyRosterLoopStatus(options: { autoRefreshMs?: number } = {}
     error.value = ''
     try {
       const payload = (await xcmaxMarketProxy.adminDutyGraphHealth()) as HealthPayload
-      status.value = normalizeDutyRosterLoopStatus(payload)
+      status.value = normalizeDutyRosterLoopStatus(payload, plannedCount())
     } catch (e: unknown) {
       error.value = e instanceof Error ? e.message : String(e)
-      status.value = { ...emptyStatus(), source: 'unavailable', checkedAt: Date.now(), message: error.value }
+      status.value = {
+        ...emptyStatus(plannedCount()),
+        source: 'unavailable',
+        checkedAt: Date.now(),
+        message: error.value,
+      }
     } finally {
       loading.value = false
     }

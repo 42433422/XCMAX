@@ -32,6 +32,8 @@ export interface WorkflowEmployeeManifestEntry {
   enterprise_mod_id?: string
   /** 电话业务员通道：wechat | adb（宿主任务 UI 用） */
   phone_channel?: 'wechat' | 'adb' | string
+  /** 仅提示词、无本地运行时的对话型员工（如导入的 WorkBuddy 专家） */
+  prompt_only?: boolean
 }
 
 /** 由 manifest 字段得到电话 HTTP 根（无则 null） */
@@ -51,6 +53,10 @@ export type ModWithWorkflowEmployees = {
   id: string
   name?: string
   type?: string
+  /** 后端标注：员工包由本机商店安装（属于本企业），平台随包分发的员工包为 false/缺省 */
+  tenant_owned?: boolean
+  /** 由统一员工目录合成的工位源：条目已是可用员工，不再套用办公包排除规则 */
+  directory_sourced?: boolean
   workflow_employees?: WorkflowEmployeeManifestEntry[]
 }
 

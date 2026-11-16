@@ -161,7 +161,7 @@ class TargetConfigServiceMixin:
         }:
             raise EltNotFound("导出文件")
         receipt = load_json(run.receipt_json, {})
-        root = (Path(get_app_data_dir()).resolve() / "etl" / "exports").resolve()
+        root = (Path(get_app_data_dir()).resolve() / "elt" / "exports").resolve()
         file_name = Path(str(receipt.get("file_name") or "")).name
         path = (root / file_name).resolve() if file_name else root / "_"
         if run.target_type == "shipment_records" and (
@@ -193,7 +193,7 @@ class TargetConfigServiceMixin:
             .order_by(EltRunRow.id)
             .all()
         )
-        root = Path(get_app_data_dir()).resolve() / "etl" / "error_exports"
+        root = Path(get_app_data_dir()).resolve() / "elt" / "error_exports"
         root.mkdir(parents=True, exist_ok=True)
         path = root / f"{run.id}-errors.csv"
         with path.open("w", encoding="utf-8-sig", newline="") as handle:

@@ -20,6 +20,10 @@ try:
 except ImportError:
     pass
 
+from app.utils.elt_env import reject_legacy_elt_env
+
+reject_legacy_elt_env()
+
 try:
     from app.desktop_runtime import configure_desktop_environment, is_desktop_mode
 

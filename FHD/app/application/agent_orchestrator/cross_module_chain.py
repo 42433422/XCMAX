@@ -28,10 +28,10 @@ from app.application.elt.service_uploads import UploadServiceMixin
 from app.application.elt.targets.products import ProductAdapter
 from app.application.employee_runtime.executor import execute_employee_task_local
 from app.application.employee_runtime.loader import load_employee_pack_from_disk
-from app.application.shipment_excel_etl_security import (
-    ShipmentEtlPathError,
-    open_etl_input_file,
-    resolve_etl_path,
+from app.application.shipment_excel_elt_security import (
+    ShipmentEltPathError,
+    open_elt_input_file,
+    resolve_elt_path,
 )
 from app.application.workflow.approval_policy import WorkflowApprovalPolicy
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
@@ -81,7 +81,7 @@ def _source_bytes(
     from app.utils.path_io.path_utils import get_app_data_dir
 
     candidate = Path(file_path).expanduser()
-    upload_root = Path(get_app_data_dir()).resolve() / "etl" / "uploads"
+    upload_root = Path(get_app_data_dir()).resolve() / "elt" / "uploads"
     expected_sha = ""
     if candidate.is_relative_to(upload_root) or candidate.resolve().is_relative_to(upload_root):
         if db is None:
@@ -97,14 +97,14 @@ def _source_bytes(
             .first()
         )
         if upload is None:
-            raise ShipmentEtlPathError("上传文件不属于当前账号")
+            raise ShipmentEltPathError("上传文件不属于当前账号")
         upload = UploadServiceMixin()._owned_upload(db, upload.id, user_id)
         source = Path(upload.storage_path)
         expected_sha = upload.sha256
-        opened = open_etl_input_file(source, owner_user_id=user_id)
+        opened = open_elt_input_file(source, owner_user_id=user_id)
     else:
-        source = resolve_etl_path(candidate)
-        opened = open_etl_input_file(source)
+        source = resolve_elt_path(candidate)
+        opened = open_elt_input_file(source)
     with opened as stream:
         body = stream.read(MAX_FILE_BYTES + 1)
     if not body or len(body) > MAX_FILE_BYTES:

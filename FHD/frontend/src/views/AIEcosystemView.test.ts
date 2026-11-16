@@ -83,7 +83,7 @@ describe('AIEcosystemView.vue', () => {
     expect(descs[2].text()).toContain('客户交付中心')
     expect(descs[3].text()).toContain('MOD 扩展')
     const names = wrapper.findAll('.app-launcher-name')
-    expect(names.map((n) => n.text())).toEqual(['智慧分析', 'AIOPEN 开放智控', '生产员工', '员工商店'])
+    expect(names.map((n) => n.text())).toEqual(['智慧分析', 'AIOPEN 开放智控', '私有交付', '员工商店'])
     const modstore = wrapper.find('[data-tour="ecosystem-launcher-modstore"]')
     expect(modstore.exists()).toBe(true)
   })

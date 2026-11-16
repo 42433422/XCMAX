@@ -28,7 +28,7 @@ def store(tmp_path, request):
         url = os.environ.get("ELT_TEST_POSTGRES_URL", "")
         if not url:
             pytest.skip("ELT_TEST_POSTGRES_URL must point to an isolated acceptance PostgreSQL")
-        schema = f"pm_etl_{uuid.uuid4().hex}"
+        schema = f"pm_elt_{uuid.uuid4().hex}"
         admin = create_engine(url)
         with admin.begin() as connection:
             connection.execute(text(f'CREATE SCHEMA "{schema}"'))

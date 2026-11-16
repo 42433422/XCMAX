@@ -17,8 +17,8 @@ from app.application.elt.customer_excel_gate import (
 
 
 def test_release_status_without_customer_original_is_blocked(monkeypatch):
-    monkeypatch.delenv("XCAGI_ETL_CUSTOMER_EXCEL", raising=False)
-    monkeypatch.delenv("XCAGI_ETL_MANUAL_BASELINE", raising=False)
+    monkeypatch.delenv("XCAGI_ELT_CUSTOMER_EXCEL", raising=False)
+    monkeypatch.delenv("XCAGI_ELT_MANUAL_BASELINE", raising=False)
     report = release_status()
     assert report["status"] == "BLOCKED"
     assert report["release_pass"] is False
@@ -100,7 +100,7 @@ def test_corrupt_customer_workbook_returns_failure_without_writes(tmp_path):
 
 def test_synthetic_workbook_is_not_a_release_pass(tmp_path, monkeypatch):
     monkeypatch.setattr("app.utils.path_io.path_utils.get_app_data_dir", lambda: str(tmp_path))
-    monkeypatch.setenv("FHD_ETL_ATTENDANCE_FAULT", "after_first_commit")
+    monkeypatch.setenv("FHD_ELT_ATTENDANCE_FAULT", "after_first_commit")
     path = tmp_path / "synthetic-attendance.xlsx"
     book = Workbook()
     sheet = book.active
@@ -139,7 +139,7 @@ def test_synthetic_workbook_is_not_a_release_pass(tmp_path, monkeypatch):
     assert report["checks"]["B31-54"] == "pass"
     import os
 
-    assert os.environ["FHD_ETL_ATTENDANCE_FAULT"] == "after_first_commit"
+    assert os.environ["FHD_ELT_ATTENDANCE_FAULT"] == "after_first_commit"
 
 
 def test_missing_manual_oracle_does_not_verify_totals_and_db_fields_are_compared(
@@ -178,16 +178,16 @@ def test_missing_manual_oracle_does_not_verify_totals_and_db_fields_are_compared
 
 
 def test_fixture_path_cannot_release_even_with_customer_label(tmp_path, monkeypatch):
-    monkeypatch.delenv("XCAGI_ETL_CUSTOMER_EXCEL", raising=False)
-    monkeypatch.delenv("XCAGI_ETL_MANUAL_BASELINE", raising=False)
+    monkeypatch.delenv("XCAGI_ELT_CUSTOMER_EXCEL", raising=False)
+    monkeypatch.delenv("XCAGI_ELT_MANUAL_BASELINE", raising=False)
     sample = tmp_path / "tests" / "sample-customer.xlsx"
     sample.parent.mkdir()
     sample.write_bytes(b"not-a-workbook")
     oracle = tmp_path / "baseline.json"
     oracle.write_text(json.dumps({"evidence_class": "customer_original"}), encoding="utf-8")
     env = {
-        "XCAGI_ETL_CUSTOMER_EXCEL": str(sample),
-        "XCAGI_ETL_MANUAL_BASELINE": str(oracle),
+        "XCAGI_ELT_CUSTOMER_EXCEL": str(sample),
+        "XCAGI_ELT_MANUAL_BASELINE": str(oracle),
     }
     report = release_status(env)
     assert report["status"] == "BLOCKED"

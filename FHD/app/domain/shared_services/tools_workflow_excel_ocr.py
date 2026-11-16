@@ -128,6 +128,9 @@ def _registered_router_excel_analysis(
                 "columns": result.get("columns") or [],
                 "row_count": result.get("row_count"),
                 "file_path": result.get("file_path"),
+                # 导入等后续步骤要用占位符引用实际工作表与表头，必须出现在 data 中。
+                "sheet_name": result.get("sheet_name"),
+                "header_row": result.get("header_row"),
             },
         }
     return result
@@ -149,6 +152,7 @@ def _registered_router_generate_office_document(
             "generate_office_document",
             payload,
             workspace_root=runtime_context.get("workspace_root"),
+            runtime_context=runtime_context,
         )
         parsed = json.loads(raw) if isinstance(raw, str) else raw
         return parsed if isinstance(parsed, dict) else {"success": False, "message": str(raw)}

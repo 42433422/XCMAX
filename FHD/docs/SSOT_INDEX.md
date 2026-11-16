@@ -101,6 +101,7 @@
 | deployment-modes | `FHD/config/deployment_modes.yaml` | blocking |
 | database-storage | `FHD/config/database_storage_modes.yaml` | blocking |
 | mobile-tri-platform | `FHD/docs/mobile_tri_platform_ssot.md` | blocking |
+| navigation-catalog | `FHD/config/core_navigation.json` | blocking |
 | neuro-bus-events | `FHD/config/neuro_bus_events.yaml` | blocking |
 | runtime-inventory | `FHD/config/service_topology.yaml` | blocking |
 | repository-ssot | `FHD/app/infrastructure/repositories/` | blocking |

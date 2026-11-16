@@ -36,6 +36,24 @@ def _meter_planner_completion(payload: dict[str, Any] | None, *, model: str) -> 
         logger.debug("planner LLM metering skipped", exc_info=True)
 
 
+def stream_planner_completion(
+    *,
+    ai_service: Any,
+    context: dict[str, Any] | None,
+    messages: list[dict[str, str]],
+    temperature: float = 0.1,
+    max_tokens: int = 1200,
+) -> Any:
+    """返回正文增量的异步生成器；provider 不支持流式时返回 None。"""
+    from app.infrastructure.llm.providers.registry import get_active_provider
+
+    provider = get_active_provider(conversation_service=ai_service)
+    stream = getattr(provider, "stream_chat_completion", None) if provider is not None else None
+    if stream is None:
+        return None
+    return stream(messages=messages, temperature=temperature, max_tokens=max_tokens)
+
+
 def request_planner_completion(
     *,
     ai_service: Any,

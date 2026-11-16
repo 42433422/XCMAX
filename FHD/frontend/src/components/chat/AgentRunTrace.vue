@@ -5,32 +5,15 @@
     data-testid="agent-run-trace"
   >
     <summary class="art-summary" @click.prevent="userOpen = !(userOpen ?? defaultOpen)">
-      <span class="art-disclosure" aria-hidden="true">
-        <i class="fa fa-chevron-right"></i>
-      </span>
-      <span class="art-harness-icon" aria-hidden="true">
-        <i class="fa fa-sitemap"></i>
-      </span>
-      <span class="art-heading">
-        <span class="art-eyebrow">XCAGI Business Harness</span>
-        <span class="art-task-title">{{ taskTitle }}</span>
-      </span>
+      <i class="fa fa-sitemap art-trace-icon" aria-hidden="true"></i>
+      <span class="art-task-title">{{ taskTitle }}</span>
       <span v-if="toolCount" class="art-tool-count">{{ toolCount }} 个工具</span>
-      <span :class="['art-status-pill', `is-${trace.status}`]">
-        <i class="fa" :class="statusIconClass(trace.status)" aria-hidden="true"></i>
-        {{ statusLabel }}
-      </span>
+      <span :class="['art-status-pill', `is-${trace.status}`]">{{ statusLabel }}</span>
       <span v-if="durationLabel" class="art-duration">{{ durationLabel }}</span>
+      <i class="fa fa-angle-down art-chevron" aria-hidden="true"></i>
     </summary>
 
     <div class="art-body">
-      <div class="art-overview">
-        <span><i class="fa fa-list-ul" aria-hidden="true"></i>{{ trace.phases.length }} 个步骤</span>
-        <span v-if="waitingCount" class="is-warning"><i class="fa fa-shield" aria-hidden="true"></i>{{ waitingCount }} 项待确认</span>
-        <span v-if="failedCount" class="is-danger"><i class="fa fa-exclamation-circle" aria-hidden="true"></i>{{ failedCount }} 项异常</span>
-        <span v-if="trace.last_event_id" class="art-run-id">Run · {{ shortRunId }}</span>
-      </div>
-
       <div class="art-stream">
         <details
           v-for="(phase, idx) in trace.phases"
@@ -187,12 +170,6 @@ watch(() => props.trace.run_id, () => { userOpen.value = undefined; phaseOpen.va
 const showPlanGraph = computed(() => shouldShowAgentRunPlanGraph(props.trace))
 const toolPhases = computed(() => props.trace.phases.filter((phase): phase is TraceToolPhase => phase.kind === 'tool'))
 const toolCount = computed(() => toolPhases.value.length)
-const waitingCount = computed(() => toolPhases.value.filter((phase) => phase.waiting_approval || phase.status === 'waiting').length)
-const failedCount = computed(() => props.trace.phases.filter((phase) => phase.status === 'failed' || phase.status === 'blocked').length)
-const shortRunId = computed(() => {
-  const raw = String(props.trace.run_id || '').replace(/^run[_-]?/, '')
-  return raw.length > 10 ? `${raw.slice(0, 8)}…` : raw || '—'
-})
 
 const taskTitle = computed(() => {
   const intent = String(props.trace.intent || '').trim()

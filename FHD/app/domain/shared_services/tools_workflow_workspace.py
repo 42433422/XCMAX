@@ -27,6 +27,29 @@ def _registered_router_desktop_automation(
     return {**result, "message": result.get("error") or message}
 
 
+def _match_template_requirement(
+    payload: dict[str, Any], params: dict, user_message: str, action: str
+) -> dict[str, Any]:
+    """用户说“用某某模板”时，让模型在模板库里挑最匹配的一个；不可用时保持原样。"""
+    requirement = str(params.get("query") or params.get("requirement") or "").strip()
+    if not requirement and action == "query":
+        requirement = str(user_message or "").strip()
+    templates = payload.get("templates")
+    if not requirement or not isinstance(templates, list) or not templates:
+        return payload
+    from app.application.template_ai import rank_templates
+
+    picked = rank_templates(requirement=requirement, candidates=templates[:30])
+    if not picked:
+        return payload
+    payload["matched"] = {
+        **picked["template"],
+        "match_confidence": picked["confidence"],
+        "match_reason": picked["reason"],
+    }
+    return payload
+
+
 def _registered_router_template_preview(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
@@ -35,18 +58,28 @@ def _registered_router_template_preview(
     from app.application import get_template_app_service
 
     svc = get_template_app_service()
+    tenant_raw = runtime_context.get("tenant_id")
+    tenant_id = int(str(tenant_raw)) if str(tenant_raw or "").isdigit() else None
     if action in ("list", "query"):
-        result = svc.get_templates()
+        # 规划器在后台执行时没有请求上下文，必须显式带入租户，否则模板库 fail-closed。
+        result = svc.get_templates(tenant_id=tenant_id)
         if isinstance(result, dict):
             templates = result.get("templates")
-            return {
+            payload = {
                 **result,
                 "success": True,
                 "templates": templates if isinstance(templates, list) else [],
                 "count": len(templates) if isinstance(templates, list) else 0,
             }
-        templates = list(result or [])
-        return {"success": True, "data": templates, "templates": templates, "count": len(templates)}
+        else:
+            templates = list(result or [])
+            payload = {
+                "success": True,
+                "data": templates,
+                "templates": templates,
+                "count": len(templates),
+            }
+        return _match_template_requirement(payload, params, user_message, action)
     if action == "create":
         import json
         import re
@@ -355,16 +388,14 @@ def _registered_router_employee(
     from app.mod_sdk.employee_tool_registry import build_employee_tools_status
 
     if action in ("list", "query"):
-        status = build_employee_tools_status()
+        from app.mod_sdk.employee_directory import build_employee_directory
+
+        employees = build_employee_directory(include_prompt_only=True)
         return {
             "success": True,
-            "message": f"已发现 {status.get('registered_tool_count', 0)} 个可调用员工",
-            "data": [
-                {**item, "employee_id": item.get("pack_id") or item.get("employee_id")}
-                for item in status.get("employee_pack_tools", [])
-                if isinstance(item, dict)
-            ],
-            "status": status,
+            "message": f"已发现 {len(employees)} 个员工",
+            "data": [{**item, "employee_id": item["pack_id"]} for item in employees],
+            "status": {"registered_tool_count": len(employees)},
         }
     if action not in {"execute", "context"}:
         return {"success": False, "message": f"未注册的 employee 动作: {action}"}

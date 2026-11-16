@@ -108,7 +108,7 @@ globals().update(
     }
 )
 
-_m = importlib.import_module("app.application.shipment_etl.protocols")
+_m = importlib.import_module("app.application.shipment_elt.protocols")
 globals().update(
     {
         k: getattr(_m, k)

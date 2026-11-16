@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
 }))
 vi.mock('electron', () => ({
   ipcMain: { handle: (name: string, handler: (...args: any[]) => any) => mocks.handlers.set(name, handler) },
-  app: {}, clipboard: {}, shell: {},
+  app: { getPath: () => '/synthetic/home' }, clipboard: {}, shell: {}, dialog: {},
   Notification: Object.assign(vi.fn(function () { return mocks.notification }), { isSupported: () => true }),
 }))
 vi.mock('./desktop-config', () => ({ APP_NAME: 'test', DEFAULT_PORT: 18500, readPackagedAppVersion: vi.fn() }))

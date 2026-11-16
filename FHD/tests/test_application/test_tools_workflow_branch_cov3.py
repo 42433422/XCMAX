@@ -1754,6 +1754,30 @@ class TestImportFailureReceipts:
         assert receipt["outcome"] == "unknown"
         assert receipt["retryable"] is False
 
+    def test_empty_product_mapping_is_definite_retryable_failure(self):
+        from app.application.tools.workflow_tools.contracts import ImportServices
+        from app.application.tools.workflow_tools.import_execution import ImportExecutor
+        from app.application.tools.workflow_tools.import_mapping import ProductRows
+
+        products = MagicMock()
+        executor = ImportExecutor(
+            ImportServices(
+                customer=MagicMock(),
+                products=lambda: products,
+                shipment=MagicMock(),
+                find_customer=lambda name: None,
+            )
+        )
+        receipt = executor.products(
+            ProductRows(records=[], unit="客户", fields={}, skipped_clauses=0), "客户", True, None
+        )
+        assert receipt["success"] is False
+        assert receipt["error_code"] == "no_mappable_rows"
+        assert receipt["outcome"] == "failed"
+        assert receipt["retryable"] is True
+        assert receipt["reconciliation_required"] is False
+        products.assert_not_called()
+
     def test_failed_customer_creation_prevents_product_batch(self):
         from app.application.tools.workflow_tools.contracts import ImportServices
         from app.application.tools.workflow_tools.import_execution import ImportExecutor

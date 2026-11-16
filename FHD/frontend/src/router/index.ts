@@ -1,3 +1,4 @@
+import { getAppBase } from '@/utils/apiBase'
 import {
   createRouter,
   createWebHistory,
@@ -60,7 +61,7 @@ if (import.meta.env.VITE_XCMAX_ADMIN_CONSOLE === '1') {
 const routes = resolveInitialRoutes(allRoutes)
 
 const router = createRouter({
-  history: createWebHistory(import.meta.env.BASE_URL),
+  history: createWebHistory(getAppBase()),
   routes,
 })
 router.beforeEach(async (to, _from, finish) => {
@@ -180,7 +181,7 @@ router.beforeEach(async (to, _from, finish) => {
     }
     const member = profile.loaded && String(profile.userRole || '').startsWith('tenant:')
     const allowed = to.name === 'settings'
-      || (to.name === 'business-docking' && profile.permissions?.includes('etl.read'))
+      || (to.name === 'business-docking' && profile.permissions?.includes('elt.read'))
       || (to.name === 'tenant-roles' && profile.permissions?.includes('tenant.manage_roles'))
     if (member && !allowed) {
       next({ name: 'settings', replace: true })

@@ -1,3 +1,4 @@
+import { getAppBase } from '@/utils/apiBase'
 import { installStabilityClient } from '@/api/sessionRefresh'
 import { installDesktopRendererErrorReporting, reportDesktopRendererFault } from '@/utils/desktopRendererErrors'
 import { createApp } from 'vue'
@@ -59,7 +60,7 @@ function readVanillaNoModUi(): boolean {
 
 function browserFullPath(): string {
   if (typeof window === 'undefined' || !window.location) return '/'
-  const base = String(import.meta.env.BASE_URL || '/').replace(/\/$/, '')
+  const base = getAppBase().replace(/\/$/, '')
   let pathname = window.location.pathname || '/'
   if (base && base !== '/' && pathname.startsWith(`${base}/`)) {
     pathname = pathname.slice(base.length) || '/'

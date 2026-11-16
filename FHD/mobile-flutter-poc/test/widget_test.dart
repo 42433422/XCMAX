@@ -136,7 +136,7 @@ void main() {
     expect(light.colorScheme.outlineVariant, const Color(0xFFDEE0E3));
     expect(light.colorScheme.error, const Color(0xFFEF4444));
     expect(light.colorScheme.errorContainer, const Color(0xFFFFECEC));
-    expect(light.scaffoldBackgroundColor, const Color(0xFFF3F4F7));
+    expect(light.scaffoldBackgroundColor, const Color(0xFFF5F6FA));
     expect(lightExtra.brandGradientEnd, const Color(0xFF7C3AED));
     expect(lightExtra.weChatOnline, const Color(0xFF10B981));
     expect(lightExtra.chatUserBubble, const Color(0xFF6366F1));
@@ -297,7 +297,7 @@ void main() {
             onOpenScan: () => opened.add('scan'),
             onOpenEmployees: () => opened.add('employees'),
             onOpenContacts: () => opened.add('contacts'),
-            onOpenDiscover: () => opened.add('discover'),
+            onOpenCircle: () => opened.add('circle'),
           ),
         ),
       ),
@@ -354,9 +354,30 @@ void main() {
       'scan',
       'employees',
       'contacts',
-      'discover',
+      'circle',
     ]);
     expect(find.byType(SnackBar), findsNothing);
+  });
+
+  testWidgets('message header opens notifications with the current account',
+      (tester) async {
+    final repository = _FakeNotificationRepository();
+    addTearDown(repository.dispose);
+    addTearDown(repository.client.dispose);
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+          body: MessageListScreen(
+        items: const [],
+        repository: repository,
+      )),
+    ));
+    await tester.tap(find.byTooltip('通知与公告'));
+    await tester.pumpAndSettle();
+    final notifications = tester.widget<NotificationListScreen>(
+      find.byType(NotificationListScreen),
+    );
+    expect(notifications.repository, same(repository));
+    expect(find.text('移动端通知'), findsOneWidget);
   });
 
   testWidgets(
@@ -453,7 +474,8 @@ void main() {
       expect(find.byIcon(Icons.push_pin_outlined), findsOneWidget);
       expect(find.text('不再关注'), findsOneWidget);
       final timestamp = tester.widget<Text>(find.text('刚刚'));
-      expect(timestamp.style?.fontSize, 11);
+      expect(timestamp.style?.fontSize,
+          AppTheme.light().textTheme.labelSmall?.fontSize);
     },
   );
 
@@ -859,7 +881,7 @@ void main() {
 
     expect(find.text('消息'), findsOneWidget);
     expect(find.text('AI员工'), findsOneWidget);
-    expect(find.text('探索'), findsOneWidget);
+    expect(find.text('工作台'), findsOneWidget);
     expect(find.text('我'), findsOneWidget);
 
     final selectedLabel = tester.widget<Text>(find.text('消息'));
@@ -925,7 +947,7 @@ void main() {
 
     expect(host.color, AppTheme.page);
     expect(safeArea.minimum, const EdgeInsets.fromLTRB(20, 6, 20, 10));
-    expect(capsule.elevation, 8);
+    expect(capsule.elevation, 1.5);
   });
 
   testWidgets('bottom nav hit area fills Flutter 66dp item surface', (
@@ -1301,7 +1323,7 @@ void main() {
     expect(find.text('发消息'), findsOneWidget);
     expect(find.text('消息'), findsNothing);
     expect(find.text('AI员工'), findsNothing);
-    expect(find.text('探索'), findsNothing);
+    expect(find.text('工作台'), findsNothing);
     expect(find.text('我'), findsNothing);
   });
 
@@ -1441,6 +1463,16 @@ void main() {
     WidgetTester tester,
   ) async {
     final repository = _CachedFirstHomeShellRepository();
+    await tester.runAsync(() async {
+      final cache = await MobileOfflineStore.open();
+      await cache
+          .appendMessage('employee:cached-avatar-mod:cached-avatar-employee', {
+        'id': 'cached-preview',
+        'role': 'user',
+        'body': '先看缓存',
+        'ts': 1719820800000,
+      });
+    });
 
     await tester.pumpWidget(
       MaterialApp(
@@ -1463,6 +1495,16 @@ void main() {
     'home shell keeps Flutter cached employees after refresh failure',
     (WidgetTester tester) async {
       final repository = _CachedFirstHomeShellRepository();
+      await tester.runAsync(() async {
+        final cache = await MobileOfflineStore.open();
+        await cache.appendMessage(
+            'employee:cached-avatar-mod:cached-avatar-employee', {
+          'id': 'cached-preview',
+          'role': 'user',
+          'body': '先看缓存',
+          'ts': 1719820800000,
+        });
+      });
 
       await tester.pumpWidget(
         MaterialApp(
@@ -1832,206 +1874,36 @@ void main() {
     expect(find.text('扫码绑定工作台或登录账号后，员工会自动同步到这里。'), findsNothing);
   });
 
-  testWidgets('discover tab matches Flutter tool sections', (
+  testWidgets('workbench preserves dark theme across grouped task entries', (
     WidgetTester tester,
   ) async {
-    tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = const Size(430, 1800);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    addTearDown(tester.view.resetPhysicalSize);
-
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.light(),
-        home: const Scaffold(body: DiscoverScreen()),
-      ),
-    );
-
-    expect(find.text('探索'), findsOneWidget);
-    expect(find.byKey(const ValueKey('we_top_bar_divider_探索')), findsOneWidget);
-    expect(find.text('AI交流'), findsOneWidget);
-    expect(find.text('AI交流圈'), findsOneWidget);
-    expect(find.text('查看企业 AI 员工动态、主页和能力介绍'), findsNothing);
-    expect(find.text('桌面工具'), findsOneWidget);
-    expect(find.text('扫码绑定电脑端'), findsOneWidget);
-    expect(find.text('绑定后，电脑端侧栏的工具会同步到这里'), findsNothing);
-    expect(find.text('绑定企业端、管理端或电脑端登录'), findsNothing);
-    expect(find.text('企业公告与系统通知'), findsNothing);
-    expect(
-      tester
-          .widget<Icon>(find.byKey(const ValueKey('we_cell_icon_AI交流圈')))
-          .color,
-      AppTheme.brand,
-    );
-    expect(
-      (tester
-              .widget<Container>(
-                find.byKey(const ValueKey('we_cell_icon_box_AI交流圈')),
-              )
-              .decoration! as BoxDecoration)
-          .color,
-      AppTheme.brandContainer,
-    );
-    expect(
-      tester
-          .widget<Icon>(find.byKey(const ValueKey('we_cell_icon_OCR识别')))
-          .color,
-      AppTheme.light().colorScheme.tertiary,
-    );
-    expect(
-      (tester
-              .widget<Container>(
-                find.byKey(const ValueKey('we_cell_icon_box_OCR识别')),
-              )
-              .decoration! as BoxDecoration)
-          .color,
-      AppTheme.light().colorScheme.tertiaryContainer,
-    );
-    expect(
-      tester
-          .widget<Icon>(find.byKey(const ValueKey('we_cell_icon_通知与公告')))
-          .color,
-      AppTheme.danger,
-    );
-    expect(
-      (tester
-              .widget<Container>(
-                find.byKey(const ValueKey('we_cell_icon_box_通知与公告')),
-              )
-              .decoration! as BoxDecoration)
-          .color,
-      AppTheme.light().colorScheme.errorContainer,
-    );
-  });
-
-  testWidgets('discover tab follows Flutter dark theme tokens', (
-    WidgetTester tester,
-  ) async {
+    final repository = _FakeDiscoverRepository(const []);
+    addTearDown(repository.dispose);
+    addTearDown(repository.client.dispose);
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light(),
         darkTheme: AppTheme.dark(),
         themeMode: ThemeMode.dark,
-        home: const Scaffold(body: DiscoverScreen()),
+        home: Scaffold(body: DiscoverScreen(repository: repository)),
       ),
     );
+    await tester.pumpAndSettle();
 
     final colors = AppTheme.colors(tester.element(find.byType(DiscoverScreen)));
     final topBar = tester.widget<Container>(
-      find.byKey(const ValueKey('we_top_bar_surface_探索')),
+      find.byKey(const ValueKey('we_top_bar_surface_工作台')),
     );
-    final aiCircleIcon = tester.widget<Icon>(
-      find.byKey(const ValueKey('we_cell_icon_AI交流圈')),
-    );
-    final aiCircleIconBox = tester.widget<Container>(
-      find.byKey(const ValueKey('we_cell_icon_box_AI交流圈')),
-    );
-    final title = tester.widget<Text>(find.text('AI交流圈'));
-
-    expect(
-      find.byWidgetPredicate(
-        (widget) => widget is ColoredBox && widget.color == colors.surface,
-      ),
-      findsWidgets,
+    final taskIcon = tester.widget<Icon>(
+      find.byKey(const ValueKey('we_cell_icon_任务')),
     );
     expect(topBar.color, colors.surface);
-    expect(aiCircleIcon.color, colors.brand);
+    expect(taskIcon.color, colors.success);
     expect(
-      (aiCircleIconBox.decoration! as BoxDecoration).color,
-      colors.brandContainer,
-    );
-    expect(title.style?.color, colors.textPrimary);
+        tester.widget<Text>(find.text('任务')).style?.color, colors.textPrimary);
+    expect(find.text('AI交流圈'), findsOneWidget);
+    expect(find.text('通知与公告'), findsNothing);
   });
-
-  testWidgets(
-    'discover desktop tools follow Flutter native map and hidden keys',
-    (WidgetTester tester) async {
-      var openedWork = 0;
-
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: AppTheme.light(),
-          home: Scaffold(
-            body: DiscoverScreen(
-              repository: _FakeDiscoverRepository(const [
-                MobileNavMenuItem(
-                  key: 'chat',
-                  name: '智能对话',
-                  icon: 'comment',
-                  path: '/chat',
-                  source: 'core',
-                  modId: null,
-                ),
-                MobileNavMenuItem(
-                  key: 'im',
-                  name: 'IM 消息',
-                  icon: 'envelope',
-                  path: '/im',
-                  source: 'core',
-                  modId: null,
-                ),
-                MobileNavMenuItem(
-                  key: 'ai-ecosystem',
-                  name: 'AI员工生态',
-                  icon: 'sitemap',
-                  path: '/ai-ecosystem',
-                  source: 'core',
-                  modId: null,
-                ),
-                MobileNavMenuItem(
-                  key: 'employee-workflow',
-                  name: '员工工作流',
-                  icon: 'users',
-                  path: '/employee-workflow',
-                  source: 'core',
-                  modId: null,
-                ),
-                MobileNavMenuItem(
-                  key: 'settings',
-                  name: '设置入口',
-                  icon: 'cog',
-                  path: '/settings',
-                  source: 'core',
-                  modId: null,
-                ),
-                MobileNavMenuItem(
-                  key: 'smart_analysis',
-                  name: '智慧分析',
-                  icon: 'sparkles',
-                  path: '/smart-analysis',
-                  source: 'core',
-                  modId: null,
-                ),
-              ]),
-              onOpenWork: () => openedWork += 1,
-            ),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.text('智能对话'), findsNothing);
-      expect(find.text('IM 消息'), findsNothing);
-      expect(find.text('AI员工生态'), findsOneWidget);
-      expect(find.text('员工工作流'), findsOneWidget);
-      expect(find.text('设置入口'), findsOneWidget);
-      expect(find.text('智慧分析'), findsOneWidget);
-
-      await tester.tap(find.text('AI员工生态'));
-      await tester.pumpAndSettle();
-      expect(find.text('AI员工(55)'), findsOneWidget);
-      await tester.tap(find.byTooltip('返回'));
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.text('员工工作流'));
-      await tester.pump();
-      expect(openedWork, 1);
-
-      await tester.tap(find.text('设置入口'));
-      await tester.pumpAndSettle();
-      expect(find.text('生物识别解锁'), findsOneWidget);
-    },
-  );
 
   testWidgets('AI circle renders Flutter moments shell from backend data', (
     WidgetTester tester,
@@ -2189,63 +2061,23 @@ void main() {
     expect(systemIcon.color, colors.brand);
   });
 
-  testWidgets('OCR page matches Flutter entry and status sections', (
+  testWidgets('legacy OCR deep link opens the real assistant attachment flow', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(
-      MaterialApp(theme: AppTheme.light(), home: const OcrScreen()),
-    );
-
-    expect(find.text('拍照识别'), findsWidgets);
-    expect(
-      find.byKey(const ValueKey('we_top_bar_divider_拍照识别')),
-      findsOneWidget,
-    );
-    expect(find.text('入口'), findsOneWidget);
-    expect(find.text('调用企业端 OCR 引擎处理图片文字'), findsNothing);
-    expect(find.text('从相册选择'), findsOneWidget);
-    expect(find.text('批量识别'), findsOneWidget);
-    expect(find.text('状态'), findsOneWidget);
-    expect(find.text('OCR 服务'), findsOneWidget);
-
-    await tester.tap(find.byIcon(Icons.camera_alt));
+    final repository = _FakeRealtimeRepository();
+    addTearDown(repository.dispose);
+    addTearDown(repository.client.dispose);
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.light(),
+      home: OcrScreen(repository: repository),
+    ));
     await tester.pumpAndSettle();
-    expect(find.text('请使用电脑端 OCR'), findsOneWidget);
-    await tester.pump(const Duration(seconds: 4));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byIcon(Icons.photo_library));
-    await tester.pumpAndSettle();
-    expect(find.text('请使用电脑端 OCR'), findsOneWidget);
-  });
 
-  testWidgets('OCR page follows Flutter dark theme tokens', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.light(),
-        darkTheme: AppTheme.dark(),
-        themeMode: ThemeMode.dark,
-        home: const OcrScreen(),
-      ),
-    );
-
-    final colors = AppTheme.colors(tester.element(find.byType(OcrScreen)));
-    final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
-    final topBar = tester.widget<Container>(
-      find.byKey(const ValueKey('we_top_bar_surface_拍照识别')),
-    );
-    final cameraIcon = tester.widget<Icon>(
-      find.byKey(const ValueKey('we_cell_icon_拍照识别')),
-    );
-    final albumIcon = tester.widget<Icon>(
-      find.byKey(const ValueKey('we_cell_icon_从相册选择')),
-    );
-
-    expect(scaffold.backgroundColor, colors.page);
-    expect(topBar.color, colors.surface);
-    expect(cameraIcon.color, colors.brand);
-    expect(albumIcon.color, colors.success);
+    final chat = tester.widget<ChatScreen>(find.byType(ChatScreen));
+    expect(chat.repository, same(repository));
+    expect(chat.conversation.id, PinnedIds.assistant);
+    expect(find.text('请使用电脑端 OCR'), findsNothing);
+    expect(find.text('OCR 服务'), findsNothing);
   });
 
   testWidgets('scan page renders Flutter scanner shell and manual code entry', (
@@ -2836,7 +2668,8 @@ void main() {
     expect(find.byType(DesktopToolWebViewScreen), findsNothing);
   });
 
-  testWidgets('auth page exposes password and scan login without unsupported SMS', (
+  testWidgets(
+      'auth page exposes password and scan login without unsupported SMS', (
     WidgetTester tester,
   ) async {
     tester.view.devicePixelRatio = 1;
@@ -2859,7 +2692,7 @@ void main() {
     expect(find.text('手机号登录'), findsNothing);
     expect(find.text('企业工作台'), findsNothing);
     expect(find.text('服务器后台'), findsNothing);
-    expect(find.text(MobileBuildConfig.profileVersionText), findsOneWidget);
+    expect(find.text(MobileBuildConfig.displayVersion), findsOneWidget);
     expect(find.text('扫码绑定/登录'), findsOneWidget);
     expect(find.text('记住密码'), findsOneWidget);
     expect(find.text('免登录'), findsOneWidget);
@@ -2967,20 +2800,24 @@ void main() {
     expect(saved.savedPassword, 'secret');
   });
 
-  testWidgets('auth succeeds with a warning when secure password storage fails', (
+  testWidgets('auth succeeds with a warning when secure password storage fails',
+      (
     WidgetTester tester,
   ) async {
     final store = MemoryMobileSessionStore(const MobileSessionData(
-      savedUsername: 'remembered-admin', savedPassword: 'secret',
-      rememberPassword: true, autoLogin: true,
+      savedUsername: 'remembered-admin',
+      savedPassword: 'secret',
+      rememberPassword: true,
+      autoLogin: true,
     ));
-    final api = MobileApiClient(sessionStore: store,
+    final api = MobileApiClient(
+        sessionStore: store,
         credentialCipher: const _UnavailableAuthTestCredentialCipher());
     var completed = false;
     await tester.pumpWidget(MaterialApp(
       theme: AppTheme.light(),
-      home: AuthScreen(repository: _FakeAuthRepository(api),
-          onDone: () => completed = true),
+      home: AuthScreen(
+          repository: _FakeAuthRepository(api), onDone: () => completed = true),
     ));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, '进入企业工作台'));
@@ -3297,6 +3134,11 @@ void main() {
     expect(find.text('AP-7'), findsOneWidget);
     expect(find.text('审批意见'), findsOneWidget);
     expect(find.text('复杂编辑请在电脑端处理'), findsNothing);
+    await tester.scrollUntilVisible(find.text('通过'), 160,
+        scrollable: find
+            .descendant(
+                of: find.byType(ListView), matching: find.byType(Scrollable))
+            .first);
     expect(find.text('通过'), findsOneWidget);
     expect(find.text('驳回'), findsOneWidget);
     expect(find.byType(WeBlockButton), findsOneWidget);
@@ -4608,7 +4450,7 @@ void main() {
     expect(find.text('服务'), findsOneWidget);
     expect(find.text('设置'), findsOneWidget);
     expect(find.text('关于'), findsOneWidget);
-    expect(find.text(MobileBuildConfig.profileVersionText), findsOneWidget);
+    expect(find.text(MobileBuildConfig.displayVersion), findsOneWidget);
     expect(find.text('蜀ICP备2026014056号-3A'), findsOneWidget);
     final heroDecoration = tester
         .widget<Container>(
@@ -5475,7 +5317,7 @@ void main() {
       expect(sendText.style?.fontWeight, FontWeight.w500);
 
       await tester.tap(find.byTooltip('更多工具'));
-      await tester.pump();
+      await tester.pumpAndSettle();
 
       // Codex 超级员工无活跃 git 分支时，仅显示执行回顾 + 共享操作。
       expect(find.text('执行回顾'), findsOneWidget);
@@ -5504,7 +5346,7 @@ void main() {
       expect(taskToolText.style?.height, typography.labelMedium?.height);
 
       await tester.tap(find.text('任务派工'));
-      await tester.pump();
+      await tester.pumpAndSettle();
 
       expect(find.text('帮我安排并完成这个任务：继续'), findsOneWidget);
     },
@@ -5853,6 +5695,8 @@ const _fakeUnreadConversation = ConversationItem(
 );
 
 class _FakeRealtimeRepository extends MobileRepository {
+  _FakeRealtimeRepository({super.client});
+
   final List<Map<String, String>> gitOperations = [];
   final List<Map<String, Object?>> groupPostCalls = [];
   var employeeLoads = 0;
@@ -6124,6 +5968,15 @@ class _FakeBridgeRepository extends MobileRepository {
 }
 
 class _FakeStreamingChatRepository extends _FakeRealtimeRepository {
+  _FakeStreamingChatRepository()
+      : super(
+          client: MobileApiClient(
+            sessionStore: MemoryMobileSessionStore(
+              const MobileSessionData(accessToken: 'chat-widget-test'),
+            ),
+          ),
+        );
+
   final firstToken = Completer<void>();
   final finish = Completer<void>();
   final List<Map<String, Object?>> calls = [];
@@ -6156,6 +6009,15 @@ class _FakeStreamingChatRepository extends _FakeRealtimeRepository {
 }
 
 class _FakeFailThenStreamingRepository extends _FakeRealtimeRepository {
+  _FakeFailThenStreamingRepository()
+      : super(
+          client: MobileApiClient(
+            sessionStore: MemoryMobileSessionStore(
+              const MobileSessionData(accessToken: 'chat-widget-test'),
+            ),
+          ),
+        );
+
   final calls = <String>[];
 
   @override
@@ -6208,12 +6070,15 @@ class _FakeInflightRelayRepository extends _FakeRealtimeRepository {
 }
 
 class _FakeDiscoverRepository extends MobileRepository {
-  _FakeDiscoverRepository(this.menu);
+  _FakeDiscoverRepository(this.menu) : super(client: _FakeSettingsApi());
 
   final List<MobileNavMenuItem> menu;
 
   @override
   Future<List<MobileNavMenuItem>> loadNavMenu() async => menu;
+
+  @override
+  Future<List<MobileDesktopDevice>> loadDesktopDevices() async => const [];
 
   @override
   Future<List<AiEmployeeProfile>> loadAiEmployees() async {
@@ -6387,6 +6252,7 @@ class _CachedFirstHomeShellRepository extends MobileRepository {
               userId: 1,
               cachedModInfos: [
                 {
+                  '_mobile_cache_base_url': 'https://xiu-ci.com/fhd-api/',
                   'id': 'cached-avatar-mod',
                   'name': '缓存头像包',
                   'workflow_employees': [
@@ -6399,12 +6265,6 @@ class _CachedFirstHomeShellRepository extends MobileRepository {
                   ],
                 },
               ],
-              conversationListStates: {
-                'employee:cached-avatar-mod:cached-avatar-employee': {
-                  'last_message_preview': '我: 先看缓存',
-                  'last_message_at': 1719820800000,
-                },
-              },
             ),
           ),
         );
@@ -6865,7 +6725,8 @@ class _AuthTestCredentialCipher extends PlatformCredentialCipher {
   Future<String> encrypt(String plain) async => 'enc:v1:$plain';
 
   @override
-  Future<String> decrypt(String stored) async => stored.substring('enc:v1:'.length);
+  Future<String> decrypt(String stored) async =>
+      stored.substring('enc:v1:'.length);
 }
 
 class _UnavailableAuthTestCredentialCipher extends PlatformCredentialCipher {

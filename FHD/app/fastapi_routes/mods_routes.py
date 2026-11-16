@@ -187,6 +187,12 @@ def _register_mods_endpoints(router) -> None:
             from app.mod_sdk.runtime_frontend import visible_mod_rows
 
             mods = visible_mod_rows(request, mm.list_all_mods())
+            try:
+                from app.mod_sdk.tenant_employee_packs import annotate_tenant_owned
+
+                mods = annotate_tenant_owned(mods)
+            except RECOVERABLE_ERRORS:
+                logger.warning("annotate tenant owned employee packs failed", exc_info=True)
             # Rights or owner changes must not reuse a previous private menu body.
             etag_src = json.dumps(
                 mods, sort_keys=True, ensure_ascii=False

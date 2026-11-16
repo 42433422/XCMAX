@@ -37,15 +37,20 @@ class TestIterIndustryPackageManifestsRealEnv:
         assert "FHD" in coating[0].parts
         assert "XCAGI" not in coating[0].parts
 
-    def test_finds_attendance_in_xcagi_mods_fallback(self):
-        """attendance-industry 仅在 FHD/XCAGI/mods/ → fallback 路径补齐。
+    def test_finds_attendance_via_mods_scan(self):
+        """attendance-industry 由 mods 双路径扫描发现（编辑源优先，缺失时 fallback 补齐）。
 
-        commit a34114a0a 的回归测试：双路径扫描避免迁移期间漏检。
+        commit a34114a0a 的回归测试：双路径扫描避免迁移期间漏检。断言不依赖 checkout
+        绝对路径：只要落在配置的 mods 根之一即可；编辑源存在时不得被导出副本重复提供。
         """
         manifests = ipv.iter_industry_package_manifests()
         attendance = [m for m in manifests if m.parent.name == "attendance-industry"]
         assert len(attendance) == 1
-        assert "XCAGI" in attendance[0].parts
+        assert attendance[0].name == "manifest.json"
+        assert attendance[0].parent.parent in ipv._MODS_ROOTS
+        primary = ipv._MODS_ROOTS[0]
+        if (primary / "attendance-industry" / "manifest.json").is_file():
+            assert attendance[0].parent.parent == primary
 
     def test_returns_list_of_manifest_paths(self):
         """返回类型 list[Path]，每项都以 manifest.json 结尾，父目录以 -industry 结尾。"""

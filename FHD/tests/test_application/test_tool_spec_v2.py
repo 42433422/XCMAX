@@ -39,6 +39,16 @@ def test_quote_requires_customer_even_when_details_are_complete():
     assert not validate_tool_call("sales", "quote", params).ok
 
 
+def test_etl_batch_arrays_truncate_instead_of_rejecting_the_plan():
+    params = {"file_paths": [f"f{i}.xlsx" for i in range(60)]}
+    validation = validate_tool_call("elt_import", "preview", params)
+    assert validation.ok, validation.message
+    planner = validate_tool_call("elt_import", "preview", params, allow_references_from=set())
+    assert planner.ok, planner.message
+    runs = {"run_ids": [f"r{i}" for i in range(60)]}
+    assert validate_tool_call("elt_import", "execute", runs).ok
+
+
 @pytest.mark.parametrize(
     "params, accepted",
     [
@@ -173,6 +183,7 @@ def test_build_tool_specs_v2_exposes_business_db_and_employee_contracts() -> Non
 
     shipment_order_generate_spec = specs[("shipment_orders", "generate")]
     assert shipment_order_generate_spec.risk == "high"
+    assert shipment_order_generate_spec.permission == "shipment.create"
     assert shipment_order_generate_spec.required_params == ["unit_name", "products"]
     assert shipment_order_generate_spec.input_schema["required"] == ["unit_name", "products"]
     assert shipment_order_generate_spec.test_fixtures[0]["output"]["record_id"] == 7
@@ -315,6 +326,7 @@ def test_build_tool_specs_v2_exposes_document_generation_contract() -> None:
     document_spec = specs[("generate_office_document", "execute")]
     assert document_spec.risk == "medium"
     assert document_spec.idempotent is False
+    assert document_spec.permission == "tool.generate_office_document.execute"
     assert document_spec.timeout_seconds == 120
     assert document_spec.input_schema["properties"]["output_format"]["enum"] == ["docx", "xlsx"]
     assert document_spec.output_schema["required"] == [
@@ -763,12 +775,27 @@ def test_materials_permissions_use_business_codes(monkeypatch):
     assert get_tool_action_spec("materials", "batch_delete").permission == "material.edit"
 
 
-def test_template_permissions_use_etl_codes(monkeypatch):
+def test_template_permissions_use_elt_codes(monkeypatch):
     monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
-    assert get_tool_action_spec("template_preview", "list").permission == "etl.read"
-    assert get_tool_action_spec("template_preview", "create").permission == "etl.template.manage"
-    assert get_tool_action_spec("document_template", "delete").permission == "etl.template.manage"
-    assert get_tool_action_spec("document_template", "clear").permission == "etl.template.manage"
+    assert get_tool_action_spec("template_preview", "list").permission == "elt.read"
+    assert get_tool_action_spec("template_preview", "create").permission == "elt.template.manage"
+    assert get_tool_action_spec("document_template", "delete").permission == "elt.template.manage"
+    assert get_tool_action_spec("document_template", "clear").permission == "elt.template.manage"
+
+
+def test_template_permissions_match_seeded_elt_codes(monkeypatch):
+    """模板工具声明的权限必须真实存在于种子权限，否则改名后无人能通过鉴权。"""
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    from app.db.models.permission import DEFAULT_PERMISSIONS
+
+    seeded = {item["code"] for item in DEFAULT_PERMISSIONS}
+    for tool_id, action in (
+        ("template_preview", "list"),
+        ("template_preview", "create"),
+        ("document_template", "delete"),
+        ("document_template", "clear"),
+    ):
+        assert get_tool_action_spec(tool_id, action).permission in seeded
 
 
 def test_business_clear_permissions_use_edit_codes(monkeypatch):
@@ -791,3 +818,15 @@ def test_business_db_read_materials_accepts_material_view(trusted_actor, monkeyp
 
     assert allowed is None
     assert denied is not None and denied["error_code"] == "tool_permission_denied"
+
+
+def test_shipment_order_generate_uses_shipment_create_permission(trusted_actor, monkeypatch):
+    from app.application.agent_orchestrator.tool_permission import actor_tool_denial
+
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    actor = trusted_actor(permissions=["shipment.create"])
+    assert actor_tool_denial("shipment_orders", "generate", actor.context, {}) is None
+
+    viewer = trusted_actor(permissions=["shipment.view"], role="viewer")
+    denied = actor_tool_denial("shipment_orders", "generate", viewer.context, {})
+    assert denied is not None and denied["reason"] == "permission_denied"

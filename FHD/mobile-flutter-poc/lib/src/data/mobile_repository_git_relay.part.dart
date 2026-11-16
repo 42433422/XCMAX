@@ -2,9 +2,9 @@ part of 'mobile_repository.dart';
 
 abstract class _RepoRelayBase extends _RepoHelpersBase {
   _RepoRelayBase({
-    MobileApiClient? client,
-    ImWebSocketClient? imWebSocket,
-  }) : super(client: client, imWebSocket: imWebSocket);
+    super.client,
+    super.imWebSocket,
+  });
 
   Future<String> runGitOperation({
     required String branch,
@@ -36,7 +36,6 @@ abstract class _RepoRelayBase extends _RepoHelpersBase {
       kind: cleanOp,
       payload: {
         'branch': cleanBranch,
-        'workspace_root': _xcmaxDefaultWorkspaceRoot,
         'context': _superEmployeeRelayContext(),
       },
     );
@@ -88,7 +87,6 @@ abstract class _RepoRelayBase extends _RepoHelpersBase {
       kind: 'git.diff.structured',
       payload: {
         'branch': branch.trim(),
-        'workspace_root': _xcmaxDefaultWorkspaceRoot,
         'context': _superEmployeeRelayContext(),
       },
     );
@@ -142,7 +140,6 @@ abstract class _RepoRelayBase extends _RepoHelpersBase {
       payload: {
         'branch': branch.trim(),
         'limit': limit,
-        'workspace_root': _xcmaxDefaultWorkspaceRoot,
         'context': _superEmployeeRelayContext(),
       },
     );
@@ -302,19 +299,21 @@ abstract class _RepoRelayBase extends _RepoHelpersBase {
     required String relayKind,
     required String conversationId,
     required String message,
+    required Future<void> Function() requireScope,
     void Function(String token)? onToken,
     void Function(RelayTaskProgress progress)? onStatus,
     bool Function()? isCancelled,
   }) async {
+    await requireScope();
     final created = await _client.relayCreateTask(
       relayId: relayId,
       kind: relayKind,
       payload: {
         'message': message,
-        'workspace_root': _xcmaxDefaultWorkspaceRoot,
         'context': _superEmployeeRelayContext(conversationId: conversationId),
       },
     );
+    await requireScope();
     if (!created.success) {
       throw MobileRepositoryException(created.message.ifEmpty('中继任务创建失败'));
     }
@@ -323,7 +322,9 @@ abstract class _RepoRelayBase extends _RepoHelpersBase {
     if (taskId.isEmpty) {
       throw const MobileRepositoryException('中继任务缺少 task_id');
     }
-    await _setInflightRelayTask(conversationId, taskId);
+    await _setInflightRelayTask(conversationId, taskId,
+        requireScope: requireScope);
+    await requireScope();
     final toolLabel = toolLabelForRelayKind(relayKind);
     onStatus?.call(
       RelayTaskProgress(taskId: taskId, status: 'queued', toolLabel: toolLabel),
@@ -336,6 +337,7 @@ abstract class _RepoRelayBase extends _RepoHelpersBase {
       onToken: onToken,
       onStatus: onStatus,
       isCancelled: isCancelled,
+      requireScope: requireScope,
     );
   }
 
@@ -343,6 +345,7 @@ abstract class _RepoRelayBase extends _RepoHelpersBase {
     required String taskId,
     required String toolLabel,
     required String conversationId,
+    required Future<void> Function() requireScope,
     void Function(String token)? onToken,
     void Function(RelayTaskProgress progress)? onStatus,
     bool Function()? isCancelled,
@@ -351,23 +354,27 @@ abstract class _RepoRelayBase extends _RepoHelpersBase {
     for (var attempt = 0; attempt < 150; attempt += 1) {
       _throwIfCancelled(isCancelled);
       await Future<void>.delayed(const Duration(seconds: 2));
+      await requireScope();
       _throwIfCancelled(isCancelled);
       late final MobileEnvelope<Map<String, Object?>> status;
       try {
         status = await _relayTaskStatusWithBackoff(
           taskId,
           isCancelled: isCancelled,
+          requireScope: requireScope,
         );
       } on MobileApiException catch (error) {
         if (error.statusCode == 404) {
           // 任务已被清理或服务端版本不含该任务：停止后续 resume，避免反复 404。
-          await _setInflightRelayTask(conversationId, '');
+          await _setInflightRelayTask(conversationId, '',
+              requireScope: requireScope);
           throw const MobileRepositoryException(
             '执行任务已不存在（可能已结束或服务端版本不一致），请重新发起',
           );
         }
         rethrow;
       }
+      await requireScope();
       final taskMap = _objectMap(status.data?['task']);
       final current = taskMap.isNotEmpty
           ? taskMap
@@ -394,7 +401,9 @@ abstract class _RepoRelayBase extends _RepoHelpersBase {
         lastStatus = currentStatus;
       }
       if (currentStatus == 'done' || currentStatus == 'completed') {
-        await _setInflightRelayTask(conversationId, '');
+        await _setInflightRelayTask(conversationId, '',
+            requireScope: requireScope);
+        await requireScope();
         onStatus?.call(
           RelayTaskProgress(
             taskId: taskId,
@@ -405,7 +414,9 @@ abstract class _RepoRelayBase extends _RepoHelpersBase {
         return _relayTaskResultText(current).ifEmpty('电脑工具已完成任务。');
       }
       if (const {'failed', 'blocked', 'cancelled'}.contains(currentStatus)) {
-        await _setInflightRelayTask(conversationId, '');
+        await _setInflightRelayTask(conversationId, '',
+            requireScope: requireScope);
+        await requireScope();
         onStatus?.call(
           RelayTaskProgress(
             taskId: taskId,
@@ -424,10 +435,12 @@ abstract class _RepoRelayBase extends _RepoHelpersBase {
   /// 429 是服务端正常限流：按 Retry-After 等待后重试同一任务，不当作失败。
   Future<MobileEnvelope<Map<String, Object?>>> _relayTaskStatusWithBackoff(
     String taskId, {
+    required Future<void> Function() requireScope,
     bool Function()? isCancelled,
   }) async {
     while (true) {
       _throwIfCancelled(isCancelled);
+      await requireScope();
       try {
         return await _client.relayTaskStatus(taskId);
       } on MobileApiException catch (error) {
@@ -438,5 +451,4 @@ abstract class _RepoRelayBase extends _RepoHelpersBase {
       }
     }
   }
-
 }

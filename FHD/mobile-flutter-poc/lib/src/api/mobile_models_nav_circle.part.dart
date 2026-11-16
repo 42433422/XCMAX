@@ -76,6 +76,8 @@ class MobileNavMenuItem {
     required this.path,
     required this.source,
     required this.modId,
+    this.mobileGroup = 'business',
+    this.requiresDesktop = false,
   });
 
   final String key;
@@ -84,6 +86,8 @@ class MobileNavMenuItem {
   final String path;
   final String source;
   final String? modId;
+  final String mobileGroup;
+  final bool requiresDesktop;
 
   factory MobileNavMenuItem.fromJson(Map<String, Object?> json) {
     return MobileNavMenuItem(
@@ -93,6 +97,9 @@ class MobileNavMenuItem {
       path: _readString(json, const ['path', 'url', 'route']),
       source: _readString(json, const ['source']).ifEmpty('core'),
       modId: _readOptionalString(json, const ['mod_id']),
+      mobileGroup:
+          _readString(json, const ['mobile_group']).ifEmpty('business'),
+      requiresDesktop: _readBool(json, const ['requires_desktop']),
     );
   }
 }

@@ -117,6 +117,14 @@
   display: block;
 }
 
+/* v-html 注入的节点不带 scoped 标记，需用 :deep 命中。 */
+.data-source-card-icon-inline :deep(.data-source-card-icon--art) {
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  object-fit: cover;
+}
+
 .data-source-card-icon-slot {
   width: 40px;
   height: 40px;
@@ -158,6 +166,12 @@
 .data-source-card-icon-slot.is-ecommerce {
   background: linear-gradient(145deg, #fff7ed 0%, #ffedd5 100%);
   color: #c2410c;
+}
+
+/* 彩色插画图标铺满槽位，覆盖分类底色。 */
+.data-source-card-icon-slot.has-art {
+  background: transparent;
+  box-shadow: none;
 }
 
 .data-source-card.active .data-source-card-icon-slot {

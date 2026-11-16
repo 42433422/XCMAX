@@ -13,11 +13,11 @@ TENANT_PERMISSION_CODES = frozenset(
     {
         "tenant.manage_roles",
         "model_payment.refund",
-        "etl.read",
-        "etl.template.manage",
-        "etl.execute",
-        "etl.rollback",
-        "etl.target.manage",
+        "elt.read",
+        "elt.template.manage",
+        "elt.execute",
+        "elt.rollback",
+        "elt.target.manage",
     }
 )
 

@@ -12,6 +12,7 @@ Voice / ASR Routes - FastAPI Implementation
 
 from __future__ import annotations
 
+import asyncio
 import io
 import logging
 import sys
@@ -22,7 +23,16 @@ import wave
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
+from fastapi import (
+    APIRouter,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from starlette.concurrency import run_in_threadpool
 
 from app.fastapi_routes.voice_model_source import (
@@ -196,6 +206,114 @@ def _asr_wav(path: Path) -> tuple[bytes, float]:
     return out.getvalue(), len(pcm) / 32000
 
 
+def _wav_pcm16k(wav_bytes: bytes) -> bytes:
+    with wave.open(io.BytesIO(wav_bytes), "rb") as source:
+        return source.readframes(source.getnframes())
+
+
+def _funasr_text(message: dict[str, Any]) -> str:
+    direct = str(message.get("text") or "").strip()
+    if direct:
+        return direct
+    sents = message.get("stamp_sents")
+    if not isinstance(sents, list):
+        return ""
+    return "".join(
+        str(item.get("text_seg") or "").replace(" ", "") for item in sents if isinstance(item, dict)
+    ).strip()
+
+
+def _funasr_ws_url(token: str) -> str:
+    from urllib.parse import quote
+
+    from app.fastapi_routes.market_bridge.settings import _market_api_base_url
+
+    base = _market_api_base_url().rstrip("/")
+    scheme, _, host = base.partition("://")
+    return f"{'wss' if scheme == 'https' else 'ws'}://{host}/api/asr/funasr?token={quote(token, safe='')}"
+
+
+_FUNASR_STREAM_CONFIG = {
+    "mode": "2pass",
+    "chunk_size": [5, 10, 5],
+    "chunk_interval": 10,
+    "encoder_chunk_look_back": 4,
+    "decoder_chunk_look_back": 0,
+    "wav_name": "mic",
+    "wav_format": "pcm",
+    "audio_fs": 16000,
+    "is_speaking": True,
+    "itn": True,
+}
+
+
+async def _platform_funasr_transcribe(token: str, wav: bytes) -> str:
+    """平台 FunASR WebSocket：MiMo ASR 尚未上线时的可用识别通道。"""
+    try:
+        import websockets  # noqa: F401 - 仅探测语音通道组件是否可用
+        from websockets.exceptions import WebSocketException
+    except ImportError:
+        raise HTTPException(503, "本机缺少语音通道组件") from None
+
+    pcm = _wav_pcm16k(wav)
+    if not pcm:
+        raise HTTPException(422, "录音为空")
+
+    try:
+        return await _funasr_stream(_funasr_ws_url(token), pcm)
+    except HTTPException:
+        raise
+    except (OSError, TimeoutError, WebSocketException) as exc:
+        logger.warning("platform FunASR websocket failed: %s", type(exc).__name__)
+        raise HTTPException(503, "平台语音识别连接失败") from None
+
+
+async def _funasr_stream(ws_url: str, pcm: bytes) -> str:
+    import json as _json
+
+    import websockets
+
+    async with websockets.connect(ws_url, open_timeout=10, close_timeout=2) as ws:
+        try:
+            ready = _json.loads(await asyncio.wait_for(ws.recv(), timeout=10))
+        except (TimeoutError, ValueError, TypeError):
+            raise HTTPException(504, "平台语音识别连接超时") from None
+        if isinstance(ready, dict) and ready.get("type") == "error":
+            raise HTTPException(503, "平台语音识别服务未启动")
+        await ws.send(_json.dumps(_FUNASR_STREAM_CONFIG))
+        # 60ms 一包（16k mono s16le），与平台前端一致。
+        for offset in range(0, len(pcm), 1920):
+            await ws.send(pcm[offset : offset + 1920])
+        await ws.send(_json.dumps({"is_speaking": False}))
+
+        deadline = time.monotonic() + 12
+        partial = ""
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            try:
+                raw = await asyncio.wait_for(ws.recv(), timeout=remaining)
+            except TimeoutError:
+                break
+            try:
+                message = _json.loads(raw)
+            except (ValueError, TypeError):
+                continue
+            if not isinstance(message, dict):
+                continue
+            if message.get("type") == "error":
+                raise HTTPException(502, "平台语音识别失败")
+            text = _funasr_text(message)
+            if not text:
+                continue
+            mode = str(message.get("mode") or "")
+            if "offline" in mode:
+                return text
+            partial = text
+        return partial
+
+
 async def _platform_transcribe(
     request: Request, path: Path, language: str | None
 ) -> dict[str, Any]:
@@ -208,8 +326,9 @@ async def _platform_transcribe(
     token = _session_market_token(request)
     if not token:
         raise HTTPException(401, "当前账户未连接平台")
+    wav, duration = await run_in_threadpool(_asr_wav, path)
+    failure: HTTPException | None = None
     try:
-        wav, duration = await run_in_threadpool(_asr_wav, path)
         async with httpx.AsyncClient(timeout=75.0) as client:
             response = await client.post(
                 f"{_market_api_base_url()}/api/workbench/asr",
@@ -226,18 +345,42 @@ async def _platform_transcribe(
             or not isinstance(result.get("text"), str)
         ):
             raise ValueError("invalid platform response")
-    except HTTPException:
-        raise
+    except HTTPException as exc:
+        failure = exc
     except (httpx.HTTPError, ValueError, TypeError) as exc:
-        logger.warning("platform ASR failed: %s", type(exc).__name__)
-        raise HTTPException(502, "平台语音识别请求失败，请勿自动重试") from None
-    return {
-        "text": result["text"],
-        "language": result.get("language", ""),
-        "audio_seconds": duration,
-        "cold_start": False,
-        "model_loaded": True,
-    }
+        logger.warning("platform MiMo ASR failed: %s", type(exc).__name__)
+        failure = HTTPException(502, "平台语音识别请求失败，请勿自动重试")
+    else:
+        return {
+            "text": result["text"],
+            "language": result.get("language", ""),
+            "audio_seconds": duration,
+            "cold_start": False,
+            "model_loaded": True,
+        }
+
+    # 生产尚未上线 MiMo ASR 时退回平台已有的 FunASR 实时识别。
+    assert failure is not None
+    logger.info("falling back to platform FunASR: %s", failure.detail)
+    try:
+        text = await _platform_funasr_transcribe(token, wav)
+    except HTTPException as exc:
+        logger.warning("platform FunASR unavailable: %s", exc.detail)
+        text = ""
+    if text.strip():
+        return {
+            "text": text,
+            "language": "",
+            "audio_seconds": duration,
+            "cold_start": False,
+            "model_loaded": True,
+            "engine": "funasr",
+        }
+
+    # 平台两条 ASR 通道都不可用时，用本机 faster-whisper 兜底，保证语音通话可用。
+    local = await run_in_threadpool(_run_transcribe, path, language)
+    local["engine"] = "local-whisper"
+    return local
 
 
 @router.post("/transcribe")
@@ -279,6 +422,29 @@ async def transcribe_audio(
             "bytes": len(raw),
         },
     }
+
+
+@router.post("/turn-detect")
+async def detect_turn_complete(
+    file: UploadFile = File(..., description="16 kHz 单声道 PCM16 WAV，用于判断这句话是否说完"),
+    threshold: float = Form(default=0.5, description="判停阈值（0.05–0.95），越低越容易判定说完"),
+):
+    """Smart Turn v3.2 本地端点检测：避免把语气词或半句话直接发出去。"""
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="录音内容为空")
+    if len(raw) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail=f"录音文件过大：{len(raw)} 字节")
+    try:
+        from app.application.voice.smart_turn import predict_turn_complete
+
+        result = await asyncio.to_thread(predict_turn_complete, raw, threshold)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("smart-turn 判断失败，按“已说完”继续：%s", exc)
+        return {"success": True, "data": {"complete": True, "probability": None, "degraded": True}}
+    return {"success": True, "data": result}
 
 
 @router.get("/health")
@@ -468,3 +634,137 @@ async def voice_command(
             "elapsed_ms_asr": elapsed_ms,
         },
     }
+
+
+def _ws_session_id(ws: WebSocket) -> str:
+    try:
+        from app.config import Config
+
+        cookie_name = getattr(Config, "SESSION_COOKIE_NAME", "session_id")
+        return str(ws.cookies.get(cookie_name) or ws.query_params.get("session_id") or "").strip()
+    except RECOVERABLE_ERRORS:
+        return ""
+
+
+def _ws_market_token(ws: WebSocket) -> str:
+    session_id = _ws_session_id(ws)
+    if not session_id:
+        return ""
+    try:
+        from app.fastapi_routes.market_account import session_market_token
+
+        return str(session_market_token(session_id) or "").strip()
+    except RECOVERABLE_ERRORS:
+        return ""
+
+
+@router.websocket("/stream")
+async def voice_stream(ws: WebSocket):
+    """浏览器 PCM 分片 → 平台 FunASR 2pass 流式识别。
+
+    流式通道不可用（未登录平台/平台 ASR 未启动）时立即回 unavailable，
+    前端据此回退到「录完整段再上传」，不会让通话失败。
+    """
+    import json as _json
+
+    await ws.accept()
+    token = _ws_market_token(ws)
+    if not token:
+        await ws.send_json({"type": "unavailable", "reason": "no_session"})
+        await ws.close()
+        return
+    try:
+        import websockets
+        from websockets.exceptions import WebSocketException
+    except ImportError:
+        await ws.send_json({"type": "unavailable", "reason": "no_component"})
+        await ws.close()
+        return
+    try:
+        upstream = await websockets.connect(_funasr_ws_url(token), open_timeout=6, close_timeout=2)
+    except (OSError, TimeoutError, WebSocketException):
+        await ws.send_json({"type": "unavailable", "reason": "platform"})
+        await ws.close()
+        return
+
+    state = {"done": False, "text": ""}
+
+    async def send_json(payload: dict[str, Any]) -> None:
+        try:
+            await ws.send_json(payload)
+        except RECOVERABLE_ERRORS:
+            return
+
+    async def pump_upstream() -> None:
+        try:
+            ready = _json.loads(await asyncio.wait_for(upstream.recv(), timeout=6))
+            if isinstance(ready, dict) and ready.get("type") == "error":
+                await send_json({"type": "unavailable", "reason": "platform"})
+                return
+            await upstream.send(_json.dumps(_FUNASR_STREAM_CONFIG))
+            await send_json({"type": "ready"})
+            while True:
+                message = _json.loads(await upstream.recv())
+                if not isinstance(message, dict):
+                    continue
+                if message.get("type") == "error":
+                    await send_json({"type": "error"})
+                    return
+                text = _funasr_text(message)
+                if not text:
+                    continue
+                state["text"] = text
+                if "offline" in str(message.get("mode") or ""):
+                    state["done"] = True
+                    await send_json({"type": "final", "text": text})
+                    return
+                await send_json({"type": "partial", "text": text})
+        except asyncio.CancelledError:
+            raise
+        except (TimeoutError, ValueError, TypeError, OSError, WebSocketException):
+            return
+
+    async def pump_client() -> None:
+        try:
+            while True:
+                message = await ws.receive()
+                if message.get("type") == "websocket.disconnect":
+                    return
+                chunk = message.get("bytes")
+                if chunk:
+                    await upstream.send(chunk)
+                    continue
+                raw = message.get("text") or ""
+                try:
+                    control = _json.loads(raw)
+                except (ValueError, TypeError):
+                    continue
+                if not isinstance(control, dict) or control.get("type") != "end":
+                    continue
+                await upstream.send(_json.dumps({"is_speaking": False}))
+                deadline = time.monotonic() + 8
+                while not state["done"] and time.monotonic() < deadline:
+                    await asyncio.sleep(0.05)
+                state["done"] = True
+                await send_json({"type": "final", "text": state["text"]})
+                return
+        except WebSocketDisconnect:
+            return
+        except RECOVERABLE_ERRORS:
+            return
+
+    tasks = [asyncio.create_task(pump_upstream()), asyncio.create_task(pump_client())]
+    try:
+        await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+    finally:
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        try:
+            await upstream.close()
+        except RECOVERABLE_ERRORS:
+            pass
+        try:
+            await ws.close()
+        except RECOVERABLE_ERRORS:
+            pass

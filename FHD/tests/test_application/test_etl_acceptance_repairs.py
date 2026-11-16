@@ -14,11 +14,11 @@ from openpyxl import Workbook, load_workbook
 
 from app.application.elt.attendance_pipeline import _hours, parse_attendance_dataset
 from app.application.elt.errors import ReviewedExcelError
-from app.application.elt.target_detection import detect_etl_target
+from app.application.elt.target_detection import detect_elt_target
 from app.application.reviewed_excel_basic_classification import classify_review_workbook
 from app.application.reviewed_excel_template import inspect_workbook
 
-CUSTOMER = Path("/opt/cursor/artifacts/etl-b01-b31/customer-sources")
+CUSTOMER = Path("/opt/cursor/artifacts/elt-b01-b31/customer-sources")
 
 
 def test_classification_of_skipped_parts_does_not_authorize_lossy_export():
@@ -51,7 +51,7 @@ def test_classification_of_skipped_parts_does_not_authorize_lossy_export():
         (CUSTOMER / name).is_file()
         for name in ("dingtalk-export.xlsx", "kaoqin-2026-03-template.xlsx")
     ),
-    reason="缺少 ETL 验收原始工作簿（/opt/cursor/artifacts/etl-b01-b31）",
+    reason="缺少 ETL 验收原始工作簿（/opt/cursor/artifacts/elt-b01-b31）",
 )
 def test_real_customer_workbooks_classify_without_size_or_fidelity_rejection():
     dingtalk = (CUSTOMER / "dingtalk-export.xlsx").read_bytes()
@@ -77,6 +77,131 @@ def test_real_customer_workbooks_classify_without_size_or_fidelity_rejection():
     parsed.close()
 
 
+def test_recipe_and_finance_ledgers_are_not_misclassified_as_master_data(tmp_path, monkeypatch):
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    recipe = tmp_path / "recipe.xlsx"
+    book = Workbook()
+    sheet = book.active
+    sheet.append(["原材料编号", "原料数量（KG)", "工艺流程", "备注"])
+    sheet.append(["A1", 10, "搅拌", ""])
+    book.save(recipe)
+    book.close()
+
+    ledger = tmp_path / "ledger.xlsx"
+    book = Workbook()
+    sheet = book.active
+    sheet.append(["日期", "单号", "客户", "应收", "实收", "欠款"])
+    sheet.append(["2026-01-01", "1", "甲", 100, 50, 50])
+    book.save(ledger)
+    book.close()
+
+    customers = tmp_path / "customers.xlsx"
+    book = Workbook()
+    sheet = book.active
+    sheet.append(["客户名称", "联系人", "电话", "地址"])
+    sheet.append(["甲公司", "张三", "13800138000", "成都"])
+    book.save(customers)
+    book.close()
+
+    recipe_result = detect_elt_target(recipe)
+    assert recipe_result["target_type"] == "abnormal"
+    assert recipe_result["reason"] == "recipe_sheet_not_master_data"
+    ledger_result = detect_elt_target(ledger)
+    assert ledger_result["target_type"] == "abnormal"
+    assert ledger_result["reason"] == "finance_ledger_not_master_data"
+    assert detect_elt_target(customers)["target_type"] == "customers"
+
+
+def test_advise_target_classification_rejects_unknown_enum(monkeypatch):
+    from app.application.elt import llm_assist
+
+    monkeypatch.setattr(
+        llm_assist,
+        "_complete",
+        lambda *args, **kwargs: llm_assist.LlmAssistResult(
+            used_llm=True,
+            data={"target_type": "made_up_target", "confidence": 0.99, "reason": "x"},
+        ),
+    )
+    rejected = llm_assist.advise_target_classification("表头：自定义字段")
+    assert rejected.used_llm is False
+    assert rejected.degraded is True
+
+    monkeypatch.setattr(
+        llm_assist,
+        "_complete",
+        lambda *args, **kwargs: llm_assist.LlmAssistResult(
+            used_llm=True,
+            data={"target_type": "customers", "confidence": 3, "reason": "客户名单"},
+        ),
+    )
+    accepted = llm_assist.advise_target_classification("表头：客户名称 联系人")
+    assert accepted.used_llm is True
+    assert accepted.data == {
+        "target_type": "customers",
+        "confidence": 1.0,
+        "reason": "客户名单",
+    }
+
+
+def test_llm_escalation_accepts_confident_unknown_classification(tmp_path, monkeypatch):
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    from app.application.elt import target_detection as detection
+
+    unknown = tmp_path / "unknown-format.xlsx"
+    book = Workbook()
+    sheet = book.active
+    sheet.append(["自定义字段", "记录值"])
+    sheet.append(["甲", 1])
+    book.save(unknown)
+    book.close()
+
+    monkeypatch.setattr(
+        detection,
+        "_llm_classification",
+        lambda _lines: {
+            "target_type": "customers",
+            "document_type": "llm_classified",
+            "confidence": 0.9,
+            "reason": "llm:名单含客户与联系人",
+            "confirmed": True,
+        },
+    )
+    result = detection.detect_elt_target(unknown)
+    assert result["target_type"] == "customers"
+    assert result["reason"].startswith("llm:")
+
+
+def test_llm_not_consulted_for_recipe_or_unconfident_answer(tmp_path, monkeypatch):
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    from app.application.elt import target_detection as detection
+
+    recipe = tmp_path / "recipe-guard.xlsx"
+    book = Workbook()
+    sheet = book.active
+    sheet.append(["原材料编号", "原料数量（KG)", "工艺流程"])
+    sheet.append(["A1", 10, "搅拌"])
+    book.save(recipe)
+    book.close()
+
+    calls: list[int] = []
+    monkeypatch.setattr(
+        detection,
+        "_llm_classification",
+        lambda lines: calls.append(1) or {"target_type": "products", "confidence": 0.99},
+    )
+    assert detection.detect_elt_target(recipe)["target_type"] == "abnormal"
+    assert calls == []
+
+    # 模型没给出可信答案时不改变确定性结论。
+    monkeypatch.setattr(detection, "_llm_classification", lambda _lines: None)
+    escalated = detection._escalate(
+        {"target_type": "abnormal", "confidence": 0.0, "reason": "unconfirmed_template:.xlsx"},
+        ["未知内容"],
+    )
+    assert escalated["target_type"] == "abnormal"
+
+
 def test_unknown_and_similar_templates_are_not_forced(tmp_path, monkeypatch):
     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     unknown = tmp_path / "unknown-template.xlsx"
@@ -97,8 +222,15 @@ def test_unknown_and_similar_templates_are_not_forced(tmp_path, monkeypatch):
     sheet["F5"] = "=1+1"
     book.save(similar)
     book.close()
-    assert detect_etl_target(unknown)["target_type"] == "abnormal"
-    assert detect_etl_target(similar)["target_type"] == "abnormal"
+    # AI-first：未知模板不再判死为 abnormal，而是按表头落到 schema 可扩展的通用表，
+    # 但仍不得被强行归入客户/产品主数据。
+    assert detect_elt_target(unknown)["target_type"] == "dynamic_table"
+    assert detect_elt_target(similar)["target_type"] == "dynamic_table"
+    assert detect_elt_target(unknown)["target_type"] not in {
+        "customers",
+        "customer_products",
+        "products",
+    }
     review = classify_review_workbook(inspect_workbook(similar.read_bytes()))[0]
     ranges = [region["range"] for region in review["regions"]]
     assert ranges == ["A1:F5", "A7:F10"]
@@ -252,7 +384,7 @@ def test_enterprise_desktop_demo_can_convert(monkeypatch):
 
 
 def test_fault_retry_does_not_duplicate_written_rows(tmp_path, monkeypatch):
-    monkeypatch.setenv("FHD_ETL_ATTENDANCE_FAULT", "after_first_commit")
+    monkeypatch.setenv("FHD_ELT_ATTENDANCE_FAULT", "after_first_commit")
     monkeypatch.setattr("app.utils.path_io.path_utils.get_app_data_dir", lambda: str(tmp_path))
     from app.application.elt.attendance_pipeline import persist_attendance_rows
     from app.application.elt.errors import EltError
@@ -283,7 +415,7 @@ def test_fault_retry_does_not_duplicate_written_rows(tmp_path, monkeypatch):
         raise AssertionError("fault must fail the ingest")
     except EltError as exc:
         assert exc.code == "ELT_ATTENDANCE_FAULT"
-    monkeypatch.delenv("FHD_ETL_ATTENDANCE_FAULT")
+    monkeypatch.delenv("FHD_ELT_ATTENDANCE_FAULT")
     again = persist_attendance_rows(
         rows, db_path=db, source_file="fault", upload_path=path, run_id="retry"
     )
@@ -300,3 +432,34 @@ def test_corrupt_and_empty_workbooks_still_fail():
     buffer = BytesIO()
     Workbook().save(buffer)
     assert inspect_workbook(buffer.getvalue())["sha256"]
+
+
+def test_material_ledger_is_not_forced_into_customer_master(tmp_path, monkeypatch):
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    materials = tmp_path / "material-ledger.xlsx"
+    book = Workbook()
+    sheet = book.active
+    sheet.title = "25材料"
+    sheet.append(["日期", "厂名", "品名", "数量", "规格", "单价", "金额", "客户"])
+    sheet.append(["2026-01-02", "甲厂", "树脂A", 2, "25", 42, 2100, "某客户"])
+    book.save(materials)
+    book.close()
+
+    result = detect_elt_target(materials)
+    assert result["target_type"] == "abnormal"
+    assert result["reason"] == "purchase_ledger_not_master_data"
+
+
+def test_bare_customer_column_without_name_header_is_not_a_customer_table(tmp_path, monkeypatch):
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    sheet_path = tmp_path / "order-lines.xlsx"
+    book = Workbook()
+    sheet = book.active
+    sheet.append(["单号", "客户", "金额"])
+    sheet.append(["A-1", "甲", 100])
+    book.save(sheet_path)
+    book.close()
+
+    # 「客户」只是订单行里的普通列，不能据此把整表当客户主数据；按通用表落库。
+    assert detect_elt_target(sheet_path)["target_type"] == "dynamic_table"
+    assert detect_elt_target(sheet_path)["target_type"] != "customers"

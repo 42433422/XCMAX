@@ -13,7 +13,7 @@ const mods = reactive({ activeModId: 'mod-a' })
 vi.mock('@/stores/mods', () => ({ useModsStore: () => mods }))
 import { catalogPeriod, useAssistantCatalogPrices } from './useAssistantCatalogPrices'
 
-const source = { source_id: 'source-a', epoch: 'epoch-a', protocol: 'etl-owned-mixed-v1' }
+const source = { source_id: 'source-a', epoch: 'epoch-a', protocol: 'elt-owned-mixed-v1' }
 const revision = 'a'.repeat(64), serverDigest = 'b'.repeat(64)
 const scopes: ReturnType<typeof effectScope>[] = []
 function account(user = 7, tenantId = 5) {
@@ -68,7 +68,7 @@ beforeEach(() => {
   api.list.mockResolvedValue({ success: true, capability: 'catalog_prices_v1', source, data: [product()] })
   api.submit.mockResolvedValue({ success: true, data: { run_id: 'run-a' } })
   api.proceed.mockResolvedValue({ success: true })
-  api.permissions.mockResolvedValue({ success: true, data: { user: { id: 7 }, permissions: ['product.view', 'dataset.read', 'etl.execute', 'product.edit', 'dataset.write', 'etl.template.manage'] } })
+  api.permissions.mockResolvedValue({ success: true, data: { user: { id: 7 }, permissions: ['product.view', 'dataset.read', 'elt.execute', 'product.edit', 'dataset.write', 'elt.template.manage'] } })
 })
 afterEach(() => { scopes.splice(0).forEach(scope => scope.stop()); vi.unstubAllGlobals() })
 
@@ -560,7 +560,7 @@ describe('explicit preclaim finalization', () => {
     await vi.waitFor(() => expect(api.permissions).toHaveBeenCalledTimes(2))
     if (kind === 'source') row.source.epoch = 'other'
     if (kind === 'account') { account(8); account(7) }
-    resolve({ success: true, data: { user: { id: 7 }, permissions: kind === 'revoked' ? [] : ['product.view', 'dataset.read', 'etl.execute', 'product.edit', 'dataset.write', 'etl.template.manage'] } })
+    resolve({ success: true, data: { user: { id: 7 }, permissions: kind === 'revoked' ? [] : ['product.view', 'dataset.read', 'elt.execute', 'product.edit', 'dataset.write', 'elt.template.manage'] } })
     await pending
     expect(api.reconcile).not.toHaveBeenCalled(); expect(localStorage.length).toBe(1)
   })

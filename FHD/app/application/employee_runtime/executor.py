@@ -20,11 +20,11 @@ from app.application.employee_runtime.loader import (
     pack_has_direct_python_runtime,
     verify_direct_python_pack_trust,
 )
-from app.application.shipment_excel_etl_security import (
-    ShipmentEtlPathError,
-    open_etl_input_file,
-    prepare_etl_output_path,
-    resolve_etl_path,
+from app.application.shipment_excel_elt_security import (
+    ShipmentEltPathError,
+    open_elt_input_file,
+    prepare_elt_output_path,
+    resolve_elt_path,
 )
 from app.application.tool_execution_deadline import build_http_helpers
 from app.mod_sdk.employee_specialized_tools import get_employee_tools, handle_specialized
@@ -105,10 +105,10 @@ def _resolve_file_path(args: dict[str, Any], workspace_root: str | None) -> Path
     if not raw:
         return None
     try:
-        candidate = resolve_etl_path(raw, workspace_root=workspace_root)
-        with open_etl_input_file(candidate, workspace_root=workspace_root):
+        candidate = resolve_elt_path(raw, workspace_root=workspace_root)
+        with open_elt_input_file(candidate, workspace_root=workspace_root):
             pass
-    except (OSError, ShipmentEtlPathError):
+    except (OSError, ShipmentEltPathError):
         return None
     return candidate
 
@@ -179,15 +179,15 @@ def _action_vendor_convert(
     # placeholders and generated documents therefore belong to a path that has
     # passed the shared ETL workspace sandbox, never to ``mods/_employees``.
     # Request data can nominate a workspace only when it is already under a
-    # trusted root; ``resolve_etl_output_path`` rejects traversal and rebuilds
+    # trusted root; ``resolve_elt_output_path`` rejects traversal and rebuilds
     # the final path under that root.
     requested_root = str(workspace_root or get_app_data_dir()).strip()
     try:
-        output_path = prepare_etl_output_path(
+        output_path = prepare_elt_output_path(
             str(Path(requested_root) / "outputs" / output_name),
             workspace_root=workspace_root,
         )
-    except ShipmentEtlPathError:
+    except ShipmentEltPathError:
         return {"handler": "direct_python", "ok": False, "error": "工作区不在允许范围"}
     workspace = output_path.parent.parent
     src = _resolve_file_path(payload, str(workspace))

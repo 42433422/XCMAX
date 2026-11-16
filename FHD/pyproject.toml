@@ -18,6 +18,11 @@ dependencies = [
 xcagi-brain = "app.cli.brain:main"
 
 [project.optional-dependencies]
+# 可选：Docling 文档解析后端（PDF/DOCX/PPTX 的版面、表格与扫描件 OCR）。
+# 默认不安装；安装后由 XCAGI_DOC_PARSER=auto 自动启用。
+doc-parsing = [
+    "docling>=2.0.0",
+]
 # 意图语义兜底：FastEmbed 走 ONNX，不依赖 torch；未安装时自动降级为纯规则。
 intent-semantic = [
     "semantic-router>=1.1,<2",
@@ -56,6 +61,8 @@ server-api = [
     "alembic>=1.13.0",
     "psycopg[binary]>=3.1.18",
     "pgvector>=0.2.5",
+    # 外部工具接入：官方 MCP Python SDK（MIT）
+    "mcp==2.3.0",
     # 长期记忆（mem0 OSS，Apache-2.0；离线本地向量，不依赖 torch）
     "mem0ai==2.2.1",
     # 计划修复：容忍模型 JSON 的尾逗号/截断（MIT，纯 Python）
@@ -263,11 +270,13 @@ module = [
     "alipay.*",
     "barcode.*",
     "cv2.*",
+    "docling.*",
     "easyocr.*",
     "faster_whisper.*",
     "google.*",
     "jsonschema.*",
     "keyring.*",
+    "mcp.*",
     "mem0.*",
     "onnxruntime.*",
     "paddleocr.*",
@@ -279,6 +288,7 @@ module = [
     "pytesseract.*",
     "pythoncom.*",
     "rasa.*",
+    "semantic_router.*",
     "sentence_transformers.*",
     "shipment_document.*",
     "sklearn.*",
