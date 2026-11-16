@@ -2,6 +2,8 @@
 
 import multiprocessing
 import os
+import sys
+from pathlib import Path
 
 import pytest
 from sqlalchemy import create_engine
@@ -14,6 +16,12 @@ from app.application.agent_orchestrator.task_execution_sql_repository import (
 )
 from app.db.models.agent import AgentTaskRecord
 from app.db.models.agent_approval import AgentApprovalConsumption
+
+# spawn 子进程按父进程 sys.path 导入本模块；分片运行时 cwd 可能不在 FHD，
+# 显式补入仓库根，避免 ModuleNotFoundError: tests.test_application。
+_FHD_ROOT = str(Path(__file__).resolve().parents[1])
+if _FHD_ROOT not in sys.path:
+    sys.path.insert(0, _FHD_ROOT)
 
 
 def _approve_and_exit(url, run_id, token, before_commit):

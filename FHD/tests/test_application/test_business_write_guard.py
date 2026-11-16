@@ -1,7 +1,9 @@
 import multiprocessing
 import os
+import sys
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 from sqlalchemy import create_engine, event
@@ -19,6 +21,12 @@ from app.db.db_base import Base
 from app.db.models import InventoryLedger, InventoryTransaction, Product, Warehouse
 from app.db.models.agent import AgentTaskExecutionRecord
 from app.domain.shared_services.inventory_service import InventoryService
+
+# spawn 子进程按父进程 sys.path 导入本模块；分片运行时 cwd 可能不在 FHD，
+# 显式补入仓库根，避免 ModuleNotFoundError: tests.test_application。
+_FHD_ROOT = str(Path(__file__).resolve().parents[1])
+if _FHD_ROOT not in sys.path:
+    sys.path.insert(0, _FHD_ROOT)
 
 
 def _inbound_paused_before_commit(

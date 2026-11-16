@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import os
 import shutil
+from datetime import datetime
 from hashlib import sha256
 from io import BytesIO
 from typing import Any, BinaryIO
@@ -265,42 +266,28 @@ def run_archive_template_delete(
         except RECOVERABLE_ERRORS:
             pass
         tenant_sql, tenant_bind = "tenant_id = :tenant_id", {"tenant_id": int(tenant_id)}
-        removed_path = ""
         with get_db() as db:
             row = db.execute(
-                text(
-                    f"SELECT id, original_file_path FROM templates "
-                    f"WHERE id = :id AND ({tenant_sql})"
-                ),
+                text(f"SELECT id FROM templates WHERE id = :id AND ({tenant_sql})"),
                 {"id": db_id, **tenant_bind},
             ).fetchone()
             if not row:
                 return {"success": False, "message": "模板不存在"}, 404
-            removed_path = str(getattr(row, "original_file_path", "") or "")
-            # 「删除」必须是真删除：软删会让模板库页面看起来永远清不干净。
+            # Recoverable removal: hide the owned row for this tenant without
+            # destroying asset bytes, so existing references stay valid and the
+            # scanner keeps the matching fs alias hidden while the row is inactive.
             db.execute(
-                text(f"DELETE FROM templates WHERE id = :id AND ({tenant_sql})"),
-                {"id": db_id, **tenant_bind},
+                text(
+                    f"UPDATE templates SET is_active = 0, updated_at = :updated_at "
+                    f"WHERE id = :id AND ({tenant_sql})"
+                ),
+                {"id": db_id, "updated_at": datetime.now(), **tenant_bind},
             )
             db.commit()
-        if removed_path:
-            from pathlib import Path
-
-            try:
-                path_obj = Path(removed_path)
-                if path_obj.is_file():
-                    path_obj.unlink()
-            except OSError:
-                pass
         return {
             "success": True,
-            "message": "模板已彻底删除",
-            "deleted": {
-                "id": template_id,
-                "db_id": db_id,
-                "path": removed_path,
-                "soft_deleted": False,
-            },
+            "message": "模板删除成功",
+            "deleted": {"id": template_id, "db_id": db_id, "soft_deleted": True},
         }, 200
 
     return {"success": False, "message": f"暂不支持删除该模板类型: {template_id}"}, 400
