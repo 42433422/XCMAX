@@ -26,6 +26,9 @@ class AutonomyAdmin:
         self._gate = gate
         self._approver = approver
         self._duty_health = duty_health
+        from app.application.autonomy.maintenance_console import register
+
+        register()
 
     async def autonomy_audit_log(
         self,
@@ -99,7 +102,10 @@ class AutonomyAdmin:
                 status_code=409,
             )
         try:
-            item = resume_action(
+            from starlette.concurrency import run_in_threadpool
+
+            item = await run_in_threadpool(
+                resume_action,
                 action_id,
                 approver=approver,
                 approval_id=str(body.get("approval_id") or ""),
@@ -266,3 +272,38 @@ class AutonomyAdmin:
         except self._errors.recoverable() as exc:
             self._errors.logger.warning("admin force self-maintenance failed: %s", exc)
             return JSONResponse({"ok": False, "message": str(exc)}, status_code=502)
+
+    async def admin_maintenance_tasks(self, request: Request):
+        return await self._maintenance_call(request, "snapshot")
+
+    async def admin_maintenance_run(self, request: Request):
+        body = await read_json_object(request, self._errors) or {}
+        return await self._maintenance_call(
+            request, "request_run", str(body.get("action", "")), str(body.get("request_id", ""))
+        )
+
+    async def admin_maintenance_cancel(self, execution_id: int, request: Request):
+        return await self._maintenance_call(request, "cancel", execution_id)
+
+    async def _maintenance_call(self, request: Request, operation: str, *args):
+        denied = self._gate(request)
+        if denied is not None:
+            return denied
+        from starlette.concurrency import run_in_threadpool
+        from app.application.autonomy import maintenance_console as service
+
+        actor = self._approver(request)
+        try:
+            if operation != "snapshot":
+                args = (*args, actor)
+            return {"ok": True, **await run_in_threadpool(getattr(service, operation), *args)}
+        except (ValueError, KeyError, OSError):
+            return JSONResponse(
+                {"ok": False, "message": "维护服务未就绪或操作不适用，请刷新状态后检查任务配置。"},
+                status_code=409,
+            )
+        except service.requests.RequestException:
+            return JSONResponse(
+                {"ok": False, "message": "维护服务暂时无法连接；没有自动重发任务。"},
+                status_code=502,
+            )

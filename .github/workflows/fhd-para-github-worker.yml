@@ -1,0 +1,98 @@
+# CI SSOT: generated from FHD/.github/workflows/para-github-worker.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
+name: Para GitHub Worker
+run-name: para-workspace-${{ inputs.request_id }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      request_id:
+        description: "管理端派工回执标识"
+        required: true
+
+permissions:
+  contents: read
+
+# A dedicated Para device token may have only one connected worker at a time.
+concurrency:
+  group: para-github-worker
+  cancel-in-progress: false
+
+
+defaults:
+  run:
+    working-directory: FHD
+
+jobs:
+  employee-workspace:
+    if: github.ref == 'refs/heads/main' && github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Prepare the existing Para executor
+        env:
+          PARA_CODEX_VERSION: ${{ vars.PARA_CODEX_VERSION }}
+          PARA_CODEX_AUTH_JSON: ${{ secrets.PARA_CODEX_AUTH_JSON }}
+          PARA_CODEX_CONFIG_TOML: ${{ secrets.PARA_CODEX_CONFIG_TOML }}
+          PARA_CODEX_API_KEY: ${{ secrets.PARA_CODEX_API_KEY }}
+        run: |
+          [[ "$PARA_CODEX_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Pin the Para Codex CLI version first'; exit 1; }
+          mkdir -p "$RUNNER_TEMP/para-worker"
+          cp scripts/autonomy/runtime_tools/*.mjs "$RUNNER_TEMP/para-worker/"
+          npm install --prefix "$RUNNER_TEMP/para-worker" --package-lock=false "ws@8.18.0" "@openai/codex@$PARA_CODEX_VERSION"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          auth = os.environ.get('PARA_CODEX_AUTH_JSON', '')
+          if not auth and not os.environ.get('PARA_CODEX_API_KEY'):
+              raise SystemExit('Para Codex authorization is not configured')
+          root = Path.home() / '.codex'
+          root.mkdir(mode=0o700, exist_ok=True)
+          if auth:
+              json.loads(auth)
+              target = root / 'auth.json'
+              target.write_text(auth)
+              target.chmod(0o600)
+          config = os.environ.get('PARA_CODEX_CONFIG_TOML', '')
+          if config:
+              target = root / 'config.toml'
+              target.write_text(config)
+              target.chmod(0o600)
+          PY
+      - name: Run the existing employees through Para
+        env:
+          PARA_GITHUB_REQUEST_ID: ${{ inputs.request_id }}
+          PARA_GITHUB_EVIDENCE_DIR: ${{ runner.temp }}/para-evidence
+          DEVFLEET_API_URL: ${{ vars.PARA_GITHUB_API_URL }}
+          DEVFLEET_DEVICE_TOKEN: ${{ secrets.PARA_GITHUB_DEVICE_TOKEN }}
+          DEVFLEET_CODEX_AGENT: ${{ runner.temp }}/para-worker/node_modules/.bin/codex
+          DEVFLEET_WORKSPACE_ROOT: ${{ runner.temp }}/para-workspaces
+          DEVFLEET_BARE_REPO: ${{ runner.temp }}/xcmax-bare.git
+          DEVFLEET_REPO_URL: https://github.com/${{ github.repository }}.git
+          XCMAX_CONTROL_REPORTS_ENABLED: "1"
+          DEVFLEET_CODEX_MODEL_CANDIDATES: ${{ vars.PARA_CODEX_MODEL_CANDIDATES }}
+          CODEX_API_KEY: ${{ secrets.PARA_CODEX_API_KEY }}
+          MODSTORE_DISPATCH_BASE: https://xiu-ci.com
+          MODSTORE_PARA_DISPATCH_TOKEN: ${{ secrets.MODSTORE_PARA_DISPATCH_TOKEN }}
+          GH_TOKEN: ${{ secrets.CI_COMMIT_TOKEN }}
+        run: |
+          test -n "$DEVFLEET_API_URL" && test -n "$DEVFLEET_DEVICE_TOKEN" && test -n "$GH_TOKEN"
+          gh auth setup-git
+          git clone --bare "$DEVFLEET_REPO_URL" "$DEVFLEET_BARE_REPO"
+          node "$RUNNER_TEMP/para-worker/github_para_worker.mjs"
+      - name: Retain execution evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: para-execution-${{ inputs.request_id }}
+          path: ${{ runner.temp }}/para-evidence/execution.json
+          if-no-files-found: warn

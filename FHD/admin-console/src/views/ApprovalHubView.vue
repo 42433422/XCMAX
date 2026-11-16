@@ -1,7 +1,7 @@
 <template>
-  <main class="approval-hub-view page-content" id="view-autonomy-approval-hub">
+  <main class="approval-hub-view page-content admin-screen" id="view-autonomy-approval-hub">
     <header class="page-header">
-      <div><h2>产品问题工单审批</h2><p>共享 Work Order 与完整闸门时间线；每 30 秒刷新</p></div>
+      <div><h2>产品问题工单审批</h2></div>
       <div class="header-actions">
         <span v-if="updatedAt" class="updated-at">更新于 {{ formatTime(updatedAt) }}</span>
         <button class="btn btn-secondary" :disabled="loading" @click="refresh">{{ loading ? '刷新中…' : '刷新工单' }}</button>
@@ -9,8 +9,9 @@
     </header>
     <p v-if="error" class="banner-error">工单刷新失败：{{ error }}</p>
     <section v-if="!orders.length && !error" class="panel admin-card empty">{{ loading ? '正在读取共享工单…' : '当前没有共享工单' }}</section>
-    <section v-for="item in orders" :key="item.wo_id" class="panel admin-card work-order">
-      <header class="panel-head"><h3>{{ item.wo_id }}</h3><span class="risk">{{ workOrderLabel(item.status) }}</span></header>
+    <div class="admin-pane" tabindex="0" aria-label="待审批工单">
+    <details v-for="item in orders" :key="item.wo_id" class="panel admin-card work-order">
+      <summary class="panel-head"><strong>{{ item.wo_id }}</strong><span>{{ item.context?.actual || item.reason || '待查看' }}</span><span class="risk">{{ workOrderLabel(item.status) }}</span></summary>
       <dl class="facts">
         <dt>客户 / 租户</dt><dd>{{ item.context?.customer_user_id || item.context?.tenant_id || '—' }}</dd>
         <dt>客户实例</dt><dd>{{ item.context?.client_instance_id || '—' }}</dd>
@@ -44,7 +45,8 @@
         <button class="btn btn-secondary" :disabled="acting" @click="decide(item, 'held')">暂缓</button>
       </div>
       <p v-else class="muted">决策锁定：必须同一工单已有 RED、GREEN 和 OWNER_INSTANCE_VERIFIED 收据。</p>
-    </section>
+    </details>
+    </div>
   </main>
 </template>
 

@@ -2,9 +2,7 @@
   <section class="enterprise-customer-roster" aria-label="企业客户交付台账">
     <header class="enterprise-customer-roster__head">
       <div>
-        <p>企业客户名册</p>
         <h3>企业客户交付台账</h3>
-        <span>所有企业用户都在这里；企业身份决定是否进入台账，购买权益与定制需求分别展示。</span>
       </div>
       <strong>{{ users.length }} 家</strong>
     </header>
@@ -38,7 +36,6 @@
           <span v-if="account.lane === 'custom'">
             {{ account.tickets.length }} 个工单 · 最新 {{ stageLabel(account.latestStage) }}
           </span>
-          <span v-else>无需定制生产线，仍保留企业交付卡片</span>
         </div>
         <div class="enterprise-customer-roster__entitlement">
           <strong>{{ entitlementTitle(account.delivery) }}</strong>
@@ -52,7 +49,7 @@
           查看定制工单
         </button>
         <span v-else class="enterprise-customer-roster__standard-mark">
-          <i class="fa fa-check-circle" aria-hidden="true"></i> 已进入交付中心
+          <i class="fa fa-check-circle" aria-hidden="true"></i> 已登记
         </span>
       </article>
     </div>
@@ -147,7 +144,7 @@ function entitlementTitle(delivery?: StandardDeliveryRecord): string {
 }
 
 function entitlementDetail(delivery?: StandardDeliveryRecord): string {
-  return delivery?.status_label || '未绑定购买套餐，不冒充已购买'
+  return delivery?.status_label || '未绑定购买套餐'
 }
 
 function stageLabel(stage: string): string {

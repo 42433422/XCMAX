@@ -61,11 +61,7 @@ const {
   <section class="selp" :class="[`selp--${statusTone}`, { 'selp--compact': compact }]" aria-label="自进化 loop 运行状态">
     <div class="selp-head">
       <div>
-        <p class="selp-kicker">Self-Evolution Loop</p>
         <h3 class="selp-title">自维护 / 自进化真实运行线</h3>
-        <p class="selp-desc">
-          读取后端 self-maintenance ledger、gate、policy 与 memory；不是静态演示。
-        </p>
       </div>
       <div class="selp-state">
         <span class="selp-state-dot" aria-hidden="true" />

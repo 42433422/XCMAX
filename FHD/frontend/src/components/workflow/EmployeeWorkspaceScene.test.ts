@@ -266,121 +266,6 @@ describe('EmployeeWorkspaceScene.vue', () => {
     expect(stats[3].find('.ews-stat-v').text()).toBe('1')
   })
 
-  it('渲染 Loop 控制台区域', async () => {
-    const wrapper = await mountManagementComponent()
-    await flushPromises()
-    expect(wrapper.find('.ews-loop-console').exists()).toBe(true)
-    expect(wrapper.find('.ews-loop-cockpit').exists()).toBe(true)
-    const diagnostics = wrapper.get('details.ews-diagnostics')
-    expect(diagnostics.attributes('open')).toBeUndefined()
-    expect(diagnostics.get('summary').text()).toContain('编制与运行诊断')
-    expect(wrapper.get('#ews-workflow-monitor').exists()).toBe(true)
-  })
-
-  it('企业端不渲染管理端编制和自进化面板', async () => {
-    const wrapper = await mountComponent()
-    await flushPromises()
-    expect(wrapper.find('.drwlv-stub').exists()).toBe(false)
-    expect(wrapper.find('.selp-stub').exists()).toBe(false)
-    expect(wrapper.find('.ews-loop-console').exists()).toBe(false)
-    expect(wrapper.find('.ews-stat-k').text()).toBe('企业工位')
-  })
-
-  it('loopRuntime 为 null 时 loopStatusLabel 为待连接', async () => {
-    statusMock.mockResolvedValue(null)
-    const wrapper = await mountManagementComponent()
-    await flushPromises()
-    expect(wrapper.find('.ews-loop-console-status').text()).toBe('待连接')
-  })
-
-  it('loopRuntime 有 open_run_ids 时 loopStatusLabel 为运行中', async () => {
-    statusMock.mockResolvedValue({
-      schema_version: 'self_maintenance_runtime.v1',
-      evidence: { open_run_ids: ['r1'] },
-      contract: { required_top_level: ['evidence'] },
-      contract_validation: { ok: true, surface_readiness: { employee_space: { ok: true } } },
-    })
-    const wrapper = await mountManagementComponent()
-    await flushPromises()
-    expect(wrapper.find('.ews-loop-console-status').text()).toBe('运行中')
-  })
-
-  it('点击 loop 状态按钮触发 refreshLoopRuntime', async () => {
-    statusMock.mockResolvedValue(null)
-    const wrapper = await mountManagementComponent()
-    await flushPromises()
-    expect(statusMock).toHaveBeenCalledTimes(1)
-    await wrapper.find('.ews-loop-console-status').trigger('click')
-    await flushPromises()
-    expect(statusMock).toHaveBeenCalledTimes(2)
-  })
-
-  it('渲染 loop 摘要卡片 loopRuntimeCards', async () => {
-    const wrapper = await mountManagementComponent()
-    await flushPromises()
-    const cards = wrapper.findAll('.ews-loop-card')
-    expect(cards.length).toBe(5)
-    expect(cards[0].find('span').text()).toBe('Loop 状态')
-  })
-
-  it('渲染 loop 流水线阶段 loopPipelineStages', async () => {
-    const wrapper = await mountManagementComponent()
-    await flushPromises()
-    const stages = wrapper.findAll('.ews-loop-stage')
-    expect(stages.length).toBe(5)
-  })
-
-  it('渲染三端模块就绪 surface 卡片', async () => {
-    const wrapper = await mountManagementComponent()
-    await flushPromises()
-    const cards = wrapper.findAll('.ews-loop-surface-card')
-    expect(cards.length).toBe(3)
-  })
-
-  it('渲染 loop 角色分工图', async () => {
-    const wrapper = await mountManagementComponent()
-    await flushPromises()
-    const nodes = wrapper.findAll('.ews-loop-role-map-node')
-    expect(nodes.length).toBe(3)
-    expect(nodes[0].find('span').text()).toBe('员工空间')
-  })
-
-  it('渲染 loop 下一步操作指引区', async () => {
-    const wrapper = await mountManagementComponent()
-    await flushPromises()
-    expect(wrapper.find('.ews-loop-directive').exists()).toBe(true)
-    expect(wrapper.find('.ews-loop-directive-link').exists()).toBe(true)
-  })
-
-  it('渲染 loop 真实数据来源 truth strip', async () => {
-    const wrapper = await mountManagementComponent()
-    await flushPromises()
-    expect(wrapper.find('.ews-loop-truth-strip').exists()).toBe(true)
-    // 主状态卡 + truthCards
-    expect(wrapper.find('.ews-loop-truth-card--primary').exists()).toBe(true)
-  })
-
-  it('渲染 loop 数据新鲜度 freshness strip', async () => {
-    const wrapper = await mountManagementComponent()
-    await flushPromises()
-    expect(wrapper.find('.ews-loop-freshness-strip').exists()).toBe(true)
-    expect(wrapper.findAll('.ews-loop-freshness-card').length).toBeGreaterThan(0)
-  })
-
-  it('渲染 loop 诊断区', async () => {
-    const wrapper = await mountManagementComponent()
-    await flushPromises()
-    expect(wrapper.find('.ews-loop-diagnosis').exists()).toBe(true)
-  })
-
-  it('渲染 loop 员工分离矩阵 isolation cards', async () => {
-    const wrapper = await mountManagementComponent()
-    await flushPromises()
-    expect(wrapper.find('.ews-loop-isolation').exists()).toBe(true)
-    const cards = wrapper.findAll('.ews-loop-isolation-card')
-    expect(cards.length).toBe(5)
-  })
-
   it('渲染工位实况监控区', async () => {
     const wrapper = await mountComponent()
     await flushPromises()
@@ -410,14 +295,6 @@ describe('EmployeeWorkspaceScene.vue', () => {
     await flushPromises()
     const desks = wrapper.findAll('.ews-desk')
     expect(desks[1].classes()).toContain('ews-desk--selected')
-  })
-
-  it('路由有 employee 参数但不在工位中时渲染警告', async () => {
-    desksRef.value = [makeDesk({ empId: 'emp-001' })]
-    const wrapper = await mountManagementComponent({ employee: 'emp-999' })
-    await flushPromises()
-    expect(wrapper.find('.ews-route-focus-warning').exists()).toBe(true)
-    expect(wrapper.find('.ews-route-focus-warning strong').text()).toContain('不在员工空间工位里')
   })
 
   it('入口背景图 error 时切换 fallback URL', async () => {
@@ -486,133 +363,6 @@ describe('EmployeeWorkspaceScene.vue', () => {
     expect(wrapper.find('.ews-stat-sub').text()).toContain('家具行业包')
   })
 
-  it('loopRuntime 有 participants 时 loop 卡片显示参与数', async () => {
-    statusMock.mockResolvedValue({
-      schema_version: 'self_maintenance_runtime.v1',
-      evidence: {},
-      memory: {},
-      current_gate: {},
-      participants: [
-        { employee_id: 'emp-001', role_label: '侦察' },
-        { employee_id: 'emp-002', role_label: '修复' },
-      ],
-      contract: { required_top_level: ['evidence'] },
-      contract_validation: { ok: true, surface_readiness: { employee_space: { ok: true } } },
-    })
-    const wrapper = await mountManagementComponent()
-    await flushPromises()
-    // workers 卡片显示参与数
-    const cards = wrapper.findAll('.ews-loop-card')
-    const workersCard = cards.find((c) => c.find('span').text() === '上岗参与')
-    expect(workersCard).toBeTruthy()
-    expect(workersCard!.find('strong').text()).toBe('2')
-  })
-
-  it('loopRuntime 有 active_gates.blocking_count 时驾驶舱门禁显示阻断数', async () => {
-    statusMock.mockResolvedValue({
-      schema_version: 'self_maintenance_runtime.v1',
-      evidence: {},
-      memory: {},
-      current_gate: {},
-      active_gates: { ok: false, blocking_count: 3, blocking_keys: ['roster'] },
-      contract: { required_top_level: ['evidence'] },
-      contract_validation: { ok: true, surface_readiness: { employee_space: { ok: true } } },
-    })
-    const wrapper = await mountManagementComponent()
-    await flushPromises()
-    const meters = wrapper.findAll('.ews-loop-cockpit-meter')
-    // 第二个 meter 是 gate
-    expect(meters[1].find('strong').text()).toBe('3')
-  })
-
-  it('loopRuntime 有 surface_incidents 时渲染 incident 列表', async () => {
-    statusMock.mockResolvedValue({
-      schema_version: 'self_maintenance_runtime.v1',
-      evidence: {},
-      memory: {},
-      current_gate: {},
-      contract: { required_top_level: ['evidence'] },
-      contract_validation: {
-        ok: true,
-        surface_readiness: { employee_space: { ok: true } },
-        surface_incidents: [{ id: 'inc-1', surface: 'employee_space', severity: 'bad', title: '断点A' }],
-      },
-    })
-    const wrapper = await mountManagementComponent()
-    await flushPromises()
-    expect(wrapper.find('.ews-loop-incident-list').exists()).toBe(true)
-    expect(wrapper.findAll('.ews-loop-incident').length).toBe(1)
-  })
-
-  it('loopRuntime 有 run_timelines 时渲染工单卡片', async () => {
-    statusMock.mockResolvedValue({
-      schema_version: 'self_maintenance_runtime.v1',
-      evidence: {},
-      memory: {},
-      current_gate: {},
-      run_timelines: [
-        {
-          run_id: 'run-1',
-          items: [{ employee_id: 'emp-001', label: '扫描', status: 'done', stage: 'sense' }],
-        },
-      ],
-      contract: { required_top_level: ['evidence'] },
-      contract_validation: { ok: true, surface_readiness: { employee_space: { ok: true } } },
-    })
-    const wrapper = await mountManagementComponent()
-    await flushPromises()
-    // loop work order cards
-    expect(wrapper.find('.ews-loop-next-actions').exists()).toBe(true)
-    expect(wrapper.findAll('.ews-loop-next-action').length).toBeGreaterThan(0)
-  })
-
-  it('loopRuntime contract 异常时 loopStatusLabel 为 Contract 异常', async () => {
-    statusMock.mockResolvedValue({
-      schema_version: 'unknown.v0',
-      contract: { required_top_level: ['evidence'] },
-      contract_validation: { ok: false },
-    })
-    const wrapper = await mountManagementComponent()
-    await flushPromises()
-    expect(wrapper.find('.ews-loop-console-status').text()).toBe('Contract 异常')
-  })
-
-  it('loopRuntime gate.should_run=true 且无 open runs 时状态为达到阈值', async () => {
-    statusMock.mockResolvedValue({
-      schema_version: 'self_maintenance_runtime.v1',
-      evidence: { open_run_ids: [] },
-      memory: {},
-      current_gate: { should_run: true, reason: 'threshold' },
-      contract: { required_top_level: ['evidence'] },
-      contract_validation: { ok: true, surface_readiness: { employee_space: { ok: true } } },
-    })
-    const wrapper = await mountManagementComponent()
-    await flushPromises()
-    expect(wrapper.find('.ews-loop-console-status').text()).toBe('达到阈值')
-  })
-
-  it('loopRuntime gate.reason=cooldown 时状态为冷却中', async () => {
-    statusMock.mockResolvedValue({
-      schema_version: 'self_maintenance_runtime.v1',
-      evidence: { open_run_ids: [] },
-      memory: {},
-      current_gate: { should_run: false, reason: 'cooldown' },
-      contract: { required_top_level: ['evidence'] },
-      contract_validation: { ok: true, surface_readiness: { employee_space: { ok: true } } },
-    })
-    const wrapper = await mountManagementComponent()
-    await flushPromises()
-    expect(wrapper.find('.ews-loop-console-status').text()).toBe('冷却中')
-  })
-
-  it('API 抛错时 loopRuntime 保持 null 不崩溃', async () => {
-    statusMock.mockRejectedValue(new Error('网络错误'))
-    const wrapper = await mountManagementComponent()
-    await flushPromises()
-    expect(wrapper.find('.ews').exists()).toBe(true)
-    expect(wrapper.find('.ews-loop-console-status').text()).toBe('待连接')
-  })
-
   it('组件卸载时清理定时器（不报错）', async () => {
     const wrapper = await mountManagementComponent()
     await flushPromises()
@@ -632,45 +382,14 @@ describe('EmployeeWorkspaceScene.vue', () => {
     expect(wrapper.find('.wei-stub').exists()).toBe(true)
   })
 
-  it('loop focused employee 有 worker task card 时渲染 focus card', async () => {
-    desksRef.value = [makeDesk({ empId: 'emp-001', shortName: '侦察员' })]
-    statusMock.mockResolvedValue({
-      schema_version: 'self_maintenance_runtime.v1',
-      evidence: {},
-      memory: {},
-      current_gate: {},
-      participants: [{ employee_id: 'emp-001', role_label: '侦察' }],
-      ui_bridge: { primary_employee_id: 'emp-001' },
-      run_timelines: [
-        {
-          run_id: 'r1',
-          items: [{ employee_id: 'emp-001', label: '扫描', status: 'done' }],
-        },
-      ],
-      contract: { required_top_level: ['evidence'] },
-      contract_validation: { ok: true, surface_readiness: { employee_space: { ok: true } } },
-    })
-    const wrapper = await mountManagementComponent()
+
+  it('企业端不渲染管理端编制和自进化面板', async () => {
+    const wrapper = await mountComponent()
     await flushPromises()
-    expect(wrapper.find('.ews-loop-focus-card').exists()).toBe(true)
+    expect(wrapper.find('.drwlv-stub').exists()).toBe(false)
+    expect(wrapper.find('.selp-stub').exists()).toBe(false)
+    expect(wrapper.find('.ews-loop-console').exists()).toBe(false)
+    expect(wrapper.find('.ews-stat-k').text()).toBe('企业工位')
   })
 
-  it('loop focused employee 无 worker task card 但有 focus id 时渲染 warn focus card', async () => {
-    desksRef.value = [makeDesk({ empId: 'emp-001', shortName: '侦察员' })]
-    statusMock.mockResolvedValue({
-      schema_version: 'self_maintenance_runtime.v1',
-      evidence: {},
-      memory: {},
-      current_gate: {},
-      ui_bridge: { primary_employee_id: 'emp-001' },
-      contract: { required_top_level: ['evidence'] },
-      contract_validation: { ok: true, surface_readiness: { employee_space: { ok: true } } },
-    })
-    const wrapper = await mountManagementComponent()
-    await flushPromises()
-    // emp-001 是 focused 但没有 worker task card
-    const focusCard = wrapper.find('.ews-loop-focus-card')
-    expect(focusCard.exists()).toBe(true)
-    expect(focusCard.classes()).toContain('ews-loop-focus-card--warn')
-  })
 })

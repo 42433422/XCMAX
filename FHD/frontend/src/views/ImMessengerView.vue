@@ -5,10 +5,12 @@
       <button v-if="enterpriseCsUnconfirmed" type="button" @click="confirmCsReconciliation">已核对会话，解除重复发送保护</button>
       <button type="button" :disabled="busy" @click="refreshEnterpriseCsThread()">重新连接</button>
     </p>
-    <div class="im-body">
+    <div class="im-body" :class="{ 'im-body--mobile-list': mobileShowList }">
+      <button class="im-mobile-back" @click="mobileShowList = true">‹ 会话列表</button>
       <ConversationSidebar
         :is-admin-customer-service-console="isAdminCustomerServiceConsole"
         :busy="busy"
+        :group-load-error="groupLoadError"
         :im-connection-class="imConnectionClass"
         :im-connection-label="imConnectionLabel"
         :external-channel-entries="externalChannelEntries"
@@ -25,19 +27,22 @@
         :sidebar-item-super-avatar-src="sidebarItemSuperAvatarSrc"
         :sidebar-item-unread="sidebarItemUnread"
         @open-contact-picker="openContactPicker"
-        @activate-pinned="activatePinnedEntry"
-        @select-sidebar-item="selectSidebarItem"
+        @create-group="createGroupConversation"
+        @retry-groups="loadGroupConversations"
+        @activate-pinned="mobileShowList = false; activatePinnedEntry($event)"
+        @select-sidebar-item="mobileShowList = false; selectSidebarItem($event)"
       />
 
       <main v-if="activeExternalEntry" class="im-chat im-chat--external-inbox">
         <KellaiCustomerInbox />
       </main>
       <main v-else-if="activeGroupChat" class="im-chat im-chat--group-chat">
-        <AiGroupChatView />
+        <AiGroupChatView v-if="activeAiGroup" :key="activeAiGroup.id" :group="activeAiGroup" @group-updated="updateGroupConversation" />
       </main>
       <SystemEmployeeChat
         v-else-if="activeSystemEntry"
         :active-system-entry="activeSystemEntry"
+        :active-avatar-src="sidebarItemAvatarSrc({ kind: 'pinned', key: activeSystemEntry.id, entry: activeSystemEntry })"
         :super-cli-tools="superCliTools"
         :super-cli-tool-label="superCliToolLabel"
         :system-entry-status-label="systemEntryStatusLabel"
@@ -62,11 +67,12 @@
         :codex-scroll-el="imChatDomRefs.codexScrollEl"
         :duty-employee-scroll-el="imChatDomRefs.dutyEmployeeScrollEl"
         :codex-input-el="imChatDomRefs.codexInputEl"
-        @activate-pinned="activatePinnedEntry"
+        @activate-pinned="mobileShowList = false; activatePinnedEntry($event)"
         @codex-send="onCodexSend"
         @duty-employee-send="onDutyEmployeeSend"
       />
       <ConversationChat
+        :key="activeConversationId"
         v-else-if="activeConversationId"
         :active-title="activeTitle"
         :active-avatar-src="activeAvatarSrc"
@@ -89,7 +95,6 @@
       <main v-else class="im-chat im-chat--empty">
         <i class="fa fa-comment-o" aria-hidden="true"></i>
         <p>选择左侧会话开始聊天</p>
-        <p class="im-empty-hint">这里是同事和客服的一对一会话；找小C办事请用侧栏「智能对话」</p>
       </main>
     </div>
 
@@ -100,13 +105,13 @@
       :contacts-loading="contactsLoading"
       @close="closeContactPicker"
       @update:keyword="contactKeyword = $event"
-      @select="startChatWith"
+      @select="mobileShowList = false; startChatWith($event)"
     />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import {
   createDirectConversation,
   fetchCsInbox,
@@ -156,7 +161,9 @@ import ConversationSidebar from '@/views/im/ConversationSidebar.vue'
 import SystemEmployeeChat from '@/views/im/SystemEmployeeChat.vue'
 import ConversationChat from '@/views/im/ConversationChat.vue'
 
-const AiGroupChatView = defineAsyncComponent(() => import('@/views/AiGroupChatView.vue'))
+import { fetchAiGroups, createAiGroup, type AiGroup } from '@/api/aiGroups'
+
+import AiGroupChatView from '@/views/AiGroupChatView.vue'
 
 type CurrentUserPayload = {
   user?: { id?: number }
@@ -164,12 +171,36 @@ type CurrentUserPayload = {
   market_is_admin?: boolean
 }
 
+const mobileShowList = ref(false)
 const localUserId = ref<number | null>(null)
 const conversations = ref<ImConversationSummary[]>([])
 const activeConversationId = ref<number | null>(null)
 const activeSystemEntry = ref<SystemEmployeeEntry | null>(null)
 const activeExternalEntry = ref<ExternalAppEntry | null>(null)
 const activeGroupChat = ref(false)
+const groups = ref<AiGroup[]>([])
+const activeAiGroupId = ref<string | null>(null)
+const groupLoadError = ref('')
+const activeAiGroup = computed(() => groups.value.find(group => group.id === activeAiGroupId.value))
+async function loadGroupConversations() {
+  try { groups.value = await fetchAiGroups('admin'); groupLoadError.value = '' }
+  catch { groupLoadError.value = '群聊读取失败' }
+}
+function updateGroupConversation(group: AiGroup) {
+  groups.value = groups.value.map(row => row.id === group.id ? group : row)
+}
+async function createGroupConversation() {
+  const name = window.prompt('群名称')?.trim()
+  if (!name) return
+  try {
+    const group = await createAiGroup(name, 'admin')
+    if (!group) throw new Error('创建群聊未确认成功')
+    groups.value = [group, ...groups.value]
+    await activatePinnedEntry({ id: `ai-group-${group.id}`, username: group.id, display_name: group.name,
+      subtitle: `${group.member_count} 个 AI 成员`, group_id: group.id, is_ai_group_chat_entry: true })
+    mobileShowList.value = false
+  } catch { showAppToast('创建群聊失败，请重试', 'warning') }
+}
 const dutyEmployees = ref<DutyEmployeeEntry[]>([])
 const messages = ref<ImMessage[]>([])
 const draft = ref('')
@@ -278,6 +309,7 @@ const {
   stopCodexPolling,
   stopCodexTypewriter,
 } = useSuperEmployeeDispatch({
+  activeAiGroupId,
   activeSystemEntry,
   activeExternalEntry,
   activeConversationId,
@@ -341,6 +373,8 @@ const {
   sidebarItemUnread,
   selectSidebarItem,
 } = useConversationList({
+  groups,
+  activeAiGroupId,
   conversations,
   contacts,
   dutyEmployees,
@@ -527,7 +561,7 @@ onMounted(() => {
     if (isAdminCustomerServiceConsole.value) {
       closeOverlappingAssistantFloat()
       activeSystemEntry.value = CODEX_SUPER_EMPLOYEE_ENTRY
-      initialLoads.push(loadCodexConversation())
+      initialLoads.push(loadCodexConversation(), loadGroupConversations())
     }
     await Promise.all(initialLoads)
   })()

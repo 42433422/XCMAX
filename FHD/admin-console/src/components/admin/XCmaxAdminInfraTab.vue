@@ -1,8 +1,10 @@
 <template>
   <div class="xcmax-admin-infra">
-    <div class="ops-toolbar"><span>核对岗位、员工包、服务连接与调度；实际交付另读原单回执。</span><button class="btn btn-secondary btn-sm" type="button" :disabled="loading" @click="refresh">{{ loading ? '刷新中…' : '刷新基础设施' }}</button></div>
+    <div class="ops-toolbar"><button class="btn btn-secondary btn-sm" type="button" :disabled="loading" @click="refresh">{{ loading ? '刷新中…' : '刷新基础设施' }}</button></div>
     <p v-if="errorMessage" class="ops-error" role="alert">{{ errorMessage }}</p>
-    <section class="admin-card">
+    <AdminSectionNav v-model="section" label="工作分区" :items="[{ value: 'health', label: '岗位与服务状态' }, { value: 'blockers', label: '未闭环原因与下一步' }, { value: 'departments', label: '计划编制部门（非运行人数）' }]" />
+    <div class="admin-pane" tabindex="0" aria-label="工作内容">
+    <section v-show="section === 'health'" class="admin-card">
       <div class="card-header"><h3>岗位与服务状态</h3><span class="status-badge" :class="checkState.ready ? 'badge-ok' : 'badge-warn'">{{ checkState.label }}</span></div>
       <dl class="card-info">
         <dt>计划岗位</dt><dd>{{ plannedCount ?? '待核实' }}</dd>
@@ -12,10 +14,9 @@
         <dt>远端连接</dt><dd>{{ remoteReachable === null ? '待核实' : remoteReachable ? '可达' : '不可达' }}</dd>
         <dt>员工调度</dt><dd>{{ schedulerRunning === null ? '待核实' : schedulerRunning ? '运行中' : '未运行' }}</dd>
       </dl>
-      <p class="muted">本端指提供当前运行数据的设备；包已安装、服务可达和业务完成分别核对。</p>
       <details v-if="closureDetail"><summary>查看闭环依据</summary><pre class="ops-json">{{ closureDetail }}</pre></details>
     </section>
-    <section class="admin-card" aria-label="未闭环原因与下一步">
+    <section v-show="section === 'blockers'" class="admin-card" aria-label="未闭环原因与下一步">
       <h3>未闭环原因与下一步</h3>
       <p v-if="!closureKnown" class="muted">闭环依据尚未读全，请先重新读取；不能据此认定没有待办。</p>
       <ul v-else-if="blockers.length" class="blocker-list">
@@ -31,14 +32,17 @@
       <p v-if="schedulerRunning === false">员工调度未运行；责任方尚未记录。请到员工自治核对失败与未运行任务，处理后回读。</p>
       <nav class="ops-links"><router-link :to="{ name: 'duty-roster-graph', query: { view: 'department' } }">查看编制与包状态</router-link><router-link :to="{ name: 'employee-autonomy' }">查看员工运行</router-link><router-link :to="{ name: 'autonomy-approval-hub' }">查看待审请求</router-link></nav>
     </section>
-    <section class="admin-card">
+    <section v-show="section === 'departments'" class="admin-card">
       <h3>计划编制部门（非运行人数）</h3>
       <ul class="dept-list"><li v-for="(dept, id) in YUANGON_AREAS" :key="id"><strong>{{ dept.label }}</strong><span>{{ dept.ids.length }} 个计划岗位 · 本端已装 {{ departmentCount(dept.ids, 'installed') }} · 目录缺岗 {{ departmentCount(dept.ids, 'missing') }} · 本端缺包 {{ departmentCount(dept.ids, 'local') }}</span></li></ul>
     </section>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import AdminSectionNav from './AdminSectionNav.vue'
+const section = ref('health')
 import { computed, onMounted, ref } from 'vue'
 import { xcmaxOpsApi } from '@/api/xcmaxOps'
 import { api } from '@/api'

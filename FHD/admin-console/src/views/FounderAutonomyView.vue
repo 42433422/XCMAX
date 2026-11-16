@@ -1,40 +1,101 @@
 <template>
-  <main class="founder-view page-content" id="view-founder-autonomy">
+  <main class="founder-view page-content admin-screen" id="view-founder-autonomy">
     <header class="founder-hero page-header">
       <div>
-        <p class="eyebrow">创始人视角 · 只看战略</p>
-        <h1>创始人自治驾驶舱</h1>
-        <p class="hero-copy">日常运营交给 AI 员工与 Loops；这里只保留战略方向、少量例外与 veto。</p>
+        <h1>创始人状态</h1>
       </div>
       <div class="hero-actions">
         <span class="refresh-time">{{ generatedAtLabel }}</span>
         <button class="refresh-button" type="button" :disabled="loading" @click="refresh">
           <i class="fa fa-refresh" :class="{ 'fa-spin': loading }" aria-hidden="true"></i>
-          {{ loading ? '正在刷新证据' : '刷新真实进度' }}
+          {{ loading ? '刷新中…' : '刷新' }}
         </button>
       </div>
     </header>
 
     <section v-if="error" class="error-panel" role="alert">
-      <strong>驾驶舱暂时无法读取：</strong>{{ error }}
+      <strong>状态读取失败：</strong>{{ error }}
     </section>
 
     <template v-if="snapshot">
-      <section class="overview-grid" aria-label="自治总览">
-        <article class="overall-card">
-          <div class="overall-score">{{ snapshot.overall_progress }}<small>%</small></div>
-          <div class="overall-copy">
-            <span>距离创始人退出日常运营还差</span>
-            <strong>{{ snapshot.overall_remaining }}%</strong>
-            <p>总分是七项能力的等权平均，缺少运行或生产证据时不会自动补分。</p>
-          </div>
+      <p v-if="snapshot.warnings?.length" class="warning-copy" role="status">数据源异常：{{ snapshot.warnings.join('；') }}</p>
+      <section class="metric-strip" aria-label="核心指标">
+        <article class="metric-tile primary">
+          <span>总体进度</span><strong>{{ snapshot.overall_progress ?? '—' }}<small>%</small></strong>
+          <div class="metric-track" aria-hidden="true"><span :style="{ width: `${snapshot.overall_progress || 0}%` }"></span></div>
         </article>
+        <article class="metric-tile" :class="{ warning: snapshot.attention?.total > 0 }">
+          <span>例外信号</span><strong>{{ snapshot.attention?.total ?? '—' }}<small>项</small></strong>
+          <span class="metric-status">{{ snapshot.attention?.human_intervention_rare === true ? '人工介入低频' : snapshot.attention?.total > 0 ? '需关注' : '待核实' }}</span>
+        </article>
+        <article class="metric-tile">
+          <span>生产履职员工</span><strong>{{ snapshot.live_summary?.production_proven_employees ?? '—' }}<small>/ {{ snapshot.live_summary?.planned_employees ?? '—' }}</small></strong>
+          <span class="metric-status">{{ snapshot.live_summary?.employee_production_workforce_ready === true ? '已达门槛' : snapshot.live_summary?.employee_production_workforce_ready === false ? '未达门槛' : '待核实' }}</span>
+        </article>
+        <article class="metric-tile">
+          <span>客户验收</span><strong>{{ snapshot.live_summary?.paid_acceptance_count ?? '—' }}<small>项</small></strong>
+          <span class="metric-status">{{ snapshot.live_summary?.customer_value_ledger_ready === true ? '账本已就绪' : snapshot.live_summary?.customer_value_ledger_ready === false ? '账本未就绪' : '待核实' }}</span>
+        </article>
+      </section>
 
+      <section v-if="blockingGateKeys.length" class="blocking-banner">
+        <i class="fa fa-shield" aria-hidden="true"></i>
+        <div>
+          <strong>自治阻塞：</strong>
+          <span>{{ blockingGateKeys.join(' / ') }}</span>
+        </div>
+        <router-link :to="{ name: 'duty-roster-graph', query: { view: 'loop' } }">查看详情</router-link>
+      </section>
+
+      <AdminSectionNav v-model="section" label="创始人状态分区" :items="[{ value: 'status', label: '状态总览' }, { value: 'council', label: '战略协作' }, { value: 'evidence', label: '运行证据' }]" />
+      <div class="admin-pane founder-pane" tabindex="0" aria-label="状态内容">
+      <div v-show="section === 'status'" class="dashboard-body">
+      <section class="score-section">
+        <div class="section-heading"><h2>七项状态</h2><span>进度 / 状态</span></div>
+
+        <div class="dimension-grid">
+          <details v-for="dimension in snapshot.dimensions" :key="dimension.id" class="dimension-row" :class="`is-${dimension.status}`">
+            <summary class="dimension-summary">
+              <span class="dimension-label">{{ dimension.label }}</span>
+              <div class="progress-track" :aria-label="`${dimension.label} ${dimension.progress}%`"><span :style="{ width: `${dimension.progress}%` }"></span></div>
+              <strong>{{ dimension.progress }}%</strong>
+              <span class="status-chip">{{ dimension.status_label }}</span>
+            </summary>
+            <div class="dimension-detail">
+              <p class="next-gap">{{ dimension.next_gap }}</p>
+              <h3>证据 {{ dimension.passed_gate_count }}/{{ dimension.total_gate_count }}</h3>
+              <div class="gate-columns">
+                <div>
+                  <h3>已证明</h3>
+                  <ul>
+                    <li v-for="gate in dimension.evidence" :key="gate.key">
+                      <span>{{ gate.label }} · {{ gate.weight }}%</span>
+                      <small>{{ gate.evidence }}</small>
+                    </li>
+                    <li v-if="!dimension.evidence?.length" class="muted">暂无可计分证据</li>
+                  </ul>
+                </div>
+                <div>
+                  <h3>未闭环</h3>
+                  <ul>
+                    <li v-for="gate in dimension.gaps" :key="gate.key">
+                      <span>{{ gate.label }} · {{ gate.weight }}%</span>
+                      <small>{{ gate.gap }}</small>
+                    </li>
+                    <li v-if="!dimension.gaps?.length" class="muted">当前门槛已全部满足</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </details>
+        </div>
+      </section>
+
+        <aside class="action-column" aria-label="待关注与常用入口">
         <article class="attention-card" :class="{ clear: snapshot.attention?.human_intervention_rare }">
           <div class="section-title-row">
             <div>
-              <span class="section-kicker">只需要你处理</span>
-              <h2>{{ snapshot.attention?.human_intervention_rare ? '当前无高频人工负担' : `${snapshot.attention?.total || 0} 项例外信号` }}</h2>
+              <h2>待关注事项</h2>
             </div>
             <span class="attention-badge">{{ snapshot.attention?.human_intervention_rare ? '低频' : '需关注' }}</span>
           </div>
@@ -42,55 +103,42 @@
             <li v-for="item in snapshot.attention.items" :key="`${item.kind}-${item.label}`">
               <router-link :to="attentionRoute(item)">
                 <span>{{ item.label }}</span>
-                <strong>{{ item.count }}</strong>
+                <strong>{{ item.count }}<i class="fa fa-angle-right" aria-hidden="true"></i></strong>
               </router-link>
             </li>
           </ul>
           <p v-else class="empty-copy">没有待审批、治理 hold 或悬挂 Loop。</p>
         </article>
-      </section>
-
-      <section v-if="blockingGateKeys.length" class="blocking-banner">
-        <i class="fa fa-shield" aria-hidden="true"></i>
-        <div>
-          <strong>系统正在正确地阻止自己继续：</strong>
-          <span>{{ blockingGateKeys.join(' / ') }}。解除前不计为“无人介入完成”。</span>
-        </div>
-        <router-link :to="{ name: 'duty-roster-graph', query: { view: 'loop' } }">查看 Loop 证据</router-link>
-      </section>
-
-      <section class="quick-links" aria-label="创始人控制面入口">
+          <section class="shortcut-panel"><h2>常用入口</h2>
+      <nav class="quick-links" aria-label="创始人控制面入口">
         <router-link :to="{ name: 'autonomy-approval-hub' }">
           <i class="fa fa-check-square-o" aria-hidden="true"></i>
-          <span><strong>审批中心</strong><small>少量例外与 veto</small></span>
+          <span><strong>审批中心</strong></span>
         </router-link>
         <router-link :to="{ name: 'persy-knowledge' }">
           <i class="fa fa-book" aria-hidden="true"></i>
-          <span><strong>知识库</strong><small>事实、资料与长期记忆</small></span>
+          <span><strong>知识库</strong></span>
         </router-link>
         <router-link :to="{ name: 'workflow-employee-space' }">
           <i class="fa fa-users" aria-hidden="true"></i>
-          <span><strong>AI 员工</strong><small>岗位、工位与执行状态</small></span>
+          <span><strong>AI 员工</strong></span>
         </router-link>
         <router-link :to="{ name: 'duty-roster-graph', query: { view: 'loop' } }">
           <i class="fa fa-repeat" aria-hidden="true"></i>
-          <span><strong>Goals & Loops</strong><small>目标、执行与闭环账本</small></span>
+          <span><strong>目标与执行</strong></span>
         </router-link>
-      </section>
+      </nav>
 
-      <section class="council-panel" :class="{ ready: snapshot.live_summary?.strategic_council_ready }" aria-label="战略三席">
-        <div class="section-title-row">
-          <div>
-            <span class="section-kicker">战略三席 · 同一证据回执</span>
-            <h2>Persy 记事实，Para 跑目标，Retort 先反问再放行</h2>
-          </div>
-          <span class="council-state">{{ snapshot.live_summary?.strategic_council_ready ? '已打通' : '等待真实回执' }}</span>
-        </div>
+          </section>
+        </aside>
+      </div>
+
+      <section v-show="section === 'council'" class="council-panel" :class="{ ready: snapshot.live_summary?.strategic_council_ready }" aria-label="战略三席">
+        <h2 class="pane-title">战略协作 <span class="council-state">{{ snapshot.live_summary?.strategic_council_ready ? '已打通' : '待回执' }}</span></h2>
         <div class="council-grid">
           <article v-for="role in councilRoles" :key="role.key">
             <span>{{ role.eyebrow }}</span>
             <strong>{{ role.name }}</strong>
-            <p>{{ role.responsibility }}</p>
             <small :class="{ ok: role.ready }">{{ role.status }}</small>
           </article>
         </div>
@@ -116,70 +164,10 @@
         </dl>
       </section>
 
-      <section class="score-section">
-        <div class="section-heading">
-          <div>
-            <span class="section-kicker">七项真实进度</span>
-            <h2>源码能力、运行证据、部署证据、客户价值分层计算</h2>
-          </div>
-          <span class="schema-tag">{{ snapshot.schema_version }}</span>
-        </div>
-
-        <div class="dimension-grid">
-          <article v-for="dimension in snapshot.dimensions" :key="dimension.id" class="dimension-card" :class="`is-${dimension.status}`">
-            <header>
-              <div>
-                <span class="dimension-label">{{ dimension.label }}</span>
-                <strong>{{ dimension.progress }}%</strong>
-              </div>
-              <span class="status-chip">{{ dimension.status_label }}</span>
-            </header>
-            <div class="progress-track" :aria-label="`${dimension.label} ${dimension.progress}%`">
-              <span :style="{ width: `${dimension.progress}%` }"></span>
-            </div>
-            <p class="target-copy">{{ dimension.target }}</p>
-            <div class="next-gap">
-              <span>还差 {{ dimension.remaining }}%</span>
-              <strong>{{ dimension.next_gap }}</strong>
-            </div>
-            <details>
-              <summary>查看 {{ dimension.passed_gate_count }}/{{ dimension.total_gate_count }} 项证据门槛</summary>
-              <div class="gate-columns">
-                <div>
-                  <h3>已证明</h3>
-                  <ul>
-                    <li v-for="gate in dimension.evidence" :key="gate.key">
-                      <span>{{ gate.label }} · {{ gate.weight }}%</span>
-                      <small>{{ gate.evidence }}</small>
-                    </li>
-                    <li v-if="!dimension.evidence?.length" class="muted">暂无可计分证据</li>
-                  </ul>
-                </div>
-                <div>
-                  <h3>未闭环</h3>
-                  <ul>
-                    <li v-for="gate in dimension.gaps" :key="gate.key">
-                      <span>{{ gate.label }} · {{ gate.weight }}%</span>
-                      <small>{{ gate.gap }}</small>
-                    </li>
-                    <li v-if="!dimension.gaps?.length" class="muted">当前门槛已全部满足</li>
-                  </ul>
-                </div>
-              </div>
-            </details>
-          </article>
-        </div>
-      </section>
-
-      <section class="evidence-section">
+      <section v-show="section === 'evidence'" class="evidence-section">
+        <h2 class="pane-title">运行与证据明细</h2>
         <article class="live-card">
-          <div class="section-title-row">
-            <div>
-              <span class="section-kicker">当前运行真相</span>
-              <h2>不是源码声明</h2>
-            </div>
-            <span class="live-dot" :class="{ ok: snapshot.live_summary?.runtime_fresh }"></span>
-          </div>
+          <h2>运行指标</h2>
           <dl class="live-metrics">
             <div><dt>最新事件</dt><dd>{{ formatDate(snapshot.live_summary?.latest_event_at) }}</dd></div>
             <div><dt>最近完成</dt><dd>{{ snapshot.live_summary?.latest_complete_status || '无证据' }}</dd></div>
@@ -214,8 +202,7 @@
           </dl>
         </article>
         <article class="truth-card">
-          <span class="section-kicker">证据域</span>
-          <h2>哪些层已经有证据</h2>
+          <h2>证据来源</h2>
           <ul class="truth-list">
             <li v-for="(item, key) in snapshot.truth_domains" :key="key" :class="{ ok: item.available }">
               <i class="fa" :class="item.available ? 'fa-check-circle' : 'fa-circle-o'" aria-hidden="true"></i>
@@ -223,15 +210,17 @@
               <strong>{{ item.available ? '有证据' : '待证明' }}</strong>
             </li>
           </ul>
-          <p v-if="snapshot.warnings?.length" class="warning-copy">部分数据源不可用：{{ snapshot.warnings.join('；') }}</p>
         </article>
       </section>
+      </div>
     </template>
     <section v-else-if="loading" class="loading-panel">正在汇总审批、知识库、员工、Goals 与 Loop 账本……</section>
   </main>
 </template>
 
 <script setup lang="ts">
+import AdminSectionNav from '../components/admin/AdminSectionNav.vue'
+const section = ref('status')
 import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref } from 'vue'
 import { xcmaxOpsApi } from '@/api/xcmaxOps'
 
@@ -280,14 +269,14 @@ const blockingGateKeys = computed<string[]>(() =>
 const councilRoles = computed(() => {
   const roles = snapshot.value?.live_summary?.strategic_council_roles || {}
   const rows = [
-    { key: 'persy', eyebrow: '拟人', name: 'Persy', responsibility: '从知识库提供事实、历史与长期记忆', expected: 'grounded' },
-    { key: 'para', eyebrow: '排比', name: 'Para', responsibility: '把战略绑定到真实 Goal、Loop 与执行任务', expected: 'linked' },
-    { key: 'retort', eyebrow: '反问', name: 'Retort', responsibility: '意图不清先澄清（Boss 问答页），未对齐或未回答就阻止部署', expected: 'aligned' },
+    { key: 'persy', eyebrow: '拟人', name: 'Persy', expected: 'grounded' },
+    { key: 'para', eyebrow: '排比', name: 'Para', expected: 'linked' },
+    { key: 'retort', eyebrow: '反问', name: 'Retort', expected: 'aligned' },
   ]
   return rows.map((row) => {
     const detail = roles[row.key] || {}
     const status = String(detail.status || 'awaiting_receipt')
-    return { ...row, status, ready: status === row.expected }
+    return { ...row, status: ({ grounded: '已核实', linked: '已关联', aligned: '已对齐', awaiting_receipt: '待回执' } as Record<string, string>)[status] || status, ready: status === row.expected }
   })
 })
 

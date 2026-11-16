@@ -84,7 +84,10 @@ def test_all_roles_resume_in_order_and_reuse_completed_scout(incident, monkeypat
         saved = _claim(incident)
         assert saved["schema_version"] == 2
         assert [r["role"] for r in saved["team"]] == ["scout", "fix", "verify"]
-        assert next(r for r in saved["team"] if r["role"] == role)["status"] == "dispatching"
+        assert (
+            next(r for r in saved["team"] if r["role"] == role)["status"]
+            == "dispatching"
+        )
         assert runtime["wait_for_para"] is False
         if role in {"scout", "verify"}:
             assert runtime["report_only"] is True
@@ -155,7 +158,27 @@ def test_ready_plan_resumes_without_any_pending_receipt(incident, monkeypatch):
     assert calls == ["scout", "fix"]
 
 
-def test_late_receipt_wakes_next_role_and_does_not_share_old_claim(incident, monkeypatch):
+def test_github_receipt_is_read_from_cloud_coordinator(incident, monkeypatch):
+    monkeypatch.setenv("MODSTORE_PARA_GITHUB_API_BASE", "https://para.example.test")
+
+    def execute(*args, **kwargs):
+        result = _accepted("scout")
+        result["result"]["outputs"][0]["executor"] = "github_actions"
+        return result
+
+    monkeypatch.setattr(team, "_execute_employee_task_with_timeout", execute)
+    team.dispatch_incident_team(incident)
+    seen = []
+    completion.reconcile_pending_teams(
+        event_id=incident,
+        fetcher=lambda base, tid: seen.append((base, tid)) or _terminal(tid, "running"),
+    )
+    assert seen == [("https://para.example.test", "p-scout")]
+
+
+def test_late_receipt_wakes_next_role_and_does_not_share_old_claim(
+    incident, monkeypatch
+):
     calls = []
     monkeypatch.setattr(
         team,
@@ -220,7 +243,9 @@ def test_customer_checks_are_not_promoted_into_server_plan(incident, monkeypatch
     monkeypatch.setattr(
         team,
         "_execute_employee_task_with_timeout",
-        lambda employee, task, runtime, **kw: (seen.append(runtime) or _accepted(runtime["role"])),
+        lambda employee, task, runtime, **kw: (
+            seen.append(runtime) or _accepted(runtime["role"])
+        ),
     )
     team.dispatch_incident_team(incident)
     assert "independent_checks" not in seen[0]
@@ -235,7 +260,8 @@ def test_fresh_reopen_starts_but_old_event_cannot_advance(incident, monkeypatch)
         team,
         "_execute_employee_task_with_timeout",
         lambda employee, task, runtime, **kw: (
-            calls.append((runtime["event_id"], runtime["role"])) or _accepted(runtime["role"])
+            calls.append((runtime["event_id"], runtime["role"]))
+            or _accepted(runtime["role"])
         ),
     )
     sf = models.get_session_factory()
@@ -290,7 +316,10 @@ def test_fresh_reopen_starts_but_old_event_cannot_advance(incident, monkeypatch)
         resolution = json.loads(db.get(CustomerServiceTicket, ticket_id).evidence_json)[
             "resolution"
         ]
-        assert resolution["incident_event_id"] == new_id and resolution["state"] == "processing"
+        assert (
+            resolution["incident_event_id"] == new_id
+            and resolution["state"] == "processing"
+        )
 
 
 def test_interrupted_followup_without_receipt_requires_readback(incident, monkeypatch):
@@ -333,7 +362,9 @@ def test_interrupted_followup_without_receipt_requires_readback(incident, monkey
     assert calls == ["scout"]
 
 
-def test_legacy_claim_without_complete_plan_only_reads_original_task(incident, monkeypatch):
+def test_legacy_claim_without_complete_plan_only_reads_original_task(
+    incident, monkeypatch
+):
     monkeypatch.setenv("MODSTORE_INCIDENT_TEAM_HANDLER_FAILED_FOLLOWUP", "1")
     calls = []
     monkeypatch.setattr(
@@ -350,7 +381,9 @@ def test_legacy_claim_without_complete_plan_only_reads_original_task(incident, m
         payload["_team_claim"].pop("plan")
         event.payload_json = json.dumps(payload)
         db.commit()
-    completion.reconcile_pending_teams(event_id=incident, fetcher=lambda base, tid: _terminal(tid))
+    completion.reconcile_pending_teams(
+        event_id=incident, fetcher=lambda base, tid: _terminal(tid)
+    )
     assert calls == ["scout"]
     assert _claim(incident)["team"][0]["ok"] is True
     assert _claim(incident)["team"][1]["status"] == "planned"

@@ -5,10 +5,13 @@
  * 返回侧栏列表渲染所需的全部 computeds/函数。父组件通过
  * selectConversation / activatePinnedEntry 回调驱动会话切换。
  */
-import { computed, type Ref } from 'vue'
+import { computed, ref, type Ref } from 'vue'
+import { openimGroupUnread } from './useOpenIMGroup'
 import { type ImContact, type ImConversationSummary } from '@/api/im'
+import type { AiGroup } from '@/api/aiGroups'
 import { EMPLOYEE_AVATAR_POOL } from '@/utils/employeeAvatar'
 import {
+  AI_GROUP_CHAT_ENTRY,
   CLAUDE_SUPER_EMPLOYEE_ENTRY,
   CODEX_SUPER_EMPLOYEE_ENTRY,
   CURSOR_SUPER_EMPLOYEE_ENTRY,
@@ -43,6 +46,8 @@ export type UseConversationListParams = {
   activeSystemEntry: Ref<SystemEmployeeEntry | null>
   activeExternalEntry: Ref<ExternalAppEntry | null>
   activeGroupChat: Ref<boolean>
+  groups?: Ref<AiGroup[]>
+  activeAiGroupId?: Ref<string | null>
   isAdminCustomerServiceConsole: Ref<boolean>
   selectConversation: (id: number) => Promise<void>
   activatePinnedEntry: (entry: PinnedImEntry) => Promise<void>
@@ -57,6 +62,8 @@ export function useConversationList(params: UseConversationListParams) {
     activeSystemEntry,
     activeExternalEntry,
     activeGroupChat,
+    groups = ref([]),
+    activeAiGroupId = ref(null),
     isAdminCustomerServiceConsole,
     selectConversation,
     activatePinnedEntry,
@@ -76,7 +83,8 @@ export function useConversationList(params: UseConversationListParams) {
 
   const pinnedContacts = computed<PinnedImEntry[]>(() => {
     if (isAdminCustomerServiceConsole.value) {
-      return [CODEX_SUPER_EMPLOYEE_ENTRY, CURSOR_SUPER_EMPLOYEE_ENTRY, CLAUDE_SUPER_EMPLOYEE_ENTRY, ...dutyEmployees.value]
+      return [...groups.value.map(group => ({ ...AI_GROUP_CHAT_ENTRY, id: `ai-group-${group.id}`, group_id: group.id, members: group.members,
+        display_name: group.name, subtitle: group.last_message_preview || `${group.member_count} 个 AI 成员` })), CODEX_SUPER_EMPLOYEE_ENTRY, CURSOR_SUPER_EMPLOYEE_ENTRY, CLAUDE_SUPER_EMPLOYEE_ENTRY, ...dutyEmployees.value]
     }
     // 企业专属客服固定顶置，其余编制员工排在其后。
     return [
@@ -119,7 +127,7 @@ export function useConversationList(params: UseConversationListParams) {
 
   function isPinnedContactActive(contact: PinnedImEntry): boolean {
     if (isExternalAppEntry(contact)) return activeExternalEntry.value?.id === contact.id
-    if (isAiGroupChatEntry(contact)) return activeGroupChat.value
+    if (isAiGroupChatEntry(contact)) return activeGroupChat.value && contact.group_id === activeAiGroupId.value
     if (isSuperEmployeeEntry(contact)) {
       return activeSystemEntry.value?.id === contact.id
     }
@@ -226,7 +234,8 @@ export function useConversationList(params: UseConversationListParams) {
   }
 
   function sidebarItemUnread(item: ImSidebarListItem): number {
-    return item.kind === 'conversation' ? item.conversation.unread_count || 0 : 0
+    if (item.kind === 'conversation') return item.conversation.unread_count || 0
+    return isAiGroupChatEntry(item.entry) ? openimGroupUnread[item.entry.group_id || ''] || 0 : 0
   }
 
   function selectSidebarItem(item: ImSidebarListItem): void {

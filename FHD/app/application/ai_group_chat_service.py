@@ -416,6 +416,10 @@ class AiGroupChatService:
 
     @_with_bound_tenant
     def delete_group(self, *, user_id: int, group_id: str) -> dict[str, Any]:
+        from app.infrastructure.im.openim import enabled
+
+        if enabled():
+            raise ValueError("迁移验收期间暂不支持删除，请保留消息用于核对")
         if self._deny_unscoped():
             raise ValueError("群不存在")
         return self._catalog.delete_group(user_id=user_id, group_id=group_id)
@@ -493,6 +497,10 @@ class AiGroupChatService:
 
     @_with_bound_tenant
     def delete_message(self, *, user_id: int, group_id: str, message_id: str) -> dict[str, Any]:
+        from app.infrastructure.im.openim import enabled
+
+        if enabled():
+            raise ValueError("迁移验收期间暂不支持删除，请保留消息用于核对")
         if self._deny_unscoped():
             raise ValueError("群不存在")
         return self._conversation.delete_message(
@@ -725,7 +733,13 @@ class AiGroupChatService:
 
     @_with_bound_tenant
     def _append_messages(self, messages: list[dict[str, Any]]) -> None:
-        return self._storage.append_messages(messages)
+        self._storage.append_messages(messages)
+        from app.infrastructure.im.openim import OpenIMGroups, enabled
+
+        if enabled():
+            transport = OpenIMGroups(self._storage)
+            for user_id, group_id in {(int(m["user_id"]), str(m["group_id"])) for m in messages}:
+                transport.sync(user_id, group_id)
 
     @_with_bound_tenant
     def _rewrite_messages(self, messages: list[dict[str, Any]]) -> None:

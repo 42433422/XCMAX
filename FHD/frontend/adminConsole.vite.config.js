@@ -3,6 +3,7 @@
  * 入口：admin-console/index.html → admin-console/src/main.ts → frontend/src/main.ts
  */
 import { defineConfig } from 'vite'
+import { openimAssets } from './vite/openimAssets.js'
 import vue from '@vitejs/plugin-vue'
 import { routerDevtoolsNullGuard } from './vite/routerDevtoolsGuard.js'
 import VueI18n from '@intlify/unplugin-vue-i18n/vite'
@@ -104,6 +105,7 @@ function buildDevProxy(apiBase) {
 export default defineConfig(() => ({
   root: adminRoot,
   plugins: [
+    openimAssets(),
     createAdminConsoleAtAliasPlugin(hostRoot),
     createWorkflowComponentsAliasPlugin(hostRoot),
     vue(),
@@ -171,15 +173,15 @@ export default defineConfig(() => ({
       },
       {
         find: '@admin-console-inject/employeeWorkspace/EmployeeWorkspaceLoopConsole.vue',
-        replacement: path.join(hostSrc, 'components/employeeWorkspace/EmployeeWorkspaceLoopConsole.vue'),
+        replacement: path.join(adminSrc, 'components/workflow/GithubEmployeeWorkspace.vue'),
       },
       {
         find: /^@vue-office\/docx$/,
-        replacement: path.join(hostRoot, 'node_modules/@vue-office/docx'),
+        replacement: path.join(hostRoot, 'node_modules/@vue-office/docx/lib/v3/index.js'),
       },
       {
         find: /^@vue-office\/pptx$/,
-        replacement: path.join(hostRoot, 'node_modules/@vue-office/pptx'),
+        replacement: path.join(hostRoot, 'node_modules/@vue-office/pptx/lib/v3/index.js'),
       },
       { find: '@host', replacement: hostSrc },
       { find: '@', replacement: hostSrc },

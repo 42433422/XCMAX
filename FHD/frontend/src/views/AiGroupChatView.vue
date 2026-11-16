@@ -1,7 +1,7 @@
 <template>
   <div class="aigc">
     <!-- 左：群列表 -->
-    <aside class="aigc-list">
+    <aside v-if="!group" class="aigc-list">
       <div class="aigc-list__head">
         <span>群聊</span>
         <button class="aigc-icon-btn" title="创建群聊" @click="onCreateGroup">＋</button>
@@ -14,7 +14,7 @@
           :class="{ 'is-active': activeGroup && activeGroup.id === g.id }"
           @click="selectGroup(g)"
         >
-          <div class="aigc-group__avatar">群</div>
+          <GroupAvatar :name="g.name" :members="g.members" />
           <div class="aigc-group__main">
             <div class="aigc-group__name">{{ g.name }}</div>
             <div class="aigc-group__sub">
@@ -28,72 +28,22 @@
 
     <!-- 右：会话 -->
     <section class="aigc-chat" v-if="activeGroup">
-      <header class="aigc-chat__head">
-        <div>
-          <div class="aigc-chat__title">{{ activeGroup.name }}</div>
-          <div class="aigc-chat__sub" v-if="activeGroup.member_count">{{ activeGroup.member_count }} 个 AI 成员</div>
-        </div>
-        <button class="aigc-text-btn" @click="showMembers = !showMembers">群成员</button>
-      </header>
-
-      <div class="aigc-chat__body" ref="bodyRef">
-        <div
-          v-for="m in messages"
-          :key="m.id"
-          class="aigc-msg"
-          :class="{
-            'is-user': m.role === 'user',
-            [messageUi(m).bubbleClass]: Boolean(messageUi(m).bubbleClass),
-          }"
-        >
-          <div v-if="m.role !== 'user'" class="aigc-msg__avatar">
-            <img
-              v-if="messageAvatarSrc(m)"
-              class="aigc-msg__avatar-img"
-              :src="messageAvatarSrc(m) || undefined"
-              alt=""
-              decoding="async"
-              draggable="false"
-            />
-            <template v-else>{{ (m.sender_name || 'AI').slice(0, 1) }}</template>
-          </div>
-          <div class="aigc-msg__col">
-            <div v-if="m.role !== 'user'" class="aigc-msg__sender">{{ m.sender_name }}</div>
-            <div
-              v-if="messageUi(m).badge"
-              class="aigc-msg__badge"
-              :class="{ 'is-review': messageUi(m).needsReview }"
-            >
-              {{ messageUi(m).badge }}
-            </div>
-            <div class="aigc-msg__bubble">{{ m.body }}</div>
-          </div>
-        </div>
-        <div v-if="sending" class="aigc-typing">{{ sendingLabel }}</div>
-        <div v-if="!messages.length && !sending" class="aigc-empty">
-          {{ activeGroup.member_count ? '群里安静得很，发条消息试试' : '点「群成员」把 AI 员工拉进群，然后开聊' }}
-        </div>
+      <div v-if="chatError || transport.error.value" class="aigc-error" role="alert">
+        {{ chatError || transport.error.value }}
+        <button class="aigc-text-btn" :disabled="sending" @click="selectGroup(activeGroup)">重新连接</button>
       </div>
 
-      <footer class="aigc-chat__input">
-        <input
-          v-model="input"
-          class="aigc-input"
-          :placeholder="inputPlaceholder"
-          :disabled="sending"
-          @keyup.enter="send"
-        />
-        <button
-          type="button"
-          class="aigc-mode"
-          :class="{ 'is-active': dispatchMode }"
-          :disabled="sending"
-          @click="dispatchMode = !dispatchMode"
-        >
-          派工
-        </button>
-        <button class="aigc-send" :disabled="!input.trim() || sending" @click="send">发送</button>
-      </footer>
+      <MatureChat :room-id="activeGroup.id" :title="activeGroup.name"
+        :subtitle="`${activeGroup.member_count} 个 AI 成员${transport.active.value ? (transport.connected.value ? ' · 已连接' : ' · 连接中') : ''}`"
+        :rows="chatRows" v-model:draft="input" :disabled="sending || loading || (transport.active.value && !transport.connected.value)"
+        :busy-label="sending ? sendingLabel : '正在连接…'" :has-more="transport.hasOlder.value" :placeholder="inputPlaceholder"
+        @send="send" @load-older="loadOlder">
+        <template #avatar><GroupAvatar :name="activeGroup.name" :members="activeGroup.members" /></template>
+        <template #actions>
+          <button class="aigc-text-btn" :class="{ 'is-active': dispatchMode }" :aria-pressed="dispatchMode" :disabled="sending" @click="dispatchMode = !dispatchMode">派工</button>
+          <button class="aigc-text-btn" :aria-expanded="showMembers" @click="showMembers = !showMembers">群成员</button>
+        </template>
+      </MatureChat>
     </section>
     <section class="aigc-chat aigc-chat--empty" v-else>
       <div class="aigc-empty">选择左侧的群开始聊天</div>
@@ -101,7 +51,7 @@
 
     <!-- 群成员抽屉 -->
     <aside class="aigc-members" v-if="showMembers && activeGroup">
-      <div class="aigc-members__head">群成员（{{ activeGroup.member_count }}）</div>
+      <div class="aigc-members__head">群成员（{{ activeGroup.member_count }}）<button class="aigc-text-btn" @click="showMembers = false">关闭</button></div>
       <div v-for="mem in activeGroup.members" :key="mem.employee_id" class="aigc-member">
         <div class="aigc-member__main">
           <div class="aigc-member__avatar">
@@ -143,7 +93,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
+import MatureChat from '@/components/im/MatureChat.vue';
+import GroupAvatar from '@/components/im/GroupAvatar.vue';
+import { employeeAvatarUrl } from '@/utils/employeeAvatar';
 import {
   addAiGroupMember,
   createAiGroup,
@@ -158,18 +111,37 @@ import {
 import { resolveSuperEmployeeAvatarSrc } from '@/constants/superEmployeeAvatars';
 import { apiFetch } from '@/utils/apiBase';
 import { groupSendingLabel, resolveAiGroupMessageUi } from '@/utils/aiGroupMessageUi';
+import { useOpenIMGroup } from '@/composables/messenger/useOpenIMGroup';
 
 type PickEmployee = { employee_id: string; mod_id: string; name: string; avatar: string; summary: string };
 
+const props = defineProps<{ group?: AiGroup }>();
+const emit = defineEmits<{ (event: 'group-updated', group: AiGroup): void }>();
 const groups = ref<AiGroup[]>([]);
 const activeGroup = ref<AiGroup | null>(null);
 const messages = ref<AiGroupMessage[]>([]);
 const employees = ref<PickEmployee[]>([]);
 const input = ref('');
 const sending = ref(false);
+const loading = ref(false);
+let selection = 0;
 const showMembers = ref(false);
 const dispatchMode = ref(false);
-const bodyRef = ref<HTMLElement | null>(null);
+const chatError = ref('');
+function mergeMessages(rows: AiGroupMessage[]) {
+  const existing = messages.value.filter(m => !m.id.startsWith('local-') || !rows.some(row => row.role === 'user' && row.body === m.body));
+  messages.value = [...new Map([...existing, ...rows].map(row => [row.id, row])).values()]
+    .sort((a, b) => a.created_at.localeCompare(b.created_at));
+}
+const transport = useOpenIMGroup(mergeMessages);
+const chatRows = computed(() => messages.value.map(m => ({ id: m.id, body: m.body,
+  mine: m.role === 'user', sender: m.sender_name, avatar: messageAvatarSrc(m), at: m.created_at,
+  label: messageUi(m).badge,
+})));
+async function loadOlder() {
+  try { await transport.history(true); }
+  catch { chatError.value = '历史消息加载失败，请重试'; }
+}
 
 const addableEmployees = computed(() => {
   const inGroup = new Set((activeGroup.value?.members || []).map((m: AiGroupMember) => m.employee_id));
@@ -189,13 +161,13 @@ function messageUi(m: AiGroupMessage) {
 function withBaseUrl(path: string): string {
   const raw = String(path || '').trim();
   if (!raw) return '';
-  if (/^https?:\/\//i.test(raw)) return raw;
+  if (/^(https?:|data:|blob:|\/)/i.test(raw)) return raw;
   const base = String(import.meta.env.BASE_URL || '/');
   return `${base.replace(/\/$/, '')}/${raw.replace(/^\//, '')}`;
 }
 
 function memberAvatarSrc(member: AiGroupMember): string | null {
-  const resolved = resolveSuperEmployeeAvatarSrc(member.employee_id, member.avatar);
+  const resolved = resolveSuperEmployeeAvatarSrc(member.employee_id, member.avatar) || employeeAvatarUrl(member.employee_id);
   return resolved ? withBaseUrl(resolved) : null;
 }
 
@@ -219,39 +191,52 @@ async function loadGroups(): Promise<void> {
 }
 
 async function selectGroup(g: AiGroup): Promise<void> {
+  const selected = ++selection;
+  loading.value = true;
   activeGroup.value = g;
   messages.value = [];
+  chatError.value = '';
   try {
-    messages.value = await fetchAiGroupMessages(g.id, 'admin');
-    await scrollToBottom();
+    const enabled = await transport.start(g.id);
+    if (selected !== selection) return;
+    if (!enabled) {
+      const rows = await fetchAiGroupMessages(g.id, 'admin');
+      if (selected !== selection) return;
+      messages.value = rows;
+    }
   } catch {
-    /* ignore */
+    if (selected === selection) chatError.value = '消息加载失败，请重新连接';
+  } finally {
+    if (selected === selection) loading.value = false;
   }
 }
 
 async function send(): Promise<void> {
   const text = input.value.trim();
   const g = activeGroup.value;
-  if (!text || !g || sending.value) return;
+  if (!text || !g || sending.value || loading.value || (transport.active.value && !transport.connected.value)) return;
   input.value = '';
   messages.value = [
     ...messages.value,
-    { id: `local-${messages.value.length}`, group_id: g.id, role: 'user', sender_id: 'user', sender_name: '我', sender_avatar: '', body: text, created_at: '' },
+    { id: `local-${messages.value.length}`, group_id: g.id, role: 'user', sender_id: 'user', sender_name: '我', sender_avatar: '', body: text, created_at: new Date().toISOString() },
   ];
   sending.value = true;
-  await scrollToBottom();
+  chatError.value = '';
   try {
     const res = await postAiGroupMessage(g.id, text, [], 'admin', { dispatch: dispatchMode.value });
-    messages.value = [...messages.value.filter((m) => !m.id.startsWith('local-')), ...res.messages];
+    messages.value = messages.value.filter((m) => !m.id.startsWith('local-'));
+    mergeMessages(res.messages);
     if (res.group) {
+      emit('group-updated', res.group);
       activeGroup.value = res.group;
       groups.value = groups.value.map((x) => (x.id === res.group!.id ? res.group! : x));
     }
   } catch {
-    /* ignore */
+    messages.value = messages.value.filter((m) => !m.id.startsWith('local-'));
+    input.value = text;
+    chatError.value = '发送结果尚未确认，请重新连接核对消息，避免重复派工';
   } finally {
     sending.value = false;
-    await scrollToBottom();
   }
 }
 
@@ -272,6 +257,7 @@ async function addMember(e: PickEmployee): Promise<void> {
   try {
     const updated = await addAiGroupMember(g.id, e, 'admin');
     if (updated) {
+      emit('group-updated', updated);
       activeGroup.value = updated;
       groups.value = groups.value.map((x) => (x.id === updated.id ? updated : x));
     }
@@ -286,6 +272,7 @@ async function removeMember(employeeId: string): Promise<void> {
   try {
     const updated = await removeAiGroupMember(g.id, employeeId, 'admin');
     if (updated) {
+      emit('group-updated', updated);
       activeGroup.value = updated;
       groups.value = groups.value.map((x) => (x.id === updated.id ? updated : x));
     }
@@ -314,26 +301,22 @@ async function loadEmployees(): Promise<void> {
   }
 }
 
-async function scrollToBottom(): Promise<void> {
-  await nextTick();
-  const el = bodyRef.value;
-  if (el) el.scrollTop = el.scrollHeight;
-}
-
 onMounted(() => {
-  loadGroups();
+  if (props.group) void selectGroup(props.group);
+  else void loadGroups();
   loadEmployees();
 });
 </script>
 
 <style scoped>
-.aigc { display: flex; height: 100%; min-height: 0; background: var(--color-bg, #f5f6f7); }
+.aigc-error { padding: 8px 18px; background: var(--color-warning-soft, #fff7e6); font-size: 13px; }
+.aigc { position:relative; display: flex; height: 100%; min-height: 0; background: var(--color-bg, #f5f6f7); }
 .aigc-list { width: 280px; border-right: 1px solid var(--color-border, #e5e7eb); background: var(--color-surface, #fff); display: flex; flex-direction: column; }
 .aigc-list__head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; font-weight: 600; border-bottom: 1px solid var(--color-border, #e5e7eb); }
 .aigc-list__body { overflow-y: auto; flex: 1; }
 .aigc-group { display: flex; gap: 10px; align-items: center; width: 100%; padding: 12px 16px; border: none; background: none; cursor: pointer; text-align: left; border-bottom: 1px solid var(--color-border-weak, #f0f0f0); }
 .aigc-group.is-active { background: var(--color-primary-soft, #eef4ff); }
-.aigc-group__avatar { width: 40px; height: 40px; border-radius: 9px; background: #3370ff22; color: #3370ff; display: flex; align-items: center; justify-content: center; font-size: 14px; flex: none; }
+.aigc-chat__identity { display:flex; align-items:center; gap:10px; min-width:0; }
 .aigc-group__main { min-width: 0; }
 .aigc-group__name { font-size: 14px; font-weight: 500; }
 .aigc-group__sub { font-size: 12px; color: var(--color-text-2, #888); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -342,41 +325,7 @@ onMounted(() => {
 .aigc-chat__head { display: flex; align-items: center; justify-content: space-between; padding: 12px 18px; border-bottom: 1px solid var(--color-border, #e5e7eb); background: var(--color-surface, #fff); }
 .aigc-chat__title { font-weight: 600; }
 .aigc-chat__sub { font-size: 12px; color: var(--color-text-2, #888); }
-.aigc-chat__body { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; }
-.aigc-msg { display: flex; gap: 8px; align-items: flex-start; max-width: 72%; }
-.aigc-msg.is-user { align-self: flex-end; flex-direction: row-reverse; }
-.aigc-msg__avatar { width: 34px; height: 34px; border-radius: 8px; background: #5b8def22; color: #3a5bb8; display: flex; align-items: center; justify-content: center; font-size: 13px; flex: none; overflow: hidden; }
-.aigc-msg__avatar-img { width: 100%; height: 100%; display: block; object-fit: cover; }
-.aigc-msg__col { display: flex; flex-direction: column; }
-.aigc-msg__sender { font-size: 11px; color: var(--color-text-2, #999); margin: 0 2px 3px; }
-.aigc-msg__bubble { padding: 9px 12px; border-radius: 10px; background: var(--color-surface, #fff); border: 1px solid var(--color-border-weak, #eee); font-size: 14px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
-.aigc-msg.is-user .aigc-msg__bubble { background: #95ec69; border-color: #7fd957; color: #1f2329; }
-.aigc-msg__badge {
-  display: inline-block;
-  margin: 0 2px 4px;
-  padding: 1px 7px;
-  border-radius: 999px;
-  font-size: 10px;
-  font-weight: 600;
-  color: #245bdb;
-  background: #eef4ff;
-  border: 1px solid #c9dcff;
-}
-.aigc-msg__badge.is-review { color: #b45309; background: #fff7ed; border-color: #fed7aa; }
-.aigc-msg.is-discussion .aigc-msg__bubble { border-color: #7c3aed44; background: #faf5ff; }
-.aigc-msg.is-routing .aigc-msg__bubble { border-color: #0d948844; background: #f0fdfa; }
-.aigc-msg.is-work .aigc-msg__bubble { border-color: #5b8def55; background: #f7fbff; }
-.aigc-msg.is-acceptance .aigc-msg__bubble { border-color: #16a34a55; background: #f0fdf4; }
-.aigc-msg.is-acceptance-review .aigc-msg__bubble { border-color: #ea580c55; background: #fff7ed; }
-.aigc-typing { font-size: 12px; color: var(--color-text-2, #999); }
-.aigc-chat__input { display: flex; gap: 10px; padding: 12px 16px; border-top: 1px solid var(--color-border, #e5e7eb); background: var(--color-surface, #fff); }
-.aigc-input { flex: 1; border: 1px solid var(--color-border, #ddd); border-radius: 8px; padding: 9px 12px; font-size: 14px; outline: none; }
-.aigc-mode { border: 1px solid var(--color-border, #ddd); background: var(--color-surface, #fff); color: var(--color-text-1, #333); border-radius: 8px; padding: 0 12px; font-size: 13px; cursor: pointer; }
-.aigc-mode.is-active { border-color: #3370ff; background: #eef4ff; color: #245bdb; font-weight: 600; }
-.aigc-mode:disabled { color: #9ca3af; cursor: not-allowed; }
-.aigc-send { padding: 0 18px; border: none; border-radius: 8px; background: #07c160; color: #fff; cursor: pointer; }
-.aigc-send:disabled { background: #c8c9cc; cursor: not-allowed; }
-.aigc-members { width: 240px; border-left: 1px solid var(--color-border, #e5e7eb); background: var(--color-surface, #fff); padding: 12px 14px; overflow-y: auto; }
+.aigc-members { position:absolute; z-index:3; right:0; top:64px; bottom:0; width:min(280px, 85%); box-sizing:border-box; box-shadow:-8px 0 24px #182b4910; border-left: 1px solid var(--color-border, #e5e7eb); background: var(--color-surface, #fff); padding: 12px 14px; overflow-y: auto; }
 .aigc-members__head { font-size: 12px; color: var(--color-text-2, #888); margin: 12px 0 6px; }
 .aigc-member { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 8px 4px; border: none; background: none; border-bottom: 1px solid var(--color-border-weak, #f0f0f0); cursor: default; gap: 8px; }
 .aigc-member__main { display: flex; align-items: center; gap: 8px; min-width: 0; }
@@ -387,6 +336,7 @@ onMounted(() => {
 .aigc-member__add { color: #3370ff; }
 .aigc-icon-btn { border: none; background: none; font-size: 18px; cursor: pointer; color: var(--color-text-2, #666); }
 .aigc-text-btn { border: 1px solid var(--color-border, #ddd); background: none; border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
+.aigc-text-btn.is-active { background:#e6efff; color:#245bdb; border-color:#c7d9ff; }
 .aigc-text-btn--danger { color: #e34d59; border-color: #f0c2c5; }
 .aigc-empty { color: var(--color-text-2, #999); font-size: 13px; padding: 20px; text-align: center; }
 .aigc-empty--sm { padding: 8px; text-align: left; }

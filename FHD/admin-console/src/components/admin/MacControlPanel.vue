@@ -1,6 +1,6 @@
 <template>
   <section class="mac-control" aria-label="Mac 主控协同">
-    <header><div><h3>Mac 主控 · {{ fleet?.devices.length || 0 }} 台设备</h3><p>服务器保存任务与回执，Mac 主控编排执行。</p></div><button :disabled="loading" @click="refresh">刷新</button></header>
+    <header><div><h3>Mac 主控 · {{ fleet?.devices.length || 0 }} 台设备</h3></div><button :disabled="loading" @click="refresh">刷新</button></header>
     <p v-if="error" role="alert">{{ error }}</p>
     <p v-if="fleet">{{ fleet.enabled ? '已启用' : '尚未启用新派工' }} · {{ fleet.freshness === 'fresh' && !fleet.error ? '数据已同步' : '数据缺失或过期，等待同步' }} · {{ stamp(fleet.observed_at) }}</p>
     <p v-if="fleet?.error">连接状态：{{ fleet.error }}</p>
@@ -19,7 +19,6 @@
       <label v-if="target === 'mac' && mode === 'code'"><input v-model="verifyWindows" type="checkbox" />代码推送后交给 Windows 验证同一提交</label>
       <button :disabled="sending || !draft.trim() || !fleet?.enabled">{{ sending ? '保存中…' : '交给主控' }}</button>
     </form>
-    <p>客户安装与业务验收独立核对；执行器报告完成不等于已交付。</p>
     <ul class="tasks"><li v-for="task in tasks" :key="task.id"><button @click="inspect(task.id)">{{ promptPreview(task.request.message) }}</button><span>{{ label(task.state) }} · {{ stamp(task.updated_at) }}</span><small v-if="task.reason" :title="task.reason">{{ reasonText(task.reason) }}</small><details><summary>查看完整任务提示词</summary><pre>{{ task.request.message }}</pre></details></li></ul>
     <article v-if="selected" class="detail">
       <details><summary>{{ promptPreview(selected.request.message) }}</summary><pre>{{ selected.request.message }}</pre></details><p>任务 {{ selected.id }} · Para {{ selected.para_task_id || '尚未派发' }} · 执行：{{ label(selected.state) }} · 客户验收：待业务回执核对</p>

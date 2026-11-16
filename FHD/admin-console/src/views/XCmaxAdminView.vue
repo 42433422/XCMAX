@@ -1,5 +1,5 @@
 <template>
-  <div class="xcmax-admin-view" id="view-xcmax-admin">
+  <div class="xcmax-admin-view admin-screen" id="view-xcmax-admin">
     <nav class="admin-tab-bar" role="tablist" aria-label="服务器后台分区">
       <button
         v-for="tab in adminTabs"
@@ -30,9 +30,10 @@
         </div>
       </div>
 
-      <div class="admin-grid">
+      <AdminSectionNav v-model="overviewSection" label="总览内容" :items="[{ value: 'health', label: '服务健康' }, { value: 'release', label: '版本发布' }, { value: 'sync', label: '同步与冲突' }, { value: 'modules', label: '模块注册' }, { value: 'employees', label: '远端员工' }]" />
+      <div class="admin-grid admin-pane" tabindex="0" aria-label="总览内容区">
         <!-- 本地节点 -->
-        <div class="admin-card">
+        <div v-show="overviewSection === 'health'" class="admin-card">
           <div class="card-header">
             <i class="fa fa-desktop card-icon" aria-hidden="true"></i>
             <h3>本地服务健康</h3>
@@ -50,7 +51,7 @@
         </div>
 
         <!-- 远端服务器 -->
-        <div class="admin-card">
+        <div v-show="overviewSection === 'health'" class="admin-card">
           <div class="card-header">
             <i class="fa fa-server card-icon" aria-hidden="true"></i>
             <h3>远端服务器</h3>
@@ -67,14 +68,14 @@
           </dl>
         </div>
 
-        <AdminReleaseStatusCard
+        <AdminReleaseStatusCard v-show="overviewSection === 'release'"
           ref="releaseStatusCard"
           :local-version="localStatus.version"
           @open-deploy="openDeployModal"
         />
 
         <!-- 自治健康 -->
-        <div class="admin-card">
+        <div v-show="overviewSection === 'health'" class="admin-card">
           <div class="card-header">
             <i class="fa fa-heartbeat card-icon" aria-hidden="true"></i>
             <h3>自治健康</h3>
@@ -101,7 +102,7 @@
         </div>
 
         <!-- 同步状态 -->
-        <div class="admin-card">
+        <div v-show="overviewSection === 'sync'" class="admin-card">
           <div class="card-header">
             <i class="fa fa-refresh card-icon" aria-hidden="true"></i>
             <h3>双向同步</h3>
@@ -128,7 +129,7 @@
         </div>
 
         <!-- 模块注册 -->
-        <div class="admin-card admin-card--wide">
+        <div v-show="overviewSection === 'modules'" class="admin-card admin-card--wide">
           <div class="card-header">
             <i class="fa fa-puzzle-piece card-icon" aria-hidden="true"></i>
             <h3>模块注册表</h3>
@@ -168,7 +169,7 @@
         </div>
 
         <!-- 远端员工 (yuangon) -->
-        <div class="admin-card admin-card--wide">
+        <div v-show="overviewSection === 'employees'" class="admin-card admin-card--wide">
           <div class="card-header">
             <i class="fa fa-users card-icon" aria-hidden="true"></i>
             <h3>远端服务器员工</h3>
@@ -199,7 +200,7 @@
         </div>
 
         <!-- 冲突列表 -->
-        <div class="admin-card admin-card--wide" v-if="syncStatus.conflictCount > 0">
+        <div v-show="overviewSection === 'sync'" class="admin-card admin-card--wide" v-if="syncStatus.conflictCount > 0">
           <div class="card-header">
             <i class="fa fa-exclamation-circle card-icon" style="color:#d97706" aria-hidden="true"></i>
             <h3>同步冲突</h3>
@@ -234,7 +235,7 @@
         </div>
 
         <!-- 最近错误 -->
-        <div class="admin-card admin-card--wide" v-if="recentErrors.length">
+        <div v-show="overviewSection === 'health'" class="admin-card admin-card--wide" v-if="recentErrors.length">
           <div class="card-header">
             <i class="fa fa-exclamation-triangle card-icon" aria-hidden="true"></i>
             <h3>最近错误</h3>
@@ -281,6 +282,8 @@ export default { name: 'XCmaxAdminView' }
 </script>
 
 <script setup>
+import AdminSectionNav from '../components/admin/AdminSectionNav.vue'
+const overviewSection = ref('health')
 import { onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import XCmaxAdminInfraTab from '@/components/admin/XCmaxAdminInfraTab.vue'

@@ -76,7 +76,6 @@ defineProps<{
         <div>
           <span>Policy</span>
           <strong>{{ runtimeContractOk ? 'allow view' : 'do not trust' }}</strong>
-          <small>完整 Loop 面板与员工空间、编制图谱共用同一 contract guard。</small>
         </div>
         <div>
           <span>Surface ready</span>

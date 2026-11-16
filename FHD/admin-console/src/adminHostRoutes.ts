@@ -37,7 +37,7 @@ export const ADMIN_HOST_ROUTE_RECORDS: RouteRecordRaw[] = [
     path: '/founder-autonomy',
     name: 'founder-autonomy',
     component: () => import('./views/FounderAutonomyView.vue'),
-    meta: { title: '创始人自治驾驶舱', requiresAdminAccount: true, hostAdmin: true },
+    meta: { title: '创始人状态', requiresAdminAccount: true, hostAdmin: true },
   },
   // #53：自动化方针仅保留总览页签；旧侧栏/直达路径重定向，避免重复入口
   {

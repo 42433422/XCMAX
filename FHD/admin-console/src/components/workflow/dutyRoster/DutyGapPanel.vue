@@ -25,7 +25,7 @@ defineProps<{
             <transition name="dg-slide-top">
               <div v-if="showGapPanel" class="dg-gap-panel">
                 <p v-if="gapFocusHint" class="dg-gap-hint">{{ gapFocusHint }}</p>
-                <details class="dg-gap-help"><summary>缺包、编制外与处理方式</summary><p>本端指提供当前运行数据的设备。缺包会影响依赖该包的本端执行，服务器调度另看运行回执；编制外包可按需保留。选择具体员工查看详情，核对市场权益和平台后安装需要的包。</p></details>
+                <details class="dg-gap-help"><summary>缺包、编制外与处理方式</summary></details>
                 <div class="dg-gap-summary">
                   <span class="dg-gap-pill dg-gap-pill--deployed">包已对齐 {{ gapSummary.deployed }}</span>
                   <span class="dg-gap-pill dg-gap-pill--missing">包或目录缺口 {{ gapSummary.missing }}</span>

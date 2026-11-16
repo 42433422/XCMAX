@@ -67,3 +67,102 @@
 #app .page-content :is(input, select, textarea)::placeholder {
   color: #94a3b8;
 }
+
+/* Fixed page tools with independently scrollable task content. Small screens retain document flow. */
+#app .admin-section-nav { display:flex; flex:0 0 auto; gap:20px; overflow-x:auto; border-bottom:1px solid var(--admin-border); margin:0 0 12px; }
+#app .admin-section-nav button { flex:0 0 auto; border:0; border-bottom:2px solid transparent; border-radius:0; padding:8px 2px; background:transparent; color:var(--admin-muted); cursor:pointer; }
+#app .admin-section-nav button[aria-pressed="true"] { border-bottom-color:var(--admin-primary); color:var(--admin-primary); font-weight:600; }
+#app .admin-pane { min-width:0; min-height:0; overflow:auto; overscroll-behavior:contain; scrollbar-gutter:stable; }
+#app .admin-pane:focus-visible { outline:2px solid var(--admin-primary); outline-offset:-2px; }
+#app .pane-title { padding:16px 0; }
+#app .work-order > summary { cursor:pointer; gap:16px; }
+#app .work-order > summary > span:not(.risk) { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#app .cs-metadata > summary { cursor:pointer; color:var(--admin-muted); padding-top:10px; }
+@media (min-width: 900px) and (min-height: 620px) {
+  #app :is(.admin-screen, #view-customer-service-tickets, .employee-autonomy-view) { display:flex; flex-direction:column; height:100%; min-height:0; overflow:hidden; box-sizing:border-box; padding-bottom:16px; }
+  #app :is(.admin-screen, #view-customer-service-tickets, .employee-autonomy-view) > * { flex-shrink:0; }
+  #app .admin-screen > .admin-pane { flex:1 1 0; min-height:0; }
+  #app .admin-screen > .page-content { display:flex; flex-direction:column; flex:1 1 0; min-height:0; overflow:hidden; padding:16px 20px; }
+  #app .admin-screen > .page-content > .admin-pane { flex:1 1 0; align-content:start; }
+  #app .admin-screen > .page-content > :not(.admin-pane) { flex-shrink:0; }
+  #app .admin-tab-bar { flex-wrap:nowrap; overflow-x:auto; white-space:nowrap; }
+  #app .admin-tab-panel > :is(.autonomy-tab,.automation-policy-panel,.admin-orders-tab,.xcmax-admin-duty,.xcmax-admin-infra) { display:flex; flex-direction:column; height:100%; min-height:0; overflow:auto; }
+  #app :is(.autonomy-tab,.automation-policy-panel) > .admin-pane { flex:1 1 0; }
+  #app :is(.autonomy-tab,.automation-policy-panel) > :not(.admin-pane) { flex-shrink:0; }
+  #app .autonomy-metrics { display:grid; gap:12px; }
+  #app .autonomy-metrics > .split { min-width:0; }
+  #app .autonomy-metrics .card { overflow:auto; max-height:320px; }
+  #app .founder-view { gap:12px; padding:16px 20px; }
+  #app .founder-view .metric-strip { padding:12px 0; }
+  #app .founder-view .metric-tile { gap:6px; }
+  #app .founder-view .dimension-summary { padding:6px 14px; }
+  #app .founder-view .section-heading { padding:12px 14px; }
+  #app .founder-pane .dashboard-body { grid-template-columns:minmax(0,1.5fr) minmax(230px,1fr); }
+  #app .founder-view :is(.warning-copy,.blocking-banner) { max-height:64px; overflow:auto; }
+  #app .founder-view .attention-card, #app .founder-view .shortcut-panel { padding:12px 16px; }
+  #app .founder-view .action-column { grid-template-columns:1fr; gap:12px; }
+  #app .founder-view .quick-links { margin-top:10px; gap:4px 12px; }
+  #app .founder-view .attention-list { max-height:180px; overflow:auto; }
+  #app .founder-view .dimension-detail { max-height:260px; overflow:auto; }
+  #app .modules-panel { display:flex; flex-direction:column; flex:1 1 0; min-height:0; }
+  #app .modules-panel .module-metrics { flex-shrink:0; padding:12px 0; margin-bottom:12px; }
+  #app .modules-panel .module-list { display:flex; flex-direction:column; flex:1 1 0; min-height:0; }
+  #app .modules-panel .module-toolbar { flex-shrink:0; padding:12px 16px; }
+  #app .modules-panel .table-scroll { flex:1 1 0; min-height:0; overflow:auto; }
+  #app :is(.data-table,.module-table,.cs-table,.order-table) thead { position:sticky; top:0; z-index:1; background:#f5f7fa; }
+  #app .delivery-center { padding:16px 20px; }
+  #app .delivery-hero { margin-bottom:12px; }
+  #app .delivery-tabs { margin-bottom:12px; }
+  #app .delivery-stats article { min-height:66px; padding:10px 14px; }
+  #app .employee-autonomy-view > section { flex:1 1 0; min-height:0; overflow:auto; }
+  #app .consistency-panel { display:flex; flex-direction:column; }
+  #app .consistency-grid { flex:1; min-height:0; grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-rows:repeat(2,minmax(0,1fr)); }
+  #app .consistency-card { min-height:0; overflow:auto; }
+  #app .cs-view { padding:16px 20px; }
+  #app #view-customer-service-tickets > section.cs-card { display:flex; flex-direction:column; flex:1 1 0; min-height:0; }
+  #app #view-customer-service-tickets .cs-table-wrap { flex:1 1 0; min-height:0; overflow:auto; }
+  #app .cs-pager { flex-shrink:0; }
+  #app .cs-detail { display:flex; flex-direction:column; flex:1 1 0; min-height:0; gap:12px; }
+  #app .cs-detail > .admin-pane { flex:1 1 0; display:flex; flex-direction:column; gap:12px; }
+  #app .cs-detail > .admin-pane > * { flex-shrink:0; }
+  #app .cs-detail > .cs-hero { flex-shrink:0; max-height:42vh; overflow:auto; }
+  #app .cs-hero .cs-steps { margin:12px 0; }
+  #app .admin-entitlements-view > .page-content { height:100%; min-height:0; display:flex; flex-direction:column; overflow:hidden; padding-bottom:16px; }
+  #app .admin-entitlements-view .admin-user-grid { flex:1 1 0; min-height:0; overflow:auto; }
+  #app .xcmax-dashboard-embed { flex:1 1 0; min-height:0; height:100%; }
+  #app .xcmax-dashboard-embed__frame { height:100%; min-height:0; }
+}
+@media (max-width:899px), (max-height:619px) {
+  #app .admin-screen { height:100%; min-height:0; overflow:auto; }
+  #app .admin-pane { overflow:visible; }
+  #app .admin-section-nav { position:sticky; top:0; background:var(--admin-bg,#f5f7fa); z-index:2; }
+}
+@media (min-width:900px) and (min-height:620px) {
+  #app :is(.xcmax-admin-infra,.xcmax-admin-ops,.admin-orders-tab) { display:flex; flex-direction:column; min-height:0; }
+  #app :is(.xcmax-admin-infra,.xcmax-admin-ops,.admin-orders-tab) > .admin-pane { flex:1 1 0; }
+  #app :is(.xcmax-admin-infra,.xcmax-admin-ops,.admin-orders-tab) > :not(.admin-pane) { flex-shrink:0; }
+  #app .xcmax-admin-duty > .xcmax-admin-ops { flex:1 1 0; overflow:hidden; }
+  #app .admin-entitlements-view :is(.admin-user-detail,.admin-create-account) { flex:1 1 0; min-height:0; overflow:auto; }
+  #app .admin-entitlements-view .admin-user-detail__head { position:sticky; top:0; z-index:2; background:#fff; padding:12px 0; }
+  #app .admin-entitlements-view .admin-user-grid { align-content:start; }
+}
+@media (min-width:900px) and (min-height:620px) {
+  #app .settings-page__scroll { height:100%; overflow:hidden; }
+  #app .settings-layout { height:100%; min-height:0; box-sizing:border-box; padding-bottom:16px; align-items:stretch; }
+  #app .settings-profile { overflow:auto; min-height:0; }
+  #app .settings-layout__main { display:flex; flex-direction:column; min-height:0; }
+  #app .settings-list { flex:1 1 0; min-height:0; overflow:auto; }
+  #app .data-sources-shell { min-height:0; height:100%; overflow:hidden; box-sizing:border-box; }
+  #app .local-file-section { flex-shrink:0; max-height:40%; overflow:auto; }
+  #app .local-file-section > summary { cursor:pointer; padding:8px 4px; color:var(--admin-muted); }
+  #app #view-data-sources { flex:1 1 0; min-height:0; }
+  #app #view-data-sources > .page-content { height:100%; min-height:0; display:flex; flex-direction:column; padding:0; overflow:hidden; }
+  #app #view-data-sources :is(.page-header,.data-source-summary,.admin-section-nav) { flex-shrink:0; }
+  #app .data-source-summary { padding:0 0 12px; }
+  #app .data-source-pane { flex:1 1 0; min-height:0; overflow:auto; }
+  #app #view-data-sources .card-header { display:flex; justify-content:space-between; gap:12px; align-items:center; }
+  #app #view-data-sources .data-source-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  #app #view-data-sources .data-source-card { padding:10px; }
+  #app #view-data-sources .data-source-card-desc { display:none; }
+  #app .data-sources-shell .local-file-list { max-height:240px; overflow:auto; }
+}

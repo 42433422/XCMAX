@@ -3,9 +3,6 @@
     <header class="page-header">
       <div>
         <h2>智能生态市场总览</h2>
-        <p class="muted">
-          管理端正式入口：查看市场目录规模与注册账号等业务指标（非 Full-Pipeline / iframe 嵌套）。
-        </p>
       </div>
       <div class="header-actions">
         <button type="button" class="btn btn-secondary" :disabled="loading" @click="load">
@@ -31,12 +28,6 @@
         <article class="admin-card kpi">
           <div class="kpi-num">{{ usersLabel }}</div>
           <div class="kpi-label">注册用户</div>
-        </article>
-        <article class="admin-card kpi kpi-wide">
-          <div class="kpi-label">说明</div>
-          <p class="kpi-text">
-            指标来自市场管理接口 <code>/api/admin/status</code>（经管理端 market-proxy）。用于核对目录与账号规模是否完整。
-          </p>
         </article>
       </section>
 
@@ -138,15 +129,6 @@ defineExpose({ load })
   margin-top: 6px;
   font-size: 13px;
   color: var(--admin-muted, #64748b);
-}
-.kpi-wide {
-  grid-column: span 1;
-}
-.kpi-text {
-  margin: 8px 0 0;
-  font-size: 13px;
-  color: var(--admin-text, #172033);
-  line-height: 1.5;
 }
 .overview-links {
   padding: 16px;

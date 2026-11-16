@@ -1,5 +1,6 @@
 
 import vue from '@vitejs/plugin-vue'
+import { openimAssets } from './openimAssets.js'
 import VueI18n from '@intlify/unplugin-vue-i18n/vite'
 import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
@@ -14,6 +15,7 @@ import { routerDevtoolsNullGuard } from './routerDevtoolsGuard.js'
  */
 export function createVitePlugins({ xcmaxPublicApiPrefix = '', i18nInclude }) {
   return [
+    openimAssets(),
     vue(),
     VueI18n({
       runtimeOnly: true,

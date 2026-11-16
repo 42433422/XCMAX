@@ -16,6 +16,7 @@ import { readActiveExtensionModId } from '@/utils/erpDomainPaths'
 import { isProtectedClientModId } from '@/constants/protectedMods'
 import { fetchProductSku, isEnterpriseEdition } from '@/utils/productSku'
 import {
+  captureAuthSession,
   consumeDesktopSessionBootstrapHint,
   hasRecentEnterpriseSessionHint,
   validateEnterpriseSessionCached,
@@ -466,9 +467,24 @@ router.beforeEach(async (to, _from, finish) => {
 })
 
 if (typeof window !== 'undefined') {
-  window.addEventListener('xcagi:enterprise-session-invalid', () => {
+  let checkingAdminSession = false
+  window.addEventListener('xcagi:enterprise-session-invalid', async () => {
     const current = router.currentRoute.value
     if (current.meta?.publicAccess || current.name === 'login') return
+    // Market credentials can expire independently of the admin console session.
+    if (isAdminConsoleSpa()) {
+      if (checkingAdminSession) return
+      checkingAdminSession = true
+      const isCurrent = captureAuthSession()
+      try {
+        if (await validateEnterpriseSessionCached(true)) return
+        if (!isCurrent() || router.currentRoute.value !== current) return
+      } catch {
+        return
+      } finally {
+        checkingAdminSession = false
+      }
+    }
     void router.replace({ name: 'login', query: { redirect: current.fullPath && current.fullPath !== '/login' ? current.fullPath : '/' } })
   })
 }

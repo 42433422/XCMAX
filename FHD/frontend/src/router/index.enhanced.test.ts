@@ -276,6 +276,29 @@ describe('router/index enhanced', () => {
 
   // ── 基础路由 ────────────────────────────────────────────
 
+  it.each(['valid', 'expired', 'unavailable', 'account-switch'])('checks the local admin session before redirecting after upstream 401: %s', async outcome => {
+    mockIsAdminConsoleSpa.mockReturnValue(true)
+    mockAccountProfileStore.isAdminAccount = true
+    await router.push('/settings')
+    let finish!: (value: boolean) => void
+    let fail!: (error: Error) => void
+    mockValidateEnterpriseSession.mockImplementationOnce(() => new Promise<boolean>((resolve, reject) => { finish = resolve; fail = reject }))
+    const replace = vi.spyOn(router, 'replace').mockResolvedValue(undefined)
+    try {
+      window.dispatchEvent(new CustomEvent('xcagi:enterprise-session-invalid'))
+      window.dispatchEvent(new CustomEvent('xcagi:enterprise-session-invalid'))
+      expect(mockValidateEnterpriseSession).toHaveBeenCalledWith(true)
+      if (outcome === 'account-switch') {
+        const { invalidateEnterpriseSessionCache } = await import('@/utils/authSessionCache')
+        invalidateEnterpriseSessionCache()
+      }
+      if (outcome === 'unavailable') fail(new Error('offline'))
+      else finish(outcome === 'valid')
+      await new Promise(resolve => setTimeout(resolve, 0))
+      expect(replace).toHaveBeenCalledTimes(outcome === 'expired' ? 1 : 0)
+    } finally { replace.mockRestore() }
+  })
+
   it('exports router with core routes', () => {
     const names = router.getRoutes().map((r) => r.name)
     expect(names).toContain('login')

@@ -22,6 +22,41 @@ def _request(session_id: str = "") -> Request:
     return Request({"type": "http", "headers": headers})
 
 
+@pytest.mark.parametrize("case", ["admin", "enterprise", "impersonating", "desktop", "disabled"])
+@pytest.mark.asyncio
+async def test_web_admin_validation_preserves_account_boundaries(case):
+    import json
+    from dataclasses import fields
+
+    from fastapi import BackgroundTasks
+
+    from app.fastapi_routes.domains.auth.session_access import SessionAccess
+
+    meta = {"account_kind": "admin", "market_is_admin": True}
+    if case == "enterprise":
+        meta = {"account_kind": "enterprise", "market_is_admin": False}
+    if case == "impersonating":
+        meta["impersonating_market_user_id"] = 71
+    ports = {field.name: Mock(return_value=None) for field in fields(SessionAccess)}
+    ports.update(
+        session_id=lambda request: "test-admin-session",
+        backend=lambda: SimpleNamespace(session_manager=SimpleNamespace(
+            get_session_info=lambda sid: {"id": sid})),
+        resolve_user=lambda request: SimpleNamespace(is_active=case != "disabled"),
+        desktop_gate=lambda sid: {"valid": False} if case == "desktop" else None,
+        product_sku=lambda: "enterprise",
+        stored_market_token=lambda sid: "",
+        session_meta=lambda *args: meta,
+        profile_fields=lambda *args: {},
+        infra_errors=lambda: (RuntimeError,),
+    )
+    result = await SessionAccess(**ports).validate(_request(), BackgroundTasks())
+    payload = result if isinstance(result, dict) else json.loads(result.body)
+    assert payload["valid"] is (case == "admin")
+    if case in {"desktop", "disabled"}:
+        assert result.status_code == 403
+
+
 @pytest.mark.parametrize("resolved", [False, True])
 @pytest.mark.parametrize("unavailable", [False, True])
 @pytest.mark.asyncio

@@ -105,6 +105,21 @@ class CustomerTickets:
     async def admin_customer_ticket_staff(self, request: Request):
         return await self._customer_ticket_proxy(request, "/api/customer-service/staff")
 
+    async def admin_github_workspace(self, request: Request):
+        return await self._customer_ticket_proxy(request, "/api/customer-service/github/workspace")
+
+    async def admin_ticket_github(self, request: Request, ticket_id: int):
+        return await self._customer_ticket_proxy(request, f"/api/customer-service/tickets/{ticket_id}/github")
+
+    async def admin_ticket_github_publish(self, request: Request, ticket_id: int):
+        return await self.admin_customer_ticket_command(request, ticket_id, "github")
+
+    async def admin_ticket_github_start(self, request: Request, ticket_id: int):
+        return await self.admin_customer_ticket_command(request, ticket_id, "github/start")
+
+    async def admin_ticket_github_reconcile(self, request: Request, ticket_id: int):
+        return await self.admin_customer_ticket_command(request, ticket_id, "github/reconcile")
+
     async def admin_assign_customer_ticket(self, request: Request, ticket_id: int):
         return await self.admin_customer_ticket_command(request, ticket_id, "assign")
 

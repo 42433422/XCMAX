@@ -54,6 +54,21 @@ def _dispatch_incident_team_once(event_id: int) -> dict[str, Any]:
                 "ok": bool(_payload(saved)["_team_claim"].get("ok")),
                 "reason": "incident_completion_readback",
             }
+        if (
+            saved is not None
+            and saved.event_type == "ops.intake.customer_ticket"
+            and _payload(saved).get("resolution", {}).get("route") == "shared_core"
+        ):
+            from modstore_server.customer_ticket_github import authorized_incident
+
+            if not authorized_incident(session, _payload(saved), event_id):
+                return {
+                    "claimed": True,
+                    "ok": False,
+                    "event_id": event_id,
+                    "status": "awaiting_github",
+                    "reason": "github_workspace_required",
+                }
     team_plan = build_incident_team(event_id)
     team = team_plan.get("team") if isinstance(team_plan.get("team"), list) else []
     if len(team) < 2:
@@ -83,7 +98,8 @@ def _dispatch_incident_team_once(event_id: int) -> dict[str, Any]:
             except (TypeError, ValueError):
                 ticket_id_hint = 0
             customer_ticket = ticket_id_hint > 0 and (
-                str(payload.get("source") or source or "").strip().lower() == "customer_ticket"
+                str(payload.get("source") or source or "").strip().lower()
+                == "customer_ticket"
                 or event_type == "ops.intake.customer_ticket"
                 or str(payload.get("ticket_no") or "").startswith("CS")
             )
@@ -101,7 +117,9 @@ def _dispatch_incident_team_once(event_id: int) -> dict[str, Any]:
     checks = team_plan.get("independent_checks")
     if checks is None:
         try:
-            checks = json.loads(os.environ.get("MODSTORE_INCIDENT_TEAM_CHECKS_JSON") or "{}")
+            checks = json.loads(
+                os.environ.get("MODSTORE_INCIDENT_TEAM_CHECKS_JSON") or "{}"
+            )
         except (TypeError, ValueError):
             checks = {}
     team_plan = {
@@ -137,7 +155,8 @@ def _dispatch_incident_team_once(event_id: int) -> dict[str, Any]:
                 and ticket.status == "processing"
                 and not ticket.closed_at
                 and original_resolution.get("reopened_at")
-                and original_resolution.get("reopened_at") == resolution.get("reopened_at")
+                and original_resolution.get("reopened_at")
+                == resolution.get("reopened_at")
             ):
                 # A fresh reopen owns a new event; an old event keeps its old timestamp.
                 resolution.update(state="processing", incident_event_id=int(event_id))
@@ -174,7 +193,9 @@ def _dispatch_incident_team_once(event_id: int) -> dict[str, Any]:
     try:
         from modstore_server.release_recovery_orchestrator import maybe_execute_recovery
 
-        recovery = maybe_execute_recovery(event_id=event_id, event_type=event_type, payload=payload)
+        recovery = maybe_execute_recovery(
+            event_id=event_id, event_type=event_type, payload=payload
+        )
     except RECOVERABLE_ERRORS as exc:
         recovery = {"ok": False, "error": str(exc)[:500]}
     with sf() as session:
@@ -187,7 +208,9 @@ def _dispatch_incident_team_once(event_id: int) -> dict[str, Any]:
     return advance_team(int(event_id))
 
 
-def _write_repair_loop(session, ticket, event_id: int, follow_ups: list[dict[str, Any]]) -> None:
+def _write_repair_loop(
+    session, ticket, event_id: int, follow_ups: list[dict[str, Any]]
+) -> None:
     """把失败分类、处置次数、原因、是否升级回写工单（仅管理端证据与审计，客户视图白名单不含）。"""
     from modstore_server.customer_service_tools import audit
     from modstore_server.incident_team_failure_loop import loop_summary
@@ -200,7 +223,9 @@ def _write_repair_loop(session, ticket, event_id: int, follow_ups: list[dict[str
     escalated = [item for item in summary if item.get("escalated_to")]
     audit(
         session,
-        event_type="incident.repair_loop_escalated" if escalated else "incident.repair_loop",
+        event_type="incident.repair_loop_escalated"
+        if escalated
+        else "incident.repair_loop",
         detail={"event_id": event_id, "items": summary},
         ticket_id=int(ticket.id),
         actor_type="system",
@@ -224,9 +249,14 @@ def member_runtime_input(
     from modstore_server.duty_workforce_contracts import duty_event_execution_input
     from modstore_server.incident_team_handoff import role_handoff
 
+    incident_input = payload
+    if payload.get("github_workspace"):
+        from modstore_server.customer_ticket_github import public_incident
+
+        incident_input = public_incident(payload)
     runtime = (
         duty_event_execution_input(
-            employee_id, event_type=event_type, source=source, incident=payload
+            employee_id, event_type=event_type, source=source, incident=incident_input
         )
         or {}
     )
@@ -234,7 +264,7 @@ def member_runtime_input(
         {
             "allow_high_risk_real_run": role in {"fix", "verify"},
             "allow_medium_risk": True,
-            "incident": payload,
+            "incident": incident_input,
             "incident_team": team_plan,
             "model_route": route,
             "role": role,
@@ -258,7 +288,9 @@ def member_runtime_input(
                 "role": role,
                 "attempt_id": attempt_id,
                 "previous_fix": (
-                    role_handoff(fix_result, "fix") if role == "fix" and fix_result else None
+                    role_handoff(fix_result, "fix")
+                    if role == "fix" and fix_result
+                    else None
                 ),
             },
         }
@@ -272,6 +304,21 @@ def member_runtime_input(
             checks = (team_plan.get("independent_checks") or {}).get(role)
             if checks:
                 runtime["independent_checks"] = checks
+    if payload.get("github_workspace"):
+        workspace = payload["github_workspace"]
+        runtime.update(
+            github_workspace=workspace,
+            repo_url=f"https://github.com/{workspace['repository']}.git",
+            branch="main",
+            allow_tool_fallback=False,
+        )
+        # The ephemeral worker owns its checkout; a CVM path is not a workspace there.
+        runtime["project_root"] = ""
+        if role == "verify":
+            outputs = ((fix_result or {}).get("handler_outputs") or {}).get("outputs") or []
+            revisions = {o["commit_sha"] for o in outputs if o.get("commit_sha")}
+            runtime["branch"] = next(iter(revisions)) if len(revisions) == 1 else ""
+        return runtime
     if not str(runtime.get("project_root") or "").strip():
         roots = [
             str(os.environ.get(name) or "").strip()

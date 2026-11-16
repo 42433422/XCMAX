@@ -156,6 +156,14 @@ def dispatch_issue_event(event: dict[str, Any]) -> dict[str, Any]:
 
         if active_shared_repair(db, ticket):
             return {"ok": True, "skipped": True, "reason": "shared_repair_reused"}
+        if payload.get("github_workspace"):
+            from modstore_server.para_github_runner import ensure_runner
+
+            ready = ensure_runner(db, payload)
+            if ready is None:
+                return {"ok": True, "skipped": True, "reason": "github_runner_stopped"}
+            if not ready:
+                return {"ok": False, "skipped": True, "message": "等待 GitHub 临时执行器就绪"}
     if payload.get("intake_source") == "private_mod_rework":
         from modstore_server.customer_issue_private_factory import (
             dispatch_private_rework,

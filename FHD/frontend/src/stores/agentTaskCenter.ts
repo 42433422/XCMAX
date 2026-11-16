@@ -69,7 +69,10 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
     try {
       const [taskResponse, runtimeResponse] = await Promise.all([agentRunsApi.listTasks({ limit: 200 }), agentRunsApi.getTaskRuntime()])
       if (requestedScopeVersion !== scopeVersion) return
-      replaceTasks(Array.isArray(taskResponse.data) ? taskResponse.data : [])
+      if (taskResponse.success === false || !Array.isArray(taskResponse.data) || runtimeResponse.success === false || !runtimeResponse.data) {
+        throw new Error('任务状态读取失败，保留上次记录，请刷新核对')
+      }
+      replaceTasks(taskResponse.data)
       if (runtimeResponse.data) runtime.value = runtimeResponse.data
       error.value = ''
     } catch (reason) {
@@ -93,6 +96,7 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
     try {
       const response = await agentRunsApi.getTask(requestedTaskId)
       if (!isCurrent()) return
+      if (response.success === false || !response.data) throw new Error('任务详情读取失败，请刷新核对')
       selectedTask.value = response.data || null
       error.value = ''
     } catch (reason) {

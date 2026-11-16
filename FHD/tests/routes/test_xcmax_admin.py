@@ -1527,7 +1527,7 @@ class TestMarketAdminProxy:
         assert isinstance(result, JSONResponse)
         assert result.status_code == 401
 
-    def test_no_authorization_returns_401(self) -> None:
+    def test_unbound_upstream_preserves_valid_admin_session(self) -> None:
         from starlette.requests import Request
 
         request = MagicMock(spec=Request)
@@ -1551,7 +1551,7 @@ class TestMarketAdminProxy:
                 admin_routes._market_admin_proxy(request, "GET", "/api/test")
             )
         assert isinstance(result, JSONResponse)
-        assert result.status_code == 401
+        assert result.status_code == 409
 
     def test_proxy_error_returns_error_response(self) -> None:
         from starlette.requests import Request

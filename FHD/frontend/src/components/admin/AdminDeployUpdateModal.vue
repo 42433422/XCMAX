@@ -7,17 +7,7 @@
     @close="$emit('update:modelValue', false)"
   >
     <div class="deploy-update-modal">
-      <p class="deploy-update-modal__intro muted">
-        管理端只负责<strong>推</strong>到 update 站；企业端在 :5001 自行<strong>收</strong>（拉取并应用）。
-      </p>
 
-      <div v-if="checkData && !checkLoading" class="deploy-update-pipeline" aria-hidden="true">
-        <span class="deploy-update-pipeline__node is-admin">管理端<br /><small>推</small></span>
-        <span class="deploy-update-pipeline__arrow">→</span>
-        <span class="deploy-update-pipeline__node is-hub">update 站<br /><small>中转</small></span>
-        <span class="deploy-update-pipeline__arrow">→</span>
-        <span class="deploy-update-pipeline__node is-ent">企业端<br /><small>收</small></span>
-      </div>
 
       <div v-if="checkLoading" class="deploy-update-modal__checking">正在检测更新…</div>
       <div v-else-if="checkError" class="deploy-update-alert" role="alert">{{ checkError }}</div>
@@ -260,11 +250,6 @@ watch(
 </script>
 
 <style scoped>
-.deploy-update-modal__intro {
-  margin: 0 0 12px;
-  font-size: 13px;
-  line-height: 1.5;
-}
 
 .deploy-update-pipeline {
   display: flex;
