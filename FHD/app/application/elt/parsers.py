@@ -251,7 +251,7 @@ def _parse_workbook(path: Path, max_rows: int, target_type: str) -> ParsedDatase
                 slices: list[tuple[SegmentedTable | None, tuple[Any, ...]]]
                 tables: list[SegmentedTable] = []
                 if plan is not None:
-                    tables = plan.tables_by_row.get(row_number)
+                    tables = plan.tables_by_row.get(row_number) or []
                     if not tables:
                         if any(value not in (None, "") for value in row_values):
                             role, reason = plan.exclude(row_number)
