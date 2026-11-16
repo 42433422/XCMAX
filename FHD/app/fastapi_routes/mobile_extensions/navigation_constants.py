@@ -82,8 +82,8 @@ def resolve_mobile_navigation(
             continue
         overrides = _rows(mod.get("menu_overrides"))
         # Only declared industry subsystems or visible overrides create host slots.
-        industry = mod.get("industry") if isinstance(mod.get("industry"), dict) else {}
-        subsystems = industry.get("subsystems") or {}
+        industry = mod.get("industry")
+        subsystems = industry.get("subsystems") if isinstance(industry, dict) else {}
         slots = (
             [
                 {"key": key, **(value if isinstance(value, dict) else {})}

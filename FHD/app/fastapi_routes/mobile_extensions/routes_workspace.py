@@ -377,9 +377,11 @@ class WorkspaceRoutes:
             permissions: list[str] = []
             if tenant_member:
                 from app.application.auth_app_service import get_auth_app_service
+                from app.db.models import User
 
                 try:
-                    permissions = get_auth_app_service().get_user_permissions(user)
+                    if isinstance(user, User):
+                        permissions = get_auth_app_service().get_user_permissions(user)
                 except RECOVERABLE_ERRORS:
                     logger.warning("nav-menu tenant permissions unavailable")
             mod_items: list[dict[str, Any]] = []

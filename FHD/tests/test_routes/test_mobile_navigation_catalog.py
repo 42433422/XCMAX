@@ -42,6 +42,11 @@ def test_host_navigation_uses_desktop_catalog_without_uninstalled_business_pages
     )
 
 
+@pytest.mark.parametrize("industry", [None, [], "invalid", {"subsystems": None}])
+def test_malformed_industry_metadata_does_not_create_business_slots(industry):
+    assert _menu([{"id": "custom", "industry": industry}]) == _menu()
+
+
 def test_personal_and_admin_roles_remain_distinct():
     assert set(_menu(account_kind="personal")) == {"chat", "im", "ai-ecosystem", "settings"}
     assert "admin-entitlements" in _menu(account_kind="admin")
@@ -199,3 +204,38 @@ async def test_endpoint_role_and_failed_mod_lookup_fallback(role, kind):
     actual = {item["key"] for item in result["data"]["items"]}
     assert ("admin-entitlements" in actual) == (kind == "admin")
     assert ("employee-workflow" in actual) == (kind != "personal")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "principal,grants", [("user", ["elt.read"]), ("user", []), ("error", []), ("unknown", [])]
+)
+async def test_tenant_endpoint_requires_typed_user_and_current_permissions(
+    monkeypatch, principal, grants
+):
+    from app.db.models import User
+    from app.fastapi_routes.mobile_extensions.routes_workspace import WorkspaceRoutes
+
+    calls = []
+    user = (SimpleNamespace if principal == "unknown" else User)(
+        id=23, role="tenant:7:operator", tenant_id=7, tier="enterprise"
+    )
+
+    def permissions(actual):
+        calls.append(actual)
+        if principal == "error":
+            raise OSError("permission storage unavailable")
+        return grants
+
+    monkeypatch.setattr(
+        "app.application.auth_app_service.get_auth_app_service",
+        lambda: SimpleNamespace(get_user_permissions=permissions),
+    )
+    route = WorkspaceRoutes(
+        SimpleNamespace(mobile_session_id_from_request=lambda _: "", mobile_mod_items=lambda: []),
+        lambda: None,
+    ).mobile_nav_menu
+    result = await route(Request({"type": "http", "headers": []}), user=user)
+    keys = {item["key"] for item in result["data"]["items"]}
+    assert keys == ({"settings", "business-docking"} if grants else {"settings"})
+    assert calls == ([] if principal == "unknown" else [user])
