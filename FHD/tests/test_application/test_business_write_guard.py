@@ -25,6 +25,11 @@ from app.domain.shared_services.inventory_service import InventoryService
 # spawn 子进程按父进程 sys.path 导入本模块；分片运行时 cwd 可能不在 FHD，
 # 显式补入仓库根，避免 ModuleNotFoundError: tests.test_application。
 _FHD_ROOT = str(Path(__file__).resolve().parents[1])
+# spawn 子进程是新解释器：同时通过 PYTHONPATH 保证它能导入 tests.* 与被测模块。
+os.environ["PYTHONPATH"] = os.pathsep.join([_FHD_ROOT, os.environ.get("PYTHONPATH", "")]).strip(
+    os.pathsep
+)
+
 if _FHD_ROOT not in sys.path:
     sys.path.insert(0, _FHD_ROOT)
 
