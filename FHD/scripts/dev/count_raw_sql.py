@@ -40,7 +40,7 @@ TEXT_F_PATTERN = re.compile(r"\btext\s*\(\s*f[\"']", re.MULTILINE)
 # 仅匹配单行 f-string 中的 SQL 关键字（[^"'\n] 不跨行），
 # 避免误报 f"..." 后跨行撞上 Python 代码中的 from/where 等标识符。
 FSQL_PATTERN = re.compile(
-    r'f["\'][^"\'\n]*\b(SELECT|INSERT|UPDATE|DELETE|FROM|WHERE)\b',
+    r'(?<![A-Za-z0-9_])f["\'][^"\'\n]*\b(SELECT|INSERT|UPDATE|DELETE|FROM|WHERE)\b',
     re.IGNORECASE,
 )
 

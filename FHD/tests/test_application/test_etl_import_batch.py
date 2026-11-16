@@ -63,10 +63,8 @@ def test_batch_preview_exposes_data_for_workflow_references(monkeypatch):
 
 def test_preview_batch_publishes_per_file_stage(monkeypatch):
     """执行链要能显示「正在处理哪个文件 / 哪个文件已完成」。"""
-    from app.infrastructure import chat_stream_lifetime
-
     stages: list[dict] = []
-    monkeypatch.setattr(chat_stream_lifetime, "publish_stream_tool_record", stages.append)
+    monkeypatch.setattr(tools_workflow_elt, "publish_stream_tool_record", stages.append)
     monkeypatch.setattr(
         tools_workflow_elt,
         "_preview",

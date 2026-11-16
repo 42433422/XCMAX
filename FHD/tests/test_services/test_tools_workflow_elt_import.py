@@ -174,7 +174,7 @@ def test_batch_preview_stops_before_budget_is_exhausted():
     with (
         patch.object(elt, "_preview") as preview,
         patch(
-            "app.infrastructure.chat_stream_lifetime.publish_stream_note",
+            "app.domain.shared_services.tools_workflow_elt.publish_stream_note",
             side_effect=notes.append,
         ),
     ):
@@ -191,7 +191,7 @@ def test_batch_progress_notes_include_file_name_and_counts():
 
     notes: list[str] = []
     with patch(
-        "app.infrastructure.chat_stream_lifetime.publish_stream_note",
+        "app.domain.shared_services.tools_workflow_elt.publish_stream_note",
         side_effect=notes.append,
     ):
         elt._batch_progress_note("预演", 2, 5, "客户清单.xlsx")
@@ -240,7 +240,7 @@ def test_preview_batch_publishes_progress_and_result_per_file():
         patch.object(elt, "_preview", side_effect=fake_preview),
         patch.object(elt, "_upload_label", side_effect=lambda path, _ctx: path),
         patch(
-            "app.infrastructure.chat_stream_lifetime.publish_stream_note",
+            "app.domain.shared_services.tools_workflow_elt.publish_stream_note",
             side_effect=notes.append,
         ),
     ):

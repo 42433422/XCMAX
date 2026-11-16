@@ -1996,12 +1996,19 @@ class TestPrintRouterSavePrinterSelection:
 
 class TestEmployeeRouter:
     def test_list_action(self):
-        with patch("app.mod_sdk.employee_tool_registry.build_employee_tools_status") as mock_build:
-            mock_build.return_value = {"registered_tool_count": 3}
+        employees = [{"pack_id": f"employee-{index}"} for index in range(3)]
+        with patch(
+            "app.mod_sdk.employee_directory.build_employee_directory", return_value=employees
+        ) as mock_build:
             result = _registered_router_employee("list", {}, {}, "admin", "")
         assert result["success"] is True
         assert result["status"]["registered_tool_count"] == 3
-        assert result["data"] == []
+        assert [item["employee_id"] for item in result["data"]] == [
+            "employee-0",
+            "employee-1",
+            "employee-2",
+        ]
+        mock_build.assert_called_once_with(include_prompt_only=True)
 
     def test_query_alias(self):
         with patch("app.mod_sdk.employee_tool_registry.build_employee_tools_status") as mock_build:

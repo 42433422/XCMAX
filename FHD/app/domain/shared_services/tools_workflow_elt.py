@@ -17,11 +17,17 @@ from typing import Any
 
 from sqlalchemy import or_
 
-from app.application.tools.workflow_spreadsheet_scope import resolve_owned_upload_path
+from app.application.tools.workflow_spreadsheet_scope import (
+    TenantScopeError,
+    _bound_actor,
+    publish_stream_note,
+    publish_stream_tool_record,
+    resolve_owned_upload_path,
+    tenant_id_for_write,
+    tenant_scope,
+)
 from app.db.models.elt import EltUpload
 from app.db.session import get_db
-from app.infrastructure.auth.agent_mod_scope import _bound_actor
-from app.infrastructure.tenant_scope import tenant_id_for_write
 from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 from app.utils.time import utc_now_naive
 
@@ -107,8 +113,6 @@ def _recent_upload_ids(runtime_context: dict[str, Any]) -> list[str]:
 
 def _publish_note(text: str) -> None:
     """把逐文件进度推给对话流；没有流式上下文时静默忽略。"""
-    from app.infrastructure.chat_stream_lifetime import publish_stream_note
-
     publish_stream_note(text)
 
 
@@ -137,8 +141,6 @@ def _publish_file_stage(
         if error:
             record["error"] = str(error)[:200]
     try:
-        from app.infrastructure.chat_stream_lifetime import publish_stream_tool_record
-
         publish_stream_tool_record(record)
     except BOUNDARY_ERRORS:
         pass
@@ -321,7 +323,6 @@ def _knowledge_receipt(data: dict[str, Any], owner_id: int) -> dict[str, Any]:
         get_auto_ingest_service,
     )
     from app.db.models.elt import EltUpload
-    from app.infrastructure.tenant_scope import tenant_scope
 
     tenant = tenant_id_for_write()
     try:
@@ -539,7 +540,6 @@ def _template_receipt(data: dict[str, Any], owner_id: int) -> dict[str, Any]:
     from app.application import template_ai
     from app.application.template_app_service import get_template_app_service
     from app.db.models.elt import EltUpload
-    from app.infrastructure.tenant_scope import TenantScopeError, tenant_scope
 
     target_type = str(data.get("target_type") or "").strip()
     all_regions = [
@@ -1145,7 +1145,6 @@ def _preview(params: dict, runtime_context: dict) -> dict:
 
 def _receipt_tenant(data: dict[str, Any]) -> int:
     """登记线程拿不到调用线程的租户上下文，先固定本次运行的租户再进线程。"""
-    from app.infrastructure.tenant_scope import TenantScopeError, tenant_id_for_write
 
     try:
         return tenant_id_for_write()
@@ -1169,8 +1168,6 @@ def _parallel_receipts(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """知识库与模板库互不依赖，一次导入内并行写，互不拖累。"""
     from concurrent.futures import ThreadPoolExecutor
-
-    from app.infrastructure.tenant_scope import tenant_scope
 
     tenant = _receipt_tenant(data)
 

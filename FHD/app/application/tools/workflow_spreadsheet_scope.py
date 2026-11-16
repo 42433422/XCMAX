@@ -27,7 +27,27 @@ from app.db.models.elt import EltUpload
 from app.db.session import get_db
 from app.domain.context.session_excel_context import excel_analysis_from_runtime
 from app.infrastructure.auth.agent_mod_scope import _bound_actor
-from app.infrastructure.tenant_scope import tenant_id_for_write
+from app.infrastructure.chat_stream_lifetime import (
+    publish_stream_note as publish_stream_note,
+)
+from app.infrastructure.chat_stream_lifetime import (
+    publish_stream_tool_record as publish_stream_tool_record,
+)
+from app.infrastructure.tenant_scope import (
+    TenantScopeError as TenantScopeError,
+)
+from app.infrastructure.tenant_scope import (
+    tenant_id_for_write,
+)
+from app.infrastructure.tenant_scope import (
+    tenant_scope as tenant_scope,
+)
+from app.infrastructure.workspace import (
+    resolve_existing_file_under_root as resolve_existing_file_under_root,
+)
+from app.infrastructure.workspace import (
+    resolve_existing_workspace_file as resolve_existing_workspace_file,
+)
 from app.utils.path_io.path_utils import get_app_data_dir
 from app.utils.time import utc_now_naive
 

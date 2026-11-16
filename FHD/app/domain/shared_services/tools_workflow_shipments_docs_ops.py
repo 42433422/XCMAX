@@ -84,56 +84,6 @@ def _registered_router_label_template_generator(
     return result if isinstance(result, dict) else {"success": False, "message": "技能返回值无效"}
 
 
-def _purge_archive_assets() -> int:
-    """清掉模板库页面真正展示的审阅归档资产。
-
-    页面列的是 ``elt_archive_assets``，清理只删 ``elt_templates`` 时页面不会变化。
-    没有请求用户上下文时不动数据，避免误删其他账号的归档。
-    """
-    from app.application.elt.errors import EltError
-    from app.db.models.elt_archive import EltArchiveAsset, EltArchiveVersion
-    from app.db.session import get_db
-    from app.domain.context.current_request import get_current_request
-    from app.infrastructure.tenant_scope import tenant_scope
-
-    request = get_current_request()
-    user = getattr(getattr(request, "state", None), "user", None)
-    tenant_id = getattr(user, "tenant_id", None)
-    owner_id = getattr(user, "id", None)
-    if tenant_id is None or owner_id is None:
-        return 0
-    tenant, owner = int(tenant_id), int(owner_id)
-    try:
-        with tenant_scope(tenant), get_db() as db:
-            asset_ids = [
-                row[0]
-                for row in db.query(EltArchiveAsset.id)
-                .filter(
-                    EltArchiveAsset.tenant_id == tenant,
-                    EltArchiveAsset.owner_user_id == owner,
-                )
-                .all()
-            ]
-            if not asset_ids:
-                return 0
-            db.query(EltArchiveVersion).filter(
-                EltArchiveVersion.tenant_id == tenant,
-                EltArchiveVersion.asset_id.in_(asset_ids),
-            ).delete(synchronize_session=False)
-            removed = (
-                db.query(EltArchiveAsset)
-                .filter(
-                    EltArchiveAsset.tenant_id == tenant,
-                    EltArchiveAsset.owner_user_id == owner,
-                )
-                .delete(synchronize_session=False)
-            )
-            db.commit()
-            return int(removed or 0)
-    except (EltError, RuntimeError, ValueError):
-        return 0
-
-
 def _registered_router_document_template(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
@@ -154,10 +104,10 @@ def _registered_router_document_template(
         )
     elif action == "clear":
         from app.application import get_template_app_service
-        from app.infrastructure.templates.template_preferences import hide_templates
         from app.legacy.routes.document_templates_compat import run_archive_template_delete
 
-        listed = get_template_app_service().get_templates() or {}
+        service = get_template_app_service()
+        listed = service.get_templates() or {}
         rows = listed.get("templates") if isinstance(listed, dict) else None
         deleted = skipped = 0
         base_dir = str(runtime_context.get("template_base_dir") or "") or None
@@ -191,10 +141,10 @@ def _registered_router_document_template(
                 builtin_paths.append(installed_path)
                 continue
             skipped += 1
-        hidden = hide_templates(ids=starter_ids, paths=builtin_paths)
+        hidden = service.hide_templates(ids=starter_ids, paths=builtin_paths)
         # 模板库页面实际列出的是审阅归档（elt_archive_assets），只清 elt_templates
         # 会让「清理后页面仍满屏」；同一动作必须一并清掉当前账号的归档资产。
-        deleted_archives = _purge_archive_assets()
+        deleted_archives = service.purge_archive_assets()
         if deleted or hidden:
             message = f"已清理 {deleted} 个自定义模板，隐藏 {hidden} 个内置模板"
         elif skipped:

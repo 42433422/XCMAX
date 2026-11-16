@@ -21,7 +21,7 @@ DOMAIN_IDS = (
     "architecture",
     "erp",
     "agent-orchestration",
-    "elt",
+    "etl",
     "intent-routing",
     "event-kernel",
     "mod-sdk",

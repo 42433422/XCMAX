@@ -165,10 +165,8 @@ def _resolve_template(
     template_id: str, template_name: str, tenant_id: int | None
 ) -> dict[str, Any]:
     from app.application import get_template_app_service
-    from app.infrastructure.tenant_scope import tenant_scope
 
-    with tenant_scope(tenant_id):
-        result = get_template_app_service().get_templates()
+    result = get_template_app_service().get_templates(tenant_id=tenant_id)
     templates = result.get("templates") if isinstance(result, dict) else result
     candidates = [t for t in (templates or []) if isinstance(t, dict) and t.get("path")]
     if template_id:
@@ -237,7 +235,7 @@ def fill_document_from_template(
     if not source_records:
         if not file_path:
             raise ValueError("缺少数据来源：请提供 rows 或源文件 file_path")
-        from app.infrastructure.tenant_scope import tenant_scope
+        from app.application.tools.workflow_spreadsheet_scope import tenant_scope
 
         # 审批后执行发生后台线程，没有请求上下文，必须显式带上租户做归属校验。
         with tenant_scope(tenant_id):
@@ -420,7 +418,7 @@ def _resolve_source_path(
         )
     if os.path.isabs(raw) and os.path.exists(raw):
         return raw
-    from app.infrastructure.workspace import (
+    from app.application.tools.workflow_spreadsheet_scope import (
         resolve_existing_file_under_root,
         resolve_existing_workspace_file,
     )

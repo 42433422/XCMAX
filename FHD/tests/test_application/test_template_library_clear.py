@@ -45,6 +45,7 @@ def test_clear_hides_builtin_templates_instead_of_failing():
     }
     service = MagicMock()
     service.get_templates.return_value = listed
+    service.purge_archive_assets.return_value = 0
     captured: dict = {}
 
     def fake_delete(payload, base_dir=None):
@@ -57,13 +58,14 @@ def test_clear_hides_builtin_templates_instead_of_failing():
         captured["paths"] = list(paths or [])
         return len(captured["ids"]) + len(captured["paths"])
 
+    service.hide_templates.side_effect = fake_hide
     with (
         patch("app.application.get_template_app_service", return_value=service),
         patch(
             "app.legacy.routes.document_templates_compat.run_archive_template_delete",
             side_effect=fake_delete,
         ),
-        patch.object(template_preferences, "hide_templates", side_effect=fake_hide),
+        patch.object(template_preferences, "hide_templates", return_value=0) as legacy_hide,
     ):
         result = _registered_router_document_template("clear", {}, {}, "", "")
 
@@ -73,3 +75,5 @@ def test_clear_hides_builtin_templates_instead_of_failing():
     assert captured["ids"] == ["seed:sales-order"]
     assert captured["paths"] == ["/opt/templates/标准发货单.xlsx"]
     assert "已清理 1 个自定义模板" in result["message"]
+    legacy_hide.assert_not_called()
+    service.purge_archive_assets.assert_called_once_with()

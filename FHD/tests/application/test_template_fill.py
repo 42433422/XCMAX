@@ -126,10 +126,8 @@ def test_template_preview_list_uses_runtime_tenant(monkeypatch):
     seen: dict[str, object] = {}
 
     class _Service:
-        def get_templates(self):
-            from app.infrastructure.tenant_scope import current_tenant_id
-
-            seen["tenant"] = current_tenant_id()
+        def get_templates(self, tenant_id=None):
+            seen["tenant"] = tenant_id
             return {"templates": [{"id": "db:46", "name": "生产打印单"}]}
 
     monkeypatch.setattr(
