@@ -109,7 +109,9 @@ class CustomerTickets:
         return await self._customer_ticket_proxy(request, "/api/customer-service/github/workspace")
 
     async def admin_ticket_github(self, request: Request, ticket_id: int):
-        return await self._customer_ticket_proxy(request, f"/api/customer-service/tickets/{ticket_id}/github")
+        return await self._customer_ticket_proxy(
+            request, f"/api/customer-service/tickets/{ticket_id}/github"
+        )
 
     async def admin_ticket_github_publish(self, request: Request, ticket_id: int):
         return await self.admin_customer_ticket_command(request, ticket_id, "github")

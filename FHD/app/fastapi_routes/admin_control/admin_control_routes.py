@@ -299,11 +299,31 @@ def register_routes(
                 customer_tickets.admin_update_customer_ticket_expected_completion,
             ),
             ("/admin/customer-service/staff", "GET", customer_tickets.admin_customer_ticket_staff),
-            ("/admin/customer-service/github/workspace", "GET", customer_tickets.admin_github_workspace),
-            ("/admin/customer-service/tickets/{ticket_id}/github", "GET", customer_tickets.admin_ticket_github),
-            ("/admin/customer-service/tickets/{ticket_id}/github", "POST", customer_tickets.admin_ticket_github_publish),
-            ("/admin/customer-service/tickets/{ticket_id}/github/start", "POST", customer_tickets.admin_ticket_github_start),
-            ("/admin/customer-service/tickets/{ticket_id}/github/reconcile", "POST", customer_tickets.admin_ticket_github_reconcile),
+            (
+                "/admin/customer-service/github/workspace",
+                "GET",
+                customer_tickets.admin_github_workspace,
+            ),
+            (
+                "/admin/customer-service/tickets/{ticket_id}/github",
+                "GET",
+                customer_tickets.admin_ticket_github,
+            ),
+            (
+                "/admin/customer-service/tickets/{ticket_id}/github",
+                "POST",
+                customer_tickets.admin_ticket_github_publish,
+            ),
+            (
+                "/admin/customer-service/tickets/{ticket_id}/github/start",
+                "POST",
+                customer_tickets.admin_ticket_github_start,
+            ),
+            (
+                "/admin/customer-service/tickets/{ticket_id}/github/reconcile",
+                "POST",
+                customer_tickets.admin_ticket_github_reconcile,
+            ),
             (
                 "/admin/customer-service/tickets/{ticket_id}/assign",
                 "POST",

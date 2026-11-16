@@ -40,8 +40,9 @@ async def test_web_admin_validation_preserves_account_boundaries(case):
     ports = {field.name: Mock(return_value=None) for field in fields(SessionAccess)}
     ports.update(
         session_id=lambda request: "test-admin-session",
-        backend=lambda: SimpleNamespace(session_manager=SimpleNamespace(
-            get_session_info=lambda sid: {"id": sid})),
+        backend=lambda: SimpleNamespace(
+            session_manager=SimpleNamespace(get_session_info=lambda sid: {"id": sid})
+        ),
         resolve_user=lambda request: SimpleNamespace(is_active=case != "disabled"),
         desktop_gate=lambda sid: {"valid": False} if case == "desktop" else None,
         product_sku=lambda: "enterprise",

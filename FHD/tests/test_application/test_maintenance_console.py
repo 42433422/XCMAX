@@ -99,10 +99,10 @@ def test_missing_upstream_auth_does_not_invalidate_admin_session(monkeypatch):
 
 def test_log_cleanup_requires_review(configured, monkeypatch):
     perform = Mock()
-    monkeypatch.setattr(svc, 'perform', perform)
-    result = svc.request_run('clear_logs', str(uuid4()), 'operator')
-    assert result['state'] == 'pending_approval'
+    monkeypatch.setattr(svc, "perform", perform)
+    result = svc.request_run("clear_logs", str(uuid4()), "operator")
+    assert result["state"] == "pending_approval"
     perform.assert_not_called()
-    record = svc.approvals.get_action_state(result['action_id'])
-    assert record['payload']['job_id'] == JOB
-    assert record['payload']['actor'] == 'operator'
+    record = svc.approvals.get_action_state(result["action_id"])
+    assert record["payload"]["job_id"] == JOB
+    assert record["payload"]["actor"] == "operator"
