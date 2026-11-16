@@ -33,9 +33,12 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+      - name: Read pinned Flutter SDK
+        id: flutter_sdk
+        run: echo "version=$(cat .flutter-version)" >> "$GITHUB_OUTPUT"
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version-file: FHD/mobile-flutter-poc/.flutter-version
+          flutter-version: ${{ steps.flutter_sdk.outputs.version }}
           cache: true
       - name: Flutter version
         run: flutter --version
@@ -65,9 +68,12 @@ jobs:
         run: |
           xcodebuild -version
           xcrun --sdk iphoneos --show-sdk-version
+      - name: Read pinned Flutter SDK
+        id: flutter_sdk
+        run: echo "version=$(cat .flutter-version)" >> "$GITHUB_OUTPUT"
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version-file: FHD/mobile-flutter-poc/.flutter-version
+          flutter-version: ${{ steps.flutter_sdk.outputs.version }}
           cache: true
       - name: Flutter version
         run: flutter --version

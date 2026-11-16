@@ -1,5 +1,7 @@
 PODS:
   - Flutter (1.0.0)
+  - flutter_tts (0.0.1):
+    - Flutter
   - google_mlkit_barcode_scanning (0.14.2):
     - Flutter
     - google_mlkit_commons
@@ -56,6 +58,7 @@ PODS:
 
 DEPENDENCIES:
   - Flutter (from `Flutter`)
+  - flutter_tts (from `.symlinks/plugins/flutter_tts/ios`)
   - google_mlkit_barcode_scanning (from `.symlinks/plugins/google_mlkit_barcode_scanning/ios`)
   - google_mlkit_commons (from `.symlinks/plugins/google_mlkit_commons/ios`)
 
@@ -76,6 +79,8 @@ SPEC REPOS:
 EXTERNAL SOURCES:
   Flutter:
     :path: Flutter
+  flutter_tts:
+    :path: ".symlinks/plugins/flutter_tts/ios"
   google_mlkit_barcode_scanning:
     :path: ".symlinks/plugins/google_mlkit_barcode_scanning/ios"
   google_mlkit_commons:
@@ -83,6 +88,7 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
+  flutter_tts: 91ad1884033cd95ef6e9338754adad54f01f090f
   google_mlkit_barcode_scanning: 558187bc222df9e86110a2dad3c61695b4a3ac99
   google_mlkit_commons: 1e6ef6605d7281f35baf2b355e6049b9984fd624
   GoogleDataTransport: aae35b7ea0c09004c3797d53c8c41f66f219d6a7
