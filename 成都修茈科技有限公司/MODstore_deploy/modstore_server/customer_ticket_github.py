@@ -6,6 +6,7 @@ import hashlib
 import os
 import re
 import uuid
+from typing import Any
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
@@ -31,10 +32,7 @@ RUN_ACTION = "github.run"
 def public_incident(payload):
     workspace = payload["github_workspace"]
     return {
-        **{
-            key: payload.get(key)
-            for key in ("scope", "issue_domain", "intent", "source")
-        },
+        **{key: payload.get(key) for key in ("scope", "issue_domain", "intent", "source")},
         "title": workspace["public_title"],
         "summary": workspace["public_summary"],
     }
@@ -82,33 +80,36 @@ def github(method, path, body=None):
     except (httpx.HTTPError, ValueError) as exc:
         # Never return upstream bodies, request headers, or customer data in errors.
         code = getattr(getattr(exc, "response", None), "status_code", None)
-        raise HTTPException(
-            502, f"GitHub 请求未确认（{code or '连接中断'}），请查询回执"
-        ) from exc
+        raise HTTPException(502, f"GitHub 请求未确认（{code or '连接中断'}），请查询回执") from exc
 
 
 def _ticket(db, ticket_id, *, mutable=False):
     ticket = db.get(CustomerServiceTicket, ticket_id)
     if not ticket:
         raise HTTPException(404, "工单不存在")
-    if ticket.intent != "product_issue":
-        raise HTTPException(409, "仅产品问题进入共享仓库修复")
     from modstore_server.customer_issue_delivery_contract import issue_resolution
 
-    if (
-        issue_resolution(ticket, json_loads(ticket.evidence_json, {}))["route"]
-        != "shared_core"
-    ):
-        raise HTTPException(409, "客户专属 Mod 保留在原交付流程")
+    evidence = json_loads(ticket.evidence_json, {})
+    route = issue_resolution(ticket, evidence)["route"]
+    prerequisite = evidence.get("shared_core_prerequisite")
+    pending_host = (
+        route == "private_mod"
+        and isinstance(prerequisite, str)
+        and bool(prerequisite.strip())
+        and not evidence.get("shared_core_prerequisite_release")
+        and ticket.intent in {"product_issue", "custom_delivery"}
+    )
+    if not pending_host and (ticket.intent != "product_issue" or route != "shared_core"):
+        raise HTTPException(
+            409, "客户专属 Mod 保留在原交付流程；仅待发布宿主前置修复可提交公开摘要"
+        )
     if mutable and ticket.status not in {"open", "processing"}:
         raise HTTPException(409, "已结束工单不能发起修复")
     return ticket
 
 
 def _actions(db, ticket_id, kind=ISSUE_ACTION):
-    return db.query(CustomerServiceAction).filter_by(
-        ticket_id=ticket_id, action_type=kind
-    )
+    return db.query(CustomerServiceAction).filter_by(ticket_id=ticket_id, action_type=kind)
 
 
 def _receipt(row):
@@ -211,10 +212,7 @@ def _legacy_guard(db, ticket):
     if claim and (
         claim.get("continuation_pending")
         or not claim.get("ok")
-        or any(
-            r.get("requires_reconciliation") or not r.get("completed")
-            for r in _receipts(claim)
-        )
+        or any(r.get("requires_reconciliation") or not r.get("completed") for r in _receipts(claim))
     ):
         raise HTTPException(409, "原执行任务尚未核销，请先查询原任务，避免重复修复")
 
@@ -244,9 +242,12 @@ def workspace(db: Session = Depends(get_db), user: User = Depends(require_admin)
         .limit(100)
         .all()
     )
+    from modstore_server.para_github_runner import publisher_capability
+
     config = configuration()
     return {
         **config,
+        "publisher_capability": publisher_capability(),
         "items": [
             {
                 "ticket_id": t.id,
@@ -292,16 +293,12 @@ def publish(
         )
         return _link(db, ticket, row, user, issue)
     except HTTPException:
-        _record(
-            db, row, user, {}, "unknown", "提交结果未确认，请查询回执；不会自动重复创建"
-        )
+        _record(db, row, user, {}, "unknown", "提交结果未确认，请查询回执；不会自动重复创建")
         raise
 
 
 @router.post("/tickets/{ticket_id}/github/reconcile")
-def reconcile(
-    ticket_id: int, db: Session = Depends(get_db), user: User = Depends(require_admin)
-):
+def reconcile(ticket_id: int, db: Session = Depends(get_db), user: User = Depends(require_admin)):
     ticket = _ticket(db, ticket_id)
     row = _actions(db, ticket.id).first()
     if not row:
@@ -310,16 +307,14 @@ def reconcile(
     repo = request["repository"]
     if row.status != "completed":
         marker = request["body"].splitlines()[-1]
-        found = []
+        found: list[dict[str, Any]] = []
         for page in range(1, 11):
             issues = github(
                 "GET",
                 f"/repos/{repo}/issues?state=all&sort=created&direction=desc&per_page=100&page={page}",
             )
             found.extend(
-                i
-                for i in issues
-                if not i.get("pull_request") and marker in (i.get("body") or "")
+                i for i in issues if not i.get("pull_request") and marker in (i.get("body") or "")
             )
             if len(issues) < 100:
                 break
@@ -337,6 +332,27 @@ def _inbox(db, run):
         f"ops.intake.customer_ticket:customer-issue-intake:{event_key}".encode()
     ).hexdigest()
     return db.get(IncidentInbox, key) if event_key else None
+
+
+def _settled(claim, receipts):
+    """A failed attempt is not terminal until its recovery and receipts settle."""
+    if claim.get("continuation_pending") or any(
+        intent.get("state") not in {"completed", "receipt_recorded"}
+        for intent in (claim.get("follow_up_intents") or {}).values()
+    ):
+        return False
+    if any(
+        r.get("requires_reconciliation")
+        or r.get("state") not in {"completed", "failed", "cancelled", "rejected"}
+        for r in receipts
+    ):
+        return False
+    handled = claim.get("failure_handled_attempts") or []
+    return bool(claim.get("team")) and all(
+        row.get("status") in {"completed", "cancelled", "rejected"}
+        or (row.get("status") in {"failed", "handler_failed"} and row.get("attempt_id") in handled)
+        for row in claim["team"]
+    )
 
 
 def _execution(db, run):
@@ -360,29 +376,25 @@ def _execution(db, run):
         for r in claim.get("team", [])
     ]
     if jobs:
+        receipts = _receipts(claim)
+        settled = _settled(claim, receipts)
         failed = any(j["status"] in {"failed", "cancelled", "rejected"} for j in jobs)
         result.update(
-            execution_status="completed"
-            if claim.get("ok") or failed
-            else "in_progress",
+            execution_status=(
+                "completed" if settled and (claim.get("ok") or failed) else "in_progress"
+            ),
             conclusion="success" if claim.get("ok") else "failure" if failed else None,
             event_id=event.id,
-            receipts=_receipts(claim),
+            receipts=receipts,
         )
     return result, jobs
 
 
 @router.get("/tickets/{ticket_id}/github")
-def detail(
-    ticket_id: int, db: Session = Depends(get_db), user: User = Depends(require_admin)
-):
+def detail(ticket_id: int, db: Session = Depends(get_db), user: User = Depends(require_admin)):
     ticket = _ticket(db, ticket_id)
     row = _actions(db, ticket.id).first()
-    run = (
-        _actions(db, ticket.id, RUN_ACTION)
-        .order_by(CustomerServiceAction.id.desc())
-        .first()
-    )
+    run = _actions(db, ticket.id, RUN_ACTION).order_by(CustomerServiceAction.id.desc()).first()
     execution, jobs = _execution(db, run)
     result = {
         **configuration(),
@@ -397,9 +409,7 @@ def detail(
         result.update(repository=repo, url=f"https://github.com/{repo}")
         try:
             if execution and execution.get("run_id"):
-                worker = github(
-                    "GET", f"/repos/{repo}/actions/runs/{execution['run_id']}"
-                )
+                worker = github("GET", f"/repos/{repo}/actions/runs/{execution['run_id']}")
                 if (
                     worker.get("status") == "completed"
                     and execution.get("execution_status") != "completed"
@@ -410,9 +420,7 @@ def detail(
                     )
             issue = github("GET", f"/repos/{repo}/issues/{number}")
             result["issue"]["state"] = issue["state"]
-            timeline = github(
-                "GET", f"/repos/{repo}/issues/{number}/timeline?per_page=100"
-            )
+            timeline = github("GET", f"/repos/{repo}/issues/{number}/timeline?per_page=100")
             if not isinstance(timeline, list) or any(
                 not isinstance(item, dict) for item in timeline
             ):
@@ -457,6 +465,11 @@ def start(
     previous = _actions(db, ticket.id, RUN_ACTION).first()
     if previous:
         return _receipt(previous)
+    from modstore_server.para_github_runner import publisher_capability
+
+    capability = publisher_capability()
+    if not capability["available"]:
+        raise HTTPException(503, detail=capability)
     _legacy_guard(db, ticket)
     if not configuration()["para_configured"]:
         raise HTTPException(503, "尚未接通 GitHub 临时执行器")

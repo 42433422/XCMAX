@@ -130,7 +130,7 @@ abstract class _MobileStartupStateBase extends State<MobileStartupApp> {
         _pushMobileDeepLinkPage(
           navigator,
           DesktopToolWebViewScreen(
-            title: destination.title ?? '桌面工具',
+            title: destination.title ?? '工作台应用',
             path: destination.path ?? '/',
             api: widget.repository.client,
           ),
@@ -222,7 +222,8 @@ abstract class _MobileStartupStateBase extends State<MobileStartupApp> {
         );
         return true;
       case MobileDeepLinkTarget.ocr:
-        _pushMobileDeepLinkPage(navigator, const OcrScreen());
+        _pushMobileDeepLinkPage(
+            navigator, OcrScreen(repository: widget.repository));
         return true;
       case MobileDeepLinkTarget.bridge:
         _pushMobileDeepLinkPage(

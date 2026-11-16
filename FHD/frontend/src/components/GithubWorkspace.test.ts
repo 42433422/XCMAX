@@ -17,7 +17,7 @@ beforeEach(() => {
 })
 afterEach(() => {
   wrapper?.unmount()
-  document.body.innerHTML = ''
+  document.body.replaceChildren()
 })
 const button = (text: string) => wrapper.findAll('button').find((b) => b.text().includes(text))!
 

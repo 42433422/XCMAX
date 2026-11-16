@@ -207,15 +207,20 @@ class _MessageListScreenState extends State<MessageListScreen> {
           ),
         );
         return;
+      case 'notifications':
+        await Navigator.of(context).push<void>(MaterialPageRoute(
+          builder: (_) => NotificationListScreen(repository: _repository),
+        ));
+        return;
       case 'circle':
-        final callback = widget.onOpenDiscover;
+        final callback = widget.onOpenCircle;
         if (callback != null) {
           callback();
           return;
         }
         await Navigator.of(context).push<void>(
           MaterialPageRoute(
-            builder: (_) => DiscoverScreen(repository: _repository),
+            builder: (_) => AiCircleScreen(repository: _repository),
           ),
         );
         return;

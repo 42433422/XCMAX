@@ -32,6 +32,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      # Disabled until publication runs outside the model's identity/filesystem.
+      # This step executes before any model, management or publisher secret is supplied.
+      - name: Block unsafe shared-identity publisher
+        env:
+          PARA_GITHUB_REQUEST_ID: ${{ inputs.request_id }}
+          PARA_GITHUB_EVIDENCE_DIR: ${{ runner.temp }}/para-evidence
+        run: |
+          node scripts/autonomy/runtime_tools/github_para_worker.mjs
       - uses: actions/setup-node@v4
         with:
           node-version: "22"

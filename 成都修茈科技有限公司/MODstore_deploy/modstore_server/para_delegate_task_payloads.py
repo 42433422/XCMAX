@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import importlib
+import json
+import re
+from hashlib import sha256
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -21,6 +24,172 @@ class PreparedTaskGroup:
     payloads: list[PreparedPayload] = field(default_factory=list)
     first_payload: dict[str, object] = field(default_factory=dict)
     blocked: dict[str, Any] | None = None
+
+
+def _facade():
+    return importlib.import_module("modstore_server.para_delegate_handler")
+
+
+def _build_request(*, task: str, input_data: dict[str, Any], employee_id: str) -> dict[str, Any]:
+    input_data = {**input_data, **_facade()._customer_ticket_cloud_route(input_data)}
+    from modstore_server.customer_ticket_triage import para_triage_hook
+
+    input_data = para_triage_hook(input_data, employee_id=employee_id)
+    budget = {}
+    if input_data.get("_trusted_incident_team_execution") is True:
+        from modstore_server.incident_model_router import route_for_incident
+
+        role = str(input_data.get("role") or "")
+        route = route_for_incident(
+            event_type=str(input_data.get("event_type") or ""),
+            payload=input_data.get("incident") or {},
+            role=role,
+        )
+        budget = {"role": role, **route.get("budget", {})} if route.get("budget") else {}
+    title = str(input_data.get("title") or task or "")[:240]
+    if input_data.get("github_workspace") and input_data.get("_trusted_incident_team_execution"):
+        request_key = str(input_data["github_workspace"]["request_id"])
+        attempt = str(input_data.get("attempt_id") or "")
+        if not re.fullmatch(r"[0-9a-f]{32}", attempt):
+            raise ValueError("GitHub employee attempt identity is invalid")
+        title = f"[xcmax:{sha256(request_key.encode()).hexdigest()[:32]}:{attempt}] {employee_id}"
+    workspace_root = (
+        "" if input_data.get("github_workspace") else _facade()._project_root(input_data)
+    )
+    mode = _facade()._mode_for_employee(employee_id, input_data)
+    report_only = _facade()._coerce_bool(
+        input_data.get("report_only"), mode in {"review", "verify"}
+    )
+    branch = (
+        str(
+            input_data.get("branch")
+            or input_data.get("base_branch")
+            or _facade().os.environ.get("MODSTORE_PARA_BRANCH")
+            or "main"
+        ).strip()
+        or "main"
+    )
+    return {
+        "request_id": str(
+            input_data.get("request_id")
+            or input_data.get("attempt_id")
+            or _facade().uuid.uuid4().hex
+        ),
+        "execution_identity": {
+            key: input_data.get(key)
+            for key in (
+                "event_id",
+                "tenant_id",
+                "user_id",
+                "attempt_id",
+                "revision",
+                "role",
+            )
+        },
+        "created_at": _facade().datetime.now(_facade().timezone.utc).isoformat(),
+        "source": "modstore_employee_loop",
+        "execution_budget": budget,
+        "codex_model_candidates": budget.get("codex_model_candidates")
+        or input_data.get("codex_model_candidates"),
+        "employee_id": employee_id,
+        "mode": mode,
+        "report_only": report_only,
+        "title": title,
+        "max_attempts": 1 if input_data.get("github_workspace") else input_data.get("max_attempts"),
+        "task": task,
+        "prompt": str(input_data.get("prompt") or task or ""),
+        "workspace_root": workspace_root,
+        "repo_url": str(
+            input_data.get("repo_url") or _facade().os.environ.get("MODSTORE_PARA_REPO_URL") or ""
+        ),
+        "branch": branch,
+        "device_id": str(
+            input_data.get("device_id") or _facade().os.environ.get("MODSTORE_PARA_DEVICE_ID") or ""
+        ),
+        "tool_name": str(input_data.get("tool_name") or input_data.get("dev_tool") or ""),
+        "depends_on": (
+            input_data.get("depends_on") if isinstance(input_data.get("depends_on"), list) else []
+        ),
+        "para_task_id": str(input_data.get("para_task_id") or input_data.get("task_id") or ""),
+        "dispatch_line": str(input_data.get("dispatch_line") or ""),
+        "priority": str(input_data.get("priority") or ""),
+        "action_item_id": input_data.get("action_item_id"),
+        "record_id": input_data.get("record_id"),
+        "wait_for_para": input_data.get("wait_for_para"),
+        "wait_timeout_sec": input_data.get("wait_timeout_sec"),
+        "evidence": (
+            input_data.get("evidence") if isinstance(input_data.get("evidence"), dict) else {}
+        ),
+        "raw_input": input_data,
+    }
+
+
+def _independent_check_plan(req):
+    """Validate read-only units against the saved server plan, never customer input."""
+    raw = req.get("raw_input") or {}
+    units = raw.get("independent_checks")
+    if not units:
+        return [], ""
+    role = raw.get("role")
+    if (
+        not raw.get("_trusted_incident_team_execution")
+        or not raw.get("_incident_continuation")
+        or role not in {"scout", "verify"}
+        or req.get("report_only") is not True
+        or not isinstance(units, list)
+        or not 1 <= len(units) <= 8
+    ):
+        raise ValueError("Independent checks require a durable read-only incident role")
+    from modstore_server.models import IncidentEvent, get_session_factory
+    from modstore_server.node_coordinator import assert_incident_claim
+
+    event_id = int(raw.get("event_id") or 0)
+    with get_session_factory()() as db:
+        assert_incident_claim(event_id, session=db)
+        event = db.get(IncidentEvent, event_id)
+        if event is None:
+            raise ValueError("Independent check incident does not exist")
+        claim = json.loads(event.payload_json or "{}").get("_team_claim") or {}
+        plan = claim.get("plan") or {}
+        row = next((r for r in claim.get("team") or [] if r.get("role") == role), {})
+        if (
+            plan.get("execution_schema") != 2
+            or (plan.get("independent_checks") or {}).get(role) != units
+            or not row.get("attempt_id")
+            or row.get("attempt_id") != raw.get("attempt_id")
+        ):
+            raise ValueError("Independent check plan or attempt does not match the incident")
+        fix = next((r for r in claim.get("team") or [] if r.get("role") == "fix"), {})
+        fixed = {
+            str(output.get("commit_sha") or output.get("merge_commit_sha") or "")
+            for output in (fix.get("handler_outputs") or {}).get("outputs") or []
+            if output.get("commit_sha") or output.get("merge_commit_sha")
+        }
+    ids, revisions = set(), set()
+    for unit in units:
+        if (
+            not isinstance(unit, dict)
+            or unit.get("read_only") is not True
+            or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", str(unit.get("unit_id") or ""))
+            or unit["unit_id"] in ids
+            or not str(unit.get("prompt") or "").strip()
+            or len(str(unit.get("prompt") or "")) > 4000
+            or unit.get("depends_on")
+        ):
+            raise ValueError(
+                "Checks need distinct IDs, bounded prompts and independent read-only scope"
+            )
+        ids.add(unit["unit_id"])
+        if unit.get("source_revision"):
+            revisions.add(str(unit["source_revision"]))
+    if not revisions and role == "verify":
+        revisions = fixed
+    if len(revisions) != 1 or not re.fullmatch(r"[0-9a-fA-F]{40}", next(iter(revisions), "")):
+        raise ValueError("Independent checks require one immutable source revision")
+    revision = next(iter(revisions))
+    if role == "verify" and (not fix.get("ok") or fixed != {revision}):
+        raise ValueError("Verification checks must target the completed fix revision")
+    return units, revision
 
 
 def validated_check_units(

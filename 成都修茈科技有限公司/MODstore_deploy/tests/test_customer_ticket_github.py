@@ -4,6 +4,7 @@ import uuid
 
 import pytest
 from fastapi import HTTPException
+
 from modstore_server import customer_ticket_github as bridge
 from modstore_server.api.deps import require_admin
 from modstore_server.app import app
@@ -30,9 +31,7 @@ def ticket(client, monkeypatch):
         owner = User(username=uuid.uuid4().hex, password_hash="x", is_admin=False)
         db.add_all([user, owner])
         db.flush()
-        session = CustomerServiceSession(
-            user_id=owner.id, channel="customer_issue_intake"
-        )
+        session = CustomerServiceSession(user_id=owner.id, channel="customer_issue_intake")
         db.add(session)
         db.flush()
         row = CustomerServiceTicket(
@@ -56,6 +55,14 @@ def ticket(client, monkeypatch):
     yield ident
     app.dependency_overrides.clear()
     app.dependency_overrides.update(previous)
+
+
+@pytest.fixture
+def isolated_publisher_stub(monkeypatch):
+    """Exercise downstream contracts only; production intentionally has no publisher."""
+    from modstore_server import para_github_runner
+
+    monkeypatch.setattr(para_github_runner, "publisher_capability", lambda: {"available": True})
 
 
 DRAFT = {
@@ -86,9 +93,7 @@ def test_publish_idempotent_and_private_source_never_sent(client, ticket, monkey
         assert db.query(CustomerServiceAction).filter_by(ticket_id=ticket).count() == 1
 
 
-def test_unknown_create_is_never_replayed_and_can_reconcile(
-    client, ticket, monkeypatch
-):
+def test_unknown_create_is_never_replayed_and_can_reconcile(client, ticket, monkeypatch):
     bodies = []
 
     def timeout(method, path, body=None):
@@ -117,9 +122,7 @@ def test_unknown_create_is_never_replayed_and_can_reconcile(
         assert db.get(CustomerServiceTicket, ticket).status == "open"
 
 
-def test_publish_requires_admin_public_review_and_open_product_ticket(
-    client, ticket, monkeypatch
-):
+def test_publish_requires_admin_public_review_and_open_product_ticket(client, ticket, monkeypatch):
     monkeypatch.setattr(bridge, "github", lambda *args: pytest.fail("must not publish"))
     path = f"/api/customer-service/tickets/{ticket}/github"
     assert client.post(path, json={**DRAFT, "confirm_public": False}).status_code == 422
@@ -137,6 +140,7 @@ def test_publish_requires_admin_public_review_and_open_product_ticket(
     assert client.get("/api/customer-service/github/workspace").status_code == 403
 
 
+@pytest.mark.usefixtures("isolated_publisher_stub")
 def test_legacy_unknown_execution_blocks_cloud_start(client, ticket, monkeypatch):
     from modstore_server import customer_ticket_execution
 
@@ -150,9 +154,7 @@ def test_legacy_unknown_execution_blocks_cloud_start(client, ticket, monkeypatch
     assert result.status_code == 409 and "原执行任务" in result.text
 
 
-def test_issue_links_original_owner_work_order_without_changing_status(
-    client, ticket, monkeypatch
-):
+def test_issue_links_original_owner_work_order_without_changing_status(client, ticket, monkeypatch):
     from modstore_server.work_order_api import (
         CandidateBody,
         _create_candidate,
@@ -181,6 +183,7 @@ def test_issue_links_original_owner_work_order_without_changing_status(
         assert db.get(CustomerServiceTicket, ticket).status == "open"
 
 
+@pytest.mark.usefixtures("isolated_publisher_stub")
 def test_start_uses_existing_employee_outbox_once_without_model_or_workflow_dispatch(
     client, ticket, monkeypatch
 ):
@@ -201,14 +204,9 @@ def test_start_uses_existing_employee_outbox_once_without_model_or_workflow_disp
     assert first.status_code == 200, first.text
     assert first.json()["status"] == "queued"
     assert (
-        client.post(path + "/start", json={"request_id": str(uuid.uuid4())}).json()
-        == first.json()
+        client.post(path + "/start", json={"request_id": str(uuid.uuid4())}).json() == first.json()
     )
-    rows = [
-        r
-        for r in db_outbox.fetch_pending(limit=100)
-        if r.payload.get("ticket_id") == ticket
-    ]
+    rows = [r for r in db_outbox.fetch_pending(limit=100) if r.payload.get("ticket_id") == ticket]
     assert len(rows) == 1
     assert rows[0].payload["github_workspace"]["issue_number"] == 123
     with get_session_factory()() as db:
@@ -221,6 +219,7 @@ def test_start_uses_existing_employee_outbox_once_without_model_or_workflow_disp
     assert len([c for c in calls if c[0] == "POST"]) == 1
 
 
+@pytest.mark.usefixtures("isolated_publisher_stub")
 def test_no_cloud_para_binding_means_no_dispatch(client, ticket, monkeypatch):
     monkeypatch.delenv("MODSTORE_PARA_GITHUB_DEVICE_ID")
     monkeypatch.setattr(bridge, "github", lambda *args: {"number": 123})
@@ -239,23 +238,19 @@ def test_no_cloud_para_binding_means_no_dispatch(client, ticket, monkeypatch):
 
 def test_private_mod_does_not_enter_public_shared_repair(client, ticket, monkeypatch):
     with get_session_factory()() as db:
-        db.get(
-            CustomerServiceTicket, ticket
-        ).evidence_json = '{"issue_domain":"custom"}'
+        db.get(CustomerServiceTicket, ticket).evidence_json = '{"issue_domain":"custom"}'
         db.commit()
-    monkeypatch.setattr(
-        bridge, "github", lambda *args: pytest.fail("private Mod must not publish")
-    )
+    monkeypatch.setattr(bridge, "github", lambda *args: pytest.fail("private Mod must not publish"))
     result = client.post(f"/api/customer-service/tickets/{ticket}/github", json=DRAFT)
     assert result.status_code == 409
 
 
-def test_github_runner_acknowledgement_then_original_outbox_incident(
-    client, ticket, monkeypatch
-):
+@pytest.mark.usefixtures("isolated_publisher_stub")
+def test_github_runner_acknowledgement_then_original_outbox_incident(client, ticket, monkeypatch):
     from datetime import UTC, datetime
 
     import httpx
+
     from modstore_server import customer_issue_intake as intake
     from modstore_server import incident_bus
     from modstore_server import para_github_runner as runner
@@ -288,9 +283,7 @@ def test_github_runner_acknowledgement_then_original_outbox_incident(
     client.post(path, json=DRAFT)
     client.post(path + "/start", json={"request_id": request_id})
     record = next(
-        r
-        for r in db_outbox.fetch_pending(limit=100)
-        if r.payload.get("ticket_id") == ticket
+        r for r in db_outbox.fetch_pending(limit=100) if r.payload.get("ticket_id") == ticket
     )
     real_client = httpx.Client
     device = {
@@ -410,6 +403,7 @@ def test_github_runner_acknowledgement_then_original_outbox_incident(
         assert "PRIVATE" not in str(status)
 
 
+@pytest.mark.usefixtures("isolated_publisher_stub")
 def test_uncertain_workflow_dispatch_is_not_replayed(client, ticket, monkeypatch):
     from modstore_server import para_github_runner as runner
     from modstore_server.eventing import db_outbox
@@ -419,9 +413,7 @@ def test_uncertain_workflow_dispatch_is_not_replayed(client, ticket, monkeypatch
     client.post(path, json=DRAFT)
     client.post(path + "/start", json={"request_id": str(uuid.uuid4())})
     record = next(
-        r
-        for r in db_outbox.fetch_pending(limit=100)
-        if r.payload.get("ticket_id") == ticket
+        r for r in db_outbox.fetch_pending(limit=100) if r.payload.get("ticket_id") == ticket
     )
     posts = []
 
@@ -491,9 +483,7 @@ def test_worker_slot_keeps_pending_jobs_in_management_until_prior_run_is_settled
         db.commit()
         assert runner._claim_worker_slot(db, actions[0])
         assert runner._claim_worker_slot(db, actions[0])
-        assert not runner._claim_worker_slot(
-            db, actions[1]
-        )  # Unknown dispatch remains owned.
+        assert not runner._claim_worker_slot(db, actions[1])  # Unknown dispatch remains owned.
         receipt = {
             "run_id": 123,
             "receipts": [{"state": "running", "requires_reconciliation": True}],
@@ -509,3 +499,206 @@ def test_worker_slot_keeps_pending_jobs_in_management_until_prior_run_is_settled
         monkeypatch.setattr(bridge, "github", lambda *args: {"status": "completed"})
         assert runner._claim_worker_slot(db, actions[1])
         assert actions[0].status == "runner_stopped"
+
+
+@pytest.mark.parametrize("intent", ["product_issue", "custom_delivery"])
+def test_private_prerequisite_only_publishes_reviewed_summary(client, ticket, monkeypatch, intent):
+    with get_session_factory()() as db:
+        row = db.get(CustomerServiceTicket, ticket)
+        row.intent = intent
+        row.evidence_json = bridge.json_dumps(
+            {"issue_domain": "custom", "shared_core_prerequisite": "PRIVATE prerequisite"}
+        )
+        db.commit()
+    sent = []
+    monkeypatch.setattr(
+        bridge, "github", lambda method, path, body=None: sent.append(body) or {"number": 124}
+    )
+    response = client.post(f"/api/customer-service/tickets/{ticket}/github", json=DRAFT)
+    assert response.status_code == 200, response.text
+    assert len(sent) == 1 and "PRIVATE" not in str(sent)
+    with get_session_factory()() as db:
+        row = db.get(CustomerServiceTicket, ticket)
+        assert row.intent == intent and "PRIVATE" in row.summary
+
+
+@pytest.mark.parametrize(
+    "evidence",
+    [
+        {"shared_core_prerequisite": ""},
+        {"shared_core_prerequisite": {"unsafe": "not text"}},
+        {"shared_core_prerequisite": "host fix", "shared_core_prerequisite_release": "released"},
+    ],
+)
+def test_private_prerequisite_rejects_missing_or_released_scope(
+    client, ticket, monkeypatch, evidence
+):
+    with get_session_factory()() as db:
+        row = db.get(CustomerServiceTicket, ticket)
+        row.evidence_json = bridge.json_dumps({"issue_domain": "custom", **evidence})
+        db.commit()
+    monkeypatch.setattr(bridge, "github", lambda *a: pytest.fail("no external operation"))
+    assert (
+        client.post(f"/api/customer-service/tickets/{ticket}/github", json=DRAFT).status_code == 409
+    )
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {},
+        {"continuation_pending": True},
+        {"failure_handled_attempts": ["a"], "follow_up_intents": {"a": {"state": "dispatching"}}},
+    ],
+)
+def test_failed_attempt_does_not_finish_before_recovery(extra):
+    claim = {"team": [{"status": "failed", "attempt_id": "a"}], **extra}
+    assert not bridge._settled(claim, [])
+
+
+def test_finished_requires_recovery_and_outstanding_receipts_settled():
+    claim = {
+        "team": [{"status": "failed", "attempt_id": "a"}],
+        "failure_handled_attempts": ["a"],
+        "follow_up_intents": {"a": {"state": "completed"}},
+    }
+    assert bridge._settled(claim, [])
+    assert not bridge._settled(claim, [{"state": "pending"}])
+    assert not bridge._settled(claim, [{"state": "completed", "requires_reconciliation": True}])
+    assert not bridge._settled({**claim, "team": [{"status": "dispatching"}]}, [])
+
+
+def test_retry_prompt_keeps_public_boundary(monkeypatch):
+    from modstore_server import incident_team_orchestrator as orchestrator
+
+    class Captured(Exception):
+        pass
+
+    def capture(**kwargs):
+        assert kwargs["payload"] == {
+            "scope": "fhd",
+            "issue_domain": None,
+            "intent": None,
+            "source": None,
+            "title": DRAFT["title"],
+            "summary": DRAFT["body"],
+        }
+        raise Captured
+
+    monkeypatch.setattr(orchestrator, "_task_for_role", capture)
+    with pytest.raises(Captured):
+        orchestrator._retry_member(
+            event_id=1,
+            member={"role": "fix", "employee_id": "test"},
+            team_plan={},
+            payload={
+                "scope": "fhd",
+                "summary": "PRIVATE",
+                "user_id": 999,
+                "ticket_no": "PRIVATE",
+                "github_workspace": {
+                    "public_title": DRAFT["title"],
+                    "public_summary": DRAFT["body"],
+                },
+            },
+            event_type="test",
+            source="test",
+            uid=0,
+            prev_results={},
+        )
+
+
+@pytest.mark.usefixtures("isolated_publisher_stub")
+def test_private_prerequisite_start_keeps_private_delivery_and_scopes_host(
+    client, ticket, monkeypatch
+):
+    from modstore_server.eventing import db_outbox
+
+    with get_session_factory()() as db:
+        row = db.get(CustomerServiceTicket, ticket)
+        row.intent = "custom_delivery"
+        row.evidence_json = bridge.json_dumps(
+            {"issue_domain": "custom", "shared_core_prerequisite": "PRIVATE host requirement"}
+        )
+        db.commit()
+    monkeypatch.setattr(
+        bridge, "github", lambda method, path, body=None: {"number": 124, "state": "open"}
+    )
+    path = f"/api/customer-service/tickets/{ticket}/github"
+    assert client.post(path, json=DRAFT).status_code == 200
+    captured = []
+    monkeypatch.setattr(
+        db_outbox, "enqueue", lambda db, kind, key, payload, **kw: captured.append(payload)
+    )
+    response = client.post(path + "/start", json={"request_id": str(uuid.uuid4())})
+    assert response.status_code == 200, response.text
+    assert len(captured) == 1
+    assert captured[0]["intake_source"] == "private_mod_prerequisite"
+    assert captured[0]["resolution"]["route"] == "shared_core"
+    assert captured[0]["delivery_managed_by"] == "custom_delivery"
+    assert captured[0]["github_workspace"]["issue_number"] == 124
+    with get_session_factory()() as db:
+        row = db.get(CustomerServiceTicket, ticket)
+        assert row.intent == "custom_delivery" and "PRIVATE" in row.summary
+
+
+def test_unisolated_publisher_blocks_start_and_reports_capability(client, ticket, monkeypatch):
+    from modstore_server import para_github_runner as runner
+    from modstore_server.eventing import db_outbox
+
+    monkeypatch.setenv("PARA_GITHUB_ISOLATED_PUBLISHER", "true")
+    monkeypatch.setattr(bridge, "github", lambda *args: {"number": 123})
+    path = f"/api/customer-service/tickets/{ticket}/github"
+    assert client.post(path, json=DRAFT).status_code == 200
+    monkeypatch.setattr(bridge, "github", lambda *args: pytest.fail("No GitHub call after block"))
+    response = client.post(path + "/start", json={"request_id": str(uuid.uuid4())})
+    assert response.status_code == 503
+    capability = runner.publisher_capability()
+    assert capability == response.json()["detail"]
+    assert capability["available"] is False
+    assert capability["reason"] == "blocked_isolated_publisher_required"
+    assert (
+        client.get("/api/customer-service/github/workspace").json()["publisher_capability"]
+        == capability
+    )
+    assert not [
+        r for r in db_outbox.fetch_pending(limit=100) if r.payload.get("ticket_id") == ticket
+    ]
+    with get_session_factory()() as db:
+        assert (
+            db.query(CustomerServiceAction)
+            .filter_by(ticket_id=ticket, action_type=bridge.RUN_ACTION)
+            .count()
+            == 0
+        )
+
+
+def test_existing_queued_dispatch_becomes_durable_block_without_external_calls(
+    client, ticket, monkeypatch
+):
+    from modstore_server import customer_issue_intake as intake
+    from modstore_server import para_github_runner as runner
+    from modstore_server.eventing import db_outbox
+
+    request_id = str(uuid.uuid4())
+    monkeypatch.setattr(bridge, "github", lambda *args: {"number": 123, "state": "open"})
+    path = f"/api/customer-service/tickets/{ticket}/github"
+    assert client.post(path, json=DRAFT).status_code == 200
+    with monkeypatch.context() as permitted:
+        permitted.setattr(runner, "publisher_capability", lambda: {"available": True})
+        assert client.post(path + "/start", json={"request_id": request_id}).status_code == 200
+    record = next(
+        r for r in db_outbox.fetch_pending(limit=100) if r.payload.get("ticket_id") == ticket
+    )
+    monkeypatch.setattr(
+        bridge, "github", lambda *args: pytest.fail("Blocked runner must not call GitHub")
+    )
+    result = intake.dispatch_issue_event(record.to_envelope())
+    assert result["status"] == "blocked"
+    assert result["reason"] == "blocked_isolated_publisher_required"
+    with get_session_factory()() as db:
+        assert runner.ensure_runner(db, record.payload) is None
+        status = runner.run_status(db, request_id)
+        assert status["finished"] is True
+        assert status["status"] == "blocked"
+        assert status["reason"] == "blocked_isolated_publisher_required"

@@ -33,9 +33,10 @@
         <button class="aigc-text-btn" :disabled="sending" @click="selectGroup(activeGroup)">重新连接</button>
       </div>
 
+      <p v-if="receiptError" class="aigc-error" role="status">{{ receiptError }}</p>
       <MatureChat :room-id="activeGroup.id" :title="activeGroup.name"
         :subtitle="`${activeGroup.member_count} 个 AI 成员${transport.active.value ? (transport.connected.value ? ' · 已连接' : ' · 连接中') : ''}`"
-        :rows="chatRows" v-model:draft="input" :disabled="sending || loading || (transport.active.value && !transport.connected.value)"
+        :rows="chatRows" v-model:draft="input" :disabled="sending || !sessionAvailable"
         :busy-label="sending ? sendingLabel : '正在连接…'" :has-more="transport.hasOlder.value" :placeholder="inputPlaceholder"
         @send="send" @load-older="loadOlder">
         <template #avatar><GroupAvatar :name="activeGroup.name" :members="activeGroup.members" /></template>
@@ -93,7 +94,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope';
 import MatureChat from '@/components/im/MatureChat.vue';
 import GroupAvatar from '@/components/im/GroupAvatar.vue';
 import { employeeAvatarUrl } from '@/utils/employeeAvatar';
@@ -111,6 +113,7 @@ import {
 import { resolveSuperEmployeeAvatarSrc } from '@/constants/superEmployeeAvatars';
 import { apiFetch } from '@/utils/apiBase';
 import { groupSendingLabel, resolveAiGroupMessageUi } from '@/utils/aiGroupMessageUi';
+import { useAiGroupResultRefresh } from '@/composables/messenger/useAiGroupResultRefresh';
 import { useOpenIMGroup } from '@/composables/messenger/useOpenIMGroup';
 
 type PickEmployee = { employee_id: string; mod_id: string; name: string; avatar: string; summary: string };
@@ -124,6 +127,7 @@ const employees = ref<PickEmployee[]>([]);
 const input = ref('');
 const sending = ref(false);
 const loading = ref(false);
+const sessionReady = ref(false);
 let selection = 0;
 const showMembers = ref(false);
 const dispatchMode = ref(false);
@@ -134,6 +138,15 @@ function mergeMessages(rows: AiGroupMessage[]) {
     .sort((a, b) => a.created_at.localeCompare(b.created_at));
 }
 const transport = useOpenIMGroup(mergeMessages);
+const sessionAvailable = computed(() => sessionReady.value && !loading.value
+  && (!transport.active.value || transport.connected.value));
+const receiptError = useAiGroupResultRefresh(() => activeGroup.value?.id || '',
+  () => sessionAvailable.value, mergeMessages);
+watch(productReadAccountEpoch, () => {
+  selection++;
+  activeGroup.value = null; groups.value = []; messages.value = []; input.value = ''; employees.value = [];
+  loading.value = false; sending.value = false; sessionReady.value = false;
+}, { flush: 'sync' });
 const chatRows = computed(() => messages.value.map(m => ({ id: m.id, body: m.body,
   mine: m.role === 'user', sender: m.sender_name, avatar: messageAvatarSrc(m), at: m.created_at,
   label: messageUi(m).badge,
@@ -182,8 +195,11 @@ function messageAvatarSrc(message: AiGroupMessage): string | null {
 }
 
 async function loadGroups(): Promise<void> {
+  const epoch = productReadAccountEpoch.value;
   try {
-    groups.value = await fetchAiGroups('admin');
+    const rows = await fetchAiGroups('admin');
+    if (epoch !== productReadAccountEpoch.value) return;
+    groups.value = rows;
     if (!activeGroup.value && groups.value.length) await selectGroup(groups.value[0]);
   } catch {
     /* 静默：保留旧值 */
@@ -192,7 +208,9 @@ async function loadGroups(): Promise<void> {
 
 async function selectGroup(g: AiGroup): Promise<void> {
   const selected = ++selection;
+  sessionReady.value = false;
   loading.value = true;
+  sending.value = false;
   activeGroup.value = g;
   messages.value = [];
   chatError.value = '';
@@ -204,6 +222,7 @@ async function selectGroup(g: AiGroup): Promise<void> {
       if (selected !== selection) return;
       messages.value = rows;
     }
+    sessionReady.value = true;
   } catch {
     if (selected === selection) chatError.value = '消息加载失败，请重新连接';
   } finally {
@@ -214,7 +233,8 @@ async function selectGroup(g: AiGroup): Promise<void> {
 async function send(): Promise<void> {
   const text = input.value.trim();
   const g = activeGroup.value;
-  if (!text || !g || sending.value || loading.value || (transport.active.value && !transport.connected.value)) return;
+  if (!text || !g || sending.value || !sessionAvailable.value) return;
+  const selected = selection;
   input.value = '';
   messages.value = [
     ...messages.value,
@@ -224,6 +244,7 @@ async function send(): Promise<void> {
   chatError.value = '';
   try {
     const res = await postAiGroupMessage(g.id, text, [], 'admin', { dispatch: dispatchMode.value });
+    if (selected !== selection) return;
     messages.value = messages.value.filter((m) => !m.id.startsWith('local-'));
     mergeMessages(res.messages);
     if (res.group) {
@@ -232,20 +253,22 @@ async function send(): Promise<void> {
       groups.value = groups.value.map((x) => (x.id === res.group!.id ? res.group! : x));
     }
   } catch {
+    if (selected !== selection) return;
     messages.value = messages.value.filter((m) => !m.id.startsWith('local-'));
     input.value = text;
     chatError.value = '发送结果尚未确认，请重新连接核对消息，避免重复派工';
   } finally {
-    sending.value = false;
+    if (selected === selection) sending.value = false;
   }
 }
 
 async function onCreateGroup(): Promise<void> {
+  const epoch = productReadAccountEpoch.value;
   const name = window.prompt('群名称');
   if (!name || !name.trim()) return;
   try {
     await createAiGroup(name.trim(), 'admin');
-    await loadGroups();
+    if (epoch === productReadAccountEpoch.value) await loadGroups();
   } catch {
     /* ignore */
   }
@@ -254,9 +277,10 @@ async function onCreateGroup(): Promise<void> {
 async function addMember(e: PickEmployee): Promise<void> {
   const g = activeGroup.value;
   if (!g) return;
+  const selected = selection;
   try {
     const updated = await addAiGroupMember(g.id, e, 'admin');
-    if (updated) {
+    if (updated && selected === selection) {
       emit('group-updated', updated);
       activeGroup.value = updated;
       groups.value = groups.value.map((x) => (x.id === updated.id ? updated : x));
@@ -269,9 +293,10 @@ async function addMember(e: PickEmployee): Promise<void> {
 async function removeMember(employeeId: string): Promise<void> {
   const g = activeGroup.value;
   if (!g) return;
+  const selected = selection;
   try {
     const updated = await removeAiGroupMember(g.id, employeeId, 'admin');
-    if (updated) {
+    if (updated && selected === selection) {
       emit('group-updated', updated);
       activeGroup.value = updated;
       groups.value = groups.value.map((x) => (x.id === updated.id ? updated : x));
@@ -282,9 +307,11 @@ async function removeMember(employeeId: string): Promise<void> {
 }
 
 async function loadEmployees(): Promise<void> {
+  const epoch = productReadAccountEpoch.value;
   try {
     const res = await apiFetch('/api/mobile/v1/admin/employees', { headers: { 'Content-Type': 'application/json' } });
     const json = (await res.json()) as { data?: { items?: unknown[]; employees?: unknown[] }; items?: unknown[]; employees?: unknown[] };
+    if (epoch !== productReadAccountEpoch.value) return;
     const payload = json.data || json;
     const rows = (payload.items || payload.employees || []) as Array<Record<string, unknown>>;
     employees.value = rows
@@ -297,7 +324,7 @@ async function loadEmployees(): Promise<void> {
       }))
       .filter((e) => e.employee_id);
   } catch {
-    employees.value = [];
+    if (epoch === productReadAccountEpoch.value) employees.value = [];
   }
 }
 

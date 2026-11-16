@@ -18,6 +18,16 @@ from modstore_server.models_cs import CustomerServiceAction
 WORKFLOW = "fhd-para-github-worker.yml"
 
 
+def publisher_capability():
+    # No configuration flag may enable a publisher sharing the agent's identity.
+    # Replace this guard only alongside a genuinely isolated publisher implementation.
+    return {
+        "available": False,
+        "status": "blocked",
+        "reason": "blocked_isolated_publisher_required",
+    }
+
+
 def authorized_dispatch(runtime, employee_id):
     from modstore_server.customer_ticket_github import authorized_incident
     from modstore_server.models import IncidentEvent, get_session_factory
@@ -53,16 +63,14 @@ def api_base():
         or url.path
         or (
             url.scheme != "https"
-            and not (
-                url.scheme == "http" and url.hostname in {"127.0.0.1", "localhost"}
-            )
+            and not (url.scheme == "http" and url.hostname in {"127.0.0.1", "localhost"})
         )
     ):
         raise ValueError("GitHub Para 协调服务地址无效")
     return base
 
 
-def auth_headers():
+def auth_headers() -> dict[str, str]:
     from modstore_server.cred_vault import get_credential
 
     token = get_credential(
@@ -127,9 +135,7 @@ def _claim_worker_slot(db, row):
             return False
         repo = json_loads(previous.request_json, {})["repository"]
         if (
-            github("GET", f"/repos/{repo}/actions/runs/{receipt['run_id']}").get(
-                "status"
-            )
+            github("GET", f"/repos/{repo}/actions/runs/{receipt['run_id']}").get("status")
             != "completed"
         ):
             return False
@@ -147,9 +153,7 @@ def ensure_runner(db, payload):
     try:
         return _ensure_runner(db, payload)
     except (HTTPException, httpx.HTTPError):
-        row = db.get(
-            CustomerServiceAction, payload["github_workspace"].get("action_id")
-        )
+        row = db.get(CustomerServiceAction, payload["github_workspace"].get("action_id"))
         if row:
             row.error = "GitHub 或 Para 状态暂未取得，保留原派工等待核对"
             db.commit()
@@ -171,9 +175,13 @@ def _ensure_runner(db, payload):
     ):
         raise ValueError("GitHub 派工记录不匹配")
     repo, request_id = workspace["repository"], workspace["request_id"]
-    if row.status == "runner_stopped":
+    if row.status in {"runner_stopped", "blocked"}:
         return None
     if row.status == "queued":
+        capability = publisher_capability()
+        if not capability["available"]:
+            _save(db, row, "blocked", reason=capability["reason"])
+            return None
         if not _claim_worker_slot(db, row):
             return False
         claimed = (
@@ -231,9 +239,7 @@ def _ensure_runner(db, payload):
     with httpx.Client(timeout=10, trust_env=False, follow_redirects=False) as client:
         response = client.get(api_base() + "/api/devices", headers=auth_headers())
         response.raise_for_status()
-        ready = any(
-            device_matches(d, workspace) for d in response.json().get("devices", [])
-        )
+        ready = any(device_matches(d, workspace) for d in response.json().get("devices", []))
     if ready:
         _save(db, row, "running")
         issue = (
@@ -260,26 +266,22 @@ def run_status(db, request_id):
         .all()
     )
     row = next(
-        (
-            r
-            for r in rows
-            if json_loads(r.request_json, {}).get("request_id") == str(request_id)
-        ),
+        (r for r in rows if json_loads(r.request_json, {}).get("request_id") == str(request_id)),
         None,
     )
     if row is None:
         raise HTTPException(404, "派工记录不存在")
     execution, jobs = _execution(db, row)
-    finished = execution.get("execution_status") == "completed" or any(
-        j["status"] == "manual_review" for j in jobs
-    )
+    finished = execution.get("execution_status") == "completed"
     request = json_loads(row.request_json, {})
     return {
         "request_id": str(request_id),
         "repository": request["repository"],
         "issue_number": request["issue_number"],
         "run_id": execution.get("run_id"),
-        "finished": finished,
+        "finished": finished or execution.get("status") == "blocked",
+        "status": execution.get("status"),
+        "reason": execution.get("reason"),
         "conclusion": execution.get("conclusion") or "unknown",
         "jobs": jobs,
         "receipts": execution.get("receipts", []),
@@ -303,9 +305,7 @@ def verified_code_identity(snapshot):
             continue
         repo = configuration()["repository"]
         try:
-            ref = github(
-                "GET", f"/repos/{repo}/git/ref/heads/{quote(value['branch'], safe='/')}"
-            )
+            ref = github("GET", f"/repos/{repo}/git/ref/heads/{quote(value['branch'], safe='/')}")
         except HTTPException as exc:
             raise ValueError("GitHub 提交回执暂未取得") from exc
         if ref.get("object", {}).get("sha") != value["commit_sha"]:

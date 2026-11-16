@@ -69,7 +69,7 @@ const credentialVault = createCredentialVault({ actor: 'para_e2e_agent' });
 const token = credentialVault.getCredential('DEVFLEET_DEVICE_TOKEN', {
   taskId: 'agent-session', purpose: 'para_device_ws', fallback: resolveDeviceToken, required: true,
 });
-// 子进程（Codex 等）环境走统一凭据层：按派单授权引用审计；开启强制模式后只给作用域内的密钥。
+// Model children receive only their model authentication; prompt grants may only narrow it.
 const toolEnv = (prompt, tool) => credentialVault.childEnv(process.env, parseCredentialGrant(prompt), { tool });
 const apiBase = (process.env.DEVFLEET_API_URL || 'http://localhost:3001').replace(/\/$/, '');
 const workspaceRoot = process.env.DEVFLEET_WORKSPACE_ROOT || '/tmp/devfleet-e2e/agent-workspace';
@@ -1095,6 +1095,7 @@ async function autoFormatPythonFiles(taskDir, ws, task) {
       try {
         await execFileAsync(cmd, args, {
           cwd: taskDir,
+          env: toolEnv('', 'formatter'),
           maxBuffer: 5 * 1024 * 1024,
           timeout: 30_000,
         });

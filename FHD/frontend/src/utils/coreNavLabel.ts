@@ -1,3 +1,4 @@
+import navigationCatalog from '../../../config/core_navigation.json'
 /**
  * 核心侧栏菜单键的展示名：与 Sidebar 一致。
  * 优先级：Mod manifest `menu_overrides[].label` → 行业名 → 默认名。
@@ -22,40 +23,23 @@ export type ModForNavLabel = {
 
 /** 与 MainLayout.viewTitlesBase 对齐；默认文案保持通用宿主语境，行业词汇由 preset / Mod 覆盖 */
 export const MENU_DEFAULT_NAMES: Record<string, string> = {
-  chat: '智能对话',
-  im: '信息',
-  'ai-ecosystem': '智能生态',
-  'persy-knowledge': '知识库',
   'model-payment': '模型服务',
   'kitten-finance': '财务分析',
   'mod-store': '能力库',
-  products: '产品管理',
   'materials-list': '资源库',
-  materials: '资源库',
   'traditional-mode': '表格模式',
-  'business-docking': '数据对接中心',
-  orders: '业务单据',
   'orders-create': '新建业务单据',
-  'shipment-records': '业务记录',
-  customers: '客户管理',
-  'data-sources': '数据来源',
-  print: '模板与打印',
-  'printer-list': '打印机列表',
-  'template-preview': '模板库',
   console: '模板库',
-  settings: '系统设置',
   tools: '工具表',
-  'approval-hub': '审批中心',
   'enterprise-customer-service': '信息',
   'internal-customer-service': '信息',
   'other-tools': '员工视图',
-  'employee-workflow': '员工工作台',
   'workflow-employee-space': '员工工作台',
   'workflow-visualization': '流程可视化',
-  purchase: '采购管理',
   'label-editor': '模板编辑器',
   'batch-analyze': '批量分析',
   'chat-debug': '对话调试',
+  ...Object.fromEntries([...navigationCatalog.core, ...navigationCatalog.industry, navigationCatalog.settings, navigationCatalog.admin].map(item => [item.key, item.name])),
 }
 
 /**

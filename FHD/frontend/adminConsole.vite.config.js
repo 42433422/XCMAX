@@ -106,7 +106,7 @@ export default defineConfig(() => ({
     openimAssets(),
     createAdminConsoleAtAliasPlugin(hostRoot),
     createWorkflowComponentsAliasPlugin(hostRoot),
-    vue(),
+    vue({ template: { compilerOptions: { isCustomElement: tag => tag === 'vue-advanced-chat' } } }),
     // 管理端网页使用严格 CSP（不允许 unsafe-eval）。翻译消息必须在构建期
     // 预编译，否则 vue-i18n 会在登录页通过 new Function 动态编译并白屏。
     VueI18n({

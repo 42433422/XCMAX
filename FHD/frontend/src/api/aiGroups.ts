@@ -76,9 +76,9 @@ export async function createAiGroup(name: string, scope: AiGroupApiScope = 'admi
   return unwrap(data, '建群失败').group ?? null
 }
 
-export async function fetchAiGroupMessages(groupId: string, scope: AiGroupApiScope = 'admin'): Promise<AiGroupMessage[]> {
+export async function fetchAiGroupMessages(groupId: string, scope: AiGroupApiScope = 'admin', signal?: AbortSignal): Promise<AiGroupMessage[]> {
   const res = await apiFetch(`${base(scope)}/${encodeURIComponent(groupId)}/messages`, {
-    headers: jsonHeaders,
+    headers: jsonHeaders, signal,
   })
   const data = await readJson<{
     messages?: AiGroupMessage[]

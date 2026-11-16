@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:animations/animations.dart';
 import 'package:flutter/material.dart';
 
 import '../../api/mobile_api.dart';
@@ -22,7 +23,7 @@ import '../scan/scan_qr_screen.dart';
 const _bottomNavItems = [
   _NavItem('chat', AppIcons.chatOutline, AppIcons.chat, '消息'),
   _NavItem('work', AppIcons.employeesOutline, AppIcons.employees, 'AI员工'),
-  _NavItem('discover', AppIcons.discoverOutline, AppIcons.discover, '探索'),
+  _NavItem('discover', AppIcons.discoverOutline, AppIcons.discover, '工作台'),
   _NavItem('profile', AppIcons.profileOutline, AppIcons.profile, '我'),
 ];
 
@@ -134,18 +135,20 @@ class _HomeShellState extends State<HomeShell> {
             onOpenGroups: _openGroups,
             onOpenEmployees: () => _selectTab(1),
             onOpenContacts: () => _selectTab(1),
-            onOpenDiscover: () => _selectTab(2),
           );
         },
       ),
       AiEmployeesScreen(repository: _repository),
-      DiscoverScreen(repository: _repository, onOpenWork: () => _selectTab(1)),
+      DiscoverScreen(repository: _repository),
       ProfileScreen(api: _repository.client),
     ];
 
     return Scaffold(
       backgroundColor: AppTheme.colors(context).page,
-      body: IndexedStack(index: _index, children: pages),
+      body: HomeTabView(
+        index: _index,
+        children: pages,
+      ),
       bottomNavigationBar: WeBottomNavBar(
         currentIndex: _index,
         onSelect: _selectTab,
@@ -253,6 +256,7 @@ class _HomeShellState extends State<HomeShell> {
   }
 
   void _selectTab(int index) {
+    if (index < 0 || index >= _bottomNavItems.length || index == _index) return;
     setState(() => _index = index);
     if (index == 0) {
       unawaited(_refreshHomeData());
@@ -283,6 +287,73 @@ class _HomeShellState extends State<HomeShell> {
     );
     if (mounted) await _refreshHomeData();
   }
+}
+
+/// Keeps each tab mounted; the entrance effect never retains an outgoing copy.
+class HomeTabView extends StatefulWidget {
+  const HomeTabView({super.key, required this.index, required this.children});
+
+  final int index;
+  final List<Widget> children;
+
+  @override
+  State<HomeTabView> createState() => _HomeTabViewState();
+}
+
+class _HomeTabViewState extends State<HomeTabView>
+    with SingleTickerProviderStateMixin {
+  late final _transition = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 220),
+    value: 1,
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final duration = AppTheme.motionDuration(context, milliseconds: 220);
+    _transition.duration = duration;
+    if (duration == Duration.zero) _transition.value = 1;
+  }
+
+  @override
+  void didUpdateWidget(covariant HomeTabView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.index == widget.index) return;
+    if (AppTheme.motionDuration(context) == Duration.zero) {
+      _transition.value = 1;
+    } else {
+      _transition.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _transition.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+        animation: _transition,
+        builder: (context, child) => IgnorePointer(
+          ignoring: _transition.isAnimating,
+          child: child,
+        ),
+        child: FadeThroughTransition(
+          animation: _transition,
+          secondaryAnimation: kAlwaysDismissedAnimation,
+          fillColor: AppTheme.colors(context).page,
+          child: IndexedStack(
+            index: widget.index,
+            children: [
+              for (var i = 0; i < widget.children.length; i++)
+                TickerMode(
+                    enabled: i == widget.index, child: widget.children[i]),
+            ],
+          ),
+        ),
+      );
 }
 
 class _HomeData {
@@ -319,8 +390,8 @@ class WeBottomNavBar extends StatelessWidget {
         child: Material(
           key: const ValueKey('bottom_nav_capsule'),
           color: colors.surface,
-          elevation: 8,
-          shadowColor: Colors.black.withValues(alpha: 0.18),
+          elevation: 1.5,
+          shadowColor: Colors.black.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(30),
           child: SizedBox(
             height: 66,
@@ -365,36 +436,44 @@ class _WeBottomNavTile extends StatelessWidget {
       button: true,
       selected: selected,
       label: item.label,
-      child: Material(
-        key: ValueKey('bottom_nav_tile_${item.label}'),
-        color: selected ? colors.page : Colors.transparent,
-        borderRadius: BorderRadius.circular(24),
-        child: InkWell(
-          onTap: onTap,
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(begin: selected ? 1 : 0, end: selected ? 1 : 0),
+        duration: AppTheme.motionDuration(context),
+        curve: Curves.easeOutCubic,
+        builder: (context, value, _) => Material(
+          key: ValueKey('bottom_nav_tile_${item.label}'),
+          animationDuration: Duration.zero,
+          color: Color.lerp(Colors.transparent, colors.page, value),
           borderRadius: BorderRadius.circular(24),
-          child: SizedBox.expand(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  selected ? item.selectedIcon : item.icon,
-                  semanticLabel: item.label,
-                  size: 23,
-                  color: selected ? colors.brand : colors.textPrimary,
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  item.label,
-                  maxLines: 1,
-                  style: TextStyle(
-                    fontSize: 11,
-                    height: 1.2,
-                    fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                    color: selected ? colors.brand : colors.textStrongSecondary,
-                    letterSpacing: 0,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(24),
+            child: SizedBox.expand(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    selected ? item.selectedIcon : item.icon,
+                    semanticLabel: item.label,
+                    size: 23,
+                    color: Color.lerp(colors.textPrimary, colors.brand, value),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 2),
+                  Text(
+                    item.label,
+                    maxLines: 1,
+                    style: TextStyle(
+                      fontSize: 11,
+                      height: 1.2,
+                      fontWeight: FontWeight.lerp(
+                          FontWeight.w400, FontWeight.w600, value),
+                      color: Color.lerp(
+                          colors.textStrongSecondary, colors.brand, value),
+                      letterSpacing: 0,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

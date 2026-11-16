@@ -4,6 +4,17 @@
 version: 1
 
 domains:
+  - name: navigation-catalog
+    owner: product-platform
+    enabled: true
+    ssot: FHD/config/core_navigation.json
+    derived:
+      - FHD/frontend/src/constants/coreMenuCatalog.ts
+      - FHD/app/fastapi_routes/mobile_extensions/navigation_constants.py
+    mode: verify
+    check: python scripts/dev/ssot_plugins/mobile_tri_platform.py check-navigation
+    sync: null
+
   # ===== MVP enabled 域（包装现有 5 个脚本）=====
   - name: mods
     owner: FHD/mod_sdk

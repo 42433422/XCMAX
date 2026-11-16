@@ -290,6 +290,7 @@ class AutonomyAdmin:
         if denied is not None:
             return denied
         from starlette.concurrency import run_in_threadpool
+
         from app.application.autonomy import maintenance_console as service
 
         actor = self._approver(request)

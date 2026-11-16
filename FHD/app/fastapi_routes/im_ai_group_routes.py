@@ -42,14 +42,15 @@ def admin_ai_group_transport(
     denied = _facade()._ai_group_guard(request)
     if denied is not None:
         return denied
-    from app.infrastructure.im.openim import OpenIMError, OpenIMGroups, enabled
+    from app.application.group_chat import message_transport
+    from app.infrastructure.im.openim import OpenIMError, enabled
 
     headers = {"Cache-Control": "no-store"}
     if not enabled():
         return JSONResponse({"enabled": False}, headers=headers)
     try:
         service = _facade().AiGroupChatService()
-        result = OpenIMGroups(service._storage).session(_facade()._uid(user), group_id)
+        result = message_transport.session(service, _facade()._uid(user), group_id)
         return JSONResponse(result, headers=headers)
     except ValueError as exc:
         return _group_value_error_response(exc)

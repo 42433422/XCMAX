@@ -68,7 +68,7 @@ beforeEach(() => {
 })
 afterEach(() => {
   wrapper?.unmount()
-  document.body.innerHTML = ''
+  document.body.replaceChildren()
 })
 describe('employee task workspace', () => {
   it('reads durable task evidence and preserves failure status', async () => {

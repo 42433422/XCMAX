@@ -95,44 +95,54 @@ class _ChatToolCardPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const columns = 4;
-    final rows = <List<_ChatToolAction>>[];
-    for (var start = 0; start < actions.length; start += columns) {
-      final end = (start + columns).clamp(0, actions.length);
-      rows.add(actions.sublist(start, end));
-    }
-
+    final fontSize = MediaQuery.textScalerOf(context).scale(13);
+    final lineHeight =
+        fontSize * (Theme.of(context).textTheme.labelMedium?.height ?? 1.3);
     return Padding(
       key: const ValueKey('chat_tool_card_panel'),
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 20),
-      child: Column(
-        children: [
-          for (var rowIndex = 0; rowIndex < rows.length; rowIndex++) ...[
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (var index = 0; index < columns; index++) ...[
-                  Expanded(
-                    child: index < rows[rowIndex].length
-                        ? _ChatToolCard(action: rows[rowIndex][index])
-                        : const SizedBox(height: 92),
-                  ),
-                  if (index != columns - 1) const SizedBox(width: 12),
+      child: LayoutBuilder(builder: (context, constraints) {
+        final columns =
+            ((constraints.maxWidth + 12) / (max(82.0, fontSize * 5) + 12))
+                .floor()
+                .clamp(1, 4);
+        final compact = columns == 4 && fontSize <= 13;
+        final height = compact ? 92.0 : max(92.0, 75 + lineHeight * 2);
+        return Column(
+          children: [
+            for (var start = 0; start < actions.length; start += columns) ...[
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (var index = 0; index < columns; index++) ...[
+                    Expanded(
+                      child: start + index < actions.length
+                          ? _ChatToolCard(
+                              action: actions[start + index],
+                              height: height,
+                              maxLines: compact ? 1 : 2)
+                          : SizedBox(height: height),
+                    ),
+                    if (index != columns - 1) const SizedBox(width: 12),
+                  ],
                 ],
-              ],
-            ),
-            if (rowIndex != rows.length - 1) const SizedBox(height: 18),
+              ),
+              if (start + columns < actions.length) const SizedBox(height: 18),
+            ],
           ],
-        ],
-      ),
+        );
+      }),
     );
   }
 }
 
 class _ChatToolCard extends StatelessWidget {
-  const _ChatToolCard({required this.action});
+  const _ChatToolCard(
+      {required this.action, required this.height, required this.maxLines});
 
   final _ChatToolAction action;
+  final double height;
+  final int maxLines;
 
   @override
   Widget build(BuildContext context) {
@@ -140,7 +150,7 @@ class _ChatToolCard extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
     return SizedBox(
       key: ValueKey('chat_tool_card_${action.title}'),
-      height: 92,
+      height: height,
       child: Material(
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(8),
@@ -170,10 +180,11 @@ class _ChatToolCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 82),
+                  constraints: BoxConstraints(
+                      maxWidth: maxLines == 1 ? 82 : double.infinity),
                   child: Text(
                     action.title,
-                    maxLines: 1,
+                    maxLines: maxLines,
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.center,
                     style: textTheme.labelMedium?.copyWith(

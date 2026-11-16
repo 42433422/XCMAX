@@ -2,7 +2,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import MatureChat from './MatureChat.vue'
 vi.mock('vue-advanced-chat', () => ({ register: () => {
-  if (!customElements.get('vue-advanced-chat')) customElements.define('vue-advanced-chat', class extends HTMLElement {})
+  if (!customElements.get('vue-advanced-chat')) customElements.define('vue-advanced-chat', class extends HTMLElement {
+    constructor() {
+      super()
+      this.attachShadow({ mode: 'open' }).innerHTML = ['room-header-info', 'room-options', 'room-header-avatar', 'messages-empty']
+        .map(name => `<slot name="${name}"></slot>`).join('')
+    }
+  })
 } }))
 const wrappers: ReturnType<typeof mount>[] = []
 afterEach(() => wrappers.splice(0).forEach(w => w.unmount()))
@@ -18,6 +24,23 @@ function dispatch(wrapper: ReturnType<typeof mount>, type: string, data: object)
   wrapper.get('vue-advanced-chat').element.dispatchEvent(new CustomEvent(type, { detail: [data] }))
 }
 describe('mature chat host adapter', () => {
+  it('projects identity, actions, avatar and empty content into native shadow slots', async () => {
+    const click = vi.fn()
+    const w = mount(MatureChat, { props: { roomId: 'g', title: '员工群', rows: [] },
+      slots: { actions: '<button class="native-action">成员</button>', avatar: '<img alt="群头像" />' } })
+    wrappers.push(w)
+    await flushPromises()
+    const host = w.get('vue-advanced-chat').element
+    for (const name of ['room-header-info', 'room-options', 'room-header-avatar', 'messages-empty']) {
+      const slot = host.shadowRoot!.querySelector<HTMLSlotElement>(`slot[name="${name}"]`)!
+      expect(slot.assignedElements()).toEqual([host.querySelector(`[slot="${name}"]`)])
+    }
+    w.get('.native-action').element.addEventListener('click', click)
+    await w.get('.native-action').trigger('click')
+    expect(click).toHaveBeenCalledOnce()
+    expect(w.get('[slot="room-header-info"]').text()).toContain('员工群')
+    expect(w.get('[slot="room-header-avatar"] img').attributes('alt')).toBe('群头像')
+  })
   it('preserves source IDs and review provenance without fabricating read receipts', async () => {
     const w = await setup()
     const row = JSON.parse(w.get('vue-advanced-chat').attributes('messages'))[0]

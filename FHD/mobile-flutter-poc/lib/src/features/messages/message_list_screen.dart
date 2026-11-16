@@ -13,7 +13,8 @@ import '../chat/chat_screen.dart';
 import '../contacts/contacts_screen.dart';
 import '../cs/admin_cs_console_screen.dart';
 import '../cs/cs_chat_screen.dart';
-import '../discover/discover_screen.dart';
+import '../circle/ai_circle_screen.dart';
+import '../notifications/notification_list_screen.dart';
 import '../groups/ai_group_screens.dart';
 import '../scan/scan_qr_screen.dart';
 import '../tasks/task_list_screen.dart';
@@ -39,7 +40,7 @@ class MessageListScreen extends StatefulWidget {
     this.onOpenGroups,
     this.onOpenEmployees,
     this.onOpenContacts,
-    this.onOpenDiscover,
+    this.onOpenCircle,
   });
 
   final List<AiGroupConversation> groups;
@@ -53,7 +54,7 @@ class MessageListScreen extends StatefulWidget {
   final VoidCallback? onOpenGroups;
   final VoidCallback? onOpenEmployees;
   final VoidCallback? onOpenContacts;
-  final VoidCallback? onOpenDiscover;
+  final VoidCallback? onOpenCircle;
 
   @override
   State<MessageListScreen> createState() => _MessageListScreenState();
