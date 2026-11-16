@@ -364,9 +364,9 @@
     "FHD/app/application/shipment_excel_elt_security.py": {
       "base_file": null,
       "base_blob": null,
-      "head_blob": "021156a271c4983bc331f3e943688a221123d7c6",
+      "head_blob": "d0394b98a541ede75df78219eaf7a41b4ba837c0",
       "before_lines": 0,
-      "after_lines": 1019,
+      "after_lines": 1017,
       "reason": "Review request only: Introduce the ELT-named security module with canonical-root checks, owner-pinned no-follow file opening, atomic output publication and default-off execution gates.",
       "boundary": "Only managed roots and narrowly configured workspaces are trusted, secure output fails closed without platform handle support, and uploads remain pinned to tenant and owner directories.",
       "validation": "Requires test_shipment_excel_etl_production_ready.py and test_shipment_result_security.py regressions for traversal, symlink swaps, atomic replacement, cleanup and default-off gates.",
@@ -388,9 +388,9 @@
     "FHD/app/domain/shared_services/tools_workflow_elt.py": {
       "base_file": null,
       "base_blob": null,
-      "head_blob": "3bf4ab087a6e2d89ac5a003283367ab299883eb5",
+      "head_blob": "4924e77e65dd4b0cc2bc5e8c949f5d7dc91f18b6",
       "before_lines": 0,
-      "after_lines": 1672,
+      "after_lines": 1681,
       "reason": "Review request only: Add the enterprise chat ELT router with owned single and batch preview and execution, per-file progress, explicit blocker decisions, auto-mode execution and durable receipts.",
       "boundary": "The router requires the enterprise gate, bound actors, owned uploads and runs and preview revisions, caps batches at fifty, preserves tenant scope in receipt threads and limits auto-execution to chat_approval_mode=auto.",
       "validation": "Requires test_tools_workflow_elt_import.py, test_etl_import_batch.py and test_agent_user_decision_pause.py regressions for continuation, blockers, ownership and receipt behavior.",
