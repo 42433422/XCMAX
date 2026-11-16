@@ -163,7 +163,9 @@ def prepare_chat_evidence(
             history = task_conversation_store.get_conversation(session_id=session, user_id=owner)
             rows = [
                 {
-                    "role": "assistant" if item.get("role") == "ai" else str(item.get("role") or ""),
+                    "role": "assistant"
+                    if item.get("role") == "ai"
+                    else str(item.get("role") or ""),
                     "content": str(item.get("content") or "")[:2000],
                 }
                 for item in (history.get("messages") or [])

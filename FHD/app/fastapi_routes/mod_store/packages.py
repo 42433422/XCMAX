@@ -167,7 +167,8 @@ class PackageInstaller:
             if not install_verify:
                 if self._artifact(files.normalized) == ARTIFACT_EMPLOYEE_PACK:
                     self._logger.warning(
-                        "市场员工包未强制验签（按安装请求放行）：%s:%s", pkg_id, version
+                        "市场员工包未强制验签（按安装请求放行）：%s",
+                        self._artifact(files.normalized),
                     )
                 else:
                     install_verify = True

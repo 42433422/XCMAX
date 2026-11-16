@@ -526,11 +526,7 @@ class ApprovalDecisions:
         data = self.view(req, include_records=True)
         data["workflow_execution"] = {
             **bounded_outcome,
-            **(
-                {"waiting_user_decision": True}
-                if include_waiting_decision
-                else {}
-            ),
+            **({"waiting_user_decision": True} if include_waiting_decision else {}),
         }
         if handed_off:
             data["workflow_execution"]["execution_accepted"] = True

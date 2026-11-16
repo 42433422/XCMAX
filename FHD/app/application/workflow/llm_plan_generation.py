@@ -137,6 +137,12 @@ _BUSINESS_INTENT = re.compile(
     "提交|扫描|图片|照片|ocr|OCR"
 )
 _LIGHT_SYSTEM = "你是平台对话助手。只输出约定 JSON。"
+
+
+class _LightReplyUnavailable(Exception):
+    """轻量轮次的模型调用已失败，不再重复调用完整规划。"""
+
+
 _LIGHT_RULES = (
     "只输出 JSON，不要 markdown。",
     '闲聊、解释、总结、写作和通用问答返回 {"mode":"reply","reply":"..."}。',
@@ -483,7 +489,8 @@ class LlmPlanGeneration:
                 http_client_factory=self.http_client,
             )
         if response is None:
-            return None
+            # 模型调用本身失败：轻量轮次已经花掉一次调用，不再重复打一次完整规划。
+            raise _LightReplyUnavailable
         decoded = _decode_completion(response)
         if decoded is None:
             return None
@@ -514,7 +521,10 @@ class LlmPlanGeneration:
     ) -> PlanGraph | None:
         try:
             if _conversational_turn(message, context):
-                light = self._light_reply(plan_id, message, context)
+                try:
+                    light = self._light_reply(plan_id, message, context)
+                except _LightReplyUnavailable:
+                    return None
                 if light is not None:
                     return light
             tool_specs = _tool_specs(select_tools_for_prompt(tool_registry, message, context))

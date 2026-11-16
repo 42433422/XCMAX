@@ -149,7 +149,7 @@ def _platform_mimo_audio(
     except RECOVERABLE_ERRORS as exc:
         logger.info("platform MiMo TTS unavailable: %s", type(exc).__name__)
         return None
-    if resp.status_code != 200 or provider not in {"mimo", "edge"} or not mime.startswith("audio/"):
+    if resp.status_code != 200 or provider != "mimo" or not mime.startswith("audio/"):
         logger.info(
             "platform TTS rejected: status=%s provider=%s content_type=%s",
             resp.status_code,
@@ -162,8 +162,8 @@ def _platform_mimo_audio(
     return {
         "audio": audio,
         "mime": mime,
-        "provider": provider,
-        "voice": voice_name or ("冰糖" if provider == "mimo" else edge_voice),
+        "provider": "mimo",
+        "voice": voice_name or "冰糖",
     }
 
 

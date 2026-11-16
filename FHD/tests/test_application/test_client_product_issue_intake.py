@@ -530,6 +530,15 @@ def test_resumed_ticket_inherits_the_previous_customer_words():
     assert prior in merged and "继续提交原来的工单。" in merged
 
 
+def test_registration_marker_does_not_scan_unbounded_repetition():
+    """登记确认语只在邻近出现；超长间隔不得让正则回溯到任意长度。"""
+    from app.application.client_product_issue_intake import _ALREADY_REGISTERED_RE
+
+    far_apart = "工单" + "甲" * 1500 + "已受理"
+    assert _ALREADY_REGISTERED_RE.search(far_apart) is None
+    assert _ALREADY_REGISTERED_RE.search("工单 A-1024 已受理") is not None
+
+
 def test_confirmation_turn_resolves_the_earlier_customer_words():
     """「那你去提交一下呀 / 确认」本身不含问题，要能从会话前文找回工单正文。"""
     from app.application.client_product_issue_intake import resolve_issue_report_message

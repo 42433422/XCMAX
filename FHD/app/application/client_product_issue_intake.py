@@ -41,7 +41,9 @@ _UI_SYMPTOM_RE = re.compile(
 _IMAGE_DATA_URL = re.compile(r"(?i)^data:image/[\w.+-]+;base64,")
 _LOG_DATA_URL = re.compile(r"(?i)^data:(?:text/plain|application/octet-stream|text/x-log);base64,")
 _ASSISTANT_ROLES = frozenset({"assistant", "ai"})
-_ALREADY_REGISTERED_RE = re.compile(r"(?:工单.*已(?:受理|登记)|已(?:受理|登记).*工单)")
+_ALREADY_REGISTERED_RE = re.compile(
+    r"(?:工单[^\n]{0,200}已(?:受理|登记)|已(?:受理|登记)[^\n]{0,200}工单)"
+)
 
 
 def looks_like_issue_report(message: str) -> bool:
