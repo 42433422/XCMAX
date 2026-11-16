@@ -17,8 +17,8 @@ from typing import Any
 
 import yaml
 
-from app.application.elt_env import elt_getenv
 from app.domain.app_pure.excel_elt_kb import get_excel_elt_kb
+from app.utils.elt_env import elt_getenv
 
 _BUILTIN_DIR = (
     Path(__file__).resolve().parents[2] / "resources" / "config" / "shipment_elt" / "examples"

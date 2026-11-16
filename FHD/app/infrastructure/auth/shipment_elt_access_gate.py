@@ -2,9 +2,9 @@
 
 from fastapi import HTTPException, Request
 
-from app.application.elt_env import reject_legacy_elt_env
 from app.mod_sdk.product_skus import resolve_product_sku
 from app.utils.deployment import deployment_is_production, deployment_is_staging, env_flag
+from app.utils.elt_env import reject_legacy_elt_env
 
 
 def _shipment_elt_must_check() -> bool:

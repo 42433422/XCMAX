@@ -10,7 +10,7 @@ import pytest
 from sqlalchemy import create_engine, inspect, text
 
 from alembic import command
-from app.application.elt_env import LegacyEltEnvError, reject_legacy_elt_env
+from app.utils.elt_env import LegacyEltEnvError, reject_legacy_elt_env
 from tests.test_services.test_erp_schema_migration import _alembic_config
 from tests.test_services.test_erp_schema_migration import _db_url as _db_url
 

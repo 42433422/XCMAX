@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.application.elt_env import elt_getenv
 from app.application.shipment_elt_profile import ShipmentEltProfile, parse_profile_dict
 from app.domain.app_pure.excel_elt_kb import get_excel_elt_kb
+from app.utils.elt_env import elt_getenv
 
 
 def build_universal_profile_from_kb() -> ShipmentEltProfile:

@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 
-from app.application.elt_env import elt_getenv
 from app.application.shipment_elt_profile import (
     ShipmentEltProfile,
 )
@@ -14,6 +13,7 @@ from app.domain.app_pure.excel_elt_kb import (
     TemplateMemory,
     sheet_layout_fingerprint,
 )
+from app.utils.elt_env import elt_getenv
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .layout import _header_cell_texts

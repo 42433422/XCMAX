@@ -5,12 +5,12 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from app.application.elt_env import elt_getenv
 from app.application.shipment_elt_profile import (
     ShipmentEltProfile,
     column_rule_matches,
     header_groups_match,
 )
+from app.utils.elt_env import elt_getenv
 
 
 def _norm_cell(value: Any) -> str:

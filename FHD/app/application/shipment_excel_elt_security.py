@@ -11,7 +11,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import BinaryIO, Iterator
 
-from app.application.elt_env import elt_getenv
+from app.utils.elt_env import elt_getenv
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 

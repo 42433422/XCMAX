@@ -20,7 +20,7 @@ try:
 except ImportError:
     pass
 
-from app.application.elt_env import reject_legacy_elt_env
+from app.utils.elt_env import reject_legacy_elt_env
 
 reject_legacy_elt_env()
 

@@ -11,7 +11,7 @@ from typing import Any, cast
 
 from sqlalchemy import Table
 
-from app.application.elt_env import elt_getenv
+from app.utils.elt_env import elt_getenv
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
