@@ -11,15 +11,21 @@ import '../../models/conversation.dart';
 import '../../policy/pinned_ids.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/we_ui.dart';
-import '../approval/approval_screens.dart';
+import '../approval/native_approval_workspace.dart';
+import '../business/native_catalog_screen.dart';
+import '../business/native_orders_screen.dart';
+import '../business/native_materials_screen.dart';
 import '../chat/chat_screen.dart';
 import '../circle/ai_circle_screen.dart';
 import '../scan/scan_qr_screen.dart';
 import '../tasks/task_list_screen.dart';
 import '../webview/desktop_tool_webview_screen.dart';
+import '../workspace/employee_workspace_screen.dart';
 
 const _discoverNativeRouteMap = <String, String>{
   'ai-circle': 'circle',
+  'employee-workflow': 'employee_workspace',
+  'workflow-employee-space': 'employee_workspace',
   'tasks': 'tasks',
   'approval-hub': 'approval',
   'photo-files': 'assistant_attachments',
@@ -178,7 +184,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
           existing?.group ?? group,
           existing?.icon ?? _iconFor(item),
           path: item.path.trim().isNotEmpty
-              ? item.path
+              ? _nativeBusinessPath(item.path, nav.data ?? const [])
               : _authorizedRouteFallbacks[item.key] ?? existing?.path ?? '',
           requiresDesktop: item.requiresDesktop,
           subtitle: existing?.subtitle ?? '',
@@ -436,18 +442,72 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     );
   }
 
+  String _nativeBusinessPath(String path, List<MobileNavMenuItem> menu) {
+    if (!const ['/products', '/customers', '/orders', '/shipment-records']
+        .contains(path)) {
+      return path;
+    }
+    // Desktop core ERP pages use the installed domain facade. Only select it
+    // when this account's navigation actually authorizes the same page.
+    final facade = '/mod/xcagi-erp-domain-bridge$path';
+    return menu.any((entry) => entry.path == facade) ? facade : path;
+  }
+
   void _open(_WorkbenchItem item) {
+    final material =
+        RegExp(r'^/(?:mod/([a-zA-Z0-9_-]+)/)?(?:materials|inventory)/?$')
+            .firstMatch(Uri.tryParse(item.path)?.path ?? '');
+    if (material != null) {
+      Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => NativeMaterialsScreen(
+              repository: _repository,
+              title: item.title,
+              activeModId: material[1] ?? '')));
+      return;
+    }
+    final approval = RegExp(
+            r'^/(?:mod/([a-zA-Z0-9_-]+)/)?approval-hub(?:/(workspace|flow-management))?/?$')
+        .firstMatch(Uri.tryParse(item.path)?.path ?? '');
+    if (approval != null || item.key == 'approval-hub' && item.path.isEmpty) {
+      Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => NativeApprovalWorkspace(
+                repository: _repository,
+                apiBase: approval?[1] == null
+                    ? 'api/approval'
+                    : 'api/mod/${approval![1]}',
+                initialTab: approval?[2] == 'flow-management' ? 2 : 0,
+              )));
+      return;
+    }
+    final orderRoute =
+        RegExp(r'^/(?:mod/([a-zA-Z0-9_-]+)/)?orders/?$').firstMatch(item.path);
+    if (orderRoute != null) {
+      Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => NativeOrdersScreen(
+              repository: _repository,
+              apiBase:
+                  orderRoute[1] == null ? 'api' : 'api/mod/${orderRoute[1]}')));
+      return;
+    }
+    final catalog = nativeCatalogRoute(item.path);
+    if (catalog != null) {
+      Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => NativeCatalogScreen(
+              repository: _repository,
+              resource: catalog.resource,
+              apiBase: catalog.base,
+              title: item.title)));
+      return;
+    }
     final Widget screen;
     switch (item.key) {
+      case 'employee-workflow':
+      case 'workflow-employee-space':
+        screen = EmployeeWorkspaceScreen(repository: _repository);
       case 'ai-circle':
         screen = AiCircleScreen(repository: _repository);
       case 'tasks':
         screen = TaskListScreen(repository: _repository);
-      case 'approval-hub':
-        screen = item.path.trim().isEmpty
-            ? ApprovalListScreen(repository: _repository)
-            : DesktopToolWebViewScreen(
-                title: item.title, path: item.path, api: _repository.client);
       case 'photo-files':
         screen = ChatScreen(
           repository: _repository,

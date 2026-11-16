@@ -6,8 +6,10 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, ConfigDict
+from starlette.concurrency import run_in_threadpool
 
 from app.application.mobile_extensions.protocols import (
     GrantEntitlementsCall,
@@ -35,6 +37,11 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 
+class MobileWorkspacePrefsPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    workflow_ai_employees: dict[str, bool]
+
+
 @dataclass(frozen=True)
 class WorkspaceRoutesPorts:
     load_market_ai_employee_profile_index: LoadMarketAiEmployeeProfileIndexCall
@@ -58,6 +65,81 @@ class WorkspaceRoutes:
     def __init__(self, ports: WorkspaceRoutesPorts, get_user: UserDependency) -> None:
         self.ports = ports
         self.router = router = APIRouter()
+
+        async def require_workspace_account(
+            request: Request, user: MobilePrincipal | None = Depends(get_user)
+        ):
+            if user is None:
+                raise HTTPException(status_code=401, detail="请先登录")
+            tenant_id = getattr(user, "tenant_id", None)
+            if type(tenant_id) is not int or tenant_id <= 0:
+                raise HTTPException(status_code=403, detail="无法确认企业数据归属")
+            request.state.tenant_id = tenant_id
+            return user
+
+        @router.get("/workspace/templates", response_model=None)
+        async def workspace_templates(
+            request: Request, user: MobilePrincipal = Depends(require_workspace_account)
+        ):
+            from app.fastapi_routes.template_api import templates_list_compat
+            from app.infrastructure.tenant_scope import owned_tenant_scope
+
+            # Keep account-owned templates and the shared starter catalog. The
+            # outer Mod middleware retains entitlement and database selection.
+            with owned_tenant_scope(user.tenant_id):
+                return await run_in_threadpool(templates_list_compat, request)
+
+        from app.fastapi_routes.domains.shipment.shipment_orders import router as shipment_router
+
+        shipment_paths = {
+            "/api/shipment/shipment-records/record",
+            "/api/shipment/shipment-records/export",
+        }
+        for route in shipment_router.routes:
+            if route.path not in shipment_paths:
+                continue
+            router.add_api_route(
+                "/workspace" + route.path.removeprefix("/api"),
+                route.endpoint,
+                methods=list(route.methods),
+                dependencies=[Depends(require_workspace_account), *route.dependencies],
+                response_model=None,
+            )
+
+        @router.get("/workspace/prefs", response_model=None)
+        async def workspace_prefs(
+            request: Request, user: MobilePrincipal | None = Depends(get_user)
+        ):
+            if user is None:
+                return ports.mobile_unauthorized_response()
+            from app.fastapi_routes.workspace_prefs_routes import get_workspace_prefs_endpoint
+
+            result = await run_in_threadpool(get_workspace_prefs_endpoint, request)
+            if not result.get("owner_id"):
+                return JSONResponse(
+                    format_mobile_response(
+                        None, "无法确认工作区归属，请重新登录", success=False, code=403
+                    ),
+                    status_code=403,
+                )
+            return result
+
+        @router.patch("/workspace/prefs", response_model=None)
+        async def update_workspace_prefs(
+            body: MobileWorkspacePrefsPatch,
+            request: Request,
+            user: MobilePrincipal | None = Depends(get_user),
+        ):
+            if user is None:
+                return ports.mobile_unauthorized_response()
+            from app.fastapi_routes.workspace_prefs_routes import (
+                WorkspacePrefsPatch,
+                patch_workspace_prefs_endpoint,
+            )
+
+            return await patch_workspace_prefs_endpoint(
+                WorkspacePrefsPatch(workflow_ai_employees=body.workflow_ai_employees), request
+            )
 
         @router.get("/mods", response_model=None)
         async def mobile_mods_summary(user: MobilePrincipal | None = Depends(get_user)) -> object:

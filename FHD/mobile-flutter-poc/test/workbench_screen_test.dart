@@ -11,6 +11,7 @@ import 'package:xcagi_flutter_poc/src/data/ai_employee_profile.dart';
 import 'package:xcagi_flutter_poc/src/features/chat/chat_screen.dart';
 import 'package:xcagi_flutter_poc/src/features/circle/ai_circle_screen.dart';
 import 'package:xcagi_flutter_poc/src/features/discover/discover_screen.dart';
+import 'package:xcagi_flutter_poc/src/features/approval/native_approval_workspace.dart';
 import 'package:xcagi_flutter_poc/src/features/tasks/task_list_screen.dart';
 import 'package:xcagi_flutter_poc/src/features/webview/desktop_tool_webview_screen.dart';
 import 'package:xcagi_flutter_poc/src/models/conversation.dart';
@@ -187,12 +188,7 @@ void main() {
     expect(
         find.byKey(const ValueKey('workbench-approval-hub')), findsOneWidget);
   });
-  for (final key in [
-    'business-docking',
-    'employee-workflow',
-    'ai-ecosystem',
-    'approval-hub'
-  ]) {
+  for (final key in ['business-docking', 'ai-ecosystem', 'approval-hub']) {
     testWidgets('authorized $key preserves its Mod scoped route',
         (tester) async {
       final path = '/mod/authorized/$key?view=mobile';
@@ -201,10 +197,18 @@ void main() {
       await _show(tester, repository);
       await tester.tap(find.byKey(ValueKey('workbench-$key')));
       await tester.pumpAndSettle();
-      final web = tester.widget<DesktopToolWebViewScreen>(
-          find.byType(DesktopToolWebViewScreen));
-      expect(web.path, path);
-      expect(web.api, same(repository.client));
+      if (key == 'approval-hub') {
+        final native = tester.widget<NativeApprovalWorkspace>(
+            find.byType(NativeApprovalWorkspace));
+        expect(native.apiBase, 'api/mod/authorized');
+        expect(native.repository, same(repository));
+        expect(find.byType(DesktopToolWebViewScreen), findsNothing);
+      } else {
+        final web = tester.widget<DesktopToolWebViewScreen>(
+            find.byType(DesktopToolWebViewScreen));
+        expect(web.path, path);
+        expect(web.api, same(repository.client));
+      }
     });
   }
 

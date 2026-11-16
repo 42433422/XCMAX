@@ -8,6 +8,8 @@ void main() {
         {'chat', 'im', 'settings', 'admin-entitlements'});
     expect(flutterDiscoverNativeRouteMapForTest(), {
       'ai-circle': 'circle',
+      'employee-workflow': 'employee_workspace',
+      'workflow-employee-space': 'employee_workspace',
       'tasks': 'tasks',
       'approval-hub': 'approval',
       'photo-files': 'assistant_attachments',

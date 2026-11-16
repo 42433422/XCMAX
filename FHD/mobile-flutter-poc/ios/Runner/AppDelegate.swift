@@ -45,6 +45,24 @@ import UIKit
   }
 
   private func registerXcagiChannels(messenger: FlutterBinaryMessenger) {
+    FlutterMethodChannel(name: "xcagi/workspace_files", binaryMessenger: messenger)
+      .setMethodCallHandler { [weak self] call, result in
+        guard call.method == "share" else { result(FlutterMethodNotImplemented); return }
+        guard let args = call.arguments as? [String: Any], let path = args["path"] as? String else {
+          result(FlutterError(code: "file_export", message: "文件无效", details: nil)); return
+        }
+        let url = URL(fileURLWithPath: path).resolvingSymlinksInPath()
+        let root = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("workspace_exports").resolvingSymlinksInPath()
+        guard url.path.hasPrefix(root.path + "/"), FileManager.default.fileExists(atPath: url.path),
+              var controller = self?.window?.rootViewController else {
+          result(FlutterError(code: "file_export", message: "文件不可用", details: nil)); return
+        }
+        while let presented = controller.presentedViewController { controller = presented }
+        let sheet = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+        sheet.popoverPresentationController?.sourceView = controller.view
+        sheet.popoverPresentationController?.sourceRect = CGRect(x: controller.view.bounds.midX, y: controller.view.bounds.midY, width: 1, height: 1)
+        controller.present(sheet, animated: true) { result(nil) }
+      }
     deepLinkChannel = FlutterMethodChannel(
       name: "xcagi/deep_link",
       binaryMessenger: messenger

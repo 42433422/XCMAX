@@ -564,6 +564,7 @@ _tasks = TaskRoutes(
     TaskRoutesPorts(
         list_tasks=contracts.late_callback(lambda: _mobile_tasks_list),
         get_task=contracts.late_callback(lambda: _mobile_task_get),
+        get_run=lambda run_id: _mobile_task_orchestrator().get_run(run_id),
     ),
     get_mobile_user,
 )
