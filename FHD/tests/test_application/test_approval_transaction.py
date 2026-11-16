@@ -81,7 +81,9 @@ def test_process_death_preserves_atomic_approval_and_pollable_dispatch(
     AgentApprovalConsumption.__table__.create(engine)
     token = issue_approval_grant(run, principal_id="owner")["grant"]
     engine.dispose()
-    process = multiprocessing.get_context("spawn").Process(
+    # POSIX 用 fork 免去子进程重新导入测试模块；Windows 走 spawn 保持真实语义。
+    _context = "fork" if sys.platform != "win32" else "spawn"
+    process = multiprocessing.get_context(_context).Process(
         target=_approve_and_exit, args=(url, run.run_id, token, before_commit)
     )
     try:

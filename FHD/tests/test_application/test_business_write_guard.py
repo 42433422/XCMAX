@@ -119,7 +119,7 @@ def test_takeover_cannot_cross_inventory_commit(
                 Warehouse(code="MAIN", name="主仓库", status="active"),
             ]
         )
-    ctx = multiprocessing.get_context("spawn")
+    ctx = multiprocessing.get_context("fork" if sys.platform != "win32" else "spawn")
     ready, result, release = ctx.Queue(), ctx.Queue(), ctx.Event()
     process = ctx.Process(
         target=_inbound_paused_before_commit,
