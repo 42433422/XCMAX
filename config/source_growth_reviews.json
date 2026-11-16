@@ -352,13 +352,13 @@
     "FHD/app/application/agent_orchestrator/tool_spec.py": {
       "base_file": "FHD/app/application/agent_orchestrator/tool_spec.py",
       "base_blob": "e70749be60cdf65c4d22952bf4b72129dd34fd3d",
-      "head_blob": "edcaad2fdd5eab028d42ee89707efbca76c1d500",
+      "head_blob": "b530c36af3c20425d858d8dd75746921fa633a76",
       "before_lines": 786,
       "after_lines": 801,
       "reason": "Review request only: Accept common delimiter-separated model output for array inputs and truncate oversized file_paths or run_ids batches instead of rejecting the entire plan.",
       "boundary": "String-to-array coercion applies to schema arrays, maxItems truncation is restricted to file_paths and run_ids, and all other schema checks remain in place.",
-      "validation": "Requires test_tool_spec_array_coercion.py and test_tool_spec_v2.py ELT batch truncation regressions; this request is not architecture approval.",
-      "follow_up": "Add a filename-with-spaces regression and restrict whitespace tokenization to run IDs unless upload names are supplied as an array.",
+      "validation": "Requires test_tool_spec_array_coercion.py, test_tool_spec_v2.py ELT batch truncation and template permission regressions; this request is not architecture approval.",
+      "follow_up": "Add a filename-with-spaces regression, restrict whitespace tokenization to run IDs unless upload names are supplied as an array, and keep template tool permissions aligned with seeded elt.* codes.",
       "review_owner": "@42433422"
     },
     "FHD/app/application/shipment_excel_elt_security.py": {
