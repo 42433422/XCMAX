@@ -6,8 +6,11 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
+from fastapi.routing import APIRoute
+from pydantic import BaseModel, ConfigDict
+from starlette.concurrency import run_in_threadpool
 
 from app.application.mobile_extensions.protocols import (
     GrantEntitlementsCall,
@@ -28,15 +31,16 @@ from app.application.mobile_extensions.protocols import (
     SyncDatabaseCall,
     UserDependency,
 )
-from app.fastapi_routes.mobile_extensions.navigation_constants import (
-    _ADMIN_NAV_ITEM,
-    _CORE_NAV_ITEMS,
-    _ROLE_VISIBLE_KEYS,
-)
+from app.fastapi_routes.mobile_extensions.navigation_constants import resolve_mobile_navigation
 from app.utils.device_system.mobile_api import format_mobile_response
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+
+class MobileWorkspacePrefsPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    workflow_ai_employees: dict[str, bool]
 
 
 @dataclass(frozen=True)
@@ -62,6 +66,81 @@ class WorkspaceRoutes:
     def __init__(self, ports: WorkspaceRoutesPorts, get_user: UserDependency) -> None:
         self.ports = ports
         self.router = router = APIRouter()
+
+        async def require_workspace_account(
+            request: Request, user: MobilePrincipal | None = Depends(get_user)
+        ):
+            if user is None:
+                raise HTTPException(status_code=401, detail="请先登录")
+            tenant_id = getattr(user, "tenant_id", None)
+            if type(tenant_id) is not int or tenant_id <= 0:
+                raise HTTPException(status_code=403, detail="无法确认企业数据归属")
+            request.state.tenant_id = tenant_id
+            return user
+
+        @router.get("/workspace/templates", response_model=None)
+        async def workspace_templates(
+            request: Request, user: MobilePrincipal = Depends(require_workspace_account)
+        ):
+            from app.fastapi_routes.template_api import templates_list_compat
+            from app.infrastructure.tenant_scope import owned_tenant_scope
+
+            # Keep account-owned templates and the shared starter catalog. The
+            # outer Mod middleware retains entitlement and database selection.
+            with owned_tenant_scope(request.state.tenant_id):
+                return await run_in_threadpool(templates_list_compat, request)
+
+        from app.fastapi_routes.domains.shipment.shipment_orders import router as shipment_router
+
+        shipment_paths = {
+            "/api/shipment/shipment-records/record",
+            "/api/shipment/shipment-records/export",
+        }
+        for route in shipment_router.routes:
+            if not isinstance(route, APIRoute) or route.path not in shipment_paths:
+                continue
+            router.add_api_route(
+                "/workspace" + route.path.removeprefix("/api"),
+                route.endpoint,
+                methods=list(route.methods or ()),
+                dependencies=[Depends(require_workspace_account), *route.dependencies],
+                response_model=None,
+            )
+
+        @router.get("/workspace/prefs", response_model=None)
+        async def workspace_prefs(
+            request: Request, user: MobilePrincipal | None = Depends(get_user)
+        ):
+            if user is None:
+                return ports.mobile_unauthorized_response()
+            from app.fastapi_routes.workspace_prefs_routes import get_workspace_prefs_endpoint
+
+            result = await run_in_threadpool(get_workspace_prefs_endpoint, request)
+            if not result.get("owner_id"):
+                return JSONResponse(
+                    format_mobile_response(
+                        None, "无法确认工作区归属，请重新登录", success=False, code=403
+                    ),
+                    status_code=403,
+                )
+            return result
+
+        @router.patch("/workspace/prefs", response_model=None)
+        async def update_workspace_prefs(
+            body: MobileWorkspacePrefsPatch,
+            request: Request,
+            user: MobilePrincipal | None = Depends(get_user),
+        ):
+            if user is None:
+                return ports.mobile_unauthorized_response()
+            from app.fastapi_routes.workspace_prefs_routes import (
+                WorkspacePrefsPatch,
+                patch_workspace_prefs_endpoint,
+            )
+
+            return await patch_workspace_prefs_endpoint(
+                WorkspacePrefsPatch(workflow_ai_employees=body.workflow_ai_employees), request
+            )
 
         @router.get("/mods", response_model=None)
         async def mobile_mods_summary(user: MobilePrincipal | None = Depends(get_user)) -> object:
@@ -356,10 +435,12 @@ class WorkspaceRoutes:
         self.mobile_home = mobile_home
 
         @router.get("/nav-menu", response_model=None)
-        async def mobile_nav_menu(user: MobilePrincipal | None = Depends(get_user)) -> object:
+        async def mobile_nav_menu(
+            request: Request, user: MobilePrincipal | None = Depends(get_user)
+        ) -> object:
             """返回当前用户可见的侧栏菜单项（核心菜单 + Mod 菜单）。
 
-            供手机端"探索"Tab 配对后动态渲染工具列表，与桌面端侧栏对齐。
+            供手机端工作台按任务、业务、资料和电脑能力分组，与桌面端侧栏对齐。
             """
             if user is None:
                 return JSONResponse(
@@ -367,53 +448,58 @@ class WorkspaceRoutes:
                     status_code=401,
                 )
             user_role = str(getattr(user, "role", "") or "").strip().lower()
-            is_admin = user_role in {"admin", "super_admin", "owner"}
-            account_kind = "admin" if is_admin else "enterprise"
-            visible_keys = _ROLE_VISIBLE_KEYS.get(account_kind)
-            items: list[dict[str, Any]] = []
-            for item in _CORE_NAV_ITEMS:
-                if visible_keys is not None and item["key"] not in visible_keys:
-                    continue
-                items.append({**item, "source": "core"})
-            if is_admin:
-                items.append({**_ADMIN_NAV_ITEM, "source": "core"})
+            tier = str(getattr(user, "tier", "") or "").strip().lower()
+            account_kind = tier if tier in {"personal", "enterprise", "admin"} else "enterprise"
+            if user_role in {"admin", "super_admin", "owner"}:
+                account_kind = "admin"
+            elif user_role == "personal":
+                account_kind = "personal"
+            tenant_id = getattr(user, "tenant_id", None)
+            tenant_member = user_role.startswith("tenant:")
+            tenant = tenant_member or (type(tenant_id) is int and tenant_id > 0)
+            permissions: list[str] = []
+            if tenant_member:
+                from app.application.auth_app_service import get_auth_app_service
+                from app.db.models import User
+
+                try:
+                    if isinstance(user, User):
+                        permissions = get_auth_app_service().get_user_permissions(user)
+                except RECOVERABLE_ERRORS:
+                    logger.warning("nav-menu tenant permissions unavailable")
+            mod_items: list[dict[str, Any]] = []
             try:
+                from app.enterprise.mod_entitlements import (
+                    clear_session_entitlements,
+                    sync_entitlements_for_session,
+                )
+
+                clear_session_entitlements()
+                sid = ports.mobile_session_id_from_request(request)
+                if not sid:
+                    from app.infrastructure.auth.dependencies import session_id_from_request
+
+                    sid = session_id_from_request(request)
+                if sid:
+                    await sync_entitlements_for_session(sid)
+                    from app.application.session_account_meta import load_session_account_meta
+                    from app.enterprise.mod_entitlements import is_admin_account_session
+
+                    session_kind = (load_session_account_meta(sid) or {}).get("account_kind")
+                    if is_admin_account_session():
+                        account_kind = "admin"
+                    elif account_kind != "admin" and session_kind in {"personal", "enterprise"}:
+                        account_kind = session_kind
                 mod_items = ports.mobile_mod_items()
-                for mod in mod_items:
-                    mod_id = str(mod.get("id") or "").strip()
-                    mod_name = str(mod.get("name") or mod_id).strip()
-                    frontend_menu = mod.get("frontend_menu") or mod.get("menu") or []
-                    if not isinstance(frontend_menu, list):
-                        continue
-                    for menu_entry in frontend_menu:
-                        if not isinstance(menu_entry, dict):
-                            continue
-                        menu_id = str(menu_entry.get("id") or menu_entry.get("key") or "").strip()
-                        if not menu_id:
-                            continue
-                        menu_label = str(
-                            menu_entry.get("label") or menu_entry.get("name") or mod_name
-                        ).strip()
-                        menu_path = str(
-                            menu_entry.get("path") or menu_entry.get("url") or f"/mod/{mod_id}"
-                        ).strip()
-                        menu_icon = str(
-                            menu_entry.get("icon") or menu_entry.get("iconClass") or "fa-cube"
-                        ).strip()
-                        items.append(
-                            {
-                                "key": (
-                                    f"mod-{menu_id}" if not menu_id.startswith("mod-") else menu_id
-                                ),
-                                "name": menu_label,
-                                "icon": menu_icon,
-                                "path": menu_path,
-                                "source": "mod",
-                                "mod_id": mod_id,
-                            }
-                        )
             except RECOVERABLE_ERRORS as exc:
                 logger.warning("nav-menu mod items failed: %s", exc)
+            items = resolve_mobile_navigation(
+                mod_items,
+                account_kind=account_kind,
+                tenant=tenant,
+                tenant_member=tenant_member,
+                permissions=permissions,
+            )
             return format_mobile_response(data={"items": items, "account_kind": account_kind})
 
         self.mobile_nav_menu = mobile_nav_menu

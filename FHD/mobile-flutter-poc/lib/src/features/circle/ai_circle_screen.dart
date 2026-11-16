@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../api/mobile_models.dart';
@@ -25,7 +27,11 @@ class AiCircleScreen extends StatefulWidget {
 
 class _AiCircleScreenState extends State<AiCircleScreen> {
   late final MobileRepository _repository;
-  late Future<_AiCircleData> _future;
+  _AiCircleData? _data;
+  Object? _loadError;
+  var _loading = true;
+  var _loadRequest = 0;
+  final _pendingLikes = <int, bool>{};
 
   @override
   void initState() {
@@ -34,12 +40,18 @@ class _AiCircleScreenState extends State<AiCircleScreen> {
       context,
       explicit: widget.repository,
     );
-    _future = _load();
+    unawaited(_refresh());
   }
 
   @override
   Widget build(BuildContext context) {
     final colors = AppTheme.colors(context);
+    final data = _data ??
+        _AiCircleData(
+          account: MobileMeData.adminFallback(),
+          employees: const [],
+          posts: const [],
+        );
     return Scaffold(
       backgroundColor: colors.page,
       body: SafeArea(
@@ -52,45 +64,43 @@ class _AiCircleScreenState extends State<AiCircleScreen> {
               onBack: () => Navigator.of(context).maybePop(),
             ),
             Expanded(
-              child: FutureBuilder<_AiCircleData>(
-                future: _future,
-                builder: (context, snapshot) {
-                  final data = snapshot.data ??
-                      _AiCircleData(
-                        account: MobileMeData.adminFallback(),
-                        employees: const <AiEmployeeProfile>[],
-                        posts: <AiCirclePost>[],
-                      );
-                  return RefreshIndicator(
-                    color: colors.brand,
-                    onRefresh: _refresh,
-                    child: ListView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.only(bottom: 24),
-                      children: [
-                        _AiCircleHeader(
-                          employees: data.employees,
-                          account: data.account,
-                        ),
-                        if (data.posts.isEmpty)
-                          _AiCircleEmptyState(
-                            loading: snapshot.connectionState ==
-                                ConnectionState.waiting,
-                          )
-                        else
-                          for (final post in data.posts)
-                            _AiCirclePostCard(
-                              post: post,
-                              employee: _employeeForPost(data.employees, post),
-                              onLike: () => _toggleLike(post),
-                              onComment: (text) => _addComment(post, text),
-                              onOpenHome: () =>
-                                  _openEmployee(data.employees, post),
-                            ),
-                      ],
+              child: RefreshIndicator(
+                color: colors.brand,
+                onRefresh: _refresh,
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.only(bottom: 24),
+                  children: [
+                    _AiCircleHeader(
+                      employees: data.employees,
+                      account: data.account,
                     ),
-                  );
-                },
+                    if (_loadError != null)
+                      ListTile(
+                        title:
+                            Text(_data == null ? '动态加载失败' : '动态更新失败，已保留当前内容'),
+                        subtitle: Text(mobileErrorText(_loadError!)),
+                        trailing: TextButton(
+                          onPressed: _loading ? null : _refresh,
+                          child: const Text('重试'),
+                        ),
+                      ),
+                    if (data.posts.isEmpty && _loadError == null)
+                      _AiCircleEmptyState(
+                        loading: _loading,
+                      )
+                    else
+                      for (final post in data.posts)
+                        _AiCirclePostCard(
+                          key: ValueKey(post.id),
+                          post: _withLike(post, _pendingLikes[post.id]),
+                          employee: _employeeForPost(data.employees, post),
+                          onLike: () => _toggleLike(post),
+                          onComment: (text) => _addComment(post, text),
+                          onOpenHome: () => _openEmployee(data.employees, post),
+                        ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -102,10 +112,12 @@ class _AiCircleScreenState extends State<AiCircleScreen> {
   Future<_AiCircleData> _load() async {
     final results = await Future.wait<Object>([
       _repository.loadAiEmployees().catchError(
-            (_) => const <AiEmployeeProfile>[],
+            (_) => _data?.employees ?? const <AiEmployeeProfile>[],
           ),
-      _repository.loadMe().catchError((_) => MobileMeData.adminFallback()),
-      _repository.loadAiCirclePosts().catchError((_) => const <AiCirclePost>[]),
+      _repository
+          .loadMe()
+          .catchError((_) => _data?.account ?? MobileMeData.adminFallback()),
+      _repository.loadAiCirclePosts(),
     ]);
     return _AiCircleData(
       employees: results[0] as List<AiEmployeeProfile>,
@@ -115,43 +127,54 @@ class _AiCircleScreenState extends State<AiCircleScreen> {
   }
 
   Future<void> _refresh() async {
-    final future = _load();
+    if (!mounted) return;
+    final request = ++_loadRequest;
     setState(() {
-      _future = future;
-    });
-    await future;
-  }
-
-  Future<void> _toggleLike(AiCirclePost post) async {
-    final data = await _future;
-    final liked = !post.likedByMe;
-    setState(() {
-      _future = Future.value(
-        data.copyWith(
-          posts: data.posts
-              .map(
-                (item) => item.id == post.id
-                    ? item.copyWith(
-                        likedByMe: liked,
-                        likeCount: (item.likeCount + (liked ? 1 : -1)).clamp(
-                          0,
-                          999999,
-                        ),
-                      )
-                    : item,
-              )
-              .toList(growable: false),
-        ),
-      );
+      _loading = true;
+      _loadError = null;
     });
     try {
+      final data = await _load();
+      if (!mounted || request != _loadRequest) return;
+      setState(() {
+        _data = data;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted || request != _loadRequest) return;
+      setState(() {
+        _loadError = error;
+        _loading = false;
+      });
+    }
+  }
+
+  AiCirclePost _withLike(AiCirclePost post, bool? liked) =>
+      liked == null || liked == post.likedByMe
+          ? post
+          : post.copyWith(
+              likedByMe: liked,
+              likeCount: (post.likeCount + (liked ? 1 : -1)).clamp(0, 999999),
+            );
+
+  Future<void> _toggleLike(AiCirclePost post) async {
+    if (_pendingLikes.containsKey(post.id)) return;
+    final liked = !post.likedByMe;
+    setState(() => _pendingLikes[post.id] = liked);
+    try {
       await _repository.toggleAiCircleLike(post.id);
+      if (!mounted) return;
+      setState(() {
+        _data = _data?.copyWith(posts: [
+          for (final item in _data!.posts)
+            item.id == post.id ? _withLike(item, liked) : item,
+        ]);
+        _pendingLikes.remove(post.id);
+      });
       await _refresh();
     } catch (error) {
-      setState(() {
-        _future = Future.value(data);
-      });
       if (mounted) {
+        setState(() => _pendingLikes.remove(post.id));
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(mobileErrorText(error, fallback: '点赞失败')),
@@ -161,10 +184,11 @@ class _AiCircleScreenState extends State<AiCircleScreen> {
     }
   }
 
-  Future<void> _addComment(AiCirclePost post, String text) async {
+  Future<bool> _addComment(AiCirclePost post, String text) async {
     try {
       await _repository.addAiCircleComment(post.id, text);
       await _refresh();
+      return true;
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -173,6 +197,7 @@ class _AiCircleScreenState extends State<AiCircleScreen> {
           ),
         );
       }
+      return false;
     }
   }
 

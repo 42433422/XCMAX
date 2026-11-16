@@ -5,6 +5,7 @@ from __future__ import annotations
 import ipaddress
 import os
 import socket
+from contextlib import closing
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
@@ -19,10 +20,9 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 def _guess_lan_ipv4() -> str:
     """本机对外网卡 IPv4，供手机扫码时避免 127.0.0.1。"""
     try:
-        probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        probe.connect(("8.8.8.8", 80))
-        ip = str(probe.getsockname()[0] or "").strip()
-        probe.close()
+        with closing(socket.socket(socket.AF_INET, socket.SOCK_DGRAM)) as probe:
+            probe.connect(("8.8.8.8", 80))
+            ip = str(probe.getsockname()[0] or "").strip()
         if ip and not ip.startswith("127."):
             return ip
     except OSError:

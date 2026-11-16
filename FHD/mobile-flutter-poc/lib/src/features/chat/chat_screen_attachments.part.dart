@@ -1,6 +1,8 @@
 part of 'chat_screen.dart';
 
 abstract class _ChatAttachmentActions extends _ChatStateMessaging {
+  final _attachmentSizes = Expando<int>();
+
   Future<String> _currentAttachmentScope() async {
     final client = _repository!.client;
     final base = await client.resolveSessionBaseUrl();
@@ -93,7 +95,9 @@ abstract class _ChatAttachmentActions extends _ChatStateMessaging {
         break;
       }
       try {
-        if (await file.length() > 16 * 1024 * 1024) {
+        final size = await file.length();
+        _attachmentSizes[file] = size;
+        if (size > 16 * 1024 * 1024) {
           throw Exception('单个附件不能超过 16MB');
         }
         final attachment = await client.uploadChatAttachment(
@@ -108,6 +112,7 @@ abstract class _ChatAttachmentActions extends _ChatStateMessaging {
           break;
         }
         setState(() {
+          _attachmentSizes[attachment] = size;
           _attachments.add(attachment);
           _failedAttachments.remove(file);
         });
@@ -130,25 +135,102 @@ abstract class _ChatAttachmentActions extends _ChatStateMessaging {
     }
   }
 
-  Widget _attachmentChips() => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        child: Wrap(spacing: 6, children: [
-          if (_uploading) const Chip(label: Text('附件上传中…')),
-          for (final attachment in _attachments)
-            InputChip(
-                label: Text(attachment.name),
-                onDeleted: _sending || _uploading
-                    ? null
-                    : () => setState(() => _attachments.remove(attachment))),
-          for (final file in _failedAttachments)
-            InputChip(
-                label: Text('${file.name} · 上传失败，点击重试'),
-                onPressed: _sending || _uploading
-                    ? null
-                    : () => _uploadAttachments([file]),
-                onDeleted: _sending || _uploading
-                    ? null
-                    : () => setState(() => _failedAttachments.remove(file))),
-        ]),
+  Widget _attachmentList() => ConstrainedBox(
+        constraints: const BoxConstraints(maxHeight: 176),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Column(children: [
+            if (_uploading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Text('附件上传中…'),
+              ),
+            for (final attachment in _attachments)
+              _ChatAttachmentRow(
+                  name: attachment.name,
+                  size: _attachmentSizes[attachment],
+                  onRemove: _sending || _uploading
+                      ? null
+                      : () => setState(() => _attachments.remove(attachment))),
+            for (final file in _failedAttachments)
+              _ChatAttachmentRow(
+                  name: file.name,
+                  size: _attachmentSizes[file],
+                  failed: true,
+                  onRetry: _sending || _uploading
+                      ? null
+                      : () => _uploadAttachments([file]),
+                  onRemove: _sending || _uploading
+                      ? null
+                      : () => setState(() => _failedAttachments.remove(file))),
+          ]),
+        ),
       );
+}
+
+class _ChatAttachmentRow extends StatelessWidget {
+  const _ChatAttachmentRow({
+    required this.name,
+    required this.size,
+    required this.onRemove,
+    this.failed = false,
+    this.onRetry,
+  });
+
+  final String name;
+  final int? size;
+  final bool failed;
+  final VoidCallback? onRemove, onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppTheme.colors(context);
+    final bytes = size;
+    final sizeLabel = bytes == null
+        ? ''
+        : bytes < 1024
+            ? '$bytes B · '
+            : bytes < 1024 * 1024
+                ? '${(bytes / 1024).toStringAsFixed(1)} KB · '
+                : '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB · ';
+    return Container(
+      margin: const EdgeInsets.only(top: 6),
+      padding: const EdgeInsets.only(left: 12),
+      decoration: BoxDecoration(
+        color: colors.surfaceHigh,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(children: [
+        Icon(failed ? Icons.error_outline : Icons.insert_drive_file_outlined,
+            size: 24, color: failed ? colors.danger : colors.brand),
+        const SizedBox(width: 10),
+        Expanded(
+            child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Tooltip(
+                message: name,
+                child: Text(name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        color: colors.textPrimary,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500))),
+            const SizedBox(height: 3),
+            Text('$sizeLabel${failed ? '上传失败' : '已就绪'}',
+                style: TextStyle(
+                    fontSize: 12,
+                    color: failed ? colors.danger : colors.textSecondary)),
+          ]),
+        )),
+        if (failed) TextButton(onPressed: onRetry, child: const Text('重试')),
+        IconButton(
+            tooltip: '移除 $name',
+            onPressed: onRemove,
+            icon: const Icon(Icons.close, size: 18)),
+      ]),
+    );
+  }
 }
