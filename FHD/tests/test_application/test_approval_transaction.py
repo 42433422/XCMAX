@@ -17,9 +17,9 @@ from app.application.agent_orchestrator.task_execution_sql_repository import (
 from app.db.models.agent import AgentTaskRecord
 from app.db.models.agent_approval import AgentApprovalConsumption
 
-# spawn 子进程按父进程 sys.path 导入本模块；分片运行时 cwd 可能不在 FHD，
-# 显式补入仓库根，避免 ModuleNotFoundError: tests.test_application。
-_FHD_ROOT = str(Path(__file__).resolve().parents[1])
+# spawn 子进程要按模块名重导入本文件。必须把 FHD 根（tests/ 与 app/ 的父目录）
+# 放入 PYTHONPATH；parents[1] 只到 tests/，无法 import tests.test_application。
+_FHD_ROOT = str(Path(__file__).resolve().parents[2])
 # spawn 子进程是新解释器：同时通过 PYTHONPATH 保证它能导入 tests.* 与被测模块。
 os.environ["PYTHONPATH"] = os.pathsep.join([_FHD_ROOT, os.environ.get("PYTHONPATH", "")]).strip(
     os.pathsep
