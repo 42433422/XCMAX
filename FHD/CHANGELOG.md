@@ -1,4 +1,5 @@
 ## Unreleased
+- 移动端登录页、个人页和关于页统一显示与桌面端同源的产品版本，移除过期版本及虚假构建号；历史 Android 安装包身份保持不变。
 - 数据对接运行时改为只使用 ELT 名称：旧 Python 导入路径、etl.* 权限别名和 FHD_*_ETL_* 环境变量不再静默转发。已装库须执行 alembic upgrade，把遗留 etl.* 权限码迁成 elt.*，并把业务可变状态中的 shipment_excel_etl、shipment_delivery_etl、general_etl、_etl、execute_delivery_etl 改为现行 ELT 标识；回执和审计快照不改写。未改名的历史环境变量会在启动时报出对应的 FHD_*_ELT_* 名称。升级步骤见 docs/ELT_BREAKING_UPGRADE.md。不改已落库历史 revision，也不删用户数据。
 - 调和迁移只删除已空的历史 etl_* 表，若现行表为空则收回仍有数据的旧表；当前迁移头回退同样拒绝丢失切片来源或留下与表结构不符的部分父链戳。
 - 用户授权后可以只读本机文件夹或整机文件，新增内容持续索引到知识库；敏感路径默认跳过，撤销授权会同步清理已入库内容。

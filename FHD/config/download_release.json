@@ -1,6 +1,6 @@
 {
   "schema": "xcagi.download_release/v1",
-  "_doc": "版本演进与发布意图唯一目录；release_history 保留历史世代，不等于正式发布次数。VERSION.md 管候选数字；逐制品 deliveries 及不可变发布清单提供渠道状态/身份/证据。官网、客户端、GitHub 是派生视图，必须交叉核验，不单独充当总账。release_ready 是旧兼容字段，不能证明所有平台已发布。企业版活跃、个人版冻结；工具链使用三段映射。",
+  "_doc": "版本演进与发布意图唯一目录；release_history 保留历史世代，不等于正式发布次数。VERSION.md 管候选数字；逐制品 deliveries 及不可变发布清单提供渠道状态/身份/证据。官网、客户端、GitHub 是派生视图，必须交叉核验，不单独充当总账。release_ready 是旧兼容字段，不能证明所有平台已发布。企业版活跃、个人版冻结；移动端与桌面端共用 VERSION.md 产品版本及 version_sync 派生锚点，界面统一消费 displayVersion；工具链使用三段映射。android_version/android_git_sha 保留既有制品身份，不随源码候选或界面版本同步晋级。",
   "release_policy": {
     "history_scope": "product_evolution",
     "states": ["candidate", "accepted", "published", "withdrawn"],

@@ -2859,7 +2859,7 @@ void main() {
     expect(find.text('手机号登录'), findsNothing);
     expect(find.text('企业工作台'), findsNothing);
     expect(find.text('服务器后台'), findsNothing);
-    expect(find.text(MobileBuildConfig.profileVersionText), findsOneWidget);
+    expect(find.text(MobileBuildConfig.displayVersion), findsOneWidget);
     expect(find.text('扫码绑定/登录'), findsOneWidget);
     expect(find.text('记住密码'), findsOneWidget);
     expect(find.text('免登录'), findsOneWidget);
@@ -4608,7 +4608,7 @@ void main() {
     expect(find.text('服务'), findsOneWidget);
     expect(find.text('设置'), findsOneWidget);
     expect(find.text('关于'), findsOneWidget);
-    expect(find.text(MobileBuildConfig.profileVersionText), findsOneWidget);
+    expect(find.text(MobileBuildConfig.displayVersion), findsOneWidget);
     expect(find.text('蜀ICP备2026014056号-3A'), findsOneWidget);
     final heroDecoration = tester
         .widget<Container>(

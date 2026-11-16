@@ -23,7 +23,6 @@ class AboutScreen extends StatefulWidget {
 
   static const companyName = '成都修茈科技有限公司';
   static const brandUrl = 'https://xiu-ci.com';
-  static const appVersion = MobileBuildConfig.displayVersion;
   static const websiteIcp = '蜀ICP备2026014056号-3A';
   static const appFilingSubtitle = '审核通过 2026-04-08';
 
@@ -91,7 +90,7 @@ class _AboutScreenState extends State<AboutScreen> {
                   const SizedBox(height: 2),
                   Center(
                     child: Text(
-                      AboutScreen.appVersion,
+                      MobileBuildConfig.displayVersion,
                       style: TextStyle(
                         color: colors.textSecondary,
                         fontSize: 13,
@@ -116,7 +115,7 @@ class _AboutScreenState extends State<AboutScreen> {
                       ),
                       WeCell(
                         title: '检查更新',
-                        subtitle: AboutScreen.appVersion,
+                        subtitle: MobileBuildConfig.displayVersion,
                         showDivider: false,
                         onTap: _checkingUpdate ? null : _checkForUpdate,
                       ),
