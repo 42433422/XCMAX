@@ -9,6 +9,8 @@ const modules = import.meta.glob('../assets/avatars/employees/*.png', {
 }) as Record<string, string>
 
 export const EMPLOYEE_AVATAR_POOL: string[] = Object.keys(modules)
+  // 专属客服固定用管理端小C头像，不参与头像池；与移动端保持同一份名单。
+  .filter((key) => !key.includes('user_customer_service_officer'))
   .sort()
   .map((key) => modules[key])
 

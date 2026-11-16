@@ -1502,6 +1502,23 @@ void main() {
   );
 
   test(
+    'MobileRepository AI employee page prefers platform employee directory',
+    () async {
+      final api = _EmployeeDirectoryApi();
+      final repository = MobileRepository(client: api);
+
+      final employees = await repository.loadAiEmployees();
+
+      expect(api.mobileModsCalls, 0);
+      expect(
+        employees.map((employee) => employee.employeeId),
+        ['excel-generate-employee', 'word-full-read-employee'],
+      );
+      expect(employees.first.name, 'Excel 生成员');
+    },
+  );
+
+  test(
     'MobileRepository personal conversations keep Flutter fixed assistant',
     () async {
       final repository = MobileRepository(client: _EnterpriseModsApi());
@@ -1914,6 +1931,16 @@ class _EnterpriseModsApi extends MobileApiClient {
       : super(sessionStore: store ?? MemoryMobileSessionStore());
 
   @override
+  Future<MobileEnvelope<List<Map<String, Object?>>>> employeeDirectory() async {
+    return const MobileEnvelope<List<Map<String, Object?>>>(
+      success: false,
+      message: 'offline',
+      data: null,
+      raw: {'success': false, 'message': 'offline'},
+    );
+  }
+
+  @override
   Future<MobileEnvelope<Map<String, Object?>>> mobileMods() async {
     return const MobileEnvelope<Map<String, Object?>>(
       success: true,
@@ -1949,9 +1976,64 @@ class _EnterpriseModsApi extends MobileApiClient {
   }
 }
 
+class _EmployeeDirectoryApi extends MobileApiClient {
+  _EmployeeDirectoryApi() : super(sessionStore: MemoryMobileSessionStore());
+
+  var mobileModsCalls = 0;
+
+  @override
+  Future<MobileSessionData> loadSession({bool forceReload = false}) async {
+    return MobileSessionData(accountKind: 'enterprise');
+  }
+
+  @override
+  Future<MobileEnvelope<List<Map<String, Object?>>>> employeeDirectory() async {
+    return const MobileEnvelope<List<Map<String, Object?>>>(
+      success: true,
+      message: '',
+      data: [
+        {
+          'pack_id': 'excel-generate-employee',
+          'label': 'Excel 生成员',
+          'description': '生成 Excel 文件',
+          'runtime_kind': 'direct_python',
+        },
+        {
+          'pack_id': 'word-full-read-employee',
+          'label': 'Word 全量读取员',
+          'description': '读取 Word 全文',
+          'runtime_kind': 'direct_python',
+        },
+      ],
+      raw: {'success': true},
+    );
+  }
+
+  @override
+  Future<MobileEnvelope<Map<String, Object?>>> mobileMods() async {
+    mobileModsCalls += 1;
+    return const MobileEnvelope<Map<String, Object?>>(
+      success: false,
+      message: 'unused',
+      data: {},
+      raw: {'success': false},
+    );
+  }
+}
+
 class _FailingModsApi extends MobileApiClient {
   _FailingModsApi({required MobileSessionStore store})
       : super(sessionStore: store);
+
+  @override
+  Future<MobileEnvelope<List<Map<String, Object?>>>> employeeDirectory() async {
+    return const MobileEnvelope<List<Map<String, Object?>>>(
+      success: false,
+      message: 'offline',
+      data: null,
+      raw: {'success': false, 'message': 'offline'},
+    );
+  }
 
   @override
   Future<MobileEnvelope<Map<String, Object?>>> mobileMods() async {

@@ -11,6 +11,8 @@ class XcagiMobileEndpoints {
   static const authOidcExchange = '$base/auth/oidc/exchange';
   static const authRefresh = '$base/auth/refresh';
   static const legacyAuthRegister = 'api/auth/register';
+  /// 与桌面端 / 员工工作台共用的统一员工目录。
+  static const employeeDirectory = 'api/platform-shell/employee-directory';
   static const lanAccessRequests = 'api/lan/access-requests';
   static const lanStatus = 'api/lan/status';
   static const hostDiscoverHint = '$base/host/discover-hint';

@@ -4,6 +4,19 @@ import 'package:xcagi_flutter_poc/src/policy/avatar_policy.dart';
 import 'package:xcagi_flutter_poc/src/policy/pinned_ids.dart';
 
 void main() {
+  test('员工头像池与桌面端同名单同顺序', () {
+    expect(employeeAvatarPool.length, 54);
+    expect(
+      employeeAvatarPool.take(4).toList(),
+      [
+        'assets/avatars/avatar_emp_artifact_generator.png',
+        'assets/avatars/avatar_emp_avatar_generation_employee.png',
+        'assets/avatars/avatar_emp_change_request_auditor.png',
+        'assets/avatars/avatar_emp_code_validator.png',
+      ],
+    );
+  });
+
   test('fixed conversation ids map to fixed conversation types', () {
     expect(
       {
@@ -122,6 +135,10 @@ void main() {
       employeeAvatarFallback(employeeId: 'avatar-generation-employee'),
       AppAvatarFallback.empAvatarGenerationEmployee,
     );
+    expect(
+      employeeAvatarFallback(employeeId: 'user-customer-service-officer'),
+      AppAvatarFallback.assistant,
+    );
   });
 
   test('all Flutter avatar fallbacks resolve to bundled assets', () {
@@ -134,10 +151,31 @@ void main() {
       'assets/avatars/avatar_default_user.png',
     );
     expect(
+      AppAvatarFallback.customerService.assetPath,
+      'assets/avatars/avatar_assistant.png',
+    );
+    expect(
       AppAvatarFallback.values.any(
         (fallback) => fallback.assetPath.contains('avatar_admin_profile'),
       ),
       isFalse,
+    );
+  });
+
+  test('enterprise account uses the enterprise 小C avatar', () {
+    addTearDown(() => AppAvatarVariant.useEnterpriseAssistant(false));
+    AppAvatarVariant.useEnterpriseAssistant(true);
+    expect(
+      AppAvatarFallback.assistant.assetPath,
+      'assets/avatars/avatar_assistant_enterprise.png',
+    );
+    expect(
+      AppAvatarFallback.customerService.assetPath,
+      'assets/avatars/avatar_assistant.png',
+    );
+    expect(
+      AppAvatarFallback.aiEmployee.assetPath,
+      'assets/avatars/avatar_default_ai_employee.png',
     );
   });
 

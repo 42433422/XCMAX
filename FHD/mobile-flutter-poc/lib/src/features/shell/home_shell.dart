@@ -8,6 +8,7 @@ import '../../api/mobile_session_store.dart';
 import '../../data/mobile_repository.dart';
 import '../../data/mobile_repository_scope.dart';
 import '../../models/conversation.dart';
+import '../../policy/avatar_policy.dart';
 import '../../policy/mobile_runtime_policy.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_icons.dart';
@@ -219,10 +220,15 @@ class _HomeShellState extends State<HomeShell> {
     final session = await _repository.client.loadSession().catchError(
           (_) => MobileSessionData.empty,
         );
-    return MobileConversationRuntimePolicy.resolve(
+    final runtime = MobileConversationRuntimePolicy.resolve(
       accountKind: session.accountKind,
       buildSku: MobileBuildConfig.productSku,
     );
+    // 企业端使用企业版小C头像；管理端（含专属客服）保持管理端头像。
+    AppAvatarVariant.useEnterpriseAssistant(
+      runtime.enterpriseMode && !runtime.adminMode,
+    );
+    return runtime;
   }
 
   Future<void> _refreshHomeData() async {

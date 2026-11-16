@@ -167,6 +167,20 @@ abstract class _ApiWorkBase extends _ApiPairingBase {
     return MobileEnvelope.fromJson(json, _asObjectMap);
   }
 
+  /// 统一员工目录：与桌面端员工工作台、信息页同源。
+  Future<MobileEnvelope<List<Map<String, Object?>>>> employeeDirectory() async {
+    final json = await getJson(XcagiMobileEndpoints.employeeDirectory);
+    return MobileEnvelope.fromJson(json, (value) {
+      final data = _asObjectMap(value);
+      final rows = data['employees'];
+      if (rows is! List) return const <Map<String, Object?>>[];
+      return rows
+          .whereType<Map>()
+          .map((row) => Map<String, Object?>.from(row))
+          .toList(growable: false);
+    });
+  }
+
   Future<MobileEnvelope<MobileTaskListData>> mobileTasks({
     int limit = 50,
   }) async {
