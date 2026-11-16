@@ -131,7 +131,7 @@ void main() {
         options: const MobileAutonomyControllerOptions(tickIntervalMs: 0),
       );
 
-      final now = 1000000.0;
+      const now = 1000000.0;
       controller.ingest(_crashSignal(now - 240000));
       controller.ingest(_crashSignal(now - 120000));
       controller.ingest(_crashSignal(now));
@@ -151,7 +151,7 @@ void main() {
         options: const MobileAutonomyControllerOptions(tickIntervalMs: 0),
       );
 
-      controller.ingest(MobileAutonomySignal(
+      controller.ingest(const MobileAutonomySignal(
         kind: 'ota_failed',
         severity: MobileAutonomySeverity.warn,
         detail: 'ota',
@@ -195,7 +195,7 @@ void main() {
         ),
       );
 
-      final now = 1000000.0;
+      const now = 1000000.0;
       final signals = [
         _crashSignal(now - 240000),
         _crashSignal(now - 120000),
@@ -242,7 +242,7 @@ void main() {
         ),
       );
 
-      final now = 1000000.0;
+      const now = 1000000.0;
       final signals = [
         _crashSignal(now - 240000),
         _crashSignal(now - 120000),
@@ -303,7 +303,7 @@ void main() {
         ),
       );
 
-      final now = 1000000.0;
+      const now = 1000000.0;
       controller.ingest(_crashSignal(now - 240000));
       controller.ingest(_crashSignal(now - 120000));
       controller.ingest(_crashSignal(now));
@@ -370,7 +370,7 @@ void main() {
       final emitted = <MobileAutonomyAuditEntry>[];
       final sub = controller.auditStream.listen(emitted.add);
 
-      final now = 1000000.0;
+      const now = 1000000.0;
       controller.ingest(_crashSignal(now - 240000));
       controller.ingest(_crashSignal(now - 120000));
       controller.ingest(_crashSignal(now));

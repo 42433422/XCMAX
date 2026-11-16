@@ -2,9 +2,9 @@ part of 'mobile_repository.dart';
 
 abstract class _RepoServicesBase extends _RepoChatBase {
   _RepoServicesBase({
-    MobileApiClient? client,
-    ImWebSocketClient? imWebSocket,
-  }) : super(client: client, imWebSocket: imWebSocket);
+    super.client,
+    super.imWebSocket,
+  });
 
   Future<CsInfo> loadCsInfo() async {
     final response = await _client.csInfo();
@@ -346,7 +346,7 @@ abstract class _RepoServicesBase extends _RepoChatBase {
     final sessionId = session.sessionId.trim();
     if (sessionId.isEmpty) return;
     final url = await _imWebSocketUrl(sessionId);
-    _imWebSocketSubscription ??= _imWebSocket.events.listen((_) {});
+    if (_disposed) return;
     _imWebSocket.connect(sessionId: sessionId, url: url);
   }
 

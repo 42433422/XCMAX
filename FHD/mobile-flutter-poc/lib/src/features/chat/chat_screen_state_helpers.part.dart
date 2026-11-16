@@ -5,6 +5,7 @@ abstract class _ChatStateHelpers extends State<ChatScreen> {
   String get _flyerMeId => 'me';
 
   late List<ChatMessage> _messages;
+
   /// 没有缓存时间戳的消息（本地新建/测试注入）首次渲染时固定 createdAt，
   /// 避免每次同步都换时间导致 flutter_chat_ui 的动画列表重排断言。
   final _flyerCreatedAt = <String, DateTime>{};
@@ -13,6 +14,14 @@ abstract class _ChatStateHelpers extends State<ChatScreen> {
   final _controller = TextEditingController();
   var _showToolPanel = false;
   var _sending = false;
+  var _uploading = false;
+  String? _attachmentScope;
+  StreamSubscription<MobileSessionData>? _attachmentSessionSubscription;
+  final _attachments = <MobileChatAttachment>[];
+  final _failedAttachments = <XFile>[];
+  List<MobileChatAttachment> _lastSentAttachments = const [];
+  String _lastAttachmentTurnId = '';
+  String _lastAttachmentOutgoing = '';
   var _runningGitOp = false;
   String? _selectedGitBranch;
   ChatMessage? _replyTo;

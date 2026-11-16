@@ -1441,6 +1441,16 @@ void main() {
     WidgetTester tester,
   ) async {
     final repository = _CachedFirstHomeShellRepository();
+    await tester.runAsync(() async {
+      final cache = await MobileOfflineStore.open();
+      await cache
+          .appendMessage('employee:cached-avatar-mod:cached-avatar-employee', {
+        'id': 'cached-preview',
+        'role': 'user',
+        'body': '先看缓存',
+        'ts': 1719820800000,
+      });
+    });
 
     await tester.pumpWidget(
       MaterialApp(
@@ -1463,6 +1473,16 @@ void main() {
     'home shell keeps Flutter cached employees after refresh failure',
     (WidgetTester tester) async {
       final repository = _CachedFirstHomeShellRepository();
+      await tester.runAsync(() async {
+        final cache = await MobileOfflineStore.open();
+        await cache.appendMessage(
+            'employee:cached-avatar-mod:cached-avatar-employee', {
+          'id': 'cached-preview',
+          'role': 'user',
+          'body': '先看缓存',
+          'ts': 1719820800000,
+        });
+      });
 
       await tester.pumpWidget(
         MaterialApp(
@@ -2025,7 +2045,14 @@ void main() {
 
       await tester.tap(find.text('员工工作流'));
       await tester.pump();
-      expect(openedWork, 1);
+      await tester.pumpAndSettle();
+      expect(openedWork, 0);
+      final workspace = tester.widget<DesktopToolWebViewScreen>(
+          find.byType(DesktopToolWebViewScreen));
+      expect(workspace.path, '/workflow-employee-space');
+      expect(workspace.api, isNotNull);
+      Navigator.of(tester.element(find.byType(DesktopToolWebViewScreen))).pop();
+      await tester.pumpAndSettle();
 
       await tester.tap(find.text('设置入口'));
       await tester.pumpAndSettle();
@@ -2836,7 +2863,8 @@ void main() {
     expect(find.byType(DesktopToolWebViewScreen), findsNothing);
   });
 
-  testWidgets('auth page exposes password and scan login without unsupported SMS', (
+  testWidgets(
+      'auth page exposes password and scan login without unsupported SMS', (
     WidgetTester tester,
   ) async {
     tester.view.devicePixelRatio = 1;
@@ -2859,7 +2887,7 @@ void main() {
     expect(find.text('手机号登录'), findsNothing);
     expect(find.text('企业工作台'), findsNothing);
     expect(find.text('服务器后台'), findsNothing);
-    expect(find.text(MobileBuildConfig.profileVersionText), findsOneWidget);
+    expect(find.text(MobileBuildConfig.displayVersion), findsOneWidget);
     expect(find.text('扫码绑定/登录'), findsOneWidget);
     expect(find.text('记住密码'), findsOneWidget);
     expect(find.text('免登录'), findsOneWidget);
@@ -2967,20 +2995,24 @@ void main() {
     expect(saved.savedPassword, 'secret');
   });
 
-  testWidgets('auth succeeds with a warning when secure password storage fails', (
+  testWidgets('auth succeeds with a warning when secure password storage fails',
+      (
     WidgetTester tester,
   ) async {
     final store = MemoryMobileSessionStore(const MobileSessionData(
-      savedUsername: 'remembered-admin', savedPassword: 'secret',
-      rememberPassword: true, autoLogin: true,
+      savedUsername: 'remembered-admin',
+      savedPassword: 'secret',
+      rememberPassword: true,
+      autoLogin: true,
     ));
-    final api = MobileApiClient(sessionStore: store,
+    final api = MobileApiClient(
+        sessionStore: store,
         credentialCipher: const _UnavailableAuthTestCredentialCipher());
     var completed = false;
     await tester.pumpWidget(MaterialApp(
       theme: AppTheme.light(),
-      home: AuthScreen(repository: _FakeAuthRepository(api),
-          onDone: () => completed = true),
+      home: AuthScreen(
+          repository: _FakeAuthRepository(api), onDone: () => completed = true),
     ));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, '进入企业工作台'));
@@ -4608,7 +4640,7 @@ void main() {
     expect(find.text('服务'), findsOneWidget);
     expect(find.text('设置'), findsOneWidget);
     expect(find.text('关于'), findsOneWidget);
-    expect(find.text(MobileBuildConfig.profileVersionText), findsOneWidget);
+    expect(find.text(MobileBuildConfig.displayVersion), findsOneWidget);
     expect(find.text('蜀ICP备2026014056号-3A'), findsOneWidget);
     final heroDecoration = tester
         .widget<Container>(
@@ -5853,6 +5885,8 @@ const _fakeUnreadConversation = ConversationItem(
 );
 
 class _FakeRealtimeRepository extends MobileRepository {
+  _FakeRealtimeRepository({super.client});
+
   final List<Map<String, String>> gitOperations = [];
   final List<Map<String, Object?>> groupPostCalls = [];
   var employeeLoads = 0;
@@ -6124,6 +6158,15 @@ class _FakeBridgeRepository extends MobileRepository {
 }
 
 class _FakeStreamingChatRepository extends _FakeRealtimeRepository {
+  _FakeStreamingChatRepository()
+      : super(
+          client: MobileApiClient(
+            sessionStore: MemoryMobileSessionStore(
+              const MobileSessionData(accessToken: 'chat-widget-test'),
+            ),
+          ),
+        );
+
   final firstToken = Completer<void>();
   final finish = Completer<void>();
   final List<Map<String, Object?>> calls = [];
@@ -6156,6 +6199,15 @@ class _FakeStreamingChatRepository extends _FakeRealtimeRepository {
 }
 
 class _FakeFailThenStreamingRepository extends _FakeRealtimeRepository {
+  _FakeFailThenStreamingRepository()
+      : super(
+          client: MobileApiClient(
+            sessionStore: MemoryMobileSessionStore(
+              const MobileSessionData(accessToken: 'chat-widget-test'),
+            ),
+          ),
+        );
+
   final calls = <String>[];
 
   @override
@@ -6208,7 +6260,7 @@ class _FakeInflightRelayRepository extends _FakeRealtimeRepository {
 }
 
 class _FakeDiscoverRepository extends MobileRepository {
-  _FakeDiscoverRepository(this.menu);
+  _FakeDiscoverRepository(this.menu) : super(client: _FakeSettingsApi());
 
   final List<MobileNavMenuItem> menu;
 
@@ -6387,6 +6439,7 @@ class _CachedFirstHomeShellRepository extends MobileRepository {
               userId: 1,
               cachedModInfos: [
                 {
+                  '_mobile_cache_base_url': 'https://xiu-ci.com/fhd-api/',
                   'id': 'cached-avatar-mod',
                   'name': '缓存头像包',
                   'workflow_employees': [
@@ -6399,12 +6452,6 @@ class _CachedFirstHomeShellRepository extends MobileRepository {
                   ],
                 },
               ],
-              conversationListStates: {
-                'employee:cached-avatar-mod:cached-avatar-employee': {
-                  'last_message_preview': '我: 先看缓存',
-                  'last_message_at': 1719820800000,
-                },
-              },
             ),
           ),
         );
@@ -6865,7 +6912,8 @@ class _AuthTestCredentialCipher extends PlatformCredentialCipher {
   Future<String> encrypt(String plain) async => 'enc:v1:$plain';
 
   @override
-  Future<String> decrypt(String stored) async => stored.substring('enc:v1:'.length);
+  Future<String> decrypt(String stored) async =>
+      stored.substring('enc:v1:'.length);
 }
 
 class _UnavailableAuthTestCredentialCipher extends PlatformCredentialCipher {

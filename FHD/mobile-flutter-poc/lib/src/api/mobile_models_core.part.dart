@@ -53,6 +53,11 @@ class MobileTaskSummary {
   final String conversationId;
   final String updatedAt;
 
+  String get workspacePath => Uri(
+    pathSegments: ['', 'workspaces', taskId],
+    queryParameters: {'conversation': conversationId.isEmpty ? taskId : conversationId},
+  ).toString();
+
   factory MobileTaskSummary.fromJson(Map<String, Object?> json) {
     return MobileTaskSummary(
       taskId: _readString(json, const ['task_id']),

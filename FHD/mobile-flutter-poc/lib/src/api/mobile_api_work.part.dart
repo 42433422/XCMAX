@@ -2,16 +2,11 @@ part of 'mobile_api.dart';
 
 abstract class _ApiWorkBase extends _ApiPairingBase {
   _ApiWorkBase({
-    MobileApiConfig config = const MobileApiConfig(),
-    MobileSessionStore? sessionStore,
-    HttpClient? httpClient,
-    PlatformCredentialCipher? credentialCipher,
-  }) : super(
-          config: config,
-          sessionStore: sessionStore,
-          httpClient: httpClient,
-          credentialCipher: credentialCipher,
-        );
+    super.config,
+    super.sessionStore,
+    super.httpClient,
+    super.credentialCipher,
+  });
 
   Future<MobileEnvelope<Map<String, Object?>>> approvals({
     int page = 1,

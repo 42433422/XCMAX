@@ -87,8 +87,8 @@ describe('registerModRoutes', () => {
     expect(modRouteGlob['/mods/empty-mod/frontend/routes.js']).toHaveBeenCalledTimes(1)
   })
 
-  it('refreshes the actual browser path when router is still at start location', async () => {
-    window.history.replaceState(null, '', '/onboarding?step=welcome&redirect=/')
+  it('strips the cloud mount when refreshing the browser path from the start location', async () => {
+    window.history.replaceState(null, '', '/fhd-api/onboarding?step=welcome&redirect=/')
     const router = createRouter({
       history: createMemoryHistory(),
       routes: [

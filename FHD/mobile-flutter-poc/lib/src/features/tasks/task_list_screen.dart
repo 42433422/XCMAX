@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../api/mobile_models.dart';
+import '../../policy/mobile_error_policy.dart';
+import '../webview/desktop_tool_webview_screen.dart';
 import '../../data/mobile_repository.dart';
 import '../../data/mobile_repository_scope.dart';
 import '../../theme/app_theme.dart';
@@ -30,8 +32,8 @@ class _TaskListScreenState extends State<TaskListScreen> {
     );
     _tasksFuture = _repository.loadTasks();
     _devicesFuture = _repository.loadDesktopDevices().catchError(
-      (_) => const <MobileDesktopDevice>[],
-    );
+          (_) => const <MobileDesktopDevice>[],
+        );
   }
 
   @override
@@ -53,12 +55,10 @@ class _TaskListScreenState extends State<TaskListScreen> {
                 builder: (context, snapshot) {
                   final tasks = snapshot.data ?? const <MobileTaskSummary>[];
                   if (snapshot.connectionState != ConnectionState.done) {
-                    return const SizedBox.shrink();
+                    return const Center(child: CircularProgressIndicator());
                   }
-                  if (tasks.isEmpty) return const SizedBox.shrink();
-                  final pendingApprovals = tasks
-                      .where((task) => task.approvalRequired)
-                      .length;
+                  final pendingApprovals =
+                      tasks.where((task) => task.approvalRequired).length;
                   return RefreshIndicator(
                     color: colors.brand,
                     onRefresh: _refresh,
@@ -66,6 +66,17 @@ class _TaskListScreenState extends State<TaskListScreen> {
                       physics: const AlwaysScrollableScrollPhysics(),
                       padding: const EdgeInsets.only(bottom: 24),
                       children: [
+                        if (snapshot.hasError || tasks.isEmpty)
+                          ListTile(
+                            title: Text(
+                              snapshot.hasError
+                                  ? mobileErrorText(snapshot.error)
+                                  : '暂无任务',
+                            ),
+                            subtitle: const Text('下拉刷新，或点击重试'),
+                            trailing: const Icon(Icons.refresh),
+                            onTap: _refresh,
+                          ),
                         if (pendingApprovals > 0) ...[
                           WeCellGroup(
                             children: [
@@ -87,6 +98,9 @@ class _TaskListScreenState extends State<TaskListScreen> {
                             for (var i = 0; i < tasks.length; i += 1)
                               _TaskCell(
                                 task: tasks[i],
+                                onTap: tasks[i].taskId.isEmpty
+                                    ? null
+                                    : () => _openTask(tasks[i].taskId),
                                 showDivider: i != tasks.length - 1,
                               ),
                           ],
@@ -108,13 +122,98 @@ class _TaskListScreenState extends State<TaskListScreen> {
   Future<void> _refresh() async {
     final tasksFuture = _repository.loadTasks();
     final devicesFuture = _repository.loadDesktopDevices().catchError(
-      (_) => const <MobileDesktopDevice>[],
-    );
+          (_) => const <MobileDesktopDevice>[],
+        );
     setState(() {
       _tasksFuture = tasksFuture;
       _devicesFuture = devicesFuture;
     });
-    await Future.wait([tasksFuture, devicesFuture]);
+    // FutureBuilder owns the error state, including failed pull-to-refresh.
+    await Future.wait([
+      tasksFuture,
+      devicesFuture,
+    ]).then<void>((_) {}, onError: (Object _, StackTrace __) {});
+  }
+
+  Future<void> _openTask(String taskId) async {
+    var detail = _repository.client.mobileTaskDetail(taskId);
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: StatefulBuilder(
+              builder: (context, updateDetail) =>
+                  FutureBuilder<MobileEnvelope<MobileTaskSummary>>(
+                    future: detail,
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState != ConnectionState.done) {
+                        return const SizedBox(
+                          height: 120,
+                          child: Center(child: CircularProgressIndicator()),
+                        );
+                      }
+                      final task = snapshot.data?.data;
+                      if (snapshot.hasError ||
+                          snapshot.data?.success != true ||
+                          task == null ||
+                          task.taskId != taskId) {
+                        return Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(mobileErrorText(
+                                  snapshot.error ?? snapshot.data?.message,
+                                  fallback: '任务不存在或无权查看')),
+                              TextButton(
+                                  onPressed: () => updateDetail(() {
+                                        detail = _repository.client
+                                            .mobileTaskDetail(taskId);
+                                      }),
+                                  child: const Text('重试')),
+                            ]);
+                      }
+                      return Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            task.title.isEmpty ? '任务详情' : task.title,
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                          const SizedBox(height: 12),
+                          Text(_TaskCell._statusText(task)),
+                          if (task.updatedAt.isNotEmpty)
+                            Text('更新时间：${task.updatedAt}'),
+                          const SizedBox(height: 12),
+                          FilledButton(
+                            onPressed: () {
+                              Navigator.of(sheetContext).pop();
+                              Navigator.of(this.context)
+                                  .push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => DesktopToolWebViewScreen(
+                                    title: '任务结果与操作',
+                                    path: task.workspacePath,
+                                    api: _repository.client,
+                                  ),
+                                ),
+                              )
+                                  .then((_) {
+                                if (mounted) _refresh();
+                              });
+                            },
+                            child: const Text('查看结果与操作'),
+                          ),
+                        ],
+                      );
+                    },
+                  )),
+        ),
+      ),
+    );
   }
 
   void _openApprovals() {
@@ -127,9 +226,10 @@ class _TaskListScreenState extends State<TaskListScreen> {
 }
 
 class _TaskCell extends StatelessWidget {
-  const _TaskCell({required this.task, required this.showDivider});
+  const _TaskCell({required this.task, required this.showDivider, this.onTap});
 
   final MobileTaskSummary task;
+  final VoidCallback? onTap;
   final bool showDivider;
 
   @override
@@ -139,6 +239,7 @@ class _TaskCell extends StatelessWidget {
     return WeCell(
       title: task.title.isEmpty ? '未命名任务' : task.title,
       subtitle: statusText,
+      onTap: onTap,
       icon: Icons.task_alt,
       iconColor: colors.textSecondary,
       iconBg: colors.surfaceHigh,
@@ -156,24 +257,28 @@ class _TaskCell extends StatelessWidget {
   }
 
   static String _statusText(MobileTaskSummary task) {
-    if (task.approvalRequired) return '待审批';
-    if (task.attentionState == 'result_unread') return '有结果待查看';
-    switch (task.status) {
-      case 'queued':
-        return '排队中';
-      case 'running':
-        return '进行中 ${task.progressPercent}%';
-      case 'completed':
-        return '已完成';
-      case 'failed':
-        return '执行失败';
-      case 'paused':
-        return '已暂停';
-      case 'cancelled':
-        return '已取消';
-      default:
-        return task.status;
+    if (task.approvalRequired ||
+        task.attentionState == 'approval_required' ||
+        task.status == 'waiting_user') {
+      return '待审批';
     }
+    if (task.attentionState == 'result_unread') return '有结果待查看';
+    if (task.status == 'running' || task.status == 'claimed') {
+      return '进行中 ${task.progressPercent.clamp(0, 100)}%';
+    }
+    return const {
+          'queued': '排队中',
+          'planning': '规划中',
+          'retrying': '重试中',
+          'completed': '已完成',
+          'failed': '执行失败',
+          'paused': '已暂停',
+          'cancelled': '已取消',
+          'blocked': '已阻断',
+          'pending': '待执行',
+          'skipped': '已跳过',
+        }[task.status] ??
+        '状态待同步';
   }
 
   static String _targetLabel(String target) {

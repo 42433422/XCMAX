@@ -74,6 +74,14 @@ function shouldPreferRelativeApiBase(): boolean {
   return false
 }
 
+/** Match the early HTML base used by the shared desktop/cloud asset bundle. */
+export function getAppBase(): string {
+  const built = String(import.meta.env.BASE_URL || '/')
+  if (built !== './' && built !== '/') return built
+  return typeof window !== 'undefined' && /^\/fhd-api(?:\/|$)/.test(window.location.pathname)
+    ? '/fhd-api/' : '/'
+}
+
 export function getApiBase(): string {
   const injected = readInjectedApiBase()
   if (injected) {
@@ -82,6 +90,8 @@ export function getApiBase(): string {
     }
     return injected
   }
+
+  if (getAppBase() === '/fhd-api/') return '/fhd-api'
 
   const a = import.meta.env.VITE_API_BASE as string | undefined
   const b = import.meta.env.VITE_API_BASE_URL as string | undefined

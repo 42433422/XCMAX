@@ -18,7 +18,6 @@ const _discoverNativeRouteMap = <String, String>{
   'chat': 'ai_chat',
   'im': 'im',
   'ai-ecosystem': 'ai_employees',
-  'employee-workflow': 'work',
   'settings': 'settings',
 };
 
@@ -101,6 +100,15 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                         ],
                       ),
                       const WeSectionCaption('桌面工具'),
+                      if (snapshot.hasError)
+                        ListTile(
+                            title: const Text('桌面工具加载失败'),
+                            trailing: TextButton(
+                                onPressed: () => setState(() {
+                                      _navMenuFuture =
+                                          _repository.loadNavMenu();
+                                    }),
+                                child: const Text('重试'))),
                       WeCellGroup(
                         children: [
                           for (var i = 0; i < desktopTools.length; i++)
@@ -316,19 +324,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         );
         return;
       case 'employee-workflow':
-        final callback = widget.onOpenWork;
-        if (callback != null) {
-          callback();
-          return;
-        }
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (routeContext) => AiEmployeesScreen(
-              repository: _repository,
-              onBack: () => Navigator.of(routeContext).pop(),
-            ),
-          ),
-        );
+        _openDesktopWebView(
+            title: item.title, path: '/workflow-employee-space');
         return;
       case 'settings':
         Navigator.of(context).push(
@@ -345,7 +342,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   void _openDesktopWebView({required String title, required String path}) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => DesktopToolWebViewScreen(title: title, path: path),
+        builder: (_) => DesktopToolWebViewScreen(
+            title: title, path: path, api: _repository.client),
       ),
     );
   }

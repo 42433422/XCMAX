@@ -5,6 +5,7 @@ import '../../data/mobile_repository_scope.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/we_ui.dart';
 import '../../policy/mobile_error_policy.dart';
+import '../webview/desktop_tool_webview_screen.dart';
 
 enum BusinessListKind {
   customers('客户', Icons.people),
@@ -15,6 +16,11 @@ enum BusinessListKind {
 
   final String title;
   final IconData icon;
+  String get managementPath => switch (this) {
+        customers => '/customers',
+        shipments => '/shipment-records',
+        inventory => '/inventory',
+      };
 }
 
 class ErpScreen extends StatefulWidget {
@@ -141,7 +147,13 @@ class _BusinessListScaffoldState extends State<BusinessListScaffold> {
           children: [
             WeTopBar(
               title: widget.title,
+              showBack: true,
+              onBack: () => Navigator.of(context).maybePop(),
               actions: [
+                IconButton(
+                    onPressed: _openManagement,
+                    icon: const Icon(Icons.edit_note),
+                    tooltip: '查看与编辑'),
                 IconButton(
                   onPressed: _refresh,
                   icon: const Icon(Icons.refresh),
@@ -226,6 +238,15 @@ class _BusinessListScaffoldState extends State<BusinessListScaffold> {
         ),
       ),
     );
+  }
+
+  Future<void> _openManagement() async {
+    await Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => DesktopToolWebViewScreen(
+            title: '${widget.kind.title}管理',
+            path: widget.kind.managementPath,
+            api: _repository.client)));
+    if (mounted) await _refresh();
   }
 
   Future<_BusinessListResult> _load() async {

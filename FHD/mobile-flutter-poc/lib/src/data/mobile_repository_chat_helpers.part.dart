@@ -2,9 +2,9 @@ part of 'mobile_repository.dart';
 
 abstract class _RepoHelpersBase extends _RepoPairingAuthBase {
   _RepoHelpersBase({
-    MobileApiClient? client,
-    ImWebSocketClient? imWebSocket,
-  }) : super(client: client, imWebSocket: imWebSocket);
+    super.client,
+    super.imWebSocket,
+  });
 
   Future<int> _loadCurrentUserId() async {
     try {
@@ -82,113 +82,77 @@ abstract class _RepoHelpersBase extends _RepoPairingAuthBase {
   }
 
   Future<String> _inflightRelayTask(String conversationId) async {
-    final id = conversationId.trim();
-    if (id.isEmpty) return '';
-    final store = await openOfflineStore();
-    if (store != null) {
-      final taskId = await store.inflightTaskId(id);
-      if (taskId.isNotEmpty) return taskId;
-    }
-    final session = await _client.loadSession();
-    return session.inflightRelayTasks[id]?.trim() ?? '';
+    final scope = await _offlineScope();
+    final store = await openOfflineStore(expectedScope: scope);
+    final task = await store?.inflightTaskId(conversationId.trim()) ?? '';
+    return scope == await _offlineScope() ? task : '';
   }
 
-  Future<void> _setInflightRelayTask(
-    String conversationId,
-    String taskId,
-  ) async {
-    final generation = _client.authGeneration;
+  Future<void> _setInflightRelayTask(String conversationId, String taskId,
+      {required Future<void> Function() requireScope}) async {
     final id = conversationId.trim();
     if (id.isEmpty) return;
-    final store = await openOfflineStore();
-    if (store != null) {
-      await store.setInflightTaskId(id, taskId);
-      return;
-    }
-    final session = await _client.loadSession();
-    final tasks = Map<String, String>.of(session.inflightRelayTasks);
-    final cleanTaskId = taskId.trim();
-    if (cleanTaskId.isEmpty) {
-      tasks.remove(id);
-    } else {
-      tasks[id] = cleanTaskId;
-    }
-    await _client.saveSession(session.copyWith(inflightRelayTasks: tasks),
-        authGeneration: generation);
+    final scope = await _offlineScope();
+    final store = await openOfflineStore(expectedScope: scope);
+    await requireScope();
+    if (scope != await _offlineScope()) return;
+    await store?.setInflightTaskId(id, taskId);
   }
 
   Future<bool> _clearInflightIfRelayChanged(
     String conversationId,
-    String taskId,
-  ) async {
+    String taskId, {
+    required Future<void> Function() requireScope,
+  }) async {
     final currentRelayId = await _relayIdForSuperEmployeeDispatch();
+    await requireScope();
     if (currentRelayId.isEmpty) {
-      await _setInflightRelayTask(conversationId, '');
+      await _setInflightRelayTask(conversationId, '',
+          requireScope: requireScope);
       return true;
     }
     final status = await _client.relayTaskStatus(taskId);
+    await requireScope();
     final taskMap = _objectMap(status.data?['task']);
     final current =
         taskMap.isNotEmpty ? taskMap : status.data ?? const <String, Object?>{};
     final taskRelayId = _stringField(current, 'relay_id');
     if (taskRelayId.isEmpty || taskRelayId == currentRelayId) return false;
-    await _setInflightRelayTask(conversationId, '');
+    await _setInflightRelayTask(conversationId, '', requireScope: requireScope);
     return true;
   }
 
   Future<List<ChatMessage>> _loadCachedChat(String conversationId) async {
     final id = conversationId.trim();
     if (id.isEmpty) return const [];
-    final store = await openOfflineStore();
-    if (store != null) {
-      final rows = await store.cachedMessages(id);
-      if (rows.isNotEmpty) {
-        return rows.map(_chatMessageFromCache).whereType<ChatMessage>().toList();
-      }
-      final session = await _client.loadSession();
-      final legacy = session.cachedChatMessages[id];
-      if (legacy != null && legacy.isNotEmpty) {
-        await store.importFromSession(session);
-        await _clearLegacySessionCache();
-        final imported = await store.cachedMessages(id);
-        return imported
-            .map(_chatMessageFromCache)
-            .whereType<ChatMessage>()
-            .toList();
-      }
-      return const [];
-    }
-    final session = await _client.loadSession();
-    final rows = session.cachedChatMessages[id];
-    if (rows == null || rows.isEmpty) return const [];
+    final scope = await _offlineScope();
+    final store = await openOfflineStore(expectedScope: scope);
+    if (store == null) return const [];
+    final rows = await store.cachedMessages(id);
+    if (scope != await _offlineScope()) return const [];
+    // Legacy JSON/SQLite has no reliable backend owner: retain it on disk,
+    // but never import it into a newly authenticated account's scoped cache.
     return rows.map(_chatMessageFromCache).whereType<ChatMessage>().toList();
   }
 
-  /// 历史缓存迁入 SQLite 后，会话文件不再保留聊天记录、列表状态与进行中任务。
-  Future<void> _clearLegacySessionCache() async {
-    final generation = _client.authGeneration;
-    final session = await _client.loadSession();
-    if (session.cachedChatMessages.isEmpty &&
-        session.conversationListStates.isEmpty &&
-        session.inflightRelayTasks.isEmpty) {
-      return;
+  Future<void> _requireChatScope(int generation, String base) async {
+    final currentBase = await _client.resolveSessionBaseUrl();
+    if (generation != _client.authGeneration || base != currentBase) {
+      throw const MobileRepositoryException('账号或服务端已切换，请重新发送');
     }
-    await _client.saveSession(
-      session.copyWith(
-        cachedChatMessages: const <String, List<Map<String, Object?>>>{},
-        conversationListStates: const <String, Map<String, Object?>>{},
-        inflightRelayTasks: const <String, String>{},
-      ),
-      authGeneration: generation,
-    );
   }
 
   Future<void> _cacheChatMessage(
     String conversationId, {
     required ChatRole role,
     required String body,
+    int? expectedAuthGeneration,
+    String? expectedBaseUrl,
   }) async {
-    final generation = _client.authGeneration;
+    final generation = expectedAuthGeneration ?? _client.authGeneration;
+    if (expectedBaseUrl != null) {
+      await _requireChatScope(generation, expectedBaseUrl);
+    }
     final id = conversationId.trim();
     final text = body.trim();
     if (id.isEmpty || text.isEmpty) return;
@@ -198,6 +162,10 @@ abstract class _RepoHelpersBase extends _RepoPairingAuthBase {
     final messageId = 'cache-${now.microsecondsSinceEpoch}-${role.name}';
     final preview = _conversationPreviewForRole(role, text);
     final store = await openOfflineStore();
+    if (expectedBaseUrl != null) {
+      await _requireChatScope(generation, expectedBaseUrl);
+    }
+    if (generation != _client.authGeneration) return;
     if (store != null) {
       await store.appendMessage(id, {
         'id': messageId,
@@ -216,37 +184,5 @@ abstract class _RepoHelpersBase extends _RepoPairingAuthBase {
       );
       return;
     }
-    final session = await _client.loadSession();
-    final cache = Map<String, List<Map<String, Object?>>>.of(
-      session.cachedChatMessages,
-    );
-    final rows = [...(cache[id] ?? const <Map<String, Object?>>[])];
-    rows.add({
-      'id': messageId,
-      'conversation_id': id,
-      'role': role.name,
-      'body': text,
-      'time_text': now.toIso8601String(),
-      'ts': timestampMs,
-      'has_employee_profile': role == ChatRole.assistant,
-      'status': ChatDeliveryStatus.sent.name,
-    });
-    cache[id] = rows.length > 80
-        ? rows.sublist(rows.length - 80).toList(growable: false)
-        : rows;
-    final states = Map<String, Map<String, Object?>>.of(
-      session.conversationListStates,
-    );
-    states[id] = _ConversationListState(
-      preview: preview,
-      timestampMs: timestampMs,
-    ).toJson();
-    await _client.saveSession(
-      session.copyWith(
-        cachedChatMessages: cache,
-        conversationListStates: states,
-      ),
-      authGeneration: generation,
-    );
   }
 }
