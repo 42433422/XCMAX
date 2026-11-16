@@ -1155,7 +1155,7 @@
     "tests/test_routes/test_dataset_access.py": 0.015626,
     "tests/test_routes/test_document_templates_compat.py": 0.058483,
     "tests/test_routes/test_document_templates_compat_zero.py": 0.062713,
-    "tests/test_routes/test_etl_sources.py": 9.628374,
+    "tests/test_routes/test_elt_sources.py": 9.628374,
     "tests/test_routes/test_excel_extract.py": 0.421094,
     "tests/test_routes/test_excel_extract_pure.py": 0.057285,
     "tests/test_routes/test_excel_extract_shipment_security.py": 0.005564,

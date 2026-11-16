@@ -104,6 +104,7 @@ class AuthService(NeuroEventPublisherMixin):
             return existing_permissions(user)
         from app.application.tenant_rbac_policy import (
             TENANT_PERMISSION_CODES,
+            canonical_permission_code,
             is_tenant_role,
             owner_permission_for_user,
             role_belongs_to_user,
@@ -112,10 +113,10 @@ class AuthService(NeuroEventPublisherMixin):
         with get_db() as db:
             if user.role == "admin" and user.tier == "admin" and user.tenant_id is None:
                 perms = db.query(Permission).all()
-                return [p.code for p in perms]
+                return [canonical_permission_code(p.code) for p in perms]
 
             role = db.query(Role).filter(Role.name == user.role).first()
-            codes = [p.code for p in role.permissions] if role else []
+            codes = [canonical_permission_code(p.code) for p in role.permissions] if role else []
             if is_tenant_role(user.role):
                 codes = (
                     [code for code in codes if code in TENANT_PERMISSION_CODES]
@@ -124,18 +125,19 @@ class AuthService(NeuroEventPublisherMixin):
                 )
             if owner_permission_for_user(user) and "tenant.manage_roles" not in codes:
                 codes.append("tenant.manage_roles")
-            return codes
+            return [canonical_permission_code(code) for code in codes]
 
     def has_permission(self, user: User, permission_code: str) -> bool:
+        from app.application.tenant_rbac_policy import canonical_permission_code
         from app.db.bootstrap.guarded import enabled
 
+        needed = canonical_permission_code(permission_code)
         if enabled():
-            return permission_code in self.get_user_permissions(user)
+            return needed in self.get_user_permissions(user)
         if user.role == "admin" and user.tier == "admin" and user.tenant_id is None:
             return True
 
-        perms = self.get_user_permissions(user)
-        return permission_code in perms
+        return needed in self.get_user_permissions(user)
 
     def change_password(self, user_id: int, old_password: str, new_password: str) -> dict[str, Any]:
         with get_db() as db:
