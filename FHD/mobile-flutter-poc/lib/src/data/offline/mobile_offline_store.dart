@@ -5,14 +5,16 @@ import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 
 import '../../models/conversation.dart';
-import '../../api/mobile_session_store.dart';
 
 /// 移动端离线存储：消息缓存、会话列表状态、进行中任务与待发送队列。
 ///
 /// 这些数据此前混在会话 JSON 文件里，导致每次会话写入都要重写整份聊天记录。
 /// 这里使用 drift（成熟 SQLite 封装）单独建库，会话文件只保留凭证与偏好。
 class MobileOfflineStore {
-  MobileOfflineStore._(this._db);
+  MobileOfflineStore._(this._db, [this._namespace]);
+
+  final String? _namespace;
+  static final _scoped = <String, Future<MobileOfflineStore>>{};
 
   static const _databaseName = 'xcagi_mobile_cache';
   static const _maxMessagesPerConversation = 80;
@@ -22,14 +24,26 @@ class MobileOfflineStore {
 
   final _MobileOfflineDatabase _db;
 
-  static Future<MobileOfflineStore> open() async {
-    final cached = _shared;
-    if (cached != null) return cached;
-    final store = MobileOfflineStore._(
-      _MobileOfflineDatabase(driftDatabase(name: _databaseName)),
-    );
-    await store._db.ensureReady();
-    return _shared = store;
+  static Future<MobileOfflineStore> open(
+      {String namespace = 'legacy', QueryExecutor? executor}) async {
+    if (_shared != null) return _shared!; // Explicit test injection only.
+    if (!RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(namespace)) {
+      throw ArgumentError('Invalid cache scope');
+    }
+    return _scoped.putIfAbsent(namespace, () async {
+      final store = MobileOfflineStore._(
+        _MobileOfflineDatabase(
+            executor ?? driftDatabase(name: '${_databaseName}_$namespace')),
+        namespace,
+      );
+      try {
+        await store._db.ensureReady();
+        return store;
+      } catch (_) {
+        _scoped.remove(namespace);
+        rethrow;
+      }
+    });
   }
 
   /// 测试或自定义执行器入口（例如 NativeDatabase.memory()）。
@@ -50,6 +64,7 @@ class MobileOfflineStore {
   Future<void> close() async {
     await _db.close();
     if (identical(_shared, this)) _shared = null;
+    if (_namespace != null) _scoped.remove(_namespace);
   }
 
   // ── 消息缓存 ────────────────────────────────────────────────
@@ -310,39 +325,6 @@ class MobileOfflineStore {
         Variable<int>(id)
       ],
     );
-  }
-
-  // ── 一次性迁移 ──────────────────────────────────────────────
-
-  /// 首次启动时把会话 JSON 里的历史缓存搬到 SQLite；成功后由调用方清空会话字段。
-  Future<bool> importFromSession(MobileSessionData session) async {
-    final marker = await _db
-        .customSelect(
-          "SELECT value FROM meta WHERE key = 'session_imported'",
-        )
-        .get();
-    if (marker.isNotEmpty) return false;
-
-    for (final entry in session.cachedChatMessages.entries) {
-      if (entry.value.isEmpty) continue;
-      await replaceMessages(entry.key, entry.value);
-    }
-    for (final entry in session.conversationListStates.entries) {
-      final state = entry.value;
-      await saveConversationState(
-        entry.key,
-        preview: '${state['preview'] ?? ''}',
-        timestampMs: _asInt(state['timestamp_ms']),
-      );
-    }
-    for (final entry in session.inflightRelayTasks.entries) {
-      if (entry.value.trim().isEmpty) continue;
-      await setInflightTaskId(entry.key, entry.value);
-    }
-    await _db.customUpdate(
-      "INSERT OR REPLACE INTO meta (key, value) VALUES ('session_imported', '1')",
-    );
-    return true;
   }
 
   // ── 映射与类型转换 ──────────────────────────────────────────

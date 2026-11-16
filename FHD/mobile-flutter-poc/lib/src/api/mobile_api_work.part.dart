@@ -2,16 +2,11 @@ part of 'mobile_api.dart';
 
 abstract class _ApiWorkBase extends _ApiPairingBase {
   _ApiWorkBase({
-    MobileApiConfig config = const MobileApiConfig(),
-    MobileSessionStore? sessionStore,
-    HttpClient? httpClient,
-    PlatformCredentialCipher? credentialCipher,
-  }) : super(
-          config: config,
-          sessionStore: sessionStore,
-          httpClient: httpClient,
-          credentialCipher: credentialCipher,
-        );
+    super.config,
+    super.sessionStore,
+    super.httpClient,
+    super.credentialCipher,
+  });
 
   Future<MobileEnvelope<Map<String, Object?>>> approvals({
     int page = 1,
@@ -165,6 +160,20 @@ abstract class _ApiWorkBase extends _ApiPairingBase {
   Future<MobileEnvelope<Map<String, Object?>>> mobileMods() async {
     final json = await getJson(XcagiMobileEndpoints.mods);
     return MobileEnvelope.fromJson(json, _asObjectMap);
+  }
+
+  /// 统一员工目录：与桌面端员工工作台、信息页同源。
+  Future<MobileEnvelope<List<Map<String, Object?>>>> employeeDirectory() async {
+    final json = await getJson(XcagiMobileEndpoints.employeeDirectory);
+    return MobileEnvelope.fromJson(json, (value) {
+      final data = _asObjectMap(value);
+      final rows = data['employees'];
+      if (rows is! List) return const <Map<String, Object?>>[];
+      return rows
+          .whereType<Map>()
+          .map((row) => Map<String, Object?>.from(row))
+          .toList(growable: false);
+    });
   }
 
   Future<MobileEnvelope<MobileTaskListData>> mobileTasks({

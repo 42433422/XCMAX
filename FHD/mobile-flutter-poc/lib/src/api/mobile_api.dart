@@ -27,16 +27,11 @@ part 'mobile_api_misc.part.dart';
 
 class MobileApiClient extends _ApiChatBase {
   MobileApiClient({
-    MobileApiConfig config = const MobileApiConfig(),
-    MobileSessionStore? sessionStore,
-    HttpClient? httpClient,
-    PlatformCredentialCipher? credentialCipher,
-  }) : super(
-          config: config,
-          sessionStore: sessionStore,
-          httpClient: httpClient,
-          credentialCipher: credentialCipher,
-        );
+    super.config,
+    super.sessionStore,
+    super.httpClient,
+    super.credentialCipher,
+  });
 }
 
 abstract class _ApiRootBase {
@@ -45,7 +40,8 @@ abstract class _ApiRootBase {
     MobileSessionStore? sessionStore,
     HttpClient? httpClient,
     PlatformCredentialCipher? credentialCipher,
-  })  : _config = config,
+  })  : _ownsHttpClient = httpClient == null,
+        _config = config,
         _httpClient = httpClient ?? HttpClient(),
         _credentialCipher =
             credentialCipher ?? const PlatformCredentialCipher() {
@@ -54,6 +50,16 @@ abstract class _ApiRootBase {
           FileMobileSessionStore(),
           cipher: _credentialCipher,
         );
+  }
+
+  final bool _ownsHttpClient;
+  bool _disposed = false;
+
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    if (_ownsHttpClient) _httpClient.close(force: true);
+    unawaited(_sessionChanges.close());
   }
 
   final MobileApiConfig _config;

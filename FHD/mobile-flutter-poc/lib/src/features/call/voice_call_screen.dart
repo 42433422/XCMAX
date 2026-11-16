@@ -185,11 +185,13 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
     });
     await _speech.listen(
       onResult: _onSpeechResult,
-      listenFor: const Duration(seconds: 30),
-      pauseFor: const Duration(seconds: 3),
-      localeId: 'zh_CN',
-      partialResults: true,
-      cancelOnError: true,
+      listenOptions: SpeechListenOptions(
+        listenFor: const Duration(seconds: 30),
+        pauseFor: const Duration(seconds: 3),
+        localeId: 'zh_CN',
+        partialResults: true,
+        cancelOnError: true,
+      ),
     );
   }
 

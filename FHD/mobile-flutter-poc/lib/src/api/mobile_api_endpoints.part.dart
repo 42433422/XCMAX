@@ -11,6 +11,8 @@ class XcagiMobileEndpoints {
   static const authOidcExchange = '$base/auth/oidc/exchange';
   static const authRefresh = '$base/auth/refresh';
   static const legacyAuthRegister = 'api/auth/register';
+  /// 与桌面端 / 员工工作台共用的统一员工目录。
+  static const employeeDirectory = 'api/platform-shell/employee-directory';
   static const lanAccessRequests = 'api/lan/access-requests';
   static const lanStatus = 'api/lan/status';
   static const hostDiscoverHint = '$base/host/discover-hint';
@@ -60,7 +62,7 @@ class XcagiMobileEndpoints {
   static const adminCsInboxReplyTemplate = '$base/im/cs/inbox/{id}/reply';
   static const mods = '$base/mods';
   static const tasks = '$base/tasks';
-  static String taskDetail(String taskId) => '$tasks/$taskId';
+  static String taskDetail(String taskId) => '$tasks/${Uri.encodeComponent(taskId)}';
   static const desktopDevices = '$base/devices/desktop';
   static const desktopDeviceHeartbeat = '$base/devices/desktop/heartbeat';
   static const paymentPlans = '$base/payment/plans';

@@ -91,7 +91,7 @@ class TestPlatformShellUploadAuth:
         assert resp.json()["success"] is True
 
 
-@pytest.mark.parametrize("suffix", ["xlsx", "xls"])
+@pytest.mark.parametrize("suffix", ["xlsx", "xls", "png", "jpg", "pdf"])
 def test_chat_upload_binds_original_bytes_to_authenticated_owner(tmp_path, monkeypatch, suffix):
     from types import SimpleNamespace
 
@@ -116,5 +116,5 @@ def test_chat_upload_binds_original_bytes_to_authenticated_owner(tmp_path, monke
         return
     assert data["upload_id"] == "owned-upload"
     args = registration.call_args.args
-    assert args[:3] == (user, "report.xlsx", "application/octet-stream")
+    assert args[:3] == (user, f"report.{suffix}", "application/octet-stream")
     assert args[3].getvalue() == b"original"

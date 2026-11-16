@@ -163,7 +163,10 @@ async def _save_workspace_upload(file: UploadFile, *, subdir: str, user) -> dict
 
     name = (file.filename or "").strip()
     suffix = Path(name).suffix.lower()
-    if suffix not in _office_upload_suffixes():
+    from app.application.elt.parsers import OCR_SUFFIXES
+
+    allowed = _office_upload_suffixes() | (OCR_SUFFIXES if subdir == "chat" else set())
+    if suffix not in allowed:
         raise HTTPException(
             status_code=400,
             detail=f"unsupported office file type: {suffix or '(no extension)'}",

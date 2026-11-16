@@ -198,7 +198,7 @@ class _AuthScreenState extends State<AuthScreen> {
                 padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
                 alignment: Alignment.center,
                 child: Text(
-                  MobileBuildConfig.profileVersionText,
+                  MobileBuildConfig.displayVersion,
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: colors.textTertiary,

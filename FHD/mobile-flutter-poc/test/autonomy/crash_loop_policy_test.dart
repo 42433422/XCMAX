@@ -77,7 +77,7 @@ void main() {
 
     test('unrelated signals ignored', () {
       const policy = CrashLoopPolicy();
-      final unrelated = MobileAutonomySignal(
+      const unrelated = MobileAutonomySignal(
         kind: 'ota_failed',
         severity: MobileAutonomySeverity.warn,
         detail: 'ota',
@@ -90,7 +90,7 @@ void main() {
 
     test('below threshold (2 crashes in window) returns info only', () {
       const policy = CrashLoopPolicy();
-      final now = 1000000.0;
+      const now = 1000000.0;
       final signals = [
         _crashSignal(ts: now - 60000),
         _crashSignal(ts: now - 30000),
@@ -103,7 +103,7 @@ void main() {
 
     test('3 crashes in 5min window triggers enterSafeMode', () {
       const policy = CrashLoopPolicy();
-      final now = 1000000.0;
+      const now = 1000000.0;
       final signals = [
         _crashSignal(ts: now - 240000), // 4 min ago
         _crashSignal(ts: now - 120000), // 2 min ago
@@ -125,7 +125,7 @@ void main() {
 
     test('crashes beyond 5min window ignored', () {
       const policy = CrashLoopPolicy();
-      final now = 1000000.0;
+      const now = 1000000.0;
       final signals = [
         _crashSignal(ts: now - 400000), // 6.6 min ago, beyond window
         _crashSignal(ts: now - 200000), // 3.3 min ago
@@ -156,7 +156,7 @@ void main() {
 
     test('5 crashes still single action (idempotency)', () {
       const policy = CrashLoopPolicy();
-      final now = 1000000.0;
+      const now = 1000000.0;
       final signals = [
         _crashSignal(ts: now - 240000),
         _crashSignal(ts: now - 180000),
@@ -171,7 +171,7 @@ void main() {
 
     test('pure function: same input → same output', () {
       const policy = CrashLoopPolicy();
-      final now = 1000000.0;
+      const now = 1000000.0;
       final signals = [
         _crashSignal(ts: now - 60000),
         _crashSignal(ts: now - 30000),
@@ -190,7 +190,7 @@ void main() {
 
     test('signal order independence', () {
       const policy = CrashLoopPolicy();
-      final now = 1000000.0;
+      const now = 1000000.0;
       final signals = [
         _crashSignal(ts: now),
         _crashSignal(ts: now - 120000),
@@ -203,7 +203,7 @@ void main() {
 
     test('custom window and threshold', () {
       const policy = CrashLoopPolicy(windowMs: 60000, threshold: 2);
-      final now = 1000000.0;
+      const now = 1000000.0;
       final signals = [
         _crashSignal(ts: now - 30000),
         _crashSignal(ts: now),
@@ -215,10 +215,10 @@ void main() {
 
     test('payload.crash_ts overrides signal.ts for window check', () {
       const policy = CrashLoopPolicy();
-      final now = 1000000.0;
+      const now = 1000000.0;
       // signal.ts 在窗口内，但 payload.crash_ts 在窗口外
       final signals = [
-        MobileAutonomySignal(
+        const MobileAutonomySignal(
           kind: 'app_crash_loop',
           severity: MobileAutonomySeverity.crit,
           detail: 'crash',

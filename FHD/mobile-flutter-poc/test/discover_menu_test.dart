@@ -8,7 +8,6 @@ void main() {
       'chat': 'ai_chat',
       'im': 'im',
       'ai-ecosystem': 'ai_employees',
-      'employee-workflow': 'work',
       'settings': 'settings',
     });
   });

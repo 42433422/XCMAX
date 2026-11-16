@@ -1,3 +1,4 @@
+import { getAppBase } from '@/utils/apiBase'
 import {
   createRouter,
   createWebHistory,
@@ -61,7 +62,7 @@ if (import.meta.env.VITE_XCMAX_ADMIN_CONSOLE === '1') {
 const routes = resolveInitialRoutes(allRoutes)
 
 const router = createRouter({
-  history: createWebHistory(import.meta.env.BASE_URL),
+  history: createWebHistory(getAppBase()),
   routes,
 })
 router.beforeEach(async (to, _from, finish) => {

@@ -1,3 +1,5 @@
+import { getAppBase } from './apiBase'
+
 /**
  * Service Worker 注册与管理模块
  *
@@ -69,6 +71,9 @@ class ServiceWorkerManager {
       console.warn('[SW Manager] Service Worker not supported')
       return false
     }
+
+    // The shared-origin cloud mount must not install or remove root-scoped workers.
+    if (getAppBase() === '/fhd-api/') return false
 
     // 开发 / 本机直连后端打包页：不注册 SW，避免 sw.js 与 HMR、SPA 兜底冲突
     if (shouldSkipServiceWorkerRegistration()) {
