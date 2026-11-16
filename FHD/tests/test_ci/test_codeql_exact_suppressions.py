@@ -109,7 +109,9 @@ def _source_tree(tmp_path, source):
     return tmp_path
 
 
-@pytest.mark.parametrize("function", ["open_elt_input_file", "_open_elt_output_under_root", "_reject_output_symlink"])
+@pytest.mark.parametrize(
+    "function", ["open_elt_input_file", "_open_elt_output_under_root", "_reject_output_symlink"]
+)
 def test_reviewed_fd_sinks_survive_only_nonsemantic_line_drift(tmp_path, function):
     source = "# harmless line drift\n\n" + _SOURCE
     root = _source_tree(tmp_path, source)
@@ -117,7 +119,9 @@ def test_reviewed_fd_sinks_survive_only_nonsemantic_line_drift(tmp_path, functio
     assert keep_result(finding, source_root=root) is False
 
 
-@pytest.mark.parametrize("function", ["open_elt_input_file", "_open_elt_output_under_root", "_reject_output_symlink"])
+@pytest.mark.parametrize(
+    "function", ["open_elt_input_file", "_open_elt_output_under_root", "_reject_output_symlink"]
+)
 @pytest.mark.parametrize(
     "old,new",
     [
