@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:webview_flutter_android/webview_flutter_android.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:webview_flutter_platform_interface/webview_flutter_platform_interface.dart';
 import 'package:xcagi_flutter_poc/src/api/mobile_api.dart';
@@ -192,9 +194,109 @@ void main() {
     await tester.pump();
     expect(platform.loads, 2);
   });
+  testWidgets(
+      'Android chooser preserves accept types, multiple files and URI paths',
+      (tester) async {
+    final platform = await _showFileChooser(tester, filePicker: ({
+      required acceptedTypeGroups,
+      required multiple,
+    }) async {
+      expect(multiple, isTrue);
+      expect(acceptedTypeGroups.single.extensions, ['xlsx']);
+      expect(acceptedTypeGroups.single.mimeTypes, ['text/csv', 'image/*']);
+      return [XFile('/cache/客户 数据.xlsx'), XFile('content://documents/report')];
+    });
+    final selected = await platform.selectFiles!(const FileSelectorParams(
+        isCaptureEnabled: false,
+        acceptTypes: ['.xlsx, text/csv', 'image/*'],
+        mode: FileSelectorMode.openMultiple));
+    expect(selected, [
+      Uri.file('/cache/客户 数据.xlsx').toString(),
+      'content://documents/report'
+    ]);
+  });
+  testWidgets(
+      'Android chooser cancellation and picker failure return empty selections',
+      (tester) async {
+    var calls = 0;
+    final platform = await _showFileChooser(tester, filePicker: ({
+      required acceptedTypeGroups,
+      required multiple,
+    }) async {
+      expect(multiple, isFalse);
+      expect(acceptedTypeGroups, isEmpty);
+      if (++calls == 2) throw StateError('Picker unavailable');
+      return [];
+    });
+    expect(await platform.selectFiles!(_singleFile), isEmpty);
+    expect(await platform.selectFiles!(_singleFile), isEmpty);
+    expect(await platform.selectFiles!(_singleFile), isEmpty);
+    expect(calls, 3);
+  });
+  testWidgets(
+      'Android chooser rejects untrusted pages before opening native picker',
+      (tester) async {
+    var calls = 0;
+    final platform = await _showFileChooser(tester, filePicker: ({
+      required acceptedTypeGroups,
+      required multiple,
+    }) async {
+      calls++;
+      return [XFile('/cache/report.csv')];
+    });
+    for (final url in [
+      'https://example.com/',
+      'https://xiu-ci.com/market',
+      'https://xiu-ci.com/fhd-api-other/'
+    ]) {
+      platform.current = url;
+      expect(await platform.selectFiles!(_singleFile), isEmpty);
+    }
+    expect(calls, 0);
+  });
+  for (final change in ['account', 'backend', 'page', 'refresh', 'unmount']) {
+    testWidgets('Android chooser discards selection after $change changes',
+        (tester) async {
+      final api = _chooserApi();
+      addTearDown(api.dispose);
+      final pending = Completer<List<XFile>>();
+      var calls = 0;
+      final platform = await _showFileChooser(tester, api: api, filePicker: ({
+        required acceptedTypeGroups,
+        required multiple,
+      }) {
+        calls++;
+        return pending.future;
+      });
+      final selection = platform.selectFiles!(_singleFile);
+      await tester.pump();
+      expect(calls, 1);
+      expect(await platform.selectFiles!(_singleFile), isEmpty);
+      switch (change) {
+        case 'account':
+          api.beginLoginAttempt();
+        case 'backend':
+          await api.saveSession((await api.loadSession()).copyWith(
+              serverMode: 'lan',
+              fhdHost: '10.0.0.8:5000',
+              localBaseUrl: 'http://10.0.0.8:5000/'));
+        case 'page':
+          platform.current = 'https://xiu-ci.com/fhd-api/customers';
+        case 'refresh':
+          await tester.tap(find.byTooltip('刷新'));
+          await tester.pump();
+        case 'unmount':
+          await tester.pumpWidget(const SizedBox());
+      }
+      pending.complete([XFile('/cache/private.csv')]);
+      expect(await selection, isEmpty);
+    });
+  }
 }
 
 class _Platform extends WebViewPlatform {
+  _Platform({this.android = false});
+  final bool android;
   _Controller? controller;
   _Delegate? delegate;
   WebViewCookie? cookie;
@@ -204,7 +306,9 @@ class _Platform extends WebViewPlatform {
   @override
   PlatformWebViewController createPlatformWebViewController(
           PlatformWebViewControllerCreationParams params) =>
-      controller = _Controller(params, this);
+      controller = android
+          ? _AndroidController(params, this)
+          : _Controller(params, this);
   @override
   PlatformNavigationDelegate createPlatformNavigationDelegate(
           PlatformNavigationDelegateCreationParams params) =>
@@ -307,4 +411,44 @@ class _DelayedSessionApi extends MobileApiClient {
   @override
   Future<MobileSessionData> loadSession({bool forceReload = false}) =>
       pending?.future ?? super.loadSession(forceReload: forceReload);
+}
+
+const _singleFile = FileSelectorParams(
+    isCaptureEnabled: false, acceptTypes: ['*/*'], mode: FileSelectorMode.open);
+
+MobileApiClient _chooserApi() => MobileApiClient(
+    sessionStore: MemoryMobileSessionStore(
+        MobileSessionData.empty.copyWith(accessToken: 'account-a')));
+
+Future<_AndroidController> _showFileChooser(
+  WidgetTester tester, {
+  required MobileWebFilePicker filePicker,
+  MobileApiClient? api,
+}) async {
+  final client = api ?? _chooserApi();
+  if (api == null) addTearDown(client.dispose);
+  final platform = _Platform(android: true);
+  WebViewPlatform.instance = platform;
+  await tester.pumpWidget(MaterialApp(
+      home: DesktopToolWebViewScreen(
+          title: '数据对接',
+          path: '/data-integration',
+          api: client,
+          filePicker: filePicker)));
+  await tester.pump();
+  return platform.controller! as _AndroidController;
+}
+
+class _AndroidController extends _Controller
+    implements AndroidWebViewController {
+  _AndroidController(super.params, super.owner);
+  Future<List<String>> Function(FileSelectorParams)? selectFiles;
+  @override
+  Future<void> setOnShowFileSelector(
+      Future<List<String>> Function(FileSelectorParams)? callback) async {
+    selectFiles = callback;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
