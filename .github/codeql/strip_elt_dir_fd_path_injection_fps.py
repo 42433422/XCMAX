@@ -63,9 +63,9 @@ _REVIEWED_FILE_SINKS: dict[str, tuple[str, frozenset[int]]] = {
         frozenset({181}),
     ),
     "FHD/app/application/shipment_excel_elt_security.py": (
-        "2d13ca41715ea352a7c2b66965e17bf9699706d8d32a34e90e656b6fe719a13b",
-        # 458-459 是同一个 os.stat 调用（SARIF 起始行落在参数行）。
-        frozenset({458, 459}),
+        "12d2c45c87bab0a3aacb0ee758cb27f64f8a82b43d487b6e87b03e1c4b83b683",
+        # 同一组 dir_fd/NOfollow sink：os.stat 拒绝叶链接、输入 os.open、发布 os.rename。
+        frozenset({459, 460, 461, 831, 971, 972, 973}),
     ),
     "FHD/app/application/attachment_artifacts/store.py": (
         # 记录 id 只允许 [0-9a-f]{8,64}，再拼到私有 root 下。
@@ -92,10 +92,11 @@ _REVIEWED_FILE_SINKS: dict[str, tuple[str, frozenset[int]]] = {
 # ownership/root validation, component barriers, flags, and cleanup dependencies.
 # Blank lines/comments may move; every semantic AST change fails closed.
 _REVIEWED_URI = "FHD/app/application/shipment_excel_elt_security.py"
-_REVIEWED_MODULE = "2d13ca41715ea352a7c2b66965e17bf9699706d8d32a34e90e656b6fe719a13b"
+_REVIEWED_MODULE = "12d2c45c87bab0a3aacb0ee758cb27f64f8a82b43d487b6e87b03e1c4b83b683"
 _REVIEWED_CALLS = {
     "open_elt_input_file": "19094ef1cb8443339fcb23be54c51abecea8fa5a11b3f844c05b620d285aa9d8",
     "_open_elt_output_under_root": "8b0fd8e35e3a7cb7ad1a91e048c74b1ee1260d9adb7f18dd7d242ef800f16b31",
+    "_reject_output_symlink": "c395992d4f0df2e3555deaf7aff1f2517214862a907819fd78742620b4bf5312",
 }
 
 

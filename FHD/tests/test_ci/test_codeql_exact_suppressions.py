@@ -86,7 +86,11 @@ def _fd_line(source, function_name):
         for node in ast.parse(source).body
         if isinstance(node, ast.FunctionDef) and node.name == function_name
     )
-    method = "open" if function_name == "open_elt_input_file" else "rename"
+    method = {
+        "open_elt_input_file": "open",
+        "_open_elt_output_under_root": "rename",
+        "_reject_output_symlink": "stat",
+    }[function_name]
     return next(
         node.lineno
         for node in ast.walk(function)
@@ -105,7 +109,7 @@ def _source_tree(tmp_path, source):
     return tmp_path
 
 
-@pytest.mark.parametrize("function", ["open_elt_input_file", "_open_elt_output_under_root"])
+@pytest.mark.parametrize("function", ["open_elt_input_file", "_open_elt_output_under_root", "_reject_output_symlink"])
 def test_reviewed_fd_sinks_survive_only_nonsemantic_line_drift(tmp_path, function):
     source = "# harmless line drift\n\n" + _SOURCE
     root = _source_tree(tmp_path, source)
@@ -113,7 +117,7 @@ def test_reviewed_fd_sinks_survive_only_nonsemantic_line_drift(tmp_path, functio
     assert keep_result(finding, source_root=root) is False
 
 
-@pytest.mark.parametrize("function", ["open_elt_input_file", "_open_elt_output_under_root"])
+@pytest.mark.parametrize("function", ["open_elt_input_file", "_open_elt_output_under_root", "_reject_output_symlink"])
 @pytest.mark.parametrize(
     "old,new",
     [
@@ -212,7 +216,7 @@ _REVIEWED_FILE_SINKS = {
     "FHD/app/application/agent_orchestrator/artifact_files.py": (73, 96, 97, 105, 107, 129),
     "FHD/app/application/employee_runtime/workspace_io.py": (57, 91),
     "FHD/app/application/tools/workflow_spreadsheet_scope.py": (181,),
-    "FHD/app/application/shipment_excel_elt_security.py": (458, 459),
+    "FHD/app/application/shipment_excel_elt_security.py": (459, 460, 461, 831, 971, 972, 973),
     "FHD/app/application/attachment_artifacts/store.py": (84, 87),
     "FHD/app/application/local_file_access/paths.py": (76, 134),
     "FHD/app/application/agent_orchestrator/cross_module_chain.py": (83,),

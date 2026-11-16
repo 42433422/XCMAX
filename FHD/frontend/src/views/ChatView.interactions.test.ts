@@ -559,7 +559,7 @@ describe('ChatView interactions', () => {
 
   afterEach(() => {
     while (mounted.length) mounted.pop()?.unmount()
-    document.body.innerHTML = ''
+    document.body.replaceChildren()
     setRuntimeTenantStorageScopeInput(null)
     invalidateTenantStorageScopeCache()
     localStorage.clear()
