@@ -2,16 +2,11 @@ part of 'mobile_api.dart';
 
 abstract class _ApiSessionPersistBase extends _ApiTransportBase {
   _ApiSessionPersistBase({
-    MobileApiConfig config = const MobileApiConfig(),
-    MobileSessionStore? sessionStore,
-    HttpClient? httpClient,
-    PlatformCredentialCipher? credentialCipher,
-  }) : super(
-          config: config,
-          sessionStore: sessionStore,
-          httpClient: httpClient,
-          credentialCipher: credentialCipher,
-        );
+    super.config,
+    super.sessionStore,
+    super.httpClient,
+    super.credentialCipher,
+  });
 
   Future<int?> persistLoginSession(
     Map<String, Object?>? data, {
@@ -24,8 +19,9 @@ abstract class _ApiSessionPersistBase extends _ApiTransportBase {
     final accessToken = _readString(data, const ['access_token']);
     final marketToken = _readString(data, const ['market_access_token']);
     if (accessToken.isEmpty && marketToken.isEmpty) return null;
-    if (authGeneration != null && authGeneration != _authGeneration)
+    if (authGeneration != null && authGeneration != _authGeneration) {
       return null;
+    }
     // Requests issued while login was pending still belong to the previous account.
     final generation = _beginAuthChange();
     await _updateSession((current) {

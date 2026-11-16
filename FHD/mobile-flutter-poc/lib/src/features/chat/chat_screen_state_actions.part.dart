@@ -1,7 +1,7 @@
 part of 'chat_screen.dart';
 
 // 工具面板、页面导航、语音输入与 git 操作入口。
-abstract class _ChatStateActions extends _ChatStateMessaging {
+abstract class _ChatStateActions extends _ChatAttachmentActions {
   Future<void> _startVoiceInput() async {
     setState(() => _showToolPanel = false);
     final granted = await const AndroidRecordAudioPermission().ensureGranted();
@@ -243,6 +243,15 @@ abstract class _ChatStateActions extends _ChatStateMessaging {
   List<_ChatToolAction> _sharedToolActions() {
     return [
       _ChatToolAction(
+          icon: Icons.attach_file,
+          title: widget.conversation.type == ConversationType.pinnedAssistant
+              ? '添加文件'
+              : '文件交给小C',
+          onTap: _pickAttachments),
+      if (widget.conversation.type == ConversationType.pinnedAssistant)
+        _ChatToolAction(
+            icon: Icons.camera_alt, title: '拍照上传', onTap: _takeAttachmentPhoto),
+      _ChatToolAction(
         icon: Icons.group,
         title: '任务派工',
         onTap: _sendTaskDispatch,
@@ -263,7 +272,13 @@ abstract class _ChatStateActions extends _ChatStateMessaging {
   Widget? _composerTopContent(List<String> branches, String? branch) {
     final gitBar = _gitActionBar(branches, branch);
     final reply = _replyTo;
-    if (gitBar == null && reply == null) return null;
+    if (gitBar == null &&
+        reply == null &&
+        _attachments.isEmpty &&
+        _failedAttachments.isEmpty &&
+        !_uploading) {
+      return null;
+    }
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -273,6 +288,7 @@ abstract class _ChatStateActions extends _ChatStateMessaging {
             onCancel: () => setState(() => _replyTo = null),
           ),
         if (gitBar != null) gitBar,
+        _attachmentChips(),
       ],
     );
   }

@@ -28,10 +28,8 @@ import 'dart:io'
     show
         ContentType,
         HttpClient,
-        HttpClientRequest,
         HttpClientResponse,
-        HttpHeaders,
-        HttpStatus;
+        HttpHeaders;
 
 import 'mobile_autonomy_types.dart';
 

@@ -2,16 +2,11 @@ part of 'mobile_api.dart';
 
 abstract class _ApiTransportBase extends _ApiSessionCoreBase {
   _ApiTransportBase({
-    MobileApiConfig config = const MobileApiConfig(),
-    MobileSessionStore? sessionStore,
-    HttpClient? httpClient,
-    PlatformCredentialCipher? credentialCipher,
-  }) : super(
-          config: config,
-          sessionStore: sessionStore,
-          httpClient: httpClient,
-          credentialCipher: credentialCipher,
-        );
+    super.config,
+    super.sessionStore,
+    super.httpClient,
+    super.credentialCipher,
+  });
 
   Future<MobileEnvelope<Map<String, Object?>>> mobileHealth() async {
     final json = await getJson(XcagiMobileEndpoints.health);
@@ -513,6 +508,7 @@ String _errorMessageFromBody(Map<String, Object?> body, int status) {
   final candidates = <String>[
     (body['message'] ?? '').toString().trim(),
     (detail['message'] ?? '').toString().trim(),
+    (body['detail'] is String ? body['detail'] : '').toString().trim(),
     (errorMap['message'] ?? '').toString().trim(),
     (body['error'] is String ? body['error'] : '').toString().trim(),
   ];

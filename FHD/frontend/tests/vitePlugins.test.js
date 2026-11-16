@@ -71,3 +71,20 @@ describe('public API base injection', () => {
     expect(transformHtml(prefix, result)).toBe(result)
   })
 })
+
+
+describe('shared bundle initial asset base', () => {
+  it.each([
+    ['./', '/fhd-api/workspaces/task-1', '/fhd-api/'],
+    ['./', '/workspaces/task-1', '/'],
+    ['./', '/fhd-api-other/customers', '/'],
+    ['/admin/', '/admin/duty-roster', '/admin/'],
+  ])('loads nested-route assets for build %s at %s', (builtBase, pathname, expected) => {
+    const document = new DOMParser().parseFromString(indexHtml.replace('%BASE_URL%', builtBase), 'text/html')
+    const bootstrap = Array.from(document.scripts).find((script) => script.textContent.includes("base.getAttribute('href')"))
+    runInNewContext(bootstrap.textContent, { document, location: { pathname } })
+    const base = document.querySelector('base').getAttribute('href')
+    expect(base).toBe(expected)
+    expect(new URL('./assets/js/index.js', `https://example.test${base}`).pathname).toBe(`${expected}assets/js/index.js`)
+  })
+})

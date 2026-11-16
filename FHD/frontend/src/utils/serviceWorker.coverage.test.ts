@@ -89,6 +89,14 @@ describe('service worker public lifecycle', () => {
     expect(sw.register).not.toHaveBeenCalled()
     expect(registration.unregister).toHaveBeenCalledOnce()
   })
+  it('skips cloud workers without touching other apps on the same origin', async () => {
+    vi.stubEnv('BASE_URL', './')
+    window.location.pathname = '/fhd-api/workspaces/task-1'
+    expect(await api.swManager.register()).toBe(false)
+    expect(sw.register).not.toHaveBeenCalled()
+    expect(sw.getRegistrations).not.toHaveBeenCalled()
+    expect(registration.unregister).not.toHaveBeenCalled()
+  })
   it('reports registration and stale-unregister failures without rejecting', async () => {
     sw.register.mockRejectedValue(new Error('registration failed'))
     expect(await api.initServiceWorker()).toMatchObject({ supported: true, registered: false })

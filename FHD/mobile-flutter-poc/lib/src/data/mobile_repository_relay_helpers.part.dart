@@ -5,7 +5,6 @@ Map<String, Object?> _superEmployeeRelayContext({String conversationId = ''}) {
   return {
     'source': 'mobile_chat',
     'client_surface': 'mobile',
-    'workspace_root': _xcmaxDefaultWorkspaceRoot,
     if (conversationId.trim().isNotEmpty)
       'conversation_id': conversationId.trim(),
   };

@@ -5,6 +5,7 @@ import '../../data/mobile_repository_scope.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/we_ui.dart';
 import '../../policy/mobile_error_policy.dart';
+import '../webview/desktop_tool_webview_screen.dart';
 
 class ApprovalListScreen extends StatefulWidget {
   const ApprovalListScreen({super.key, this.repository, this.initialItems});
@@ -41,7 +42,25 @@ class _ApprovalListScreenState extends State<ApprovalListScreen> {
           children: [
             WeTopBar(
               title: '审批',
+              showBack: true,
+              onBack: () => Navigator.of(context).maybePop(),
               actions: [
+                PopupMenuButton<String>(
+                    tooltip: '审批管理',
+                    onSelected: (path) => Navigator.of(context).push(
+                        MaterialPageRoute(
+                            builder: (_) => DesktopToolWebViewScreen(
+                                title: '审批管理',
+                                path: path,
+                                api: _repository.client))),
+                    itemBuilder: (_) => const [
+                          PopupMenuItem(
+                              value: '/approval-hub/flow-management',
+                              child: Text('流程管理')),
+                          PopupMenuItem(
+                              value: '/approval-hub/rules',
+                              child: Text('规则配置')),
+                        ]),
                 IconButton(
                   onPressed: _refresh,
                   icon: const Icon(Icons.refresh),
@@ -55,6 +74,17 @@ class _ApprovalListScreenState extends State<ApprovalListScreen> {
                 future: _future,
                 builder: (context, snapshot) {
                   final items = snapshot.data ?? const <ApprovalRequest>[];
+                  if (snapshot.hasError) {
+                    return Center(
+                        child:
+                            Column(mainAxisSize: MainAxisSize.min, children: [
+                      Text(mobileErrorText(snapshot.error)),
+                      TextButton(onPressed: _refresh, child: const Text('重试')),
+                    ]));
+                  }
+                  if (snapshot.connectionState != ConnectionState.done) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
                   if (snapshot.connectionState == ConnectionState.done &&
                       items.isEmpty) {
                     return RefreshIndicator(
@@ -130,17 +160,18 @@ class _ApprovalListScreenState extends State<ApprovalListScreen> {
     setState(() {
       _future = future;
     });
-    await future;
+    await future.catchError((Object _) => <ApprovalRequest>[]);
   }
 
-  void _openDetail(ApprovalRequest item) {
+  Future<void> _openDetail(ApprovalRequest item) async {
     if (item.id <= 0) return;
-    Navigator.of(context).push(
+    await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) =>
             ApprovalDetailScreen(repository: _repository, id: item.id),
       ),
     );
+    if (mounted) await _refresh();
   }
 }
 
@@ -202,95 +233,110 @@ class _ApprovalDetailScreenState extends State<ApprovalDetailScreen> {
                   onBack: () => Navigator.of(context).maybePop(),
                 ),
                 Expanded(
-                  child: detail == null
+                  child: snapshot.hasError
                       ? Center(
-                          child: CircularProgressIndicator(color: colors.brand),
-                        )
-                      : ListView(
-                          padding: const EdgeInsets.only(bottom: 96),
-                          children: [
-                            if (_status.trim().isNotEmpty)
-                              _StatusBanner(_status),
-                            const WeSectionCaption('审批信息'),
-                            WeCellGroup(
+                          child:
+                              Column(mainAxisSize: MainAxisSize.min, children: [
+                          Text(mobileErrorText(snapshot.error)),
+                          TextButton(
+                              onPressed: () =>
+                                  setState(() => _future = _load()),
+                              child: const Text('重试')),
+                        ]))
+                      : detail == null
+                          ? Center(
+                              child: CircularProgressIndicator(
+                                  color: colors.brand),
+                            )
+                          : ListView(
+                              padding: const EdgeInsets.only(bottom: 96),
                               children: [
-                                WeCell(
-                                  title: '单号',
-                                  value: detail.requestNo.ifEmpty(
-                                    '#${detail.id}',
-                                  ),
-                                  trailing: _StatusChip(detail.status),
-                                ),
-                                WeCell(
-                                  title: '发起人',
-                                  value: detail.applicantName,
-                                  showDivider:
-                                      detail.flowName.trim().isNotEmpty,
-                                ),
-                                if (detail.flowName.trim().isNotEmpty)
-                                  WeCell(
-                                    title: '流程',
-                                    value: detail.flowName,
-                                    showDivider: detail.currentNodeName
-                                        .trim()
-                                        .isNotEmpty,
-                                  ),
-                                if (detail.currentNodeName.trim().isNotEmpty)
-                                  WeCell(
-                                    title: '当前节点',
-                                    value: detail.currentNodeName,
-                                    showDivider:
-                                        detail.submittedAt.trim().isNotEmpty,
-                                  ),
-                                if (detail.submittedAt.trim().isNotEmpty)
-                                  WeCell(
-                                    title: '提交时间',
-                                    value: detail.submittedAt,
-                                    showDivider:
-                                        detail.description.trim().isNotEmpty,
-                                  ),
-                                if (detail.description.trim().isNotEmpty)
-                                  WeCell(
-                                    title: '说明',
-                                    subtitle: detail.description,
-                                    showDivider: false,
-                                  ),
-                              ],
-                            ),
-                            const WeSectionCaption('审批意见'),
-                            WeCellGroup(
-                              children: [
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 8,
-                                  ),
-                                  child: TextField(
-                                    controller: _opinionController,
-                                    minLines: 2,
-                                    maxLines: 4,
-                                    decoration: const InputDecoration(
-                                      border: InputBorder.none,
-                                      hintText: '输入审批意见（可选）',
+                                if (_status.trim().isNotEmpty)
+                                  _StatusBanner(_status),
+                                const WeSectionCaption('审批信息'),
+                                WeCellGroup(
+                                  children: [
+                                    WeCell(
+                                      title: '单号',
+                                      value: detail.requestNo.ifEmpty(
+                                        '#${detail.id}',
+                                      ),
+                                      trailing: _StatusChip(detail.status),
                                     ),
-                                  ),
+                                    WeCell(
+                                      title: '发起人',
+                                      value: detail.applicantName,
+                                      showDivider:
+                                          detail.flowName.trim().isNotEmpty,
+                                    ),
+                                    if (detail.flowName.trim().isNotEmpty)
+                                      WeCell(
+                                        title: '流程',
+                                        value: detail.flowName,
+                                        showDivider: detail.currentNodeName
+                                            .trim()
+                                            .isNotEmpty,
+                                      ),
+                                    if (detail.currentNodeName
+                                        .trim()
+                                        .isNotEmpty)
+                                      WeCell(
+                                        title: '当前节点',
+                                        value: detail.currentNodeName,
+                                        showDivider: detail.submittedAt
+                                            .trim()
+                                            .isNotEmpty,
+                                      ),
+                                    if (detail.submittedAt.trim().isNotEmpty)
+                                      WeCell(
+                                        title: '提交时间',
+                                        value: detail.submittedAt,
+                                        showDivider: detail.description
+                                            .trim()
+                                            .isNotEmpty,
+                                      ),
+                                    if (detail.description.trim().isNotEmpty)
+                                      WeCell(
+                                        title: '说明',
+                                        subtitle: detail.description,
+                                        showDivider: false,
+                                      ),
+                                  ],
+                                ),
+                                const WeSectionCaption('审批意见'),
+                                WeCellGroup(
+                                  children: [
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 16,
+                                        vertical: 8,
+                                      ),
+                                      child: TextField(
+                                        controller: _opinionController,
+                                        minLines: 2,
+                                        maxLines: 4,
+                                        decoration: const InputDecoration(
+                                          border: InputBorder.none,
+                                          hintText: '输入审批意见（可选）',
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 16),
+                                WeBlockButton(
+                                  text: '通过',
+                                  onPressed: () => _confirm(true),
+                                  enabled: detail.canAct && !_working,
+                                ),
+                                const SizedBox(height: 8),
+                                WeBlockOutlinedButton(
+                                  text: '驳回',
+                                  onPressed: () => _confirm(false),
+                                  enabled: detail.canAct && !_working,
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 16),
-                            WeBlockButton(
-                              text: '通过',
-                              onPressed: () => _confirm(true),
-                              enabled: detail.canAct && !_working,
-                            ),
-                            const SizedBox(height: 8),
-                            WeBlockOutlinedButton(
-                              text: '驳回',
-                              onPressed: () => _confirm(false),
-                              enabled: detail.canAct && !_working,
-                            ),
-                          ],
-                        ),
                 ),
               ],
             ),

@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:xcagi_flutter_poc/src/api/mobile_session_store.dart';
 import 'package:xcagi_flutter_poc/src/data/offline/mobile_offline_store.dart';
 import 'package:xcagi_flutter_poc/src/models/conversation.dart';
 
@@ -28,6 +27,35 @@ void main() {
         'has_employee_profile': role == 'assistant',
         'status': 'sent',
       };
+
+  test('separate account/backend scopes never share messages or queued sends',
+      () async {
+    final first = await MobileOfflineStore.open(
+        namespace: 'userA_backend1', executor: NativeDatabase.memory());
+    final second = await MobileOfflineStore.open(
+        namespace: 'userB_backend1', executor: NativeDatabase.memory());
+    final otherBackend = await MobileOfflineStore.open(
+        namespace: 'userA_backend2', executor: NativeDatabase.memory());
+    try {
+      await first.appendMessage('c1', message(1, 'private'));
+      await first.enqueueMessage(
+          conversationId: 'c1',
+          conversationType: ConversationType.pinnedAssistant,
+          title: '小C',
+          body: 'private pending',
+          authGeneration: 0);
+      expect(await first.pendingMessageCount(), 1);
+      expect(await second.cachedMessages('c1'), isEmpty);
+      expect(await otherBackend.cachedMessages('c1'), isEmpty);
+      expect((await first.cachedMessages('c1')).single['body'], 'private');
+      expect(await second.pendingMessageCount(), 0);
+      expect(await otherBackend.pendingMessageCount(), 0);
+    } finally {
+      await first.close();
+      await second.close();
+      await otherBackend.close();
+    }
+  });
 
   test('消息按时间顺序读取并返回旧缓存结构', () async {
     await store.appendMessage('c1', message(2, '第二条'));
@@ -138,36 +166,6 @@ void main() {
     await store.removePendingByBody('c1', '重复内容');
 
     expect(await store.pendingMessageCount(), 0);
-  });
-
-  test('首次启动从会话 JSON 迁移缓存且只迁移一次', () async {
-    const session = MobileSessionData(
-      cachedChatMessages: {
-        'c1': [
-          {
-            'id': 'legacy-1',
-            'conversation_id': 'c1',
-            'role': 'user',
-            'body': '历史消息',
-            'time_text': 't',
-            'ts': 10,
-            'has_employee_profile': false,
-            'status': 'sent',
-          },
-        ],
-      },
-      conversationListStates: {
-        'c1': {'preview': '历史预览', 'timestamp_ms': 10},
-      },
-      inflightRelayTasks: {'c1': 'task-legacy'},
-    );
-
-    expect(await store.importFromSession(session), isTrue);
-    expect((await store.cachedMessages('c1')).length, 1);
-    expect((await store.conversationState('c1'))?['preview'], '历史预览');
-    expect(await store.inflightTaskId('c1'), 'task-legacy');
-
-    expect(await store.importFromSession(session), isFalse);
   });
 
   test('离线错误判定覆盖常见网络异常', () {

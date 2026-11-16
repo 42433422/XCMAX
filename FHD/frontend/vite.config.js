@@ -15,7 +15,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), 'VITE_')
   process.env.VITE_XCAGI_GIT_SHA = resolveViteGitSha(env.VITE_XCAGI_GIT_SHA)
   const apiBase = env.VITE_API_BASE || API_BASE
-  const publicBase = env.VITE_PUBLIC_BASE || '/'
+  const publicBase = env.VITE_PUBLIC_BASE || './'
   const isDev = mode === 'development'
   const xcmaxPublicApiPrefix = String(env.VITE_XCMAX_PUBLIC_API_PREFIX || '').trim()
 
