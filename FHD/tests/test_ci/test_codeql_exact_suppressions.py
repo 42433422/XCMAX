@@ -212,7 +212,10 @@ _REVIEWED_FILE_SINKS = {
     "FHD/app/application/agent_orchestrator/artifact_files.py": (73, 96, 97, 105, 107, 129),
     "FHD/app/application/employee_runtime/workspace_io.py": (57, 91),
     "FHD/app/application/tools/workflow_spreadsheet_scope.py": (181,),
-    "FHD/app/application/shipment_excel_elt_security.py": (458,),
+    "FHD/app/application/shipment_excel_elt_security.py": (458, 459),
+    "FHD/app/application/attachment_artifacts/store.py": (84, 87),
+    "FHD/app/application/local_file_access/paths.py": (76, 134),
+    "FHD/app/application/agent_orchestrator/cross_module_chain.py": (83,),
 }
 
 
@@ -265,6 +268,21 @@ def test_file_suppression_fails_closed_after_semantic_change(tmp_path):
     assert changed != source
     root = _sink_source_tree(tmp_path, path, changed)
     assert keep_result(_finding(uri=path, line=73), source_root=root) is True
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "FHD/app/application/attachment_artifacts/store.py",
+        "FHD/app/application/local_file_access/paths.py",
+        "FHD/app/application/agent_orchestrator/cross_module_chain.py",
+    ],
+)
+def test_resolver_suppression_fails_closed_after_semantic_change(tmp_path, path):
+    source = (_SCRIPT.parents[2] / path).read_text(encoding="utf-8")
+    root = _sink_source_tree(tmp_path, path, source + "\nREVIEWED_GUARD = False\n")
+    for line in _REVIEWED_FILE_SINKS[path]:
+        assert keep_result(_finding(uri=path, line=line), source_root=root) is True
 
 
 def test_file_suppression_requires_parseable_source(tmp_path):

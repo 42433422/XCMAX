@@ -5,6 +5,9 @@
 2) domains/excel/excel_extract.py sinks after resolve_elt_path
 3) artifact_files.py, workspace_io.py, workflow_spreadsheet_scope.py sinks
    whose single-component/basename guards CodeQL cannot model
+4) attachment_artifacts/store.py, local_file_access/paths.py and
+   agent_orchestrator/cross_module_chain.py sinks that resolve/grant a caller
+   path behind hex-id, containment or ownership guards CodeQL cannot model
 
 CodeQL does not treat those helpers as barriers without a published model pack,
 and Actions cannot load an in-repo +./ pack. Runtime tests cover the hardening.
@@ -26,6 +29,9 @@ SAFE_PATH_SUFFIXES = (
     "FHD/app/application/agent_orchestrator/artifact_files.py",
     "FHD/app/application/employee_runtime/workspace_io.py",
     "FHD/app/application/tools/workflow_spreadsheet_scope.py",
+    "FHD/app/application/attachment_artifacts/store.py",
+    "FHD/app/application/local_file_access/paths.py",
+    "FHD/app/application/agent_orchestrator/cross_module_chain.py",
 )
 SAFE_LINES_BY_SUFFIX = {
     "FHD/app/fastapi_routes/domains/excel/excel_extract.py": {
@@ -58,7 +64,23 @@ _REVIEWED_FILE_SINKS: dict[str, tuple[str, frozenset[int]]] = {
     ),
     "FHD/app/application/shipment_excel_elt_security.py": (
         "2d13ca41715ea352a7c2b66965e17bf9699706d8d32a34e90e656b6fe719a13b",
-        frozenset({458}),
+        # 458-459 是同一个 os.stat 调用（SARIF 起始行落在参数行）。
+        frozenset({458, 459}),
+    ),
+    "FHD/app/application/attachment_artifacts/store.py": (
+        # 记录 id 只允许 [0-9a-f]{8,64}，再拼到私有 root 下。
+        "4cce2527b0b33b35cd6f992eba962c79a5c0ec29c6e8f5e89b2bd1160bf117df",
+        frozenset({84, 87}),
+    ),
+    "FHD/app/application/local_file_access/paths.py": (
+        # _real 只做规范化；真实读写由 resolve_authorized_path 的包含检查收口。
+        "c1a7fa17ceafdd8f56823ef77dd99d680feddfdcfcdffbd4f9ca99d307ed655e",
+        frozenset({76, 134}),
+    ),
+    "FHD/app/application/agent_orchestrator/cross_module_chain.py": (
+        # 上传分支先做 owner/tenant 查询，其余分支经 resolve_elt_path 归一化。
+        "17658d66f2aefd454afc15fb652e8111cfdad2c9e17e4f6701a54585159b164e",
+        frozenset({83}),
     ),
 }
 
