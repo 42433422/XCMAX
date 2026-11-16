@@ -1,8 +1,10 @@
 import type { EnterpriseModStack } from '@/constants/enterpriseModStack'
 import { fetchEmployeeDirectory } from '@/api/employeeDirectory'
+import { useModsStore } from '@/stores/mods'
 import { useWorkflowAiEmployeesStore } from '@/stores/workflowAiEmployees'
 import { resolveEnterpriseModStack } from '@/utils/enterpriseModStackApi'
 import type { ModWithWorkflowEmployees } from '@/utils/modWorkflowEmployees'
+import { harvestOfficialCarrierEmployeesForStack } from '@/utils/workflowEmployeeScope'
 
 /** 统一员工目录 → 注册表源形态（每个员工包一行工位）。 */
 export function directoryToWorkflowMods(
@@ -39,9 +41,17 @@ export async function syncEnterpriseWorkflowRegistry(options?: {
   } catch (e) {
     console.warn('[workflowEmployeeRegistry] employee-directory failed:', e)
   }
+  const modsStore = useModsStore()
+  const harvested = harvestOfficialCarrierEmployeesForStack(
+    modsStore.modsForWorkflowUi,
+    stack,
+    modsStore.entitledModIds,
+  )
   const wfStore = useWorkflowAiEmployeesStore()
   wfStore.hydrateFromMods(scopedMods)
   wfStore.pruneOrphanWorkflowEmployeeToggles(scopedMods)
   await wfStore.loadRegistry(scopedMods)
+  harvested.forEach((entry) => wfStore.registerEmployee(entry))
+  wfStore.ensureEnabledKeys()
   return stack
 }

@@ -419,6 +419,13 @@ describe('TTS speech dispatch and playback', () => {
     expect(onEnd).toHaveBeenCalledOnce()
     expect(mocks.toast).toHaveBeenCalledExactlyOnceWith('语音播放被浏览器阻止，请点击朗读按钮重试。')
   })
+  it('preserves silent error handling and reports incomplete playback', async () => {
+    playback = 'blocked'
+    const onError = vi.fn()
+    await expect(tts.speakText('静默失败', { onError, silent: true })).resolves.toBe(false)
+    expect(onError).not.toHaveBeenCalled()
+    expect(mocks.toast).not.toHaveBeenCalled()
+  })
   it.each(['success', 'synthesis failure', 'playback failure'])('uses offline synthesis and preserves completion on %s', async (mode) => {
     tts.setEngineMode('offline'); mocks.offline.isOfflineReady.mockReturnValue(true)
     if (mode === 'synthesis failure') mocks.offline.synthesizeOffline.mockRejectedValueOnce(new Error(mode))
@@ -552,5 +559,50 @@ describe('voice loading and offline warmup', () => {
     tts = await import('./tts')
     await vi.advanceTimersByTimeAsync(1499); expect(mocks.offline.ensureOfflineReady).not.toHaveBeenCalled()
     await vi.advanceTimersByTimeAsync(1); expect(mocks.offline.ensureOfflineReady).toHaveBeenCalledOnce()
+  })
+})
+
+describe('TTS long-reply sentence continuity', () => {
+  const longReply = '第一句已经说完。第二句接着往下。第三句还要继续。第四句才是结尾。'
+  const sentences = ['第一句已经说完。', '第二句接着往下。', '第三句还要继续。', '第四句才是结尾。']
+  const onlineSentences = ['第一句已经说完', '第二句接着往下', '第三句还要继续', '第四句才是结尾']
+  const requested = () => mocks.apiFetch.mock.calls.map(callText)
+  it('requests online audio for every sentence and does not stop after the second', async () => {
+    expect(tts.splitTextForSpeech(longReply)).toEqual(sentences)
+    expect(tts.splitTextForSpeech('只有一句')).toEqual(['只有一句'])
+    tts.setEngineMode('auto')
+    const onEnd = vi.fn()
+    await tts.speakText(longReply, { onEnd })
+    expect(requested()).toEqual(onlineSentences)
+    expect(audio).toHaveLength(4)
+    expect(onEnd).toHaveBeenCalledOnce()
+  })
+  it('starts once and completes only after every sentence finishes', async () => {
+    tts.setEngineMode('online')
+    const onStart = vi.fn(), onEnd = vi.fn()
+    await expect(tts.speakText(longReply, { onStart, onEnd })).resolves.toBe(true)
+    expect(onStart).toHaveBeenCalledOnce()
+    expect(onEnd).toHaveBeenCalledOnce()
+  })
+  it('falls back to system voice for every remaining sentence', async () => {
+    mocks.apiFetch.mockRejectedValue(new Error('platform unavailable'))
+    const spoken: string[] = []
+    speech.speak.mockImplementation((u: { text: string; onend?: () => void }) => { spoken.push(u.text); u.onend?.() })
+    const onEnd = vi.fn()
+    await tts.speakText(longReply, { onEnd })
+    expect(spoken).toEqual(sentences)
+    expect(onEnd).toHaveBeenCalledOnce()
+  })
+  it('stops remaining sentences when the user cancels mid-reply', async () => {
+    tts.setEngineMode('auto')
+    playback = 'pending'
+    const pending = tts.speakText(longReply)
+    await vi.waitFor(() => expect(audio).toHaveLength(1))
+    audio[0].onended?.()
+    await vi.waitFor(() => expect(audio).toHaveLength(2))
+    tts.stopSpeaking()
+    await expect(pending).resolves.toBe(false)
+    expect(requested()).toEqual(onlineSentences.slice(0, 2))
+    expect(audio).toHaveLength(2)
   })
 })

@@ -260,7 +260,10 @@ class PlannedWorkflowDispatch:
         if (plan.metadata or {}).get("planning_rejected") is True:
             reason = str((plan.metadata or {}).get("rejection_reason") or "").strip()
             unavailable = (plan.metadata or {}).get("planning_unavailable") is True
-            if unavailable and "余额不足" in reason:
+            deterministic = (plan.metadata or {}).get("planning_source") == "deterministic_command"
+            if deterministic and reason:
+                message_text = reason
+            elif unavailable and "余额不足" in reason:
                 message_text = f"{reason.rstrip('。')}。本次没有执行任何业务操作。"
             elif unavailable:
                 message_text = (

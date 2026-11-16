@@ -651,43 +651,61 @@ async function speakWithFallback(text: string, controller: AbortController): Pro
   return speakWithSystemVoice(text, controller)
 }
 
+export function splitTextForSpeech(text: string): string[] {
+  const plain = String(text || '').replace(/\s+/g, ' ').trim()
+  if (!plain) return []
+  const chunks = (plain.match(/[^。！？!?；;]+[。！？!?；;]*|.+$/g) || [plain]).map((part) => part.trim()).filter(Boolean)
+  return chunks.length ? chunks : [plain]
+}
+
 /** 朗读完成、失败或主动停止后结束；失败统一提示，取消静默。 */
 export async function speakText(text: string, options?: { onEnd?: () => void; onError?: (e: unknown) => void; onStart?: () => void; silent?: boolean }): Promise<boolean> {
-  const plain = String(text || '').trim()
-  if (!plain) { options?.onEnd?.(); return false }
+  const chunks = splitTextForSpeech(text)
+  if (!chunks.length) { options?.onEnd?.(); return false }
   stopSpeaking()
   const controller = new AbortController()
   speechController = controller
   let completed = false
+  let startNotified = false
+  const notifyStart = () => {
+    if (startNotified) return
+    startNotified = true
+    options?.onStart?.()
+  }
   try {
-    if (getEngineMode() === 'offline') {
-      const { audio, samplingRate } = await waitForSpeech(synthesizeOffline(plain, controller.signal), controller.signal)
-      controller.signal.throwIfAborted()
-      options?.onStart?.()
-      await waitForSpeech(playOfflinePcm(audio, samplingRate, controller.signal), controller.signal)
-      completed = true
-    } else {
-      await playOnlineTts(plain, controller, options?.onStart)
-      completed = true
-    }
-  } catch (e) {
-    const error = controller.signal.aborted ? controller.signal.reason : e
-    const abortedByUser = controller.signal.aborted && error?.name !== 'TimeoutError'
-    const message = String(error?.message || '')
-    const playbackError = error?.name === 'NotAllowedError'
-      || error?.name === 'AbortError'
-      || message.includes('音频播放失败')
-      || message.includes('play rejected')
-    const offlineMode = getEngineMode() === 'offline'
-    const fallbackOk = getEngineMode() !== 'system' || offlineMode || abortedByUser || playbackError ? false : await speakWithFallback(plain, controller)
-    if (!fallbackOk) {
-      if (!options?.silent && speechController === controller && (!controller.signal.aborted || error?.name === 'TimeoutError')) {
-        showAppToast(error?.name === 'NotAllowedError'
-          ? '语音播放被浏览器阻止，请点击朗读按钮重试。'
-          : error?.name === 'TimeoutError' ? '语音服务响应超时，请稍后重试。' : '语音播放失败，请稍后重试。')
-        options?.onError?.(error)
+    for (const chunk of chunks) {
+      if (speechController !== controller || controller.signal.aborted) return false
+      try {
+        if (getEngineMode() === 'offline') {
+          const { audio, samplingRate } = await waitForSpeech(synthesizeOffline(chunk, controller.signal), controller.signal)
+          controller.signal.throwIfAborted()
+          notifyStart()
+          await waitForSpeech(playOfflinePcm(audio, samplingRate, controller.signal), controller.signal)
+        } else {
+          await playOnlineTts(chunk, controller, notifyStart)
+        }
+      } catch (e) {
+        const error = controller.signal.aborted ? controller.signal.reason : e
+        const abortedByUser = controller.signal.aborted && error?.name !== 'TimeoutError'
+        const message = String(error?.message || '')
+        const playbackError = error?.name === 'NotAllowedError'
+          || error?.name === 'AbortError'
+          || message.includes('音频播放失败')
+          || message.includes('play rejected')
+        const offlineMode = getEngineMode() === 'offline'
+        const fallbackOk = getEngineMode() !== 'system' || offlineMode || abortedByUser || playbackError ? false : await speakWithFallback(chunk, controller)
+        if (!fallbackOk) {
+          if (!options?.silent && speechController === controller && (!controller.signal.aborted || error?.name === 'TimeoutError')) {
+            showAppToast(error?.name === 'NotAllowedError'
+              ? '语音播放被浏览器阻止，请点击朗读按钮重试。'
+              : error?.name === 'TimeoutError' ? '语音服务响应超时，请稍后重试。' : '语音播放失败，请稍后重试。')
+            options?.onError?.(error)
+          }
+          return false
+        }
       }
     }
+    completed = true
   } finally {
     if (speechController === controller) speechController = null
     options?.onEnd?.()
