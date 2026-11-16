@@ -293,13 +293,13 @@ class TestResolveModDir:
         assert result.parent.parent.parent.name == "FHD"
         assert (result / "manifest.json").is_file()
 
-    def test_mod_in_fhd_mods_precedes_export_copy(self):
-        """attendance-industry 同时有编辑源与导出副本时优先使用编辑源。"""
+    def test_mod_resolves_from_export_copy_when_no_source(self):
+        """FHD/mods 不再保留 mutation 副本时，回退解析到 XCAGI 导出副本。"""
         result = osm._resolve_mod_dir("attendance-industry")
         assert result is not None
         assert result.name == "attendance-industry"
         assert result.parent.name == "mods"
-        assert result.parent.parent.name == "FHD"
+        assert result.parent.parent.name == "XCAGI"
         assert (result / "manifest.json").is_file()
 
     def test_mod_not_found_returns_none(self):
