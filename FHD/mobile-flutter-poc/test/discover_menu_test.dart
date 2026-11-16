@@ -2,6 +2,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xcagi_flutter_poc/src/features/discover/discover_screen.dart';
 
 void main() {
+  test('inventory ledger retains web route while materials stays native', () {
+    expect(nativeMaterialsModForPath('/materials'), '');
+    expect(nativeMaterialsModForPath('/mod/erp/materials'), 'erp');
+    for (final path in [
+      '/inventory',
+      '/mod/erp/inventory',
+      '/mod/erp/inventory?warehouse=2',
+      'https://other/materials'
+    ]) {
+      expect(nativeMaterialsModForPath(path), isNull, reason: path);
+    }
+  });
   test('workbench keeps community and native actions outside account settings',
       () {
     expect(flutterDiscoverHiddenKeysForTest(),

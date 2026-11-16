@@ -30,10 +30,17 @@ extension _CatalogTransfer on _NativeCatalogScreenState {
             (row['business_scope'] == 'customers' ||
                 row['template_type'] == '客户');
       }
+      final filename = '${row['filename'] ?? ''}'.toLowerCase();
+      final name = '${row['name'] ?? ''}'.toLowerCase();
+      final id = '${row['id'] ?? ''}'.toLowerCase();
       return row['category'] == 'word' &&
-          '${row['filename']} ${row['id']} ${row['name']}'
-              .toLowerCase()
-              .contains('price_list');
+          (filename.contains('price_list') ||
+              id.contains('price_list') ||
+              name.contains('price_list') ||
+              filename.contains('价目') ||
+              filename.contains('价格表') ||
+              name.contains('价目') ||
+              name.contains('价格表'));
     }).toList();
     if (!mounted || !_session.active) return null;
     if (!_products && rows.isEmpty) throw StateError('没有可用的导出模板，请先在模板管理中配置');
@@ -48,7 +55,10 @@ extension _CatalogTransfer on _NativeCatalogScreenState {
               for (final row in rows)
                 SimpleDialogOption(
                     onPressed: () {
-                      final slug = '${row['filename'] ?? row['id'] ?? ''}'
+                      final filename = '${row['filename'] ?? ''}'.trim();
+                      final slug = (filename.isNotEmpty
+                              ? filename
+                              : '${row['id'] ?? ''}'.trim())
                           .replaceFirst(RegExp(r'^fs:'), '')
                           .replaceFirst(
                               RegExp(r'\.docx$', caseSensitive: false), '');

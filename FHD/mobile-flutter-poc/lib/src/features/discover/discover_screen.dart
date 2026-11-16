@@ -22,6 +22,16 @@ import '../tasks/task_list_screen.dart';
 import '../webview/desktop_tool_webview_screen.dart';
 import '../workspace/employee_workspace_screen.dart';
 
+// Materials are not the stock ledger. Keep inventory on its authorized web
+// route until the native page implements balances, not just movement history.
+String? nativeMaterialsModForPath(String path) {
+  final uri = Uri.tryParse(path);
+  if (uri == null || uri.hasScheme || uri.hasAuthority) return null;
+  final match =
+      RegExp(r'^/(?:mod/([a-zA-Z0-9_-]+)/)?materials/?$').firstMatch(uri.path);
+  return match == null ? null : match[1] ?? '';
+}
+
 const _discoverNativeRouteMap = <String, String>{
   'ai-circle': 'circle',
   'employee-workflow': 'employee_workspace',
@@ -454,15 +464,13 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   }
 
   void _open(_WorkbenchItem item) {
-    final material =
-        RegExp(r'^/(?:mod/([a-zA-Z0-9_-]+)/)?(?:materials|inventory)/?$')
-            .firstMatch(Uri.tryParse(item.path)?.path ?? '');
+    final material = nativeMaterialsModForPath(item.path);
     if (material != null) {
       Navigator.of(context).push(MaterialPageRoute(
           builder: (_) => NativeMaterialsScreen(
               repository: _repository,
               title: item.title,
-              activeModId: material[1] ?? '')));
+              activeModId: material)));
       return;
     }
     final approval = RegExp(

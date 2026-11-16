@@ -18,6 +18,21 @@ class CatalogApi extends MobileApiClient {
     Map<String, String> query,
     Map<String, Object?>? body
   })>[];
+  @override
+  Future<List<int>> workspaceFileRequest(
+    String path, {
+    Map<String, String> query = const {},
+    List<int>? upload,
+    String name = '',
+    String field = 'file',
+    required int expectedGeneration,
+    required String expectedBase,
+    String activeModId = '',
+  }) async {
+    calls.add((path: path, method: 'DOWNLOAD', query: query, body: null));
+    throw StateError('Test stops before platform sharing');
+  }
+
   bool fail = false;
   Completer<Map<String, Object?>>? saving;
   @override
@@ -31,6 +46,34 @@ class CatalogApi extends MobileApiClient {
     calls.add((path: path, method: method, query: query, body: body));
     if (method != 'GET') {
       return saving?.future ?? Future.value({'success': true});
+    }
+    if (path == 'api/mobile/v1/workspace/templates') {
+      return {
+        'success': true,
+        'templates': [
+          {
+            'id': 'fs:a.docx',
+            'filename': '企业价目.docx',
+            'name': '企业价目',
+            'category': 'word'
+          },
+          {
+            'id': 'fs:b.docx',
+            'filename': '   ',
+            'name': '客户价格表',
+            'category': 'word'
+          },
+          {'id': 'fs:price_list_c.docx', 'name': 'English', 'category': 'word'},
+          {
+            'id': 'virtual',
+            'name': '虚拟价目',
+            'category': 'word',
+            'virtual': true
+          },
+          {'id': 'excel', 'name': 'Excel价目', 'category': 'excel'},
+          {'id': 'other', 'name': '普通合同', 'category': 'word'},
+        ]
+      };
     }
     if (path == 'api/system/industry') {
       return {
@@ -129,6 +172,27 @@ Future<void> show(WidgetTester tester, CatalogApi api,
 }
 
 void main() {
+  testWidgets(
+      'Word prices retain desktop Chinese and English template matching',
+      (tester) async {
+    final api = CatalogApi();
+    await show(tester, api);
+    await tester.tap(find.byTooltip('导入与导出'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('导出 Word 价格表'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    for (final title in ['企业价目', '客户价格表', 'English', '默认价格表模板']) {
+      expect(find.text(title), findsOneWidget);
+    }
+    for (final title in ['虚拟价目', 'Excel价目', '普通合同']) {
+      expect(find.text(title), findsNothing);
+    }
+    await tester.tap(find.text('客户价格表'));
+    await tester.pumpAndSettle();
+    expect(api.calls.last.method, 'DOWNLOAD');
+    expect(api.calls.last.query['template_id'], 'b');
+  });
   test('native routes retain exact authorized Mod and reject unrelated paths',
       () {
     expect(nativeCatalogRoute('/mod/customer-erp/products')?.base,

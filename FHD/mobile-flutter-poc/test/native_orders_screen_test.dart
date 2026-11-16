@@ -15,7 +15,8 @@ class Api extends MobileApiClient {
   final writes = <Map<String, Object?>>[];
   final paths = <String>[];
   Completer<Map<String, Object?>>? generation;
-  bool fail = false;
+  bool fail = false, missingTemplate = false;
+  String unitName = '客户甲';
   @override
   Future<Map<String, Object?>> workspaceRequest(String path,
       {String method = 'GET',
@@ -34,12 +35,13 @@ class Api extends MobileApiClient {
       return {
         'success': true,
         'templates': [
-          {
-            'id': 'db:1',
-            'name': '企业发货单',
-            'category': 'excel',
-            'business_scope': 'orders'
-          }
+          if (!missingTemplate)
+            {
+              'id': 'db:1',
+              'name': '企业发货单',
+              'category': 'excel',
+              'business_scope': 'orders'
+            }
         ]
       };
     }
@@ -47,7 +49,8 @@ class Api extends MobileApiClient {
       return {
         'success': true,
         'data': [
-          {'unit_name': '客户甲', 'contact_person': '张先生'}
+          if (unitName.isNotEmpty)
+            {'unit_name': unitName, 'contact_person': '张先生'}
         ]
       };
     }
@@ -110,6 +113,62 @@ Future<void> scrollTo(WidgetTester tester, String text) =>
                 matching: find.byType(Scrollable))
             .first);
 void main() {
+  for (final nextUnit in ['客户改名', '']) {
+    testWidgets(
+        'option refresh clears removed selection ($nextUnit) but preserves draft',
+        (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1000, 1800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final api = Api();
+      await show(tester, api);
+      await tester.tap(find.text('新建订单'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(DropdownButtonFormField<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('企业发货单').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(DropdownButtonFormField<String>).last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('客户甲').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('选择产品'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('产品甲'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('刷新选项'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(
+          tester
+              .state<FormFieldState<String>>(
+                  find.byType(DropdownButtonFormField<String>).first)
+              .value,
+          'db:1');
+      expect(
+          tester
+              .state<FormFieldState<String>>(
+                  find.byType(DropdownButtonFormField<String>).last)
+              .value,
+          '客户甲');
+      api.unitName = nextUnit;
+      api.missingTemplate = true;
+      await tester.tap(find.byTooltip('刷新选项'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      for (final field
+          in find.byType(DropdownButtonFormField<String>).evaluate()) {
+        expect((field as StatefulElement).state, isA<FormFieldState<String>>());
+        expect((field.state as FormFieldState<String>).value, isNull);
+      }
+      expect(find.text('产品甲'), findsOneWidget);
+      expect(find.text('订单编号：20261117A001'), findsOneWidget);
+      expect(find.text('张先生'), findsNothing);
+      await tester.tap(find.text('生成发货单'));
+      await tester.pumpAndSettle();
+      expect(api.writes, isEmpty);
+    });
+  }
+
   testWidgets('orders normalize the real Mod envelope and never open WebView',
       (tester) async {
     final api = Api();

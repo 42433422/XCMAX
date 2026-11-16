@@ -18,6 +18,7 @@ class _OrderFormState extends State<_OrderForm> {
   List<Map<String, Object?>> _templates = [], _units = [];
   final _lines = <_OrderLine>[];
   String _unit = '', _template = '', _number = '';
+  int _optionsTicket = 0;
   String? _error;
   Map<String, Object?>? _result;
   bool _loading = true, _busy = false, _optionsReady = false;
@@ -31,6 +32,9 @@ class _OrderFormState extends State<_OrderForm> {
   void _invalidate() {
     if (mounted) {
       setState(() {
+        ++_optionsTicket;
+        _unit = '';
+        _template = '';
         _units = [];
         _templates = [];
         _result = null;
@@ -57,6 +61,7 @@ class _OrderFormState extends State<_OrderForm> {
 
   Future<void> _loadOptions() async {
     if (!widget.session.active) return;
+    final ticket = ++_optionsTicket;
     setState(() {
       _loading = true;
       _optionsReady = false;
@@ -70,7 +75,9 @@ class _OrderFormState extends State<_OrderForm> {
           widget.session.request('${widget.apiBase}/orders/next_number',
               query: {'suffix': 'A'})
       ]);
-      if (!mounted || !widget.session.active) return;
+      if (!mounted || !widget.session.active || ticket != _optionsTicket) {
+        return;
+      }
       final templates = (values[0]['templates'] as List? ?? [])
           .whereType<Map>()
           .map((v) => Map<String, Object?>.from(v))
@@ -84,6 +91,14 @@ class _OrderFormState extends State<_OrderForm> {
       setState(() {
         _templates = templates;
         _units = units;
+        if (!_templates.any((row) => '${row['id']}' == _template)) {
+          _template = '';
+        }
+        final selectedUnit = _units
+            .where((row) => '${row['unit_name'] ?? row['name'] ?? ''}' == _unit)
+            .firstOrNull;
+        if (selectedUnit == null) _unit = '';
+        _contact.text = '${selectedUnit?['contact_person'] ?? ''}';
         if (values.length > 2) {
           _number = '${_object(values[2]['data'])['order_number'] ?? ''}';
         }
@@ -93,13 +108,13 @@ class _OrderFormState extends State<_OrderForm> {
         _optionsReady = true;
       });
     } catch (error) {
-      if (mounted && widget.session.active) {
+      if (mounted && widget.session.active && ticket == _optionsTicket) {
         setState(() {
           _error = mobileErrorText(error);
         });
       }
     } finally {
-      if (mounted) {
+      if (mounted && ticket == _optionsTicket) {
         setState(() {
           _loading = false;
         });
@@ -264,6 +279,7 @@ class _OrderFormState extends State<_OrderForm> {
                               ]))),
                     const WeSectionCaption('基础信息'),
                     DropdownButtonFormField<String>(
+                        key: ValueKey('order-template-$_template'),
                         initialValue: _template.isEmpty ? null : _template,
                         isExpanded: true,
                         decoration: const InputDecoration(labelText: '发货单模板 *'),
@@ -274,7 +290,7 @@ class _OrderFormState extends State<_OrderForm> {
                                 child: Text('${t['name'] ?? t['id']}',
                                     overflow: TextOverflow.ellipsis))
                         ],
-                        onChanged: _busy || _result != null
+                        onChanged: _busy || _loading || _result != null
                             ? null
                             : (v) => setState(() {
                                   _template = v ?? '';
@@ -287,6 +303,7 @@ class _OrderFormState extends State<_OrderForm> {
                           child: Text('暂无可用发货单模板，请先配置当前工作区的模板后刷新。')),
                     const SizedBox(height: 16),
                     DropdownButtonFormField<String>(
+                        key: ValueKey('order-unit-$_unit'),
                         initialValue: _unit.isEmpty ? null : _unit,
                         isExpanded: true,
                         decoration: const InputDecoration(labelText: '购买单位 *'),
@@ -301,7 +318,7 @@ class _OrderFormState extends State<_OrderForm> {
                                 child:
                                     Text(name, overflow: TextOverflow.ellipsis))
                         ],
-                        onChanged: _busy || _result != null
+                        onChanged: _busy || _loading || _result != null
                             ? null
                             : (v) => setState(() {
                                   _unit = v ?? '';
