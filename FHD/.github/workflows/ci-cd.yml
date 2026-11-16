@@ -424,6 +424,8 @@ jobs:
           mkdir -p shard-evidence
           cp dependency-versions.json shard-evidence/
           export BACKEND_SHARD_MANIFEST=shard-evidence/full.json
+          # spawn 子进程需要从仓库根导入 tests.*；importlib 模式下父进程 sys.path 不含 FHD。
+          export PYTHONPATH="${GITHUB_WORKSPACE}/FHD${PYTHONPATH:+:$PYTHONPATH}"
           rc=0
           python -m pytest tests/ -v -p scripts.ci.backend_shards \
             --cov --cov-branch --cov-fail-under=0 --cov-report= \
