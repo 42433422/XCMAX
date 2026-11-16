@@ -8,6 +8,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
+from fastapi.routing import APIRoute
 from pydantic import BaseModel, ConfigDict
 from starlette.concurrency import run_in_threadpool
 
@@ -86,7 +87,7 @@ class WorkspaceRoutes:
 
             # Keep account-owned templates and the shared starter catalog. The
             # outer Mod middleware retains entitlement and database selection.
-            with owned_tenant_scope(user.tenant_id):
+            with owned_tenant_scope(request.state.tenant_id):
                 return await run_in_threadpool(templates_list_compat, request)
 
         from app.fastapi_routes.domains.shipment.shipment_orders import router as shipment_router
@@ -96,12 +97,12 @@ class WorkspaceRoutes:
             "/api/shipment/shipment-records/export",
         }
         for route in shipment_router.routes:
-            if route.path not in shipment_paths:
+            if not isinstance(route, APIRoute) or route.path not in shipment_paths:
                 continue
             router.add_api_route(
                 "/workspace" + route.path.removeprefix("/api"),
                 route.endpoint,
-                methods=list(route.methods),
+                methods=list(route.methods or ()),
                 dependencies=[Depends(require_workspace_account), *route.dependencies],
                 response_model=None,
             )
