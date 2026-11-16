@@ -130,7 +130,7 @@ class ImportCoordinator:
         if direct and not dry_run and not security.direct_execute_allowed():
             return {
                 "success": False,
-                "message": "无预览直写未开启。请设置 FHD_EXCEL_ETL_ALLOW_DIRECT=1 （或 FHD_SHIPMENT_ETL_ALLOW_DIRECT=1）并确认权限后再执行。",
+                "message": "无预览直写未开启。请设置 FHD_EXCEL_ELT_ALLOW_DIRECT=1 （或 FHD_SHIPMENT_ELT_ALLOW_DIRECT=1）并确认权限后再执行。",
                 "error_code": "direct_execute_denied",
             }
         resolved_profile = self._ports.resolve_profile(profile, profile_id)

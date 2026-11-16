@@ -1,5 +1,5 @@
 # 通用明细表：报价/订单/清单等扁平面表（无「送货单」抬头也能识别）
-# 自定义：复制本文件到 FHD_EXCEL_ETL_PROFILE_DIR，改 id/别名/写出模板即可
+# 自定义：复制本文件到 FHD_EXCEL_ELT_PROFILE_DIR，改 id/别名/写出模板即可
 id: generic_table
 kind: tabular_order
 label: 通用明细表

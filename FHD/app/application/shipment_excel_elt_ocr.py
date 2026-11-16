@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from app.application.elt_env import elt_getenv, reject_legacy_elt_env
 import logging
 import os
 import re
@@ -202,7 +203,7 @@ def _load_image_arrays(source: BinaryIO | Path, *, suffix: str | None = None) ->
             pdf = pdfium.PdfDocument(source)
             try:
                 pages = []
-                max_pages = int(os.environ.get("FHD_EXCEL_ETL_OCR_MAX_PAGES") or 5)
+                max_pages = int(elt_getenv("FHD_EXCEL_ELT_OCR_MAX_PAGES") or 5)
                 for i in range(min(len(pdf), max(1, max_pages))):
                     page = pdf[i]
                     bitmap = page.render(scale=2).to_pil().convert("RGB")
@@ -217,7 +218,7 @@ def _load_image_arrays(source: BinaryIO | Path, *, suffix: str | None = None) ->
             from pdf2image import convert_from_bytes
 
             source.seek(0)
-            max_pages = int(os.environ.get("FHD_EXCEL_ETL_OCR_MAX_PAGES") or 5)
+            max_pages = int(elt_getenv("FHD_EXCEL_ELT_OCR_MAX_PAGES") or 5)
             images = convert_from_bytes(source.read(), first_page=1, last_page=max_pages)
             return [np.array(img.convert("RGB")) for img in images]
         except RECOVERABLE_ERRORS as exc:

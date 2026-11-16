@@ -38,7 +38,7 @@ def import_ports(tmp_path, monkeypatch):
     from app.domain.app_pure.excel_elt_kb import reset_excel_elt_kb_for_tests
 
     kb_path = tmp_path / "kb.json"
-    monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(kb_path))
+    monkeypatch.setenv("FHD_EXCEL_ELT_KB_PATH", str(kb_path))
     reset_excel_elt_kb_for_tests(kb_path)
     clear_profile_cache()
     recorded = set()
@@ -68,13 +68,13 @@ def test_failed_compensation_keeps_fingerprint_and_retry_skips_active_shipment(i
     service.cancel_shipment.return_value = {"success": False, "message": "cannot cancel"}
     service.delete_shipment.return_value = {"success": False, "message": "cannot delete"}
     notes = [_note("SYNTH-A"), _note("SYNTH-B")]
-    first = elt.execute_shipment_excel_etl("", notes=deepcopy(notes), import_products=False)
+    first = elt.execute_shipment_excel_elt("", notes=deepcopy(notes), import_products=False)
     assert first["success"] is False
     assert first["safe_to_retry"] is False
     assert first["shipment_ids"] == [101]
     assert elt.note_fingerprint(notes[0]) in recorded
 
-    retried = elt.execute_shipment_excel_etl("", notes=deepcopy(notes), import_products=False)
+    retried = elt.execute_shipment_excel_elt("", notes=deepcopy(notes), import_products=False)
     assert retried["shipment_skipped"] == 1
     assert service.create_shipment.call_count == 3
 
@@ -85,7 +85,7 @@ def test_service_exception_compensates_known_writes_and_marks_unknown_outcome(im
         {"success": True, "shipment": {"id": 101}},
         RuntimeError("connection lost while creating shipment"),
     ]
-    result = elt.execute_shipment_excel_etl(
+    result = elt.execute_shipment_excel_elt(
         "",
         notes=[_note("SYNTH-A"), _note("SYNTH-B")],
         import_products=False,
@@ -102,7 +102,7 @@ def test_identical_notes_in_one_batch_are_created_once(import_ports):
     service, _ = import_ports
     service.create_shipment.return_value = {"success": True, "shipment": {"id": 101}}
     note = _note("SYNTH-A")
-    result = elt.execute_shipment_excel_etl(
+    result = elt.execute_shipment_excel_elt(
         "",
         notes=[note, deepcopy(note)],
         import_products=False,
@@ -123,7 +123,7 @@ def test_fingerprint_failure_does_not_claim_a_completed_write_is_safe_to_repeat(
         raise OSError("deduplication store unavailable")
 
     monkeypatch.setattr(elt, "_record_fingerprint_now", unavailable)
-    result = elt.execute_shipment_excel_etl("", notes=[_note("SYNTH-A")], import_products=False)
+    result = elt.execute_shipment_excel_elt("", notes=[_note("SYNTH-A")], import_products=False)
     assert result["success"] is True
     assert result["shipment_created"] == 1
     assert result["safe_to_retry"] is False
@@ -139,14 +139,14 @@ def test_batch_does_not_report_success_when_a_file_is_rejected_before_writing(
     source.write_bytes(b"synthetic placeholder; parsing is replaced below")
     monkeypatch.setattr(
         elt,
-        "execute_shipment_excel_etl",
+        "execute_shipment_excel_elt",
         lambda *args, **kwargs: {
             "success": False,
             "error_code": "ledger_confirm_required",
             "message": "confirmation required",
         },
     )
-    result = elt.batch_execute_shipment_excel_etl(tmp_path, workspace_root=tmp_path, dry_run=True)
+    result = elt.batch_execute_shipment_excel_elt(tmp_path, workspace_root=tmp_path, dry_run=True)
     assert result["success"] is False
     assert result["failed_file_count"] == 1
     assert result["shipment_created"] == 0
@@ -387,7 +387,7 @@ def test_failed_fingerprint_cleanup_does_not_claim_a_rollback_is_retryable(
     monkeypatch.setattr(
         "app.application.shipment_excel_elt_fingerprint_store.delete_fingerprint", unavailable
     )
-    result = elt.execute_shipment_excel_etl(
+    result = elt.execute_shipment_excel_elt(
         "", notes=[_note("SYNTH-A"), _note("SYNTH-B")], import_products=False
     )
     assert result["success"] is False
@@ -408,7 +408,7 @@ def test_dry_run_deduplicates_without_constructing_any_writer(import_ports, monk
         unexpected,
     )
     note = _note("SYNTH-A")
-    result = elt.execute_shipment_excel_etl("", notes=[note, deepcopy(note)], dry_run=True)
+    result = elt.execute_shipment_excel_elt("", notes=[note, deepcopy(note)], dry_run=True)
     assert result["success"] is True
     assert result["would_create"] == 1
     assert result["would_skip"] == 1
@@ -424,7 +424,7 @@ def test_product_import_failure_prevents_shipment_service_construction(import_po
         "app.domain.shared_services.tools_workflow_registered._execute_excel_import_records",
         lambda records: {"success": False, "message": "product validation rejected"},
     )
-    result = elt.execute_shipment_excel_etl("", notes=[_note("SYNTH-A")])
+    result = elt.execute_shipment_excel_elt("", notes=[_note("SYNTH-A")])
     assert result["success"] is False
     assert result["error_code"] == "product_import_failed"
     assert result["closed_loop"] is False
@@ -437,7 +437,7 @@ def test_explicit_non_idempotent_import_keeps_repeated_notes(import_ports):
         {"success": True, "shipment": {"id": 102}},
     ]
     note = _note("SYNTH-A")
-    result = elt.execute_shipment_excel_etl(
+    result = elt.execute_shipment_excel_elt(
         "", notes=[note, deepcopy(note)], import_products=False, idempotent=False
     )
     assert result["success"] is True

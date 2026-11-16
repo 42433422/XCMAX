@@ -46,7 +46,7 @@ def elt_adapters(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Mock:
         lambda: service,
     )
     monkeypatch.setattr(
-        "app.application.shipment_excel_elt_app_service.preview_shipment_excel_etl",
+        "app.application.shipment_excel_elt_app_service.preview_shipment_excel_elt",
         service.preview,
     )
     monkeypatch.setattr(
@@ -328,10 +328,10 @@ async def test_mounted_template_preview_regeneration_round_trip(
     monkeypatch.setattr(
         excel_elt_kb, "_KB", excel_elt_kb.ExcelEltKnowledgeBase(tmp_path / "kb.json")
     )
-    monkeypatch.setenv("FHD_EXCEL_ETL_DEFAULT_TARGET", "shipment")
-    monkeypatch.setenv("FHD_SHIPMENT_ETL_LLM", "0")
+    monkeypatch.setenv("FHD_EXCEL_ELT_DEFAULT_TARGET", "shipment")
+    monkeypatch.setenv("FHD_SHIPMENT_ELT_LLM", "0")
     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
-    monkeypatch.delenv("FHD_EXCEL_ETL_ALLOW_BUILTIN", raising=False)
+    monkeypatch.delenv("FHD_EXCEL_ELT_ALLOW_BUILTIN", raising=False)
     monkeypatch.setattr(api, "TEMP_EXCEL_DIR", str(tmp_path))
     clear_profile_cache()
     app = FastAPI()

@@ -13,7 +13,7 @@
 
 LLM 助抽（可选，auto 模式下有密钥即启用）::
 
-    export FHD_SHIPMENT_ETL_LLM=auto   # off|auto|on，默认 auto
+    export FHD_SHIPMENT_ELT_LLM=auto   # off|auto|on，默认 auto
     export OPENAI_API_KEY=...          # 或 XCAUTO_API_KEY / DEEPSEEK_API_KEY
     export OPENAI_BASE_URL=https://xiu-ci.com/v1   # 走修茈网关时
 """
@@ -129,13 +129,13 @@ def _eval_one(path: Path) -> dict:
     from app.application.excel_template_http_app_service import _decompose_template
     from app.application.shipment_app_service import ShipmentApplicationService
     from app.application.shipment_excel_elt_app_service import (
-        execute_shipment_excel_etl,
-        preview_shipment_excel_etl,
+        execute_shipment_excel_elt,
+        preview_shipment_excel_elt,
     )
     from app.application.shipment_template_resolve import clear_template_list_cache
 
     stem = path.stem
-    preview = preview_shipment_excel_etl(str(path), workspace_root=path.parent)
+    preview = preview_shipment_excel_elt(str(path), workspace_root=path.parent)
     notes = list((preview or {}).get("notes") or []) if isinstance(preview, dict) else []
     decomp, _ = _decompose_template(str(path), sample_rows=3)
     headers = ((decomp or {}).get("decomposition") or {}).get("editable_entries") or []
@@ -198,7 +198,7 @@ def _eval_one(path: Path) -> dict:
                     return_value=fp_db,
                 ),
             ):
-                exec_result = execute_shipment_excel_etl(
+                exec_result = execute_shipment_excel_elt(
                     sandbox,
                     notes=_promote(notes),
                     idempotent=False,

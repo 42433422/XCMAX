@@ -91,7 +91,7 @@ def _build_elt_http():
     )
     from app.application.shipment_excel_elt_app_service import (
         get_shipment_excel_elt_app_service,
-        preview_shipment_excel_etl,
+        preview_shipment_excel_elt,
     )
     from app.application.shipment_excel_elt_ocr import parse_ocr_document
     from app.application.shipment_excel_elt_security import (
@@ -114,7 +114,7 @@ def _build_elt_http():
         uploads,
         responses,
     )
-    ocr = OcrPreview(parse_ocr_document, preview_shipment_excel_etl, uploads, responses)
+    ocr = OcrPreview(parse_ocr_document, preview_shipment_excel_elt, uploads, responses)
     history = HistoryViews(get_extract_log_service, responses)
     templates = TemplateOutputs(
         get_shipment_excel_elt_app_service,

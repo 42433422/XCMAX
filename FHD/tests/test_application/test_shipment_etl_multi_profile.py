@@ -18,10 +18,10 @@ from app.domain.app_pure.excel_elt_kb import (
 
 
 def test_list_profiles_default_is_universal(tmp_path, monkeypatch):
-    monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))
-    monkeypatch.delenv("FHD_EXCEL_ETL_ALLOW_BUILTIN", raising=False)
-    monkeypatch.delenv("FHD_EXCEL_ETL_PROFILE_DIR", raising=False)
-    monkeypatch.delenv("FHD_SHIPMENT_ETL_PROFILE_DIR", raising=False)
+    monkeypatch.setenv("FHD_EXCEL_ELT_KB_PATH", str(tmp_path / "kb.json"))
+    monkeypatch.delenv("FHD_EXCEL_ELT_ALLOW_BUILTIN", raising=False)
+    monkeypatch.delenv("FHD_EXCEL_ELT_PROFILE_DIR", raising=False)
+    monkeypatch.delenv("FHD_SHIPMENT_ELT_PROFILE_DIR", raising=False)
     reset_excel_elt_kb_for_tests(tmp_path / "kb.json")
     clear_profile_cache()
     ids = {p["id"] for p in list_profiles()}
@@ -32,7 +32,7 @@ def test_list_profiles_default_is_universal(tmp_path, monkeypatch):
 
 def test_universal_recognizes_generic_table_without_delivery_title(tmp_path, monkeypatch):
     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
-    monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))
+    monkeypatch.setenv("FHD_EXCEL_ELT_KB_PATH", str(tmp_path / "kb.json"))
     reset_excel_elt_kb_for_tests(tmp_path / "kb.json")
     clear_profile_cache()
     from openpyxl import Workbook
@@ -71,7 +71,7 @@ def test_universal_recognizes_generic_table_without_delivery_title(tmp_path, mon
 def test_knowledge_base_remembers_and_hits(tmp_path, monkeypatch):
     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     kb_path = tmp_path / "kb.json"
-    monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(kb_path))
+    monkeypatch.setenv("FHD_EXCEL_ELT_KB_PATH", str(kb_path))
     kb = reset_excel_elt_kb_for_tests(kb_path)
     clear_profile_cache()
     from openpyxl import Workbook
@@ -117,7 +117,7 @@ def test_knowledge_base_remembers_and_hits(tmp_path, monkeypatch):
 def test_custom_profile_dir_overrides(tmp_path, monkeypatch):
     """把自定义 YAML 丢进 PROFILE_DIR 即可识别新模板。"""
     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
-    monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))
+    monkeypatch.setenv("FHD_EXCEL_ELT_KB_PATH", str(tmp_path / "kb.json"))
     reset_excel_elt_kb_for_tests(tmp_path / "kb.json")
     clear_profile_cache()
     data = {
@@ -189,7 +189,7 @@ def test_custom_profile_dir_overrides(tmp_path, monkeypatch):
     (tmp_path / "custom_pack_slip.yaml").write_text(
         yaml.safe_dump(data, allow_unicode=True), encoding="utf-8"
     )
-    monkeypatch.setenv("FHD_EXCEL_ETL_PROFILE_DIR", str(tmp_path))
+    monkeypatch.setenv("FHD_EXCEL_ELT_PROFILE_DIR", str(tmp_path))
     clear_profile_cache()
     assert any(p["id"] == "custom_pack_slip" for p in list_profiles())
 
@@ -224,7 +224,7 @@ def test_custom_profile_dir_overrides(tmp_path, monkeypatch):
 
 def test_universal_write_roundtrip(tmp_path, monkeypatch):
     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
-    monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))
+    monkeypatch.setenv("FHD_EXCEL_ELT_KB_PATH", str(tmp_path / "kb.json"))
     reset_excel_elt_kb_for_tests(tmp_path / "kb.json")
     clear_profile_cache()
     path = tmp_path / "delivery.xlsx"

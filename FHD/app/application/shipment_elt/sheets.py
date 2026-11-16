@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.application.elt_env import elt_getenv, reject_legacy_elt_env
 import os
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -137,9 +138,12 @@ class SheetParser:
                 return None
             if kb_fp and (not assist_public.get("layout_fingerprint")):
                 assist_public["layout_fingerprint"] = kb_fp
-        heuristic_on = str(
-            os.environ.get("FHD_EXCEL_ETL_HEURISTIC") or "1"
-        ).strip().lower() not in {"0", "false", "no", "off"}
+        heuristic_on = str(elt_getenv("FHD_EXCEL_ELT_HEURISTIC") or "1").strip().lower() not in {
+            "0",
+            "false",
+            "no",
+            "off",
+        }
         if (
             heuristic_on
             and header_row is not None

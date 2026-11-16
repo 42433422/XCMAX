@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.application.elt_env import elt_getenv, reject_legacy_elt_env
 import os
 from typing import Any
 
@@ -63,7 +64,7 @@ def build_universal_profile_from_kb() -> ShipmentEltProfile:
         "id": "universal",
         "kind": "universal_document",
         "label": "通用单据（知识库）",
-        "target": str(os.environ.get("FHD_EXCEL_ETL_DEFAULT_TARGET") or "preview_only").strip()
+        "target": str(elt_getenv("FHD_EXCEL_ELT_DEFAULT_TARGET") or "preview_only").strip()
         or "preview_only",
         "detect": {
             "primary": {

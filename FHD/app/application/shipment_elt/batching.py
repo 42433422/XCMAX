@@ -162,7 +162,7 @@ def execute_directory(
     if not dry_run and not security.batch_execute_allowed():
         return {
             "success": False,
-            "message": "批量入库默认关闭。需设置环境变量 FHD_SHIPMENT_ETL_ALLOW_BATCH=1",
+            "message": "批量入库默认关闭。需设置环境变量 FHD_SHIPMENT_ELT_ALLOW_BATCH=1",
             "error_code": "batch_disabled",
             "files": [],
         }

@@ -56,12 +56,12 @@ def main() -> int:
         ok = _download(url, dest)
         print(f"{'ok' if ok else 'FAIL'} {name}")
 
-    from app.application.shipment_excel_elt_app_service import preview_shipment_excel_etl
+    from app.application.shipment_excel_elt_app_service import preview_shipment_excel_elt
     from app.legacy.routes.document_templates_compat import run_archive_template_analyze
 
     rows = []
     for path in sorted(FIXTURE_DIR.glob("net_*.xlsx")):
-        etl = preview_shipment_excel_etl(str(path))
+        etl = preview_shipment_excel_elt(str(path))
         analyzed, code = run_archive_template_analyze(
             file_body=path.read_bytes(),
             filename=path.name,

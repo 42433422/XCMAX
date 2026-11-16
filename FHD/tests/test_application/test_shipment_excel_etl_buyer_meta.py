@@ -12,8 +12,8 @@ from app.application.shipment_excel_elt_app_service import parse_delivery_notes
 
 def test_english_to_adjacent_buyer(tmp_path, monkeypatch):
     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
-    monkeypatch.setenv("FHD_SHIPMENT_ETL_LLM", "0")
-    monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))
+    monkeypatch.setenv("FHD_SHIPMENT_ELT_LLM", "0")
+    monkeypatch.setenv("FHD_EXCEL_ELT_KB_PATH", str(tmp_path / "kb.json"))
     clear_profile_cache()
     from app.domain.app_pure.excel_elt_kb import reset_excel_elt_kb_for_tests
 
@@ -41,8 +41,8 @@ def test_english_to_adjacent_buyer(tmp_path, monkeypatch):
 
 def test_header_row_buyer_column_stays_per_row_with_cell_lineage(tmp_path, monkeypatch):
     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
-    monkeypatch.setenv("FHD_SHIPMENT_ETL_LLM", "0")
-    monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))
+    monkeypatch.setenv("FHD_SHIPMENT_ELT_LLM", "0")
+    monkeypatch.setenv("FHD_EXCEL_ELT_KB_PATH", str(tmp_path / "kb.json"))
     clear_profile_cache()
     from app.application.elt.shipment_compat_parser import parse_delivery_note_with_compat_profile
     from app.domain.app_pure.excel_elt_kb import reset_excel_elt_kb_for_tests
@@ -76,8 +76,8 @@ def test_header_row_buyer_column_stays_per_row_with_cell_lineage(tmp_path, monke
 
 
 def test_pi_bill_to_not_buyer_po(tmp_path, monkeypatch):
-    monkeypatch.setenv("FHD_SHIPMENT_ETL_LLM", "0")
-    monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))
+    monkeypatch.setenv("FHD_SHIPMENT_ELT_LLM", "0")
+    monkeypatch.setenv("FHD_EXCEL_ELT_KB_PATH", str(tmp_path / "kb.json"))
     clear_profile_cache()
     from app.domain.app_pure.excel_elt_kb import reset_excel_elt_kb_for_tests
 
@@ -97,8 +97,8 @@ def test_pi_bill_to_not_buyer_po(tmp_path, monkeypatch):
 
 
 def test_purchase_unit_label(tmp_path, monkeypatch):
-    monkeypatch.setenv("FHD_SHIPMENT_ETL_LLM", "0")
-    monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))
+    monkeypatch.setenv("FHD_SHIPMENT_ELT_LLM", "0")
+    monkeypatch.setenv("FHD_EXCEL_ELT_KB_PATH", str(tmp_path / "kb.json"))
     clear_profile_cache()
     from app.domain.app_pure.excel_elt_kb import reset_excel_elt_kb_for_tests
 
