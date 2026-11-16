@@ -113,6 +113,11 @@ class _MessageHomeHeader extends StatelessWidget {
           Row(
             children: [
               const Spacer(),
+              IconButton(
+                tooltip: '通知与公告',
+                onPressed: () => onMenuSelected('notifications'),
+                icon: const Icon(Icons.notifications_outlined),
+              ),
               _HeaderPlusMenu(onSelected: onMenuSelected),
             ],
           ),

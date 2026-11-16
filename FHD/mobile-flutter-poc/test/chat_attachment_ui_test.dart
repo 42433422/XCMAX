@@ -17,6 +17,16 @@ class _Api extends MobileApiClient {
             sessionStore: MemoryMobileSessionStore(
                 const MobileSessionData(accessToken: 'user')));
   int attempts = 0;
+  bool failResolve = false;
+  @override
+  Future<String> resolveSessionBaseUrl() {
+    if (failResolve) {
+      throw const MobileApiException(
+          statusCode: 503, message: '连接暂时不可用', body: {});
+    }
+    return super.resolveSessionBaseUrl();
+  }
+
   @override
   Future<MobileChatAttachment> uploadChatAttachment(
       {required String name,
@@ -44,6 +54,22 @@ class _Repository extends MobileRepository {
 
   final turnKeys = <String>[];
   final sentBodies = <String>[];
+  final plainBodies = <String>[];
+  @override
+  Future<String> streamMessage({
+    required ConversationItem conversation,
+    required String body,
+    int userId = 0,
+    List<ChatMessage> recentMessages = const [],
+    bool cacheUserMessage = true,
+    void Function(String)? onToken,
+    void Function(RelayTaskProgress)? onStatus,
+    bool Function()? isCancelled,
+  }) async {
+    plainBodies.add(body);
+    return '已收到';
+  }
+
   @override
   Future<String> streamAttachedMessage({
     required ConversationItem conversation,
@@ -73,6 +99,115 @@ class _Repository extends MobileRepository {
 }
 
 void main() {
+  for (final change in ['account', 'backend', 'tenant', 'error', 'unchanged']) {
+    testWidgets('tool selection revalidates $change before executing',
+        (tester) async {
+      final api = _Api();
+      final repo = _Repository(api);
+      await tester.pumpWidget(MaterialApp(
+        theme: AppTheme.light(),
+        home: ChatScreen(
+          conversation: const ConversationItem(
+              id: 'pinned:assistant',
+              type: ConversationType.pinnedAssistant,
+              title: '小C',
+              subtitle: '',
+              timestampText: ''),
+          initialMessages: const [],
+          repository: repo,
+        ),
+      ));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), '继续旧任务');
+      await tester.tap(find.byTooltip('更多工具'));
+      await tester.pumpAndSettle();
+      switch (change) {
+        case 'account':
+          await api.persistPairingSession({
+            'access_token': 'other-account',
+            'user': {'id': 2, 'username': 'other'},
+          });
+        case 'backend':
+          await api.saveSession((await api.loadSession()).copyWith(
+              serverMode: 'lan',
+              fhdHost: '10.0.0.8:5000',
+              localBaseUrl: 'http://10.0.0.8:5000/'));
+        case 'tenant':
+          await api.saveSession((await api.loadSession())
+              .copyWith(relayTenantId: 'other-tenant'));
+        case 'error':
+          api.failResolve = true;
+      }
+      await tester.tap(find.text(change == 'backend' ? '验收回访' : '任务派工'));
+      await tester.pumpAndSettle();
+      expect(find.text('聊天工具'), findsNothing);
+      if (change == 'unchanged') {
+        expect(repo.plainBodies, ['帮我安排并完成这个任务：继续旧任务']);
+      } else {
+        expect(repo.plainBodies, isEmpty);
+        expect(find.text('继续旧任务'), findsOneWidget);
+        expect(
+            find.text(change == 'error'
+                ? '工具暂时不可用：服务器暂时不可用，请稍后重试'
+                : '账号或连接已切换，请重新打开工具'),
+            findsOneWidget);
+      }
+      api.failResolve = false;
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.runAsync(() async {
+        await repo.dispose();
+        api.dispose();
+      });
+    });
+  }
+
+  testWidgets('tool sheet cancellation keeps draft and honors reduced motion',
+      (tester) async {
+    final api = _Api();
+    final repo = _Repository(api);
+    var selections = 0;
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.light(),
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(disableAnimations: true),
+        child: child!,
+      ),
+      home: ChatScreen(
+        conversation: const ConversationItem(
+            id: 'pinned:assistant',
+            type: ConversationType.pinnedAssistant,
+            title: '小C',
+            subtitle: '',
+            timestampText: ''),
+        initialMessages: const [],
+        repository: repo,
+        attachmentPicker: () async {
+          selections++;
+          return [];
+        },
+      ),
+    ));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '保留这份草稿');
+    await tester.tap(find.byTooltip('更多工具'));
+    await tester.pumpAndSettle();
+    final route = ModalRoute.of(
+        tester.element(find.byKey(const ValueKey('chat_tool_card_panel'))))!;
+    expect(route.transitionDuration, Duration.zero);
+    expect(find.text('聊天工具'), findsOneWidget);
+    await tester.tap(find.byTooltip('关闭工具'));
+    await tester.pumpAndSettle();
+    expect(find.text('聊天工具'), findsNothing);
+    expect(find.text('保留这份草稿'), findsOneWidget);
+    expect(selections, 0);
+    expect(api.attempts, 0);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.runAsync(() async {
+      await repo.dispose();
+      api.dispose();
+    });
+  });
+
   testWidgets(
       'attachment retry keeps turn key and new send creates another key',
       (tester) async {
@@ -154,26 +289,25 @@ void main() {
     await tester.tap(find.text('添加文件'));
     await tester.pumpAndSettle();
     expect(api.attempts, 1);
-    expect(find.text('report.csv · 上传失败，点击重试'), findsOneWidget);
-    await tester.tap(find.text('report.csv · 上传失败，点击重试'));
+    expect(find.text('2 B · 上传失败'), findsOneWidget);
+    await tester.tap(find.text('重试'));
     await tester.pumpAndSettle();
     expect(api.attempts, 2);
     expect(find.text('report.csv'), findsOneWidget);
-    final chip = tester.widget<InputChip>(find.byType(InputChip));
-    expect(chip.onDeleted, isNotNull);
-    chip.onDeleted!();
+    expect(find.text('2 B · 已就绪'), findsOneWidget);
+    await tester.tap(find.byTooltip('移除 report.csv'));
     await tester.pumpAndSettle();
-    expect(find.byType(InputChip), findsNothing);
+    expect(find.byTooltip('移除 report.csv'), findsNothing);
     await tester.pump(const Duration(seconds: 5));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('更多工具'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('添加文件'));
     await tester.pumpAndSettle();
-    expect(find.byType(InputChip), findsOneWidget);
+    expect(find.byTooltip('移除 report.csv'), findsOneWidget);
     await api.clearActiveAuth();
     await tester.pumpAndSettle();
-    expect(find.byType(InputChip), findsNothing);
+    expect(find.byTooltip('移除 report.csv'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 

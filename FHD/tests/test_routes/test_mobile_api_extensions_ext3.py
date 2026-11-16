@@ -1051,14 +1051,13 @@ class TestGuessLanIpv4Additional2:
         mock_socket.close.assert_called_once()
 
     def test_socket_close_called_on_error(self, ext_mod):
-        """Test that socket.close() is NOT called when connect raises OSError."""
+        """A failed network probe still closes its allocated socket."""
         mock_socket = MagicMock()
         mock_socket.connect.side_effect = OSError("no network")
         with patch("socket.socket", return_value=mock_socket):
             ip = ext_mod._guess_lan_ipv4()
         assert ip == "127.0.0.1"
-        # socket was created but connect failed, close not called
-        mock_socket.close.assert_not_called()
+        mock_socket.close.assert_called_once()
 
 
 # ---------------------------------------------------------------------------

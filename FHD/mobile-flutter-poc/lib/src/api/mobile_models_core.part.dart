@@ -40,6 +40,7 @@ class MobileTaskSummary {
     required this.workspaceId,
     required this.conversationId,
     required this.updatedAt,
+    this.activeModId = '',
   });
 
   final String taskId;
@@ -52,15 +53,19 @@ class MobileTaskSummary {
   final String workspaceId;
   final String conversationId;
   final String updatedAt;
+  final String activeModId;
 
   String get workspacePath => Uri(
-    pathSegments: ['', 'workspaces', taskId],
-    queryParameters: {'conversation': conversationId.isEmpty ? taskId : conversationId},
-  ).toString();
+        pathSegments: ['', 'workspaces', taskId],
+        queryParameters: {
+          'conversation': conversationId.isEmpty ? taskId : conversationId
+        },
+      ).toString();
 
   factory MobileTaskSummary.fromJson(Map<String, Object?> json) {
     return MobileTaskSummary(
       taskId: _readString(json, const ['task_id']),
+      activeModId: _readString(json, const ['active_mod_id']),
       title: _readString(json, const ['title']),
       status: _readString(json, const ['status']),
       attentionState: _readString(json, const ['attention_state']),
@@ -94,7 +99,8 @@ class MobileTaskListData {
         : const <MobileTaskSummary>[];
     return MobileTaskListData(
       items: items,
-      count: _readInt(json, const ['count'], items.length).clamp(0, items.length),
+      count:
+          _readInt(json, const ['count'], items.length).clamp(0, items.length),
     );
   }
 }

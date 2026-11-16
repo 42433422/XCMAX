@@ -11,7 +11,6 @@ class _Composer extends StatelessWidget {
     required this.showTools,
     required this.onToggleTools,
     required this.onVoice,
-    required this.toolActions,
   });
 
   final TextEditingController controller;
@@ -22,7 +21,6 @@ class _Composer extends StatelessWidget {
   final bool showTools;
   final VoidCallback onToggleTools;
   final VoidCallback onVoice;
-  final List<_ChatToolAction> toolActions;
 
   @override
   Widget build(BuildContext context) {
@@ -111,8 +109,6 @@ class _Composer extends StatelessWidget {
                 ],
               ),
             ),
-            if (showTools && toolActions.isNotEmpty)
-              _ChatToolCardPanel(actions: toolActions),
           ],
         ),
       ),

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../api/mobile_models.dart';
 import '../../policy/mobile_error_policy.dart';
-import '../webview/desktop_tool_webview_screen.dart';
+import 'native_task_workspace_screen.dart';
 import '../../data/mobile_repository.dart';
 import '../../data/mobile_repository_scope.dart';
 import '../../theme/app_theme.dart';
@@ -100,7 +100,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
                                 task: tasks[i],
                                 onTap: tasks[i].taskId.isEmpty
                                     ? null
-                                    : () => _openTask(tasks[i].taskId),
+                                    : () => _openTask(tasks[i]),
                                 showDivider: i != tasks.length - 1,
                               ),
                           ],
@@ -135,85 +135,13 @@ class _TaskListScreenState extends State<TaskListScreen> {
     ]).then<void>((_) {}, onError: (Object _, StackTrace __) {});
   }
 
-  Future<void> _openTask(String taskId) async {
-    var detail = _repository.client.mobileTaskDetail(taskId);
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: StatefulBuilder(
-              builder: (context, updateDetail) =>
-                  FutureBuilder<MobileEnvelope<MobileTaskSummary>>(
-                    future: detail,
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState != ConnectionState.done) {
-                        return const SizedBox(
-                          height: 120,
-                          child: Center(child: CircularProgressIndicator()),
-                        );
-                      }
-                      final task = snapshot.data?.data;
-                      if (snapshot.hasError ||
-                          snapshot.data?.success != true ||
-                          task == null ||
-                          task.taskId != taskId) {
-                        return Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(mobileErrorText(
-                                  snapshot.error ?? snapshot.data?.message,
-                                  fallback: '任务不存在或无权查看')),
-                              TextButton(
-                                  onPressed: () => updateDetail(() {
-                                        detail = _repository.client
-                                            .mobileTaskDetail(taskId);
-                                      }),
-                                  child: const Text('重试')),
-                            ]);
-                      }
-                      return Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            task.title.isEmpty ? '任务详情' : task.title,
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                          const SizedBox(height: 12),
-                          Text(_TaskCell._statusText(task)),
-                          if (task.updatedAt.isNotEmpty)
-                            Text('更新时间：${task.updatedAt}'),
-                          const SizedBox(height: 12),
-                          FilledButton(
-                            onPressed: () {
-                              Navigator.of(sheetContext).pop();
-                              Navigator.of(this.context)
-                                  .push(
-                                MaterialPageRoute<void>(
-                                  builder: (_) => DesktopToolWebViewScreen(
-                                    title: '任务结果与操作',
-                                    path: task.workspacePath,
-                                    api: _repository.client,
-                                  ),
-                                ),
-                              )
-                                  .then((_) {
-                                if (mounted) _refresh();
-                              });
-                            },
-                            child: const Text('查看结果与操作'),
-                          ),
-                        ],
-                      );
-                    },
-                  )),
-        ),
-      ),
-    );
+  Future<void> _openTask(MobileTaskSummary task) async {
+    await Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => NativeTaskWorkspaceScreen(
+            taskId: task.taskId,
+            activeModId: task.activeModId,
+            repository: _repository)));
+    if (mounted) await _refresh();
   }
 
   void _openApprovals() {

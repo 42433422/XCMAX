@@ -1,7 +1,9 @@
 import 'dart:async';
 
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:webview_flutter_android/webview_flutter_android.dart';
 
 import '../../api/mobile_api.dart';
 import '../../api/mobile_session_store.dart';
@@ -10,6 +12,10 @@ import '../../theme/app_theme.dart';
 import '../../widgets/we_ui.dart';
 
 typedef MobileWebUrlOverride = bool Function(String nextUrl);
+typedef MobileWebFilePicker = Future<List<XFile>> Function({
+  required List<XTypeGroup> acceptedTypeGroups,
+  required bool multiple,
+});
 
 class DesktopToolWebViewScreen extends StatefulWidget {
   const DesktopToolWebViewScreen({
@@ -20,6 +26,7 @@ class DesktopToolWebViewScreen extends StatefulWidget {
     this.api,
     this.onUrlOverride,
     this.externalUrlLauncher = launchExternalUrl,
+    this.filePicker = _openWebFiles,
   });
 
   final String title;
@@ -28,6 +35,7 @@ class DesktopToolWebViewScreen extends StatefulWidget {
   final MobileApiClient? api;
   final MobileWebUrlOverride? onUrlOverride;
   final ExternalUrlLauncher externalUrlLauncher;
+  final MobileWebFilePicker filePicker;
 
   @override
   State<DesktopToolWebViewScreen> createState() =>
@@ -112,6 +120,52 @@ class _DesktopToolWebViewScreenState extends State<DesktopToolWebViewScreen> {
       if (!allowed(uri)) throw StateError('该链接不属于当前连接，请返回后重新选择');
       final controller = WebViewController();
       var bootstrapping = true;
+      final platform = controller.platform;
+      if (platform is AndroidWebViewController) {
+        var selectingFiles = false;
+        final connection = _pageConnection;
+        bool active() =>
+            mounted &&
+            !bootstrapping &&
+            _error == null &&
+            identical(_controller, controller) &&
+            loadId == _loadId &&
+            generation == _api.authGeneration;
+        Future<Uri?> trustedPage() async {
+          if (!active()) return null;
+          final session = await _api.loadSession();
+          if (_connectionKey(session) != connection ||
+              await _api.resolveSessionBaseUrl() != base) {
+            return null;
+          }
+          final current = Uri.tryParse(await controller.currentUrl() ?? '');
+          return active() && current != null && allowed(current)
+              ? current
+              : null;
+        }
+
+        await platform.setOnShowFileSelector((params) async {
+          if (selectingFiles || params.mode == FileSelectorMode.save) return [];
+          selectingFiles = true;
+          try {
+            final page = await trustedPage();
+            if (page == null) return [];
+            final multiple = params.mode == FileSelectorMode.openMultiple;
+            final files = await widget.filePicker(
+                acceptedTypeGroups: _webFileTypes(params.acceptTypes),
+                multiple: multiple);
+            if (page != await trustedPage()) return [];
+            return (multiple ? files : files.take(1))
+                .map(_webFileUri)
+                .whereType<String>()
+                .toList(growable: false);
+          } catch (_) {
+            return [];
+          } finally {
+            selectingFiles = false;
+          }
+        });
+      }
       await controller.setJavaScriptMode(JavaScriptMode.unrestricted);
       await controller.setNavigationDelegate(NavigationDelegate(
         onNavigationRequest: (request) {
@@ -274,6 +328,47 @@ class ModWebViewScreen extends StatelessWidget {
       path: '/mod/${Uri.encodeComponent(modId.trim())}/',
       config: config,
       api: api);
+}
+
+Future<List<XFile>> _openWebFiles({
+  required List<XTypeGroup> acceptedTypeGroups,
+  required bool multiple,
+}) async {
+  if (multiple) return openFiles(acceptedTypeGroups: acceptedTypeGroups);
+  final file = await openFile(acceptedTypeGroups: acceptedTypeGroups);
+  return file == null ? [] : [file];
+}
+
+List<XTypeGroup> _webFileTypes(List<String> acceptTypes) {
+  final types = acceptTypes
+      .expand((value) => value.split(','))
+      .map((value) => value.trim().toLowerCase())
+      .toSet();
+  if (types.contains('*/*')) return const [];
+  final extensions = types
+      .where((type) => RegExp(r'^\.[a-z0-9][a-z0-9._+-]*$').hasMatch(type))
+      .map((type) => type.substring(1))
+      .toList();
+  final mimeTypes = types
+      .where((type) =>
+          RegExp(r'^[a-z0-9!#$&^_.+-]+/[a-z0-9!#$&^_.+*-]+$').hasMatch(type))
+      .toList();
+  return extensions.isEmpty && mimeTypes.isEmpty
+      ? const []
+      : [XTypeGroup(extensions: extensions, mimeTypes: mimeTypes)];
+}
+
+String? _webFileUri(XFile file) {
+  final path = file.path;
+  if (path.startsWith('/')) return Uri.file(path).toString();
+  final uri = Uri.tryParse(path);
+  if (uri == null || !uri.path.startsWith('/') || uri.userInfo.isNotEmpty) {
+    return null;
+  }
+  return (uri.scheme == 'content' && uri.host.isNotEmpty) ||
+          (uri.scheme == 'file' && uri.host.isEmpty)
+      ? uri.toString()
+      : null;
 }
 
 Uri _resolveDesktopUri(

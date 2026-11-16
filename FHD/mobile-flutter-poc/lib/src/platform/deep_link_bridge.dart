@@ -285,7 +285,7 @@ MobileDeepLinkDestination resolveMobileDeepLinkDestination(String route) {
           query['url']?.trim().isNotEmpty == true ? query['url']!.trim() : '/',
       title: query['title']?.trim().isNotEmpty == true
           ? query['title']!.trim()
-          : '桌面工具',
+          : '工作台应用',
     );
   }
   if (first == 'work') {

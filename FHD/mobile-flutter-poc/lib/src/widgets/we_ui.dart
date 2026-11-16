@@ -91,7 +91,7 @@ class WeSectionCaption extends StatelessWidget {
       child: SizedBox(
         width: double.infinity,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
           child: Text(
             text,
             maxLines: 1,
@@ -113,18 +113,12 @@ class WeCellGroup extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = AppTheme.colors(context);
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12),
+      margin: const EdgeInsets.symmetric(horizontal: 16),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: colors.surface,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 3,
-            offset: const Offset(0, 1),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(XcagiShapeTokens.large),
+        border: Border.all(color: colors.divider.withValues(alpha: 0.45)),
       ),
       child: Column(children: children),
     );
@@ -187,14 +181,14 @@ class WeCell extends StatelessWidget {
       AppTheme.danger => colors.danger,
       _ => titleColor,
     };
-    return Material(
-      color: colors.surface,
-      child: InkWell(
-        onTap: onTap,
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+    return _WeCellSurface(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 36),
               child: Row(
                 children: [
                   if (icon != null) ...[
@@ -204,7 +198,8 @@ class WeCell extends StatelessWidget {
                       height: 36,
                       decoration: BoxDecoration(
                         color: effectiveIconBg,
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius:
+                            BorderRadius.circular(XcagiShapeTokens.medium),
                       ),
                       alignment: Alignment.center,
                       child: Icon(
@@ -226,12 +221,13 @@ class WeCell extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: textTheme.bodyLarge?.copyWith(
                             color: effectiveTitleColor,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                         if (subtitle.trim().isNotEmpty)
                           Text(
                             subtitle,
-                            maxLines: 1,
+                            maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: textTheme.bodySmall?.copyWith(
                               color: colors.textSecondary,
@@ -241,12 +237,17 @@ class WeCell extends StatelessWidget {
                     ),
                   ),
                   if (value.trim().isNotEmpty) ...[
-                    Text(
-                      value,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: textTheme.bodyMedium?.copyWith(
-                        color: colors.textSecondary,
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxWidth: MediaQuery.sizeOf(context).width * 0.32,
+                      ),
+                      child: Text(
+                        value,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: textTheme.bodyMedium?.copyWith(
+                          color: colors.textSecondary,
+                        ),
                       ),
                     ),
                     if (showArrow) const SizedBox(width: 4),
@@ -265,13 +266,49 @@ class WeCell extends StatelessWidget {
                 ],
               ),
             ),
-            if (showDivider)
-              Divider(
-                height: 0.5,
-                indent: icon == null ? 16 : 66,
-                thickness: 0.5,
-              ),
-          ],
+          ),
+          if (showDivider)
+            Divider(
+              height: 0.5,
+              indent: icon == null ? 16 : 66,
+              thickness: 0.5,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WeCellSurface extends StatefulWidget {
+  const _WeCellSurface({required this.child, this.onTap});
+  final Widget child;
+  final VoidCallback? onTap;
+
+  @override
+  State<_WeCellSurface> createState() => _WeCellSurfaceState();
+}
+
+class _WeCellSurfaceState extends State<_WeCellSurface> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final reduced = AppTheme.motionDuration(context) == Duration.zero;
+    return AnimatedScale(
+      scale: _pressed && widget.onTap != null && !reduced ? 0.99 : 1,
+      duration:
+          AppTheme.motionDuration(context, milliseconds: _pressed ? 100 : 180),
+      curve: Curves.easeOutCubic,
+      child: Material(
+        color: AppTheme.colors(context).surface,
+        child: InkWell(
+          onTap: widget.onTap,
+          splashFactory:
+              reduced ? NoSplash.splashFactory : InkSparkle.splashFactory,
+          onHighlightChanged: (value) {
+            if (_pressed != value) setState(() => _pressed = value);
+          },
+          child: widget.child,
         ),
       ),
     );

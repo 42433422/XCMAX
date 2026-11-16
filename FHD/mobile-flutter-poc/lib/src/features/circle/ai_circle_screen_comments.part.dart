@@ -8,38 +8,56 @@ class _CircleActionButton extends StatelessWidget {
     required this.label,
     required this.tint,
     required this.onTap,
+    this.selected = false,
   });
 
   final IconData icon;
   final String label;
   final Color tint;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
+  final bool selected;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      borderRadius: BorderRadius.circular(8),
-      child: InkWell(
-        onTap: onTap,
+    return Semantics(
+      button: true,
+      selected: selected,
+      enabled: onTap != null,
+      child: Material(
+        color: Colors.transparent,
         borderRadius: BorderRadius.circular(8),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-          child: Row(
-            children: [
-              Icon(icon, size: 18, color: tint),
-              const SizedBox(width: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  color: tint,
-                  fontSize: 13,
-                  height: 1.31,
-                  fontWeight: FontWeight.w500,
-                  letterSpacing: 0,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            child: Row(
+              children: [
+                AnimatedSwitcher(
+                  duration: AppTheme.motionDuration(context, milliseconds: 160),
+                  transitionBuilder: (child, animation) => FadeTransition(
+                    opacity: animation,
+                    child: ScaleTransition(
+                      scale:
+                          Tween<double>(begin: 0.85, end: 1).animate(animation),
+                      child: child,
+                    ),
+                  ),
+                  child: Icon(icon, key: ValueKey(icon), size: 18, color: tint),
                 ),
-              ),
-            ],
+                const SizedBox(width: 4),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: tint,
+                    fontSize: 13,
+                    height: 1.31,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 0,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -85,10 +103,12 @@ class _CircleComments extends StatelessWidget {
 }
 
 class _CircleCommentInput extends StatelessWidget {
-  const _CircleCommentInput({required this.controller, required this.onSend});
+  const _CircleCommentInput(
+      {required this.controller, required this.onSend, required this.sending});
 
   final TextEditingController controller;
   final VoidCallback onSend;
+  final bool sending;
 
   @override
   Widget build(BuildContext context) {
@@ -98,6 +118,8 @@ class _CircleCommentInput extends StatelessWidget {
         Expanded(
           child: TextField(
             controller: controller,
+            readOnly: sending,
+            onSubmitted: sending ? null : (_) => onSend(),
             maxLines: 1,
             style: TextStyle(
               color: colors.textPrimary,
@@ -124,7 +146,9 @@ class _CircleCommentInput extends StatelessWidget {
             ),
           ),
         ),
-        TextButton(onPressed: onSend, child: const Text('发送')),
+        TextButton(
+            onPressed: sending ? null : onSend,
+            child: Text(sending ? '发送中…' : '发送')),
       ],
     );
   }

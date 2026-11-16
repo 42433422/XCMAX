@@ -21,7 +21,13 @@ def _permission_code(request: Request, read_code: str, write_code: str | None) -
 
 
 def _request_path(request: Request) -> str:
-    return request.url.path.rstrip("/") or "/"
+    path = request.url.path.rstrip("/") or "/"
+    # Explicit native aliases keep the same tenant/RBAC policy as the original
+    # shipment routes; no other mobile path is treated as a business store.
+    for suffix in ("/shipment/shipment-records/record", "/shipment/shipment-records/export"):
+        if path == "/api/mobile/v1/workspace" + suffix:
+            return "/api" + suffix
+    return path
 
 
 def uses_tenant_scoped_store(request: Request) -> bool:
