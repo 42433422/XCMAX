@@ -133,6 +133,9 @@ def _registered_router_dataset_rag(
         tenant_id = str(params.get("tenant_id") or "")
         version = params.get("version") or ""
         metadata_filter = as_dict(params.get("metadata_filter"))
+        tags = [str(tag) for tag in params.get("tags") or [] if str(tag).strip()]
+        if tags:
+            metadata_filter = {**metadata_filter, "tags": tags}
         rerank = as_bool(params.get("rerank"), default=False)
         read_context = access_context(DATASET_READ_PERMISSION)
         include_answer = as_bool(params.get("include_answer"), default=True)
@@ -180,13 +183,17 @@ def _registered_router_dataset_rag(
             return {"success": False, "message": "dataset_rag.multi_query 缺少 dataset_ids 参数"}
         raw_history = params.get("history")
         history = raw_history if isinstance(raw_history, list) else []
+        metadata_filter = as_dict(params.get("metadata_filter"))
+        tags = [str(tag) for tag in params.get("tags") or [] if str(tag).strip()]
+        if tags:
+            metadata_filter = {**metadata_filter, "tags": tags}
         shared = {
             "dataset_ids": dataset_ids,
             "query": query,
             "top_k": as_int(params.get("top_k"), 5),
             "tenant_id": str(params.get("tenant_id") or ""),
             "version": params.get("version") or "",
-            "metadata_filter": as_dict(params.get("metadata_filter")),
+            "metadata_filter": metadata_filter,
             "rerank": as_bool(params.get("rerank"), default=False),
             "access_context": access_context(DATASET_READ_PERMISSION),
             "history": history,

@@ -70,7 +70,11 @@ def _metadata_matches(chunk: RetrievedChunk, metadata_filter: dict[str, Any]) ->
         actual = metadata.get(str(key))
         if isinstance(expected, list):
             expected_values = {str(item) for item in expected}
-            if str(actual) not in expected_values:
+            if isinstance(actual, (list, tuple, set)):
+                # 标签这类多值元数据：与过滤集合有交集即命中。
+                if not expected_values & {str(item) for item in actual}:
+                    return False
+            elif str(actual) not in expected_values:
                 return False
         elif isinstance(expected, dict):
             if not isinstance(actual, dict):
@@ -78,6 +82,9 @@ def _metadata_matches(chunk: RetrievedChunk, metadata_filter: dict[str, Any]) ->
             for nested_key, nested_expected in expected.items():
                 if str(actual.get(str(nested_key))) != str(nested_expected):
                     return False
+        elif isinstance(actual, (list, tuple, set)):
+            if str(expected) not in {str(item) for item in actual}:
+                return False
         elif str(actual) != str(expected):
             return False
     return True

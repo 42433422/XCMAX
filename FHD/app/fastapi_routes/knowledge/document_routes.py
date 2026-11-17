@@ -169,6 +169,8 @@ class DocumentRoutes:
                 }
             metadata = dict(req.metadata)
             metadata.update(extra_metadata)
+            if req.tags:
+                metadata["tags"] = list(req.tags)
             if extra_metadata:
                 metadata.setdefault("chunk_strategy", req.chunk_strategy)
                 metadata.setdefault("chunk_size", req.chunk_size)
@@ -243,6 +245,7 @@ class DocumentRoutes:
                     "tenant_id": req.tenant_id,
                     "version": req.version,
                     "metadata_filter": req.metadata_filter,
+                    "tags": req.tags,
                     "rerank": req.rerank,
                     "context_window": req.context_window,
                     "history": req.history,
@@ -266,6 +269,7 @@ class DocumentRoutes:
                     "tenant_id": req.tenant_id,
                     "version": req.version,
                     "metadata_filter": req.metadata_filter,
+                    "tags": req.tags,
                     "rerank": req.rerank,
                     "context_window": req.context_window,
                     "history": req.history,

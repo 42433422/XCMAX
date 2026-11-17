@@ -34,6 +34,24 @@ _DATASET_UPLOAD_MAX_BYTES = 25 * 1024 * 1024
 _DATASET_INLINE_MAX_CHARS = 5_000_000
 _DATASET_METADATA_MAX_BYTES = 64 * 1024
 _PERSY_DATASET_ID = "persy-knowledge"
+_MAX_TAGS = 20
+_MAX_TAG_LENGTH = 32
+
+
+def _normalize_tags(value: list[str]) -> list[str]:
+    """Tags are trimmed, de-duplicated, bounded, and case-preserving."""
+    cleaned: list[str] = []
+    for raw in value:
+        tag = str(raw or "").strip()
+        if not tag:
+            continue
+        if len(tag) > _MAX_TAG_LENGTH:
+            raise ValueError(f"tag cannot exceed {_MAX_TAG_LENGTH} characters")
+        if tag not in cleaned:
+            cleaned.append(tag)
+    if len(cleaned) > _MAX_TAGS:
+        raise ValueError(f"tags cannot exceed {_MAX_TAGS} entries")
+    return cleaned
 
 
 def _ensure_bounded_metadata(value: Any, *, max_bytes: int = _DATASET_METADATA_MAX_BYTES) -> None:
@@ -149,9 +167,17 @@ class DatasetDocumentIngestRequest(BaseModel):
     chunk_size: int = Field(500, ge=50, le=5000)
     chunk_overlap: int = Field(50, ge=0, le=500)
     metadata: dict[str, Any] = Field(default_factory=dict)
+    tags: list[str] = Field(
+        default_factory=list, max_length=_MAX_TAGS, description="document tags used for filtering"
+    )
     acl: dict[str, Any] = Field(
         default_factory=dict, description="document-level allow_actors / deny_actors"
     )
+
+    @field_validator("tags")
+    @classmethod
+    def validate_tags(cls, value: list[str]) -> list[str]:
+        return _normalize_tags(value)
 
     @field_validator("metadata")
     @classmethod
@@ -222,6 +248,9 @@ class DatasetQueryRequest(BaseModel):
         "", max_length=80, description="document version number, vN, latest, or empty"
     )
     metadata_filter: dict[str, Any] = Field(default_factory=dict)
+    tags: list[str] = Field(
+        default_factory=list, max_length=_MAX_TAGS, description="only return documents with any tag"
+    )
     min_relevance: float = Field(
         0.0,
         ge=0.0,
@@ -246,6 +275,11 @@ class DatasetQueryRequest(BaseModel):
     def validate_metadata_filter(cls, value: dict[str, Any]) -> dict[str, Any]:
         _ensure_bounded_metadata(value)
         return value
+
+    @field_validator("tags")
+    @classmethod
+    def validate_query_tags(cls, value: list[str]) -> list[str]:
+        return _normalize_tags(value)
 
     @field_validator("history")
     @classmethod
