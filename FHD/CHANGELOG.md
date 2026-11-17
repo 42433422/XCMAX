@@ -1,19 +1,20 @@
 ## Unreleased
+- 检索评测升级为 **69 条中文查询 + 15 篇高重叠干扰文档**（4 条歧义查询允许两个相关文档）：fastembed + 精排 recall@1=1.0、MRR=1.0；fastembed 无精排 0.9565 / recall@5=1.0 / MRR=0.9783；hash 无精排 0.1739 / recall@5=0.913 / MRR=0.399；hash + `FHD_RERANK_AUTO=1` 0.9275 / 0.942 / MRR=0.9348。
 - 知识库新增 Notion 页面导入：入库接口支持 `notion_page_id`，按 `XCAGI_NOTION_TOKEN` 读取页面标题与块树（递归子块、分页，最多 500 块 / 3 层）并扁平化为纯文本；5MB/15s 限制、页面 ID 校验、与其他来源互斥，失败返回 400。
 - 知识库新增飞书云文档导入：入库接口支持 `feishu_document_id`，用 `XCAGI_FEISHU_APP_ID` / `XCAGI_FEISHU_APP_SECRET` 换取并缓存租户 token，读取 docx `raw_content` 纯文本；5MB/15s 限制、文档 ID 校验、与其他来源互斥，鉴权或读取失败返回 400。
 - 知识库新增 Confluence 页面导入：入库接口支持 `confluence_page_id`，按管理员配置的站点（`XCAGI_CONFLUENCE_BASE_URL`）与凭据（`XCAGI_CONFLUENCE_API_TOKEN`，可选 `XCAGI_CONFLUENCE_EMAIL` 走 Basic Auth）读取页面 storage 内容，复用 trafilatura 提取正文（`parser` 仍为文本入库链路）；限制 5MB/15s，页面 ID 与来源互斥校验，失败返回 400。
 - 知识库支持本地保存的网页：上传或 S3 导入 `.html` / `.htm` 时复用 trafilatura 提取正文与标题（`parser=trafilatura_html`），与 URL 导入共用同一实现与错误回退。
 - 知识库新增多轮追问改写：`POST /api/knowledge/v1/datasets/{dataset_id}/query` 支持 `history`（最多 12 轮、总计 2 万字符，角色仅限 user/assistant），有平台模型时把追问改写为可独立检索的问题并回填 `original_query` 与 `query_rewritten`；未配置模型、超时或输出异常时沿用原问题，`XCAGI_KB_QUERY_REWRITE=0` 可关闭。
-- 知识库精排升级：默认 cross-encoder 从 `BAAI/bge-reranker-base` 换为多语言 int8 的 `BAAI/bge-reranker-v2-m3-int8`（fastembed/ONNX，约 0.57GB，无 torch）。50 条中文评测中开启精排后 fastembed 与 hash 两种向量模式均达到 recall@1=1.0、MRR=1.0（hash 无精排仅 0.22/0.40）；新增 `FHD_RERANK_AUTO=1` 允许 hash 降级时自动精排，默认仍不静默下载模型。
+- 知识库精排升级：默认 cross-encoder 从 `BAAI/bge-reranker-base` 换为多语言 int8 的 `BAAI/bge-reranker-v2-m3-int8`（fastembed/ONNX，约 0.57GB，无 torch）；新增 `FHD_RERANK_AUTO=1` 允许 hash 降级时自动精排，默认仍不静默下载模型。评测对照见上方 69 条含干扰文档结果。
 - 知识库新增章节与上下文窗口：入库时为每个分块记录最近的 Markdown 标题，查询支持 `context_window`（0-2）返回同文档相邻块的上下文窗口，不跨文档/版本且受 ACL 与租户过滤约束；问答合成自动使用扩展上下文。
 - 修复固定分块在 `chunk_overlap >= chunk_size` 时游标不前进导致的死循环，现在会收敛 overlap 并保证每次至少前进一个字符。
 - 知识库新增对象存储导入：`POST /api/knowledge/v1/datasets/{dataset_id}/documents` 支持 `s3_uri`，复用 boto3（Apache-2.0）读取 `s3://bucket/key` 并复用现有文档入库链路；校验桶名/对象键、可选桶白名单 `XCAGI_S3_ALLOWED_BUCKETS`、大小上限 `XCAGI_KB_MAX_OBJECT_BYTES`（默认 25MB），仅接受既有文档扩展名；S3 兼容存储通过 `XCAGI_S3_ENDPOINT_URL` / `XCAGI_S3_REGION` 接入。
 - 知识库问答默认接入平台模型合成答案：检索命中后按带编号的资料生成回答并保留引用；未配置平台模型、调用超时或异常时自动回退原有抽取式答案，`XCAGI_KB_ANSWER_LLM=0` 可关闭，超时用 `XCAGI_KB_ANSWER_TIMEOUT_S` 调整（默认 30 秒）。
-- 检索评测扩到 50 条中文查询：fastembed 语义模式 recall@1=0.98、recall@5=1.0、MRR=0.99；未启用精排的 hash 降级 recall@1=0.22、recall@5=0.86、MRR=0.40。
+- 检索评测先扩到 50 条中文查询（后升级为 69 条含干扰文档，指标见上方）：fastembed 语义模式 recall@1=0.98、recall@5=1.0、MRR=0.99；未启用精排的 hash 降级 recall@1=0.22、recall@5=0.86、MRR=0.40。
 - 知识库新增文档级 ACL：文档元数据支持 `acl.allow_actors` / `acl.deny_actors`，在租户隔离之上按访问主体收窄检索、问答、知识图谱与文档列表；管理员可越过限制。新增 `POST /api/knowledge/v1/datasets/{dataset_id}/documents/{document_id}/acl` 在不产生新版本的情况下替换权限，入库时也可直接携带 `acl`。非法 ACL 键或值在入库/更新时明确拒绝。
 - 知识库新增网页导入（URL 连接器）：`POST /api/knowledge/v1/datasets/{dataset_id}/documents` 支持 `url` 字段，复用 trafilatura 2.3.1（Apache-2.0，纯 Python）提取正文与标题；默认拒绝内网/回环/保留地址、逐跳校验重定向（最多 3 跳）、限制 5MB/15s，抓取失败返回 400。`XCAGI_KB_ALLOW_PRIVATE_URLS=1` 仅供受控内网调试。
 - 知识库扫描件与图片兜底：复用 RapidOCR（Apache-2.0，ONNX，无 torch），PDF 页面提取不到文本时渲染后 OCR，默认最多 30 个空页，`XCAGI_PDF_OCR=off` 可关闭；同时支持直接导入 png/jpg/webp/bmp 图片并识别文字。实测图片型 PDF 与截图均可识别中文正文，返回 `parser_backend=pdfplumber+ocr`/`rapidocr` 与 `ocr_pages`。
-- 知识库检索升级：新增 fastembed（Apache-2.0，ONNX，无 torch）语义向量模式，默认中文模型 `BAAI/bge-small-zh-v1.5`；精排支持 cross-encoder，并扩大候选池后再精排。修复「hash 向量也被报告为语义可用」的误报：hash 模式现在如实显示 `semantic_embedding_available=false`。新增 `scripts/dev/knowledge_retrieval_eval.py` 做 recall@k/MRR 评测（当前 50 条中文查询）。
+- 知识库检索升级：新增 fastembed（Apache-2.0，ONNX，无 torch）语义向量模式，默认中文模型 `BAAI/bge-small-zh-v1.5`；精排支持 cross-encoder，并扩大候选池后再精排。修复「hash 向量也被报告为语义可用」的误报：hash 模式现在如实显示 `semantic_embedding_available=false`。新增 `scripts/dev/knowledge_retrieval_eval.py` 做 recall@k/MRR 评测（当前 69 条中文查询）。
 - AIOPEN 新增「自动批准危险操作」服务端开关 `AIOPEN_AUTO_APPROVE_DANGER`：默认关闭；只有同时开启 `AIOPEN_ENABLE_WRITES` 时，危险操作才会先写入审批单（含申请人、批准人、参数摘要）再自动批准并消费执行，审批记录与防重放不变；未开启时仍返回 `APPROVAL_REQUIRED` 等人工审批。
 - AIOPEN 虚拟光标动效升级：复用开源库 cursor-effects（MIT, 1.0.18）的蓝色星尘拖尾，按移动方向轻微倾斜、点击时粒子爆散并放大回弹光标与标签；操作类指令的光标停留延长到 4 秒，快照/校验仍然静默。管理端与企业端共用同一套效果。
 - AIOPEN 面板「发给其他 AI 助手」的句子不再截断到 URL 中间，完整显示接入说明与口令；复制时会确保本次生成可用连接口令，避免历史上已有 Key 但拿不到明文时，交给 AI 的话术缺鉴权而 401。

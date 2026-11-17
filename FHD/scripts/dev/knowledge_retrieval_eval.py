@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""知识库检索质量评测：recall@k / MRR，自带 50 条中文查询，可重复运行。
+"""知识库检索质量评测：recall@k / MRR，自带 69 条中文查询（含 15 篇干扰文档），可重复运行。
 
 用法（在 FHD/ 下）::
 
@@ -223,10 +223,85 @@ DOCS: list[dict[str, str]] = [
         "text": "离职流程：员工提交离职申请后由主管和人事审批，最后工作日当天回收账号。"
         "账号回收后立即失去所有业务权限，工作交接清单需双方签字确认。",
     },
+    {
+        "id": "refund-policy-vip",
+        "text": "VIP 客户退款：VIP 客户签收后十五天内可申请无理由退款，享有专属客服通道。"
+        "VIP 退款审批由客户成功经理确认，退款金额原路退回，两个工作日内到账。",
+    },
+    {
+        "id": "approval-small",
+        "text": "小额采购审批：单笔五千元以下的采购由部门组长审批，无需财务复核。"
+        "五千元到五万元由部门负责人审批，审批通过后直接生成采购单。",
+    },
+    {
+        "id": "permissions-guest",
+        "text": "访客权限：访客账号只能查看被授权的只读页面，不能编辑、导出或下载附件。"
+        "访客邀请有效期七天，到期自动失效，续期需要管理员重新授权。",
+    },
+    {
+        "id": "backup-offsite",
+        "text": "异地备份：核心数据库每周日做一次异地全量备份，备份文件加密后上传对象存储。"
+        "异地恢复演练每半年一次，恢复目标时间不超过四小时。",
+    },
+    {
+        "id": "shipping-holiday",
+        "text": "节假日发货：法定节假日不安排发货，节前最后一个工作日下午两点前付款的订单当天发出。"
+        "节假日期间的订单在节后第一个工作日按付款顺序顺延发出。",
+    },
+    {
+        "id": "invoice-red",
+        "text": "发票红冲：发票开错需要先申请红冲，红冲确认后重新开具正确发票。"
+        "跨月红冲需要客户提供情况说明，红冲记录保留在订单开票历史中。",
+    },
+    {
+        "id": "attendance-remote",
+        "text": "外勤打卡：外勤人员在客户现场打卡需要开启定位并上传现场照片。"
+        "定位偏差超过五百米需要主管确认，外勤记录同步到考勤月报。",
+    },
+    {
+        "id": "security-2fa",
+        "text": "二次验证：异地登录、修改密码和绑定新设备时触发短信二次验证。"
+        "连续三次验证失败会临时锁定账号，二次验证记录保留在安全日志中。",
+    },
+    {
+        "id": "export-audit",
+        "text": "导出审计：所有客户与订单导出操作都会记录操作人、条数和时间。"
+        "导出包含敏感字段时需要管理员审批，审计记录保留一年且不可删除。",
+    },
+    {
+        "id": "inventory-freeze",
+        "text": "盘点冻结：月度盘点期间仓库冻结出入库操作，紧急出库需要仓库主管手工解锁。"
+        "冻结期间产生的订单顺延到盘点结束后处理，盘点结果确认后自动解冻。",
+    },
+    {
+        "id": "contract-template",
+        "text": "合同模板：标准销售合同模板在资料中心下载，模板编号以 CT 开头。"
+        "使用模板签署前需要法务确认条款版本，修改模板需要走变更审批。",
+    },
+    {
+        "id": "onboarding-intern",
+        "text": "实习生入职：实习生签订实习协议，实习期一般为六个月，不设试用期。"
+        "实习转正需要部门负责人评估并提交转正申请，转正后重新签订劳动合同。",
+    },
+    {
+        "id": "customer-tier-vip",
+        "text": "VIP 客户服务：VIP 客户配备专属客户经理，享受七乘二十四小时响应。"
+        "VIP 等级每年复核一次，未达标的客户降为普通客户并调整服务策略。",
+    },
+    {
+        "id": "data-retention-legal",
+        "text": "诉讼保留：涉及诉讼或监管调查的数据进入保留状态，暂停自动删除流程。"
+        "保留状态需要法务发起并定期复核，案件结束后恢复常规保留策略。",
+    },
+    {
+        "id": "print-template-barcode",
+        "text": "条码打印：条码打印失败先检查打印机分辨率与碳带余量，再重新下发打印任务。"
+        "条码内容重复会导致校验失败，需要在模板中确认序列号规则。",
+    },
 ]
 
 QUERIES: list[dict[str, object]] = [
-    {"q": "客户想退款，几天内可以无理由退？", "expected": "refund-policy"},
+    {"q": "客户想退款，几天内可以无理由退？", "expected": ["refund-policy", "refund-policy-vip"]},
     {"q": "Mac 怎么安装客户端？", "expected": "install-guide"},
     {"q": "开增值税专用发票要什么资料？", "expected": "invoice-rules"},
     {"q": "迟到半小时怎么算？", "expected": "attendance"},
@@ -237,7 +312,7 @@ QUERIES: list[dict[str, object]] = [
     {"q": "五万以上的采购要谁审批？", "expected": "approval"},
     {"q": "订单导出成 Excel 在哪里下载？", "expected": "export"},
     {"q": "密码输错几次会被锁定？", "expected": "security"},
-    {"q": "今天下午三点付款什么时候发货？", "expected": "shipping"},
+    {"q": "今天下午三点付款什么时候发货？", "expected": ["shipping", "shipping-holiday"]},
     {"q": "库存低于安全线会提醒吗？", "expected": "inventory"},
     {"q": "电子合同怎么确认身份？", "expected": "contract"},
     {"q": "新员工试用期多久，转正谁审批？", "expected": "onboarding"},
@@ -267,15 +342,34 @@ QUERIES: list[dict[str, object]] = [
     {"q": "服务不可用有赔偿吗？", "expected": "sla"},
     {"q": "员工离职后账号怎么处理？", "expected": "offboarding"},
     {"q": "退款原路退回要几个工作日？", "expected": "refund-policy"},
-    {"q": "发票开错了可以重开吗？", "expected": "invoice-rules"},
+    {"q": "发票开错了可以重开吗？", "expected": ["invoice-rules", "invoice-red"]},
     {"q": "补卡一个月最多几次？", "expected": "attendance"},
     {"q": "备份文件能恢复到昨天吗？", "expected": "backup"},
     {"q": "超过五万元的采购审批要几天？", "expected": "approval"},
     {"q": "导出的文件保留七天吗？", "expected": "export"},
-    {"q": "异地登录需要二次验证吗？", "expected": "security"},
+    {"q": "异地登录需要二次验证吗？", "expected": ["security", "security-2fa"]},
     {"q": "预售商品什么时候发出？", "expected": "shipping"},
     {"q": "盘点差异需要谁确认？", "expected": "inventory"},
     {"q": "合同变更需要双方重新签署吗？", "expected": "contract"},
+    {"q": "普通客户的退款期限是多久？", "expected": "refund-policy"},
+    {"q": "VIP 客户退款期限和普通客户一样吗？", "expected": "refund-policy-vip"},
+    {"q": "五千元以下的采购由谁审批？", "expected": "approval-small"},
+    {"q": "五万元以上的采购是几级审批？", "expected": "approval"},
+    {"q": "访客账号可以编辑页面吗？", "expected": "permissions-guest"},
+    {"q": "异地备份多久做一次？", "expected": "backup-offsite"},
+    {"q": "节假日期间的订单什么时候发货？", "expected": "shipping-holiday"},
+    {"q": "发票红冲需要客户提供什么？", "expected": "invoice-red"},
+    {"q": "外勤打卡需要上传照片吗？", "expected": "attendance-remote"},
+    {"q": "什么情况下会触发二次验证？", "expected": "security-2fa"},
+    {"q": "导出敏感字段需要审批吗？", "expected": "export-audit"},
+    {"q": "盘点冻结期间能紧急出库吗？", "expected": "inventory-freeze"},
+    {"q": "标准销售合同模板在哪里下载？", "expected": "contract-template"},
+    {"q": "实习生有试用期吗？", "expected": "onboarding-intern"},
+    {"q": "VIP 客户有专属客户经理吗？", "expected": "customer-tier-vip"},
+    {"q": "涉及诉讼的数据还会自动删除吗？", "expected": "data-retention-legal"},
+    {"q": "条码打印失败先检查什么？", "expected": "print-template-barcode"},
+    {"q": "退款审批由谁确认？", "expected": "refund-policy"},
+    {"q": "异地登录需要短信验证吗？", "expected": "security-2fa"},
 ]
 
 
@@ -318,8 +412,11 @@ def run(*, rerank: bool) -> dict[str, float]:
                 str((chunk.get("metadata") or {}).get("document_id") or "")
                 for chunk in result.get("chunks") or []
             ]
-            expected = str(item["expected"])
-            rank = next((idx for idx, doc_id in enumerate(doc_ids, 1) if doc_id == expected), 0)
+            expected = item["expected"]
+            expected_ids = {
+                str(value) for value in (expected if isinstance(expected, list) else [expected])
+            }
+            rank = next((idx for idx, doc_id in enumerate(doc_ids, 1) if doc_id in expected_ids), 0)
             for k in hits_at:
                 if rank and rank <= k:
                     hits_at[k] += 1
