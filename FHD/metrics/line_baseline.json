@@ -1,5 +1,5 @@
 {
-  "lines": 2472034,
+  "lines": 2472315,
   "updated": "2026-11-18",
-  "note": "知识库来源定时同步运行时接线（scheduler+lifespan+多库汇总+6 条测试）为功能净增"
+  "note": "知识库 PDF 表格上下文 table_context（实现+3 条测试+文档）为功能净增"
 }

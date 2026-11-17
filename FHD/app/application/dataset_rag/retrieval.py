@@ -58,6 +58,40 @@ class RetrieverFactory(Protocol):
     ) -> EvidenceRetriever: ...
 
 
+_TABLE_MARKER = re.compile(r"(?m)^\[(table|page) \d+\]")
+
+
+def _table_context(texts: list[str], *, max_chars: int = 4000) -> str:
+    """命中片段附近有 ``[table N]`` 时返回完整 Markdown 表格（跨块拼接、有预算）。"""
+    started = False
+    parts: list[str] = []
+    used = 0
+    for raw in texts:
+        text = str(raw or "")
+        markers = list(_TABLE_MARKER.finditer(text))
+        if not started:
+            marker = next((match for match in markers if match.group(1) == "table"), None)
+            if marker is None:
+                continue
+            started = True
+            segment = text[marker.start() :]
+        else:
+            if markers and markers[0].start() == 0:
+                break
+            segment = text
+        following = _TABLE_MARKER.search(segment, 1)
+        if following is not None:
+            segment = segment[: following.start()]
+        remaining = max_chars - used
+        if len(segment) > remaining:
+            segment = segment[:remaining]
+        parts.append(segment)
+        used += len(segment)
+        if used >= max_chars or following is not None:
+            break
+    return "\n".join(part for part in parts if part).strip()
+
+
 def _named_sheet_context(
     query: str, top: list[RetrievedChunk], scoped_chunks: list[RetrievedChunk]
 ) -> list[dict[str, Any]]:
@@ -309,6 +343,26 @@ class DatasetRetrieval:
                     metadata["sheet_context"] = "片段含工作表边界：" + "、".join(markers)
                 elif previous:
                     metadata["sheet_context"] = previous[1]
+                # PDF 表格：命中块（或其前一块带 [table N] 标记）时补一份完整表格。
+                start = int(row.get("char_start") or 0)
+                ordered = sorted(
+                    (
+                        candidate
+                        for candidate in scope_chunks
+                        if (candidate.metadata or {}).get("document_id") == document_id
+                        and (candidate.metadata or {}).get("document_version")
+                        == metadata.get("document_version")
+                    ),
+                    key=lambda item: item.char_start,
+                )
+                position = next(
+                    (index for index, item in enumerate(ordered) if item.char_start == start), 0
+                )
+                table = _table_context(
+                    [item.text for item in ordered[max(0, position - 1) : position + 3]]
+                )
+                if table.startswith("[table"):
+                    metadata["table_context"] = table
         if expand_section:
             for row, chunk in zip(rows, top, strict=True):
                 expanded = section_context(chunk, scope_chunks)
