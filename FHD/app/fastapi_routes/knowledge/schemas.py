@@ -289,6 +289,10 @@ class DatasetQueryRequest(BaseModel):
         le=2,
         description="expand each hit with neighbouring chunks from the same document",
     )
+    expand_section: bool = Field(
+        False,
+        description="return the whole Markdown section around each hit (small-to-big)",
+    )
     history: list[dict[str, str]] = Field(
         default_factory=list,
         max_length=12,

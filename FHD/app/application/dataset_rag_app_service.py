@@ -827,6 +827,7 @@ class DatasetRagApplicationService:
         retrieval_mode: str = "hybrid",
         vector_weight: float = 1.0,
         keyword_weight: float = 1.0,
+        expand_section: bool = False,
     ) -> dict[str, Any]:
         original_query = query
         rewritten = ""
@@ -852,6 +853,7 @@ class DatasetRagApplicationService:
             retrieval_mode=retrieval_mode,
             vector_weight=vector_weight,
             keyword_weight=keyword_weight,
+            expand_section=expand_section,
         )
         if rewritten:
             result["original_query"] = original_query
@@ -978,6 +980,7 @@ class DatasetRagApplicationService:
         retrieval_mode: str = "hybrid",
         vector_weight: float = 1.0,
         keyword_weight: float = 1.0,
+        expand_section: bool = False,
     ) -> dict[str, Any]:
         result = self.query(
             dataset_id=dataset_id,
@@ -995,6 +998,7 @@ class DatasetRagApplicationService:
             retrieval_mode=retrieval_mode,
             vector_weight=vector_weight,
             keyword_weight=keyword_weight,
+            expand_section=expand_section,
         )
         return self._synthesize_answer(
             result, llm_call=llm_call, max_context_chars=max_context_chars
@@ -1018,6 +1022,7 @@ class DatasetRagApplicationService:
         retrieval_mode: str = "hybrid",
         vector_weight: float = 1.0,
         keyword_weight: float = 1.0,
+        expand_section: bool = False,
     ) -> dict[str, Any]:
         """Query several datasets and rank their pooled candidates on one scale.
 
@@ -1070,6 +1075,7 @@ class DatasetRagApplicationService:
                 retrieval_mode=retrieval_mode,
                 vector_weight=vector_weight,
                 keyword_weight=keyword_weight,
+                expand_section=expand_section,
             )
             if not result.get("success"):
                 failures.append(
@@ -1231,6 +1237,7 @@ class DatasetRagApplicationService:
         retrieval_mode: str = "hybrid",
         vector_weight: float = 1.0,
         keyword_weight: float = 1.0,
+        expand_section: bool = False,
     ) -> dict[str, Any]:
         result = self.multi_query(
             dataset_ids=dataset_ids,
@@ -1248,6 +1255,7 @@ class DatasetRagApplicationService:
             retrieval_mode=retrieval_mode,
             vector_weight=vector_weight,
             keyword_weight=keyword_weight,
+            expand_section=expand_section,
         )
         return self._synthesize_answer(
             result, llm_call=llm_call, max_context_chars=max_context_chars

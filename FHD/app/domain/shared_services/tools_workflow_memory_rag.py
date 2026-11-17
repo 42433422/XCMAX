@@ -175,6 +175,7 @@ def _registered_router_dataset_rag(
         retrieval_mode = _retrieval_mode(params.get("retrieval_mode"))
         vector_weight = _weight(params.get("vector_weight"))
         keyword_weight = _weight(params.get("keyword_weight"))
+        expand_section = as_bool(params.get("expand_section"), default=False)
         if include_answer:
             result = service.answer(
                 dataset_id=dataset_id,
@@ -192,6 +193,7 @@ def _registered_router_dataset_rag(
                 retrieval_mode=retrieval_mode,
                 vector_weight=vector_weight,
                 keyword_weight=keyword_weight,
+                expand_section=expand_section,
             )
         else:
             result = service.query(
@@ -210,6 +212,7 @@ def _registered_router_dataset_rag(
                 retrieval_mode=retrieval_mode,
                 vector_weight=vector_weight,
                 keyword_weight=keyword_weight,
+                expand_section=expand_section,
             )
         return finalize(
             result, dataset_id=dataset_id, query=query, chunks=[], citations=[], answer=""
@@ -244,6 +247,7 @@ def _registered_router_dataset_rag(
             "retrieval_mode": _retrieval_mode(params.get("retrieval_mode")),
             "vector_weight": _weight(params.get("vector_weight")),
             "keyword_weight": _weight(params.get("keyword_weight")),
+            "expand_section": as_bool(params.get("expand_section"), default=False),
         }
         if as_bool(params.get("include_answer"), default=True):
             result = service.multi_answer(

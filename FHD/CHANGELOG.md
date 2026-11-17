@@ -1,4 +1,5 @@
 ## Unreleased
+- 知识库新增章节父块扩展（small-to-big）：查询与问答传 `expand_section=true` 时，命中片段会扩展为同一 Markdown 章节的完整正文（默认 4000 字预算，从命中块向两侧扩；不跨文档、版本或章节），并在结果 `metadata.context_mode="section"` 标明；默认关闭，原行为与评测指标不变。相比相邻块窗口（`context_window`），长章节不再只给命中块前后各一段。
 - 知识库混合检索支持通道权重：`vector_weight` / `keyword_weight`（0–10，默认 1:1），按权重加权 RRF，适合「精确编号靠关键词、口语改写靠向量」的语料微调；单库、跨库与问答都支持，评测脚本新增 `--vector-weight/--keyword-weight`。本语料默认 1:1 仍最优（0.8551/0.9565/1.0、MRR 0.9135），调权重与 keyword-only 的对照数据见 README。
 - 知识库检索新增可选模式：`retrieval_mode`（`hybrid` 默认 / `vector` 仅向量 / `keyword` 仅 BM25）作用于单库查询、跨库检索与问答，非法值回落到 `hybrid`。适合精确编号/型号用关键词、语义改写用向量；69 条评测 hash 下 keyword 0.8696/1.0/1.0、MRR 0.9348（跨库 0.8986/1.0/1.0、MRR 0.9493），hybrid 0.8551/0.9565/1.0、MRR 0.9135，vector 0.7536/0.8551/0.8986、MRR 0.8121；评测脚本新增 `--mode`。
 - 知识库来源同步支持按新鲜度增量：每次刷新（含内容未变）记录 `metadata.last_source_sync_at`，批量同步 `POST .../documents/refresh` 新增 `max_age_hours`（>0 时只处理超过该时长未同步的来源，返回 `fresh` 计数），便于定时任务反复调用而不重复抓取刚同步过的页面。
