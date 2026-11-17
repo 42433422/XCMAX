@@ -1,5 +1,5 @@
 {
-  "lines": 2458689,
+  "lines": 2458879,
   "updated": "2026-11-17",
-  "note": "AIOPEN 检索词汇表：中文别名与动作词提示，修复英文路由摘要下的中文意图命中"
+  "note": "合并 origin/feat/planning-metrics-holdout 后同步基线：远端审批与模板修复净增 190 行，非本 PR 新增"
 }
