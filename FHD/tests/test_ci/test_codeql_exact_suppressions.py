@@ -221,7 +221,6 @@ _REVIEWED_FILE_SINKS = {
     "FHD/app/application/employee_runtime/workspace_io.py": (57, 91),
     "FHD/app/application/tools/workflow_spreadsheet_scope.py": (181,),
     "FHD/app/application/shipment_excel_elt_security.py": (459, 460, 461, 831, 971, 972, 973),
-    "FHD/app/application/attachment_artifacts/store.py": (84, 87),
     "FHD/app/application/local_file_access/paths.py": (76, 134),
     "FHD/app/application/agent_orchestrator/cross_module_chain.py": (83,),
 }
@@ -281,7 +280,6 @@ def test_file_suppression_fails_closed_after_semantic_change(tmp_path):
 @pytest.mark.parametrize(
     "path",
     [
-        "FHD/app/application/attachment_artifacts/store.py",
         "FHD/app/application/local_file_access/paths.py",
         "FHD/app/application/agent_orchestrator/cross_module_chain.py",
     ],
@@ -313,3 +311,11 @@ def test_moved_workflow_sink_does_not_suppress_the_old_location():
         )
         is True
     )
+
+
+@pytest.mark.parametrize("line", [76, 84, 87, 125, 127])
+def test_changed_attachment_store_keeps_findings(line):
+    # Ownership isolation changed the module; the former review no longer applies.
+    path = "FHD/app/application/attachment_artifacts/store.py"
+    assert path not in _SCRIPT_NS["_REVIEWED_FILE_SINKS"]
+    assert keep_result(_finding(uri=path, line=line)) is True

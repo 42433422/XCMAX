@@ -5,7 +5,7 @@
 2) domains/excel/excel_extract.py sinks after resolve_elt_path
 3) artifact_files.py, workspace_io.py, workflow_spreadsheet_scope.py sinks
    whose single-component/basename guards CodeQL cannot model
-4) attachment_artifacts/store.py, local_file_access/paths.py and
+4) local_file_access/paths.py and
    agent_orchestrator/cross_module_chain.py sinks that resolve/grant a caller
    path behind hex-id, containment or ownership guards CodeQL cannot model
 
@@ -29,7 +29,6 @@ SAFE_PATH_SUFFIXES = (
     "FHD/app/application/agent_orchestrator/artifact_files.py",
     "FHD/app/application/employee_runtime/workspace_io.py",
     "FHD/app/application/tools/workflow_spreadsheet_scope.py",
-    "FHD/app/application/attachment_artifacts/store.py",
     "FHD/app/application/local_file_access/paths.py",
     "FHD/app/application/agent_orchestrator/cross_module_chain.py",
 )
@@ -66,11 +65,6 @@ _REVIEWED_FILE_SINKS: dict[str, tuple[str, frozenset[int]]] = {
         "12d2c45c87bab0a3aacb0ee758cb27f64f8a82b43d487b6e87b03e1c4b83b683",
         # 同一组 dir_fd/NOfollow sink：os.stat 拒绝叶链接、输入 os.open、发布 os.rename。
         frozenset({459, 460, 461, 831, 971, 972, 973}),
-    ),
-    "FHD/app/application/attachment_artifacts/store.py": (
-        # 记录 id 只允许 [0-9a-f]{8,64}，再拼到私有 root 下。
-        "4cce2527b0b33b35cd6f992eba962c79a5c0ec29c6e8f5e89b2bd1160bf117df",
-        frozenset({84, 87}),
     ),
     "FHD/app/application/local_file_access/paths.py": (
         # _real 只做规范化；真实读写由 resolve_authorized_path 的包含检查收口。
