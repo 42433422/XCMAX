@@ -86,6 +86,35 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "xcagi/workspace_files")
+            .setMethodCallHandler { call, result ->
+                if (call.method != "share") {
+                    result.notImplemented()
+                } else {
+                    try {
+                        val file = File(call.argument<String>("path") ?: "").canonicalFile
+                        val root = File(cacheDir, "workspace_exports").canonicalFile
+                        require(file.isFile && file.path.startsWith(root.path + File.separator))
+                        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+                        val mime = when (file.extension.lowercase()) {
+                            "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                            "pdf" -> "application/pdf"
+                            else -> "application/octet-stream"
+                        }
+                        val intent = Intent(Intent.ACTION_SEND).apply {
+                            type = mime
+                            putExtra(Intent.EXTRA_STREAM, uri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            clipData = android.content.ClipData.newRawUri(file.name, uri)
+                        }
+                        startActivity(Intent.createChooser(intent, "保存或分享文件"))
+                        result.success(null)
+                    } catch (error: Exception) {
+                        result.error("file_export", "无法打开文件分享，请重试", null)
+                    }
+                }
+            }
         deepLinkChannel =
             MethodChannel(
                 flutterEngine.dartExecutor.binaryMessenger,

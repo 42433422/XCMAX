@@ -26,11 +26,14 @@ export function shouldOpenPrForPushedTask(task, env = process.env) {
   return { open: true, reason: '' };
 }
 
-export function buildPushedPrRequest(task) {
+export function buildPushedPrRequest(task, env = process.env) {
   const branch = String(task.work_branch).trim();
   const base = pushedPrBaseBranch(task);
   // 仓库公开：标题/正文都不带任务标题与描述（可能含工单原文/客户内容），只用任务 ID 与分支。
   const title = `devfleet: Para 任务 ${String(task.task_id || '').slice(0, 8)} 产物（${branch}）`;
+  const issue = Number(env.PARA_GITHUB_ISSUE_NUMBER);
+  const reference = env.GITHUB_ACTIONS === 'true' && env.GITHUB_REPOSITORY === parseGithubRepoFull(task.repo_url)
+    && Number.isSafeInteger(issue) && issue > 0 ? `Refs #${issue}` : '';
   const body = [
     '## Para 派工产物（push 后自动开 PR）',
     '',
@@ -39,6 +42,7 @@ export function buildPushedPrRequest(task) {
     `- 工作分支：\`${branch}\` → 目标：\`${base}\``,
     '- 策略：auto_merge=0，已标 `hold-merge`；未开 auto-merge。',
     '- 合入条件：CI 全绿 + 终极员工判断符合发展方向后人工合入；超级员工不得自动合入或部署。',
+    reference,
   ].join('\n');
   return { repoFull: parseGithubRepoFull(task.repo_url), branch, base, title, body };
 }

@@ -3,6 +3,18 @@ import 'package:xcagi_flutter_poc/src/policy/mobile_error_policy.dart';
 
 void main() {
   test(
+      'network access policy and form validation are not account or pairing errors',
+      () {
+    expect(mobileProductErrorMessage('HTTP 403 lan_blocked', '失败'),
+        '服务器限制了当前网络访问，请连接企业网络或联系管理员开通手机访问');
+    expect(mobileProductErrorMessage('HTTP 403 访问被局域网模式拒绝', '失败'),
+        '服务器限制了当前网络访问，请连接企业网络或联系管理员开通手机访问');
+    expect(
+        mobileProductErrorMessage('HTTP 400 缺少购买单位', '失败'), '提交的内容有误，请检查后重试');
+    expect(mobileProductErrorMessage('HTTP 400 配对码无效', '失败'),
+        '配对码无效或已过期，请在电脑端刷新二维码后重试');
+  });
+  test(
     'Flutter product error policy mirrors AppViewModel productErrorMessage',
     () {
       expect(
@@ -30,7 +42,8 @@ void main() {
         '接口或数据不存在，可能是客户端与服务端版本不一致，请更新后重试',
       );
       expect(
-        mobileProductErrorMessage('MobileApiException(409): 任务状态冲突', 'fallback'),
+        mobileProductErrorMessage(
+            'MobileApiException(409): 任务状态冲突', 'fallback'),
         '数据已被他人更新，请刷新后重试',
       );
       expect(
@@ -55,7 +68,8 @@ void main() {
       '无法安全连接服务器，请检查网络后重试',
     );
     expect(
-      mobileProductErrorMessage('SocketException: Network is unreachable', 'fallback'),
+      mobileProductErrorMessage(
+          'SocketException: Network is unreachable', 'fallback'),
       '网络连接失败，请检查网络后重试',
     );
     expect(

@@ -31,7 +31,7 @@ it('renders market business metrics from admin status', async () => {
   expect(wrapper.text()).toContain('532')
   expect(wrapper.text()).toContain('注册用户')
   expect(wrapper.text()).toContain('21')
-  expect(wrapper.text()).toContain('非 Full-Pipeline')
+  expect(wrapper.text()).not.toContain('非 Full-Pipeline')
   expect(wrapper.find('iframe').exists()).toBe(false)
   wrapper.unmount()
 })

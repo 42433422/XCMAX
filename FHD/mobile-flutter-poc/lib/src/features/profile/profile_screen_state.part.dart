@@ -150,7 +150,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       Padding(
                         padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                         child: Text(
-                          MobileBuildConfig.profileVersionText,
+                          MobileBuildConfig.displayVersion,
                           style: TextStyle(
                             color: colors.textTertiary,
                             fontSize: 11,

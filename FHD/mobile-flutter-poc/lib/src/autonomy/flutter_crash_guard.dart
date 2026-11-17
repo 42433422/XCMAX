@@ -20,7 +20,6 @@ import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 
-import 'mobile_autonomy_store.dart';
 import 'mobile_autonomy_types.dart';
 
 /// Flutter 应用层崩溃守卫。

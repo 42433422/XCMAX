@@ -15,7 +15,6 @@ import { buildTimeEdition, isMinimalBuild, isGenericBuild, MINIMAL_BUILD_MOD_IDS
 import { BRIDGE_MOD_IDS, PLATFORM_SHELL_POLICY } from './platformShell'
 import { SIX_LINE_DEPARTMENTS } from './sixLineDepartments'
 import { ALL_PLANNED_YUANGON_PKG_IDS } from './modstoreDutyRosterIds'
-import { xcmaxAutomationPolicyEmbedUrl, xcmaxAutomationPolicyOpenUrl, xcmaxDutyTimeArchitectureEmbedUrl } from './xcmaxDashboardEmbed'
 import {
   ENTERPRISE_CUSTOMER_SERVICE_KEY,
   INTERNAL_CUSTOMER_SERVICE_KEY,
@@ -267,29 +266,6 @@ describe('modstoreDutyRosterIds', () => {
   it('re-exports ALL_PLANNED_YUANGON_PKG_IDS as a non-empty set', () => {
     expect(ALL_PLANNED_YUANGON_PKG_IDS).toBeInstanceOf(Set)
     expect(ALL_PLANNED_YUANGON_PKG_IDS.size).toBeGreaterThan(0)
-  })
-})
-
-describe('xcmaxDashboardEmbed', () => {
-  it('xcmaxAutomationPolicyEmbedUrl returns a url with embed=loops', () => {
-    const url = xcmaxAutomationPolicyEmbedUrl()
-    expect(typeof url).toBe('string')
-    expect(url).toContain('embed=loops')
-    expect(url).toContain('#s-loops')
-  })
-
-  it('xcmaxAutomationPolicyOpenUrl returns a url with #s-loops', () => {
-    const url = xcmaxAutomationPolicyOpenUrl()
-    expect(typeof url).toBe('string')
-    expect(url).toContain('#s-loops')
-    expect(url).not.toContain('embed=loops')
-  })
-
-  it('xcmaxDutyTimeArchitectureEmbedUrl returns a url with embed=shell', () => {
-    const url = xcmaxDutyTimeArchitectureEmbedUrl()
-    expect(typeof url).toBe('string')
-    expect(url).toContain('embed=shell')
-    expect(url).toContain('view=mermaid')
   })
 })
 

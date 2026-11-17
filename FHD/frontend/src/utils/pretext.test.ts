@@ -1,13 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('@chenglou/pretext', () => ({
-  prepare: vi.fn(() => ({ prepared: true })),
-  layout: vi.fn(() => ({ width: 120, height: 40, lineCount: 2 })),
+  layout: vi.fn(() => ({ height: 40, lineCount: 2 })),
+  measureLineStats: vi.fn(() => ({ maxLineWidth: 120, lineCount: 2 })),
   prepareWithSegments: vi.fn(() => ({ prepared: true })),
   layoutWithLines: vi.fn(() => ({
-    width: 120,
     height: 40,
-    lines: [{ text: 'line1' }, { text: 'line2' }],
+    lineCount: 2,
+    lines: [{ text: 'line1', width: 90 }, { text: 'line2', width: 120 }],
   })),
 }))
 
@@ -53,6 +53,7 @@ describe('pretext text measurement', () => {
       whiteSpace: 'pre-wrap',
     })
     expect(result.lines).toEqual(['line1', 'line2'])
+    expect(result.width).toBe(120)
   })
 
   it('batchMeasure maps items', () => {

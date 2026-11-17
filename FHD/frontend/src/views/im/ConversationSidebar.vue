@@ -3,6 +3,7 @@
     <div class="im-sidebar-head">
       <h2 class="im-title">信息</h2>
       <div class="im-sidebar-actions">
+        <button v-if="isAdminCustomerServiceConsole" type="button" class="im-icon-btn" title="创建群聊" :disabled="busy" @click="emit('create-group')"><i class="fa fa-users" aria-hidden="true"></i></button>
         <button type="button" class="im-icon-btn" title="发起会话" :disabled="busy" @click="emit('open-contact-picker')">
           <i class="fa fa-pencil-square-o" aria-hidden="true"></i>
         </button>
@@ -14,6 +15,7 @@
       {{ imConnectionLabel }}
     </div>
 
+    <div class="im-search"><i class="fa fa-search" aria-hidden="true"></i><input v-model="search" type="search" placeholder="搜索会话或员工" aria-label="搜索会话或员工" /></div>
     <div v-if="externalChannelEntries.length" class="im-channel-list">
       <button
         v-for="entry in externalChannelEntries"
@@ -31,11 +33,13 @@
       </button>
     </div>
 
-    <ul v-if="sidebarListItems.length" class="im-conv-list">
-      <li v-for="item in sidebarListItems" :key="item.key" :class="sidebarItemClasses(item)" @click="emit('select-sidebar-item', item)">
+    <p v-if="groupLoadError" role="alert">{{ groupLoadError }} <button type="button" @click="emit('retry-groups')">重试</button></p>
+    <ul v-if="filteredItems.length" class="im-conv-list">
+      <li v-for="item in filteredItems" :key="item.key" :class="sidebarItemClasses(item)" role="button" tabindex="0" @click="emit('select-sidebar-item', item)" @keydown.enter.prevent="emit('select-sidebar-item', item)" @keydown.space.prevent="emit('select-sidebar-item', item)">
         <span :class="sidebarItemAvatarClasses(item)" aria-hidden="true">
+          <GroupAvatar v-if="item.kind === 'pinned' && isAiGroupChatEntry(item.entry)" :name="sidebarItemTitle(item)" :members="item.entry.members" />
           <img
-            v-if="sidebarItemSuperAvatarSrc(item)"
+            v-else-if="sidebarItemSuperAvatarSrc(item)"
             class="im-super-tool-icon"
             :src="sidebarItemSuperAvatarSrc(item) || undefined"
             alt=""
@@ -64,19 +68,21 @@
     </ul>
     <div v-else class="im-empty im-empty--list">
       <i class="fa fa-comments-o" aria-hidden="true"></i>
-      <p>还没有会话</p>
-      <p class="im-empty-hint">这里联系已安装的 AI 同事和专属客服；找小C办事请用侧栏「智能对话」</p>
+      <p>{{ search ? '未找到会话' : '暂无会话' }}</p>
       <button type="button" class="im-btn im-btn--primary" :disabled="busy" @click="emit('open-contact-picker')">发起会话</button>
     </div>
   </aside>
 </template>
 
 <script setup lang="ts">
-import { type ExternalAppEntry, type ImSidebarListItem, type PinnedImEntry } from '@/composables/messenger/useMessengerEntries'
+import { computed, ref } from 'vue'
+import { isAiGroupChatEntry, type ExternalAppEntry, type ImSidebarListItem, type PinnedImEntry } from '@/composables/messenger/useMessengerEntries'
+import GroupAvatar from '@/components/im/GroupAvatar.vue'
 
-defineProps<{
+const props = defineProps<{
   isAdminCustomerServiceConsole: boolean
   busy: boolean
+  groupLoadError?: string
   imConnectionClass: string
   imConnectionLabel: string
   externalChannelEntries: ExternalAppEntry[]
@@ -94,14 +100,22 @@ defineProps<{
   sidebarItemUnread: (item: ImSidebarListItem) => number
 }>()
 
+const search = ref('')
+const filteredItems = computed(() => props.sidebarListItems.filter(item =>
+  `${props.sidebarItemTitle(item)} ${props.sidebarItemPreview(item)}`.toLocaleLowerCase().includes(search.value.trim().toLocaleLowerCase())))
 const emit = defineEmits<{
   (e: 'open-contact-picker'): void
+  (e: 'create-group'): void
+  (e: 'retry-groups'): void
   (e: 'activate-pinned', entry: PinnedImEntry): void
   (e: 'select-sidebar-item', item: ImSidebarListItem): void
 }>()
 </script>
 
 <style scoped>
+.im-search { display:flex; align-items:center; gap:8px; margin:4px 12px 12px; padding:8px 10px; border:1px solid #e8ecf1; border-radius:7px; color:#9ca3af; background:#fff; }
+.im-search input { width:100%; border:0; outline:0; font:inherit; font-size:12px; color:#374151; background:transparent; }
+
 /* 左侧会话栏 */
 .im-sidebar {
   width: 280px;
@@ -341,9 +355,11 @@ const emit = defineEmits<{
   color: #0f766e;
 }
 .im-avatar--group {
-  border-radius: 10px;
-  background: #f3e8ff;
-  color: #7c3aed;
+  flex-basis: 40px;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  background: transparent;
 }
 .im-avatar--sm.im-avatar--employee {
   flex-basis: 30px;

@@ -11,6 +11,7 @@ from typing import Any
 
 from cryptography.fernet import Fernet
 
+from app.application.group_chat import message_transport
 from app.application.group_chat.catalog import GroupCatalog
 from app.application.group_chat.constants import (
     _LEGACY_SUPER_EMPLOYEE_IDS as _LEGACY_SUPER_EMPLOYEE_IDS,
@@ -416,8 +417,7 @@ class AiGroupChatService:
 
     @_with_bound_tenant
     def delete_group(self, *, user_id: int, group_id: str) -> dict[str, Any]:
-        if self._deny_unscoped():
-            raise ValueError("群不存在")
+        message_transport.require_deletion_allowed(self)
         return self._catalog.delete_group(user_id=user_id, group_id=group_id)
 
     @_with_bound_tenant
@@ -493,8 +493,7 @@ class AiGroupChatService:
 
     @_with_bound_tenant
     def delete_message(self, *, user_id: int, group_id: str, message_id: str) -> dict[str, Any]:
-        if self._deny_unscoped():
-            raise ValueError("群不存在")
+        message_transport.require_deletion_allowed(self)
         return self._conversation.delete_message(
             user_id=user_id, group_id=group_id, message_id=message_id
         )
@@ -725,7 +724,7 @@ class AiGroupChatService:
 
     @_with_bound_tenant
     def _append_messages(self, messages: list[dict[str, Any]]) -> None:
-        return self._storage.append_messages(messages)
+        message_transport.append_messages(self._storage, messages)
 
     @_with_bound_tenant
     def _rewrite_messages(self, messages: list[dict[str, Any]]) -> None:

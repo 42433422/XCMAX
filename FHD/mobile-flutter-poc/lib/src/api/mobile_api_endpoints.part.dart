@@ -62,7 +62,7 @@ class XcagiMobileEndpoints {
   static const adminCsInboxReplyTemplate = '$base/im/cs/inbox/{id}/reply';
   static const mods = '$base/mods';
   static const tasks = '$base/tasks';
-  static String taskDetail(String taskId) => '$tasks/$taskId';
+  static String taskDetail(String taskId) => '$tasks/${Uri.encodeComponent(taskId)}';
   static const desktopDevices = '$base/devices/desktop';
   static const desktopDeviceHeartbeat = '$base/devices/desktop/heartbeat';
   static const paymentPlans = '$base/payment/plans';

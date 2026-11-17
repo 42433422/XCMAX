@@ -10,65 +10,100 @@ from fastapi.responses import JSONResponse
 from app.fastapi_routes import xcmax_admin as admin_routes
 
 
-@pytest.mark.asyncio
-async def test_self_maintenance_local_or_proxy_prefers_local_when_enabled():
-    req = MagicMock()
-    payload = {"schema_version": "self_maintenance_runtime.v1", "contract": {}}
-    with (
-        patch(
-            "app.application.modstore_local_client.prefer_local_modstore",
-            return_value=True,
-        ),
-        patch(
-            "app.application.self_maintenance_app_service.get_runtime_status_local",
-            new=AsyncMock(return_value=payload),
-        ) as mock_local,
-    ):
-        result = await admin_routes._self_maintenance_local_or_proxy(
-            req,
-            "GET",
-            "/api/ops/self-maintenance/status?limit=40",
-        )
-    assert result == payload
-    mock_local.assert_awaited_once()
+@pytest.fixture
+def controller(monkeypatch):
+    from app.fastapi_routes.admin_control.maintenance import SelfMaintenance
+
+    errors = MagicMock()
+    errors.recoverable.return_value = (OSError, ValueError)
+    proxy = AsyncMock(return_value={"ok": True})
+    gate = MagicMock(return_value=None)
+    monkeypatch.delenv("MODSTORE_LOCAL_AUTOMATION", raising=False)
+    return SelfMaintenance(errors=errors, proxy=proxy, gate=gate), proxy, gate
 
 
 @pytest.mark.asyncio
-async def test_self_maintenance_local_or_proxy_falls_back_after_upstream_404():
+async def test_status_alias_reads_configured_market_by_default(controller):
+    service, proxy, _ = controller
     req = MagicMock()
-    payload = {"schema_version": "self_maintenance_runtime.v1", "contract": {}}
-    with (
-        patch(
-            "app.application.modstore_local_client.prefer_local_modstore",
-            return_value=False,
-        ),
-        patch(
-            "app.fastapi_routes.xcmax_admin._market_admin_proxy",
-            new=AsyncMock(return_value=JSONResponse({"message": "Not Found"}, status_code=404)),
-        ),
-        patch(
-            "app.application.self_maintenance_app_service.get_runtime_status_local",
-            new=AsyncMock(return_value=payload),
-        ) as mock_local,
-    ):
-        result = await admin_routes._self_maintenance_local_or_proxy(
-            req,
-            "GET",
-            "/api/ops/self-maintenance/status?limit=80",
-        )
-    assert result == payload
-    mock_local.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_self_maintenance_local_or_proxy_ignores_non_matching_path():
-    req = MagicMock()
-    result = await admin_routes._self_maintenance_local_or_proxy(
-        req,
-        "GET",
-        "/api/admin/duty-graph/health",
+    result = await service.local_self_maintenance_status(req, 40)
+    proxy.assert_awaited_once_with(
+        req, "GET", "/api/ops/self-maintenance/status?limit=40", json_body=None
     )
-    assert result is None
+    assert result["control_plane"]["target"] == "market"
+
+
+@pytest.mark.asyncio
+async def test_explicit_local_status_passes_limit_and_provenance(controller, monkeypatch):
+    service, proxy, _ = controller
+    monkeypatch.setenv("MODSTORE_LOCAL_AUTOMATION", "1")
+    with patch(
+        "app.application.self_maintenance_app_service.get_runtime_status_local",
+        new=AsyncMock(return_value={"ok": True}),
+    ) as local:
+        result = await service.local_self_maintenance_status(MagicMock(), 40)
+    assert local.await_args.kwargs["limit"] == 40
+    assert result["control_plane"]["target"] == "local"
+    proxy.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "method,path,fn",
+    [
+        ("GET", "status", "get_runtime_status_local"),
+        ("POST", "run", "force_run_local"),
+        ("POST", "governance-review", "governance_review_local"),
+    ],
+)
+async def test_local_failure_never_replays_on_remote(controller, monkeypatch, method, path, fn):
+    service, proxy, _ = controller
+    monkeypatch.setenv("MODSTORE_LOCAL_AUTOMATION", "1")
+    with patch(
+        f"app.application.self_maintenance_app_service.{fn}",
+        new=AsyncMock(side_effect=OSError("offline")),
+    ):
+        result = await service._self_maintenance_local_or_proxy(
+            MagicMock(), method, f"/api/ops/self-maintenance/{path}"
+        )
+    assert result.status_code == 502
+    proxy.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_upstream_404_does_not_fall_back_to_another_environment(controller):
+    service, proxy, _ = controller
+    proxy.return_value = JSONResponse({}, status_code=404)
+    with patch(
+        "app.application.self_maintenance_app_service.get_runtime_status_local", new=AsyncMock()
+    ) as local:
+        result = await service.local_self_maintenance_status(MagicMock(), 80)
+    assert result.status_code == 404
+    local.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [401, 403])
+async def test_admin_gate_precedes_status_and_commands(controller, status):
+    service, proxy, gate = controller
+    gate.return_value = JSONResponse({}, status_code=status)
+    assert (await service.local_self_maintenance_status(MagicMock(), 80)).status_code == status
+    assert (
+        await service.local_self_maintenance_governance_review(MagicMock(), {})
+    ).status_code == status
+    proxy.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_ignores_non_matching_path(controller):
+    service, proxy, _ = controller
+    assert (
+        await service._self_maintenance_local_or_proxy(
+            MagicMock(), "GET", "/api/admin/duty-graph/health"
+        )
+        is None
+    )
+    proxy.assert_not_awaited()
 
 
 @pytest.mark.asyncio

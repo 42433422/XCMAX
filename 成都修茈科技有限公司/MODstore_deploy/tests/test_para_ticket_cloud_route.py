@@ -6,7 +6,109 @@ import pytest
 from modstore_server import para_delegate_handler as mod
 
 TICKET = {"event_type": "ops.intake.customer_ticket", "role": "scout"}
+
+
+def test_github_employee_route_keeps_codex_inside_para_and_cannot_fallback(monkeypatch):
+    monkeypatch.setenv("MODSTORE_PARA_GITHUB_DEVICE_ID", "cloud-code-worker")
+    monkeypatch.setenv("MODSTORE_PARA_WORKSPACE_ROOT", "/opt/production/workspace")
+    req = _req({**TICKET, "github_workspace": {"issue_number": 123}})
+    assert req["device_id"] == "cloud-code-worker" and req["tool_name"] == "codex"
+    assert req["workspace_root"] == ""
+    assert mod._tool_candidates(req) == ["codex"]
+    monkeypatch.setattr(
+        mod,
+        "_fetch_devices",
+        lambda *args: [
+            {
+                "id": "cloud-code-worker",
+                "status": "online",
+                "capabilities": {"platform": "linux", "server_bridge": True},
+                "tools": [{"toolName": "codex", "status": "idle"}],
+            }
+        ],
+    )
+    _, devices, reason = mod._resolve_dispatch_devices(None, "", "", req)
+    assert not devices and "GitHub 临时执行器" in reason
+    monkeypatch.delenv("MODSTORE_PARA_GITHUB_DEVICE_ID")
+    assert (
+        _req({**TICKET, "github_workspace": {"issue_number": 123}})["device_id"]
+        == "unconfigured-cloud-worker"
+    )
+
+
 CANNOT_HANDLE = {"logs_tail": [{"content": "CANNOT_HANDLE"}]}
+
+
+def test_only_same_github_job_can_become_the_worker(monkeypatch):
+    from datetime import UTC, datetime
+
+    from modstore_server.para_github_runner import device_matches
+
+    monkeypatch.setenv("MODSTORE_PARA_GITHUB_DEVICE_ID", "dedicated-worker")
+    workspace = {"request_id": "same-request", "run_id": 123}
+    device = {
+        "id": "dedicated-worker",
+        "status": "online",
+        "lastSeen": datetime.now(UTC).isoformat(),
+        "tools": [{"toolName": "codex", "status": "idle"}],
+        "capabilities": {
+            "github_actions": True,
+            "github_request_id": "same-request",
+            "github_run_id": "123",
+            "github_run_attempt": "1",
+        },
+    }
+    assert device_matches(device, workspace)
+    for key, value in {
+        "github_request_id": "other-request",
+        "github_run_id": "999",
+        "github_run_attempt": "2",
+        "github_actions": False,
+        "server_bridge": True,
+    }.items():
+        assert not device_matches(
+            {**device, "capabilities": {**device["capabilities"], key: value}},
+            workspace,
+        )
+
+
+def test_github_credentials_never_fall_back_to_mac_or_guest(monkeypatch):
+    from modstore_server import cred_vault
+    from modstore_server.maintenance_loop import para_auth
+
+    monkeypatch.setenv("MODSTORE_PARA_GITHUB_API_BASE", "https://para.example.test")
+    monkeypatch.setattr(
+        cred_vault,
+        "get_credential",
+        lambda name, **kw: "old-mac" if name == "MODSTORE_PARA_AUTH_TOKEN" else "",
+    )
+    with pytest.raises(ValueError, match="专用服务身份"):
+        mod._get_para_token(None, "https://para.example.test")
+    with pytest.raises(ValueError, match="专用服务身份"):
+        para_auth._guest_auth_headers("https://para.example.test")
+
+
+def test_cloud_dispatch_remains_available_after_removing_legacy_mac_connection(
+    monkeypatch,
+):
+    monkeypatch.delenv("MODSTORE_PARA_API_BASE", raising=False)
+    monkeypatch.delenv("MODSTORE_PARA_DELEGATE_WEBHOOK", raising=False)
+    monkeypatch.setenv("MODSTORE_PARA_GITHUB_API_BASE", "https://para.example.test")
+    monkeypatch.setenv("MODSTORE_PARA_GITHUB_AUTH_TOKEN", "test-only")
+    monkeypatch.setenv("MODSTORE_PARA_GITHUB_DEVICE_ID", "github-worker")
+    assert mod.para_delegate_ready_for_dispatch()
+    monkeypatch.delenv("MODSTORE_PARA_GITHUB_AUTH_TOKEN")
+    assert not mod.para_delegate_ready_for_dispatch()
+
+
+def test_untrusted_github_workspace_does_not_dispatch(monkeypatch):
+    monkeypatch.setattr(mod, "_post_webhook", lambda *a: pytest.fail("must not dispatch"))
+    result = mod.dispatch_para_delegate(
+        task="untrusted",
+        employee_id="someone",
+        input_data={"github_workspace": {"run_id": 123}},
+    )
+    assert result["status"] == "blocked_github_dispatch_identity" and not result["accepted"]
 
 
 def _req(input_data=None, employee_id="change-request-auditor"):

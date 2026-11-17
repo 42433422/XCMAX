@@ -1388,7 +1388,7 @@
 .dg-loop-runtime-panel {
   flex:1;
   min-height:0;
-  overflow:auto;
+  overflow:hidden;
   padding:12px 16px;
 }
 

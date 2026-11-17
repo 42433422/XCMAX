@@ -5,7 +5,7 @@
  * API 文档: https://www.npmjs.com/package/@chenglou/pretext
  */
 
-import { prepare, layout, prepareWithSegments, layoutWithLines, type LayoutResult, type LineResult } from '@chenglou/pretext'
+import { layout, prepareWithSegments, layoutWithLines, measureLineStats } from '@chenglou/pretext'
 import { plainTextFromChatHtml } from '@/utils/sanitizeHtml'
 
 // 测量结果接口
@@ -30,7 +30,7 @@ export interface TextMeasureOptions {
 }
 
 // 缓存机制
-const prepareCache = new Map<string, ReturnType<typeof prepare>>()
+const prepareCache = new Map<string, ReturnType<typeof prepareWithSegments>>()
 const CACHE_MAX_SIZE = 500
 
 /**
@@ -87,7 +87,7 @@ export function measureText(options: TextMeasureOptions): MeasureResult {
   if (!prepared) {
     // 执行 prepare（一次性字体分析）
     const font = getFontString(options)
-    prepared = prepare(options.text, font, {
+    prepared = prepareWithSegments(options.text, font, {
       whiteSpace: options.whiteSpace || 'normal',
       wordBreak: options.wordBreak,
       letterSpacing: options.letterSpacing,
@@ -101,10 +101,10 @@ export function measureText(options: TextMeasureOptions): MeasureResult {
   // 执行 layout（纯算术计算）
   const lineHeight = options.lineHeight || 1.5
   const fontSize = options.fontSize || 14
-  const result: LayoutResult = layout(prepared, options.width, fontSize * lineHeight)
+  const result = layout(prepared, options.width, fontSize * lineHeight)
 
   return {
-    width: result.width,
+    width: measureLineStats(prepared, options.width).maxLineWidth,
     height: result.height,
     lines: [], // layout 不返回具体行内容，需要 layoutWithLines
     lineCount: result.lineCount,
@@ -129,9 +129,9 @@ export function measureTextWithLines(options: TextMeasureOptions): MeasureResult
   const result = layoutWithLines(prepared, options.width, fontSize * lineHeight)
 
   return {
-    width: result.width,
+    width: result.lines.reduce((width, line) => Math.max(width, line.width), 0),
     height: result.height,
-    lines: result.lines.map((line: LineResult) => line.text),
+    lines: result.lines.map((line) => line.text),
     lineCount: result.lines.length,
   }
 }

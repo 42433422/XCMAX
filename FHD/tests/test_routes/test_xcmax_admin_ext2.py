@@ -95,7 +95,7 @@ def client(app_with_router: FastAPI) -> TestClient:
 
 class TestMarketAdminProxyAdditional:
     @pytest.mark.asyncio
-    async def test_no_authorization_returns_401(self):
+    async def test_missing_upstream_binding_does_not_invalidate_admin_session(self):
         req = MagicMock(spec=Request)
         with (
             patch(
@@ -109,7 +109,8 @@ class TestMarketAdminProxyAdditional:
         ):
             result = await admin_routes._market_admin_proxy(req, "GET", "/api/test")
         assert isinstance(result, JSONResponse)
-        assert result.status_code == 401
+        assert result.status_code == 409
+        assert json.loads(result.body)["code"] == "upstream_auth_unavailable"
 
     @pytest.mark.asyncio
     async def test_proxy_error_payload(self):

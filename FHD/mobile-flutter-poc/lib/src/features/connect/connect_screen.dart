@@ -102,11 +102,11 @@ class ConnectScreen extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 22),
-                        Wrap(
+                        const Wrap(
                           alignment: WrapAlignment.center,
                           spacing: 8,
                           runSpacing: 8,
-                          children: const [
+                          children: [
                             _CapabilityChip(label: '扫码绑定'),
                             _CapabilityChip(label: '远程派单'),
                             _CapabilityChip(label: '审批与收产物'),

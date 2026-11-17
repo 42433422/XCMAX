@@ -8,7 +8,6 @@ import os
 from datetime import UTC, datetime
 from typing import Any
 
-from modstore_server import incident_team_orchestrator as facade
 from modstore_server.incident_team_handler_digest import handler_output_digest
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
@@ -34,6 +33,8 @@ def dispatch_incident_team(event_id: int) -> dict[str, Any]:
 
 
 def _dispatch_incident_team_once(event_id: int) -> dict[str, Any]:
+    from modstore_server import incident_team_orchestrator as facade
+
     _env_bool = facade._env_bool
     build_incident_team = facade.build_incident_team
     get_session_factory = facade.get_session_factory
@@ -44,6 +45,13 @@ def _dispatch_incident_team_once(event_id: int) -> dict[str, Any]:
         return {"claimed": False, "ok": False, "reason": "incident_team_disabled"}
     with get_session_factory()() as session:
         saved = session.get(IncidentEvent, int(event_id))
+        if saved is not None and (
+            saved.event_type == "ops.retort.evolution" or _payload(saved).get("retort_run_id")
+        ):
+            from modstore_server.retort_github_workspace import authorized_incident
+
+            if not authorized_incident(session, _payload(saved), event_id):
+                return {"claimed": False, "ok": False, "reason": "retort_authorization_required"}
         if saved is not None and isinstance(_payload(saved).get("_team_claim"), dict):
             from modstore_server.incident_team_completion import reconcile_pending_teams
 
@@ -54,6 +62,21 @@ def _dispatch_incident_team_once(event_id: int) -> dict[str, Any]:
                 "ok": bool(_payload(saved)["_team_claim"].get("ok")),
                 "reason": "incident_completion_readback",
             }
+        if (
+            saved is not None
+            and saved.event_type == "ops.intake.customer_ticket"
+            and _payload(saved).get("resolution", {}).get("route") == "shared_core"
+        ):
+            from modstore_server.customer_ticket_github import authorized_incident
+
+            if not authorized_incident(session, _payload(saved), event_id):
+                return {
+                    "claimed": True,
+                    "ok": False,
+                    "event_id": event_id,
+                    "status": "awaiting_github",
+                    "reason": "github_workspace_required",
+                }
     team_plan = build_incident_team(event_id)
     team = team_plan.get("team") if isinstance(team_plan.get("team"), list) else []
     if len(team) < 2:
@@ -224,9 +247,14 @@ def member_runtime_input(
     from modstore_server.duty_workforce_contracts import duty_event_execution_input
     from modstore_server.incident_team_handoff import role_handoff
 
+    incident_input = payload
+    if payload.get("github_workspace"):
+        from modstore_server.customer_ticket_github import public_incident
+
+        incident_input = public_incident(payload)
     runtime = (
         duty_event_execution_input(
-            employee_id, event_type=event_type, source=source, incident=payload
+            employee_id, event_type=event_type, source=source, incident=incident_input
         )
         or {}
     )
@@ -234,7 +262,7 @@ def member_runtime_input(
         {
             "allow_high_risk_real_run": role in {"fix", "verify"},
             "allow_medium_risk": True,
-            "incident": payload,
+            "incident": incident_input,
             "incident_team": team_plan,
             "model_route": route,
             "role": role,
@@ -272,6 +300,21 @@ def member_runtime_input(
             checks = (team_plan.get("independent_checks") or {}).get(role)
             if checks:
                 runtime["independent_checks"] = checks
+    if payload.get("github_workspace"):
+        workspace = payload["github_workspace"]
+        runtime.update(
+            github_workspace=workspace,
+            repo_url=f"https://github.com/{workspace['repository']}.git",
+            branch=workspace.get("source_sha") or "main",
+            allow_tool_fallback=False,
+        )
+        # The ephemeral worker owns its checkout; a CVM path is not a workspace there.
+        runtime["project_root"] = ""
+        if role == "verify":
+            outputs = ((fix_result or {}).get("handler_outputs") or {}).get("outputs") or []
+            revisions = {o["commit_sha"] for o in outputs if o.get("commit_sha")}
+            runtime["branch"] = next(iter(revisions)) if len(revisions) == 1 else ""
+        return runtime
     if not str(runtime.get("project_root") or "").strip():
         roots = [
             str(os.environ.get(name) or "").strip()

@@ -3,7 +3,6 @@
     <div class="page-header">
       <div>
         <h2>自治总览</h2>
-        <p>运营指标 · 部署事件 · 审计 · 跨端门禁 · GitHub 待处理</p>
       </div>
       <div class="header-actions">
         <button class="btn btn-secondary" type="button" :disabled="loading" @click="loadAll">
@@ -17,6 +16,11 @@
     <p v-if="error" class="banner-error" role="alert">{{ error }}</p>
     <p class="muted" role="status">运营总览：{{ overviewReady ? '已读取' : loading ? '读取中' : '待核实' }} · 跨端门禁：{{ gateReady ? '已读取' : loading ? '读取中' : '待核实' }} · GitHub：{{ githubReady ? '已读取' : loading ? '读取中' : '待核实' }} · 总览数据时间：{{ overview?.generated_at || overview?.operating_metrics?.generated_at || '未提供' }}</p>
     <p v-if="forceMsg" class="banner-ok">{{ forceMsg }}</p>
+
+    <AdminSectionNav v-model="section" label="自治分区" :items="[{ value: 'maintenance', label: '维护执行' }, { value: 'metrics', label: '运行与门禁' }, { value: 'audit', label: '跨端审计' }]" />
+    <div class="admin-pane" tabindex="0" aria-label="自治内容">
+    <MaintenanceExecutionPanel v-show="section === 'maintenance'" />
+    <div v-show="section === 'metrics'" class="autonomy-metrics">
 
     <div class="kpi-grid">
       <div v-for="[label, value] in kpis" :key="label" class="kpi">
@@ -81,7 +85,8 @@
       </section>
     </div>
 
-    <section class="card">
+    </div>
+    <section v-show="section === 'audit'" class="card">
       <div class="card-head-row">
         <h3>跨端审计</h3>
         <div class="tabs">
@@ -97,7 +102,7 @@
         </div>
       </div>
       <p role="status">{{ auditLoading ? '正在加载审计记录…' : auditMessage }}</p>
-      <p class="muted">{{ crossAudit.length }} 条记录 · 最新事件 {{ auditLatest || '未知' }} · 超过 24 小时提示过期，不代表服务故障</p>
+      <p class="muted">{{ crossAudit.length }} 条记录 · 最新事件 {{ auditLatest || '未知' }}</p>
       <button type="button" class="btn" :disabled="auditLoading" @click="switchTier(auditTier)">重新读取</button>
       <table v-if="crossAudit.length" class="data-table">
         <thead><tr><th>动作</th><th>说明</th><th>时间</th><th>详情</th></tr></thead>
@@ -108,13 +113,17 @@
           <td><details><summary>原始记录</summary><pre>{{ JSON.stringify(row, null, 2) }}</pre></details></td>
         </tr></tbody>
       </table>
-      <details><summary>数据来源</summary><p class="mono">{{ auditPath || '尚未取得来源' }}</p><p>读取服务端可见的该端审计文件，不代表已实时连接其他设备。</p></details>
+      <details><summary>数据来源</summary><p class="mono">{{ auditPath || '尚未取得来源' }}</p></details>
     </section>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import AdminSectionNav from './AdminSectionNav.vue'
+const section = ref('maintenance')
 import { computed, onMounted, ref } from 'vue'
+import MaintenanceExecutionPanel from './MaintenanceExecutionPanel.vue'
 import {
   xcmaxAdminApi,
   type AutonomyDeployEvent,

@@ -1,3 +1,4 @@
+import { getAppBase } from '@/utils/apiBase'
 import type { Router, RouteRecordRaw } from 'vue-router'
 import type { RuntimeModMetadata } from '@/utils/runtimeModSdk'
 
@@ -71,7 +72,7 @@ const modRouteLoaders = modRouteGlob
 
 function browserFullPath(): string | null {
   if (typeof window === 'undefined' || !window.location) return null
-  const base = String(import.meta.env.BASE_URL || '/').replace(/\/$/, '')
+  const base = getAppBase().replace(/\/$/, '')
   let path = window.location.pathname || '/'
   if (base && base !== '/' && path.startsWith(`${base}/`)) {
     path = path.slice(base.length) || '/'

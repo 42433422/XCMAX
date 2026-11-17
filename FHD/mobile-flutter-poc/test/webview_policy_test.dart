@@ -13,10 +13,11 @@ void main() {
     expect(isMobileWebViewUrlAllowedForTest('https://xiu-ci.com/a'), isTrue);
     expect(
       isMobileWebViewUrlAllowedForTest('https://market.xiu-ci.com/a'),
-      isTrue,
+      isFalse,
     );
-    expect(isMobileWebViewUrlAllowedForTest('http://127.0.0.1:5100'), isTrue);
-    expect(isMobileWebViewUrlAllowedForTest('http://192.168.1.8:5100'), isTrue);
+    expect(isMobileWebViewUrlAllowedForTest('http://127.0.0.1:5100'), isFalse);
+    expect(
+        isMobileWebViewUrlAllowedForTest('http://192.168.1.8:5100'), isFalse);
     expect(
       isMobileWebViewUrlAllowedForTest(
         'http://10.0.0.9:5100',
@@ -35,8 +36,8 @@ void main() {
     );
     expect(
       shouldInjectMarketTokensForTest('https://example.com/?next=xiu-ci.com'),
-      isTrue,
-      reason: 'The policy checks the whole URL string for xiu-ci.com.',
+      isFalse,
+      reason: 'A query substring cannot authorize credentials.',
     );
     expect(
       shouldInjectMarketTokensForTest('https://example.com/market'),
@@ -45,17 +46,21 @@ void main() {
 
     expect(
       shouldInjectFhdSessionForTest('http://127.0.0.1:5100/mod/a'),
-      isTrue,
+      isFalse,
     );
     expect(
       shouldInjectFhdSessionForTest('http://192.168.1.8:5100/mod/a'),
-      isTrue,
+      isFalse,
     );
-    expect(shouldInjectFhdSessionForTest('http://10.0.0.9:5100/mod/a'), isTrue);
+    expect(
+        shouldInjectFhdSessionForTest('http://10.0.0.9:5100/mod/a'), isFalse);
     expect(
       shouldInjectFhdSessionForTest('http://localhost:5100/mod/a'),
-      isTrue,
+      isFalse,
     );
+    expect(
+        shouldInjectFhdSessionForTest('https://xiu-ci.com/fhd-api/customers'),
+        isTrue);
     expect(
       shouldInjectFhdSessionForTest('https://127.0.0.1:5100/mod/a'),
       isFalse,

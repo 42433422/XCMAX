@@ -19,6 +19,25 @@ from sqlalchemy import (
 from modstore_server.db.db_base import Base
 
 
+class RetortEvolutionRun(Base):
+    """Business identity and external receipts; LangGraph owns workflow checkpoints."""
+
+    __tablename__ = "retort_evolution_runs"
+    id = Column(String(36), primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    status = Column(String(32), nullable=False, default="created", index=True)
+    protocol_json = Column(Text, nullable=False)
+    snapshot_json = Column(Text, nullable=False, default="{}")
+    effects_json = Column(Text, nullable=False, default="{}")
+    knowledge_json = Column(Text, nullable=False, default="{}")
+    event_id = Column(Integer, ForeignKey("incident_events.id"), nullable=True)
+    error = Column(Text, nullable=False, default="")
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
+    updated_at = Column(
+        DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+    )
+
+
 class Workflow(Base):
     """节点图模型：用于编辑、执行和员工发布；可显式迁移为脚本工作流。"""
 

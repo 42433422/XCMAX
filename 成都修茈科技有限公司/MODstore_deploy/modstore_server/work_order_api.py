@@ -474,7 +474,11 @@ def acceptance(
 
 def _find_by_issue(db: Session, issue_number: int) -> dict[str, Any] | None:
     """按 issue 反查：找携带该 issue_number 的 transition 事件所属工单再折叠。"""
-    for rec in db.query(WorkOrderEvent).filter(WorkOrderEvent.event == "transition").all():
+    for rec in (
+        db.query(WorkOrderEvent)
+        .filter(WorkOrderEvent.event.in_(["transition", "github_linked"]))
+        .all()
+    ):
         ref = _loads(rec.ref)
         if int(ref.get("issue_number") or 0) == int(issue_number):
             return _view(db, str(rec.wo_id))

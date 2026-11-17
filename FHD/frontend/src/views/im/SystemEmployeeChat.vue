@@ -1,155 +1,35 @@
 <template>
   <main class="im-chat im-chat--system-employee">
-    <header class="im-chat-head">
-      <span
-        :class="[
-          'im-avatar',
-          'im-avatar--sm',
-          {
-            'im-avatar--super-tool': superEmployeeAvatarKey(activeSystemEntry),
-            [`im-avatar--${superEmployeeAvatarKey(activeSystemEntry)}`]: superEmployeeAvatarKey(activeSystemEntry),
-            'im-avatar--employee': isDutyEmployeeEntry(activeSystemEntry),
-          },
-        ]"
-        aria-hidden="true"
-      >
-        <img
-          v-if="superEmployeeAvatarSrc(activeSystemEntry)"
-          class="im-super-tool-icon"
-          :src="superEmployeeAvatarSrc(activeSystemEntry) || undefined"
-          alt=""
-          decoding="async"
-          draggable="false"
-        />
-        <template v-else>{{ pinnedAvatarText(activeSystemEntry) }}</template>
-      </span>
-      <span class="im-chat-title">{{ activeSystemEntry.display_name }}</span>
-      <span class="im-system-status">{{ systemEntryStatusLabel(activeSystemEntry) }}</span>
-    </header>
-    <div class="im-system-employee-body">
-      <div class="im-system-employee-profile">
-        <dl class="im-system-status-grid im-system-status-grid--identity">
-          <div>
-            <dt>身份</dt>
-            <dd>{{ systemEntryIdentity(activeSystemEntry) }}</dd>
-          </div>
-        </dl>
-        <details class="im-system-status-details">
-          <summary>员工资料与运行详情</summary>
-          <section class="im-system-employee-card">
-            <h3>{{ activeSystemEntry.display_name }}</h3>
-            <p>{{ activeSystemEntry.subtitle }}</p>
-            <p v-if="isDutyEmployeeEntry(activeSystemEntry)" class="im-system-employee-responsibility">
-              职责：{{ activeSystemEntry.description }}
-            </p>
-          </section>
-          <dl class="im-system-status-grid">
-            <div>
-              <dt>{{ isSuperEmployeeEntry(activeSystemEntry) ? '调度' : '联系方式' }}</dt>
-              <dd>{{ systemEntryDispatch(activeSystemEntry) }}</dd>
-            </div>
-            <div>
-              <dt>状态</dt>
-              <dd>{{ systemEntryRuntimeStatus(activeSystemEntry) }}</dd>
-            </div>
-            <div>
-              <dt>最近任务</dt>
-              <dd>{{ systemEntryLastStatus(activeSystemEntry) }}</dd>
-            </div>
-          </dl>
-        </details>
-        <section v-if="isSuperEmployeeEntry(activeSystemEntry)" class="im-cli-model-switch" aria-label="超级开发组 CLI 切换">
-          <div class="im-cli-model-switch__label">超级开发组 · CLI</div>
-          <div class="im-cli-model-switch__options" role="tablist">
-            <button
-              v-for="tool in superCliTools"
-              :key="tool.id"
-              type="button"
-              role="tab"
-              :class="['im-cli-model-switch__btn', { active: activeSystemEntry?.id === tool.id }]"
-              :aria-selected="activeSystemEntry?.id === tool.id"
-              @click="emit('activate-pinned', tool)"
-            >
-              {{ superCliToolLabel(tool) }}
-            </button>
-          </div>
-        </section>
-      </div>
-      <div v-if="isSuperEmployeeEntry(activeSystemEntry)" :ref="codexScrollEl" class="im-system-call-log">
-        <div v-if="!codexVisibleMessages.length" class="im-system-call-empty">
-          <i class="fa fa-terminal" aria-hidden="true"></i>
-          <p>等待软件内调用</p>
-        </div>
-        <div
-          v-for="m in codexVisibleMessages"
-          :key="m.id"
-          :class="['im-system-call-row', m.role === 'user' ? 'mine' : 'theirs', { 'is-streaming': isCodexStreamingMessage(m) }]"
-        >
-          <div class="im-system-call-bubble">
-            <span class="im-system-call-role">{{ codexMessageRoleLabel(m) }}</span>
-            <p>
-              {{ m.body }}
-              <span v-if="isCodexStreamingMessage(m)" class="im-system-call-cursor" aria-hidden="true"></span>
-            </p>
-            <time>{{ formatTime(m.created_at) }}</time>
-          </div>
-        </div>
-      </div>
-      <div v-else :ref="dutyEmployeeScrollEl" class="im-system-call-log">
-        <div v-if="!activeDutyEmployeeMessages.length" class="im-system-call-empty">
-          <i class="fa fa-id-badge" aria-hidden="true"></i>
-          <p>向该员工发送任务后，这里会显示执行回复</p>
-        </div>
-        <div v-for="m in activeDutyEmployeeMessages" :key="m.id" :class="['im-system-call-row', m.role === 'user' ? 'mine' : 'theirs']">
-          <div class="im-system-call-bubble">
-            <span class="im-system-call-role">
-              {{ m.role === 'user' ? '管理端' : activeSystemEntry.display_name }}
-            </span>
-            <p>{{ m.body }}</p>
-            <time>{{ formatTime(m.created_at) }}</time>
-          </div>
-        </div>
-      </div>
-    </div>
-    <form v-if="isSuperEmployeeEntry(activeSystemEntry)" class="im-compose im-compose--codex" @submit.prevent="emit('codex-send')">
-      <input
-        :ref="codexInputEl"
-        :value="codexDraft"
-        type="text"
-        class="im-compose-input"
-        :placeholder="`向${activeSystemEntry.display_name}派工`"
-        maxlength="4000"
-        :disabled="codexBusy"
-        @input="onCodexDraftInput"
-        @keydown.enter.prevent="emit('codex-send')"
-      />
-      <button type="button" class="im-btn im-btn--primary" :disabled="codexBusy || !codexDraft.trim()" @click="emit('codex-send')">
-        调用
-      </button>
-    </form>
-    <form v-else class="im-compose im-compose--codex" @submit.prevent="emit('duty-employee-send')">
-      <input
-        :value="dutyEmployeeDraft"
-        type="text"
-        class="im-compose-input"
-        :placeholder="isPlannedDutyEmployee(activeSystemEntry) ? '该员工尚未安装' : `向${activeSystemEntry.display_name}发送任务`"
-        maxlength="4000"
-        :disabled="dutyEmployeeBusy || isPlannedDutyEmployee(activeSystemEntry)"
-        @input="onDutyEmployeeDraftInput"
-      />
-      <button
-        type="submit"
-        class="im-btn im-btn--primary"
-        :disabled="dutyEmployeeBusy || isPlannedDutyEmployee(activeSystemEntry) || !dutyEmployeeDraft.trim()"
-      >
-        {{ dutyEmployeeBusy ? '执行中' : '发送' }}
-      </button>
-    </form>
+    <MatureChat :key="activeSystemEntry.id" :room-id="String(activeSystemEntry.id)" :title="activeSystemEntry.display_name"
+      :subtitle="systemEntryStatusLabel(activeSystemEntry)" :avatar="avatar"
+      :rows="rows" :draft="isSuper ? codexDraft : dutyEmployeeDraft"
+      :disabled="isSuper ? codexBusy : dutyEmployeeBusy || isPlannedDutyEmployee(activeSystemEntry)"
+      :busy-label="isPlannedDutyEmployee(activeSystemEntry) ? '该员工尚未安装' : '正在处理…'"
+      :placeholder="`向${activeSystemEntry.display_name}发送消息…`" @update:draft="updateDraft" @send="send">
+      <template #actions>
+        <select v-if="isSuper" class="im-tool-select" aria-label="切换开发员工" :value="activeSystemEntry.id"
+          @change="emit('activate-pinned', superCliTools.find(t => String(t.id) === ($event.target as HTMLSelectElement).value)!)">
+          <option v-for="tool in superCliTools" :key="tool.id" :value="tool.id">{{ superCliToolLabel(tool) }}</option>
+        </select>
+        <button class="im-profile-button" :aria-expanded="showProfile" @click="showProfile = !showProfile">员工资料</button>
+      </template>
+    </MatureChat>
+    <aside v-if="showProfile" class="im-employee-profile" aria-label="员工资料">
+      <header><strong>{{ activeSystemEntry.display_name }}</strong><button class="im-profile-button" @click="showProfile = false">关闭</button></header>
+      <dl>
+        <dt>身份</dt><dd>{{ systemEntryIdentity(activeSystemEntry) }}</dd>
+        <template v-if="isDutyEmployeeEntry(activeSystemEntry)"><dt>职责</dt><dd>{{ activeSystemEntry.description }}</dd></template>
+        <dt>调度</dt><dd>{{ systemEntryDispatch(activeSystemEntry) }}</dd>
+        <dt>状态</dt><dd>{{ systemEntryRuntimeStatus(activeSystemEntry) }}</dd>
+        <dt>最近任务</dt><dd>{{ systemEntryLastStatus(activeSystemEntry) }}</dd>
+      </dl>
+    </aside>
   </main>
 </template>
 
 <script setup lang="ts">
-import type { Ref } from 'vue'
+import { computed, nextTick, ref, type Ref } from 'vue'
+import MatureChat from '@/components/im/MatureChat.vue'
 import {
   type CodexDisplayMessage,
   type DutyEmployeeChatMessage,
@@ -157,8 +37,9 @@ import {
 } from '@/composables/messenger/useMessengerEntries'
 import './SystemEmployeeChat.css'
 
-defineProps<{
+const props = defineProps<{
   activeSystemEntry: SystemEmployeeEntry
+  activeAvatarSrc?: string | null
   superCliTools: SystemEmployeeEntry[]
   superCliToolLabel: (entry: SystemEmployeeEntry) => string
   systemEntryStatusLabel: (entry: SystemEmployeeEntry) => string
@@ -193,12 +74,23 @@ const emit = defineEmits<{
   (e: 'update:dutyEmployeeDraft', value: string): void
 }>()
 
-function onCodexDraftInput(ev: Event): void {
-  emit('update:codexDraft', (ev.target as HTMLInputElement).value)
+const showProfile = ref(false)
+const isSuper = computed(() => props.isSuperEmployeeEntry(props.activeSystemEntry))
+const avatar = computed(() => props.superEmployeeAvatarSrc(props.activeSystemEntry) || props.activeAvatarSrc)
+const rows = computed(() => (isSuper.value ? props.codexVisibleMessages : props.activeDutyEmployeeMessages).map(m => ({
+  id: m.id, body: m.body, mine: m.role === 'user', sender: m.role === 'user' ? '我' : props.activeSystemEntry.display_name,
+  label: isSuper.value && props.isCodexStreamingMessage(m as CodexDisplayMessage) ? '正在回复' : '',
+  avatar: m.role === 'user' ? '' : avatar.value, at: m.created_at,
+})))
+function updateDraft(value: string) {
+  if (isSuper.value) emit('update:codexDraft', value)
+  else emit('update:dutyEmployeeDraft', value)
 }
-
-function onDutyEmployeeDraftInput(ev: Event): void {
-  emit('update:dutyEmployeeDraft', (ev.target as HTMLInputElement).value)
+async function send(value: string) {
+  updateDraft(value)
+  await nextTick()
+  if (isSuper.value) emit('codex-send')
+  else emit('duty-employee-send')
 }
 
 function isPlannedDutyEmployee(entry: SystemEmployeeEntry): boolean {

@@ -3,7 +3,6 @@
     <header class="cs-page-head page-header">
       <div>
         <h2>客服工单 · 客户反馈</h2>
-        <p>来源：市场客服原单（当前登录市场账号的可见范围）。研发 Work Order 与客户交付单在各自入口查看。时间均为北京时间。</p>
       </div>
     </header>
     <form class="cs-card cs-toolbar" @submit.prevent="load(0, true)">

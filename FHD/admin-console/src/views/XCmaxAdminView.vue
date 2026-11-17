@@ -1,5 +1,5 @@
 <template>
-  <div class="xcmax-admin-view" id="view-xcmax-admin">
+  <div class="xcmax-admin-view admin-screen" id="view-xcmax-admin">
     <nav class="admin-tab-bar" role="tablist" aria-label="服务器后台分区">
       <button
         v-for="tab in adminTabs"
@@ -30,9 +30,10 @@
         </div>
       </div>
 
-      <div class="admin-grid">
+      <AdminSectionNav v-model="overviewSection" label="总览内容" :items="[{ value: 'health', label: '服务健康' }, { value: 'release', label: '版本发布' }, { value: 'sync', label: '同步与冲突' }, { value: 'modules', label: '模块注册' }, { value: 'employees', label: '远端员工' }]" />
+      <div class="admin-grid admin-pane" tabindex="0" aria-label="总览内容区">
         <!-- 本地节点 -->
-        <div class="admin-card">
+        <div v-show="overviewSection === 'health'" class="admin-card">
           <div class="card-header">
             <i class="fa fa-desktop card-icon" aria-hidden="true"></i>
             <h3>本地服务健康</h3>
@@ -50,7 +51,7 @@
         </div>
 
         <!-- 远端服务器 -->
-        <div class="admin-card">
+        <div v-show="overviewSection === 'health'" class="admin-card">
           <div class="card-header">
             <i class="fa fa-server card-icon" aria-hidden="true"></i>
             <h3>远端服务器</h3>
@@ -67,14 +68,14 @@
           </dl>
         </div>
 
-        <AdminReleaseStatusCard
+        <AdminReleaseStatusCard v-show="overviewSection === 'release'"
           ref="releaseStatusCard"
           :local-version="localStatus.version"
           @open-deploy="openDeployModal"
         />
 
         <!-- 自治健康 -->
-        <div class="admin-card">
+        <div v-show="overviewSection === 'health'" class="admin-card">
           <div class="card-header">
             <i class="fa fa-heartbeat card-icon" aria-hidden="true"></i>
             <h3>自治健康</h3>
@@ -101,7 +102,7 @@
         </div>
 
         <!-- 同步状态 -->
-        <div class="admin-card">
+        <div v-show="overviewSection === 'sync'" class="admin-card">
           <div class="card-header">
             <i class="fa fa-refresh card-icon" aria-hidden="true"></i>
             <h3>双向同步</h3>
@@ -128,7 +129,7 @@
         </div>
 
         <!-- 模块注册 -->
-        <div class="admin-card admin-card--wide">
+        <div v-show="overviewSection === 'modules'" class="admin-card admin-card--wide">
           <div class="card-header">
             <i class="fa fa-puzzle-piece card-icon" aria-hidden="true"></i>
             <h3>模块注册表</h3>
@@ -168,7 +169,7 @@
         </div>
 
         <!-- 远端员工 (yuangon) -->
-        <div class="admin-card admin-card--wide">
+        <div v-show="overviewSection === 'employees'" class="admin-card admin-card--wide">
           <div class="card-header">
             <i class="fa fa-users card-icon" aria-hidden="true"></i>
             <h3>远端服务器员工</h3>
@@ -199,7 +200,7 @@
         </div>
 
         <!-- 冲突列表 -->
-        <div class="admin-card admin-card--wide" v-if="syncStatus.conflictCount > 0">
+        <div v-show="overviewSection === 'sync'" class="admin-card admin-card--wide" v-if="syncStatus.conflictCount > 0">
           <div class="card-header">
             <i class="fa fa-exclamation-circle card-icon" style="color:#d97706" aria-hidden="true"></i>
             <h3>同步冲突</h3>
@@ -234,7 +235,7 @@
         </div>
 
         <!-- 最近错误 -->
-        <div class="admin-card admin-card--wide" v-if="recentErrors.length">
+        <div v-show="overviewSection === 'health'" class="admin-card admin-card--wide" v-if="recentErrors.length">
           <div class="card-header">
             <i class="fa fa-exclamation-triangle card-icon" aria-hidden="true"></i>
             <h3>最近错误</h3>
@@ -265,11 +266,8 @@
     <div v-show="activeTab === 'automation-policy'" class="page-content admin-tab-panel">
       <AutomationPolicyPanel />
     </div>
-    <div v-show="activeTab === 'duty-time-architecture'" class="page-content admin-tab-panel">
-      <div class="page-header">
-        <h2>同时完成时间架构</h2>
-      </div>
-      <XcmaxDashboardEmbed :src="timeArchEmbedUrl" title="同时完成时间架构" />
+    <div v-if="activeTab === 'implementation-goals'" class="page-content admin-tab-panel">
+      <ImplementationGoalsPanel />
     </div>
     <AdminDeployUpdateModal v-model="deployModalOpen" @done="handleDeployDone" />
   </div>
@@ -281,6 +279,8 @@ export default { name: 'XCmaxAdminView' }
 </script>
 
 <script setup>
+import AdminSectionNav from '../components/admin/AdminSectionNav.vue'
+const overviewSection = ref('health')
 import { onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import XCmaxAdminInfraTab from '@/components/admin/XCmaxAdminInfraTab.vue'
@@ -288,10 +288,9 @@ import XCmaxAdminDutyTab from '@/components/admin/XCmaxAdminDutyTab.vue'
 import XCmaxAdminAutonomyTab from '@/components/admin/XCmaxAdminAutonomyTab.vue'
 import XCmaxAdminOrdersTab from '@/components/admin/XCmaxAdminOrdersTab.vue'
 import AdminReleaseStatusCard from '../components/admin/AdminReleaseStatusCard.vue'
-import XcmaxDashboardEmbed from '@/components/admin/XcmaxDashboardEmbed.vue'
 import AutomationPolicyPanel from '@/components/admin/AutomationPolicyPanel.vue'
+import ImplementationGoalsPanel from '@/components/admin/ImplementationGoalsPanel.vue'
 import AdminDeployUpdateModal from '@host/components/admin/AdminDeployUpdateModal.vue'
-import { xcmaxDutyTimeArchitectureEmbedUrl } from '@/constants/xcmaxDashboardEmbed'
 import { useXcmaxOverview } from './xcmaxAdmin/useXcmaxOverview'
 import { useXcmaxSync } from './xcmaxAdmin/useXcmaxSync'
 import { useXcmaxAutonomyHealth } from './xcmaxAdmin/useXcmaxAutonomyHealth'
@@ -303,16 +302,16 @@ const adminTabs = [
   { id: 'infra', label: '基础设施' },
   { id: 'duty', label: '编制与调度' },
   { id: 'automation-policy', label: '自动化方针' },
-  { id: 'duty-time-architecture', label: '同时完成时间架构' },
+  { id: 'implementation-goals', label: '实现目标' },
 ]
 const route = useRoute()
 const activeTab = ref('overview')
-const timeArchEmbedUrl = xcmaxDutyTimeArchitectureEmbedUrl()
 
 const TAB_IDS = new Set(adminTabs.map((t) => t.id))
 function applyTabFromRoute() {
   const tab = String(route.query.tab || '').trim()
-  if (tab && TAB_IDS.has(tab)) activeTab.value = tab
+  if (tab === 'duty-time-architecture') activeTab.value = 'overview'
+  else if (tab && TAB_IDS.has(tab)) activeTab.value = tab
 }
 watch(() => route.query.tab, applyTabFromRoute, { immediate: true })
 

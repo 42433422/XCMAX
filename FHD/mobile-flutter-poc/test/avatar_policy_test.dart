@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xcagi_flutter_poc/src/models/conversation.dart';
 import 'package:xcagi_flutter_poc/src/policy/avatar_policy.dart';
@@ -5,16 +6,15 @@ import 'package:xcagi_flutter_poc/src/policy/pinned_ids.dart';
 
 void main() {
   test('员工头像池与桌面端同名单同顺序', () {
-    expect(employeeAvatarPool.length, 54);
-    expect(
-      employeeAvatarPool.take(4).toList(),
-      [
-        'assets/avatars/avatar_emp_artifact_generator.png',
-        'assets/avatars/avatar_emp_avatar_generation_employee.png',
-        'assets/avatars/avatar_emp_change_request_auditor.png',
-        'assets/avatars/avatar_emp_code_validator.png',
-      ],
-    );
+    final desktop = Directory('../frontend/src/assets/avatars/employees')
+        .listSync().whereType<File>()
+        .map((file) => file.uri.pathSegments.last)
+        .where((name) => name.endsWith('.png') && !name.contains('user_customer_service_officer'))
+        .map((name) => 'assets/avatars/$name').toList()..sort();
+    expect(employeeAvatarPool, desktop);
+    for (final path in employeeAvatarPool) {
+      expect(File(path).existsSync(), isTrue, reason: path);
+    }
   });
 
   test('fixed conversation ids map to fixed conversation types', () {

@@ -25,7 +25,8 @@ export function useSelfEvolutionRuntimePresenters(state: SelfEvolutionRuntimePan
   })
 
   const statusLabel = computed(() => {
-    if (state.error) return '接口异常'
+    if (state.error) return '监控连接异常'
+    if (!state.raw) return state.loading ? '正在连接' : '尚未连接'
     if (state.openRunIds.length > 0) return '运行中'
     if (state.gate.should_run === true) return '达到触发阈值'
     if (asString(state.gate.reason) === 'cooldown') return '冷却中'

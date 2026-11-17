@@ -2,16 +2,11 @@ part of 'mobile_api.dart';
 
 abstract class _ApiSessionCoreBase extends _ApiRootBase {
   _ApiSessionCoreBase({
-    MobileApiConfig config = const MobileApiConfig(),
-    MobileSessionStore? sessionStore,
-    HttpClient? httpClient,
-    PlatformCredentialCipher? credentialCipher,
-  }) : super(
-          config: config,
-          sessionStore: sessionStore,
-          httpClient: httpClient,
-          credentialCipher: credentialCipher,
-        );
+    super.config,
+    super.sessionStore,
+    super.httpClient,
+    super.credentialCipher,
+  });
 
   Future<MobileSessionData> loadSession({bool forceReload = false}) async {
     Future<void> pending;
@@ -106,8 +101,9 @@ abstract class _ApiSessionCoreBase extends _ApiRootBase {
             session.userId != current.userId ||
             session.username != current.username ||
             session.marketAccessToken != current.marketAccessToken ||
-            session.marketRefreshToken != current.marketRefreshToken)
+            session.marketRefreshToken != current.marketRefreshToken) {
           return null;
+        }
         return session;
       }, authGeneration: authGeneration, passwordIsPlaintext: true);
 
@@ -275,9 +271,29 @@ abstract class _ApiSessionCoreBase extends _ApiRootBase {
     await _updateSession(_withoutActiveAuth, authGeneration: generation);
   }
 
-  Future<void> cacheModInfos(List<Map<String, Object?>> mods) async {
-    if (mods.isEmpty) return;
-    await _updateSession((current) => current.copyWith(cachedModInfos: mods));
+  Future<void> cacheModInfos(
+    List<Map<String, Object?>> mods, {
+    int? authGeneration,
+    MobileSessionData? expectedSession,
+    String? expectedBaseUrl,
+  }) async {
+    await _updateSession((stored) {
+      final current = stored.mergePreferNonBlank(_configSession());
+      if (expectedSession != null &&
+          (current.serverMode != expectedSession.serverMode ||
+              current.fhdHost != expectedSession.fhdHost ||
+              current.localBaseUrl != expectedSession.localBaseUrl)) {
+        return null;
+      }
+      return stored.copyWith(
+          cachedModInfos: mods
+              .map((mod) => {
+                    ...mod,
+                    if (expectedBaseUrl != null)
+                      '_mobile_cache_base_url': expectedBaseUrl,
+                  })
+              .toList(growable: false));
+    }, authGeneration: authGeneration);
   }
 
   MobileSessionData _configSession() {

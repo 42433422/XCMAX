@@ -159,6 +159,7 @@ class _AiCircleEmptyState extends StatelessWidget {
 
 class _AiCirclePostCard extends StatefulWidget {
   const _AiCirclePostCard({
+    super.key,
     required this.post,
     required this.employee,
     required this.onLike,
@@ -168,8 +169,8 @@ class _AiCirclePostCard extends StatefulWidget {
 
   final AiCirclePost post;
   final AiEmployeeProfile? employee;
-  final VoidCallback onLike;
-  final ValueChanged<String> onComment;
+  final Future<void> Function() onLike;
+  final Future<bool> Function(String) onComment;
   final VoidCallback onOpenHome;
 
   @override
@@ -179,6 +180,33 @@ class _AiCirclePostCard extends StatefulWidget {
 class _AiCirclePostCardState extends State<_AiCirclePostCard> {
   final _controller = TextEditingController();
   var _showCommentInput = false;
+  var _liking = false;
+  var _commenting = false;
+
+  Future<void> _like() async {
+    if (_liking) return;
+    setState(() => _liking = true);
+    try {
+      await widget.onLike();
+    } finally {
+      if (mounted) setState(() => _liking = false);
+    }
+  }
+
+  Future<void> _comment() async {
+    final text = _controller.text.trim();
+    if (_commenting || text.isEmpty) return;
+    setState(() => _commenting = true);
+    final sent = await widget.onComment(text);
+    if (!mounted) return;
+    setState(() {
+      _commenting = false;
+      if (sent) {
+        _controller.clear();
+        _showCommentInput = false;
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -191,6 +219,16 @@ class _AiCirclePostCardState extends State<_AiCirclePostCard> {
     final colors = AppTheme.colors(context);
     final employeeId =
         widget.post.employeeId ?? widget.employee?.employeeId ?? '';
+    final commentInput = _showCommentInput
+        ? Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: _CircleCommentInput(
+              controller: _controller,
+              sending: _commenting,
+              onSend: _comment,
+            ),
+          )
+        : const SizedBox(width: double.infinity);
     return Container(
       color: colors.surface,
       child: Column(
@@ -266,16 +304,21 @@ class _AiCirclePostCardState extends State<_AiCirclePostCard> {
                               tint: widget.post.likedByMe
                                   ? colors.danger
                                   : colors.momentAccent,
-                              onTap: widget.onLike,
+                              selected: widget.post.likedByMe,
+                              onTap: _liking ? null : _like,
                             ),
                             const SizedBox(width: 12),
                             _CircleActionButton(
                               icon: Icons.chat_bubble_outline,
                               label: '评论',
                               tint: colors.momentAccent,
-                              onTap: () => setState(
-                                () => _showCommentInput = !_showCommentInput,
-                              ),
+                              selected: _showCommentInput,
+                              onTap: _commenting
+                                  ? null
+                                  : () => setState(
+                                        () => _showCommentInput =
+                                            !_showCommentInput,
+                                      ),
                             ),
                             if (widget.employee != null) ...[
                               const SizedBox(width: 12),
@@ -293,19 +336,15 @@ class _AiCirclePostCardState extends State<_AiCirclePostCard> {
                         const SizedBox(height: 6),
                         _CircleComments(comments: widget.post.comments),
                       ],
-                      if (_showCommentInput) ...[
-                        const SizedBox(height: 6),
-                        _CircleCommentInput(
-                          controller: _controller,
-                          onSend: () {
-                            final text = _controller.text.trim();
-                            if (text.isEmpty) return;
-                            widget.onComment(text);
-                            _controller.clear();
-                            setState(() => _showCommentInput = false);
-                          },
+                      if (MediaQuery.disableAnimationsOf(context))
+                        commentInput
+                      else
+                        AnimatedSize(
+                          duration: AppTheme.motionDuration(context),
+                          curve: Curves.easeOutCubic,
+                          alignment: Alignment.topCenter,
+                          child: commentInput,
                         ),
-                      ],
                     ],
                   ),
                 ),

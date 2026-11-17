@@ -3,6 +3,7 @@
 part of 'scan_qr_screen.dart';
 
 abstract class _ScanQrStateScan extends _ScanQrStateCamera {
+  @override
   void _handleScanResult(String raw) {
     if (_scanned || _pairing) return;
     HapticFeedback.mediumImpact();

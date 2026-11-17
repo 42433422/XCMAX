@@ -3,6 +3,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { defineComponent, KeepAlive } from 'vue'
 import { createMemoryHistory, createRouter, RouterView } from 'vue-router'
 import { assembleTemplatePreview } from '../../../mods/bridge/xcagi-erp-domain-bridge/frontend/views/template-preview/assemble'
+import { useTpTemplateList } from '../../../mods/bridge/xcagi-erp-domain-bridge/frontend/views/template-preview/useTpTemplateList'
 import TpPreviewModal from '../../../mods/bridge/xcagi-erp-domain-bridge/frontend/views/template-preview/TpPreviewModal.vue'
 
 const listTemplates = vi.hoisted(() => vi.fn())
@@ -77,8 +78,27 @@ it('shows templates saved from ETL after returning to a retained library, and re
   await flushPromises()
   expect(wrapper.text()).toContain('检验说明模板')
   expect(listTemplates).toHaveBeenCalledTimes(3)
+  // Server changes may arrive without this browser receiving the update event.
+  for (let visit = 0; visit < 2; visit++) {
+    await router.push('/etl')
+    templates = [{ id: 4, name: `服务端模板 ${visit}` }]
+    await router.push('/templates')
+    await flushPromises()
+    expect(wrapper.text()).toContain(`服务端模板 ${visit}`)
+    expect(wrapper.text()).not.toContain('原有模板')
+    expect(listTemplates).toHaveBeenCalledTimes(4 + visit)
+  }
   wrapper.unmount(); wrapper = undefined
   window.dispatchEvent(new CustomEvent('xcagi:templates-updated'))
   await flushPromises()
-  expect(listTemplates).toHaveBeenCalledTimes(3)
+  expect(listTemplates).toHaveBeenCalledTimes(5)
+})
+
+
+it('does not invent cards for empty business groups', () => {
+  const list = useTpTemplateList()
+  expect(list.exportScopedTemplates.value).toEqual([])
+  list.templates.value = [{ id: 'db:1', name: '真实模板', category: 'excel', source: 'db' }]
+  expect(list.exportScopedTemplates.value.map(item => item.id)).toEqual(['db:1'])
+  expect(list.exportScopedTemplates.value.some(item => item.virtual)).toBe(false)
 })

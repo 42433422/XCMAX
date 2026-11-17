@@ -1,10 +1,8 @@
 <template>
-  <div class="delivery-center page-content" id="view-delivery-center">
+  <div class="delivery-center page-content admin-screen" id="view-delivery-center">
     <header class="delivery-hero">
       <div>
-        <p class="delivery-eyebrow">客户交付总控</p>
         <h2>客户交付中心</h2>
-        <p>所有企业用户统一进入交付台账；内部本 Mac 永不计入客户交付；购买权益、定制路径、安装与首次登录证据分别如实展示。</p>
       </div>
       <button type="button" class="delivery-refresh" :disabled="loading" @click="loadAll">
         <i class="fa fa-refresh" :class="{ 'fa-spin': loading }" aria-hidden="true"></i>
@@ -16,14 +14,18 @@
       <article v-for="item in summaryCards" :key="item.key" :class="`is-${item.key}`">
         <span>{{ item.label }}</span>
         <strong>{{ item.value }}</strong>
-        <small>{{ item.hint }}</small>
       </article>
     </section>
-    <nav class="delivery-jumps" aria-label="交付中心快速导航"><a href="#delivery-overview">交付概览</a><a href="#delivery-enterprise-roster">企业客户</a>
-      <a href="#delivery-standard-roster">购买交付</a><a href="#delivery-trial-roster">体验交付</a><a href="#delivery-custom-orders">定制工单</a></nav>
-    <MacControlPanel />
-
-    <EnterpriseCustomerRoster id="delivery-enterprise-roster"
+    <nav class="delivery-tabs" aria-label="交付分类">
+      <button v-for="item in deliveryTabs" :key="item.key" type="button"
+        :aria-pressed="activeTab === item.key" @click="activeTab = item.key">
+        {{ item.label }} <span v-if="item.count !== undefined">{{ dataKnown && !errorMessage ? item.count : '—' }}</span>
+      </button>
+    </nav>
+    <div class="admin-pane" tabindex="0" aria-label="交付内容">
+    <KeepAlive><MacControlPanel v-if="activeTab === 'devices'" /></KeepAlive>
+    <div v-show="activeTab !== 'devices'">
+    <EnterpriseCustomerRoster id="delivery-enterprise-roster" v-show="activeTab === 'enterprise'"
       v-if="!errorMessage && (!loading || enterpriseUsers.length)"
       :users="enterpriseUsers"
       :tickets="tickets"
@@ -32,7 +34,7 @@
       @open-custom="focusCustomDeliveries"
     />
 
-    <EnterpriseDeliveryRoster id="delivery-standard-roster"
+    <EnterpriseDeliveryRoster id="delivery-standard-roster" v-show="activeTab === 'standard'"
       v-if="!errorMessage && (!loading || standardDeliveries.length)"
       :deliveries="standardDeliveries"
       :tickets="tickets"
@@ -40,7 +42,7 @@
       @open-custom="focusCustomDeliveries"
     />
 
-    <EnterpriseDeliveryRoster id="delivery-trial-roster"
+    <EnterpriseDeliveryRoster id="delivery-trial-roster" v-show="activeTab === 'trial'"
       v-if="!errorMessage && (!loading || trialDeliveries.length)"
       variant="trial"
       :deliveries="trialDeliveries"
@@ -49,6 +51,21 @@
       @open-custom="focusCustomDeliveries"
     />
 
+    <div v-if="errorMessage" class="delivery-alert" role="alert">
+      <i class="fa fa-exclamation-circle" aria-hidden="true"></i>
+      <div>
+        <strong>交付数据暂时无法读取</strong>
+        <p>{{ errorMessage }}</p>
+      </div>
+      <button type="button" @click="loadAll">重试</button>
+    </div>
+
+    <div v-else-if="loading && !tickets.length && !enterpriseUsers.length && !standardDeliveries.length" class="delivery-empty">
+      <i class="fa fa-circle-o-notch fa-spin" aria-hidden="true"></i>
+      <strong>正在汇总客户交付证据</strong>
+    </div>
+
+    <div v-show="activeTab === 'custom'" :aria-busy="loading">
     <section id="delivery-custom-orders" class="delivery-toolbar" aria-label="定制交付工单筛选">
       <label>
         <i class="fa fa-search" aria-hidden="true"></i>
@@ -63,30 +80,14 @@
       <span>定制工单 {{ filteredTickets.length }} / {{ tickets.length }} 项</span>
     </section>
 
-    <div v-if="errorMessage" class="delivery-alert" role="alert">
-      <i class="fa fa-exclamation-circle" aria-hidden="true"></i>
-      <div>
-        <strong>交付数据暂时无法读取</strong>
-        <p>{{ errorMessage }}</p>
-      </div>
-      <button type="button" @click="loadAll">重试</button>
-    </div>
-
-    <div v-else-if="loading && !tickets.length && !enterpriseUsers.length && !standardDeliveries.length" class="delivery-empty">
-      <i class="fa fa-circle-o-notch fa-spin" aria-hidden="true"></i>
-      <strong>正在汇总客户交付证据</strong>
-      <span>会同时读取客户身份、生产运行、质量门和安装回执。</span>
-    </div>
-
-    <div v-else-if="!filteredTickets.length" class="delivery-empty">
+    <div v-if="!errorMessage && !loading && !filteredTickets.length" class="delivery-empty">
       <i class="fa fa-inbox" aria-hidden="true"></i>
       <strong>{{ tickets.length ? '没有符合筛选条件的定制工单' : '暂无定制交付工单' }}</strong>
-      <span>无需定制的企业用户仍在上方企业客户台账中；首次交付后新增需求才进入报价付款。</span>
     </div>
 
-    <section v-else class="delivery-list" aria-label="客户交付列表">
-      <article v-for="ticket in filteredTickets" :key="ticket.id" class="delivery-ticket">
-        <header class="delivery-ticket__head">
+    <section v-if="!errorMessage && filteredTickets.length" class="delivery-list" aria-label="客户交付列表">
+      <details v-for="ticket in filteredTickets" :key="ticket.id" class="delivery-ticket">
+        <summary class="delivery-ticket__head">
           <div class="delivery-customer">
             <span class="delivery-customer__avatar">{{ customerInitial(ticket) }}</span>
             <div>
@@ -105,7 +106,7 @@
             <span>{{ ticket.ticket_no || `#${ticket.id}` }}</span>
             <time>{{ formatDate(ticket.updated_at || ticket.created_at) }}</time>
           </div>
-        </header>
+        </summary>
 
         <p class="delivery-next-step"><strong :title="stageOf(ticket)">当前：{{ stageLabel(stageOf(ticket)) }}</strong><span>下一步：{{ nextStepLabel(stageOf(ticket)) }}</span></p>
         <ol class="delivery-timeline" aria-label="交付阶段">
@@ -116,7 +117,7 @@
             :aria-current="timelineClass(ticket, step.key).active || timelineClass(ticket, step.key).failed ? 'step' : undefined"
           >
             <span>{{ index + 1 }}</span>
-            <div><strong>{{ step.label }}</strong><small>{{ step.hint }}</small></div>
+            <div><strong>{{ step.label }}</strong></div>
           </li>
         </ol>
 
@@ -178,7 +179,6 @@
         <footer class="delivery-actions">
           <div class="delivery-actions__note">
             <i class="fa fa-shield" aria-hidden="true"></i>
-            <span>内部确认不会冒充客户验收；不把“已生成”冒充“已安装”。</span>
           </div>
           <div v-if="stageOf(ticket) !== 'delivered'" class="delivery-actions__controls">
             <label v-if="ticket.custom_delivery?.kind === 'module' && ticket.custom_delivery.suggested_id === 'sunbird-attendance-custom'">
@@ -212,8 +212,11 @@
             <i class="fa fa-check-circle" aria-hidden="true"></i> 交付闭环完成
           </strong>
         </footer>
-      </article>
+      </details>
     </section>
+    </div>
+    </div>
+    </div>
   </div>
 </template>
 
@@ -251,6 +254,15 @@ const trialDeliveries = ref<StandardDeliveryRecord[]>([])
 const standardPolicy = ref<StandardDeliveryPolicy>({})
 const trialPolicy = ref<StandardDeliveryPolicy>({})
 const usersById = ref(new Map<number, MarketAdminUser>())
+const activeTab = ref('standard')
+const dataKnown = ref(false)
+const deliveryTabs = computed(() => [
+  { key: 'standard', label: '购买交付', count: standardDeliveries.value.length },
+  { key: 'trial', label: '体验交付', count: trialDeliveries.value.length },
+  { key: 'custom', label: '定制工单', count: tickets.value.length },
+  { key: 'enterprise', label: '企业客户', count: enterpriseUsers.value.length },
+  { key: 'devices', label: 'Mac 设备' },
+])
 const query = ref('')
 const stageFilter = ref('')
 const loading = ref(false)
@@ -275,17 +287,12 @@ const filteredTickets = computed(() => {
 })
 
 const summaryCards = computed(() => {
-  const count = (stages: string[]) => tickets.value.filter((ticket) => stages.includes(stageOf(ticket))).length
+  const value = (count: number) => dataKnown.value && !errorMessage.value ? count : '—'
   return [
-    { key: 'enterprise', label: '企业用户', value: enterpriseUsers.value.length, hint: '全部渲染企业卡片' },
-    { key: 'permanent', label: '永久购买账户', value: standardDeliveries.value.length, hint: '来源：购买账户 SSOT' },
-    { key: 'trial', label: '体验账户', value: trialDeliveries.value.length, hint: '¥99 · 30 天全功能体验' },
-    { key: 'standard', label: '永久待安装', value: standardDeliveries.value.filter((row) => row.status === 'pending_install').length, hint: 'Mac / Windows 通用安装包' },
-    { key: 'receipt', label: '待首次登录', value: standardDeliveries.value.filter((row) => row.status === 'pending_first_login').length, hint: '安装成功，等待账号登录' },
-    { key: 'done', label: '永久交付完成', value: standardDeliveries.value.filter((row) => row.status === 'completed').length, hint: '客户设备安装 + 首次登录' },
-    { key: 'internal', label: '内部本机排除', value: standardPolicy.value.internal_device_ids_configured || 0, hint: standardPolicy.value.internal_device_exclusion_enabled ? '已登记，不计客户交付' : '尚未登记内部设备' },
-    { key: 'custom', label: '定制交付工单', value: tickets.value.length, hint: '首次内含 / 交付后新增' },
-    { key: 'production', label: '生产进行中', value: count(['queued', 'production']), hint: '等待产物与质量证据' },
+    { key: 'standard', label: '购买待安装', value: value(standardDeliveries.value.filter(row => row.status === 'pending_install').length) },
+    { key: 'receipt', label: '购买待首次登录', value: value(standardDeliveries.value.filter(row => row.status === 'pending_first_login').length) },
+    { key: 'custom', label: '定制待验收', value: value(tickets.value.filter(ticket => stageOf(ticket) === 'acceptance').length) },
+    { key: 'done', label: '购买交付完成', value: value(standardDeliveries.value.filter(row => row.status === 'completed').length) },
   ]
 })
 
@@ -313,6 +320,7 @@ function extractStandardPolicy(raw: unknown): StandardDeliveryPolicy {
 }
 
 async function loadAll() {
+  if (loading.value) return
   loading.value = true
   errorMessage.value = ''
   try {
@@ -322,6 +330,7 @@ async function loadAll() {
       xcmaxAdminApi.listStandardDeliveries(),
       xcmaxAdminApi.listTrialDeliveries(),
     ])
+    dataKnown.value = true
     tickets.value = extractTickets(deliveryResult)
     enterpriseUsers.value = enterpriseAccounts
     standardDeliveries.value = extractStandardDeliveries(standardResult)
@@ -343,6 +352,7 @@ async function loadAll() {
 }
 
 async function focusCustomDeliveries(user: MarketAdminUser) {
+  activeTab.value = 'custom'
   query.value = String(user.company || user.username || '')
   stageFilter.value = ''
   await nextTick()

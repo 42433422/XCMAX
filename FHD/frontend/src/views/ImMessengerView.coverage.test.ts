@@ -1,3 +1,4 @@
+vi.mock('@/components/im/MatureChat.vue', async () => ({ default: (await import('@/test-stubs/MatureChatStub.vue')).default }))
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { ref, nextTick } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -360,10 +361,10 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     const wrapper = await mountView()
     await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
-    expect(wrapper.find('.im-chat-head').exists()).toBe(true)
-    expect(wrapper.findAll('.im-bubble-row')).toHaveLength(2)
-    expect(wrapper.findAll('.im-bubble-row.mine')).toHaveLength(1)
-    expect(wrapper.findAll('.im-bubble-row.theirs')).toHaveLength(1)
+    expect(wrapper.find('.chat-header').exists()).toBe(true)
+    expect(wrapper.findAll('.chat-row')).toHaveLength(2)
+    expect(wrapper.findAll('.chat-row.mine')).toHaveLength(1)
+    expect(wrapper.findAll('.chat-row.theirs')).toHaveLength(1)
   })
 
   it('对方消息显示发送者名称', async () => {
@@ -373,7 +374,7 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     const wrapper = await mountView()
     await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
-    expect(wrapper.find('.im-sender').text()).toBe('客服')
+    expect(wrapper.find('.chat-sender').text()).toBe('客服')
   })
 
   it('对方消息无 sender_display_name 时显示用户+id', async () => {
@@ -383,7 +384,7 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     const wrapper = await mountView()
     await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
-    expect(wrapper.find('.im-sender').text()).toBe('用户2')
+    expect(wrapper.find('.chat-sender').text()).toBe('用户2')
   })
 
   it('消息数量达到 50 时显示加载更多按钮', async () => {
@@ -397,7 +398,7 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     const wrapper = await mountView()
     await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
-    expect(wrapper.find('.im-load-more').exists()).toBe(true)
+    expect(wrapper.find('.chat-load-older').exists()).toBe(true)
   })
 
   it('点击加载更多按钮加载历史消息', async () => {
@@ -415,12 +416,12 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     const wrapper = await mountView()
     await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
-    await wrapper.find('.im-load-more').trigger('click')
+    await wrapper.find('.chat-load-older').trigger('click')
     await flushPromises()
     expect(imMocks.fetchImMessages).toHaveBeenLastCalledWith(1, { limit: 50, beforeId: 100 })
   })
 
-  it('加载更早消息后保持当前对话内容的视口位置', async () => {
+  it('加载更早消息后向成熟组件提供完整历史', async () => {
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
     imMocks.fetchImContacts.mockResolvedValue([])
     const initialMessages = Array.from({ length: 50 }, (_, i) => ({
@@ -435,17 +436,11 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     const wrapper = await mountView()
     await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
-    const scrollContainer = wrapper.find('.im-messages').element as HTMLElement
-    Object.defineProperty(scrollContainer, 'scrollHeight', {
-      configurable: true,
-      get: () => wrapper.findAll('.im-bubble-row').length * 40,
-    })
-    scrollContainer.scrollTop = 120
-    await wrapper.find('.im-load-more').trigger('click')
+    await wrapper.find('.chat-load-older').trigger('click')
     await flushPromises()
 
-    expect(wrapper.findAll('.im-bubble-row')).toHaveLength(60)
-    expect(scrollContainer.scrollTop).toBe(520)
+    expect(wrapper.findAll('.chat-row')).toHaveLength(60)
+    expect(wrapper.findAll('.chat-row')[0].text()).toContain(sampleMessage.body)
   })
 
   // ===== 4. 发送消息 =====
@@ -464,7 +459,7 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     const wrapper = await mountView()
     await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
-    const input = wrapper.find('.im-compose-input')
+    const input = wrapper.find('.chat-input')
     await input.setValue('hello')
     await wrapper.find('form').trigger('submit.prevent')
     await flushPromises()
@@ -489,7 +484,7 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     imMocks.fetchImContacts.mockResolvedValue([normalContact])
     const wrapper = await mountView()
     // 没有会话可点,直接尝试提交
-    const input = wrapper.find('.im-compose-input')
+    const input = wrapper.find('.chat-input')
     if (input.exists()) {
       await input.setValue('hello')
       await wrapper.find('form').trigger('submit.prevent')
@@ -506,7 +501,7 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     const wrapper = await mountView()
     await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
-    const input = wrapper.find('.im-compose-input')
+    const input = wrapper.find('.chat-input')
     await input.setValue('hello')
     await wrapper.find('form').trigger('submit.prevent')
     await flushPromises()
@@ -521,7 +516,7 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     const wrapper = await mountView()
     await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
-    const input = wrapper.find('.im-compose-input')
+    const input = wrapper.find('.chat-input')
     await input.setValue('hello')
     await wrapper.find('form').trigger('submit.prevent')
     await flushPromises()
@@ -738,7 +733,7 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     const wrapper = await mountView()
     await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
-    await wrapper.find('.im-load-more').trigger('click')
+    await wrapper.find('.chat-load-older').trigger('click')
     await flushPromises()
     expect(toastMocks.showAppToast).toHaveBeenCalledWith('历史加载失败', 'error')
   })
@@ -754,7 +749,7 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     const wrapper = await mountView()
     await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
-    await wrapper.find('.im-load-more').trigger('click')
+    await wrapper.find('.chat-load-older').trigger('click')
     await flushPromises()
     expect(toastMocks.showAppToast).toHaveBeenCalledWith('加载历史失败', 'error')
   })
@@ -970,7 +965,7 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     })
     await flushPromises()
     // 不应重复添加
-    expect(wrapper.findAll('.im-bubble-row')).toHaveLength(1)
+    expect(wrapper.findAll('.chat-row')).toHaveLength(1)
   })
 
   it('WebSocket 接收自己发送的消息时不播放 incoming 音效', async () => {
@@ -1081,46 +1076,14 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     expect(avatar.attributes('src')).toBe('/api/im/users/10/avatar')
   })
 
-  it('formatTime 处理 null 返回空字符串', async () => {
+  it('passes nullable timestamps to the mature component without inventing a time', async () => {
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
     imMocks.fetchImContacts.mockResolvedValue([])
     imMocks.fetchImMessages.mockResolvedValue([{ ...sampleMessage, created_at: null }])
     const wrapper = await mountView()
     await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
-    const time = wrapper.find('.im-bubble time')
-    expect(time.text()).toBe('')
-  })
-
-  it('formatTime 处理有效 ISO 字符串返回本地时间', async () => {
-    imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
-    imMocks.fetchImContacts.mockResolvedValue([])
-    imMocks.fetchImMessages.mockResolvedValue([sampleMessage])
-    const wrapper = await mountView()
-    await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
-    await flushPromises()
-    const time = wrapper.find('.im-bubble time')
-    expect(time.text()).not.toBe('')
-  })
-
-  it('formatTime 在 toLocaleString 抛错时返回原始 iso 字符串', async () => {
-    const realToLocaleString = Date.prototype.toLocaleString
-    Date.prototype.toLocaleString = function () {
-      throw new Error('locale error')
-    }
-    try {
-      imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
-      imMocks.fetchImContacts.mockResolvedValue([])
-      imMocks.fetchImMessages.mockResolvedValue([{ ...sampleMessage, created_at: 'invalid-iso' }])
-      const wrapper = await mountView()
-      await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
-      await flushPromises()
-      const time = wrapper.find('.im-bubble time')
-      // 抛错时返回原始 iso 字符串
-      expect(time.text()).toBe('invalid-iso')
-    } finally {
-      Date.prototype.toLocaleString = realToLocaleString
-    }
+    expect(wrapper.findComponent({ name: 'MatureChatStub' }).props('rows')[0].at).toBeNull()
   })
 
   it('activeTitle 在会话不存在时返回默认值', async () => {
@@ -1131,7 +1094,7 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
     // activeTitle 应为会话标题
-    expect(wrapper.find('.im-chat-title').text()).toBe('企业专属客服')
+    expect(wrapper.find('.chat-title').text()).toBe('企业专属客服')
   })
 
   // ===== 11. 边界场景 =====
@@ -1165,7 +1128,7 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     const rawState = (wrapper.vm as unknown as { $: { devtoolsRawSetupState: Record<string, { value: unknown }> } }).$.devtoolsRawSetupState
     rawState.messages.value = []
     imMocks.fetchImMessages.mockClear()
-    await wrapper.find('.im-load-more').trigger('click')
+    await wrapper.find('.chat-load-older').trigger('click')
     await flushPromises()
     // messages 为空时直接返回,不调用 fetchImMessages
     expect(imMocks.fetchImMessages).not.toHaveBeenCalled()
@@ -1184,7 +1147,7 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     await flushPromises()
     const rawState = (wrapper.vm as unknown as { $: { devtoolsRawSetupState: Record<string, { value: unknown }> } }).$.devtoolsRawSetupState
     const beforeCount = (rawState.messages.value as (typeof sampleMessage)[]).length
-    await wrapper.find('.im-load-more').trigger('click')
+    await wrapper.find('.chat-load-older').trigger('click')
     await flushPromises()
     expect((rawState.messages.value as (typeof sampleMessage)[]).length).toBe(beforeCount)
   })
@@ -1204,10 +1167,10 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     const items = wrapper.findAll('.im-conv-item:not(.im-conv-item--pinned)')
     await items[0].trigger('click')
     await flushPromises()
-    expect(wrapper.find('.im-chat-title').text()).toBe('企业专属客服')
+    expect(wrapper.find('.chat-title').text()).toBe('企业专属客服')
     await items[1].trigger('click')
     await flushPromises()
-    expect(wrapper.find('.im-chat-title').text()).toBe('另一个会话')
+    expect(wrapper.find('.chat-title').text()).toBe('另一个会话')
   })
 
   it('发送按钮在 busy 时禁用', async () => {
@@ -1220,7 +1183,7 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     const rawState = (wrapper.vm as unknown as { $: { devtoolsRawSetupState: Record<string, { value: unknown }> } }).$.devtoolsRawSetupState
     rawState.busy.value = true
     await nextTick()
-    const submitBtn = wrapper.find('button[type="submit"]')
+    const submitBtn = wrapper.find('.chat-send')
     expect(submitBtn.attributes('disabled')).toBeDefined()
   })
 
@@ -1231,7 +1194,7 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     const wrapper = await mountView()
     await wrapper.find('.im-conv-item:not(.im-conv-item--pinned)').trigger('click')
     await flushPromises()
-    const submitBtn = wrapper.find('button[type="submit"]')
+    const submitBtn = wrapper.find('.chat-send')
     expect(submitBtn.attributes('disabled')).toBeDefined()
   })
 

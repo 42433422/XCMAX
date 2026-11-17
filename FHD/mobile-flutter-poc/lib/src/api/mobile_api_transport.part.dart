@@ -2,16 +2,11 @@ part of 'mobile_api.dart';
 
 abstract class _ApiTransportBase extends _ApiSessionCoreBase {
   _ApiTransportBase({
-    MobileApiConfig config = const MobileApiConfig(),
-    MobileSessionStore? sessionStore,
-    HttpClient? httpClient,
-    PlatformCredentialCipher? credentialCipher,
-  }) : super(
-          config: config,
-          sessionStore: sessionStore,
-          httpClient: httpClient,
-          credentialCipher: credentialCipher,
-        );
+    super.config,
+    super.sessionStore,
+    super.httpClient,
+    super.credentialCipher,
+  });
 
   Future<MobileEnvelope<Map<String, Object?>>> mobileHealth() async {
     final json = await getJson(XcagiMobileEndpoints.health);
@@ -249,6 +244,8 @@ abstract class _ApiTransportBase extends _ApiSessionCoreBase {
     String? baseUrl,
     String? authToken,
     bool allowAuthRefresh = true,
+    String? expectedConnectionBase,
+    String activeModId = '',
   }) async {
     final generation = _authGeneration;
     Future<Map<String, Object?>> perform() async {
@@ -269,7 +266,13 @@ abstract class _ApiTransportBase extends _ApiSessionCoreBase {
         baseUrl: effectiveBase,
         authToken: authToken,
       );
-      if (generation != _authGeneration) {
+      if (expectedConnectionBase != null) request.followRedirects = false;
+      if (activeModId.isNotEmpty) {
+        request.headers.set('X-XCAGI-Active-Mod-Id', activeModId);
+      }
+      final connectionChanged = expectedConnectionBase != null &&
+          await resolveSessionBaseUrl() != expectedConnectionBase;
+      if (generation != _authGeneration || connectionChanged) {
         unawaited(request.done.then<void>((_) {}, onError: (Object _) {}));
         request.abort();
         throw const MobileApiException(
@@ -284,7 +287,11 @@ abstract class _ApiTransportBase extends _ApiSessionCoreBase {
         request.add(bytes);
       }
       final response = await _readJsonResponse(request);
-      if (generation != _authGeneration) {
+      final responseBase =
+          expectedConnectionBase == null ? null : await resolveSessionBaseUrl();
+      if (generation != _authGeneration ||
+          (expectedConnectionBase != null &&
+              responseBase != expectedConnectionBase)) {
         throw const MobileApiException(
           statusCode: 409,
           message: '登录状态已变更，请重试',
@@ -513,6 +520,7 @@ String _errorMessageFromBody(Map<String, Object?> body, int status) {
   final candidates = <String>[
     (body['message'] ?? '').toString().trim(),
     (detail['message'] ?? '').toString().trim(),
+    (body['detail'] is String ? body['detail'] : '').toString().trim(),
     (errorMap['message'] ?? '').toString().trim(),
     (body['error'] is String ? body['error'] : '').toString().trim(),
   ];
@@ -530,7 +538,9 @@ String _errorCodeFromBody(Map<String, Object?> body) {
   if (nested is String && nested.trim().isNotEmpty) return nested.trim();
   final error = _asObjectMap(body['error']);
   final fromError = error['code'];
-  if (fromError is String && fromError.trim().isNotEmpty) return fromError.trim();
+  if (fromError is String && fromError.trim().isNotEmpty) {
+    return fromError.trim();
+  }
   return '';
 }
 

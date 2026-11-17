@@ -1,7 +1,6 @@
 <template>
   <section class="cs-card" aria-label="同根因公共修复">
     <h3 class="cs-card-title">复用同根因公共修复</h3>
-    <p class="cs-hint">适用于相同源版本和问题的公共修复。确认关联后，本客户仍须独立完成正式版本绑定和验收。</p>
     <button type="button" class="cs-btn" :disabled="busy" @click="findCandidates">查找可复用修复</button>
     <p v-if="error" role="alert" class="cs-error-text">{{ error }}</p>
     <p v-if="loaded && !candidates.length" class="cs-state">未发现符合当前原单版本与问题的公共修复。</p>

@@ -8,7 +8,7 @@ String mobileErrorText(
   if (error == null) return fallback;
   if (error is MobileApiException) {
     return mobileProductErrorMessage(
-      'HTTP ${error.statusCode} ${error.message}',
+      'HTTP ${error.statusCode} ${error.errorCode} ${error.message}',
       fallback,
     );
   }
@@ -21,9 +21,15 @@ String mobileProductErrorMessage(String? raw, String fallback) {
   final lower = message.toLowerCase();
   final status = _httpStatusFromMessage(message);
 
+  if (lower.contains('lan_blocked') || message.contains('局域网模式拒绝')) {
+    return '服务器限制了当前网络访问，请连接企业网络或联系管理员开通手机访问';
+  }
+  if (message.contains('配对码无效') || message.contains('缺少配对码')) {
+    return '配对码无效或已过期，请在电脑端刷新二维码后重试';
+  }
   switch (status) {
     case 400:
-      return '配对码无效或已过期，请在电脑端刷新二维码后重试';
+      return '提交的内容有误，请检查后重试';
     case 401:
       return '登录已过期，请重新登录或重新扫码绑定';
     case 403:
@@ -46,9 +52,6 @@ String mobileProductErrorMessage(String? raw, String fallback) {
 
   if (message.contains('未授权')) {
     return '登录已过期，请重新登录或重新扫码绑定';
-  }
-  if (message.contains('配对码无效') || message.contains('缺少配对码')) {
-    return '配对码无效或已过期，请在电脑端刷新二维码后重试';
   }
   if (message.contains('拒绝') ||
       message.contains('权限不足') ||

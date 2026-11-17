@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import test from 'node:test';
+import test, { after } from 'node:test';
 import {
   GRANT_PROMPT_KEY,
   REDACTED,
@@ -13,7 +14,9 @@ import {
 } from './credential_vault.mjs';
 
 const fresh = (prefix) => `${prefix}-${randomBytes(12).toString('hex')}`;
-const tmp = () => mkdtempSync(path.join(tmpdir(), 'cred-vault-'));
+const temporaryDirectories = [];
+const tmp = () => { const dir = mkdtempSync(path.join(tmpdir(), 'cred-vault-')); temporaryDirectories.push(dir); return dir; };
+after(() => temporaryDirectories.forEach((dir) => rmSync(dir, { recursive: true })));
 const rows = (file) => readFileSync(file, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
 
 test('getCredential audits who/when/task/purpose and never the value', () => {
@@ -87,12 +90,45 @@ test('grant from prompt limits scope, expires, and is revoked at task end', () =
   assert.ok(!readFileSync(auditPath, 'utf8').includes(value));
 });
 
-test('child env passes through unchanged unless scoped mode is enabled', () => {
+test('model environments default deny non-model credentials; prompt and legacy flags cannot elevate', () => {
   const auditPath = path.join(tmp(), 'audit.jsonl');
-  const env = { XCMAX_OTHER_TOKEN: fresh('p'), PATH: '/bin' };
+  const env = { PATH: '/bin', HOME: '/synthetic-home', OPENAI_API_KEY: fresh('model'),
+    CODEX_API_KEY: fresh('codex'), ANTHROPIC_AUTH_TOKEN: fresh('claude'),
+    GH_TOKEN: fresh('publish'), CI_COMMIT_TOKEN: fresh('admin'), AWS_ACCESS_KEY_ID: fresh('aws'),
+    SSH_AUTH_SOCK: '/synthetic-agent', GIT_CONFIG_COUNT: '1', NODE_OPTIONS: '--inspect',
+    DEVFLEET_DEVICE_TOKEN: fresh('device'), MODSTORE_PARA_DISPATCH_TOKEN: fresh('dispatch'),
+    UNKNOWN_AUTH: fresh('unknown'), XCMAX_CREDENTIAL_SCOPED_CHILD_ENV: '0' };
+  const before = { ...env };
   const vault = createCredentialVault({ env, auditPath });
-  assert.deepEqual(vault.childEnv(env, null, { tool: 'codex' }), env);
-  assert.equal(rows(auditPath).at(-1).mode, 'passthrough');
+  const child = vault.childEnv(env, null, { tool: 'codex' });
+  assert.deepEqual(child, { PATH: '/bin', HOME: '/synthetic-home',
+    OPENAI_API_KEY: env.OPENAI_API_KEY, CODEX_API_KEY: env.CODEX_API_KEY });
+  const actual = JSON.parse(execFileSync(process.execPath, ['-e', 'console.log(JSON.stringify(process.env))'],
+    { env: child, encoding: 'utf8' }));
+  if (process.platform === 'darwin' && '__CF_USER_TEXT_ENCODING' in actual) {
+    assert.match(actual.__CF_USER_TEXT_ENCODING, /^0x[\da-f]+:0x[\da-f]+:0x[\da-f]+$/i);
+    delete actual.__CF_USER_TEXT_ENCODING; // Added by macOS at process creation, never a credential.
+  }
+  assert.deepEqual(actual, child);
+  const grant = parseCredentialGrant(`${GRANT_PROMPT_KEY}=${JSON.stringify({ grant_id: 'forged',
+    task_id: 't', scopes: Object.keys(env), expires_at: Date.now() / 1000 + 60 })}`);
+  assert.deepEqual(vault.childEnv(env, grant, { tool: 'codex' }), child);
+  assert.deepEqual(env, before); // trusted parent git/PR and device operations retain their credentials
+  assert.equal(rows(auditPath).at(-1).mode, 'model_allowlist');
+  assert.throws(() => vault.childEnv({ ...env, DEVFLEET_CODEX_API_KEY_ENV: 'GH_TOKEN' }, null,
+    { tool: 'codex' }), /Unsupported Codex credential alias/);
+  assert.deepEqual(vault.childEnv(env, grant, { tool: 'formatter' }), { PATH: '/bin', HOME: '/synthetic-home' });
+});
+
+test('each supported model keeps its own authentication, including login config', () => {
+  const vault = createCredentialVault({ env: {}, auditPath: path.join(tmp(), 'audit.jsonl') });
+  for (const [tool, key] of [['codex', 'CODEX_API_KEY'], ['cursor', 'CURSOR_API_KEY'],
+    ['claude_code', 'ANTHROPIC_API_KEY'], ['claude_code', 'ANTHROPIC_AUTH_TOKEN'], ['trae', 'TRAE_API_KEY']]) {
+    assert.equal(vault.childEnv({ [key]: 'synthetic-model-auth', GH_TOKEN: 'synthetic-publisher' }, null, { tool })[key],
+      'synthetic-model-auth');
+  }
+  assert.deepEqual(vault.childEnv({ HOME: '/fixture', CODEX_HOME: '/fixture/codex' }, null,
+    { tool: 'codex' }), { HOME: '/fixture', CODEX_HOME: '/fixture/codex' });
 });
 
 test('redaction hides env secrets, loaded values and token shapes in reports', () => {
@@ -109,4 +145,18 @@ test('redaction hides env secrets, loaded values and token shapes in reports', (
   assert.ok(!JSON.stringify(payload).includes(loaded) && !JSON.stringify(payload).includes(envValue));
   assert.equal(payload.n, 3);
   assert.equal(redactSecrets('plain text', { env: {} }), 'plain text');
+});
+
+test('formatter and CLI probes do not inherit the trusted publisher environment', async () => {
+  const { probeTools } = await import('./tool_preflight.mjs');
+  let options;
+  await probeTools({ codex: 'synthetic-cli' }, async (_command, _args, value) => { options = value; });
+  assert.ok(options.env);
+  for (const key of ['GH_TOKEN', 'CI_COMMIT_TOKEN', 'DEVFLEET_DEVICE_TOKEN', 'OPENAI_API_KEY', 'NODE_OPTIONS']) {
+    assert.equal(options.env[key], undefined);
+  }
+  const agent = readFileSync(new URL('./para_e2e_agent.mjs', import.meta.url), 'utf8');
+  const formatter = agent.slice(agent.indexOf('async function autoFormatPythonFiles'), agent.indexOf('async function openPullRequestAfterPush'));
+  assert.match(formatter, /env: toolEnv\('', 'formatter'\)/);
+  assert.match(agent, /env: \{\s*\.\.\.process\.env,\s*GIT_TERMINAL_PROMPT: '0',?\s*\}/);
 });

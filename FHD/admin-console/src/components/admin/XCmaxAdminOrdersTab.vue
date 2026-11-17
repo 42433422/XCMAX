@@ -64,7 +64,9 @@
       </div>
     </div>
 
-    <div class="admin-card">
+    <AdminSectionNav v-model="section" label="订单分区" :items="[{ value: 'orders', label: '订单列表' }, { value: 'refunds', label: '退款审核' }]" />
+    <div class="admin-pane" tabindex="0" aria-label="订单内容">
+    <div v-show="section === 'orders'" class="admin-card">
       <div class="card-header">
         <i class="fa fa-table card-icon" aria-hidden="true"></i>
         <h3>订单列表</h3>
@@ -104,7 +106,7 @@
       </table>
     </div>
 
-    <div class="admin-card">
+    <div v-show="section === 'refunds'" class="admin-card">
       <div class="card-header">
         <i class="fa fa-undo card-icon" aria-hidden="true"></i>
         <h3>退款审核</h3>
@@ -127,10 +129,13 @@
         </tbody>
       </table>
     </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import AdminSectionNav from './AdminSectionNav.vue'
+const section = ref('orders')
 import { onMounted, ref } from 'vue'
 import { statusLabel } from '../../utils/statusLabel'
 import { xcmaxAdminApi } from '@/api/xcmaxAdmin'

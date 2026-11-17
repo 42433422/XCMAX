@@ -1,3 +1,4 @@
+import { getAppBase } from '@/utils/apiBase'
 import {
   createRouter,
   createWebHistory,
@@ -16,6 +17,7 @@ import { readActiveExtensionModId } from '@/utils/erpDomainPaths'
 import { isProtectedClientModId } from '@/constants/protectedMods'
 import { fetchProductSku, isEnterpriseEdition } from '@/utils/productSku'
 import {
+  captureAuthSession,
   consumeDesktopSessionBootstrapHint,
   hasRecentEnterpriseSessionHint,
   validateEnterpriseSessionCached,
@@ -43,6 +45,7 @@ function normalizeDutyRosterGraphView(raw: unknown): string {
   if (token === 'hub' || token === 'center' || token === '中心' || token === '中心图') return 'hub'
   if (token === 'legacy-area' || token === 'area' || token === '物理' || token === '物理分区') return 'legacy-area'
   if (token === 'client' || token === 'workshop' || token === '车间' || token === '客户端车间') return 'client'
+  if (token === 'loop') return 'loop'
   return DEFAULT_DUTY_ROSTER_GRAPH_VIEW
 }
 
@@ -60,7 +63,7 @@ if (import.meta.env.VITE_XCMAX_ADMIN_CONSOLE === '1') {
 const routes = resolveInitialRoutes(allRoutes)
 
 const router = createRouter({
-  history: createWebHistory(import.meta.env.BASE_URL),
+  history: createWebHistory(getAppBase()),
   routes,
 })
 router.beforeEach(async (to, _from, finish) => {
@@ -466,9 +469,24 @@ router.beforeEach(async (to, _from, finish) => {
 })
 
 if (typeof window !== 'undefined') {
-  window.addEventListener('xcagi:enterprise-session-invalid', () => {
+  let checkingAdminSession = false
+  window.addEventListener('xcagi:enterprise-session-invalid', async () => {
     const current = router.currentRoute.value
     if (current.meta?.publicAccess || current.name === 'login') return
+    // Market credentials can expire independently of the admin console session.
+    if (isAdminConsoleSpa()) {
+      if (checkingAdminSession) return
+      checkingAdminSession = true
+      const isCurrent = captureAuthSession()
+      try {
+        if (await validateEnterpriseSessionCached(true)) return
+        if (!isCurrent() || router.currentRoute.value !== current) return
+      } catch {
+        return
+      } finally {
+        checkingAdminSession = false
+      }
+    }
     void router.replace({ name: 'login', query: { redirect: current.fullPath && current.fullPath !== '/login' ? current.fullPath : '/' } })
   })
 }

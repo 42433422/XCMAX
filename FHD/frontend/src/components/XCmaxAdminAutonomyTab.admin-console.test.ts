@@ -3,6 +3,7 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import XCmaxAdminAutonomyTab from '../../../admin-console/src/components/admin/XCmaxAdminAutonomyTab.vue'
 import { xcmaxAdminApi } from '@/api/xcmaxAdmin'
 
+vi.mock('../../../admin-console/src/components/admin/MaintenanceExecutionPanel.vue', () => ({ default: { template: '<section>维护执行</section>' } }))
 vi.mock('@/api/xcmaxAdmin', () => ({ xcmaxAdminApi: { fetchAutonomyOverview: vi.fn(), fetchAutonomyGithubItems: vi.fn(), fetchAutonomyCrossTierGate: vi.fn(), fetchAutonomyAuditCrossTier: vi.fn(), forceSelfMaintenanceRun: vi.fn() } }))
 const overview = () => ({ pending: { count: 3 }, operating_metrics: { windows: { '30': { action_count: 10, blocked_count: 1, veto_rate: 10 } }, veto_rate_trend_30d: [{ veto_rate: 4 }, { veto_rate: 3 }] }, deploy_events: { items: [] }, audit: { items: [] } })
 beforeEach(() => {

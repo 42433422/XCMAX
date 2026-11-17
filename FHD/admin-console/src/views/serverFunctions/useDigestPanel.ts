@@ -29,7 +29,7 @@ interface DigestDetailEnvelope {
   data?: DigestRow | null
 }
 
-type TabKey = 'modules' | 'digests' | 'allHands'
+type TabKey = 'modules' | 'digests'
 
 /** 每日摘要存档 + 身份码徽章域逻辑（自 ServerFunctionsView.vue 拆出，行为零变更）。 */
 export function useDigestPanel(activeTab: Ref<TabKey>) {

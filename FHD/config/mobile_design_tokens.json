@@ -37,6 +37,7 @@
       "reply_bg_dark": "#26262E"
     },
     "neutral_light": {
+      "page": "#F5F6FA",
       "n00": "#FFFFFF",
       "n50": "#F5F6F7",
       "n100": "#E8E9EB",
@@ -78,6 +79,7 @@
   "elevation": {
     "none": 0,
     "level1": 1,
+    "bottom_navigation": 1.5,
     "level2": 3,
     "level3": 8
   },
@@ -89,14 +91,15 @@
     "headline_medium": { "size": 20, "line_height": 28, "weight": "semibold" },
     "headline_small": { "size": 18, "line_height": 26, "weight": "semibold" },
     "title_large": { "size": 18, "line_height": 24, "weight": "semibold" },
-    "title_medium": { "size": 17, "line_height": 22, "weight": "medium" },
+    "title_medium": { "size": 17, "line_height": 22, "weight": "semibold" },
     "title_small": { "size": 15, "line_height": 20, "weight": "medium" },
     "body_large": { "size": 16, "line_height": 22, "weight": "regular" },
     "body_medium": { "size": 15, "line_height": 21, "weight": "regular" },
-    "body_small": { "size": 14, "line_height": 19, "weight": "regular" },
+    "body_small": { "size": 13, "line_height": 18, "weight": "regular" },
     "label_large": { "size": 14, "line_height": 18, "weight": "medium" },
     "label_medium": { "size": 13, "line_height": 17, "weight": "medium" },
-    "label_small": { "size": 11, "line_height": 14, "weight": "medium" }
+    "label_small": { "size": 12, "line_height": 17, "weight": "semibold" }
   },
+  "motion": { "press_ms": 100, "feedback_ms": 160, "standard_ms": 180, "navigation_ms": 220, "reduced_ms": 0 },
   "platform_overrides": {}
 }

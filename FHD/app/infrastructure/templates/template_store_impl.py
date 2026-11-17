@@ -287,13 +287,12 @@ class FileSystemTemplateStore(TemplateStorePort):
         return out
 
     def list_templates(self) -> list[dict]:
-        # Real files only; bundled standard forms contain headers without customer data.
+        # 自定义模板以数据库为准；固定 legacy 兼容项继续受租户隐藏规则控制。
+        # 磁盘扫描仅用于导入候选与 id 解析，不能让已删除的数据库模板重新出现。
         templates = self._db_templates()
-        templates.extend(self._discover_excel_templates())
-        templates.extend(self._discover_word_templates())
         templates.extend([t for t in self._legacy_templates() if t.get("exists")])
 
-        # 按文件路径去重，避免 legacy 与 fs_scan 重复展示
+        # 按文件路径去重，避免 legacy 与数据库记录重复展示
         deduped: list[dict] = []
         seen = set()
         for tpl in templates:

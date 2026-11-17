@@ -266,12 +266,6 @@ class MobileAutonomyController {
         case MobileAutonomyActionType.noop:
           return MobileAutonomyActionResult(action: action, ok: true);
 
-        default:
-          return MobileAutonomyActionResult(
-            action: action,
-            ok: false,
-            error: 'unsupported_action_type: ${action.type.name}',
-          );
       }
     } catch (e) {
       return MobileAutonomyActionResult(

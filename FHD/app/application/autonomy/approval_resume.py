@@ -7,13 +7,15 @@ import os
 import re
 import threading
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, cast
+from typing import Any, Callable, Iterator, cast
 
 from app.domain.autonomy.audit_log import append_autonomy_audit
 from app.domain.autonomy.autonomy_guard import RiskDecision, evaluate_risk
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.process_lock import exclusive_file_lock
 
 _FHD_ROOT = Path(__file__).resolve().parents[3]
 _DEFAULT_LEDGER_PATH = _FHD_ROOT / "metrics" / "autonomy-approval-ledger.jsonl"
@@ -47,6 +49,26 @@ def _ledger_path() -> Path:
     return _DEFAULT_LEDGER_PATH
 
 
+@contextmanager
+def _ledger_transaction() -> Iterator[None]:
+    """Serialize ledger transitions across threads/workers, never remote execution."""
+    path = _ledger_path()
+    # A separate stable lock survives append opens; the shared primitive is reentrant.
+    with _LOCK:
+        try:
+            with exclusive_file_lock(
+                path.with_name(path.name + ".lock"),
+                blocking=True,
+                timeout=10,
+                reject_symlink=True,
+            ):
+                yield
+        except OSError as exc:
+            raise ApprovalStateError(
+                "approval ledger unavailable; retry after checking state"
+            ) from exc
+
+
 def _iso_now() -> str:
     return datetime.now(UTC).isoformat()
 
@@ -72,7 +94,7 @@ def _append_ledger(record: dict[str, Any]) -> dict[str, Any]:
     row = {**record, "timestamp": str(record.get("timestamp") or _iso_now())}
     path = _ledger_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    with _LOCK, path.open("a", encoding="utf-8") as stream:
+    with _ledger_transaction(), path.open("a", encoding="utf-8") as stream:
         stream.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
     return row
 
@@ -82,7 +104,7 @@ def _read_ledger() -> list[dict[str, Any]]:
     if not path.is_file():
         return []
     result: list[dict[str, Any]] = []
-    with _LOCK, path.open("r", encoding="utf-8") as stream:
+    with _ledger_transaction(), path.open("r", encoding="utf-8") as stream:
         for line in stream:
             try:
                 item = json.loads(line)
@@ -117,6 +139,7 @@ def register_action_executor(
         _EXECUTORS[str(name)] = executor
 
 
+@_ledger_transaction()
 def record_pending_action(
     *,
     action: str,
@@ -210,6 +233,7 @@ def _check_retry_approval(latest: dict[str, Any], approval_id: str) -> None:
         raise ApprovalStateError("callback does not belong to the current release retry")
 
 
+@_ledger_transaction()
 def mark_approval_requested(
     action_id: str,
     *,
@@ -297,14 +321,15 @@ def _execute_self_maintenance_merge(payload: dict[str, Any]) -> Any:
 register_action_executor("self_maintenance_merge", _execute_self_maintenance_merge)
 
 
-def resume_action(
+@_ledger_transaction()
+def _claim_action(
     action_id: str,
     *,
     approver: str,
     approval_id: str = "",
     executor: Callable[[dict[str, Any]], Any] | None = None,
     defer_execution: bool = False,
-) -> dict[str, Any]:
+) -> tuple[dict[str, Any], Callable[[dict[str, Any]], Any] | None]:
     latest = _latest(action_id)
     if latest is None:
         raise ApprovalStateError(f"pending action not found: {action_id}")
@@ -318,7 +343,6 @@ def resume_action(
     if not actor:
         raise ApprovalStateError("approver is required")
     action = str(latest.get("action") or "")
-    payload = latest.get("payload") if isinstance(latest.get("payload"), dict) else {}
     decision = evaluate_risk(
         action,
         {
@@ -334,7 +358,7 @@ def resume_action(
         raise ApprovalStateError(f"autonomy_guard still denied action: {decision.reason}")
     chosen: Callable[[dict[str, Any]], Any] | None = None
     if not defer_execution:
-        chosen = executor or _ACTION_EXECUTORS.pop(action_id, None)
+        chosen = executor or _ACTION_EXECUTORS.get(action_id)
         if chosen is None:
             chosen = _EXECUTORS.get(str(latest.get("executor_name") or ""))
         if chosen is None:
@@ -365,8 +389,31 @@ def resume_action(
             "metadata": {"approval_id": approval_id},
         }
     )
+    if not defer_execution:
+        _ACTION_EXECUTORS.pop(action_id, None)
+    return approved_row, chosen
+
+
+def resume_action(
+    action_id: str,
+    *,
+    approver: str,
+    approval_id: str = "",
+    executor: Callable[[dict[str, Any]], Any] | None = None,
+    defer_execution: bool = False,
+) -> dict[str, Any]:
+    approved_row, chosen = _claim_action(
+        action_id,
+        approver=approver,
+        approval_id=approval_id,
+        executor=executor,
+        defer_execution=defer_execution,
+    )
     if defer_execution:
         return approved_row
+    raw_payload = approved_row.get("payload")
+    payload = raw_payload if isinstance(raw_payload, dict) else {}
+    actor = approved_row["approver"]
     assert chosen is not None
     try:
         raw_outcome = chosen(
@@ -389,6 +436,7 @@ def resume_action(
     )
 
 
+@_ledger_transaction()
 def complete_action(
     action_id: str,
     *,
@@ -460,6 +508,7 @@ def complete_action(
     return row
 
 
+@_ledger_transaction()
 def reject_action(
     action_id: str,
     *,

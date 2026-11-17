@@ -266,7 +266,25 @@ def test_db_delete_does_not_resurrect_as_scanned_file(template_app, tmp_path, fo
     other_rows = client.get("/api/templates", headers={"X-Session-ID": "label-session-8"}).json()[
         "templates"
     ]
-    assert any(t.get("path") == str(other) for t in other_rows)
+    # A bare file is an import candidate, not an active catalog row.
+    assert all(t.get("path") != str(other) for t in other_rows)
+    with engine.begin() as db:
+        db.execute(
+            text(
+                "INSERT INTO templates (id, template_key, template_name, template_type, "
+                "original_file_path, tenant_id, is_active) "
+                "VALUES (2, 'other-file', 'other', 'Excel', :path, 22, 1)"
+            ),
+            {"path": str(other)},
+        )
+    other_rows = client.get("/api/templates", headers={"X-Session-ID": "label-session-8"}).json()[
+        "templates"
+    ]
+    assert any(t.get("id") == "db:2" and t.get("path") == str(other) for t in other_rows)
+    assert all(
+        t.get("id") != "db:2"
+        for t in client.get("/api/templates", headers=headers).json()["templates"]
+    )
     assert own.read_bytes() == other.read_bytes() == b"synthetic retained bytes"
 
 
@@ -278,7 +296,9 @@ def test_default_fs_delete_commits_removal_without_destroying_bytes(template_app
     headers = {"X-Session-ID": "label-session-7"}
     template_id = f"fs:{target.name}"
     before = client.get("/api/templates", headers=headers).json()["templates"]
-    assert any(t["id"] == template_id for t in before)
+    assert all(t["id"] != template_id for t in before)
+    # Unregistered files stay out of catalog details; explicit legacy IDs remain deletable.
+    assert client.get(f"/api/templates/detail/{template_id}", headers=headers).status_code == 404
     for _repeat in range(2):
         response = client.post("/api/templates/delete", headers=headers, json={"id": template_id})
         assert response.status_code == 200, response.text

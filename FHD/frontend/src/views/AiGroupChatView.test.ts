@@ -1,5 +1,12 @@
+vi.mock('@/components/im/MatureChat.vue', async () => ({ default: (await import('@/test-stubs/MatureChatStub.vue')).default }))
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { ref } from 'vue'
+
+vi.mock('@/composables/messenger/useOpenIMGroup', () => ({
+  useOpenIMGroup: () => ({ start: vi.fn().mockResolvedValue(false), history: vi.fn(),
+    active: ref(false), connected: ref(false), error: ref(''), hasOlder: ref(false) }),
+}))
 
 const mocks = vi.hoisted(() => ({
   fetchAiGroups: vi.fn(),
@@ -65,6 +72,17 @@ describe('AiGroupChatView', () => {
     } as Response)
   })
 
+  it('opens the supplied group directly without a second group list', async () => {
+    const group = { ...sampleGroup, department_key: '', last_message_at: '', members: [] }
+    const wrapper = mount(AiGroupChatView, { props: { group } })
+    wrappers.push(wrapper)
+    await flushPromises()
+    expect(wrapper.find('.aigc-list').exists()).toBe(false)
+    expect(wrapper.get('.chat-title').text()).toBe('测试群')
+    expect(fetchAiGroupMessages).toHaveBeenCalledWith('g1', 'admin')
+    expect(fetchAiGroups).not.toHaveBeenCalled()
+  })
+
   it('renders the main container', () => {
     const wrapper = mountView()
     expect(wrapper.find('.aigc').exists()).toBe(true)
@@ -100,7 +118,7 @@ describe('AiGroupChatView', () => {
     const wrapper = mountView()
     await flushPromises()
     expect(fetchAiGroupMessages).toHaveBeenCalledWith('g1', 'admin')
-    expect(wrapper.find('.aigc-chat__title').text()).toBe('测试群')
+    expect(wrapper.find('.chat-title').text()).toBe('测试群')
   })
 
   it('renders messages in chat body', async () => {
@@ -108,7 +126,7 @@ describe('AiGroupChatView', () => {
     fetchAiGroupMessages.mockResolvedValue([sampleMessage])
     const wrapper = mountView()
     await flushPromises()
-    expect(wrapper.find('.aigc-msg__bubble').text()).toContain('你好，有什么可以帮你？')
+    expect(wrapper.find('.chat-message').text()).toContain('你好，有什么可以帮你？')
   })
 
   it('renders empty chat placeholder when no active group', async () => {
@@ -124,7 +142,7 @@ describe('AiGroupChatView', () => {
     fetchAiGroupMessages.mockResolvedValue([])
     const wrapper = mountView()
     await flushPromises()
-    expect(wrapper.find('.aigc-chat__sub').text()).toContain('2 个 AI 成员')
+    expect(wrapper.find('.chat-subtitle').text()).toContain('2 个 AI 成员')
   })
 
   it('shows group member preview when no last_message_preview', async () => {
@@ -150,7 +168,7 @@ describe('AiGroupChatView', () => {
     fetchAiGroupMessages.mockResolvedValue([])
     const wrapper = mountView()
     await flushPromises()
-    expect(wrapper.find('.aigc-send').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('.chat-send').attributes('disabled')).toBeDefined()
   })
 
   it('enables send button when input has text', async () => {
@@ -158,8 +176,8 @@ describe('AiGroupChatView', () => {
     fetchAiGroupMessages.mockResolvedValue([])
     const wrapper = mountView()
     await flushPromises()
-    await wrapper.find('.aigc-input').setValue('你好')
-    expect(wrapper.find('.aigc-send').attributes('disabled')).toBeUndefined()
+    await wrapper.find('.chat-input').setValue('你好')
+    expect(wrapper.find('.chat-send').attributes('disabled')).toBeUndefined()
   })
 
   it('sends message when send button is clicked', async () => {
@@ -171,8 +189,8 @@ describe('AiGroupChatView', () => {
     })
     const wrapper = mountView()
     await flushPromises()
-    await wrapper.find('.aigc-input').setValue('你好')
-    await wrapper.find('.aigc-send').trigger('click')
+    await wrapper.find('.chat-input').setValue('你好')
+    await wrapper.find('.chat-send').trigger('click')
     await flushPromises()
     expect(postAiGroupMessage).toHaveBeenCalledWith('g1', '你好', [], 'admin', { dispatch: false })
   })
@@ -188,8 +206,8 @@ describe('AiGroupChatView', () => {
     fetchAiGroupMessages.mockResolvedValue([discussionMsg])
     const wrapper = mountView()
     await flushPromises()
-    expect(wrapper.find('.aigc-msg__badge').text()).toBe('讨论')
-    expect(wrapper.find('.aigc-msg').classes()).toContain('is-discussion')
+    expect(wrapper.find('.chat-label').text()).toBe('讨论')
+    expect(wrapper.find('.chat-row').text()).toContain('讨论')
   })
 
   it('shows needs-review badge for false acceptance', async () => {
@@ -204,8 +222,8 @@ describe('AiGroupChatView', () => {
     fetchAiGroupMessages.mockResolvedValue([acceptanceMsg])
     const wrapper = mountView()
     await flushPromises()
-    expect(wrapper.find('.aigc-msg__badge').text()).toBe('待复核')
-    expect(wrapper.find('.aigc-msg__badge').classes()).toContain('is-review')
+    expect(wrapper.find('.chat-label').text()).toBe('待复核')
+    expect(wrapper.find('.chat-label').text()).toContain('待复核')
   })
 
   it('sends message in dispatch mode when dispatch toggle is active', async () => {
@@ -224,9 +242,9 @@ describe('AiGroupChatView', () => {
     })
     const wrapper = mountView()
     await flushPromises()
-    await wrapper.find('.aigc-mode').trigger('click')
-    await wrapper.find('.aigc-input').setValue('整理客户数据')
-    await wrapper.find('.aigc-send').trigger('click')
+    await wrapper.find('.aigc-text-btn[aria-pressed]').trigger('click')
+    await wrapper.find('.chat-input').setValue('整理客户数据')
+    await wrapper.find('.chat-send').trigger('click')
     await flushPromises()
     expect(postAiGroupMessage).toHaveBeenCalledWith('g1', '整理客户数据', [], 'admin', {
       dispatch: true,
@@ -245,13 +263,13 @@ describe('AiGroupChatView', () => {
     )
     const wrapper = mountView()
     await flushPromises()
-    await wrapper.find('.aigc-input').setValue('你好')
-    await wrapper.find('.aigc-send').trigger('click')
+    await wrapper.find('.chat-input').setValue('你好')
+    await wrapper.find('.chat-send').trigger('click')
     await flushPromises()
-    expect(wrapper.find('.aigc-typing').exists()).toBe(true)
+    expect(wrapper.find('.chat-busy').exists()).toBe(true)
     resolvePost!({ messages: [], group: null })
     await flushPromises()
-    expect(wrapper.find('.aigc-typing').exists()).toBe(false)
+    expect(wrapper.find('.chat-busy').exists()).toBe(false)
   })
 
   it('clears input after sending', async () => {
@@ -260,10 +278,10 @@ describe('AiGroupChatView', () => {
     postAiGroupMessage.mockResolvedValue({ messages: [], group: null })
     const wrapper = mountView()
     await flushPromises()
-    await wrapper.find('.aigc-input').setValue('你好')
-    await wrapper.find('.aigc-send').trigger('click')
+    await wrapper.find('.chat-input').setValue('你好')
+    await wrapper.find('.chat-send').trigger('click')
     await flushPromises()
-    expect((wrapper.find('.aigc-input').element as HTMLInputElement).value).toBe('')
+    expect((wrapper.find('.chat-input').element as HTMLInputElement).value).toBe('')
   })
 
   it('toggles members panel when group members button is clicked', async () => {
@@ -272,7 +290,7 @@ describe('AiGroupChatView', () => {
     const wrapper = mountView()
     await flushPromises()
     expect(wrapper.find('.aigc-members').exists()).toBe(false)
-    await wrapper.find('.aigc-text-btn').trigger('click')
+    await wrapper.find('.aigc-text-btn:not([aria-pressed])').trigger('click')
     expect(wrapper.find('.aigc-members').exists()).toBe(true)
   })
 
@@ -281,7 +299,7 @@ describe('AiGroupChatView', () => {
     fetchAiGroupMessages.mockResolvedValue([])
     const wrapper = mountView()
     await flushPromises()
-    await wrapper.find('.aigc-text-btn').trigger('click')
+    await wrapper.find('.aigc-text-btn:not([aria-pressed])').trigger('click')
     expect(wrapper.text()).toContain('AI助手A')
   })
 
@@ -292,7 +310,7 @@ describe('AiGroupChatView', () => {
     removeAiGroupMember.mockResolvedValue(updatedGroup)
     const wrapper = mountView()
     await flushPromises()
-    await wrapper.find('.aigc-text-btn').trigger('click')
+    await wrapper.find('.aigc-text-btn:not([aria-pressed])').trigger('click')
     const removeBtn = wrapper.find('.aigc-text-btn--danger')
     await removeBtn.trigger('click')
     await flushPromises()
@@ -358,7 +376,7 @@ describe('AiGroupChatView', () => {
     fetchAiGroupMessages.mockResolvedValue([])
     const wrapper = mountView()
     await flushPromises()
-    expect(wrapper.find('.aigc-chat__body .aigc-empty').exists()).toBe(true)
+    expect(wrapper.find('.chat-empty').exists()).toBe(true)
   })
 
   it('shows different empty state text when group has members vs no members', async () => {
@@ -367,7 +385,7 @@ describe('AiGroupChatView', () => {
     fetchAiGroupMessages.mockResolvedValue([])
     const wrapper = mountView()
     await flushPromises()
-    expect(wrapper.find('.aigc-chat__body .aigc-empty').text()).toContain('发条消息试试')
+    expect(wrapper.find('.chat-empty').text()).toContain('暂无消息')
   })
 
   it('renders user message with is-user class', async () => {
@@ -377,10 +395,10 @@ describe('AiGroupChatView', () => {
     postAiGroupMessage.mockResolvedValue({ messages: [userMsg], group: null })
     const wrapper = mountView()
     await flushPromises()
-    await wrapper.find('.aigc-input').setValue('用户消息')
-    await wrapper.find('.aigc-send').trigger('click')
+    await wrapper.find('.chat-input').setValue('用户消息')
+    await wrapper.find('.chat-send').trigger('click')
     await flushPromises()
-    const userMsgEl = wrapper.findAll('.aigc-msg').find((m) => m.classes().includes('is-user'))
+    const userMsgEl = wrapper.findAll('.chat-row').find((m) => m.classes().includes('mine'))
     expect(userMsgEl).toBeTruthy()
     expect(userMsgEl!.text()).toContain('用户消息')
   })
@@ -406,10 +424,10 @@ describe('AiGroupChatView', () => {
     postAiGroupMessage.mockRejectedValue(new Error('send failed'))
     const wrapper = mountView()
     await flushPromises()
-    await wrapper.find('.aigc-input').setValue('你好')
-    await wrapper.find('.aigc-send').trigger('click')
+    await wrapper.find('.chat-input').setValue('你好')
+    await wrapper.find('.chat-send').trigger('click')
     await flushPromises()
-    expect(wrapper.find('.aigc-typing').exists()).toBe(false)
+    expect(wrapper.find('.chat-busy').exists()).toBe(false)
   })
 
   it('renders AI avatar with first character of sender_name', async () => {
@@ -417,7 +435,7 @@ describe('AiGroupChatView', () => {
     fetchAiGroupMessages.mockResolvedValue([sampleMessage])
     const wrapper = mountView()
     await flushPromises()
-    const avatar = wrapper.find('.aigc-msg__avatar')
+    const avatar = wrapper.find('.chat-avatar')
     expect(avatar.exists()).toBe(true)
     expect(avatar.text()).toBe('A')
   })
@@ -428,7 +446,7 @@ describe('AiGroupChatView', () => {
     fetchAiGroupMessages.mockResolvedValue([msg])
     const wrapper = mountView()
     await flushPromises()
-    const avatar = wrapper.find('.aigc-msg__avatar')
+    const avatar = wrapper.find('.chat-avatar')
     expect(avatar.text()).toBe('A')
   })
 
@@ -461,8 +479,8 @@ describe('AiGroupChatView', () => {
     postAiGroupMessage.mockResolvedValue({ messages: [], group: null })
     const wrapper = mountView()
     await flushPromises()
-    await wrapper.find('.aigc-input').setValue('回车发送')
-    await wrapper.find('.aigc-input').trigger('keyup.enter')
+    await wrapper.find('.chat-input').setValue('回车发送')
+    await wrapper.find('.chat-input').trigger('keyup.enter')
     await flushPromises()
     expect(postAiGroupMessage).toHaveBeenCalled()
   })
@@ -472,7 +490,7 @@ describe('AiGroupChatView', () => {
     fetchAiGroupMessages.mockResolvedValue([])
     const wrapper = mountView()
     await flushPromises()
-    await wrapper.find('.aigc-input').trigger('keyup.enter')
+    await wrapper.find('.chat-input').trigger('keyup.enter')
     await flushPromises()
     expect(postAiGroupMessage).not.toHaveBeenCalled()
   })
@@ -488,12 +506,12 @@ describe('AiGroupChatView', () => {
     )
     const wrapper = mountView()
     await flushPromises()
-    await wrapper.find('.aigc-input').setValue('第一条')
-    await wrapper.find('.aigc-send').trigger('click')
+    await wrapper.find('.chat-input').setValue('第一条')
+    await wrapper.find('.chat-send').trigger('click')
     await flushPromises()
     postAiGroupMessage.mockClear()
-    await wrapper.find('.aigc-input').setValue('第二条')
-    await wrapper.find('.aigc-send').trigger('click')
+    await wrapper.find('.chat-input').setValue('第二条')
+    await wrapper.find('.chat-send').trigger('click')
     await flushPromises()
     expect(postAiGroupMessage).not.toHaveBeenCalled()
     resolvePost!({ messages: [], group: null })
@@ -510,7 +528,7 @@ describe('AiGroupChatView', () => {
     if (result === 'error') mocks.addAiGroupMember.mockRejectedValueOnce(new Error('member service offline'))
     const wrapper = mountView()
     await flushPromises()
-    await wrapper.get('.aigc-chat__head .aigc-text-btn').trigger('click')
+    await wrapper.get('.aigc-text-btn:not([aria-pressed])').trigger('click')
     expect(wrapper.findAll('.aigc-member--add')).toHaveLength(2)
     expect(wrapper.get('.aigc-member:not(button) img').attributes('src')).toBe('https://example.com/e1.png')
     const candidate = wrapper.get('.aigc-member--add')
@@ -528,9 +546,9 @@ describe('AiGroupChatView', () => {
     apiFetchMock.mockRejectedValueOnce(new Error('employee service offline'))
     const wrapper = mountView()
     await flushPromises()
-    await wrapper.get('.aigc-chat__head .aigc-text-btn').trigger('click')
+    await wrapper.get('.aigc-text-btn:not([aria-pressed])').trigger('click')
     expect(wrapper.text()).toContain('没有可添加的 AI 员工')
-    expect(wrapper.get('.aigc-chat__title').text()).toBe('测试群')
+    expect(wrapper.get('.chat-title').text()).toBe('测试群')
   })
 
 })

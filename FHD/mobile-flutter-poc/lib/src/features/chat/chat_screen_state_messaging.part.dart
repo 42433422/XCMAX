@@ -145,13 +145,23 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
 
   Future<void> _send([String? overrideText]) async {
     final text = (overrideText ?? _controller.text).trim();
-    if (text.isEmpty || _sending) return;
+    if (text.isEmpty ||
+        _sending ||
+        _uploading ||
+        _failedAttachments.isNotEmpty) {
+      return;
+    }
+    _lastSentAttachments = List.of(_attachments);
     final quoted = _replyTo;
     _replyTo = null;
     final now = DateTime.now().microsecondsSinceEpoch;
     final assistantId = 'assistant-$now';
     final outgoing =
         quoted == null ? text : '引用「${_take(quoted.body, 200)}」\n\n$text';
+    _lastAttachmentTurnId = _lastSentAttachments.isEmpty
+        ? ''
+        : 'mobile-$now-${Random.secure().nextInt(1 << 32).toRadixString(16)}';
+    _lastAttachmentOutgoing = _lastSentAttachments.isEmpty ? '' : outgoing;
     late List<ChatMessage> recentMessages;
     setState(() {
       _sending = true;
@@ -198,6 +208,8 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
       assistantId: assistantId,
       outgoing: outgoing,
       recentMessages: recentMessages,
+      attachments: _lastSentAttachments,
+      idempotencyKey: _lastAttachmentTurnId,
     );
   }
 
@@ -205,6 +217,8 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
     required String assistantId,
     required String outgoing,
     required List<ChatMessage> recentMessages,
+    List<MobileChatAttachment> attachments = const [],
+    String idempotencyKey = '',
   }) async {
     final repository = _repository;
     if (repository == null) {
@@ -221,23 +235,38 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
     }
 
     try {
-      final reply = await repository.streamMessage(
-        conversation: widget.conversation,
-        body: outgoing,
-        userId: _userId,
-        recentMessages: recentMessages,
-        onToken: (token) {
-          if (!mounted) return;
-          if (_stopRequested || _activeAssistantId != assistantId) return;
-          setState(() => _appendMessageBody(assistantId, token));
-        },
-        onStatus: (progress) {
-          if (!mounted) return;
-          if (_stopRequested || _activeAssistantId != assistantId) return;
-          setState(() => _activeRelayProgress = progress);
-        },
-        isCancelled: () => _stopRequested || _activeAssistantId != assistantId,
-      );
+      final reply = attachments.isNotEmpty
+          ? await repository.streamAttachedMessage(
+              conversation: widget.conversation,
+              body: outgoing,
+              attachments: attachments,
+              idempotencyKey: idempotencyKey,
+              recentMessages: recentMessages,
+              onToken: (token) {
+                if (mounted &&
+                    !_stopRequested &&
+                    _activeAssistantId == assistantId) {
+                  setState(() => _appendMessageBody(assistantId, token));
+                }
+              })
+          : await repository.streamMessage(
+              conversation: widget.conversation,
+              body: outgoing,
+              userId: _userId,
+              recentMessages: recentMessages,
+              onToken: (token) {
+                if (!mounted) return;
+                if (_stopRequested || _activeAssistantId != assistantId) return;
+                setState(() => _appendMessageBody(assistantId, token));
+              },
+              onStatus: (progress) {
+                if (!mounted) return;
+                if (_stopRequested || _activeAssistantId != assistantId) return;
+                setState(() => _activeRelayProgress = progress);
+              },
+              isCancelled: () =>
+                  _stopRequested || _activeAssistantId != assistantId,
+            );
       if (!mounted) return;
       if (_stopRequested || _activeAssistantId != assistantId) return;
       await repository.removeQueuedMessage(widget.conversation.id, outgoing);
@@ -248,12 +277,13 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
           status: ChatDeliveryStatus.sent,
         );
         _activeRelayProgress = null;
+        _attachments.removeWhere(attachments.contains);
       });
     } catch (error) {
       if (!mounted) return;
       if (_stopRequested || _activeAssistantId != assistantId) return;
       final offline = isOfflineError(error);
-      final queuedId = offline
+      final queuedId = offline && attachments.isEmpty
           ? await repository.enqueuePendingMessage(
               conversation: widget.conversation,
               body: outgoing,
@@ -290,6 +320,11 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
   void _clearChat() {
     setState(() {
       _messages.clear();
+      _attachments.clear();
+      _failedAttachments.clear();
+      _lastSentAttachments = const [];
+      _lastAttachmentTurnId = '';
+      _lastAttachmentOutgoing = '';
       _showToolPanel = false;
       _replyTo = null;
     });
@@ -383,8 +418,11 @@ abstract class _ChatStateMessaging extends _ChatStateHelpers {
         : '引用「${_take(quote, 200)}」\n\n${lastUser.body}';
     await _streamAssistantReply(
       assistantId: assistantId,
-      outgoing: outgoing,
+      outgoing:
+          _lastSentAttachments.isEmpty ? outgoing : _lastAttachmentOutgoing,
       recentMessages: recentMessages,
+      attachments: _lastSentAttachments,
+      idempotencyKey: _lastAttachmentTurnId,
     );
   }
 

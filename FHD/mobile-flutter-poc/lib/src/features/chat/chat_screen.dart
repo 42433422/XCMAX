@@ -1,6 +1,13 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:file_selector/file_selector.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:wolt_modal_sheet/wolt_modal_sheet.dart';
+import '../../api/mobile_api.dart' show MobileChatAttachment;
+import '../../api/mobile_session_store.dart' show MobileSessionData;
+import '../../policy/pinned_ids.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_chat_ui/flutter_chat_ui.dart' hide ChatMessage;
 import 'package:flutter_chat_core/flutter_chat_core.dart';
@@ -25,11 +32,11 @@ import '../contacts/fixed_partner_profile_screen.dart';
 import '../devtools/branch_detail_screen.dart';
 import '../devtools/diff_viewer_screen.dart';
 import '../devtools/timeline_screen.dart';
-import '../tools/ocr_screen.dart';
 import '../voice/voice_input_sheet.dart';
 
 // 按职责拆分为 part 文件：state 状态类分层（helpers/messaging/actions）与各 UI 组件组。
 part 'chat_screen_state_helpers.part.dart';
+part 'chat_screen_attachments.part.dart';
 part 'chat_screen_state_messaging.part.dart';
 part 'chat_screen_state_actions.part.dart';
 part 'chat_screen_bubble.part.dart';
@@ -43,11 +50,13 @@ class ChatScreen extends StatefulWidget {
     required this.conversation,
     required this.initialMessages,
     this.repository,
+    this.attachmentPicker,
   });
 
   final ConversationItem conversation;
   final List<ChatMessage> initialMessages;
   final MobileRepository? repository;
+  final Future<List<XFile>> Function()? attachmentPicker;
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -60,6 +69,8 @@ class _ChatScreenState extends _ChatStateActions {
     _messages = [...widget.initialMessages];
     _syncFlyerChat();
     _repository = widget.repository ?? MobileRepositoryScope.maybeRead(context);
+    _attachmentSessionSubscription = _repository?.client.sessionChanges
+        .listen((_) => _checkAttachmentScope());
     _employeeRef = _parseEmployeeConversationRef(widget.conversation.id);
     _loadRemoteMessages();
     _loadUserAvatar();
@@ -68,6 +79,7 @@ class _ChatScreenState extends _ChatStateActions {
 
   @override
   void dispose() {
+    _attachmentSessionSubscription?.cancel();
     _flyerChatController.dispose();
     _controller.dispose();
     super.dispose();
@@ -107,8 +119,7 @@ class _ChatScreenState extends _ChatStateActions {
     required bool isSentByMe,
     MessageGroupStatus? groupStatus,
   }) {
-    final originalIndex =
-        _messages.indexWhere((item) => item.id == message.id);
+    final originalIndex = _messages.indexWhere((item) => item.id == message.id);
     if (originalIndex < 0) return const SizedBox.shrink();
     final original = _messages[originalIndex];
     final isActiveRelay = _sending &&
@@ -128,13 +139,11 @@ class _ChatScreenState extends _ChatStateActions {
       onCancelRelay: _cancellingRelay ? null : () => _stopChat(),
       onReply: () => setState(() => _replyTo = original),
       onDelete: () => _deleteMessageAt(originalIndex),
-      onResend: original.status == ChatDeliveryStatus.failed
-          ? _resendLastChat
-          : null,
+      onResend:
+          original.status == ChatDeliveryStatus.failed ? _resendLastChat : null,
       toolCalls: toolCalls,
-      onShowTimeline: toolCalls.isEmpty
-          ? null
-          : () => _openTimelineForMessage(original),
+      onShowTimeline:
+          toolCalls.isEmpty ? null : () => _openTimelineForMessage(original),
     );
   }
 
@@ -143,7 +152,6 @@ class _ChatScreenState extends _ChatStateActions {
     final colors = AppTheme.colors(context);
     final activeGitBranches = _activeGitBranches();
     final activeGitBranch = _currentGitBranch(activeGitBranches);
-    final employeeProfile = _employeeProfile;
     return Scaffold(
       backgroundColor: colors.page,
       body: SafeArea(
@@ -183,7 +191,8 @@ class _ChatScreenState extends _ChatStateActions {
                   emptyChatListBuilder: _buildEmptyChat,
                   // 与微信/Telegram 一致：消息从底部向上生长。
                   chatAnimatedListBuilder: (context, itemBuilder) =>
-                      ChatAnimatedList(itemBuilder: itemBuilder, reversed: true),
+                      ChatAnimatedList(
+                          itemBuilder: itemBuilder, reversed: true),
                   // 输入区由外层 Column 提供，Chat 只负责消息列表。
                   composerBuilder: (context) => const SizedBox.shrink(),
                 ),
@@ -191,7 +200,8 @@ class _ChatScreenState extends _ChatStateActions {
             ),
             _Composer(
               controller: _controller,
-              onSend: _send,
+              onSend:
+                  _uploading || _failedAttachments.isNotEmpty ? () {} : _send,
               onStop: _stopChat,
               busy: _sending,
               topContent: _composerTopContent(
@@ -199,10 +209,8 @@ class _ChatScreenState extends _ChatStateActions {
                 activeGitBranch,
               ),
               showTools: _showToolPanel,
-              onToggleTools: () =>
-                  setState(() => _showToolPanel = !_showToolPanel),
+              onToggleTools: _openTools,
               onVoice: _startVoiceInput,
-              toolActions: _toolActions(),
             ),
           ],
         ),

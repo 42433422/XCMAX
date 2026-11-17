@@ -350,27 +350,6 @@ def _dispatch_implement_workflow(issue_number: int) -> subprocess.CompletedProce
     return subprocess.run(cmd, capture_output=True, text=True)
 
 
-def _run_implement_local(issue_number: int) -> subprocess.CompletedProcess[str]:
-    """本地 fallback：直接跑 ai_issue_implement.py --apply。"""
-    repo = os.environ.get("GITHUB_REPOSITORY") or os.environ.get("GITHUB_REPO", "")
-    token = os.environ.get("GITHUB_TOKEN", "")
-    llm_api_key = os.environ.get("XCAGI_LLM_API_KEY", "")
-    script = REPO_ROOT / "FHD" / "scripts" / "dev" / "ai_issue_implement.py"
-    cmd = [
-        sys.executable,
-        str(script),
-        "--issue-number",
-        str(issue_number),
-        "--repo",
-        repo,
-        "--token",
-        token,
-        "--llm-api-key",
-        llm_api_key,
-        "--apply",
-    ]
-    print(f"  invoking local: {' '.join(cmd[:6])} ... --apply")
-    return subprocess.run(cmd, capture_output=True, text=True)
 
 
 def cmd_implement_pack(args: argparse.Namespace) -> int:
@@ -378,7 +357,7 @@ def cmd_implement_pack(args: argparse.Namespace) -> int:
 
     dry-run: 不真实 dispatch，只写 implement_succeeded 事件。
     实模式默认: ``gh workflow run fhd-ai-issue-implement.yml -f issue_number=N``
-    （EVOLUTION_IMPLEMENT_MODE=local 时改为 subprocess 调 ai_issue_implement.py）。
+    仅派发 GitHub 云端执行，不再支持本地模型回退。
     """
     trace_id = args.trace_id or _new_trace_id()
     print(f"[trace_id={trace_id}] Step 4: implement-pack (dry_run={args.dry_run})")
@@ -409,15 +388,9 @@ def cmd_implement_pack(args: argparse.Namespace) -> int:
         print(f"  ERROR: cannot parse issue_number from {issue_url}", file=sys.stderr)
         return 2
 
-    mode = (os.environ.get("EVOLUTION_IMPLEMENT_MODE") or "workflow").strip().lower()
-    if mode == "local":
-        result = _run_implement_local(issue_number_int)
-        trigger = "ledger_local_subprocess"
-        success_type = "implement_succeeded"
-    else:
-        result = _dispatch_implement_workflow(issue_number_int)
-        trigger = "ledger_gh_workflow_run"
-        success_type = "implement_dispatched"
+    result = _dispatch_implement_workflow(issue_number_int)
+    trigger = "ledger_gh_workflow_run"
+    success_type = "implement_dispatched"
 
     print(result.stdout)
     if result.stderr:

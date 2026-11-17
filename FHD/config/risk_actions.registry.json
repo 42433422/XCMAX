@@ -29,6 +29,15 @@
       "rollback_path": "freeze_manifest",
       "entrypoints": [".github/workflows/fhd-deploy.yml"]
     },
+    "clear_logs": {
+      "risk": "HIGH",
+      "allow_auto_execute": false,
+      "rollback_path": "restore_archived_logs_if_available",
+      "entrypoints": [
+        "app/application/autonomy/maintenance_console.py"
+      ],
+      "scope": "Operator-approved removal of expired files only in the fixed deployment logs directory; never autonomy audit or user data."
+    },
     "restart_service": {
       "risk": "LOW",
       "allow_auto_execute": true,

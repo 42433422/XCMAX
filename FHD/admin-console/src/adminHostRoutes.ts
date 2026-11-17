@@ -37,7 +37,7 @@ export const ADMIN_HOST_ROUTE_RECORDS: RouteRecordRaw[] = [
     path: '/founder-autonomy',
     name: 'founder-autonomy',
     component: () => import('./views/FounderAutonomyView.vue'),
-    meta: { title: '创始人自治驾驶舱', requiresAdminAccount: true, hostAdmin: true },
+    meta: { title: '创始人状态', requiresAdminAccount: true, hostAdmin: true },
   },
   // #53：自动化方针仅保留总览页签；旧侧栏/直达路径重定向，避免重复入口
   {
@@ -46,10 +46,14 @@ export const ADMIN_HOST_ROUTE_RECORDS: RouteRecordRaw[] = [
     redirect: { name: 'xcmax-admin', query: { tab: 'automation-policy' } },
   },
   {
+    path: '/implementation-goals',
+    name: 'implementation-goals',
+    redirect: { name: 'xcmax-admin', query: { tab: 'implementation-goals' } },
+  },
+  {
     path: '/duty-time-architecture',
     name: 'duty-time-architecture',
-    component: () => import('./views/DutyTimeArchitectureView.vue'),
-    meta: { title: '同时完成时间架构', requiresAdminAccount: true, hostAdmin: true },
+    redirect: { name: 'xcmax-admin', query: { tab: 'overview' } },
   },
   {
     path: '/duty-roster-graph',

@@ -95,9 +95,14 @@ def reconcile_pending_teams(*, event_id=None, limit=20, fetcher=None):
                     row["status"] = "manual_review"
                     continue
                 try:
-                    if not base and fetcher is _fetch_para_task_state:
+                    task_base = base
+                    if output.get("executor") == "github_actions":
+                        from modstore_server.para_github_runner import api_base
+
+                        task_base = api_base()
+                    if not task_base and fetcher is _fetch_para_task_state:
                         raise ValueError("Para API 未配置")
-                    task = fetcher(base, task_id)
+                    task = fetcher(task_base, task_id)
                     if str(task.get("id") or "") != task_id:
                         raise ValueError("Para返回任务号不一致")
                     status = str(task.get("status") or "")
@@ -109,6 +114,14 @@ def reconcile_pending_teams(*, event_id=None, limit=20, fetcher=None):
                             output.get("planned_devices"),
                         ) and not output.get("partial")
                         snapshot = _task_result_snapshot({"task": task})
+                        if (
+                            ok
+                            and output.get("executor") == "github_actions"
+                            and row.get("role") == "fix"
+                        ):
+                            from modstore_server.para_github_runner import verified_code_identity
+
+                            output.update(verified_code_identity(snapshot))
                         output.update(
                             ok=ok,
                             completed=ok,
