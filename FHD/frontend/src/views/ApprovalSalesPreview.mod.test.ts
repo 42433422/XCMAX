@@ -4,8 +4,8 @@ import { ref } from 'vue'
 import AwDetailModal from '../../../mods/bridge/xcagi-approval-bridge/frontend/views/approval-workspace/AwDetailModal.vue'
 import { formatRequestTitle } from '../../../mods/bridge/xcagi-approval-bridge/frontend/views/approval-workspace/awHelpers'
 
-function render(items: Record<string, unknown>[], tool = 'sales') {
-  const request = { id: 12, request_no: 'test-approval', title: '智能对话写操作：sales.create_order', status: 'pending', business_type: 'workflow_tool', records: [], description: JSON.stringify({ customer_name: '验收客户', items }), business_data: { tool_id: tool, action: 'create_order', params: { customer_name: '验收客户', items } } }
+function render(items: Record<string, unknown>[], tool = 'sales', status = 'pending', runtime?: boolean) {
+  const request = { id: 12, request_no: 'test-approval', title: '智能对话写操作：sales.create_order', status, runtime_available: runtime, business_type: 'workflow_tool', records: [], description: JSON.stringify({ customer_name: '验收客户', items }), business_data: { tool_id: tool, action: 'create_order', params: { customer_name: '验收客户', items } } }
   const before = JSON.stringify(request)
   const approve = vi.fn()
   const wrapper = mount(AwDetailModal, {
@@ -47,4 +47,23 @@ describe('sales approval details before execution', () => {
     expect(f.wrapper.find('[data-testid="sales-approval-total"]').exists()).toBe(false)
     f.wrapper.unmount()
   })
+})
+
+
+it.each(['approved', 'rejected', 'withdrawn', 'cancelled', 'completed'])(
+  'does not present terminal %s requests as expired or actionable even with stale runtime flags', status => {
+    const f = render([], 'sales', status, false)
+    expect(f.wrapper.find('.expired-hint').exists()).toBe(false)
+    expect(f.wrapper.find('.btn-reject').exists()).toBe(false)
+    expect(f.wrapper.find('.btn-approve').exists()).toBe(false)
+    f.wrapper.unmount()
+  },
+)
+
+it.each(['pending', 'in_progress'])('retains rejection guidance for confirmed expired %s requests', status => {
+  const f = render([], 'sales', status, false)
+  expect(f.wrapper.find('.expired-hint').exists()).toBe(true)
+  expect(f.wrapper.find('.btn-reject').exists()).toBe(true)
+  expect(f.wrapper.find('.btn-approve').exists()).toBe(false)
+  f.wrapper.unmount()
 })

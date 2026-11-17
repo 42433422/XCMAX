@@ -10,6 +10,8 @@ const {
   showDetails, closeDetails, selectedRequest, canApprove, approve, reject,
   getBusinessLabel, getStatusLabel, getActionIcon, formatRequestTitle, formatTime, getWorkflowExecutionStatusLabel,
 } = props.tm
+const pendingRequest = computed(() => ['pending', 'in_progress'].includes(selectedRequest.value?.status || ''))
+const expiredRequest = computed(() => pendingRequest.value && selectedRequest.value?.runtime_available === false)
 const salesPreview = computed(() => salesApprovalPreview(selectedRequest.value))
 </script>
 
@@ -51,7 +53,7 @@ const salesPreview = computed(() => salesApprovalPreview(selectedRequest.value))
           </div>
         </div>
 
-        <p v-if="selectedRequest.runtime_available === false" class="expired-hint" role="status">
+        <p v-if="expiredRequest" class="expired-hint" role="status">
           该审批的 AI 工作流运行态已过期（通常由应用重启导致），无法再「通过」。请拒绝这条申请后重新发起任务。
         </p>
 
@@ -150,10 +152,10 @@ const salesPreview = computed(() => salesApprovalPreview(selectedRequest.value))
         <button class="btn btn-link" @click="closeDetails">
           <i class="fa fa-times"></i> 关闭
         </button>
-        <button v-if="selectedRequest && (canApprove || selectedRequest.runtime_available === false)" class="btn btn-reject" @click="reject(selectedRequest.id)">
+        <button v-if="selectedRequest && pendingRequest && (canApprove || expiredRequest)" class="btn btn-reject" @click="reject(selectedRequest.id)">
           <i class="fa fa-times"></i> 拒绝
         </button>
-        <button v-if="canApprove && selectedRequest" class="btn btn-approve" data-tutorial-id="approval-approve-action" @click="approve(selectedRequest.id)">
+        <button v-if="pendingRequest && !expiredRequest && canApprove && selectedRequest" class="btn btn-approve" data-tutorial-id="approval-approve-action" @click="approve(selectedRequest.id)">
           <i class="fa fa-check"></i> 通过
         </button>
       </template>

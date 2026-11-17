@@ -81,7 +81,11 @@ class ApprovalQueries:
             for req in items:
                 data = self.view(req, include_records=False)
                 # 查询失败不是过期；不能把未知状态呈现为不可恢复的工作流。
-                if self.access.is_workflow(req) and not req.current_node:
+                if (
+                    self.access.is_workflow(req)
+                    and not req.current_node
+                    and req.status in (ApprovalStatus.PENDING.value, ApprovalStatus.IN_PROGRESS.value)
+                ):
                     pending = self.pending(req.request_no)
                     if pending is None:
                         return _availability_unavailable()
@@ -129,7 +133,11 @@ class ApprovalQueries:
                     {"success": False, "message": "审批请求不存在", "data": None}, status_code=404
                 )
             data = self.view(req, include_records=True)
-            if self.access.is_workflow(req) and not req.current_node:
+            if (
+                self.access.is_workflow(req)
+                and not req.current_node
+                and req.status in (ApprovalStatus.PENDING.value, ApprovalStatus.IN_PROGRESS.value)
+            ):
                 pending = self.pending(req.request_no)
                 if pending is None:
                     return _availability_unavailable()

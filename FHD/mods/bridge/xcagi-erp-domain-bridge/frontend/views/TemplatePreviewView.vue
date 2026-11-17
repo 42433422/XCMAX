@@ -13,6 +13,11 @@
         </div>
       </div>
 
+      <div v-if="searchKeyword || activeScopeTab !== 'all'" class="tpl-library__actions" role="status">
+        <span>当前筛选：{{ searchKeyword || '全部关键词' }} / {{ activeScopeTab }}</span>
+        <button type="button" class="btn btn-secondary" data-testid="reset-template-filters" @click="resetLibraryFilters">清除筛选，显示全部模板</button>
+      </div>
+
       <div class="grid-tool-card">
         <div class="grid-tool-title">Excel 网格映射工具</div>
         <div class="grid-tool-actions">
@@ -129,6 +134,7 @@ const gridToolFileInput = ref<HTMLInputElement | null>(null)
 
 const {
   loading, error, refreshTemplates, openCreateModal,
+  searchKeyword, activeScopeTab, resetLibraryFilters,
   gridToolFile, gridToolResult, extractingGrid, onGridToolFileSelected,
   extractGridFromExcel, openGridToolPreview,
   getTemplateCategoryLabel, getTemplateScopeLabel, getTemplateSourceLabel,

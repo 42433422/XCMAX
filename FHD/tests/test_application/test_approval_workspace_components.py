@@ -497,14 +497,16 @@ def test_pending_snapshot_propagates_storage_errors(monkeypatch):
         service._pending_snapshot("pending-1")
 
 
+@pytest.mark.parametrize(
+    "status",
+    ["pending", "in_progress", "approved", "rejected", "withdrawn", "cancelled", "completed"],
+)
 @pytest.mark.parametrize("availability", [None, False, True])
 @pytest.mark.parametrize("endpoint", ["detail", "list", "reviewer_list"])
-def test_workflow_queries_preserve_unknown_availability(availability, endpoint):
+def test_workflow_queries_preserve_unknown_availability(availability, endpoint, status):
     from app.application.approval_workspace.queries import ApprovalQueries
 
-    req = ApprovalRequest(
-        request_no="pending-1", status=ApprovalStatus.PENDING.value, business_data="{}"
-    )
+    req = ApprovalRequest(request_no="pending-1", status=status, business_data="{}")
     req.current_node = None
     db = MagicMock()
     query = db.query.return_value
@@ -527,6 +529,17 @@ def test_workflow_queries_preserve_unknown_availability(availability, endpoint):
         if endpoint == "detail"
         else queries.list_requests(7 if endpoint == "reviewer_list" else None, None, None, None, 1, 20)
     )
+    if status not in ("pending", "in_progress"):
+        pending.assert_not_called()
+        assert result["success"] is True
+        data = result["data"]
+        if endpoint == "reviewer_list":
+            assert data == []
+        else:
+            assert "runtime_available" not in (data if endpoint == "detail" else data[0])
+        assert req.status == status
+        db.commit.assert_not_called()
+        return
     pending.assert_called_once_with("pending-1")
     if availability is None:
         assert result.status_code == 503
@@ -539,5 +552,5 @@ def test_workflow_queries_preserve_unknown_availability(availability, endpoint):
     else:
         data = result["data"] if endpoint == "detail" else result["data"][0]
         assert data["runtime_available"] is availability
-    assert req.status == ApprovalStatus.PENDING.value
+    assert req.status == status
     db.commit.assert_not_called()
