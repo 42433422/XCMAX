@@ -195,6 +195,26 @@ def _build_dataset_vector_index_backend(
     raise ValueError(f"unsupported dataset vector backend: {configured}")
 
 
+_DEFAULT_MAX_CONTEXT_CHARS = 6000
+_MIN_CONTEXT_CHARS = 500
+_MAX_CONTEXT_CHARS = 200_000
+
+
+def _resolve_max_context_chars(requested: int | None) -> int:
+    def _clamp(value: int) -> int:
+        return max(_MIN_CONTEXT_CHARS, min(value, _MAX_CONTEXT_CHARS))
+
+    try:
+        if requested is not None and int(requested) > 0:
+            return _clamp(int(requested))
+    except (TypeError, ValueError):
+        pass
+    raw = os.environ.get("XCAGI_KB_MAX_CONTEXT_CHARS", "").strip()
+    if not raw.isdigit():
+        return _DEFAULT_MAX_CONTEXT_CHARS
+    return _clamp(int(raw))
+
+
 def _resolve_max_concurrent_rebuild_jobs(configured: int | None) -> int:
     if configured is not None:
         return max(1, min(int(configured), 8))
@@ -913,6 +933,7 @@ class DatasetRagApplicationService:
         access_context: DatasetAccessContext | dict[str, Any] | None = None,
         history: list[dict[str, Any]] | None = None,
         min_relevance: float | None = None,
+        max_context_chars: int | None = None,
     ) -> dict[str, Any]:
         result = self.query(
             dataset_id=dataset_id,
@@ -927,7 +948,9 @@ class DatasetRagApplicationService:
             history=history,
             min_relevance=min_relevance,
         )
-        return self._synthesize_answer(result, llm_call=llm_call)
+        return self._synthesize_answer(
+            result, llm_call=llm_call, max_context_chars=max_context_chars
+        )
 
     def multi_query(
         self,
@@ -1104,6 +1127,7 @@ class DatasetRagApplicationService:
         access_context: DatasetAccessContext | dict[str, Any] | None = None,
         history: list[dict[str, Any]] | None = None,
         min_relevance: float | None = None,
+        max_context_chars: int | None = None,
     ) -> dict[str, Any]:
         result = self.multi_query(
             dataset_ids=dataset_ids,
@@ -1118,10 +1142,16 @@ class DatasetRagApplicationService:
             history=history,
             min_relevance=min_relevance,
         )
-        return self._synthesize_answer(result, llm_call=llm_call)
+        return self._synthesize_answer(
+            result, llm_call=llm_call, max_context_chars=max_context_chars
+        )
 
     def _synthesize_answer(
-        self, result: dict[str, Any], *, llm_call: Callable[[str, str], str] | None = None
+        self,
+        result: dict[str, Any],
+        *,
+        llm_call: Callable[[str, str], str] | None = None,
+        max_context_chars: int | None = None,
     ) -> dict[str, Any]:
         if not result.get("success"):
             result.setdefault("answer", "")
@@ -1157,7 +1187,36 @@ class DatasetRagApplicationService:
                 )
             )
         tracker = CitationTracker(retrieved_chunks=retrieved)
-        prompt = CitationTracker(retrieved_chunks=prompt_chunks).format_for_prompt()
+        budget = _resolve_max_context_chars(max_context_chars)
+        budgeted: list[RetrievedChunk] = []
+        used = 0
+        truncated = False
+        for chunk in prompt_chunks:
+            remaining = budget - used
+            if remaining <= 0:
+                truncated = True
+                break
+            text = chunk.text
+            if len(text) > remaining:
+                text = text[: max(0, remaining - 1)] + "…"
+                truncated = True
+            budgeted.append(
+                RetrievedChunk(
+                    text=text,
+                    score=chunk.score,
+                    source=chunk.source,
+                    chunk_index=chunk.chunk_index,
+                    char_start=chunk.char_start,
+                    char_end=chunk.char_end,
+                    metadata=chunk.metadata,
+                    source_url=chunk.source_url,
+                    page=chunk.page,
+                )
+            )
+            used += len(text)
+        result["context_chars"] = used
+        result["context_truncated"] = truncated
+        prompt = CitationTracker(retrieved_chunks=budgeted).format_for_prompt()
         if llm_call is None:
             from app.infrastructure.llm.knowledge_answer import get_kb_answer_llm_call
 

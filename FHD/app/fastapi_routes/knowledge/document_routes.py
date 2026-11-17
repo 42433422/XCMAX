@@ -250,6 +250,7 @@ class DocumentRoutes:
                     "context_window": req.context_window,
                     "history": req.history,
                     "min_relevance": req.min_relevance,
+                    "max_context_chars": req.max_context_chars,
                 },
             )
 
@@ -274,6 +275,7 @@ class DocumentRoutes:
                     "context_window": req.context_window,
                     "history": req.history,
                     "min_relevance": req.min_relevance,
+                    "max_context_chars": req.max_context_chars,
                 },
             )
 

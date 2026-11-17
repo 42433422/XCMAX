@@ -154,6 +154,7 @@ def _registered_router_dataset_rag(
                 access_context=read_context,
                 history=history,
                 min_relevance=min_relevance,
+                max_context_chars=as_int(params.get("max_context_chars"), 0),
             )
         else:
             result = service.query(
@@ -200,7 +201,9 @@ def _registered_router_dataset_rag(
             "min_relevance": as_float(params.get("min_relevance"), 0.0),
         }
         if as_bool(params.get("include_answer"), default=True):
-            result = service.multi_answer(**shared)
+            result = service.multi_answer(
+                **shared, max_context_chars=as_int(params.get("max_context_chars"), 0)
+            )
         else:
             result = service.multi_query(
                 **shared, context_window=as_int(params.get("context_window"), 0)

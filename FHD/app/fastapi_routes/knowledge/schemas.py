@@ -257,6 +257,12 @@ class DatasetQueryRequest(BaseModel):
         le=1.0,
         description="evidence coverage floor; 0 uses the server default (XCAGI_KB_MIN_RELEVANCE)",
     )
+    max_context_chars: int = Field(
+        0,
+        ge=0,
+        le=200_000,
+        description="prompt evidence budget; 0 uses XCAGI_KB_MAX_CONTEXT_CHARS (default 6000)",
+    )
     rerank: bool = Field(False, description="apply cross-encoder reranking with safe fallback")
     context_window: int = Field(
         0,
