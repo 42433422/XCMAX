@@ -39,7 +39,7 @@ beforeEach(() => {
 })
 afterEach(() => {
   wrapper?.unmount()
-  document.body.innerHTML = ''
+  document.body.replaceChildren()
 })
 function render() {
   wrapper = mount(Panel, { attachTo: document.body })

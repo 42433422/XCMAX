@@ -15,6 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from modstore_server.customer_service_tools import json_dumps, json_loads
 from modstore_server.integrations.repository_packages import load_repository_module
 from modstore_server.models import RetortEvolutionRun, get_engine, get_session_factory
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 TERMINAL = {"completed", "rejected", "failed", "cancelled"}
 
@@ -149,7 +150,7 @@ class ComponentPorts:
             return module.optimize_protocol(
                 Path(path), seed={"plan": plan["public_body"]}, reflection_lm=reflect
             )
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             # RSI is auxiliary: retain the original plan and expose the failed
             # experiment at approval, without publishing an unmeasured proposal.
             return {
@@ -231,7 +232,7 @@ def advance_run(request_id, *, approval=None, ports=None):
             snapshot = _snapshot(graph.get_state(config))
             _project(request_id, snapshot)
             return snapshot
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             snapshot = _snapshot(graph.get_state(config))
             from httpx import HTTPError
 
@@ -289,7 +290,7 @@ def tick():
     for request_id in ids:
         try:
             advance_run(request_id)
-        except Exception as exc:
+        except RECOVERABLE_ERRORS as exc:
             errors.append({"request_id": request_id, "error": type(exc).__name__})
     return {"processed": len(ids), "errors": errors}
 

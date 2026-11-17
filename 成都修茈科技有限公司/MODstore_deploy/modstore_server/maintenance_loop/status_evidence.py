@@ -270,9 +270,7 @@ def collect_runtime_evidence(state):
         qa = row.get("qa") if isinstance(row.get("qa"), dict) else None
         review = row.get("review") if isinstance(row.get("review"), dict) else None
         if qa is None and str(row.get("step") or "").strip() == "qa":
-            qa = review_domain._structured_report_from_step(
-                row, config.STRUCTURED_QA_MARKER
-            )
+            qa = review_domain._structured_report_from_step(row, config.STRUCTURED_QA_MARKER)
         if review is None and str(row.get("step") or "").strip() == "review":
             review = review_domain._structured_report_from_step(
                 row, config.STRUCTURED_REVIEW_MARKER
@@ -298,20 +296,12 @@ def collect_runtime_evidence(state):
             "qa_verdict": str(qa.get("verdict") or "").strip() if qa else "",
             "qa_blocking_findings": qa.get("blocking_findings") if qa else [],
             "qa_tested_commands": qa.get("tested_commands") if qa else [],
-            "qa_target_branch_available": qa.get("target_branch_available")
-            if qa
-            else None,
+            "qa_target_branch_available": qa.get("target_branch_available") if qa else None,
             "qa_risk_class": str(qa.get("risk_class") or "").strip() if qa else "",
-            "review_verdict": str(review.get("verdict") or "").strip()
-            if review
-            else "",
-            "review_max_severity": str(review.get("max_severity") or "").strip()
-            if review
-            else "",
+            "review_verdict": str(review.get("verdict") or "").strip() if review else "",
+            "review_max_severity": str(review.get("max_severity") or "").strip() if review else "",
             "review_findings": review.get("findings") if review else [],
-            "review_blocking_findings": review.get("blocking_findings")
-            if review
-            else [],
+            "review_blocking_findings": review.get("blocking_findings") if review else [],
             "review_dimensions": review.get("dimensions") if review else {},
             "reason": str(row.get("reason") or "").strip(),
             "error": str(row.get("error") or "").strip()[:2000],
@@ -384,9 +374,7 @@ def collect_runtime_evidence(state):
                     continue
                 sub_ids = subzone.get("ids")
                 if isinstance(sub_ids, list):
-                    ids.extend(
-                        (str(item).strip() for item in sub_ids if str(item).strip())
-                    )
+                    ids.extend((str(item).strip() for item in sub_ids if str(item).strip()))
         return list(dict.fromkeys(ids))
 
     def _department_lookup() -> Dict[str, Dict[str, str]]:
@@ -410,9 +398,7 @@ def collect_runtime_evidence(state):
     except RECOVERABLE_ERRORS:
         planned_ids_for_participants = set()
     try:
-        deployed_ids_for_participants = set(
-            duty_employee_registry.duty_employee_records().keys()
-        )
+        deployed_ids_for_participants = set(duty_employee_registry.duty_employee_records().keys())
     except RECOVERABLE_ERRORS:
         deployed_ids_for_participants = set()
     departments_by_employee = _department_lookup()
@@ -446,9 +432,7 @@ def collect_runtime_evidence(state):
             item["department_key"] = dept.get("department_key", "")
             item["department_label"] = dept.get("department_label", "")
 
-    state["merge_decision"] = _merge_decision_summary(
-        state["memory"].get("last_policy_decision")
-    )
+    state["merge_decision"] = _merge_decision_summary(state["memory"].get("last_policy_decision"))
     return None
 
 
@@ -512,7 +496,5 @@ def _merge_decision_summary(value: Any) -> Dict[str, Any]:
             or final.get("target_branch")
             or ""
         ).strip(),
-        "para_task_id": str(
-            value.get("para_task_id") or final.get("para_task_id") or ""
-        ).strip(),
+        "para_task_id": str(value.get("para_task_id") or final.get("para_task_id") or "").strip(),
     }

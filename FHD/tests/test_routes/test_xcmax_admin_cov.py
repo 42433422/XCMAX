@@ -1048,7 +1048,9 @@ class TestLocalEndpoints:
         """Lines 1079-1083: service error → 502."""
         with (
             patch.dict("os.environ", {"MODSTORE_LOCAL_AUTOMATION": "1"}),
-            patch("app.fastapi_routes.xcmax_admin._require_market_admin_session", return_value=None),
+            patch(
+                "app.fastapi_routes.xcmax_admin._require_market_admin_session", return_value=None
+            ),
             patch(
                 "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
                 return_value="sid",

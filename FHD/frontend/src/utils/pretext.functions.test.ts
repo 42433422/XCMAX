@@ -1,14 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const { mockPrepare, mockLayout, mockPrepareWithSegments, mockLayoutWithLines } = vi.hoisted(() => ({
-  mockPrepare: vi.fn(),
+const { mockMeasureLineStats, mockLayout, mockPrepareWithSegments, mockLayoutWithLines } = vi.hoisted(() => ({
+  mockMeasureLineStats: vi.fn(),
   mockLayout: vi.fn(),
   mockPrepareWithSegments: vi.fn(),
   mockLayoutWithLines: vi.fn(),
 }))
 
 vi.mock('@chenglou/pretext', () => ({
-  prepare: mockPrepare,
+  measureLineStats: mockMeasureLineStats,
   layout: mockLayout,
   prepareWithSegments: mockPrepareWithSegments,
   layoutWithLines: mockLayoutWithLines,
@@ -32,13 +32,13 @@ describe('pretext', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     clearMeasureCache()
-    mockPrepare.mockReturnValue('prepared-data')
-    mockLayout.mockReturnValue({ width: 100, height: 30, lineCount: 1 })
+    mockMeasureLineStats.mockReturnValue({ maxLineWidth: 100, lineCount: 1 })
+    mockLayout.mockReturnValue({ height: 30, lineCount: 1 })
     mockPrepareWithSegments.mockReturnValue('prepared-segments')
     mockLayoutWithLines.mockReturnValue({
       width: 100,
       height: 30,
-      lines: [{ text: 'line1' }, { text: 'line2' }],
+      lines: [{ text: 'line1', width: 80 }, { text: 'line2', width: 100 }],
     })
   })
 
@@ -46,6 +46,7 @@ describe('pretext', () => {
     it('returns measurement result for basic text', () => {
       const result = measureText({ text: 'hello', width: 200 })
       expect(result.width).toBe(100)
+      expect(mockMeasureLineStats).toHaveBeenCalledWith('prepared-segments', 200)
       expect(result.height).toBe(30)
       expect(result.lineCount).toBe(1)
       expect(result.lines).toEqual([])
@@ -53,17 +54,17 @@ describe('pretext', () => {
 
     it('uses default fontSize and lineHeight when not provided', () => {
       measureText({ text: 'test', width: 100 })
-      expect(mockLayout).toHaveBeenCalledWith('prepared-data', 100, 14 * 1.5)
+      expect(mockLayout).toHaveBeenCalledWith('prepared-segments', 100, 14 * 1.5)
     })
 
     it('uses custom fontSize and lineHeight', () => {
       measureText({ text: 'test', width: 100, fontSize: 20, lineHeight: 2 })
-      expect(mockLayout).toHaveBeenCalledWith('prepared-data', 100, 40)
+      expect(mockLayout).toHaveBeenCalledWith('prepared-segments', 100, 40)
     })
 
     it('passes whiteSpace and wordBreak to prepare', () => {
       measureText({ text: 'test', width: 100, whiteSpace: 'pre-wrap', wordBreak: 'keep-all' })
-      expect(mockPrepare).toHaveBeenCalledWith('test', expect.any(String), {
+      expect(mockPrepareWithSegments).toHaveBeenCalledWith('test', expect.any(String), {
         whiteSpace: 'pre-wrap',
         wordBreak: 'keep-all',
         letterSpacing: undefined,
@@ -72,24 +73,26 @@ describe('pretext', () => {
 
     it('defaults whiteSpace to normal', () => {
       measureText({ text: 'test', width: 100 })
-      expect(mockPrepare).toHaveBeenCalledWith('test', expect.any(String), expect.objectContaining({ whiteSpace: 'normal' }))
+      expect(mockPrepareWithSegments).toHaveBeenCalledWith('test', expect.any(String), expect.objectContaining({ whiteSpace: 'normal' }))
     })
 
     it('caches prepared data for same text and options', () => {
       measureText({ text: 'cached', width: 100 })
       measureText({ text: 'cached', width: 200 })
-      expect(mockPrepare).toHaveBeenCalledTimes(1)
+      expect(mockPrepareWithSegments).toHaveBeenCalledTimes(1)
+      expect(mockMeasureLineStats).toHaveBeenNthCalledWith(1, 'prepared-segments', 100)
+      expect(mockMeasureLineStats).toHaveBeenNthCalledWith(2, 'prepared-segments', 200)
     })
 
     it('does not use cache for different text', () => {
       measureText({ text: 'text1', width: 100 })
       measureText({ text: 'text2', width: 100 })
-      expect(mockPrepare).toHaveBeenCalledTimes(2)
+      expect(mockPrepareWithSegments).toHaveBeenCalledTimes(2)
     })
 
     it('uses custom fontFamily and fontWeight in font string', () => {
       measureText({ text: 'test', width: 100, fontFamily: 'Arial', fontWeight: '700' })
-      expect(mockPrepare).toHaveBeenCalledWith('test', '700 14px Arial', expect.any(Object))
+      expect(mockPrepareWithSegments).toHaveBeenCalledWith('test', '700 14px Arial', expect.any(Object))
     })
   })
 
@@ -98,6 +101,7 @@ describe('pretext', () => {
       const result = measureTextWithLines({ text: 'hello world', width: 200 })
       expect(result.lines).toEqual(['line1', 'line2'])
       expect(result.lineCount).toBe(2)
+      expect(result.width).toBe(100)
     })
 
     it('calls prepareWithSegments and layoutWithLines', () => {
@@ -142,11 +146,11 @@ describe('pretext', () => {
   describe('estimateMessageHeight', () => {
     it('strips HTML tags before measuring', () => {
       estimateMessageHeight('<p>hello</p>', 200)
-      expect(mockPrepare).toHaveBeenCalledWith('hello', expect.any(String), expect.any(Object))
+      expect(mockPrepareWithSegments).toHaveBeenCalledWith('hello', expect.any(String), expect.any(Object))
     })
 
     it('returns the height from measurement', () => {
-      mockLayout.mockReturnValue({ width: 200, height: 42, lineCount: 2 })
+      mockLayout.mockReturnValue({ height: 42, lineCount: 2 })
       const h = estimateMessageHeight('text', 200)
       expect(h).toBe(42)
     })
@@ -164,7 +168,7 @@ describe('pretext', () => {
 
   describe('batchEstimateMessageHeights', () => {
     it('returns heights for multiple messages', () => {
-      mockLayout.mockReturnValue({ width: 200, height: 30, lineCount: 1 })
+      mockLayout.mockReturnValue({ height: 30, lineCount: 1 })
       const heights = batchEstimateMessageHeights([{ content: 'a' }, { content: 'b', fontSize: 18 }], 200)
       expect(heights).toEqual([30, 30])
     })
@@ -176,14 +180,14 @@ describe('pretext', () => {
 
   describe('calculateTableRowHeights', () => {
     it('returns heights with padding for each cell', () => {
-      mockLayout.mockReturnValue({ width: 100, height: 20, lineCount: 1 })
+      mockLayout.mockReturnValue({ height: 20, lineCount: 1 })
       const heights = calculateTableRowHeights(['cell1', 'cell2'], 100)
       expect(heights).toEqual([36, 36])
     })
 
     it('uses monospace font family', () => {
       calculateTableRowHeights(['cell'], 100)
-      expect(mockPrepare).toHaveBeenCalledWith('cell', expect.stringContaining('monospace'), expect.any(Object))
+      expect(mockPrepareWithSegments).toHaveBeenCalledWith('cell', expect.stringContaining('monospace'), expect.any(Object))
     })
 
     it('uses default fontSize of 12', () => {
@@ -194,7 +198,7 @@ describe('pretext', () => {
 
   describe('calculateLabelLayout', () => {
     it('returns layout with fontSize and lines when text fits', () => {
-      mockLayoutWithLines.mockReturnValue({ width: 100, height: 20, lines: [{ text: 'label' }] })
+      mockLayoutWithLines.mockReturnValue({ width: 100, height: 20, lines: [{ text: 'label', width: 100 }] })
       const layout = calculateLabelLayout('label', 100, 30)
       expect(layout.fontSize).toBe(16)
       expect(layout.lines).toEqual(['label'])
@@ -203,9 +207,9 @@ describe('pretext', () => {
 
     it('tries smaller font sizes when text does not fit', () => {
       mockLayoutWithLines
-        .mockReturnValueOnce({ width: 100, height: 50, lines: [{ text: 'label' }] })
-        .mockReturnValueOnce({ width: 100, height: 40, lines: [{ text: 'label' }] })
-        .mockReturnValueOnce({ width: 100, height: 20, lines: [{ text: 'label' }] })
+        .mockReturnValueOnce({ width: 100, height: 50, lines: [{ text: 'label', width: 100 }] })
+        .mockReturnValueOnce({ width: 100, height: 40, lines: [{ text: 'label', width: 100 }] })
+        .mockReturnValueOnce({ width: 100, height: 20, lines: [{ text: 'label', width: 100 }] })
       const layout = calculateLabelLayout('label', 100, 30)
       expect(layout.fontSize).toBe(12)
     })
@@ -214,7 +218,7 @@ describe('pretext', () => {
       mockLayoutWithLines.mockReturnValue({
         width: 100,
         height: 100,
-        lines: [{ text: 'l1' }, { text: 'l2' }, { text: 'l3' }],
+        lines: [{ text: 'l1', width: 100 }, { text: 'l2', width: 100 }, { text: 'l3', width: 100 }],
       })
       const layout = calculateLabelLayout('long label', 50, 20)
       expect(layout.fontSize).toBe(8)

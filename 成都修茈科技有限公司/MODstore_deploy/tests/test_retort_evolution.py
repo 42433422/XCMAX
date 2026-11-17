@@ -359,3 +359,83 @@ def test_postgres_native_lock_excludes_another_connection(monkeypatch):
             pass
     finally:
         engine.dispose()
+
+
+@pytest.mark.parametrize("failure", [ValueError("invalid protocol"), AssertionError("invariant")])
+def test_optimizer_only_recovers_operational_errors(monkeypatch, failure):
+    from types import SimpleNamespace
+
+    def fail(*args, **kwargs):
+        raise failure
+
+    monkeypatch.setenv("MODSTORE_RETORT_RSI_PROTOCOL", "synthetic-protocol.json")
+    monkeypatch.setattr(
+        service, "load_repository_module", lambda _: SimpleNamespace(optimize_protocol=fail)
+    )
+    ports = service.ComponentPorts(str(uuid4()))
+    if isinstance(failure, AssertionError):
+        with pytest.raises(AssertionError, match="invariant"):
+            ports.optimize({}, {"public_body": "original"})
+    else:
+        result = ports.optimize({}, {"public_body": "original"})
+        assert result["status"] == "experiment_failed"
+        assert result["error_type"] == "ValueError"
+        assert result["automatically_applied"] is False
+
+
+@pytest.mark.parametrize(
+    "failure", [ValueError("temporarily unavailable"), AssertionError("invariant")]
+)
+def test_background_only_recovers_operational_errors(monkeypatch, caplog, failure):
+    from modstore_server.retort_evolution_api import _advance
+
+    def fail(*args, **kwargs):
+        raise failure
+
+    monkeypatch.setattr(service, "advance_run", fail)
+    if isinstance(failure, AssertionError):
+        with pytest.raises(AssertionError, match="invariant"):
+            _advance("synthetic-request")
+    else:
+        _advance("synthetic-request")
+        assert "Retort continuation incomplete" in caplog.text
+
+
+@pytest.mark.parametrize(
+    "failure", [ValueError("temporarily unavailable"), AssertionError("invariant")]
+)
+def test_tick_only_recovers_operational_errors(setup, monkeypatch, failure):
+    request_id = create(setup)
+
+    def fail(*args, **kwargs):
+        raise failure
+
+    monkeypatch.setattr(service, "advance_run", fail)
+    if isinstance(failure, AssertionError):
+        with pytest.raises(AssertionError, match="invariant"):
+            service.tick()
+    else:
+        assert service.tick()["errors"] == [{"request_id": request_id, "error": "ValueError"}]
+
+
+@pytest.mark.parametrize("failure", [ValueError("invalid dispatch"), AssertionError("invariant")])
+def test_advance_only_projects_operational_errors(setup, monkeypatch, failure):
+    request_id = create(setup)
+    before = read(setup["client"], request_id)
+
+    def fail(self, state):
+        raise failure
+
+    monkeypatch.setattr(service.ComponentPorts, "dispatch", fail)
+    with pytest.raises(type(failure), match=str(failure)):
+        service.advance_run(
+            request_id,
+            approval={
+                "digest": before["snapshot"]["pending"][0]["digest"],
+                "approved": True,
+                "actor_id": setup["user"].id,
+            },
+        )
+    after = read(setup["client"], request_id)
+    assert after["error"] == ("" if isinstance(failure, AssertionError) else "invalid dispatch")
+    assert not [call for call in setup["calls"] if call[0] == "POST"]

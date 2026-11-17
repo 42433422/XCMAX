@@ -33,7 +33,9 @@ class RetortEvolutionRun(Base):
     event_id = Column(Integer, ForeignKey("incident_events.id"), nullable=True)
     error = Column(Text, nullable=False, default="")
     created_at = Column(DateTime, default=lambda: datetime.now(UTC))
-    updated_at = Column(DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+    updated_at = Column(
+        DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+    )
 
 
 class Workflow(Base):

@@ -7,14 +7,10 @@ from pathlib import Path
 from modstore_server.para_delegate_handler_merged import _git_preflight_branch
 
 
-def test_git_preflight_survives_deleted_process_working_directory(
-    tmp_path, monkeypatch
-):
+def test_git_preflight_survives_deleted_process_working_directory(tmp_path, monkeypatch):
     monkeypatch.delenv("MODSTORE_PARA_SKIP_GIT_PREFLIGHT", raising=False)
     repo = tmp_path / "repository"
-    subprocess.run(
-        ["git", "init", "-b", "main", str(repo)], check=True, capture_output=True
-    )
+    subprocess.run(["git", "init", "-b", "main", str(repo)], check=True, capture_output=True)
     subprocess.run(
         [
             "git",

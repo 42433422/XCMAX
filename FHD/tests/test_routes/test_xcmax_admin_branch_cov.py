@@ -652,7 +652,9 @@ class TestLocalSelfMaintenanceGovernanceReview:
         """Lines 1101-1108: success path."""
         with (
             patch.dict("os.environ", {"MODSTORE_LOCAL_AUTOMATION": "1"}),
-            patch("app.fastapi_routes.xcmax_admin._require_market_admin_session", return_value=None),
+            patch(
+                "app.fastapi_routes.xcmax_admin._require_market_admin_session", return_value=None
+            ),
             _session_id("sid123"),
             patch(
                 "app.fastapi_routes.market_account._authorization_from_request",
@@ -674,7 +676,9 @@ class TestLocalSelfMaintenanceGovernanceReview:
         """Lines 1107-1108: error → 502."""
         with (
             patch.dict("os.environ", {"MODSTORE_LOCAL_AUTOMATION": "1"}),
-            patch("app.fastapi_routes.xcmax_admin._require_market_admin_session", return_value=None),
+            patch(
+                "app.fastapi_routes.xcmax_admin._require_market_admin_session", return_value=None
+            ),
             _session_id("sid123"),
             patch(
                 "app.fastapi_routes.market_account._authorization_from_request",

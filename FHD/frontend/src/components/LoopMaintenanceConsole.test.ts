@@ -29,7 +29,7 @@ beforeEach(() => {
 })
 afterEach(() => {
   wrapper?.unmount()
-  document.body.innerHTML = ''
+  document.body.replaceChildren()
   vi.useRealTimers()
 })
 function render() {

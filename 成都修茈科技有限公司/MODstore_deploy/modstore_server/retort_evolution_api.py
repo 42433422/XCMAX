@@ -16,6 +16,7 @@ from modstore_server.api.deps import get_db, require_admin
 from modstore_server.customer_service_tools import json_loads
 from modstore_server.customer_ticket_github import configuration, github
 from modstore_server.models import RetortEvolutionRun, User
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 router = APIRouter(
     prefix="/api/retort-evolution", tags=["retort-evolution"], dependencies=[Depends(require_admin)]
@@ -104,7 +105,7 @@ def _advance(request_id, approval=None):
     # Persisted work remains resumable by APScheduler if this HTTP worker exits.
     try:
         service.advance_run(request_id, approval=approval)
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         import logging
 
         logging.getLogger(__name__).error(

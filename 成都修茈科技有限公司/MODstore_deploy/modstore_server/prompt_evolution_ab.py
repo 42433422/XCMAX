@@ -136,35 +136,65 @@ def get_effective_system_prompt(employee_id: str, manifest_prompt: str) -> str:
 
 
 def run_prompt_shadow_ab(
-    *, employee_id: str, prompt_before: str, prompt_after: str,
-    lookback_hours: int = 24, min_wins: int = 2,
+    *,
+    employee_id: str,
+    prompt_before: str,
+    prompt_after: str,
+    lookback_hours: int = 24,
+    min_wins: int = 2,
 ) -> Dict[str, Any]:
     """Compatibility entry: compare real trials through GEPA, never an LLM vote."""
     path = os.environ.get("MODSTORE_RETORT_RSI_PROTOCOL", "")
     if not _ab_enabled() or not path:
-        return {"ok": True, "skipped": True, "improved_wins": False,
-                "reason": "awaiting_measured_baseline"}
+        return {
+            "ok": True,
+            "skipped": True,
+            "improved_wins": False,
+            "reason": "awaiting_measured_baseline",
+        }
     from modstore_server.integrations.repository_packages import load_repository_module
 
     optimizer = load_repository_module("retort_engine.evolution_optimizer")
     result = optimizer.optimize_protocol(
-        Path(path), seed={"system_prompt": prompt_before},
-        proposer=lambda candidate, reflective_dataset, components_to_update:
-            {key: prompt_after for key in components_to_update},
+        Path(path),
+        seed={"system_prompt": prompt_before},
+        proposer=lambda candidate, reflective_dataset, components_to_update: {
+            key: prompt_after for key in components_to_update
+        },
     )
-    return {"ok": True, **result, "improved_wins": result["status"] == "proposed",
-            "verdict": "after" if result["status"] == "proposed" else "tie"}
+    return {
+        "ok": True,
+        **result,
+        "improved_wins": result["status"] == "proposed",
+        "verdict": "after" if result["status"] == "proposed" else "tie",
+    }
 
 
 def maybe_auto_apply_prompt_evolution(
-    *, employee_id: str, prompt_before: str, prompt_after: str,
-    evolution_record_id: int = 0, lookback_hours: int = 24,
+    *,
+    employee_id: str,
+    prompt_before: str,
+    prompt_after: str,
+    evolution_record_id: int = 0,
+    lookback_hours: int = 24,
 ) -> Dict[str, Any]:
     """Legacy callers may propose; only the Retort approval flow may promote."""
-    ab = run_prompt_shadow_ab(employee_id=employee_id, prompt_before=prompt_before,
-                              prompt_after=prompt_after, lookback_hours=lookback_hours)
-    return {"ok": True, "applied": False, "ab": ab,
-            "reason": "awaiting_retort_acceptance" if ab.get("improved_wins") else ab.get("reason", "no_verified_improvement")}
+    ab = run_prompt_shadow_ab(
+        employee_id=employee_id,
+        prompt_before=prompt_before,
+        prompt_after=prompt_after,
+        lookback_hours=lookback_hours,
+    )
+    return {
+        "ok": True,
+        "applied": False,
+        "ab": ab,
+        "reason": (
+            "awaiting_retort_acceptance"
+            if ab.get("improved_wins")
+            else ab.get("reason", "no_verified_improvement")
+        ),
+    }
 
 
 __all__ = [

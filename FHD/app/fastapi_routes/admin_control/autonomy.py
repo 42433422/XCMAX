@@ -174,7 +174,7 @@ class AutonomyAdmin:
         metrics = operating_metrics_windows()
         deploy = list_deploy_events(limit=20)
         pending = list_pending_actions()
-        runtime: dict[str, Any] = {}
+        runtime: dict[str, Any] | JSONResponse | None = {}
         try:
             runtime = await _self_maintenance_local_or_proxy(
                 request, "GET", "/api/ops/self-maintenance/status?limit=40"
