@@ -142,6 +142,7 @@ def _registered_router_dataset_rag(
         raw_history = params.get("history")
         history = raw_history if isinstance(raw_history, list) else []
         min_relevance = as_float(params.get("min_relevance"), 0.0)
+        mmr_lambda = as_float(params.get("mmr_lambda"), 0.0)
         if include_answer:
             result = service.answer(
                 dataset_id=dataset_id,
@@ -155,6 +156,7 @@ def _registered_router_dataset_rag(
                 history=history,
                 min_relevance=min_relevance,
                 max_context_chars=as_int(params.get("max_context_chars"), 0),
+                mmr_lambda=mmr_lambda,
             )
         else:
             result = service.query(
@@ -169,6 +171,7 @@ def _registered_router_dataset_rag(
                 context_window=as_int(params.get("context_window"), 0),
                 history=history,
                 min_relevance=min_relevance,
+                mmr_lambda=mmr_lambda,
             )
         return finalize(
             result, dataset_id=dataset_id, query=query, chunks=[], citations=[], answer=""
@@ -199,6 +202,7 @@ def _registered_router_dataset_rag(
             "access_context": access_context(DATASET_READ_PERMISSION),
             "history": history,
             "min_relevance": as_float(params.get("min_relevance"), 0.0),
+            "mmr_lambda": as_float(params.get("mmr_lambda"), 0.0),
         }
         if as_bool(params.get("include_answer"), default=True):
             result = service.multi_answer(

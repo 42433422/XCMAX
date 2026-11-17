@@ -791,6 +791,7 @@ class DatasetRagApplicationService:
         context_window: int = 0,
         history: list[dict[str, Any]] | None = None,
         min_relevance: float | None = None,
+        mmr_lambda: float | None = None,
     ) -> dict[str, Any]:
         original_query = query
         rewritten = ""
@@ -812,6 +813,7 @@ class DatasetRagApplicationService:
             include_sheet_context=include_sheet_context,
             context_window=context_window,
             min_relevance=min_relevance,
+            mmr_lambda=mmr_lambda,
         )
         if rewritten:
             result["original_query"] = original_query
@@ -934,6 +936,7 @@ class DatasetRagApplicationService:
         history: list[dict[str, Any]] | None = None,
         min_relevance: float | None = None,
         max_context_chars: int | None = None,
+        mmr_lambda: float | None = None,
     ) -> dict[str, Any]:
         result = self.query(
             dataset_id=dataset_id,
@@ -947,6 +950,7 @@ class DatasetRagApplicationService:
             context_window=1,
             history=history,
             min_relevance=min_relevance,
+            mmr_lambda=mmr_lambda,
         )
         return self._synthesize_answer(
             result, llm_call=llm_call, max_context_chars=max_context_chars
@@ -966,6 +970,7 @@ class DatasetRagApplicationService:
         context_window: int = 0,
         history: list[dict[str, Any]] | None = None,
         min_relevance: float | None = None,
+        mmr_lambda: float | None = None,
     ) -> dict[str, Any]:
         """Query several datasets and rank their pooled candidates on one scale.
 
@@ -1033,7 +1038,7 @@ class DatasetRagApplicationService:
                         "metadata": {**metadata, "_dataset_id": key},
                     }
                 )
-        fused = self._pool_retrieve(pooled, query, finals, rerank=rerank)
+        fused = self._pool_retrieve(pooled, query, finals, rerank=rerank, mmr_lambda=mmr_lambda)
         grounding = evidence_grounding(query, [_dict_to_retrieved_chunk(row) for row in fused])
         threshold = resolve_min_relevance(min_relevance)
         payload: dict[str, Any] = {
@@ -1065,7 +1070,13 @@ class DatasetRagApplicationService:
         return payload
 
     def _pool_retrieve(
-        self, pooled: list[dict[str, Any]], query: str, top_k: int, *, rerank: bool
+        self,
+        pooled: list[dict[str, Any]],
+        query: str,
+        top_k: int,
+        *,
+        rerank: bool,
+        mmr_lambda: float | None = None,
     ) -> list[dict[str, Any]]:
         """Rank pooled candidates from several datasets on a single scoring scale."""
         if not pooled:
@@ -1080,7 +1091,14 @@ class DatasetRagApplicationService:
             )
             rows.setdefault(key, row)
         chunks = [_dict_to_retrieved_chunk(row) for row in rows.values()]
-        retriever = HybridRetriever(embedder=self._vector.embedder, top_k=len(chunks))
+        # 向量/BM25 两条通道各自默认只取 10 条；候选池要做 MMR 时必须全量排序，
+        # 否则长尾里的独立文档根本进不了池子。
+        retriever = HybridRetriever(
+            embedder=self._vector.embedder,
+            top_k=len(chunks),
+            top_k_vector=len(chunks),
+            top_k_bm25=len(chunks),
+        )
         retriever.index(chunks)
         top = retriever.retrieve(query)
         from app.application.dataset_rag.retrieval import (
@@ -1088,14 +1106,30 @@ class DatasetRagApplicationService:
             _rerank_chunks,
             _semantic_rerank_chunks,
         )
+        from app.application.dataset_rag.retrieval_policy import (
+            mmr_rerank,
+            resolve_mmr_lambda,
+        )
 
         auto = False if rerank else _auto_rerank_available()
+        lambda_value = resolve_mmr_lambda(mmr_lambda)
+        # MMR 需要完整候选池才能在长尾里挑出「不同文档」；池子本身已按
+        # 每个库的候选上限收敛，不会无限膨胀。
+        retrieve_k = len(top) if lambda_value > 0 else top_k
         if rerank or auto:
-            top = _semantic_rerank_chunks(query, top, top_k=top_k, auto=auto) or _rerank_chunks(
-                query, top, top_k=top_k
-            )
+            top = _semantic_rerank_chunks(
+                query, top, top_k=retrieve_k, auto=auto
+            ) or _rerank_chunks(query, top, top_k=retrieve_k)
         else:
-            top = top[:top_k]
+            top = top[:retrieve_k]
+        if lambda_value > 0:
+            top = mmr_rerank(
+                query,
+                top,
+                lambda_=lambda_value,
+                top_k=top_k,
+                embedder=self._vector.embedder,
+            )
         output: list[dict[str, Any]] = []
         for chunk in top:
             metadata = chunk.metadata or {}
@@ -1128,6 +1162,7 @@ class DatasetRagApplicationService:
         history: list[dict[str, Any]] | None = None,
         min_relevance: float | None = None,
         max_context_chars: int | None = None,
+        mmr_lambda: float | None = None,
     ) -> dict[str, Any]:
         result = self.multi_query(
             dataset_ids=dataset_ids,
@@ -1141,6 +1176,7 @@ class DatasetRagApplicationService:
             context_window=1,
             history=history,
             min_relevance=min_relevance,
+            mmr_lambda=mmr_lambda,
         )
         return self._synthesize_answer(
             result, llm_call=llm_call, max_context_chars=max_context_chars

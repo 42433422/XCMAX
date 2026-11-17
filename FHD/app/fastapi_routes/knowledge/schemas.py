@@ -264,6 +264,12 @@ class DatasetQueryRequest(BaseModel):
         description="prompt evidence budget; 0 uses XCAGI_KB_MAX_CONTEXT_CHARS (default 6000)",
     )
     rerank: bool = Field(False, description="apply cross-encoder reranking with safe fallback")
+    mmr_lambda: float = Field(
+        0.0,
+        ge=0.0,
+        le=1.0,
+        description="MMR diversity weight; 0 disables, 1 keeps pure relevance",
+    )
     context_window: int = Field(
         0,
         ge=0,

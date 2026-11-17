@@ -31,7 +31,9 @@ from app.application.dataset_rag.retrieval_policy import (
     _rerank_chunks,
     _semantic_rerank_chunks,
     evidence_grounding,
+    mmr_rerank,
     resolve_min_relevance,
+    resolve_mmr_lambda,
 )
 from app.application.dataset_rag.vector_index import VectorIndexService
 from app.infrastructure.rag import RetrievedChunk
@@ -159,6 +161,7 @@ class DatasetRetrieval:
         include_sheet_context: bool = False,
         context_window: int = 0,
         min_relevance: float | None = None,
+        mmr_lambda: float | None = None,
     ) -> dict[str, Any]:
         dataset_key = _clean_key(dataset_id, default="default")
         tenant_key, denied = _resolve_tenant_for_access(
@@ -238,15 +241,28 @@ class DatasetRetrieval:
         final_k = max(1, min(int(top_k), 50))
         auto_rerank = False if rerank else _auto_rerank_available()
         effective_rerank = rerank or auto_rerank
-        # 精排需要更大的候选池，否则 cross-encoder 没有可选空间
+        lambda_value = resolve_mmr_lambda(mmr_lambda)
+        # 精排与 MMR 都需要更大的候选池，否则没有可选空间
         retrieve_k = max(final_k * 4, 20) if effective_rerank else final_k
+        if lambda_value > 0:
+            retrieve_k = max(retrieve_k, final_k * 3, 15)
         retriever = self._retriever_factory(embedder=self._vector.embedder, top_k=retrieve_k)
         retriever.index(chunks)
         top = retriever.retrieve(query_text)
         if effective_rerank:
             top = _semantic_rerank_chunks(
-                query_text, top, top_k=final_k, auto=auto_rerank
-            ) or _rerank_chunks(query_text, top, top_k=final_k)
+                query_text, top, top_k=retrieve_k, auto=auto_rerank
+            ) or _rerank_chunks(query_text, top, top_k=retrieve_k)
+        if lambda_value > 0:
+            top = mmr_rerank(
+                query_text,
+                top,
+                lambda_=lambda_value,
+                top_k=final_k,
+                embedder=self._vector.embedder,
+            )
+        else:
+            top = top[:final_k]
         rows = [_chunk_to_dict(c, public=True) for c in top]
         # Excel text embeds sheet boundaries. Recover them for older indexed chunks
         # so rows from another worksheet cannot inherit a customer's identity.

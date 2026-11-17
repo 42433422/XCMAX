@@ -398,7 +398,7 @@ def _build_service(storage: Path):
     )
 
 
-def run(*, rerank: bool, multi: bool = False) -> dict[str, float]:
+def run(*, rerank: bool, multi: bool = False, mmr_lambda: float = 0.0) -> dict[str, float]:
     from app.infrastructure.llm.embedding_service import get_default_embedding_service
 
     svc = get_default_embedding_service()
@@ -419,6 +419,7 @@ def run(*, rerank: bool, multi: bool = False) -> dict[str, float]:
         hits_at = {1: 0, 3: 0, 5: 0}
         reciprocal = 0.0
         grounded = 0
+        distinct_docs = 0
         for item in QUERIES:
             if multi:
                 result = service.multi_query(
@@ -426,6 +427,7 @@ def run(*, rerank: bool, multi: bool = False) -> dict[str, float]:
                     query=str(item["q"]),
                     top_k=5,
                     rerank=rerank,
+                    mmr_lambda=mmr_lambda,
                 )
             else:
                 result = service.query(
@@ -433,11 +435,13 @@ def run(*, rerank: bool, multi: bool = False) -> dict[str, float]:
                     query=str(item["q"]),
                     top_k=5,
                     rerank=rerank,
+                    mmr_lambda=mmr_lambda,
                 )
             doc_ids = [
                 str((chunk.get("metadata") or {}).get("document_id") or "")
                 for chunk in result.get("chunks") or []
             ]
+            distinct_docs += len(set(doc_ids))
             expected = item["expected"]
             expected_ids = {
                 str(value) for value in (expected if isinstance(expected, list) else [expected])
@@ -459,6 +463,8 @@ def run(*, rerank: bool, multi: bool = False) -> dict[str, float]:
             "recall@5": round(hits_at[5] / total, 4),
             "mrr": round(reciprocal / total, 4),
             "answer_grounded_rate": round(grounded / total, 4),
+            "mmr_lambda": mmr_lambda,
+            "distinct_doc_rate@5": round(distinct_docs / (total * 5), 4),
         }
         return metrics
 
@@ -507,9 +513,20 @@ def main() -> int:
         "--multi", action="store_true", help="把文档拆到 3 个知识库并用 multi-query 融合检索"
     )
     parser.add_argument("--ood", action="store_true", help="只跑域外问题，检查是否被低置信拒答")
+    parser.add_argument(
+        "--diversity",
+        type=float,
+        default=0.0,
+        metavar="LAMBDA",
+        help="MMR 多样性权重 0–1（0 关闭）：同时报告 distinct_doc_rate@5",
+    )
     parser.add_argument("--json", action="store_true", help="只输出 JSON")
     args = parser.parse_args()
-    metrics = run_ood(multi=args.multi) if args.ood else run(rerank=args.rerank, multi=args.multi)
+    metrics = (
+        run_ood(multi=args.multi)
+        if args.ood
+        else run(rerank=args.rerank, multi=args.multi, mmr_lambda=args.diversity)
+    )
     if args.json:
         print(json.dumps(metrics, ensure_ascii=False))
     else:

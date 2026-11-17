@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+from collections.abc import Callable
 from typing import Any
 
 from app.application.dataset_rag.models import _clean_key
@@ -205,6 +206,81 @@ def _query_coverage(query: str, text: str) -> float:
     return len(query_terms & _query_terms(text)) / len(query_terms)
 
 
+def _vector_similarity(left: list[float], right: list[float]) -> float:
+    if not left or not right or len(left) != len(right):
+        return 0.0
+    dot = sum(a * b for a, b in zip(left, right, strict=True))
+    left_norm = sum(value * value for value in left) ** 0.5
+    right_norm = sum(value * value for value in right) ** 0.5
+    if not left_norm or not right_norm:
+        return 0.0
+    return dot / (left_norm * right_norm)
+
+
+def mmr_rerank(
+    query: str,
+    chunks: list[RetrievedChunk],
+    *,
+    lambda_: float,
+    top_k: int,
+    embedder: Callable[[str], list[float]] | None = None,
+) -> list[RetrievedChunk]:
+    """Maximal Marginal Relevance：在相关性与结果多样性之间折中。
+
+    成熟的 RAG 框架用 MMR 避免同一段内容的不同切片占满 top-k。有向量时用余弦
+    相似度，没有时回退到查询词覆盖率，保证 hash 降级模式同样可用。
+    """
+    if len(chunks) <= 1 or lambda_ <= 0:
+        return chunks[:top_k]
+    lambda_ = max(0.0, min(float(lambda_), 1.0))
+    vectors: list[list[float]] = []
+    if embedder is not None:
+        for chunk in chunks:
+            cached = (chunk.metadata or {}).get("_embedding")
+            if isinstance(cached, list) and cached:
+                vectors.append([float(value) for value in cached])
+                continue
+            try:
+                vectors.append(list(embedder(chunk.text)))
+            except RECOVERABLE_ERRORS:
+                vectors = []
+                break
+    if vectors and len(vectors) != len(chunks):
+        vectors = []
+    relevance = [_query_coverage(query, chunk.text) for chunk in chunks]
+    if not any(relevance):
+        relevance = [float(chunk.score) for chunk in chunks]
+        ceiling = max(relevance) or 1.0
+        relevance = [value / ceiling for value in relevance]
+    selected: list[int] = []
+    remaining = list(range(len(chunks)))
+    while remaining and len(selected) < max(1, min(int(top_k), len(chunks))):
+        best_index = remaining[0]
+        best_value = float("-inf")
+        for index in remaining:
+            if vectors:
+                similarity = max(
+                    (_vector_similarity(vectors[index], vectors[picked]) for picked in selected),
+                    default=0.0,
+                )
+            else:
+                terms = _query_terms(chunks[index].text)
+                similarity = max(
+                    (
+                        len(terms & _query_terms(chunks[picked].text))
+                        / max(1, len(terms | _query_terms(chunks[picked].text)))
+                        for picked in selected
+                    ),
+                    default=0.0,
+                )
+            value = lambda_ * relevance[index] - (1.0 - lambda_) * similarity
+            if value > best_value:
+                best_value, best_index = value, index
+        selected.append(best_index)
+        remaining.remove(best_index)
+    return [chunks[index] for index in selected]
+
+
 def _chunk_coverage(query: str, chunk: RetrievedChunk) -> float:
     best = _query_coverage(query, chunk.text)
     questions = (chunk.metadata or {}).get("auto_questions")
@@ -242,6 +318,21 @@ def resolve_min_relevance(requested: float | None) -> float:
     if requested is None or requested <= 0:
         return default_min_relevance()
     return max(0.0, min(float(requested), 1.0))
+
+
+def resolve_mmr_lambda(requested: float | None) -> float:
+    """MMR 强度：0 表示关闭；环境 ``XCAGI_KB_MMR_LAMBDA`` 可设默认。"""
+    try:
+        if requested is not None and float(requested) > 0:
+            return max(0.0, min(float(requested), 1.0))
+    except (TypeError, ValueError):
+        pass
+    raw = os.environ.get("XCAGI_KB_MMR_LAMBDA", "").strip()
+    try:
+        value = float(raw)
+    except ValueError:
+        return 0.0
+    return max(0.0, min(value, 1.0))
 
 
 def _deterministic_answer(query: str, chunks: list[RetrievedChunk]) -> str:
