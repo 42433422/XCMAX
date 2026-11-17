@@ -8,7 +8,6 @@ updates:
     groups:
       actions-minor-patch:
         update-types: [minor, patch]
-
   - package-ecosystem: pip
     directory: /FHD
     schedule:
@@ -16,7 +15,9 @@ updates:
     groups:
       fhd-python-minor-patch:
         update-types: [minor, patch]
-
+    # Vendored FHD/packages/xcagi_langgraph_* SSOT, including 3.1.1+xcagi.1.
+    ignore:
+      - dependency-name: "langgraph*"
   - package-ecosystem: pip
     directory: /成都修茈科技有限公司/MODstore_deploy
     schedule:
@@ -24,7 +25,6 @@ updates:
     groups:
       modstore-python-minor-patch:
         update-types: [minor, patch]
-
   - package-ecosystem: pip
     directory: /成都修茈科技有限公司/vibe-coding
     schedule:
@@ -32,7 +32,6 @@ updates:
     groups:
       vibe-python-minor-patch:
         update-types: [minor, patch]
-
   - package-ecosystem: pip
     directory: /packages/retort_engine
     schedule:
@@ -40,7 +39,9 @@ updates:
     groups:
       retort-python-minor-patch:
         update-types: [minor, patch]
-
+    # Same vendored LangGraph SSOT as /FHD.
+    ignore:
+      - dependency-name: "langgraph*"
   - package-ecosystem: npm
     directory: /FHD/frontend
     schedule:
@@ -48,7 +49,6 @@ updates:
     groups:
       frontend-minor-patch:
         update-types: [minor, patch]
-
   - package-ecosystem: npm
     directory: /FHD/desktop
     schedule:
@@ -56,7 +56,6 @@ updates:
     groups:
       desktop-minor-patch:
         update-types: [minor, patch]
-
   - package-ecosystem: npm
     directory: /FHD/XCAGI
     schedule:
@@ -64,7 +63,6 @@ updates:
     groups:
       xcagi-tooling-minor-patch:
         update-types: [minor, patch]
-
   - package-ecosystem: npm
     directory: /成都修茈科技有限公司
     schedule:
@@ -72,7 +70,6 @@ updates:
     groups:
       company-frontend-minor-patch:
         update-types: [minor, patch]
-
   - package-ecosystem: npm
     directory: /成都修茈科技有限公司/MODstore_deploy/market
     schedule:
@@ -80,7 +77,6 @@ updates:
     groups:
       market-minor-patch:
         update-types: [minor, patch]
-
   - package-ecosystem: npm
     directory: /成都修茈科技有限公司/MODstore_deploy/desktop-shell
     schedule:
