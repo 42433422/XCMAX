@@ -64,13 +64,15 @@ _BLOCKED_SEGMENTS = frozenset(
 )
 
 _WORD_SPLIT = re.compile(r"[^a-z0-9]+")
-_OVERLAY_PATH = Path(__file__).with_name("overlay") / "operations.yaml"
+_OVERLAY_DIR = Path(__file__).with_name("overlay")
+_OVERLAY_PATH = _OVERLAY_DIR / "operations.yaml"
+_OVERLAY_GENERATED_DIR = _OVERLAY_DIR / "generated"
 
 _CACHE_LOCK = threading.Lock()
 _SCHEMA_CACHE: weakref.WeakKeyDictionary[Any, dict[str, Any]] = weakref.WeakKeyDictionary()
 _CATALOG_CACHE: weakref.WeakKeyDictionary[Any, dict[str, Any]] = weakref.WeakKeyDictionary()
 _OVERLAY_LOCK = threading.Lock()
-_OVERLAY_CACHE: dict[str, Any] = {"mtime": None, "entries": {}, "glossary": {}}
+_OVERLAY_CACHE: dict[str, Any] = {"signature": None, "entries": {}, "glossary": {}}
 
 
 def _slug(value: str) -> str:
@@ -148,32 +150,58 @@ def _unique(base: str, taken: set[str], suffix: str = "") -> str:
     return candidate
 
 
-def _overlay_document() -> tuple[dict[str, dict[str, Any]], dict[str, list[str]]]:
-    """读取 overlay（按 mtime 缓存）：返回 operation 语义与业务域词汇表。"""
-    try:
-        mtime = _OVERLAY_PATH.stat().st_mtime
-    except OSError:
-        return {}, {}
-    with _OVERLAY_LOCK:
-        if _OVERLAY_CACHE["mtime"] == mtime:
-            return dict(_OVERLAY_CACHE["entries"]), dict(_OVERLAY_CACHE["glossary"])
+def _overlay_files() -> list[Path]:
+    """人工维护的 operations.yaml + 已审核入库的 generated/*.yaml（按文件名排序）。"""
+    files = [_OVERLAY_PATH]
+    if _OVERLAY_GENERATED_DIR.is_dir():
+        files.extend(sorted(_OVERLAY_GENERATED_DIR.glob("*.yaml")))
+    return files
+
+
+def _overlay_signature(files: list[Path]) -> tuple[tuple[str, float], ...]:
+    signature: list[tuple[str, float]] = []
+    for path in files:
         try:
-            raw = yaml.safe_load(_OVERLAY_PATH.read_text(encoding="utf-8")) or {}
-        except (OSError, yaml.YAMLError):
-            raw = {}
+            signature.append((path.name, path.stat().st_mtime))
+        except OSError:
+            signature.append((path.name, 0.0))
+    return tuple(signature)
+
+
+def _overlay_document() -> tuple[dict[str, dict[str, Any]], dict[str, list[str]]]:
+    """读取 overlay（按文件签名缓存）：返回 operation 语义与业务域词汇表。
+
+    草稿目录 ``overlay/drafts`` 不参与加载；人工审核后把条目移入
+    ``overlay/generated/*.yaml`` 才会生效。
+    """
+    files = _overlay_files()
+    signature = _overlay_signature(files)
+    with _OVERLAY_LOCK:
+        if _OVERLAY_CACHE["signature"] == signature:
+            return dict(_OVERLAY_CACHE["entries"]), dict(_OVERLAY_CACHE["glossary"])
         entries: dict[str, dict[str, Any]] = {}
-        for item in raw.get("operations") or []:
-            if not isinstance(item, dict):
-                continue
-            operation_id = str(item.get("operation_id") or "").strip()
-            if operation_id:
-                entries[operation_id] = {k: v for k, v in item.items() if k != "operation_id"}
         glossary: dict[str, list[str]] = {}
-        for domain, aliases in (raw.get("glossary") or {}).items():
-            key = _slug(str(domain))
-            if key and isinstance(aliases, list):
-                glossary[key] = [str(alias).strip() for alias in aliases if str(alias).strip()]
-        _OVERLAY_CACHE["mtime"] = mtime
+        for path in files:
+            try:
+                raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            except (OSError, yaml.YAMLError):
+                continue
+            for item in raw.get("operations") or []:
+                if not isinstance(item, dict):
+                    continue
+                operation_id = str(item.get("operation_id") or "").strip()
+                if operation_id:
+                    entries[operation_id] = {
+                        k: v for k, v in item.items() if k != "operation_id"
+                    }
+            for domain, aliases in (raw.get("glossary") or {}).items():
+                key = _slug(str(domain))
+                if key and isinstance(aliases, list):
+                    known = glossary.setdefault(key, [])
+                    known.extend(
+                        str(alias).strip() for alias in aliases if str(alias).strip()
+                    )
+        _OVERLAY_CACHE["signature"] = signature
         _OVERLAY_CACHE["entries"] = entries
         _OVERLAY_CACHE["glossary"] = glossary
         return dict(entries), dict(glossary)

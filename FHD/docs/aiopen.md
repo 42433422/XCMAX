@@ -137,6 +137,9 @@ MCP 只读资源：
 
 推荐顺序：`knowledge_search` → `operation_describe` → `api_call`。
 
+语义草稿由 `scripts/dev/aiopen_overlay_draft.py` 批量生成到 `overlay/drafts/`（运行时不加载），
+人工审核后移入 `overlay/generated/*.yaml` 生效。
+
 默认白名单覆盖对话 / IM / 群聊 / 知识库 / 员工台 / 产品组织订单 / 出货打印 / Mod 等前缀；
 `api_call` 对已启用前缀的子路径自动放行（例如启用 `/api/products` 即可调 `/api/products/list`）。
 
