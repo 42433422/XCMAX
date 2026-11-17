@@ -14,8 +14,9 @@ LiteLLM 是可选依赖：未安装或显式关闭时 ``chat``/``stream_events``
 from __future__ import annotations
 
 import asyncio
-import hashlib
+import hmac
 import os
+import secrets
 import threading
 import time
 from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
@@ -25,17 +26,24 @@ from modstore_server.llm_key_resolver import (
     is_minimax_token_plan_key,
     minimax_anthropic_base_url,
     normalize_minimax_api_key,
-    platform_api_key,
-    platform_base_url,
 )
 from modstore_server.llm_quota_monitor import scrub_llm_error
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.platform_model_config import PlatformApiKey
+
+try:
+    from openai import OpenAIError
+except ImportError:
+    _UPSTREAM_ERRORS = RECOVERABLE_ERRORS
+else:
+    _UPSTREAM_ERRORS = (*RECOVERABLE_ERRORS, OpenAIError)
 
 _PRIMARY_ALIAS = "modstore-primary"
 _FALLBACK_PREFIX = "modstore-fallback-"
 _ROUTER_LOCK = threading.Lock()
 _ROUTER_CACHE: Dict[Tuple[Any, ...], Any] = {}
 _ROUTER_CACHE_MAX = 64
+_CACHE_FINGERPRINT_KEY = secrets.token_bytes(32)
 _LITELLM_LOCK = threading.Lock()
 _LITELLM_MODULE: Any = None
 _LITELLM_FAILED = False
@@ -56,7 +64,7 @@ def _load_litellm() -> Any:
             import litellm  # type: ignore[import-not-found]
 
             _LITELLM_MODULE = litellm
-        except Exception:  # noqa: BLE001 - 可选依赖缺失必须降级而不是中断服务
+        except (ImportError, RuntimeError, OSError):
             _LITELLM_FAILED = True
             return None
     return _LITELLM_MODULE
@@ -74,7 +82,7 @@ def available() -> bool:
 
 def _key_fingerprint(api_key: Any) -> str:
     raw = str(api_key or "")
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+    return hmac.new(_CACHE_FINGERPRINT_KEY, raw.encode("utf-8"), "sha256").hexdigest()
 
 
 def _extra_headers(provider: str, api_key: Any) -> Dict[str, str]:
@@ -98,6 +106,7 @@ def _deployment(
     if isinstance(api_key, PlatformApiKey):
         base_url = api_key.configuration["base_url"]
 
+    params: Dict[str, Any]
     if provider == "anthropic":
         litellm_model, params = f"anthropic/{model}", {"api_key": str(api_key)}
     elif provider == "google":
@@ -106,7 +115,9 @@ def _deployment(
         litellm_model = f"anthropic/{model}"
         params = {
             "api_key": normalize_minimax_api_key(api_key),
-            "api_base": minimax_anthropic_base_url(base_url),
+            "api_base": minimax_anthropic_base_url(
+                base_url, prefer_base=isinstance(api_key, PlatformApiKey) and api_key.managed
+            ),
             "extra_headers": {"anthropic-version": "2023-06-01"},
         }
     elif provider in OAI_COMPAT_OPENAI_STYLE_PROVIDERS:
@@ -134,22 +145,6 @@ def _deployment(
         "litellm_params": {**params, "model": litellm_model},
         "model_info": {"id": alias, "provider": provider, "model": model},
     }
-
-
-def _key_pool(provider: str, api_key: Any, base_url: Optional[str]) -> List[Any]:
-    """平台托管 Key 支持 ``MODSTORE_LLM_KEY_POOL_<PROVIDER>`` 轮询池。"""
-
-    if not isinstance(api_key, PlatformApiKey):
-        return []
-    raw = (os.environ.get(f"MODSTORE_LLM_KEY_POOL_{provider.upper()}") or "").strip()
-    if not raw:
-        return []
-    pool: List[Any] = []
-    for item in raw.split(","):
-        candidate = item.strip()
-        if candidate and candidate != str(api_key):
-            pool.append(PlatformApiKey(candidate, dict(api_key.configuration)))
-    return pool
 
 
 def _router_key(
@@ -236,46 +231,6 @@ def _router_settings() -> Dict[str, Any]:
     return settings()
 
 
-def env_platform_fallbacks(provider: str, model: str) -> List[Dict[str, Any]]:
-    """返回管理端配置的平台 fallback 链（环境变量可覆盖）。
-
-    格式：``minimax/MiniMax-M2.7,deepseek/deepseek-chat``；仅使用平台 Key，
-    不会把用户 BYOK 请求切到平台付费。
-    """
-
-    raw = ",".join(_router_settings()["platform_fallbacks"])
-    if not raw:
-        return []
-    rows: List[Dict[str, Any]] = []
-    for item in raw.split(","):
-        part = item.strip()
-        if not part or "/" not in part:
-            continue
-        fb_provider, _, fb_model = part.partition("/")
-        fb_provider = fb_provider.strip().lower()
-        fb_model = fb_model.strip()
-        if not fb_provider or not fb_model:
-            continue
-        if fb_provider == provider and fb_model == model:
-            continue
-        key = platform_api_key(fb_provider)
-        if not key:
-            continue
-        rows.append(
-            {
-                "provider": fb_provider,
-                "model": fb_model,
-                "api_key": key,
-                "base_url": (
-                    platform_base_url(fb_provider)
-                    if fb_provider in OAI_COMPAT_OPENAI_STYLE_PROVIDERS
-                    else None
-                ),
-            }
-        )
-    return rows
-
-
 def _build_specs(
     provider: str,
     model: str,
@@ -283,18 +238,17 @@ def _build_specs(
     base_url: Optional[str],
     fallbacks: Optional[List[Dict[str, Any]]],
 ) -> Optional[Tuple[List[Dict[str, Any]], List[str], List[Dict[str, Any]]]]:
+    # Platform credentials require the legacy pinned transport and billed route lifecycle.
+    if isinstance(api_key, PlatformApiKey) or any(
+        isinstance(row.get("api_key"), PlatformApiKey)
+        for row in fallbacks or []
+        if isinstance(row, dict)
+    ):
+        return None
     primary = _deployment(_PRIMARY_ALIAS, provider, model, api_key, base_url)
     if primary is None:
         return None
     deployments = [primary]
-    for extra_key in _key_pool(provider, api_key, base_url):
-        extra = _deployment(_PRIMARY_ALIAS, provider, model, extra_key, base_url)
-        if extra is not None:
-            deployments.append(extra)
-
-    if fallbacks is None and isinstance(api_key, PlatformApiKey):
-        fallbacks = env_platform_fallbacks(provider, model)
-
     fallback_aliases: List[str] = []
     fallback_rows: List[Dict[str, Any]] = []
     for idx, row in enumerate(fallbacks or []):
@@ -328,7 +282,7 @@ def _usage_dict(response: Any) -> Dict[str, Any]:
     if hasattr(usage, "model_dump"):
         try:
             return dict(usage.model_dump())
-        except Exception:  # noqa: BLE001
+        except (TypeError, ValueError, AttributeError):
             return {}
     if isinstance(usage, dict):
         return dict(usage)
@@ -462,14 +416,16 @@ async def chat(
     except asyncio.CancelledError:
         outcome = "cancelled"
         raise
-    except Exception as exc:  # noqa: BLE001 - 上游异常统一归一化
+    except _UPSTREAM_ERRORS as exc:
         outcome = "error"
         return _error_payload(exc, timeout_s=timeout_s)
     finally:
         _observe(provider, model, time.perf_counter() - started, "chat", outcome)
 
 
-def _stream_delta_events(chunk: Any) -> List[Dict[str, Any]]:
+def _stream_delta_events(
+    chunk: Any, pending_calls: Dict[int, Dict[str, Any]]
+) -> List[Dict[str, Any]]:
     events: List[Dict[str, Any]] = []
     choices = getattr(chunk, "choices", None) or []
     if not choices:
@@ -498,15 +454,37 @@ def _stream_delta_events(chunk: Any) -> List[Dict[str, Any]]:
                         },
                     }
                 )
+        for call in normalized:
+            index = int(call.get("index", 0))
+            current = pending_calls.setdefault(
+                index,
+                {
+                    "index": index,
+                    "id": "",
+                    "type": "function",
+                    "function": {"name": "", "arguments": ""},
+                },
+            )
+            if call.get("id"):
+                current["id"] = call["id"]
+            function = call.get("function") or {}
+            for field in ("name", "arguments"):
+                current["function"][field] += function.get(field) or ""
+    finish_reason = getattr(choice0, "finish_reason", None)
+    if finish_reason == "tool_calls" and pending_calls:
         events.append(
             {
                 "type": "toolcall",
                 "choices": [
-                    {"index": 0, "delta": {"tool_calls": normalized}, "finish_reason": "tool_calls"}
+                    {
+                        "index": 0,
+                        "delta": {"tool_calls": [pending_calls[i] for i in sorted(pending_calls)]},
+                        "finish_reason": "tool_calls",
+                    }
                 ],
             }
         )
-    finish_reason = getattr(choice0, "finish_reason", None)
+        pending_calls.clear()
     if finish_reason:
         events.append({"type": "finish", "finish_reason": str(finish_reason)[:32]})
     return events
@@ -545,16 +523,17 @@ async def _stream_impl(
             stream=True,
             stream_options={"include_usage": True},
         )
+        pending_calls: Dict[int, Dict[str, Any]] = {}
         async for chunk in response:
             usage = _usage_dict(chunk)
             if usage:
                 yield {"type": "usage", "usage": usage}
-            for event in _stream_delta_events(chunk):
+            for event in _stream_delta_events(chunk, pending_calls):
                 yield event
     except asyncio.CancelledError:
         outcome = "cancelled"
         raise
-    except Exception as exc:  # noqa: BLE001
+    except _UPSTREAM_ERRORS as exc:
         outcome = "error"
         payload = _error_payload(exc, timeout_s=None)
         yield {"type": "error", "status": payload.get("status"), "error": payload.get("error")}
@@ -598,7 +577,7 @@ def _observe(
         from modstore_server.metrics import observe_llm_router
 
         observe_llm_router(provider, model, mode, outcome, elapsed)
-    except Exception:  # noqa: BLE001 - 指标失败不影响主链路
+    except RECOVERABLE_ERRORS:
         return
 
 
@@ -616,7 +595,6 @@ def reset_cache() -> None:
 __all__ = [
     "available",
     "chat",
-    "env_platform_fallbacks",
     "reset_cache",
     "stream_events",
     "supports",

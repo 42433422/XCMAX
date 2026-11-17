@@ -199,15 +199,6 @@ async def chat_dispatch(
                 "base_url": fallback_base_url or base_url,
             }
         )
-    if isinstance(api_key, PlatformApiKey):
-        from modstore_server.llm_litellm_router import env_platform_fallbacks
-
-        known = {(row.get("provider"), row.get("model")) for row in router_fallbacks}
-        router_fallbacks.extend(
-            row
-            for row in env_platform_fallbacks(provider, model)
-            if (row.get("provider"), row.get("model")) not in known
-        )
     if not (
         messages_use_openai_multipart_content(messages)
         and (
@@ -500,7 +491,7 @@ async def chat_dispatch_stream(
             max_tokens=max_tokens,
             tools=tools,
             tool_choice=tool_choice,
-            fallbacks=list(fallbacks or []),
+            fallbacks=fallbacks,
         )
         if routed_events is not None:
             async for ev in _with_processing_status(routed_events):

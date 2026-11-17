@@ -77,32 +77,6 @@ def test_router_passes_mature_fallback_and_cooldown_params(monkeypatch):
     assert captured["routing_strategy"]
 
 
-def test_env_platform_fallbacks_builds_chain(monkeypatch):
-    monkeypatch.setenv(
-        "MODSTORE_LLM_ROUTER_PLATFORM_FALLBACKS",
-        "minimax/MiniMax-M2.7,deepseek/deepseek-chat,openai/gpt-4o-mini",
-    )
-    monkeypatch.setattr(router_mod, "platform_api_key", lambda provider: f"sk-{provider}")
-    monkeypatch.setattr(
-        router_mod, "platform_base_url", lambda provider: "https://example.invalid/v1"
-    )
-
-    rows = router_mod.env_platform_fallbacks("openai", "gpt-4o-mini")
-
-    assert [(row["provider"], row["model"]) for row in rows] == [
-        ("minimax", "MiniMax-M2.7"),
-        ("deepseek", "deepseek-chat"),
-    ]
-
-
-def test_key_pool_only_applies_to_platform_keys(monkeypatch):
-    monkeypatch.setenv("MODSTORE_LLM_KEY_POOL_OPENAI", "sk-a,sk-b")
-
-    platform_pool = router_mod._key_pool("openai", _platform_key("openai", "sk-a"), None)
-    assert [str(key) for key in platform_pool] == ["sk-b"]
-    assert router_mod._key_pool("openai", "sk-user-byok", None) == []
-
-
 def test_normalize_response_marks_fallback():
     response = SimpleNamespace(
         choices=[SimpleNamespace(message=SimpleNamespace(content="hello", reasoning_content=None))],
@@ -311,3 +285,113 @@ async def test_chat_dispatch_stream_prefers_litellm_router(monkeypatch):
     ]
 
     assert {"type": "delta", "delta": "routed"} in out
+
+
+@pytest.mark.parametrize("object_fragments", [False, True])
+def test_stream_tool_fragments_complete_once_in_index_order(object_fragments):
+    pending = {}
+
+    def chunk(calls, finish=None):
+        if object_fragments:
+            calls = [
+                SimpleNamespace(**{**call, "function": SimpleNamespace(**call["function"])})
+                for call in calls
+            ]
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    delta=SimpleNamespace(content=None, tool_calls=calls), finish_reason=finish
+                )
+            ]
+        )
+
+    first = chunk(
+        [
+            {"index": 1, "id": "call-b", "function": {"name": "second", "arguments": '{"b":'}},
+            {"index": 0, "id": "call-a", "function": {"name": "weather", "arguments": '{"city":'}},
+        ]
+    )
+    assert router_mod._stream_delta_events(first, pending) == []
+    last = chunk(
+        [
+            {"index": 0, "function": {"arguments": '"北京"}'}},
+            {"index": 1, "function": {"arguments": "2}"}},
+        ],
+        "tool_calls",
+    )
+    events = router_mod._stream_delta_events(last, pending)
+    calls = events[0]["choices"][0]["delta"]["tool_calls"]
+    assert [call["id"] for call in calls] == ["call-a", "call-b"]
+    assert calls[0]["function"] == {"name": "weather", "arguments": '{"city":"北京"}'}
+    assert calls[1]["function"] == {"name": "second", "arguments": '{"b":2}'}
+    assert pending == {}
+    assert not any(
+        e["type"] == "toolcall"
+        for e in router_mod._stream_delta_events(chunk([], "tool_calls"), pending)
+    )
+
+
+def test_managed_minimax_keeps_saved_endpoint_over_environment(monkeypatch):
+    monkeypatch.setenv("MINIMAX_ANTHROPIC_BASE_URL", "https://old-gateway.invalid/anthropic")
+    key = _platform_key("minimax", "sk-cp-token-plan")
+    key = PlatformApiKey(
+        str(key), {**key.configuration, "base_url": "https://saved-gateway.invalid/anthropic"}
+    )
+    dep = router_mod._deployment("primary", "minimax", "MiniMax-M2.7", key, None)
+    assert dep["litellm_params"]["api_base"] == "https://saved-gateway.invalid/anthropic"
+
+
+def test_usage_conversion_does_not_swallow_programming_assertions():
+    class BrokenUsage:
+        def model_dump(self):
+            raise AssertionError("implementation bug")
+
+    with pytest.raises(AssertionError, match="implementation bug"):
+        router_mod._usage_dict(SimpleNamespace(usage=BrokenUsage()))
+
+
+def test_cache_credential_fingerprint_is_keyed_and_rotation_sensitive(monkeypatch):
+    monkeypatch.setattr(router_mod, "_CACHE_FINGERPRINT_KEY", b"a" * 32)
+    first = router_mod._key_fingerprint("dummy-credential-one")
+    assert first == router_mod._key_fingerprint("dummy-credential-one")
+    assert first != router_mod._key_fingerprint("dummy-credential-two")
+    assert "dummy-credential" not in first
+    monkeypatch.setattr(router_mod, "_CACHE_FINGERPRINT_KEY", b"b" * 32)
+    assert first != router_mod._key_fingerprint("dummy-credential-one")
+
+
+@pytest.mark.parametrize("source", ["stored", "env"])
+def test_platform_credentials_never_enter_unpinned_router(source):
+    key = _platform_key("openai")
+    key = PlatformApiKey(str(key), {**key.configuration, "source": source})
+    assert router_mod._build_specs("openai", "gpt", key, None, None) is None
+    assert (
+        router_mod._build_specs(
+            "openai",
+            "gpt",
+            "byok",
+            None,
+            [{"provider": "openai", "model": "backup", "api_key": key}],
+        )
+        is None
+    )
+
+
+@pytest.mark.asyncio
+async def test_mapped_upstream_error_remains_normalized(monkeypatch):
+    openai = pytest.importorskip("openai")
+    import httpx
+
+    class Router:
+        async def acompletion(self, **kwargs):
+            raise openai.APIConnectionError(
+                request=httpx.Request("POST", "https://example.invalid")
+            )
+
+    monkeypatch.setattr(router_mod, "available", lambda: True)
+    monkeypatch.setattr(router_mod, "_get_router", lambda *a: Router())
+    result = await router_mod.chat(
+        "openai", api_key="dummy", base_url=None, model="gpt", messages=[]
+    )
+    assert result["ok"] is False
+    assert result["error"]

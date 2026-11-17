@@ -171,6 +171,8 @@ def public_state(state: dict[str, Any] | None = None) -> dict[str, Any]:
         "updated_by": current.get("updated_by") or "",
         "updated_at": current.get("updated_at") or "",
         "routing_strategies": list(ROUTING_STRATEGIES),
+        "credential_scope": "byok",
+        "platform_fallback_executor": "billed_route_lifecycle",
     }
 
 
