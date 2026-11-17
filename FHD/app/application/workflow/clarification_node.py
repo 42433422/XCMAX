@@ -64,14 +64,26 @@ def _build_missing_question(node: WorkflowNode, missing: list[str]) -> str:
 
 def _build_ambiguous_question(node: WorkflowNode, candidates: list[dict[str, Any]]) -> str:
     lines = [f"检测到 {node.tool_id}.{node.action} 存在多个候选目标，请确认实际要操作的对象："]
-    for index, cand in enumerate(candidates[:10], start=1):
+    for index, cand in enumerate(candidates[:20], start=1):
         name = str(
-            cand.get("name") or cand.get("customer_name") or cand.get("unit_name") or ""
+            cand.get("name")
+            or cand.get("customer_name")
+            or cand.get("unit_name")
+            or cand.get("product_name")
+            or cand.get("material_name")
+            or ""
         ).strip()
         cid = str(cand.get("id") or "").strip()
         label = f"{name}（#{cid}）" if name and cid else (name or cid or f"候选{index}")
+        details = " / ".join(
+            str(cand[key])
+            for key in ("model_number", "specification", "contact_person", "address")
+            if cand.get(key)
+        )
+        if details:
+            label += f" — {details}"
         lines.append(f"{index}. {label}")
-    lines.append("请回复序号或唯一 ID 以确认目标。")
+    lines.append("请回复「第几个」、唯一 ID（如 ID 123）或能区分对象的名称/属性。")
     return "\n".join(lines)
 
 

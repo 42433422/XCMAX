@@ -324,6 +324,7 @@ class LLMWorkflowPlanner:
         current_params: dict[str, Any],
         allowed_fields: set[str],
         context: dict[str, Any],
+        candidates: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any] | None:
         from app.infrastructure.llm.model_admission import model_rate_limit_scope
 
@@ -337,4 +338,5 @@ class LLMWorkflowPlanner:
                 current_params=current_params,
                 allowed_fields=allowed_fields,
                 context=context,
+                candidates=candidates,
             )

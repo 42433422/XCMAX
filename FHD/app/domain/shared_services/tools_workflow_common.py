@@ -159,7 +159,13 @@ def _business_db_target_candidates(
             rows = query.order_by(PurchaseUnit.id.asc()).limit(21).all()
             return (
                 [
-                    {"id": row.id, "customer_name": row.unit_name, "name": row.unit_name}
+                    {
+                        "id": row.id,
+                        "customer_name": row.unit_name,
+                        "name": row.unit_name,
+                        "contact_person": row.contact_person or "",
+                        "address": row.address or "",
+                    }
                     for row in rows
                 ],
                 selector_field,

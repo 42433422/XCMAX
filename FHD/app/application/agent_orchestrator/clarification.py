@@ -167,6 +167,17 @@ def apply_clarification_answer(
             if candidate_id in (None, "") or set(parameters) != {"id"}:
                 raise ClarificationAnswerError("答案只能指定一个唯一目标 ID")
             candidate["id"] = candidate_id
+        candidates = detail.get("candidates") or []
+        if reason == "ambiguous_target" or candidates:
+            allowed_ids = {
+                str(item["id"])
+                for item in candidates
+                if isinstance(item, dict) and item.get("id") not in (None, "")
+            }
+            if str(candidate_id) not in allowed_ids:
+                raise ClarificationAnswerError(
+                    "请选择当前问题列出的候选对象，目标范围不能在回答中更换"
+                )
     elif reason in {
         "multi_unit",
         "report_scope",

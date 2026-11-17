@@ -35,7 +35,9 @@ def _plan_confirmation_decision(text: str) -> bool | None:
         return None
     if normalized in CANCEL_WORDS or normalized.startswith(_PLAN_CANCEL_PREFIXES):
         return False
-    if normalized in CONFIRM_WORDS or normalized.startswith(_PLAN_CONFIRM_PREFIXES):
+    if normalized in CONFIRM_WORDS or all(
+        part.strip() in _PLAN_CONFIRM_PREFIXES for part in normalized.replace("，", ",").split(",")
+    ):
         return True
     return None
 
@@ -775,17 +777,8 @@ class WorkflowSession:
         if target is None:
             return None
         candidates = detail.get("candidates") or []
-        affirmative = str(text or "").strip().lower().rstrip("。.!！") in {
-            "确认",
-            "是",
-            "是的",
-            "好的",
-            "好",
-            "继续",
-            "执行",
-            "确认执行",
-            "ok",
-            "yes",
+        candidates = [item for item in candidates if isinstance(item, dict)]
+        affirmative = str(text or "").strip().lower().rstrip("。.!！") in CONFIRM_WORDS | {
             "按这个",
             "就这样",
             "可以",
@@ -793,10 +786,52 @@ class WorkflowSession:
         if reason in {"ambiguous_target", "missing_target"}:
             from app.application.workflow.clarification_node import resolve_confirmed_target
 
-            selected = resolve_confirmed_target(
-                text, candidates if isinstance(candidates, list) else []
-            )
-            if selected is None and target.tool_id == "business_db" and target.action == "write":
+            selected = resolve_confirmed_target(text, candidates)
+            if selected is None and candidates:
+                duplicate_name = (
+                    sum(
+                        text.strip()
+                        in {
+                            str(item.get(key) or "").strip()
+                            for key in (
+                                "name",
+                                "customer_name",
+                                "unit_name",
+                                "product_name",
+                                "material_name",
+                            )
+                        }
+                        for item in candidates
+                    )
+                    > 1
+                )
+                if affirmative or text.strip().isdigit() or duplicate_name:
+                    return None
+                planner = self.callbacks.workflow_planner
+                selected = planner.extract_clarification_parameters(
+                    user_id=run.user_id,
+                    original_message=run.message,
+                    answer=text,
+                    tool_id=target.tool_id,
+                    action=target.action,
+                    current_params=target.params,
+                    allowed_fields={"id"},
+                    candidates=candidates,
+                    context=dict(run.metadata.get("runtime_context") or {}),
+                )
+                if (
+                    not isinstance(selected, dict)
+                    or set(selected) != {"id"}
+                    or str(selected["id"]) not in {str(item.get("id")) for item in candidates}
+                ):
+                    return None
+            if (
+                selected is None
+                and not candidates
+                and reason == "missing_target"
+                and target.tool_id == "business_db"
+                and target.action == "write"
+            ):
                 if str(text or "").strip().isdigit():
                     selected = {"id": str(text).strip()}
                 else:

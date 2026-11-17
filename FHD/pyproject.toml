@@ -6,6 +6,7 @@ license = "Apache-2.0"
 requires-python = ">=3.11.5"
 # 运行时依赖见 optional-dependencies；CI/生产安装：requirements-server-api.txt（与 server-api extra 对齐）
 dependencies = [
+    "langchain-core==1.5.3",
     "langgraph==1.2.10",
     "langgraph-checkpoint==4.3.0",
     "langgraph-checkpoint-sqlite==3.1.2",

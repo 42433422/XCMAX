@@ -114,27 +114,27 @@ def resolve_confirmed_target(
     message: str,
     candidates: list[dict[str, Any]],
 ) -> dict[str, Any] | None:
-    """Resolve a candidate by exact ID, name, or one-based list position."""
+    """Accept only a unique exact ID, name, or unambiguous one-based position."""
     if not candidates:
         return None
     text = str(message or "").strip()
     if not text:
         return None
-    for candidate in candidates:
-        candidate_id = str(candidate.get("id") or "").strip()
-        if candidate_id and candidate_id == text:
-            return {"id": candidate_id}
-    for candidate in candidates:
-        name = str(
-            candidate.get("name")
-            or candidate.get("customer_name")
-            or candidate.get("unit_name")
-            or ""
-        ).strip()
-        if name and (name == text or name in text or text in name):
-            return {"id": str(candidate.get("id") or "")}
+    matches = {
+        str(candidate["id"])
+        for candidate in candidates
+        if isinstance(candidate, dict)
+        and candidate.get("id") not in (None, "")
+        and text
+        in {
+            str(candidate.get(key) or "").strip()
+            for key in ("id", "name", "customer_name", "unit_name", "product_name", "material_name")
+        }
+    }
     if text.isdigit():
         index = int(text)
         if 1 <= index <= len(candidates):
-            return {"id": str(candidates[index - 1].get("id") or "")}
-    return None
+            candidate = candidates[index - 1]
+            if isinstance(candidate, dict) and candidate.get("id") not in (None, ""):
+                matches.add(str(candidate["id"]))
+    return {"id": matches.pop()} if len(matches) == 1 else None

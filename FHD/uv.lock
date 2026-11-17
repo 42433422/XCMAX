@@ -7982,6 +7982,7 @@ name = "xcagi"
 version = "1.0.0.7"
 source = { editable = "." }
 dependencies = [
+    { name = "langchain-core" },
     { name = "langgraph" },
     { name = "langgraph-checkpoint" },
     { name = "langgraph-checkpoint-postgres" },
@@ -8120,6 +8121,7 @@ requires-dist = [
     { name = "import-linter", marker = "extra == 'dev'", specifier = ">=2.15,<3" },
     { name = "json-repair", marker = "extra == 'server-api'", specifier = "==0.64.9" },
     { name = "jsonschema", marker = "extra == 'dev'", specifier = ">=4.23" },
+    { name = "langchain-core", specifier = "==1.5.3" },
     { name = "langgraph", editable = "packages/xcagi_langgraph_core" },
     { name = "langgraph-checkpoint", editable = "packages/xcagi_langgraph_checkpoint" },
     { name = "langgraph-checkpoint-postgres", editable = "packages/xcagi_langgraph_checkpoint_backends/checkpoint-postgres" },
