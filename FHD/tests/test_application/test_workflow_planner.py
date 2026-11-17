@@ -449,3 +449,58 @@ class TestPlanWithLLM:
                 result = planner._plan_with_llm("p1", "u1", "hello", get_tool_registry(), {})
 
         assert result is None
+
+
+class TestPlannerStageMetrics:
+    """规划指标必须区分「模型返回了」「计划校验通过」，不能用单点 success 代替。"""
+
+    @staticmethod
+    def _delta(before: dict, after: dict, *, stage: str, outcome: str) -> float:
+        key = f"xcagi_plan_stage_total{{outcome={outcome},stage={stage}}}"
+        return float(after.get(key, 0.0)) - float(before.get(key, 0.0))
+
+    def test_missing_model_plan_is_not_counted_as_success(self, monkeypatch):
+        from app.infrastructure.observability import metrics
+
+        planner = LLMWorkflowPlanner(ai_service=Mock())
+        monkeypatch.setattr(planner, "_plan_with_llm", lambda *args, **kwargs: None)
+
+        before = metrics.snapshot()
+        plan = planner.plan("u-metric-empty", "请把客户写入数据库", get_tool_registry(), {})
+        after = metrics.snapshot()
+
+        assert plan.metadata.get("planning_rejected") is True
+        assert self._delta(before, after, stage="model_returned", outcome="empty") == 1
+        assert self._delta(before, after, stage="plan_valid", outcome="rejected") == 1
+        assert self._delta(before, after, stage="plan_valid", outcome="valid_first_pass") == 0
+
+    def test_valid_reply_plan_records_first_pass(self, monkeypatch):
+        from app.infrastructure.observability import metrics
+
+        def reply(plan_id, user_id, message, registry, context):
+            return PlanGraph(
+                plan_id=plan_id,
+                intent="conversation_reply",
+                nodes=[
+                    WorkflowNode(
+                        node_id="model_reply",
+                        tool_id="conversation",
+                        action="reply",
+                        params={"response": "ready"},
+                        risk="low",
+                        idempotent=True,
+                    )
+                ],
+                metadata={"response_mode": "reply", "reply": "ready"},
+            )
+
+        planner = LLMWorkflowPlanner(ai_service=Mock())
+        monkeypatch.setattr(planner, "_plan_with_llm", reply)
+
+        before = metrics.snapshot()
+        plan = planner.plan("u-metric-valid", "hello", get_tool_registry(), {})
+        after = metrics.snapshot()
+
+        assert plan.metadata.get("response_mode") == "reply"
+        assert self._delta(before, after, stage="model_returned", outcome="returned") == 1
+        assert self._delta(before, after, stage="plan_valid", outcome="valid_first_pass") == 1

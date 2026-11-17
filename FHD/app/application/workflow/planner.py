@@ -10,7 +10,7 @@ from typing import Any, cast
 
 import httpx
 
-from app.infrastructure.observability.metrics import observe_plan_generation
+from app.infrastructure.observability.metrics import observe_plan_stage
 from app.services import get_ai_conversation_service
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -214,13 +214,14 @@ class LLMWorkflowPlanner:
         except MarketModelError as exc:
             context["planning_failure_reason"] = str(exc)
             planned = None
-            observe_plan_generation(
-                outcome="failure", duration_ms=(time.perf_counter() - started) * 1000
-            )
+            model_outcome = "error"
         else:
-            observe_plan_generation(
-                outcome="success", duration_ms=(time.perf_counter() - started) * 1000
-            )
+            model_outcome = "returned" if planned is not None else "empty"
+        observe_plan_stage(
+            stage="model_returned",
+            outcome=model_outcome,
+            duration_ms=(time.perf_counter() - started) * 1000,
+        )
         repair_trace: dict[str, Any] = {}
         if planned is not None:
             from app.application.workflow.plan_repair import repair_plan
@@ -258,18 +259,27 @@ class LLMWorkflowPlanner:
                 planned.metadata["memory_recall"] = recall_meta
             except (AttributeError, TypeError):
                 logger.debug("plan metadata 不支持 memory_recall 附加", exc_info=True)
-        return cast(
-            "PlanGraph",
-            finalize_planned_graph(
-                planned,
-                plan_id=plan_id,
-                context=context,
-                validate=validate_candidate,
-                warn=logger.warning,
-                plan_type=PlanGraph,
-                node_type=WorkflowNode,
-            ),
+        final_plan = finalize_planned_graph(
+            planned,
+            plan_id=plan_id,
+            context=context,
+            validate=validate_candidate,
+            warn=logger.warning,
+            plan_type=PlanGraph,
+            node_type=WorkflowNode,
         )
+        if planned is None or (final_plan.metadata or {}).get("planning_rejected"):
+            valid_outcome = "rejected"
+        elif repair_trace.get("first_pass_valid"):
+            valid_outcome = "valid_first_pass"
+        else:
+            valid_outcome = "valid_after_repair"
+        observe_plan_stage(
+            stage="plan_valid",
+            outcome=valid_outcome,
+            duration_ms=(time.perf_counter() - started) * 1000,
+        )
+        return cast("PlanGraph", final_plan)
 
     def _generation(self) -> LlmPlanGeneration:
         return LlmPlanGeneration(

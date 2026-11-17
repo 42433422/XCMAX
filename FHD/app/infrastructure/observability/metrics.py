@@ -37,16 +37,34 @@ _MEMORY_CONSOLIDATION = Counter(
     ("action",),
     registry=_REGISTRY,
 )
-_PLAN_GENERATION = Counter(
-    "xcagi_plan_generation_total",
-    "计划生成结果（success/failure）",
-    ("outcome",),
+_PLAN_STAGES = frozenset({"model_returned", "plan_valid"})
+_PLAN_OUTCOMES = frozenset(
+    {
+        "returned",
+        "empty",
+        "error",
+        "valid_first_pass",
+        "valid_after_repair",
+        "rejected",
+    }
+)
+_PLAN_STAGE = Counter(
+    "xcagi_plan_stage_total",
+    "规划分阶段结果（模型返回 / 计划有效）",
+    ("stage", "outcome"),
     registry=_REGISTRY,
 )
-_PLAN_GENERATION_MS = Histogram(
-    "xcagi_plan_generation_duration_ms",
-    "计划生成耗时（毫秒）",
+_PLAN_STAGE_MS = Histogram(
+    "xcagi_plan_stage_duration_ms",
+    "规划分阶段耗时（毫秒）",
+    ("stage",),
     buckets=(10, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000),
+    registry=_REGISTRY,
+)
+_RUN_TERMINAL = Counter(
+    "xcagi_run_terminal_total",
+    "Agent run 终态（业务目标完成与否）",
+    ("status",),
     registry=_REGISTRY,
 )
 _TOOL_CALL = Counter(
@@ -95,12 +113,19 @@ def observe_memory_consolidation(action: str) -> None:
     _MEMORY_CONSOLIDATION.labels(action=label).inc()
 
 
-def observe_plan_generation(*, outcome: str, duration_ms: float) -> None:
+def observe_plan_stage(*, stage: str, outcome: str, duration_ms: float) -> None:
     if not _guard():
         return
-    label = "success" if str(outcome) == "success" else "failure"
-    _PLAN_GENERATION.labels(outcome=label).inc()
-    _PLAN_GENERATION_MS.observe(max(0.0, float(duration_ms)))
+    stage_label = str(stage) if str(stage) in _PLAN_STAGES else "unknown"
+    outcome_label = str(outcome) if str(outcome) in _PLAN_OUTCOMES else "unknown"
+    _PLAN_STAGE.labels(stage=stage_label, outcome=outcome_label).inc()
+    _PLAN_STAGE_MS.labels(stage=stage_label).observe(max(0.0, float(duration_ms)))
+
+
+def observe_run_terminal(*, status: str) -> None:
+    if not _guard():
+        return
+    _RUN_TERMINAL.labels(status=str(status or "unknown")[:32]).inc()
 
 
 def observe_tool_call(*, tool: str, status: str, duration_ms: float) -> None:
@@ -141,7 +166,8 @@ __all__ = [
     "observe_chat_ttft",
     "observe_memory_consolidation",
     "observe_memory_recall",
-    "observe_plan_generation",
+    "observe_plan_stage",
+    "observe_run_terminal",
     "observe_tool_call",
     "render",
     "snapshot",
