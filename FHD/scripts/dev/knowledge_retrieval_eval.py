@@ -73,6 +73,56 @@ DOCS: list[dict[str, str]] = [
         "text": "数据导出：订单和客户列表支持导出 Excel，导出任务异步执行，"
         "完成后在消息中心下载，文件保留七天。",
     },
+    {
+        "id": "security",
+        "text": "账号安全：连续五次密码错误会锁定三十分钟，管理员可以重置密码并强制下线。"
+        "异地登录需要二次验证，登录记录可在安全日志查看。",
+    },
+    {
+        "id": "shipping",
+        "text": "发货规则：现货订单当天下午四点前付款当天发出，预售订单按承诺日期发出。"
+        "物流单号会在发货后自动同步到订单详情页。",
+    },
+    {
+        "id": "inventory",
+        "text": "库存管理：低于安全库存时自动生成补货提醒，盘点差异需要仓库主管确认后调整。"
+        "库存流水保留一年，支持按商品查询。",
+    },
+    {
+        "id": "contract",
+        "text": "合同签署：电子合同通过短信验证码确认身份，签署完成后自动归档到客户档案。"
+        "合同变更需要双方重新签署，旧版本保留可追溯。",
+    },
+    {
+        "id": "onboarding",
+        "text": "新员工入职：入职当天开通账号并分配部门，试用期三个月。"
+        "转正申请需要直属主管和人事审批，通过后同步更新权限。",
+    },
+    {
+        "id": "customer-tier",
+        "text": "客户分级：年采购额超过一百万为战略客户，享受专属客户经理和优先交付。"
+        "普通客户按季度评估，等级变化会同步到报价策略。",
+    },
+    {
+        "id": "refund-freight",
+        "text": "退货运费：质量问题由商家承担来回运费，七天无理由退货由客户承担寄回运费。"
+        "运费险理赔需要在退货完成后发起。",
+    },
+    {
+        "id": "data-retention",
+        "text": "数据保留：业务数据默认保留三年，日志保留一百八十天。"
+        "客户注销后三十天内删除个人数据，备份中的副本按备份周期自然过期。",
+    },
+    {
+        "id": "api-limit",
+        "text": "接口限流：单个账号每分钟最多三百次请求，超限返回 429 并提示重试时间。"
+        "批量导入走异步任务，不受实时接口限流影响。",
+    },
+    {
+        "id": "print-template",
+        "text": "打印模板：标签模板支持变量占位和条码，模板修改后需要重新发布才生效。"
+        "打印任务失败会在队列里保留并允许重试。",
+    },
 ]
 
 QUERIES: list[dict[str, object]] = [
@@ -86,6 +136,16 @@ QUERIES: list[dict[str, object]] = [
     {"q": "平台模型的密钥在哪里配置？", "expected": "model-config"},
     {"q": "五万以上的采购要谁审批？", "expected": "approval"},
     {"q": "订单导出成 Excel 在哪里下载？", "expected": "export"},
+    {"q": "密码输错几次会被锁定？", "expected": "security"},
+    {"q": "今天下午三点付款什么时候发货？", "expected": "shipping"},
+    {"q": "库存低于安全线会提醒吗？", "expected": "inventory"},
+    {"q": "电子合同怎么确认身份？", "expected": "contract"},
+    {"q": "新员工试用期多久，转正谁审批？", "expected": "onboarding"},
+    {"q": "多大的客户算战略客户？", "expected": "customer-tier"},
+    {"q": "质量问题退货的运费谁出？", "expected": "refund-freight"},
+    {"q": "客户注销后多久删除数据？", "expected": "data-retention"},
+    {"q": "接口超过每分钟三百次会怎样？", "expected": "api-limit"},
+    {"q": "打印模板改完为什么不生效？", "expected": "print-template"},
 ]
 
 
@@ -154,7 +214,7 @@ def main() -> int:
     if args.json:
         print(json.dumps(metrics, ensure_ascii=False))
     else:
-        print("知识库检索评测（10 条中文查询）")
+        print(f"知识库检索评测（{metrics['queries']} 条中文查询）")
         for key, value in metrics.items():
             print(f"  {key}: {value}")
     return 0
