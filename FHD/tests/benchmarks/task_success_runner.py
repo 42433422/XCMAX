@@ -42,7 +42,7 @@ def _bootstrap_isolated_db() -> None:
     url = f"sqlite+pysqlite:///{tmpdir}/trial.sqlite3"
     os.environ["DATABASE_URL"] = url
     os.environ["VECTOR_DB_URL"] = url
-    os.environ["XCAGI_SKIP_INTENT_LLM"] = "1"
+    os.environ.setdefault("XCAGI_SKIP_INTENT_LLM", "1")
     os.environ["XCAGI_AGENT_RUNTIME_HOOKS"] = "0"
     os.environ["MODEL_USAGE_LEDGER_PATH"] = f"{tmpdir}/usage.json"
     os.environ["MODEL_USAGE_WALLET_BACKEND"] = "audit"

@@ -27,7 +27,8 @@ def test_metrics_can_be_disabled(monkeypatch) -> None:
     monkeypatch.setenv("XCAGI_METRICS", "0")
     before = metrics.snapshot()
 
-    metrics.observe_plan_generation(outcome="success", duration_ms=100)
+    metrics.observe_plan_stage(stage="model_returned", outcome="returned", duration_ms=100)
+    metrics.observe_run_terminal(status="completed")
     metrics.observe_chat_ttft(50)
     metrics.observe_tool_call(tool="products", status="success", duration_ms=8)
 
