@@ -82,14 +82,13 @@ def fetch_object(uri: str, *, client=None) -> FetchedObject:
     chunks: list[bytes] = []
     total = 0
     try:
-        while True:
-            chunk = body.read(1024 * 1024)
-            if not chunk:
-                break
+        chunk = body.read(1024 * 1024)
+        while chunk:
             total += len(chunk)
             if total > limit:
                 raise ValueError(f"对象超过大小限制（>{limit // 1024 // 1024}MB）")
             chunks.append(chunk)
+            chunk = body.read(1024 * 1024)
     except BOUNDARY_ERRORS as exc:
         raise ValueError(f"对象读取失败：{exc}") from exc
     finally:
