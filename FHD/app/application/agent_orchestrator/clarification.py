@@ -203,7 +203,12 @@ def apply_clarification_answer(
             candidate["confirmed"] = True
     candidate.pop("candidates", None)
     candidate.pop("_candidates", None)
-    if target.tool_id == "sales" and target.action in {"quote", "create_order"} and parameters:
+    if (
+        reason == "missing_required"
+        and target.tool_id == "sales"
+        and target.action in {"quote", "create_order"}
+        and parameters
+    ):
         from app.application.sales_quote_inputs import quote_answer_candidate
 
         candidate = quote_answer_candidate(target.params, parameters)
@@ -478,7 +483,16 @@ def pause_for_ambiguous_target(
         "candidates": candidates,
         "question": question,
     }
-    clarify_node_id = f"{step.node_id}_clarify"
+    plan = plan_from_dict(run.metadata.get("plan")) if run.metadata.get("plan") else None
+    used_ids = {item.node_id for item in run.steps}
+    if plan is not None:
+        used_ids.update(node.node_id for node in plan.nodes)
+    base_id = f"{step.node_id}_clarify"
+    clarify_node_id = next(
+        candidate
+        for index in range(len(used_ids) + 1)
+        if (candidate := base_id if index == 0 else f"{base_id}_{index}") not in used_ids
+    )
     params = {
         "question": question,
         "answer_key": "confirmed",
@@ -518,7 +532,6 @@ def pause_for_ambiguous_target(
     step.status = "pending"
     step.error = ""
     step.output = {}
-    plan = plan_from_dict(run.metadata.get("plan")) if run.metadata.get("plan") else None
     if plan is not None:
         node_index = next(
             (position for position, node in enumerate(plan.nodes) if node.node_id == step.node_id),

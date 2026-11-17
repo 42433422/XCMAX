@@ -133,3 +133,63 @@ def test_shipment_nested_answer_requires_approval_and_rejects_other_fields():
     assert continued.steps[1].status == "waiting_user"
     assert continued.steps[1].params["products"][0]["tin_spec"] == 20
     assert continued.tool_calls == []
+
+
+def _runtime_target_run(tool_id, action, params):
+    from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
+    from app.application.workflow.workflow_types import plan_to_dict
+
+    step = AgentStep(node_id="target", tool_id=tool_id, action=action, params=params)
+    run = AgentRun(user_id="owner", message="执行", status="running", steps=[step])
+    run.metadata["plan"] = plan_to_dict(
+        PlanGraph(
+            plan_id="runtime-answers",
+            intent="execute",
+            nodes=[WorkflowNode(node_id="target", tool_id=tool_id, action=action, params=params)],
+        )
+    )
+    return run, step
+
+
+def test_sales_customer_selection_preserves_complete_quote_inputs():
+    from app.application.agent_orchestrator.clarification import pause_for_ambiguous_target
+    from app.application.workflow.workflow_types import plan_from_dict
+
+    params = {
+        "customer_name": "客户",
+        "items": [{"model_number": "A100", "quantity": 2, "unit_price": 50}],
+    }
+    run, target = _runtime_target_run("sales", "create_order", params)
+    assert pause_for_ambiguous_target(
+        run, target, [{"id": 7, "name": "客户甲"}, {"id": 8, "name": "客户乙"}], field="customer_id"
+    )
+    question = run.steps[0]
+    apply_clarification_answer(run, step_id=question.step_id, parameters={"id": 8})
+    assert question.status == "completed"
+    assert target.params == {**params, "customer_id": 8}
+    plan = plan_from_dict(run.metadata["plan"])
+    assert next(node for node in plan.nodes if node.node_id == "target").params == target.params
+    assert target.status == "pending" and run.tool_calls == []
+
+
+def test_successive_target_selections_have_distinct_durable_nodes():
+    from app.application.agent_orchestrator.clarification import pause_for_ambiguous_target
+    from app.application.workflow.workflow_types import plan_from_dict, validate_plan_graph
+
+    run, target = _runtime_target_run(
+        "inventory", "stock_out", {"product_id": 1, "warehouse_id": 2, "quantity": 3}
+    )
+    questions = []
+    for field, answer in (("product_id", 7), ("warehouse_id", 8)):
+        assert pause_for_ambiguous_target(run, target, [{"id": 7}, {"id": 8}], field=field)
+        question = next(step for step in run.steps if step.status == "waiting_user")
+        questions.append(question)
+        apply_clarification_answer(run, step_id=question.step_id, parameters={"id": answer})
+    assert questions[0].node_id != questions[1].node_id
+    assert all(question.status == "completed" for question in questions)
+    assert target.params == {"product_id": 7, "warehouse_id": 8, "quantity": 3}
+    plan = plan_from_dict(run.metadata["plan"])
+    assert validate_plan_graph(plan) is None
+    assert len({node.node_id for node in plan.nodes}) == len(plan.nodes)
+    assert next(node for node in plan.nodes if node.node_id == "target").params == target.params
+    assert target.status == "pending" and run.tool_calls == []

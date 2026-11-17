@@ -3,6 +3,7 @@ import { defineComponent, nextTick, ref } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { assembleTemplatePreview, TEMPLATE_SEARCH_STORAGE_KEY } from '../../../mods/bridge/xcagi-erp-domain-bridge/frontend/views/template-preview/assemble'
+import TemplatePreviewView from '../../../mods/bridge/xcagi-erp-domain-bridge/frontend/views/TemplatePreviewView.vue'
 import { useTpVueFinder } from '../../../mods/bridge/xcagi-erp-domain-bridge/frontend/views/template-preview/useTpVueFinder'
 import type { TemplatePreviewCtx } from '../../../mods/bridge/xcagi-erp-domain-bridge/frontend/views/template-preview/assemble'
 import type { TplRecord } from '../../../mods/bridge/xcagi-erp-domain-bridge/frontend/views/template-preview/tpTemplateMeta'
@@ -10,7 +11,7 @@ import type { TplRecord } from '../../../mods/bridge/xcagi-erp-domain-bridge/fro
 const listTemplates = vi.hoisted(() => vi.fn())
 vi.mock('@/api/templatePreview', () => ({ default: { listTemplates } }))
 
-vi.mock('@/components/template/vuefinder', () => ({ ArrayDriver: class {} }))
+vi.mock('@/components/template/vuefinder', () => ({ ArrayDriver: class { constructor(public options: unknown) {} }, VueFinder: { props: ['driver'], template: `<div><p v-for="file in driver.options.files.value.filter(e => e.type === 'file')" :key="file.path">{{ file.basename }}</p></div>` }, VueFinderPlugin: { install() {} }, zhCN: {} }))
 
 function setup() {
   const records = ref<TplRecord[]>([
@@ -104,4 +105,32 @@ it('applies route scope/keyword and both global-search handoffs to the actual fi
     expect(remounted.text()).toBe('Beta 出货.docx')
     expect(sessionStorage.getItem(TEMPLATE_SEARCH_STORAGE_KEY)).toBeNull()
   } finally { remounted.unmount(); sessionStorage.removeItem(TEMPLATE_SEARCH_STORAGE_KEY) }
+})
+
+
+it('offers visible recovery from an empty handed-off filter and preserves other navigation', async () => {
+  listTemplates.mockResolvedValue({ success: true, templates: [
+    { id: 'db:1', name: 'Alpha 出货', category: 'word', business_scope: 'orders' },
+    { id: 'db:2', name: 'Beta 产品', category: 'word', business_scope: 'products' },
+  ] })
+  const router = createRouter({ history: createMemoryHistory(), routes: [
+    { path: '/templates', component: { template: '<div />' } },
+  ] })
+  await router.push('/templates?scope=orders&keyword=missing&keep=yes')
+  const wrapper = mount(TemplatePreviewView, { global: { plugins: [router], stubs: {
+    TpCreateModal: true, TpGridToolModal: true, TpPreviewModal: true, TpEditModal: true, TpReplaceModal: true,
+  } } })
+  try {
+    await flushPromises()
+    const reset = wrapper.get('[data-testid="reset-template-filters"]')
+    expect(reset.text()).toContain('显示全部模板')
+    expect(wrapper.text()).not.toContain('Alpha 出货')
+    expect(wrapper.text()).not.toContain('Beta 产品')
+    await reset.trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.query).toEqual({ keep: 'yes' })
+    expect(wrapper.find('[data-testid="reset-template-filters"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain('Alpha 出货')
+    expect(wrapper.text()).toContain('Beta 产品')
+  } finally { wrapper.unmount() }
 })
