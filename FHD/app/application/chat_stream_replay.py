@@ -1,14 +1,22 @@
 """按 turn 回放的聊天 SSE 事件缓冲。
 
-断线续传的前提是「事件生产」与「HTTP 连接」解耦：后台任务持续把事件写入
-本模块，HTTP 连接只负责按序号跟随读取。客户端重连时带上同一 ``turn_id``
-和最后收到的序号，即可从断点继续。
+生产端与 HTTP 连接解耦：生产者把事件写入按 ``tenant:owner:turn`` 绑定的
+Redis Stream，连接只按游标跟随，因此跨 worker 的续传不依赖进程内状态。
+
+- 归属：命名空间包含租户与发起者，其它主体的请求读不到同一条流。
+- 单生产者：``redis-py`` 的分布式锁（``SET NX PX`` + Lua 释放）充当生产权
+  租约，后台心跳续期；锁丢失即视为生产端失联。
+- 连续性：事件与序号由 Stream 条目 ID 原子生成，故障切换不会重启序号；
+  运行期后端不可用时显式失败，不静默切到进程内缓冲。
+
+无 Redis 的单进程部署（桌面）退回进程内缓冲，语义保持一致。
 """
 
 from __future__ import annotations
 
 import json
 import os
+import re
 import threading
 import time
 from typing import Any
@@ -17,161 +25,263 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 REPLAY_TTL_SECONDS = int(os.environ.get("XCAGI_CHAT_STREAM_REPLAY_TTL_SECONDS", "1800"))
 REPLAY_MAX_EVENTS = int(os.environ.get("XCAGI_CHAT_STREAM_REPLAY_MAX_EVENTS", "5000"))
+LEASE_TTL_SECONDS = int(os.environ.get("XCAGI_CHAT_STREAM_LEASE_TTL_SECONDS", "30"))
 _PREFIX = "chat_stream:replay"
+_STREAM_ID = re.compile(r"^\d+-\d+$")
 
 _lock = threading.Lock()
 _events: dict[str, list[dict[str, Any]]] = {}
 _status: dict[str, str] = {}
 _running: set[str] = set()
 _touched: dict[str, float] = {}
+_leases: dict[str, tuple[Any, threading.Event]] = {}
 
 
-def _redis() -> tuple[Any, str]:
+class ReplayBackendUnavailable(RuntimeError):
+    """回放后端不可用；调用方必须显式终止流，不得静默降级。"""
+
+
+def _backend() -> tuple[Any, str, bool]:
+    """返回 ``(client, prefix, configured)``；``client`` 为 None 表示不可用。"""
     try:
         from app.utils.performance.redis_cache import get_redis_cache
 
         cache = get_redis_cache()
+        client = getattr(cache, "_redis", None)
+        prefix = str(getattr(cache, "_prefix", "") or "")
+        configured = client is not None
+        if not configured:
+            from app.utils.deployment import redis_url_from_env
+
+            env_url = (os.environ.get("CACHE_REDIS_URL") or "").strip() or redis_url_from_env()
+            configured = bool(env_url)
+        if not configured:
+            return None, prefix, False
         if not cache.is_available:
-            return None, ""
-        return getattr(cache, "_redis", None), str(getattr(cache, "_prefix", "") or "")
+            return None, prefix, True
+        return client, prefix, True
     except RECOVERABLE_ERRORS:
-        return None, ""
+        return None, "", False
 
 
-def _events_key(turn_id: str, prefix: str) -> str:
-    return f"{prefix}{_PREFIX}:{turn_id}:events"
+def _redis() -> tuple[Any, str]:
+    client, prefix, _configured = _backend()
+    return client, prefix
 
 
-def _seq_key(turn_id: str, prefix: str) -> str:
-    return f"{prefix}{_PREFIX}:{turn_id}:seq"
+def _require_client() -> tuple[Any, str]:
+    client, prefix, configured = _backend()
+    if client is None and configured:
+        raise ReplayBackendUnavailable("回放后端不可用")
+    return client, prefix
 
 
-def _status_key(turn_id: str, prefix: str) -> str:
-    return f"{prefix}{_PREFIX}:{turn_id}:status"
+def scope_key(turn_id: str, owner: str, tenant: str) -> str:
+    """按租户 + 发起者隔离回放命名空间；不含 session，重登不丢进行中的流。"""
+    return f"{tenant or '-'}:{owner or '-'}:{turn_id}"
+
+
+def _redis_keys(scoped: str, prefix: str) -> tuple[str, str, str]:
+    base = f"{prefix}{_PREFIX}:{scoped}"
+    return f"{base}:stream", f"{base}:status", f"{base}:lease"
 
 
 def _prune_locked() -> None:
     if len(_touched) < 200:
         return
     cutoff = time.time() - REPLAY_TTL_SECONDS
-    for turn_id, seen in list(_touched.items()):
-        if seen >= cutoff or turn_id in _running:
+    for scoped, seen in list(_touched.items()):
+        if seen >= cutoff or scoped in _running or scoped in _leases:
             continue
-        _events.pop(turn_id, None)
-        _status.pop(turn_id, None)
-        _touched.pop(turn_id, None)
+        _events.pop(scoped, None)
+        _status.pop(scoped, None)
+        _touched.pop(scoped, None)
 
 
-def append(turn_id: str, payload: dict[str, Any]) -> int:
-    """追加一条事件并返回其序号；无 turn_id 时返回 0（不进缓冲）。"""
+def append(turn_id: str, payload: dict[str, Any], *, owner: str = "", tenant: str = "") -> str:
+    """追加一条事件并返回游标；无 turn_id 时返回空串（不进缓冲）。"""
     if not turn_id:
-        return 0
-    client, prefix = _redis()
+        return ""
+    scoped = scope_key(turn_id, owner, tenant)
+    client, prefix = _require_client()
     if client is not None:
+        stream_key, _, _ = _redis_keys(scoped, prefix)
         try:
-            seq = int(client.incr(_seq_key(turn_id, prefix)))
-            client.expire(_seq_key(turn_id, prefix), REPLAY_TTL_SECONDS)
-            key = _events_key(turn_id, prefix)
-            client.rpush(key, json.dumps({"seq": seq, "payload": payload}, ensure_ascii=False))
-            client.expire(key, REPLAY_TTL_SECONDS)
-            return seq
+            entry_id = client.xadd(
+                stream_key,
+                {"payload": json.dumps(payload, ensure_ascii=False)},
+                maxlen=REPLAY_MAX_EVENTS,
+                approximate=False,
+            )
+            client.expire(stream_key, REPLAY_TTL_SECONDS)
+            return str(entry_id)
         except RECOVERABLE_ERRORS:
-            pass
+            raise ReplayBackendUnavailable("回放流写入失败") from None
     with _lock:
         _prune_locked()
-        bucket = _events.setdefault(turn_id, [])
+        bucket = _events.setdefault(scoped, [])
         seq = int(bucket[-1]["seq"]) + 1 if bucket else 1
         bucket.append({"seq": seq, "payload": payload})
         if len(bucket) > REPLAY_MAX_EVENTS:
             del bucket[: len(bucket) - REPLAY_MAX_EVENTS]
-        _touched[turn_id] = time.time()
-        return seq
+        _touched[scoped] = time.time()
+        return str(seq)
 
 
-def events_after(turn_id: str, after: int = 0) -> list[dict[str, Any]]:
-    """返回序号大于 ``after`` 的事件，元素形如 ``{"seq": int, "payload": dict}``。"""
+def events_after(
+    turn_id: str, after: str | int = 0, *, owner: str = "", tenant: str = ""
+) -> list[dict[str, Any]]:
+    """返回游标之后的事件，元素形如 ``{"seq": str, "payload": dict}``。"""
     if not turn_id:
         return []
-    client, prefix = _redis()
+    scoped = scope_key(turn_id, owner, tenant)
+    cursor = str(after or "")
+    client, prefix = _require_client()
     if client is not None:
+        stream_key, _, _ = _redis_keys(scoped, prefix)
         try:
-            raw = client.lrange(_events_key(turn_id, prefix), 0, -1)
-            out: list[dict[str, Any]] = []
-            for item in raw:
-                try:
-                    row = json.loads(item)
-                except (ValueError, TypeError):
-                    continue
-                if isinstance(row, dict) and int(row.get("seq") or 0) > after:
-                    out.append(row)
-            return out
+            start = cursor if _STREAM_ID.match(cursor) else "-"
+            raw = client.xrange(stream_key, min=start, max="+")
         except RECOVERABLE_ERRORS:
-            pass
+            raise ReplayBackendUnavailable("回放流读取失败") from None
+        out: list[dict[str, Any]] = []
+        for entry_id, fields in raw:
+            sid = str(entry_id)
+            if sid == cursor:
+                continue
+            try:
+                payload = json.loads((fields or {}).get("payload") or "{}")
+            except (ValueError, TypeError):
+                continue
+            if isinstance(payload, dict):
+                out.append({"seq": sid, "payload": payload})
+        return out
+    after_int = int(cursor) if cursor.isdigit() else 0
     with _lock:
-        bucket = _events.get(turn_id) or []
-        _touched[turn_id] = time.time()
-        return [dict(row) for row in bucket if int(row["seq"]) > after]
+        bucket = _events.get(scoped) or []
+        _touched[scoped] = time.time()
+        return [dict(row) for row in bucket if int(row["seq"]) > after_int]
 
 
-def has_replay(turn_id: str) -> bool:
+def has_replay(turn_id: str, *, owner: str = "", tenant: str = "") -> bool:
     if not turn_id:
         return False
+    scoped = scope_key(turn_id, owner, tenant)
     with _lock:
-        if _events.get(turn_id) or turn_id in _status:
+        if _events.get(scoped) or scoped in _status or scoped in _running:
             return True
-    client, prefix = _redis()
+    client, prefix = _require_client()
     if client is not None:
+        stream_key, status_key, lease_key = _redis_keys(scoped, prefix)
         try:
-            return bool(client.exists(_events_key(turn_id, prefix)))
+            return bool(client.exists(stream_key, status_key, lease_key))
         except RECOVERABLE_ERRORS:
-            return False
+            raise ReplayBackendUnavailable("回放状态读取失败") from None
     return False
 
 
-def claim_runner(turn_id: str) -> bool:
+def claim_runner(turn_id: str, *, owner: str = "", tenant: str = "") -> bool:
     """抢占该 turn 的生产权；返回 True 表示由当前请求负责跑任务。"""
     if not turn_id:
         return True
+    scoped = scope_key(turn_id, owner, tenant)
+    client, prefix = _require_client()
+    if client is not None:
+        from redis.lock import Lock
+
+        _, _, lease_key = _redis_keys(scoped, prefix)
+        lease = Lock(
+            client,
+            lease_key,
+            timeout=LEASE_TTL_SECONDS,
+            blocking_timeout=0,
+            thread_local=False,
+        )
+        try:
+            if not lease.acquire(blocking=False):
+                return False
+        except RECOVERABLE_ERRORS:
+            raise ReplayBackendUnavailable("生产权租约不可用") from None
+        stop = threading.Event()
+
+        def _renew() -> None:
+            interval = max(1.0, LEASE_TTL_SECONDS / 3)
+            while not stop.wait(interval):
+                try:
+                    lease.reacquire()
+                except RECOVERABLE_ERRORS:
+                    return
+
+        threading.Thread(
+            target=_renew, name=f"replay-lease-{turn_id[:12]}", daemon=True
+        ).start()
+        with _lock:
+            _leases[scoped] = (lease, stop)
+            _touched[scoped] = time.time()
+        return True
     with _lock:
-        if turn_id in _running:
+        if scoped in _running:
             return False
-        _running.add(turn_id)
-        _touched[turn_id] = time.time()
+        _running.add(scoped)
+        _touched[scoped] = time.time()
     return True
 
 
-def release_runner(turn_id: str) -> None:
+def _stop_lease(scoped: str) -> None:
     with _lock:
-        _running.discard(turn_id)
+        entry = _leases.pop(scoped, None)
+    if entry is None:
+        return
+    lease, stop = entry
+    stop.set()
+    try:
+        lease.release()
+    except RECOVERABLE_ERRORS:
+        pass
 
 
-def mark_finished(turn_id: str, status: str = "done") -> None:
+def release_runner(turn_id: str, *, owner: str = "", tenant: str = "") -> None:
     if not turn_id:
         return
+    scoped = scope_key(turn_id, owner, tenant)
     with _lock:
-        _status[turn_id] = status
-        _running.discard(turn_id)
-        _touched[turn_id] = time.time()
+        _running.discard(scoped)
+    _stop_lease(scoped)
+
+
+def mark_finished(turn_id: str, status: str = "done", *, owner: str = "", tenant: str = "") -> None:
+    if not turn_id:
+        return
+    scoped = scope_key(turn_id, owner, tenant)
+    with _lock:
+        _status[scoped] = status
+        _running.discard(scoped)
+        _touched[scoped] = time.time()
     client, prefix = _redis()
     if client is not None:
+        stream_key, status_key, _ = _redis_keys(scoped, prefix)
         try:
-            client.set(_status_key(turn_id, prefix), status, ex=REPLAY_TTL_SECONDS)
+            client.set(status_key, status, ex=REPLAY_TTL_SECONDS)
+            client.expire(stream_key, REPLAY_TTL_SECONDS)
         except RECOVERABLE_ERRORS:
             pass
+    _stop_lease(scoped)
 
 
-def finish_status(turn_id: str) -> str | None:
+def finish_status(turn_id: str, *, owner: str = "", tenant: str = "") -> str | None:
     """返回 ``done`` / ``error`` / ``aborted``；仍在运行时返回 None。"""
     if not turn_id:
         return None
+    scoped = scope_key(turn_id, owner, tenant)
     with _lock:
-        local = _status.get(turn_id)
+        local = _status.get(scoped)
         if local:
             return local
     client, prefix = _redis()
     if client is not None:
+        _, status_key, _ = _redis_keys(scoped, prefix)
         try:
-            value = client.get(_status_key(turn_id, prefix))
+            value = client.get(status_key)
             if isinstance(value, bytes):
                 value = value.decode()
             if value:
@@ -181,19 +291,37 @@ def finish_status(turn_id: str) -> str | None:
     return None
 
 
-def clear(turn_id: str) -> None:
+def lease_alive(turn_id: str, *, owner: str = "", tenant: str = "") -> bool:
+    """生产端是否仍持有租约；无法确认时返回 True，避免误报断流。"""
+    if not turn_id:
+        return False
+    scoped = scope_key(turn_id, owner, tenant)
+    client, prefix, configured = _backend()
+    if client is not None:
+        _, _, lease_key = _redis_keys(scoped, prefix)
+        try:
+            return bool(client.exists(lease_key))
+        except RECOVERABLE_ERRORS:
+            return True
+    if configured:
+        return True
     with _lock:
-        _events.pop(turn_id, None)
-        _status.pop(turn_id, None)
-        _running.discard(turn_id)
-        _touched.pop(turn_id, None)
+        return scoped in _running
+
+
+def clear(turn_id: str, *, owner: str = "", tenant: str = "") -> None:
+    """清空该 turn 的事件与终态；不动租约（调用方已持有生产权）。"""
+    if not turn_id:
+        return
+    scoped = scope_key(turn_id, owner, tenant)
+    with _lock:
+        _events.pop(scoped, None)
+        _status.pop(scoped, None)
+        _touched.pop(scoped, None)
     client, prefix = _redis()
     if client is not None:
+        stream_key, status_key, _ = _redis_keys(scoped, prefix)
         try:
-            client.delete(
-                _events_key(turn_id, prefix),
-                _seq_key(turn_id, prefix),
-                _status_key(turn_id, prefix),
-            )
+            client.delete(stream_key, status_key)
         except RECOVERABLE_ERRORS:
             pass
