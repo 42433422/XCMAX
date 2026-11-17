@@ -1,4 +1,5 @@
 ## Unreleased
+- 知识库来源定时同步落地：`XCAGI_KB_AUTO_REFRESH_HOURS>0` 时 FastAPI lifespan 启动一个 daemon 线程（首次延迟 120 秒、最小间隔 5 分钟，随应用关闭优雅退出），按新鲜度阈值遍历所有知识库批量刷新外部来源，未变页面不产生新版本；默认关闭，被动节点不启动。新增 `refresh_all_due_sources` 汇总多库结果。
 - 知识库前端可直接调节检索：问答输入框下方新增「模式（混合/语义/关键词）、整章扩展、多样性（关/中/强）」，分别映射后端 `retrieval_mode`、`expand_section`、`mmr_lambda`；不改变默认值（混合、关闭、关闭），API 层对 λ 做 0–1 收敛。
 - 知识库新增章节父块扩展（small-to-big）：查询与问答传 `expand_section=true` 时，命中片段会扩展为同一 Markdown 章节的完整正文（默认 4000 字预算，从命中块向两侧扩；不跨文档、版本或章节），并在结果 `metadata.context_mode="section"` 标明；默认关闭，原行为与评测指标不变。相比相邻块窗口（`context_window`），长章节不再只给命中块前后各一段。
 - 知识库混合检索支持通道权重：`vector_weight` / `keyword_weight`（0–10，默认 1:1），按权重加权 RRF，适合「精确编号靠关键词、口语改写靠向量」的语料微调；单库、跨库与问答都支持，评测脚本新增 `--vector-weight/--keyword-weight`。本语料默认 1:1 仍最优（0.8551/0.9565/1.0、MRR 0.9135），调权重与 keyword-only 的对照数据见 README。

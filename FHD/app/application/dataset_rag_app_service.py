@@ -628,6 +628,53 @@ class DatasetRagApplicationService:
             "documents": results,
         }
 
+    def refresh_all_due_sources(
+        self,
+        *,
+        max_age_hours: float = 24.0,
+        limit_per_dataset: int = 50,
+    ) -> dict[str, Any]:
+        """后台定时任务入口：刷新所有知识库中超过新鲜度阈值的来源。"""
+        with self._repository.lock:
+            dataset_ids = sorted(
+                key
+                for key, state in self._repository.datasets.items()
+                if state.documents
+                and any(source_coordinates(doc.metadata) for doc in state.documents.values())
+            )
+        totals = {
+            "datasets": 0,
+            "processed": 0,
+            "changed": 0,
+            "unchanged": 0,
+            "failed": 0,
+            "fresh": 0,
+        }
+        results: list[dict[str, Any]] = []
+        for dataset_id in dataset_ids:
+            outcome = self.refresh_documents(
+                dataset_id,
+                max_age_hours=max_age_hours,
+                limit=limit_per_dataset,
+                access_context=None,
+            )
+            if not outcome.get("success"):
+                results.append({"dataset_id": dataset_id, "error": outcome.get("message", "")})
+                continue
+            totals["datasets"] += 1
+            for key in ("processed", "changed", "unchanged", "failed", "fresh"):
+                totals[key] += int(outcome.get(key) or 0)
+            results.append(
+                {
+                    "dataset_id": dataset_id,
+                    "processed": int(outcome.get("processed") or 0),
+                    "changed": int(outcome.get("changed") or 0),
+                    "failed": int(outcome.get("failed") or 0),
+                    "fresh": int(outcome.get("fresh") or 0),
+                }
+            )
+        return {**totals, "max_age_hours": float(max_age_hours), "results": results}
+
     def clear_dataset(
         self,
         dataset_id: str,
