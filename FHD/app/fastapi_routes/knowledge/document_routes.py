@@ -110,6 +110,20 @@ class DocumentRoutes:
                     "confluence_page_id": page.page_id,
                     "source_url": page.url,
                 }
+            elif req.feishu_document_id.strip():
+                from app.application.document_parsing.feishu_doc import fetch_document
+
+                try:
+                    doc = fetch_document(req.feishu_document_id)
+                except ValueError as exc:
+                    return JSONResponse(status_code=400, content={"detail": str(exc)})
+                text = doc.text
+                source = source or doc.title or f"feishu:{doc.document_id}"
+                document_id = document_id or doc.url
+                extra_metadata = {
+                    "feishu_document_id": doc.document_id,
+                    "source_url": doc.url,
+                }
             metadata = dict(req.metadata)
             metadata.update(extra_metadata)
             if req.acl:
