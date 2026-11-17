@@ -14,8 +14,11 @@ from app.application.attachment_artifacts.attachment_parser import (
     UnsupportedDocument,
     parse_file,
 )
-from app.application.attachment_artifacts.models import ArtifactRecord
+from app.application.attachment_artifacts.models import ArtifactRecord, ArtifactScope
 from app.application.attachment_artifacts.store import ArtifactStore
+
+SCOPE = ArtifactScope(owner_user_id="101", tenant_id="7")
+OTHER_SCOPE = ArtifactScope(owner_user_id="202", tenant_id="7")
 
 
 def _make_xlsx(path: Path) -> Path:
@@ -44,7 +47,7 @@ def record(tmp_path: Path) -> ArtifactRecord:
 
 @pytest.fixture()
 def store(tmp_path: Path, record: ArtifactRecord) -> ArtifactStore:
-    artifact_store = ArtifactStore(tmp_path)
+    artifact_store = ArtifactStore(tmp_path, scope=SCOPE)
     artifact_store.save(record)
     return artifact_store
 
@@ -97,6 +100,69 @@ def test_store_save_get_list_delete(store: ArtifactStore, record: ArtifactRecord
     assert store.get(record.id) is None
     assert store.list_all() == []
     assert store.delete(record.id) is False
+
+
+def test_store_reads_and_writes_follow_account_scope(tmp_path: Path, record: ArtifactRecord) -> None:
+    owner_store = ArtifactStore(tmp_path, scope=SCOPE)
+    owner_store.save(record)
+
+    other = ArtifactStore(tmp_path, scope=OTHER_SCOPE)
+    assert other.get(record.id) is None
+    assert other.load_rows(record.id) == {}
+    assert other.list_all() == []
+    assert other.delete(record.id) is False
+    assert owner_store.get(record.id) is not None
+
+    # 同一份文件被另一个账号上传时各存一份，不覆盖原归属。
+    duplicate = ArtifactRecord(
+        id=record.id,
+        name=record.name,
+        suffix=record.suffix,
+        size=record.size,
+        sha1=record.sha1,
+        created_at=record.created_at,
+        sheets=record.sheets,
+    )
+    other.save(duplicate)
+    assert owner_store.get(record.id).owner_user_id == "101"
+    assert other.get(record.id).owner_user_id == "202"
+
+    other_tenant = ArtifactStore(
+        tmp_path, scope=ArtifactScope(owner_user_id="101", tenant_id="8")
+    )
+    assert other_tenant.get(record.id) is None
+    assert other_tenant.list_all() == []
+
+
+def test_store_denies_legacy_and_unscoped_access(tmp_path: Path, record: ArtifactRecord) -> None:
+    legacy = ArtifactStore(tmp_path)
+    with pytest.raises(ValueError):
+        legacy.save(record)
+
+    record_dir = tmp_path / "artifacts"
+    record_dir.mkdir(parents=True, exist_ok=True)
+    (record_dir / f"{record.id}.json").write_text(
+        json.dumps({**record.to_dict(), "owner_user_id": "", "tenant_id": ""}),
+        encoding="utf-8",
+    )
+    assert legacy.get(record.id) is None
+    assert legacy.list_all() == []
+    assert ArtifactStore(tmp_path, scope=SCOPE).get(record.id) is None
+
+
+def test_store_enforces_mod_and_conversation_binding(tmp_path: Path, record: ArtifactRecord) -> None:
+    bound = ArtifactScope(
+        owner_user_id="101", tenant_id="7", mod_id="sales", conversation_id="conv-1"
+    )
+    ArtifactStore(tmp_path, scope=bound).save(record)
+
+    assert ArtifactStore(tmp_path, scope=bound).get(record.id) is not None
+    same_mod_other_conv = ArtifactScope(
+        owner_user_id="101", tenant_id="7", mod_id="sales", conversation_id="conv-2"
+    )
+    assert ArtifactStore(tmp_path, scope=same_mod_other_conv).get(record.id) is None
+    other_mod = ArtifactScope(owner_user_id="101", tenant_id="7", mod_id="erp")
+    assert ArtifactStore(tmp_path, scope=other_mod).get(record.id) is None
 
 
 def test_read_slice_bounds_and_cap(store: ArtifactStore, record: ArtifactRecord) -> None:

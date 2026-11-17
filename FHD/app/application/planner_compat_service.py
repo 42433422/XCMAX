@@ -439,6 +439,9 @@ async def compat_chat_stream_async(
             # 附件证据只进入本轮模型输入，不写回 body，避免污染落库的对话历史。
             stream_body = body
             try:
+                from app.application.attachment_artifacts.models import (
+                    artifact_scope_from_context,
+                )
                 from app.application.attachment_artifacts.store import ArtifactStore
                 from app.application.attachment_evidence import (
                     collect_evidence,
@@ -448,12 +451,14 @@ async def compat_chat_stream_async(
                 raw_ids = (body.context or {}).get("artifact_ids") or []
                 if isinstance(raw_ids, str):
                     raw_ids = [raw_ids]
-                if isinstance(raw_ids, (list, tuple, set)) and raw_ids:
+                # 归属只认服务端重建的身份上下文；匿名请求不启用附件证据。
+                scope = artifact_scope_from_context(body.context)
+                if scope is not None and isinstance(raw_ids, (list, tuple, set)) and raw_ids:
                     evidence = await collect_evidence(
                         body.message,
                         list(raw_ids),
-                        store=ArtifactStore(),
-                        user_id=str(body.user_id or (body.context or {}).get("user_id") or ""),
+                        store=ArtifactStore(scope=scope),
+                        user_id=scope.owner_user_id,
                     )
                     if evidence["trace"]:
                         yield _sse_event(
