@@ -1,6 +1,7 @@
 ## Unreleased
+- hash 降级检索重做：中文按二元组、英文数字按词做带符号哈希，维度 64→192；旧向量在加载时按维度不一致自动重算，无需手工重建。69 条含干扰文档评测中 hash 无精排 recall@1 0.1739→**0.8406**、recall@5 0.913→**1.0**、MRR 0.399→**0.9031**；hash + `FHD_RERANK_AUTO=1` 达到 **1.0/1.0/1.0、MRR 1.0**。
 - 知识库新增文档分块预览接口：`GET /api/knowledge/v1/datasets/{dataset_id}/documents/{document_id}/chunks?offset=&limit=` 按文档顺序分页返回分块（limit 1-200），受租户隔离与文档 ACL 约束，可用于命中测试与解析结果核对。
-- 检索评测升级为 **69 条中文查询 + 15 篇高重叠干扰文档**（4 条歧义查询允许两个相关文档）：fastembed + 精排 recall@1=1.0、MRR=1.0；fastembed 无精排 0.9565 / recall@5=1.0 / MRR=0.9783；hash 无精排 0.1739 / recall@5=0.913 / MRR=0.399；hash + `FHD_RERANK_AUTO=1` 0.9275 / 0.942 / MRR=0.9348。
+- 检索评测升级为 **69 条中文查询 + 15 篇高重叠干扰文档**（4 条歧义查询允许两个相关文档）：fastembed + 精排 recall@1=1.0、MRR=1.0；fastembed 无精排 0.9565 / recall@5=1.0 / MRR=0.9783；hash 无精排（改造后 192 维二元组）0.8406 / recall@5=1.0 / MRR=0.9031；hash + `FHD_RERANK_AUTO=1` 1.0 / 1.0 / MRR=1.0。
 - 知识库新增 Notion 页面导入：入库接口支持 `notion_page_id`，按 `XCAGI_NOTION_TOKEN` 读取页面标题与块树（递归子块、分页，最多 500 块 / 3 层）并扁平化为纯文本；5MB/15s 限制、页面 ID 校验、与其他来源互斥，失败返回 400。
 - 知识库新增飞书云文档导入：入库接口支持 `feishu_document_id`，用 `XCAGI_FEISHU_APP_ID` / `XCAGI_FEISHU_APP_SECRET` 换取并缓存租户 token，读取 docx `raw_content` 纯文本；5MB/15s 限制、文档 ID 校验、与其他来源互斥，鉴权或读取失败返回 400。
 - 知识库新增 Confluence 页面导入：入库接口支持 `confluence_page_id`，按管理员配置的站点（`XCAGI_CONFLUENCE_BASE_URL`）与凭据（`XCAGI_CONFLUENCE_API_TOKEN`，可选 `XCAGI_CONFLUENCE_EMAIL` 走 Basic Auth）读取页面 storage 内容，复用 trafilatura 提取正文（`parser` 仍为文本入库链路）；限制 5MB/15s，页面 ID 与来源互斥校验，失败返回 400。

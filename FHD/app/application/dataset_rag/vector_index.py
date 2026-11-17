@@ -29,15 +29,23 @@ def _embedding_metadata(embedder: Callable[[str], list[float]] | None, text: str
 def backfill_missing_embeddings(
     embedder: Callable[[str], list[float]] | None, state: _DatasetState
 ) -> bool:
-    """Fill chunks that were stored before an embedder existed. Returns whether any changed."""
+    """Fill chunks that were stored before an embedder existed.
+
+    Also recomputes vectors whose dimension no longer matches the current embedder
+    (e.g. switching hash 64 → 192 or hash ↔ fastembed), otherwise stale vectors
+    silently score zero.
+    """
     if embedder is None:
         return False
+    probe = _embedding_metadata(embedder, "_dim_probe_").get("_embedding")
+    expected_dim = len(probe) if isinstance(probe, list) else 0
     changed = False
     for chunk in state.chunks:
         meta = chunk.metadata if isinstance(chunk.metadata, dict) else {}
         existing = meta.get("_embedding")
         if isinstance(existing, list) and existing:
-            continue
+            if not expected_dim or len(existing) == expected_dim:
+                continue
         extra = _embedding_metadata(embedder, chunk.text)
         if not extra:
             continue
