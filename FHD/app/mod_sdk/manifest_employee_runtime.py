@@ -247,8 +247,7 @@ class ManifestEmployeeRuntime:
 
     async def run(self, payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
         self.logger.info(
-            "[employee:%s] run payload_field_count=%d",
-            self.employee_id,
+            "employee run payload_field_count=%d",
             len(payload or {}),
         )
         payload = payload or {}
