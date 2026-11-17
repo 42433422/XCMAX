@@ -75,6 +75,29 @@ def ocr_page_text(page: Any, *, resolution: int = 150) -> str:
     return "\n".join(lines)
 
 
+def ocr_image_text(path: Any, *, max_side: int = 2400) -> str:
+    """识别单张图片（png/jpg/webp 等）；失败返回空串。"""
+    engine = _engine_or_none()
+    if engine is None:
+        return ""
+    try:
+        from PIL import Image
+
+        image = Image.open(str(path)).convert("RGB")
+        if max(image.size) > max_side:
+            image.thumbnail((max_side, max_side))
+        import numpy as np
+
+        result, _ = engine(np.array(image))
+    except BOUNDARY_ERRORS:
+        logger.warning("图片 OCR 失败", exc_info=True)
+        return ""
+    if not result:
+        return ""
+    lines = [str(item[1]).strip() for item in result if len(item) > 1 and str(item[1]).strip()]
+    return "\n".join(lines)
+
+
 def reset_engine_for_tests() -> None:
     global _engine, _load_attempted
     with _lock:

@@ -8,7 +8,24 @@ from typing import Any
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 _DATASET_UPLOAD_EXTENSIONS = frozenset(
-    {".pdf", ".docx", ".pptx", ".xlsx", ".xls", ".txt", ".md", ".csv", ".json", ".log"}
+    {
+        ".pdf",
+        ".docx",
+        ".pptx",
+        ".xlsx",
+        ".xls",
+        ".txt",
+        ".md",
+        ".csv",
+        ".json",
+        ".log",
+        # 图片走 RapidOCR 识别（需安装 pdf-ocr 可选依赖）
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".webp",
+        ".bmp",
+    }
 )
 _DATASET_UPLOAD_MAX_BYTES = 25 * 1024 * 1024
 _DATASET_INLINE_MAX_CHARS = 5_000_000

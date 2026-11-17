@@ -89,6 +89,13 @@ class DocumentParser:
         if suffix in {".txt", ".md", ".csv", ".json", ".log"}:
             text, encoding = self._read_text_with_fallback(path)
             return (text, "text_file", {"extension": suffix, "encoding": encoding})
+        if suffix in {".png", ".jpg", ".jpeg", ".webp", ".bmp"}:
+            from app.application.document_parsing.ocr import ocr_image_text
+
+            text = ocr_image_text(path).strip()
+            if not text:
+                raise ValueError(f"图片未识别到文字：{path.name}（需安装 rapidocr-onnxruntime）")
+            return (text, "rapidocr", {"extension": suffix, "image_ocr": True})
         raise ValueError(f"unsupported document type: {suffix or '<none>'}")
 
     def _read_text_with_fallback(self, path: Path) -> tuple[str, str]:
