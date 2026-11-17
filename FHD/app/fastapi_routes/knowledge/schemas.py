@@ -356,6 +356,27 @@ class DatasetMultiQueryRequest(DatasetQueryRequest):
         return cleaned
 
 
+class DatasetFeedbackRequest(BaseModel):
+    """Thumb up/down on one answer, used for quality review rather than ranking."""
+
+    rating: str = Field(..., min_length=2, max_length=4, description="up or down")
+    query: str = Field("", max_length=2000, description="question that produced the answer")
+    answer: str = Field("", max_length=4000, description="answer text the user judged")
+    comment: str = Field("", max_length=1000, description="optional free-form reason")
+    citations: list[dict[str, object]] = Field(
+        default_factory=list, max_length=10, description="evidence rows shown with the answer"
+    )
+    tenant_id: str = Field("", max_length=160, description="tenant isolation key")
+
+    @field_validator("rating")
+    @classmethod
+    def validate_rating(cls, value: str) -> str:
+        cleaned = str(value or "").strip().lower()
+        if cleaned not in {"up", "down"}:
+            raise ValueError("rating must be 'up' or 'down'")
+        return cleaned
+
+
 class DatasetVersionDiffRequest(BaseModel):
     source: str = Field(..., min_length=1, max_length=300, description="document source label")
     tenant_id: str = Field("", max_length=160, description="tenant/user isolation key")

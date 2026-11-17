@@ -366,6 +366,25 @@
               <button type="button" class="secondary-button" @click="openImport('file')">{{ knowledgeEmpty ? '导入第一份资料' : '补充知识资料' }}</button>
             </template>
             <div v-else-if="answerText" class="recall-answer">{{ answerText }}</div>
+            <div v-if="answerText && !queryMessage" class="recall-feedback" aria-label="答案反馈">
+              <button
+                type="button"
+                :class="{ 'is-active': feedbackRating === 'up' }"
+                :disabled="feedbackRating !== ''"
+                @click="submitAnswerFeedback('up')"
+              >
+                有帮助
+              </button>
+              <button
+                type="button"
+                :class="{ 'is-active': feedbackRating === 'down' }"
+                :disabled="feedbackRating !== ''"
+                @click="submitAnswerFeedback('down')"
+              >
+                没帮助
+              </button>
+              <span v-if="feedbackMessage" role="status">{{ feedbackMessage }}</span>
+            </div>
 
             <div v-if="resultChunks.length" class="evidence-list">
               <article v-for="(chunk, index) in resultChunks" :key="evidenceKey(chunk, index)">
@@ -495,6 +514,9 @@ const {
   expandSection,
   mmrLambda,
   crossDataset,
+  feedbackRating,
+  feedbackMessage,
+  submitAnswerFeedback,
   queryMessage,
   queryError,
   answerText,

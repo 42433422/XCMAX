@@ -167,6 +167,29 @@ describe('knowledgeBaseApi', () => {
     })
   })
 
+  it('submits answer feedback and reads the summary', async () => {
+    await knowledgeBaseApi.submitFeedback({
+      datasetId: 'office-docking',
+      rating: 'down',
+      query: '退款流程',
+      answer: '未命中',
+      citations: [{ source: '退款.md', chunk_index: 1, score: 0.4 }],
+    })
+    await knowledgeBaseApi.feedbackSummary('office-docking', 999)
+
+    expect(mocks.primeCsrfCookie).toHaveBeenCalledTimes(1)
+    expect(mocks.api.post).toHaveBeenCalledWith('/api/knowledge/v1/datasets/office-docking/feedback', {
+      rating: 'down',
+      query: '退款流程',
+      answer: '未命中',
+      comment: '',
+      citations: [{ source: '退款.md', chunk_index: 1, score: 0.4 }],
+    })
+    expect(mocks.api.get).toHaveBeenCalledWith(
+      '/api/knowledge/v1/datasets/office-docking/feedback?limit=100',
+    )
+  })
+
   it('parses SSE knowledge query events', async () => {
     const encoder = new TextEncoder()
     const chunks = [

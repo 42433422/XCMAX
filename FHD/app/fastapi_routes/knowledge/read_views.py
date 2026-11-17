@@ -83,6 +83,42 @@ class DatasetViews:
             ),
         )
 
+    def record_feedback(
+        self, dataset_id: str, request: Request, payload: Any
+    ) -> dict[str, Any]:
+        """Record one thumb up/down on the answer the user just saw."""
+        access = self._access(request)
+        citations = [
+            dict(row) for row in (getattr(payload, "citations", []) or []) if isinstance(row, dict)
+        ]
+        return cast(
+            "dict[str, Any]",
+            self._service().record_feedback(
+                dataset_id=dataset_id,
+                rating=str(payload.rating),
+                query=str(getattr(payload, "query", "") or ""),
+                answer=str(getattr(payload, "answer", "") or ""),
+                comment=str(getattr(payload, "comment", "") or ""),
+                citations=citations,
+                tenant_id=str(getattr(payload, "tenant_id", "") or ""),
+                access_context=access,
+            ),
+        )
+
+    def feedback_summary(
+        self, dataset_id: str, request: Request, *, limit: int = 20
+    ) -> dict[str, Any]:
+        access = self._access(request)
+        return cast(
+            "dict[str, Any]",
+            self._service().feedback_summary(
+                dataset_id,
+                tenant_id=self._tenant_scope(access),
+                limit=limit,
+                access_context=access,
+            ),
+        )
+
     def graph(self, dataset_id: str, request: Request, limit: int = 80) -> dict[str, Any]:
         from app.application.persy_memory_app_service import merge_memory_graph
 

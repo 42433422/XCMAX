@@ -13,7 +13,7 @@ from fastapi.responses import StreamingResponse
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .read_views import DatasetViews
-from .schemas import DatasetQueryRequest
+from .schemas import DatasetFeedbackRequest, DatasetQueryRequest
 
 
 def _sse(event: dict[str, Any]) -> bytes:
@@ -86,6 +86,24 @@ class DatasetViewRoutes:
             )
 
         self.dataset_document_chunks = dataset_document_chunks
+
+        @router.post("/datasets/{dataset_id}/feedback")
+        def dataset_feedback(
+            dataset_id: str, req: DatasetFeedbackRequest, request: Request
+        ) -> dict[str, Any]:
+            return views().record_feedback(dataset_id, request, req)
+
+        self.dataset_feedback = dataset_feedback
+
+        @router.get("/datasets/{dataset_id}/feedback")
+        def dataset_feedback_summary(
+            dataset_id: str,
+            request: Request,
+            limit: int = FastAPIQuery(20, ge=1, le=100),
+        ) -> dict[str, Any]:
+            return views().feedback_summary(dataset_id, request, limit=limit)
+
+        self.dataset_feedback_summary = dataset_feedback_summary
 
         @router.get("/datasets/{dataset_id}/graph")
         def dataset_graph(

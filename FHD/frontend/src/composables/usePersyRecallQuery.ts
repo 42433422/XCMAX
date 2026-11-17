@@ -31,6 +31,8 @@ export function usePersyRecallQuery(options: {
   const grounding = ref<number | null>(null)
   const answerGrounded = ref<boolean | null>(null)
   const noAnswer = ref(false)
+  const feedbackRating = ref<'up' | 'down' | ''>('')
+  const feedbackMessage = ref('')
 
   const recallState = computed<PersyGraphRecall | null>(() =>
     lastQuery.value
@@ -50,6 +52,8 @@ export function usePersyRecallQuery(options: {
     grounding.value = null
     answerGrounded.value = null
     noAnswer.value = false
+    feedbackRating.value = ''
+    feedbackMessage.value = ''
   }
 
   async function queryKnowledge(): Promise<void> {
@@ -177,6 +181,32 @@ export function usePersyRecallQuery(options: {
     }
   }
 
+  async function submitAnswerFeedback(rating: 'up' | 'down'): Promise<void> {
+    if (feedbackRating.value || !lastQuery.value || !answerText.value) return
+    feedbackMessage.value = ''
+    try {
+      const result = await knowledgeBaseApi.submitFeedback({
+        datasetId: activeDatasetId.value,
+        rating,
+        query: lastQuery.value,
+        answer: answerText.value,
+        citations: resultChunks.value.slice(0, 10).map((chunk) => ({
+          source: chunk.source,
+          chunk_index: chunk.chunk_index,
+          score: chunk.score,
+        })),
+      })
+      if (result.success) {
+        feedbackRating.value = rating
+        feedbackMessage.value = '感谢反馈'
+      } else {
+        feedbackMessage.value = result.message || '反馈未保存，请稍后重试'
+      }
+    } catch {
+      feedbackMessage.value = '反馈未保存，请稍后重试'
+    }
+  }
+
   return {
     queryText,
     topK,
@@ -194,6 +224,9 @@ export function usePersyRecallQuery(options: {
     resultChunks,
     grounding,
     answerGrounded,
+    feedbackRating,
+    feedbackMessage,
+    submitAnswerFeedback,
     noAnswer,
     recallState,
     resetRecall,

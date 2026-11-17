@@ -44,6 +44,7 @@ from app.application.dataset_rag.document_lifecycle import (
 )
 from app.application.dataset_rag.document_lifecycle import DocumentLifecycle
 from app.application.dataset_rag.document_parser import DocumentParser
+from app.application.dataset_rag.feedback import DatasetFeedbackStore
 from app.application.dataset_rag.knowledge_graph import (
     _GRAPH_TOPIC_METADATA_KEYS as _GRAPH_TOPIC_METADATA_KEYS,
 )
@@ -267,6 +268,7 @@ class DatasetRagApplicationService:
         self._repository = DatasetRepository(
             chosen_path, prepare_loaded_state=self._prepare_loaded_state
         )
+        self._feedback = DatasetFeedbackStore(chosen_path.with_name("dataset_feedback.json"))
         self._documents = DocumentLifecycle(
             repository=self._repository,
             parser=self._parser,
@@ -938,6 +940,69 @@ class DatasetRagApplicationService:
         return self._retrieval.knowledge_graph(
             dataset_id, tenant_id=tenant_id, limit=limit, access_context=access_context
         )
+
+    def record_feedback(
+        self,
+        *,
+        dataset_id: str,
+        rating: str,
+        query: str = "",
+        answer: str = "",
+        comment: str = "",
+        citations: list[dict[str, Any]] | None = None,
+        tenant_id: str = "",
+        access_context: DatasetAccessContext | dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Record whether an answer was useful (thumb up/down) for quality review."""
+        dataset_key = _clean_key(dataset_id, default="default")
+        context = _coerce_access_context(access_context)
+        tenant_key, denied = _resolve_tenant_for_access(
+            context,
+            tenant_id,
+            required_permission=DATASET_READ_PERMISSION,
+            default_without_context="",
+            dataset_id=dataset_key,
+        )
+        if denied is not None:
+            return denied
+        try:
+            record = self._feedback.record(
+                dataset_id=dataset_key,
+                tenant_id=tenant_key,
+                rating=str(rating or "").strip().lower(),
+                query=query,
+                answer=answer,
+                comment=comment,
+                citations=citations,
+                actor_id=str(getattr(context, "actor_id", "") or ""),
+            )
+        except ValueError as exc:
+            return {"success": False, "dataset_id": dataset_key, "message": str(exc)}
+        return {"success": True, "dataset_id": dataset_key, "feedback": record}
+
+    def feedback_summary(
+        self,
+        dataset_id: str,
+        *,
+        tenant_id: str = "",
+        limit: int = 20,
+        access_context: DatasetAccessContext | dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        dataset_key = _clean_key(dataset_id, default="default")
+        context = _coerce_access_context(access_context)
+        tenant_key, denied = _resolve_tenant_for_access(
+            context,
+            tenant_id,
+            required_permission=DATASET_READ_PERMISSION,
+            default_without_context="",
+            dataset_id=dataset_key,
+        )
+        if denied is not None:
+            return denied
+        summary = self._feedback.summary(
+            dataset_id=dataset_key, tenant_id=tenant_key, limit=limit
+        )
+        return {"success": True, "dataset_id": dataset_key, **summary}
 
     def _resolve_file_path(self, file_path: str) -> Path:
         return self._parser._resolve_file_path(file_path)

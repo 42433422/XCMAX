@@ -342,7 +342,7 @@ def test_included_knowledge_routes_keep_real_desktop_authentication_gate(
 
 
 @pytest.mark.parametrize(
-    ("root", "namespace", "count"), [(knowledge_v1, "knowledge", 27), (mod_store, "mod_store", 26)]
+    ("root", "namespace", "count"), [(knowledge_v1, "knowledge", 30), (mod_store, "mod_store", 26)]
 )
 def test_public_function_exports_are_the_registered_owned_endpoints(root, namespace, count) -> None:
     endpoints = [

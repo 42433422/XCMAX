@@ -685,6 +685,36 @@
   white-space: pre-wrap;
 }
 
+.recall-feedback {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  color: #718078;
+  font-size: 12px;
+}
+
+.recall-feedback button {
+  padding: 3px 10px;
+  border: 1px solid #d5e0da;
+  border-radius: 999px;
+  background: #fff;
+  color: #3d4b45;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.recall-feedback button.is-active {
+  border-color: #1d6259;
+  background: #e6f2ee;
+  color: #1d6259;
+}
+
+.recall-feedback button:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
 .recall-empty {
   color: #718078;
   font-size: 12px;

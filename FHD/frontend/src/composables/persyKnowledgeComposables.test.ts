@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   query: vi.fn(),
   queryStream: vi.fn(),
   multiQuery: vi.fn(),
+  submitFeedback: vi.fn(),
   queryMemories: vi.fn(),
 }))
 
@@ -227,6 +228,46 @@ describe('Persy knowledge composables', () => {
     )
     expect(mocks.queryStream).not.toHaveBeenCalled()
     expect(recall.answerText.value).toBe('次日达')
+  })
+
+  it('records answer feedback once per recall', async () => {
+    mocks.queryStream.mockImplementation(
+      async (_payload, handlers: { onMeta?: (d: unknown) => void; onDone?: (d: unknown) => void }) => {
+        handlers.onMeta?.({
+          success: true,
+          chunks: [{ source: '退款.md', chunk_index: 0, score: 0.9 }],
+        })
+        handlers.onDone?.({ answer: '七天内可退款', citations: [] })
+      },
+    )
+    mocks.queryMemories.mockResolvedValue({ success: true, memories: [] })
+    mocks.submitFeedback.mockResolvedValue({ success: true })
+    const recall = usePersyRecallQuery({
+      activeDatasetId: ref('office-docking'),
+      adminOmniscient: computed(() => false),
+      omniscientQueryEnabled: ref(false),
+      refreshMemories: vi.fn().mockResolvedValue(undefined),
+      refreshGraph: vi.fn().mockResolvedValue(undefined),
+      onRecallCommitted: vi.fn(),
+    })
+    recall.queryText.value = '退款流程'
+
+    await recall.queryKnowledge()
+    await recall.submitAnswerFeedback('up')
+    await recall.submitAnswerFeedback('down')
+
+    expect(mocks.submitFeedback).toHaveBeenCalledTimes(1)
+    expect(mocks.submitFeedback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        datasetId: 'office-docking',
+        rating: 'up',
+        query: '退款流程',
+        answer: '七天内可退款',
+        citations: [expect.objectContaining({ source: '退款.md', chunk_index: 0 })],
+      }),
+    )
+    expect(recall.feedbackRating.value).toBe('up')
+    expect(recall.feedbackMessage.value).toBe('感谢反馈')
   })
 
   it('applies a dataset and rebuilds its active index', async () => {

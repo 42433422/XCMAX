@@ -186,6 +186,42 @@ export interface KnowledgeStreamHandlers {
   onDone?: (data: Record<string, unknown>) => void
 }
 
+export interface KnowledgeFeedbackPayload {
+  datasetId?: string
+  rating: 'up' | 'down'
+  query?: string
+  answer?: string
+  comment?: string
+  citations?: KnowledgeBaseCitation[]
+}
+
+export interface KnowledgeFeedbackRecord {
+  feedback_id?: string
+  dataset_id?: string
+  rating?: string
+  query?: string
+  answer?: string
+  comment?: string
+  created_at?: string
+}
+
+export interface KnowledgeFeedbackResponse {
+  success: boolean
+  dataset_id?: string
+  feedback?: KnowledgeFeedbackRecord
+  message?: string
+}
+
+export interface KnowledgeFeedbackSummary {
+  success: boolean
+  dataset_id?: string
+  total?: number
+  up?: number
+  down?: number
+  satisfaction?: number | null
+  latest?: KnowledgeFeedbackRecord[]
+}
+
 function knowledgeQueryBody(payload: KnowledgeBaseQueryPayload): Record<string, unknown> {
   return {
     query: payload.query,
@@ -493,6 +529,25 @@ export const knowledgeBaseApi = {
     }
     if (buffer.trim()) dispatch(buffer)
     if (!finished) throw new Error('stream ended before done')
+  },
+
+  async submitFeedback(payload: KnowledgeFeedbackPayload): Promise<KnowledgeFeedbackResponse> {
+    await primeCsrfCookie()
+    return api.post<KnowledgeFeedbackResponse>(
+      datasetPath(payload.datasetId || PERSY_KNOWLEDGE_DATASET_ID, '/feedback'),
+      {
+        rating: payload.rating,
+        query: payload.query || '',
+        answer: payload.answer || '',
+        comment: payload.comment || '',
+        citations: payload.citations || [],
+      },
+    )
+  },
+
+  feedbackSummary(datasetId = PERSY_KNOWLEDGE_DATASET_ID, limit = 20): Promise<KnowledgeFeedbackSummary> {
+    const bounded = Math.max(1, Math.min(Number(limit) || 20, 100))
+    return api.get<KnowledgeFeedbackSummary>(datasetPath(datasetId, `/feedback?limit=${bounded}`))
   },
 
   memories(
