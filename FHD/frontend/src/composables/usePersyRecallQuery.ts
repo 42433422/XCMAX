@@ -1,5 +1,5 @@
 import { computed, ref, type ComputedRef, type Ref } from 'vue'
-import { PERSY_KNOWLEDGE_DATASET_ID, knowledgeBaseApi, type KnowledgeBaseChunk } from '@/api/knowledgeBase'
+import { PERSY_KNOWLEDGE_DATASET_ID, knowledgeBaseApi, type KnowledgeBaseChunk, type KnowledgeBaseQueryResponse } from '@/api/knowledgeBase'
 import type { PersyGraphRecall } from '@/components/persy/PersyKnowledgeGraph.vue'
 import { errorText, isMemoryChunk, normalizeAnswer } from '@/composables/persyKnowledgeFormatters'
 
@@ -19,6 +19,7 @@ export function usePersyRecallQuery(options: {
   const retrievalMode = ref<'hybrid' | 'vector' | 'keyword'>('hybrid')
   const expandSection = ref(false)
   const mmrLambda = ref(0)
+  const streaming = ref(true)
   const querying = ref(false)
   const queryMessage = ref('')
   const queryError = ref('')
@@ -64,22 +65,56 @@ export function usePersyRecallQuery(options: {
       let memory: Awaited<ReturnType<typeof knowledgeBaseApi.queryMemories>> | null = null
       let knowledgeFailure: unknown = null
       let memoryFailure: unknown = null
+      const payload = {
+        datasetId: activeDatasetId.value,
+        query,
+        topK: boundedTopK,
+        rerank: rerank.value,
+        retrievalMode: retrievalMode.value,
+        expandSection: expandSection.value,
+        mmrLambda: mmrLambda.value,
+      }
       try {
-        knowledge =
-          adminOmniscient.value && omniscientQueryEnabled.value
-            ? await knowledgeBaseApi.omniscientQuery({
-                query,
-                topK: boundedTopK,
-              })
-            : await knowledgeBaseApi.query({
-                datasetId: activeDatasetId.value,
-                query,
-                topK: boundedTopK,
-                rerank: rerank.value,
-                retrievalMode: retrievalMode.value,
-                expandSection: expandSection.value,
-                mmrLambda: mmrLambda.value,
-              })
+        if (adminOmniscient.value && omniscientQueryEnabled.value) {
+          knowledge = await knowledgeBaseApi.omniscientQuery({
+            query,
+            topK: boundedTopK,
+          })
+        } else if (streaming.value) {
+          let meta: Record<string, unknown> = {}
+          let done: Record<string, unknown> = {}
+          let streamed = ''
+          try {
+            await knowledgeBaseApi.queryStream(payload, {
+              onMeta: (data) => {
+                meta = data
+                if (Array.isArray(data.chunks)) {
+                  resultChunks.value = data.chunks as KnowledgeBaseChunk[]
+                }
+              },
+              onDelta: (text) => {
+                streamed += text
+                answerText.value = streamed
+              },
+              onDone: (data) => {
+                done = data
+              },
+            })
+            knowledge = {
+              ...(meta as unknown as KnowledgeBaseQueryResponse),
+              ...(done as unknown as KnowledgeBaseQueryResponse),
+              success: true,
+              dataset_id: activeDatasetId.value,
+              chunks: Array.isArray(meta.chunks)
+                ? (meta.chunks as KnowledgeBaseChunk[])
+                : [],
+            }
+          } catch {
+            knowledge = await knowledgeBaseApi.query(payload)
+          }
+        } else {
+          knowledge = await knowledgeBaseApi.query(payload)
+        }
       } catch (error) {
         knowledgeFailure = error
       }
@@ -142,6 +177,7 @@ export function usePersyRecallQuery(options: {
     retrievalMode,
     expandSection,
     mmrLambda,
+    streaming,
     querying,
     queryMessage,
     queryError,

@@ -1419,6 +1419,7 @@ class DatasetRagApplicationService:
                 "grounding": result.get("grounding", 0.0),
                 "answer_grounded": result.get("answer_grounded", False),
                 "chunk_count": len(result.get("chunks") or []),
+                "chunks": result.get("chunks") or [],
             },
         }
         prepared = self._prepare_answer_prompt(result, max_context_chars=max_context_chars)

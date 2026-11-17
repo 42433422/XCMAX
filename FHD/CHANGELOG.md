@@ -1,4 +1,5 @@
 ## Unreleased
+- 知识库前端接入流式问答：默认走 `query/stream`，答案逐字出现；`meta` 事件带回命中片段与 grounding，`done` 回填引用与上下文预算；流失败自动回退普通 `query`。API 层新增 `queryStream`（fetch + SSE 解析，带 CSRF 头）。
 - 知识库新增流式问答：`POST /api/knowledge/v1/datasets/{dataset_id}/query/stream` 返回 SSE（`meta` → 若干 `delta` → `done`），复用检索、低置信拒答、引用编号与上下文预算；平台模型未配置或 provider 不支持流式时回退确定性答案并以单个 `delta` 发出，`done` 携带 `answer/citations/context_chars/context_truncated`。
 - 知识库状态接口新增 `source_sync` 概览：可刷新文档数、从未同步数、最近同步时间与检查时间（受租户与文档 ACL 过滤），便于前端/运维判断定时同步是否在生效。
 - 新增检索质量回归门禁：`tests/test_application/test_knowledge_retrieval_baseline.py` 在 hash 模式下锁定单库 hybrid（recall@1≥0.84、recall@5≥0.99、MRR≥0.90）、keyword（recall@1≥0.86）、跨库（recall@1≥0.84）与 12 条域外问题 100% 拒答；语义向量环境自动跳过。

@@ -1,5 +1,5 @@
 {
-  "lines": 2472725,
+  "lines": 2473048,
   "updated": "2026-11-18",
-  "note": "知识库 SSE 流式问答（provider 流式通道+服务事件流+路由+4 条测试+文档）为功能净增"
+  "note": "知识库前端流式问答（queryStream SSE 解析+composable 流式/回退+2 条测试+meta 回传片段）为功能净增"
 }

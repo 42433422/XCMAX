@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('./core', () => ({
   api: mocks.api,
   primeCsrfCookie: mocks.primeCsrfCookie,
+  buildFullApiUrl: (path: string) => path,
 }))
 
 describe('knowledgeBaseApi', () => {
@@ -140,6 +141,40 @@ describe('knowledgeBaseApi', () => {
       expand_section: true,
       mmr_lambda: 1,
     })
+  })
+
+  it('parses SSE knowledge query events', async () => {
+    const encoder = new TextEncoder()
+    const chunks = [
+      'event: meta\ndata: {"success":true,"chunks":[],"grounding":0.9}\n\n',
+      'event: delta\ndata: {"text":"退款"}\n\n',
+      'event: done\ndata: {"answer":"退款流程","citations":[]}\n\n',
+    ]
+    const body = new ReadableStream({
+      start(controller) {
+        for (const chunk of chunks) controller.enqueue(encoder.encode(chunk))
+        controller.close()
+      },
+    })
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, body })
+    vi.stubGlobal('fetch', fetchMock)
+    const events: string[] = []
+
+    await knowledgeBaseApi.queryStream(
+      { datasetId: 'kb', query: '退款流程' },
+      {
+        onMeta: () => events.push('meta'),
+        onDelta: (text) => events.push(`delta:${text}`),
+        onDone: (data) => events.push(`done:${String(data.answer)}`),
+      },
+    )
+
+    expect(events).toEqual(['meta', 'delta:退款', 'done:退款流程'])
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/knowledge/v1/datasets/kb/query/stream',
+      expect.objectContaining({ method: 'POST', credentials: 'include' }),
+    )
+    vi.unstubAllGlobals()
   })
 
   it('loads and queries governed Persy memories', async () => {

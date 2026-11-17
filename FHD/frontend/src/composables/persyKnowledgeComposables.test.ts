@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   memories: vi.fn(),
   rebuildIndex: vi.fn(),
   query: vi.fn(),
+  queryStream: vi.fn(),
   queryMemories: vi.fn(),
 }))
 
@@ -130,13 +131,13 @@ describe('Persy knowledge composables', () => {
   })
 
   it('passes retrieval options to the knowledge query', async () => {
-    mocks.query.mockResolvedValue({
-      success: true,
-      dataset_id: 'office-docking',
-      chunks: [],
-      answer: '',
-      answer_grounded: true,
-    })
+    mocks.queryStream.mockImplementation(
+      async (_payload, handlers: { onMeta?: (d: unknown) => void; onDelta?: (t: string) => void; onDone?: (d: unknown) => void }) => {
+        handlers.onMeta?.({ success: true, chunks: [], grounding: 0.8, answer_grounded: true })
+        handlers.onDelta?.('退款')
+        handlers.onDone?.({ answer: '退款流程', citations: [] })
+      },
+    )
     mocks.queryMemories.mockResolvedValue({ success: true, memories: [] })
     const recall = usePersyRecallQuery({
       activeDatasetId: ref('office-docking'),
@@ -153,7 +154,7 @@ describe('Persy knowledge composables', () => {
 
     await recall.queryKnowledge()
 
-    expect(mocks.query).toHaveBeenCalledWith(
+    expect(mocks.queryStream).toHaveBeenCalledWith(
       expect.objectContaining({
         datasetId: 'office-docking',
         query: '退款流程',
@@ -161,7 +162,37 @@ describe('Persy knowledge composables', () => {
         expandSection: true,
         mmrLambda: 0.5,
       }),
+      expect.any(Object),
     )
+    expect(recall.answerText.value).toBe('退款流程')
+    expect(recall.grounding.value).toBe(0.8)
+    expect(mocks.query).not.toHaveBeenCalled()
+  })
+
+  it('falls back to the non-stream query when streaming fails', async () => {
+    mocks.queryStream.mockRejectedValue(new Error('stream failed: 502'))
+    mocks.query.mockResolvedValue({
+      success: true,
+      dataset_id: 'office-docking',
+      chunks: [],
+      answer: '回退答案',
+      answer_grounded: true,
+    })
+    mocks.queryMemories.mockResolvedValue({ success: true, memories: [] })
+    const recall = usePersyRecallQuery({
+      activeDatasetId: ref('office-docking'),
+      adminOmniscient: computed(() => false),
+      omniscientQueryEnabled: ref(false),
+      refreshMemories: vi.fn().mockResolvedValue(undefined),
+      refreshGraph: vi.fn().mockResolvedValue(undefined),
+      onRecallCommitted: vi.fn(),
+    })
+    recall.queryText.value = '退款流程'
+
+    await recall.queryKnowledge()
+
+    expect(mocks.query).toHaveBeenCalled()
+    expect(recall.answerText.value).toBe('回退答案')
   })
 
   it('applies a dataset and rebuilds its active index', async () => {

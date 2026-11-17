@@ -1,4 +1,5 @@
-import { api, primeCsrfCookie } from './core'
+import { api, buildFullApiUrl, primeCsrfCookie } from './core'
+import { readCsrfTokenFromCookie, shouldAttachCsrfHeader } from '@/utils/csrfCookie'
 
 export const PERSY_KNOWLEDGE_DATASET_ID = 'persy-knowledge'
 
@@ -173,6 +174,27 @@ export interface KnowledgeBaseQueryPayload {
   retrievalMode?: 'hybrid' | 'vector' | 'keyword'
   expandSection?: boolean
   mmrLambda?: number
+}
+
+export interface KnowledgeStreamHandlers {
+  onMeta?: (data: Record<string, unknown>) => void
+  onDelta?: (text: string) => void
+  onDone?: (data: Record<string, unknown>) => void
+}
+
+function knowledgeQueryBody(payload: KnowledgeBaseQueryPayload): Record<string, unknown> {
+  return {
+    query: payload.query,
+    top_k: payload.topK || 5,
+    include_answer: payload.includeAnswer !== false,
+    tenant_id: payload.tenantId || '',
+    version: payload.version || '',
+    metadata_filter: payload.metadataFilter || {},
+    rerank: payload.rerank === true,
+    retrieval_mode: payload.retrievalMode || 'hybrid',
+    expand_section: payload.expandSection === true,
+    mmr_lambda: Math.max(0, Math.min(Number(payload.mmrLambda) || 0, 1)),
+  }
 }
 
 export interface KnowledgeBaseQueryResponse {
@@ -389,18 +411,73 @@ export const knowledgeBaseApi = {
 
   async query(payload: KnowledgeBaseQueryPayload): Promise<KnowledgeBaseQueryResponse> {
     await primeCsrfCookie()
-    return api.post<KnowledgeBaseQueryResponse>(datasetPath(payload.datasetId || PERSY_KNOWLEDGE_DATASET_ID, '/query'), {
-      query: payload.query,
-      top_k: payload.topK || 5,
-      include_answer: payload.includeAnswer !== false,
-      tenant_id: payload.tenantId || '',
-      version: payload.version || '',
-      metadata_filter: payload.metadataFilter || {},
-      rerank: payload.rerank === true,
-      retrieval_mode: payload.retrievalMode || 'hybrid',
-      expand_section: payload.expandSection === true,
-      mmr_lambda: Math.max(0, Math.min(Number(payload.mmrLambda) || 0, 1)),
-    })
+    return api.post<KnowledgeBaseQueryResponse>(
+      datasetPath(payload.datasetId || PERSY_KNOWLEDGE_DATASET_ID, '/query'),
+      knowledgeQueryBody(payload),
+    )
+  },
+
+  async queryStream(
+    payload: KnowledgeBaseQueryPayload,
+    handlers: KnowledgeStreamHandlers = {},
+    signal?: AbortSignal,
+  ): Promise<void> {
+    await primeCsrfCookie()
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (shouldAttachCsrfHeader('POST', headers)) {
+      const token = readCsrfTokenFromCookie()
+      if (token) headers['X-CSRF-Token'] = token
+    }
+    const response = await fetch(
+      buildFullApiUrl(datasetPath(payload.datasetId || PERSY_KNOWLEDGE_DATASET_ID, '/query/stream')),
+      {
+        method: 'POST',
+        credentials: 'include',
+        headers,
+        body: JSON.stringify(knowledgeQueryBody(payload)),
+        signal,
+      },
+    )
+    if (!response.ok || !response.body) {
+      throw new Error(`stream failed: ${response.status}`)
+    }
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let finished = false
+    const dispatch = (block: string) => {
+      const event = /^event:\s*(.+)$/m.exec(block)?.[1]?.trim() || 'message'
+      const dataLine = /^data:\s*(.+)$/m.exec(block)?.[1] || ''
+      let data: Record<string, unknown> = {}
+      try {
+        data = dataLine ? JSON.parse(dataLine) : {}
+      } catch {
+        data = {}
+      }
+      if (event === 'meta') handlers.onMeta?.(data)
+      else if (event === 'delta') handlers.onDelta?.(String(data.text || ''))
+      else if (event === 'done') {
+        finished = true
+        handlers.onDone?.(data)
+      } else if (event === 'error') {
+        finished = true
+        throw new Error(String(data.message || 'stream error'))
+      }
+    }
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      let boundary = buffer.indexOf('\n\n')
+      while (boundary >= 0) {
+        const block = buffer.slice(0, boundary)
+        buffer = buffer.slice(boundary + 2)
+        if (block.trim()) dispatch(block)
+        boundary = buffer.indexOf('\n\n')
+      }
+    }
+    if (buffer.trim()) dispatch(buffer)
+    if (!finished) throw new Error('stream ended before done')
   },
 
   memories(
