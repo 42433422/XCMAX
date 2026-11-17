@@ -1,4 +1,5 @@
 ## Unreleased
+- 知识库 BM25 中文分词改进：去掉「的/了/是/什/么/怎/可/需/要…」等高频功能字，关键词信号不再被疑问词稀释。69 条评测中 hash 无精排 recall@1 0.8406→**0.8551**、MRR 0.9031→**0.9135**；跨库 0.8551/0.971/1.0、MRR 0.9147；fastembed 0.9565/1.0/1.0、MRR 0.9783 与域外拒答率均不变。
 - 知识库新增语雀导入：入库接口支持 `yuque_document_ref`（`namespace/repo/doc`），调用语雀官方 REST `GET /api/v2/repos/{namespace}/docs/{slug}`（`X-Auth-Token`），读取标题与 Markdown 正文（缺正文时从 `body_html` 抽纯文本）；`XCAGI_YUQUE_TOKEN` 必填、`XCAGI_YUQUE_BASE_URL` 支持私有化域名，5MB/15s 限制、401/403/404 明确报错，并记录 `source_kind=yuque` 支持单篇与批量来源同步。
 - 知识库新增批量来源同步：`POST /api/knowledge/v1/datasets/{dataset_id}/documents/refresh?limit=`（默认 50、上限 200）按记录的外部来源坐标逐个刷新当前租户可见文档，返回 `total/processed/changed/unchanged/failed/skipped/truncated` 与逐文档状态；没有来源坐标的文档计入 `skipped` 而不是让整批失败，受写权限、租户与文档 ACL 约束。
 - 知识库前端新增分块预览与证据提示：资料列表点选文档后可在详情面板「分块」页按序查看分块（每页 50、可加载更多，复用 `GET .../documents/{id}/chunks`），召回面板显示 `grounding` 证据徽标（低于门槛时标注「未命中足够证据」），问答与召回不再只给一段文字。

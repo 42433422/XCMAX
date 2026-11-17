@@ -17,6 +17,11 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
+# 中文功能字：几乎每条文本都有，保留会稀释 BM25 关键词信号。
+_CJK_STOP_CHARS = frozenset(
+    "的了呢吧啊哦呀吗嘛么是在有和与或及就都也还我你他她它个这那怎什请问可需要多少几天内已未被把让给对从向于为以之其"
+)
+
 
 @dataclass
 class RetrievedChunk:
@@ -85,13 +90,14 @@ class BM25:
     def _tokenize(text: str) -> list[str]:
         if not text:
             return []
-        # 支持中英：英文按词、中文按字
+        # 支持中英：英文按词、中文按字（去掉高频功能字）
         tokens: list[str] = []
         for part in re.split(r"([\u4e00-\u9fff])", text):
             if not part:
                 continue
             if re.match(r"[\u4e00-\u9fff]", part):
-                tokens.extend(list(part))
+                if part not in _CJK_STOP_CHARS:
+                    tokens.append(part)
             else:
                 tokens.extend(re.findall(r"[A-Za-z0-9]+", part.lower()))
         return [t for t in tokens if t]

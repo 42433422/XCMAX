@@ -40,6 +40,17 @@ class TestBM25:
         assert "b" in bm._idf
         assert "c" in bm._idf
 
+    def test_tokenizer_drops_cjk_function_chars(self) -> None:
+        assert BM25._tokenize("退款的政策是什么？") == ["退", "款", "政", "策"]
+
+    def test_tokenizer_keeps_lowercased_words(self) -> None:
+        assert BM25._tokenize("Refund Policy v2") == ["refund", "policy", "v2"]
+
+    def test_stop_only_query_scores_zero(self) -> None:
+        bm = BM25()
+        bm.fit(["退款政策七天内可申请"])
+        assert bm.score("的是什么") == [0.0]
+
 
 class TestHybridRetriever:
     def test_no_match_does_not_return_arbitrary_documents(self) -> None:
