@@ -383,7 +383,10 @@ class SQLAlchemyAgentRunRepository:
         preserve_catalog_run_authority(db, run, previous)
         preserve_run_evidence(run, previous)
         ensure_terminal_business_result(run)
-        from .run_terminal_metrics import record_terminal_transition
+        from app.application.agent_orchestrator.run_terminal_metrics import (
+            record_terminal_transition,
+        )
+
         record_terminal_transition(run, previous, db)
         run.touch()
         payload = json.dumps(run.to_dict(), ensure_ascii=False, default=str)
