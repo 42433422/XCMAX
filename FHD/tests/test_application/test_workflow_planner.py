@@ -477,25 +477,12 @@ class TestPlannerStageMetrics:
     def test_valid_reply_plan_records_first_pass(self, monkeypatch):
         from app.infrastructure.observability import metrics
 
-        def reply(plan_id, user_id, message, registry, context):
-            return PlanGraph(
-                plan_id=plan_id,
-                intent="conversation_reply",
-                nodes=[
-                    WorkflowNode(
-                        node_id="model_reply",
-                        tool_id="conversation",
-                        action="reply",
-                        params={"response": "ready"},
-                        risk="low",
-                        idempotent=True,
-                    )
-                ],
-                metadata={"response_mode": "reply", "reply": "ready"},
-            )
-
-        planner = LLMWorkflowPlanner(ai_service=Mock())
-        monkeypatch.setattr(planner, "_plan_with_llm", reply)
+        planner = LLMWorkflowPlanner(
+            ai_service=Mock(),
+            completion=lambda **kwargs: {
+                "choices": [{"message": {"content": '{"mode":"reply","reply":"ready"}'}}]
+            },
+        )
 
         before = metrics.snapshot()
         plan = planner.plan("u-metric-valid", "hello", get_tool_registry(), {})

@@ -15,6 +15,7 @@ from app.services import get_ai_conversation_service
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .llm_plan_generation import LlmPlanGeneration, PlannerCompletion, PlannerConversation
+from .model_response_metrics import model_response_scope, record_response_error
 from .planner_llm_gateway import request_planner_completion
 from .planning_graph_policy import apply_clarification, validate_required_params
 from .planning_graph_policy import (
@@ -209,19 +210,13 @@ class LLMWorkflowPlanner:
         from app.infrastructure.modstore_transport import MarketModelError
 
         started = time.perf_counter()
-        try:
-            planned = self._plan_with_llm(plan_id, user_id, message, registry_for_plan, context)
-        except MarketModelError as exc:
-            context["planning_failure_reason"] = str(exc)
-            planned = None
-            model_outcome = "error"
-        else:
-            model_outcome = "returned" if planned is not None else "empty"
-        observe_plan_stage(
-            stage="model_returned",
-            outcome=model_outcome,
-            duration_ms=(time.perf_counter() - started) * 1000,
-        )
+        with model_response_scope():
+            try:
+                planned = self._plan_with_llm(plan_id, user_id, message, registry_for_plan, context)
+            except MarketModelError as exc:
+                context["planning_failure_reason"] = str(exc)
+                planned = None
+                record_response_error()
         repair_trace: dict[str, Any] = {}
         if planned is not None:
             from app.application.workflow.plan_repair import repair_plan

@@ -270,3 +270,14 @@ def select_rules_for_prompt(
     for intent in sorted(intents):
         rules.extend(SCENARIO_RULES.get(intent, ()))
     return rules
+
+
+def memory_digest(context: dict[str, Any]) -> dict[str, str]:
+    digest: dict[str, str] = {}
+    for key in ("user_memory_rag", "memory_v2"):
+        item = context.get(key)
+        if isinstance(item, dict):
+            summary = str(item.get("summary") or "").strip()
+            if summary:
+                digest[key] = summary[:1200]
+    return digest

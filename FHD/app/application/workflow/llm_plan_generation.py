@@ -11,6 +11,9 @@ from typing import Any, Protocol, cast
 import httpx
 
 from app.application.workflow.planner_prompt_profile import (
+    memory_digest as _memory_digest,
+)
+from app.application.workflow.planner_prompt_profile import (
     select_rules_for_prompt,
     select_tools_for_prompt,
 )
@@ -21,6 +24,8 @@ from app.application.workflow.workflow_types import (
     normalize_workflow_risk,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+from .model_response_metrics import observe_model_response, record_response_error
 
 logger = logging.getLogger(__name__)
 _MODEL_SECRET_TEXT = re.compile(
@@ -230,19 +235,9 @@ async def _consume_reply_stream(stream, on_prefix: Callable[[str], None]) -> tup
             on_prefix(prefix[len(emitted_text) :])
             emitted_text = prefix
     except RECOVERABLE_ERRORS:  # 流中断：保留下发内容，交给已发送前缀收尾
+        record_response_error()
         logger.warning("planner reply stream interrupted", exc_info=True)
     return "".join(chunks), emitted_text
-
-
-def _memory_digest(context: dict[str, Any]) -> dict[str, str]:
-    digest: dict[str, str] = {}
-    for key in ("user_memory_rag", "memory_v2"):
-        item = context.get(key)
-        if isinstance(item, dict):
-            summary = str(item.get("summary") or "").strip()
-            if summary:
-                digest[key] = summary[:1200]
-    return digest
 
 
 def _tool_specs(tool_registry: dict[str, Any]) -> list[dict[str, Any]]:
@@ -422,9 +417,10 @@ class LlmPlanGeneration:
         http_client: Callable[[], httpx.Client],
     ) -> None:
         self.conversation = conversation
-        self.completion = completion
+        self.completion = observe_model_response(completion)
         self.http_client = http_client
 
+    @observe_model_response
     def _stream_reply(
         self, messages: list[dict[str, str]], context: dict[str, Any]
     ) -> dict[str, Any] | None:
@@ -440,6 +436,7 @@ class LlmPlanGeneration:
                 ai_service=self.conversation, context=context, messages=messages
             )
         except RECOVERABLE_ERRORS:
+            record_response_error()
             logger.debug("planner streaming unavailable", exc_info=True)
             return None
         if stream is None:
@@ -453,6 +450,7 @@ class LlmPlanGeneration:
 
             text, streamed = _run_async(_consume_reply_stream(stream, emit))
         except RECOVERABLE_ERRORS:
+            record_response_error()
             logger.warning("planner streaming failed, falling back", exc_info=True)
             return None
         if not text.strip():

@@ -14,6 +14,14 @@ Customer customization belongs in versioned Mods with account-scoped entitlement
 
 Read-only reviews, design proposals, and requests explicitly limited to a draft do not require merging or releasing.
 
+## AI-first recognition (2026-11-15)
+
+Excel/table ingestion and file-type or field-semantics judgement are AI-first: the model infers structure, column meaning and destination, and the data lands in a schema-flexible store. Do not propose a new hardcoded target table, keyword whitelist or per-file adapter as the primary path; that answer was explicitly rejected. Deterministic code is limited to guardrails (tenant isolation, dedupe fingerprints, transactions/rollback, value parsing) and to fallback when no model is available. Existing rule lanes stay as fallback only. A template-library record that holds no business data is not a completed import.
+
+## Mature component reuse (2026-11-17 user rule)
+
+For any component, capability or interaction that needs to be built, migrate a mature and maintained open-source implementation instead of writing it from scratch: identify the reference repository first, pin the version, record the selection and license in the project README, and keep only thin product-side glue (tenant isolation, permissions, styling, control plane) in our own code. Self-development is acceptable only when no mature implementation covers the need, and that reason must be stated in the PR. This covers chat UI/streaming, document preview, settings and panel layouts, ingestion/parsing, workflow orchestration and similar building blocks. Every such change is then delivered closed-loop: commit, CI green, merge to `main`, deploy, and verify the running product against that commit.
+
 Version/release/download/client-update changes must follow `FHD/docs/architecture/PRODUCT_VERSION_SSOT.md`: edit the existing `FHD/config/download_release.json` catalog, regenerate derived views, and run `ssot_cli.py check version product-lines`. Count evolution records, not tags or version suffixes; preserve historical acceptance and each platform/channel artifact identity. Server/site deploys must never promote desktop candidates or replace their source SHA. Record unresolved evidence instead of inventing publication status.
 
 ## 合入顺序与快车道（2026-10-19 03:37 用户定）
