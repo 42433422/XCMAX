@@ -34,7 +34,7 @@ _events: dict[str, list[dict[str, Any]]] = {}
 _status: dict[str, str] = {}
 _running: set[str] = set()
 _touched: dict[str, float] = {}
-_leases: dict[str, tuple[Any, threading.Event]] = {}
+_leases: dict[str, Any] = {}
 
 
 class ReplayBackendUnavailable(RuntimeError):
@@ -62,11 +62,6 @@ def _backend() -> tuple[Any, str, bool]:
         return client, prefix, True
     except RECOVERABLE_ERRORS:
         return None, "", False
-
-
-def _redis() -> tuple[Any, str]:
-    client, prefix, _configured = _backend()
-    return client, prefix
 
 
 def _require_client() -> tuple[Any, str]:
@@ -98,25 +93,19 @@ def _prune_locked() -> None:
         _touched.pop(scoped, None)
 
 
-def append(turn_id: str, payload: dict[str, Any], *, owner: str = "", tenant: str = "") -> str:
+def append(
+    turn_id: str, payload: dict[str, Any], *, owner: str = "", tenant: str = "", runner: Any = None
+) -> str:
     """追加一条事件并返回游标；无 turn_id 时返回空串（不进缓冲）。"""
     if not turn_id:
         return ""
     scoped = scope_key(turn_id, owner, tenant)
     client, prefix = _require_client()
     if client is not None:
-        stream_key, _, _ = _redis_keys(scoped, prefix)
-        try:
-            entry_id = client.xadd(
-                stream_key,
-                {"payload": json.dumps(payload, ensure_ascii=False)},
-                maxlen=REPLAY_MAX_EVENTS,
-                approximate=False,
-            )
-            client.expire(stream_key, REPLAY_TTL_SECONDS)
-            return str(entry_id)
-        except RECOVERABLE_ERRORS:
-            raise ReplayBackendUnavailable("回放流写入失败") from None
+        entry_id = _fenced(
+            client, scoped, prefix, runner, "append", json.dumps(payload, ensure_ascii=False)
+        )
+        return entry_id.decode() if isinstance(entry_id, bytes) else str(entry_id)
     with _lock:
         _prune_locked()
         bucket = _events.setdefault(scoped, [])
@@ -167,9 +156,6 @@ def has_replay(turn_id: str, *, owner: str = "", tenant: str = "") -> bool:
     if not turn_id:
         return False
     scoped = scope_key(turn_id, owner, tenant)
-    with _lock:
-        if _events.get(scoped) or scoped in _status or scoped in _running:
-            return True
     client, prefix = _require_client()
     if client is not None:
         stream_key, status_key, lease_key = _redis_keys(scoped, prefix)
@@ -177,7 +163,8 @@ def has_replay(turn_id: str, *, owner: str = "", tenant: str = "") -> bool:
             return bool(client.exists(stream_key, status_key, lease_key))
         except RECOVERABLE_ERRORS:
             raise ReplayBackendUnavailable("回放状态读取失败") from None
-    return False
+    with _lock:
+        return bool(_events.get(scoped) or scoped in _status or scoped in _running)
 
 
 def claim_runner(turn_id: str, *, owner: str = "", tenant: str = "") -> bool:
@@ -202,21 +189,8 @@ def claim_runner(turn_id: str, *, owner: str = "", tenant: str = "") -> bool:
                 return False
         except RECOVERABLE_ERRORS:
             raise ReplayBackendUnavailable("生产权租约不可用") from None
-        stop = threading.Event()
-
-        def _renew() -> None:
-            interval = max(1.0, LEASE_TTL_SECONDS / 3)
-            while not stop.wait(interval):
-                try:
-                    lease.reacquire()
-                except RECOVERABLE_ERRORS:
-                    return
-
-        threading.Thread(
-            target=_renew, name=f"replay-lease-{turn_id[:12]}", daemon=True
-        ).start()
         with _lock:
-            _leases[scoped] = (lease, stop)
+            _leases[scoped] = lease
             _touched[scoped] = time.time()
         return True
     with _lock:
@@ -227,68 +201,105 @@ def claim_runner(turn_id: str, *, owner: str = "", tenant: str = "") -> bool:
     return True
 
 
-def _stop_lease(scoped: str) -> None:
+def runner_for(turn_id: str, *, owner: str = "", tenant: str = "") -> Any:
+    """Capture the lease once: an old producer must never borrow a replacement."""
     with _lock:
-        entry = _leases.pop(scoped, None)
-    if entry is None:
-        return
-    lease, stop = entry
-    stop.set()
-    try:
-        lease.release()
-    except RECOVERABLE_ERRORS:
-        pass
+        return _leases.get(scope_key(turn_id, owner, tenant))
 
 
-def release_runner(turn_id: str, *, owner: str = "", tenant: str = "") -> None:
-    if not turn_id:
-        return
+def release_runner(turn_id: str, *, owner: str = "", tenant: str = "", runner: Any = None) -> None:
     scoped = scope_key(turn_id, owner, tenant)
     with _lock:
         _running.discard(scoped)
-    _stop_lease(scoped)
-
-
-def mark_finished(turn_id: str, status: str = "done", *, owner: str = "", tenant: str = "") -> None:
-    if not turn_id:
-        return
-    scoped = scope_key(turn_id, owner, tenant)
-    with _lock:
-        _status[scoped] = status
-        _running.discard(scoped)
-        _touched[scoped] = time.time()
-    client, prefix = _redis()
-    if client is not None:
-        stream_key, status_key, _ = _redis_keys(scoped, prefix)
+        lease = runner if runner is not None else _leases.get(scoped)
+        if _leases.get(scoped) is lease:
+            _leases.pop(scoped, None)
+    if lease is not None:
         try:
-            client.set(status_key, status, ex=REPLAY_TTL_SECONDS)
-            client.expire(stream_key, REPLAY_TTL_SECONDS)
+            lease.release()
         except RECOVERABLE_ERRORS:
             pass
-    _stop_lease(scoped)
+
+
+def _fenced(
+    client: Any, scoped: str, prefix: str, runner: Any, action: str, value: str = ""
+) -> Any:
+    """Compare the captured lease token and mutate replay data in one Redis operation."""
+    if runner is None:
+        with _lock:
+            runner = _leases.get(scoped)
+    token = runner.local.token if runner is not None else None
+    if token is None:
+        raise ReplayBackendUnavailable("生产权租约已失效")
+    stream, status, lease = _redis_keys(scoped, prefix)
+    try:
+        result = client.eval(
+            """
+            if redis.call('get', KEYS[3]) ~= ARGV[1] then return false end
+            if ARGV[2] == 'append' then
+                local id = redis.call('xadd', KEYS[1], 'MAXLEN', ARGV[5], '*', 'payload', ARGV[3])
+                redis.call('expire', KEYS[1], ARGV[4])
+                return id
+            elseif ARGV[2] == 'finish' then
+                redis.call('set', KEYS[2], ARGV[3], 'EX', ARGV[4])
+                redis.call('expire', KEYS[1], ARGV[4])
+            elseif ARGV[2] == 'clear' then
+                redis.call('del', KEYS[1], KEYS[2])
+            end
+            return 1
+            """,
+            3,
+            stream,
+            status,
+            lease,
+            token,
+            action,
+            value,
+            REPLAY_TTL_SECONDS,
+            REPLAY_MAX_EVENTS,
+        )
+    except RECOVERABLE_ERRORS:
+        raise ReplayBackendUnavailable("回放流写入失败") from None
+    if not result:
+        raise ReplayBackendUnavailable("生产权租约已失效")
+    return result
+
+
+def mark_finished(
+    turn_id: str, status: str = "done", *, owner: str = "", tenant: str = "", runner: Any = None
+) -> None:
+    if not turn_id:
+        return
+    scoped = scope_key(turn_id, owner, tenant)
+    try:
+        client, prefix = _require_client()
+        if client is not None:
+            _fenced(client, scoped, prefix, runner, "finish", status)
+        else:
+            with _lock:
+                _status[scoped] = status
+                _touched[scoped] = time.time()
+    finally:
+        release_runner(turn_id, owner=owner, tenant=tenant, runner=runner)
 
 
 def finish_status(turn_id: str, *, owner: str = "", tenant: str = "") -> str | None:
-    """返回 ``done`` / ``error`` / ``aborted``；仍在运行时返回 None。"""
+    """Redis is authoritative across workers, including retries of a finished turn."""
     if not turn_id:
         return None
     scoped = scope_key(turn_id, owner, tenant)
-    with _lock:
-        local = _status.get(scoped)
-        if local:
-            return local
-    client, prefix = _redis()
+    client, prefix = _require_client()
     if client is not None:
         _, status_key, _ = _redis_keys(scoped, prefix)
         try:
             value = client.get(status_key)
-            if isinstance(value, bytes):
-                value = value.decode()
-            if value:
-                return str(value)
         except RECOVERABLE_ERRORS:
-            return None
-    return None
+            raise ReplayBackendUnavailable("回放状态读取失败") from None
+        if isinstance(value, bytes):
+            value = value.decode()
+        return str(value) if value else None
+    with _lock:
+        return _status.get(scoped)
 
 
 def lease_alive(turn_id: str, *, owner: str = "", tenant: str = "") -> bool:
@@ -309,7 +320,7 @@ def lease_alive(turn_id: str, *, owner: str = "", tenant: str = "") -> bool:
         return scoped in _running
 
 
-def clear(turn_id: str, *, owner: str = "", tenant: str = "") -> None:
+def clear(turn_id: str, *, owner: str = "", tenant: str = "", runner: Any = None) -> None:
     """清空该 turn 的事件与终态；不动租约（调用方已持有生产权）。"""
     if not turn_id:
         return
@@ -318,10 +329,6 @@ def clear(turn_id: str, *, owner: str = "", tenant: str = "") -> None:
         _events.pop(scoped, None)
         _status.pop(scoped, None)
         _touched.pop(scoped, None)
-    client, prefix = _redis()
+    client, prefix = _require_client()
     if client is not None:
-        stream_key, status_key, _ = _redis_keys(scoped, prefix)
-        try:
-            client.delete(stream_key, status_key)
-        except RECOVERABLE_ERRORS:
-            pass
+        _fenced(client, scoped, prefix, runner, "clear")
