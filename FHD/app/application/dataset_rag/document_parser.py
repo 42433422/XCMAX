@@ -11,6 +11,13 @@ from app.infrastructure.rag.semantic_chunker import Chunk
 from app.utils.security.safe_download_path import resolve_under_allowed_dirs
 
 
+def _pdf_ocr_enabled() -> bool:
+    """扫描件 OCR 开关：XCAGI_PDF_OCR=off 关闭，其余（默认 auto）启用空页 OCR。"""
+    from app.application.document_parsing.ocr import ocr_mode
+
+    return ocr_mode() != "off"
+
+
 def _table_to_markdown(rows: Any, *, max_rows: int = 200) -> str:
     """Serialize table rows to Markdown without adding a table-parsing dependency."""
     all_rows = list(rows or [])
@@ -102,8 +109,10 @@ class DocumentParser:
         max_pages = 500
         max_tables = 50
         max_table_rows = 200
+        max_ocr_pages = 30
         pages: list[str] = []
         table_count = 0
+        ocr_pages: list[int] = []
         empty_pages: list[int] = []
         with pdfplumber.open(str(path)) as pdf:
             all_pages = pdf.pages
@@ -123,6 +132,17 @@ class DocumentParser:
                         if markdown:
                             tables.append(f"[table {table_count + 1}]\n{markdown}")
                             table_count += 1
+                # 扫描件兜底：文本层为空时才 OCR，避免文本版 PDF 付多余算力
+                if (
+                    not page_text
+                    and len(ocr_pages) < max_ocr_pages
+                    and _pdf_ocr_enabled()
+                ):
+                    from app.application.document_parsing.ocr import ocr_page_text
+
+                    page_text = ocr_page_text(page).strip()
+                    if page_text:
+                        ocr_pages.append(index)
                 if page_text or tables:
                     block = [f"[page {index}]"]
                     if page_text:
@@ -133,22 +153,27 @@ class DocumentParser:
                     empty_pages.append(index)
         if not pages:
             raise ValueError(
-                "PDF 未检测到可提取文本，可能是扫描件；当前版本未启用 OCR，请提供文本版 PDF 或先做 OCR"
+                "PDF 未检测到可提取文本，可能是扫描件；"
+                "安装 rapidocr-onnxruntime 后会自动 OCR，或请提供文本版 PDF"
             )
         metadata: dict[str, Any] = {
             "extension": ".pdf",
             "page_count": page_count,
             "table_count": table_count,
             "pages_without_text": len(empty_pages),
+            "ocr_pages": len(ocr_pages),
         }
         warnings: list[str] = []
         if page_count > max_pages:
             warnings.append(f"仅解析前 {max_pages} 页（共 {page_count} 页）")
+        if len(empty_pages) > max_ocr_pages:
+            warnings.append(f"OCR 仅处理前 {max_ocr_pages} 个空页")
         if empty_pages:
             warnings.append(f"{len(empty_pages)} 页未提取到文本，可能为图片页")
         if warnings:
             metadata["parser_warnings"] = warnings
-        return ("\n\n".join(pages), "pdfplumber", metadata)
+        parser_backend = "pdfplumber+ocr" if ocr_pages else "pdfplumber"
+        return ("\n\n".join(pages), parser_backend, metadata)
 
     def _extract_docx_text(self, path: Path) -> tuple[str, str, dict[str, Any]]:
         try:

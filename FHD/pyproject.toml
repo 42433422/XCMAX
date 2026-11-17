@@ -24,6 +24,10 @@ doc-parsing = [
     "docling>=2.0.0",
     "soupsieve>=4,<5",
 ]
+# 可选：扫描件 PDF 的 ONNX OCR 兜底（RapidOCR，Apache-2.0，不依赖 torch）。
+pdf-ocr = [
+    "rapidocr-onnxruntime>=1.3,<2",
+]
 # 意图语义兜底：FastEmbed 走 ONNX，不依赖 torch；未安装时自动降级为纯规则。
 intent-semantic = [
     "semantic-router>=1.1,<2",
