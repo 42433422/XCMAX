@@ -1,5 +1,5 @@
 {
-  "lines": 2463152,
+  "lines": 2463506,
   "updated": "2026-11-18",
-  "note": "知识库检索升级（用户 2026-11-18 目标：迁移成熟组件补齐短板）：新增 fastembed 语义 embedding 与 cross-encoder rerank 适配约 150 行、评测脚本与中文评测集约 130 行、状态误报修复与测试约 80 行；均为能力补齐，无删除项"
+  "note": "知识库检索升级（用户 2026-11-18 目标）：fastembed 语义 embedding 与 cross-encoder rerank、评测脚本与中文评测集、状态误报修复及测试，共 +354 行；均为能力补齐，无删除项"
 }
