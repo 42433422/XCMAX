@@ -45,6 +45,17 @@ def test_parse_drafts_drops_unknown_and_invalid_entries():
     assert drafts[0]["preconditions"] == ["已登录"]
 
 
+def test_parse_drafts_recovers_objects_from_reasoning_text():
+    raw = (
+        '先分析这批接口。\n'
+        '{"operation_id":"orders.create","when_to_use":"创建订单","side_effects":["写数据库"],'
+        '"preconditions":["已登录"],"returns":""}\n'
+        "以上。"
+    )
+    drafts = draft_tool.parse_drafts(raw, {"orders.create"})
+    assert [item["operation_id"] for item in drafts] == ["orders.create"]
+
+
 def test_parse_drafts_handles_non_json_output():
     assert draft_tool.parse_drafts("模型拒绝回答", {"products.list"}) == []
 
@@ -104,7 +115,14 @@ async def test_generate_writes_draft_file(monkeypatch, tmp_path):
     monkeypatch.setattr(draft_tool, "DRAFT_DIR", tmp_path)
     catalog = {"operations": [_operation("products.list", "read")]}
     path = await draft_tool.generate(
-        catalog, batch_size=5, limit=10, domains=set(), profile="default", dry_run=False
+        catalog,
+        batch_size=5,
+        limit=10,
+        domains=set(),
+        risks=set(),
+        only_ids=set(),
+        profile="default",
+        dry_run=False,
     )
     assert path is not None and path.exists()
     document = yaml.safe_load(path.read_text(encoding="utf-8").split("\n", 1)[1])

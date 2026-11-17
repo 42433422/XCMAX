@@ -41,6 +41,11 @@ _SYSTEM_PROMPT = """你是企业软件的能力目录编辑。给你一批后端
 5. 只输出 JSON 数组，不要 Markdown 代码块以外的任何文字。每个元素字段：
    operation_id（必须与输入一致）、when_to_use（≤120 字）、side_effects（字符串数组，≤4）、
    preconditions（字符串数组，≤4）、returns（≤80 字，可空字符串）。
+6. 若 risk 为 danger（删除/批量/退款/发布类）：
+   - when_to_use 必须点明不可逆或高影响的操作对象；
+   - side_effects 必须写明影响范围（单条还是批量）以及是否不可逆；
+   - preconditions 必须包含「已获得明确授权或审批」；
+   - 不允许猜测业务阈值、金额上限或审批层级。
 """
 
 _JSON_ARRAY_RE = re.compile(r"\[[\s\S]*\]")
@@ -66,17 +71,54 @@ def _string_list(value: Any, *, limit: int = 4) -> list[str]:
     return items
 
 
+def _extract_json_objects(text: str) -> list[Any]:
+    """从含推理文字或代码块的输出中逐个大括号提取 JSON 对象。"""
+    objects: list[Any] = []
+    depth = 0
+    start = -1
+    in_string = False
+    escaped = False
+    for index, char in enumerate(text):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            if depth == 0:
+                start = index
+            depth += 1
+        elif char == "}" and depth > 0:
+            depth -= 1
+            if depth == 0 and start >= 0:
+                try:
+                    objects.append(json.loads(text[start : index + 1]))
+                except json.JSONDecodeError:
+                    pass
+                start = -1
+    return objects
+
+
+def _parse_payload(raw: str) -> list[Any]:
+    match = _JSON_ARRAY_RE.search(raw)
+    if match:
+        try:
+            payload = json.loads(match.group(0))
+        except json.JSONDecodeError:
+            payload = None
+        if isinstance(payload, list):
+            return payload
+    return _extract_json_objects(raw)
+
+
 def parse_drafts(raw: str, known_ids: set[str]) -> list[dict[str, Any]]:
     """解析模型输出；未知 operation_id 与类型错误的条目直接丢弃。"""
-    match = _JSON_ARRAY_RE.search(str(raw or ""))
-    if not match:
-        return []
-    try:
-        payload = json.loads(match.group(0))
-    except json.JSONDecodeError:
-        return []
-    if not isinstance(payload, list):
-        return []
+    payload = _parse_payload(str(raw or ""))
     drafts: list[dict[str, Any]] = []
     seen: set[str] = set()
     for item in payload:
@@ -124,6 +166,8 @@ def select_targets(
     *,
     limit: int,
     domains: set[str],
+    risks: set[str] | None = None,
+    only_ids: set[str] | None = None,
     skip_described: bool = True,
 ) -> list[dict[str, Any]]:
     order = {"read": 0, "write": 1, "danger": 2}
@@ -132,6 +176,8 @@ def select_targets(
         for entry in operations
         if (not skip_described or not entry.get("described"))
         and (not domains or str(entry.get("domain")) in domains)
+        and (not risks or str(entry.get("risk")) in risks)
+        and (not only_ids or str(entry.get("operation_id")) in only_ids)
     ]
     targets.sort(key=lambda entry: (order.get(str(entry.get("risk")), 3), entry["operation_id"]))
     return targets[:limit] if limit > 0 else targets
@@ -154,11 +200,21 @@ async def generate(
     batch_size: int,
     limit: int,
     domains: set[str],
+    risks: set[str],
+    only_ids: set[str],
     profile: str,
     dry_run: bool,
+    skip_described: bool = True,
 ) -> Path | None:
     operations = list(catalog.get("operations") or [])
-    targets = select_targets(operations, limit=limit, domains=domains)
+    targets = select_targets(
+        operations,
+        limit=limit,
+        domains=domains,
+        risks=risks,
+        only_ids=only_ids,
+        skip_described=skip_described,
+    )
     if not targets:
         print("没有需要生成语义的 operation。")
         return None
@@ -180,7 +236,7 @@ async def generate(
                     chat_completion_openai_format(
                         build_messages(batch),
                         temperature=0.2,
-                        max_tokens=4000,
+                        max_tokens=6000,
                         profile=profile,
                         reasoning_enabled=False,
                     ),
@@ -230,6 +286,17 @@ async def generate(
     return path
 
 
+def _resolve_ids(raw: str) -> set[str]:
+    text = str(raw or "").strip()
+    if not text:
+        return set()
+    candidate = Path(text)
+    if candidate.is_file():
+        lines = candidate.read_text(encoding="utf-8").splitlines()
+        return {line.strip() for line in lines if line.strip()}
+    return {item.strip() for item in text.split(",") if item.strip()}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="生成 AIOPEN 语义 overlay 草稿")
     parser.add_argument("--from-app", action="store_true", help="从当前应用构建目录")
@@ -237,12 +304,21 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--limit", type=int, default=40, help="最多生成条数，0 表示不限")
     parser.add_argument("--batch-size", type=int, default=10, help="每批 operation 数")
     parser.add_argument("--domains", default="", help="限定业务域，逗号分隔")
+    parser.add_argument("--risk", default="", help="限定风险级别：read,write,danger（逗号分隔）")
+    parser.add_argument(
+        "--include-described", action="store_true", help="包含已有语义的 operation（用于重写）"
+    )
+    parser.add_argument(
+        "--ids", default="", help="仅处理指定 operation_id（逗号分隔，或每行一个的文件路径）"
+    )
     parser.add_argument("--profile", default="default", help="LLM profile")
     parser.add_argument("--dry-run", action="store_true", help="只打印首批提示词")
     args = parser.parse_args(argv)
     if args.batch_size < 1:
         parser.error("--batch-size 必须 ≥ 1")
     domains = {item.strip() for item in args.domains.split(",") if item.strip()}
+    risks = {item.strip().lower() for item in args.risk.split(",") if item.strip()}
+    only_ids = _resolve_ids(args.ids)
     catalog = load_catalog(from_app=args.from_app, catalog_json=args.catalog_json)
     asyncio.run(
         generate(
@@ -250,8 +326,11 @@ def main(argv: list[str] | None = None) -> int:
             batch_size=args.batch_size,
             limit=args.limit,
             domains=domains,
+            risks=risks,
+            only_ids=only_ids,
             profile=args.profile,
             dry_run=args.dry_run,
+            skip_described=not args.include_described,
         )
     )
     return 0

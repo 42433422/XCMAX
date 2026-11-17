@@ -1,5 +1,5 @@
 {
-  "lines": 2459697,
+  "lines": 2459794,
   "updated": "2026-11-17",
-  "note": "棘轮下调"
+  "note": "AIOPEN 语义重写能力：新增 --risk/--ids/--include-described 与推理输出解析（+97 行）"
 }
