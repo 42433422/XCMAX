@@ -1,5 +1,5 @@
 {
-  "lines": 2459343,
+  "lines": 2459651,
   "updated": "2026-11-17",
-  "note": "合并远端 replay 字节事件修复（+39 行，非本 PR 新增）后同步基线"
+  "note": "新增 tests/test_application/test_semantic_multiturn_deterministic.py（+308 行）覆盖 S1-S4 确定性多轮闭环；纯测试新增，无生产代码净增；用户批准提交推送"
 }
