@@ -655,10 +655,12 @@ class DatasetRagApplicationService:
         retrieved = [_dict_to_retrieved_chunk(row) for row in result["chunks"]]
         tracker = CitationTracker(retrieved_chunks=retrieved)
         prompt = tracker.format_for_prompt()
-        raw_answer = (
-            llm_call(str(result.get("query") or ""), prompt)
-            if llm_call is not None
-            else _deterministic_answer(str(result.get("query") or ""), retrieved)
+        if llm_call is None:
+            from app.infrastructure.llm.knowledge_answer import get_kb_answer_llm_call
+
+            llm_call = get_kb_answer_llm_call()
+        raw_answer = (llm_call(str(result.get("query") or ""), prompt) if llm_call else "") or (
+            _deterministic_answer(str(result.get("query") or ""), retrieved)
         )
         clean_answer, citations = tracker.attach_citations(raw_answer)
         result["answer"] = clean_answer

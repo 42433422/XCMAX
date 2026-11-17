@@ -1,8 +1,10 @@
 ## Unreleased
+- 知识库问答默认接入平台模型合成答案：检索命中后按带编号的资料生成回答并保留引用；未配置平台模型、调用超时或异常时自动回退原有抽取式答案，`XCAGI_KB_ANSWER_LLM=0` 可关闭，超时用 `XCAGI_KB_ANSWER_TIMEOUT_S` 调整（默认 30 秒）。
+- 检索评测扩到 50 条中文查询：fastembed 语义模式 recall@1=0.98、recall@5=1.0、MRR=0.99；hash 降级 recall@1=0.22、recall@5=0.86、MRR=0.40；cross-encoder 精排在该评测上 recall@1=0.96，仍保持默认关闭。
 - 知识库新增文档级 ACL：文档元数据支持 `acl.allow_actors` / `acl.deny_actors`，在租户隔离之上按访问主体收窄检索、问答、知识图谱与文档列表；管理员可越过限制。新增 `POST /api/knowledge/v1/datasets/{dataset_id}/documents/{document_id}/acl` 在不产生新版本的情况下替换权限，入库时也可直接携带 `acl`。非法 ACL 键或值在入库/更新时明确拒绝。
 - 知识库新增网页导入（URL 连接器）：`POST /api/knowledge/v1/datasets/{dataset_id}/documents` 支持 `url` 字段，复用 trafilatura 2.3.1（Apache-2.0，纯 Python）提取正文与标题；默认拒绝内网/回环/保留地址、逐跳校验重定向（最多 3 跳）、限制 5MB/15s，抓取失败返回 400。`XCAGI_KB_ALLOW_PRIVATE_URLS=1` 仅供受控内网调试。
 - 知识库扫描件与图片兜底：复用 RapidOCR（Apache-2.0，ONNX，无 torch），PDF 页面提取不到文本时渲染后 OCR，默认最多 30 个空页，`XCAGI_PDF_OCR=off` 可关闭；同时支持直接导入 png/jpg/webp/bmp 图片并识别文字。实测图片型 PDF 与截图均可识别中文正文，返回 `parser_backend=pdfplumber+ocr`/`rapidocr` 与 `ocr_pages`。
-- 知识库检索升级：新增 fastembed（Apache-2.0，ONNX，无 torch）语义向量模式，默认中文模型 `BAAI/bge-small-zh-v1.5`；精排支持 cross-encoder（默认 `BAAI/bge-reranker-base`，显式开启），并扩大候选池后再精排。修复「hash 向量也被报告为语义可用」的误报：hash 模式现在如实显示 `semantic_embedding_available=false`。新增 `scripts/dev/knowledge_retrieval_eval.py`（20 条中文查询，recall@k/MRR）：hash 基线 recall@1=0.35、recall@5=0.85、MRR=0.513，fastembed 后 recall@1=1.0、MRR=1.0。
+- 知识库检索升级：新增 fastembed（Apache-2.0，ONNX，无 torch）语义向量模式，默认中文模型 `BAAI/bge-small-zh-v1.5`；精排支持 cross-encoder（默认 `BAAI/bge-reranker-base`，显式开启），并扩大候选池后再精排。修复「hash 向量也被报告为语义可用」的误报：hash 模式现在如实显示 `semantic_embedding_available=false`。新增 `scripts/dev/knowledge_retrieval_eval.py` 做 recall@k/MRR 评测（当前 50 条中文查询）。
 - AIOPEN 新增「自动批准危险操作」服务端开关 `AIOPEN_AUTO_APPROVE_DANGER`：默认关闭；只有同时开启 `AIOPEN_ENABLE_WRITES` 时，危险操作才会先写入审批单（含申请人、批准人、参数摘要）再自动批准并消费执行，审批记录与防重放不变；未开启时仍返回 `APPROVAL_REQUIRED` 等人工审批。
 - AIOPEN 虚拟光标动效升级：复用开源库 cursor-effects（MIT, 1.0.18）的蓝色星尘拖尾，按移动方向轻微倾斜、点击时粒子爆散并放大回弹光标与标签；操作类指令的光标停留延长到 4 秒，快照/校验仍然静默。管理端与企业端共用同一套效果。
 - AIOPEN 面板「发给其他 AI 助手」的句子不再截断到 URL 中间，完整显示接入说明与口令；复制时会确保本次生成可用连接口令，避免历史上已有 Key 但拿不到明文时，交给 AI 的话术缺鉴权而 401。
