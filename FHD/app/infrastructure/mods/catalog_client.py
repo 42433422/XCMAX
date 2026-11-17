@@ -145,7 +145,11 @@ def _market_item_to_package_row(item: dict[str, Any]) -> dict[str, Any] | None:
         "description": str(item.get("description") or "").strip(),
         "artifact": item.get("artifact") or "employee_pack",
         "author": item.get("author") or item.get("publisher"),
-        "download_url": f"/v1/packages/{pid}/{ver}/download",
+        "download_url": (
+            f"/api/market/catalog/{item['id']}/download"
+            if isinstance(item.get("id"), int) and not isinstance(item["id"], bool) and item["id"] > 0
+            else f"/v1/packages/{pid}/{ver}/download"
+        ),
         "public_listing": True,
         "download_count": int(item.get("download_count") or item.get("total_downloads") or 0),
         "total_downloads": int(item.get("total_downloads") or item.get("download_count") or 0),

@@ -83,7 +83,21 @@ def test_admin_market_upload_download_and_corruption(client, auth_headers, monke
     assert client.get(f"/api/market/catalog/{item_id}").status_code == 200
     download = client.get(f"/api/market/catalog/{item_id}/download", headers=auth_headers)
     assert download.status_code == 200 and download.content == raw
+    assert catalog_store.get_package(pkg_id, "1.0.0") is None
+    for action in ("delist", "restore"):
+        response = client.post(
+            f"/api/admin/catalog/{item_id}/review", headers=auth_headers, json={"action": action}
+        )
+        assert response.status_code == 200, response.text
+    download = client.get(f"/api/market/catalog/{item_id}/download", headers=auth_headers)
+    assert download.status_code == 200 and download.content == raw
     archive.write_bytes(b"corrupted")
+    assert (
+        client.post(
+            f"/api/admin/catalog/{item_id}/review", headers=auth_headers, json={"action": "restore"}
+        ).status_code
+        == 409
+    )
     assert client.get("/api/market/catalog", params={"q": pkg_id}).json()["total"] == 0
     assert pkg_id not in client.get("/api/market/facets").json()["industries"]
     assert client.get(f"/api/market/catalog/{item_id}").status_code == 404
@@ -112,6 +126,15 @@ def test_graph_template_needs_snapshot_not_archive(client, auth_headers):
         db.add(item)
         db.commit()
         item_id = item.id
+    user_id = int(decode_access_token(auth_headers["Authorization"].split()[-1])["sub"])
+    with get_session_factory()() as db:
+        db.get(User, user_id).is_admin = True
+        db.commit()
+    for action in ("delist", "restore"):
+        response = client.post(
+            f"/api/admin/catalog/{item_id}/review", headers=auth_headers, json={"action": action}
+        )
+        assert response.status_code == 200, response.text
     assert client.get("/api/market/catalog", params={"q": pkg_id}).json()["total"] == 1
     assert client.get(f"/api/market/catalog/{item_id}").status_code == 200
     assert (
@@ -210,6 +233,13 @@ def test_admin_catalog_review_lists_statuses_and_updates_listing(
             ]
         }
     )
+    with get_session_factory()() as db:
+        item = db.get(CatalogItem, pending_id)
+        item.stored_filename = archive.name
+        item.sha256 = hashlib.sha256(raw).hexdigest()
+        db.commit()
+    # A removed public record must not break the actual market download route.
+    catalog_store.save_store({"packages": []})
     restored = client.post(
         f"/api/admin/catalog/{pending_id}/review",
         headers=auth_headers,
@@ -306,3 +336,39 @@ def test_hidden_and_delisted_id_routes_require_prior_purchase(
     result = client.get(download, headers=auth_headers)
     assert result.status_code == 200 and result.content == data
     assert client.post(buy, headers=auth_headers).status_code == 404
+
+
+def test_admin_status_filter_and_counts_match_display_for_unpublished(client, auth_headers):
+    user_id = int(decode_access_token(auth_headers["Authorization"].split()[-1])["sub"])
+    prefix = f"status-{uuid.uuid4().hex[:10]}"
+    with get_session_factory()() as db:
+        db.get(User, user_id).is_admin = True
+        for state, public in (
+            ("approved", False),
+            ("delisted", False),
+            ("under_review", False),
+            ("restricted", False),
+            ("approved", True),
+        ):
+            db.add(
+                CatalogItem(
+                    pkg_id=f"{prefix}-{state}-{public}",
+                    version="1",
+                    name=prefix,
+                    compliance_status=state,
+                    is_public=public,
+                )
+            )
+        db.commit()
+    for status, expected in (("delisted", 2), ("listed", 1), ("pending", 1), ("restricted", 1)):
+        response = client.get(
+            "/api/admin/catalog", headers=auth_headers, params={"status": status, "search": prefix}
+        )
+        assert response.status_code == 200, response.text
+        data = response.json()
+        assert data["total"] == expected
+        assert data["counts"][status] >= expected
+        unfiltered = client.get(
+            "/api/admin/catalog", headers=auth_headers, params={"status": status, "limit": 200}
+        ).json()
+        assert data["counts"][status] == unfiltered["total"]

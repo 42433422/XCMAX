@@ -162,7 +162,6 @@ from modstore_server.api.market_routes_merged import (
     api_admin_upload_catalog as api_admin_upload_catalog,
     api_admin_patch_catalog_item as api_admin_patch_catalog_item,
     api_admin_sync_xc_catalog_packages as api_admin_sync_xc_catalog_packages,
-    api_admin_list_catalog as api_admin_list_catalog,
     api_initiate_upload as api_initiate_upload,
     api_upload_chunk as api_upload_chunk,
     api_complete_upload as api_complete_upload,
@@ -188,5 +187,13 @@ from modstore_server.api.market_routes_merged import (
     api_wallet_overview as api_wallet_overview,
     api_package_audit as api_package_audit,
 )
+
+from modstore_server.api.market_catalog_admin import (
+    api_admin_list_catalog as api_admin_list_catalog,
+    api_admin_review_catalog_item as api_admin_review_catalog_item,
+    router as catalog_admin_router,
+)
+
+router.include_router(catalog_admin_router)
 
 init_db()
