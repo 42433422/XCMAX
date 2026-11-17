@@ -186,6 +186,14 @@ export interface KnowledgeStreamHandlers {
   onDone?: (data: Record<string, unknown>) => void
 }
 
+export interface KnowledgeSynonymsResponse {
+  success: boolean
+  dataset_id?: string
+  synonyms?: Record<string, string[]>
+  count?: number
+  message?: string
+}
+
 export interface KnowledgeFeedbackPayload {
   datasetId?: string
   rating: 'up' | 'down'
@@ -548,6 +556,18 @@ export const knowledgeBaseApi = {
   feedbackSummary(datasetId = PERSY_KNOWLEDGE_DATASET_ID, limit = 20): Promise<KnowledgeFeedbackSummary> {
     const bounded = Math.max(1, Math.min(Number(limit) || 20, 100))
     return api.get<KnowledgeFeedbackSummary>(datasetPath(datasetId, `/feedback?limit=${bounded}`))
+  },
+
+  synonyms(datasetId = PERSY_KNOWLEDGE_DATASET_ID): Promise<KnowledgeSynonymsResponse> {
+    return api.get<KnowledgeSynonymsResponse>(datasetPath(datasetId, '/synonyms'))
+  },
+
+  async saveSynonyms(
+    datasetId: string,
+    synonyms: Record<string, string[]>,
+  ): Promise<KnowledgeSynonymsResponse> {
+    await primeCsrfCookie()
+    return api.put<KnowledgeSynonymsResponse>(datasetPath(datasetId, '/synonyms'), { synonyms })
   },
 
   memories(

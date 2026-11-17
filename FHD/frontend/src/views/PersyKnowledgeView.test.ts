@@ -21,6 +21,8 @@ const mocks = vi.hoisted(() => ({
   ingestDocument: vi.fn(),
   uploadDocument: vi.fn(),
   rebuildIndex: vi.fn(),
+  synonyms: vi.fn(),
+  saveSynonyms: vi.fn(),
   resetGraphView: vi.fn(),
 }))
 
@@ -269,6 +271,28 @@ describe('PersyKnowledgeView', () => {
 
     expect(wrapper.get('.recall-grounding').text()).toContain('未命中足够证据')
     expect(wrapper.get('.recall-grounding').classes()).toContain('is-weak')
+  })
+
+  it('edits and saves dataset synonyms from the ask dock', async () => {
+    mocks.synonyms.mockResolvedValue({
+      success: true,
+      synonyms: { 退款: ['退货'] },
+    })
+    mocks.saveSynonyms.mockResolvedValue({ success: true, count: 2 })
+    const wrapper = await mountKnowledge()
+
+    await wrapper.get('.ask-dock__term').trigger('click')
+    await flushPromises()
+    const editor = wrapper.get('textarea[aria-label="术语表"]')
+    expect((editor.element as HTMLTextAreaElement).value).toBe('退款=退货')
+    await editor.setValue('退款=退货,退钱')
+    await clickLabel(wrapper, '.ask-dock__synonym-actions button', '保存术语')
+
+    expect(mocks.synonyms).toHaveBeenCalledWith('persy-knowledge')
+    expect(mocks.saveSynonyms).toHaveBeenCalledWith('persy-knowledge', {
+      退款: ['退货', '退钱'],
+    })
+    expect(wrapper.get('.ask-dock__synonym-actions').text()).toContain('已保存 2 组术语')
   })
 
   it('admin omniscient auto-switches to nonempty space and heals empty graph once', async () => {

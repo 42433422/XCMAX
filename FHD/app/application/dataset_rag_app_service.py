@@ -1002,6 +1002,23 @@ class DatasetRagApplicationService:
         summary = self._feedback.summary(dataset_id=dataset_key, tenant_id=tenant_key, limit=limit)
         return {"success": True, "dataset_id": dataset_key, **summary}
 
+    def synonyms(
+        self,
+        dataset_id: str,
+        *,
+        access_context: DatasetAccessContext | dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        return self._retrieval.synonyms(dataset_id, access_context=access_context)
+
+    def set_synonyms(
+        self,
+        dataset_id: str,
+        synonyms: Any,
+        *,
+        access_context: DatasetAccessContext | dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        return self._retrieval.set_synonyms(dataset_id, synonyms, access_context=access_context)
+
     def _resolve_file_path(self, file_path: str) -> Path:
         return self._parser._resolve_file_path(file_path)
 

@@ -9,7 +9,9 @@ from typing import Any, Protocol
 from app.application.dataset_rag.access_policy import (
     DATASET_ADMIN_PERMISSION,
     DATASET_READ_PERMISSION,
+    DATASET_WRITE_PERMISSION,
     _coerce_access_context,
+    _ensure_dataset_permission,
     _resolve_tenant_for_access,
 )
 from app.application.dataset_rag.chunk_context import expanded_context, section_context
@@ -24,6 +26,7 @@ from app.application.dataset_rag.models import (
     DatasetDocument,
     _chunk_to_dict,
     _clean_key,
+    _DatasetState,
 )
 from app.application.dataset_rag.repository import DatasetRepository
 from app.application.dataset_rag.retrieval_policy import (
@@ -35,6 +38,7 @@ from app.application.dataset_rag.retrieval_policy import (
     resolve_min_relevance,
     resolve_mmr_lambda,
 )
+from app.application.dataset_rag.synonyms import expand_query, normalize_synonyms
 from app.application.dataset_rag.vector_index import VectorIndexService
 from app.infrastructure.rag import RetrievedChunk
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -235,6 +239,9 @@ class DatasetRetrieval:
             chunks, tenant_id=tenant_key, version=version, metadata_filter=metadata_filter or {}
         )
         scope_chunks = filter_chunks_by_acl(scope_chunks, access_context)
+        # 术语表（可选）：把用户口语词展开为语料里的写法，只影响召回通道，
+        # 引用与证据覆盖率仍按原问题计算。
+        retrieval_query = expand_query(query_text, index_snapshot.get("synonyms"))
         # 向量库只能先取候选再按 ACL 过滤；有受限文档时扩大候选池，避免
         # 受限结果占满名额导致本来可见的文档被挤出。
         context = _coerce_access_context(access_context)
@@ -246,7 +253,7 @@ class DatasetRetrieval:
             candidate_k = min(500, candidate_k * 8)
         vector_candidates = self._vector._query_vector_index_candidates(
             dataset_id=dataset_key,
-            query=query_text,
+            query=retrieval_query,
             top_k=candidate_k,
             tenant_id=tenant_key,
             version=version,
@@ -301,7 +308,7 @@ class DatasetRetrieval:
             factory_kwargs["keyword_weight"] = float(keyword_weight)
         retriever = self._retriever_factory(**factory_kwargs)
         retriever.index(chunks)
-        top = retriever.retrieve(query_text)
+        top = retriever.retrieve(retrieval_query)
         if effective_rerank:
             top = _semantic_rerank_chunks(
                 query_text, top, top_k=retrieve_k, auto=auto_rerank
@@ -459,6 +466,60 @@ class DatasetRetrieval:
             "total": len(selected),
             "offset": start,
             "limit": size,
+        }
+
+    def synonyms(
+        self,
+        dataset_id: str,
+        *,
+        access_context: DatasetAccessContext | dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Return the dataset synonym groups used for query expansion."""
+        dataset_key = _clean_key(dataset_id, default="default")
+        context = _coerce_access_context(access_context)
+        denied = _ensure_dataset_permission(
+            context, DATASET_READ_PERMISSION, dataset_id=dataset_key
+        )
+        if denied is not None:
+            return denied
+        with self._repository.lock:
+            state = self._repository.datasets.get(dataset_key)
+            groups = normalize_synonyms((state.index or {}).get("synonyms")) if state else {}
+        return {
+            "success": True,
+            "dataset_id": dataset_key,
+            "synonyms": groups,
+            "count": len(groups),
+        }
+
+    def set_synonyms(
+        self,
+        dataset_id: str,
+        synonyms: Any,
+        *,
+        access_context: DatasetAccessContext | dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Replace the dataset synonym groups (empty mapping clears them)."""
+        dataset_key = _clean_key(dataset_id, default="default")
+        context = _coerce_access_context(access_context)
+        denied = _ensure_dataset_permission(
+            context, DATASET_WRITE_PERMISSION, dataset_id=dataset_key
+        )
+        if denied is not None:
+            return denied
+        try:
+            cleaned = normalize_synonyms(synonyms)
+        except ValueError as exc:
+            return {"success": False, "dataset_id": dataset_key, "message": str(exc)}
+        with self._repository.lock:
+            state = self._repository.datasets.setdefault(dataset_key, _DatasetState(dataset_key))
+            state.index["synonyms"] = cleaned
+            self._repository._persist_locked()
+        return {
+            "success": True,
+            "dataset_id": dataset_key,
+            "synonyms": cleaned,
+            "count": len(cleaned),
         }
 
     def knowledge_graph(

@@ -377,6 +377,15 @@ class DatasetFeedbackRequest(BaseModel):
         return cleaned
 
 
+class DatasetSynonymsRequest(BaseModel):
+    """Term -> expansions used to expand queries at retrieval time."""
+
+    synonyms: dict[str, list[str]] = Field(
+        default_factory=dict,
+        description="map of user term to corpus-side synonyms (max 200 groups)",
+    )
+
+
 class DatasetVersionDiffRequest(BaseModel):
     source: str = Field(..., min_length=1, max_length=300, description="document source label")
     tenant_id: str = Field("", max_length=160, description="tenant/user isolation key")

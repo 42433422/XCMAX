@@ -1,4 +1,5 @@
 ## Unreleased
+- 知识库新增数据集术语表（同义词查询扩展）：`PUT /datasets/{dataset_id}/synonyms` 保存 `{口语词: [语料写法,…]}`（≤200 组、每组 ≤10 个、词长 ≤32），`GET` 读取；查询时若问题包含口语词，自动把语料写法追加到召回查询（仅影响召回，引用与证据覆盖率仍按原问题）。术语表随数据集快照持久化、可先配置后导入；前端问答「术语」按钮可直接编辑（每行 `退款=退货,退钱`）。
 - 知识库新增答案反馈：`POST /datasets/{dataset_id}/feedback` 记录 up/down（可带问题、答案、原因与证据来源），`GET .../feedback?limit=` 返回 up/down 数与满意度及最近记录；反馈按租户隔离、单库最多保留 2000 条，写入独立 `dataset_feedback.json` 不触碰查询快照。前端召回面板答案下新增「有帮助 / 没帮助」，每轮只提交一次。
 - 知识库前端接入跨库检索：问答设置新增「跨库」开关（存在多个知识空间时显示），开启后一次检索全部可见库并统一重排，结果面板与回答复用同一渲染；API 层新增 `multiQuery`（`POST /api/knowledge/v1/datasets/multi-query`，`dataset_ids` 去重去空）。
 - 知识库前端接入流式问答：默认走 `query/stream`，答案逐字出现；`meta` 事件带回命中片段与 grounding，`done` 回填引用与上下文预算；流失败自动回退普通 `query`。API 层新增 `queryStream`（fetch + SSE 解析，带 CSRF 头）。

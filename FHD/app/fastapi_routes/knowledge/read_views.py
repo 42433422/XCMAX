@@ -117,6 +117,22 @@ class DatasetViews:
             ),
         )
 
+    def synonyms(self, dataset_id: str, request: Request) -> dict[str, Any]:
+        return cast(
+            "dict[str, Any]",
+            self._service().synonyms(dataset_id, access_context=self._access(request)),
+        )
+
+    def update_synonyms(self, dataset_id: str, request: Request, payload: Any) -> dict[str, Any]:
+        return cast(
+            "dict[str, Any]",
+            self._service().set_synonyms(
+                dataset_id,
+                dict(getattr(payload, "synonyms", {}) or {}),
+                access_context=self._access(request),
+            ),
+        )
+
     def graph(self, dataset_id: str, request: Request, limit: int = 80) -> dict[str, Any]:
         from app.application.persy_memory_app_service import merge_memory_graph
 

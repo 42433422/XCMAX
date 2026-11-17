@@ -215,6 +215,7 @@
   "/api/knowledge/v1/datasets/{dataset_id}/query",
   "/api/knowledge/v1/datasets/{dataset_id}/query/stream",
   "/api/knowledge/v1/datasets/{dataset_id}/status",
+  "/api/knowledge/v1/datasets/{dataset_id}/synonyms",
   "/api/knowledge/v1/datasets/{dataset_id}/versions/diff",
   "/api/knowledge/v1/datasets/{dataset_id}/versions/rollback",
   "/api/knowledge/v1/health",

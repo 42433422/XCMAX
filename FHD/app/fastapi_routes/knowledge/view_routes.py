@@ -13,7 +13,7 @@ from fastapi.responses import StreamingResponse
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .read_views import DatasetViews
-from .schemas import DatasetFeedbackRequest, DatasetQueryRequest
+from .schemas import DatasetFeedbackRequest, DatasetQueryRequest, DatasetSynonymsRequest
 
 
 def _sse(event: dict[str, Any]) -> bytes:
@@ -104,6 +104,20 @@ class DatasetViewRoutes:
             return views().feedback_summary(dataset_id, request, limit=limit)
 
         self.dataset_feedback_summary = dataset_feedback_summary
+
+        @router.get("/datasets/{dataset_id}/synonyms")
+        def dataset_synonyms(dataset_id: str, request: Request) -> dict[str, Any]:
+            return views().synonyms(dataset_id, request)
+
+        self.dataset_synonyms = dataset_synonyms
+
+        @router.put("/datasets/{dataset_id}/synonyms")
+        def update_dataset_synonyms(
+            dataset_id: str, req: DatasetSynonymsRequest, request: Request
+        ) -> dict[str, Any]:
+            return views().update_synonyms(dataset_id, request, req)
+
+        self.update_dataset_synonyms = update_dataset_synonyms
 
         @router.get("/datasets/{dataset_id}/graph")
         def dataset_graph(

@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   api: {
     get: vi.fn(),
     post: vi.fn(),
+    put: vi.fn(),
     patch: vi.fn(),
     delete: vi.fn(),
   },
@@ -21,6 +22,7 @@ describe('knowledgeBaseApi', () => {
   beforeEach(() => {
     mocks.api.get.mockReset().mockResolvedValue({ success: true })
     mocks.api.post.mockReset().mockResolvedValue({ success: true })
+    mocks.api.put.mockReset().mockResolvedValue({ success: true })
     mocks.api.patch.mockReset().mockResolvedValue({ success: true })
     mocks.api.delete.mockReset().mockResolvedValue({ success: true })
     mocks.primeCsrfCookie.mockReset().mockResolvedValue(undefined)
@@ -187,6 +189,20 @@ describe('knowledgeBaseApi', () => {
     })
     expect(mocks.api.get).toHaveBeenCalledWith(
       '/api/knowledge/v1/datasets/office-docking/feedback?limit=100',
+    )
+  })
+
+  it('loads and saves dataset synonyms', async () => {
+    await knowledgeBaseApi.synonyms('office-docking')
+    await knowledgeBaseApi.saveSynonyms('office-docking', { 退款: ['退货'] })
+
+    expect(mocks.api.get).toHaveBeenCalledWith(
+      '/api/knowledge/v1/datasets/office-docking/synonyms',
+    )
+    expect(mocks.primeCsrfCookie).toHaveBeenCalledTimes(1)
+    expect(mocks.api.put).toHaveBeenCalledWith(
+      '/api/knowledge/v1/datasets/office-docking/synonyms',
+      { synonyms: { 退款: ['退货'] } },
     )
   })
 

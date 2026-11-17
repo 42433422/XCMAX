@@ -215,6 +215,21 @@
                 <option :value="0.7">强</option>
               </select>
             </label>
+            <button type="button" class="ask-dock__term" @click="toggleSynonymEditor">术语</button>
+          </div>
+          <div v-if="synonymEditorOpen" class="ask-dock__synonyms" aria-label="术语表">
+            <textarea
+              v-model="synonymDraft"
+              rows="3"
+              placeholder="每行一组：退款=退货,退钱"
+              aria-label="术语表"
+            ></textarea>
+            <div class="ask-dock__synonym-actions">
+              <button type="button" :disabled="synonymSaving" @click="saveSynonyms">
+                {{ synonymSaving ? '保存中…' : '保存术语' }}
+              </button>
+              <span v-if="synonymMessage" role="status">{{ synonymMessage }}</span>
+            </div>
           </div>
           <p v-if="querying" class="ask-dock__status" role="status">正在检索知识，请稍候…</p>
           <p v-else-if="queryError" class="ask-dock__error" role="alert">{{ queryError }}</p>
@@ -454,13 +469,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onActivated, onMounted, watch } from 'vue'
+import { computed, onActivated, onMounted, ref, watch } from 'vue'
 import PersyKnowledgeGraph from '@/components/persy/PersyKnowledgeGraph.vue'
 import PersyImportDrawer from '@/components/persy/PersyImportDrawer.vue'
 import PersyMemoryList from '@/components/persy/PersyMemoryList.vue'
 import PersyNodeCards from '@/components/persy/PersyNodeCards.vue'
 import PersySourceList from '@/components/persy/PersySourceList.vue'
 import type { KnowledgeBaseDocument, KnowledgeGraphNode, PersyMemoryRecord } from '@/api/knowledgeBase'
+import { knowledgeBaseApi } from '@/api/knowledgeBase'
 import { usePersyKnowledgeData, type PersyKnowledgeViewMode } from '@/composables/usePersyKnowledgeData'
 import { usePersyRecallQuery } from '@/composables/usePersyRecallQuery'
 import { usePersyMemoryGovernance } from '@/composables/usePersyMemoryGovernance'
@@ -493,6 +509,63 @@ const knowledgeEmpty = computed(() => {
 })
 
 const crossDatasetIds = computed(() => datasetOptions.value.map((item) => item.id))
+
+const synonymEditorOpen = ref(false)
+const synonymDraft = ref('')
+const synonymSaving = ref(false)
+const synonymMessage = ref('')
+
+function formatSynonyms(groups: Record<string, string[]>): string {
+  return Object.entries(groups)
+    .map(([term, values]) => `${term}=${(values || []).join(',')}`)
+    .join('\n')
+}
+
+function parseSynonyms(text: string): Record<string, string[]> {
+  const groups: Record<string, string[]> = {}
+  for (const line of text.split('\n')) {
+    const [termRaw, valuesRaw] = line.split(/[=:：]/)
+    const term = (termRaw || '').trim().slice(0, 32)
+    if (!term) continue
+    const values = (valuesRaw || '')
+      .split(/[,，;；\s]+/)
+      .map((value) => value.trim().slice(0, 32))
+      .filter(Boolean)
+      .slice(0, 10)
+    if (values.length) groups[term] = values
+  }
+  return Object.fromEntries(Object.entries(groups).slice(0, 200))
+}
+
+async function toggleSynonymEditor(): Promise<void> {
+  synonymEditorOpen.value = !synonymEditorOpen.value
+  synonymMessage.value = ''
+  if (!synonymEditorOpen.value) return
+  try {
+    const result = await knowledgeBaseApi.synonyms(activeDatasetId.value)
+    synonymDraft.value = formatSynonyms(result.synonyms || {})
+  } catch {
+    synonymMessage.value = '术语表加载失败'
+  }
+}
+
+async function saveSynonyms(): Promise<void> {
+  synonymSaving.value = true
+  synonymMessage.value = ''
+  try {
+    const result = await knowledgeBaseApi.saveSynonyms(
+      activeDatasetId.value,
+      parseSynonyms(synonymDraft.value),
+    )
+    synonymMessage.value = result.success
+      ? `已保存 ${result.count ?? 0} 组术语`
+      : result.message || '保存失败'
+  } catch {
+    synonymMessage.value = '保存失败，请稍后重试'
+  } finally {
+    synonymSaving.value = false
+  }
+}
 
 const recall = usePersyRecallQuery({
   activeDatasetId,
