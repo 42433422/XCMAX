@@ -220,6 +220,20 @@ def _registered_router_dataset_rag(
                 access_context=write_context,
             )
         return finalize(result, dataset_id=dataset_id)
+    if action == "update_document_acl":
+        document_id = str(params.get("document_id") or "").strip()
+        if not document_id:
+            return {
+                "success": False,
+                "message": "dataset_rag.update_document_acl 缺少 document_id 参数",
+            }
+        result = service.update_document_acl(
+            dataset_id,
+            document_id,
+            acl=as_dict(params.get("acl")),
+            access_context=access_context(DATASET_WRITE_PERMISSION),
+        )
+        return finalize(result, dataset_id=dataset_id, document_id=document_id)
     if action == "delete_document":
         document_id = str(params.get("document_id") or "").strip()
         if not document_id:

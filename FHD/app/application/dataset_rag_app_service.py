@@ -323,6 +323,21 @@ class DatasetRagApplicationService:
             access_context=access_context,
         )
 
+    def update_document_acl(
+        self,
+        dataset_id: str,
+        document_id: str,
+        *,
+        acl: dict[str, Any] | None = None,
+        access_context: DatasetAccessContext | dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        return self._documents.update_document_acl(
+            dataset_id,
+            document_id,
+            acl=acl,
+            access_context=access_context,
+        )
+
     def clear_dataset(
         self,
         dataset_id: str,
@@ -493,12 +508,14 @@ class DatasetRagApplicationService:
         *,
         tenant_id_filter: str = "",
         include_documents: bool = True,
+        access_context: DatasetAccessContext | dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         return self._status._status_for_state(
             dataset_id,
             state,
             tenant_id_filter=tenant_id_filter,
             include_documents=include_documents,
+            access_context=access_context,
         )
 
     def query(

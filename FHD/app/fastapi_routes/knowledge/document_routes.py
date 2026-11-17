@@ -10,7 +10,11 @@ from fastapi.responses import JSONResponse
 
 from app.application.knowledge.http_port_contracts import DatasetAction
 
-from .schemas import DatasetDocumentIngestRequest, DatasetQueryRequest
+from .schemas import (
+    DatasetDocumentAclRequest,
+    DatasetDocumentIngestRequest,
+    DatasetQueryRequest,
+)
 from .uploads import DocumentUpload
 
 
@@ -43,6 +47,9 @@ class DocumentRoutes:
                 text = page.text
                 source = source or page.title or page.url
                 document_id = document_id or page.url
+            metadata = dict(req.metadata)
+            if req.acl:
+                metadata["acl"] = req.acl
             return dispatch()(
                 request=request,
                 action="ingest_document",
@@ -56,7 +63,7 @@ class DocumentRoutes:
                     "chunk_strategy": req.chunk_strategy,
                     "chunk_size": req.chunk_size,
                     "chunk_overlap": req.chunk_overlap,
-                    "metadata": req.metadata,
+                    "metadata": metadata,
                     "tenant_id": req.tenant_id,
                     "version": req.version,
                     "version_label": req.version_label,
@@ -128,3 +135,19 @@ class DocumentRoutes:
             )
 
         self.delete_dataset_document = delete_dataset_document
+
+        @router.post("/datasets/{dataset_id}/documents/{document_id}/acl")
+        def update_dataset_document_acl(
+            dataset_id: str,
+            document_id: str,
+            req: DatasetDocumentAclRequest,
+            request: Request,
+        ) -> JSONResponse:
+            return dispatch()(
+                request=request,
+                action="update_document_acl",
+                route_path="/api/knowledge/v1/datasets/{dataset_id}/documents/{document_id}/acl",
+                params={"dataset_id": dataset_id, "document_id": document_id, "acl": req.acl},
+            )
+
+        self.update_dataset_document_acl = update_dataset_document_acl

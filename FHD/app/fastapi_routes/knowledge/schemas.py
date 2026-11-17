@@ -131,12 +131,22 @@ class DatasetDocumentIngestRequest(BaseModel):
     chunk_size: int = Field(500, ge=50, le=5000)
     chunk_overlap: int = Field(50, ge=0, le=500)
     metadata: dict[str, Any] = Field(default_factory=dict)
+    acl: dict[str, Any] = Field(
+        default_factory=dict, description="document-level allow_actors / deny_actors"
+    )
 
     @field_validator("metadata")
     @classmethod
     def validate_metadata(cls, value: dict[str, Any]) -> dict[str, Any]:
         _ensure_bounded_metadata(value)
         return value
+
+    @field_validator("acl")
+    @classmethod
+    def validate_acl(cls, value: dict[str, Any]) -> dict[str, Any]:
+        from app.application.dataset_rag.document_acl import normalize_document_acl
+
+        return normalize_document_acl(value)
 
     @model_validator(mode="after")
     def validate_document_input(self):
@@ -145,6 +155,19 @@ class DatasetDocumentIngestRequest(BaseModel):
         if self.chunk_strategy == "fixed" and self.chunk_overlap >= self.chunk_size:
             raise ValueError("chunk_overlap must be smaller than chunk_size")
         return self
+
+
+class DatasetDocumentAclRequest(BaseModel):
+    """Replace one document's access list (empty acl restores tenant-wide visibility)."""
+
+    acl: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("acl")
+    @classmethod
+    def validate_acl(cls, value: dict[str, Any]) -> dict[str, Any]:
+        from app.application.dataset_rag.document_acl import normalize_document_acl
+
+        return normalize_document_acl(value)
 
 
 class DatasetQueryRequest(BaseModel):

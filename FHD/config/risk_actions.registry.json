@@ -1819,6 +1819,16 @@
           ],
           "availability": "shared"
         },
+        "update_document_acl": {
+          "risk": "high",
+          "idempotent": true,
+          "required_params": [
+            "dataset_id",
+            "document_id",
+            "acl"
+          ],
+          "availability": "shared"
+        },
         "clear_dataset": {
           "risk": "high",
           "idempotent": false,

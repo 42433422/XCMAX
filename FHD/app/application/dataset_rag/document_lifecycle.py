@@ -16,6 +16,10 @@ from app.application.dataset_rag.access_policy import (
     _ensure_tenant_allowed,
     _resolve_tenant_for_access,
 )
+from app.application.dataset_rag.document_acl import (
+    ACL_METADATA_KEY,
+    normalize_document_acl,
+)
 from app.application.dataset_rag.document_parser import DocumentParser
 from app.application.dataset_rag.models import (
     DatasetAccessContext,
@@ -75,6 +79,19 @@ class DocumentLifecycle:
         dataset_key = _clean_key(dataset_id, default="default")
         source_label = source.strip() or file_path.strip() or "inline"
         base_metadata = dict(metadata or {})
+        try:
+            normalized_acl = normalize_document_acl(base_metadata.get(ACL_METADATA_KEY))
+        except ValueError as exc:
+            return {
+                "success": False,
+                "dataset_id": dataset_key,
+                "message": str(exc),
+                "error_code": "dataset_ingest_failed",
+            }
+        if normalized_acl:
+            base_metadata[ACL_METADATA_KEY] = normalized_acl
+        else:
+            base_metadata.pop(ACL_METADATA_KEY, None)
         requested_tenant = str(
             tenant_id or base_metadata.get("tenant_id") or base_metadata.get("user_id") or ""
         )
@@ -389,6 +406,83 @@ class DocumentLifecycle:
             "dataset_id": dataset_key,
             "document_id": doc_key,
             "deleted_chunks": before - len(state.chunks),
+        }
+
+    def update_document_acl(
+        self,
+        dataset_id: str,
+        document_id: str,
+        *,
+        acl: dict[str, Any] | None = None,
+        access_context: DatasetAccessContext | dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Replace one document's access list without creating a new version."""
+        dataset_key = _clean_key(dataset_id, default="default")
+        doc_key = document_id.strip()
+        context = _coerce_access_context(access_context)
+        denied = _ensure_dataset_permission(
+            context, DATASET_WRITE_PERMISSION, dataset_id=dataset_key
+        )
+        if denied is not None:
+            return denied
+        try:
+            normalized = normalize_document_acl(acl)
+        except ValueError as exc:
+            return {
+                "success": False,
+                "dataset_id": dataset_key,
+                "document_id": doc_key,
+                "message": str(exc),
+                "error_code": "dataset_acl_invalid",
+            }
+        with self._repository.lock:
+            state = self._repository.datasets.get(dataset_key)
+            document = state.documents.get(doc_key) if state is not None else None
+            if state is None or document is None:
+                return {
+                    "success": False,
+                    "dataset_id": dataset_key,
+                    "document_id": doc_key,
+                    "message": "document not found",
+                    "error_code": "dataset_document_not_found",
+                }
+            denied = _ensure_tenant_allowed(
+                context,
+                document.tenant_id,
+                dataset_id=dataset_key,
+                operation="update_document_acl",
+            )
+            if denied is not None:
+                denied["document_id"] = doc_key
+                return denied
+            metadata = dict(document.metadata or {})
+            if normalized:
+                metadata[ACL_METADATA_KEY] = normalized
+            else:
+                metadata.pop(ACL_METADATA_KEY, None)
+            metadata["acl_updated_at"] = _utc_now_iso()
+            metadata["acl_updated_by"] = str(getattr(context, "actor_id", "") or "")
+            document.metadata = metadata
+            for chunk in state.chunks:
+                if not isinstance(chunk.metadata, dict):
+                    continue
+                if str(chunk.metadata.get("document_id") or "") != doc_key:
+                    continue
+                chunk_metadata = dict(chunk.metadata)
+                if normalized:
+                    chunk_metadata[ACL_METADATA_KEY] = normalized
+                else:
+                    chunk_metadata.pop(ACL_METADATA_KEY, None)
+                chunk.metadata = chunk_metadata
+            self._vector._sync_vector_index_locked(state)
+            self._vector._refresh_index_metadata(state)
+            self._repository._persist_locked()
+        return {
+            "success": True,
+            "dataset_id": dataset_key,
+            "document_id": doc_key,
+            "document": document.to_dict(),
+            "acl": normalized,
         }
 
     def diff_versions(

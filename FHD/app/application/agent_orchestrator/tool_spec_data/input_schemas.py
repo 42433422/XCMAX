@@ -971,6 +971,15 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "access_context": {"type": "object"},
         },
     ),
+    ("dataset_rag", "update_document_acl"): _object_schema(
+        ["dataset_id", "document_id", "acl"],
+        {
+            "dataset_id": {"type": "string"},
+            "document_id": {"type": "string"},
+            "acl": {"type": "object"},
+            "access_context": {"type": "object"},
+        },
+    ),
     ("dataset_rag", "clear_dataset"): _object_schema(
         ["dataset_id"],
         {

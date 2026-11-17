@@ -10,6 +10,10 @@ from app.application.dataset_rag.access_policy import (
     DATASET_READ_PERMISSION,
     _resolve_tenant_for_access,
 )
+from app.application.dataset_rag.document_acl import (
+    document_visible_to,
+    filter_chunks_by_acl,
+)
 from app.application.dataset_rag.knowledge_graph import _build_knowledge_graph_payload
 from app.application.dataset_rag.models import (
     DatasetAccessContext,
@@ -157,6 +161,7 @@ class DatasetRetrieval:
         scope_chunks = _filter_chunks(
             chunks, tenant_id=tenant_key, version=version, metadata_filter=metadata_filter or {}
         )
+        scope_chunks = filter_chunks_by_acl(scope_chunks, access_context)
         vector_candidates = self._vector._query_vector_index_candidates(
             dataset_id=dataset_key,
             query=query_text,
@@ -167,11 +172,17 @@ class DatasetRetrieval:
         )
         used_vector_backend = vector_candidates is not None
         if vector_candidates is not None:
-            chunks = vector_candidates
+            chunks = filter_chunks_by_acl(vector_candidates, access_context)
             index_snapshot["query_backend"] = self._vector._vector_index_backend_name()
         else:
-            chunks = _filter_chunks(
-                chunks, tenant_id=tenant_key, version=version, metadata_filter=metadata_filter or {}
+            chunks = filter_chunks_by_acl(
+                _filter_chunks(
+                    chunks,
+                    tenant_id=tenant_key,
+                    version=version,
+                    metadata_filter=metadata_filter or {},
+                ),
+                access_context,
             )
             index_snapshot["query_backend"] = "in_memory_hybrid"
         if not chunks:
@@ -190,9 +201,7 @@ class DatasetRetrieval:
         final_k = max(1, min(int(top_k), 50))
         # 精排需要更大的候选池，否则 cross-encoder 没有可选空间
         retrieve_k = max(final_k * 4, 20) if rerank else final_k
-        retriever = self._retriever_factory(
-            embedder=self._vector.embedder, top_k=retrieve_k
-        )
+        retriever = self._retriever_factory(embedder=self._vector.embedder, top_k=retrieve_k)
         retriever.index(chunks)
         top = retriever.retrieve(query_text)
         if rerank:
@@ -271,10 +280,14 @@ class DatasetRetrieval:
                 documents = [
                     doc
                     for doc in state.documents.values()
-                    if not tenant_key or doc.tenant_id == tenant_key
+                    if (not tenant_key or doc.tenant_id == tenant_key)
+                    and document_visible_to(doc.metadata, access_context)
                 ]
-                chunks = _filter_chunks(
-                    list(state.chunks), tenant_id=tenant_key, version="", metadata_filter={}
+                chunks = filter_chunks_by_acl(
+                    _filter_chunks(
+                        list(state.chunks), tenant_id=tenant_key, version="", metadata_filter={}
+                    ),
+                    access_context,
                 )
         return _build_knowledge_graph_payload(
             dataset_id=dataset_key,
