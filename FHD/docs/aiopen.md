@@ -146,10 +146,14 @@ MCP 只读资源：
 |---|---|
 | `read` | 直接执行，Key 需具备 `read:<domain>` 或以 `*` 全量授权 |
 | `write` | 默认返回 `WRITE_DISABLED`；服务端设置 `AIOPEN_ENABLE_WRITES=1` 后才执行 |
-| `danger` | 一律返回 `APPROVAL_REQUIRED`，不执行；等待审批桥上线 |
+| `danger` | 发起审批（复用审批中心）；通过后携带 `approval_id` 重试，审批单只能执行一次 |
+
+审批流程：服务端设置 `AIOPEN_APPROVAL_FLOW_KEY`（默认 `aiopen_danger_operation`），
+并先在审批中心创建同名 `flow_key` 且配置启用节点；未配置时危险操作一律拒绝。
+审批单记录 operation、参数指纹与申请人，执行时校验三者一致并写入消费时间防重放。
 
 `params` 传路径与查询参数（键名见 operation 卡片），`body` 传 JSON 请求体。
-`api_call` 仍保留为兼容逃生舱，受白名单与 Key scope 约束，P1.5 再统一收口。
+`api_call` 命中目录条目时套用同一套读写/危险闸门，未命中目录的自定义路径保持原白名单行为。
 
 语义草稿由 `scripts/dev/aiopen_overlay_draft.py` 批量生成到 `overlay/drafts/`（运行时不加载），
 人工审核后移入 `overlay/generated/*.yaml|*.jsonl` 生效；大规模语义用 jsonl（每行一条）存储。

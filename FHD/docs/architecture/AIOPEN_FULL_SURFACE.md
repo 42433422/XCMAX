@@ -186,7 +186,7 @@ TF-IDF（字符 n-gram，兼容中文）做余弦相似度，索引按目录签�
 
 **`api_call` 保留为逃生舱**：可调任意 scope 内路径，但受方法白名单、scope 校验与全量审计约束，且不可调用 `exclude` 路由。
 
-**危险动作审批桥**（新增 `app/application/aiopen/approval_bridge.py`）：
+**危险动作审批桥**（已实现 `app/application/aiopen/approval_bridge.py`）：
 
 ```
 AI 调 danger 工具 → 生成审批单（复用审批中心） → 返回

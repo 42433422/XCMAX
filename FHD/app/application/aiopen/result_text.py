@@ -112,7 +112,15 @@ def format_tool_result_text(tool_name: str, result: dict[str, Any]) -> str:
         operation_id = result.get("operation_id", "")
         code = result.get("code", "")
         if code == "APPROVAL_REQUIRED":
-            return f"{operation_id} 需要人工审批，未执行。\n{result.get('message', '')}"
+            ticket = result.get("approval_id")
+            number = result.get("request_no")
+            detail = f"审批单 #{ticket}" if ticket else ""
+            if number:
+                detail += f"（{number}）"
+            return (
+                f"{operation_id} 需要人工审批，尚未执行。{detail}\n"
+                f"{result.get('message', '')}"
+            )
         if code == "WRITE_DISABLED":
             return f"{operation_id} 为写操作，服务端未启用。\n{result.get('message', '')}"
         if not ok:

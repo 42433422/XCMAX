@@ -69,12 +69,22 @@ def client(app):
     return TestClient(app, headers={"X-AIOPEN-Key": _KEY})
 
 
-def _call(client, operation_id: str, *, params=None, body=None, key: str | None = None):
+def _call(
+    client,
+    operation_id: str,
+    *,
+    params=None,
+    body=None,
+    key: str | None = None,
+    approval_id: int | None = None,
+):
     payload = {"operation_id": operation_id}
     if params is not None:
         payload["params"] = params
     if body is not None:
         payload["body"] = body
+    if approval_id is not None:
+        payload["approval_id"] = approval_id
     headers = {"X-AIOPEN-Key": key} if key else None
     return client.post(
         "/api/aiopen/invoke",
@@ -120,10 +130,101 @@ def test_write_executes_when_enabled(client, app, state, monkeypatch):
     assert state["created"]["name"] == "螺丝"
 
 
-def test_danger_requires_approval_and_never_executes(client, app, state):
+def test_danger_requires_approval_and_never_executes(client, app, state, monkeypatch):
+    from app.application.aiopen import approval_bridge
+
+    monkeypatch.setattr(
+        approval_bridge,
+        "submit",
+        lambda entry, args, principal: {
+            "status": "pending",
+            "code": "APPROVAL_REQUIRED",
+            "approval_id": 91,
+            "request_no": "APR20261117-TEST",
+            "message": "已提交审批",
+        },
+    )
     operation_id = _operation_id(app, "DELETE", "/api/products/{product_id}")
-    body = _call(client, operation_id, params={"product_id": "P-1"})
-    assert body.json()["code"] == "APPROVAL_REQUIRED"
+    body = _call(client, operation_id, params={"product_id": "P-1"}).json()
+    assert body["code"] == "APPROVAL_REQUIRED"
+    assert body["approval_id"] == 91
+    assert state["deleted"] is False
+
+
+def test_danger_executes_with_approved_ticket(client, app, state, monkeypatch):
+    from app.application.aiopen import approval_bridge
+
+    monkeypatch.setattr(
+        approval_bridge,
+        "consume",
+        lambda approval_id, entry, args, principal: {
+            "status": "approved",
+            "approval_id": approval_id,
+            "request_no": "APR20261117-TEST",
+        },
+    )
+    operation_id = _operation_id(app, "DELETE", "/api/products/{product_id}")
+    body = _call(
+        client, operation_id, params={"product_id": "P-1"}, approval_id=91
+    ).json()
+    assert body["success"] is True
+    assert state["deleted"] is True
+
+
+def test_danger_rejects_rejected_ticket(client, app, state, monkeypatch):
+    from app.application.aiopen import approval_bridge
+
+    monkeypatch.setattr(
+        approval_bridge,
+        "consume",
+        lambda approval_id, entry, args, principal: {
+            "status": "pending",
+            "code": "APPROVAL_PENDING",
+            "message": "审批尚未通过",
+        },
+    )
+    operation_id = _operation_id(app, "DELETE", "/api/products/{product_id}")
+    body = _call(
+        client, operation_id, params={"product_id": "P-1"}, approval_id=91
+    ).json()
+    assert body["code"] == "APPROVAL_PENDING"
+    assert state["deleted"] is False
+
+
+def test_api_call_write_is_gated(client, app, state):
+    body = client.post(
+        "/api/aiopen/invoke",
+        json={
+            "tool": "api_call",
+            "args": {"path": "/api/products", "method": "POST", "body": {"name": "x"}},
+        },
+    ).json()
+    assert body["code"] == "WRITE_DISABLED"
+    assert state["created"] is None
+
+
+def test_api_call_danger_requires_approval(client, app, state, monkeypatch):
+    from app.application.aiopen import approval_bridge
+
+    monkeypatch.setattr(
+        approval_bridge,
+        "submit",
+        lambda entry, args, principal: {
+            "status": "pending",
+            "code": "APPROVAL_REQUIRED",
+            "approval_id": 92,
+            "request_no": "APR20261117-TEST2",
+            "message": "已提交审批",
+        },
+    )
+    body = client.post(
+        "/api/aiopen/invoke",
+        json={
+            "tool": "api_call",
+            "args": {"path": "/api/products/P-1", "method": "DELETE"},
+        },
+    ).json()
+    assert body["code"] == "APPROVAL_REQUIRED"
     assert state["deleted"] is False
 
 

@@ -52,6 +52,7 @@ from .definitions import (
     TOOL_DEFINITIONS as TOOL_DEFINITIONS,
 )
 from .dispatch import ToolDispatcher, call_chat
+from .generated_tools import guarded_api_call as _guarded_api_call
 from .generated_tools import operation_call as _operation_call_impl
 from .generated_tools import required_scope as _required_scope
 from .installation import (
@@ -290,7 +291,7 @@ def _tool_api_catalog() -> dict[str, Any]:
 
 
 def _tool_api_call(app: ASGIApp, args: dict[str, Any]) -> dict[str, Any]:
-    return _gateway.call(app, args)
+    return _guarded_api_call(app, args, _gateway.call)
 
 
 def _tool_chat(app: ASGIApp, args: dict[str, Any]) -> dict[str, Any]:
