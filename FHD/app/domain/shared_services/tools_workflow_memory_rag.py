@@ -25,6 +25,17 @@ def _retrieval_mode(value: Any) -> str:
     return cleaned if cleaned in {"hybrid", "vector", "keyword"} else "hybrid"
 
 
+def _weight(value: Any, default: float = 1.0) -> float:
+    """RRF 通道权重：0–10，缺省/非法回落默认 1.0。"""
+    if value in (None, ""):
+        return default
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return default
+    return number if 0.0 <= number <= 10.0 else default
+
+
 def _registered_router_dataset_rag(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
@@ -162,6 +173,8 @@ def _registered_router_dataset_rag(
         min_relevance = as_float(params.get("min_relevance"), 0.0)
         mmr_lambda = as_float(params.get("mmr_lambda"), 0.0)
         retrieval_mode = _retrieval_mode(params.get("retrieval_mode"))
+        vector_weight = _weight(params.get("vector_weight"))
+        keyword_weight = _weight(params.get("keyword_weight"))
         if include_answer:
             result = service.answer(
                 dataset_id=dataset_id,
@@ -177,6 +190,8 @@ def _registered_router_dataset_rag(
                 max_context_chars=as_int(params.get("max_context_chars"), 0),
                 mmr_lambda=mmr_lambda,
                 retrieval_mode=retrieval_mode,
+                vector_weight=vector_weight,
+                keyword_weight=keyword_weight,
             )
         else:
             result = service.query(
@@ -193,6 +208,8 @@ def _registered_router_dataset_rag(
                 min_relevance=min_relevance,
                 mmr_lambda=mmr_lambda,
                 retrieval_mode=retrieval_mode,
+                vector_weight=vector_weight,
+                keyword_weight=keyword_weight,
             )
         return finalize(
             result, dataset_id=dataset_id, query=query, chunks=[], citations=[], answer=""
@@ -225,6 +242,8 @@ def _registered_router_dataset_rag(
             "min_relevance": as_float(params.get("min_relevance"), 0.0),
             "mmr_lambda": as_float(params.get("mmr_lambda"), 0.0),
             "retrieval_mode": _retrieval_mode(params.get("retrieval_mode")),
+            "vector_weight": _weight(params.get("vector_weight")),
+            "keyword_weight": _weight(params.get("keyword_weight")),
         }
         if as_bool(params.get("include_answer"), default=True):
             result = service.multi_answer(

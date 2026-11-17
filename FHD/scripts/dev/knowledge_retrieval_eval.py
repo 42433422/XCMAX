@@ -399,7 +399,13 @@ def _build_service(storage: Path):
 
 
 def run(
-    *, rerank: bool, multi: bool = False, mmr_lambda: float = 0.0, retrieval_mode: str = "hybrid"
+    *,
+    rerank: bool,
+    multi: bool = False,
+    mmr_lambda: float = 0.0,
+    retrieval_mode: str = "hybrid",
+    vector_weight: float = 1.0,
+    keyword_weight: float = 1.0,
 ) -> dict[str, float]:
     from app.infrastructure.llm.embedding_service import get_default_embedding_service
 
@@ -431,6 +437,8 @@ def run(
                     rerank=rerank,
                     mmr_lambda=mmr_lambda,
                     retrieval_mode=retrieval_mode,
+                    vector_weight=vector_weight,
+                    keyword_weight=keyword_weight,
                 )
             else:
                 result = service.query(
@@ -440,6 +448,8 @@ def run(
                     rerank=rerank,
                     mmr_lambda=mmr_lambda,
                     retrieval_mode=retrieval_mode,
+                    vector_weight=vector_weight,
+                    keyword_weight=keyword_weight,
                 )
             doc_ids = [
                 str((chunk.get("metadata") or {}).get("document_id") or "")
@@ -469,6 +479,8 @@ def run(
             "answer_grounded_rate": round(grounded / total, 4),
             "mmr_lambda": mmr_lambda,
             "retrieval_mode": retrieval_mode,
+            "vector_weight": vector_weight,
+            "keyword_weight": keyword_weight,
             "distinct_doc_rate@5": round(distinct_docs / (total * 5), 4),
         }
         return metrics
@@ -532,6 +544,8 @@ def main() -> int:
         default="hybrid",
         help="检索模式：混合 RRF / 仅向量 / 仅关键词",
     )
+    parser.add_argument("--vector-weight", type=float, default=1.0, help="混合模式向量通道权重")
+    parser.add_argument("--keyword-weight", type=float, default=1.0, help="混合模式关键词通道权重")
     args = parser.parse_args()
     metrics = (
         run_ood(multi=args.multi)
@@ -541,6 +555,8 @@ def main() -> int:
             multi=args.multi,
             mmr_lambda=args.diversity,
             retrieval_mode=args.mode,
+            vector_weight=args.vector_weight,
+            keyword_weight=args.keyword_weight,
         )
     )
     if args.json:

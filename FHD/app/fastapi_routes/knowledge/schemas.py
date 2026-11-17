@@ -271,6 +271,12 @@ class DatasetQueryRequest(BaseModel):
     retrieval_mode: Literal["hybrid", "vector", "keyword"] = Field(
         "hybrid", description="hybrid RRF | vector only | keyword (BM25) only"
     )
+    vector_weight: float = Field(
+        1.0, ge=0.0, le=10.0, description="RRF weight for the vector lane (hybrid mode)"
+    )
+    keyword_weight: float = Field(
+        1.0, ge=0.0, le=10.0, description="RRF weight for the BM25 lane (hybrid mode)"
+    )
     mmr_lambda: float = Field(
         0.0,
         ge=0.0,

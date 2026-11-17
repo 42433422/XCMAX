@@ -1,4 +1,5 @@
 ## Unreleased
+- 知识库混合检索支持通道权重：`vector_weight` / `keyword_weight`（0–10，默认 1:1），按权重加权 RRF，适合「精确编号靠关键词、口语改写靠向量」的语料微调；单库、跨库与问答都支持，评测脚本新增 `--vector-weight/--keyword-weight`。本语料默认 1:1 仍最优（0.8551/0.9565/1.0、MRR 0.9135），调权重与 keyword-only 的对照数据见 README。
 - 知识库检索新增可选模式：`retrieval_mode`（`hybrid` 默认 / `vector` 仅向量 / `keyword` 仅 BM25）作用于单库查询、跨库检索与问答，非法值回落到 `hybrid`。适合精确编号/型号用关键词、语义改写用向量；69 条评测 hash 下 keyword 0.8696/1.0/1.0、MRR 0.9348（跨库 0.8986/1.0/1.0、MRR 0.9493），hybrid 0.8551/0.9565/1.0、MRR 0.9135，vector 0.7536/0.8551/0.8986、MRR 0.8121；评测脚本新增 `--mode`。
 - 知识库来源同步支持按新鲜度增量：每次刷新（含内容未变）记录 `metadata.last_source_sync_at`，批量同步 `POST .../documents/refresh` 新增 `max_age_hours`（>0 时只处理超过该时长未同步的来源，返回 `fresh` 计数），便于定时任务反复调用而不重复抓取刚同步过的页面。
 - 知识库入库新增内容级去重（护栏）：同一租户下若另一来源的正文完全一致（SHA-256 `document_content_hash` 相同），直接复用已有文档并返回 `duplicate=true` 与 `duplicate_of`，不再重复入库、重复切片挤占召回；需要保留副本时传 `allow_duplicate=true`，显式 `document_id`/`version` 与同一来源的版本递增不受影响（跨租户永不合并）。

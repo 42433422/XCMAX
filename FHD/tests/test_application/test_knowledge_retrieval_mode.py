@@ -100,6 +100,32 @@ def test_query_keyword_mode_skips_unrelated_documents(tmp_path) -> None:
     assert sources == {"退款.md"}
 
 
+def test_channel_weights_rebalance_rrf() -> None:
+    semantic = RetrievedChunk(text="alpha semantic passage", score=0.0, chunk_index=0)
+    lexical = RetrievedChunk(text="target token passage", score=0.0, chunk_index=1)
+
+    def embedder(text: str) -> list[float]:
+        return [1.0, 0.0] if "alpha" in text or text == "target" else [0.0, 1.0]
+
+    def ranked(**kwargs) -> list[int]:
+        retriever = HybridRetriever(embedder=embedder, top_k=2, **kwargs)
+        retriever.index([semantic, lexical])
+        return [hit.chunk_index for hit in retriever.retrieve("target")]
+
+    assert ranked()[0] == 0  # 默认等权：向量通道先计入，平票时靠前
+    assert ranked(vector_weight=0.0)[0] == 1  # 只看关键词
+    assert ranked(keyword_weight=0.0)[0] == 0  # 只看向量
+    assert ranked(vector_weight=-1.0)[0] == 0  # 非法权重回落默认 1.0
+
+
+def test_schema_bounds_channel_weights() -> None:
+    assert DatasetQueryRequest(query="退款", keyword_weight=2.5).keyword_weight == 2.5
+    with pytest.raises(ValidationError):
+        DatasetQueryRequest(query="退款", vector_weight=11.0)
+    with pytest.raises(ValidationError):
+        DatasetQueryRequest(query="退款", keyword_weight=-0.5)
+
+
 def test_dispatcher_passes_retrieval_mode() -> None:
     from app.domain.shared_services.tools_workflow_memory_rag import (
         _registered_router_dataset_rag,
@@ -114,6 +140,8 @@ def test_dispatcher_passes_retrieval_mode() -> None:
                 "query": "退款",
                 "include_answer": "false",
                 "retrieval_mode": "keyword",
+                "vector_weight": 2.5,
+                "keyword_weight": 0.5,
             },
             {},
             "admin",
@@ -121,3 +149,5 @@ def test_dispatcher_passes_retrieval_mode() -> None:
         )
 
     assert mock_get.return_value.query.call_args.kwargs["retrieval_mode"] == "keyword"
+    assert mock_get.return_value.query.call_args.kwargs["vector_weight"] == 2.5
+    assert mock_get.return_value.query.call_args.kwargs["keyword_weight"] == 0.5

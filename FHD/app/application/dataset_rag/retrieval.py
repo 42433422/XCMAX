@@ -53,6 +53,8 @@ class RetrieverFactory(Protocol):
         embedder: Callable[[str], list[float]] | None,
         top_k: int,
         mode: str = "hybrid",
+        vector_weight: float = 1.0,
+        keyword_weight: float = 1.0,
     ) -> EvidenceRetriever: ...
 
 
@@ -167,6 +169,8 @@ class DatasetRetrieval:
         min_relevance: float | None = None,
         mmr_lambda: float | None = None,
         retrieval_mode: str = "hybrid",
+        vector_weight: float = 1.0,
+        keyword_weight: float = 1.0,
     ) -> dict[str, Any]:
         dataset_key = _clean_key(dataset_id, default="default")
         tenant_key, denied = _resolve_tenant_for_access(
@@ -253,11 +257,14 @@ class DatasetRetrieval:
             retrieve_k = max(retrieve_k, final_k * 3, 15)
         mode = str(retrieval_mode or "hybrid").strip().lower()
         mode = mode if mode in {"hybrid", "vector", "keyword"} else "hybrid"
-        retriever = (
-            self._retriever_factory(embedder=self._vector.embedder, top_k=retrieve_k, mode=mode)
-            if mode != "hybrid"
-            else self._retriever_factory(embedder=self._vector.embedder, top_k=retrieve_k)
-        )
+        factory_kwargs: dict[str, Any] = {"embedder": self._vector.embedder, "top_k": retrieve_k}
+        if mode != "hybrid":
+            factory_kwargs["mode"] = mode
+        if float(vector_weight) != 1.0:
+            factory_kwargs["vector_weight"] = float(vector_weight)
+        if float(keyword_weight) != 1.0:
+            factory_kwargs["keyword_weight"] = float(keyword_weight)
+        retriever = self._retriever_factory(**factory_kwargs)
         retriever.index(chunks)
         top = retriever.retrieve(query_text)
         if effective_rerank:

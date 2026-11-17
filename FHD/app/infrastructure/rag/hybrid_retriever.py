@@ -38,6 +38,15 @@ class RetrievedChunk:
     page: int | None = None
 
 
+def _non_negative(value: Any, default: float) -> float:
+    """权重必须非负；负数或非数值回落到默认值。"""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return default
+    return number if number >= 0 else default
+
+
 def _index_text(chunk: RetrievedChunk) -> str:
     """BM25 索引文本：正文 + 自动生成的问题（Q&A 增强）；向量仍按正文计算。"""
     questions = (chunk.metadata or {}).get("auto_questions")
@@ -130,6 +139,8 @@ class HybridRetriever:
     DEFAULT_TOP_K = 5
     DEFAULT_MODE = "hybrid"
     MODES = frozenset({"hybrid", "vector", "keyword"})
+    DEFAULT_VECTOR_WEIGHT = 1.0
+    DEFAULT_KEYWORD_WEIGHT = 1.0
 
     def __init__(
         self,
@@ -140,6 +151,8 @@ class HybridRetriever:
         top_k_bm25: int = DEFAULT_TOP_K_BM25,
         top_k: int = DEFAULT_TOP_K,
         mode: str = DEFAULT_MODE,
+        vector_weight: float = DEFAULT_VECTOR_WEIGHT,
+        keyword_weight: float = DEFAULT_KEYWORD_WEIGHT,
     ) -> None:
         self._embedder = embedder
         self._k = k
@@ -148,6 +161,8 @@ class HybridRetriever:
         self._top_k = top_k
         normalized_mode = str(mode or self.DEFAULT_MODE).strip().lower()
         self._mode = normalized_mode if normalized_mode in self.MODES else self.DEFAULT_MODE
+        self._vector_weight = _non_negative(vector_weight, self.DEFAULT_VECTOR_WEIGHT)
+        self._keyword_weight = _non_negative(keyword_weight, self.DEFAULT_KEYWORD_WEIGHT)
         self._chunks: list[RetrievedChunk] = []
         self._chunk_texts: list[str] = []
         self._bm25 = BM25()
@@ -214,12 +229,12 @@ class HybridRetriever:
             except RECOVERABLE_ERRORS as e:
                 logger.warning("向量检索失败: %s", e)
 
-        # 3) RRF
+        # 3) RRF（可加权：精确编号依赖关键词、语义改写依赖向量）
         scores: dict[int, float] = {}
         for rank, idx in enumerate(vector_ranked):
-            scores[idx] = scores.get(idx, 0.0) + 1.0 / (self._k + rank + 1)
+            scores[idx] = scores.get(idx, 0.0) + self._vector_weight / (self._k + rank + 1)
         for rank, idx in enumerate(bm25_ranked):
-            scores[idx] = scores.get(idx, 0.0) + 1.0 / (self._k + rank + 1)
+            scores[idx] = scores.get(idx, 0.0) + self._keyword_weight / (self._k + rank + 1)
 
         # 4) 取 top_k
         ranked = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)[:limit]
