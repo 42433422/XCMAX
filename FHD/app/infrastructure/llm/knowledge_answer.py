@@ -32,16 +32,21 @@ def _timeout_seconds() -> float:
         return 30.0
 
 
+def platform_provider() -> object | None:
+    """解析当前平台模型 provider；未配置或依赖异常时返回 None。"""
+    try:
+        from app.infrastructure.llm.providers.registry import get_active_provider
+
+        return get_active_provider()
+    except RECOVERABLE_ERRORS:
+        return None
+
+
 def get_kb_answer_llm_call() -> Callable[[str, str], str] | None:
     """返回 (query, passages) -> answer 的合成调用；无平台模型时返回 None。"""
     if _disabled():
         return None
-    try:
-        from app.infrastructure.llm.providers.registry import get_active_provider
-
-        provider = get_active_provider()
-    except RECOVERABLE_ERRORS:
-        return None
+    provider = platform_provider()
     if provider is None:
         return None
     timeout = _timeout_seconds()

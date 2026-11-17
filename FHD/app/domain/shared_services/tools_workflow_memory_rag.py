@@ -127,6 +127,8 @@ def _registered_router_dataset_rag(
         rerank = as_bool(params.get("rerank"), default=False)
         read_context = access_context(DATASET_READ_PERMISSION)
         include_answer = as_bool(params.get("include_answer"), default=True)
+        raw_history = params.get("history")
+        history = raw_history if isinstance(raw_history, list) else []
         if include_answer:
             result = service.answer(
                 dataset_id=dataset_id,
@@ -137,6 +139,7 @@ def _registered_router_dataset_rag(
                 metadata_filter=metadata_filter,
                 rerank=rerank,
                 access_context=read_context,
+                history=history,
             )
         else:
             result = service.query(
@@ -149,6 +152,7 @@ def _registered_router_dataset_rag(
                 rerank=rerank,
                 access_context=read_context,
                 context_window=as_int(params.get("context_window"), 0),
+                history=history,
             )
         return finalize(
             result, dataset_id=dataset_id, query=query, chunks=[], citations=[], answer=""

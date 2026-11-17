@@ -531,8 +531,17 @@ class DatasetRagApplicationService:
         access_context: DatasetAccessContext | dict[str, Any] | None = None,
         include_sheet_context: bool = False,
         context_window: int = 0,
+        history: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
-        return self._retrieval.query(
+        original_query = query
+        rewritten = ""
+        if history:
+            from app.infrastructure.llm.query_rewrite import rewrite_query
+
+            rewritten = rewrite_query(query, history)
+            if rewritten:
+                query = rewritten
+        result = self._retrieval.query(
             dataset_id=dataset_id,
             query=query,
             top_k=top_k,
@@ -544,6 +553,11 @@ class DatasetRagApplicationService:
             include_sheet_context=include_sheet_context,
             context_window=context_window,
         )
+        if rewritten:
+            result["original_query"] = original_query
+            result["query_rewritten"] = True
+            result["query"] = query
+        return result
 
     def knowledge_graph(
         self,
@@ -638,6 +652,7 @@ class DatasetRagApplicationService:
         metadata_filter: dict[str, Any] | None = None,
         rerank: bool = False,
         access_context: DatasetAccessContext | dict[str, Any] | None = None,
+        history: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         result = self.query(
             dataset_id=dataset_id,
@@ -649,6 +664,7 @@ class DatasetRagApplicationService:
             rerank=rerank,
             access_context=access_context,
             context_window=1,
+            history=history,
         )
         if not result.get("success") or not result.get("chunks"):
             result.setdefault("answer", "")

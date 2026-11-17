@@ -168,6 +168,7 @@ class DocumentRoutes:
                     "metadata_filter": req.metadata_filter,
                     "rerank": req.rerank,
                     "context_window": req.context_window,
+                    "history": req.history,
                 },
             )
 

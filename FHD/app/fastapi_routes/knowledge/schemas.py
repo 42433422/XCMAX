@@ -197,12 +197,37 @@ class DatasetQueryRequest(BaseModel):
         le=2,
         description="expand each hit with neighbouring chunks from the same document",
     )
+    history: list[dict[str, str]] = Field(
+        default_factory=list,
+        max_length=12,
+        description="prior turns ({role, content}) used to rewrite the follow-up question",
+    )
 
     @field_validator("metadata_filter")
     @classmethod
     def validate_metadata_filter(cls, value: dict[str, Any]) -> dict[str, Any]:
         _ensure_bounded_metadata(value)
         return value
+
+    @field_validator("history")
+    @classmethod
+    def validate_history(cls, value: list[dict[str, str]]) -> list[dict[str, str]]:
+        cleaned: list[dict[str, str]] = []
+        total = 0
+        for turn in value:
+            if not isinstance(turn, dict):
+                raise ValueError("history turns must be objects")
+            role = str(turn.get("role") or "").strip().lower()
+            content = str(turn.get("content") or "").strip()
+            if role not in {"user", "assistant"}:
+                raise ValueError("history role must be user or assistant")
+            if len(content) > 4000:
+                raise ValueError("history turn cannot exceed 4000 characters")
+            total += len(content)
+            cleaned.append({"role": role, "content": content})
+        if total > 20000:
+            raise ValueError("history cannot exceed 20000 characters in total")
+        return cleaned
 
 
 class DatasetVersionDiffRequest(BaseModel):
