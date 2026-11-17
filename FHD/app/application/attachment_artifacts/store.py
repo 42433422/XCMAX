@@ -16,6 +16,10 @@ from typing import Any
 
 from app.application.attachment_artifacts.models import ArtifactRecord, ArtifactScope
 from app.utils.process_lock import exclusive_file_lock
+from app.utils.security.safe_download_path import (
+    UnsafeDownloadPathError,
+    resolve_under_allowed_dirs,
+)
 
 _ID_PATTERN = re.compile(r"^[0-9a-f]{8,64}$")
 _SEGMENT_PATTERN = re.compile(r"[^0-9A-Za-z_.-]+")
@@ -65,17 +69,13 @@ class ArtifactStore:
         return self.base / "tenants" / tenant / "owners" / owner
 
     def _path_for(self, artifact_id: str, suffix: str) -> Path | None:
-        """拼接并确认目标仍在作用域目录内，避免路径穿越。"""
+        """按受信根目录解析文件名；越界或非法 id 一律拒绝。"""
         if not isinstance(artifact_id, str) or not _ID_PATTERN.fullmatch(artifact_id):
             return None
-        root = self.root.resolve()
-        name = os.path.basename(f"{artifact_id}{suffix}")
-        candidate = (root / name).resolve()
         try:
-            candidate.relative_to(root)
-        except ValueError:
+            return resolve_under_allowed_dirs(f"{artifact_id}{suffix}", [self.root])
+        except UnsafeDownloadPathError:
             return None
-        return candidate
 
     def _record_path(self, artifact_id: str) -> Path | None:
         return self._path_for(artifact_id, ".json")
