@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from typing import Any, cast
 
 from fastapi import Request
@@ -141,6 +141,31 @@ class DatasetViews:
                 }
             ),
         )
+
+    async def stream_answer(
+        self, dataset_id: str, request: Request, payload: Any
+    ) -> AsyncIterator[dict[str, Any]]:
+        """逐事件转发知识库流式答案（meta / delta / done）。"""
+        access = self._access(request)
+        async for event in self._service().stream_answer(
+            dataset_id=dataset_id,
+            query=str(payload.query),
+            top_k=int(payload.top_k),
+            tenant_id=str(getattr(payload, "tenant_id", "") or ""),
+            version=getattr(payload, "version", "") or "",
+            metadata_filter=dict(getattr(payload, "metadata_filter", {}) or {}),
+            rerank=bool(getattr(payload, "rerank", False)),
+            history=list(getattr(payload, "history", []) or []),
+            min_relevance=getattr(payload, "min_relevance", 0.0),
+            max_context_chars=getattr(payload, "max_context_chars", 0),
+            mmr_lambda=getattr(payload, "mmr_lambda", 0.0),
+            retrieval_mode=str(getattr(payload, "retrieval_mode", "hybrid") or "hybrid"),
+            vector_weight=float(getattr(payload, "vector_weight", 1.0)),
+            keyword_weight=float(getattr(payload, "keyword_weight", 1.0)),
+            expand_section=bool(getattr(payload, "expand_section", False)),
+            access_context=access,
+        ):
+            yield event
 
     def query_all(
         self, req: QueryRequest, request: Request, *, rag_enabled: Callable[[], bool]

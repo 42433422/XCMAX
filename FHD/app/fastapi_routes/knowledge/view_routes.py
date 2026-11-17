@@ -2,13 +2,23 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import json
+from collections.abc import AsyncIterator, Callable
 from typing import Any
 
 from fastapi import APIRouter, Request
 from fastapi import Query as FastAPIQuery
+from fastapi.responses import StreamingResponse
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .read_views import DatasetViews
+from .schemas import DatasetQueryRequest
+
+
+def _sse(event: dict[str, Any]) -> bytes:
+    payload = json.dumps(event.get("data") or {}, ensure_ascii=False)
+    return f"event: {event.get('event', 'message')}\ndata: {payload}\n\n".encode()
 
 
 class DatasetViewRoutes:
@@ -20,6 +30,29 @@ class DatasetViewRoutes:
         views: Callable[[], DatasetViews],
     ) -> None:
         router = self.router = APIRouter()
+
+        @router.post("/datasets/{dataset_id}/query/stream")
+        def stream_dataset_answer(
+            dataset_id: str, req: DatasetQueryRequest, request: Request
+        ) -> StreamingResponse:
+            async def _events() -> AsyncIterator[bytes]:
+                try:
+                    async for event in views().stream_answer(dataset_id, request, req):
+                        yield _sse(event)
+                except RECOVERABLE_ERRORS as exc:
+                    yield _sse({"event": "error", "data": {"message": str(exc)}})
+
+            return StreamingResponse(
+                _events(),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                    "X-Accel-Buffering": "no",
+                },
+            )
+
+        self.stream_dataset_answer = stream_dataset_answer
 
         @router.get("/datasets")
         def dataset_status_all(request: Request) -> dict[str, Any]:

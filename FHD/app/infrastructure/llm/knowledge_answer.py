@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -40,6 +40,50 @@ def platform_provider() -> object | None:
         return get_active_provider()
     except RECOVERABLE_ERRORS:
         return None
+
+
+def _delta_text(delta: object) -> str:
+    """从 provider 的流式增量里取出正文（兼容 dict / SDK 对象 / 纯字符串）。"""
+    if isinstance(delta, str):
+        return delta
+    if isinstance(delta, dict):
+        choices = delta.get("choices") or []
+        if choices and isinstance(choices[0], dict):
+            piece = (choices[0].get("delta") or {}).get("content")
+            return str(piece or "")
+        return ""
+    choices = getattr(delta, "choices", None) or []
+    if choices:
+        piece = getattr(getattr(choices[0], "delta", None), "content", "")
+        return str(piece or "")
+    return ""
+
+
+def get_kb_answer_stream() -> Callable[[str, str], AsyncIterator[str]] | None:
+    """返回 (query, passages) -> 增量文本流；无平台模型或 provider 不支持时返回 None。"""
+    if _disabled():
+        return None
+    provider = platform_provider()
+    if provider is None:
+        return None
+    stream = getattr(provider, "stream_chat_completion", None)
+    if stream is None:
+        return None
+
+    async def _call(query: str, passages: str) -> AsyncIterator[str]:
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": f"资料：\n{passages}\n\n问题：{query}"},
+        ]
+        try:
+            async for delta in stream(messages, temperature=0.2, max_tokens=900):
+                piece = _delta_text(delta)
+                if piece:
+                    yield piece
+        except RECOVERABLE_ERRORS:
+            return
+
+    return _call
 
 
 def get_kb_answer_llm_call() -> Callable[[str, str], str] | None:

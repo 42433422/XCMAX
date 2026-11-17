@@ -6,7 +6,7 @@ import hashlib
 import multiprocessing
 import os
 import threading
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from threading import Thread
@@ -1308,26 +1308,15 @@ class DatasetRagApplicationService:
             result, llm_call=llm_call, max_context_chars=max_context_chars
         )
 
-    def _synthesize_answer(
+    def _prepare_answer_prompt(
         self,
         result: dict[str, Any],
         *,
-        llm_call: Callable[[str, str], str] | None = None,
         max_context_chars: int | None = None,
-    ) -> dict[str, Any]:
-        if not result.get("success"):
-            result.setdefault("answer", "")
-            result.setdefault("citations", [])
-            result.setdefault("raw", "")
-            return result
+    ) -> tuple[str, CitationTracker, list[RetrievedChunk]] | None:
+        """构造带引用编号与预算的证据提示词；拒答场景返回 None。"""
         if not result.get("chunks") or result.get("answer_grounded") is False:
-            # 没有候选或证据覆盖率低于门槛时明确拒答，避免模型用无关片段编造答案。
-            result["answer"] = "知识库中没有找到与该问题足够相关的内容，请补充资料或换个问法。"
-            result["citations"] = []
-            result["raw"] = ""
-            result["no_answer"] = True
-            result.setdefault("answer_grounded", False)
-            return result
+            return None
         retrieved = [_dict_to_retrieved_chunk(row) for row in result["chunks"]]
         prompt_chunks: list[RetrievedChunk] = []
         for row, chunk in zip(result["chunks"], retrieved, strict=True):
@@ -1379,6 +1368,122 @@ class DatasetRagApplicationService:
         result["context_chars"] = used
         result["context_truncated"] = truncated
         prompt = CitationTracker(retrieved_chunks=budgeted).format_for_prompt()
+        return prompt, tracker, retrieved
+
+    async def stream_answer(
+        self,
+        *,
+        dataset_id: str,
+        query: str,
+        top_k: int = 5,
+        tenant_id: str = "",
+        version: str | int = "",
+        metadata_filter: dict[str, Any] | None = None,
+        rerank: bool = False,
+        access_context: DatasetAccessContext | dict[str, Any] | None = None,
+        history: list[dict[str, Any]] | None = None,
+        min_relevance: float | None = None,
+        max_context_chars: int | None = None,
+        mmr_lambda: float | None = None,
+        retrieval_mode: str = "hybrid",
+        vector_weight: float = 1.0,
+        keyword_weight: float = 1.0,
+        expand_section: bool = False,
+        llm_stream: Callable[[str, str], Any] | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """SSE 事件流：meta → 若干 delta → done（拒答时直接 delta+done）。"""
+        result = self.query(
+            dataset_id=dataset_id,
+            query=query,
+            top_k=top_k,
+            tenant_id=tenant_id,
+            version=version,
+            metadata_filter=metadata_filter,
+            rerank=rerank,
+            access_context=access_context,
+            context_window=1,
+            history=history,
+            min_relevance=min_relevance,
+            mmr_lambda=mmr_lambda,
+            retrieval_mode=retrieval_mode,
+            vector_weight=vector_weight,
+            keyword_weight=keyword_weight,
+            expand_section=expand_section,
+        )
+        yield {
+            "event": "meta",
+            "data": {
+                "success": bool(result.get("success")),
+                "dataset_id": result.get("dataset_id", dataset_id),
+                "query": result.get("query", query),
+                "grounding": result.get("grounding", 0.0),
+                "answer_grounded": result.get("answer_grounded", False),
+                "chunk_count": len(result.get("chunks") or []),
+            },
+        }
+        prepared = self._prepare_answer_prompt(result, max_context_chars=max_context_chars)
+        query_text = str(result.get("query") or query)
+        if prepared is None:
+            refusal = (
+                "知识库中没有找到与该问题足够相关的内容，请补充资料或换个问法。"
+                if result.get("success")
+                else str(result.get("message") or "知识库检索失败")
+            )
+            yield {"event": "delta", "data": {"text": refusal}}
+            yield {
+                "event": "done",
+                "data": {"answer": refusal, "citations": [], "no_answer": True},
+            }
+            return
+        prompt, tracker, retrieved = prepared
+        if llm_stream is None:
+            from app.infrastructure.llm.knowledge_answer import get_kb_answer_stream
+
+            llm_stream = get_kb_answer_stream()
+        pieces: list[str] = []
+        if llm_stream is not None:
+            async for piece in llm_stream(query_text, prompt):
+                if not piece:
+                    continue
+                pieces.append(str(piece))
+                yield {"event": "delta", "data": {"text": str(piece)}}
+        if not pieces:
+            fallback = _deterministic_answer(query_text, retrieved)
+            pieces.append(fallback)
+            yield {"event": "delta", "data": {"text": fallback}}
+        clean_answer, citations = tracker.attach_citations("".join(pieces))
+        yield {
+            "event": "done",
+            "data": {
+                "answer": clean_answer,
+                "citations": [_citation_to_dict(citation) for citation in citations],
+                "context_chars": result.get("context_chars", 0),
+                "context_truncated": bool(result.get("context_truncated")),
+            },
+        }
+
+    def _synthesize_answer(
+        self,
+        result: dict[str, Any],
+        *,
+        llm_call: Callable[[str, str], str] | None = None,
+        max_context_chars: int | None = None,
+    ) -> dict[str, Any]:
+        if not result.get("success"):
+            result.setdefault("answer", "")
+            result.setdefault("citations", [])
+            result.setdefault("raw", "")
+            return result
+        prepared = self._prepare_answer_prompt(result, max_context_chars=max_context_chars)
+        if prepared is None:
+            # 没有候选或证据覆盖率低于门槛时明确拒答，避免模型用无关片段编造答案。
+            result["answer"] = "知识库中没有找到与该问题足够相关的内容，请补充资料或换个问法。"
+            result["citations"] = []
+            result["raw"] = ""
+            result["no_answer"] = True
+            result.setdefault("answer_grounded", False)
+            return result
+        prompt, tracker, retrieved = prepared
         if llm_call is None:
             from app.infrastructure.llm.knowledge_answer import get_kb_answer_llm_call
 
