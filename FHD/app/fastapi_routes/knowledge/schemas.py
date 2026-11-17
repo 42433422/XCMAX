@@ -191,6 +191,12 @@ class DatasetQueryRequest(BaseModel):
     )
     metadata_filter: dict[str, Any] = Field(default_factory=dict)
     rerank: bool = Field(False, description="apply cross-encoder reranking with safe fallback")
+    context_window: int = Field(
+        0,
+        ge=0,
+        le=2,
+        description="expand each hit with neighbouring chunks from the same document",
+    )
 
     @field_validator("metadata_filter")
     @classmethod

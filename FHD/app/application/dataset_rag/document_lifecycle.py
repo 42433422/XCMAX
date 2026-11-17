@@ -16,6 +16,7 @@ from app.application.dataset_rag.access_policy import (
     _ensure_tenant_allowed,
     _resolve_tenant_for_access,
 )
+from app.application.dataset_rag.chunk_context import section_metadata
 from app.application.dataset_rag.document_acl import (
     ACL_METADATA_KEY,
     normalize_document_acl,
@@ -193,6 +194,7 @@ class DocumentLifecycle:
                         "tenant_id": tenant_key,
                         "document_version": document_version,
                         "version_label": version_text,
+                        **section_metadata(extracted_text, chunk.char_start),
                         **_embedding_metadata(self._vector.embedder, chunk.text),
                         **base_metadata,
                     },

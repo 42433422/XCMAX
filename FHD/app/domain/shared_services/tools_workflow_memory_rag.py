@@ -148,6 +148,7 @@ def _registered_router_dataset_rag(
                 metadata_filter=metadata_filter,
                 rerank=rerank,
                 access_context=read_context,
+                context_window=as_int(params.get("context_window"), 0),
             )
         return finalize(
             result, dataset_id=dataset_id, query=query, chunks=[], citations=[], answer=""

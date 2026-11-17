@@ -530,6 +530,7 @@ class DatasetRagApplicationService:
         rerank: bool = False,
         access_context: DatasetAccessContext | dict[str, Any] | None = None,
         include_sheet_context: bool = False,
+        context_window: int = 0,
     ) -> dict[str, Any]:
         return self._retrieval.query(
             dataset_id=dataset_id,
@@ -541,6 +542,7 @@ class DatasetRagApplicationService:
             rerank=rerank,
             access_context=access_context,
             include_sheet_context=include_sheet_context,
+            context_window=context_window,
         )
 
     def knowledge_graph(
@@ -646,6 +648,7 @@ class DatasetRagApplicationService:
             metadata_filter=metadata_filter,
             rerank=rerank,
             access_context=access_context,
+            context_window=1,
         )
         if not result.get("success") or not result.get("chunks"):
             result.setdefault("answer", "")
@@ -653,8 +656,27 @@ class DatasetRagApplicationService:
             result.setdefault("raw", "")
             return result
         retrieved = [_dict_to_retrieved_chunk(row) for row in result["chunks"]]
+        prompt_chunks: list[RetrievedChunk] = []
+        for row, chunk in zip(result["chunks"], retrieved, strict=True):
+            context = str((row.get("metadata") or {}).get("context") or "")
+            if not context or context == chunk.text:
+                prompt_chunks.append(chunk)
+                continue
+            prompt_chunks.append(
+                RetrievedChunk(
+                    text=context,
+                    score=chunk.score,
+                    source=chunk.source,
+                    chunk_index=chunk.chunk_index,
+                    char_start=chunk.char_start,
+                    char_end=chunk.char_end,
+                    metadata=chunk.metadata,
+                    source_url=chunk.source_url,
+                    page=chunk.page,
+                )
+            )
         tracker = CitationTracker(retrieved_chunks=retrieved)
-        prompt = tracker.format_for_prompt()
+        prompt = CitationTracker(retrieved_chunks=prompt_chunks).format_for_prompt()
         if llm_call is None:
             from app.infrastructure.llm.knowledge_answer import get_kb_answer_llm_call
 

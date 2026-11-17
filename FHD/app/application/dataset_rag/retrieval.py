@@ -12,6 +12,7 @@ from app.application.dataset_rag.access_policy import (
     _coerce_access_context,
     _resolve_tenant_for_access,
 )
+from app.application.dataset_rag.chunk_context import expanded_context
 from app.application.dataset_rag.document_acl import (
     document_acl,
     document_visible_to,
@@ -137,6 +138,7 @@ class DatasetRetrieval:
         rerank: bool = False,
         access_context: DatasetAccessContext | dict[str, Any] | None = None,
         include_sheet_context: bool = False,
+        context_window: int = 0,
     ) -> dict[str, Any]:
         dataset_key = _clean_key(dataset_id, default="default")
         tenant_key, denied = _resolve_tenant_for_access(
@@ -248,6 +250,11 @@ class DatasetRetrieval:
                     metadata["sheet_context"] = "片段含工作表边界：" + "、".join(markers)
                 elif previous:
                     metadata["sheet_context"] = previous[1]
+        if context_window > 0:
+            for row, chunk in zip(rows, top, strict=True):
+                expanded = expanded_context(chunk, scope_chunks)
+                if expanded != chunk.text:
+                    row.setdefault("metadata", {})["context"] = expanded
         result = {
             "success": True,
             "dataset_id": dataset_key,

@@ -1,4 +1,6 @@
 ## Unreleased
+- 知识库新增章节与上下文窗口：入库时为每个分块记录最近的 Markdown 标题，查询支持 `context_window`（0-2）返回同文档相邻块的上下文窗口，不跨文档/版本且受 ACL 与租户过滤约束；问答合成自动使用扩展上下文。
+- 修复固定分块在 `chunk_overlap >= chunk_size` 时游标不前进导致的死循环，现在会收敛 overlap 并保证每次至少前进一个字符。
 - 知识库新增对象存储导入：`POST /api/knowledge/v1/datasets/{dataset_id}/documents` 支持 `s3_uri`，复用 boto3（Apache-2.0）读取 `s3://bucket/key` 并复用现有文档入库链路；校验桶名/对象键、可选桶白名单 `XCAGI_S3_ALLOWED_BUCKETS`、大小上限 `XCAGI_KB_MAX_OBJECT_BYTES`（默认 25MB），仅接受既有文档扩展名；S3 兼容存储通过 `XCAGI_S3_ENDPOINT_URL` / `XCAGI_S3_REGION` 接入。
 - 知识库问答默认接入平台模型合成答案：检索命中后按带编号的资料生成回答并保留引用；未配置平台模型、调用超时或异常时自动回退原有抽取式答案，`XCAGI_KB_ANSWER_LLM=0` 可关闭，超时用 `XCAGI_KB_ANSWER_TIMEOUT_S` 调整（默认 30 秒）。
 - 检索评测扩到 50 条中文查询：fastembed 语义模式 recall@1=0.98、recall@5=1.0、MRR=0.99；hash 降级 recall@1=0.22、recall@5=0.86、MRR=0.40；cross-encoder 精排在该评测上 recall@1=0.96，仍保持默认关闭。
