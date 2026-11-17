@@ -70,7 +70,7 @@ _CACHE_LOCK = threading.Lock()
 _SCHEMA_CACHE: weakref.WeakKeyDictionary[Any, dict[str, Any]] = weakref.WeakKeyDictionary()
 _CATALOG_CACHE: weakref.WeakKeyDictionary[Any, dict[str, Any]] = weakref.WeakKeyDictionary()
 _OVERLAY_LOCK = threading.Lock()
-_OVERLAY_CACHE: dict[str, Any] = {"mtime": None, "entries": {}}
+_OVERLAY_CACHE: dict[str, Any] = {"mtime": None, "entries": {}, "glossary": {}}
 
 
 def _slug(value: str) -> str:
@@ -148,15 +148,15 @@ def _unique(base: str, taken: set[str], suffix: str = "") -> str:
     return candidate
 
 
-def load_overlay() -> dict[str, dict[str, Any]]:
-    """读取语义 overlay；按文件 mtime 缓存，缺失或损坏时返回空字典。"""
+def _overlay_document() -> tuple[dict[str, dict[str, Any]], dict[str, list[str]]]:
+    """读取 overlay（按 mtime 缓存）：返回 operation 语义与业务域词汇表。"""
     try:
         mtime = _OVERLAY_PATH.stat().st_mtime
     except OSError:
-        return {}
+        return {}, {}
     with _OVERLAY_LOCK:
         if _OVERLAY_CACHE["mtime"] == mtime:
-            return dict(_OVERLAY_CACHE["entries"])
+            return dict(_OVERLAY_CACHE["entries"]), dict(_OVERLAY_CACHE["glossary"])
         try:
             raw = yaml.safe_load(_OVERLAY_PATH.read_text(encoding="utf-8")) or {}
         except (OSError, yaml.YAMLError):
@@ -168,9 +168,25 @@ def load_overlay() -> dict[str, dict[str, Any]]:
             operation_id = str(item.get("operation_id") or "").strip()
             if operation_id:
                 entries[operation_id] = {k: v for k, v in item.items() if k != "operation_id"}
+        glossary: dict[str, list[str]] = {}
+        for domain, aliases in (raw.get("glossary") or {}).items():
+            key = _slug(str(domain))
+            if key and isinstance(aliases, list):
+                glossary[key] = [str(alias).strip() for alias in aliases if str(alias).strip()]
         _OVERLAY_CACHE["mtime"] = mtime
         _OVERLAY_CACHE["entries"] = entries
-        return dict(entries)
+        _OVERLAY_CACHE["glossary"] = glossary
+        return dict(entries), dict(glossary)
+
+
+def load_overlay() -> dict[str, dict[str, Any]]:
+    """读取 operation 语义 overlay；缺失或损坏时返回空字典。"""
+    return _overlay_document()[0]
+
+
+def load_glossary() -> dict[str, list[str]]:
+    """读取业务域中文词汇表；仅用于检索，不改变目录。"""
+    return _overlay_document()[1]
 
 
 def openapi_schema(app: Any) -> dict[str, Any]:

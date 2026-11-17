@@ -1,6 +1,31 @@
 # AIOPEN 语义 overlay：补充「何时用 / 副作用 / 前置条件 / 返回 / 示例」。
 # operation_id 由运行时目录生成；未匹配到任何路由的条目会被忽略，不会报错。
 # 只允许补充语义，不参与风险分级与 scope 计算。
+#
+# glossary：业务域 → 中文别名。路由摘要多为英文或占位（Customers Create），
+# 词汇表让中文检索能命中正确的域；只影响检索排序，不改变目录内容。
+glossary:
+  products: [商品, 货物, 产品, 库存, 价格]
+  customers: [客户, 会员, 联系人, 客商]
+  orders: [订单, 销售单, 下单, 收款]
+  shipment: [出货, 发货, 物流, 送货]
+  print: [打印, 单据, 小票, 标签]
+  materials: [物料, 原料, 用料]
+  templates: [模板, 样式]
+  document_templates: [文档模板, 合同模板, 打印模板]
+  knowledge: [知识库, 文档, 资料, 检索]
+  approval: [审批, 审核, 待办, 流程]
+  conversations: [会话, 聊天, 对话]
+  conversation: [会话, 聊天, 对话]
+  im: [消息, 群聊, 即时通讯]
+  employees: [员工, 数字员工, 智能体]
+  excel: [表格, Excel, 导入, 导出]
+  data_sources: [数据源, 数据库, 对接]
+  auth: [账号, 登录, 权限]
+  wechat_contacts: [微信, 联系人]
+  planner: [计划, 排产, 工单]
+  mod: [模块, 插件, 应用]
+  ai: [助手, 智能, 问答]
 operations:
   - operation_id: products.list
     when_to_use: 需要浏览或筛选商品目录时使用，例如报价前确认可售商品。

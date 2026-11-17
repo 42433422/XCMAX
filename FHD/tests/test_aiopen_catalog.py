@@ -43,6 +43,10 @@ def client(monkeypatch):
     def batch_products(payload: dict):
         return {"success": True, "payload": payload}
 
+    @business.post("/api/customers", summary="Customers Create")
+    def create_customer(payload: dict):
+        return {"success": True, "payload": payload}
+
     @business.get("/api/admin/overview", summary="内部总览")
     def admin_overview():
         return {"success": True}
@@ -172,6 +176,17 @@ def test_operation_describe_returns_semantic_card(client):
     text = body["result"]["content"][0]["text"]
     assert "何时用" in text
     assert "read:products" in text
+
+
+def test_knowledge_search_matches_chinese_intent_via_glossary(client):
+    """路由摘要是英文时，中文意图仍应命中正确业务域。"""
+    body = _rpc(
+        client,
+        "tools/call",
+        {"name": "knowledge_search", "arguments": {"query": "创建客户", "limit": 3}},
+    )
+    lines = body["result"]["content"][0]["text"].splitlines()
+    assert "customers.create" in lines[1]
 
 
 def test_coverage_reports_ratios(client):

@@ -10,15 +10,22 @@ import threading
 from collections import Counter
 from typing import Any
 
-from .catalog_builder import find_operation, get_catalog
+from .catalog_builder import find_operation, get_catalog, load_glossary
 
 _INDEX_LOCK = threading.Lock()
 _INDEX: dict[str, Any] = {"signature": None, "vectorizer": None, "matrix": None, "entries": []}
 
 _SEMANTIC_KEYS = ("when_to_use", "returns", "side_effects", "preconditions", "examples", "related")
 
+# 通用动作词按风险级别补齐：只降低动作词的区分度，业务域别名仍然决定排序。
+_ACTION_ALIASES = {
+    "read": ("查询", "查看", "列表", "详情", "搜索"),
+    "write": ("创建", "新增", "新建", "保存", "更新", "修改"),
+    "danger": ("删除", "作废", "撤销", "批量"),
+}
 
-def _document(entry: dict[str, Any]) -> str:
+
+def _document(entry: dict[str, Any], glossary: dict[str, list[str]]) -> str:
     parts = [
         str(entry.get("operation_id") or ""),
         str(entry.get("tool_name") or ""),
@@ -26,6 +33,11 @@ def _document(entry: dict[str, Any]) -> str:
         str(entry.get("summary") or ""),
         " ".join(str(tag) for tag in entry.get("tags") or []),
     ]
+    # 路由摘要多为英文或占位，中文别名让「创建客户」这类意图命中正确的域；
+    # 别名重复两次以提高业务域权重，动作词只做弱提示。
+    domain = str(entry.get("domain") or "")
+    parts.extend(glossary.get(domain, []) * 2)
+    parts.extend(_ACTION_ALIASES.get(str(entry.get("risk") or "read"), ()))
     semantics = entry.get("semantics") if isinstance(entry.get("semantics"), dict) else {}
     for key in _SEMANTIC_KEYS:
         value = semantics.get(key)
@@ -37,7 +49,8 @@ def _document(entry: dict[str, Any]) -> str:
 
 
 def _signature(entries: list[dict[str, Any]]) -> tuple[str, ...]:
-    return tuple(_document(entry) for entry in entries)
+    glossary = load_glossary()
+    return tuple(_document(entry, glossary) for entry in entries)
 
 
 def _index(entries: list[dict[str, Any]]) -> tuple[Any, Any] | None:
