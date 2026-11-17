@@ -203,6 +203,10 @@
               <input v-model="expandSection" type="checkbox" />
               <span>整章扩展</span>
             </label>
+            <label v-if="datasetOptions.length > 1" class="ask-dock__toggle">
+              <input v-model="crossDataset" type="checkbox" />
+              <span>跨库</span>
+            </label>
             <label>
               <span>多样性</span>
               <select v-model.number="mmrLambda" aria-label="MMR 多样性">
@@ -469,10 +473,13 @@ const knowledgeEmpty = computed(() => {
   return scope?.success === true && scope.document_count === 0 && scope.chunk_count === 0 && memories.value.length === 0
 })
 
+const crossDatasetIds = computed(() => datasetOptions.value.map((item) => item.id))
+
 const recall = usePersyRecallQuery({
   activeDatasetId,
   adminOmniscient,
   omniscientQueryEnabled,
+  crossDatasetIds,
   refreshMemories,
   refreshGraph,
   onRecallCommitted: () => {
@@ -487,6 +494,7 @@ const {
   retrievalMode,
   expandSection,
   mmrLambda,
+  crossDataset,
   queryMessage,
   queryError,
   answerText,

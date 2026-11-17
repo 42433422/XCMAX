@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   rebuildIndex: vi.fn(),
   query: vi.fn(),
   queryStream: vi.fn(),
+  multiQuery: vi.fn(),
   queryMemories: vi.fn(),
 }))
 
@@ -193,6 +194,39 @@ describe('Persy knowledge composables', () => {
 
     expect(mocks.query).toHaveBeenCalled()
     expect(recall.answerText.value).toBe('回退答案')
+  })
+
+  it('queries every dataset when cross-dataset recall is enabled', async () => {
+    mocks.multiQuery.mockResolvedValue({
+      success: true,
+      dataset_id: 'office-docking',
+      chunks: [{ source: '送货单', text: '次日达', score: 0.9 }],
+      answer: '次日达',
+      answer_grounded: true,
+    })
+    mocks.queryMemories.mockResolvedValue({ success: true, memories: [] })
+    const recall = usePersyRecallQuery({
+      activeDatasetId: ref('office-docking'),
+      adminOmniscient: computed(() => false),
+      omniscientQueryEnabled: ref(false),
+      crossDatasetIds: ref(['office-docking', 'persy-knowledge']),
+      refreshMemories: vi.fn().mockResolvedValue(undefined),
+      refreshGraph: vi.fn().mockResolvedValue(undefined),
+      onRecallCommitted: vi.fn(),
+    })
+    recall.queryText.value = '送货时效'
+    recall.crossDataset.value = true
+
+    await recall.queryKnowledge()
+
+    expect(mocks.multiQuery).toHaveBeenCalledWith(
+      expect.objectContaining({
+        datasetIds: ['office-docking', 'persy-knowledge'],
+        query: '送货时效',
+      }),
+    )
+    expect(mocks.queryStream).not.toHaveBeenCalled()
+    expect(recall.answerText.value).toBe('次日达')
   })
 
   it('applies a dataset and rebuilds its active index', async () => {

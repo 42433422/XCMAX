@@ -143,6 +143,30 @@ describe('knowledgeBaseApi', () => {
     })
   })
 
+  it('queries multiple datasets with deduplicated ids', async () => {
+    await knowledgeBaseApi.multiQuery({
+      datasetIds: ['office-docking', ' persy-knowledge ', 'office-docking', ''],
+      query: '退款流程',
+      topK: 6,
+      rerank: true,
+    })
+
+    expect(mocks.primeCsrfCookie).toHaveBeenCalledTimes(1)
+    expect(mocks.api.post).toHaveBeenCalledWith('/api/knowledge/v1/datasets/multi-query', {
+      query: '退款流程',
+      top_k: 6,
+      include_answer: true,
+      tenant_id: '',
+      version: '',
+      metadata_filter: {},
+      rerank: true,
+      retrieval_mode: 'hybrid',
+      expand_section: false,
+      mmr_lambda: 0,
+      dataset_ids: ['office-docking', 'persy-knowledge'],
+    })
+  })
+
   it('parses SSE knowledge query events', async () => {
     const encoder = new TextEncoder()
     const chunks = [

@@ -1,5 +1,5 @@
 {
-  "lines": 2473048,
+  "lines": 2473138,
   "updated": "2026-11-18",
-  "note": "知识库前端流式问答（queryStream SSE 解析+composable 流式/回退+2 条测试+meta 回传片段）为功能净增"
+  "note": "知识库跨库检索前端入口（API multiQuery + 跨库开关 + 测试/文档），单一功能闭环，无可删除的等量死代码"
 }

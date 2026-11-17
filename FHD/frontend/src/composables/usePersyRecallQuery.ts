@@ -10,6 +10,7 @@ export function usePersyRecallQuery(options: {
   refreshMemories: () => Promise<void>
   refreshGraph: () => Promise<void>
   onRecallCommitted: () => void
+  crossDatasetIds?: Ref<string[]>
 }) {
   const { activeDatasetId, adminOmniscient, omniscientQueryEnabled, refreshMemories, refreshGraph, onRecallCommitted } = options
 
@@ -20,6 +21,7 @@ export function usePersyRecallQuery(options: {
   const expandSection = ref(false)
   const mmrLambda = ref(0)
   const streaming = ref(true)
+  const crossDataset = ref(false)
   const querying = ref(false)
   const queryMessage = ref('')
   const queryError = ref('')
@@ -79,6 +81,11 @@ export function usePersyRecallQuery(options: {
           knowledge = await knowledgeBaseApi.omniscientQuery({
             query,
             topK: boundedTopK,
+          })
+        } else if (crossDataset.value && (options.crossDatasetIds?.value.length ?? 0) > 1) {
+          knowledge = await knowledgeBaseApi.multiQuery({
+            ...payload,
+            datasetIds: options.crossDatasetIds?.value || [],
           })
         } else if (streaming.value) {
           let meta: Record<string, unknown> = {}
@@ -178,6 +185,7 @@ export function usePersyRecallQuery(options: {
     expandSection,
     mmrLambda,
     streaming,
+    crossDataset,
     querying,
     queryMessage,
     queryError,

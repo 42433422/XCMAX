@@ -176,6 +176,10 @@ export interface KnowledgeBaseQueryPayload {
   mmrLambda?: number
 }
 
+export interface KnowledgeBaseMultiQueryPayload extends KnowledgeBaseQueryPayload {
+  datasetIds: string[]
+}
+
 export interface KnowledgeStreamHandlers {
   onMeta?: (data: Record<string, unknown>) => void
   onDelta?: (text: string) => void
@@ -415,6 +419,17 @@ export const knowledgeBaseApi = {
       datasetPath(payload.datasetId || PERSY_KNOWLEDGE_DATASET_ID, '/query'),
       knowledgeQueryBody(payload),
     )
+  },
+
+  async multiQuery(payload: KnowledgeBaseMultiQueryPayload): Promise<KnowledgeBaseQueryResponse> {
+    await primeCsrfCookie()
+    const datasetIds = Array.from(
+      new Set((payload.datasetIds || []).map((id) => id.trim()).filter(Boolean)),
+    )
+    return api.post<KnowledgeBaseQueryResponse>('/api/knowledge/v1/datasets/multi-query', {
+      ...knowledgeQueryBody(payload),
+      dataset_ids: datasetIds,
+    })
   },
 
   async queryStream(

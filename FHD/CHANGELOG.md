@@ -1,4 +1,5 @@
 ## Unreleased
+- 知识库前端接入跨库检索：问答设置新增「跨库」开关（存在多个知识空间时显示），开启后一次检索全部可见库并统一重排，结果面板与回答复用同一渲染；API 层新增 `multiQuery`（`POST /api/knowledge/v1/datasets/multi-query`，`dataset_ids` 去重去空）。
 - 知识库前端接入流式问答：默认走 `query/stream`，答案逐字出现；`meta` 事件带回命中片段与 grounding，`done` 回填引用与上下文预算；流失败自动回退普通 `query`。API 层新增 `queryStream`（fetch + SSE 解析，带 CSRF 头）。
 - 知识库新增流式问答：`POST /api/knowledge/v1/datasets/{dataset_id}/query/stream` 返回 SSE（`meta` → 若干 `delta` → `done`），复用检索、低置信拒答、引用编号与上下文预算；平台模型未配置或 provider 不支持流式时回退确定性答案并以单个 `delta` 发出，`done` 携带 `answer/citations/context_chars/context_truncated`。
 - 知识库状态接口新增 `source_sync` 概览：可刷新文档数、从未同步数、最近同步时间与检查时间（受租户与文档 ACL 过滤），便于前端/运维判断定时同步是否在生效。
