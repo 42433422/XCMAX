@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import threading
 import weakref
@@ -151,11 +152,31 @@ def _unique(base: str, taken: set[str], suffix: str = "") -> str:
 
 
 def _overlay_files() -> list[Path]:
-    """人工维护的 operations.yaml + 已审核入库的 generated/*.yaml（按文件名排序）。"""
+    """人工维护的 operations.yaml + 已审核入库的 generated/*（yaml 或 jsonl）。"""
     files = [_OVERLAY_PATH]
     if _OVERLAY_GENERATED_DIR.is_dir():
         files.extend(sorted(_OVERLAY_GENERATED_DIR.glob("*.yaml")))
+        files.extend(sorted(_OVERLAY_GENERATED_DIR.glob("*.jsonl")))
     return files
+
+
+def _read_overlay_file(path: Path) -> dict[str, Any]:
+    """读取单个 overlay 文件；jsonl 每行一条记录，用于大规模语义的紧凑存储。"""
+    text = path.read_text(encoding="utf-8")
+    if path.suffix != ".jsonl":
+        return yaml.safe_load(text) or {}
+    operations: list[Any] = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        try:
+            item = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(item, dict):
+            operations.append(item)
+    return {"operations": operations}
 
 
 def _overlay_signature(files: list[Path]) -> tuple[tuple[str, float], ...]:
@@ -183,7 +204,7 @@ def _overlay_document() -> tuple[dict[str, dict[str, Any]], dict[str, list[str]]
         glossary: dict[str, list[str]] = {}
         for path in files:
             try:
-                raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+                raw = _read_overlay_file(path)
             except (OSError, yaml.YAMLError):
                 continue
             for item in raw.get("operations") or []:

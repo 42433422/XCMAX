@@ -136,6 +136,13 @@ def test_loader_reads_generated_but_not_drafts(monkeypatch, tmp_path):
         ),
         encoding="utf-8",
     )
+    (generated / "batch-02.jsonl").write_text(
+        json.dumps(
+            {"operation_id": "print.test", "when_to_use": "打印自检"}, ensure_ascii=False
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     (drafts / "draft-01.yaml").write_text(
         yaml.safe_dump(
             {"operations": [{"operation_id": "ghost.op", "when_to_use": "未审核"}]},
@@ -148,5 +155,5 @@ def test_loader_reads_generated_but_not_drafts(monkeypatch, tmp_path):
     monkeypatch.setattr(catalog_builder, "_OVERLAY_GENERATED_DIR", generated)
     monkeypatch.setitem(catalog_builder._OVERLAY_CACHE, "signature", None)
     entries = catalog_builder.load_overlay()
-    assert set(entries) == {"products.list", "orders.create"}
+    assert set(entries) == {"products.list", "orders.create", "print.test"}
     assert catalog_builder.load_glossary() == {"products": ["商品"]}

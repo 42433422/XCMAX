@@ -140,7 +140,7 @@ overlay 是「懂」的唯一增量来源；构建器负责「有什么」，ove
 
 **草稿流水线**：`scripts/dev/aiopen_overlay_draft.py` 用现有 LLM Provider 为未描述的
 operation 批量起草语义，写入 `overlay/drafts/`（运行时**不加载**）；人工审核后把条目
-移入 `overlay/generated/*.yaml` 才进入系统地图。模型只起草，不参与风险分级、scope 或权限判断。
+移入 `overlay/generated/*.yaml|*.jsonl` 才进入系统地图。模型只起草，不参与风险分级、scope 或权限判断。
 
 **MCP Resources**（新增 `app/application/aiopen/resources.py`，URI 路由器）：
 

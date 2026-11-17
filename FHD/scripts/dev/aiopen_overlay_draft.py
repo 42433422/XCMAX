@@ -176,12 +176,15 @@ async def generate(
         content = ""
         for attempt in (1, 2):
             try:
-                response = await chat_completion_openai_format(
-                    build_messages(batch),
-                    temperature=0.2,
-                    max_tokens=4000,
-                    profile=profile,
-                    reasoning_enabled=False,
+                response = await asyncio.wait_for(
+                    chat_completion_openai_format(
+                        build_messages(batch),
+                        temperature=0.2,
+                        max_tokens=4000,
+                        profile=profile,
+                        reasoning_enabled=False,
+                    ),
+                    timeout=120.0,
                 )
             except RECOVERABLE_ERRORS as error:
                 print(f"[{index}/{len(batches)}] 第 {attempt} 次请求失败：{type(error).__name__}")
