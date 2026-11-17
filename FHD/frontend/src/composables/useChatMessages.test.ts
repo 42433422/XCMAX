@@ -420,6 +420,29 @@ describe('useChatMessages', () => {
     expect(chatMessageKey(messages.messages.value[0])).toBe(key)
   })
 
+  it('persists reconciled fields even when every message object is reused', async () => {
+    const chatApi = (await import('@/api/chat')).default
+    messages.loadMessages([{ role: 'ai', content: 'old reply', time: '10:00',
+      persistence: { id: 'server:42', status: 'failed', error: 'save uncertain' } }])
+    const original = messages.messages.value[0]
+    const key = chatMessageKey(original)
+    vi.mocked(chatApi.getConversation).mockResolvedValueOnce({
+      messages: [{ id: 42, role: 'ai', content: 'confirmed reply', time: '11:00' }],
+    } as any)
+    expect(await messages.syncFromServer()).toBe(true)
+    expect(messages.messages.value[0]).toBe(original)
+    const cached = JSON.parse(localStorage.getItem('chat_session-1_') || '[]')[0]
+    expect(cached.content).toContain('confirmed reply')
+    expect(cached.time).toBe('11:00')
+    expect(cached.persistence.status).toBe('saved')
+    expect(cached.persistence.error).toBeUndefined()
+    resetChatMessageStores()
+    const reopened = useChatMessages(ref('session-1'))
+    expect(reopened.messages.value[0].content).toContain('confirmed reply')
+    expect(reopened.messages.value[0].persistence?.status).toBe('saved')
+    expect(chatMessageKey(reopened.messages.value[0])).toBe(key)
+  })
+
   it('syncFromServer handles success', async () => {
     const chatApi = (await import('@/api/chat')).default
     vi.mocked(chatApi.getConversation).mockResolvedValueOnce({

@@ -1,8 +1,14 @@
 import { describe, expect, it, vi } from 'vitest'
-import { nextTick, ref } from 'vue'
+import { defineComponent, nextTick, ref } from 'vue'
+import { flushPromises, mount } from '@vue/test-utils'
+import { createMemoryHistory, createRouter } from 'vue-router'
+import { assembleTemplatePreview, TEMPLATE_SEARCH_STORAGE_KEY } from '../../../mods/bridge/xcagi-erp-domain-bridge/frontend/views/template-preview/assemble'
 import { useTpVueFinder } from '../../../mods/bridge/xcagi-erp-domain-bridge/frontend/views/template-preview/useTpVueFinder'
 import type { TemplatePreviewCtx } from '../../../mods/bridge/xcagi-erp-domain-bridge/frontend/views/template-preview/assemble'
 import type { TplRecord } from '../../../mods/bridge/xcagi-erp-domain-bridge/frontend/views/template-preview/tpTemplateMeta'
+
+const listTemplates = vi.hoisted(() => vi.fn())
+vi.mock('@/api/templatePreview', () => ({ default: { listTemplates } }))
 
 vi.mock('@/components/template/vuefinder', () => ({ ArrayDriver: class {} }))
 
@@ -13,7 +19,7 @@ function setup() {
   ])
   const previewTemplate = vi.fn()
   const finder = useTpVueFinder({
-    exportScopedTemplates: records, getTemplateScopeLabel: () => '销售/出货', previewTemplate,
+    filteredTemplates: records, getTemplateScopeLabel: () => '销售/出货', previewTemplate,
   } as unknown as TemplatePreviewCtx)
   return { records, previewTemplate, finder }
 }
@@ -51,4 +57,51 @@ describe('template library record identity', () => {
     finder.onSelect([])
     expect(finder.selectedTemplate.value).toBeNull()
   })
+})
+
+
+it('applies route scope/keyword and both global-search handoffs to the actual finder entries', async () => {
+  listTemplates.mockResolvedValue({ success: true, templates: [
+    { id: 'db:1', name: 'Alpha 出货', category: 'word', business_scope: 'orders' },
+    { id: 'db:2', name: 'Beta 出货', category: 'word', business_scope: 'orders' },
+    { id: 'db:3', name: 'Alpha 产品', category: 'word', business_scope: 'products' },
+  ] })
+  const router = createRouter({ history: createMemoryHistory(), routes: [
+    { path: '/templates', component: { template: '<div />' } },
+  ] })
+  await router.push('/templates?scope=orders&keyword=Alpha')
+  const wrapper = mount(defineComponent({
+    setup() { return useTpVueFinder(assembleTemplatePreview()) },
+    template: '<p v-for="file in entries.filter(e => e.type === \'file\')" :key="file.path">{{ file.basename }}</p>',
+  }), { global: { plugins: [router] } })
+  try {
+    await flushPromises()
+    expect(wrapper.text()).toBe('Alpha 出货.docx')
+    await router.push('/templates?scope=products&keyword=Alpha')
+    await flushPromises()
+    expect(wrapper.text()).toBe('Alpha 产品.docx')
+    await router.push('/templates?scope=orders&keyword=Beta')
+    await flushPromises()
+    expect(wrapper.text()).toBe('Beta 出货.docx')
+    window.dispatchEvent(new CustomEvent('xcagi:template-search', { detail: { keyword: 'Alpha' } }))
+    await nextTick()
+    expect(wrapper.text()).toBe('Alpha 出货.docx')
+    await router.push('/templates?scope=orders&keyword=missing')
+    await flushPromises()
+    expect(wrapper.text()).toBe('')
+    sessionStorage.setItem(TEMPLATE_SEARCH_STORAGE_KEY, 'Beta')
+  } finally { wrapper.unmount() }
+  const handoffRouter = createRouter({ history: createMemoryHistory(), routes: [
+    { path: '/templates', component: { template: '<div />' } },
+  ] })
+  await handoffRouter.push('/templates?scope=orders')
+  const remounted = mount(defineComponent({
+    setup() { return useTpVueFinder(assembleTemplatePreview()) },
+    template: '<p v-for="file in entries.filter(e => e.type === \'file\')" :key="file.path">{{ file.basename }}</p>',
+  }), { global: { plugins: [handoffRouter] } })
+  try {
+    await flushPromises()
+    expect(remounted.text()).toBe('Beta 出货.docx')
+    expect(sessionStorage.getItem(TEMPLATE_SEARCH_STORAGE_KEY)).toBeNull()
+  } finally { remounted.unmount(); sessionStorage.removeItem(TEMPLATE_SEARCH_STORAGE_KEY) }
 })

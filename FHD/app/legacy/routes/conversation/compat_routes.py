@@ -213,8 +213,10 @@ async def _stream_live(request: Request, body: XcagiCompatChatBody, *, ai_tier: 
 async def _renew_replay_lease(runner: Any, producer: asyncio.Task[Any]) -> None:
     """The producer owns this heartbeat and awaits it on every exit path."""
     try:
-        while True:
+        while not producer.done():
             await asyncio.sleep(max(1.0, chat_stream_replay.LEASE_TTL_SECONDS / 3))
+            if producer.done():
+                break
             renewal = asyncio.create_task(asyncio.to_thread(runner.reacquire))
             try:
                 renewed = await asyncio.shield(renewal)
@@ -340,13 +342,8 @@ async def ai_unified_chat_stream(request: Request, body: XcagiCompatChatBody):
     # 同一 turn 仍在生产：本次连接只跟随，不重复执行（断线重连）。
     if not claimed:
         return _sse_response(_follow_replay(turn_id, owner=owner, tenant=tenant))
-    # 生产权已拿到：上一轮若已结束，清掉本作用域旧回放后重跑。
+    # 抢占已原子清除旧回放；此处不得再次清除新生产周期的数据。
     runner = chat_stream_replay.runner_for(turn_id, owner=owner, tenant=tenant)
-    try:
-        chat_stream_replay.clear(turn_id, owner=owner, tenant=tenant, runner=runner)
-    except chat_stream_replay.ReplayBackendUnavailable:
-        chat_stream_replay.release_runner(turn_id, owner=owner, tenant=tenant, runner=runner)
-        return _replay_unavailable_response()
 
     if not acquire_chat_stream_slot():
         chat_stream_replay.release_runner(turn_id, owner=owner, tenant=tenant, runner=runner)

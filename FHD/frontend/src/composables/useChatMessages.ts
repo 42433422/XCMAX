@@ -625,6 +625,7 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
       const next = withoutRepeatedWelcomes([...mergedServer, ...unsaved.filter(message => !isWelcomeMessage(message))])
       const unchanged = next.length === localList.length && next.every((message, index) => message === localList[index])
       if (!unchanged) loadMessages(next)
+      else persistMessagesCache()
       return true
     } catch (_e) {
       if (options.required) throw _e

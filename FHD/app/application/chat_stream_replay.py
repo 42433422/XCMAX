@@ -19,6 +19,7 @@ import os
 import re
 import threading
 import time
+import uuid
 from typing import Any
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -168,7 +169,7 @@ def has_replay(turn_id: str, *, owner: str = "", tenant: str = "") -> bool:
 
 
 def claim_runner(turn_id: str, *, owner: str = "", tenant: str = "") -> bool:
-    """抢占该 turn 的生产权；返回 True 表示由当前请求负责跑任务。"""
+    """原子抢占生产权并清除旧回放；失败时保留当前生产者的数据。"""
     if not turn_id:
         return True
     scoped = scope_key(turn_id, owner, tenant)
@@ -176,7 +177,7 @@ def claim_runner(turn_id: str, *, owner: str = "", tenant: str = "") -> bool:
     if client is not None:
         from redis.lock import Lock
 
-        _, _, lease_key = _redis_keys(scoped, prefix)
+        stream_key, status_key, lease_key = _redis_keys(scoped, prefix)
         lease = Lock(
             client,
             lease_key,
@@ -184,9 +185,23 @@ def claim_runner(turn_id: str, *, owner: str = "", tenant: str = "") -> bool:
             blocking_timeout=0,
             thread_local=False,
         )
+        token = uuid.uuid4().hex.encode()
         try:
-            if not lease.acquire(blocking=False):
+            claim = client.register_script(
+                """
+                if not redis.call('set', KEYS[3], ARGV[1], 'NX', 'PX', ARGV[2]) then
+                    return 0
+                end
+                redis.call('del', KEYS[1], KEYS[2])
+                return 1
+                """
+            )
+            if not claim(
+                keys=[stream_key, status_key, lease_key],
+                args=[token, LEASE_TTL_SECONDS * 1000],
+            ):
                 return False
+            lease.local.token = token
         except RECOVERABLE_ERRORS:
             raise ReplayBackendUnavailable("生产权租约不可用") from None
         with _lock:
@@ -197,6 +212,8 @@ def claim_runner(turn_id: str, *, owner: str = "", tenant: str = "") -> bool:
         if scoped in _running:
             return False
         _running.add(scoped)
+        _events.pop(scoped, None)
+        _status.pop(scoped, None)
         _touched[scoped] = time.time()
     return True
 
@@ -233,7 +250,7 @@ def _fenced(
         raise ReplayBackendUnavailable("生产权租约已失效")
     stream, status, lease = _redis_keys(scoped, prefix)
     try:
-        result = client.eval(
+        mutate = client.register_script(
             """
             if redis.call('get', KEYS[3]) ~= ARGV[1] then return false end
             if ARGV[2] == 'append' then
@@ -248,15 +265,10 @@ def _fenced(
             end
             return 1
             """,
-            3,
-            stream,
-            status,
-            lease,
-            token,
-            action,
-            value,
-            REPLAY_TTL_SECONDS,
-            REPLAY_MAX_EVENTS,
+        )
+        result = mutate(
+            keys=[stream, status, lease],
+            args=[token, action, value, REPLAY_TTL_SECONDS, REPLAY_MAX_EVENTS],
         )
     except RECOVERABLE_ERRORS:
         raise ReplayBackendUnavailable("回放流写入失败") from None

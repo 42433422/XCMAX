@@ -17,6 +17,13 @@ from .protocols import ApprovalAccess, RequestView, WorkspaceResponse
 from .repository import ApprovalRepository
 
 
+def _availability_unavailable() -> JSONResponse:
+    return JSONResponse(
+        {"success": False, "retryable": True, "message": "暂时无法核实工作流状态，请稍后重试"},
+        status_code=503,
+    )
+
+
 class ApprovalQueries:
     def __init__(
         self,
@@ -73,9 +80,12 @@ class ApprovalQueries:
             result: list[dict[str, Any]] = []
             for req in items:
                 data = self.view(req, include_records=False)
-                # AI 工作流审批依赖进程内运行态；应用重启后它不再可被「通过」。
+                # 查询失败不是过期；不能把未知状态呈现为不可恢复的工作流。
                 if self.access.is_workflow(req) and not req.current_node:
-                    data["runtime_available"] = bool(self.pending(req.request_no))
+                    pending = self.pending(req.request_no)
+                    if pending is None:
+                        return _availability_unavailable()
+                    data["runtime_available"] = pending
                 if approver_id is not None:
                     node = req.current_node
                     if self.access.is_workflow(req) and (not node):
@@ -84,7 +94,7 @@ class ApprovalQueries:
                             ApprovalStatus.IN_PROGRESS.value,
                         ):
                             continue
-                        if not self.pending(req.request_no):
+                        if data["runtime_available"] is False:
                             continue
                         if not self.access.workflow_reviewer(db, req, approver_id):
                             continue
@@ -120,7 +130,10 @@ class ApprovalQueries:
                 )
             data = self.view(req, include_records=True)
             if self.access.is_workflow(req) and not req.current_node:
-                data["runtime_available"] = bool(self.pending(req.request_no))
+                pending = self.pending(req.request_no)
+                if pending is None:
+                    return _availability_unavailable()
+                data["runtime_available"] = pending
             return {"success": True, "data": data}
 
     def list_flows(self, is_active: bool | None, business_type: str | None) -> WorkspaceResponse:

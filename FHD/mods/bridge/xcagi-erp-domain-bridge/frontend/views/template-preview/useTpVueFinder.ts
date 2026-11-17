@@ -37,7 +37,7 @@ function modifiedAt(tpl: TplRecord): number {
 
 export function useTpVueFinder(tp: TemplatePreviewCtx) {
   const list = computed<TplRecord[]>(() => {
-    const scoped = tp.exportScopedTemplates?.value
+    const scoped = tp.filteredTemplates?.value
     return Array.isArray(scoped) ? scoped : []
   })
 

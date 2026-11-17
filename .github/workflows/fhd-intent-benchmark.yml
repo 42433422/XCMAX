@@ -493,20 +493,22 @@ jobs:
           set -euo pipefail
           python - <<'PY'
           import json, os
+          from pathlib import Path
 
           report_path = "test_reports/task_holdout_report.json"
           assert os.path.isfile(report_path), "留出评测失败：task_holdout_report.json 不存在"
-          report = json.loads(open(report_path, encoding="utf-8").read())
-          cases = json.loads(open("tests/benchmarks/task_holdout_set.json", encoding="utf-8").read())
+          report = json.loads(Path(report_path).read_text(encoding="utf-8"))
+          cases = json.loads(Path("tests/benchmarks/task_holdout_set.json").read_text(encoding="utf-8"))
           assert int(report.get("total_tasks", 0)) == len(cases["tasks"]) > 0, (
               f"留出样本数不符 report={report.get('total_tasks')} set={len(cases['tasks'])}"
           )
           marker = {
               "mode": "task_holdout",
-              "llm_verified": True,
-              "status": "VERIFIED",
+              "llm_verified": int(report.get("model_responses", 0)) > 0,
+              "status": "VERIFIED" if int(report.get("model_responses", 0)) > 0 else "UNVERIFIED",
               "evidence": {
                   "report": report_path,
+                  "model_responses": int(report.get("model_responses", 0)),
                   "total_tasks": report["total_tasks"],
                   "trials": report.get("trials"),
                   "pass_1": report.get("pass_1"),

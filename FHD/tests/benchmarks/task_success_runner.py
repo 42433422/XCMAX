@@ -53,6 +53,14 @@ def _bootstrap_isolated_db() -> None:
     _BOOTED = True
 
 
+def _model_response_received(response: Any) -> bool:
+    choices = response.get("choices") if isinstance(response, dict) else None
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+        return False
+    message = choices[0].get("message")
+    return isinstance(message, dict) and bool(message.get("content") or message.get("tool_calls"))
+
+
 def _action_sig(node: Any) -> dict[str, str]:
     return {"tool_id": str(node.tool_id), "action": str(node.action)}
 
@@ -268,10 +276,21 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
         Base.metadata.create_all(engine, checkfirst=True)
 
     with out_path.open("w", encoding="utf-8") as out, tenant_scope(1):
-        planner = LLMWorkflowPlanner()
+        from app.application.workflow.planner_llm_gateway import request_planner_completion
+
+        responses = []
+
+        def measured_completion(**kwargs):
+            response = request_planner_completion(**kwargs)
+            if _model_response_received(response):
+                responses.append(True)
+            return response
+
+        planner = LLMWorkflowPlanner(completion=measured_completion)
         registry = get_workflow_tool_registry()
         for task in tasks:
             _reset_db()
+            responses.clear()
             expect = task.get("expect") or {}
             result: dict[str, Any] = {
                 "task_id": task["task_id"],
@@ -329,6 +348,7 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
                 result["pass"] = ok and exec_ok and db_ok and output_ok and artifact_ok
             except _TRIAL_BOUNDARY_ERRORS as exc:
                 result["failure"] = f"{type(exc).__name__}: {exc}"
+            result["model_responses"] = len(responses)
             out.write(json.dumps(result, ensure_ascii=False) + "\n")
 
 

@@ -365,14 +365,12 @@ class SQLAlchemyAgentRunRepository:
         return copy.deepcopy(run)
 
     def save_in_session(self, db: Session, run: AgentRun) -> None:
-        """Persist into the caller's transaction without committing or closing it."""
+        """Lock then persist in the caller's transaction, preserving concurrent receipts."""
         from app.application.agent_orchestrator.business_harness import (
             ensure_terminal_business_result,
         )
         from app.db.models.agent import AgentRunRecord, AgentTaskRecord
 
-        # Take ownership before reading the current payload; a SELECT followed by
-        # an unconditional write can erase a receipt saved by another connection.
         db.query(AgentRunRecord).filter(AgentRunRecord.run_id == run.run_id).update(
             {AgentRunRecord.status: AgentRunRecord.status}, synchronize_session=False
         )
@@ -385,6 +383,8 @@ class SQLAlchemyAgentRunRepository:
         preserve_catalog_run_authority(db, run, previous)
         preserve_run_evidence(run, previous)
         ensure_terminal_business_result(run)
+        from .run_terminal_metrics import record_terminal_transition
+        record_terminal_transition(run, previous, db)
         run.touch()
         payload = json.dumps(run.to_dict(), ensure_ascii=False, default=str)
         if record is None:
