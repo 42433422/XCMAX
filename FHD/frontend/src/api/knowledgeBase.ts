@@ -186,6 +186,22 @@ export interface KnowledgeStreamHandlers {
   onDone?: (data: Record<string, unknown>) => void
 }
 
+export interface KnowledgeQueryGap {
+  query?: string
+  count?: number
+  last_at?: string
+  created_at?: string
+}
+
+export interface KnowledgeQueryGapResponse {
+  success: boolean
+  dataset_id?: string
+  gaps?: KnowledgeQueryGap[]
+  total?: number
+  removed?: number
+  message?: string
+}
+
 export interface KnowledgeSynonymsResponse {
   success: boolean
   dataset_id?: string
@@ -556,6 +572,21 @@ export const knowledgeBaseApi = {
   feedbackSummary(datasetId = PERSY_KNOWLEDGE_DATASET_ID, limit = 20): Promise<KnowledgeFeedbackSummary> {
     const bounded = Math.max(1, Math.min(Number(limit) || 20, 100))
     return api.get<KnowledgeFeedbackSummary>(datasetPath(datasetId, `/feedback?limit=${bounded}`))
+  },
+
+  queryGaps(
+    datasetId = PERSY_KNOWLEDGE_DATASET_ID,
+    limit = 20,
+  ): Promise<KnowledgeQueryGapResponse> {
+    const bounded = Math.max(1, Math.min(Number(limit) || 20, 100))
+    return api.get<KnowledgeQueryGapResponse>(
+      datasetPath(datasetId, `/query-gaps?limit=${bounded}`),
+    )
+  },
+
+  async clearQueryGaps(datasetId = PERSY_KNOWLEDGE_DATASET_ID): Promise<KnowledgeQueryGapResponse> {
+    await primeCsrfCookie()
+    return api.delete<KnowledgeQueryGapResponse>(datasetPath(datasetId, '/query-gaps'))
   },
 
   synonyms(datasetId = PERSY_KNOWLEDGE_DATASET_ID): Promise<KnowledgeSynonymsResponse> {

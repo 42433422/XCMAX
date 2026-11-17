@@ -90,6 +90,7 @@ from app.application.dataset_rag.models import _rebuild_job_from_dict as _rebuil
 from app.application.dataset_rag.models import _source_synced_at as _source_synced_at
 from app.application.dataset_rag.models import _stable_document_id as _stable_document_id
 from app.application.dataset_rag.models import _utc_now_iso as _utc_now_iso
+from app.application.dataset_rag.query_gaps import DatasetQueryGapStore
 from app.application.dataset_rag.rebuild_coordinator import (
     REBUILD_TERMINAL_STATUSES as REBUILD_TERMINAL_STATUSES,
 )
@@ -143,6 +144,7 @@ from app.infrastructure.rag.dataset_vector_index import (
     DatasetVectorSQLiteIndex,
     default_dataset_vector_index_path,
 )
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_io.path_utils import get_app_data_dir, get_upload_dir
 
 
@@ -269,6 +271,7 @@ class DatasetRagApplicationService:
             chosen_path, prepare_loaded_state=self._prepare_loaded_state
         )
         self._feedback = DatasetFeedbackStore(chosen_path.with_name("dataset_feedback.json"))
+        self._query_gaps = DatasetQueryGapStore(chosen_path.with_name("dataset_query_gaps.json"))
         self._documents = DocumentLifecycle(
             repository=self._repository,
             parser=self._parser,
@@ -908,6 +911,12 @@ class DatasetRagApplicationService:
             result["original_query"] = original_query
             result["query_rewritten"] = True
             result["query"] = query
+        if result.get("success") and not result.get("chunks"):
+            self._record_query_gap(
+                dataset_id,
+                original_query if rewritten else query,
+                str(result.get("tenant_id") or tenant_id),
+            )
         return result
 
     def document_chunks(
@@ -1001,6 +1010,65 @@ class DatasetRagApplicationService:
             return denied
         summary = self._feedback.summary(dataset_id=dataset_key, tenant_id=tenant_key, limit=limit)
         return {"success": True, "dataset_id": dataset_key, **summary}
+
+    def query_gaps(
+        self,
+        dataset_id: str,
+        *,
+        tenant_id: str = "",
+        limit: int = 20,
+        access_context: DatasetAccessContext | dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Questions that retrieved no usable evidence, most frequent first."""
+        dataset_key = _clean_key(dataset_id, default="default")
+        context = _coerce_access_context(access_context)
+        tenant_key, denied = _resolve_tenant_for_access(
+            context,
+            tenant_id,
+            required_permission=DATASET_READ_PERMISSION,
+            default_without_context="",
+            dataset_id=dataset_key,
+        )
+        if denied is not None:
+            return denied
+        rows = self._query_gaps.list(dataset_id=dataset_key, tenant_id=tenant_key, limit=limit)
+        return {
+            "success": True,
+            "dataset_id": dataset_key,
+            "gaps": rows,
+            "total": len(rows),
+        }
+
+    def clear_query_gaps(
+        self,
+        dataset_id: str,
+        *,
+        tenant_id: str = "",
+        access_context: DatasetAccessContext | dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        dataset_key = _clean_key(dataset_id, default="default")
+        context = _coerce_access_context(access_context)
+        tenant_key, denied = _resolve_tenant_for_access(
+            context,
+            tenant_id,
+            required_permission=DATASET_WRITE_PERMISSION,
+            default_without_context="",
+            dataset_id=dataset_key,
+        )
+        if denied is not None:
+            return denied
+        removed = self._query_gaps.clear(dataset_id=dataset_key, tenant_id=tenant_key)
+        return {"success": True, "dataset_id": dataset_key, "removed": removed}
+
+    def _record_query_gap(self, dataset_id: str, query: str, tenant_id: str) -> None:
+        try:
+            self._query_gaps.record(
+                dataset_id=_clean_key(dataset_id, default="default"),
+                tenant_id=_clean_key(tenant_id, default="") if tenant_id else "",
+                query=query,
+            )
+        except RECOVERABLE_ERRORS:
+            pass
 
     def synonyms(
         self,
@@ -1127,9 +1195,12 @@ class DatasetRagApplicationService:
             keyword_weight=keyword_weight,
             expand_section=expand_section,
         )
-        return self._synthesize_answer(
+        synthesized = self._synthesize_answer(
             result, llm_call=llm_call, max_context_chars=max_context_chars
         )
+        if synthesized.get("no_answer") and result.get("chunks"):
+            self._record_query_gap(dataset_id, query, str(result.get("tenant_id") or tenant_id))
+        return synthesized
 
     def multi_query(
         self,

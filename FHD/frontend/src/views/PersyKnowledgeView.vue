@@ -379,6 +379,26 @@
             <template v-if="queryMessage">
               <p class="recall-empty" role="status">{{ knowledgeEmpty ? '当前知识空间暂无可检索资料。请先导入文档或文本，再发起查询。' : `${queryMessage}。本次仅检索已入库的资料与可用记忆，可调整关键词或补充资料。` }}</p>
               <button type="button" class="secondary-button" @click="openImport('file')">{{ knowledgeEmpty ? '导入第一份资料' : '补充知识资料' }}</button>
+              <button type="button" class="secondary-button" @click="toggleQueryGaps">查看知识缺口</button>
+              <div v-if="gapsOpen" class="gap-list" aria-label="知识缺口">
+                <p v-if="gapsLoading" class="recall-empty" role="status">正在加载知识缺口…</p>
+                <p v-else-if="!queryGapItems.length" class="recall-empty">暂无未命中问题</p>
+                <ol v-else>
+                  <li v-for="(gap, index) in queryGapItems" :key="`${index}-${gap.query}`">
+                    <span>{{ gap.query }}</span>
+                    <em>×{{ gap.count }}</em>
+                  </li>
+                </ol>
+                <button
+                  v-if="queryGapItems.length"
+                  type="button"
+                  class="gap-clear"
+                  @click="clearQueryGaps"
+                >
+                  清空缺口
+                </button>
+              </div>
+              <p v-if="gapMessage" role="status">{{ gapMessage }}</p>
             </template>
             <div v-else-if="answerText" class="recall-answer">{{ answerText }}</div>
             <div v-if="answerText && !queryMessage" class="recall-feedback" aria-label="答案反馈">
@@ -514,6 +534,41 @@ const synonymEditorOpen = ref(false)
 const synonymDraft = ref('')
 const synonymSaving = ref(false)
 const synonymMessage = ref('')
+const gapsOpen = ref(false)
+const gapsLoading = ref(false)
+const gapMessage = ref('')
+const queryGapItems = ref<Array<{ query?: string; count?: number }>>([])
+
+async function toggleQueryGaps(): Promise<void> {
+  gapsOpen.value = !gapsOpen.value
+  gapMessage.value = ''
+  if (!gapsOpen.value) return
+  gapsLoading.value = true
+  try {
+    const result = await knowledgeBaseApi.queryGaps(activeDatasetId.value, 20)
+    queryGapItems.value = result.success ? result.gaps || [] : []
+    if (!result.success) gapMessage.value = result.message || '知识缺口加载失败'
+  } catch {
+    gapMessage.value = '知识缺口加载失败'
+  } finally {
+    gapsLoading.value = false
+  }
+}
+
+async function clearQueryGaps(): Promise<void> {
+  gapMessage.value = ''
+  try {
+    const result = await knowledgeBaseApi.clearQueryGaps(activeDatasetId.value)
+    if (result.success) {
+      queryGapItems.value = []
+      gapMessage.value = `已清空 ${result.removed ?? 0} 条缺口`
+    } else {
+      gapMessage.value = result.message || '清空失败'
+    }
+  } catch {
+    gapMessage.value = '清空失败，请稍后重试'
+  }
+}
 
 function formatSynonyms(groups: Record<string, string[]>): string {
   return Object.entries(groups)

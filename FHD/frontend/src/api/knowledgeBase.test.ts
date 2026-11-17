@@ -192,6 +192,19 @@ describe('knowledgeBaseApi', () => {
     )
   })
 
+  it('lists and clears unanswered question gaps', async () => {
+    await knowledgeBaseApi.queryGaps('office-docking', 999)
+    await knowledgeBaseApi.clearQueryGaps('office-docking')
+
+    expect(mocks.api.get).toHaveBeenCalledWith(
+      '/api/knowledge/v1/datasets/office-docking/query-gaps?limit=100',
+    )
+    expect(mocks.primeCsrfCookie).toHaveBeenCalledTimes(1)
+    expect(mocks.api.delete).toHaveBeenCalledWith(
+      '/api/knowledge/v1/datasets/office-docking/query-gaps',
+    )
+  })
+
   it('loads and saves dataset synonyms', async () => {
     await knowledgeBaseApi.synonyms('office-docking')
     await knowledgeBaseApi.saveSynonyms('office-docking', { 退款: ['退货'] })

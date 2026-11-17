@@ -119,6 +119,22 @@ class DatasetViewRoutes:
 
         self.update_dataset_synonyms = update_dataset_synonyms
 
+        @router.get("/datasets/{dataset_id}/query-gaps")
+        def dataset_query_gaps(
+            dataset_id: str,
+            request: Request,
+            limit: int = FastAPIQuery(20, ge=1, le=100),
+        ) -> dict[str, Any]:
+            return views().query_gaps(dataset_id, request, limit=limit)
+
+        self.dataset_query_gaps = dataset_query_gaps
+
+        @router.delete("/datasets/{dataset_id}/query-gaps")
+        def clear_dataset_query_gaps(dataset_id: str, request: Request) -> dict[str, Any]:
+            return views().clear_query_gaps(dataset_id, request)
+
+        self.clear_dataset_query_gaps = clear_dataset_query_gaps
+
         @router.get("/datasets/{dataset_id}/graph")
         def dataset_graph(
             dataset_id: str, request: Request, limit: int = FastAPIQuery(80, ge=20, le=240)

@@ -23,6 +23,8 @@ const mocks = vi.hoisted(() => ({
   rebuildIndex: vi.fn(),
   synonyms: vi.fn(),
   saveSynonyms: vi.fn(),
+  queryGaps: vi.fn(),
+  clearQueryGaps: vi.fn(),
   resetGraphView: vi.fn(),
 }))
 
@@ -293,6 +295,35 @@ describe('PersyKnowledgeView', () => {
       退款: ['退货', '退钱'],
     })
     expect(wrapper.get('.ask-dock__synonym-actions').text()).toContain('已保存 2 组术语')
+  })
+
+  it('shows recorded knowledge gaps for an empty recall', async () => {
+    mocks.query.mockResolvedValueOnce({
+      success: true,
+      dataset_id: 'persy-knowledge',
+      answer: '',
+      chunks: [],
+    })
+    mocks.queryMemories.mockResolvedValue({ success: true, chunks: [] })
+    mocks.queryGaps.mockResolvedValue({
+      success: true,
+      total: 1,
+      gaps: [{ query: '报价单模板', count: 2 }],
+    })
+    mocks.clearQueryGaps.mockResolvedValue({ success: true, removed: 1 })
+    const wrapper = await mountKnowledge()
+    await wrapper.get('input[aria-label="向 Persy 提问"]').setValue('报价单模板')
+    await wrapper.get('.ask-dock').trigger('submit')
+    await flushPromises()
+
+    await clickLabel(wrapper, '.secondary-button', '查看知识缺口')
+    expect(mocks.queryGaps).toHaveBeenCalledWith('persy-knowledge', 20)
+    expect(wrapper.get('.gap-list').text()).toContain('报价单模板')
+    expect(wrapper.get('.gap-list').text()).toContain('×2')
+
+    await clickLabel(wrapper, '.gap-clear', '清空缺口')
+    expect(mocks.clearQueryGaps).toHaveBeenCalledWith('persy-knowledge')
+    expect(wrapper.find('.gap-list ol').exists()).toBe(false)
   })
 
   it('admin omniscient auto-switches to nonempty space and heals empty graph once', async () => {

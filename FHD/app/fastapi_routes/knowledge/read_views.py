@@ -117,6 +117,29 @@ class DatasetViews:
             ),
         )
 
+    def query_gaps(self, dataset_id: str, request: Request, *, limit: int = 20) -> dict[str, Any]:
+        access = self._access(request)
+        return cast(
+            "dict[str, Any]",
+            self._service().query_gaps(
+                dataset_id,
+                tenant_id=self._tenant_scope(access),
+                limit=limit,
+                access_context=access,
+            ),
+        )
+
+    def clear_query_gaps(self, dataset_id: str, request: Request) -> dict[str, Any]:
+        access = self._access(request)
+        return cast(
+            "dict[str, Any]",
+            self._service().clear_query_gaps(
+                dataset_id,
+                tenant_id=self._tenant_scope(access),
+                access_context=access,
+            ),
+        )
+
     def synonyms(self, dataset_id: str, request: Request) -> dict[str, Any]:
         return cast(
             "dict[str, Any]",

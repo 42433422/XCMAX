@@ -968,6 +968,45 @@
   cursor: pointer;
 }
 
+.gap-list {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px solid #d5e0da;
+  border-radius: 7px;
+  background: #fbfdfc;
+  color: #3d4b45;
+  font-size: 12px;
+}
+
+.gap-list ol {
+  margin: 6px 0;
+  padding-left: 18px;
+}
+
+.gap-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 3px 0;
+}
+
+.gap-list em {
+  color: #9a5a20;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.gap-clear {
+  margin-top: 4px;
+  padding: 2px 10px;
+  border: 1px solid #ccd7d2;
+  border-radius: 5px;
+  background: #ffffff;
+  color: #27352f;
+  font-size: 11px;
+  cursor: pointer;
+}
+
 .secondary-button {
   min-height: 36px;
   border: 1px solid #ccd7d2;

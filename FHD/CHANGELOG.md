@@ -1,4 +1,5 @@
 ## Unreleased
+- 知识库新增知识缺口（未命中问题）记录：查询/问答无可用证据时按数据集记录问题（相同问题合并计数、单库上限 500 条，租户隔离，独立 `dataset_query_gaps.json`）；`GET /datasets/{dataset_id}/query-gaps?limit=` 按频次查看，`DELETE` 清理（需 `dataset.write`）。前端空召回时可直接「查看知识缺口」并清空，便于补充缺失资料。
 - 知识库新增数据集术语表（同义词查询扩展）：`PUT /datasets/{dataset_id}/synonyms` 保存 `{口语词: [语料写法,…]}`（≤200 组、每组 ≤10 个、词长 ≤32），`GET` 读取；查询时若问题包含口语词，自动把语料写法追加到召回查询（仅影响召回，引用与证据覆盖率仍按原问题）。术语表随数据集快照持久化、可先配置后导入；前端问答「术语」按钮可直接编辑（每行 `退款=退货,退钱`）。
 - 知识库新增答案反馈：`POST /datasets/{dataset_id}/feedback` 记录 up/down（可带问题、答案、原因与证据来源），`GET .../feedback?limit=` 返回 up/down 数与满意度及最近记录；反馈按租户隔离、单库最多保留 2000 条，写入独立 `dataset_feedback.json` 不触碰查询快照。前端召回面板答案下新增「有帮助 / 没帮助」，每轮只提交一次。
 - 知识库前端接入跨库检索：问答设置新增「跨库」开关（存在多个知识空间时显示），开启后一次检索全部可见库并统一重排，结果面板与回答复用同一渲染；API 层新增 `multiQuery`（`POST /api/knowledge/v1/datasets/multi-query`，`dataset_ids` 去重去空）。

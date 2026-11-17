@@ -213,6 +213,7 @@
   "/api/knowledge/v1/datasets/{dataset_id}/memories/{memory_id}/confirm",
   "/api/knowledge/v1/datasets/{dataset_id}/memories/{memory_id}/reject",
   "/api/knowledge/v1/datasets/{dataset_id}/query",
+  "/api/knowledge/v1/datasets/{dataset_id}/query-gaps",
   "/api/knowledge/v1/datasets/{dataset_id}/query/stream",
   "/api/knowledge/v1/datasets/{dataset_id}/status",
   "/api/knowledge/v1/datasets/{dataset_id}/synonyms",
