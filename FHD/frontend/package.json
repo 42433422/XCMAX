@@ -76,7 +76,7 @@
     "eslint-plugin-vue": "^10.12.1",
     "fast-glob": "file:./compat-resource-glob.tgz",
     "globals": "^17.14.0",
-    "jsdom": "^24.1.0",
+    "jsdom": "^31.0.1",
     "openapi-typescript": "^7.4.4",
     "parse5": "8.1.1",
     "prettier": "^3.10.1",
