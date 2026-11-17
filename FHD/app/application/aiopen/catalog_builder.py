@@ -39,11 +39,13 @@ _DANGER_MARKERS = (
     "revoke",
     "reset",
     "impersonate",
-    "batch",
-    "bulk",
     "purge",
     "destroy",
     "rollback",
+    "batch-delete",
+    "bulk-delete",
+    "clear-all",
+    "clear_all",
 )
 
 _WRITE_METHODS = frozenset({"POST", "PUT", "PATCH"})

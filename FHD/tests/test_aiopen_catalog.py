@@ -39,8 +39,12 @@ def client(monkeypatch):
     def delete_product(product_id: str):
         return {"success": True, "product_id": product_id}
 
-    @business.post("/api/products/batch", summary="批量商品操作")
+    @business.post("/api/products/batch", summary="批量创建商品")
     def batch_products(payload: dict):
+        return {"success": True, "payload": payload}
+
+    @business.post("/api/products/batch-delete", summary="批量删除商品")
+    def batch_delete_products(payload: dict):
         return {"success": True, "payload": payload}
 
     @business.post("/api/customers", summary="Customers Create")
@@ -84,7 +88,8 @@ def test_catalog_is_generated_from_routes_with_risk_levels(client):
     assert operations["products.list"]["risk"] == "read"
     assert operations["products.create"]["risk"] == "write"
     assert operations["products.delete"]["risk"] == "danger"
-    assert operations["products.batch"]["risk"] == "danger"
+    assert operations["products.batch_delete"]["risk"] == "danger"
+    assert operations["products.batch"]["risk"] == "write"
     assert operations["products.list"]["scope"] == "read:products"
     assert operations["products.delete"]["scope"] == "danger:products"
 
@@ -110,7 +115,7 @@ def test_catalog_filters_by_risk_and_keyword(client):
     danger = client.get("/api/aiopen/catalog/operations", params={"risk": "danger"}).json()
     assert {item["operation_id"] for item in danger["items"]} == {
         "products.delete",
-        "products.batch",
+        "products.batch_delete",
     }
     keyword = client.get("/api/aiopen/catalog/operations", params={"q": "检索"}).json()
     assert "products.search" in {item["operation_id"] for item in keyword["items"]}
