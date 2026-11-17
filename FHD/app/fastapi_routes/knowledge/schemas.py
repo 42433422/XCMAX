@@ -19,6 +19,9 @@ _DATASET_UPLOAD_EXTENSIONS = frozenset(
         ".csv",
         ".json",
         ".log",
+        # 保存的网页：复用 trafilatura 提取正文（与 URL 导入同一实现）
+        ".html",
+        ".htm",
         # 图片走 RapidOCR 识别（需安装 pdf-ocr 可选依赖）
         ".png",
         ".jpg",

@@ -181,3 +181,46 @@ def test_ingest_route_maps_fetch_failure_to_400(monkeypatch: pytest.MonkeyPatch)
     assert response.status_code == 400
     assert "内网" in response.json()["detail"]
     assert calls == []
+
+
+def test_extract_html_text_returns_body_and_title(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(sys.modules, "trafilatura", _fake_trafilatura("本地正文", "本地标题"))
+    text, title = web_fetch.extract_html_text("<html><body>本地正文</body></html>")
+    assert (text, title) == ("本地正文", "本地标题")
+
+
+def test_extract_html_text_rejects_empty_body(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(sys.modules, "trafilatura", _fake_trafilatura(None))
+    with pytest.raises(ValueError, match="未提取到正文"):
+        web_fetch.extract_html_text("<html></html>")
+
+
+def test_html_file_ingest_uses_trafilatura_parser(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.application.dataset_rag_app_service import DatasetRagApplicationService
+
+    page = tmp_path / "saved.html"
+    page.write_text("<html><body>保存的网页正文</body></html>", encoding="utf-8")
+    monkeypatch.setitem(sys.modules, "trafilatura", _fake_trafilatura("保存的网页正文", "保存页"))
+    service = DatasetRagApplicationService(
+        storage_path=tmp_path / "datasets.json",
+        embedder=lambda text: [float(len(text)), 1.0],
+        allowed_roots=[tmp_path],
+        rebuild_workers_enabled=False,
+        vector_index_backend_name="none",
+    )
+
+    result = service.ingest_document(
+        dataset_id="kb", source="saved.html", file_path=str(page), tenant_id="t1"
+    )
+
+    assert result["success"] is True
+    assert result["document"]["parser"] == "trafilatura_html"
+    assert result["document"]["metadata"]["title"] == "保存页"
+
+
+def test_upload_extensions_include_saved_pages() -> None:
+    from app.fastapi_routes.knowledge.schemas import _DATASET_UPLOAD_EXTENSIONS
+
+    assert {".html", ".htm"} <= _DATASET_UPLOAD_EXTENSIONS

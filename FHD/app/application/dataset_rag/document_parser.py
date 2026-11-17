@@ -89,6 +89,15 @@ class DocumentParser:
         if suffix in {".txt", ".md", ".csv", ".json", ".log"}:
             text, encoding = self._read_text_with_fallback(path)
             return (text, "text_file", {"extension": suffix, "encoding": encoding})
+        if suffix in {".html", ".htm"}:
+            from app.application.document_parsing.web_fetch import extract_html_text
+
+            raw, encoding = self._read_text_with_fallback(path)
+            text, title = extract_html_text(raw)
+            metadata: dict[str, Any] = {"extension": suffix, "encoding": encoding}
+            if title:
+                metadata["title"] = title
+            return (text, "trafilatura_html", metadata)
         if suffix in {".png", ".jpg", ".jpeg", ".webp", ".bmp"}:
             from app.application.document_parsing.ocr import ocr_image_text
 
@@ -140,11 +149,7 @@ class DocumentParser:
                             tables.append(f"[table {table_count + 1}]\n{markdown}")
                             table_count += 1
                 # 扫描件兜底：文本层为空时才 OCR，避免文本版 PDF 付多余算力
-                if (
-                    not page_text
-                    and len(ocr_pages) < max_ocr_pages
-                    and _pdf_ocr_enabled()
-                ):
+                if not page_text and len(ocr_pages) < max_ocr_pages and _pdf_ocr_enabled():
                     from app.application.document_parsing.ocr import ocr_page_text
 
                     page_text = ocr_page_text(page).strip()

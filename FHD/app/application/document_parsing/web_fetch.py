@@ -66,6 +66,27 @@ def _read_limited(response) -> bytes:
     return b"".join(chunks)
 
 
+def extract_html_text(html: str, *, url: str = "") -> tuple[str, str]:
+    """从 HTML 提取 (正文, 标题)；无正文抛 ValueError。URL 导入与本地 HTML 共用。"""
+    try:
+        import trafilatura
+
+        text = trafilatura.extract(
+            html,
+            url=url,
+            include_comments=False,
+            include_tables=True,
+            favor_recall=True,
+        )
+        meta = trafilatura.extract_metadata(html, default_url=url)
+        title = str(getattr(meta, "title", "") or "")
+    except BOUNDARY_ERRORS as exc:
+        raise ValueError(f"网页正文提取失败：{exc}") from exc
+    if not text or not text.strip():
+        raise ValueError("网页未提取到正文，可能是动态渲染页面")
+    return text.strip(), title
+
+
 def fetch_url_text(url: str) -> FetchedPage:
     """抓取网页并提取正文；失败抛 ValueError（调用方转 400）。"""
     import requests
@@ -94,20 +115,5 @@ def fetch_url_text(url: str) -> FetchedPage:
     else:
         raise ValueError("重定向次数过多")
 
-    try:
-        import trafilatura
-
-        text = trafilatura.extract(
-            html,
-            url=current,
-            include_comments=False,
-            include_tables=True,
-            favor_recall=True,
-        )
-        meta = trafilatura.extract_metadata(html, default_url=current)
-        title = str(getattr(meta, "title", "") or "")
-    except BOUNDARY_ERRORS as exc:
-        raise ValueError(f"网页正文提取失败：{exc}") from exc
-    if not text or not text.strip():
-        raise ValueError("网页未提取到正文，可能是动态渲染页面")
-    return FetchedPage(url=current, title=title, text=text.strip())
+    text, title = extract_html_text(html, url=current)
+    return FetchedPage(url=current, title=title, text=text)
