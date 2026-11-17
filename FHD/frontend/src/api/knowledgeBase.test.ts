@@ -113,6 +113,32 @@ describe('knowledgeBaseApi', () => {
       version: '',
       metadata_filter: {},
       rerank: true,
+      retrieval_mode: 'hybrid',
+      expand_section: false,
+      mmr_lambda: 0,
+    })
+  })
+
+  it('maps retrieval mode, section expansion and mmr lambda', async () => {
+    await knowledgeBaseApi.query({
+      datasetId: 'office-docking',
+      query: '退款流程',
+      retrievalMode: 'keyword',
+      expandSection: true,
+      mmrLambda: 2,
+    })
+
+    expect(mocks.api.post).toHaveBeenCalledWith('/api/knowledge/v1/datasets/office-docking/query', {
+      query: '退款流程',
+      top_k: 5,
+      include_answer: true,
+      tenant_id: '',
+      version: '',
+      metadata_filter: {},
+      rerank: false,
+      retrieval_mode: 'keyword',
+      expand_section: true,
+      mmr_lambda: 1,
     })
   })
 

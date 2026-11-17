@@ -16,6 +16,8 @@ const mocks = vi.hoisted(() => ({
   graph: vi.fn(),
   memories: vi.fn(),
   rebuildIndex: vi.fn(),
+  query: vi.fn(),
+  queryMemories: vi.fn(),
 }))
 
 vi.mock('@/api/knowledgeBase', () => ({
@@ -125,6 +127,41 @@ describe('Persy knowledge composables', () => {
     expect(recall.recallState.value).toBeNull()
     expect(recall.answerText.value).toBe('')
     expect(recall.resultChunks.value).toEqual([])
+  })
+
+  it('passes retrieval options to the knowledge query', async () => {
+    mocks.query.mockResolvedValue({
+      success: true,
+      dataset_id: 'office-docking',
+      chunks: [],
+      answer: '',
+      answer_grounded: true,
+    })
+    mocks.queryMemories.mockResolvedValue({ success: true, memories: [] })
+    const recall = usePersyRecallQuery({
+      activeDatasetId: ref('office-docking'),
+      adminOmniscient: computed(() => false),
+      omniscientQueryEnabled: ref(false),
+      refreshMemories: vi.fn().mockResolvedValue(undefined),
+      refreshGraph: vi.fn().mockResolvedValue(undefined),
+      onRecallCommitted: vi.fn(),
+    })
+    recall.queryText.value = '退款流程'
+    recall.retrievalMode.value = 'keyword'
+    recall.expandSection.value = true
+    recall.mmrLambda.value = 0.5
+
+    await recall.queryKnowledge()
+
+    expect(mocks.query).toHaveBeenCalledWith(
+      expect.objectContaining({
+        datasetId: 'office-docking',
+        query: '退款流程',
+        retrievalMode: 'keyword',
+        expandSection: true,
+        mmrLambda: 0.5,
+      }),
+    )
   })
 
   it('applies a dataset and rebuilds its active index', async () => {

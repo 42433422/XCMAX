@@ -170,6 +170,9 @@ export interface KnowledgeBaseQueryPayload {
   version?: string
   metadataFilter?: Record<string, unknown>
   rerank?: boolean
+  retrievalMode?: 'hybrid' | 'vector' | 'keyword'
+  expandSection?: boolean
+  mmrLambda?: number
 }
 
 export interface KnowledgeBaseQueryResponse {
@@ -394,6 +397,9 @@ export const knowledgeBaseApi = {
       version: payload.version || '',
       metadata_filter: payload.metadataFilter || {},
       rerank: payload.rerank === true,
+      retrieval_mode: payload.retrievalMode || 'hybrid',
+      expand_section: payload.expandSection === true,
+      mmr_lambda: Math.max(0, Math.min(Number(payload.mmrLambda) || 0, 1)),
     })
   },
 

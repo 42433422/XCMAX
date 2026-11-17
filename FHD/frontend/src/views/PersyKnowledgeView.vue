@@ -190,6 +190,28 @@
           <button type="submit" :disabled="querying" aria-label="发送问题" title="发送问题">
             <i :class="querying ? 'fa fa-circle-o-notch fa-spin' : 'fa fa-arrow-right'" aria-hidden="true"></i>
           </button>
+          <div class="ask-dock__options" aria-label="检索设置">
+            <label>
+              <span>模式</span>
+              <select v-model="retrievalMode" aria-label="检索模式">
+                <option value="hybrid">混合</option>
+                <option value="vector">语义</option>
+                <option value="keyword">关键词</option>
+              </select>
+            </label>
+            <label class="ask-dock__toggle">
+              <input v-model="expandSection" type="checkbox" />
+              <span>整章扩展</span>
+            </label>
+            <label>
+              <span>多样性</span>
+              <select v-model.number="mmrLambda" aria-label="MMR 多样性">
+                <option :value="0">关</option>
+                <option :value="0.5">中</option>
+                <option :value="0.7">强</option>
+              </select>
+            </label>
+          </div>
           <p v-if="querying" class="ask-dock__status" role="status">正在检索知识，请稍候…</p>
           <p v-else-if="queryError" class="ask-dock__error" role="alert">{{ queryError }}</p>
         </form>
@@ -459,7 +481,20 @@ const recall = usePersyRecallQuery({
     viewMode.value = 'graph'
   },
 })
-const { queryText, querying, queryMessage, queryError, answerText, lastQuery, resultChunks, recallState, queryKnowledge } = recall
+const {
+  queryText,
+  querying,
+  retrievalMode,
+  expandSection,
+  mmrLambda,
+  queryMessage,
+  queryError,
+  answerText,
+  lastQuery,
+  resultChunks,
+  recallState,
+  queryKnowledge,
+} = recall
 const { grounding, answerGrounded } = recall
 
 const sourceChunkState = usePersySourceChunks({ activeDatasetId })

@@ -16,6 +16,9 @@ export function usePersyRecallQuery(options: {
   const queryText = ref('')
   const topK = ref(6)
   const rerank = ref(true)
+  const retrievalMode = ref<'hybrid' | 'vector' | 'keyword'>('hybrid')
+  const expandSection = ref(false)
+  const mmrLambda = ref(0)
   const querying = ref(false)
   const queryMessage = ref('')
   const queryError = ref('')
@@ -73,6 +76,9 @@ export function usePersyRecallQuery(options: {
                 query,
                 topK: boundedTopK,
                 rerank: rerank.value,
+                retrievalMode: retrievalMode.value,
+                expandSection: expandSection.value,
+                mmrLambda: mmrLambda.value,
               })
       } catch (error) {
         knowledgeFailure = error
@@ -133,6 +139,9 @@ export function usePersyRecallQuery(options: {
     queryText,
     topK,
     rerank,
+    retrievalMode,
+    expandSection,
+    mmrLambda,
     querying,
     queryMessage,
     queryError,

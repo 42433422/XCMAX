@@ -861,6 +861,35 @@
   background: #edf5f0;
 }
 
+.ask-dock__options {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 0 10px 8px;
+  color: #4b5a53;
+  font-size: 11px;
+}
+
+.ask-dock__options label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ask-dock__options select {
+  border: 1px solid #ccd7d2;
+  border-radius: 5px;
+  padding: 1px 4px;
+  background: #ffffff;
+  color: #17211d;
+  font-size: 11px;
+}
+
+.ask-dock__toggle input {
+  width: auto;
+}
+
 .secondary-button {
   min-height: 36px;
   border: 1px solid #ccd7d2;
