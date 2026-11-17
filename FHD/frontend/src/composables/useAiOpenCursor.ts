@@ -15,6 +15,11 @@ const STORAGE_KEY = 'xcagi_aiopen_remote_control'
 const MAX_LOGS = 100
 const SNAPSHOT_MAX_ELEMENTS = 120
 const CURSOR_MOVE_MS = 480
+const WAIT_POLL_MS = 100
+const WAIT_MAX_MS = 15000
+const SCREENSHOT_MAX_WIDTH = 1280
+// Agent 操作时不应触发虚拟光标动画的指令
+const SILENT_ACTIONS = new Set(['snapshot', 'wait', 'verify', 'screenshot'])
 
 export const aiopenCursorEnabled = ref(false)
 export const aiopenCursorConnected = ref(false)
@@ -88,7 +93,130 @@ function elementText(el: Element): string {
   return raw.replace(/\s+/g, ' ').trim().slice(0, 80)
 }
 
-function findElement(selector?: string, text?: string): HTMLElement | null {
+// ---------------------------------------------------------------------------
+// 可访问性快照：ref 注册表
+// ---------------------------------------------------------------------------
+
+/** 最近一次快照分配的 ref → 元素；下一次快照重建。 */
+let refRegistry = new Map<string, HTMLElement>()
+let refSeq = 0
+
+function resetRefs() {
+  refRegistry = new Map()
+  refSeq = 0
+}
+
+function assignRef(el: HTMLElement): string {
+  const ref = `e${++refSeq}`
+  refRegistry.set(ref, el)
+  return ref
+}
+
+const ROLE_BY_TAG: Record<string, string> = {
+  a: 'link',
+  button: 'button',
+  select: 'combobox',
+  textarea: 'textbox',
+  h1: 'heading',
+  h2: 'heading',
+  h3: 'heading',
+  h4: 'heading',
+  h5: 'heading',
+  h6: 'heading',
+  img: 'image',
+  nav: 'navigation',
+  main: 'main',
+  header: 'banner',
+  footer: 'contentinfo',
+  ul: 'list',
+  ol: 'list',
+  li: 'listitem',
+  table: 'table',
+  tr: 'row',
+  td: 'cell',
+  th: 'columnheader',
+  dialog: 'dialog',
+  form: 'form',
+  input: 'textbox',
+}
+
+const INPUT_ROLES: Record<string, string> = {
+  button: 'button',
+  submit: 'button',
+  reset: 'button',
+  checkbox: 'checkbox',
+  radio: 'radio',
+  range: 'slider',
+  number: 'spinbutton',
+  search: 'searchbox',
+  email: 'textbox',
+  password: 'textbox',
+  tel: 'textbox',
+  url: 'textbox',
+  file: 'button',
+  color: 'button',
+  date: 'textbox',
+  time: 'textbox',
+  datetime: 'textbox',
+}
+
+function implicitRole(el: Element): string {
+  const explicit = el.getAttribute('role')
+  if (explicit) return explicit.trim()
+  const tag = el.tagName.toLowerCase()
+  if (tag === 'input') {
+    const type = (el.getAttribute('type') || 'text').toLowerCase()
+    return INPUT_ROLES[type] || 'textbox'
+  }
+  if (tag === 'a' && !el.hasAttribute('href')) return ''
+  return ROLE_BY_TAG[tag] || tag
+}
+
+function accessibleName(el: Element): string {
+  const aria = el.getAttribute('aria-label')
+  if (aria && aria.trim()) return aria.replace(/\s+/g, ' ').trim().slice(0, 80)
+  const labelledBy = el.getAttribute('aria-labelledby')
+  if (labelledBy) {
+    const target = document.getElementById(labelledBy)
+    if (target) return elementText(target)
+  }
+  if (el.id) {
+    const label = document.querySelector(`label[for="${CSS.escape(el.id)}"]`)
+    if (label) return elementText(label)
+  }
+  const wrapping = el.closest('label')
+  if (wrapping) {
+    const text = elementText(wrapping)
+    if (text) return text
+  }
+  return elementText(el)
+}
+
+function nodeState(el: Element): Record<string, unknown> {
+  const state: Record<string, unknown> = {}
+  const input = el as HTMLInputElement
+  if (input.disabled || el.getAttribute('aria-disabled') === 'true') state.disabled = true
+  if (input.readOnly) state.readonly = true
+  if (input.required || el.getAttribute('aria-required') === 'true') state.required = true
+  const ariaChecked = el.getAttribute('aria-checked')
+  if (ariaChecked) state.checked = ariaChecked === 'true'
+  else if (input.type === 'checkbox' || input.type === 'radio') state.checked = Boolean(input.checked)
+  const ariaExpanded = el.getAttribute('aria-expanded')
+  if (ariaExpanded !== null) state.expanded = ariaExpanded === 'true'
+  const ariaSelected = el.getAttribute('aria-selected')
+  if (ariaSelected !== null) state.selected = ariaSelected === 'true'
+  if (typeof input.value === 'string' && input.value && el.tagName === 'INPUT' && input.type !== 'file') {
+    state.value = input.value.slice(0, 80)
+  }
+  return state
+}
+
+function findElement(ref?: string, selector?: string, text?: string): HTMLElement | null {
+  if (ref) {
+    const el = refRegistry.get(ref.trim())
+    // 页面重渲染后节点会脱离文档，直接视为失效，提示重新快照
+    if (el && el.isConnected) return el
+  }
   if (selector) {
     try {
       const el = document.querySelector(selector)
@@ -105,6 +233,15 @@ function findElement(selector?: string, text?: string): HTMLElement | null {
     }
   }
   return null
+}
+
+function describeTarget(params: Record<string, unknown>): string {
+  const ref = String(params.ref || '').trim()
+  const selector = String(params.selector || '').trim()
+  const text = String(params.text || '').trim()
+  return [ref && `ref=${ref}`, selector && `selector=${selector}`, text && `text=${text}`]
+    .filter(Boolean)
+    .join(' ') || '(空)'
 }
 
 // ---------------------------------------------------------------------------
@@ -124,15 +261,27 @@ async function animateCursorTo(x: number, y: number, label: string): Promise<voi
 }
 
 async function execSnapshot(): Promise<Record<string, unknown>> {
-  const selectorList = 'button, a[href], input, textarea, select, [role="button"], [role="tab"], [role="menuitem"]'
+  const selectorList =
+    'button, a[href], input, textarea, select, [role="button"], [role="link"], [role="tab"], [role="menuitem"], [role="option"], [role="switch"], [role="checkbox"], [contenteditable="true"]'
+  resetRefs()
   const elements: Array<Record<string, unknown>> = []
+  let truncated = false
   for (const el of Array.from(document.querySelectorAll(selectorList))) {
     if (!isVisible(el)) continue
+    if (elements.length >= SNAPSHOT_MAX_ELEMENTS) {
+      truncated = true
+      break
+    }
     const rect = (el as HTMLElement).getBoundingClientRect()
     elements.push({
+      ref: assignRef(el as HTMLElement),
+      role: implicitRole(el),
+      name: accessibleName(el),
+      // selector 保留为兼容回退；ref 在同一次快照内稳定
       selector: buildSelector(el),
       tag: el.tagName.toLowerCase(),
       text: elementText(el),
+      state: nodeState(el),
       rect: {
         x: Math.round(rect.x),
         y: Math.round(rect.y),
@@ -140,7 +289,6 @@ async function execSnapshot(): Promise<Record<string, unknown>> {
         h: Math.round(rect.height),
       },
     })
-    if (elements.length >= SNAPSHOT_MAX_ELEMENTS) break
   }
   return {
     success: true,
@@ -148,6 +296,7 @@ async function execSnapshot(): Promise<Record<string, unknown>> {
     route: routerRef?.currentRoute.value.fullPath || '',
     title: document.title,
     viewport: { width: window.innerWidth, height: window.innerHeight },
+    truncated,
     elements,
   }
 }
@@ -162,10 +311,16 @@ async function execNavigate(params: Record<string, unknown>): Promise<Record<str
 }
 
 async function execClick(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const ref = params.ref ? String(params.ref) : undefined
   const selector = params.selector ? String(params.selector) : undefined
   const text = params.text ? String(params.text) : undefined
-  const el = findElement(selector, text)
-  if (!el) return { success: false, message: `未找到元素：${selector || text || '(空)'}` }
+  const el = findElement(ref, selector, text)
+  if (!el) {
+    return {
+      success: false,
+      message: `未找到元素：${describeTarget(params)}${ref ? '（ref 可能已失效，请重新 ui_snapshot）' : ''}`,
+    }
+  }
   el.scrollIntoView({ block: 'center', behavior: 'smooth' })
   await sleep(260)
   const rect = el.getBoundingClientRect()
@@ -174,15 +329,17 @@ async function execClick(params: Record<string, unknown>): Promise<Record<string
   await sleep(180)
   el.click()
   cursorClicking.value = false
-  pushLog(`click → ${elementText(el) || selector || text}`)
-  return { success: true, clicked: elementText(el) || selector || text }
+  const label = accessibleName(el) || selector || text || ref || ''
+  pushLog(`click → ${label}`)
+  return { success: true, clicked: label }
 }
 
 async function execType(params: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const selector = String(params.selector || '')
+  const ref = params.ref ? String(params.ref) : undefined
+  const selector = params.selector ? String(params.selector) : undefined
   const text = String(params.text ?? '')
-  const el = findElement(selector)
-  if (!el) return { success: false, message: `未找到输入框：${selector}` }
+  const el = findElement(ref, selector)
+  if (!el) return { success: false, message: `未找到输入框：${describeTarget(params)}` }
   el.scrollIntoView({ block: 'center', behavior: 'smooth' })
   await sleep(260)
   const rect = el.getBoundingClientRect()
@@ -199,24 +356,288 @@ async function execType(params: Record<string, unknown>): Promise<Record<string,
   }
   input.dispatchEvent(new Event('input', { bubbles: true }))
   input.dispatchEvent(new Event('change', { bubbles: true }))
-  pushLog(`type → ${selector}（${text.slice(0, 30)}）`)
-  return { success: true, selector, typed: text }
+  const target = ref || selector || ''
+  pushLog(`type → ${target}（${text.slice(0, 30)}）`)
+  return { success: true, ref: ref || undefined, selector, typed: text }
 }
 
 async function execScroll(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const ref = params.ref ? String(params.ref) : ''
   const selector = params.selector ? String(params.selector) : ''
-  if (selector) {
-    const el = findElement(selector)
-    if (!el) return { success: false, message: `未找到元素：${selector}` }
+  if (ref || selector) {
+    const el = findElement(ref, selector)
+    if (!el) return { success: false, message: `未找到元素：${describeTarget(params)}` }
     el.scrollIntoView({ block: 'center', behavior: 'smooth' })
     await sleep(320)
-    return { success: true, scrolled_to: selector }
+    return { success: true, scrolled_to: ref || selector }
   }
   const deltaY = Number(params.delta_y || 0) || 300
   const scroller = document.querySelector('.route-view-shell, .main-content, main') || document.scrollingElement
   if (scroller) scroller.scrollBy({ top: deltaY, behavior: 'smooth' })
   await sleep(320)
   return { success: true, delta_y: deltaY }
+}
+
+async function execSelect(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const el = findElement(
+    params.ref ? String(params.ref) : undefined,
+    params.selector ? String(params.selector) : undefined,
+  )
+  if (!el) return { success: false, message: `未找到下拉控件：${describeTarget(params)}` }
+  const values = Array.isArray(params.values)
+    ? params.values.map((item) => String(item))
+    : params.value !== undefined
+      ? [String(params.value)]
+      : []
+  const label = params.label ? String(params.label) : ''
+
+  if (el instanceof HTMLSelectElement) {
+    const wanted = new Set(values)
+    let matched = 0
+    for (const option of Array.from(el.options)) {
+      const hit = wanted.has(option.value) || wanted.has(option.text.trim()) || (!!label && option.text.trim() === label)
+      option.selected = hit
+      if (hit) matched += 1
+    }
+    if (!matched) {
+      return { success: false, message: `下拉中没有匹配项：${[...values, label].filter(Boolean).join(', ')}` }
+    }
+    el.dispatchEvent(new Event('input', { bubbles: true }))
+    el.dispatchEvent(new Event('change', { bubbles: true }))
+    return { success: true, selected: Array.from(el.selectedOptions).map((option) => option.text.trim()) }
+  }
+
+  // 自定义下拉：先点开，再按可见文本匹配选项
+  const needle = (label || values[0] || '').trim()
+  if (!needle) return { success: false, message: '自定义下拉需要 label 或 value 作为选项文本' }
+  el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  await sleep(200)
+  const rect = el.getBoundingClientRect()
+  await animateCursorTo(rect.x + rect.width / 2, rect.y + rect.height / 2, '选择')
+  el.click()
+  await sleep(320)
+  const candidates = document.querySelectorAll(
+    '[role="option"], [role="menuitem"], .el-select-dropdown__item, .ant-select-item-option, li'
+  )
+  for (const option of Array.from(candidates)) {
+    if (!isVisible(option)) continue
+    const text = elementText(option)
+    if (text === needle || text.includes(needle)) {
+      ;(option as HTMLElement).click()
+      pushLog(`select → ${needle}`)
+      return { success: true, selected: text }
+    }
+  }
+  return { success: false, message: `展开后未找到选项：${needle}` }
+}
+
+function decodeBase64(source: string): ArrayBuffer {
+  const binary = atob(source.includes(',') ? source.split(',', 2)[1] : source)
+  const bytes = new Uint8Array(binary.length)
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index)
+  return bytes.buffer as ArrayBuffer
+}
+
+async function execUpload(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+  let el = findElement(
+    params.ref ? String(params.ref) : undefined,
+    params.selector ? String(params.selector) : undefined,
+  )
+  if (!el) return { success: false, message: `未找到上传控件：${describeTarget(params)}` }
+  if (!(el instanceof HTMLInputElement) || el.type !== 'file') {
+    const nested = el.querySelector('input[type="file"]')
+    if (nested instanceof HTMLInputElement) el = nested
+  }
+  if (!(el instanceof HTMLInputElement) || el.type !== 'file') {
+    return { success: false, message: '目标不是 file input（可传容器 ref，内部含 input[type=file]）' }
+  }
+  const specs = Array.isArray(params.files) ? params.files : []
+  const transfer = new DataTransfer()
+  for (const raw of specs) {
+    const spec = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+    const name = String(spec.name || '').trim()
+    if (!name) continue
+    const type = String(spec.type || '')
+    let blob: Blob | null = null
+    if (spec.url) {
+      try {
+        const response = await fetch(String(spec.url), { credentials: 'same-origin' })
+        if (!response.ok) return { success: false, message: `读取文件失败：${spec.url} → HTTP ${response.status}` }
+        blob = await response.blob()
+      } catch (err) {
+        return { success: false, message: `读取文件失败：${spec.url}（${String((err as Error)?.message || err)}）` }
+      }
+    } else if (spec.base64) {
+      blob = new Blob([decodeBase64(String(spec.base64))], { type: type || 'application/octet-stream' })
+    } else if (spec.text !== undefined) {
+      blob = new Blob([String(spec.text)], { type: type || 'text/plain' })
+    }
+    if (!blob) continue
+    transfer.items.add(new File([blob], name, { type: type || blob.type || 'application/octet-stream' }))
+  }
+  if (transfer.files.length === 0) {
+    return { success: false, message: 'files 为空或缺少可用内容（url / base64 / text）' }
+  }
+  el.files = transfer.files
+  el.dispatchEvent(new Event('input', { bubbles: true }))
+  el.dispatchEvent(new Event('change', { bubbles: true }))
+  const names = Array.from(transfer.files).map((file) => file.name)
+  pushLog(`upload → ${names.join(', ')}`)
+  return { success: true, uploaded: names }
+}
+
+function waitConditions(params: Record<string, unknown>): Array<{ unmet: string | null; detail: string }> {
+  const checks: Array<{ unmet: string | null; detail: string }> = []
+  const ref = params.ref ? String(params.ref) : ''
+  const selector = params.selector ? String(params.selector) : ''
+  if (ref || selector) {
+    const el = findElement(ref || undefined, selector || undefined)
+    checks.push({
+      unmet: el && isVisible(el) ? null : `元素出现（${describeTarget(params)}）`,
+      detail: `元素出现（${describeTarget(params)}）`,
+    })
+  }
+  const text = params.text ? String(params.text) : ''
+  if (text) {
+    const hit = (document.body.innerText || '').includes(text)
+    checks.push({ unmet: hit ? null : `页面文本「${text}」`, detail: `页面文本「${text}」` })
+  }
+  const urlContains = params.url_contains ? String(params.url_contains) : ''
+  if (urlContains) {
+    const hit = window.location.href.includes(urlContains)
+    checks.push({ unmet: hit ? null : `URL 包含「${urlContains}」`, detail: `URL 包含「${urlContains}」` })
+  }
+  const goneRef = params.gone_ref ? String(params.gone_ref) : ''
+  const goneSelector = params.gone_selector ? String(params.gone_selector) : ''
+  if (goneRef || goneSelector) {
+    const el = findElement(goneRef || undefined, goneSelector || undefined)
+    const gone = !el || !isVisible(el)
+    const detail = `元素消失（${goneRef ? `ref=${goneRef}` : `selector=${goneSelector}`}）`
+    checks.push({ unmet: gone ? null : detail, detail })
+  }
+  return checks
+}
+
+async function execWait(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const timeout = Math.min(Math.max(Number(params.timeout_ms) || 5000, 300), WAIT_MAX_MS)
+  const startedAt = Date.now()
+  const probes = waitConditions(params)
+  if (probes.length === 0) {
+    return { success: false, message: '至少提供一个等待条件（ref/selector/text/url_contains/gone_*）' }
+  }
+  for (;;) {
+    const unmet = probes.map((probe) => probe.unmet).filter((item): item is string => Boolean(item))
+    if (unmet.length === 0) {
+      return {
+        success: true,
+        waited_ms: Date.now() - startedAt,
+        matched: probes.map((probe) => probe.detail).join('；'),
+      }
+    }
+    if (Date.now() - startedAt >= timeout) {
+      return {
+        success: false,
+        waited_ms: Date.now() - startedAt,
+        message: `等待超时（${timeout}ms），未满足：${unmet.join('；')}`,
+      }
+    }
+    await sleep(WAIT_POLL_MS)
+  }
+}
+
+async function execVerify(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const checks: Array<Record<string, unknown>> = []
+  const ref = params.ref ? String(params.ref) : ''
+  const selector = params.selector ? String(params.selector) : ''
+  const target = ref || selector
+  let element: HTMLElement | null = null
+  if (target) {
+    element = findElement(ref || undefined, selector || undefined)
+    checks.push({
+      check: '元素存在',
+      ok: Boolean(element) && isVisible(element as HTMLElement),
+      detail: describeTarget(params),
+    })
+  }
+  if (params.value !== undefined) {
+    const expected = String(params.value)
+    const actual = element
+      ? String((element as HTMLInputElement).value ?? element.getAttribute('value') ?? elementText(element))
+      : ''
+    checks.push({
+      check: '控件值',
+      ok: Boolean(element) && actual === expected,
+      detail: `期望「${expected}」，实际「${actual}」`,
+    })
+  }
+  if (params.text) {
+    const needle = String(params.text)
+    checks.push({
+      check: '页面文本',
+      ok: (document.body.innerText || '').includes(needle),
+      detail: `应包含「${needle}」`,
+    })
+  }
+  if (params.url_contains) {
+    const needle = String(params.url_contains)
+    checks.push({
+      check: 'URL',
+      ok: window.location.href.includes(needle),
+      detail: `应包含「${needle}」，当前 ${window.location.href}`,
+    })
+  }
+  if (checks.length === 0) {
+    return { success: false, message: '至少提供一个校验条件（ref/selector/value/text/url_contains）' }
+  }
+  return { success: checks.every((check) => check.ok), checks }
+}
+
+async function execScreenshot(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const ref = params.ref ? String(params.ref) : ''
+  const selector = params.selector ? String(params.selector) : ''
+  const targetEl = ref || selector ? findElement(ref || undefined, selector || undefined) : document.body
+  if (!targetEl) return { success: false, message: `未找到截图区域：${describeTarget(params)}` }
+  const maxWidth = Math.min(Math.max(Number(params.max_width) || SCREENSHOT_MAX_WIDTH, 320), 4096)
+  const rect = targetEl.getBoundingClientRect()
+  const naturalWidth = Math.max(
+    Math.round(rect.width || targetEl.scrollWidth || 0),
+    document.documentElement.clientWidth
+  )
+  const pixelRatio = Math.min(1, maxWidth / Math.max(naturalWidth, 1))
+  const cursorWasVisible = cursorVisible.value
+  // 截图前隐藏虚拟光标，避免把操控光标画进画面
+  cursorVisible.value = false
+  await sleep(80)
+  try {
+    const { toPng } = await import('html-to-image')
+    const dataUrl = await toPng(targetEl as HTMLElement, {
+      pixelRatio,
+      cacheBust: true,
+      backgroundColor: window.getComputedStyle(document.body).backgroundColor || '#ffffff',
+      width: Math.round(rect.width || targetEl.scrollWidth || document.documentElement.clientWidth),
+      height: Math.round(rect.height || targetEl.scrollHeight || document.documentElement.clientHeight),
+    })
+    const size = await new Promise<{ width: number; height: number }>((resolve, reject) => {
+      const image = new Image()
+      image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight })
+      image.onerror = () => reject(new Error('截图解码失败'))
+      image.src = dataUrl
+    })
+    const bytes = Math.round((dataUrl.length - dataUrl.indexOf(',') - 1) * 0.75)
+    pushLog(`screenshot → ${size.width}×${size.height}`)
+    return {
+      success: true,
+      data_url: dataUrl,
+      width: size.width,
+      height: size.height,
+      bytes,
+      target: ref || selector || 'viewport',
+    }
+  } catch (err) {
+    return { success: false, message: `截图失败：${String((err as Error)?.message || err)}` }
+  } finally {
+    cursorVisible.value = cursorWasVisible
+  }
 }
 
 async function executeCommand(action: string, params: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -229,6 +650,16 @@ async function executeCommand(action: string, params: Record<string, unknown>): 
       return execClick(params)
     case 'type':
       return execType(params)
+    case 'select':
+      return execSelect(params)
+    case 'upload':
+      return execUpload(params)
+    case 'wait':
+      return execWait(params)
+    case 'verify':
+      return execVerify(params)
+    case 'screenshot':
+      return execScreenshot(params)
     case 'scroll':
       return execScroll(params)
     default:
@@ -276,8 +707,8 @@ function connect() {
       } catch (err) {
         result = { success: false, message: String((err as Error)?.message || err) }
       }
-      if (action !== 'snapshot') {
-        // 快照不收光标；操作类指令完成后短暂保留再淡出
+      if (!SILENT_ACTIONS.has(action)) {
+        // 快照/等待/校验/截图不收光标；操作类指令完成后短暂保留再淡出
         window.setTimeout(() => {
           cursorVisible.value = false
           cursorActionLabel.value = ''

@@ -84,19 +84,53 @@ def format_tool_result_text(tool_name: str, result: dict[str, Any]) -> str:
         lines = [
             f"页面：{title or '(无标题)'}",
             f"URL：{url or '(未知)'}",
-            f"可交互元素 {len(elements or [])} 个：",
+            f"可交互节点 {len(elements or [])} 个（优先用 ref）：",
         ]
-        for el in elements[:40]:
+        for el in elements[:60]:
             if not isinstance(el, dict):
                 continue
-            sel = el.get("selector") or el.get("ref") or "?"
-            text = str(el.get("text") or el.get("label") or "")[:60]
+            ref = el.get("ref") or el.get("selector") or "?"
+            label = str(el.get("name") or el.get("text") or el.get("label") or "")[:60]
             role = el.get("role") or el.get("tag") or ""
-            lines.append(f"  · [{role}] {text!r} → {sel}")
-        if len(elements or []) > 40:
-            lines.append(f"  … 另有 {len(elements or []) - 40} 个元素")
+            state = el.get("state") if isinstance(el.get("state"), dict) else {}
+            marks = "".join(
+                f" {key}" for key in ("disabled", "checked", "expanded", "selected") if state.get(key)
+            )
+            lines.append(f"  · [{role}]{marks} {label!r} → {ref}")
+        if len(elements or []) > 60:
+            lines.append(f"  … 另有 {len(elements or []) - 60} 个节点")
+        if result.get("truncated"):
+            lines.append("  （节点过多已截断，可用 ui_navigate 缩小范围后重新快照）")
         return "\n".join(lines)
-    if name in {"ui_click", "ui_type", "ui_navigate", "ui_scroll"}:
+    if name == "ui_verify":
+        checks = result.get("checks") if isinstance(result.get("checks"), list) else []
+        lines = [f"页面校验：{'通过' if ok else '未通过'}"]
+        for check in checks:
+            if not isinstance(check, dict):
+                continue
+            mark = "✓" if check.get("ok") else "✗"
+            lines.append(f"  {mark} {check.get('check')} — {check.get('detail', '')}")
+        return "\n".join(lines)
+    if name == "ui_wait":
+        if not ok:
+            return f"等待未满足：{result.get('message', '')}"
+        return f"等待完成（{result.get('waited_ms', 0)}ms）：{result.get('matched', '')}"
+    if name == "ui_screenshot":
+        if not ok:
+            return f"截图失败：{result.get('message', '')}"
+        return (
+            f"截图已生成：{result.get('width')}×{result.get('height')}"
+            f"，约 {result.get('bytes', 0)} 字节"
+            f"，参考：{result.get('target', 'viewport')}"
+        )
+    if name in {
+        "ui_click",
+        "ui_type",
+        "ui_select",
+        "ui_upload",
+        "ui_navigate",
+        "ui_scroll",
+    }:
         if not ok:
             return f"{name} 失败：{result.get('message', '')}"
         detail = result.get("message") or result.get("detail") or "操作已执行"

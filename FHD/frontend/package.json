@@ -47,6 +47,7 @@
     "echarts": "^6.1.0",
     "element-plus": "^2.14.8",
     "font-awesome": "^4.7.0",
+    "html-to-image": "^1.11.11",
     "mermaid": "^12.3.0",
     "onnxruntime-web": "^1.31.1",
     "pinia": "^4.1.0",

@@ -396,6 +396,47 @@ class TestFormatToolResultText:
         text = format_tool_result_text("ui_snapshot", result)
         assert "页面快照失败" in text
 
+    def test_ui_snapshot_uses_ref_and_state(self):
+        result = {
+            "success": True,
+            "elements": [
+                {"ref": "e1", "role": "textbox", "name": "手机号", "state": {"disabled": True}},
+            ],
+            "truncated": True,
+        }
+        text = format_tool_result_text("ui_snapshot", result)
+        assert "e1" in text
+        assert "手机号" in text
+        assert "disabled" in text
+        assert "截断" in text
+
+    def test_ui_verify_lists_checks(self):
+        result = {
+            "success": False,
+            "checks": [
+                {"check": "元素存在", "ok": True, "detail": "ref=e1"},
+                {"check": "控件值", "ok": False, "detail": "期望「A」，实际「B」"},
+            ],
+        }
+        text = format_tool_result_text("ui_verify", result)
+        assert "未通过" in text
+        assert "✓ 元素存在" in text
+        assert "✗ 控件值" in text
+
+    def test_ui_wait_and_screenshot(self):
+        assert "等待完成" in format_tool_result_text(
+            "ui_wait", {"success": True, "waited_ms": 320, "matched": "元素出现"}
+        )
+        assert "等待超时" in format_tool_result_text(
+            "ui_wait", {"success": False, "message": "等待超时（5000ms）"}
+        )
+        shot = format_tool_result_text(
+            "ui_screenshot",
+            {"success": True, "width": 800, "height": 600, "bytes": 2048, "target": "ref=e1"},
+        )
+        assert "800×600" in shot
+        assert "data_url" not in shot
+
     def test_ui_action_success(self):
         result = {"success": True, "message": "clicked"}
         text = format_tool_result_text("ui_click", result)
@@ -751,15 +792,48 @@ class TestConstants:
         assert MCP_DEFAULT_PROTOCOL_VERSION in MCP_PROTOCOL_VERSIONS
 
     def test_tool_definitions_count(self):
-        assert len(TOOL_DEFINITIONS) == 10
-        assert any(t["name"] == "capability_loop" for t in TOOL_DEFINITIONS)
+        names = {tool["name"] for tool in TOOL_DEFINITIONS}
+        assert len(names) == len(TOOL_DEFINITIONS)
+        assert {
+            "api_catalog",
+            "api_call",
+            "knowledge_search",
+            "operation_describe",
+            "operation_call",
+            "chat",
+            "capability_loop",
+            "ui_sessions",
+            "ui_snapshot",
+            "ui_navigate",
+            "ui_click",
+            "ui_type",
+            "ui_select",
+            "ui_upload",
+            "ui_wait",
+            "ui_verify",
+            "ui_screenshot",
+            "ui_scroll",
+        } <= names
 
     def test_ui_actions_mapping(self):
-        assert "ui_snapshot" in _UI_ACTIONS
-        assert "ui_navigate" in _UI_ACTIONS
-        assert "ui_click" in _UI_ACTIONS
-        assert "ui_type" in _UI_ACTIONS
-        assert "ui_scroll" in _UI_ACTIONS
+        assert _UI_ACTIONS == {
+            "ui_snapshot": "snapshot",
+            "ui_navigate": "navigate",
+            "ui_click": "click",
+            "ui_type": "type",
+            "ui_select": "select",
+            "ui_upload": "upload",
+            "ui_wait": "wait",
+            "ui_verify": "verify",
+            "ui_screenshot": "screenshot",
+            "ui_scroll": "scroll",
+        }
+
+    def test_ui_tools_accept_ref(self):
+        by_name = {tool["name"]: tool for tool in TOOL_DEFINITIONS}
+        for name in ("ui_click", "ui_type", "ui_select", "ui_upload", "ui_scroll"):
+            assert "ref" in by_name[name]["inputSchema"]["properties"]
+        assert "ref" in by_name["ui_snapshot"]["description"]
 
     def test_aiopen_state_structure(self):
         assert "whitelist" in AIOPEN_STATE

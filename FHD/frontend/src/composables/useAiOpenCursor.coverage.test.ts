@@ -426,6 +426,119 @@ describe('useAiOpenCursor - coverage ramp', () => {
       expect(sent.result.elements.length).toBeLessThanOrEqual(120)
     })
 
+    async function runCommand(
+      id: string,
+      action: string,
+      params: Record<string, unknown>
+    ): Promise<Record<string, any>> {
+      const ws = lastWs()!
+      ws.onmessage!({
+        data: JSON.stringify({ type: 'command', id, action, params }),
+      })
+      await vi.runAllTimersAsync()
+      const sent = ws.send.mock.calls
+        .map((call) => {
+          try {
+            return JSON.parse(call[0] as string)
+          } catch {
+            return null
+          }
+        })
+        .find((message) => message && message.type === 'result' && message.id === id)
+      return sent?.result || {}
+    }
+
+    it('snapshot assigns stable refs with role, name and state', async () => {
+      const btn = document.createElement('button')
+      btn.id = 'ref-btn'
+      btn.setAttribute('aria-label', '保存')
+      btn.disabled = true
+      document.body.appendChild(btn)
+      makeVisible(btn)
+
+      setAiOpenCursorEnabled(true)
+      const result = await runCommand('ref1', 'snapshot', {})
+      expect(result.success).toBe(true)
+      expect(result.elements[0].ref).toBe('e1')
+      expect(result.elements[0].role).toBe('button')
+      expect(result.elements[0].name).toBe('保存')
+      expect(result.elements[0].selector).toBe('#ref-btn')
+      expect(result.elements[0].state.disabled).toBe(true)
+    })
+
+    it('click resolves element by ref from the latest snapshot', async () => {
+      const btn = document.createElement('button')
+      setElementText(btn, '提交')
+      document.body.appendChild(btn)
+      makeVisible(btn)
+
+      setAiOpenCursorEnabled(true)
+      await runCommand('ref2', 'snapshot', {})
+      const result = await runCommand('ref3', 'click', { ref: 'e1' })
+      expect(result.success).toBe(true)
+      expect(btn.click).toHaveBeenCalled()
+    })
+
+    it('click with stale ref reports failure', async () => {
+      setAiOpenCursorEnabled(true)
+      const result = await runCommand('ref4', 'click', { ref: 'e99' })
+      expect(result.success).toBe(false)
+      expect(result.message).toContain('ref')
+    })
+
+    it('verify returns per-check conclusions', async () => {
+      const input = document.createElement('input')
+      input.id = 'verify-input'
+      input.value = 'abc'
+      document.body.appendChild(input)
+      makeVisible(input)
+
+      setAiOpenCursorEnabled(true)
+      await runCommand('ref5', 'snapshot', {})
+      const result = await runCommand('ref6', 'verify', { ref: 'e1', value: 'abc' })
+      expect(result.success).toBe(true)
+      expect(result.checks.length).toBe(2)
+      expect(result.checks.every((check: any) => check.ok)).toBe(true)
+    })
+
+    it('select picks native option by value', async () => {
+      const select = document.createElement('select')
+      select.id = 'verify-select'
+      for (const value of ['a', 'b']) {
+        const option = document.createElement('option')
+        option.value = value
+        option.text = value.toUpperCase()
+        select.appendChild(option)
+      }
+      document.body.appendChild(select)
+      makeVisible(select)
+
+      setAiOpenCursorEnabled(true)
+      await runCommand('ref7', 'snapshot', {})
+      const result = await runCommand('ref8', 'select', { ref: 'e1', value: 'b' })
+      expect(result.success).toBe(true)
+      expect(select.value).toBe('b')
+    })
+
+    it('wait returns immediately when condition already holds', async () => {
+      const node = document.createElement('div')
+      node.id = 'wait-target'
+      document.body.appendChild(node)
+      makeVisible(node)
+
+      setAiOpenCursorEnabled(true)
+      const result = await runCommand('ref9', 'wait', { selector: '#wait-target', timeout_ms: 500 })
+      expect(result.success).toBe(true)
+      expect(result.waited_ms).toBeGreaterThanOrEqual(0)
+    })
+
+    it('wait without conditions returns argument error', async () => {
+      setAiOpenCursorEnabled(true)
+      const result = await runCommand('ref10', 'wait', { timeout_ms: 500 })
+      expect(result.success).toBe(false)
+      expect(result.message).toContain('等待条件')
+    })
+
     it('navigate with empty path returns error', async () => {
       const router = {
         currentRoute: { value: { fullPath: '/' } },

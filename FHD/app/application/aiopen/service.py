@@ -28,6 +28,9 @@ from .definitions import (
     _API_CALL_METHODS as _API_CALL_METHODS,
 )
 from .definitions import (
+    _UI_ACTION_TIMEOUTS as _UI_ACTION_TIMEOUTS,
+)
+from .definitions import (
     _UI_ACTIONS as _UI_ACTIONS,
 )
 from .definitions import (
@@ -180,6 +183,7 @@ _dispatcher = ToolDispatcher(
     lambda: aiopen_cursor_hub,
     lambda: _UI_ACTIONS,
     lambda: _UI_TOOL_TIMEOUT_SECONDS,
+    lambda: _UI_ACTION_TIMEOUTS,
 )
 _openclaw = OpenClawProxy(
     lambda: _state.openclaw_base,

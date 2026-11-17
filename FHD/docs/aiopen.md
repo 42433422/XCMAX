@@ -113,10 +113,15 @@ curl -X POST http://localhost:5000/api/aiopen/invoke \
 | `chat` | 发消息给 XCAGI AI 助手（unified_chat，source=`aiopen`） |
 | `capability_loop` | 全调用闭环自检：catalog → 抽样 api_call → chat → ui_sessions |
 | `ui_sessions` | 列出在线虚拟光标 screen 会话 |
-| `ui_snapshot` | 页面快照：URL / 标题 / 可交互元素（selector / 文本 / 位置） |
+| `ui_snapshot` | 可访问性树快照：每个节点分配稳定 `ref`，附角色 / 可访问名称 / 状态 / 位置；`selector` 仅作兼容回退 |
 | `ui_navigate` | 前端路由跳转（router.push） |
-| `ui_click` | 虚拟光标移动并真实点击（selector 或按可见文本匹配） |
+| `ui_click` | 虚拟光标移动并真实点击（`ref` 优先，兼容 selector / 可见文本） |
 | `ui_type` | 输入框写值（原型 setter + input/change 事件，兼容 v-model） |
+| `ui_select` | 下拉选择：原生 select 按 value/文本选中，自定义下拉点开后按 label 匹配 |
+| `ui_upload` | 向 file input 投放文件（同源 url / base64 / 纯文本），派发 input/change |
+| `ui_wait` | 轮询等待元素出现/消失、页面文本或 URL 变化（最长 15s） |
+| `ui_verify` | 校验元素存在、控件值、页面文本与 URL，逐项返回结论 |
+| `ui_screenshot` | DOM 重绘截图（html-to-image，MIT），返回 data_url 与尺寸；不含跨域 iframe/视频 |
 | `ui_scroll` | 滚动页面或将元素滚动到可见区域 |
 
 面板还可：`POST /api/aiopen/whitelist/seed` 一键开启侧栏全业务白名单；
@@ -150,7 +155,12 @@ MCP 只读资源：
 
 审批流程：服务端设置 `AIOPEN_APPROVAL_FLOW_KEY`（默认 `aiopen_danger_operation`），
 并先在审批中心创建同名 `flow_key` 且配置启用节点；未配置时危险操作一律拒绝。
+幂等创建用 `python scripts/dev/ensure_aiopen_approval_flow.py --approver-id <用户ID>`
+（缺省自动取 admin/superadmin；找不到审批人时退出码 2，不会创建无人可批的空流程）。
 审批单记录 operation、参数指纹与申请人，执行时校验三者一致并写入消费时间防重放。
+
+生产前置顺序：先确保审批流程与启用节点存在，再设置 `AIOPEN_ENABLE_WRITES=1` 放行写操作；
+两者都完成前，写操作返回 `WRITE_DISABLED`，危险操作返回 `APPROVAL_FLOW_NOT_CONFIGURED`。
 
 `params` 传路径与查询参数（键名见 operation 卡片），`body` 传 JSON 请求体。
 `api_call` 命中目录条目时套用同一套读写/危险闸门，未命中目录的自定义路径保持原白名单行为。
@@ -168,8 +178,15 @@ MCP 只读资源：
 3. 页面右下角出现「AI 操控通道已连接」徽标，外部 Agent 即可经 `ui_*` 工具操作
 4. 执行 `ui_click` / `ui_type` 时页面会出现蓝色虚拟光标动画与「AI 点击/输入」标签
 
-典型流程：`ui_snapshot` 取元素 → `ui_click {"selector": "..."} ` 或
-`ui_click {"text": "员工商店"}` → 再次 `ui_snapshot` 验证结果。
+典型流程：`ui_snapshot` 取节点 `ref` → `ui_click {"ref": "e3"}` 或
+`ui_click {"text": "员工商店"}` → `ui_wait` 等待结果 → `ui_verify` 校验 → 必要时
+`ui_screenshot` 留证。`ref` 只在下一次 `ui_snapshot` 前有效，页面重渲染后会自动失效，
+需重新快照；找不到时会明确提示。输入后可用 `ui_verify {"ref": "e5", "value": "..."}`
+确认写值生效。
+
+`ui_select` 对原生 `select` 直接按 `value`/文本选中；对 Element Plus / Ant 等自定义
+下拉，会真实点开再按 `label` 匹配可见选项。`ui_upload` 只接受同源 `url`、`base64`
+或 `text` 内容，由浏览器合成 `File` 后写入 `input.files`。
 
 ### 指令协议（screen 端 WS）
 
@@ -185,7 +202,8 @@ MCP 只读资源：
 { "type": "result", "id": "<hex>", "result": { "success": true, "clicked": "保存" } }
 ```
 
-`action ∈ snapshot | navigate | click | type | scroll`；回执超时 10s。
+`action ∈ snapshot | navigate | click | type | select | upload | wait | verify | screenshot | scroll`；
+普通操作回执超时 10s，`wait`/`upload` 20s，`screenshot` 30s。
 
 ## 安全模型
 
