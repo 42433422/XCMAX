@@ -64,15 +64,23 @@ class ArtifactStore:
         owner = _segment(self.scope.owner_user_id) or "_unowned"
         return self.base / "tenants" / tenant / "owners" / owner
 
-    def _record_path(self, artifact_id: str) -> Path | None:
-        if not _ID_PATTERN.match(artifact_id):
+    def _path_for(self, artifact_id: str, suffix: str) -> Path | None:
+        """拼接并确认目标仍在作用域目录内，避免路径穿越。"""
+        if not isinstance(artifact_id, str) or not _ID_PATTERN.fullmatch(artifact_id):
             return None
-        return self.root / f"{artifact_id}.json"
+        root = self.root.resolve()
+        candidate = (root / f"{artifact_id}{suffix}").resolve()
+        try:
+            candidate.relative_to(root)
+        except ValueError:
+            return None
+        return candidate
+
+    def _record_path(self, artifact_id: str) -> Path | None:
+        return self._path_for(artifact_id, ".json")
 
     def _rows_path(self, artifact_id: str) -> Path | None:
-        if not _ID_PATTERN.match(artifact_id):
-            return None
-        return self.root / f"{artifact_id}.rows.json"
+        return self._path_for(artifact_id, ".rows.json")
 
     def _load_index(self) -> dict[str, dict[str, Any]]:
         try:
