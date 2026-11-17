@@ -214,6 +214,12 @@ class DatasetQueryRequest(BaseModel):
         "", max_length=80, description="document version number, vN, latest, or empty"
     )
     metadata_filter: dict[str, Any] = Field(default_factory=dict)
+    min_relevance: float = Field(
+        0.0,
+        ge=0.0,
+        le=1.0,
+        description="evidence coverage floor; 0 uses the server default (XCAGI_KB_MIN_RELEVANCE)",
+    )
     rerank: bool = Field(False, description="apply cross-encoder reranking with safe fallback")
     context_window: int = Field(
         0,

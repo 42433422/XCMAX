@@ -373,6 +373,22 @@ QUERIES: list[dict[str, object]] = [
 ]
 
 
+OOD_QUERIES: list[str] = [
+    "今天天气怎么样",
+    "红烧肉怎么做",
+    "推荐一部电影",
+    "股票明天会涨吗",
+    "帮我写一首诗",
+    "量子力学是什么",
+    "北京到上海多远",
+    "如何减肥",
+    "世界杯冠军是谁",
+    "怎么学吉他",
+    "我想订一张机票",
+    "明天会下雨吗",
+]
+
+
 def _build_service(storage: Path):
     from app.application.dataset_rag_app_service import DatasetRagApplicationService
 
@@ -402,6 +418,7 @@ def run(*, rerank: bool, multi: bool = False) -> dict[str, float]:
             )
         hits_at = {1: 0, 3: 0, 5: 0}
         reciprocal = 0.0
+        grounded = 0
         for item in QUERIES:
             if multi:
                 result = service.multi_query(
@@ -430,6 +447,8 @@ def run(*, rerank: bool, multi: bool = False) -> dict[str, float]:
                 if rank and rank <= k:
                     hits_at[k] += 1
             reciprocal += 1.0 / rank if rank else 0.0
+            if result.get("answer_grounded"):
+                grounded += 1
         total = len(QUERIES)
         metrics = {
             "embedding_mode": mode,
@@ -439,8 +458,46 @@ def run(*, rerank: bool, multi: bool = False) -> dict[str, float]:
             "recall@3": round(hits_at[3] / total, 4),
             "recall@5": round(hits_at[5] / total, 4),
             "mrr": round(reciprocal / total, 4),
+            "answer_grounded_rate": round(grounded / total, 4),
         }
         return metrics
+
+
+def run_ood(*, multi: bool = False) -> dict[str, float]:
+    """Out-of-domain queries must be refused instead of answered from noise."""
+    from app.infrastructure.llm.embedding_service import get_default_embedding_service
+
+    svc = get_default_embedding_service()
+    mode = svc.mode if svc else "disabled"
+    dataset_ids = ["eval-0", "eval-1", "eval-2"] if multi else ["eval"]
+    with tempfile.TemporaryDirectory(prefix="kb-ood-") as tmp:
+        service = _build_service(Path(tmp) / "datasets")
+        for index, doc in enumerate(DOCS):
+            service.ingest_document(
+                dataset_id=dataset_ids[index % len(dataset_ids)] if multi else "eval",
+                document_id=doc["id"],
+                source=doc["id"],
+                text=doc["text"],
+                chunk_strategy="fixed",
+                chunk_size=200,
+                chunk_overlap=20,
+            )
+        answered = 0
+        for query in OOD_QUERIES:
+            if multi:
+                result = service.multi_answer(dataset_ids=dataset_ids, query=query, top_k=5)
+            else:
+                result = service.answer(dataset_id="eval", query=query, top_k=5)
+            if result.get("answer_grounded") is not False:
+                answered += 1
+        total = len(OOD_QUERIES)
+        return {
+            "embedding_mode": mode,
+            "datasets": len(dataset_ids),
+            "ood_queries": total,
+            "ood_answered": answered,
+            "ood_refused_rate": round((total - answered) / total, 4),
+        }
 
 
 def main() -> int:
@@ -449,13 +506,14 @@ def main() -> int:
     parser.add_argument(
         "--multi", action="store_true", help="把文档拆到 3 个知识库并用 multi-query 融合检索"
     )
+    parser.add_argument("--ood", action="store_true", help="只跑域外问题，检查是否被低置信拒答")
     parser.add_argument("--json", action="store_true", help="只输出 JSON")
     args = parser.parse_args()
-    metrics = run(rerank=args.rerank, multi=args.multi)
+    metrics = run_ood(multi=args.multi) if args.ood else run(rerank=args.rerank, multi=args.multi)
     if args.json:
         print(json.dumps(metrics, ensure_ascii=False))
     else:
-        print(f"知识库检索评测（{metrics['queries']} 条中文查询，{metrics['datasets']} 个知识库）")
+        print(f"知识库检索评测（{metrics['datasets']} 个知识库）")
         for key, value in metrics.items():
             print(f"  {key}: {value}")
     return 0

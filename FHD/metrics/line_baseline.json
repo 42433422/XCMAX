@@ -1,5 +1,5 @@
 {
-  "lines": 2468597,
+  "lines": 2468937,
   "updated": "2026-11-18",
-  "note": "知识库外部来源刷新：refresh_document + 来源坐标记录 + 路由与 7 条测试（未变化不建新版本）"
+  "note": "知识库低置信拒答：grounding 判定 + min_relevance 参数/环境默认 + 跨库复用 + 6 条测试 + 评测 --ood"
 }

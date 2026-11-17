@@ -230,6 +230,7 @@ class DocumentRoutes:
                     "rerank": req.rerank,
                     "context_window": req.context_window,
                     "history": req.history,
+                    "min_relevance": req.min_relevance,
                 },
             )
 
@@ -252,6 +253,7 @@ class DocumentRoutes:
                     "rerank": req.rerank,
                     "context_window": req.context_window,
                     "history": req.history,
+                    "min_relevance": req.min_relevance,
                 },
             )
 

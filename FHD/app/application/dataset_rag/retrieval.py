@@ -30,6 +30,8 @@ from app.application.dataset_rag.retrieval_policy import (
     _filter_chunks,
     _rerank_chunks,
     _semantic_rerank_chunks,
+    evidence_grounding,
+    resolve_min_relevance,
 )
 from app.application.dataset_rag.vector_index import VectorIndexService
 from app.infrastructure.rag import RetrievedChunk
@@ -156,6 +158,7 @@ class DatasetRetrieval:
         access_context: DatasetAccessContext | dict[str, Any] | None = None,
         include_sheet_context: bool = False,
         context_window: int = 0,
+        min_relevance: float | None = None,
     ) -> dict[str, Any]:
         dataset_key = _clean_key(dataset_id, default="default")
         tenant_key, denied = _resolve_tenant_for_access(
@@ -225,6 +228,8 @@ class DatasetRetrieval:
                 "chunks": [],
                 "citations": [],
                 "answer": "",
+                "grounding": 0.0,
+                "answer_grounded": False,
                 "tenant_id": tenant_key,
                 "version": str(version or ""),
                 "vector_backend_used": used_vector_backend,
@@ -286,6 +291,11 @@ class DatasetRetrieval:
             "vector_backend_used": used_vector_backend,
             "index": index_snapshot,
         }
+        grounding = evidence_grounding(query_text, top)
+        threshold = resolve_min_relevance(min_relevance)
+        result["grounding"] = round(grounding, 4)
+        result["min_relevance"] = round(threshold, 4)
+        result["answer_grounded"] = grounding >= threshold
         if include_sheet_context:
             result["sheet_contexts"] = _named_sheet_context(query_text, top, scope_chunks)
         return result

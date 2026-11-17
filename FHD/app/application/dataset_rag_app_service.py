@@ -110,6 +110,12 @@ from app.application.dataset_rag.retrieval_policy import _rerank_chunks as _rera
 from app.application.dataset_rag.retrieval_policy import (
     _tokenize_for_rerank as _tokenize_for_rerank,
 )
+from app.application.dataset_rag.retrieval_policy import (
+    evidence_grounding as evidence_grounding,
+)
+from app.application.dataset_rag.retrieval_policy import (
+    resolve_min_relevance as resolve_min_relevance,
+)
 from app.application.dataset_rag.status import DatasetStatus
 from app.application.dataset_rag.vector_index import VectorIndexService
 from app.application.dataset_rag.vector_index import _embedding_metadata as _embedding_metadata
@@ -665,6 +671,7 @@ class DatasetRagApplicationService:
         include_sheet_context: bool = False,
         context_window: int = 0,
         history: list[dict[str, Any]] | None = None,
+        min_relevance: float | None = None,
     ) -> dict[str, Any]:
         original_query = query
         rewritten = ""
@@ -685,6 +692,7 @@ class DatasetRagApplicationService:
             access_context=access_context,
             include_sheet_context=include_sheet_context,
             context_window=context_window,
+            min_relevance=min_relevance,
         )
         if rewritten:
             result["original_query"] = original_query
@@ -805,6 +813,7 @@ class DatasetRagApplicationService:
         rerank: bool = False,
         access_context: DatasetAccessContext | dict[str, Any] | None = None,
         history: list[dict[str, Any]] | None = None,
+        min_relevance: float | None = None,
     ) -> dict[str, Any]:
         result = self.query(
             dataset_id=dataset_id,
@@ -817,6 +826,7 @@ class DatasetRagApplicationService:
             access_context=access_context,
             context_window=1,
             history=history,
+            min_relevance=min_relevance,
         )
         return self._synthesize_answer(result, llm_call=llm_call)
 
@@ -833,6 +843,7 @@ class DatasetRagApplicationService:
         access_context: DatasetAccessContext | dict[str, Any] | None = None,
         context_window: int = 0,
         history: list[dict[str, Any]] | None = None,
+        min_relevance: float | None = None,
     ) -> dict[str, Any]:
         """Query several datasets and rank their pooled candidates on one scale.
 
@@ -900,13 +911,19 @@ class DatasetRagApplicationService:
                         "metadata": {**metadata, "_dataset_id": key},
                     }
                 )
+        fused = self._pool_retrieve(pooled, query, finals, rerank=rerank)
+        grounding = evidence_grounding(query, [_dict_to_retrieved_chunk(row) for row in fused])
+        threshold = resolve_min_relevance(min_relevance)
         payload: dict[str, Any] = {
             "success": bool(results),
             "dataset_ids": keys,
             "query": query,
-            "chunks": self._pool_retrieve(pooled, query, finals, rerank=rerank),
+            "chunks": fused,
             "citations": [],
             "answer": "",
+            "grounding": round(grounding, 4),
+            "min_relevance": round(threshold, 4),
+            "answer_grounded": grounding >= threshold,
             "tenant_id": str(results[0][1].get("tenant_id") if results else ""),
             "version": str(version or ""),
             "datasets": [
@@ -987,6 +1004,7 @@ class DatasetRagApplicationService:
         rerank: bool = False,
         access_context: DatasetAccessContext | dict[str, Any] | None = None,
         history: list[dict[str, Any]] | None = None,
+        min_relevance: float | None = None,
     ) -> dict[str, Any]:
         result = self.multi_query(
             dataset_ids=dataset_ids,
@@ -999,16 +1017,25 @@ class DatasetRagApplicationService:
             access_context=access_context,
             context_window=1,
             history=history,
+            min_relevance=min_relevance,
         )
         return self._synthesize_answer(result, llm_call=llm_call)
 
     def _synthesize_answer(
         self, result: dict[str, Any], *, llm_call: Callable[[str, str], str] | None = None
     ) -> dict[str, Any]:
-        if not result.get("success") or not result.get("chunks"):
+        if not result.get("success"):
             result.setdefault("answer", "")
             result.setdefault("citations", [])
             result.setdefault("raw", "")
+            return result
+        if not result.get("chunks") or result.get("answer_grounded") is False:
+            # 没有候选或证据覆盖率低于门槛时明确拒答，避免模型用无关片段编造答案。
+            result["answer"] = "知识库中没有找到与该问题足够相关的内容，请补充资料或换个问法。"
+            result["citations"] = []
+            result["raw"] = ""
+            result["no_answer"] = True
+            result.setdefault("answer_grounded", False)
             return result
         retrieved = [_dict_to_retrieved_chunk(row) for row in result["chunks"]]
         prompt_chunks: list[RetrievedChunk] = []

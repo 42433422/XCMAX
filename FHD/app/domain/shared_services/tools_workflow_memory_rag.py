@@ -46,6 +46,15 @@ def _registered_router_dataset_rag(
         except (TypeError, ValueError):
             return default
 
+    def as_float(value: Any, default: float) -> float:
+        if value in (None, ""):
+            return default
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return default
+        return max(0.0, min(number, 1.0))
+
     def as_dict(value: Any) -> dict[str, Any]:
         return dict(value) if isinstance(value, dict) else {}
 
@@ -129,6 +138,7 @@ def _registered_router_dataset_rag(
         include_answer = as_bool(params.get("include_answer"), default=True)
         raw_history = params.get("history")
         history = raw_history if isinstance(raw_history, list) else []
+        min_relevance = as_float(params.get("min_relevance"), 0.0)
         if include_answer:
             result = service.answer(
                 dataset_id=dataset_id,
@@ -140,6 +150,7 @@ def _registered_router_dataset_rag(
                 rerank=rerank,
                 access_context=read_context,
                 history=history,
+                min_relevance=min_relevance,
             )
         else:
             result = service.query(
@@ -153,6 +164,7 @@ def _registered_router_dataset_rag(
                 access_context=read_context,
                 context_window=as_int(params.get("context_window"), 0),
                 history=history,
+                min_relevance=min_relevance,
             )
         return finalize(
             result, dataset_id=dataset_id, query=query, chunks=[], citations=[], answer=""
@@ -178,6 +190,7 @@ def _registered_router_dataset_rag(
             "rerank": as_bool(params.get("rerank"), default=False),
             "access_context": access_context(DATASET_READ_PERMISSION),
             "history": history,
+            "min_relevance": as_float(params.get("min_relevance"), 0.0),
         }
         if as_bool(params.get("include_answer"), default=True):
             result = service.multi_answer(**shared)
@@ -191,7 +204,10 @@ def _registered_router_dataset_rag(
     if action == "refresh_document":
         document_id = str(params.get("document_id") or "").strip()
         if not document_id:
-            return {"success": False, "message": "dataset_rag.refresh_document 缺少 document_id 参数"}
+            return {
+                "success": False,
+                "message": "dataset_rag.refresh_document 缺少 document_id 参数",
+            }
         result = service.refresh_document(
             dataset_id=dataset_id,
             document_id=document_id,

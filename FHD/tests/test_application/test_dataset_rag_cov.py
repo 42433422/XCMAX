@@ -593,7 +593,9 @@ class TestAnswer:
     def test_answer_no_chunks_returns_empty(self, tmp_path):
         svc = _make_svc(tmp_path)
         r = svc.answer(dataset_id="empty-ds", query="anything")
-        assert r.get("answer") == ""
+        # 空知识库不再返回空串，而是明确拒答（低置信无答案）。
+        assert r.get("no_answer") is True
+        assert "没有找到" in r.get("answer", "")
 
     def test_answer_with_llm_call(self, tmp_path):
         svc = _make_svc(tmp_path)

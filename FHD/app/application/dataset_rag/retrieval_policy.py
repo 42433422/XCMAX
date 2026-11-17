@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import re
 from typing import Any
 
 from app.application.dataset_rag.models import _clean_key
@@ -146,6 +148,75 @@ def _semantic_rerank_chunks(
 def _tokenize_for_rerank(text: str) -> list[str]:
     cleaned = "".join(ch.lower() if ch.isalnum() else " " for ch in text)
     return [part for part in cleaned.split() if part]
+
+
+# 问题里常见的疑问/虚词二元组，出现在任何文档里都不代表「命中证据」。
+_QUERY_TERM_STOPWORDS = frozenset(
+    {
+        "怎么",
+        "什么",
+        "如何",
+        "可以",
+        "需要",
+        "多少",
+        "哪些",
+        "是否",
+        "一下",
+        "我们",
+        "你们",
+        "这个",
+        "那个",
+        "还是",
+        "或者",
+        "以及",
+        "请问",
+        "帮我",
+        "推荐",
+    }
+)
+_DEFAULT_MIN_RELEVANCE = 0.1
+
+
+def _query_terms(text: str) -> set[str]:
+    """中文按二元组、英文数字按词的查询词集合（去掉疑问/虚词）。"""
+    terms: set[str] = set()
+    for part in re.findall(r"[\u4e00-\u9fff]+|[a-z0-9]+", str(text or "").lower()):
+        if re.match(r"[\u4e00-\u9fff]", part):
+            if len(part) == 1:
+                continue
+            terms.update(part[index : index + 2] for index in range(len(part) - 1))
+        else:
+            terms.add(part)
+    return terms - _QUERY_TERM_STOPWORDS
+
+
+def _query_coverage(query: str, text: str) -> float:
+    """查询词在候选文本中的覆盖率；无可用查询词时按 1.0 处理。"""
+    query_terms = _query_terms(query)
+    if not query_terms:
+        return 1.0
+    return len(query_terms & _query_terms(text)) / len(query_terms)
+
+
+def evidence_grounding(query: str, chunks: list[RetrievedChunk]) -> float:
+    """取前若干候选里最高的查询覆盖率，作为「有证据」的保守判据。"""
+    candidates = chunks[:5]
+    return max((_query_coverage(query, chunk.text) for chunk in candidates), default=0.0)
+
+
+def default_min_relevance() -> float:
+    raw = os.environ.get("XCAGI_KB_MIN_RELEVANCE", "").strip()
+    try:
+        value = float(raw)
+    except ValueError:
+        return _DEFAULT_MIN_RELEVANCE
+    return max(0.0, min(value, 1.0))
+
+
+def resolve_min_relevance(requested: float | None) -> float:
+    if requested is None or requested <= 0:
+        return default_min_relevance()
+    return max(0.0, min(float(requested), 1.0))
 
 
 def _deterministic_answer(query: str, chunks: list[RetrievedChunk]) -> str:
