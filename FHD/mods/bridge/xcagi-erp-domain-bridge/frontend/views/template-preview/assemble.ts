@@ -3,7 +3,6 @@ import { useRoute } from 'vue-router'
 import { useTpTemplateList } from './useTpTemplateList'
 import { useTpCreateFlow } from './useTpCreateFlow'
 import { useTpTemplateActions } from './useTpTemplateActions'
-import { useTpGridTool } from './useTpGridTool'
 import { buildScopeOptions, buildScopeTabs, getRequiredTermsByScope, getScopeIconClass } from './tpScopeRules'
 import {
   canDeleteTemplate,
@@ -41,7 +40,6 @@ export function assembleTemplatePreview() {
     templates: list.templates,
     exportScopedTemplates: list.exportScopedTemplates,
   })
-  const gridTool = useTpGridTool()
 
   const scopeTabs = computed(() => buildScopeTabs())
   const scopeOptions = computed(() => buildScopeOptions())
@@ -86,18 +84,26 @@ export function assembleTemplatePreview() {
     consumeGlobalSearchHandoff()
     window.addEventListener('xcagi:template-search', onGlobalSearchEvent)
     window.addEventListener('xcagi:templates-updated', templatesUpdated)
-    void list.refreshTemplates()
+    refreshOnEnter()
   })
 
   let active = false
-  let dirty = false
+  /** KeepAlive 首次挂载时 onMounted 与 onActivated 会同时触发，只让后者跳过第一次。 */
+  let activatedOnce = false
+  function refreshOnEnter() {
+    void list.refreshTemplates()
+  }
   function templatesUpdated() {
-    if (active) void list.refreshTemplates()
-    else dirty = true
+    if (active) refreshOnEnter()
   }
   onActivated(() => {
     active = true
-    if (dirty) { dirty = false; void list.refreshTemplates() }
+    if (!activatedOnce) {
+      activatedOnce = true
+      return
+    }
+    // 每次回到页面都以服务端真实状态为准，避免删除/导入后仍显示旧列表。
+    refreshOnEnter()
   })
   onDeactivated(() => { active = false })
 
@@ -111,7 +117,6 @@ export function assembleTemplatePreview() {
     ...list,
     ...create,
     ...actions,
-    ...gridTool,
     scopeTabs,
     scopeOptions,
     // 无状态纯函数直出，供子组件模板使用
