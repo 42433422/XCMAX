@@ -1,5 +1,5 @@
 {
-  "lines": 2459794,
+  "lines": 2459799,
   "updated": "2026-11-17",
-  "note": "AIOPEN 语义重写能力：新增 --risk/--ids/--include-described 与推理输出解析（+97 行）"
+  "note": "Source Governance 基线登记并发保留的 ai_open.py 逐文件路由上限（+5 行 JSON），不加阈值、不整表放宽；用户批准提交推送"
 }
