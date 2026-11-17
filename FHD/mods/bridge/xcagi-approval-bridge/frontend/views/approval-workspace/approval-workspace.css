@@ -488,6 +488,17 @@
   margin-bottom: 24px;
 }
 
+/* 运行态已过期的 AI 工作流审批：解释为什么「通过」不可用。 */
+.expired-hint {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  border-left: 3px solid #d97706;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .detail-section h4 {
   font-size: 16px;
   color: #1f2937;

@@ -8,6 +8,22 @@ import { resolveApprovalApiPath } from '@/utils/approvalPaths'
 
 const ap = (path: string) => resolveApprovalApiPath(path)
 
+/** 保留后端给出的失败原因（例如「运行态已过期」），不要一律折叠成通用文案。 */
+function approvalFailure(fallback: string, error: unknown) {
+  const failure = error as { message?: unknown; status?: unknown; data?: unknown }
+  const message = typeof failure?.message === 'string' && failure.message.trim()
+    ? failure.message.trim()
+    : fallback
+  const status = Number(failure?.status)
+  const expired = Boolean(failure?.data && typeof failure.data === 'object' && (failure.data as { expired?: unknown }).expired === true)
+  return {
+    success: false as const,
+    message,
+    status: Number.isFinite(status) && status > 0 ? status : undefined,
+    expired,
+  }
+}
+
 /** 后端 ApprovalListResponse 的 data 为数组，与视图中 data.requests / data.flows 对齐 */
 function withRequestList<T extends Record<string, unknown>>(res: T | null | undefined) {
   if (!res || typeof res !== 'object') {
@@ -57,6 +73,8 @@ export interface ApprovalRequest {
   title: string
   description?: string
   business_data?: { tool_id?: string; action?: string; params?: Record<string, unknown> }
+  /** AI 工作流审批的进程内运行态是否仍存在；重启后为 false，不能再「通过」。 */
+  runtime_available?: boolean
   applicant_id: number | null
   status: string
   current_node_id?: number
@@ -189,7 +207,7 @@ export const approvalApi = {
       return data
     } catch (error) {
       console.error('审批通过失败:', error)
-      return { success: false, message: '审批通过失败' }
+      return approvalFailure('审批通过失败', error)
     }
   },
 
@@ -211,7 +229,7 @@ export const approvalApi = {
       return data
     } catch (error) {
       console.error('审批拒绝失败:', error)
-      return { success: false, message: '审批拒绝失败' }
+      return approvalFailure('审批拒绝失败', error)
     }
   },
 

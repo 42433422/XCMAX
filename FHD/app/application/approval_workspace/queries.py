@@ -73,6 +73,9 @@ class ApprovalQueries:
             result: list[dict[str, Any]] = []
             for req in items:
                 data = self.view(req, include_records=False)
+                # AI 工作流审批依赖进程内运行态；应用重启后它不再可被「通过」。
+                if self.access.is_workflow(req) and not req.current_node:
+                    data["runtime_available"] = bool(self.pending(req.request_no))
                 if approver_id is not None:
                     node = req.current_node
                     if self.access.is_workflow(req) and (not node):
@@ -115,7 +118,10 @@ class ApprovalQueries:
                 return JSONResponse(
                     {"success": False, "message": "审批请求不存在", "data": None}, status_code=404
                 )
-            return {"success": True, "data": self.view(req, include_records=True)}
+            data = self.view(req, include_records=True)
+            if self.access.is_workflow(req) and not req.current_node:
+                data["runtime_available"] = bool(self.pending(req.request_no))
+            return {"success": True, "data": data}
 
     def list_flows(self, is_active: bool | None, business_type: str | None) -> WorkspaceResponse:
         with self.repository.session() as db:

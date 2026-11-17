@@ -21,10 +21,11 @@ export function useApprovalDetails(deps: { getCurrentUserId: () => number }) {
         selectedRequest.value = request
         showDetails.value = true
 
-        // 判断当前用户是否可以审批
+        // 判断当前用户是否可以审批；AI 工作流运行态已过期时只能拒绝/重新发起。
         const userId = deps.getCurrentUserId()
         canApprove.value =
-          request.current_approvers?.includes(userId) || isPendingAiWorkflowApproval(request)
+          request.runtime_available !== false &&
+          (request.current_approvers?.includes(userId) || isPendingAiWorkflowApproval(request))
       }
     } catch (error) {
       console.error('加载详情失败:', error)
