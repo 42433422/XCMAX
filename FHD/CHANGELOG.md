@@ -1,4 +1,5 @@
 ## Unreleased
+- 知识库新增对象存储导入：`POST /api/knowledge/v1/datasets/{dataset_id}/documents` 支持 `s3_uri`，复用 boto3（Apache-2.0）读取 `s3://bucket/key` 并复用现有文档入库链路；校验桶名/对象键、可选桶白名单 `XCAGI_S3_ALLOWED_BUCKETS`、大小上限 `XCAGI_KB_MAX_OBJECT_BYTES`（默认 25MB），仅接受既有文档扩展名；S3 兼容存储通过 `XCAGI_S3_ENDPOINT_URL` / `XCAGI_S3_REGION` 接入。
 - 知识库问答默认接入平台模型合成答案：检索命中后按带编号的资料生成回答并保留引用；未配置平台模型、调用超时或异常时自动回退原有抽取式答案，`XCAGI_KB_ANSWER_LLM=0` 可关闭，超时用 `XCAGI_KB_ANSWER_TIMEOUT_S` 调整（默认 30 秒）。
 - 检索评测扩到 50 条中文查询：fastembed 语义模式 recall@1=0.98、recall@5=1.0、MRR=0.99；hash 降级 recall@1=0.22、recall@5=0.86、MRR=0.40；cross-encoder 精排在该评测上 recall@1=0.96，仍保持默认关闭。
 - 知识库新增文档级 ACL：文档元数据支持 `acl.allow_actors` / `acl.deny_actors`，在租户隔离之上按访问主体收窄检索、问答、知识图谱与文档列表；管理员可越过限制。新增 `POST /api/knowledge/v1/datasets/{dataset_id}/documents/{document_id}/acl` 在不产生新版本的情况下替换权限，入库时也可直接携带 `acl`。非法 ACL 键或值在入库/更新时明确拒绝。

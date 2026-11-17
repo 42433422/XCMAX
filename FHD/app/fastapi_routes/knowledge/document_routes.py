@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import json
+import re
 from collections.abc import Callable
 from pathlib import Path
+from uuid import uuid4
 
 from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse
@@ -11,11 +14,27 @@ from fastapi.responses import JSONResponse
 from app.application.knowledge.http_port_contracts import DatasetAction
 
 from .schemas import (
+    _DATASET_UPLOAD_EXTENSIONS,
     DatasetDocumentAclRequest,
     DatasetDocumentIngestRequest,
     DatasetQueryRequest,
 )
 from .uploads import DocumentUpload
+
+
+def _upload_segment(dataset_id: str) -> str:
+    segment = re.sub("[^A-Za-z0-9._-]+", "_", str(dataset_id or "default"))[:100]
+    return "default" if segment in {"", ".", ".."} else segment
+
+
+def _accepted(response: JSONResponse) -> bool:
+    if response.status_code >= 400:
+        return False
+    try:
+        payload = json.loads(bytes(response.body).decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        return True
+    return not (isinstance(payload, dict) and payload.get("success") is False)
 
 
 class DocumentRoutes:
@@ -37,6 +56,7 @@ class DocumentRoutes:
             file_path = req.file_path
             source = req.source
             document_id = req.document_id
+            staged_path: Path | None = None
             if req.url.strip():
                 from app.application.document_parsing.web_fetch import fetch_url_text
 
@@ -47,10 +67,38 @@ class DocumentRoutes:
                 text = page.text
                 source = source or page.title or page.url
                 document_id = document_id or page.url
+            elif req.s3_uri.strip():
+                from app.application.document_parsing.object_store import (
+                    fetch_object,
+                    parse_s3_uri,
+                )
+
+                try:
+                    _bucket, key = parse_s3_uri(req.s3_uri)
+                    suffix = Path(key).suffix.lower()
+                    if suffix not in _DATASET_UPLOAD_EXTENSIONS:
+                        return JSONResponse(
+                            status_code=400,
+                            content={"detail": f"不支持的对象类型：{suffix or '无扩展名'}"},
+                        )
+                    fetched = fetch_object(req.s3_uri)
+                    from app.utils.path_io.path_utils import get_upload_dir
+
+                    upload_dir = (
+                        Path(get_upload_dir()).resolve() / "knowledge" / _upload_segment(dataset_id)
+                    )
+                    upload_dir.mkdir(parents=True, exist_ok=True)
+                    staged_path = upload_dir / f"{uuid4().hex}{suffix}"
+                    staged_path.write_bytes(fetched.data)
+                except (ValueError, OSError) as exc:
+                    return JSONResponse(status_code=400, content={"detail": str(exc)})
+                file_path = str(staged_path)
+                source = source or fetched.filename
+                document_id = document_id or req.s3_uri
             metadata = dict(req.metadata)
             if req.acl:
                 metadata["acl"] = req.acl
-            return dispatch()(
+            response = dispatch()(
                 request=request,
                 action="ingest_document",
                 route_path="/api/knowledge/v1/datasets/{dataset_id}/documents",
@@ -69,6 +117,9 @@ class DocumentRoutes:
                     "version_label": req.version_label,
                 },
             )
+            if staged_path is not None and not _accepted(response):
+                staged_path.unlink(missing_ok=True)
+            return response
 
         self.ingest_dataset_document = ingest_dataset_document
 

@@ -118,6 +118,7 @@ class DatasetDocumentIngestRequest(BaseModel):
     text: str = Field("", max_length=_DATASET_INLINE_MAX_CHARS, description="inline document text")
     file_path: str = Field("", max_length=4096, description="allowed local file path")
     url: str = Field("", max_length=4096, description="http(s) page to extract as document")
+    s3_uri: str = Field("", max_length=2048, description="s3://bucket/key object to ingest")
     source: str = Field("", max_length=300, description="source label")
     document_id: str = Field("", max_length=200, description="optional stable document id")
     tenant_id: str = Field("", max_length=160, description="tenant/user isolation key")
@@ -150,8 +151,16 @@ class DatasetDocumentIngestRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_document_input(self):
-        if not self.text.strip() and not self.file_path.strip() and not self.url.strip():
-            raise ValueError("text, file_path or url is required")
+        provided = [
+            bool(self.text.strip()),
+            bool(self.file_path.strip()),
+            bool(self.url.strip()),
+            bool(self.s3_uri.strip()),
+        ]
+        if not any(provided):
+            raise ValueError("text, file_path, url or s3_uri is required")
+        if self.s3_uri.strip() and sum(provided) > 1:
+            raise ValueError("s3_uri cannot be combined with text, file_path or url")
         if self.chunk_strategy == "fixed" and self.chunk_overlap >= self.chunk_size:
             raise ValueError("chunk_overlap must be smaller than chunk_size")
         return self
