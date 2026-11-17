@@ -188,6 +188,17 @@ def _registered_router_dataset_rag(
         return finalize(
             result, dataset_ids=dataset_ids, query=query, chunks=[], citations=[], answer=""
         )
+    if action == "refresh_document":
+        document_id = str(params.get("document_id") or "").strip()
+        if not document_id:
+            return {"success": False, "message": "dataset_rag.refresh_document 缺少 document_id 参数"}
+        result = service.refresh_document(
+            dataset_id=dataset_id,
+            document_id=document_id,
+            tenant_id=str(params.get("tenant_id") or ""),
+            access_context=access_context(DATASET_WRITE_PERMISSION),
+        )
+        return finalize(result, dataset_id=dataset_id, document_id=document_id)
     if action == "diff_versions":
         source = str(params.get("source") or "").strip()
         from_version = params.get("from_version") or ""

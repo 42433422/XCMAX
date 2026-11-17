@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import multiprocessing
 import os
 import threading
@@ -114,6 +115,10 @@ from app.application.dataset_rag.vector_index import VectorIndexService
 from app.application.dataset_rag.vector_index import _embedding_metadata as _embedding_metadata
 from app.application.dataset_rag.vector_index import (
     _semantic_embedding_available as _semantic_embedding_available,
+)
+from app.application.document_parsing.source_refresh import (
+    fetch_source_text,
+    source_coordinates,
 )
 from app.domain.app_pure.dataset_rag_queue import DatasetStateLock
 from app.infrastructure.rag import (
@@ -337,6 +342,134 @@ class DatasetRagApplicationService:
             acl=acl,
             access_context=access_context,
         )
+
+    def refresh_document(
+        self,
+        dataset_id: str,
+        document_id: str,
+        *,
+        tenant_id: str = "",
+        access_context: DatasetAccessContext | dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Re-fetch one document from its recorded external source and version it.
+
+        Knowledge bases that sync Confluence / Notion / web pages keep the source
+        coordinates so a re-sync produces a new version instead of a duplicate
+        document. Unchanged content returns ``changed=false`` without a new version.
+        """
+        from app.application.dataset_rag.document_acl import document_visible_to
+
+        dataset_key = _clean_key(dataset_id, default="default")
+        doc_key = str(document_id or "").strip()
+        context = _coerce_access_context(access_context)
+        denied = _ensure_dataset_permission(
+            context, DATASET_WRITE_PERMISSION, dataset_id=dataset_key
+        )
+        if denied is not None:
+            return denied
+        tenant_key, denied = _resolve_tenant_for_access(
+            context,
+            tenant_id,
+            required_permission=DATASET_WRITE_PERMISSION,
+            default_without_context="",
+            dataset_id=dataset_key,
+        )
+        if denied is not None:
+            return denied
+        with self._repository.lock:
+            state = self._repository.datasets.get(dataset_key)
+            document = state.documents.get(doc_key) if state is not None else None
+            snapshot = document.to_dict() if document is not None else None
+        if snapshot is None or not document_visible_to(snapshot.get("metadata"), context):
+            return {
+                "success": False,
+                "dataset_id": dataset_key,
+                "document_id": doc_key,
+                "error_code": "dataset_document_not_found",
+                "message": "document not found",
+            }
+        denied = _ensure_tenant_allowed(
+            context,
+            str(snapshot.get("tenant_id") or ""),
+            dataset_id=dataset_key,
+            operation="refresh_document",
+        )
+        if denied is not None:
+            denied["document_id"] = doc_key
+            return denied
+        metadata = dict(snapshot.get("metadata") or {})
+        coordinates = source_coordinates(metadata)
+        if coordinates is None:
+            return {
+                "success": False,
+                "dataset_id": dataset_key,
+                "document_id": doc_key,
+                "error_code": "dataset_refresh_unsupported",
+                "message": "该文档没有可刷新的外部来源（支持 url / confluence / feishu / notion）",
+            }
+        kind, ref = coordinates
+        try:
+            text, source_label, extra_metadata = fetch_source_text(kind, ref)
+        except ValueError as exc:
+            return {
+                "success": False,
+                "dataset_id": dataset_key,
+                "document_id": doc_key,
+                "error_code": "dataset_refresh_failed",
+                "message": str(exc),
+            }
+        if not str(text or "").strip():
+            return {
+                "success": False,
+                "dataset_id": dataset_key,
+                "document_id": doc_key,
+                "error_code": "dataset_refresh_failed",
+                "message": "来源返回空正文",
+            }
+        fresh_hash = hashlib.sha256(str(text).strip().encode("utf-8")).hexdigest()
+        if fresh_hash == str(metadata.get("document_content_hash") or ""):
+            return {
+                "success": True,
+                "dataset_id": dataset_key,
+                "document_id": doc_key,
+                "changed": False,
+                "version": int(snapshot.get("version") or 1),
+                "document": snapshot,
+            }
+        chunk_strategy = str(metadata.pop("chunk_strategy", "") or "semantic")
+        chunk_size = int(metadata.pop("chunk_size", 500) or 500)
+        chunk_overlap = int(metadata.pop("chunk_overlap", 50) or 50)
+        for key in (
+            "document_content_hash",
+            "document_version",
+            "version_label",
+            "ingest_idempotency_key",
+            "ingest_fingerprint",
+        ):
+            metadata.pop(key, None)
+        metadata.update(extra_metadata)
+        result = self._documents.ingest_document(
+            dataset_id=dataset_key,
+            # 版本按 source 归属，刷新必须沿用原 source，否则会被当成新文档从 v1 开始。
+            source=str(snapshot.get("source") or source_label or ""),
+            text=str(text),
+            document_id=doc_key,
+            chunk_strategy=chunk_strategy,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            metadata=metadata,
+            tenant_id=tenant_key,
+            access_context=access_context,
+        )
+        response = dict(result)
+        response.update(
+            {
+                "changed": bool(result.get("success")),
+                "previous_version": int(snapshot.get("version") or 1),
+                "source_kind": kind,
+            }
+        )
+        return response
 
     def clear_dataset(
         self,

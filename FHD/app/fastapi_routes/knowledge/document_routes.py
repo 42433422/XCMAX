@@ -69,6 +69,11 @@ class DocumentRoutes:
                 text = page.text
                 source = source or page.title or page.url
                 document_id = document_id or page.url
+                extra_metadata = {
+                    "source_kind": "url",
+                    "source_ref": page.url,
+                    "source_url": page.url,
+                }
             elif req.s3_uri.strip():
                 from app.application.document_parsing.object_store import (
                     fetch_object,
@@ -97,6 +102,7 @@ class DocumentRoutes:
                 file_path = str(staged_path)
                 source = source or fetched.filename
                 document_id = document_id or req.s3_uri
+                extra_metadata = {"source_kind": "s3", "source_ref": req.s3_uri}
             elif req.confluence_page_id.strip():
                 from app.application.document_parsing.confluence import fetch_page
 
@@ -109,6 +115,8 @@ class DocumentRoutes:
                 document_id = document_id or page.url
                 extra_metadata = {
                     "confluence_page_id": page.page_id,
+                    "source_kind": "confluence",
+                    "source_ref": page.page_id,
                     "source_url": page.url,
                 }
             elif req.feishu_document_id.strip():
@@ -123,6 +131,8 @@ class DocumentRoutes:
                 document_id = document_id or doc.url
                 extra_metadata = {
                     "feishu_document_id": doc.document_id,
+                    "source_kind": "feishu",
+                    "source_ref": doc.document_id,
                     "source_url": doc.url,
                 }
             elif req.notion_page_id.strip():
@@ -137,10 +147,16 @@ class DocumentRoutes:
                 document_id = document_id or notion.url
                 extra_metadata = {
                     "notion_page_id": notion.page_id,
+                    "source_kind": "notion",
+                    "source_ref": notion.page_id,
                     "source_url": notion.url,
                 }
             metadata = dict(req.metadata)
             metadata.update(extra_metadata)
+            if extra_metadata:
+                metadata.setdefault("chunk_strategy", req.chunk_strategy)
+                metadata.setdefault("chunk_size", req.chunk_size)
+                metadata.setdefault("chunk_overlap", req.chunk_overlap)
             if req.acl:
                 metadata["acl"] = req.acl
             response = dispatch()(
@@ -271,3 +287,16 @@ class DocumentRoutes:
             )
 
         self.update_dataset_document_acl = update_dataset_document_acl
+
+        @router.post("/datasets/{dataset_id}/documents/{document_id}/refresh")
+        def refresh_dataset_document(
+            dataset_id: str, document_id: str, request: Request
+        ) -> JSONResponse:
+            return dispatch()(
+                request=request,
+                action="refresh_document",
+                route_path="/api/knowledge/v1/datasets/{dataset_id}/documents/{document_id}/refresh",
+                params={"dataset_id": dataset_id, "document_id": document_id},
+            )
+
+        self.refresh_dataset_document = refresh_dataset_document
