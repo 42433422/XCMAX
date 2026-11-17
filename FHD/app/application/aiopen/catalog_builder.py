@@ -252,6 +252,50 @@ def openapi_schema(app: Any) -> dict[str, Any]:
     return schema
 
 
+def _parameter_specs(parameters: Any) -> list[dict[str, Any]]:
+    """保留 path/query/header 参数的最小结构，供执行层组包。"""
+    specs: list[dict[str, Any]] = []
+    for item in parameters or []:
+        if not isinstance(item, dict):
+            continue
+        location = str(item.get("in") or "")
+        name = str(item.get("name") or "").strip()
+        if not name or location not in {"path", "query", "header"}:
+            continue
+        schema = item.get("schema") if isinstance(item.get("schema"), dict) else {}
+        specs.append(
+            {
+                "name": name,
+                "in": location,
+                "required": bool(item.get("required")),
+                "type": str(schema.get("type") or "string"),
+                "enum": [str(value) for value in schema.get("enum") or [] if value is not None],
+            }
+        )
+    return specs
+
+
+def _request_body_spec(request_body: Any) -> dict[str, Any] | None:
+    if not isinstance(request_body, dict):
+        return None
+    content = request_body.get("content") if isinstance(request_body.get("content"), dict) else {}
+    media = content.get("application/json") if isinstance(content, dict) else None
+    schema = media.get("schema") if isinstance(media, dict) else None
+    if not isinstance(schema, dict):
+        return {"required": bool(request_body.get("required")), "schema": None}
+    return {
+        "required": bool(request_body.get("required")),
+        "schema": {
+            "type": str(schema.get("type") or "object"),
+            "ref": str(schema.get("$ref") or ""),
+            "required": [str(name) for name in schema.get("required") or []],
+            "properties": list((schema.get("properties") or {}).keys())
+            if isinstance(schema.get("properties"), dict)
+            else [],
+        },
+    }
+
+
 def build_operations(app: Any) -> list[dict[str, Any]]:
     """从 OpenAPI paths 生成 operation 目录；控制面与内部路由直接排除。"""
     overlay = load_overlay()
@@ -290,6 +334,8 @@ def build_operations(app: Any) -> list[dict[str, Any]]:
                     for item in parameters or []
                     if isinstance(item, dict) and item.get("in") == "path"
                 ],
+                "parameters": _parameter_specs(parameters),
+                "request_body": _request_body_spec(operation.get("requestBody")),
                 "endpoint": str(operation.get("operationId") or ""),
                 "described": operation_id in overlay,
             }

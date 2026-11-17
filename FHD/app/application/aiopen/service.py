@@ -52,6 +52,8 @@ from .definitions import (
     TOOL_DEFINITIONS as TOOL_DEFINITIONS,
 )
 from .dispatch import ToolDispatcher, call_chat
+from .generated_tools import operation_call as _operation_call_impl
+from .generated_tools import required_scope as _required_scope
 from .installation import (
     InstallationComposer,
 )
@@ -170,6 +172,7 @@ _dispatcher = ToolDispatcher(
         "api_call": lambda app, args: _tool_api_call(app, args),
         "knowledge_search": lambda app, args: _knowledge_search(app, args),
         "operation_describe": lambda app, args: _operation_describe(app, args),
+        "operation_call": lambda app, args: _operation_call_impl(app, args, _gateway.call),
         "chat": lambda app, args: _tool_chat(app, args),
         "capability_loop": lambda app, args: _tool_capability_loop(app, args),
     },
@@ -212,6 +215,11 @@ def generate_api_key(
 
 def authorize_api_key(provided: str | None, tool: str = "") -> dict[str, Any]:
     return _keys.authorize(provided, tool)
+
+
+def required_operation_scope(app: ASGIApp, tool: str, args: dict[str, Any]) -> str:
+    """写操作的 scope 由目标 operation 决定，供路由层做 Key 鉴权。"""
+    return _required_scope(app, tool, args)
 
 
 def record_api_key_use(

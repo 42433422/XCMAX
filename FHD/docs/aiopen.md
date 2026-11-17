@@ -108,6 +108,7 @@ curl -X POST http://localhost:5000/api/aiopen/invoke \
 | `api_catalog` | 列出白名单内可调用的业务 API 路由（精确 + 前缀子路径） |
 | `knowledge_search` | 在系统地图中按关键字检索 operation（含风险、scope、使用时机） |
 | `operation_describe` | 读取单个 operation 的完整语义卡片 |
+| `operation_call` | 按 operation_id 执行接口；危险操作拒绝执行，写操作需服务端开启 |
 | `api_call` | 调用白名单业务 API（GET/POST/PUT/PATCH/DELETE） |
 | `chat` | 发消息给 XCAGI AI 助手（unified_chat，source=`aiopen`） |
 | `capability_loop` | 全调用闭环自检：catalog → 抽样 api_call → chat → ui_sessions |
@@ -136,6 +137,19 @@ MCP 只读资源：
 | `xcmax://catalog/schema/{entity}` | 实体字段字典（OpenAPI components.schemas） |
 
 推荐顺序：`knowledge_search` → `operation_describe` → `api_call`。
+
+### 执行闸门（P1）
+
+`operation_call` 按目录中的风险等级执行，不靠 AI 自觉：
+
+| 风险 | 行为 |
+|---|---|
+| `read` | 直接执行，Key 需具备 `read:<domain>` 或以 `*` 全量授权 |
+| `write` | 默认返回 `WRITE_DISABLED`；服务端设置 `AIOPEN_ENABLE_WRITES=1` 后才执行 |
+| `danger` | 一律返回 `APPROVAL_REQUIRED`，不执行；等待审批桥上线 |
+
+`params` 传路径与查询参数（键名见 operation 卡片），`body` 传 JSON 请求体。
+`api_call` 仍保留为兼容逃生舱，受白名单与 Key scope 约束，P1.5 再统一收口。
 
 语义草稿由 `scripts/dev/aiopen_overlay_draft.py` 批量生成到 `overlay/drafts/`（运行时不加载），
 人工审核后移入 `overlay/generated/*.yaml|*.jsonl` 生效；大规模语义用 jsonl（每行一条）存储。

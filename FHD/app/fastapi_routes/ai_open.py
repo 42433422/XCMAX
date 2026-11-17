@@ -59,6 +59,7 @@ from app.application.aiopen.service import (
     list_api_keys,
     openclaw_chat_proxy,
     record_api_key_use,
+    required_operation_scope,
     revoke_api_key,
     seed_capability_whitelist,
     verify_api_key,
@@ -227,7 +228,7 @@ async def aiopen_invoke(
     args: dict[str, Any] = raw_args if isinstance(raw_args, dict) else {}
     if not tool:
         return JSONResponse({"success": False, "message": "tool 不能为空"}, status_code=400)
-    decision = authorize_api_key(x_aiopen_key, tool)
+    decision = _authorize_tool_call(request.app, x_aiopen_key, tool, args)
     if not decision.get("ok"):
         return _denied_response(decision)
     started = time.perf_counter()
@@ -293,11 +294,24 @@ def _mcp_tool_name(msg: dict[str, Any]) -> str:
     return str((params or {}).get("name") or "").strip()
 
 
-def _mcp_authorize(msg: dict[str, Any], key: str | None) -> dict[str, Any] | None:
+def _authorize_tool_call(
+    app: Any, key: str | None, tool: str, args: dict[str, Any]
+) -> dict[str, Any]:
+    """operation_call 按目标 operation 的 scope 鉴权，其余工具按工具名。"""
+    scope = required_operation_scope(app, tool, args)
+    return authorize_api_key(key, scope or tool)
+
+
+def _mcp_authorize(
+    msg: dict[str, Any], key: str | None, app: Any
+) -> dict[str, Any] | None:
     """仅对 tools/call 做 Key 策略校验；其余方法沿用原有鉴权。"""
     if msg.get("method") != "tools/call":
         return None
-    decision = authorize_api_key(key, _mcp_tool_name(msg))
+    params = msg.get("params") if isinstance(msg.get("params"), dict) else {}
+    raw_args = (params or {}).get("arguments")
+    args: dict[str, Any] = raw_args if isinstance(raw_args, dict) else {}
+    decision = _authorize_tool_call(app, key, _mcp_tool_name(msg), args)
     return None if decision.get("ok") else decision
 
 
@@ -357,7 +371,7 @@ async def aiopen_mcp(
                 if item.get("method") == "initialize":
                     protocol_version = _resolve_mcp_protocol_version(item_params)
                     is_initialize = True
-                denied = _mcp_authorize(item, x_aiopen_key)
+                denied = _mcp_authorize(item, x_aiopen_key, request.app)
                 if denied is not None:
                     responses.append(
                         _jsonrpc_error(
@@ -387,7 +401,7 @@ async def aiopen_mcp(
             status_code=400,
             protocol_version=protocol_version,
         )
-    denied = _mcp_authorize(body, x_aiopen_key)
+    denied = _mcp_authorize(body, x_aiopen_key, request.app)
     if denied is not None:
         return _wrap_mcp_json(
             _jsonrpc_error(

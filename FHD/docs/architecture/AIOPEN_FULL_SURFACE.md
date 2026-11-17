@@ -180,6 +180,9 @@ TF-IDF（字符 n-gram，兼容中文）做余弦相似度，索引按目录签�
 - 生成：每个非 `exclude` operation 生成一个工具，名称 `{domain}_{action}`，schema 来自 OpenAPI。
 - 精选：`default` 工具集（对应 GitHub MCP 的默认集）只放高频只读与少量安全写操作；其余按需开启。
 - 工具集：按 tags 分组（`orders` / `products` / `knowledge` / `employees` / `ui` / `admin`），可在 Key 上收窄。
+- **P1 实际落地**：先以单工具 `operation_call(operation_id, params, body)` 执行目录条目，
+  避免把 900+ 生成工具一次性塞进模型上下文（FastMCP 亦明确不建议全量镜像 REST）。
+  按 operation 拆分的独立工具留到工具检索/按需加载（P1.5）再放开。
 
 **`api_call` 保留为逃生舱**：可调任意 scope 内路径，但受方法白名单、scope 校验与全量审计约束，且不可调用 `exclude` 路由。
 

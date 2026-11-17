@@ -108,6 +108,25 @@ def format_tool_result_text(tool_name: str, result: dict[str, Any]) -> str:
         if extra_data:
             return f"{detail}\n{json.dumps(extra_data, ensure_ascii=False, default=str)}"
         return str(detail)
+    if name == "operation_call":
+        operation_id = result.get("operation_id", "")
+        code = result.get("code", "")
+        if code == "APPROVAL_REQUIRED":
+            return f"{operation_id} 需要人工审批，未执行。\n{result.get('message', '')}"
+        if code == "WRITE_DISABLED":
+            return f"{operation_id} 为写操作，服务端未启用。\n{result.get('message', '')}"
+        if not ok:
+            return f"{operation_id} 执行失败：{result.get('message', code)}"
+        status = result.get("status_code", "?")
+        data = result.get("data")
+        body = (
+            json.dumps(data, ensure_ascii=False, indent=2, default=str)
+            if data is not None
+            else "(empty)"
+        )
+        if len(body) > 4000:
+            body = body[:4000] + "\n…(truncated)"
+        return f"{operation_id} → HTTP {status}\n\n{body}"
     if name == "knowledge_search":
         if not ok:
             return f"能力检索失败：{result.get('message', '')}"

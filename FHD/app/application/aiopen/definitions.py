@@ -98,6 +98,28 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "operation_call",
+        "description": (
+            "按 operation_id 执行系统地图中的业务接口。params 传路径/查询参数，body 传 JSON 请求体。"
+            "危险操作一律返回 APPROVAL_REQUIRED 不执行；写操作需服务端开启 AIOPEN_ENABLE_WRITES。"
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "operation_id": {
+                    "type": "string",
+                    "description": "来自 knowledge_search / operation_describe 的 operation_id",
+                },
+                "params": {
+                    "type": "object",
+                    "description": "路径参数与查询参数，键名与 operation 卡片一致",
+                },
+                "body": {"type": "object", "description": "JSON 请求体（写操作使用）"},
+            },
+            "required": ["operation_id"],
+        },
+    },
+    {
         "name": "chat",
         "description": "向 XCAGI AI 助手发送一条消息（unified_chat，source=aiopen），返回助手回复。",
         "inputSchema": {
