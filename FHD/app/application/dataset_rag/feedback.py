@@ -56,9 +56,7 @@ class DatasetFeedbackStore:
             self._persist(payload)
         return record
 
-    def summary(
-        self, *, dataset_id: str, tenant_id: str = "", limit: int = 20
-    ) -> dict[str, Any]:
+    def summary(self, *, dataset_id: str, tenant_id: str = "", limit: int = 20) -> dict[str, Any]:
         with self._lock:
             rows = [
                 row

@@ -83,9 +83,7 @@ class DatasetViews:
             ),
         )
 
-    def record_feedback(
-        self, dataset_id: str, request: Request, payload: Any
-    ) -> dict[str, Any]:
+    def record_feedback(self, dataset_id: str, request: Request, payload: Any) -> dict[str, Any]:
         """Record one thumb up/down on the answer the user just saw."""
         access = self._access(request)
         citations = [

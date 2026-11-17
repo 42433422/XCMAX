@@ -999,9 +999,7 @@ class DatasetRagApplicationService:
         )
         if denied is not None:
             return denied
-        summary = self._feedback.summary(
-            dataset_id=dataset_key, tenant_id=tenant_key, limit=limit
-        )
+        summary = self._feedback.summary(dataset_id=dataset_key, tenant_id=tenant_key, limit=limit)
         return {"success": True, "dataset_id": dataset_key, **summary}
 
     def _resolve_file_path(self, file_path: str) -> Path:
