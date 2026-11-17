@@ -7,10 +7,13 @@ from collections.abc import Callable
 from typing import Any, Protocol
 
 from app.application.dataset_rag.access_policy import (
+    DATASET_ADMIN_PERMISSION,
     DATASET_READ_PERMISSION,
+    _coerce_access_context,
     _resolve_tenant_for_access,
 )
 from app.application.dataset_rag.document_acl import (
+    document_acl,
     document_visible_to,
     filter_chunks_by_acl,
 )
@@ -157,15 +160,25 @@ class DatasetRetrieval:
         with self._repository.lock:
             state = self._repository.datasets.get(dataset_key)
             chunks = list(state.chunks) if state is not None else []
+            documents_in_state = list(state.documents.values()) if state is not None else []
             index_snapshot = dict(state.index or {}) if state is not None else {}
         scope_chunks = _filter_chunks(
             chunks, tenant_id=tenant_key, version=version, metadata_filter=metadata_filter or {}
         )
         scope_chunks = filter_chunks_by_acl(scope_chunks, access_context)
+        # 向量库只能先取候选再按 ACL 过滤；有受限文档时扩大候选池，避免
+        # 受限结果占满名额导致本来可见的文档被挤出。
+        context = _coerce_access_context(access_context)
+        can_bypass_acl = context is None or context.is_admin
+        if context is not None and DATASET_ADMIN_PERMISSION in context.permissions:
+            can_bypass_acl = True
+        candidate_k = max(50, max(1, min(int(top_k), 50)) * 4)
+        if not can_bypass_acl and any(document_acl(doc.metadata) for doc in documents_in_state):
+            candidate_k = min(500, candidate_k * 8)
         vector_candidates = self._vector._query_vector_index_candidates(
             dataset_id=dataset_key,
             query=query_text,
-            top_k=max(50, max(1, min(int(top_k), 50)) * 4),
+            top_k=candidate_k,
             tenant_id=tenant_key,
             version=version,
             metadata_filter=metadata_filter or {},
