@@ -119,7 +119,9 @@ class InMemoryAgentRunRepository:
                 self._run_task_id(run),
             )
             self._tasks[key] = copy.deepcopy(task_from_run(run, existing=self._tasks.get(key)))
-            from .run_terminal_metrics import record_terminal_transition
+            from app.application.agent_orchestrator.run_terminal_metrics import (
+                record_terminal_transition,
+            )
 
             record_terminal_transition(run, previous)
             return copy.deepcopy(run)

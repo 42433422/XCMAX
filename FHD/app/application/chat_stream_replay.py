@@ -136,11 +136,12 @@ def events_after(
             raise ReplayBackendUnavailable("回放流读取失败") from None
         out: list[dict[str, Any]] = []
         for entry_id, fields in raw:
-            sid = str(entry_id)
+            sid = entry_id.decode() if isinstance(entry_id, bytes) else str(entry_id)
             if sid == cursor:
                 continue
             try:
-                payload = json.loads((fields or {}).get("payload") or "{}")
+                fields = fields or {}
+                payload = json.loads(fields.get("payload", fields.get(b"payload")) or "{}")
             except (ValueError, TypeError):
                 continue
             if isinstance(payload, dict):
