@@ -5,22 +5,24 @@
         <h2>数据来源</h2>
       </div>
 
-      <div class="card">
-        <div class="card-header">私人数据库读取助手</div>
-        <p class="muted data-source-note">
-          这里管理 AI 员工可读取的数据来源。市场展示为通用员工；启用具体适配器前，需要用户在本页明确选择并授权。
-        </p>
+      <div class="data-source-summary">
         <div class="data-source-status">
           <span>员工状态：{{ statusText }}</span>
           <span>当前来源：{{ selectedSourceLabel }}</span>
         </div>
       </div>
 
-      <div class="card">
-        <div class="card-header">选择数据来源</div>
+      <nav v-if="compact" class="admin-section-nav" aria-label="数据源分区">
+        <button v-for="item in sourceSections" :key="item.id" :aria-pressed="section === item.id" @click="section = item.id">{{ item.label }}</button>
+      </nav>
+      <div class="data-source-pane">
+      <div v-show="!compact || section === 'sources'" class="card">
+        <div class="card-header">选择数据来源
+          <select v-if="compact" v-model="category" aria-label="数据源类别"><option v-for="group in groupedSources" :key="group.category" :value="group.category">{{ group.label }}</option></select>
+        </div>
         <div v-if="sources.length === 0" class="empty-state">暂无可用数据来源</div>
         <div v-else>
-          <template v-for="(group, idx) in groupedSources" :key="idx">
+          <template v-for="(group, idx) in groupedSources.filter(group => !compact || group.category === category)" :key="idx">
             <h4 class="data-source-group-title">{{ group.label }}</h4>
             <div class="data-source-grid">
               <button
@@ -28,6 +30,7 @@
                 :key="source.id"
                 type="button"
                 class="data-source-card"
+                :title="source.description"
                 :class="{ active: selectedSourceId === source.id, 'is-planned': source.status !== 'available' }"
                 @click="onSourceCardClick(source)"
               >
@@ -76,7 +79,7 @@
         <div class="muted" style="margin-top:8px; font-size:12px">图标仅用于功能区分，不代表对应品牌的官方授权。</div>
       </div>
 
-      <div class="card">
+      <div v-show="!compact || section === 'contacts'" class="card">
         <div class="card-header">搜索联系人</div>
         <div class="form-group data-source-search">
           <input
@@ -111,7 +114,7 @@
         </div>
       </div>
 
-      <div class="card">
+      <div v-show="!compact || section === 'send'" class="card">
         <div class="card-header">发送消息辅助</div>
         <div class="form-group">
           <label>联系人</label>
@@ -126,6 +129,7 @@
         </button>
       </div>
 
+      </div>
       <div class="modal" :class="{ active: contextModalOpen }">
         <div class="modal-content data-source-modal">
           <div class="modal-header">{{ contextTitle }}</div>
@@ -151,6 +155,11 @@ import { useRoute } from 'vue-router';
 import privateDbAssistantApi, { type PrivateDbContact, type PrivateDbSource } from '@/api/privateDbAssistant';
 import { appAlert } from '@/utils/appDialog';
 import { dataSourceHasArtIcon, dataSourceIconMarkup } from '@/utils/dataSourceIcons';
+
+import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl';
+const compact = isAdminConsoleSpa();
+const section = ref('sources'), category = ref('generic');
+const sourceSections = [{ id: 'sources', label: '数据接入' }, { id: 'contacts', label: '联系人' }, { id: 'send', label: '发送消息' }];
 
 const STORAGE_KEY = 'xcagi_private_db_assistant_source';
 
@@ -216,10 +225,10 @@ const groupedSources = computed(() => {
     office: "办公 · 协作",
     ecommerce: "电商客服",
   };
-  const groups: { label: string; items: any[] }[] = [];
+  const groups: { category: string; label: string; items: any[] }[] = [];
   for (const cat of order) {
     const items = sources.value.filter((s) => (s.category || "generic") === cat);
-    if (items.length) groups.push({ label: labels[cat], items });
+    if (items.length) groups.push({ category: cat, label: labels[cat], items });
   }
   return groups;
 });
@@ -336,6 +345,7 @@ async function showContext(contact: PrivateDbContact) {
 }
 
 function prepareSend(contact: PrivateDbContact) {
+  section.value = 'send';
   sendForm.contactName = contact.display_name || contact.contact_name || contact.source_user_id || '';
 }
 

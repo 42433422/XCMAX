@@ -240,6 +240,8 @@ def test_original_customer_decision_does_not_close_earlier_product_work_order(
             "binding": "verified",
             "id": work["wo_id"],
             "status": "candidate",
+            "issue_number": 0,
+            "issue_url": "",
         }
         assert view["verification"] == {
             "repair_verified": True,

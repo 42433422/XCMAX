@@ -50,6 +50,7 @@ def admin_execution_contract(item: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+@ledger._ledger_transaction()
 def reconcile_obsolete_release_actions(
     *,
     reference_action_id: str = "",

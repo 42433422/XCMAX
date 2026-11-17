@@ -1,0 +1,16 @@
+#!/bin/sh
+# Install root-owned; SSH identity must only be allowed to invoke these actions.
+set -eu
+[ "$#" -eq 1 ] || exit 64
+cd /opt/fhd-full
+case "$1" in
+  restart_service)
+    docker compose restart
+    curl --fail --silent --show-error --max-time 15 http://127.0.0.1:5000/health
+    ;;
+  clear_logs)
+    [ -d logs ] || exit 1
+    find logs -type f -mtime +7 -delete
+    ;;
+  *) exit 64 ;;
+esac

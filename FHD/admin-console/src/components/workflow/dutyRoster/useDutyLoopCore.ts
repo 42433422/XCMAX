@@ -6,21 +6,15 @@
 import { computed, ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import type { DutyRosterState } from './useDutyRosterState'
 import type { Router } from 'vue-router'
-import api from '@/api/xcmaxMarketProxy'
+import { useLoopRuntimePanel } from '@host/composables/useLoopRuntimePanel'
 import { ALL_PLANNED_IDS, parseViewModeFromQuery, dgLoopRecord, dgLoopArray, dgLoopString, dgLoopFirstText, dgLoopNumber, collectDutyLoopEmployeeIds } from './dutyRosterConstants'
 export function useDutyLoopCore(s: DutyRosterState, ctx: { focusEmployee: (id: string) => void; router: Router }) {
   const { employees, missingLocalPackIds, healthMap, depsMap, loading, loadingP2, error, loadWarning, llmStatusMap, llmFernetConfigured, llmStatusFailed, empLlmMap, viewMode, showGapPanel, gapFocusHint, autoRefresh, countdown, capabilityMap, capLoading, runNodeStatusMap, loopRuntimeStatus, showStatsDetail, showMoreActions, detailCollapsed, empCapabilityViewMap, showNoKeyPanel, noKeyLoading, noKeyError, noKeyData, noKeyBusyRow, showAllHandsPanel, allHandsBusy, allHandsError, allHandsReport, allHandsWithResearch, allHandsExpanded, allHandsPlainOpen, allHandsPlainText, allHandsPlainLoading, allHandsPlainReqGen, allHandsMeetingMinutes, allHandsMeetingMinutesEmail, allHandsSessionId, allHandsQuestion, allHandsProgress, showRunPanel, runTargetId, runTaskBrief, runInputJson, runIncludeDependencies, runAllowHighRisk, runMaxConcurrency, runBusy, runError, latestRun, flowNodes, flowEdges, taskBrief, taskInputJson, dispatchConfirmHighRisk, taskRunning, taskResult, taskError, showDispatch, selectedEmp, selectedWorkshop, workshopRouteCopied, execItems, execTotal, execLoading, execLoadingMore, execError, onDutyEmployees, healthLevel, empAreaColor, llmActLevel, anyProviderHasUsableKey, runStatusLevel, capabilityLevel, capabilityColor, capabilityLabel, isDeployedDutyRosterRow } = s
   const { focusEmployee, router } = ctx
 
-let loopRuntimeTimer: number | null = null
-
-async function refreshLoopRuntimeStatus() {
-  try {
-    loopRuntimeStatus.value = await api.selfMaintenanceRuntimeStatus(80) as Record<string, unknown>
-  } catch {
-    loopRuntimeStatus.value = null
-  }
-}
+const runtime = useLoopRuntimePanel(() => 80, () => viewMode.value !== 'loop')
+const refreshLoopRuntimeStatus = runtime.refresh
+watch(runtime.raw, value => { loopRuntimeStatus.value = value })
 
 const loopParticipantIdSet = computed(() => {
   const ids = new Set<string>()
@@ -329,22 +323,8 @@ function employeeSpaceLocation(employeeId?: string | null) {
 }
 
 
-onMounted(() => {
-  void refreshLoopRuntimeStatus()
-  loopRuntimeTimer = window.setInterval(() => {
-    void refreshLoopRuntimeStatus()
-  }, 30000)
-})
-
-onUnmounted(() => {
-  if (loopRuntimeTimer != null) window.clearInterval(loopRuntimeTimer)
-  loopRuntimeTimer = null
-})
-
-
   return {
     loopRuntimeStatus,
-    loopRuntimeTimer,
     refreshLoopRuntimeStatus,
     loopParticipantIdSet,
     loopParticipantById,

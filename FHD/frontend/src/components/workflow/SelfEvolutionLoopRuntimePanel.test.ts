@@ -7,7 +7,10 @@ const statusMock = vi.fn()
 const reviewMock = vi.fn()
 vi.mock('@/api/xcmaxMarketProxy', () => ({
   default: {
-    selfMaintenanceRuntimeStatus: (...a: unknown[]) => statusMock(...a),
+    selfMaintenanceRuntimeStatus: async (...a: unknown[]) => {
+      const payload = await statusMock(...a)
+      return { schema_version: 'self_maintenance_runtime.v1', generated_at: new Date().toISOString(), run_timelines: [], ...payload, evidence: { open_run_ids: [], ...payload?.evidence } }
+    },
     selfMaintenanceGovernanceReview: (...a: unknown[]) => reviewMock(...a),
   },
 }))
@@ -107,7 +110,7 @@ describe('SelfEvolutionLoopRuntimePanel.vue', () => {
     expect(wrapper.find('.selp-error').exists()).toBe(true)
     expect(wrapper.find('.selp-error').text()).toContain('网络异常')
     expect(wrapper.find('.selp').classes()).toContain('selp--bad')
-    expect(wrapper.find('.selp-state strong').text()).toBe('接口异常')
+    expect(wrapper.find('.selp-state strong').text()).toBe('监控连接异常')
   })
 
   it('点击刷新按钮触发 refresh 并重新调用 API', async () => {
@@ -124,14 +127,14 @@ describe('SelfEvolutionLoopRuntimePanel.vue', () => {
     statusMock.mockResolvedValue({})
     mountComponent({ compact: true })
     await flushPromises()
-    expect(statusMock).toHaveBeenCalledWith(40)
+    expect(statusMock).toHaveBeenCalledWith(40, expect.any(AbortSignal))
   })
 
   it('非 compact 模式调用 API 传 limit=80', async () => {
     statusMock.mockResolvedValue({})
     mountComponent({ compact: false })
     await flushPromises()
-    expect(statusMock).toHaveBeenCalledWith(80)
+    expect(statusMock).toHaveBeenCalledWith(80, expect.any(AbortSignal))
   })
 
   it('空数据时状态为待命 (idle)', async () => {

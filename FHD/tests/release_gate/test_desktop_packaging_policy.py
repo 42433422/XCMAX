@@ -435,7 +435,10 @@ def test_windows_package_probes_real_elt_runtime_without_development_dependencie
         assert "$probe.WaitForExit(5000)" in script
         assert "$probe.ExitCode -ne 0" in script
     build = (REPO_ROOT / "scripts/package/build-backend.ps1").read_text(encoding="utf-8-sig")
-    assert 'pip install -c ops/deploy/requirements-server-api.lock.txt -e ".[server-api]"' in build
+    assert (
+        'pip install -c ops/deploy/requirements-server-api.lock.txt -r requirements-server-api.txt -e ".[server-api]"'
+        in build
+    )
     assert build.index("PyInstaller --noconfirm") < build.index(
         "Start-Process -FilePath $backendExe"
     )

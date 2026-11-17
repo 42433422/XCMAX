@@ -221,12 +221,26 @@ def get_agent_task_runtime(
             limit=200,
             include_archived=False,
         )
+        executor = {}
+        if principal.is_admin:
+            import socket
+
+            from app.infrastructure.workspace import workspace_root
+
+            executor = {
+                "executor": {
+                    "host": socket.gethostname(),
+                    "workspace_root": str(workspace_root()),
+                    "engine": "langgraph",
+                }
+            }
         return success(
             {
                 "running": bool(snapshot["running"]),
                 "max_workers": int(cast(Any, snapshot["max_workers"])),
                 "active_count": active_count,
                 "progress": _task_progress_overview(tasks),
+                **executor,
             }
         )
     except RECOVERABLE_ERRORS:
@@ -248,6 +262,28 @@ def create_agent_task(
         )
     runtime_context = authenticated_runtime_context(runtime_context_raw, principal)
     try:
+        if (
+            runtime_context.get("source") == "admin_employee_workspace"
+            and data.get("tool_id") == "employee"
+        ):
+            from app.application.employee_runtime.loader import candidate_pack_ids
+            from app.application.employee_runtime.tool_scope import host_employee_denial
+
+            employee_input = params.get("input")
+            denial = host_employee_denial(
+                candidate_pack_ids(str(params.get("employee_id") or params.get("pack_id") or "")),
+                employee_input if isinstance(employee_input, dict) else {},
+                runtime_context,
+            )
+            if denial:
+                return JSONResponse(
+                    {
+                        "success": False,
+                        "message": denial["error"],
+                        "error_code": denial["error_code"],
+                    },
+                    status_code=403,
+                )
         task_id = str(data.get("task_id") or "").strip()
         if not task_id or len(task_id) > 160 or "/" in task_id:
             return JSONResponse(

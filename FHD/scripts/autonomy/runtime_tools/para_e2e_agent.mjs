@@ -5,6 +5,7 @@
  * 用于 npm run e2e:loop -- --auto-touch 在无桌面代理在线时保底闭环。
  */
 import { execFile, spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -68,7 +69,7 @@ const credentialVault = createCredentialVault({ actor: 'para_e2e_agent' });
 const token = credentialVault.getCredential('DEVFLEET_DEVICE_TOKEN', {
   taskId: 'agent-session', purpose: 'para_device_ws', fallback: resolveDeviceToken, required: true,
 });
-// 子进程（Codex 等）环境走统一凭据层：按派单授权引用审计；开启强制模式后只给作用域内的密钥。
+// Model children receive only their model authentication; prompt grants may only narrow it.
 const toolEnv = (prompt, tool) => credentialVault.childEnv(process.env, parseCredentialGrant(prompt), { tool });
 const apiBase = (process.env.DEVFLEET_API_URL || 'http://localhost:3001').replace(/\/$/, '');
 const workspaceRoot = process.env.DEVFLEET_WORKSPACE_ROOT || '/tmp/devfleet-e2e/agent-workspace';
@@ -1094,6 +1095,7 @@ async function autoFormatPythonFiles(taskDir, ws, task) {
       try {
         await execFileAsync(cmd, args, {
           cwd: taskDir,
+          env: toolEnv('', 'formatter'),
           maxBuffer: 5 * 1024 * 1024,
           timeout: 30_000,
         });
@@ -1686,6 +1688,14 @@ function taskToolName(task) {
 }
 
 function enqueueTask(ws, task) {
+  if (process.env.GITHUB_ACTIONS === 'true') {
+    const request = process.env.PARA_GITHUB_REQUEST_ID;
+    const marker = request && `[xcmax:${createHash('sha256').update(request).digest('hex').slice(0, 32)}:`;
+    if (!marker || !String(task?.title || '').startsWith(marker)) {
+      console.error('[e2e-agent] rejected task outside this GitHub dispatch');
+      return false;
+    }
+  }
   const subtaskId = String(task?.subtask_id || '').trim();
   if (subtaskId && knownSubtasks.has(subtaskId)) return false;
   if (subtaskId) knownSubtasks.add(subtaskId);
@@ -1816,6 +1826,12 @@ function publishToolStatus(ws) {
     capabilities: {
       ...defaultCapabilities(),
       e2e_agent: true,
+      ...(process.env.GITHUB_ACTIONS === 'true' ? {
+        github_actions: true,
+        github_request_id: process.env.PARA_GITHUB_REQUEST_ID,
+        github_run_id: process.env.GITHUB_RUN_ID,
+        github_run_attempt: process.env.GITHUB_RUN_ATTEMPT,
+      } : {}),
       platform: process.platform === 'darwin' ? 'macos' : process.platform === 'win32' ? 'windows' : process.platform,
       tool_preflight: preflight,
       control_reports: process.env.XCMAX_CONTROL_REPORTS_ENABLED === '1',

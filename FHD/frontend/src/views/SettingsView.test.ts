@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import SettingsView from './SettingsView.vue'
 
@@ -40,6 +40,29 @@ const globalStubs = {
 }
 
 describe('SettingsView.vue', () => {
+  it('shows one admin settings section and preserves expanded details across navigation', async () => {
+    vi.stubEnv('VITE_XCMAX_ADMIN_CONSOLE', '1')
+    const router = makeRouter()
+    await router.push('/settings')
+    const wrapper = mount(SettingsView, { global: { plugins: [router], stubs: globalStubs } })
+    try {
+      await flushPromises()
+      expect(wrapper.get('#settings-group-system').isVisible()).toBe(true)
+      expect(wrapper.get('#settings-group-intelligence').isVisible()).toBe(false)
+      await wrapper.get('a[href="#settings-group-intelligence"]').trigger('click')
+      const details = wrapper.get('#settings-model-payment').element as HTMLDetailsElement
+      details.open = true
+      await wrapper.get('a[href="#settings-group-system"]').trigger('click')
+      expect(wrapper.get('#settings-group-intelligence').isVisible()).toBe(false)
+      await wrapper.get('a[href="#settings-group-intelligence"]').trigger('click')
+      expect(wrapper.get('#settings-group-intelligence').attributes('style')).not.toContain('display: none')
+      expect(wrapper.get('#settings-model-payment').element).toBe(details)
+      expect(details.open).toBe(true)
+    } finally {
+      wrapper.unmount()
+      vi.unstubAllEnvs()
+    }
+  })
   it('mounts without throwing', async () => {
     const router = makeRouter()
     await router.push('/settings')

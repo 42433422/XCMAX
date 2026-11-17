@@ -15,6 +15,36 @@ const NON_SECRET = new Set(['', '0', '1', 'true', 'false', 'yes', 'no', 'on', 'o
 const KEY_VALUE_RE = /(bearer\s+|(?:api[_-]?key|password|passwd|token|secret|authorization)\s*[:=]\s*(?:bearer\s+)?)[^\s,;'"]+/gi;
 const TOKEN_SHAPES_RE = /(sk-[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+)/g;
 
+// An environment boundary, not an OS sandbox: local HOME/config access remains trusted.
+const RUNTIME_ENV = new Set([
+  'PATH', 'HOME', 'USER', 'LOGNAME', 'SHELL', 'TMPDIR', 'TMP', 'TEMP', 'LANG',
+  'LC_ALL', 'LC_CTYPE', 'TZ', 'TERM', 'COLORTERM', 'NO_COLOR', 'CI',
+  'SystemRoot', 'SYSTEMROOT', 'WINDIR', 'COMSPEC', 'PATHEXT', 'USERPROFILE',
+  'APPDATA', 'LOCALAPPDATA', 'XDG_CONFIG_HOME', 'XDG_CACHE_HOME',
+]);
+const MODEL_AUTH = {
+  codex: ['OPENAI_API_KEY', 'CODEX_API_KEY'],
+  cursor: ['CURSOR_API_KEY'],
+  claude_code: ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN'],
+  trae: ['TRAE_API_KEY'],
+};
+const MODEL_CONFIG = {
+  codex: ['CODEX_HOME', 'OPENAI_BASE_URL', 'OPENAI_ORG_ID', 'OPENAI_PROJECT_ID', 'DEVFLEET_CODEX_API_KEY_ENV'],
+  claude_code: ['CLAUDE_CONFIG_DIR', 'ANTHROPIC_BASE_URL'],
+};
+
+/** Prompt text cannot confer authority: only narrow the built-in model-auth set. */
+export function modelChildEnv(baseEnv, { tool = '', scopes = null } = {}) {
+  const auth = MODEL_AUTH[tool] || [];
+  if (tool === 'codex' && baseEnv.DEVFLEET_CODEX_API_KEY_ENV
+      && !auth.includes(baseEnv.DEVFLEET_CODEX_API_KEY_ENV.trim())) {
+    throw new Error('Unsupported Codex credential alias; use OPENAI_API_KEY or CODEX_API_KEY');
+  }
+  const allowed = new Set([...RUNTIME_ENV, ...(MODEL_CONFIG[tool] || []),
+    ...auth.filter(key => scopes === null || scopes.includes(key))]);
+  return Object.fromEntries(Object.entries(baseEnv).filter(([key]) => allowed.has(key)));
+}
+
 export function envBackend(env = process.env) {
   return { name: 'env', fetch: (name) => String(env[name] || '').trim() || null };
 }
@@ -160,25 +190,15 @@ export function createCredentialVault({
     return null;
   }
 
-  /** 子进程环境：默认原样透传；XCMAX_CREDENTIAL_SCOPED_CHILD_ENV=1 时只保留授权作用域内的密钥变量。 */
+  /** Model auth only by default; grants narrow, never add publisher/admin credentials. */
   function childEnv(baseEnv, grant, { taskId = '', tool = '' } = {}) {
-    const enforce = String(env.XCMAX_CREDENTIAL_SCOPED_CHILD_ENV || '') === '1';
     const status = grantStatus(grant);
-    const allowed = new Set(status === 'active' ? grant.scopes : []);
-    const stripped = [];
-    const out = { ...baseEnv };
-    if (enforce) {
-      for (const key of Object.keys(out)) {
-        if (SECRET_NAME_RE.test(key) && !allowed.has(key)) {
-          delete out[key];
-          stripped.push(key);
-        }
-      }
-    }
+    const scopes = !grant ? null : (status === 'active' ? grant.scopes : []);
+    const out = modelChildEnv(baseEnv, { tool, scopes });
     audit('child_env', {
       task_id: taskId || grant?.task_id || 'unknown', purpose: `tool:${tool || 'unknown'}`,
-      mode: enforce ? 'scoped' : 'passthrough', grant_id: grant?.grant_id, grant_status: status,
-      stripped_count: stripped.length,
+      mode: 'model_allowlist', grant_id: grant?.grant_id, grant_status: status,
+      stripped_count: Object.keys(baseEnv).length - Object.keys(out).length,
     });
     return out;
   }

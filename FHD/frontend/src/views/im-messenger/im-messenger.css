@@ -50,27 +50,13 @@
   line-height: 1.5;
 }
 
+.im-mobile-back { display:none; }
 @media (max-width: 720px) {
-  .im-messenger {
-    padding: 10px;
-  }
-
-  .im-body {
-    display: block;
-    overflow-y: auto;
-  }
-
-  .im-body :deep(.im-sidebar) {
-    width: 100%;
-    height: min(360px, 45vh);
-    min-height: 280px;
-    max-height: 360px;
-    border-right: 0;
-    border-bottom: 1px solid var(--xc-color-border, #e6e9ef);
-  }
-
-  .im-chat {
-    width: 100%;
-    min-height: 460px;
-  }
+  .im-messenger { padding:8px; }
+  .im-body { flex-direction:column; }
+  .im-body :deep(.im-sidebar) { display:none; }
+  .im-mobile-back { display:block; flex:none; padding:10px 14px; border:0; border-bottom:1px solid #e8ecf1; background:#fff; color:#526177; text-align:left; cursor:pointer; }
+  .im-body--mobile-list :deep(.im-sidebar) { display:flex; width:100%; flex:1; border:0; }
+  .im-body--mobile-list .im-chat, .im-body--mobile-list .im-mobile-back { display:none; }
+  .im-chat { width:100%; min-height:0; }
 }

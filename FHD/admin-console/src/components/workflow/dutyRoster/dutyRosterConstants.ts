@@ -10,7 +10,7 @@ import {
   YUANGON_PKG_ROLE_LABELS,
   YUANGON_AREAS,
 } from '@host/domain/yuangonDutyRoster'
-import type { EmpRow, GraphViewMode, HealthLv, LlmActLv, RunNodeStatus } from './dutyRosterTypes'
+import type { EmpRow, GraphViewMode, ViewMode, HealthLv, LlmActLv, RunNodeStatus } from './dutyRosterTypes'
 /**
  * DutyRosterGraphPanel 纯常量与纯函数（无响应式依赖）。
  *
@@ -19,6 +19,7 @@ import type { EmpRow, GraphViewMode, HealthLv, LlmActLv, RunNodeStatus } from '.
 
 export const DEFAULT_GRAPH_VIEW_MODE: GraphViewMode = 'department'
 export const GRAPH_VIEW_TOKENS = new Set([
+  'loop',
   'department',
   'dept',
   '六部门',
@@ -44,8 +45,9 @@ export function isGraphViewToken(raw: unknown): boolean {
   return GRAPH_VIEW_TOKENS.has(normalizeViewToken(raw))
 }
 
-export function parseViewModeFromQuery(raw: unknown): GraphViewMode {
+export function parseViewModeFromQuery(raw: unknown): ViewMode {
   const v = normalizeViewToken(raw)
+  if (v === 'loop') return 'loop'
   if (v === 'department' || v === 'dept' || v === '六部门') return 'department'
   if (v === 'hub' || v === 'center' || v === '中心' || v === '中心图') return 'hub'
   if (v === 'legacy-area' || v === 'area' || v === '物理' || v === '物理分区') return 'legacy-area'

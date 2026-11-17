@@ -77,6 +77,17 @@ describe('agent task center store', () => {
     vi.unstubAllGlobals()
   })
 
+  it('retains existing tasks when the server returns an unsuccessful envelope', async () => {
+    const store = useAgentTaskCenterStore()
+    await store.refresh()
+    apiMock.listTasks.mockResolvedValueOnce({ success: false, data: [] })
+    await store.refresh()
+    expect(store.tasks).toHaveLength(1)
+    expect(store.error).toContain('任务状态读取失败')
+    await store.refresh()
+    expect(store.error).toBe('')
+  })
+
   it('loads independent task state and approves through the durable run contract', async () => {
     const store = useAgentTaskCenterStore()
     await store.refresh()
@@ -248,7 +259,7 @@ describe('agent task center store', () => {
     expect(store.error).toBe('工作区列表暂时不可用')
   })
 
-  it('normalizes sparse API payloads and task selections', async () => {
+  it('reports malformed payloads without clearing the current selection', async () => {
     const store = useAgentTaskCenterStore()
     store.selectedTaskId = 'stale-task'
     store.selectedTask = null
@@ -257,7 +268,8 @@ describe('agent task center store', () => {
     await store.refresh()
 
     expect(store.tasks).toEqual([])
-    expect(store.selectedTaskId).toBe('')
+    expect(store.selectedTaskId).toBe('stale-task')
+    expect(store.error).toContain('任务状态读取失败')
     expect(store.runtime).toEqual({ running: false, max_workers: 4, active_count: 0 })
 
     apiMock.getTask.mockResolvedValueOnce({ success: true })

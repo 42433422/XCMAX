@@ -3,6 +3,7 @@
  * 入口：admin-console/index.html → admin-console/src/main.ts → frontend/src/main.ts
  */
 import { defineConfig } from 'vite'
+import { openimAssets } from './vite/openimAssets.js'
 import vue from '@vitejs/plugin-vue'
 import { routerDevtoolsNullGuard } from './vite/routerDevtoolsGuard.js'
 import VueI18n from '@intlify/unplugin-vue-i18n/vite'
@@ -38,15 +39,14 @@ function modViewsDir(modId) {
 const adminModuleAliases = [
   'constants/adminOperatorNav.ts',
   'constants/personnelModApi.ts',
-  'constants/xcmaxDashboardEmbed.ts',
   'views/XCmaxAdminView.vue',
   'views/AutomationPolicyView.vue',
-  'views/DutyTimeArchitectureView.vue',
   'views/DutyRosterGraphView.vue',
   'views/ServerFunctionsView.vue',
   'views/ApprovalHubView.vue',
   'views/EmployeeAutonomyView.vue',
   'components/workflow/DutyRosterGraphPanel.vue',
+  'components/workflow/SelfEvolutionLoopRuntimePanel.vue',
   'components/admin/XCmaxAdminAutonomyTab.vue',
   'components/contract/ContractEsignPanel.vue',
   'api/xcmaxAdmin.ts',
@@ -104,9 +104,10 @@ function buildDevProxy(apiBase) {
 export default defineConfig(() => ({
   root: adminRoot,
   plugins: [
+    openimAssets(),
     createAdminConsoleAtAliasPlugin(hostRoot),
     createWorkflowComponentsAliasPlugin(hostRoot),
-    vue(),
+    vue({ template: { compilerOptions: { isCustomElement: tag => tag === 'vue-advanced-chat' } } }),
     // 管理端网页使用严格 CSP（不允许 unsafe-eval）。翻译消息必须在构建期
     // 预编译，否则 vue-i18n 会在登录页通过 new Function 动态编译并白屏。
     VueI18n({
@@ -167,19 +168,19 @@ export default defineConfig(() => ({
       },
       {
         find: '@admin-console-inject/workflow/SelfEvolutionLoopRuntimePanel.vue',
-        replacement: path.join(hostSrc, 'components/workflow/SelfEvolutionLoopRuntimePanel.vue'),
+        replacement: path.join(adminSrc, 'components/workflow/SelfEvolutionLoopRuntimePanel.vue'),
       },
       {
         find: '@admin-console-inject/employeeWorkspace/EmployeeWorkspaceLoopConsole.vue',
-        replacement: path.join(hostSrc, 'components/employeeWorkspace/EmployeeWorkspaceLoopConsole.vue'),
+        replacement: path.join(adminSrc, 'components/workflow/GithubEmployeeWorkspace.vue'),
       },
       {
         find: /^@vue-office\/docx$/,
-        replacement: path.join(hostRoot, 'node_modules/@vue-office/docx'),
+        replacement: path.join(hostRoot, 'node_modules/@vue-office/docx/lib/v3/index.js'),
       },
       {
         find: /^@vue-office\/pptx$/,
-        replacement: path.join(hostRoot, 'node_modules/@vue-office/pptx'),
+        replacement: path.join(hostRoot, 'node_modules/@vue-office/pptx/lib/v3/index.js'),
       },
       { find: '@host', replacement: hostSrc },
       { find: '@', replacement: hostSrc },

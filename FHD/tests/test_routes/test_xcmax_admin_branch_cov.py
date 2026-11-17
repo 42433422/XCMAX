@@ -252,144 +252,7 @@ class TestDigestLocalOrProxyQueryParseContinue:
 # ---------------------------------------------------------------------------
 
 
-class TestSelfMaintenanceLocalOrProxyBranches:
-    """Cover the ValueError continue and 404 fallback branches."""
-
-    @pytest.mark.asyncio
-    async def test_status_path_with_invalid_limit_uses_default(self):
-        """Lines 247->246: limit=abc raises ValueError → pass → uses default 80."""
-        req = _mock_request()
-        svc_result = {"status": "ok"}
-        with _shared_scope_case_0(
-            svc_result,
-            case_value_1="app.application.self_maintenance_app_service.get_runtime_status_local",
-        ):
-            result = await admin_routes._self_maintenance_local_or_proxy(
-                req, "GET", "/api/ops/self-maintenance/status?limit=abc"
-            )
-        assert result == svc_result
-
-    @pytest.mark.asyncio
-    async def test_404_fallback_to_local(self):
-        """Lines 285->293: upstream returns 404 → try local fallback."""
-        req = _mock_request()
-        not_found = JSONResponse({"detail": "not found"}, status_code=404)
-        local_result = {"fallback": True}
-        with (
-            patch(
-                "app.application.modstore_local_client.prefer_local_modstore",
-                return_value=False,
-            ),
-            patch(
-                "app.fastapi_routes.xcmax_admin._market_admin_proxy",
-                new=AsyncMock(return_value=not_found),
-            ),
-            patch(
-                "app.application.self_maintenance_app_service.get_runtime_status_local",
-                new=AsyncMock(return_value=local_result),
-            ),
-            patch(
-                "app.fastapi_routes.market_account._authorization_from_request",
-                return_value="tok",
-            ),
-        ):
-            result = await admin_routes._self_maintenance_local_or_proxy(
-                req, "GET", "/api/ops/self-maintenance/status"
-            )
-        assert result == local_result
-
-    @pytest.mark.asyncio
-    async def test_404_fallback_local_returns_none_returns_proxied(self):
-        """Lines 285->293: upstream 404, local returns None → return proxied 404."""
-        req = _mock_request()
-        not_found = JSONResponse({"detail": "not found"}, status_code=404)
-        with (
-            patch(
-                "app.application.modstore_local_client.prefer_local_modstore",
-                return_value=False,
-            ),
-            patch(
-                "app.fastapi_routes.xcmax_admin._market_admin_proxy",
-                new=AsyncMock(return_value=not_found),
-            ),
-            patch(
-                "app.application.self_maintenance_app_service.get_runtime_status_local",
-                new=AsyncMock(return_value=None),
-            ),
-            patch(
-                "app.fastapi_routes.market_account._authorization_from_request",
-                return_value="tok",
-            ),
-        ):
-            result = await admin_routes._self_maintenance_local_or_proxy(
-                req, "GET", "/api/ops/self-maintenance/status"
-            )
-        assert result is not_found
-
-    @pytest.mark.asyncio
-    async def test_404_fallback_local_raises_returns_proxied(self):
-        """Lines 287-292: upstream 404, local raises RECOVERABLE_ERRORS → return proxied."""
-        req = _mock_request()
-        not_found = JSONResponse({"detail": "not found"}, status_code=404)
-        with (
-            patch(
-                "app.application.modstore_local_client.prefer_local_modstore",
-                return_value=False,
-            ),
-            patch(
-                "app.fastapi_routes.xcmax_admin._market_admin_proxy",
-                new=AsyncMock(return_value=not_found),
-            ),
-            patch(
-                "app.application.self_maintenance_app_service.get_runtime_status_local",
-                new=AsyncMock(side_effect=RuntimeError("local fail")),
-            ),
-            patch(
-                "app.fastapi_routes.market_account._authorization_from_request",
-                return_value="tok",
-            ),
-        ):
-            result = await admin_routes._self_maintenance_local_or_proxy(
-                req, "GET", "/api/ops/self-maintenance/status"
-            )
-        assert result is not_found
-
-    @pytest.mark.asyncio
-    async def test_non_self_maintenance_path_returns_none(self):
-        """Line 234: path doesn't start with /api/ops/self-maintenance/ → return None."""
-        req = _mock_request()
-        result = await admin_routes._self_maintenance_local_or_proxy(req, "GET", "/api/other/path")
-        assert result is None
-
-    @pytest.mark.asyncio
-    async def test_governance_review_post_path(self):
-        """Line 256: governance-review POST path."""
-        req = _mock_request()
-        gov_result = {"reviewed": True}
-        with _shared_scope_case_0(
-            gov_result,
-            case_value_1="app.application.self_maintenance_app_service.governance_review_local",
-        ):
-            result = await admin_routes._self_maintenance_local_or_proxy(
-                req,
-                "POST",
-                "/api/ops/self-maintenance/governance-review",
-                json_body={"note": "test"},
-            )
-        assert result == gov_result
-
-    @pytest.mark.asyncio
-    async def test_unknown_self_maintenance_path_returns_none_locally(self):
-        """Line 262: self-maintenance path but unknown sub-path → _call_local returns None."""
-        req = _mock_request()
-        proxied = {"proxied": True}
-        with _shared_scope_case_0(
-            proxied, case_value_1="app.fastapi_routes.xcmax_admin._market_admin_proxy"
-        ):
-            result = await admin_routes._self_maintenance_local_or_proxy(
-                req, "GET", "/api/ops/self-maintenance/unknown"
-            )
-        assert result == proxied
+# Loop target routing is covered in application/test_self_maintenance_app_service_routes.py.
 
 
 # ---------------------------------------------------------------------------
@@ -788,6 +651,10 @@ class TestLocalSelfMaintenanceGovernanceReview:
     def test_success(self, client: TestClient):
         """Lines 1101-1108: success path."""
         with (
+            patch.dict("os.environ", {"MODSTORE_LOCAL_AUTOMATION": "1"}),
+            patch(
+                "app.fastapi_routes.xcmax_admin._require_market_admin_session", return_value=None
+            ),
             _session_id("sid123"),
             patch(
                 "app.fastapi_routes.market_account._authorization_from_request",
@@ -808,6 +675,10 @@ class TestLocalSelfMaintenanceGovernanceReview:
     def test_recoverable_error_returns_502(self, client: TestClient):
         """Lines 1107-1108: error → 502."""
         with (
+            patch.dict("os.environ", {"MODSTORE_LOCAL_AUTOMATION": "1"}),
+            patch(
+                "app.fastapi_routes.xcmax_admin._require_market_admin_session", return_value=None
+            ),
             _session_id("sid123"),
             patch(
                 "app.fastapi_routes.market_account._authorization_from_request",

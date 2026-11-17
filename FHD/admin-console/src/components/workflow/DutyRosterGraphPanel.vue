@@ -350,7 +350,7 @@ onUnmounted(() => {
           <p v-if="error" class="dg-error">
             {{ error }}&nbsp;<button class="dg-btn--inline" @click="load">重试</button>
           </p>
-          <p v-else-if="loadWarning" class="dg-error dg-error--warn">
+          <p v-else-if="loadWarning && viewMode !== 'loop'" class="dg-error dg-error--warn">
             {{ loadWarning }}（已展示本机编制，部分运维数据可能不可用）&nbsp;
             <button class="dg-btn--inline" @click="load">重试</button>
           </p>
@@ -418,6 +418,7 @@ onUnmounted(() => {
             <SelfEvolutionLoopRuntimePanel
               v-if="viewMode === 'loop'"
               class="dg-loop-runtime-panel"
+              @snapshot="loopRuntimeStatus = $event"
               surface="duty-roster"
             />
 

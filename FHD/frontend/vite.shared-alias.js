@@ -92,10 +92,6 @@ export function createResolveAlias(frontendDir, opts = {}) {
       replacement: path.join(adminSrc, 'constants/adminOperatorNav.ts'),
     },
     {
-      find: '@/constants/xcmaxDashboardEmbed',
-      replacement: path.join(adminSrc, 'constants/xcmaxDashboardEmbed.ts'),
-    },
-    {
       find: '@/api/xcmaxOps',
       replacement: path.join(adminSrc, 'api/xcmaxOps.ts'),
     },

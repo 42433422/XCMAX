@@ -58,6 +58,17 @@ def authenticated_runtime_context(raw: dict[str, Any], principal: AgentPrincipal
 
     context = without_runtime_identity(raw)
     context["workspace_root"] = str(workspace_root())
+    if context.get("source") == "admin_employee_workspace":
+        if not principal.is_admin:
+            from fastapi import HTTPException
+
+            raise HTTPException(status_code=403, detail="员工管理工作空间仅限管理员")
+        # This surface reports the actual host workspace, never a caller-supplied
+        # display path masquerading as an isolated checkout or cloud machine.
+        for key in ("worktree_path", "cwd", "workspace_path", "workspace_isolation"):
+            context.pop(key, None)
+        context["workspace_path"] = context["workspace_root"]
+        context["workspace_isolation"] = "host_workspace"
     context.update(user_id=principal.user_id, actor_id=principal.user_id)
     if principal.tenant_id:
         context["tenant_id"] = principal.tenant_id

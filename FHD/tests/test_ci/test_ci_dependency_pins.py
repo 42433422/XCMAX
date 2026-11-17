@@ -181,6 +181,9 @@ if "--format=json" in sys.argv:
                 )
             ]
             assert test_installs and all("pytest==9.1.1" in args for args in test_installs)
+            for args in test_installs:
+                if ".[server-api]" in args:
+                    assert args[args.index("-r") + 1] == "requirements-server-api.txt"
         else:
             assert not calls, "A bad or missing lock must stop before any installer runs"
 
@@ -210,3 +213,32 @@ def test_uv_installer_preserves_dependency_inputs_and_checks_the_target_interpre
         )
         assert command.index("--pytest-pin") < command.index(install) < command.index(check)
         assert "--upgrade pip" not in command
+
+
+def test_pip_runtime_install_supplies_all_vendored_sources() -> None:
+    fhd = _REPO_ROOT / "FHD"
+    project = tomllib.loads((fhd / "pyproject.toml").read_text())
+    requirements = (fhd / "requirements-server-api.txt").read_text().splitlines()
+    for name, source in project["tool"]["uv"]["sources"].items():
+        path = source["path"]
+        assert f"-e ./{path}" in requirements
+        package = tomllib.loads((fhd / path / "pyproject.toml").read_text())["project"]
+        assert f"{name}=={package['version']}" in project["project"]["dependencies"]
+    for name in ("build-backend.sh", "build-backend.ps1"):
+        script = (fhd / "scripts/package" / name).read_text()
+        install = next(
+            line
+            for line in script.splitlines()
+            if "pip install" in line and ".[server-api]" in line
+        )
+        assert "-r requirements-server-api.txt" in install
+    jobs = yaml.safe_load((_REPO_ROOT / ".github/workflows/fhd-alembic-ssot.yml").read_text())[
+        "jobs"
+    ]
+    install = next(
+        step["run"]
+        for job in jobs.values()
+        for step in job.get("steps", [])
+        if step.get("name") == "Install FHD runtime deps"
+    )
+    assert 'pip install -r requirements-server-api.txt -e ".[server-api]"' in install

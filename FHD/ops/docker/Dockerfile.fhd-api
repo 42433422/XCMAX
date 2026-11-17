@@ -58,6 +58,8 @@ ENV PYTHONPATH=/app/packages/xcagi_langgraph_core:/app/packages/xcagi_langgraph_
 COPY --from=builder /opt/site-packages /opt/site-packages
 
 COPY --chown=appuser:appuser app /app/app
+# Admin maintenance imports these runtime contracts at route registration.
+COPY --chown=appuser:appuser scripts/autonomy/__init__.py scripts/autonomy/autonomy_types.py scripts/autonomy/rundeck_executor.py /app/scripts/autonomy/
 COPY --chown=appuser:appuser packages /app/packages
 COPY --chown=appuser:appuser XCAGI /app/XCAGI
 COPY --chown=appuser:appuser alembic /app/alembic

@@ -4,7 +4,6 @@
       <header class="admin-entitlements-head page-header">
         <div>
           <h2>用户管理</h2>
-          <p class="muted">管理用户等级与行业，分配客户 Mod 权益，或进入代管模式代为配置。</p>
         </div>
         <button type="button" class="btn btn-primary btn-sm" @click="createAccountOpen = !createAccountOpen">
           {{ createAccountOpen ? '收起新建' : '新建账号' }}
@@ -90,7 +89,7 @@
         </div>
       </section>
 
-      <section class="admin-user-toolbar" aria-label="用户筛选">
+      <section v-show="!selectedUser && !createAccountOpen" class="admin-user-toolbar" aria-label="用户筛选">
         <div class="admin-user-toolbar__search">
           <input v-model="userFilter" type="search" class="admin-user-search" placeholder="搜索用户名 / 邮箱" />
         </div>
@@ -107,7 +106,7 @@
         </div>
       </section>
 
-      <section v-if="filteredUsers.length" class="admin-user-grid" aria-label="用户卡片列表">
+      <section v-show="!selectedUser && !createAccountOpen" v-if="filteredUsers.length" class="admin-user-grid" aria-label="用户卡片列表">
         <article
           v-for="u in filteredUsers"
           :key="u.id"
@@ -150,15 +149,16 @@
           </div>
         </article>
       </section>
-      <p v-else class="muted admin-user-grid__empty">没有匹配的用户</p>
+      <p v-else v-show="!selectedUser && !createAccountOpen" class="muted admin-user-grid__empty">没有匹配的用户</p>
 
-      <section v-if="selectedUser" class="admin-user-detail" aria-label="用户详情">
+      <section v-show="!createAccountOpen" v-if="selectedUser" class="admin-user-detail" aria-label="用户详情">
         <header class="admin-user-detail__head">
           <div>
             <h3>{{ selectedUser.username }}</h3>
             <p class="muted">ID {{ selectedUser.id }} · {{ selectedUser.email || '无邮箱' }}</p>
           </div>
           <div class="admin-user-detail__actions">
+            <button type="button" class="btn btn-secondary btn-sm" @click="selectedUserId = null">返回用户列表</button>
             <label class="admin-flag">
               <input type="checkbox" :checked="selectedUser.is_enterprise" @change="toggleEnterprise($event)" />
               企业用户
@@ -218,7 +218,6 @@
           <div class="admin-wallet-panel__summary">
             <span class="admin-user-profile__label">账户余额</span>
             <strong>{{ walletBalance(selectedUser) }}</strong>
-            <small class="muted">给客户市场钱包加款，完成后同步到账户可用余额。</small>
           </div>
           <div class="admin-wallet-panel__form">
             <label class="admin-user-profile__field admin-wallet-panel__amount">
@@ -250,7 +249,6 @@
           <div class="admin-entitlement-chain__intro">
             <div>
               <strong>账号 → Mod → AI 员工 → 设备执行</strong>
-              <span class="muted">这里的绑定会决定企业端、手机端和信息页能看到并调用哪些员工。</span>
             </div>
             <div class="admin-chain-actions">
               <button

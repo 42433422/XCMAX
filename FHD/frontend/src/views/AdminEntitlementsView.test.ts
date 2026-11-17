@@ -242,7 +242,7 @@ describe('AdminEntitlementsView', () => {
     await flushPromises()
     await wrapper.find('.admin-user-card').trigger('click')
     await flushPromises()
-    expect(wrapper.find('.admin-user-detail__actions button').text()).toContain('进入代管')
+    expect(wrapper.find('.admin-user-detail__actions button.btn-primary').text()).toContain('进入代管')
   })
 
   it('shows private delivery stages and rework history for the selected user', async () => {

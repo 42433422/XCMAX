@@ -139,8 +139,15 @@ class SessionAccess:
                 {**error_envelope(ACCOUNT_DISABLED, "账户已被禁用"), "valid": False},
                 status_code=403,
             )
+        session_meta = self.session_meta(request, user)
+        web_admin = (
+            user is not None
+            and session_meta.get("account_kind") == "admin"
+            and session_meta.get("market_is_admin") is True
+            and session_meta.get("impersonating_market_user_id") is None
+        )
         try:
-            if self.product_sku() == "enterprise":
+            if self.product_sku() == "enterprise" and not web_admin:
                 # Local token opens the workspace. The market probe waits out
                 # its 2s timeout and holds the desktop splash.
                 if not (self.stored_market_token(session_id) or "").strip():
@@ -166,7 +173,6 @@ class SessionAccess:
             background_tasks.add_task(self._refresh_entitlements, session_id)
         except self.infra_errors():
             self.logger.exception("sync enterprise entitlements on validate failed")
-        session_meta = self.session_meta(request, user)
         payload: dict[str, Any] = {"success": True, "valid": True, "data": session_info}
         if entitled_mod_ids:
             payload["entitled_mod_ids"] = entitled_mod_ids

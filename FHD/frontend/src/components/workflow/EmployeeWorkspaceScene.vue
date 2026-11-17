@@ -8,7 +8,6 @@ import WorkflowEmployeeInspector from '@/components/workflow/WorkflowEmployeeIns
 // 避免把平台内部员工名单打进企业产物。
 import DutyRosterWorkflowLoopView from '@admin-console-inject/workflow/DutyRosterWorkflowLoopView.vue'
 import SelfEvolutionLoopRuntimePanel from '@admin-console-inject/workflow/SelfEvolutionLoopRuntimePanel.vue'
-import EmployeeWorkspaceLoopConsole from '@admin-console-inject/employeeWorkspace/EmployeeWorkspaceLoopConsole.vue'
 import { useDutyRoster } from '@/composables/useDutyRoster'
 import { isCustomPhaseEmployeeCarrierModId } from '@/utils/modWorkflowEmployees'
 import { workflowRegistryEntryBelongsToStack } from '@/utils/workflowEmployeeScope'
@@ -275,12 +274,6 @@ onMounted(() => {
       <DutyRosterWorkflowLoopView surface="employee-space" compact />
       <SelfEvolutionLoopRuntimePanel surface="employee-space" compact />
 
-      <EmployeeWorkspaceLoopConsole
-        :loop="loop"
-        :route-focused-employee-id="routeFocusedEmployeeId"
-        :route-focused-employee-in-workspace="routeFocusedEmployeeInWorkspace"
-        :show-management-loop-panels="showManagementLoopPanels"
-      />
     </details>
   </section>
 </template>

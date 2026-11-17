@@ -155,6 +155,24 @@ def test_ready_plan_resumes_without_any_pending_receipt(incident, monkeypatch):
     assert calls == ["scout", "fix"]
 
 
+def test_github_receipt_is_read_from_cloud_coordinator(incident, monkeypatch):
+    monkeypatch.setenv("MODSTORE_PARA_GITHUB_API_BASE", "https://para.example.test")
+
+    def execute(*args, **kwargs):
+        result = _accepted("scout")
+        result["result"]["outputs"][0]["executor"] = "github_actions"
+        return result
+
+    monkeypatch.setattr(team, "_execute_employee_task_with_timeout", execute)
+    team.dispatch_incident_team(incident)
+    seen = []
+    completion.reconcile_pending_teams(
+        event_id=incident,
+        fetcher=lambda base, tid: seen.append((base, tid)) or _terminal(tid, "running"),
+    )
+    assert seen == [("https://para.example.test", "p-scout")]
+
+
 def test_late_receipt_wakes_next_role_and_does_not_share_old_claim(incident, monkeypatch):
     calls = []
     monkeypatch.setattr(

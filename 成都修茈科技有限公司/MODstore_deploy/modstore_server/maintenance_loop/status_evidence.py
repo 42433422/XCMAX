@@ -304,6 +304,7 @@ def collect_runtime_evidence(state):
             "review_blocking_findings": review.get("blocking_findings") if review else [],
             "review_dimensions": review.get("dimensions") if review else {},
             "reason": str(row.get("reason") or "").strip(),
+            "error": str(row.get("error") or "").strip()[:2000],
             "triggered_by": str(row.get("triggered_by") or "").strip(),
             "force": row.get("force") if isinstance(row.get("force"), bool) else None,
         }

@@ -312,3 +312,39 @@ def test_preparation_failure_keeps_original_scope_and_submits_nothing(check_requ
     assert saved[0]["planned_devices"] == ["w1", "w2"]
     assert saved[0]["para_payload"] == prepared[0]
     assert result["requires_reconciliation"] and not result["accepted"]
+
+
+def test_payload_preparation_uses_explicit_policies_not_handler_back_references(monkeypatch):
+    from modstore_server.para_delegate_task_payloads import PreparedTaskGroup, prepare_task_group
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("payload preparation must not look up the orchestration facade")
+
+    for name in (
+        "_normalize_tool_name",
+        "_multi_device_prompt",
+        "_para_subtask_title",
+        "insert_before_loop_context",
+    ):
+        monkeypatch.setattr(h, name, forbidden)
+    group = PreparedTaskGroup()
+    prepare_task_group(
+        {"title": "review", "report_only": True},
+        [{"id": "device", "_selected_tool": "CODEX"}],
+        base_prompt="public summary",
+        units=[{"unit_id": "one", "prompt": "check only"}],
+        check_revision="a" * 40,
+        options={"max_attempts": 2, "auto_merge": False, "workspace_path": ""},
+        grant=None,
+        group=group,
+        transform=lambda req, payload, tool: {**payload, "tool_name": tool},
+        normalize_tool=str.lower,
+        multi_device_prompt=lambda prompt, device, index, total: prompt,
+        subtask_title=lambda req, index, total: "subtask",
+        insert_context=lambda prompt, addition: prompt + "\n" + addition,
+    )
+    payload = group.payloads[0][3]
+    assert group.blocked is None and group.planned_devices == ["device"]
+    assert payload["tool_name"] == "codex" and payload["max_attempts"] == 1
+    assert payload["report_only"] is True and payload["branch"] == "a" * 40
+    assert str(payload["prompt"]).startswith("public summary\n独立只读检查 one")

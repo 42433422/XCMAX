@@ -122,6 +122,7 @@ _FULL_OPTIONAL_MODULES = (
     "modstore_server.payment_health_api",
     "modstore_server.openapi_connector_api",
     "modstore_server.customer_service_api",
+    "modstore_server.retort_evolution_api",
     "modstore_server.developer_api",
     "modstore_server.developer_key_export_api",
     "modstore_server.webhook_subscription_api",

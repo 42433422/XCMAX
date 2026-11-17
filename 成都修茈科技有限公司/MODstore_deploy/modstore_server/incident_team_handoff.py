@@ -24,6 +24,8 @@ _REFERENCES = (
     "change_request_id",
     "pull_request_url",
     "branch",
+    "commit_sha",
+    "archive_sha256",
     "merge_commit_sha",
 )
 

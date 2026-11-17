@@ -252,7 +252,7 @@ describe('AdminEntitlementsView functions', () => {
     const wrapper = await mountComponent()
     await selectUser(wrapper)
     mockStartImpersonate.mockResolvedValue({ bridge_token: 'tok' })
-    await wrapper.get('.admin-user-detail__actions button').trigger('click')
+    await wrapper.get('.admin-user-detail__actions button.btn-primary').trigger('click')
     await flushPromises()
     expect(mockStartImpersonate).toHaveBeenCalled()
     expect(mockAppAlert).toHaveBeenCalledWith(expect.stringContaining('已进入代管'))

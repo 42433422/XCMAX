@@ -1,0 +1,44 @@
+# Import into a dedicated project with one operator-registered maintenance node.
+# No schedules: XCMAX remains the authority for admission and incident identity.
+- uuid: eaf2fd6d-c7fa-48d4-9ed0-b682ad85eca1
+  name: restart-service
+  group: xcmax-maintenance
+  description: Restart the fixed XCMAX deployment and verify its local health endpoint.
+  executionEnabled: true
+  scheduleEnabled: false
+  multipleExecutions: false
+  timeout: 90s
+  nodeFilterEditable: false
+  nodefilters:
+    filter: 'tags: xcmax-maintenance'
+    dispatch:
+      threadcount: '1'
+      keepgoing: false
+      successOnEmptyNodeFilter: false
+  nodesSelectedByDefault: true
+  sequence:
+    keepgoing: false
+    strategy: node-first
+    commands:
+      - exec: /usr/local/libexec/xcmax-maintenance restart_service
+- uuid: 267c2d26-e146-4557-8c44-36c5b9e45514
+  name: clear-logs
+  group: xcmax-maintenance
+  description: Apply the existing seven-day log retention policy on the fixed deployment.
+  executionEnabled: true
+  scheduleEnabled: false
+  multipleExecutions: false
+  timeout: 90s
+  nodeFilterEditable: false
+  nodefilters:
+    filter: 'tags: xcmax-maintenance'
+    dispatch:
+      threadcount: '1'
+      keepgoing: false
+      successOnEmptyNodeFilter: false
+  nodesSelectedByDefault: true
+  sequence:
+    keepgoing: false
+    strategy: node-first
+    commands:
+      - exec: /usr/local/libexec/xcmax-maintenance clear_logs

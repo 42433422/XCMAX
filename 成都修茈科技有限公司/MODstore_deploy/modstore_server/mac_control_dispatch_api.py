@@ -15,6 +15,7 @@ import hashlib
 import hmac
 import os
 import time
+import uuid
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
@@ -62,6 +63,17 @@ def require_dispatch_service(authorization: str = Header(default="")) -> str:
     if not matched:
         raise HTTPException(401, "派单服务令牌无效")
     return SERVICE_ACTOR
+
+
+@router.get("/github-runs/{request_id}")
+def github_run_status(
+    request_id: uuid.UUID,
+    actor: str = Depends(require_dispatch_service),
+    db: Session = Depends(get_db),
+):
+    from modstore_server.para_github_runner import run_status
+
+    return run_status(db, request_id)
 
 
 class DispatchRequest(BaseModel):

@@ -1,4 +1,5 @@
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useVisiblePolling } from './messenger/useVisiblePolling'
 import xcmaxMarketProxy from '@/api/xcmaxMarketProxy'
 
 export type AnyRecord = Record<string, unknown>
@@ -28,41 +29,65 @@ export function firstText(...values: unknown[]): string {
   return ''
 }
 
-/**
- * 自进化循环运行面板的运行状态与轮询逻辑。
- * 负责拉取 selfMaintenanceRuntimeStatus、维护 loading/error 状态，
- * 并在组件挂载后每 30s 轮询刷新（卸载时清理定时器）。
- * `getLimit` 由调用方提供，用于根据 compact 模式决定接口 limit。
- */
-export function useLoopRuntimePanel(getLimit: () => number) {
-  const raw = ref<AnyRecord | null>(null)
-  const loading = ref(false)
-  const error = ref('')
-  let timer: number | null = null
+/** Reuse the shared visibility-aware poller; writes are never retried here. */
+export function useLoopRuntimePanel(getLimit: () => number, enabled: () => boolean = () => true) {
+  const raw = ref<AnyRecord | null>(null),
+    loading = ref(false),
+    error = ref('')
+  const lastSuccessAt = ref(''),
+    now = ref(Date.now())
+  let disposed = false
+  let controller: AbortController | undefined
+  let clock: ReturnType<typeof setInterval> | undefined
+  const stale = computed(() => {
+    const generated = Date.parse(asString(raw.value?.generated_at))
+    return !!raw.value && (!Number.isFinite(generated) || now.value - generated > 120000 || generated > now.value + 60000)
+  })
+  const connection = computed(() =>
+    error.value ? 'error' : !raw.value ? (loading.value ? 'loading' : 'empty') : stale.value ? 'stale' : 'connected',
+  )
 
-  async function refresh() {
+  async function refresh(): Promise<boolean> {
+    if (loading.value || disposed || !enabled()) return false
     loading.value = true
-    error.value = ''
+    controller = new AbortController()
     try {
-      raw.value = (await xcmaxMarketProxy.selfMaintenanceRuntimeStatus(getLimit())) as AnyRecord
+      const payload = asRecord(await xcmaxMarketProxy.selfMaintenanceRuntimeStatus(getLimit(), controller.signal))
+      if (disposed) return false
+      if (
+        payload.ok === false ||
+        payload.schema_version !== 'self_maintenance_runtime.v1' ||
+        !Array.isArray(payload.run_timelines) ||
+        !Array.isArray(asRecord(payload.evidence).open_run_ids) ||
+        !Number.isFinite(Date.parse(asString(payload.generated_at)))
+      ) {
+        throw new Error('维护状态数据不完整，请检查运营服务版本')
+      }
+      raw.value = payload
+      now.value = Date.now()
+      lastSuccessAt.value = new Date(now.value).toISOString()
+      error.value = ''
+      return true
     } catch (e: unknown) {
-      error.value = e instanceof Error ? e.message : String(e)
+      if (!disposed) error.value = e instanceof Error ? e.message : '维护监控连接失败'
+      return false
     } finally {
-      loading.value = false
+      if (!disposed) loading.value = false
     }
   }
-
+  const polling = useVisiblePolling(refresh, 30000, 120000)
   onMounted(() => {
     void refresh()
-    timer = window.setInterval(() => {
-      void refresh()
-    }, 30000)
+    polling.start()
+    clock = setInterval(() => {
+      now.value = Date.now()
+    }, 15000)
   })
-
   onBeforeUnmount(() => {
-    if (timer != null) window.clearInterval(timer)
-    timer = null
+    disposed = true
+    controller?.abort()
+    polling.stop()
+    if (clock) clearInterval(clock)
   })
-
-  return { raw, loading, error, refresh, asRecord, asArray, asString, asNumber, firstText }
+  return { raw, loading, error, refresh, stale, connection, lastSuccessAt, asRecord, asArray, asString, asNumber, firstText }
 }

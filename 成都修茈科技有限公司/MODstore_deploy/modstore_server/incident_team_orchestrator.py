@@ -13,7 +13,6 @@ from typing import Any, Dict, List, Optional
 
 from modstore_server.employee_executor import execute_employee_task
 from modstore_server.incident_bus import _incident_payload as _payload  # noqa: F401
-from modstore_server.incident_team_dispatch import dispatch_incident_team as dispatch_incident_team
 from modstore_server.incident_team_handler_digest import handler_output_digest, redact_text
 from modstore_server.incident_team_handoff import format_role_handoff
 from modstore_server.llm_failure_classifier import FAILURE_KIND_ROLE_TIMEOUT
@@ -400,11 +399,17 @@ def _retry_member(
         if role == "fix" and isinstance(team_plan.get("code_owner_match"), dict)
         else None
     )
+    if payload.get("github_workspace"):
+        from modstore_server.customer_ticket_github import public_incident
+
+        public_payload = public_incident(payload)
+    else:
+        public_payload = payload
     task = _task_for_role(
         code_ownership=code_ownership,
         event_type=event_type,
         fix_result=fix_result,
-        payload=payload,
+        payload=public_payload,
         role=role,
         scout_result=scout_result,
     )
@@ -481,6 +486,12 @@ def _retry_member(
     row.pop("outcome", None)
     persist_role_attempt(event_id, row, expected_attempt=attempt_id)
     return result
+
+
+def dispatch_incident_team(*args, **kwargs):
+    from modstore_server.incident_team_dispatch import dispatch_incident_team as dispatch
+
+    return dispatch(*args, **kwargs)
 
 
 __all__ = ["build_incident_team", "dispatch_incident_team"]

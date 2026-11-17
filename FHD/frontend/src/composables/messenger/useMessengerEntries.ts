@@ -70,10 +70,12 @@ export type ExternalAppEntry = {
 }
 
 export type AiGroupChatEntry = {
-  id: 'ai-group-chat'
-  display_name: '我的群聊'
-  username: 'ai-group-chat'
-  subtitle: '多 AI 员工协同群聊'
+  id: string
+  display_name: string
+  username: string
+  subtitle: string
+  group_id?: string
+  members?: import('@/api/aiGroups').AiGroupMember[]
   is_ai_group_chat_entry: true
 }
 
