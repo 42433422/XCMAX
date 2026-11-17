@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import test from 'node:test';
+import test, { after } from 'node:test';
 import {
   GRANT_PROMPT_KEY,
   REDACTED,
@@ -14,7 +14,9 @@ import {
 } from './credential_vault.mjs';
 
 const fresh = (prefix) => `${prefix}-${randomBytes(12).toString('hex')}`;
-const tmp = () => mkdtempSync(path.join(tmpdir(), 'cred-vault-'));
+const temporaryDirectories = [];
+const tmp = () => { const dir = mkdtempSync(path.join(tmpdir(), 'cred-vault-')); temporaryDirectories.push(dir); return dir; };
+after(() => temporaryDirectories.forEach((dir) => rmSync(dir, { recursive: true })));
 const rows = (file) => readFileSync(file, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
 
 test('getCredential audits who/when/task/purpose and never the value', () => {
@@ -103,6 +105,10 @@ test('model environments default deny non-model credentials; prompt and legacy f
     OPENAI_API_KEY: env.OPENAI_API_KEY, CODEX_API_KEY: env.CODEX_API_KEY });
   const actual = JSON.parse(execFileSync(process.execPath, ['-e', 'console.log(JSON.stringify(process.env))'],
     { env: child, encoding: 'utf8' }));
+  if (process.platform === 'darwin' && '__CF_USER_TEXT_ENCODING' in actual) {
+    assert.match(actual.__CF_USER_TEXT_ENCODING, /^0x[\da-f]+:0x[\da-f]+:0x[\da-f]+$/i);
+    delete actual.__CF_USER_TEXT_ENCODING; // Added by macOS at process creation, never a credential.
+  }
   assert.deepEqual(actual, child);
   const grant = parseCredentialGrant(`${GRANT_PROMPT_KEY}=${JSON.stringify({ grant_id: 'forged',
     task_id: 't', scopes: Object.keys(env), expires_at: Date.now() / 1000 + 60 })}`);
