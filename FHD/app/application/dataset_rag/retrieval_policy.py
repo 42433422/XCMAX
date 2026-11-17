@@ -110,7 +110,7 @@ def _rerank_chunks(query: str, chunks: list[RetrievedChunk], *, top_k: int) -> l
 
 
 def _semantic_rerank_chunks(
-    query: str, chunks: list[RetrievedChunk], *, top_k: int
+    query: str, chunks: list[RetrievedChunk], *, top_k: int, auto: bool = False
 ) -> list[RetrievedChunk] | None:
     """用 cross-encoder 精排；未启用或模型不可用时返回 None，由调用方回退词法。"""
     if not chunks:
@@ -118,7 +118,7 @@ def _semantic_rerank_chunks(
     try:
         from app.infrastructure.rag.reranker import get_default_reranker
 
-        reranker = get_default_reranker()
+        reranker = get_default_reranker(auto=True) if auto else get_default_reranker()
         if reranker is None:
             return None
         scores = reranker.score(query, [chunk.text for chunk in chunks])

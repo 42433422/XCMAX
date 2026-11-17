@@ -33,6 +33,7 @@ from app.application.dataset_rag.retrieval_policy import (
 )
 from app.application.dataset_rag.vector_index import VectorIndexService
 from app.infrastructure.rag import RetrievedChunk
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 class EvidenceRetriever(Protocol):
@@ -110,6 +111,22 @@ def _named_sheet_context(
             if len(contexts) >= 4:
                 return contexts
     return contexts
+
+
+def _auto_rerank_available() -> bool:
+    """hash/disabled embedding 时，若本地精排依赖可用则自动精排。"""
+    try:
+        from app.infrastructure.llm.embedding_service import get_default_embedding_service
+        from app.infrastructure.rag.reranker import auto_rerank_allowed, get_default_reranker
+
+        if not auto_rerank_allowed():
+            return False
+        service = get_default_embedding_service()
+        if service is not None and service.is_semantic():
+            return False
+        return get_default_reranker(auto=True) is not None
+    except RECOVERABLE_ERRORS:
+        return False
 
 
 class DatasetRetrieval:
@@ -214,15 +231,17 @@ class DatasetRetrieval:
                 "index": index_snapshot,
             }
         final_k = max(1, min(int(top_k), 50))
+        auto_rerank = False if rerank else _auto_rerank_available()
+        effective_rerank = rerank or auto_rerank
         # 精排需要更大的候选池，否则 cross-encoder 没有可选空间
-        retrieve_k = max(final_k * 4, 20) if rerank else final_k
+        retrieve_k = max(final_k * 4, 20) if effective_rerank else final_k
         retriever = self._retriever_factory(embedder=self._vector.embedder, top_k=retrieve_k)
         retriever.index(chunks)
         top = retriever.retrieve(query_text)
-        if rerank:
-            top = _semantic_rerank_chunks(query_text, top, top_k=final_k) or _rerank_chunks(
-                query_text, top, top_k=final_k
-            )
+        if effective_rerank:
+            top = _semantic_rerank_chunks(
+                query_text, top, top_k=final_k, auto=auto_rerank
+            ) or _rerank_chunks(query_text, top, top_k=final_k)
         rows = [_chunk_to_dict(c, public=True) for c in top]
         # Excel text embeds sheet boundaries. Recover them for older indexed chunks
         # so rows from another worksheet cannot inherit a customer's identity.

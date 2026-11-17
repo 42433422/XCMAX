@@ -78,3 +78,48 @@ def test_lexical_rerank_still_available():
     chunks = [_chunk("无关内容", 0.9), _chunk("退款政策说明", 0.1)]
     top = _rerank_chunks("退款政策", chunks, top_k=1)
     assert top[0].text == "退款政策说明"
+
+
+def test_default_rerank_model_is_multilingual_int8():
+    from app.infrastructure.rag import reranker
+
+    assert reranker.DEFAULT_RERANK_MODEL == "BAAI/bge-reranker-v2-m3-int8"
+
+
+def test_auto_rerank_requires_explicit_env(monkeypatch):
+    from app.infrastructure.rag import reranker
+
+    monkeypatch.delenv("FHD_RERANK_AUTO", raising=False)
+    assert reranker.auto_rerank_allowed() is False
+    monkeypatch.setenv("FHD_RERANK_AUTO", "1")
+    assert reranker.auto_rerank_allowed() is True
+
+
+def test_auto_rerank_bypasses_explicit_switch(monkeypatch):
+    pytest.importorskip("fastembed")
+    from app.infrastructure.rag import reranker
+
+    monkeypatch.delenv("FHD_RERANK_ENABLED", raising=False)
+    monkeypatch.delenv("FHD_RERANK_MODEL", raising=False)
+    reranker.reset_reranker_for_tests()
+    try:
+        assert reranker.get_default_reranker() is None
+        assert reranker.get_default_reranker(auto=True) is not None
+    finally:
+        reranker.reset_reranker_for_tests()
+
+
+def test_semantic_rerank_passes_auto_flag(monkeypatch):
+    seen: dict = {}
+
+    class FakeReranker:
+        def score(self, query: str, passages: list[str]) -> list[float]:
+            return [1.0 for _ in passages]
+
+    def fake_get(*, auto: bool = False):
+        seen["auto"] = auto
+        return FakeReranker()
+
+    monkeypatch.setattr("app.infrastructure.rag.reranker.get_default_reranker", fake_get)
+    top = _semantic_rerank_chunks("q", [_chunk("a", 0.1)], top_k=1, auto=True)
+    assert top is not None and seen["auto"] is True

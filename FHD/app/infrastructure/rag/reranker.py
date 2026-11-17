@@ -2,8 +2,9 @@
 
 优先 fastembed（Apache-2.0，ONNX Runtime，无 torch），未安装时退回
 sentence-transformers。默认关闭，避免首次查询静默下载大模型；显式设置
-``FHD_RERANK_ENABLED=1`` 或 ``FHD_RERANK_MODEL`` 后启用，模型不可用时由
-调用方回退到词法重排，不影响检索主链路。
+``FHD_RERANK_ENABLED=1`` 或 ``FHD_RERANK_MODEL`` 后启用。当 embedding 降级为
+hash（无语义向量）时，可显式设置 ``FHD_RERANK_AUTO=1`` 让检索自动精排；模型不可用
+时由调用方回退到词法重排，不影响检索主链路。
 """
 
 from __future__ import annotations
@@ -17,11 +18,12 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_RERANK_MODEL = "BAAI/bge-reranker-base"
+# 多语言精排，int8 量化约 0.57GB；在 50 条中文评测上 recall@1 优于 base。
+DEFAULT_RERANK_MODEL = "BAAI/bge-reranker-v2-m3-int8"
 RerankerFn = Callable[[str, list[str]], list[float]]
 
 _lock = threading.Lock()
-_singleton: "CrossEncoderReranker | None" = None
+_singleton: CrossEncoderReranker | None = None
 _load_attempted = False
 
 
@@ -34,6 +36,11 @@ def rerank_enabled() -> bool:
     return _env_truthy("FHD_RERANK_ENABLED") or bool(
         (os.environ.get("FHD_RERANK_MODEL") or "").strip()
     )
+
+
+def auto_rerank_allowed() -> bool:
+    """hash 降级时是否自动精排；需显式 ``FHD_RERANK_AUTO=1``，避免静默下载模型。"""
+    return _env_truthy("FHD_RERANK_AUTO")
 
 
 class CrossEncoderReranker:
@@ -79,10 +86,13 @@ class CrossEncoderReranker:
             return []
 
 
-def get_default_reranker() -> "CrossEncoderReranker | None":
-    """返回启用的 reranker 单例；未启用或依赖缺失时返回 None。"""
+def get_default_reranker(*, auto: bool = False) -> CrossEncoderReranker | None:
+    """返回启用的 reranker 单例；未启用或依赖缺失时返回 None。
+
+    ``auto=True`` 用于 hash 降级时的自动精排：跳过显式开关，但仍要求依赖存在。
+    """
     global _singleton, _load_attempted
-    if not rerank_enabled():
+    if not auto and not rerank_enabled():
         return None
     with _lock:
         if _singleton is not None:
