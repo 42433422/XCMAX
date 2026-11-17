@@ -47,13 +47,18 @@ def backfill_missing_embeddings(
 
 
 def _semantic_embedding_available(embedding_count: int = 0) -> bool:
-    """UI contract: true when a live embedder exists or chunks already carry vectors."""
-    if int(embedding_count or 0) > 0:
-        return True
-    try:
-        from app.infrastructure.rag import get_default_embedder
+    """语义向量是否真正生效。
 
-        return get_default_embedder() is not None
+    hash 向量只是离线降级（64 维词袋哈希），不能当作语义检索；
+    只有 local/remote embedding 模式才算语义可用。``embedding_count`` 不再作为判据，
+    因为旧数据里的 hash 向量同样会累计计数。
+    """
+    del embedding_count  # 保留参数兼容既有调用
+    try:
+        from app.infrastructure.llm.embedding_service import get_default_embedding_service
+
+        svc = get_default_embedding_service()
+        return bool(svc is not None and svc.is_semantic())
     except RECOVERABLE_ERRORS:
         return False
 

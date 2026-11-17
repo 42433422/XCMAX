@@ -28,9 +28,11 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
-EmbeddingMode = Literal["local", "remote", "hash", "disabled"]
+EmbeddingMode = Literal["local", "remote", "fastembed", "hash", "disabled"]
 
 _DEFAULT_LOCAL_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+# fastembed（Apache-2.0，ONNX Runtime，不依赖 torch）：中文默认 bge-small-zh
+_DEFAULT_FASTEMBED_MODEL = "BAAI/bge-small-zh-v1.5"
 _HASH_EMBED_DIM = 64
 
 
@@ -39,6 +41,8 @@ def _resolve_mode() -> EmbeddingMode:
     raw = (os.environ.get("FHD_EMBEDDING_MODE", "") or "").strip().lower()
     if raw in ("local", "sentence-transformers", "st"):
         return "local"
+    if raw in ("fastembed", "onnx"):
+        return "fastembed"
     if raw in ("remote", "api", "openai"):
         return "remote"
     if raw in ("hash", "local-hash", "deterministic"):
@@ -66,6 +70,7 @@ class EmbeddingService(EmbedderPort):
         # 不在 __init__ 加载模型；lazy load 在首次 embed 时触发。
         self._mode: EmbeddingMode = mode if mode is not None else _resolve_mode()
         self._model: Any | None = None  # SentenceTransformer 实例
+        self._fastembed_model: Any | None = None  # fastembed.TextEmbedding 实例
         self._dim_cache: int | None = None
         self._load_lock = threading.Lock()
         self._load_attempted: bool = False  # 标记是否已尝试加载，避免重复尝试
@@ -93,6 +98,10 @@ class EmbeddingService(EmbedderPort):
     @property
     def mode(self) -> EmbeddingMode:
         return self._mode
+
+    def is_semantic(self) -> bool:
+        """是否使用真实语义向量；hash 只是确定性降级，不算语义检索。"""
+        return self._mode in ("local", "remote", "fastembed")
 
     def dim(self) -> int:
         """返回 embedding 维度。
@@ -131,6 +140,8 @@ class EmbeddingService(EmbedderPort):
             return []
         if self._mode == "local":
             return self._embed_local(texts)
+        if self._mode == "fastembed":
+            return self._embed_fastembed(texts)
         if self._mode == "remote":
             return self._embed_remote(texts)
         if self._mode == "hash":
@@ -204,6 +215,44 @@ class EmbeddingService(EmbedderPort):
                 return self._model
             except RECOVERABLE_ERRORS as e:
                 logger.warning("sentence-transformers 不可用，embedding 降级为空: %s", e)
+                return None
+
+    # ---------------- fastembed（ONNX，无 torch） ----------------
+    def _embed_fastembed(self, texts: list[str]) -> list[list[float]]:
+        model = self._get_fastembed_model()
+        if model is None:
+            return []
+        try:
+            vectors = list(model.embed(texts))
+            result = [[float(x) for x in list(vector)] for vector in vectors]
+            if result and self._dim_cache is None:
+                self._dim_cache = len(result[0])
+            return result
+        except RECOVERABLE_ERRORS as e:
+            logger.warning("fastembed encode 失败: %s", e)
+            return []
+
+    def _get_fastembed_model(self) -> Any | None:
+        """lazy load fastembed.TextEmbedding；失败后不再重试。"""
+        if self._fastembed_model is not None:
+            return self._fastembed_model
+        with self._load_lock:
+            if self._fastembed_model is not None:
+                return self._fastembed_model
+            if self._load_attempted:
+                return None
+            self._load_attempted = True
+            model_name = (
+                os.environ.get("FHD_EMBEDDING_FASTEMBED_MODEL") or _DEFAULT_FASTEMBED_MODEL
+            ).strip()
+            try:
+                from fastembed import TextEmbedding
+
+                self._fastembed_model = TextEmbedding(model_name=model_name)
+                logger.info("EmbeddingService fastembed 模型加载完成: %s", model_name)
+                return self._fastembed_model
+            except RECOVERABLE_ERRORS as e:
+                logger.warning("fastembed 不可用，embedding 降级为空: %s", e)
                 return None
 
     # ---------------- remote 模式 ----------------

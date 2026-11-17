@@ -18,7 +18,11 @@ from app.application.dataset_rag.models import (
     _clean_key,
 )
 from app.application.dataset_rag.repository import DatasetRepository
-from app.application.dataset_rag.retrieval_policy import _filter_chunks, _rerank_chunks
+from app.application.dataset_rag.retrieval_policy import (
+    _filter_chunks,
+    _rerank_chunks,
+    _semantic_rerank_chunks,
+)
 from app.application.dataset_rag.vector_index import VectorIndexService
 from app.infrastructure.rag import RetrievedChunk
 
@@ -183,13 +187,18 @@ class DatasetRetrieval:
                 "vector_backend_used": used_vector_backend,
                 "index": index_snapshot,
             }
+        final_k = max(1, min(int(top_k), 50))
+        # 精排需要更大的候选池，否则 cross-encoder 没有可选空间
+        retrieve_k = max(final_k * 4, 20) if rerank else final_k
         retriever = self._retriever_factory(
-            embedder=self._vector.embedder, top_k=max(1, min(int(top_k), 50))
+            embedder=self._vector.embedder, top_k=retrieve_k
         )
         retriever.index(chunks)
         top = retriever.retrieve(query_text)
         if rerank:
-            top = _rerank_chunks(query_text, top, top_k=max(1, min(int(top_k), 50)))
+            top = _semantic_rerank_chunks(query_text, top, top_k=final_k) or _rerank_chunks(
+                query_text, top, top_k=final_k
+            )
         rows = [_chunk_to_dict(c, public=True) for c in top]
         # Excel text embeds sheet boundaries. Recover them for older indexed chunks
         # so rows from another worksheet cannot inherit a customer's identity.

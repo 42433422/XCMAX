@@ -6,6 +6,7 @@ from typing import Any
 
 from app.application.dataset_rag.models import _clean_key
 from app.infrastructure.rag import RetrievedChunk
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 def _filter_chunks(
@@ -105,6 +106,40 @@ def _rerank_chunks(query: str, chunks: list[RetrievedChunk], *, top_k: int) -> l
                 page=chunk.page,
             )
         )
+    return sorted(reranked, key=lambda item: item.score, reverse=True)[:top_k]
+
+
+def _semantic_rerank_chunks(
+    query: str, chunks: list[RetrievedChunk], *, top_k: int
+) -> list[RetrievedChunk] | None:
+    """用 cross-encoder 精排；未启用或模型不可用时返回 None，由调用方回退词法。"""
+    if not chunks:
+        return None
+    try:
+        from app.infrastructure.rag.reranker import get_default_reranker
+
+        reranker = get_default_reranker()
+        if reranker is None:
+            return None
+        scores = reranker.score(query, [chunk.text for chunk in chunks])
+    except RECOVERABLE_ERRORS:
+        return None
+    if len(scores) != len(chunks):
+        return None
+    reranked = [
+        RetrievedChunk(
+            text=chunk.text,
+            score=float(score),
+            source=chunk.source if "rerank" in chunk.source else f"{chunk.source}+rerank",
+            chunk_index=chunk.chunk_index,
+            char_start=chunk.char_start,
+            char_end=chunk.char_end,
+            metadata=chunk.metadata,
+            source_url=chunk.source_url,
+            page=chunk.page,
+        )
+        for chunk, score in zip(chunks, scores, strict=True)
+    ]
     return sorted(reranked, key=lambda item: item.score, reverse=True)[:top_k]
 
 
