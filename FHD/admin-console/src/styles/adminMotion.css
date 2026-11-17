@@ -1,0 +1,245 @@
+/*
+ * 管理端动效与交互细节（仅 admin-console 引入）。
+ * 实现来源：Element Plus 既有组件 + 原生 CSS / View Transitions，不新增依赖。
+ * 设计依据：Ludi-Herry/desktop-agent-ui（MIT）——骨架屏 105° 扫光、按钮六态、
+ * 0.5px 描边、等宽数字、同心圆角、prefers-reduced-motion 双层守卫。
+ */
+
+/* ── 关键帧 ────────────────────────────────────────────────────────────── */
+@keyframes admin-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes admin-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes admin-skeleton-sweep {
+  from { background-position: 120% 0; }
+  to { background-position: -120% 0; }
+}
+
+@keyframes admin-dot-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(22, 119, 255, 0.35); }
+  50% { box-shadow: 0 0 0 4px rgba(22, 119, 255, 0); }
+}
+
+/* ── 页面与卡片入场 ────────────────────────────────────────────────────── */
+#view-xcmax-admin .page-content > .page-header {
+  animation: admin-rise var(--admin-dur-slow) var(--admin-ease-out) both;
+}
+
+#view-xcmax-admin .admin-grid.is-entering > .admin-card {
+  animation: admin-rise var(--admin-dur-slow) var(--admin-ease-out) both;
+}
+
+#view-xcmax-admin .admin-grid.is-entering > .admin-card:nth-child(2) { animation-delay: 40ms; }
+#view-xcmax-admin .admin-grid.is-entering > .admin-card:nth-child(3) { animation-delay: 80ms; }
+#view-xcmax-admin .admin-grid.is-entering > .admin-card:nth-child(4) { animation-delay: 120ms; }
+#view-xcmax-admin .admin-grid.is-entering > .admin-card:nth-child(n + 5) { animation-delay: 160ms; }
+
+#view-xcmax-admin .error-item {
+  animation: admin-rise var(--admin-dur-base) var(--admin-ease-out) both;
+}
+
+/* 卡片悬停：只做外扩阴影与 2px 上浮，避免裁切祖先容器 */
+@media (hover: hover) and (pointer: fine) {
+  #view-xcmax-admin .admin-card {
+    transition:
+      transform var(--admin-dur-base) var(--admin-ease-out),
+      box-shadow var(--admin-dur-base) var(--admin-ease-out),
+      border-color var(--admin-dur-base) var(--admin-ease-out);
+  }
+  #view-xcmax-admin .admin-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--admin-shadow-hover);
+    border-color: rgba(22, 119, 255, 0.18);
+  }
+}
+
+/* ── 骨架屏：Element Plus 组件 + 105° 线性扫光（2.0s） ─────────────────── */
+.card-state--skeleton {
+  padding: 6px 2px 0;
+  background: transparent;
+  min-height: 108px;
+}
+
+.card-state--skeleton .el-skeleton__item {
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(
+    105deg,
+    var(--admin-skeleton-base) 32%,
+    var(--admin-skeleton-sheen) 46%,
+    var(--admin-skeleton-base) 60%
+  );
+  background-size: 240% 100%;
+  animation: admin-skeleton-sweep 2s linear infinite;
+}
+
+.card-state--skeleton .el-skeleton__item + .el-skeleton__item { margin-top: 12px; }
+
+/* ── 状态徽标：呼吸点 + 等宽数字 ──────────────────────────────────────── */
+#view-xcmax-admin .status-badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: 0 0 auto;
+  opacity: 0.9;
+}
+
+#view-xcmax-admin .status-badge.badge-ok::before {
+  box-shadow: 0 0 0 3px rgba(16, 183, 89, 0.16);
+}
+
+#view-xcmax-admin .status-badge.badge-info::before {
+  animation: admin-dot-pulse 1.4s ease-in-out infinite;
+}
+
+#view-xcmax-admin :is(.card-info dd, .error-time, .module-table td.mono) {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── 表格：行悬停与粘性表头 ────────────────────────────────────────────── */
+#view-xcmax-admin .module-table tbody tr {
+  transition: background var(--admin-dur-fast) var(--admin-ease-out);
+}
+
+#view-xcmax-admin .module-table tbody tr:hover {
+  background: rgba(22, 119, 255, 0.045);
+}
+
+/* ── 按钮六态：Default / Hover / Active / Disabled / Loading / Focus ───── */
+#view-xcmax-admin .btn {
+  transition:
+    transform var(--admin-dur-fast) var(--admin-ease-out),
+    box-shadow var(--admin-dur-fast) var(--admin-ease-out),
+    background var(--admin-dur-fast) var(--admin-ease-out),
+    border-color var(--admin-dur-fast) var(--admin-ease-out),
+    opacity var(--admin-dur-fast) var(--admin-ease-out);
+}
+
+#view-xcmax-admin .btn:not(:disabled):active {
+  transform: translateY(1px) scale(0.99);
+}
+
+#view-xcmax-admin .btn:focus-visible {
+  outline: none;
+  box-shadow: var(--admin-focus-ring);
+}
+
+#view-xcmax-admin .btn-primary:not(:disabled):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(22, 119, 255, 0.24);
+}
+
+#view-xcmax-admin .btn-secondary:not(:disabled):hover {
+  transform: translateY(-1px);
+  border-color: rgba(22, 119, 255, 0.28);
+}
+
+#view-xcmax-admin .btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+#view-xcmax-admin .btn .fa-spin {
+  animation-duration: 0.9s;
+}
+
+/* ── 标签页：底部滑动指示 + 分区切换视图过渡 ───────────────────────────── */
+#view-xcmax-admin .admin-tab {
+  position: relative;
+  transition:
+    color var(--admin-dur-fast) var(--admin-ease-out),
+    background var(--admin-dur-fast) var(--admin-ease-out);
+}
+
+#view-xcmax-admin .admin-tab::after {
+  content: '';
+  position: absolute;
+  right: 12px;
+  bottom: 0;
+  left: 12px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--admin-primary);
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform var(--admin-dur-base) var(--admin-ease-out);
+}
+
+#view-xcmax-admin .admin-tab.active {
+  box-shadow: none;
+}
+
+#view-xcmax-admin .admin-tab.active::after {
+  transform: scaleX(1);
+}
+
+#view-xcmax-admin .admin-tab:not(.active):hover {
+  color: var(--admin-text);
+  background: rgba(22, 119, 255, 0.06);
+}
+
+/* 视图过渡：仅在支持 View Transitions 的 Chromium 生效，其余浏览器直接切换 */
+#view-xcmax-admin .admin-grid.admin-pane {
+  view-transition-name: admin-overview-pane;
+}
+
+::view-transition-old(admin-overview-pane),
+::view-transition-new(admin-overview-pane) {
+  animation-duration: var(--admin-dur-base);
+  animation-timing-function: var(--admin-ease-out);
+}
+
+::view-transition-old(admin-overview-pane) {
+  animation-name: admin-fade;
+  animation-direction: reverse;
+}
+
+::view-transition-new(admin-overview-pane) {
+  animation-name: admin-fade;
+}
+
+/* ── 管理端外壳：侧栏与顶栏（仅 admin 作用域） ─────────────────────────── */
+html.xcmax-admin-shell .sidebar .menu-item .menu-item-icon {
+  transition:
+    transform var(--admin-dur-base) var(--admin-ease-spring),
+    background var(--admin-dur-fast) var(--admin-ease-out),
+    color var(--admin-dur-fast) var(--admin-ease-out);
+}
+
+html.xcmax-admin-shell .sidebar .menu-item.active .menu-item-icon {
+  transform: scale(1.06);
+}
+
+html.xcmax-admin-shell .sidebar .menu-item:not(.active):hover .menu-item-icon {
+  transform: translateX(1px);
+}
+
+html.xcmax-admin-shell .top-bar {
+  background: rgba(255, 255, 255, 0.82);
+  transition: box-shadow var(--admin-dur-base) var(--admin-ease-out);
+}
+
+html.xcmax-admin-shell .page-title {
+  animation: admin-rise var(--admin-dur-slow) var(--admin-ease-out) both;
+}
+
+/* ── 减弱动效：系统级双层守卫 ──────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  #view-xcmax-admin *,
+  html.xcmax-admin-shell .sidebar *,
+  html.xcmax-admin-shell .top-bar * {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+}

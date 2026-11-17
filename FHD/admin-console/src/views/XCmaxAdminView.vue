@@ -30,8 +30,8 @@
         </div>
       </div>
 
-      <AdminSectionNav v-model="overviewSection" label="总览内容" :items="[{ value: 'health', label: '服务健康' }, { value: 'release', label: '版本发布' }, { value: 'sync', label: '同步与冲突' }, { value: 'modules', label: '模块注册' }]" />
-      <div class="admin-grid admin-pane" tabindex="0" aria-label="总览内容区">
+      <AdminSectionNav v-model="overviewSection" view-transition label="总览内容" :items="[{ value: 'health', label: '服务健康' }, { value: 'release', label: '版本发布' }, { value: 'sync', label: '同步与冲突' }, { value: 'modules', label: '模块注册' }]" />
+      <div class="admin-grid admin-pane" :class="{ 'is-entering': overviewEntering }" tabindex="0" aria-label="总览内容区">
         <!-- 本地节点 -->
         <div v-show="overviewSection === 'health'" class="admin-card">
           <div class="card-header">
@@ -41,7 +41,11 @@
               {{ observationLabel(localStatus.state) || (localStatus.ok ? '服务健康' : '服务异常') }}
             </span>
           </div>
-          <p v-if="localStatus.state !== 'ready'" class="card-state" :class="`is-${localStatus.state}`">{{ ({ loading: '正在读取…', error: '读取失败，请点右上角「刷新状态」重试' })[localStatus.state] || '尚未读取，点右上角「刷新状态」获取' }}</p>
+          <div v-if="localStatus.state === 'loading'" class="card-state card-state--skeleton" role="status" aria-busy="true">
+            <el-skeleton animated :rows="3" />
+            <span class="sr-only">正在读取…</span>
+          </div>
+          <p v-else-if="localStatus.state !== 'ready'" class="card-state" :class="`is-${localStatus.state}`">{{ ({ error: '读取失败，请点右上角「刷新状态」重试' })[localStatus.state] || '尚未读取，点右上角「刷新状态」获取' }}</p>
           <dl v-else class="card-info">
             <dt>版本</dt><dd>{{ localStatus.version || '—' }}</dd>
             <dt>数据库</dt><dd>{{ localStatus.database || '—' }}</dd>
@@ -59,7 +63,11 @@
               {{ observationLabel(remoteStatus.state) || (remoteStatus.reachable ? '在线' : '离线') }}
             </span>
           </div>
-          <p v-if="remoteStatus.state !== 'ready'" class="card-state" :class="`is-${remoteStatus.state}`">{{ ({ loading: '正在读取…', error: '读取失败，请点右上角「刷新状态」重试' })[remoteStatus.state] || '尚未读取，点右上角「刷新状态」获取' }}</p>
+          <div v-if="remoteStatus.state === 'loading'" class="card-state card-state--skeleton" role="status" aria-busy="true">
+            <el-skeleton animated :rows="3" />
+            <span class="sr-only">正在读取…</span>
+          </div>
+          <p v-else-if="remoteStatus.state !== 'ready'" class="card-state" :class="`is-${remoteStatus.state}`">{{ ({ error: '读取失败，请点右上角「刷新状态」重试' })[remoteStatus.state] || '尚未读取，点右上角「刷新状态」获取' }}</p>
           <dl v-else class="card-info">
             <dt>地址</dt><dd>{{ remoteStatus.address || '—' }}</dd>
             <dt>延迟</dt><dd>{{ remoteStatus.latencyMs != null ? `${remoteStatus.latencyMs} ms` : '—' }}</dd>
@@ -110,7 +118,11 @@
               {{ observationLabel(syncStatus.state) || (syncStatus.healthy ? '队列已清空' : '待同步') }}
             </span>
           </div>
-          <p v-if="syncStatus.state !== 'ready'" class="card-state" :class="`is-${syncStatus.state}`">{{ ({ loading: '正在读取…', error: '读取失败，请点右上角「刷新状态」重试' })[syncStatus.state] || '尚未读取，点右上角「刷新状态」获取' }}</p>
+          <div v-if="syncStatus.state === 'loading'" class="card-state card-state--skeleton" role="status" aria-busy="true">
+            <el-skeleton animated :rows="4" />
+            <span class="sr-only">正在读取…</span>
+          </div>
+          <p v-else-if="syncStatus.state !== 'ready'" class="card-state" :class="`is-${syncStatus.state}`">{{ ({ error: '读取失败，请点右上角「刷新状态」重试' })[syncStatus.state] || '尚未读取，点右上角「刷新状态」获取' }}</p>
           <dl v-else class="card-info">
             <dt>本地游标</dt><dd>{{ syncStatus.localCursor ?? '—' }}</dd>
             <dt>已拉取服务器游标</dt><dd>{{ syncStatus.remoteCursor ?? '—' }}</dd>
@@ -186,7 +198,7 @@
         <!-- 冲突列表 -->
         <div v-show="overviewSection === 'sync'" class="admin-card admin-card--wide" v-if="syncStatus.conflictCount > 0">
           <div class="card-header">
-            <i class="fa fa-exclamation-circle card-icon" style="color:#d97706" aria-hidden="true"></i>
+            <i class="fa fa-exclamation-circle card-icon card-icon--warn" aria-hidden="true"></i>
             <h3>同步冲突</h3>
             <span class="status-badge badge-warn">{{ syncStatus.conflictCount }} 条待处理</span>
           </div>
@@ -349,6 +361,15 @@ const {
 
 const refreshing = ref(false)
 const deployModalOpen = ref(false)
+/** 仅首屏播放卡片级联入场；之后的分区切换交给原生 View Transition，避免快照截到半透明卡片。 */
+const overviewEntering = ref(true)
+let enterTimer = null
+onMounted(() => {
+  enterTimer = window.setTimeout(() => { overviewEntering.value = false }, 700)
+})
+onBeforeUnmount(() => {
+  if (enterTimer) window.clearTimeout(enterTimer)
+})
 const releaseStatusCard = ref(null)
 /** 首次进入时拉取；之后依赖缓存与「刷新状态」 */
 const overviewBootstrapped = ref(false)

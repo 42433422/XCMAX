@@ -30,7 +30,7 @@
       <div class="top-bar">
         <div class="page-title-wrap">
           <div class="page-kicker">{{ topKickerText }}</div>
-          <div class="page-title">{{ currentViewTitle }}</div>
+          <div class="page-title" :key="currentViewTitle">{{ currentViewTitle }}</div>
           <div v-if="accountUsername && displayBrand" class="page-account-sub muted">
             {{ accountUsername }}
           </div>

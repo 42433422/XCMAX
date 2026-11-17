@@ -44,10 +44,10 @@
 
 .admin-card {
   min-width: 0;
-  background: rgba(255, 255, 255, 0.92);
-  border-radius: 16px;
-  border: 1px solid rgba(15, 76, 129, 0.1);
-  box-shadow: 0 4px 18px rgba(15, 76, 129, 0.07);
+  background: var(--admin-surface, rgba(255, 255, 255, 0.92));
+  border-radius: var(--admin-radius-lg, 16px);
+  border: var(--admin-hairline, 1px) solid rgba(15, 76, 129, 0.1);
+  box-shadow: var(--admin-shadow-card, 0 4px 18px rgba(15, 76, 129, 0.07));
   padding: 20px;
   display: flex;
   flex-direction: column;
@@ -83,6 +83,8 @@
   text-align: center;
 }
 
+.card-icon--warn { color: var(--admin-warn, #d97706); }
+
 .card-info {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -113,7 +115,6 @@
   line-height: 1.6;
 }
 
-.card-state.is-loading { color: #0f6fc6; }
 .card-state.is-error { color: #b42318; background: #fef3f2; }
 
 .card-actions {
@@ -270,7 +271,6 @@
   cursor: pointer;
   font-size: 13px;
   font-weight: 600;
-  transition: opacity 0.15s;
 }
 
 .btn:disabled { opacity: 0.55; cursor: not-allowed; }
@@ -309,7 +309,6 @@
 .admin-tab.active {
   background: #fff;
   color: #1890ff;
-  box-shadow: 0 -1px 0 #1890ff inset;
 }
 
 .admin-tab-panel {
