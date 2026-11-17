@@ -138,6 +138,9 @@ def test_task_set_pass_k():
         "set": spec["name"],
         "golden_set": spec["path"].name,
         "total_tasks": total,
+        "model_responses": sum(
+            int(r.get("model_responses", 0)) for rows in per_trial for r in rows
+        ),
         "trials": trials,
         "pass_1": round(sum(1 for r in per_trial[0] if r["pass"]) / total, 4),
         "pass_k": round(pass_k_count / total, 4),

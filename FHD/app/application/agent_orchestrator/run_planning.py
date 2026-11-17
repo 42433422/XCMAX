@@ -145,9 +145,6 @@ class RunPlanning:
 
     def remember_run_outcome_for(self, run: AgentRun) -> None:
         """统一 Agent Runtime 接缝：run 终态记忆回写（best-effort，开关控制）。"""
-        from app.infrastructure.observability.metrics import observe_run_terminal
-
-        observe_run_terminal(status=str(run.status or "unknown"))
         try:
             from app.application.agent_runtime.pipeline import (
                 agent_runtime_hooks_enabled,
