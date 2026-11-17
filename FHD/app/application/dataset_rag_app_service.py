@@ -559,6 +559,25 @@ class DatasetRagApplicationService:
             result["query"] = query
         return result
 
+    def document_chunks(
+        self,
+        dataset_id: str,
+        document_id: str,
+        *,
+        tenant_id: str = "",
+        offset: int = 0,
+        limit: int = 50,
+        access_context: DatasetAccessContext | dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        return self._retrieval.document_chunks(
+            dataset_id,
+            document_id,
+            tenant_id=tenant_id,
+            offset=offset,
+            limit=limit,
+            access_context=access_context,
+        )
+
     def knowledge_graph(
         self,
         dataset_id: str,

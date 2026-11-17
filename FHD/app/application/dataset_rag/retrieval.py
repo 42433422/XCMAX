@@ -290,6 +290,71 @@ class DatasetRetrieval:
             result["sheet_contexts"] = _named_sheet_context(query_text, top, scope_chunks)
         return result
 
+    def document_chunks(
+        self,
+        dataset_id: str,
+        document_id: str,
+        *,
+        tenant_id: str = "",
+        offset: int = 0,
+        limit: int = 50,
+        access_context: DatasetAccessContext | dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Return one document's chunks (ACL filtered) for preview and hit testing."""
+        dataset_key = _clean_key(dataset_id, default="default")
+        doc_key = (document_id or "").strip()
+        tenant_key, denied = _resolve_tenant_for_access(
+            access_context,
+            tenant_id,
+            required_permission=DATASET_READ_PERMISSION,
+            default_without_context="",
+            dataset_id=dataset_key,
+        )
+        if denied is not None:
+            denied.update({"document": None, "chunks": [], "total": 0})
+            return denied
+        with self._repository.lock:
+            state = self._repository.datasets.get(dataset_key)
+            document = state.documents.get(doc_key) if state is not None else None
+            chunks = list(state.chunks) if state is not None else []
+        if (
+            document is None
+            or (tenant_key and document.tenant_id != tenant_key)
+            or not document_visible_to(document.metadata, access_context)
+        ):
+            return {
+                "success": False,
+                "dataset_id": dataset_key,
+                "document_id": doc_key,
+                "message": "document not found",
+                "error_code": "dataset_document_not_found",
+                "document": None,
+                "chunks": [],
+                "total": 0,
+            }
+        selected = sorted(
+            (
+                chunk
+                for chunk in chunks
+                if str((chunk.metadata or {}).get("document_id") or "") == doc_key
+                and document_visible_to(chunk.metadata, access_context)
+            ),
+            key=lambda item: (item.char_start, item.chunk_index),
+        )
+        start = max(0, int(offset))
+        size = max(1, min(int(limit), 200))
+        return {
+            "success": True,
+            "dataset_id": dataset_key,
+            "document": document.to_dict(),
+            "chunks": [
+                _chunk_to_dict(chunk, public=True) for chunk in selected[start : start + size]
+            ],
+            "total": len(selected),
+            "offset": start,
+            "limit": size,
+        }
+
     def knowledge_graph(
         self,
         dataset_id: str,

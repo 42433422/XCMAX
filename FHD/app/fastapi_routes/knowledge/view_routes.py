@@ -40,6 +40,20 @@ class DatasetViewRoutes:
 
         self.dataset_status = dataset_status
 
+        @router.get("/datasets/{dataset_id}/documents/{document_id}/chunks")
+        def dataset_document_chunks(
+            dataset_id: str,
+            document_id: str,
+            request: Request,
+            offset: int = FastAPIQuery(0, ge=0),
+            limit: int = FastAPIQuery(50, ge=1, le=200),
+        ) -> dict[str, Any]:
+            return views().document_chunks(
+                dataset_id, document_id, request, offset=offset, limit=limit
+            )
+
+        self.dataset_document_chunks = dataset_document_chunks
+
         @router.get("/datasets/{dataset_id}/graph")
         def dataset_graph(
             dataset_id: str, request: Request, limit: int = FastAPIQuery(80, ge=20, le=240)

@@ -59,6 +59,30 @@ class DatasetViews:
             ),
         )
 
+    def document_chunks(
+        self,
+        dataset_id: str,
+        document_id: str,
+        request: Request,
+        *,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        access = self._access(request)
+        return cast(
+            "dict[str, Any]",
+            _public_dataset_payload(
+                self._service().document_chunks(
+                    dataset_id,
+                    document_id,
+                    tenant_id=self._tenant_scope(access),
+                    offset=offset,
+                    limit=limit,
+                    access_context=access,
+                )
+            ),
+        )
+
     def graph(self, dataset_id: str, request: Request, limit: int = 80) -> dict[str, Any]:
         from app.application.persy_memory_app_service import merge_memory_graph
 

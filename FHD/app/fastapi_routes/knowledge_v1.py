@@ -288,6 +288,7 @@ upload_dataset_document = _document_routes.upload_dataset_document
 query_dataset = _document_routes.query_dataset
 dataset_status_all = _view_routes.dataset_status_all
 dataset_status = _view_routes.dataset_status
+dataset_document_chunks = _view_routes.dataset_document_chunks
 dataset_graph = _view_routes.dataset_graph
 list_persy_memories = _memory_routes.list_persy_memories
 query_persy_memories = _memory_routes.query_persy_memories
