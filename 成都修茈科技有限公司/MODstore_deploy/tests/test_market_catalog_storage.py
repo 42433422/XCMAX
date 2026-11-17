@@ -347,6 +347,7 @@ def test_admin_status_filter_and_counts_match_display_for_unpublished(client, au
             ("approved", False),
             ("delisted", False),
             ("under_review", False),
+            ("reviewing", True),
             ("restricted", False),
             ("approved", True),
         ):
@@ -360,7 +361,7 @@ def test_admin_status_filter_and_counts_match_display_for_unpublished(client, au
                 )
             )
         db.commit()
-    for status, expected in (("delisted", 2), ("listed", 1), ("pending", 1), ("restricted", 1)):
+    for status, expected in (("delisted", 2), ("listed", 1), ("pending", 2), ("restricted", 1)):
         response = client.get(
             "/api/admin/catalog", headers=auth_headers, params={"status": status, "search": prefix}
         )

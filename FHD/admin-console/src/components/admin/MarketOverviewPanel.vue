@@ -143,7 +143,7 @@ function metric(value: unknown): string {
 
 function statusBadge(row: Row): { label: string; type: 'success' | 'warning' | 'danger' | 'info' } {
   const state = String(row.compliance_status || 'approved')
-  if (state === 'under_review') return { label: '待审核', type: 'warning' }
+  if (['under_review', 'reviewing'].includes(state)) return { label: '待审核', type: 'warning' }
   if (state === 'restricted') return { label: '受限', type: 'danger' }
   if (state === 'delisted' || row.is_public !== true) return { label: '已下架', type: 'info' }
   return { label: '在架', type: 'success' }
@@ -151,7 +151,7 @@ function statusBadge(row: Row): { label: string; type: 'success' | 'warning' | '
 
 function actionsFor(row: Row): Array<{ key: ReviewAction; label: string; type: 'primary' | 'warning' | 'danger' | 'success' }> {
   const state = String(row.compliance_status || 'approved')
-  if (state === 'under_review') return [{ key: 'approve', label: '通过并上架', type: 'primary' }, { key: 'delist', label: '下架', type: 'danger' }]
+  if (['under_review', 'reviewing'].includes(state)) return [{ key: 'approve', label: '通过并上架', type: 'primary' }, { key: 'delist', label: '下架', type: 'danger' }]
   if (state === 'delisted' || row.is_public !== true) return [{ key: 'restore', label: '恢复上架', type: 'success' }]
   if (state === 'restricted') return [{ key: 'approve', label: '解除限制', type: 'primary' }, { key: 'delist', label: '下架', type: 'danger' }]
   return [{ key: 'restrict', label: '限制', type: 'warning' }, { key: 'delist', label: '下架', type: 'danger' }]

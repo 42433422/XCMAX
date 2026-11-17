@@ -34,16 +34,17 @@ def api_admin_list_catalog(
         query = session.query(CatalogItem)
         state = func.coalesce(CatalogItem.compliance_status, "approved")
         predicates = {
-            "pending": state == "under_review",
+            "pending": state.in_(["under_review", "reviewing"]),
             "restricted": state == "restricted",
             "listed": and_(
                 CatalogItem.is_public.is_(True),
-                state.notin_(["under_review", "restricted", "delisted"]),
+                state.notin_(["under_review", "reviewing", "restricted", "delisted"]),
             ),
             "delisted": or_(
                 state == "delisted",
                 and_(
-                    CatalogItem.is_public.is_not(True), state.notin_(["under_review", "restricted"])
+                    CatalogItem.is_public.is_not(True),
+                    state.notin_(["under_review", "reviewing", "restricted"]),
                 ),
             ),
         }

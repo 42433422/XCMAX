@@ -56,7 +56,8 @@ beforeEach(() => {
 })
 
 describe('MarketOverviewPanel 运营台', () => {
-  it('renders audit counts and pending employee rows', async () => {
+  it.each(['under_review', 'reviewing'])('renders pending employee rows (%s)', async (compliance_status) => {
+    listCatalog.mockResolvedValue({ ...payload, items: [{ ...pendingItem, compliance_status, is_public: true }] })
     const wrapper = mountPanel()
     await flushPromises()
     const text = wrapper.text()
@@ -103,7 +104,8 @@ describe('MarketOverviewPanel 运营台', () => {
     wrapper.unmount()
   })
 
-  it('approves a pending employee after confirmation' , async () => {
+  it.each(['under_review', 'reviewing'])('approves a pending employee after confirmation (%s)', async (compliance_status) => {
+    listCatalog.mockResolvedValue({ ...payload, items: [{ ...pendingItem, compliance_status, is_public: true }] })
     const wrapper = mountPanel()
     await flushPromises()
     const approve = wrapper.findAll('button').find((row) => row.text() === '通过并上架')!
