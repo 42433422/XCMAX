@@ -1,4 +1,5 @@
 ## Unreleased
+- AIOPEN 虚拟光标改为默认静默待命：页面加载即自动连接并登记受控屏幕，不需要用户先点「一键开启」或「本页待命」；待命期间不显示光标与徽标，只有 Agent 下发 `ui_*` 指令时才出现，静默 8 秒后自动收起。用户明确关闭后以本地记录为准，服务端远程操控开关与 Key 鉴权保持不变。
 - AIOPEN 虚拟光标改用可访问性快照：`ui_snapshot` 为每个可见可交互节点分配本次快照内稳定的 `ref`，并返回角色、可访问名称与状态，`selector` 仅作兼容回退；`ui_click`/`ui_type`/`ui_scroll` 同步支持 `ref`，页面重渲染后失效会明确提示重新快照。
 - AIOPEN 新增 `ui_wait`/`ui_verify`/`ui_select`/`ui_upload`/`ui_screenshot`：轮询等待元素或文本、逐项校验控件值与 URL、原生及自定义下拉选择、投放同源文件，以及基于 html-to-image（MIT）的 DOM 重绘截图；等待与截图分别放宽回执超时。
 - AIOPEN 生产前置收口：新增 `scripts/dev/ensure_aiopen_approval_flow.py` 幂等创建 `aiopen_danger_operation` 审批流程与启用节点，找不到审批人时失败退出，避免创建无人可批的空流程；文档明确先配置审批流程、再开启 `AIOPEN_ENABLE_WRITES=1` 的顺序。

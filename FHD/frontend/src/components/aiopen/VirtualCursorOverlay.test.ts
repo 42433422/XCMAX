@@ -13,6 +13,7 @@ vi.mock('@/composables/useAiOpenCursor', async () => {
   const cursorActionLabel = ref('')
   const enabled = ref(false)
   const connected = ref(false)
+  const agentActive = ref(false)
   const initAiOpenCursor = vi.fn()
   container.mocks.cursorX = cursorX
   container.mocks.cursorY = cursorY
@@ -21,6 +22,7 @@ vi.mock('@/composables/useAiOpenCursor', async () => {
   container.mocks.cursorActionLabel = cursorActionLabel
   container.mocks.enabled = enabled
   container.mocks.connected = connected
+  container.mocks.agentActive = agentActive
   container.mocks.initAiOpenCursor = initAiOpenCursor
   return {
     cursorX,
@@ -30,6 +32,7 @@ vi.mock('@/composables/useAiOpenCursor', async () => {
     cursorActionLabel,
     aiopenCursorEnabled: enabled,
     aiopenCursorConnected: connected,
+    aiopenAgentActive: agentActive,
     initAiOpenCursor,
   }
 })
@@ -44,6 +47,7 @@ const cursorState = container.mocks as {
   cursorActionLabel: { value: string }
   enabled: { value: boolean }
   connected: { value: boolean }
+  agentActive: { value: boolean }
   initAiOpenCursor: ReturnType<typeof vi.fn>
 }
 
@@ -76,6 +80,7 @@ describe('VirtualCursorOverlay', () => {
     cursorState.cursorActionLabel.value = ''
     cursorState.enabled.value = false
     cursorState.connected.value = false
+    cursorState.agentActive.value = false
   })
 
   afterEach(() => {
@@ -160,18 +165,28 @@ describe('VirtualCursorOverlay', () => {
     expect(document.querySelector('.aiopen-control-badge')).toBeNull()
   })
 
-  it('renders control badge when enabled and connected are true', async () => {
+  it('renders control badge only while an agent is active', async () => {
     cursorState.enabled.value = true
     cursorState.connected.value = true
+    cursorState.agentActive.value = true
     await mountComponent()
     const badge = document.querySelector('.aiopen-control-badge')
     expect(badge).not.toBeNull()
-    expect(badge!.textContent).toContain('AI 操控通道已连接')
+    expect(badge!.textContent).toContain('AI 正在操作本页')
+  })
+
+  it('hides control badge while idle even when connected', async () => {
+    cursorState.enabled.value = true
+    cursorState.connected.value = true
+    cursorState.agentActive.value = false
+    await mountComponent()
+    expect(document.querySelector('.aiopen-control-badge')).toBeNull()
   })
 
   it('does not render control badge when only enabled is true', async () => {
     cursorState.enabled.value = true
     cursorState.connected.value = false
+    cursorState.agentActive.value = true
     await mountComponent()
     expect(document.querySelector('.aiopen-control-badge')).toBeNull()
   })

@@ -25,6 +25,8 @@ export const aiopenCursorEnabled = ref(false)
 export const aiopenCursorConnected = ref(false)
 export const aiopenCursorSessionId = ref('')
 export const aiopenCursorLogs = ref<string[]>([])
+/** 是否有 Agent 正在操作：默认静默待命，收到指令才显示光标与徽标。 */
+export const aiopenAgentActive = ref(false)
 
 export const cursorX = ref(0)
 export const cursorY = ref(0)
@@ -32,9 +34,30 @@ export const cursorVisible = ref(false)
 export const cursorClicking = ref(false)
 export const cursorActionLabel = ref('')
 
+const AGENT_IDLE_MS = 8000
+
 let ws: WebSocket | null = null
 let routerRef: Router | null = null
 let reconnectTimer: number | null = null
+let agentIdleTimer: number | null = null
+
+/** Agent 活动窗口：收到指令即点亮，静默一段时间后自动收起。 */
+function markAgentActive() {
+  aiopenAgentActive.value = true
+  if (agentIdleTimer != null) window.clearTimeout(agentIdleTimer)
+  agentIdleTimer = window.setTimeout(() => {
+    agentIdleTimer = null
+    aiopenAgentActive.value = false
+  }, AGENT_IDLE_MS)
+}
+
+function clearAgentActive() {
+  if (agentIdleTimer != null) {
+    window.clearTimeout(agentIdleTimer)
+    agentIdleTimer = null
+  }
+  aiopenAgentActive.value = false
+}
 
 function pushLog(text: string) {
   const ts = new Date().toLocaleTimeString('zh-CN', { hour12: false })
@@ -700,6 +723,7 @@ function connect() {
     if (msg.type === 'command') {
       const action = String(msg.action || '')
       const params = (msg.params && typeof msg.params === 'object' ? msg.params : {}) as Record<string, unknown>
+      markAgentActive()
       pushLog(`收到指令：${action}`)
       let result: Record<string, unknown>
       try {
@@ -759,6 +783,7 @@ function disconnect() {
   aiopenCursorConnected.value = false
   aiopenCursorSessionId.value = ''
   cursorVisible.value = false
+  clearAgentActive()
 }
 
 // ---------------------------------------------------------------------------
@@ -781,19 +806,24 @@ export function setAiOpenCursorEnabled(enabled: boolean) {
   }
 }
 
-/** App.vue 内 VirtualCursorOverlay 调用：注入 router 并按持久化状态自动连接。 */
+/**
+ * App.vue 内 VirtualCursorOverlay 调用：注入 router 并默认静默待命。
+ *
+ * 默认连接（无需用户点开关），只有用户明确关闭过（localStorage = '0'）才保持关闭；
+ * 待命期间不展示光标与徽标，收到 Agent 指令才出现。
+ */
 export function initAiOpenCursor(router: Router) {
   routerRef = router
-  let persisted = false
+  let persisted: string | null = null
   try {
-    persisted = localStorage.getItem(STORAGE_KEY) === '1'
+    persisted = localStorage.getItem(STORAGE_KEY)
   } catch {
-    persisted = false
+    // 存储不可用（隐私模式）时按默认待命处理，用户仍可在面板关闭
+    persisted = null
   }
-  if (persisted && !aiopenCursorEnabled.value) {
-    aiopenCursorEnabled.value = true
-    connect()
-  }
+  if (persisted === '0' || aiopenCursorEnabled.value) return
+  aiopenCursorEnabled.value = true
+  connect()
 }
 
 export function useAiOpenCursor() {
@@ -802,6 +832,7 @@ export function useAiOpenCursor() {
     connected: aiopenCursorConnected,
     sessionId: aiopenCursorSessionId,
     logs: aiopenCursorLogs,
+    agentActive: aiopenAgentActive,
     setEnabled: setAiOpenCursorEnabled,
   }
 }

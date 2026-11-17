@@ -149,7 +149,7 @@ export function useAiOpenPanelState(options: { cursorEnabled: Ref<boolean>; curs
     { icon: '🔗', title: '开放接入', desc: 'Cursor / Claude / VS Code 等均可配置' },
   ]
 
-  const flowSteps = ['一键开启', '复制一句话', '说「帮我操作」']
+  const flowSteps = ['保持页面打开', '让 AI 连上', '有操作时自动出现']
 
   const anyClientInstalled = computed(() => installedClientIds.value.length > 0)
 
@@ -160,9 +160,9 @@ export function useAiOpenPanelState(options: { cursorEnabled: Ref<boolean>; curs
   ])
 
   const statusText = computed(() => {
-    if (readyStatus.value === 'ready') return '已就绪 · 右下角显示连接徽标'
-    if (readyStatus.value === 'partial') return '连接中 · 请保持本页打开'
-    return '两步即可：开启 → 选择 AI 软件安装'
+    if (readyStatus.value === 'ready') return '已就绪 · 默认静默待命，Agent 操作时才出现光标'
+    if (readyStatus.value === 'partial') return '正在连接 · 请保持本页打开'
+    return '已关闭 · 可在「更多设置」中重新开启'
   })
 
   const primaryBtnLabel = computed(() => {

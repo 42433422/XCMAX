@@ -17,6 +17,7 @@ import {
   aiopenCursorConnected,
   aiopenCursorSessionId,
   aiopenCursorLogs,
+  aiopenAgentActive,
   cursorX,
   cursorY,
   cursorVisible,
@@ -447,6 +448,22 @@ describe('useAiOpenCursor - coverage ramp', () => {
         .find((message) => message && message.type === 'result' && message.id === id)
       return sent?.result || {}
     }
+
+    it('receiving a command marks the agent active', async () => {
+      setAiOpenCursorEnabled(true)
+      const ws = lastWs()!
+      ws.onopen!()
+      expect(aiopenAgentActive.value).toBe(false)
+      ws.onmessage!({
+        data: JSON.stringify({ type: 'command', id: 'agent1', action: 'snapshot', params: {} }),
+      })
+      // 只推进 microtask，保留 8s 空闲计时器，便于验证点亮状态
+      await vi.advanceTimersByTimeAsync(0)
+      expect(aiopenAgentActive.value).toBe(true)
+      // 静默 8s 后自动收起
+      vi.advanceTimersByTime(8100)
+      expect(aiopenAgentActive.value).toBe(false)
+    })
 
     it('snapshot assigns stable refs with role, name and state', async () => {
       const btn = document.createElement('button')
@@ -1123,7 +1140,17 @@ describe('useAiOpenCursor - coverage ramp', () => {
       expect(mockWsInstances.length).toBe(beforeCount)
     })
 
-    it('localStorage error falls back to false (no connect)', () => {
+    it('connects by default when no stored preference exists', () => {
+      const router = {
+        currentRoute: { value: { fullPath: '/' } },
+        push: vi.fn(),
+      } as any
+      initAiOpenCursor(router)
+      expect(aiopenCursorEnabled.value).toBe(true)
+      expect(mockWsInstances.length).toBe(1)
+    })
+
+    it('localStorage error falls back to default standby', () => {
       const original = localStorage.getItem
       localStorage.getItem = () => {
         throw new Error('SecurityError')
@@ -1133,9 +1160,20 @@ describe('useAiOpenCursor - coverage ramp', () => {
         push: vi.fn(),
       } as any
       initAiOpenCursor(router)
+      expect(aiopenCursorEnabled.value).toBe(true)
+      expect(mockWsInstances.length).toBe(1)
+      localStorage.getItem = original
+    })
+
+    it('stays off when user explicitly disabled it', () => {
+      localStorage.setItem('xcagi_aiopen_remote_control', '0')
+      const router = {
+        currentRoute: { value: { fullPath: '/' } },
+        push: vi.fn(),
+      } as any
+      initAiOpenCursor(router)
       expect(aiopenCursorEnabled.value).toBe(false)
       expect(mockWsInstances.length).toBe(0)
-      localStorage.getItem = original
     })
   })
 

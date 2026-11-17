@@ -108,7 +108,7 @@
         </label>
         <label class="aiopen-switch-row">
           <input type="checkbox" :checked="cursorEnabled" @change="toggleScreenSession($event)">
-          <span>本页待命{{ cursorConnected ? ' · 已连接' : '' }}</span>
+          <span>本页待命（默认开启）{{ cursorConnected ? ' · 已连接' : '' }}</span>
         </label>
 
         <div class="aiopen-more-actions">

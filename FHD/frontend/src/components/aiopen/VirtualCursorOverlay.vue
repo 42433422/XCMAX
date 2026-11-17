@@ -13,9 +13,9 @@
       <span v-if="cursorActionLabel" class="aiopen-cursor-label">AI {{ cursorActionLabel }}</span>
       <span v-if="cursorClicking" class="aiopen-cursor-ripple"></span>
     </div>
-    <div v-if="enabled && connected" class="aiopen-control-badge" title="外部 AI Agent 可经 AIOPEN 操控本页面">
+    <div v-if="enabled && connected && agentActive" class="aiopen-control-badge" title="外部 AI Agent 正在操作本页面">
       <span class="aiopen-control-dot"></span>
-      AI 操控通道已连接
+      AI 正在操作本页
     </div>
   </Teleport>
 </template>
@@ -30,6 +30,7 @@ import {
   cursorActionLabel,
   aiopenCursorEnabled as enabled,
   aiopenCursorConnected as connected,
+  aiopenAgentActive as agentActive,
   initAiOpenCursor,
 } from '@/composables/useAiOpenCursor'
 
