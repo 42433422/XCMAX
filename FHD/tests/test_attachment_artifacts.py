@@ -102,7 +102,9 @@ def test_store_save_get_list_delete(store: ArtifactStore, record: ArtifactRecord
     assert store.delete(record.id) is False
 
 
-def test_store_reads_and_writes_follow_account_scope(tmp_path: Path, record: ArtifactRecord) -> None:
+def test_store_reads_and_writes_follow_account_scope(
+    tmp_path: Path, record: ArtifactRecord
+) -> None:
     owner_store = ArtifactStore(tmp_path, scope=SCOPE)
     owner_store.save(record)
 
@@ -127,9 +129,7 @@ def test_store_reads_and_writes_follow_account_scope(tmp_path: Path, record: Art
     assert owner_store.get(record.id).owner_user_id == "101"
     assert other.get(record.id).owner_user_id == "202"
 
-    other_tenant = ArtifactStore(
-        tmp_path, scope=ArtifactScope(owner_user_id="101", tenant_id="8")
-    )
+    other_tenant = ArtifactStore(tmp_path, scope=ArtifactScope(owner_user_id="101", tenant_id="8"))
     assert other_tenant.get(record.id) is None
     assert other_tenant.list_all() == []
 
@@ -150,7 +150,9 @@ def test_store_denies_legacy_and_unscoped_access(tmp_path: Path, record: Artifac
     assert ArtifactStore(tmp_path, scope=SCOPE).get(record.id) is None
 
 
-def test_store_enforces_mod_and_conversation_binding(tmp_path: Path, record: ArtifactRecord) -> None:
+def test_store_enforces_mod_and_conversation_binding(
+    tmp_path: Path, record: ArtifactRecord
+) -> None:
     bound = ArtifactScope(
         owner_user_id="101", tenant_id="7", mod_id="sales", conversation_id="conv-1"
     )
