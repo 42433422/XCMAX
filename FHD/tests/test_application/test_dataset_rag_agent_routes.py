@@ -215,6 +215,49 @@ def test_refresh_route_runs_write_tool_on_recorded_source(
     assert run.tool_calls[0].permission == "dataset.write"
 
 
+def test_batch_refresh_route_syncs_visible_sources(
+    tmp_path, monkeypatch: pytest.MonkeyPatch, local_tools
+) -> None:
+    repo = InMemoryAgentRunRepository()
+    _configure_billing(monkeypatch, tmp_path)
+    service = MagicMock()
+    service.refresh_documents.return_value = {
+        "success": True,
+        "dataset_id": "platform-docs",
+        "total": 2,
+        "processed": 2,
+        "changed": 1,
+        "unchanged": 1,
+        "failed": 0,
+        "skipped": 0,
+        "truncated": False,
+        "documents": [],
+    }
+
+    with (
+        _patch_agent_repo(repo),
+        patch(
+            "app.application.dataset_rag_app_service.get_dataset_rag_app_service",
+            return_value=service,
+        ),
+    ):
+        response = _client().post(
+            "/api/knowledge/v1/datasets/platform-docs/documents/refresh?limit=500",
+            headers=_dataset_headers(),
+        )
+
+    assert response.status_code == 200
+    assert response.json()["changed"] == 1
+    call_kwargs = service.refresh_documents.call_args.kwargs
+    assert call_kwargs["dataset_id"] == "platform-docs"
+    assert call_kwargs["limit"] == 200
+
+    run = repo.get(response.json()["run_id"])
+    assert run is not None
+    assert run.tool_calls[0].action == "refresh_documents"
+    assert run.tool_calls[0].permission == "dataset.write"
+
+
 def test_rebuild_explicit_idempotency_key_replays_and_rejects_changed_input(
     tmp_path, monkeypatch, local_tools
 ):

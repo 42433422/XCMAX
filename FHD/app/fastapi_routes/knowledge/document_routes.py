@@ -259,6 +259,19 @@ class DocumentRoutes:
 
         self.multi_query_datasets = multi_query_datasets
 
+        @router.post("/datasets/{dataset_id}/documents/refresh")
+        def refresh_dataset_documents(
+            dataset_id: str, request: Request, limit: int = 50
+        ) -> JSONResponse:
+            return dispatch()(
+                request=request,
+                action="refresh_documents",
+                route_path="/api/knowledge/v1/datasets/{dataset_id}/documents/refresh",
+                params={"dataset_id": dataset_id, "limit": max(1, min(int(limit), 200))},
+            )
+
+        self.refresh_dataset_documents = refresh_dataset_documents
+
         router = self.deletion = APIRouter()
 
         @router.delete("/datasets/{dataset_id}/documents/{document_id}")

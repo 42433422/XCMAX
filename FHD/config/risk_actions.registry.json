@@ -1847,6 +1847,14 @@
           ],
           "availability": "shared"
         },
+        "refresh_documents": {
+          "risk": "medium",
+          "idempotent": true,
+          "required_params": [
+            "dataset_id"
+          ],
+          "availability": "shared"
+        },
         "clear_dataset": {
           "risk": "high",
           "idempotent": false,

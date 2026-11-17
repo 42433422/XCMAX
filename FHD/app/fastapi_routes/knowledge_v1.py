@@ -305,6 +305,7 @@ dataset_rebuild_job = _maintenance_routes.dataset_rebuild_job
 delete_dataset_document = _document_routes.delete_dataset_document
 update_dataset_document_acl = _document_routes.update_dataset_document_acl
 refresh_dataset_document = _document_routes.refresh_dataset_document
+refresh_dataset_documents = _document_routes.refresh_dataset_documents
 status = _overview_routes.status
 health = _overview_routes.health
 omniscient_overview = _overview_routes.omniscient_overview

@@ -44,10 +44,12 @@ def _ctx(
     )
 
 
-def _seed(service: DatasetRagApplicationService, *, acl: dict | None = None) -> str:
+def _seed(
+    service: DatasetRagApplicationService, *, acl: dict | None = None, source: str = "退款.md"
+) -> str:
     metadata: dict[str, object] = {
         "source_kind": "url",
-        "source_ref": "https://docs.example.com/refund",
+        "source_ref": f"https://docs.example.com/{source}",
         "chunk_strategy": "fixed",
         "chunk_size": 120,
         "chunk_overlap": 0,
@@ -56,7 +58,7 @@ def _seed(service: DatasetRagApplicationService, *, acl: dict | None = None) -> 
         metadata["acl"] = acl
     result = service.ingest_document(
         dataset_id="kb",
-        source="退款.md",
+        source=source,
         text=_ORIGINAL,
         tenant_id="t1",
         metadata=metadata,
@@ -151,6 +153,89 @@ def test_refresh_missing_document_and_fetch_failure(tmp_path) -> None:
     assert "网页不可访问" in failed["message"]
 
 
+def test_batch_refresh_summarizes_changed_unchanged_and_skipped(tmp_path) -> None:
+    service = _service(tmp_path)
+    changed_doc = _seed(service)
+    unchanged = service.ingest_document(
+        dataset_id="kb",
+        source="发票.md",
+        text=_ORIGINAL,
+        tenant_id="t1",
+        metadata={"source_kind": "url", "source_ref": "https://docs.example.com/invoice"},
+        access_context=_ctx(),
+    )
+    inline = service.ingest_document(
+        dataset_id="kb",
+        source="内联.md",
+        text=_ORIGINAL,
+        tenant_id="t1",
+        access_context=_ctx(),
+    )
+
+    def _fetch(url: str) -> SimpleNamespace:
+        text = _UPDATED if url.endswith("退款.md") else _ORIGINAL
+        return SimpleNamespace(text=text, title="页面", url=url)
+
+    with patch("app.application.document_parsing.web_fetch.fetch_url_text", side_effect=_fetch):
+        result = service.refresh_documents("kb", tenant_id="t1", access_context=_ctx())
+
+    assert result["success"] is True
+    assert result["total"] == 2
+    assert result["changed"] == 1
+    assert result["unchanged"] == 1
+    assert result["failed"] == 0
+    assert result["skipped"] == 1
+    assert result["truncated"] is False
+    statuses = {item["document_id"]: item["status"] for item in result["documents"]}
+    assert statuses[changed_doc] == "changed"
+    assert statuses[unchanged["document"]["document_id"]] == "unchanged"
+    assert inline["document"]["document_id"] not in statuses
+
+
+def test_batch_refresh_respects_limit_and_acl(tmp_path) -> None:
+    service = _service(tmp_path)
+    _seed(service)
+    _seed(service, acl={"allow_actors": ["alice"]}, source="秘密.md")
+
+    with patch(
+        "app.application.document_parsing.web_fetch.fetch_url_text",
+        return_value=_page(_ORIGINAL),
+    ):
+        limited = service.refresh_documents("kb", tenant_id="t1", access_context=_ctx(), limit=1)
+        hidden = service.refresh_documents(
+            "kb", tenant_id="t1", access_context=_ctx("bob"), limit=50
+        )
+
+    assert limited["processed"] == 1
+    assert limited["truncated"] is True
+    # bob 看不到 ACL 受限的「秘密.md」，只同步租户内可见文档。
+    assert hidden["total"] == 1
+    assert [item["source"] for item in hidden["documents"]] == ["退款.md"]
+
+
+def test_batch_refresh_route_dispatches() -> None:
+    from fastapi.responses import JSONResponse
+
+    from app.fastapi_routes.knowledge.document_routes import DocumentRoutes
+
+    calls: list[dict] = []
+
+    def _dispatch(**kwargs):
+        calls.append(kwargs)
+        return JSONResponse({"success": True})
+
+    routes = DocumentRoutes(dispatch=lambda: _dispatch, uploads=lambda _get: None)
+    app = FastAPI()
+    app.include_router(routes.ingestion)
+    client = TestClient(app, raise_server_exceptions=False)
+
+    response = client.post("/datasets/kb/documents/refresh?limit=500")
+
+    assert response.status_code == 200
+    assert calls[0]["action"] == "refresh_documents"
+    assert calls[0]["params"] == {"dataset_id": "kb", "limit": 200}
+
+
 def test_refresh_reuses_connector_for_notion_sources(tmp_path) -> None:
     service = _service(tmp_path)
     ingested = service.ingest_document(
@@ -170,9 +255,7 @@ def test_refresh_reuses_connector_for_notion_sources(tmp_path) -> None:
     )
 
     with patch("app.application.document_parsing.notion.fetch_page", return_value=page):
-        result = service.refresh_document(
-            "kb", document_id, tenant_id="t1", access_context=_ctx()
-        )
+        result = service.refresh_document("kb", document_id, tenant_id="t1", access_context=_ctx())
 
     assert result["changed"] is True
     assert result["source_kind"] == "notion"

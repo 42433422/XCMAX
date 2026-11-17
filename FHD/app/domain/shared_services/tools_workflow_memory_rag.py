@@ -215,6 +215,14 @@ def _registered_router_dataset_rag(
             access_context=access_context(DATASET_WRITE_PERMISSION),
         )
         return finalize(result, dataset_id=dataset_id, document_id=document_id)
+    if action == "refresh_documents":
+        result = service.refresh_documents(
+            dataset_id=dataset_id,
+            tenant_id=str(params.get("tenant_id") or ""),
+            access_context=access_context(DATASET_WRITE_PERMISSION),
+            limit=as_int(params.get("limit"), 50),
+        )
+        return finalize(result, dataset_id=dataset_id, documents=[])
     if action == "diff_versions":
         source = str(params.get("source") or "").strip()
         from_version = params.get("from_version") or ""

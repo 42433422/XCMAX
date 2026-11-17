@@ -477,6 +477,105 @@ class DatasetRagApplicationService:
         )
         return response
 
+    def refresh_documents(
+        self,
+        dataset_id: str,
+        *,
+        tenant_id: str = "",
+        access_context: DatasetAccessContext | dict[str, Any] | None = None,
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        """Re-sync every document in the dataset that records external coordinates.
+
+        Mature knowledge bases offer a scheduled / bulk source sync; per-document
+        refresh alone cannot catch a whole Confluence space. Documents without a
+        recorded source are counted as skipped instead of failing the batch.
+        """
+        from app.application.dataset_rag.document_acl import document_visible_to
+
+        dataset_key = _clean_key(dataset_id, default="default")
+        context = _coerce_access_context(access_context)
+        denied = _ensure_dataset_permission(
+            context, DATASET_WRITE_PERMISSION, dataset_id=dataset_key
+        )
+        if denied is not None:
+            return denied
+        tenant_key, denied = _resolve_tenant_for_access(
+            context,
+            tenant_id,
+            required_permission=DATASET_WRITE_PERMISSION,
+            default_without_context="",
+            dataset_id=dataset_key,
+        )
+        if denied is not None:
+            return denied
+        with self._repository.lock:
+            state = self._repository.datasets.get(dataset_key)
+            snapshots = (
+                [document.to_dict() for document in state.documents.values()]
+                if state is not None
+                else []
+            )
+        candidates: list[dict[str, Any]] = []
+        skipped = 0
+        for snapshot in sorted(snapshots, key=lambda item: str(item.get("document_id") or "")):
+            if tenant_key and str(snapshot.get("tenant_id") or "") != tenant_key:
+                continue
+            if not document_visible_to(snapshot.get("metadata"), context):
+                continue
+            if source_coordinates(snapshot.get("metadata")) is None:
+                skipped += 1
+                continue
+            candidates.append(snapshot)
+        bounded = max(1, min(int(limit), 200))
+        results: list[dict[str, Any]] = []
+        changed = unchanged = failed = 0
+        for snapshot in candidates[:bounded]:
+            doc_id = str(snapshot.get("document_id") or "")
+            outcome = self.refresh_document(
+                dataset_key,
+                doc_id,
+                tenant_id=tenant_key,
+                access_context=access_context,
+            )
+            if not outcome.get("success"):
+                failed += 1
+                results.append(
+                    {
+                        "document_id": doc_id,
+                        "source": str(snapshot.get("source") or ""),
+                        "status": "failed",
+                        "error_code": str(outcome.get("error_code") or "dataset_refresh_failed"),
+                        "message": str(outcome.get("message") or ""),
+                    }
+                )
+                continue
+            is_changed = bool(outcome.get("changed"))
+            changed += int(is_changed)
+            unchanged += int(not is_changed)
+            document = outcome.get("document") if isinstance(outcome.get("document"), dict) else {}
+            results.append(
+                {
+                    "document_id": doc_id,
+                    "source": str(snapshot.get("source") or ""),
+                    "status": "changed" if is_changed else "unchanged",
+                    "version": int(document.get("version") or outcome.get("version") or 0),
+                }
+            )
+        return {
+            "success": True,
+            "dataset_id": dataset_key,
+            "tenant_id": tenant_key,
+            "total": len(candidates),
+            "processed": len(results),
+            "changed": changed,
+            "unchanged": unchanged,
+            "failed": failed,
+            "skipped": skipped,
+            "truncated": len(candidates) > bounded,
+            "documents": results,
+        }
+
     def clear_dataset(
         self,
         dataset_id: str,
