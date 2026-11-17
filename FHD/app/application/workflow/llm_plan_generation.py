@@ -9,9 +9,8 @@ from collections.abc import Callable
 from typing import Any, Protocol, cast
 
 import httpx
-from langchain_core.output_parsers import PydanticOutputParser
-from pydantic import BaseModel, ConfigDict, StrictBool
 
+from app.application.workflow.clarification_selection import CLARIFICATION_PARSER
 from app.application.workflow.planner_prompt_profile import (
     select_rules_for_prompt,
     select_tools_for_prompt,
@@ -26,14 +25,6 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
-
-class ClarificationExtraction(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    resolved: StrictBool
-    parameters: dict[str, Any]
-
-
-_CLARIFICATION_PARSER = PydanticOutputParser(pydantic_object=ClarificationExtraction)
 _MODEL_SECRET_TEXT = re.compile(
     r"(?i)(\b(?:api[_ -]?key|access[_ -]?token|refresh[_ -]?token|password|passwd|secret|密码|口令)\b\s*[:=]\s*)([^\s,;]+)|"
     r"(\bBearer\s+)[A-Za-z0-9._~+/=-]+"
@@ -790,7 +781,7 @@ class LlmPlanGeneration:
             first = choices[0] if isinstance(choices, list) and choices else {}
             message = first.get("message") if isinstance(first, dict) else {}
             raw = str(message.get("content") or "").strip() if isinstance(message, dict) else ""
-            parsed = _CLARIFICATION_PARSER.parse(raw)
+            parsed = CLARIFICATION_PARSER.parse(raw)
             parameters = parsed.parameters
             if not parsed.resolved or not parameters:
                 return None

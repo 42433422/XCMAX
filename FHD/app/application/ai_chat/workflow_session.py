@@ -12,6 +12,13 @@ from typing import TYPE_CHECKING, Any, Protocol, cast
 from starlette.responses import JSONResponse
 
 from app.application.ai_chat.excel_import_policy import _enrich_confirmation_inner
+from app.application.workflow.clarification_selection import (
+    CANCEL_WORDS,
+    CONFIRM_WORDS,
+)
+from app.application.workflow.clarification_selection import (
+    plan_confirmation_decision as _plan_confirmation_decision,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 if TYPE_CHECKING:
@@ -20,26 +27,6 @@ if TYPE_CHECKING:
     from app.application.workflow.workflow_types import PlanGraph
 
 logger = logging.getLogger(__name__)
-
-CONFIRM_WORDS = {"确认", "是", "是的", "好的", "好", "继续", "执行", "确认执行", "ok", "yes"}
-CANCEL_WORDS = {"取消", "否", "不要", "停止", "no"}
-
-_PLAN_CONFIRM_PREFIXES = ("确认", "确定", "同意", "可以", "好的", "执行", "继续", "是", "对")
-_PLAN_CANCEL_PREFIXES = ("取消", "不要", "不用", "别", "停止", "算了", "否")
-
-
-def _plan_confirmation_decision(text: str) -> bool | None:
-    """解析计划级确认答复；返回 None 表示既不是确认也不是取消。"""
-    normalized = str(text or "").strip().lower().rstrip("。.!！,，")
-    if not normalized:
-        return None
-    if normalized in CANCEL_WORDS or normalized.startswith(_PLAN_CANCEL_PREFIXES):
-        return False
-    if normalized in CONFIRM_WORDS or all(
-        part.strip() in _PLAN_CONFIRM_PREFIXES for part in normalized.replace("，", ",").split(",")
-    ):
-        return True
-    return None
 
 
 def _control_reply(
@@ -784,47 +771,24 @@ class WorkflowSession:
             "可以",
         }
         if reason in {"ambiguous_target", "missing_target"}:
-            from app.application.workflow.clarification_node import resolve_confirmed_target
+            from app.application.workflow.clarification_selection import select_clarified_target
 
-            selected = resolve_confirmed_target(text, candidates)
-            if selected is None and candidates:
-                duplicate_name = (
-                    sum(
-                        text.strip()
-                        in {
-                            str(item.get(key) or "").strip()
-                            for key in (
-                                "name",
-                                "customer_name",
-                                "unit_name",
-                                "product_name",
-                                "material_name",
-                            )
-                        }
-                        for item in candidates
-                    )
-                    > 1
-                )
-                if affirmative or text.strip().isdigit() or duplicate_name:
-                    return None
-                planner = self.callbacks.workflow_planner
-                selected = planner.extract_clarification_parameters(
-                    user_id=run.user_id,
-                    original_message=run.message,
-                    answer=text,
-                    tool_id=target.tool_id,
-                    action=target.action,
-                    current_params=target.params,
-                    allowed_fields={"id"},
-                    candidates=candidates,
-                    context=dict(run.metadata.get("runtime_context") or {}),
-                )
-                if (
-                    not isinstance(selected, dict)
-                    or set(selected) != {"id"}
-                    or str(selected["id"]) not in {str(item.get("id")) for item in candidates}
-                ):
-                    return None
+            selected = select_clarified_target(
+                text,
+                candidates,
+                affirmative=affirmative,
+                extract=lambda **kwargs: (
+                    self.callbacks.workflow_planner.extract_clarification_parameters(**kwargs)
+                ),
+                request={
+                    "user_id": run.user_id,
+                    "original_message": run.message,
+                    "tool_id": target.tool_id,
+                    "action": target.action,
+                    "current_params": target.params,
+                    "context": dict(run.metadata.get("runtime_context") or {}),
+                },
+            )
             if (
                 selected is None
                 and not candidates
