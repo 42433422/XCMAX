@@ -69,7 +69,8 @@ class ArtifactStore:
         if not isinstance(artifact_id, str) or not _ID_PATTERN.fullmatch(artifact_id):
             return None
         root = self.root.resolve()
-        candidate = (root / f"{artifact_id}{suffix}").resolve()
+        name = os.path.basename(f"{artifact_id}{suffix}")
+        candidate = (root / name).resolve()
         try:
             candidate.relative_to(root)
         except ValueError:
