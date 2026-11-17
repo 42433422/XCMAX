@@ -74,17 +74,6 @@ class _FakeRedis:
             self.streams[key] = self.streams[key][-maxlen:]
         return entry_id
 
-    def eval(self, script, count, stream, status, lease, token, action, value, ttl, maxlen):
-        if self.values.get(lease) != token:
-            return None
-        if action == "append":
-            return self.xadd(stream, {"payload": value}, maxlen=maxlen)
-        if action == "finish":
-            self.set(status, value, ex=ttl)
-        elif action == "clear":
-            self.delete(stream, status)
-        return 1
-
     def xrange(self, key, min="-", max="+"):
         rows = self.streams.get(key) or []
         if min in ("-", None):
@@ -96,13 +85,31 @@ class _FakeRedis:
 
 
 class _FakeScript:
-    """替代 redis-py Script：只实现 Lock 用到的 release/reacquire 语义。"""
+    """替代 redis-py Script：实现租约与回放的固定脚本语义；Lua 后端测试验证实际脚本。"""
 
     def __init__(self, client: _FakeRedis, script: str) -> None:
         self._client = client
         self._script = script
 
     def __call__(self, keys=None, args=None, client=None):
+        if len(keys or []) == 3:
+            stream, status, lease = keys
+            token = args[0]
+            if "'NX'" in self._script:
+                if not self._client.set(lease, token, nx=True, px=args[1]):
+                    return 0
+                self._client.delete(stream, status)
+                return 1
+            if self._client.values.get(lease) != token:
+                return None
+            _, action, value, ttl, maxlen = args
+            if action == "append":
+                return self._client.xadd(stream, {"payload": value}, maxlen=maxlen)
+            if action == "finish":
+                self._client.set(status, value, ex=ttl)
+            elif action == "clear":
+                self._client.delete(stream, status)
+            return 1
         key = (keys or [None])[0]
         token = (args or [None])[0]
         if "del" in self._script:
@@ -411,3 +418,59 @@ async def test_producer_completion_joins_heartbeat_and_releases_lease(monkeypatc
     assert not replay.lease_alive("exit", owner="7", tenant="2")
     assert replay.finish_status("exit", owner="7", tenant="2") == ("aborted" if cancel else "done")
     assert not any(t.get_coro().__name__ == "_renew_replay_lease" for t in asyncio.all_tasks())
+
+
+@pytest.mark.parametrize("backend", ["local", "lua"])
+def test_claim_clears_old_replay_before_publishing_lease(backend):
+    if backend == "lua":
+        _use_redis(pytest.importorskip("fakeredis").FakeRedis(decode_responses=True))
+    turn, owner, tenant = "atomic-retry", "7", "2"
+    assert replay.claim_runner(turn, owner=owner, tenant=tenant)
+    replay.append(turn, {"text": "old"}, owner=owner, tenant=tenant)
+    replay.mark_finished(turn, owner=owner, tenant=tenant)
+    assert replay.finish_status(turn, owner=owner, tenant=tenant) == "done"
+    assert replay.claim_runner(turn, owner=owner, tenant=tenant)
+    # A competing follower observes the lease but never the previous terminal/data.
+    assert not replay.claim_runner(turn, owner=owner, tenant=tenant)
+    assert replay.lease_alive(turn, owner=owner, tenant=tenant)
+    assert replay.finish_status(turn, owner=owner, tenant=tenant) is None
+    assert replay.events_after(turn, owner=owner, tenant=tenant) == []
+    replay.append(turn, {"text": "new"}, owner=owner, tenant=tenant)
+    assert not replay.claim_runner(turn, owner=owner, tenant=tenant)
+    assert [row["payload"] for row in replay.events_after(turn, owner=owner, tenant=tenant)] == [
+        {"text": "new"}
+    ]
+
+
+@pytest.mark.parametrize("decode_responses", [False, True])
+def test_atomic_claim_uses_real_redis_lock_token_protocol(decode_responses):
+    fake = pytest.importorskip("fakeredis").FakeRedis(decode_responses=decode_responses)
+    _use_redis(fake)
+    assert replay.claim_runner("protocol", owner="7")
+    runner = replay.runner_for("protocol", owner="7")
+    assert isinstance(runner.local.token, bytes)
+    assert runner.owned()
+    assert 0 < fake.pttl(runner.name) <= replay.LEASE_TTL_SECONDS * 1000
+    assert runner.reacquire()
+    replay.release_runner("protocol", owner="7", runner=runner)
+    assert runner.local.token is None
+    assert not fake.exists(runner.name)
+
+
+@pytest.mark.parametrize("already_done", [False, True])
+async def test_heartbeat_does_not_renew_completed_producer(monkeypatch, mocker, already_done):
+    release = asyncio.Event()
+    producer = asyncio.create_task(release.wait())
+    runner = mocker.Mock()
+
+    async def finish_during_sleep(delay):
+        release.set()
+        await producer
+
+    monkeypatch.setattr(compat_routes.asyncio, "sleep", finish_during_sleep)
+    if already_done:
+        release.set()
+        await producer
+    await asyncio.wait_for(compat_routes._renew_replay_lease(runner, producer), timeout=2)
+    runner.reacquire.assert_not_called()
+    assert producer.done() and not producer.cancelled()
