@@ -474,3 +474,34 @@ async def test_heartbeat_does_not_renew_completed_producer(monkeypatch, mocker, 
     await asyncio.wait_for(compat_routes._renew_replay_lease(runner, producer), timeout=2)
     runner.reacquire.assert_not_called()
     assert producer.done() and not producer.cancelled()
+
+
+@pytest.mark.parametrize("decode_responses", [False, True])
+async def test_redis_response_modes_preserve_replay_payload_cursor_and_done(decode_responses):
+    fake = pytest.importorskip("fakeredis").FakeRedis(decode_responses=decode_responses)
+    _use_redis(fake)
+    turn, owner, tenant = "response-mode", "7", "2"
+    assert replay.claim_runner(turn, owner=owner, tenant=tenant)
+    payloads = [
+        {"type": "token", "text": "首条"},
+        {"type": "token", "text": "续传"},
+        {"type": "done"},
+    ]
+    cursors = [replay.append(turn, payload, owner=owner, tenant=tenant) for payload in payloads]
+    replay.mark_finished(turn, owner=owner, tenant=tenant)
+    expected = [{"seq": cursor, "payload": payload} for cursor, payload in zip(cursors, payloads)]
+    assert replay.events_after(turn, owner=owner, tenant=tenant) == expected
+    assert replay.events_after(turn, cursors[0], owner=owner, tenant=tenant) == expected[1:]
+    assert replay.events_after(turn, cursors[-1], owner=owner, tenant=tenant) == []
+    assert replay.finish_status(turn, owner=owner, tenant=tenant) == "done"
+
+    async def follow():
+        return [
+            chunk
+            async for chunk in compat_routes._follow_replay(
+                turn, cursors[0], owner=owner, tenant=tenant
+            )
+        ]
+
+    chunks = await asyncio.wait_for(follow(), timeout=2)
+    assert chunks == [compat_routes._replay_line(row) for row in expected[1:]]
