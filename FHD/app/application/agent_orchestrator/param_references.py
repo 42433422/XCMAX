@@ -24,6 +24,15 @@ class UnresolvedReference(ValueError):
     pass
 
 
+class AmbiguousReference(UnresolvedReference):
+    """前序结果有多条候选；携带候选行，供上层转为澄清而不是直接失败。"""
+
+    def __init__(self, message: str, *, rows: list[Any], path: str) -> None:
+        super().__init__(message)
+        self.rows = rows
+        self.path = path
+
+
 def validate_plan_references(value: Any, allowed_sources: set[str] | frozenset[str]) -> str | None:
     """Reject malformed or undeclared plan references before any tool can run."""
     allowed = {str(item) for item in allowed_sources}
@@ -78,7 +87,11 @@ def _single(rows: list[Any], path: str) -> Any:
         return rows[0]
     if not rows:
         raise UnresolvedReference(f"{{{{{path}}}}} 引用的前序结果为空")
-    raise UnresolvedReference(f"{{{{{path}}}}} 引用的前序结果有 {len(rows)} 条，无法确定是哪一条")
+    raise AmbiguousReference(
+        f"{{{{{path}}}}} 引用的前序结果有 {len(rows)} 条，无法确定是哪一条",
+        rows=rows,
+        path=path,
+    )
 
 
 def _lookup(outputs: dict[str, Any], path: str, expected_type: str = "") -> Any:
@@ -122,17 +135,25 @@ def _lookup(outputs: dict[str, Any], path: str, expected_type: str = "") -> Any:
 
 
 def resolve_references(
-    value: Any, outputs: dict[str, Any], problems: list[str], schema: dict[str, Any] | None = None
+    value: Any,
+    outputs: dict[str, Any],
+    problems: list[str],
+    schema: dict[str, Any] | None = None,
+    ambiguities: list[AmbiguousReference] | None = None,
 ) -> Any:
     """Return ``value`` with references substituted; unresolved ones go to ``problems``."""
     schema = schema or {}
     if isinstance(value, dict):
         properties = schema.get("properties") or {}
         return {
-            k: resolve_references(v, outputs, problems, properties.get(k)) for k, v in value.items()
+            k: resolve_references(v, outputs, problems, properties.get(k), ambiguities)
+            for k, v in value.items()
         }
     if isinstance(value, list):
-        return [resolve_references(v, outputs, problems, schema.get("items")) for v in value]
+        return [
+            resolve_references(v, outputs, problems, schema.get("items"), ambiguities)
+            for v in value
+        ]
     if not isinstance(value, str) or "{{" not in value:
         return value
     full = _FULL.match(value)
@@ -140,6 +161,11 @@ def resolve_references(
         if full:
             return _lookup(outputs, full.group(1), str(schema.get("type") or ""))
         return _EMBEDDED.sub(lambda m: str(_lookup(outputs, m.group(1))), value)
+    except AmbiguousReference as exc:
+        problems.append(str(exc))
+        if ambiguities is not None:
+            ambiguities.append(exc)
+        return value
     except UnresolvedReference as exc:
         problems.append(str(exc))
         return value
@@ -179,8 +205,13 @@ def refuse_unresolved_step(run: Any, step: Any, node_outputs: dict[str, Any]) ->
     from app.application.agent_orchestrator.tool_spec import build_tool_specs_v2
 
     spec = build_tool_specs_v2().get((step.tool_id, step.action))
+    ambiguities: list[AmbiguousReference] = []
     resolved = resolve_references(
-        dict(step.params or {}), node_outputs, problems, spec.input_schema if spec else None
+        dict(step.params or {}),
+        node_outputs,
+        problems,
+        spec.input_schema if spec else None,
+        ambiguities,
     )
     if not problems:
         problems = [f"无法识别的占位符 {p[:80]}" for p in unresolved_placeholders(resolved)]
@@ -189,6 +220,20 @@ def refuse_unresolved_step(run: Any, step: Any, node_outputs: dict[str, Any]) ->
             step.params = resolved
             run.add_event("step.references_resolved", f"步骤 {step.node_id} 参数引用已解析")
         return False
+    mutating = str(getattr(step, "risk", "")) in {"medium", "high"} or any(
+        token in str(step.action).lower()
+        for token in ("create", "update", "delete", "write", "clear", "correct", "stock_in")
+    )
+    if ambiguities and mutating:
+        from app.application.agent_orchestrator.clarification import (
+            _ambiguous_field,
+            pause_for_ambiguous_target,
+        )
+
+        ambiguity = ambiguities[0]
+        field = _ambiguous_field(step.params, ambiguity.path)
+        if pause_for_ambiguous_target(run, step, ambiguity.rows, field=field):
+            return True
     from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
 
     unsafe = []

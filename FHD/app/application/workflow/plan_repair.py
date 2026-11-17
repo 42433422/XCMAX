@@ -221,7 +221,6 @@ def repair_plan(
                 messages=messages,
                 context=context,
                 temperature=0.0,
-                max_tokens=1200,
             )
         except (ValueError, TypeError, RuntimeError) as exc:
             logger.warning("计划修复请求失败: %s", exc)

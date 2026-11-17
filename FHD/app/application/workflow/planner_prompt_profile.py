@@ -47,6 +47,7 @@ SCENARIO_RULES: dict[str, tuple[str, ...]] = {
     ),
     "database": (
         "数据库相关意图：读数据库/查库使用 business_db.read，并填写 entity；写入/新增/更新/删除/入库才使用 business_db.write，并填写 entity、operation、payload。",
+        "写入类动作（新增/更新/删除/改价等）：用户已给出能唯一定位的自然键（客户名称、产品型号或名称、物料编码、单据号）时，直接把该自然键放进写入节点的 params/payload（如 unit_name、model_number、name、material_code、order_number），不要先生成查询节点再引用查询结果 id 写入；系统在命中多条时会自动返回候选澄清。只有用户完全没有给出任何定位键时，才使用 clarify.ask 询问。",
     ),
     "document": (
         "要求核对明细与合计时，读取明细后必须增加 excel_analysis.statistics，expected_row_count 引用销售查询 summary.count，expected_totals.total_amount 引用销售查询 summary.amount，并声明这些直接依赖。仅 read 不代表合计已核验。",
@@ -73,7 +74,19 @@ SCENARIO_RULES: dict[str, tuple[str, ...]] = {
 _SCENARIO_KEYWORDS: dict[str, tuple[str, ...]] = {
     "customer": ("客户", "客户名", "联系人", "往来单位", "这家公司"),
     "sales": ("销售", "订单", "出货", "报价", "收款", "付款", "应收", "发货单"),
-    "database": ("数据库", "查库", "入库", "新增", "更新", "删除", "修改", "改一下"),
+    "database": (
+        "数据库",
+        "查库",
+        "入库",
+        "新增",
+        "更新",
+        "删除",
+        "修改",
+        "改一下",
+        "改成",
+        "改价",
+        "价格改",
+    ),
     "document": (
         "excel",
         "表格",

@@ -150,6 +150,83 @@ _LIGHT_RULES = (
     '只要用户需要查询或操作企业数据、生成文件、调用工具，返回 {"mode":"workflow"}，不要输出 nodes，也不要编造结果。',
 )
 
+_PLAN_OUTPUT_SCHEMA_DOC: dict[str, Any] = {
+    "mode": "reply|workflow",
+    "reply": "string; mode=reply required, otherwise omit",
+    "intent": "string",
+    "todo_steps": ["string"],
+    "risk_level": "low|medium|high",
+    "nodes": [
+        {
+            "node_id": "string",
+            "tool_id": "string",
+            "action": "string",
+            "params": {},
+            "risk": "low|medium|high",
+            "idempotent": "bool",
+            "description": "string",
+            "depends_on": ["node_id"],
+            "next": "node_id or null",
+            "branches": [
+                {
+                    "target": "node_id",
+                    "condition": {"key": "result_field", "equals": "value"},
+                }
+            ],
+        }
+    ],
+}
+
+# 结构化输出校验（复用现有 jsonschema，不新增依赖）：workflow 必须有至少一个
+# 可执行节点；reply 必须带非空正文且不能混入节点。
+_PLAN_OUTPUT_JSON_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "required": ["mode"],
+    "properties": {
+        "mode": {"type": "string", "enum": ["reply", "workflow"]},
+        "reply": {"type": "string"},
+        "intent": {"type": "string"},
+        "todo_steps": {"type": "array", "items": {"type": "string"}},
+        "risk_level": {"type": "string"},
+        "nodes": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["tool_id", "action"],
+                "properties": {
+                    "node_id": {"type": "string"},
+                    "tool_id": {"type": "string", "minLength": 1},
+                    "action": {"type": "string", "minLength": 1},
+                    "params": {"type": "object"},
+                    "depends_on": {"type": "array"},
+                    "branches": {"type": "array"},
+                },
+            },
+        },
+    },
+    "allOf": [
+        {
+            "if": {"properties": {"mode": {"const": "workflow"}}, "required": ["mode"]},
+            "then": {"required": ["nodes"], "properties": {"nodes": {"minItems": 1}}},
+        },
+        {
+            "if": {"properties": {"mode": {"const": "reply"}}, "required": ["mode"]},
+            "then": {
+                "required": ["reply"],
+                "properties": {"reply": {"minLength": 1}, "nodes": {"maxItems": 0}},
+            },
+        },
+    ],
+}
+
+_SHAPE_REPAIR_RULES = (
+    "只输出 JSON，不要 markdown。",
+    "保留用户原始意图，只补全或修正结构，不要更换业务对象。",
+    "mode=workflow 时必须给出至少一个 nodes；每个 node 必须有非空 tool_id 与 action，params 必须是对象。",
+    "mode=reply 时必须给出非空 reply，且不能包含 nodes。",
+    "无法在不臆造业务事实的前提下补全时，改为 mode=workflow 的 clarify.ask 节点提出具体澄清问题。",
+)
+
 
 def _conversational_turn(message: str, context: dict[str, Any]) -> bool:
     text = str(message or "").strip()
@@ -292,6 +369,36 @@ def _load_model_json(raw: str) -> Any:
             return repair_loads(raw)
         except (ValueError, TypeError):
             return None
+
+
+def _model_payload(response_data: dict[str, Any]) -> tuple[Any, str]:
+    """返回（解析后的 JSON, 原始正文）；不校验业务结构。"""
+    choices = response_data.get("choices")
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+        return None, ""
+    message = choices[0].get("message")
+    if not isinstance(message, dict):
+        return None, ""
+    raw = str(message.get("content") or "").strip()
+    if not raw:
+        return None, ""
+    raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+    return _load_model_json(_sanitize_model_json(raw)), raw
+
+
+def model_plan_schema_error(payload: Any) -> str | None:
+    """校验模型计划 JSON 的必需形状；合规返回 None，否则返回可回灌的错误描述。"""
+    try:
+        from jsonschema import Draft202012Validator
+    except ImportError:  # 运行环境缺依赖时保持原有行为（由调用方结构检查兜底）
+        return None
+    validator = Draft202012Validator(_PLAN_OUTPUT_JSON_SCHEMA)
+    errors = sorted(validator.iter_errors(payload), key=lambda item: list(item.absolute_path))
+    if not errors:
+        return None
+    first = errors[0]
+    path = ".".join(str(part) for part in first.absolute_path) or "root"
+    return f"{path}: {first.message}"
 
 
 def _decode_completion(payload: dict[str, Any]) -> tuple[dict[str, Any], list[WorkflowNode]] | None:
@@ -526,6 +633,55 @@ class LlmPlanGeneration:
             },
         )
 
+    def _repair_output_shape(
+        self,
+        *,
+        plan_id: str,
+        message: str,
+        context: dict[str, Any],
+        raw_content: str,
+        error: str,
+    ) -> PlanGraph | None:
+        """一次有界的结构修复：把 schema 错误回灌给模型，要求补全计划 JSON。"""
+        payload = {
+            "task": "修复模型输出，使其满足计划 JSON schema；不得臆造业务事实。",
+            "rules": list(_SHAPE_REPAIR_RULES),
+            "error": _model_context_value(str(error or "")[:400]),
+            "user_message": _model_context_value(str(message or "")[:2000]),
+            "invalid_output": _model_context_value(str(raw_content or "")[:8000]),
+            "output_schema": _PLAN_OUTPUT_SCHEMA_DOC,
+        }
+        messages = [
+            {"role": "system", "content": "你是计划结构修复器，只输出约定 JSON。"},
+            {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+        ]
+        try:
+            response = self.completion(
+                ai_service=self.conversation,
+                context=context,
+                messages=messages,
+                http_client_factory=self.http_client,
+                temperature=0.0,
+            )
+        except RECOVERABLE_ERRORS:
+            logger.warning("计划结构修复请求失败", exc_info=True)
+            return None
+        if not isinstance(response, dict):
+            return None
+        decoded = _decode_completion(response)
+        if decoded is None:
+            return None
+        parsed, nodes = decoded
+        if model_plan_schema_error(parsed) is not None:
+            return None
+        return build_plan_from_payload(
+            plan_id=plan_id,
+            message=message,
+            parsed=parsed,
+            nodes=nodes,
+            context=context,
+        )
+
     def generate(
         self,
         plan_id: str,
@@ -577,32 +733,7 @@ class LlmPlanGeneration:
                 "recent_messages": recent_messages,
                 "context": _model_context_value(context),
                 "tool_registry": tool_specs,
-                "output_schema": {
-                    "mode": "reply|workflow",
-                    "reply": "string; mode=reply required, otherwise omit",
-                    "intent": "string",
-                    "todo_steps": ["string"],
-                    "risk_level": "low|medium|high",
-                    "nodes": [
-                        {
-                            "node_id": "string",
-                            "tool_id": "string",
-                            "action": "string",
-                            "params": {},
-                            "risk": "low|medium|high",
-                            "idempotent": "bool",
-                            "description": "string",
-                            "depends_on": ["node_id"],
-                            "next": "node_id or null",
-                            "branches": [
-                                {
-                                    "target": "node_id",
-                                    "condition": {"key": "result_field", "equals": "value"},
-                                }
-                            ],
-                        }
-                    ],
-                },
+                "output_schema": _PLAN_OUTPUT_SCHEMA_DOC,
             }
             messages = [
                 {
@@ -667,6 +798,24 @@ class LlmPlanGeneration:
                 return native_plan
             decoded = _decode_completion(response_data)
             if decoded is None:
+                parsed_payload, raw_content = _model_payload(response_data)
+                schema_error = (
+                    "输出不是可解析的 JSON"
+                    if parsed_payload is None
+                    else (model_plan_schema_error(parsed_payload) or "计划结构不完整")
+                )
+                repaired = self._repair_output_shape(
+                    plan_id=plan_id,
+                    message=message,
+                    context=context,
+                    raw_content=raw_content,
+                    error=schema_error,
+                )
+                if repaired is not None:
+                    return repaired
+                context["planning_failure_reason"] = (
+                    f"计划结构修复未完成：{schema_error}"
+                )[:300]
                 return None
             parsed, nodes = decoded
             return build_plan_from_payload(

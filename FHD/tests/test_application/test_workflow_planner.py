@@ -16,6 +16,65 @@ from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 # ========================= get_tool_registry =============================
 
 
+def test_planner_token_budget_is_configurable_for_reasoning_models(monkeypatch):
+    from app.application.workflow.planner_llm_gateway import planner_max_tokens
+
+    monkeypatch.delenv("XCAGI_PLANNER_MAX_TOKENS", raising=False)
+    assert planner_max_tokens() == 4096
+    monkeypatch.setenv("XCAGI_PLANNER_MAX_TOKENS", "8192")
+    assert planner_max_tokens() == 8192
+    monkeypatch.setenv("XCAGI_PLANNER_MAX_TOKENS", "not-a-number")
+    assert planner_max_tokens() == 4096
+
+
+def test_plan_schema_flags_workflow_without_nodes():
+    from app.application.workflow.llm_plan_generation import model_plan_schema_error
+
+    assert "nodes" in (model_plan_schema_error({"mode": "workflow"}) or "")
+    assert "reply" in (model_plan_schema_error({"mode": "reply"}) or "")
+    assert (
+        model_plan_schema_error(
+            {
+                "mode": "workflow",
+                "nodes": [{"tool_id": "products", "action": "query", "params": {}}],
+            }
+        )
+        is None
+    )
+
+
+def test_planner_repairs_workflow_output_without_nodes():
+    replies = [
+        json.dumps({"mode": "workflow"}),
+        json.dumps(
+            {
+                "mode": "workflow",
+                "intent": "查询产品 A1",
+                "nodes": [
+                    {
+                        "node_id": "n1",
+                        "tool_id": "products",
+                        "action": "query",
+                        "params": {"keyword": "A1"},
+                    }
+                ],
+            }
+        ),
+    ]
+    completion = Mock(
+        side_effect=[{"choices": [{"message": {"content": text}}]} for text in replies]
+    )
+    planner = LLMWorkflowPlanner(
+        ai_service=Mock(get_context=Mock(return_value=None)), completion=completion
+    )
+
+    plan = planner.plan("7", "查询产品 A1", get_tool_registry(), {"source": "normal"})
+
+    assert plan is not None
+    assert [node.tool_id for node in plan.nodes] == ["products"]
+    assert completion.call_count == 2
+
+
 def test_planner_does_not_mix_global_history_into_an_explicit_conversation():
     captured = {}
     ai = Mock()

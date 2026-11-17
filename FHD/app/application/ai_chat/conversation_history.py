@@ -225,6 +225,12 @@ def persist_chat_turn(
             "summary": summary,
             "business_harness": harness_metadata,
             "ui": ui_payload,
+            **(
+                {"clarification_candidates": inner_payload.get("candidates")[:20]}
+                if isinstance(inner_payload.get("candidates"), list)
+                and inner_payload.get("candidates")
+                else {}
+            ),
         },
         ensure_ascii=False,
         default=str,

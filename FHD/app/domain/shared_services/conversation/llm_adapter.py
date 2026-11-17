@@ -250,10 +250,16 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
         """获取/创建异步HTTP客户端（用于同步请求）"""
         loop_id = id(asyncio.get_running_loop())
         if self._client is None or self._client.is_closed or self._client_loop_id != loop_id:
+            try:
+                read_timeout = max(
+                    5.0, float((os.environ.get("XCAGI_LLM_TIMEOUT") or "30").strip())
+                )
+            except ValueError:
+                read_timeout = 30.0
             self._client = await self._replace_client(
                 self._client,
                 lambda: httpx.AsyncClient(
-                    timeout=httpx.Timeout(30.0, connect=10.0),
+                    timeout=httpx.Timeout(read_timeout, connect=10.0),
                     limits=httpx.Limits(max_keepalive_connections=10, max_connections=30),
                 ),
             )

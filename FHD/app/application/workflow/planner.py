@@ -15,7 +15,7 @@ from app.services import get_ai_conversation_service
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .llm_plan_generation import LlmPlanGeneration, PlannerCompletion, PlannerConversation
-from .planner_llm_gateway import request_planner_completion
+from .planner_llm_gateway import planner_max_tokens, request_planner_completion
 from .planning_graph_policy import apply_clarification, validate_required_params
 from .planning_graph_policy import (
     filter_registry_for_profile as _filter_tool_registry_for_profile,
@@ -296,7 +296,7 @@ class LLMWorkflowPlanner:
         messages: list[dict[str, str]],
         context: dict[str, Any] | None = None,
         temperature: float = 0.1,
-        max_tokens: int = 1200,
+        max_tokens: int | None = None,
         **extra: Any,
     ) -> dict[str, Any] | None:
         """Send a bounded model task through this planner's configured provider."""
@@ -309,7 +309,7 @@ class LLMWorkflowPlanner:
             messages=messages,
             http_client_factory=self._http_client_factory or _get_planner_http_client,
             temperature=temperature,
-            max_tokens=max_tokens,
+            max_tokens=max_tokens or planner_max_tokens(),
             **extra,
         )
 

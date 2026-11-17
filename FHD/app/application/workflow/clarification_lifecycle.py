@@ -110,6 +110,47 @@ def make_pending_entry(
     }
 
 
+_CN_DIGITS = {
+    "零": 0,
+    "一": 1,
+    "二": 2,
+    "两": 2,
+    "三": 3,
+    "四": 4,
+    "五": 5,
+    "六": 6,
+    "七": 7,
+    "八": 8,
+    "九": 9,
+}
+
+
+def _chinese_ordinal(text: str) -> int | None:
+    """解析「第二个 / 第2个 / 就第二个 / 第二项」等口语序号。
+
+    排除被否定的序号：「不是第一个，是第二个」应取 2，而不是 1。
+    """
+    import re
+
+    pattern = re.compile(r"第\s*([0-9]+|[零一二两三四五六七八九十]+)\s*(?:个|项|条|位|号)?")
+    valid: list[int] = []
+    for match in pattern.finditer(text):
+        prefix = text[max(0, match.start() - 3) : match.start()]
+        if any(token in prefix for token in ("不是", "不要", "别", "非", "不选")):
+            continue
+        raw = match.group(1)
+        if raw.isdigit():
+            valid.append(int(raw))
+        elif "十" in raw:
+            before, _, after = raw.partition("十")
+            tens = _CN_DIGITS.get(before, 1) if before else 1
+            ones = _CN_DIGITS.get(after, 0) if after else 0
+            valid.append(tens * 10 + ones)
+        elif len(raw) == 1 and _CN_DIGITS.get(raw):
+            valid.append(int(_CN_DIGITS[raw]))
+    return valid[-1] if valid else None
+
+
 def resolve_confirmed_target(
     message: str,
     candidates: list[dict[str, Any]],
@@ -133,8 +174,7 @@ def resolve_confirmed_target(
         ).strip()
         if name and (name == text or name in text or text in name):
             return {"id": str(candidate.get("id") or "")}
-    if text.isdigit():
-        index = int(text)
-        if 1 <= index <= len(candidates):
-            return {"id": str(candidates[index - 1].get("id") or "")}
+    index = int(text) if text.isdigit() else _chinese_ordinal(text)
+    if index is not None and 1 <= index <= len(candidates):
+        return {"id": str(candidates[index - 1].get("id") or "")}
     return None

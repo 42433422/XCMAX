@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from concurrent.futures import ThreadPoolExecutor, wait
@@ -38,6 +39,37 @@ HISTORY_WINDOW_MESSAGES = 16
 HISTORY_WINDOW_CHARS = 6000
 HISTORY_SUMMARY_ITEMS = 10
 HISTORY_SUMMARY_ITEM_CHARS = 160
+
+
+def _history_row_content(item: dict[str, Any]) -> str:
+    """把澄清候选带回历史正文，追问才能用序号指代上一轮目标。"""
+    content = str(item.get("content") or "")[:2000]
+    try:
+        metadata = json.loads(str(item.get("metadata") or "{}"))
+    except (TypeError, ValueError):
+        return content
+    candidates = metadata.get("clarification_candidates") if isinstance(metadata, dict) else None
+    if not isinstance(candidates, list) or not candidates:
+        return content
+    lines: list[str] = []
+    for index, candidate in enumerate(candidates[:10], start=1):
+        if not isinstance(candidate, dict):
+            continue
+        name = str(
+            candidate.get("name")
+            or candidate.get("customer_name")
+            or candidate.get("unit_name")
+            or candidate.get("product_name")
+            or candidate.get("material_name")
+            or ""
+        ).strip()
+        candidate_id = str(candidate.get("id") or "").strip()
+        label = f"{name}（#{candidate_id}）" if name and candidate_id else (name or candidate_id)
+        lines.append(f"{index}. {label or f'候选{index}'}")
+    if not lines:
+        return content
+    options = "\n".join(lines)
+    return f"{content}\n\n可选目标（用户可用序号指代）：\n{options}"
 
 
 def _history_window(messages: list[dict[str, str]]) -> list[dict[str, str]]:
@@ -166,7 +198,7 @@ def prepare_chat_evidence(
                     "role": "assistant"
                     if item.get("role") == "ai"
                     else str(item.get("role") or ""),
-                    "content": str(item.get("content") or "")[:2000],
+                    "content": _history_row_content(item),
                 }
                 for item in (history.get("messages") or [])
                 if isinstance(item, dict) and item.get("role") in {"user", "assistant", "ai"}

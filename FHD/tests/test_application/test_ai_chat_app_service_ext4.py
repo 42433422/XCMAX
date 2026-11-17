@@ -181,9 +181,11 @@ def _model_plan(payload, message="查询产品", source="normal", *, expected_mo
         completion.assert_called_once()
     else:
         assert completion.call_count == expected_model_calls
+        from app.application.workflow.planner_llm_gateway import planner_max_tokens
+
         for attempt in completion.call_args_list[1:]:
             assert attempt.kwargs["temperature"] == 0.0
-            assert attempt.kwargs["max_tokens"] == 1200
+            assert attempt.kwargs["max_tokens"] == planner_max_tokens()
     return plan
 
 
