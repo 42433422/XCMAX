@@ -48,7 +48,11 @@ class EvidenceRetriever(Protocol):
 
 class RetrieverFactory(Protocol):
     def __call__(
-        self, *, embedder: Callable[[str], list[float]] | None, top_k: int
+        self,
+        *,
+        embedder: Callable[[str], list[float]] | None,
+        top_k: int,
+        mode: str = "hybrid",
     ) -> EvidenceRetriever: ...
 
 
@@ -162,6 +166,7 @@ class DatasetRetrieval:
         context_window: int = 0,
         min_relevance: float | None = None,
         mmr_lambda: float | None = None,
+        retrieval_mode: str = "hybrid",
     ) -> dict[str, Any]:
         dataset_key = _clean_key(dataset_id, default="default")
         tenant_key, denied = _resolve_tenant_for_access(
@@ -246,7 +251,13 @@ class DatasetRetrieval:
         retrieve_k = max(final_k * 4, 20) if effective_rerank else final_k
         if lambda_value > 0:
             retrieve_k = max(retrieve_k, final_k * 3, 15)
-        retriever = self._retriever_factory(embedder=self._vector.embedder, top_k=retrieve_k)
+        mode = str(retrieval_mode or "hybrid").strip().lower()
+        mode = mode if mode in {"hybrid", "vector", "keyword"} else "hybrid"
+        retriever = (
+            self._retriever_factory(embedder=self._vector.embedder, top_k=retrieve_k, mode=mode)
+            if mode != "hybrid"
+            else self._retriever_factory(embedder=self._vector.embedder, top_k=retrieve_k)
+        )
         retriever.index(chunks)
         top = retriever.retrieve(query_text)
         if effective_rerank:

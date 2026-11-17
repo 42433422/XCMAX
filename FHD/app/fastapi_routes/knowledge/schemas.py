@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -268,6 +268,9 @@ class DatasetQueryRequest(BaseModel):
         description="prompt evidence budget; 0 uses XCAGI_KB_MAX_CONTEXT_CHARS (default 6000)",
     )
     rerank: bool = Field(False, description="apply cross-encoder reranking with safe fallback")
+    retrieval_mode: Literal["hybrid", "vector", "keyword"] = Field(
+        "hybrid", description="hybrid RRF | vector only | keyword (BM25) only"
+    )
     mmr_lambda: float = Field(
         0.0,
         ge=0.0,

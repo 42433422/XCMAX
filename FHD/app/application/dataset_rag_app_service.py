@@ -824,6 +824,7 @@ class DatasetRagApplicationService:
         history: list[dict[str, Any]] | None = None,
         min_relevance: float | None = None,
         mmr_lambda: float | None = None,
+        retrieval_mode: str = "hybrid",
     ) -> dict[str, Any]:
         original_query = query
         rewritten = ""
@@ -846,6 +847,7 @@ class DatasetRagApplicationService:
             context_window=context_window,
             min_relevance=min_relevance,
             mmr_lambda=mmr_lambda,
+            retrieval_mode=retrieval_mode,
         )
         if rewritten:
             result["original_query"] = original_query
@@ -969,6 +971,7 @@ class DatasetRagApplicationService:
         min_relevance: float | None = None,
         max_context_chars: int | None = None,
         mmr_lambda: float | None = None,
+        retrieval_mode: str = "hybrid",
     ) -> dict[str, Any]:
         result = self.query(
             dataset_id=dataset_id,
@@ -983,6 +986,7 @@ class DatasetRagApplicationService:
             history=history,
             min_relevance=min_relevance,
             mmr_lambda=mmr_lambda,
+            retrieval_mode=retrieval_mode,
         )
         return self._synthesize_answer(
             result, llm_call=llm_call, max_context_chars=max_context_chars
@@ -1003,6 +1007,7 @@ class DatasetRagApplicationService:
         history: list[dict[str, Any]] | None = None,
         min_relevance: float | None = None,
         mmr_lambda: float | None = None,
+        retrieval_mode: str = "hybrid",
     ) -> dict[str, Any]:
         """Query several datasets and rank their pooled candidates on one scale.
 
@@ -1052,6 +1057,7 @@ class DatasetRagApplicationService:
                 rerank=False,
                 access_context=access_context,
                 context_window=context_window,
+                retrieval_mode=retrieval_mode,
             )
             if not result.get("success"):
                 failures.append(
@@ -1070,7 +1076,14 @@ class DatasetRagApplicationService:
                         "metadata": {**metadata, "_dataset_id": key},
                     }
                 )
-        fused = self._pool_retrieve(pooled, query, finals, rerank=rerank, mmr_lambda=mmr_lambda)
+        fused = self._pool_retrieve(
+            pooled,
+            query,
+            finals,
+            rerank=rerank,
+            mmr_lambda=mmr_lambda,
+            retrieval_mode=retrieval_mode,
+        )
         grounding = evidence_grounding(query, [_dict_to_retrieved_chunk(row) for row in fused])
         threshold = resolve_min_relevance(min_relevance)
         payload: dict[str, Any] = {
@@ -1109,6 +1122,7 @@ class DatasetRagApplicationService:
         *,
         rerank: bool,
         mmr_lambda: float | None = None,
+        retrieval_mode: str = "hybrid",
     ) -> list[dict[str, Any]]:
         """Rank pooled candidates from several datasets on a single scoring scale."""
         if not pooled:
@@ -1130,6 +1144,7 @@ class DatasetRagApplicationService:
             top_k=len(chunks),
             top_k_vector=len(chunks),
             top_k_bm25=len(chunks),
+            mode=retrieval_mode,
         )
         retriever.index(chunks)
         top = retriever.retrieve(query)
@@ -1195,6 +1210,7 @@ class DatasetRagApplicationService:
         min_relevance: float | None = None,
         max_context_chars: int | None = None,
         mmr_lambda: float | None = None,
+        retrieval_mode: str = "hybrid",
     ) -> dict[str, Any]:
         result = self.multi_query(
             dataset_ids=dataset_ids,
@@ -1209,6 +1225,7 @@ class DatasetRagApplicationService:
             history=history,
             min_relevance=min_relevance,
             mmr_lambda=mmr_lambda,
+            retrieval_mode=retrieval_mode,
         )
         return self._synthesize_answer(
             result, llm_call=llm_call, max_context_chars=max_context_chars

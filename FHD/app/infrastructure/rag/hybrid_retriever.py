@@ -128,6 +128,8 @@ class HybridRetriever:
     DEFAULT_TOP_K_VECTOR = 10
     DEFAULT_TOP_K_BM25 = 10
     DEFAULT_TOP_K = 5
+    DEFAULT_MODE = "hybrid"
+    MODES = frozenset({"hybrid", "vector", "keyword"})
 
     def __init__(
         self,
@@ -137,12 +139,15 @@ class HybridRetriever:
         top_k_vector: int = DEFAULT_TOP_K_VECTOR,
         top_k_bm25: int = DEFAULT_TOP_K_BM25,
         top_k: int = DEFAULT_TOP_K,
+        mode: str = DEFAULT_MODE,
     ) -> None:
         self._embedder = embedder
         self._k = k
         self._top_k_vector = top_k_vector
         self._top_k_bm25 = top_k_bm25
         self._top_k = top_k
+        normalized_mode = str(mode or self.DEFAULT_MODE).strip().lower()
+        self._mode = normalized_mode if normalized_mode in self.MODES else self.DEFAULT_MODE
         self._chunks: list[RetrievedChunk] = []
         self._chunk_texts: list[str] = []
         self._bm25 = BM25()
@@ -184,15 +189,19 @@ class HybridRetriever:
 
         # 1) BM25
         bm25_scores = self._bm25.score(query)
-        bm25_ranked = sorted(
-            (i for i in range(len(self._chunks)) if bm25_scores[i] > 0),
-            key=lambda i: bm25_scores[i],
-            reverse=True,
-        )[: self._top_k_bm25]
+        bm25_ranked = (
+            sorted(
+                (i for i in range(len(self._chunks)) if bm25_scores[i] > 0),
+                key=lambda i: bm25_scores[i],
+                reverse=True,
+            )[: self._top_k_bm25]
+            if self._mode in {"hybrid", "keyword"}
+            else []
+        )
 
         # 2) Vector
         vector_ranked: list[int] = []
-        if self._embedder is not None and self._embeddings:
+        if self._mode in {"hybrid", "vector"} and self._embedder is not None and self._embeddings:
             try:
                 q_vec = self._embedder(query)
                 sims = [self._cosine(q_vec, e) for e in self._embeddings]

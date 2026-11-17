@@ -398,7 +398,9 @@ def _build_service(storage: Path):
     )
 
 
-def run(*, rerank: bool, multi: bool = False, mmr_lambda: float = 0.0) -> dict[str, float]:
+def run(
+    *, rerank: bool, multi: bool = False, mmr_lambda: float = 0.0, retrieval_mode: str = "hybrid"
+) -> dict[str, float]:
     from app.infrastructure.llm.embedding_service import get_default_embedding_service
 
     svc = get_default_embedding_service()
@@ -428,6 +430,7 @@ def run(*, rerank: bool, multi: bool = False, mmr_lambda: float = 0.0) -> dict[s
                     top_k=5,
                     rerank=rerank,
                     mmr_lambda=mmr_lambda,
+                    retrieval_mode=retrieval_mode,
                 )
             else:
                 result = service.query(
@@ -436,6 +439,7 @@ def run(*, rerank: bool, multi: bool = False, mmr_lambda: float = 0.0) -> dict[s
                     top_k=5,
                     rerank=rerank,
                     mmr_lambda=mmr_lambda,
+                    retrieval_mode=retrieval_mode,
                 )
             doc_ids = [
                 str((chunk.get("metadata") or {}).get("document_id") or "")
@@ -464,6 +468,7 @@ def run(*, rerank: bool, multi: bool = False, mmr_lambda: float = 0.0) -> dict[s
             "mrr": round(reciprocal / total, 4),
             "answer_grounded_rate": round(grounded / total, 4),
             "mmr_lambda": mmr_lambda,
+            "retrieval_mode": retrieval_mode,
             "distinct_doc_rate@5": round(distinct_docs / (total * 5), 4),
         }
         return metrics
@@ -521,11 +526,22 @@ def main() -> int:
         help="MMR 多样性权重 0–1（0 关闭）：同时报告 distinct_doc_rate@5",
     )
     parser.add_argument("--json", action="store_true", help="只输出 JSON")
+    parser.add_argument(
+        "--mode",
+        choices=["hybrid", "vector", "keyword"],
+        default="hybrid",
+        help="检索模式：混合 RRF / 仅向量 / 仅关键词",
+    )
     args = parser.parse_args()
     metrics = (
         run_ood(multi=args.multi)
         if args.ood
-        else run(rerank=args.rerank, multi=args.multi, mmr_lambda=args.diversity)
+        else run(
+            rerank=args.rerank,
+            multi=args.multi,
+            mmr_lambda=args.diversity,
+            retrieval_mode=args.mode,
+        )
     )
     if args.json:
         print(json.dumps(metrics, ensure_ascii=False))

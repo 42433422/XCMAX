@@ -1,4 +1,5 @@
 ## Unreleased
+- 知识库检索新增可选模式：`retrieval_mode`（`hybrid` 默认 / `vector` 仅向量 / `keyword` 仅 BM25）作用于单库查询、跨库检索与问答，非法值回落到 `hybrid`。适合精确编号/型号用关键词、语义改写用向量；69 条评测 hash 下 keyword 0.8696/1.0/1.0、MRR 0.9348（跨库 0.8986/1.0/1.0、MRR 0.9493），hybrid 0.8551/0.9565/1.0、MRR 0.9135，vector 0.7536/0.8551/0.8986、MRR 0.8121；评测脚本新增 `--mode`。
 - 知识库来源同步支持按新鲜度增量：每次刷新（含内容未变）记录 `metadata.last_source_sync_at`，批量同步 `POST .../documents/refresh` 新增 `max_age_hours`（>0 时只处理超过该时长未同步的来源，返回 `fresh` 计数），便于定时任务反复调用而不重复抓取刚同步过的页面。
 - 知识库入库新增内容级去重（护栏）：同一租户下若另一来源的正文完全一致（SHA-256 `document_content_hash` 相同），直接复用已有文档并返回 `duplicate=true` 与 `duplicate_of`，不再重复入库、重复切片挤占召回；需要保留副本时传 `allow_duplicate=true`，显式 `document_id`/`version` 与同一来源的版本递增不受影响（跨租户永不合并）。
 - 知识库检索新增可选的 MMR 多样性重排：`query` 与 `multi-query` 接受 `mmr_lambda`（0–1，0 关闭，服务端可用 `XCAGI_KB_MMR_LAMBDA` 设默认），在相关性之外惩罚与已选片段雷同的结果，避免长文档的多份近似切片占满 top-k。有向量时用余弦相似度，hash 降级时回退查询词 Jaccard；跨库路径会先把候选池全量排序（向量/BM25 不再各自截断 10 条）再做 MMR。默认关闭、原行为不变；69 条评测 hash 下 λ=0.7 时 recall@1 0.8551→**0.8986**、MRR 0.9135→**0.9348**、recall@5 1.0→0.9855，跨库 0.8986/0.9565/0.971、MRR 0.9312；评测脚本新增 `--diversity` 与 `distinct_doc_rate@5`。

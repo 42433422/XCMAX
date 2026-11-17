@@ -19,6 +19,12 @@ def _positive_float(value: Any) -> float | None:
     return number if number > 0 else None
 
 
+def _retrieval_mode(value: Any) -> str:
+    """检索模式；非法值回落到默认 hybrid 而不是报错。"""
+    cleaned = str(value or "hybrid").strip().lower()
+    return cleaned if cleaned in {"hybrid", "vector", "keyword"} else "hybrid"
+
+
 def _registered_router_dataset_rag(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
@@ -155,6 +161,7 @@ def _registered_router_dataset_rag(
         history = raw_history if isinstance(raw_history, list) else []
         min_relevance = as_float(params.get("min_relevance"), 0.0)
         mmr_lambda = as_float(params.get("mmr_lambda"), 0.0)
+        retrieval_mode = _retrieval_mode(params.get("retrieval_mode"))
         if include_answer:
             result = service.answer(
                 dataset_id=dataset_id,
@@ -169,6 +176,7 @@ def _registered_router_dataset_rag(
                 min_relevance=min_relevance,
                 max_context_chars=as_int(params.get("max_context_chars"), 0),
                 mmr_lambda=mmr_lambda,
+                retrieval_mode=retrieval_mode,
             )
         else:
             result = service.query(
@@ -184,6 +192,7 @@ def _registered_router_dataset_rag(
                 history=history,
                 min_relevance=min_relevance,
                 mmr_lambda=mmr_lambda,
+                retrieval_mode=retrieval_mode,
             )
         return finalize(
             result, dataset_id=dataset_id, query=query, chunks=[], citations=[], answer=""
@@ -215,6 +224,7 @@ def _registered_router_dataset_rag(
             "history": history,
             "min_relevance": as_float(params.get("min_relevance"), 0.0),
             "mmr_lambda": as_float(params.get("mmr_lambda"), 0.0),
+            "retrieval_mode": _retrieval_mode(params.get("retrieval_mode")),
         }
         if as_bool(params.get("include_answer"), default=True):
             result = service.multi_answer(

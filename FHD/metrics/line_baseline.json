@@ -1,5 +1,5 @@
 {
-  "lines": 2471291,
+  "lines": 2471360,
   "updated": "2026-11-18",
-  "note": "知识库来源同步按新鲜度增量（last_source_sync_at + max_age_hours + fresh 计数 + 3 条测试）为功能净增"
+  "note": "知识库可选检索模式 hybrid/vector/keyword（实现+6 条测试+评测 --mode+文档）为功能净增"
 }

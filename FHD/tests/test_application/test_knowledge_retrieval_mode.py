@@ -1,0 +1,123 @@
+"""检索模式（hybrid / vector / keyword）：仅关键词、仅向量、默认混合。"""
+
+from __future__ import annotations
+
+from unittest.mock import patch
+
+import pytest
+from pydantic import ValidationError
+
+from app.application.dataset_rag.models import DatasetAccessContext
+from app.application.dataset_rag_app_service import DatasetRagApplicationService
+from app.fastapi_routes.knowledge.schemas import DatasetQueryRequest
+from app.infrastructure.rag import RetrievedChunk
+from app.infrastructure.rag.hybrid_retriever import HybridRetriever
+
+
+def _ctx() -> DatasetAccessContext:
+    return DatasetAccessContext(
+        actor_id="alice",
+        tenant_id="t1",
+        permissions=frozenset({"dataset.read", "dataset.write"}),
+        is_admin=False,
+    )
+
+
+def _service(tmp_path) -> DatasetRagApplicationService:
+    return DatasetRagApplicationService(
+        storage_path=tmp_path / "datasets.json",
+        embedder=None,
+        rebuild_workers_enabled=False,
+        vector_index_backend_name="none",
+    )
+
+
+def _chunks() -> list[RetrievedChunk]:
+    return [
+        RetrievedChunk(text="退款流程需要审核退款申请。", score=0.0, chunk_index=0),
+        RetrievedChunk(text="桌面安装指南与首次登录。", score=0.0, chunk_index=1),
+    ]
+
+
+def test_keyword_mode_returns_only_lexical_hits() -> None:
+    retriever = HybridRetriever(embedder=None, top_k=2, mode="keyword")
+    retriever.index(_chunks())
+
+    hits = retriever.retrieve("退款")
+
+    assert [hit.chunk_index for hit in hits] == [0]
+    assert hits[0].source == "bm25"
+
+
+def test_vector_mode_has_no_keyword_lane() -> None:
+    retriever = HybridRetriever(embedder=None, top_k=2, mode="vector")
+    retriever.index(_chunks())
+
+    # embedder=None 时没有向量，只有关键词也能命中的文本不应被返回。
+    assert retriever.retrieve("退款") == []
+
+
+def test_invalid_mode_falls_back_to_hybrid() -> None:
+    retriever = HybridRetriever(embedder=None, top_k=2, mode="unknown")
+    retriever.index(_chunks())
+
+    assert retriever.retrieve("退款")
+
+
+def test_schema_accepts_modes_and_rejects_unknown() -> None:
+    assert DatasetQueryRequest(query="退款", retrieval_mode="keyword").retrieval_mode == "keyword"
+    with pytest.raises(ValidationError):
+        DatasetQueryRequest(query="退款", retrieval_mode="semantic")
+
+
+def test_query_keyword_mode_skips_unrelated_documents(tmp_path) -> None:
+    service = _service(tmp_path)
+    service.ingest_document(
+        dataset_id="kb",
+        source="退款.md",
+        text="退款流程需要审核退款申请。",
+        tenant_id="t1",
+        access_context=_ctx(),
+    )
+    service.ingest_document(
+        dataset_id="kb",
+        source="安装.md",
+        text="桌面安装指南与首次登录。",
+        tenant_id="t1",
+        access_context=_ctx(),
+    )
+
+    result = service.query(
+        dataset_id="kb",
+        query="退款",
+        top_k=5,
+        tenant_id="t1",
+        access_context=_ctx(),
+        retrieval_mode="keyword",
+    )
+
+    sources = {(row.get("metadata") or {}).get("source") for row in result["chunks"]}
+    assert sources == {"退款.md"}
+
+
+def test_dispatcher_passes_retrieval_mode() -> None:
+    from app.domain.shared_services.tools_workflow_memory_rag import (
+        _registered_router_dataset_rag,
+    )
+
+    with patch("app.application.dataset_rag_app_service.get_dataset_rag_app_service") as mock_get:
+        mock_get.return_value.query.return_value = {"success": True, "chunks": []}
+        _registered_router_dataset_rag(
+            "query",
+            {
+                "dataset_id": "ds1",
+                "query": "退款",
+                "include_answer": "false",
+                "retrieval_mode": "keyword",
+            },
+            {},
+            "admin",
+            "",
+        )
+
+    assert mock_get.return_value.query.call_args.kwargs["retrieval_mode"] == "keyword"
