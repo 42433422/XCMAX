@@ -205,10 +205,28 @@ def _query_coverage(query: str, text: str) -> float:
     return len(query_terms & _query_terms(text)) / len(query_terms)
 
 
+def _chunk_coverage(query: str, chunk: RetrievedChunk) -> float:
+    best = _query_coverage(query, chunk.text)
+    questions = (chunk.metadata or {}).get("auto_questions")
+    if isinstance(questions, (list, tuple)):
+        for question in questions[:8]:
+            text = str(question or "").strip()
+            if not text:
+                continue
+            coverage = _query_coverage(query, text)
+            # 生成问题常带通用疑问词，低覆盖率（如 0.25）不足以证明相关。
+            if coverage >= 0.5:
+                best = max(best, coverage)
+    return best
+
+
 def evidence_grounding(query: str, chunks: list[RetrievedChunk]) -> float:
-    """取前若干候选里最高的查询覆盖率，作为「有证据」的保守判据。"""
+    """取前若干候选里最高的查询覆盖率，作为「有证据」的保守判据。
+
+    自动生成的问题命中同样算证据（Q&A 索引增强），否则问题式提问会被误拒。
+    """
     candidates = chunks[:5]
-    return max((_query_coverage(query, chunk.text) for chunk in candidates), default=0.0)
+    return max((_chunk_coverage(query, chunk) for chunk in candidates), default=0.0)
 
 
 def default_min_relevance() -> float:

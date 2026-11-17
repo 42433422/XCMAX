@@ -202,6 +202,13 @@ class DocumentLifecycle:
                 )
                 for chunk in chunks
             ]
+            # Q&A 索引增强：默认关闭，失败绝不影响入库。
+            try:
+                from app.infrastructure.llm.question_gen import augment_chunks
+
+                augment_chunks(retrieved_chunks)
+            except RECOVERABLE_ERRORS:
+                pass
             with self._repository.lock:
                 # The lock may have loaded another writer's commit while embedding
                 # ran. Its new snapshot is authoritative for conflicts and versions.

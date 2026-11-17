@@ -38,6 +38,16 @@ class RetrievedChunk:
     page: int | None = None
 
 
+def _index_text(chunk: RetrievedChunk) -> str:
+    """BM25 索引文本：正文 + 自动生成的问题（Q&A 增强）；向量仍按正文计算。"""
+    questions = (chunk.metadata or {}).get("auto_questions")
+    if isinstance(questions, (list, tuple)):
+        extra = [str(question).strip() for question in questions if str(question).strip()]
+        if extra:
+            return chunk.text + "\n" + "\n".join(extra)
+    return chunk.text
+
+
 class BM25:
     """
     轻量 BM25（无第三方依赖）。
@@ -140,7 +150,7 @@ class HybridRetriever:
 
     def index(self, chunks: list[RetrievedChunk]) -> None:
         self._chunks = list(chunks)
-        self._chunk_texts = [c.text for c in chunks]
+        self._chunk_texts = [_index_text(c) for c in chunks]
         self._bm25.fit(self._chunk_texts)
         precomputed: list[list[Any]] = []
         for chunk in chunks:
