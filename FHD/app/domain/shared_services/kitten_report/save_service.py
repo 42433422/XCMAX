@@ -29,6 +29,9 @@ class AnalysisSaveService(NeuroEventPublisherMixin):
         analysis_type: str,
         data: dict[str, Any],
         metadata: dict[str, Any] | None = None,
+        *,
+        owner_id: Any = None,
+        tenant_id: Any = None,
     ) -> dict[str, Any]:
         try:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -42,6 +45,10 @@ class AnalysisSaveService(NeuroEventPublisherMixin):
                 "metadata": metadata or {},
                 "data": data,
             }
+            if owner_id is not None:
+                save_data["owner_id"] = str(owner_id)
+            if tenant_id is not None:
+                save_data["tenant_id"] = str(tenant_id)
 
             with open(filepath, "w", encoding="utf-8") as f:
                 json.dump(save_data, f, ensure_ascii=False, indent=2, default=str)
@@ -116,12 +123,43 @@ class AnalysisSaveService(NeuroEventPublisherMixin):
             logger.exception("Failed to get analysis: %s", e)
             return None
 
-    def delete_analysis(self, analysis_id: str) -> bool:
+    def delete_analysis(
+        self,
+        analysis_id: str,
+        *,
+        owner_id: Any = None,
+        tenant_id: Any = None,
+        allow_unowned: bool = False,
+    ) -> bool | dict[str, Any]:
         try:
             analysis = self.get_analysis(analysis_id)
 
             if not analysis:
                 return False
+
+            stored_owner = str(analysis.get("owner_id") or "").strip()
+            stored_tenant = str(analysis.get("tenant_id") or "").strip()
+            if not stored_owner and not stored_tenant:
+                # 历史文件没有归属信息：默认拒绝，仅管理员可清理。
+                if not allow_unowned:
+                    return {
+                        "success": False,
+                        "code": "ANALYSIS_OWNER_UNKNOWN",
+                        "message": "该分析记录缺少归属信息，需管理员处理。",
+                    }
+            else:
+                if stored_owner and str(owner_id or "").strip() != stored_owner:
+                    return {
+                        "success": False,
+                        "code": "ANALYSIS_FORBIDDEN",
+                        "message": "无权删除该分析记录。",
+                    }
+                if stored_tenant and str(tenant_id or "").strip() != stored_tenant:
+                    return {
+                        "success": False,
+                        "code": "ANALYSIS_FORBIDDEN",
+                        "message": "无权删除该分析记录。",
+                    }
 
             filepath = analysis.get("filepath")
 

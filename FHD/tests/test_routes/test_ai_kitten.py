@@ -21,6 +21,7 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -463,7 +464,16 @@ def test_saved_export_recoverable_error(
 # ---------------------------------------------------------------------------
 
 
+def _login(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        kitten_module,
+        "resolve_session_user",
+        lambda request: SimpleNamespace(id=7, tenant_id=1, tier="user", role="user"),
+    )
+
+
 def test_saved_delete_success(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    _login(monkeypatch)
     fake_save_svc = MagicMock()
     fake_save_svc.delete_analysis.return_value = {"success": True}
     monkeypatch.setattr(f"{_FACADE}.analysis_save_service", fake_save_svc)
@@ -477,6 +487,7 @@ def test_saved_delete_success(client: TestClient, monkeypatch: pytest.MonkeyPatc
 def test_saved_delete_failure_returns_400(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    _login(monkeypatch)
     fake_save_svc = MagicMock()
     fake_save_svc.delete_analysis.return_value = {"success": False, "message": "记录不存在"}
     monkeypatch.setattr(f"{_FACADE}.analysis_save_service", fake_save_svc)
@@ -489,6 +500,7 @@ def test_saved_delete_failure_returns_400(
 def test_saved_delete_recoverable_error(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    _login(monkeypatch)
     fake_save_svc = MagicMock()
     fake_save_svc.delete_analysis.side_effect = OSError("IO 错误")
     monkeypatch.setattr(f"{_FACADE}.analysis_save_service", fake_save_svc)

@@ -23,9 +23,10 @@ from io import BytesIO
 from typing import Any, Literal, cast
 from urllib.parse import quote
 
-from fastapi import APIRouter, Body, Query
+from fastapi import APIRouter, Body, Query, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
+from app.infrastructure.auth.dependencies import resolve_session_user
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -230,31 +231,48 @@ def kitten_saved_export(analysis_id: str):
         return JSONResponse({"success": False, "message": _KITTEN_UNAVAILABLE}, status_code=500)
 
 
+def _admin_user(user: Any) -> bool:
+    return any(
+        str(getattr(user, attr, "") or "").strip().lower() in {"admin", "super_admin", "owner"}
+        for attr in ("tier", "role")
+    )
+
+
 @router.delete("/api/ai/kitten/saved/{analysis_id}")
-def kitten_saved_delete(analysis_id: str):
+def kitten_saved_delete(analysis_id: str, request: Request):
     try:
         from app.application.facades.kitten_facade import analysis_save_service
 
-        result = analysis_save_service.delete_analysis(analysis_id)
-        if isinstance(result, bool):
-            if result:
+        user = resolve_session_user(request)
+        if user is None:
+            return JSONResponse({"success": False, "message": "请先登录"}, status_code=401)
+        result = analysis_save_service.delete_analysis(
+            analysis_id,
+            owner_id=getattr(user, "id", None),
+            tenant_id=getattr(user, "tenant_id", None),
+            allow_unowned=_admin_user(user),
+        )
+        if isinstance(result, dict):
+            if result.get("success"):
                 return {"success": True, "message": "删除成功"}
-            return JSONResponse(
-                {"success": False, "message": "Analysis not found"}, status_code=400
-            )
-        if result.get("success"):
+            status_code = 403 if result.get("code") else 400
+            return JSONResponse(result, status_code=status_code)
+        if result:
             return {"success": True, "message": "删除成功"}
-        return JSONResponse(result, status_code=400)
+        return JSONResponse(
+            {"success": False, "message": "Analysis not found"}, status_code=400
+        )
     except RECOVERABLE_ERRORS:
         logger.exception("kitten saved delete failed")
         return JSONResponse({"success": False, "message": _KITTEN_UNAVAILABLE}, status_code=500)
 
 
 @router.post("/api/ai/kitten/financial/report")
-def ai_kitten_financial_report(body: dict = Body(default_factory=dict)):
+def ai_kitten_financial_report(request: Request, body: dict = Body(default_factory=dict)):
     try:
         payload = body or {}
         metadata = payload.get("metadata") or {}
+        _report_user = resolve_session_user(request)
         from app.application.facades.kitten_facade import (
             FinancialReportPlugin,
             InventoryValuationPlugin,
@@ -283,6 +301,8 @@ def ai_kitten_financial_report(body: dict = Body(default_factory=dict)):
             analysis_type="financial",
             data=analysis_data,
             metadata=metadata,
+            owner_id=getattr(_report_user, "id", None),
+            tenant_id=getattr(_report_user, "tenant_id", None),
         )
         if save_result.get("success"):
             return _trace_kitten_route(
