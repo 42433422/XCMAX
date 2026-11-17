@@ -7,6 +7,7 @@ import multiprocessing
 import os
 import threading
 from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from threading import Thread
 from typing import Any
@@ -85,6 +86,7 @@ from app.application.dataset_rag.models import (
     _resolve_document_version,
 )
 from app.application.dataset_rag.models import _rebuild_job_from_dict as _rebuild_job_from_dict
+from app.application.dataset_rag.models import _source_synced_at as _source_synced_at
 from app.application.dataset_rag.models import _stable_document_id as _stable_document_id
 from app.application.dataset_rag.models import _utc_now_iso as _utc_now_iso
 from app.application.dataset_rag.rebuild_coordinator import (
@@ -455,7 +457,9 @@ class DatasetRagApplicationService:
                 "message": "来源返回空正文",
             }
         fresh_hash = hashlib.sha256(str(text).strip().encode("utf-8")).hexdigest()
+        synced_at = _utc_now_iso()
         if fresh_hash == str(metadata.get("document_content_hash") or ""):
+            self._mark_source_synced(dataset_key, doc_key, synced_at)
             return {
                 "success": True,
                 "dataset_id": dataset_key,
@@ -463,6 +467,7 @@ class DatasetRagApplicationService:
                 "changed": False,
                 "version": int(snapshot.get("version") or 1),
                 "document": snapshot,
+                "last_source_sync_at": synced_at,
             }
         chunk_strategy = str(metadata.pop("chunk_strategy", "") or "semantic")
         chunk_size = int(metadata.pop("chunk_size", 500) or 500)
@@ -476,6 +481,7 @@ class DatasetRagApplicationService:
         ):
             metadata.pop(key, None)
         metadata.update(extra_metadata)
+        metadata["last_source_sync_at"] = synced_at
         result = self._documents.ingest_document(
             dataset_id=dataset_key,
             # 版本按 source 归属，刷新必须沿用原 source，否则会被当成新文档从 v1 开始。
@@ -499,6 +505,16 @@ class DatasetRagApplicationService:
         )
         return response
 
+    def _mark_source_synced(self, dataset_id: str, document_id: str, synced_at: str) -> None:
+        """内容未变时也记录同步时间，避免批量同步反复抓同一来源。"""
+        with self._repository.lock:
+            state = self._repository.datasets.get(dataset_id)
+            document = state.documents.get(document_id) if state is not None else None
+            if document is None:
+                return
+            document.metadata = {**(document.metadata or {}), "last_source_sync_at": synced_at}
+            self._repository._persist_locked()
+
     def refresh_documents(
         self,
         dataset_id: str,
@@ -506,6 +522,7 @@ class DatasetRagApplicationService:
         tenant_id: str = "",
         access_context: DatasetAccessContext | dict[str, Any] | None = None,
         limit: int = 50,
+        max_age_hours: float | None = None,
     ) -> dict[str, Any]:
         """Re-sync every document in the dataset that records external coordinates.
 
@@ -540,6 +557,12 @@ class DatasetRagApplicationService:
             )
         candidates: list[dict[str, Any]] = []
         skipped = 0
+        fresh = 0
+        cutoff = (
+            datetime.now(UTC) - timedelta(hours=float(max_age_hours))
+            if max_age_hours is not None and float(max_age_hours) > 0
+            else None
+        )
         for snapshot in sorted(snapshots, key=lambda item: str(item.get("document_id") or "")):
             if tenant_key and str(snapshot.get("tenant_id") or "") != tenant_key:
                 continue
@@ -548,6 +571,11 @@ class DatasetRagApplicationService:
             if source_coordinates(snapshot.get("metadata")) is None:
                 skipped += 1
                 continue
+            if cutoff is not None:
+                synced_at = _source_synced_at(snapshot.get("metadata"))
+                if synced_at is not None and synced_at >= cutoff:
+                    fresh += 1
+                    continue
             candidates.append(snapshot)
         bounded = max(1, min(int(limit), 200))
         results: list[dict[str, Any]] = []
@@ -594,6 +622,8 @@ class DatasetRagApplicationService:
             "unchanged": unchanged,
             "failed": failed,
             "skipped": skipped,
+            "fresh": fresh,
+            "max_age_hours": float(max_age_hours) if max_age_hours is not None else 0.0,
             "truncated": len(candidates) > bounded,
             "documents": results,
         }

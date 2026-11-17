@@ -45,7 +45,11 @@ def _ctx(
 
 
 def _seed(
-    service: DatasetRagApplicationService, *, acl: dict | None = None, source: str = "退款.md"
+    service: DatasetRagApplicationService,
+    *,
+    acl: dict | None = None,
+    source: str = "退款.md",
+    allow_duplicate: bool = False,
 ) -> str:
     metadata: dict[str, object] = {
         "source_kind": "url",
@@ -62,6 +66,7 @@ def _seed(
         text=_ORIGINAL,
         tenant_id="t1",
         metadata=metadata,
+        allow_duplicate=allow_duplicate,
         access_context=_ctx(),
     )
     assert result["success"] is True
@@ -162,12 +167,13 @@ def test_batch_refresh_summarizes_changed_unchanged_and_skipped(tmp_path) -> Non
         text=_ORIGINAL,
         tenant_id="t1",
         metadata={"source_kind": "url", "source_ref": "https://docs.example.com/invoice"},
+        allow_duplicate=True,
         access_context=_ctx(),
     )
     inline = service.ingest_document(
         dataset_id="kb",
         source="内联.md",
-        text=_ORIGINAL,
+        text="内联说明：没有外部来源坐标。",
         tenant_id="t1",
         access_context=_ctx(),
     )
@@ -195,7 +201,7 @@ def test_batch_refresh_summarizes_changed_unchanged_and_skipped(tmp_path) -> Non
 def test_batch_refresh_respects_limit_and_acl(tmp_path) -> None:
     service = _service(tmp_path)
     _seed(service)
-    _seed(service, acl={"allow_actors": ["alice"]}, source="秘密.md")
+    _seed(service, acl={"allow_actors": ["alice"]}, source="秘密.md", allow_duplicate=True)
 
     with patch(
         "app.application.document_parsing.web_fetch.fetch_url_text",
@@ -233,7 +239,77 @@ def test_batch_refresh_route_dispatches() -> None:
 
     assert response.status_code == 200
     assert calls[0]["action"] == "refresh_documents"
-    assert calls[0]["params"] == {"dataset_id": "kb", "limit": 200}
+    assert calls[0]["params"] == {"dataset_id": "kb", "limit": 200, "max_age_hours": 0.0}
+
+
+def test_batch_refresh_route_passes_max_age_hours() -> None:
+    from fastapi.responses import JSONResponse
+
+    from app.fastapi_routes.knowledge.document_routes import DocumentRoutes
+
+    calls: list[dict] = []
+
+    def _dispatch(**kwargs):
+        calls.append(kwargs)
+        return JSONResponse({"success": True})
+
+    routes = DocumentRoutes(dispatch=lambda: _dispatch, uploads=lambda _get: None)
+    app = FastAPI()
+    app.include_router(routes.ingestion)
+    client = TestClient(app, raise_server_exceptions=False)
+
+    response = client.post("/datasets/kb/documents/refresh?max_age_hours=24")
+
+    assert response.status_code == 200
+    assert calls[0]["params"]["max_age_hours"] == 24.0
+
+
+def test_refresh_records_last_source_sync_at(tmp_path) -> None:
+    service = _service(tmp_path)
+    document_id = _seed(service)
+
+    with patch(
+        "app.application.document_parsing.web_fetch.fetch_url_text",
+        return_value=_page(_ORIGINAL),
+    ):
+        service.refresh_document("kb", document_id, tenant_id="t1", access_context=_ctx())
+
+    state = service._repository.datasets["kb"]
+    metadata = state.documents[document_id].metadata
+    assert metadata["last_source_sync_at"]
+
+
+def test_batch_refresh_skips_sources_synced_within_max_age(tmp_path) -> None:
+    service = _service(tmp_path)
+    document_id = _seed(service)
+
+    with patch(
+        "app.application.document_parsing.web_fetch.fetch_url_text",
+        return_value=_page(_ORIGINAL),
+    ):
+        first = service.refresh_documents(
+            "kb", tenant_id="t1", access_context=_ctx(), max_age_hours=24
+        )
+        second = service.refresh_documents(
+            "kb", tenant_id="t1", access_context=_ctx(), max_age_hours=24
+        )
+
+    assert first["processed"] == 1
+    assert first["fresh"] == 0
+    assert second["processed"] == 0
+    assert second["fresh"] == 1
+
+    state = service._repository.datasets["kb"]
+    state.documents[document_id].metadata["last_source_sync_at"] = "2020-01-01T00:00:00Z"
+    with patch(
+        "app.application.document_parsing.web_fetch.fetch_url_text",
+        return_value=_page(_ORIGINAL),
+    ):
+        third = service.refresh_documents(
+            "kb", tenant_id="t1", access_context=_ctx(), max_age_hours=24
+        )
+    assert third["processed"] == 1
+    assert third["unchanged"] == 1
 
 
 def test_refresh_reuses_connector_for_notion_sources(tmp_path) -> None:

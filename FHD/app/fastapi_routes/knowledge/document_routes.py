@@ -286,13 +286,17 @@ class DocumentRoutes:
 
         @router.post("/datasets/{dataset_id}/documents/refresh")
         def refresh_dataset_documents(
-            dataset_id: str, request: Request, limit: int = 50
+            dataset_id: str, request: Request, limit: int = 50, max_age_hours: float = 0
         ) -> JSONResponse:
             return dispatch()(
                 request=request,
                 action="refresh_documents",
                 route_path="/api/knowledge/v1/datasets/{dataset_id}/documents/refresh",
-                params={"dataset_id": dataset_id, "limit": max(1, min(int(limit), 200))},
+                params={
+                    "dataset_id": dataset_id,
+                    "limit": max(1, min(int(limit), 200)),
+                    "max_age_hours": max(0.0, float(max_age_hours)),
+                },
             )
 
         self.refresh_dataset_documents = refresh_dataset_documents

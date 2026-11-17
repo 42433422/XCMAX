@@ -8,6 +8,17 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
+def _positive_float(value: Any) -> float | None:
+    """正数参数（如 max_age_hours）；缺省/非法/非正数都表示不启用。"""
+    if value in (None, ""):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if number > 0 else None
+
+
 def _registered_router_dataset_rag(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
@@ -236,6 +247,7 @@ def _registered_router_dataset_rag(
             tenant_id=str(params.get("tenant_id") or ""),
             access_context=access_context(DATASET_WRITE_PERMISSION),
             limit=as_int(params.get("limit"), 50),
+            max_age_hours=_positive_float(params.get("max_age_hours")),
         )
         return finalize(result, dataset_id=dataset_id, documents=[])
     if action == "diff_versions":

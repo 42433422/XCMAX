@@ -19,6 +19,7 @@ from app.application.dataset_rag.access_policy import (
 from app.application.dataset_rag.chunk_context import section_metadata
 from app.application.dataset_rag.document_acl import (
     ACL_METADATA_KEY,
+    document_visible_to,
     normalize_document_acl,
 )
 from app.application.dataset_rag.document_parser import DocumentParser
@@ -260,6 +261,7 @@ class DocumentLifecycle:
                             for doc in state.documents.values()
                             if doc.tenant_id == tenant_key
                             and doc.source != source_label
+                            and document_visible_to(doc.metadata, access_context)
                             and str((doc.metadata or {}).get("document_content_hash") or "")
                             == document_content_hash
                         ),
