@@ -113,8 +113,31 @@ export function useAiOpenPanelState(options: { cursorEnabled: Ref<boolean>; curs
     })
   )
 
-  const mcpUrl = computed(() => `${backendOrigin.value}/api/aiopen/mcp`)
-  const guideUrl = computed(() => `${backendOrigin.value}/api/aiopen/guide?format=markdown`)
+  /**
+   * 复制给外部 AI 的地址必须跟用户实际访问的地址一致：
+   * 从局域网 / 域名打开时，后端 install 端点可能仍回 127.0.0.1，这里用页面主机名替换回环主机，
+   * 本机访问（127.0.0.1 / localhost）则保持后端原地址与端口不变。
+   */
+  const reachableOrigin = computed(() => {
+    const base = String(backendOrigin.value || '').replace(/\/$/, '')
+    if (typeof window === 'undefined' || !base) return base
+    const pageHost = String(window.location.hostname || '').toLowerCase()
+    const loopback = new Set(['127.0.0.1', 'localhost', '::1'])
+    if (!pageHost || loopback.has(pageHost)) return base
+    try {
+      const url = new URL(base)
+      if (loopback.has(url.hostname.toLowerCase())) {
+        url.hostname = pageHost
+        return url.origin
+      }
+    } catch {
+      /* 保持原地址 */
+    }
+    return base
+  })
+
+  const mcpUrl = computed(() => `${reachableOrigin.value}/api/aiopen/mcp`)
+  const guideUrl = computed(() => `${reachableOrigin.value}/api/aiopen/guide?format=markdown`)
 
   const activeKey = computed(() => newKey.value || '')
   const hasConnectConfig = computed(() => Boolean(activeKey.value) || keys.value.length > 0)
@@ -128,12 +151,19 @@ export function useAiOpenPanelState(options: { cursorEnabled: Ref<boolean>; curs
     })
   )
 
-  const oneLinerText = computed(() => buildAiopenOneLiner(backendOrigin.value, activeKey.value))
-
-  const oneLinerPreview = computed(() => {
-    const t = oneLinerText.value
-    return t.length > 72 ? `${t.slice(0, 72)}…` : t
+  // 当前用户所在端的入口：管理端与主前端不同，用于「ui_sessions 为空」时的提示
+  const consoleUrl = computed(() => {
+    if (typeof window === 'undefined') return ''
+    const isAdminConsole = String(import.meta.env.VITE_XCMAX_ADMIN_CONSOLE || '') === '1'
+    return `${window.location.origin}${isAdminConsole ? '/admin' : '/ai-ecosystem'}`
   })
+
+  const oneLinerText = computed(() =>
+    buildAiopenOneLiner(reachableOrigin.value, activeKey.value, consoleUrl.value)
+  )
+
+  // 展示完整句子：截断到 72 字会停在 URL 或「AIO…」中间，让人误以为复制内容被截断。
+  const oneLinerPreview = computed(() => oneLinerText.value)
 
   const readyStatus = computed(() => {
     if (remoteControlEnabled.value && cursorConnected.value) return 'ready'

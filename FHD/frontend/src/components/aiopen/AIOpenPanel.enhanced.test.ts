@@ -542,10 +542,11 @@ describe('AIOpenPanel.vue – computed properties', () => {
     wrapper.unmount()
   })
 
-  it('oneLinerPreview truncates long text', async () => {
-    mockBuildAiopenOneLiner.mockReturnValue('a'.repeat(80))
+  it('oneLinerPreview shows the complete sentence', async () => {
+    const full = '请打开 http://127.0.0.1:42424/api/aiopen/guide?format=markdown 阅读 XCAGI AIOPEN 接入说明，帮我写好 MCP 配置并验证连通，完成后告诉我能否操控本软件。'
+    mockBuildAiopenOneLiner.mockReturnValue(full)
     const wrapper = await mountAIOpenPanel()
-    expect(wrapper.vm.oneLinerPreview.length).toBeLessThanOrEqual(75) // 72 + '…'
+    expect(wrapper.vm.oneLinerPreview).toBe(full)
     wrapper.unmount()
   })
 

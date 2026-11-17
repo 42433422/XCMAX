@@ -210,11 +210,23 @@ export function resolveAiopenBackendBase(pageOrigin: string, options: { envApiBa
 }
 
 /** 一句话话术（粘贴给 ChatGPT / Claude 网页版等） */
-export function buildAiopenOneLiner(backendBase: string, apiKey = ''): string {
+export function buildAiopenOneLiner(
+  backendBase: string,
+  apiKey = '',
+  consoleUrl = ''
+): string {
   const base = resolveAiopenBackendBase('', { envApiBase: backendBase })
   const guide = `${base}/api/aiopen/guide?format=markdown`
   const keyHint = apiKey.trim() ? `连接口令是 ${apiKey.trim()}，` : ''
-  return `请打开 ${guide} 阅读 XCAGI AIOPEN 接入说明，${keyHint}帮我写好 MCP 配置并验证连通，完成后告诉我能否操控本软件。`
+  // 管理端与主前端入口不同，空屏提示必须给到用户当前所在端的地址
+  const screenHint = consoleUrl.trim()
+    ? `如果 ui_sessions 为空，请提示我在 ${consoleUrl.trim()} 登录并保持页面打开。`
+    : '如果 ui_sessions 为空，请提示我先登录 XCAGI 并保持页面打开。'
+  return (
+    `请打开 ${guide} 阅读 XCAGI AIOPEN 接入说明，${keyHint}帮我写好 MCP 配置并验证连通：` +
+    '依次调用 initialize、tools/list（应为 18 个工具）、tools/call ui_sessions。' +
+    `${screenHint}最后告诉我：MCP 是否连通、工具数量、是否有可操控的屏幕。`
+  )
 }
 
 /** 生成可粘贴给任意 AI 助手（ChatGPT / Claude / Kimi 等）的配置提示语 */

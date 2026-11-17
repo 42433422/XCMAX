@@ -348,6 +348,6 @@ _UI_ACTIONS = {
 }
 
 # 等待与截图比普通操作耗时更长，单独放宽虚拟光标回执超时。
-_UI_ACTION_TIMEOUTS = {"wait": 20.0, "screenshot": 30.0, "upload": 20.0}
+_UI_ACTION_TIMEOUTS = {"snapshot": 20.0, "wait": 20.0, "screenshot": 30.0, "upload": 20.0}
 
 _API_CALL_METHODS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE"})

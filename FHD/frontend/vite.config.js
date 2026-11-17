@@ -137,6 +137,8 @@ export default defineConfig(({ mode }) => {
     },
     define: {
       'import.meta.env.VITE_XCAGI_GIT_SHA': JSON.stringify(process.env.VITE_XCAGI_GIT_SHA || ''),
+      // 仅 dev：虚拟光标 WS 直连后端，避免 dev 代理改写 Host 后长连接被代理提前断开。
+      'import.meta.env.VITE_XCMAX_DEV_WS_BASE': JSON.stringify(isDev ? apiBase : ''),
     },
     publicDir: 'public',
     worker: {

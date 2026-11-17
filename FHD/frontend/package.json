@@ -42,6 +42,7 @@
     "@vue-office/pptx": "^1.0.1",
     "@vue/devtools-api": "^8.1.5",
     "ai": "^7.0.173",
+    "cursor-effects": "^1.0.18",
     "dompurify": "^3.4.17",
     "driver.js": "^1.14.0",
     "echarts": "^6.1.0",

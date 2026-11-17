@@ -758,6 +758,16 @@ def aiopen_openclaw_chat(
 # ---------------------------------------------------------------------------
 
 
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+
+
+def _hostname(raw: str) -> str:
+    value = str(raw or "").strip().lower()
+    if value.startswith("["):
+        return value.split("]", 1)[0].lstrip("[")
+    return value.split(":", 1)[0]
+
+
 def _trusted_screen_origin(ws: WebSocket) -> bool:
     """Reject cross-site WebSocket hijacking; cross-origin UIs require an explicit allowlist."""
     raw_origin = str(ws.headers.get("origin") or "").strip()
@@ -781,6 +791,13 @@ def _trusted_screen_origin(ws: WebSocket) -> bool:
         origin_scheme = {"ws": "http", "wss": "https"}.get(request_scheme, request_scheme)
         if parsed.scheme.lower() == origin_scheme and parsed.netloc.lower() == host:
             return True
+        # 本地开发时浏览器在 42423、后端在 42422（或经 vite 代理改变 Host），
+        # 端口不同但同属回环地址；这仍是同一台机器，放行不会扩大跨站风险。
+        if parsed.scheme.lower() == origin_scheme:
+            origin_host = str(parsed.hostname or "").strip("[]").lower()
+            request_host = _hostname(host)
+            if origin_host in _LOOPBACK_HOSTS and request_host in _LOOPBACK_HOSTS:
+                return True
         allowed = {
             origin.strip().rstrip("/").lower()
             for origin in os.environ.get("XCAGI_AIOPEN_WS_ALLOWED_ORIGINS", "").split(",")
@@ -825,8 +842,10 @@ async def aiopen_screen_ws(ws: WebSocket):
             handled = aiopen_cursor_hub.handle_client_message(raw, session_id=session_id)
             if not handled:
                 logger.debug("aiopen ws ignored unmatched message")
-    except WebSocketDisconnect:
-        pass
+    except WebSocketDisconnect as err:
+        logger.info(
+            "aiopen screen ws closed session=%s code=%s", session_id, getattr(err, "code", "")
+        )
     except RECOVERABLE_ERRORS:
         logger.exception("aiopen screen ws error session=%s", session_id)
     finally:

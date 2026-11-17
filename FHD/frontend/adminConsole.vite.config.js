@@ -93,6 +93,8 @@ function buildDevProxy(apiBase) {
     '/api': {
       target: apiBase,
       changeOrigin: true,
+      // AIOPEN 虚拟光标走 /api/aiopen/ws，管理端 dev 也必须代理 WebSocket 升级
+      ws: true,
       configure: forwardHost,
     },
     '/ws': { target: apiBase, changeOrigin: true, ws: true },
@@ -101,8 +103,11 @@ function buildDevProxy(apiBase) {
   }
 }
 
-export default defineConfig(() => ({
+export default defineConfig(({ command }) => ({
   root: adminRoot,
+  // 管理端与主前端共用 node_modules；必须分开依赖缓存，否则两个 Vite 实例会互相
+  // 让对方的 optimize 结果失效，页面反复重载并出现 ERR_ABORTED / 504 Outdated Optimize Dep。
+  cacheDir: path.join(hostRoot, 'node_modules', '.vite-admin'),
   plugins: [
     openimAssets(),
     createAdminConsoleAtAliasPlugin(hostRoot),
@@ -125,6 +130,8 @@ export default defineConfig(() => ({
     'import.meta.env.VITE_XCAGI_GIT_SHA': JSON.stringify(resolveViteGitSha(process.env.VITE_XCAGI_GIT_SHA)),
     'import.meta.env.VITE_XCMAX_ADMIN_CONSOLE': JSON.stringify('1'),
     'import.meta.env.VITE_XCMAX_SUNBIRD_CONSOLE': JSON.stringify(''),
+    // 仅 dev（:5011）：虚拟光标 WS 直连后端，避免代理层改写 Host 后断长连接；构建产物保持同源
+    'import.meta.env.VITE_XCMAX_DEV_WS_BASE': JSON.stringify(command === 'serve' ? API_BASE : ''),
   },
   base: '/admin/',
   resolve: {

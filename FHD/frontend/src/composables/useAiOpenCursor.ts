@@ -10,10 +10,13 @@
 import { ref } from 'vue'
 import type { Router } from 'vue-router'
 import { getApiBase } from '@/utils/apiBase'
+import { disableTrail, ensureTrail, moveTrail, pulseTrail } from './useAiOpenCursorTrail'
 
 const STORAGE_KEY = 'xcagi_aiopen_remote_control'
 const MAX_LOGS = 100
 const SNAPSHOT_MAX_ELEMENTS = 120
+// 扫描上限：避免超长页面里为上方的隐藏节点付出整页遍历成本
+const SNAPSHOT_MAX_SCAN = 3000
 const CURSOR_MOVE_MS = 480
 const WAIT_POLL_MS = 100
 const WAIT_MAX_MS = 15000
@@ -33,6 +36,8 @@ export const cursorY = ref(0)
 export const cursorVisible = ref(false)
 export const cursorClicking = ref(false)
 export const cursorActionLabel = ref('')
+/** 移动时的轻微倾斜，增加方向感（拖尾由 cursor-effects 负责）。 */
+export const cursorTilt = ref(0)
 
 const AGENT_IDLE_MS = 8000
 
@@ -67,7 +72,10 @@ function pushLog(text: string) {
 }
 
 function wsUrl(): string {
-  const base = getApiBase()
+  // dev 下 dev server 与后端不同端口；代理改写 Host 会让长连接被提前断开，
+  // 因此优先直连后端（仅 dev 注入），生产仍走同源。
+  const devBase = String(import.meta.env.VITE_XCMAX_DEV_WS_BASE || '').trim()
+  const base = devBase || getApiBase()
   const origin = base || (typeof window !== 'undefined' ? window.location.origin : '')
   const httpOrigin = origin || 'http://127.0.0.1:5000'
   return httpOrigin.replace(/^http/i, 'ws') + '/api/aiopen/ws'
@@ -81,6 +89,13 @@ function isVisible(el: Element): boolean {
   const rect = (el as HTMLElement).getBoundingClientRect()
   if (rect.width <= 0 || rect.height <= 0) return false
   if (rect.bottom < 0 || rect.top > window.innerHeight) return false
+  // 大页面里逐个 getComputedStyle 很慢；优先用原生 checkVisibility，缺失时再回退。
+  const probe = el as Element & {
+    checkVisibility?: (options?: { checkOpacity?: boolean; checkVisibilityCSS?: boolean }) => boolean
+  }
+  if (typeof probe.checkVisibility === 'function') {
+    return probe.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })
+  }
   const style = window.getComputedStyle(el as HTMLElement)
   return style.visibility !== 'hidden' && style.display !== 'none' && Number(style.opacity || '1') > 0.05
 }
@@ -111,8 +126,13 @@ function buildSelector(el: Element): string {
 }
 
 function elementText(el: Element): string {
+  // 不用 innerText：它会强制布局，在超大页面上逐个读取会让快照卡到超时。
   const raw =
-    (el as HTMLElement).innerText || (el as HTMLInputElement).value || el.getAttribute('aria-label') || el.getAttribute('placeholder') || ''
+    (el as HTMLInputElement).value ||
+    el.getAttribute('aria-label') ||
+    el.getAttribute('placeholder') ||
+    el.textContent ||
+    ''
   return raw.replace(/\s+/g, ' ').trim().slice(0, 80)
 }
 
@@ -203,6 +223,11 @@ function accessibleName(el: Element): string {
     const target = document.getElementById(labelledBy)
     if (target) return elementText(target)
   }
+  const nativeLabels = (el as HTMLInputElement).labels
+  if (nativeLabels && nativeLabels.length > 0) {
+    const text = elementText(nativeLabels[0])
+    if (text) return text
+  }
   if (el.id) {
     const label = document.querySelector(`label[for="${CSS.escape(el.id)}"]`)
     if (label) return elementText(label)
@@ -276,11 +301,17 @@ function sleep(ms: number): Promise<void> {
 }
 
 async function animateCursorTo(x: number, y: number, label: string): Promise<void> {
+  const dx = x - cursorX.value
   cursorVisible.value = true
   cursorActionLabel.value = label
+  // 方向倾斜：位移越大倾斜越明显，限制在 ±12° 避免夸张
+  cursorTilt.value = Math.max(-12, Math.min(12, dx / 6))
   cursorX.value = x
   cursorY.value = y
+  await ensureTrail()
+  moveTrail(x, y)
   await sleep(CURSOR_MOVE_MS + 60)
+  cursorTilt.value = 0
 }
 
 async function execSnapshot(): Promise<Record<string, unknown>> {
@@ -289,7 +320,18 @@ async function execSnapshot(): Promise<Record<string, unknown>> {
   resetRefs()
   const elements: Array<Record<string, unknown>> = []
   let truncated = false
-  for (const el of Array.from(document.querySelectorAll(selectorList))) {
+  let scanned = 0
+  // 超长页面里快照必须在回执超时前返回：限定总耗时并让出事件循环。
+  const deadline = performance.now() + 6000
+  const candidates = document.querySelectorAll(selectorList)
+  for (let index = 0; index < candidates.length; index += 1) {
+    const el = candidates[index]
+    if (++scanned > SNAPSHOT_MAX_SCAN || performance.now() > deadline) {
+      truncated = true
+      break
+    }
+    // 不做 setTimeout 让出：后台标签页的定时器会被浏览器节流到秒级甚至分钟级，
+    // 反而把快照拖过回执超时；同步执行由 deadline 兜底。
     if (!isVisible(el)) continue
     if (elements.length >= SNAPSHOT_MAX_ELEMENTS) {
       truncated = true
@@ -349,6 +391,7 @@ async function execClick(params: Record<string, unknown>): Promise<Record<string
   const rect = el.getBoundingClientRect()
   await animateCursorTo(rect.x + rect.width / 2, rect.y + rect.height / 2, '点击')
   cursorClicking.value = true
+  pulseTrail(rect.x + rect.width / 2, rect.y + rect.height / 2)
   await sleep(180)
   el.click()
   cursorClicking.value = false
@@ -736,7 +779,7 @@ function connect() {
         window.setTimeout(() => {
           cursorVisible.value = false
           cursorActionLabel.value = ''
-        }, 1500)
+        }, 4000)
       }
       try {
         ws?.send(JSON.stringify({ type: 'result', id: msg.id, result }))
@@ -784,6 +827,7 @@ function disconnect() {
   aiopenCursorSessionId.value = ''
   cursorVisible.value = false
   clearAgentActive()
+  disableTrail()
 }
 
 // ---------------------------------------------------------------------------
