@@ -1666,6 +1666,7 @@ def test_admin_account_and_taxonomy_filters_match_displayed_identity(client):
         )
         # Legacy SQL NULL evidence must remain visible under ordinary taxonomy.
         from sqlalchemy import update
+
         from modstore_server.models_cs import CustomerServiceTicket
 
         db.execute(

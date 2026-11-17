@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Collection, Mapping
 from datetime import timezone
-from typing import Any
+from typing import Any, cast
 
 from modstore_server.customer_service_tools import json_loads
 from modstore_server.customer_service_triage import ticket_taxonomy
@@ -22,7 +22,7 @@ def serialize_ticket(
     issue_domains: Collection[str],
     domain_labels: Mapping[str, str],
 ) -> dict[str, Any]:
-    evidence = json_loads(row.evidence_json, {})
+    evidence = json_loads(cast(str | None, row.evidence_json), {})
     if not isinstance(evidence, dict):
         evidence = {}
     domain = str(evidence.get("issue_domain") or "").strip().lower()
@@ -42,7 +42,7 @@ def serialize_ticket(
         "title": row.title,
         "intent": row.intent,
         **ticket_taxonomy(
-            row.intent,
+            cast(str, row.intent),
             getattr(row, "submitter_type", None) or "unknown",
             evidence,
         ),
