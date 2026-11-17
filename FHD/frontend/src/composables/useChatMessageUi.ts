@@ -133,7 +133,11 @@ export function useChatMessageUi(deps: UseChatMessageUiDeps) {
 
   watch(() => messages.value.length, batchCalculateHeights, { flush: 'post' })
   watch(() => messages.value[messages.value.length - 1]?.content, () => messageHeights.value.delete(messages.value.length - 1))
-  watch([messages, () => deps.sessionKey?.value], () => {
+  watch(messages, () => {
+    speakable = new WeakMap()
+    stopMessageTts()
+  }, { flush: 'sync' })
+  watch(() => deps.sessionKey?.value, () => {
     expandedMessageKeys.value = []
     messageHeights.value.clear()
     speakable = new WeakMap()

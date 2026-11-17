@@ -396,13 +396,21 @@ const copyLabels = ref(new Map<ChatMessage, string>())
 const { start: windowStart, end: windowEnd, visibleMessages, moveWindow, showLatest, onScroll, revealMessage, scrollToLatestIfFollowing } =
   useChatHistoryWindow(() => props.messages, messagesHostRef, () => props.sessionKey)
 watch(() => props.proactiveSuggestions?.size, scrollToLatestIfFollowing, { flush: 'post' })
-type Presentation = { key: number; content: string; role: ChatMessage['role']; html?: string; canSpeak?: boolean; foldable?: boolean }
+type Presentation = { key: string; content: string; role: ChatMessage['role']; html?: string; canSpeak?: boolean; foldable?: boolean }
 let presentations = new WeakMap<ChatMessage, Presentation>()
-let nextKey = 0
+/** 渲染 key 必须来自消息身份而不是对象引用：服务端同步会替换对象，引用 key 会让整列消息重挂载闪烁。 */
+function stableMessageKey(message: ChatMessage): string {
+  const id = String(message.persistence?.id || '').trim()
+  if (id) return `id:${message.role}:${id}`
+  const turnId = String(message.turnId || '').trim()
+  if (turnId) return `turn:${message.role}:${turnId}`
+  return `local:${message.role}:${String(message.time || '')}:${String(message.content || '').length}`
+}
 function presentation(message: ChatMessage): Presentation {
+  const key = stableMessageKey(message)
   let entry = presentations.get(message)
-  if (!entry || entry.content !== message.content || entry.role !== message.role) {
-    entry = { key: entry?.key ?? nextKey++, content: message.content, role: message.role }
+  if (!entry || entry.key !== key || entry.content !== message.content || entry.role !== message.role) {
+    entry = { key, content: message.content, role: message.role }
     presentations.set(message, entry)
   }
   return entry
@@ -423,7 +431,7 @@ function canCollapseMessageOf(message: ChatMessage): boolean {
   return entry.foldable
 }
 watch(
-  [() => props.sessionKey, () => props.messages, () => props.canSpeakMessage, () => props.canCollapseMessage],
+  [() => props.sessionKey, () => props.canSpeakMessage, () => props.canCollapseMessage],
   () => {
     presentations = new WeakMap()
     copyLabels.value.clear()
