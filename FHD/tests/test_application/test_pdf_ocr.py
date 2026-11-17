@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from app.application.document_parsing import ocr
 from app.application.dataset_rag.document_parser import _pdf_ocr_enabled
+from app.application.document_parsing import ocr
 
 
 def test_ocr_mode_defaults_to_auto(monkeypatch):

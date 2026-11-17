@@ -193,7 +193,7 @@ const INPUT_ROLES: Record<string, string> = {
   number: 'spinbutton',
   search: 'searchbox',
   email: 'textbox',
-  password: 'textbox',
+  password: 'textbox', // credential-guard: allow —— ARIA 角色映射，不是凭据
   tel: 'textbox',
   url: 'textbox',
   file: 'button',
