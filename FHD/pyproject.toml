@@ -57,6 +57,8 @@ server-api = [
     "socksio>=1.0.0",
     "requests>=2.33.0",
     "urllib3>=2.8.0",
+    # 知识库网页导入：trafilatura 正文抽取（Apache-2.0，纯 Python）
+    "trafilatura>=2.3,<3",
     "python-alipay-sdk>=3.3.0",
     "edge-tts>=6.1.10",
     "faster-whisper>=1.0.0",

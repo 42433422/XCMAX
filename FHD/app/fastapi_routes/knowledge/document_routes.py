@@ -29,16 +29,30 @@ class DocumentRoutes:
         def ingest_dataset_document(
             dataset_id: str, req: DatasetDocumentIngestRequest, request: Request
         ) -> JSONResponse:
+            text = req.text
+            file_path = req.file_path
+            source = req.source
+            document_id = req.document_id
+            if req.url.strip():
+                from app.application.document_parsing.web_fetch import fetch_url_text
+
+                try:
+                    page = fetch_url_text(req.url)
+                except ValueError as exc:
+                    return JSONResponse(status_code=400, content={"detail": str(exc)})
+                text = page.text
+                source = source or page.title or page.url
+                document_id = document_id or page.url
             return dispatch()(
                 request=request,
                 action="ingest_document",
                 route_path="/api/knowledge/v1/datasets/{dataset_id}/documents",
                 params={
                     "dataset_id": dataset_id,
-                    "source": req.source,
-                    "text": req.text,
-                    "file_path": req.file_path,
-                    "document_id": req.document_id,
+                    "source": source,
+                    "text": text,
+                    "file_path": file_path,
+                    "document_id": document_id,
                     "chunk_strategy": req.chunk_strategy,
                     "chunk_size": req.chunk_size,
                     "chunk_overlap": req.chunk_overlap,

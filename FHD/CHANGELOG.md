@@ -1,4 +1,5 @@
 ## Unreleased
+- 知识库新增网页导入（URL 连接器）：`POST /api/knowledge/v1/datasets/{dataset_id}/documents` 支持 `url` 字段，复用 trafilatura 2.3.1（Apache-2.0，纯 Python）提取正文与标题；默认拒绝内网/回环/保留地址、逐跳校验重定向（最多 3 跳）、限制 5MB/15s，抓取失败返回 400。`XCAGI_KB_ALLOW_PRIVATE_URLS=1` 仅供受控内网调试。
 - 知识库扫描件与图片兜底：复用 RapidOCR（Apache-2.0，ONNX，无 torch），PDF 页面提取不到文本时渲染后 OCR，默认最多 30 个空页，`XCAGI_PDF_OCR=off` 可关闭；同时支持直接导入 png/jpg/webp/bmp 图片并识别文字。实测图片型 PDF 与截图均可识别中文正文，返回 `parser_backend=pdfplumber+ocr`/`rapidocr` 与 `ocr_pages`。
 - 知识库检索升级：新增 fastembed（Apache-2.0，ONNX，无 torch）语义向量模式，默认中文模型 `BAAI/bge-small-zh-v1.5`；精排支持 cross-encoder（默认 `BAAI/bge-reranker-base`，显式开启），并扩大候选池后再精排。修复「hash 向量也被报告为语义可用」的误报：hash 模式现在如实显示 `semantic_embedding_available=false`。新增 `scripts/dev/knowledge_retrieval_eval.py`（20 条中文查询，recall@k/MRR）：hash 基线 recall@1=0.35、recall@5=0.85、MRR=0.513，fastembed 后 recall@1=1.0、MRR=1.0。
 - AIOPEN 新增「自动批准危险操作」服务端开关 `AIOPEN_AUTO_APPROVE_DANGER`：默认关闭；只有同时开启 `AIOPEN_ENABLE_WRITES` 时，危险操作才会先写入审批单（含申请人、批准人、参数摘要）再自动批准并消费执行，审批记录与防重放不变；未开启时仍返回 `APPROVAL_REQUIRED` 等人工审批。

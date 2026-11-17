@@ -117,6 +117,7 @@ class StatusResponse(BaseModel):
 class DatasetDocumentIngestRequest(BaseModel):
     text: str = Field("", max_length=_DATASET_INLINE_MAX_CHARS, description="inline document text")
     file_path: str = Field("", max_length=4096, description="allowed local file path")
+    url: str = Field("", max_length=4096, description="http(s) page to extract as document")
     source: str = Field("", max_length=300, description="source label")
     document_id: str = Field("", max_length=200, description="optional stable document id")
     tenant_id: str = Field("", max_length=160, description="tenant/user isolation key")
@@ -139,8 +140,8 @@ class DatasetDocumentIngestRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_document_input(self):
-        if not self.text.strip() and (not self.file_path.strip()):
-            raise ValueError("text or file_path is required")
+        if not self.text.strip() and not self.file_path.strip() and not self.url.strip():
+            raise ValueError("text, file_path or url is required")
         if self.chunk_strategy == "fixed" and self.chunk_overlap >= self.chunk_size:
             raise ValueError("chunk_overlap must be smaller than chunk_size")
         return self
