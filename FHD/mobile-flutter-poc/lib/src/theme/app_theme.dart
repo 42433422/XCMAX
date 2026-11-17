@@ -11,7 +11,7 @@ class AppTheme {
   static const momentAccent = Color(0xFF5145CD);
   static const momentChipBg = Color(0xFFECEDFE);
   static const replyBoxBg = Color(0xFFF4F5F7);
-  static const page = Color(0xFFF3F4F7);
+  static const page = Color(0xFFF5F6FA);
   static const surface = Color(0xFFFFFFFF);
   static const surfaceHigh = Color(0xFFE8E9EB);
   static const divider = Color(0xFFDEE0E3);
@@ -19,6 +19,13 @@ class AppTheme {
   static const textSecondary = Color(0xFF646A73);
   static const textStrongSecondary = Color(0xFF494E56);
   static const textTertiary = Color(0xFF8F959E);
+
+  static Duration motionDuration(BuildContext context,
+          {int milliseconds = 180}) =>
+      MediaQuery.disableAnimationsOf(context) ||
+              MediaQuery.accessibleNavigationOf(context)
+          ? Duration.zero
+          : Duration(milliseconds: milliseconds);
 
   static XcagiThemeColors colors(BuildContext context) {
     final extension = Theme.of(context).extension<XcagiThemeColors>();
@@ -74,7 +81,8 @@ class AppTheme {
         iconTheme: WidgetStateProperty.resolveWith(
           (states) => IconThemeData(
             size: 24,
-            color: states.contains(WidgetState.selected) ? brand : textSecondary,
+            color:
+                states.contains(WidgetState.selected) ? brand : textSecondary,
           ),
         ),
         labelTextStyle: WidgetStateProperty.resolveWith(
@@ -208,14 +216,14 @@ class AppTheme {
       headlineMedium: style(20, FontWeight.w600, 28),
       headlineSmall: style(18, FontWeight.w600, 26),
       titleLarge: style(18, FontWeight.w600, 24),
-      titleMedium: style(17, FontWeight.w500, 22),
+      titleMedium: style(17, FontWeight.w600, 22),
       titleSmall: style(15, FontWeight.w500, 20),
       bodyLarge: style(16, FontWeight.w400, 22),
       bodyMedium: style(15, FontWeight.w400, 21),
-      bodySmall: style(14, FontWeight.w400, 19),
+      bodySmall: style(13, FontWeight.w400, 18),
       labelLarge: style(14, FontWeight.w500, 18),
       labelMedium: style(13, FontWeight.w500, 17),
-      labelSmall: style(11, FontWeight.w500, 14),
+      labelSmall: style(12, FontWeight.w600, 17),
     );
   }
 }

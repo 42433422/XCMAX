@@ -262,18 +262,26 @@ def create_agent_task(
         )
     runtime_context = authenticated_runtime_context(runtime_context_raw, principal)
     try:
-        if runtime_context.get("source") == "admin_employee_workspace" and data.get("tool_id") == "employee":
+        if (
+            runtime_context.get("source") == "admin_employee_workspace"
+            and data.get("tool_id") == "employee"
+        ):
             from app.application.employee_runtime.loader import candidate_pack_ids
             from app.application.employee_runtime.tool_scope import host_employee_denial
 
+            employee_input = params.get("input")
             denial = host_employee_denial(
                 candidate_pack_ids(str(params.get("employee_id") or params.get("pack_id") or "")),
-                params.get("input") if isinstance(params.get("input"), dict) else {},
+                employee_input if isinstance(employee_input, dict) else {},
                 runtime_context,
             )
             if denial:
                 return JSONResponse(
-                    {"success": False, "message": denial["error"], "error_code": denial["error_code"]},
+                    {
+                        "success": False,
+                        "message": denial["error"],
+                        "error_code": denial["error_code"],
+                    },
                     status_code=403,
                 )
         task_id = str(data.get("task_id") or "").strip()

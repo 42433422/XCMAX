@@ -120,8 +120,13 @@ def _work_order(db, ticket, evidence):
     owner = db.get(User, ticket.user_id)
     view = _customer_view(db, wo_id, owner) if owner else None
     return (
-        {"binding": "verified", "id": wo_id, "status": view["status"],
-         "issue_number": view.get("issue_number"), "issue_url": view.get("issue_url")}
+        {
+            "binding": "verified",
+            "id": wo_id,
+            "status": view["status"],
+            "issue_number": view.get("issue_number"),
+            "issue_url": view.get("issue_url"),
+        }
         if view
         else {"binding": "unavailable", "id": None, "status": None}
     )

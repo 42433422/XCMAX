@@ -6,6 +6,19 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export async function runGithubWorker({ env = process.env, fetchStatus = fetch, spawnWorker = spawn,
   sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), now = Date.now } = {}) {
+  // Environment filtering cannot isolate same-UID processes from publisher credentials.
+  // Keep the implementation below for an independently isolated publisher integration;
+  // no runtime flag may bypass this guard.
+  const reason = 'blocked_isolated_publisher_required';
+  if (env.PARA_GITHUB_EVIDENCE_DIR) {
+    mkdirSync(env.PARA_GITHUB_EVIDENCE_DIR, { recursive: true });
+    writeFileSync(join(env.PARA_GITHUB_EVIDENCE_DIR, 'execution.json'), JSON.stringify({
+      request_id: env.PARA_GITHUB_REQUEST_ID, run_id: env.GITHUB_RUN_ID,
+      finished: true, conclusion: 'failure', status: 'blocked', reason,
+      executor: 'Para', machine: 'github-hosted', source_sha: env.GITHUB_SHA,
+    }, null, 2) + '\n');
+  }
+  throw new Error(reason);
   const requestId = env.PARA_GITHUB_REQUEST_ID || '';
   const runId = env.GITHUB_RUN_ID || '';
   const serviceBase = env.MODSTORE_DISPATCH_BASE || 'https://xiu-ci.com';

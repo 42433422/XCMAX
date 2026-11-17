@@ -80,6 +80,18 @@ class TestEnsureMobileDeviceTable:
 
 
 class TestGuessLanIpv4:
+    @pytest.mark.parametrize("stage", ["connect", "getsockname", "success"])
+    def test_probe_closes_on_success_and_error(self, ext_mod, stage):
+        probe = MagicMock()
+        probe.getsockname.return_value = ("192.168.1.9", 1234)
+        if stage != "success":
+            getattr(probe, stage).side_effect = OSError("no network")
+        with patch("socket.socket", return_value=probe):
+            assert ext_mod._guess_lan_ipv4() == (
+                "192.168.1.9" if stage == "success" else "127.0.0.1"
+            )
+        probe.close.assert_called_once()
+
     def test_returns_string(self, ext_mod):
         ip = ext_mod._guess_lan_ipv4()
         assert isinstance(ip, str)

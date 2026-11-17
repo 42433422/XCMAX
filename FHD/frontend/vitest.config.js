@@ -6,7 +6,7 @@ import vue from '@vitejs/plugin-vue'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [vue({ template: { compilerOptions: { isCustomElement: tag => tag === 'vue-advanced-chat' } } })],
   resolve: {
     alias: [
       { find: '@host', replacement: path.resolve(__dirname, './src') },

@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xcagi_flutter_poc/src/api/mobile_api.dart';
 import 'package:xcagi_flutter_poc/src/api/mobile_models.dart';
+import 'package:xcagi_flutter_poc/src/api/mobile_session_store.dart';
+import 'package:xcagi_flutter_poc/src/features/tasks/native_task_workspace_screen.dart';
 import 'package:xcagi_flutter_poc/src/data/mobile_repository.dart';
 import 'package:xcagi_flutter_poc/src/features/tasks/task_list_screen.dart';
 
@@ -20,19 +22,34 @@ MobileTaskSummary task({
     });
 
 class TaskApi extends MobileApiClient {
+  TaskApi()
+      : super(sessionStore: MemoryMobileSessionStore(MobileSessionData.empty));
   final requested = <String>[];
   bool denied = false;
   @override
-  Future<MobileEnvelope<MobileTaskSummary>> mobileTaskDetail(
-    String taskId,
-  ) async {
-    requested.add(taskId);
-    return MobileEnvelope(
-      success: !denied,
-      message: denied ? '无权查看' : '',
-      data: denied ? null : task(id: taskId),
-      raw: const {},
-    );
+  Future<Map<String, Object?>> workspaceRequest(
+    String path, {
+    String method = 'GET',
+    Map<String, String> query = const {},
+    Map<String, Object?>? body,
+    required int expectedGeneration,
+    required String expectedBase,
+    String activeModId = '',
+  }) async {
+    requested.add(path);
+    if (denied) {
+      throw const MobileApiException(
+          statusCode: 403, message: '没有权限', body: {});
+    }
+    return {
+      'success': true,
+      'data': {
+        'task_id': 'task/a',
+        'title': '整理考勤',
+        'status': 'completed',
+        'capabilities': <String, bool>{}
+      }
+    };
   }
 }
 
@@ -90,30 +107,34 @@ void main() {
   });
 
   testWidgets(
-    'task opens fresh detail; denied detail exposes no workspace action',
-    (tester) async {
-      final api = TaskApi();
-      final repo = Tasks(api)..load = () async => [task()];
-      await tester.pumpWidget(
-        MaterialApp(home: TaskListScreen(repository: repo)),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('整理考勤'));
-      await tester.pumpAndSettle();
-      expect(api.requested, ['task/a']);
-      expect(find.text('查看结果与操作'), findsOneWidget);
-      Navigator.of(tester.element(find.text('查看结果与操作'))).pop();
-      await tester.pumpAndSettle();
-      api.denied = true;
-      await tester.tap(find.text('整理考勤'));
-      await tester.pumpAndSettle();
-      expect(find.text('查看结果与操作'), findsNothing);
-      expect(find.textContaining('权限'), findsOneWidget);
-      api.denied = false;
-      await tester.tap(find.text('重试'));
-      await tester.pumpAndSettle();
-      expect(api.requested.length, 3);
-      expect(find.text('查看结果与操作'), findsOneWidget);
-    },
-  );
+      'task opens native result and denied result cannot expose actions',
+      (tester) async {
+    final api = TaskApi();
+    final repo = Tasks(api)..load = () async => [task()];
+    addTearDown(() async {
+      await repo.dispose();
+      api.dispose();
+    });
+    await tester
+        .pumpWidget(MaterialApp(home: TaskListScreen(repository: repo)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('整理考勤'));
+    await tester.pumpAndSettle();
+    expect(find.byType(NativeTaskWorkspaceScreen), findsOneWidget);
+    expect(
+        api.requested.single, 'api/mobile/v1/workspace/agent/tasks/task%2Fa');
+    Navigator.of(tester.element(find.byType(NativeTaskWorkspaceScreen))).pop();
+    await tester.pumpAndSettle();
+    api.denied = true;
+    await tester.tap(find.text('整理考勤'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('权限'), findsOneWidget);
+    expect(find.text('审批并执行'), findsNothing);
+    api.denied = false;
+    await tester.tap(find.byTooltip('刷新任务'));
+    await tester.pumpAndSettle();
+    expect(api.requested.length, 3);
+    expect(find.text('状态：已完成'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
 }

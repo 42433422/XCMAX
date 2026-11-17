@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "core": [
+    {"key": "chat", "name": "智能对话", "iconClass": "fa-comments-o", "path": "/chat", "description": "找小C办事、下指令、看任务进度"},
+    {"key": "im", "name": "信息", "iconClass": "fa-envelope-o", "path": "/im", "description": "联系已安装的AI同事、专属客服，一对一聊"},
+    {"key": "ai-ecosystem", "name": "智能生态", "iconClass": "fa-sitemap", "path": "/ai-ecosystem", "mobile_group": "business", "requires_desktop": false, "description": "智慧分析、AIOPEN、私有交付等应用入口"},
+    {"key": "persy-knowledge", "name": "知识库", "iconClass": "fa-book", "path": "/persy/knowledge", "mobile_group": "data", "requires_desktop": false, "description": "查看企业知识、资料来源与长期记忆"},
+    {"key": "business-docking", "name": "数据对接中心", "iconClass": "fa-exchange", "path": "/business-docking", "mobile_group": "data", "requires_desktop": false, "description": "上传业务文件，识别、预览并确认写入业务数据"},
+    {"key": "employee-workflow", "name": "员工工作台", "iconClass": "fa-users", "path": "/workflow-employee-space", "mobile_group": "tasks", "requires_desktop": false, "description": "看员工空间", "children": [{"key": "workflow-employee-space", "name": "员工空间", "iconClass": "fa-th-large", "path": "/workflow-employee-space", "mobile_group": "tasks", "requires_desktop": false, "description": "看工位实况与员工上岗状态"}]}
+  ],
+  "industry": [
+    {"key": "products", "name": "产品管理", "iconClass": "fa-cubes", "path": "/products", "mobile_group": "business", "requires_desktop": false},
+    {"key": "customers", "name": "客户管理", "iconClass": "fa-users", "path": "/customers", "mobile_group": "business", "requires_desktop": false},
+    {"key": "orders", "name": "业务单据", "iconClass": "fa-file-text-o", "path": "/orders", "mobile_group": "business", "requires_desktop": false},
+    {"key": "shipment-records", "name": "业务记录", "iconClass": "fa-industry", "path": "/shipment-records", "mobile_group": "business", "requires_desktop": false},
+    {"key": "materials", "name": "资源库", "iconClass": "fa-archive", "path": "/materials", "mobile_group": "data", "requires_desktop": false},
+    {"key": "inventory", "name": "库存管理", "iconClass": "fa-cubes", "path": "/inventory", "mobile_group": "business", "requires_desktop": false},
+    {"key": "purchase", "name": "采购管理", "iconClass": "fa-shopping-cart", "path": "/purchase", "mobile_group": "business", "requires_desktop": false},
+    {"key": "approval-hub", "name": "审批工作台", "iconClass": "fa-check-square-o", "path": "/approval-hub/workspace", "mobile_group": "tasks", "requires_desktop": false},
+    {"key": "business-docking", "name": "数据对接中心", "iconClass": "fa-exchange", "path": "/business-docking", "mobile_group": "data", "requires_desktop": false, "description": "上传业务文件，识别、预览并确认写入业务数据"},
+    {"key": "data-sources", "name": "数据来源", "iconClass": "fa-database", "path": "/data-sources", "mobile_group": "data", "requires_desktop": false},
+    {"key": "print", "name": "模板与打印", "iconClass": "fa-print", "path": "/print", "mobile_group": "computer", "requires_desktop": false},
+    {"key": "printer-list", "name": "打印机列表", "iconClass": "fa-print", "path": "/printer-list", "mobile_group": "computer", "requires_desktop": false},
+    {"key": "template-preview", "name": "模板库", "iconClass": "fa-file-o", "path": "/template-preview", "mobile_group": "computer", "requires_desktop": false}
+  ],
+  "admin_workflow_children": [
+    {"key": "duty-roster-graph", "name": "编制图谱", "iconClass": "fa-sitemap", "path": "/duty-roster-graph"}
+  ],
+  "settings": {"key": "settings", "name": "系统设置", "iconClass": "fa-cog", "path": "/settings", "description": "账号、模型服务、移动端连接、扩展与Mod"},
+  "admin": {"key": "admin-entitlements", "name": "用户管理", "iconClass": "fa-shield", "path": "/admin-entitlements"},
+  "personal_core_keys": ["chat", "im", "ai-ecosystem", "settings"],
+  "tenant_paths": {"products": "/mod/xcagi-erp-domain-bridge/products", "customers": "/mod/xcagi-erp-domain-bridge/customers", "orders": "/mod/xcagi-erp-domain-bridge/orders", "shipment-records": "/mod/xcagi-erp-domain-bridge/shipment-records", "materials": "/mod/xcagi-erp-domain-bridge/materials", "inventory": "/mod/xcagi-erp-domain-bridge/inventory", "purchase": "/mod/xcagi-erp-domain-bridge/purchase", "print": "/mod/xcagi-erp-domain-bridge/print", "printer-list": "/mod/xcagi-erp-domain-bridge/printer-list", "template-preview": "/mod/xcagi-erp-domain-bridge/template-preview", "traditional-mode": "/mod/xcagi-erp-domain-bridge/traditional-mode", "orders-create": "/mod/xcagi-erp-domain-bridge/orders/create", "approval-hub": "/mod/xcagi-approval-bridge/approval-hub/workspace", "tools": "/mod/xcagi-office-employee-pack-bridge/tools"},
+  "mod_aliases": {"mod-enterprise-customer-service": "enterprise-customer-service", "mod-internal-customer-service": "internal-customer-service", "mod-approval-hub": "approval-hub", "mod-workflow-visualization": "workflow-visualization", "mod-planner-chat": "chat", "mod-planner-ai-ecosystem": "ai-ecosystem", "mod-erp-products": "products", "mod-erp-purchase": "purchase", "mod-erp-inventory": "inventory", "mod-erp-customers": "customers", "mod-erp-orders": "orders", "mod-erp-shipment-records": "shipment-records", "mod-erp-materials": "materials", "mod-erp-traditional-mode": "traditional-mode", "mod-erp-business-docking": "business-docking", "mod-erp-data-sources": "data-sources", "mod-erp-print": "print", "mod-erp-printer-list": "printer-list", "mod-erp-template-preview": "template-preview", "mod-office-tools": "tools", "mod-office-other-tools": "workflow-employee-space", "mod-kitten-finance": "kitten-finance", "mod-lan-gate": "lan-gate"}
+}

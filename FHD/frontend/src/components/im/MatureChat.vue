@@ -1,7 +1,7 @@
 <template>
   <section class="mature-chat" :aria-label="title">
     <p v-if="loadError || validationError" class="mature-chat__notice" role="alert">{{ loadError || validationError }}</p>
-    <component v-if="ready" :is="'vue-advanced-chat'" :key="roomId"
+    <vue-advanced-chat v-if="ready" :key="roomId"
       height="100%" current-user-id="self" :room-id="roomId" :rooms="JSON.stringify(rooms)"
       :messages="JSON.stringify(chatMessages)" :single-room="true" :rooms-loaded="true"
       :messages-loaded="historyReady && !hasMore" :show-footer="!disabled" :show-files="false" :show-audio="false"
@@ -11,11 +11,12 @@
       :username-options="'{&quot;minUsers&quot;:1,&quot;currentUser&quot;:false}'"
       :link-options="'{&quot;disabled&quot;:false,&quot;target&quot;:&quot;_blank&quot;,&quot;rel&quot;:&quot;noopener noreferrer&quot;}'"
       @send-message="send" @typing-message="typing" @fetch-messages="fetchHistory">
+      <!-- Bind native light-DOM slots, not Vue component named slots. -->
       <div slot="room-header-info" class="mature-chat__identity"><strong>{{ title }}</strong><small>{{ subtitle }}</small></div>
       <div slot="room-options" class="mature-chat__actions"><slot name="actions" /></div>
       <div v-if="$slots.avatar" slot="room-header-avatar" class="mature-chat__avatar"><slot name="avatar" /></div>
       <div slot="messages-empty" class="mature-chat__empty">暂无消息</div>
-    </component>
+    </vue-advanced-chat>
     <p v-else class="mature-chat__notice">正在加载聊天…</p>
     <div v-if="disabled" class="mature-chat__notice" role="status">{{ busyLabel || '暂不可发送' }}</div>
   </section>

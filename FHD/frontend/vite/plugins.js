@@ -16,7 +16,7 @@ import { routerDevtoolsNullGuard } from './routerDevtoolsGuard.js'
 export function createVitePlugins({ xcmaxPublicApiPrefix = '', i18nInclude }) {
   return [
     openimAssets(),
-    vue(),
+    vue({ template: { compilerOptions: { isCustomElement: tag => tag === 'vue-advanced-chat' } } }),
     VueI18n({
       runtimeOnly: true,
       compositionOnly: true,

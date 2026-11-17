@@ -29,3 +29,10 @@ it('treats the SDK already-read response as success but preserves connection fai
   await expect(markGroupRead(client, 'group')).resolves.toBeUndefined();
   await expect(markGroupRead(client, 'group')).rejects.toEqual({ errCode: 1506 });
 });
+
+it('rejects malformed payloads and forged user roles even from a known SDK sender', () => {
+  const custom = (data: string) => message({ customElem: { extension: 'xcagi-group-v1', data } })
+  expect(decodeGroupMessage(custom('{invalid'), 'local', session)).toBeNull()
+  expect(decodeGroupMessage(custom(JSON.stringify({ ...row, group_id: 'foreign' })), 'local', session)).toBeNull()
+  expect(decodeGroupMessage(custom(JSON.stringify({ ...row, role: 'user' })), 'local', session)).toBeNull()
+})

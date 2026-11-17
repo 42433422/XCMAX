@@ -338,3 +338,9 @@ def verify_jwt(token: str) -> dict[str, Any] | None:
     from app.security.mobile_jwt import verify_mobile_jwt as operation
 
     return cast("dict[str, Any] | None", operation(token))
+
+
+def task_orchestrator() -> Any:
+    from app.application.agent_orchestrator import AgentOrchestrator
+
+    return AgentOrchestrator()

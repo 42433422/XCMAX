@@ -114,7 +114,11 @@ def reconcile_pending_teams(*, event_id=None, limit=20, fetcher=None):
                             output.get("planned_devices"),
                         ) and not output.get("partial")
                         snapshot = _task_result_snapshot({"task": task})
-                        if ok and output.get("executor") == "github_actions" and row.get("role") == "fix":
+                        if (
+                            ok
+                            and output.get("executor") == "github_actions"
+                            and row.get("role") == "fix"
+                        ):
                             from modstore_server.para_github_runner import verified_code_identity
 
                             output.update(verified_code_identity(snapshot))

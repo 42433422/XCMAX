@@ -94,3 +94,38 @@ def test_task_detail_returns_not_found_for_other_tenant() -> None:
     response = client.get("/api/mobile/v1/tasks/task-missing")
     assert response.status_code == 404
     assert response.json()["message"] == "任务不存在或无权查看"
+
+
+def test_task_summary_uses_only_owned_run_mod_binding():
+    from app.application.agent_orchestrator.run_models import AgentRun
+    from app.application.agent_orchestrator.task_models import task_from_run
+
+    run = AgentRun(
+        user_id="39",
+        message="test",
+        metadata={
+            "runtime_context": {
+                "tenant_id": "tenant-a",
+                "_mod_authorization": {"mod_id": "customer-erp"},
+            }
+        },
+    )
+    task = task_from_run(run)
+    client = _client(
+        TaskRoutesPorts(
+            list_tasks=lambda **_: [task],
+            get_task=lambda **_: task,
+            get_run=lambda _: run,
+        )
+    )
+    url = f"/api/mobile/v1/tasks/{task.task_id}"
+    assert client.get(url).json()["data"]["active_mod_id"] == "customer-erp"
+    assert (
+        client.get("/api/mobile/v1/tasks").json()["data"]["items"][0]["active_mod_id"]
+        == "customer-erp"
+    )
+    run.metadata["runtime_context"]["tenant_id"] = "other"
+    assert "active_mod_id" not in client.get(url).json()["data"]
+    run.metadata["runtime_context"]["tenant_id"] = "tenant-a"
+    run.user_id = "other"
+    assert "active_mod_id" not in client.get(url).json()["data"]

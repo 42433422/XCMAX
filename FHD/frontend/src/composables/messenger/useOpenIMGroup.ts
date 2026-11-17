@@ -118,14 +118,29 @@ export function useOpenIMGroup(receive: (rows: AiGroupMessage[]) => void) {
     localGroup = groupId
     groupIDs.set(data.groupID, groupId)
     for (const [remote, local] of Object.entries(data.groups || {})) groupIDs.set(remote, local)
-    const { getSDK, CbEvents } = await loadRuntime()
-    if (captured !== generation) return true
-    if (!sdk) {
-      const base = `${import.meta.env.BASE_URL}openim/`
-      sdk = getSDK({ coreWasmPath: `${base}openIM.wasm`, sqlWasmPath: `${base}sql-wasm.wasm` })
-      sdk.on(CbEvents.OnConversationChanged, event => unread(event.data))
-      sdk.on(CbEvents.OnNewConversation, event => unread(event.data))
+    let module: Awaited<ReturnType<typeof loadRuntime>>
+    try {
+      // Probe the existing CSP before the SDK swallows asynchronous WASM failures.
+      await WebAssembly.compile(Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0))
+      module = await loadRuntime()
+      const { getSDK, CbEvents } = module
+      if (captured !== generation) return true
+      if (!sdk) {
+        const base = `${import.meta.env.BASE_URL}openim/`
+        sdk = getSDK({ coreWasmPath: `${base}openIM.wasm`, sqlWasmPath: `${base}sql-wasm.wasm` })
+        sdk.on(CbEvents.OnConversationChanged, event => unread(event.data))
+        sdk.on(CbEvents.OnNewConversation, event => unread(event.data))
+      }
+    } catch {
+      if (captured !== generation || epoch !== productReadAccountEpoch.value) return true
+      unsubscribe()
+      session = undefined
+      active.value = false
+      connected.value = false
+      error.value = '即时消息连接不可用，已切换为主机消息同步'
+      return false
     }
+    const { CbEvents } = module
     connection = connection.catch(() => undefined).then(async () => {
       if (epoch !== productReadAccountEpoch.value || captured !== generation) return
       if (owner === data.userID && ownerToken === data.token) return
@@ -139,14 +154,16 @@ export function useOpenIMGroup(receive: (rows: AiGroupMessage[]) => void) {
     await connection
     if (captured !== generation || epoch !== productReadAccountEpoch.value) return true
     const onMessage = (event: WSEvent<MessageItem>) => {
+      if (captured !== generation || epoch !== productReadAccountEpoch.value) return
       const row = decodeGroupMessage(event.data, groupId, data)
       if (!row) return
       receive([row])
       if (document.visibilityState === 'visible') void markGroupRead(sdk!, conversationID).catch(() => { error.value = '已读状态同步失败' })
     }
-    const reconnect = () => { connected.value = true; void history().catch(() => { error.value = '历史消息同步失败，请重新连接' }) }
-    const disconnect = () => { connected.value = false }
-    const expired = () => { owner = ''; connected.value = false; error.value = '消息连接已失效，请重新连接' }
+    const current = () => captured === generation && epoch === productReadAccountEpoch.value
+    const reconnect = () => { if (!current()) return; connected.value = true; void history().catch(() => { error.value = '历史消息同步失败，请重新连接' }) }
+    const disconnect = () => { if (current()) connected.value = false }
+    const expired = () => { if (!current()) return; owner = ''; connected.value = false; error.value = '消息连接已失效，请重新连接' }
     sdk.on(CbEvents.OnRecvNewMessage, onMessage)
     sdk.on(CbEvents.OnConnectSuccess, reconnect)
     sdk.on(CbEvents.OnConnecting, disconnect)
@@ -166,12 +183,24 @@ export function useOpenIMGroup(receive: (rows: AiGroupMessage[]) => void) {
       sdk?.off(CbEvents.OnUserTokenInvalid, expired)
       document.removeEventListener('visibilitychange', visibility)
     }
-    conversationID = (await sdk.getOneConversation({ sourceID: data.groupID, sessionType: 3 })).data.conversationID
-    unread((await sdk.getAllConversationList()).data)
+    const conversation = await sdk.getOneConversation({ sourceID: data.groupID, sessionType: 3 })
+    if (!current()) return true
+    conversationID = conversation.data.conversationID
+    const conversations = await sdk.getAllConversationList()
+    if (!current()) return true
+    unread(conversations.data)
     await history()
+    if (!current()) return true
     connected.value = true
     return true
   }
+  watch(productReadAccountEpoch, () => {
+    generation++; unsubscribe()
+    session = undefined
+    localGroup = ''; conversationID = ''; oldest = ''
+    active.value = false; connected.value = false; hasOlder.value = false
+    error.value = '账号已切换，请重新打开会话'
+  }, { flush: 'sync' })
   onUnmounted(() => { generation++; unsubscribe() })
   return { start, history, connected, active, error, hasOlder }
 }

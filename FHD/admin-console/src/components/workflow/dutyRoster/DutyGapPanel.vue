@@ -25,7 +25,11 @@ defineProps<{
             <transition name="dg-slide-top">
               <div v-if="showGapPanel" class="dg-gap-panel">
                 <p v-if="gapFocusHint" class="dg-gap-hint">{{ gapFocusHint }}</p>
-                <details class="dg-gap-help"><summary>缺包、编制外与处理方式</summary></details>
+                <details class="dg-gap-help">
+                  <summary>缺包、编制外与处理方式</summary>
+                  <p>此处核对目录与本端安装包；服务器调度另看运行回执，包已对齐不代表任务已执行。</p>
+                  <p>缺包先核对市场权益和平台，再安装对应员工包；编制外包可按业务需要保留，不自动删除。</p>
+                </details>
                 <div class="dg-gap-summary">
                   <span class="dg-gap-pill dg-gap-pill--deployed">包已对齐 {{ gapSummary.deployed }}</span>
                   <span class="dg-gap-pill dg-gap-pill--missing">包或目录缺口 {{ gapSummary.missing }}</span>

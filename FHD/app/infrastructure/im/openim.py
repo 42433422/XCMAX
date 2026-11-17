@@ -8,6 +8,7 @@ import os
 import sqlite3
 import time
 import uuid
+from collections.abc import Iterator
 from functools import lru_cache
 
 import httpx
@@ -67,6 +68,26 @@ def _client(api: str, secret: str) -> OpenIMClient:
     return OpenIMClient(api, secret)
 
 
+_MAX_SCAN_PAGES = 100
+_SCAN_SECONDS = 30.0
+
+
+def _scan_pages(client: OpenIMClient, path: str, body: dict, key: str) -> Iterator[list[dict]]:
+    # Fail closed: callers must finish scanning before membership changes or publishing.
+    deadline = time.monotonic() + _SCAN_SECONDS
+    for page in range(1, _MAX_SCAN_PAGES + 1):
+        if time.monotonic() >= deadline:
+            break
+        result = client.call(path, {**body, "pagination": {"pageNumber": page, "showNumber": 100}})
+        if time.monotonic() >= deadline:
+            break
+        rows = result.get(key) or []
+        yield rows
+        if len(rows) < 100:
+            return
+    raise OpenIMError("消息服务分页核对超出限制，请稍后重试")
+
+
 class OpenIMGroups:
     def __init__(self, repository):
         tenant = current_tenant_id()
@@ -119,22 +140,10 @@ class OpenIMGroups:
             )
         else:
             current: set[str] = set()
-            page = 1
-            while True:
-                rows = (
-                    self.client.call(
-                        "/group/get_group_member_list",
-                        {
-                            "groupID": gid,
-                            "pagination": {"pageNumber": page, "showNumber": 100},
-                        },
-                    ).get("members")
-                    or []
-                )
+            for rows in _scan_pages(
+                self.client, "/group/get_group_member_list", {"groupID": gid}, "members"
+            ):
                 current.update(m["userID"] for m in rows)
-                if len(rows) < 100:
-                    break
-                page += 1
             desired = {p["userID"] for p in people}
             for path, ids in (
                 ("invite_user_to_group", desired - current),
@@ -162,27 +171,18 @@ class OpenIMGroups:
                 raise ValueError("群不存在")
             gid = self.ensure_group(group)
             existing: set[str] = set()
-            page = 1
-            while True:
-                result = self.client.call(
-                    "/msg/search_msg",
-                    {
-                        "recvID": gid,
-                        "sessionType": 3,
-                        "contentType": 110,
-                        "pagination": {"pageNumber": page, "showNumber": 100},
-                    },
-                )
-                logs = result.get("chatLogs") or []
+            for logs in _scan_pages(
+                self.client,
+                "/msg/search_msg",
+                {"recvID": gid, "sessionType": 3, "contentType": 110},
+                "chatLogs",
+            ):
                 for item in logs:
                     log = item.get("chatLog") or {}
                     try:
                         existing.add(json.loads(json.loads(log["content"])["data"])["id"])
                     except (KeyError, ValueError, TypeError):
                         continue
-                if len(logs) < 100:
-                    break
-                page += 1
             from app.application.group_chat.projections import ChatProjection
 
             with sqlite3.connect(self.repository.root / "openim-publication.sqlite3") as ledger:

@@ -161,6 +161,17 @@ def dispatch_issue_event(event: dict[str, Any]) -> dict[str, Any]:
 
             ready = ensure_runner(db, payload)
             if ready is None:
+                from modstore_server.customer_service_tools import json_loads
+                from modstore_server.models_cs import CustomerServiceAction
+
+                action = db.get(CustomerServiceAction, payload["github_workspace"]["action_id"])
+                if action and action.status == "blocked":
+                    return {
+                        "ok": True,
+                        "skipped": True,
+                        "status": "blocked",
+                        "reason": json_loads(action.result_json, {}).get("reason"),
+                    }
                 return {"ok": True, "skipped": True, "reason": "github_runner_stopped"}
             if not ready:
                 return {"ok": False, "skipped": True, "message": "等待 GitHub 临时执行器就绪"}

@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:wolt_modal_sheet/wolt_modal_sheet.dart';
 import '../../api/mobile_api.dart' show MobileChatAttachment;
 import '../../api/mobile_session_store.dart' show MobileSessionData;
 import '../../policy/pinned_ids.dart';
@@ -31,7 +32,6 @@ import '../contacts/fixed_partner_profile_screen.dart';
 import '../devtools/branch_detail_screen.dart';
 import '../devtools/diff_viewer_screen.dart';
 import '../devtools/timeline_screen.dart';
-import '../tools/ocr_screen.dart';
 import '../voice/voice_input_sheet.dart';
 
 // 按职责拆分为 part 文件：state 状态类分层（helpers/messaging/actions）与各 UI 组件组。
@@ -209,10 +209,8 @@ class _ChatScreenState extends _ChatStateActions {
                 activeGitBranch,
               ),
               showTools: _showToolPanel,
-              onToggleTools: () =>
-                  setState(() => _showToolPanel = !_showToolPanel),
+              onToggleTools: _openTools,
               onVoice: _startVoiceInput,
-              toolActions: _toolActions(),
             ),
           ],
         ),

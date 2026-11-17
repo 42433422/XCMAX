@@ -231,7 +231,10 @@ def test_customer_ticket_proxy_preserves_upstream_failure(
             f"/api/xcmax/admin/customer-service/tickets{suffix}",
             headers={"X-Session-ID": "current-session"},
         )
-    assert response.status_code == status
+    # A rejected upstream token is not a rejected local admin session.
+    assert response.status_code == (502 if status == 401 else status)
+    if status == 401:
+        assert response.json()["code"] == "upstream_auth_unavailable"
     assert "items" not in response.json()
     assert proxy.await_args.kwargs["authorization"] == "Bearer test-bound-market-identity"
 

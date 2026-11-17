@@ -118,9 +118,10 @@ describe('AdminDeployUpdateModal - coverage ramp', () => {
       wrapper.unmount()
     })
 
-    it('渲染介绍文本', () => {
+    it('明确展示后端和前端的中转站目标', () => {
       const wrapper = mountModal(true)
-      expect(wrapper.text()).toContain('管理端只负责')
+      expect(wrapper.text()).toContain('后端（打包 + 上传 update 站）')
+      expect(wrapper.text()).toContain('前端（构建 vue-dist + 发布到 update 站）')
       wrapper.unmount()
     })
 
@@ -356,14 +357,17 @@ describe('AdminDeployUpdateModal - coverage ramp', () => {
       wrapper.unmount()
     })
 
-    it('渲染 pipeline 流程图', async () => {
+    it('在紧凑对照表区分本地、中转站与只读企业运行态', async () => {
       vi.mocked(xcmaxAdminApi.checkDeployUpdates).mockResolvedValue({
         data: makeCheckData(),
       } as never)
       const wrapper = mountModal(false)
       await wrapper.setProps({ modelValue: true })
       await flushPromises()
-      expect(wrapper.find('.deploy-update-pipeline').exists()).toBe(true)
+      expect(wrapper.findAll('.deploy-update-table tbody tr')).toHaveLength(3)
+      expect(wrapper.find('.deploy-update-table').text()).toContain('① 管理端本地')
+      expect(wrapper.find('.deploy-update-table').text()).toContain('② update 中转站')
+      expect(wrapper.find('.deploy-update-table').text()).toContain('③ 企业运行态（只读）')
       wrapper.unmount()
     })
   })

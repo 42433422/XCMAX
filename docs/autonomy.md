@@ -159,8 +159,9 @@ Vue Flow 图和产物保留在「原执行记录」，不从历史页新增或�
 共享产品工单进入 GitHub 待办，私有 Mod 保留原交付流程；已有 Mac 小组仍核对原回执。
 执行复用生产已有的员工编排、事务 outbox、事故领取与 Para 回执；核查、修复、验证岗位
 保留原员工身份。代码修复交给 Para，Codex 是 Para 内部执行工具，不接 Codex Action。
-腾讯云保留员工调度、状态与监控；GitHub 提供临时机器，运行原 Para 代理及其 Codex，
-代码、测试、审查和候选构建在 GitHub 完成。正式发布沿用主线 CI 与管理端审批。
+当前 GitHub 临时执行器明确停用：返回 `blocked_isolated_publisher_required`，在注入模型、管理端及发布凭据或启动模型前终止。
+环境变量白名单不是操作系统身份隔离；须先实现并验证独立可信发布器，不能删除 guard 或设置开关强行启用。
+服务端新派工返回 503，已有排队回执在再次消费时转为可查询的 blocked，不伪装为运行中或执行成功；正式发布仍沿用主线 CI 与管理端审批。
 本地自研 LLM 实现引擎及进化账本本地回退已移除，原 Para 工作流与授权检查保留。
 服务端使用 `MODSTORE_GITHUB_TOKEN`（Issues/Actions 写、Contents/PR 读）、
 `MODSTORE_GITHUB_REPOSITORY` 和 `MODSTORE_PARA_GITHUB_{API_BASE,AUTH_TOKEN,DEVICE_ID}`。

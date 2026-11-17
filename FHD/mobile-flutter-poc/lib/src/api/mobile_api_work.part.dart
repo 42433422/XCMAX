@@ -141,6 +141,170 @@ abstract class _ApiWorkBase extends _ApiPairingBase {
     return getJson(XcagiMobileEndpoints.inventoryItems);
   }
 
+  /// Native workbench requests retain the page's account and connection.
+  Future<Map<String, Object?>> workspaceRequest(
+    String path, {
+    String method = 'GET',
+    Map<String, String> query = const {},
+    Map<String, Object?>? body,
+    required int expectedGeneration,
+    required String expectedBase,
+    String activeModId = '',
+  }) {
+    if (activeModId.isNotEmpty &&
+        !RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(activeModId)) {
+      throw ArgumentError('无效应用');
+    }
+    final uri = Uri.parse(path);
+    if (uri.hasScheme ||
+        uri.hasAuthority ||
+        !path.startsWith('api/') ||
+        path.split('/').any((part) => part == '..' || part == '.') ||
+        uri.pathSegments.any((part) => part == '..' || part == '.')) {
+      throw ArgumentError('工作台接口必须属于当前服务');
+    }
+    if (authGeneration != expectedGeneration) {
+      throw StateError('账号已切换，请重新打开');
+    }
+    return _sendJsonRequest(
+        method: method,
+        path: path,
+        query: query,
+        body: body,
+        baseUrl: expectedBase,
+        expectedConnectionBase: expectedBase,
+        activeModId: activeModId);
+  }
+
+  Future<List<int>> workspaceFileRequest(
+    String path, {
+    Map<String, String> query = const {},
+    List<int>? upload,
+    String name = '',
+    String field = 'file',
+    required int expectedGeneration,
+    required String expectedBase,
+    String activeModId = '',
+  }) async {
+    if (activeModId.isNotEmpty &&
+        !RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(activeModId)) {
+      throw ArgumentError('无效应用');
+    }
+    final uri = Uri.parse(path);
+    if (uri.hasScheme ||
+        uri.hasAuthority ||
+        !path.startsWith('api/') ||
+        path.split('/').any((part) => part == '..' || part == '.') ||
+        uri.pathSegments.any((part) => part == '..' || part == '.')) {
+      throw ArgumentError('文件接口必须属于当前服务');
+    }
+    if (upload != null &&
+        (upload.isEmpty || upload.length > 16 * 1024 * 1024)) {
+      throw StateError('文件须为 1 字节至 16MB');
+    }
+    if (upload != null && !RegExp(r'^[a-z_]+$').hasMatch(field)) {
+      throw ArgumentError('无效文件字段');
+    }
+    Future<void> check() async {
+      final currentBase = await resolveSessionBaseUrl();
+      if (expectedGeneration != authGeneration || currentBase != expectedBase) {
+        throw StateError('账号或连接已切换，请重新打开页面');
+      }
+    }
+
+    Future<List<int>> perform() async {
+      await check();
+      final request = await _open(upload == null ? 'GET' : 'POST', path,
+          baseUrl: expectedBase, query: query);
+      request.followRedirects = false;
+      if (activeModId.isNotEmpty) {
+        request.headers.set('X-XCAGI-Active-Mod-Id', activeModId);
+      }
+      try {
+        await check();
+      } catch (_) {
+        unawaited(request.done.then<void>((_) {}, onError: (Object _) {}));
+        request.abort();
+        rethrow;
+      }
+      if (upload != null) {
+        final boundary = 'xcagi-file-${DateTime.now().microsecondsSinceEpoch}';
+        final safeName = name.replaceAll(RegExp(r'[\r\n"\\]'), '_');
+        final bytes = <int>[
+          ...utf8.encode(
+              '--$boundary\r\nContent-Disposition: form-data; name="$field"; filename="$safeName"\r\nContent-Type: application/octet-stream\r\n\r\n'),
+          ...upload,
+          ...utf8.encode('\r\n--$boundary--\r\n'),
+        ];
+        request.headers.set(HttpHeaders.contentTypeHeader,
+            'multipart/form-data; boundary=$boundary');
+        request.contentLength = bytes.length;
+        request.add(bytes);
+      }
+      final response = await request.close().timeout(_config.timeout);
+      final bytes = <int>[];
+      await for (final chunk in response.timeout(_config.timeout)) {
+        if (bytes.length + chunk.length > 32 * 1024 * 1024) {
+          request.abort();
+          throw StateError('文件超过 32MB，请缩小导出范围');
+        }
+        bytes.addAll(chunk);
+      }
+      await check();
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        Map<String, Object?> body = {};
+        try {
+          body = _asObjectMap(jsonDecode(utf8.decode(bytes)));
+        } catch (_) {}
+        throw MobileApiException(
+            statusCode: response.statusCode,
+            message:
+                body['message']?.toString() ?? '文件操作失败（${response.statusCode}）',
+            body: body);
+      }
+      final contentType = response.headers.contentType?.mimeType ?? '';
+      if (upload == null &&
+          (contentType.contains('json') || contentType.contains('html'))) {
+        throw StateError('服务未返回可下载的文件');
+      }
+      return bytes;
+    }
+
+    try {
+      return await perform();
+    } on MobileApiException catch (error) {
+      if (!_isRetryableAuthError(error) ||
+          expectedGeneration != authGeneration) {
+        rethrow;
+      }
+      if (!await _refreshFhdAccessToken()) rethrow;
+      return perform();
+    }
+  }
+
+  Future<Map<String, Object?>> workspacePreferences() =>
+      getJson('api/mobile/v1/workspace/prefs');
+
+  Future<Map<String, Object?>> setWorkspaceEmployeeEnabled(
+    String employeeId,
+    bool enabled, {
+    required int expectedGeneration,
+    required String expectedBase,
+  }) {
+    if (authGeneration != expectedGeneration) {
+      throw StateError('账号已切换，请重新打开');
+    }
+    return _sendJsonRequest(
+      method: 'PATCH',
+      path: 'api/mobile/v1/workspace/prefs',
+      baseUrl: expectedBase,
+      expectedConnectionBase: expectedBase,
+      body: {
+        'workflow_ai_employees': {employeeId: enabled}
+      },
+    );
+  }
+
   Future<Map<String, Object?>> modsList() {
     return getJson(XcagiMobileEndpoints.legacyModsList);
   }
@@ -199,7 +363,8 @@ abstract class _ApiWorkBase extends _ApiPairingBase {
     );
   }
 
-  Future<MobileEnvelope<MobileDesktopDeviceListData>> mobileDesktopDevices() async {
+  Future<MobileEnvelope<MobileDesktopDeviceListData>>
+      mobileDesktopDevices() async {
     final json = await getJson(XcagiMobileEndpoints.desktopDevices);
     return MobileEnvelope.fromJson(
       json,
