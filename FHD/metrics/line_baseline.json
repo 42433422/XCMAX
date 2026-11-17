@@ -1,5 +1,5 @@
 {
-  "lines": 2454399,
+  "lines": 2454429,
   "updated": "2026-11-17",
-  "note": "PR3263 review fixes: evidence-only model certification and committed terminal transition metrics with rollback/dedup regression tests; no gate weakened"
+  "note": "按用户修复全部PR授权：将holdout证据校验从workflow内嵌exec提取为显式可测试脚本，增加缺失报告及样本数不匹配回归，并修复metrics动态加载导入；净增30维护行，未删除无关代码。"
 }
