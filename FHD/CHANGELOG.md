@@ -1,4 +1,5 @@
 ## Unreleased
+- 知识库新增 Notion 页面导入：入库接口支持 `notion_page_id`，按 `XCAGI_NOTION_TOKEN` 读取页面标题与块树（递归子块、分页，最多 500 块 / 3 层）并扁平化为纯文本；5MB/15s 限制、页面 ID 校验、与其他来源互斥，失败返回 400。
 - 知识库新增飞书云文档导入：入库接口支持 `feishu_document_id`，用 `XCAGI_FEISHU_APP_ID` / `XCAGI_FEISHU_APP_SECRET` 换取并缓存租户 token，读取 docx `raw_content` 纯文本；5MB/15s 限制、文档 ID 校验、与其他来源互斥，鉴权或读取失败返回 400。
 - 知识库新增 Confluence 页面导入：入库接口支持 `confluence_page_id`，按管理员配置的站点（`XCAGI_CONFLUENCE_BASE_URL`）与凭据（`XCAGI_CONFLUENCE_API_TOKEN`，可选 `XCAGI_CONFLUENCE_EMAIL` 走 Basic Auth）读取页面 storage 内容，复用 trafilatura 提取正文（`parser` 仍为文本入库链路）；限制 5MB/15s，页面 ID 与来源互斥校验，失败返回 400。
 - 知识库支持本地保存的网页：上传或 S3 导入 `.html` / `.htm` 时复用 trafilatura 提取正文与标题（`parser=trafilatura_html`），与 URL 导入共用同一实现与错误回退。

@@ -124,6 +124,20 @@ class DocumentRoutes:
                     "feishu_document_id": doc.document_id,
                     "source_url": doc.url,
                 }
+            elif req.notion_page_id.strip():
+                from app.application.document_parsing.notion import fetch_page as fetch_notion_page
+
+                try:
+                    notion = fetch_notion_page(req.notion_page_id)
+                except ValueError as exc:
+                    return JSONResponse(status_code=400, content={"detail": str(exc)})
+                text = notion.text
+                source = source or notion.title or f"notion:{notion.page_id}"
+                document_id = document_id or notion.url
+                extra_metadata = {
+                    "notion_page_id": notion.page_id,
+                    "source_url": notion.url,
+                }
             metadata = dict(req.metadata)
             metadata.update(extra_metadata)
             if req.acl:
