@@ -317,6 +317,7 @@ class DatasetRagApplicationService:
         version_label: str = "",
         idempotency_key: str = "",
         expected_source_version: int | None = None,
+        allow_duplicate: bool = False,
         access_context: DatasetAccessContext | dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         return self._documents.ingest_document(
@@ -334,6 +335,7 @@ class DatasetRagApplicationService:
             version_label=version_label,
             idempotency_key=idempotency_key,
             expected_source_version=expected_source_version,
+            allow_duplicate=allow_duplicate,
             access_context=access_context,
         )
 

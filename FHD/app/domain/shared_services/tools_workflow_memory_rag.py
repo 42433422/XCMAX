@@ -122,6 +122,7 @@ def _registered_router_dataset_rag(
             tenant_id=str(params.get("tenant_id") or ""),
             version=params.get("version") or "",
             version_label=str(params.get("version_label") or ""),
+            allow_duplicate=as_bool(params.get("allow_duplicate"), default=False),
             access_context=access_context(DATASET_WRITE_PERMISSION),
         )
         return finalize(result, dataset_id=dataset_id)

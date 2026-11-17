@@ -173,6 +173,10 @@ class DatasetDocumentIngestRequest(BaseModel):
     acl: dict[str, Any] = Field(
         default_factory=dict, description="document-level allow_actors / deny_actors"
     )
+    allow_duplicate: bool = Field(
+        False,
+        description="store content identical to another source instead of reusing the existing document",
+    )
 
     @field_validator("tags")
     @classmethod

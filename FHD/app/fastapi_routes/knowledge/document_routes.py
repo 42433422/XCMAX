@@ -194,6 +194,7 @@ class DocumentRoutes:
                     "tenant_id": req.tenant_id,
                     "version": req.version,
                     "version_label": req.version_label,
+                    "allow_duplicate": req.allow_duplicate,
                 },
             )
             if staged_path is not None and not _accepted(response):

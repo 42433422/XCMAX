@@ -75,9 +75,11 @@ class DocumentLifecycle:
         version_label: str = "",
         idempotency_key: str = "",
         expected_source_version: int | None = None,
+        allow_duplicate: bool = False,
         access_context: DatasetAccessContext | dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         dataset_key = _clean_key(dataset_id, default="default")
+        requested_document_id = document_id.strip()
         source_label = source.strip() or file_path.strip() or "inline"
         base_metadata = dict(metadata or {})
         try:
@@ -245,6 +247,33 @@ class DocumentLifecycle:
                                 "chunk_count": previous.chunk_count,
                             }
                         return {"success": False, "error_code": "dataset_document_conflict"}
+                # 内容级去重（护栏）：同一租户下不同来源若是完全相同的正文，
+                # 成熟知识库会复用已有文档而不是再存一份，避免重复片段挤占召回。
+                if (
+                    not allow_duplicate
+                    and not requested_document_id
+                    and (version is None or str(version).strip() == "")
+                ):
+                    existing = next(
+                        (
+                            doc
+                            for doc in state.documents.values()
+                            if doc.tenant_id == tenant_key
+                            and doc.source != source_label
+                            and str((doc.metadata or {}).get("document_content_hash") or "")
+                            == document_content_hash
+                        ),
+                        None,
+                    )
+                    if existing is not None:
+                        return {
+                            "success": True,
+                            "dataset_id": dataset_key,
+                            "document": existing.to_dict(),
+                            "chunk_count": existing.chunk_count,
+                            "duplicate": True,
+                            "duplicate_of": existing.document_id,
+                        }
                 latest_version = (
                     _resolve_document_version(
                         state, source=source_label, tenant_id=tenant_key, requested=None
