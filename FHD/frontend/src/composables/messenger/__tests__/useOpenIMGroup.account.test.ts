@@ -3,10 +3,10 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { defineComponent } from 'vue'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { apiFetch } from '@/utils/apiBase'
-import { useOpenIMGroup } from '../useOpenIMGroup'
+import { useOpenIMGroup, openimGroupUnread } from '../useOpenIMGroup'
 const compileWasm = vi.spyOn(WebAssembly, 'compile').mockResolvedValue({} as WebAssembly.Module)
 afterAll(() => compileWasm.mockRestore())
-const fake = vi.hoisted(() => ({ callbacks: new Map<string, (event: unknown) => void>(), logout: vi.fn().mockResolvedValue(undefined), initFailure: false, conversation: vi.fn(), conversations: vi.fn().mockResolvedValue({ data: [] }) }))
+const fake = vi.hoisted(() => ({ callbacks: new Map<string, (event: unknown) => void>(), logout: vi.fn().mockResolvedValue(undefined), initFailure: false, history: vi.fn().mockResolvedValue({ data: { messageList: [], isEnd: true } }), read: vi.fn().mockResolvedValue(undefined), conversation: vi.fn(), conversations: vi.fn().mockResolvedValue({ data: [] }) }))
 vi.mock('@/utils/apiBase', () => ({ apiFetch: vi.fn().mockResolvedValue({ ok: true, json: async () => ({
   enabled: true, userID: 'owner', token: 'synthetic', platformID: 5, apiAddr: '', wsAddr: '', groupID: 'remote', senders: { worker: 'employee' },
 }) }) }))
@@ -18,8 +18,8 @@ vi.mock('@openim/wasm-client-sdk', () => ({
     login: vi.fn().mockResolvedValue(undefined), logout: fake.logout,
     getOneConversation: fake.conversation,
     getAllConversationList: fake.conversations,
-    getAdvancedHistoryMessageList: vi.fn().mockResolvedValue({ data: { messageList: [], isEnd: true } }),
-    markConversationMessageAsRead: vi.fn().mockResolvedValue(undefined),
+    getAdvancedHistoryMessageList: fake.history,
+    markConversationMessageAsRead: fake.read,
   }) },
 }))
 it('falls back when the existing CSP forbids WASM compilation', async () => {
@@ -103,4 +103,50 @@ it('does not turn a forbidden transport response into host fallback', async () =
   const wrapper = mount(defineComponent({ setup() { transport = useOpenIMGroup(vi.fn()); return () => null } }))
   try { await expect(transport.start('forbidden')).rejects.toThrow('消息服务连接失败') }
   finally { wrapper.unmount() }
+})
+
+it('syncs history, unread receipts and connection recovery without hiding errors', async () => {
+  const row = { id: 'receipt', group_id: 'local', sender_id: 'employee', role: 'ai', body: 'result' }
+  const message = { clientMsgID: 'oldest', groupID: 'remote', sendID: 'worker', customElem: { extension: 'xcagi-group-v1', data: JSON.stringify(row) } }
+  fake.history.mockResolvedValue({ data: { messageList: [message], isEnd: false } })
+  fake.conversation.mockResolvedValue({ data: { conversationID: 'conversation' } })
+  fake.conversations.mockResolvedValue({ data: [{ groupID: 'remote', unreadCount: 3 }] })
+  const receive = vi.fn()
+  let transport!: ReturnType<typeof useOpenIMGroup>
+  const wrapper = mount(defineComponent({ setup() { transport = useOpenIMGroup(receive); return () => null } }))
+  try {
+    await transport.history()
+    expect(await transport.start('local')).toBe(true)
+    expect(receive).toHaveBeenCalledWith([row])
+    expect(transport.hasOlder.value).toBe(true)
+    expect(openimGroupUnread.local).toBe(3)
+    await transport.history(true)
+    expect(fake.history).toHaveBeenLastCalledWith(expect.objectContaining({ startClientMsgID: 'oldest' }))
+    fake.callbacks.get('OnConversationChanged')!({ data: [{ groupID: 'remote', unreadCount: 1 }] })
+    expect(openimGroupUnread.local).toBe(1)
+    fake.read.mockRejectedValueOnce(new Error('offline'))
+    fake.callbacks.get('OnRecvNewMessage')!({ data: message })
+    await flushPromises()
+    expect(transport.error.value).toContain('已读状态同步失败')
+    fake.callbacks.get('OnConnecting')!(undefined)
+    expect(transport.connected.value).toBe(false)
+    fake.callbacks.get('OnConnectSuccess')!(undefined)
+    await flushPromises()
+    expect(transport.connected.value).toBe(true)
+    fake.history.mockRejectedValueOnce(new Error('offline'))
+    document.dispatchEvent(new Event('visibilitychange'))
+    await flushPromises()
+    expect(transport.error.value).toContain('历史消息同步失败')
+    fake.history.mockResolvedValueOnce({ data: { errCode: 500 } })
+    await expect(transport.history()).rejects.toThrow('历史消息加载失败')
+    fake.read.mockRejectedValueOnce(new Error('offline'))
+    await transport.history()
+    expect(transport.error.value).toContain('已读状态同步失败，请重新连接')
+    fake.callbacks.get('OnUserTokenExpired')!(undefined)
+    expect(transport.connected.value).toBe(false)
+    expect(transport.error.value).toContain('消息连接已失效')
+    productReadAccountEpoch.value++
+    await flushPromises()
+    expect(openimGroupUnread.local).toBeUndefined()
+  } finally { wrapper.unmount() }
 })

@@ -75,7 +75,7 @@ def execute(action: Action, receipt_dir: str) -> ActionResult:
             raise RuntimeError(f"Rundeck HTTP {response.status_code}")
         return response.json()
 
-    def result(ok, status, execution=None):
+    def result(ok: bool, status: str, execution: int | None = None) -> ActionResult:
         return ActionResult(
             action=action,
             ok=ok,
