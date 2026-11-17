@@ -1619,3 +1619,59 @@ def test_waiting_refund_still_accepts_its_order_number(client, monkeypatch):
         assert second["ticket"]["id"] == first["ticket"]["id"]
         assert second["ticket"]["intent"] == "refund"
         assert second["decision"]["decision"] == "approved"
+
+
+def test_admin_account_and_taxonomy_filters_match_displayed_identity(client):
+    admin, customer = (
+        _make_user("taxonomy_admin", admin=True),
+        _make_user("taxonomy_customer"),
+    )
+    marker = f"TAXONOMY-{uuid.uuid4().hex}"
+    with get_session_factory()() as db:
+        incident = _make_ticket(
+            db,
+            admin,
+            ticket_no=marker + "-incident",
+            summary=marker,
+            intent="account_support",
+            submitter_type="admin",
+            evidence_json='{"source":"github_self_heal"}',
+        )
+        account = _make_ticket(
+            db,
+            customer,
+            ticket_no=marker + "-account",
+            summary=marker,
+            intent="account_support",
+            submitter_type="customer",
+            evidence_json="{}",
+        )
+        # Legacy SQL NULL evidence must remain visible under ordinary taxonomy.
+        from sqlalchemy import update
+        from modstore_server.models_cs import CustomerServiceTicket
+
+        db.execute(
+            update(CustomerServiceTicket)
+            .where(CustomerServiceTicket.id == account.id)
+            .values(evidence_json=None)
+        )
+        incident_id, account_id = incident.id, account.id
+        db.commit()
+    with _as_user(admin):
+        for filters, expected in [
+            ({"ticket_type": "incident"}, [incident_id]),
+            ({"ticket_type": "account"}, [account_id]),
+            ({"ticket_source": "admin_created"}, []),
+            ({"account_id": customer.id}, [account_id]),
+        ]:
+            response = client.get(
+                "/api/customer-service/tickets", params={"search": marker, **filters}
+            )
+            assert response.status_code == 200, response.text
+            assert [row["id"] for row in response.json()["items"]] == expected
+    with _as_user(customer):
+        response = client.get(
+            "/api/customer-service/tickets",
+            params={"search": marker, "account_id": admin.id},
+        )
+        assert [row["id"] for row in response.json()["items"]] == [account_id]

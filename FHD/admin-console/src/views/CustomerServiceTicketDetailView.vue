@@ -70,6 +70,7 @@
               <span class="cs-badge" :class="receiptOf(artifact) ? 'is-success' : 'is-neutral'">{{ receiptOf(artifact) ? `已安装 · ${receiptOf(artifact)?.host || '宿主'}` : '待安装回执' }}</span>
             </li>
           </ul>
+          <DeliveryCommercePanel :key="ticketId" :ticket="commerceTicket" @updated="updateDeliveryCommerce" />
           <p v-if="latestRun?.error" class="cs-error-text">{{ latestRun.error }}</p>
           <form class="cs-eta-editor" @submit.prevent>
             <input v-model.trim="reworkNote" type="text" maxlength="4000" placeholder="返工原因（至少 4 个字）" />
@@ -228,9 +229,10 @@ import AdminSectionNav from '../components/admin/AdminSectionNav.vue'
 const section = ref('progress')
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { xcmaxAdminApi } from '@/api/xcmaxAdmin'
+import { xcmaxAdminApi, type CustomDeliveryTicket } from '@/api/xcmaxAdmin'
 import api from '@/api/core'
 import { appConfirm, appPrompt } from '@/utils/appDialog'
+import DeliveryCommercePanel from '../components/admin/DeliveryCommercePanel.vue'
 import CustomerServiceSharedRepair from './CustomerServiceSharedRepair.vue'
 import TicketGithubPanel from '../components/workflow/TicketGithubPanel.vue'
 import {
@@ -264,6 +266,10 @@ const delivery = computed<Row | null>(() => {
   const value = detail.value?.custom_delivery
   return value && typeof value === 'object' ? value as Row : null
 })
+const commerceTicket = computed<CustomDeliveryTicket>(() => ({ ...ticket.value, id: ticketId.value, custom_delivery: delivery.value || undefined }))
+function updateDeliveryCommerce(updated: CustomDeliveryTicket) {
+  if (updated.id === ticketId.value && detail.value) detail.value.custom_delivery = updated.custom_delivery
+}
 const sections = computed(() => [
   { value: 'progress', label: '问题与进度' },
   ...(delivery.value ? [{ value: 'delivery', label: '交付进度' }] : []),
@@ -337,26 +343,29 @@ function deliveryStepClass(key: string) {
 
 async function acceptDelivery() {
   if (!canAcceptDelivery.value || saving.value) return
+  const id = ticketId.value, currentGeneration = generation
   if (!await appConfirm(`确认工单 ${ticket.value.ticket_no || ticketId.value} 通过内部质量检查？`, { title: '内部质量确认', confirmText: '确认质量通过' })) return
+  if (id !== ticketId.value || currentGeneration !== generation || saving.value) return
   saving.value = true; deliveryError.value = ''
   try {
-    await xcmaxAdminApi.decideCustomDelivery(ticketId.value, 'accept', '管理员仅完成内部质量确认，等待客户本人验收')
-    await load()
-  } catch (cause) { deliveryError.value = apiError(cause) }
+    await xcmaxAdminApi.decideCustomDelivery(id, 'accept', '管理员仅完成内部质量确认，等待客户本人验收')
+    if (id === ticketId.value && currentGeneration === generation) await load()
+  } catch (cause) { if (id === ticketId.value && currentGeneration === generation) deliveryError.value = apiError(cause) }
   finally { saving.value = false }
 }
 
 async function requestDeliveryRework() {
   if (saving.value) return
+  const id = ticketId.value, currentGeneration = generation
   const note = reworkNote.value.trim()
   if (note.length < 4) { deliveryError.value = '返工原因至少 4 个字'; return }
   if (!await appConfirm(`将工单 ${ticket.value.ticket_no || ticketId.value} 发回重新执行？`, { title: '发起返工', confirmText: '确认返工' })) return
+  if (id !== ticketId.value || currentGeneration !== generation || saving.value) return
   saving.value = true; deliveryError.value = ''
   try {
-    await xcmaxAdminApi.decideCustomDelivery(ticketId.value, 'rework', note)
-    reworkNote.value = ''
-    await load()
-  } catch (cause) { deliveryError.value = apiError(cause) }
+    await xcmaxAdminApi.decideCustomDelivery(id, 'rework', note)
+    if (id === ticketId.value && currentGeneration === generation) { reworkNote.value = ''; await load() }
+  } catch (cause) { if (id === ticketId.value && currentGeneration === generation) deliveryError.value = apiError(cause) }
   finally { saving.value = false }
 }
 

@@ -14,7 +14,7 @@ from typing import Any, Dict, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import get_current_user, get_db, require_admin
@@ -75,8 +75,8 @@ _require_admin = require_admin
 def _evidence_markers(key: str, value: str) -> list:
     """evidence_json 是文本列；按序列化常见写法匹配，供管理端派生分类筛选。"""
     return [
-        CustomerServiceTicket.evidence_json.like(f'%"{key}": "{value}"%'),
-        CustomerServiceTicket.evidence_json.like(f'%"{key}":"{value}"%'),
+        func.coalesce(CustomerServiceTicket.evidence_json, "{}").like(f'%"{key}": "{value}"%'),
+        func.coalesce(CustomerServiceTicket.evidence_json, "{}").like(f'%"{key}":"{value}"%'),
     ]
 
 
@@ -238,6 +238,7 @@ async def list_tickets(
     ticket_type: str = Query("", max_length=24),
     ticket_domain: str = Query("", max_length=24),
     ticket_source: str = Query("", max_length=24),
+    account_id: int = Query(0, ge=0),
     search: str = Query("", max_length=200),
     source_ref: str = Query("", max_length=128),
     offset: int = Query(0, ge=0),
@@ -260,6 +261,8 @@ async def list_tickets(
             CustomerServiceTicket.ticket_no
             == request_identity(user.id, "customer_feedback", source_ref),
         )
+    if user.is_admin and account_id:
+        q = q.filter(CustomerServiceTicket.user_id == account_id)
     if status:
         q = q.filter(CustomerServiceTicket.status == status)
     # 分类筛选只对管理端启用；客户仍只能读取自己的工单。
@@ -276,7 +279,10 @@ async def list_tickets(
         if kind == "incident":
             q = q.filter(_github_self_heal_condition())
         elif kind in TICKET_TYPE_INTENTS:
-            q = q.filter(CustomerServiceTicket.intent.in_(TICKET_TYPE_INTENTS[kind]))
+            q = q.filter(
+                ~_github_self_heal_condition(),
+                CustomerServiceTicket.intent.in_(TICKET_TYPE_INTENTS[kind]),
+            )
         else:
             raise HTTPException(status_code=422, detail="工单类型筛选条件无效")
     if user.is_admin and ticket_domain.strip():
@@ -296,10 +302,14 @@ async def list_tickets(
         if kind == "github_self_heal":
             q = q.filter(_github_self_heal_condition())
         else:
-            q = q.filter(CustomerServiceTicket.submitter_type == {
-                "admin_created": "admin",
-                "customer_chat": "customer",
-            }[kind])
+            q = q.filter(
+                ~_github_self_heal_condition(),
+                CustomerServiceTicket.submitter_type
+                == {
+                    "admin_created": "admin",
+                    "customer_chat": "customer",
+                }[kind],
+            )
     term = search.strip()
     if term:
         matches = [

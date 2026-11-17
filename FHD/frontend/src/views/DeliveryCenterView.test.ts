@@ -123,7 +123,7 @@ describe('DeliveryCenterView', () => {
     await flushPromises()
     const button = wrapper.findAll('button').find((row) => row.text().includes('查看定制工单'))!
     await button.trigger('click')
-    expect(push).toHaveBeenCalledWith({ name: 'customer-service-tickets', query: { q: '国圣化工' } })
+    expect(push).toHaveBeenCalledWith({ name: 'customer-service-tickets', query: { account_id: '72', type: 'delivery' } })
   })
 
   it('shows unknown counts on failure and recovers with retry', async () => {
