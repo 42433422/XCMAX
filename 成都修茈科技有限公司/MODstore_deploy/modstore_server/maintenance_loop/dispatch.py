@@ -10,6 +10,7 @@ from modstore_server import (
     employee_executor,
     self_maintenance_quality_gate,
     self_maintenance_remediation_prompts,
+    self_maintenance_retry,
 )
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
@@ -137,7 +138,11 @@ def _run_step_with_inner_retries(
         is_final = attempt >= inner_max
         should_retry = False
         if not ok and (not is_final):
-            if retry_kind == "code_fix" and (not results._is_accepted_para_wait_timeout(result)):
+            if (
+                retry_kind == "code_fix"
+                and not results._is_accepted_para_wait_timeout(result)
+                and not self_maintenance_retry.is_execution_environment_failure(result)
+            ):
                 should_retry = True
         elif ok and retry_kind == "marker" and (not is_final):
             protocol_ok, protocol_reason = review._structured_protocol_ok(step_name, report_excerpt)

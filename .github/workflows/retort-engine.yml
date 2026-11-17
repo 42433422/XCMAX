@@ -7,13 +7,32 @@ on:
 jobs:
   retort_engine:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: component-test-only
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      RETORT_TEST_POSTGRES_DSN: postgresql://postgres:component-test-only@127.0.0.1:5432/postgres
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
-      - run: python -m pip install -e 'packages/retort_engine[web]' pytest ruff mypy
+      - run: >-
+          python -m pip install -e 'packages/retort_engine[web,evolution]'
+          ./FHD/packages/xcagi_langgraph_core ./FHD/packages/xcagi_langgraph_checkpoint
+          ./FHD/packages/xcagi_langgraph_checkpoint_backends/checkpoint-sqlite
+          ./FHD/packages/xcagi_langgraph_checkpoint_backends/checkpoint-postgres
+          ./FHD/packages/xcagi_langgraph_prebuilt ./FHD/packages/xcagi_langgraph_sdk
+          pytest ruff mypy types-jsonschema
       - run: python -m ruff check --target-version py310 packages/retort_engine
       - run: python -m ruff format --check --target-version py310 packages/retort_engine
       - run: python -m mypy packages/retort_engine/retort_engine --no-error-summary
+      - name: Bind the isolated container test image
+        run: |
+          docker pull postgres:16-alpine
+          echo "RETORT_TEST_CONTAINER_IMAGE=$(docker image inspect postgres:16-alpine --format '{{index .RepoDigests 0}}')" >> "$GITHUB_ENV"
       - run: PYTHONPATH=packages/retort_engine python -m pytest packages/retort_engine/tests -q -W error

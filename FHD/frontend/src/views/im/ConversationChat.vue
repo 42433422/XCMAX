@@ -1,11 +1,9 @@
 <template>
   <main class="im-chat">
-    <header class="im-chat-head">
-      <span class="im-avatar im-avatar--sm" aria-hidden="true">
-        <img v-if="activeAvatarSrc" class="im-avatar-img" :src="activeAvatarSrc" alt="" decoding="async" draggable="false" />
-        <template v-else>{{ avatarText(activeTitle) }}</template>
-      </span>
-      <span class="im-chat-title">{{ activeTitle }}</span>
+    <MatureChat :room-id="activeTitle" :title="activeTitle" :avatar="activeAvatarSrc"
+      :rows="rows" :draft="draft" :disabled="busy" busy-label="正在发送…" :has-more="hasMoreHistory"
+      @update:draft="emit('update:draft', $event)" @send="send" @load-older="emit('load-older')">
+      <template #actions>
       <slot name="ticket-results" />
       <div v-if="csAutomation" class="im-cs-controls">
         <span :class="['im-cs-status', `is-${csAutomation.cs_status || 'ai_active'}`]">
@@ -26,45 +24,16 @@
       >
         {{ csStatusLabel(csCustomerState.cs_status) }}
       </span>
-    </header>
-    <button v-if="hasMoreHistory" type="button" class="im-load-more" :disabled="busy" @click="emit('load-older')">加载更早消息</button>
-    <div :ref="scrollEl" class="im-messages">
-      <template v-for="m in messages" :key="m.id">
-        <div :class="['im-bubble-row', isMyMessage(m) ? 'mine' : 'theirs']">
-          <div class="im-bubble">
-            <span v-if="isMyMessage(m) && replyOriginLabel(m.origin)" class="im-reply-origin">
-              {{ replyOriginLabel(m.origin) }}
-            </span>
-            <span v-if="!isMyMessage(m)" class="im-sender">
-              {{ m.sender_display_name || '用户' + m.sender_user_id }}
-            </span>
-            <p>{{ m.body }}</p>
-            <time>{{ formatTime(m.created_at) }}</time>
-          </div>
-        </div>
       </template>
-    </div>
-    <form class="im-compose" @submit.prevent="emit('send')">
-      <input
-        :value="draft"
-        type="text"
-        class="im-compose-input"
-        placeholder="输入消息，回车发送"
-        maxlength="4000"
-        :disabled="busy"
-        @input="onInput"
-      />
-      <button type="submit" class="im-btn im-btn--primary" :disabled="busy || !draft.trim()">发送</button>
-    </form>
+    </MatureChat>
   </main>
 </template>
-
 <script setup lang="ts">
-import type { Ref } from 'vue'
+import { computed, nextTick, type Ref } from 'vue'
+import MatureChat from '@/components/im/MatureChat.vue'
 import { type ImConversationSummary, type ImMessage } from '@/api/im'
-import { avatarText } from '@/composables/messenger/useMessengerEntries'
 
-defineProps<{
+const props = defineProps<{
   activeTitle: string
   activeAvatarSrc?: string | null
   hasMoreHistory: boolean
@@ -100,22 +69,13 @@ function replyOriginLabel(origin?: ImMessage['origin']): string {
   return ''
 }
 
-function onInput(ev: Event): void {
-  emit('update:draft', (ev.target as HTMLInputElement).value)
-}
+const rows = computed(() => props.messages.map(m => ({ id: m.id, body: m.body, mine: props.isMyMessage(m),
+  sender: props.isMyMessage(m) ? '我' : m.sender_display_name || `用户${m.sender_user_id}`, at: m.created_at,
+  label: replyOriginLabel(m.origin), avatar: props.isMyMessage(m) ? '' : props.activeAvatarSrc,
+})))
+async function send(value: string) { emit('update:draft', value); await nextTick(); emit('send') }
 </script>
-
-<style scoped src="./ImChatCommon.css"></style>
 <style scoped>
-.im-avatar-img {
-  width: 100%;
-  height: 100%;
-  display: block;
-  object-fit: cover;
-  border-radius: inherit;
-  user-select: none;
-  -webkit-user-drag: none;
-}
 .im-cs-controls {
   margin-left: auto;
   display: inline-flex;
@@ -147,105 +107,6 @@ function onInput(ev: Event): void {
   cursor: pointer;
 }
 .im-cs-mode-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.im-load-more {
-  margin: 10px auto 0;
-  padding: 4px 12px;
-  border: 1px solid var(--xc-color-border, #e6e9ef);
-  border-radius: 999px;
-  background: #fff;
-  color: var(--xc-color-muted, #86909c);
-  font-size: 12px;
-  cursor: pointer;
-}
-.im-messages {
-  flex: 1;
-  overflow-y: auto;
-  padding: 16px 18px;
-}
-.im-bubble-row {
-  display: flex;
-  margin-bottom: 12px;
-}
-.im-bubble-row.mine {
-  justify-content: flex-end;
-}
-.im-bubble {
-  max-width: 68%;
-  padding: 9px 13px;
-  border-radius: 12px;
-  background: #f2f3f5;
-  border-top-left-radius: 4px;
-}
-.im-bubble-row.mine .im-bubble {
-  background: var(--xc-color-primary, #0052d9);
-  color: #fff;
-  border-top-left-radius: 12px;
-  border-top-right-radius: 4px;
-}
-.im-sender {
-  display: block;
-  font-size: 12px;
-  color: var(--xc-color-muted, #86909c);
-  margin-bottom: 2px;
-}
-.im-reply-origin {
-  display: block;
-  margin-bottom: 3px;
-  font-size: 11px;
-  opacity: 0.75;
-}
-.im-bubble p {
-  margin: 0;
-  word-break: break-word;
-  line-height: 1.5;
-  font-size: 14px;
-}
-.im-bubble time {
-  display: block;
-  margin-top: 4px;
-  font-size: 11px;
-  opacity: 0.6;
-}
-.im-compose {
-  display: flex;
-  gap: 10px;
-  padding: 12px 16px;
-  border-top: 1px solid var(--xc-color-border, #e6e9ef);
-}
-.im-compose-input {
-  flex: 1;
-  padding: 9px 12px;
-  border: 1px solid var(--xc-color-border, #e6e9ef);
-  border-radius: 8px;
-  font: inherit;
-  font-size: 14px;
-  outline: none;
-  transition: border-color 150ms ease;
-}
-.im-compose-input:focus {
-  border-color: var(--xc-color-primary, #0052d9);
-}
-.im-btn {
-  padding: 8px 16px;
-  border: 1px solid var(--xc-color-border, #e6e9ef);
-  border-radius: 8px;
-  background: #fff;
-  cursor: pointer;
-  font: inherit;
-  font-size: 14px;
-}
-.im-btn--primary {
-  background: var(--xc-color-primary, #0052d9);
-  color: #fff;
-  border-color: var(--xc-color-primary, #0052d9);
-}
-.im-btn--primary:hover:not(:disabled) {
-  background: var(--xc-color-primary-hover, #003cab);
-}
-.im-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }

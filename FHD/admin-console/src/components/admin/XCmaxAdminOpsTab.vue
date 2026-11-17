@@ -9,7 +9,9 @@
 
     <div v-if="errorMessage" class="ops-error">{{ errorMessage }}</div>
 
-    <div class="admin-card">
+    <AdminSectionNav v-model="section" label="工作分区" :items="[{ value: 'health', label: '编制与健康' }, { value: 'dispatch', label: '调度下发' }, { value: 'jobs', label: '编排任务' }]" />
+    <div class="admin-pane" tabindex="0" aria-label="工作内容">
+    <div v-show="section === 'health'" class="admin-card">
       <div class="card-header">
         <h3>编制与健康</h3>
         <span class="status-badge" :class="dutyHealth.ok ? 'badge-ok' : 'badge-warn'">
@@ -31,7 +33,7 @@
       </ul>
     </div>
 
-    <div class="admin-card">
+    <div v-show="section === 'dispatch'" class="admin-card">
       <div class="card-header">
         <h3>调度下发</h3>
       </div>
@@ -40,7 +42,7 @@
         v-model="dispatchText"
         class="ops-textarea"
         rows="3"
-        placeholder="例如：日更编排 / 员工大会前检查"
+        placeholder="输入需要调度的任务"
       />
       <div class="card-actions">
         <button
@@ -49,13 +51,13 @@
           :disabled="dispatching || !dispatchText.trim()"
           @click="submitDispatch"
         >
-          {{ dispatching ? '下发中…' : 'POST /api/xcmax/ops/dispatch' }}
+          {{ dispatching ? '下发中…' : '下发任务' }}
         </button>
       </div>
       <pre v-if="dispatchResult" class="ops-json">{{ dispatchResult }}</pre>
     </div>
 
-    <div class="admin-card admin-card--wide">
+    <div v-show="section === 'jobs'" class="admin-card admin-card--wide">
       <div class="card-header">
         <h3>编排任务</h3>
         <span class="status-badge badge-info">{{ jobs.length }} 条</span>
@@ -78,10 +80,13 @@
       </table>
       <p v-else class="empty-hint">暂无任务，可先下发调度或点击刷新。</p>
     </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import AdminSectionNav from './AdminSectionNav.vue'
+const section = ref('health')
 import { onMounted, ref } from 'vue'
 import { xcmaxOpsApi } from '@/api/xcmaxOps'
 import { appAlert } from '@/utils/appDialog'

@@ -492,3 +492,29 @@ def test_step_retry_trace_does_not_pollute_final_phase(monkeypatch, captured_led
     phases = [r.get("phase") for r in captured_ledger]
     assert "step_retry" in phases
     assert "step" not in phases  # 调用方负责写最终 step
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        "Git 预检失败：fatal: Unable to read current working directory: No such file or directory",
+        "Git 预检失败：远程不存在分支 main",
+        "connection refused",
+        "device_busy_wait_timeout",
+    ],
+)
+def test_code_step_does_not_retry_environment_failures_as_code_repairs(
+    monkeypatch, captured_ledger, error
+):
+    calls = _patch_dispatch(monkeypatch, [_make_result(ok=False, error=error)])
+    _, ok, reason, _, _, rounds, _ = _maintenance_dispatch._run_step_with_inner_retries(
+        employee_id="vibe-coding-maintainer",
+        step_name="code",
+        task_text="repair",
+        extra={},
+        user_id=1,
+        run_id="environment-failed",
+    )
+    assert not ok and error in reason
+    assert len(calls) == 1 and rounds == 0
+    assert not captured_ledger

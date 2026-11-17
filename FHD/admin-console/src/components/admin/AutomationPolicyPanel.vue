@@ -3,20 +3,6 @@
     <header class="page-header">
       <div>
         <h2>自动化方针</h2>
-        <p class="muted">
-          六线步骤主责与协作编制（SSOT：six_line_employee_map.json）。保留在服务器后台总览内查看。
-        </p>
-      </div>
-      <div class="header-actions">
-        <a
-          class="btn"
-          :href="openUrl"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <i class="fa fa-external-link" aria-hidden="true"></i>
-          网页打开完整图谱
-        </a>
       </div>
     </header>
 
@@ -42,15 +28,12 @@
           <div class="kpi-num">{{ uniqueEmployees }}</div>
           <div class="kpi-label">涉及编制岗位</div>
         </article>
-        <article class="admin-card kpi kpi-wide">
-          <div class="kpi-label">说明</div>
-          <p class="kpi-text">{{ doc.description || doc.coverageNote || '—' }}</p>
-          <p v-if="doc.version" class="muted kpi-meta">映射版本 {{ doc.version }}</p>
-        </article>
       </section>
 
+      <AdminSectionNav :model-value="activeLine || doc.lines[0]?.key || ''" @update:model-value="activeLine = $event" label="业务线" :items="doc.lines.map(line => ({ value: line.key, label: line.label }))" />
+      <div class="admin-pane" tabindex="0" aria-label="业务线流程">
       <section
-        v-for="line in doc.lines"
+        v-for="line in doc.lines" v-show="line.key === (activeLine || doc.lines[0]?.key)"
         :key="line.key"
         class="admin-card policy-line"
       >
@@ -75,11 +58,14 @@
           </article>
         </div>
       </section>
+      </div>
     </template>
   </div>
 </template>
 
 <script setup lang="ts">
+import AdminSectionNav from './AdminSectionNav.vue'
+const activeLine = ref('')
 import { computed, onMounted, ref } from 'vue'
 import { YUANGON_PKG_ROLE_LABELS } from '@/domain/yuangonDutyRoster'
 import {
@@ -88,9 +74,6 @@ import {
   parseAutomationPolicyDoc,
   type AutomationPolicyDoc,
 } from '../../utils/automationPolicyLines'
-import { xcmaxAutomationPolicyOpenUrl } from '@/constants/xcmaxDashboardEmbed'
-
-const openUrl = xcmaxAutomationPolicyOpenUrl()
 const loading = ref(true)
 const loadError = ref('')
 const doc = ref<AutomationPolicyDoc | null>(null)
@@ -175,24 +158,6 @@ defineExpose({ load })
   margin-top: 6px;
   font-size: 13px;
   color: var(--admin-muted, #64748b);
-}
-.kpi-wide {
-  grid-column: 1 / -1;
-}
-@media (min-width: 960px) {
-  .kpi-wide {
-    grid-column: span 2;
-  }
-}
-.kpi-text {
-  margin: 6px 0 0;
-  font-size: 13px;
-  color: var(--admin-text, #172033);
-  line-height: 1.55;
-}
-.kpi-meta {
-  margin: 6px 0 0;
-  font-size: 12px;
 }
 .policy-line {
   padding: 16px 18px 18px;

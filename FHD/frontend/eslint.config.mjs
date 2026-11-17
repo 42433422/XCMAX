@@ -46,6 +46,8 @@ export default [
       ...tsPlugin.configs.recommended.rules,
 
       'vue/multi-word-component-names': 'off',
+      // Registered Web Component light-DOM slots use standard HTML, not Vue slot syntax.
+      'vue/no-deprecated-slot-attribute': ['error', { ignoreParents: ['vue-advanced-chat'] }],
       'vue/valid-v-for': 'error',
       'vue/no-mutating-props': 'error',
 

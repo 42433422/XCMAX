@@ -17,6 +17,7 @@ _TOKEN_SHAPES_RE = re.compile(
 )
 _SCALAR_KEYS = (
     "handler",
+    "executor",
     "ok",
     "success",
     "accepted",
@@ -45,6 +46,8 @@ _SCALAR_KEYS = (
     "output_status",
     "output_error_code",
     "branch",
+    "commit_sha",
+    "archive_sha256",
     "merge_commit_sha",
     "output_error",
     "para_task_id",

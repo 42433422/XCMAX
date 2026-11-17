@@ -222,6 +222,16 @@ class CvmAutonomyAdapter:
             os.path.join(self.deploy_root, "rollback-marker.json")
         )
 
+        if os.environ.get("XCAGI_MAINTENANCE_EXECUTOR") == "rundeck":
+            from .rundeck_executor import observe_recovery
+
+            observe_recovery(
+                self.audit_dir,
+                health_ok=health_ok,
+                compose_status=compose_status,
+                disk_usage_percent=disk_usage_percent,
+            )
+
         # 服务器端不跟踪配置指纹 / 重启计数（默认 False / 0）
         return RuntimeTruthSnapshot(
             ts=now_ms,
@@ -369,6 +379,14 @@ class CvmAutonomyAdapter:
         """执行动作。失败不抛错，返回 ok=False + detail。"""
         ts = int(time.time() * 1000)
         try:
+            backend = os.environ.get("XCAGI_MAINTENANCE_EXECUTOR", "local")
+            if backend not in {"local", "rundeck"}:
+                raise ValueError("unknown maintenance executor")
+            if backend == "rundeck":
+                from .rundeck_executor import REMOTE_ACTIONS, execute
+
+                if action.type in REMOTE_ACTIONS:
+                    return execute(action, self.audit_dir)
             if action.type == ActionType.RESTART_SERVICE:
                 return self._action_restart_service(action, ts)
             if action.type == ActionType.ROLLBACK_TO_LAST_TARBALL:

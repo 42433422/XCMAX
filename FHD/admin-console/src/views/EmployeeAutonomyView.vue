@@ -3,7 +3,6 @@
     <div class="page-header">
       <div>
         <h2>员工自治</h2>
-        <p>运行自洽 · 履职覆盖 · 建议看板 · 问答 · 成绩单</p>
       </div>
       <div class="header-actions">
         <button class="btn btn-secondary" type="button" :disabled="loading" @click="refresh">

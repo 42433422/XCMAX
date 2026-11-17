@@ -171,6 +171,7 @@ export interface AgentTaskRuntime {
   max_workers: number
   active_count: number
   progress?: AgentTaskProgressOverview
+  executor?: { host: string; workspace_root: string; engine: string }
 }
 
 export interface AgentTaskProgress {

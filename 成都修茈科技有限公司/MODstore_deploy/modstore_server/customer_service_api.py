@@ -577,3 +577,7 @@ router.include_router(customer_issue_router)
 from modstore_server.customer_service_human_api import router as customer_human_router
 
 router.include_router(customer_human_router)
+
+from modstore_server.customer_ticket_github import router as ticket_github_router
+
+router.include_router(ticket_github_router)

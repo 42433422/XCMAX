@@ -65,7 +65,6 @@ const selectedWorkshop = computed({
                         </button>
                       </li>
                     </ul>
-                    <p class="dg-workshop-linked__hint">点击员工将切换到「中心图」并定位节点。</p>
                   </div>
 
                   <div class="dg-workshop-actions">

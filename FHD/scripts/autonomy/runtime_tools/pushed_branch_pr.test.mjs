@@ -44,6 +44,14 @@ test('已有 open PR 时复用，不重复创建；gh 认证失败给出明确�
   assert.match(describePushedPrFailure(new Error('HTTP 401: Bad credentials')), /GitHub 认证失败/);
 });
 
+test('GitHub 临时执行器的 PR 引用原 Issue，保留客户验收与仓库边界', () => {
+  const env = { GITHUB_ACTIONS: 'true', GITHUB_REPOSITORY: '42433422/XCMAX', PARA_GITHUB_ISSUE_NUMBER: '123' };
+  const request = buildPushedPrRequest(task, env);
+  assert.match(request.body, /Refs #123/);
+  assert.doesNotMatch(request.body, /Closes|客户原文|提交人身份/);
+  assert.doesNotMatch(buildPushedPrRequest(task, { ...env, GITHUB_REPOSITORY: 'elsewhere/repo' }).body, /Refs/);
+});
+
 test('系统侧硬门：该开 PR 却没有 URL 必须 fail-closed', () => {
   assert.equal(requirePrUrlAfterPush(task, '').ok, false);
   assert.match(requirePrUrlAfterPush(task, '').reason, /pushed_without_pr/);

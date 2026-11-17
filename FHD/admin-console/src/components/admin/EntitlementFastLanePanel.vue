@@ -2,9 +2,7 @@
   <section class="entitlement-fast-lane" aria-label="权益快速通道">
     <header>
       <div>
-        <p>ENTITLEMENT FAST LANE</p>
         <h3>权益快速通道</h3>
-        <span>直接绑定账号授权或会员等级，不生成订单、支付、钱包或交易流水。</span>
       </div>
       <button type="button" class="fast-lane-status" :disabled="busy || !account" @click="loadStatus">
         查询当前权益

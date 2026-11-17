@@ -5,7 +5,17 @@ from __future__ import annotations
 from typing import Any, Callable, Dict, Iterable, Optional
 
 _FAILURE_TEXT_KEYS = frozenset(
-    {"content", "detail", "error", "message", "reason", "status", "stderr", "stdout"}
+    {
+        "content",
+        "detail",
+        "error",
+        "handler_failed_message",
+        "message",
+        "reason",
+        "status",
+        "stderr",
+        "stdout",
+    }
 )
 _TRANSIENT_TERMS = (
     "client network socket disconnected before secure tls connection",
@@ -50,6 +60,21 @@ def is_transient_dispatch_failure(result: Any) -> bool:
         if any(term in text for term in _TRANSIENT_TERMS):
             return True
     return False
+
+
+def is_execution_environment_failure(result: Any) -> bool:
+    """Transport/preflight failures cannot be repaired by resubmitting a code prompt."""
+    terms = (
+        "git 预检",
+        "unable to read current working directory",
+        "authentication failed",
+        "repository not found",
+        "device_busy_wait_timeout",
+        "device_online_wait_timeout",
+    )
+    return is_transient_dispatch_failure(result) or any(
+        any(term in text.lower() for term in terms) for text in _failure_texts(result)
+    )
 
 
 def successful_code_resume_resolution(final: Any) -> Optional[Dict[str, str]]:

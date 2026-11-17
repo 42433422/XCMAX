@@ -16,7 +16,6 @@
       <i class="fa fa-check-circle" aria-hidden="true"></i>
       <div>
         <strong>购买账户已包含首次交付</strong>
-        <span>交付完成前的生产、测试和返工不重新报价；交付完成后的新增功能才建立追加开发订单。</span>
       </div>
     </div>
     <div v-else class="delivery-commerce__grid">

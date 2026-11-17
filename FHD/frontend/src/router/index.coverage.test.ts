@@ -337,6 +337,15 @@ describe('router/index 覆盖率补齐', () => {
   // 1. 路由配置 - 重定向与 meta
   // ═══════════════════════════════════════════════════════════
   describe('路由配置 - 重定向', () => {
+    it('Loop 直达地址保留当前视图，未知视图仍回到六部门', async () => {
+      const remove = router.addRoute({ path: '/loop-route-check', name: 'duty-roster-graph', component: { template: '<div />' }, meta: { publicAccess: true } })
+      try {
+        await router.push({ name: 'duty-roster-graph', query: { view: 'loop' } })
+        expect(router.currentRoute.value.query.view).toBe('loop')
+        await router.push({ name: 'duty-roster-graph', query: { view: 'unknown' } })
+        expect(router.currentRoute.value.query.view).toBe('department')
+      } finally { remove() }
+    })
     it('/index.html 重定向到 / 并保留 query 和 hash', async () => {
       await router.push('/index.html?foo=bar#section')
       expect(router.currentRoute.value.path).toBe('/')

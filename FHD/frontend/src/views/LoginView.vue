@@ -143,7 +143,6 @@ onUnmounted(() => {
 
       <div class="login-panel-inner">
         <h1 id="login-heading" class="login-heading">{{ loginHeading }}</h1>
-        <p v-if="accountKind === 'admin'" class="login-subheading" role="note">{{ $t('login.subheadingAdmin') }}</p>
 
         <div v-if="accountKind === 'enterprise'" class="login-mode-tabs" role="tablist">
           <button type="button" role="tab" :class="{ active: loginMode === 'password' }" @click="switchLoginMode('password')">

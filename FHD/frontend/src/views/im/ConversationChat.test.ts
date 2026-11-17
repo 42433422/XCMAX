@@ -1,6 +1,7 @@
+vi.mock('@/components/im/MatureChat.vue', async () => ({ default: (await import('@/test-stubs/MatureChatStub.vue')).default }))
 import { mount } from '@vue/test-utils'
 import { ref } from 'vue'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import ConversationChat from './ConversationChat.vue'
 

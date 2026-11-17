@@ -233,12 +233,12 @@ describe('customer service ticket detail', () => {
     const wrapper = mountDetail(); await flushPromises()
     expect(detail).toHaveBeenCalledWith(42)
     const text = wrapper.text()
-    for (const part of [ticket.ticket_no, ticket.summary, '暂无管理员指派记录', '暂无记录', '处理状态本身不代表员工已领取或执行', '平台', '产品问题', '市场用户 ID 7', '会话 63', '2026-10-16 12:41:57', '未关闭', '北京时间']) {
+    for (const part of [ticket.ticket_no, ticket.summary, '暂无管理员指派记录', '暂无记录', '平台', '产品问题', '市场用户 ID 7', '会话 63', '2026-10-16 12:41:57', '未关闭', '北京时间']) {
       expect(text).toContain(part)
     }
     expect(wrapper.find('.cs-hero .cs-badge').text()).toBe('已完成')
     expect(wrapper.find('.cs-steps .is-current').text()).toBe('已完成')
-    expect(wrapper.find('details.cs-raw').attributes('open')).toBeUndefined()
+    expect(wrapper.find('details.cs-raw').attributes('style')).toContain('display: none')
     await wrapper.find('.cs-back button').trigger('click')
     expect(push).toHaveBeenCalledWith({ name: 'customer-service-tickets' })
     wrapper.unmount()

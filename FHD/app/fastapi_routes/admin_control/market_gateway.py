@@ -127,15 +127,21 @@ class MarketGateway:
             authorization = transport.authorization_header(authorization_override)
             if not authorization:
                 authorization = await transport.resolve_authorization(request, body_for_auth)
-        if not authorization:
+        # The monitor endpoint is read-only on MODstore. A verified local admin can
+        # inspect it without a separate market login; commands still require binding.
+        monitor_read = (
+            method.upper() == "GET" and path.split("?", 1)[0] == "/api/ops/self-maintenance/status"
+        )
+        if not authorization and not monitor_read:
             if sensitive:
                 return _platform_config_response(None, 401)
             return JSONResponse(
                 {
                     "success": False,
-                    "message": "尚未绑定修茈服务器账号；请重新登录或在设置中同步市场 Authorization",
+                    "message": "管理端登录有效，但尚未连接远端运营服务；请检查市场账号绑定。",
+                    "code": "upstream_auth_unavailable",
                 },
-                status_code=401,
+                status_code=409 if require_admin_session else 401,
             )
         if sensitive:
             try:
@@ -159,9 +165,27 @@ class MarketGateway:
             return_error_payload=True,
         )
         if isinstance(payload, JSONResponse):
+            if require_admin_session and payload.status_code == 401:
+                return JSONResponse(
+                    {
+                        "success": False,
+                        "code": "upstream_auth_unavailable",
+                        "message": "远端运营服务认证失败，当前管理端登录仍然有效。",
+                    },
+                    status_code=502,
+                )
             return payload
         if isinstance(payload, dict) and payload.get("__proxy_error__"):
             status_code = int(payload.get("status_code") or 502)
+            if require_admin_session and status_code == 401:
+                return JSONResponse(
+                    {
+                        "success": False,
+                        "code": "upstream_auth_unavailable",
+                        "message": "远端运营服务认证失败，当前管理端登录仍然有效。",
+                    },
+                    status_code=502,
+                )
             raw_error = payload.get("payload")
             return JSONResponse(
                 {
@@ -193,5 +217,7 @@ class MarketGateway:
         if method in {"POST", "PUT", "PATCH"}:
             json_body = await read_json_object(request, self._errors)
         if api_path.startswith("/api/ops/self-maintenance/"):
+            if request.url.query:
+                api_path += "?" + request.url.query
             return await self._maintenance(request, method, api_path, json_body=json_body)
         return await self._proxy(request, method, api_path, json_body=json_body)

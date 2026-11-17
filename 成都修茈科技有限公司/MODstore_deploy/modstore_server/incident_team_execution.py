@@ -130,14 +130,26 @@ def execute_member(event_id, member, plan, payload, event_type, source, rows):
             {"provider": "auto", "model": "auto", "reason": "router_error"},
             None,
         )
+    workspace = payload.get("github_workspace")
+    execution_payload = payload
+    if isinstance(workspace, dict):
+        from modstore_server.customer_ticket_github import public_incident
+
+        execution_payload = public_incident(payload)
     task = facade._task_for_role(
         code_ownership=plan.get("code_owner_match") if role == "fix" else None,
         event_type=event_type,
-        payload=payload,
+        payload=execution_payload,
         role=role,
         scout_result=previous.get("scout"),
         fix_result=previous.get("fix"),
     )
+    if isinstance(workspace, dict):
+        task += (
+            f"\nGitHub 工作空间：{workspace['issue_url']}。以该 Issue 的技术摘要和验收条件为准。"
+            "代码修改由现有 Para 执行，不得直接调用另一套模型执行器。"
+            "修复 PR 正文用 Refs 引用该 Issue，附测试与执行证据；不得自动合并或关闭客户工单。"
+        )
     attempt = uuid.uuid4().hex
     runtime = member_runtime_input(
         employee_id=employee,

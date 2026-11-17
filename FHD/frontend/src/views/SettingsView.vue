@@ -72,7 +72,7 @@
           </header>
 
           <div class="settings-list">
-            <section id="settings-group-account" class="settings-group" aria-labelledby="settings-group-account-title">
+            <section v-show="!compactSettings || activeGroup === 'settings-group-account'" id="settings-group-account" class="settings-group" aria-labelledby="settings-group-account-title">
               <h2 id="settings-group-account-title" class="settings-group__title">账号</h2>
             <details v-if="isLoggedIn" id="settings-profile-home" class="settings-card" data-tutorial-id="settings-profile-home">
               <summary class="settings-row">
@@ -141,7 +141,7 @@
             </router-link>
             </section>
 
-            <section id="settings-group-intelligence" class="settings-group" aria-labelledby="settings-group-intelligence-title">
+            <section v-show="!compactSettings || activeGroup === 'settings-group-intelligence'" id="settings-group-intelligence" class="settings-group" aria-labelledby="settings-group-intelligence-title">
               <h2 id="settings-group-intelligence-title" class="settings-group__title">智能与数据</h2>
             <details id="settings-model-payment" class="settings-card" data-tutorial-id="settings-model-payment">
               <summary class="settings-row">
@@ -217,7 +217,7 @@
             />
             </section>
 
-            <section id="settings-group-system" class="settings-group" aria-labelledby="settings-group-system-title">
+            <section v-show="!compactSettings || activeGroup === 'settings-group-system'" id="settings-group-system" class="settings-group" aria-labelledby="settings-group-system-title">
               <h2 id="settings-group-system-title" class="settings-group__title">系统与外观</h2>
             <SettingsBasicCard
               :basic-settings-summary="basicSettingsSummary" :sidebar-theme-options="sidebarThemeOptions"
@@ -248,7 +248,7 @@
             />
             </section>
 
-            <section id="settings-group-about" class="settings-group" aria-labelledby="settings-group-about-title">
+            <section v-show="!compactSettings || activeGroup === 'settings-group-about'" id="settings-group-about" class="settings-group" aria-labelledby="settings-group-about-title">
               <h2 id="settings-group-about-title" class="settings-group__title">关于</h2>
             <SettingsVersionsCard
               :loading-versions="loadingVersions" :versions-error="versionsError" :versions="versions"
@@ -272,6 +272,8 @@
 </template>
 
 <script setup lang="ts">
+import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
+const compactSettings = isAdminConsoleSpa()
 import { computed, onBeforeUnmount, onMounted, onActivated, ref, watch, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { readStoredSidebarTheme, applySidebarTheme } from '@/utils/sidebarTheme'
@@ -497,13 +499,15 @@ function scrollToSettingsSection() {
   if (!section) return
   nextTick(() => {
     const el = document.getElementById(`settings-${section}`) || document.querySelector(`[data-tutorial-id="settings-${section}"]`)
+    const groupId = el?.closest('.settings-group')?.id
+    if (compactSettings && groupId) activeGroup.value = groupId
     if (el instanceof HTMLDetailsElement) {
       el.open = true
     } else if (el) {
       const parentDetails = el.closest('details.settings-card')
       if (parentDetails instanceof HTMLDetailsElement) parentDetails.open = true
     }
-    el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    void nextTick(() => el?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
   })
 }
 
@@ -539,7 +543,7 @@ const SETTINGS_GROUPS = [
   { id: 'settings-group-system', label: '系统与外观', icon: 'fa-sliders', iconSrc: navSystemArtSrc },
   { id: 'settings-group-about', label: '关于', icon: 'fa-info-circle', iconSrc: navAboutArtSrc },
 ]
-const activeGroup = ref(SETTINGS_GROUPS[0].id)
+const activeGroup = ref(compactSettings ? 'settings-group-system' : SETTINGS_GROUPS[0].id)
 let scrollSpyFrame = 0
 
 function resolveGroupFromScroll(): string {
@@ -555,6 +559,7 @@ function resolveGroupFromScroll(): string {
 }
 
 function onSettingsScroll() {
+  if (compactSettings) return
   if (scrollSpyFrame) return
   scrollSpyFrame = window.requestAnimationFrame(() => {
     scrollSpyFrame = 0
@@ -564,7 +569,7 @@ function onSettingsScroll() {
 
 function goGroup(id: string) {
   activeGroup.value = id
-  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  if (!compactSettings) document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   try {
     history.replaceState(null, '', `#${id}`)
   } catch {
@@ -577,7 +582,7 @@ function setupGroupSpy() {
   // 滚动容器可能是页面自身或内层内容区，捕获阶段监听可覆盖两种情况。
   document.addEventListener?.('scroll', onSettingsScroll, { passive: true, capture: true })
   window.addEventListener?.('resize', onSettingsScroll, { passive: true })
-  activeGroup.value = resolveGroupFromScroll()
+  if (!compactSettings) activeGroup.value = resolveGroupFromScroll()
   const hashId = String(window.location?.hash || '').replace(/^#/, '')
   if (SETTINGS_GROUPS.some(group => group.id === hashId)) {
     nextTick(() => goGroup(hashId))

@@ -75,6 +75,7 @@ export type UseSuperEmployeeDispatchParams = {
   activeExternalEntry: Ref<ExternalAppEntry | null>
   activeConversationId: Ref<number | null>
   activeGroupChat: Ref<boolean>
+  activeAiGroupId?: Ref<string | null>
   messages: Ref<ImMessage[]>
   hasMoreHistory: Ref<boolean>
   localUserId: Ref<number | null>
@@ -278,6 +279,7 @@ export function useSuperEmployeeDispatch(params: UseSuperEmployeeDispatchParams)
       activeExternalEntry.value = null
       activeSystemEntry.value = null
       activeConversationId.value = null
+      if (params.activeAiGroupId) params.activeAiGroupId.value = entry.group_id || null
       activeGroupChat.value = true
       messages.value = []
       hasMoreHistory.value = false

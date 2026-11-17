@@ -33,6 +33,33 @@ def _group_value_error_response(exc: ValueError):
     return _facade().JSONResponse({"success": False, "message": str(exc)}, status_code=status)
 
 
+@router.post("/api/admin/ai-groups/{group_id}/transport")
+def admin_ai_group_transport(
+    request: Request,
+    group_id: str,
+    user: CurrentUser = Depends(require_identified_user),
+):
+    denied = _facade()._ai_group_guard(request)
+    if denied is not None:
+        return denied
+    from app.application.group_chat import message_transport
+    from app.infrastructure.im.openim import OpenIMError, enabled
+
+    headers = {"Cache-Control": "no-store"}
+    if not enabled():
+        return JSONResponse({"enabled": False}, headers=headers)
+    try:
+        service = _facade().AiGroupChatService()
+        result = message_transport.session(service, _facade()._uid(user), group_id)
+        return JSONResponse(result, headers=headers)
+    except ValueError as exc:
+        return _group_value_error_response(exc)
+    except OpenIMError:
+        return JSONResponse(
+            {"message": "消息服务连接失败，请重试"}, status_code=503, headers=headers
+        )
+
+
 @router.get("/api/admin/ai-groups")
 def admin_ai_groups_list(request: Request, user: CurrentUser = Depends(require_identified_user)):
     denied = _facade()._ai_group_guard(request)

@@ -12,6 +12,19 @@ def _facade():
 
 
 def _register_scheduler_phase_04():
+    from apscheduler.triggers.interval import IntervalTrigger
+
+    from modstore_server.retort_evolution import tick as retort_tick
+    from modstore_server.workflow_scheduler import _run_tracked_scheduler_job, _scheduler
+
+    _scheduler.add_job(
+        lambda: _run_tracked_scheduler_job("retort_evolution", retort_tick),
+        IntervalTrigger(seconds=30),
+        id="retort_evolution",
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+    )
     try:
         from modstore_server.duty_workforce_burnin import (
             burn_in_execution_enabled,

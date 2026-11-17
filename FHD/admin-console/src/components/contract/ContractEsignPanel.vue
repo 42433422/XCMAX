@@ -7,9 +7,6 @@
       <h3 class="contract-esign-panel__title">电子签章</h3>
       <span v-if="stageLabel" class="contract-esign-panel__stage">{{ stageLabel }}</span>
     </header>
-    <p class="contract-esign-panel__hint">
-      法大大 / Stub 适配器；签署完成 webhook 可将商机阶段推进为「已签约」。
-    </p>
 
     <p v-if="!marketUserId" class="contract-esign-panel__empty muted">
       {{ emptyHint }}

@@ -1,16 +1,8 @@
 <template>
-  <section class="enterprise-roster" aria-label="购买账户标准交付台账">
+  <section class="enterprise-roster" :aria-label="isTrial ? '体验账户交付台账' : '购买账户标准交付台账'">
     <header class="enterprise-roster__head">
       <div>
-        <p>{{ isTrial ? '试用账号交付台账' : '已购账号交付台账' }}</p>
         <h3>{{ isTrial ? '¥99 体验账户交付台账' : '购买账户标准交付台账' }}</h3>
-        <span>
-          {{
-            isTrial
-              ? '只读取 ¥99 体验（saas-trial-30）的有效账户；内部本 Mac 不计交付，仅客户侧安装并首次登录后自动完成。'
-              : '内部本 Mac 不计交付；仅客户侧 macOS/Windows 安装并首次登录后自动完成。'
-          }}
-        </span>
       </div>
       <div class="enterprise-roster__policy">
         <strong>{{ deliveries.length }} 个{{ isTrial ? '体验账户' : '永久账户' }}</strong>
@@ -41,6 +33,7 @@
     </div>
 
     <div v-else class="enterprise-roster__grid">
+      <div class="enterprise-roster__columns" aria-hidden="true"><span></span><span>客户 / 交付单</span><span>套餐 / 订单</span><span>安装与登录</span><span>交付状态</span></div>
       <article v-for="delivery in rows" :key="delivery.delivery_no" :class="`is-${delivery.status}`">
         <span class="enterprise-roster__avatar">{{ accountName(delivery).slice(0, 1).toUpperCase() }}</span>
         <div class="enterprise-roster__identity">
@@ -195,29 +188,28 @@ function formatDate(value: string): string {
 <style scoped>
 .enterprise-roster { margin-bottom: 18px; padding: 17px; border: 1px solid; }
 .enterprise-roster__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
-.enterprise-roster__head p { margin: 0 0 4px; color: #3d78bc; font-size: 9px; font-weight: 800; letter-spacing: .16em; }
+.enterprise-roster__head p { margin: 0 0 4px; color: #3d78bc; font-size: 12px; font-weight: 800; letter-spacing: .16em; }
 .enterprise-roster__head h3 { margin: 0; color: #254663; font-size: 18px; }
 .enterprise-roster__head span { display: block; margin-top: 5px; color: #6e8097; font-size: 11px; }
 .enterprise-roster__policy { display: grid; justify-items: end; gap: 6px; }
 .enterprise-roster__policy > strong { border-radius: 999px; background: #e7f1fd; color: #276bb7; padding: 7px 11px; white-space: nowrap; }
-.enterprise-roster__policy > span { border-radius: 999px; background: #fff1e8; color: #a85b25; padding: 5px 9px; font-size: 9px; font-weight: 700; white-space: nowrap; }
+.enterprise-roster__policy > span { border-radius: 999px; background: #fff1e8; color: #a85b25; padding: 5px 9px; font-size: 12px; font-weight: 700; white-space: nowrap; }
 .enterprise-roster__policy > span.is-enabled { background: #e9f3ef; color: #27745a; }
 .enterprise-roster__toolbar { display: flex; align-items: center; gap: 9px; margin: 14px 0; padding: 9px; border-radius: 11px; background: #f3f7fb; }
 .enterprise-roster__toolbar label { display: flex; align-items: center; gap: 7px; flex: 1; min-width: 180px; color: #7690ac; }
 .enterprise-roster__toolbar input { width: 100%; border: 0; outline: 0; background: transparent; color: #132a46; }
 .enterprise-roster__toolbar select { border: 1px solid #cbdbea; border-radius: 8px; background: #fff; padding: 7px 9px; color: #34516f; }
 .enterprise-roster__toolbar > span { color: #6e8097; font-size: 11px; white-space: nowrap; }
-.enterprise-roster__grid { display: grid; gap: 8px; }
-.enterprise-roster__grid article { display: grid; grid-template-columns: 38px minmax(150px,.9fr) minmax(165px,.75fr) minmax(220px,1fr) minmax(150px,.7fr); align-items: center; gap: 11px; padding: 12px; border: 1px solid #dce7f1; border-left: 3px solid #6a9fd6; border-radius: 11px; background: #fbfdff; }
-.enterprise-roster__grid article.is-completed { border-left-color: #3b9b78; }
-.enterprise-roster__grid article.is-pending-first-login { border-left-color: #8b69c8; }
+.enterprise-roster__grid { display: grid; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
+.enterprise-roster__columns { display: grid; grid-template-columns: 38px minmax(150px,.9fr) minmax(165px,.75fr) minmax(220px,1fr) minmax(150px,.7fr); gap: 11px; padding: 11px 12px; background: #f7f9fb; font-size: 12px; color: #64748b; }
+.enterprise-roster__grid article { display: grid; grid-template-columns: 38px minmax(150px,.9fr) minmax(165px,.75fr) minmax(220px,1fr) minmax(150px,.7fr); align-items: center; gap: 11px; padding: 12px; border: 0; border-top: 1px solid #e2e8f0; border-radius: 0; background: #fff; }
 .enterprise-roster__avatar { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: #e8f1fb; color: #3172b7; font-weight: 800; }
 .enterprise-roster__identity strong,.enterprise-roster__identity span,.enterprise-roster__identity code,.enterprise-roster__plan strong,.enterprise-roster__plan span,.enterprise-roster__plan small { display: block; }
 .enterprise-roster__identity strong,.enterprise-roster__plan strong { color: #294a68; font-size: 11px; }
-.enterprise-roster__identity span,.enterprise-roster__plan span,.enterprise-roster__plan small { margin-top: 3px; color: #718399; font-size: 9px; }
-.enterprise-roster__identity code { margin-top: 4px; color: #527291; font-size: 8px; overflow-wrap: anywhere; }
+.enterprise-roster__identity span,.enterprise-roster__plan span,.enterprise-roster__plan small { margin-top: 3px; color: #718399; font-size: 12px; }
+.enterprise-roster__identity code { margin-top: 4px; color: #527291; font-size: 11px; overflow-wrap: anywhere; }
 .enterprise-roster__proof { display: flex; flex-wrap: wrap; gap: 5px; }
-.proof-pill { border-radius: 999px; padding: 5px 7px; font-size: 9px; white-space: nowrap; }
+.proof-pill { border-radius: 999px; padding: 5px 7px; font-size: 12px; white-space: nowrap; }
 .proof-pill.is-ok { background: #e7f6ef; color: #28795c; }
 .proof-pill.is-wait { background: #f2f4f7; color: #738195; }
 .proof-pill.is-internal { background: #eef1f4; color: #53677d; }
@@ -225,12 +217,12 @@ function formatDate(value: string): string {
 .proof-pill.is-version-unknown { background: #fff2df; color: #9a641d; }
 .proof-pill small { font-size: inherit; }
 .enterprise-roster__state { display: grid; justify-items: end; gap: 5px; text-align: right; }
-.delivery-state { font-size: 10px; }
+.delivery-state { font-size: 12px; }
 .delivery-state.is-completed { color: #28795c; }
-.delivery-state.is-pending-install { color: #b26225; }
-.delivery-state.is-pending-first-login { color: #6c50a7; }
-.enterprise-roster__state small { color: #7a8b9c; font-size: 8px; }
+.delivery-state.is-pending_install { color: #b26225; }
+.delivery-state.is-pending_first_login { color: #6c50a7; }
+.enterprise-roster__state small { color: #7a8b9c; font-size: 11px; }
 .enterprise-roster__empty { padding: 22px; border: 1px dashed #c7d8e8; border-radius: 11px; color: #718399; text-align: center; }
-@media (max-width: 1100px) { .enterprise-roster__grid article { grid-template-columns: 38px 1fr 1fr; } .enterprise-roster__proof,.enterprise-roster__state { grid-column: 2 / -1; justify-items: start; text-align: left; } }
+@media (max-width: 1100px) { .enterprise-roster__columns { display: none; } .enterprise-roster__grid article { grid-template-columns: 38px 1fr 1fr; } .enterprise-roster__proof,.enterprise-roster__state { grid-column: 2 / -1; justify-items: start; text-align: left; } }
 @media (max-width: 760px) { .enterprise-roster__toolbar { align-items: stretch; flex-direction: column; } .enterprise-roster__grid article { grid-template-columns: 38px 1fr; } .enterprise-roster__plan,.enterprise-roster__proof,.enterprise-roster__state { grid-column: 2; } }
 </style>

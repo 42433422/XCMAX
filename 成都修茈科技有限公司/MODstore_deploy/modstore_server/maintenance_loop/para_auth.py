@@ -41,6 +41,12 @@ def _para_tls_verify():
 def _guest_auth_headers(api_base: str) -> Dict[str, str]:
     from modstore_server.cred_vault import get_credential
 
+    github_base = os.environ.get("MODSTORE_PARA_GITHUB_API_BASE", "").rstrip("/")
+    if github_base and api_base.rstrip("/") == github_base:
+        from modstore_server.para_github_runner import auth_headers
+
+        return auth_headers()
+
     env_token = get_credential(
         "MODSTORE_PARA_AUTH_TOKEN",
         task_id="self-maintenance-loop",

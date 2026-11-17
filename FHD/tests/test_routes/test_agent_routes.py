@@ -1691,3 +1691,70 @@ def test_create_task_internal_failure_returns_stable_public_message() -> None:
         )
     assert response.status_code == 503
     assert response.json() == {"success": False, "message": "Agent 服务暂时不可用，请稍后重试"}
+
+
+def test_workspace_executor_location_is_admin_only(monkeypatch, tmp_path):
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    admin = _client(is_admin=True).get("/api/agent/task-runtime").json()["data"]
+    member = _client(is_admin=False).get("/api/agent/task-runtime").json()["data"]
+    assert admin["executor"]["engine"] == "langgraph"
+    assert admin["executor"]["workspace_root"] == str(tmp_path)
+    assert admin["executor"]["host"]
+    assert "executor" not in member
+
+
+def test_employee_workspace_cannot_spoof_execution_location(monkeypatch, tmp_path):
+    from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context
+
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    result = authenticated_runtime_context(
+        {
+            "source": "admin_employee_workspace",
+            "workspace_root": "/etc",
+            "workspace_path": "GitHub",
+            "worktree_path": "/private",
+            "cwd": "/root",
+            "workspace_isolation": "container",
+            "user_id": "other",
+            "tenant_id": "other",
+        },
+        AgentPrincipal(user_id="17", tenant_id="7", is_admin=True),
+    )
+    assert result["workspace_root"] == result["workspace_path"] == str(tmp_path)
+    assert result["workspace_isolation"] == "host_workspace"
+    assert "worktree_path" not in result and "cwd" not in result
+    assert result["user_id"] == "17" and result["tenant_id"] == "7"
+
+
+def test_enterprise_cannot_claim_admin_employee_workspace():
+    from fastapi import HTTPException
+
+    from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context
+
+    with pytest.raises(HTTPException) as error:
+        authenticated_runtime_context(
+            {"source": "admin_employee_workspace"}, AgentPrincipal(user_id="17", is_admin=False)
+        )
+    assert error.value.status_code == 403
+
+
+@pytest.mark.parametrize("tenant_id, expected", [(7, 403), (None, 202)])
+def test_workspace_reuses_host_employee_authority_before_enqueue(
+    trusted_actor, tenant_id, expected
+):
+    actor = trusted_actor(role="admin", tier="admin", tenant_id=tenant_id)
+    response = _client(actor=actor).post(
+        "/api/agent/tasks",
+        json={
+            "task_id": "workspace-authority",
+            "title": "只读自检",
+            "tool_id": "employee",
+            "action": "execute",
+            "params": {"employee_id": "self-checker", "task": "只读自检"},
+            "runtime_context": {"source": "admin_employee_workspace"},
+        },
+    )
+    assert response.status_code == expected
+    if expected == 403:
+        assert response.json()["error_code"] == "employee_host_admin_required"
+        assert _client(actor=actor).get("/api/agent/tasks").json()["data"] == []

@@ -10,10 +10,12 @@ def test_delivery_center_exposes_internal_mac_exclusion_policy() -> None:
         encoding="utf-8"
     )
 
-    assert "内部本 Mac 永不计入" in view
-    assert "内部本机排除" in view
+    assert "<EnterpriseDeliveryRoster" in view
+    assert "policy.internal_device_exclusion_enabled" in roster
+    assert "policy.internal_device_ids_configured" in roster
+    assert "内部本机尚未登记" in roster
     assert ':policy="standardPolicy"' in view
-    assert "仅客户侧 macOS/Windows 安装并首次登录后自动完成" in roster
+    assert "installed_devices" in roster
     assert "台内部本机已排除" in roster
     assert "台客户设备已安装" in roster
     assert "当前版本" in roster

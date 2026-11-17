@@ -1,3 +1,4 @@
+vi.mock('@/components/im/MatureChat.vue', async () => ({ default: (await import('@/test-stubs/MatureChatStub.vue')).default }))
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { ref } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -171,16 +172,16 @@ describe('ImMessengerView.vue', () => {
     await enterpriseCs!.trigger('click')
     await flushPromises()
     expect(fetchEnterpriseCsThread).toHaveBeenCalled()
-    expect(wrapper.get('.im-chat-head').findComponent(SharedIssueAcceptancePanel).exists()).toBe(true)
+    expect(wrapper.get('.chat-header').findComponent(SharedIssueAcceptancePanel).exists()).toBe(true)
     expect(fetchImMessages).not.toHaveBeenCalled()
 
-    await wrapper.find('.im-compose-input').setValue('测试消息')
+    await wrapper.find('.chat-input').setValue('测试消息')
     vi.mocked(sendEnterpriseCsMessage).mockRejectedValueOnce(Object.assign(new Error('请重新登录企业账号'), { reconciliationRequired: false }))
-    await wrapper.find('.im-compose').trigger('submit')
+    await wrapper.find('.chat-form').trigger('submit')
     await flushPromises()
     expect(wrapper.get('[role="alert"]').text()).toContain('重新登录企业账号')
-    expect((wrapper.get('.im-compose-input').element as HTMLInputElement).value).toBe('测试消息')
-    await wrapper.find('.im-compose').trigger('submit')
+    expect((wrapper.get('.chat-input').element as HTMLInputElement).value).toBe('测试消息')
+    await wrapper.find('.chat-form').trigger('submit')
     await flushPromises()
     expect(sendEnterpriseCsMessage).toHaveBeenCalledWith('测试消息')
     wrapper.unmount()
@@ -195,8 +196,8 @@ describe('ImMessengerView.vue', () => {
     await flushPromises()
     await wrapper.findAll('.im-conv-item--pinned').find(item => item.text().includes('企业专属客服'))!.trigger('click')
     await flushPromises()
-    await wrapper.find('.im-compose-input').setValue('synthetic pending report')
-    await wrapper.find('.im-compose').trigger('submit')
+    await wrapper.find('.chat-input').setValue('synthetic pending report')
+    await wrapper.find('.chat-form').trigger('submit')
     await flushPromises()
     expect(wrapper.get('[role="alert"]').text()).toContain('发送结果待核对')
     expect(wrapper.get('[role="alert"] button').text()).toContain('解除重复发送保护')
@@ -222,7 +223,7 @@ describe('ImMessengerView.vue', () => {
     expect(wrapper.text()).toContain('客户消息 · 客来来')
     await wrapper.findAll('.im-conv-item--pinned').find(item => item.text().includes('企业专属客服'))!.trigger('click')
     await flushPromises()
-    expect(wrapper.get('.im-chat-head').findComponent(SharedIssueAcceptancePanel).exists()).toBe(true)
+    expect(wrapper.get('.chat-header').findComponent(SharedIssueAcceptancePanel).exists()).toBe(true)
     wrapper.unmount()
   })
 
@@ -287,13 +288,14 @@ describe('ImMessengerView.vue', () => {
       .trigger('click')
     await flushPromises()
 
+    await wrapper.get('.im-profile-button').trigger('click')
     expect(wrapper.text()).toContain('跨设备协作开发员工')
     expect(wrapper.text()).toContain('全设备 Codex')
     expect(createDirectConversation).not.toHaveBeenCalled()
 
-    const input = wrapper.find('.im-compose--codex input')
+    const input = wrapper.find('.chat-input')
     await input.setValue('修复登录问题')
-    await wrapper.find('.im-compose--codex button').trigger('click')
+    await wrapper.find('.chat-send').trigger('click')
     await flushPromises()
 
     expect(sendCodexSuperEmployeeMessage).toHaveBeenCalledWith(
@@ -308,7 +310,7 @@ describe('ImMessengerView.vue', () => {
     expect(wrapper.text()).toContain('Codex 已收到')
     expect(wrapper.text()).not.toContain('调度器')
     expect(wrapper.text()).not.toContain('调用队列')
-    expect(wrapper.find('.im-system-call-row.is-streaming').exists()).toBe(true)
+    expect(wrapper.find('.chat-row.is-streaming').exists()).toBe(true)
 
     await input.setValue('继续验证回车调用')
     await input.trigger('keydown', { key: 'Enter' })
@@ -346,9 +348,9 @@ describe('ImMessengerView.vue', () => {
     expect(wrapper.find('.im-pin').exists()).toBe(false)
     expect(fetchCodexSuperEmployeeMessages).toHaveBeenCalledWith({ scope: 'mobile' })
 
-    const input = wrapper.find('.im-compose--codex input')
+    const input = wrapper.find('.chat-input')
     await input.setValue('手机上调用 Codex')
-    await wrapper.find('.im-compose--codex button').trigger('click')
+    await wrapper.find('.chat-send').trigger('click')
     await flushPromises()
 
     expect(sendCodexSuperEmployeeMessage).toHaveBeenCalledWith(
@@ -385,15 +387,11 @@ describe('ImMessengerView.vue', () => {
     await codexItem!.trigger('click')
     await flushPromises()
 
-    expect(wrapper.text()).toContain('超级开发组 · CLI')
-    expect(wrapper.find('.im-cli-model-switch__btn.active').text()).toContain('Codex')
-
-    const cursorBtn = wrapper.findAll('.im-cli-model-switch__btn').find((btn) => btn.text().includes('Cursor'))
-    expect(cursorBtn).toBeTruthy()
-    await cursorBtn!.trigger('click')
+    expect((wrapper.get('.im-tool-select').element as HTMLSelectElement).value).toBe('codex-super-employee')
+    await wrapper.get('.im-tool-select').setValue('cursor-super-employee')
     await flushPromises()
 
     expect(fetchCursorSuperEmployeeMessages).toHaveBeenCalledWith({ scope: 'admin' })
-    expect(wrapper.find('.im-cli-model-switch__btn.active').text()).toContain('Cursor')
+    expect((wrapper.get('.im-tool-select').element as HTMLSelectElement).value).toBe('cursor-super-employee')
   })
 })

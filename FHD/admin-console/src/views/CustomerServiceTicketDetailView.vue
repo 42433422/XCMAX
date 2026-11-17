@@ -1,5 +1,5 @@
 <template>
-  <main class="cs-view page-content" id="view-customer-service-ticket-detail">
+  <main class="cs-view page-content admin-screen" id="view-customer-service-ticket-detail">
     <nav class="cs-back"><button type="button" class="cs-btn" @click="backToList">← 返回工单列表</button></nav>
     <p v-if="!validId" role="alert" class="cs-banner-error">工单 ID 无效：{{ route.params.ticketId }}。请从工单列表打开。</p>
     <p v-else-if="loading" role="status" class="cs-card cs-state">正在读取原单证据…</p>
@@ -27,6 +27,7 @@
         <ol v-if="steps.length" class="cs-steps" aria-label="处理阶段">
           <li v-for="step in steps" :key="String(step.stage)" :class="`is-${step.state}`">{{ step.label }}</li>
         </ol>
+        <details class="cs-metadata"><summary>客户资料与预计完成时间</summary>
         <dl class="cs-facts">
           <div><dt>客户</dt><dd>市场用户 ID {{ ticket.user_id ?? '—' }}<template v-if="ticket.session_id"> · 会话 {{ ticket.session_id }}</template></dd></div>
           <div><dt>提交人身份</dt><dd>{{ submitterTypeLabel(ticket.submitter_type) }}</dd></div>
@@ -43,17 +44,21 @@
           <span v-if="etaMessage" role="status">{{ etaMessage }}</span>
           <span v-if="etaError" role="alert" class="cs-error-text">{{ etaError }}</span>
         </form>
-        <p class="cs-hint">时间为北京时间（UTC+8）。处理状态本身不代表员工已领取或执行；以以下真实进度和审计记录为准。</p>
+        </details>
       </section>
 
-      <section class="cs-card">
+      <AdminSectionNav v-model="section" label="工单详情分区" :items="[{ value: 'progress', label: '问题与进度' }, { value: 'github', label: 'GitHub 修复' }, { value: 'handle', label: '人工处理' }, { value: 'history', label: '时间线与审计' }, { value: 'evidence', label: '原始证据' }]" />
+      <div class="admin-pane" tabindex="0" aria-label="工单内容">
+      <section v-if="section === 'github' && ticket.intent === 'product_issue' && !customDelivery" class="cs-card"><TicketGithubPanel :ticket-id="ticketId" :ticket-status="ticket.status" @updated="load" /></section>
+      <p v-else-if="section === 'github'" class="cs-state">此类工单不进入共享产品仓库修复。</p>
+      <section v-show="section === 'progress'" class="cs-card">
         <h3 class="cs-card-title">客户问题原文</h3>
         <p class="cs-quote">{{ ticket.summary || '原单未记录正文' }}</p>
         <p v-if="bundleNames.length" class="cs-hint">附件：{{ bundleNames.join('、') }}</p>
         <button v-if="hasBundle" type="button" class="cs-btn" @click="downloadBundle">下载支持包</button>
       </section>
 
-      <section class="cs-card" aria-label="人工处理">
+      <section v-show="section === 'handle'" class="cs-card" aria-label="人工处理">
         <h3 class="cs-card-title">人工处理</h3>
         <p v-if="handleError" role="alert" class="cs-error-text">{{ handleError }}</p>
         <form class="cs-eta-editor" @submit.prevent="assignHandler">
@@ -75,7 +80,7 @@
         </form>
       </section>
 
-      <section class="cs-card" aria-label="执行总览">
+      <section v-show="section === 'progress'" class="cs-card" aria-label="执行总览">
         <h3 class="cs-card-title">执行总览</h3>
         <p v-if="!overview" class="cs-state">暂无执行总览证据，请查看原单进度记录。</p>
         <template v-else>
@@ -99,10 +104,10 @@
         </template>
       </section>
 
-      <CustomerServiceSharedRepair v-if="ticket.status === 'processing' && ticket.intent === 'product_issue' && !customDelivery"
+      <CustomerServiceSharedRepair v-show="section === 'handle'" v-if="ticket.status === 'processing' && ticket.intent === 'product_issue' && !customDelivery"
         :key="ticketId" :ticket-id="ticketId" @linked="load" />
 
-      <section class="cs-card">
+      <section v-show="section === 'progress'" class="cs-card">
         <h3 class="cs-card-title">处理结论</h3>
         <p v-if="!resolution" class="cs-state">暂无处理结论记录</p>
         <template v-else>
@@ -127,14 +132,13 @@
         </template>
       </section>
 
-      <form v-if="ticket.status === 'processing'" class="cs-card cs-reply-form" @submit.prevent="replyTicket">
+      <form v-show="section === 'handle'" v-if="ticket.status === 'processing'" class="cs-card cs-reply-form" @submit.prevent="replyTicket">
         <h3 class="cs-card-title">答复原客户</h3>
-        <p class="cs-hint">发送到原客服会话，保持原工单未解决；答复不代表修复或验收通过。</p>
         <label>客户可见答复<textarea v-model="replyNote" required minlength="4" maxlength="2000" /></label>
         <button class="cs-btn" type="submit" :disabled="saving || savingEta">发送答复并保留原单</button>
       </form>
 
-      <form v-if="ticket.status === 'processing'" class="cs-card cs-close-form" @submit.prevent="closeTicket">
+      <form v-show="section === 'handle'" v-if="ticket.status === 'processing'" class="cs-card cs-close-form" @submit.prevent="closeTicket">
         <h3 class="cs-card-title">处理原工单</h3>
         <p v-if="requiresCustomerAcceptance" class="cs-hint">产品问题与定制交付须由原客户通过运行回执或原工单决策验收；管理员只能按旧单规则记录过期。</p><label v-else>处置方式<select v-model="closeDisposition"><option value="resolved">实际验收已解决</option><option value="expired">已过期不再处理（未修复，不影响资金权益）</option></select></label>
         <label>处理结论<textarea v-model="closeNote" required minlength="8" maxlength="2000" /></label>
@@ -142,7 +146,7 @@
         <button class="cs-btn" type="submit" :disabled="saving || savingEta">记录管理员处置并关闭</button>
       </form>
 
-      <section class="cs-card" aria-label="处理时间线">
+      <section v-show="section === 'history'" class="cs-card" aria-label="处理时间线">
         <h3 class="cs-card-title">处理时间线 <span class="cs-count">{{ timeline.length }}</span></h3>
         <p v-if="!timeline.length" class="cs-state">暂无记录</p>
         <ol v-else class="cs-timeline">
@@ -161,7 +165,7 @@
         </ol>
       </section>
 
-      <section class="cs-card" aria-label="审计记录">
+      <section v-show="section === 'history'" class="cs-card" aria-label="审计记录">
         <h3 class="cs-card-title">审计记录 <span class="cs-count">{{ audits.length }}</span></h3>
         <p v-if="!audits.length" class="cs-state">暂无记录</p>
         <div v-else class="cs-table-wrap">
@@ -177,25 +181,28 @@
         </div>
       </section>
 
-      <details class="cs-card cs-raw">
-        <summary>原始数据（排查用，默认收起）</summary>
-        <p class="cs-hint">包含原单 resolution、附件索引、跟进与员工回写；不展开支持包二进制内容。</p>
+      <details v-show="section === 'evidence'" open class="cs-card cs-raw">
+        <summary>原始数据</summary>
         <h4>客户证据、领取与处理进度</h4><pre class="cs-payload">{{ prettyJson(evidence) }}</pre>
         <template v-for="(rows, label) in { 决策记录: detail.decisions, 执行动作: detail.actions, 审计记录: detail.audit_logs }" :key="label">
           <h4>{{ label }}</h4><pre class="cs-payload">{{ rawOrEmpty(rows) }}</pre>
         </template>
       </details>
+      </div>
     </div>
   </main>
 </template>
 
 <script setup lang="ts">
+import AdminSectionNav from '../components/admin/AdminSectionNav.vue'
+const section = ref('progress')
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { xcmaxAdminApi } from '@/api/xcmaxAdmin'
 import api from '@/api/core'
 import { appConfirm, appPrompt } from '@/utils/appDialog'
 import CustomerServiceSharedRepair from './CustomerServiceSharedRepair.vue'
+import TicketGithubPanel from '../components/workflow/TicketGithubPanel.vue'
 import {
   auditItems, buildTimeline, executionOverview, formatBeijingTime, intentLabel, parseServerTime, prettyJson, priorityLabel, resolutionStateBadge,
   routeLabel, submitterTypeLabel, teamMembers, ticketStatusBadge, yesNoBadge, type Row,
