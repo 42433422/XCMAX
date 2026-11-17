@@ -322,7 +322,7 @@ class RabbitMqNeuroBus(InMemoryNeuroBus):
                 self._channel.basic_publish(
                     exchange=_EXCHANGE,
                     routing_key=event.event_name,
-                    body=body,
+                    body=body.encode("utf-8"),
                     properties=pika.BasicProperties(
                         delivery_mode=2,
                         content_type="application/json",
