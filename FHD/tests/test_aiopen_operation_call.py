@@ -7,7 +7,11 @@ from fastapi import APIRouter, FastAPI, Query
 from fastapi.testclient import TestClient
 
 from app.application.aiopen.catalog_builder import get_catalog
-from app.application.aiopen.service import AIOPEN_STATE, generate_api_key
+from app.application.aiopen.service import (
+    AIOPEN_STATE,
+    generate_api_key,
+    revoke_api_key,
+)
 from app.fastapi_routes.ai_open import router as ai_open_router
 
 _KEY = "fixture-operation-key"
@@ -311,10 +315,13 @@ def test_scope_limits_operation_call(client, app):
     key = created["key"]
     products = _operation_id(app, "GET", "/api/products")
     orders = _operation_id(app, "GET", "/api/orders")
-    assert _call(client, products, key=key).status_code == 200
-    denied = _call(client, orders, key=key)
-    assert denied.status_code == 403
-    assert denied.json()["code"] == "AIOPEN_SCOPE_DENIED"
+    try:
+        assert _call(client, products, key=key).status_code == 200
+        denied = _call(client, orders, key=key)
+        assert denied.status_code == 403
+        assert denied.json()["code"] == "AIOPEN_SCOPE_DENIED"
+    finally:
+        revoke_api_key(key)
 
 
 def test_mcp_operation_call_returns_readable_text(client, app):

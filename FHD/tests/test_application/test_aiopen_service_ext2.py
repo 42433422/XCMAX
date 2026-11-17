@@ -147,6 +147,15 @@ class TestRevokeApiKeyExt:
 
 
 class TestListApiKeysExt:
+    @pytest.fixture(autouse=True)
+    def _isolate_runtime_keys(self):
+        saved = dict(AIOPEN_STATE.get("runtime_keys") or {})
+        AIOPEN_STATE["runtime_keys"] = {}
+        try:
+            yield
+        finally:
+            AIOPEN_STATE["runtime_keys"] = saved
+
     def test_env_and_runtime_keys_combined(self):
         with patch.dict("os.environ", {"AIOPEN_API_KEY": "envkey"}, clear=False):
             saved = AIOPEN_STATE.setdefault("runtime_keys", {})
@@ -856,7 +865,8 @@ class TestInvokeToolExt:
                 mock_hub.dispatch = AsyncMock(return_value={"success": True})
                 await invoke_tool("ui_snapshot", {}, MagicMock())
                 call_kwargs = mock_hub.dispatch.call_args.kwargs
-                assert call_kwargs["timeout"] == 10.0
+                # 快照要遍历可访问性节点，回执超时单独放宽到 20s
+                assert call_kwargs["timeout"] == 20.0
         finally:
             AIOPEN_STATE["remote_control_enabled"] = saved
 
