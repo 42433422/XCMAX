@@ -18,9 +18,9 @@
           </div>
           <div class="cs-badges">
             <span class="cs-badge cs-badge-lg" :class="`is-${status.tone}`" :title="status.raw">{{ status.label }}</span>
-            <span class="cs-tag">{{ submitterTypeLabel(ticket.submitter_type) }}</span>
-            <span v-if="ticket.issue_domain_label" class="cs-tag">{{ ticket.issue_domain_label }}</span>
-            <span class="cs-tag">{{ intentLabel(ticket.intent) }}</span>
+            <span v-if="taxonomy.type" class="cs-tag">{{ taxonomy.type }}</span>
+            <span v-if="taxonomy.domain" class="cs-tag">{{ taxonomy.domain }}</span>
+            <span v-if="taxonomy.source" class="cs-tag">{{ taxonomy.source }}</span>
             <span v-if="ticket.priority" class="cs-tag">优先级 {{ priorityLabel(ticket.priority) }}</span>
           </div>
         </div>
@@ -47,10 +47,40 @@
         </details>
       </section>
 
-      <AdminSectionNav v-model="section" label="工单详情分区" :items="[{ value: 'progress', label: '问题与进度' }, { value: 'github', label: 'GitHub 修复' }, { value: 'handle', label: '人工处理' }, { value: 'history', label: '时间线与审计' }, { value: 'evidence', label: '原始证据' }]" />
+      <AdminSectionNav v-model="section" label="工单详情分区" :items="sections" />
       <div class="admin-pane" tabindex="0" aria-label="工单内容">
+      <section v-if="section === 'delivery'" class="cs-card" aria-label="交付进度">
+        <template v-if="delivery">
+          <ol class="cs-steps" aria-label="交付阶段">
+            <li v-for="step in deliverySteps" :key="step.key" :class="deliveryStepClass(step.key)">
+              <span>{{ step.label }}</span>
+            </li>
+          </ol>
+          <dl class="cs-facts">
+            <div><dt>当前阶段</dt><dd>{{ delivery.stage_label || delivery.stage || '未记录' }}</dd></div>
+            <div><dt>客户需求</dt><dd>{{ delivery.requirements || '未提供' }}</dd></div>
+            <div><dt>验收标准</dt><dd>{{ delivery.acceptance_criteria || '未提供' }}</dd></div>
+            <div><dt>质量门</dt><dd>{{ delivery.gate_ok === true ? '已通过' : '未通过或待运行' }} · {{ delivery.gate_message || '无结果' }}</dd></div>
+            <div v-if="latestRun"><dt>最近生产</dt><dd>第 {{ latestRun?.attempt || runCount }} 轮 · {{ runLabel(latestRun?.status) }} · {{ latestRun?.steps?.length || 0 }} 步</dd></div>
+            <div><dt>产物</dt><dd>{{ installedCount }}/{{ deliveryArtifacts.length }} 已安装</dd></div>
+          </dl>
+          <ul v-if="deliveryArtifacts.length" class="cs-chips">
+            <li v-for="artifact in deliveryArtifacts" :key="`${artifact.kind}:${artifact.id}`">
+              <code>{{ artifact.id }}</code>
+              <span class="cs-badge" :class="receiptOf(artifact) ? 'is-success' : 'is-neutral'">{{ receiptOf(artifact) ? `已安装 · ${receiptOf(artifact)?.host || '宿主'}` : '待安装回执' }}</span>
+            </li>
+          </ul>
+          <p v-if="latestRun?.error" class="cs-error-text">{{ latestRun.error }}</p>
+          <form class="cs-eta-editor" @submit.prevent>
+            <input v-model.trim="reworkNote" type="text" maxlength="4000" placeholder="返工原因（至少 4 个字）" />
+            <button class="cs-btn" type="button" :disabled="saving" @click="requestDeliveryRework">发起返工</button>
+            <button v-if="canAcceptDelivery" class="cs-btn cs-btn-primary" type="button" :disabled="saving" @click="acceptDelivery">内部质量确认</button>
+          </form>
+          <p v-if="deliveryError" role="alert" class="cs-error-text">{{ deliveryError }}</p>
+        </template>
+        <p v-else class="cs-state">暂无交付数据</p>
+      </section>
       <section v-if="section === 'github' && ticket.intent === 'product_issue' && !customDelivery" class="cs-card"><TicketGithubPanel :ticket-id="ticketId" :ticket-status="ticket.status" @updated="load" /></section>
-      <p v-else-if="section === 'github'" class="cs-state">此类工单不进入共享产品仓库修复。</p>
       <section v-show="section === 'progress'" class="cs-card">
         <h3 class="cs-card-title">客户问题原文</h3>
         <p class="cs-quote">{{ ticket.summary || '原单未记录正文' }}</p>
@@ -82,7 +112,7 @@
 
       <section v-show="section === 'progress'" class="cs-card" aria-label="执行总览">
         <h3 class="cs-card-title">执行总览</h3>
-        <p v-if="!overview" class="cs-state">暂无执行总览证据，请查看原单进度记录。</p>
+        <p v-if="!overview" class="cs-state">暂无记录</p>
         <template v-else>
           <dl class="cs-facts">
             <div><dt>当前卡点</dt><dd>{{ overview.blocker }}</dd></div>
@@ -140,7 +170,7 @@
 
       <form v-show="section === 'handle'" v-if="ticket.status === 'processing'" class="cs-card cs-close-form" @submit.prevent="closeTicket">
         <h3 class="cs-card-title">处理原工单</h3>
-        <p v-if="requiresCustomerAcceptance" class="cs-hint">产品问题与定制交付须由原客户通过运行回执或原工单决策验收；管理员只能按旧单规则记录过期。</p><label v-else>处置方式<select v-model="closeDisposition"><option value="resolved">实际验收已解决</option><option value="expired">已过期不再处理（未修复，不影响资金权益）</option></select></label>
+        <label v-if="!requiresCustomerAcceptance">处置方式<select v-model="closeDisposition"><option value="resolved">实际验收已解决</option><option value="expired">已过期不再处理（未修复，不影响资金权益）</option></select></label>
         <label>处理结论<textarea v-model="closeNote" required minlength="8" maxlength="2000" /></label>
         <label>{{ closeDisposition === 'expired' ? '过期与后续活跃需求核对记录' : '实际验收证据' }}<textarea v-model="closeVerification" required minlength="20" maxlength="4000" /></label>
         <button class="cs-btn" type="submit" :disabled="saving || savingEta">记录管理员处置并关闭</button>
@@ -204,11 +234,12 @@ import { appConfirm, appPrompt } from '@/utils/appDialog'
 import CustomerServiceSharedRepair from './CustomerServiceSharedRepair.vue'
 import TicketGithubPanel from '../components/workflow/TicketGithubPanel.vue'
 import {
-  auditItems, buildTimeline, executionOverview, formatBeijingTime, intentLabel, parseServerTime, prettyJson, priorityLabel, resolutionStateBadge,
-  routeLabel, submitterTypeLabel, teamMembers, ticketStatusBadge, yesNoBadge, type Row,
+  auditItems, buildTimeline, executionOverview, formatBeijingTime, parseServerTime, prettyJson, priorityLabel, resolutionStateBadge,
+  routeLabel, submitterTypeLabel, teamMembers, ticketDomainLabel, ticketSourceLabel, ticketStatusBadge, ticketTypeLabel, yesNoBadge, type Row,
 } from '../utils/customerServiceTicketFormat'
+import { addonTimelineSteps, initialTimelineSteps } from '../utils/deliveryPresentation'
 
-type Detail = { ticket: Row; decisions: Row[]; actions: Row[]; audit_logs: Row[]; execution_overview?: Row }
+type Detail = { ticket: Row; decisions: Row[]; actions: Row[]; audit_logs: Row[]; execution_overview?: Row; custom_delivery?: Row }
 const route = useRoute()
 const router = useRouter()
 const detail = ref<Detail | null>(null), loading = ref(false), error = ref(''), saving = ref(false), expectedCompletionInput = ref('')
@@ -217,6 +248,7 @@ const closeNote = ref(''), closeVerification = ref(''), closeRequestId = ref('')
 const replyNote = ref(''), replyRequestId = ref('')
 const assigneeId = ref(''), handleReason = ref('按客户描述核查员工图谱'), handleError = ref('')
 const sensitiveChange = ref('调整客户可见配置'), sensitiveActionId = ref(0)
+const reworkNote = ref(''), deliveryError = ref('')
 watch(replyNote, () => { replyRequestId.value = '' })
 let generation = 0
 
@@ -228,6 +260,21 @@ const evidence = computed<Row>(() => Object.fromEntries(Object.entries(
   (ticket.value.evidence || {}) as Row,
 ).filter(([key]) => key !== 'support_bundle_base64')))
 const customDelivery = computed(() => evidence.value.delivery_managed_by === 'custom_delivery' || evidence.value.issue_domain === 'custom' || evidence.value.source === 'private_mod_rework')
+const delivery = computed<Row | null>(() => {
+  const value = detail.value?.custom_delivery
+  return value && typeof value === 'object' ? value as Row : null
+})
+const sections = computed(() => [
+  { value: 'progress', label: '问题与进度' },
+  ...(delivery.value ? [{ value: 'delivery', label: '交付进度' }] : []),
+  { value: 'github', label: 'GitHub 修复' },
+  { value: 'handle', label: '人工处理' },
+  { value: 'history', label: '时间线与审计' },
+  { value: 'evidence', label: '原始证据' },
+])
+const taxonomy = computed(() => ({
+  type: ticketTypeLabel(ticket.value), domain: ticketDomainLabel(ticket.value), source: ticketSourceLabel(ticket.value),
+}))
 const requiresCustomerAcceptance = computed(() => ['product_issue', 'custom_delivery'].includes(String(ticket.value.intent)) || customDelivery.value)
 const resolution = computed(() => {
   const value = evidence.value.resolution
@@ -248,7 +295,7 @@ const bundleNames = computed(() => {
 
 function downloadBundle() {
   const raw = String((ticket.value.evidence as Row | undefined)?.support_bundle_base64 || '')
-  if (!raw) { handleError.value = '这张工单没有可下载的支持包'; return }
+  if (!raw) { handleError.value = '无可下载支持包'; return }
   const bytes = Uint8Array.from(atob(raw), (ch) => ch.charCodeAt(0))
   const url = URL.createObjectURL(new Blob([bytes], { type: 'application/zip' }))
   const link = document.createElement('a')
@@ -256,6 +303,61 @@ function downloadBundle() {
   link.download = `${ticket.value.ticket_no || ticketId.value}-support.zip`
   link.click()
   URL.revokeObjectURL(url)
+}
+
+const deliverySteps = computed(() => delivery.value?.pricing_mode === 'post_delivery_addon' ? addonTimelineSteps : initialTimelineSteps)
+const latestRun = computed<Row | null>(() => {
+  const runs = Array.isArray(delivery.value?.runs) ? delivery.value!.runs as Row[] : []
+  return runs.length ? runs[runs.length - 1] : null
+})
+const installedCount = computed(() => (Array.isArray(delivery.value?.install_receipts) ? delivery.value!.install_receipts as Row[] : []).length)
+const runCount = computed(() => Array.isArray(delivery.value?.runs) ? delivery.value!.runs.length : 0)
+const deliveryArtifacts = computed<Row[]>(() => Array.isArray(delivery.value?.artifacts) ? delivery.value!.artifacts as Row[] : [])
+const canAcceptDelivery = computed(() => String(delivery.value?.stage || '') === 'acceptance'
+  && delivery.value?.gate_ok === true && String(delivery.value?.acceptance_status || 'pending') === 'pending')
+
+function receiptOf(artifact: Row): Row | undefined {
+  const receipts = Array.isArray(delivery.value?.install_receipts) ? delivery.value!.install_receipts as Row[] : []
+  return receipts.find((row) => row.kind === artifact.kind && row.id === artifact.id)
+}
+const runLabel = (status: unknown) => ({ done: '完成', running: '运行中', queued: '排队中', error: '失败' } as Record<string, string>)[String(status || '')] || '未知'
+function stageRank(stage: string) {
+  return deliverySteps.value.findIndex((step) => step.key === (stage === 'rework' ? 'production' : stage))
+}
+function deliveryStepClass(key: string) {
+  const stage = String(delivery.value?.stage || '')
+  const rank = stageRank(stage)
+  const stepRank = stageRank(key)
+  return {
+    'is-done': stepRank < rank || stage === 'delivered',
+    'is-current': stepRank === rank && stage !== 'rework',
+    'is-failed': stage === 'rework' && key === 'production',
+  }
+}
+
+async function acceptDelivery() {
+  if (!canAcceptDelivery.value || saving.value) return
+  if (!await appConfirm(`确认工单 ${ticket.value.ticket_no || ticketId.value} 通过内部质量检查？`, { title: '内部质量确认', confirmText: '确认质量通过' })) return
+  saving.value = true; deliveryError.value = ''
+  try {
+    await xcmaxAdminApi.decideCustomDelivery(ticketId.value, 'accept', '管理员仅完成内部质量确认，等待客户本人验收')
+    await load()
+  } catch (cause) { deliveryError.value = apiError(cause) }
+  finally { saving.value = false }
+}
+
+async function requestDeliveryRework() {
+  if (saving.value) return
+  const note = reworkNote.value.trim()
+  if (note.length < 4) { deliveryError.value = '返工原因至少 4 个字'; return }
+  if (!await appConfirm(`将工单 ${ticket.value.ticket_no || ticketId.value} 发回重新执行？`, { title: '发起返工', confirmText: '确认返工' })) return
+  saving.value = true; deliveryError.value = ''
+  try {
+    await xcmaxAdminApi.decideCustomDelivery(ticketId.value, 'rework', note)
+    reworkNote.value = ''
+    await load()
+  } catch (cause) { deliveryError.value = apiError(cause) }
+  finally { saving.value = false }
 }
 
 async function postHandle(command: string, body: Row) {
@@ -368,7 +470,7 @@ async function saveExpectedCompletion() {
     await xcmaxAdminApi.updateCustomerTicketExpectedCompletion(id, fromBeijingInput(expectedCompletionInput.value))
     if (ticketId.value !== id) return
     await load()
-    if (ticketId.value === id) etaMessage.value = '已保存，客户工单页面会显示此时间。'
+    if (ticketId.value === id) etaMessage.value = '已保存'
   } catch (cause) { if (ticketId.value === id) etaError.value = message(cause) }
   finally { savingEta.value = false }
 }
@@ -401,3 +503,7 @@ onBeforeUnmount(() => { generation++ })
 </script>
 
 <style scoped src="./CustomerServiceTickets.css"></style>
+<style scoped>
+.cs-steps li.is-failed { color: #b91c1c; }
+.cs-steps li.is-failed::before { background: #dc2626; color: #fff; }
+</style>

@@ -75,9 +75,48 @@ def _build_ambiguous_question(node: WorkflowNode, candidates: list[dict[str, Any
     return "\n".join(lines)
 
 
+def _resolve_clear_dataset_target(
+    node: WorkflowNode,
+    params: dict[str, Any],
+    required: list[str],
+    context: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """清空知识库时从会话上下文解析目标空间，避免向用户索要内部 dataset_id。"""
+    if "dataset_id" not in required or str(params.get("dataset_id") or "").strip():
+        return None
+    raw_ids = (context or {}).get("chat_clearable_dataset_ids") or []
+    ids = [str(item).strip() for item in raw_ids if str(item).strip()]
+    if len(ids) == 1:
+        params["dataset_id"] = ids[0]
+        return None
+    if len(ids) > 1:
+        return {
+            "node_id": node.node_id,
+            "tool_id": node.tool_id,
+            "action": node.action,
+            "reason": "missing_required",
+            "field": "dataset_id",
+            "missing_fields": ["dataset_id"],
+            "question": (
+                "要清空哪个知识空间？可选："
+                f"{'、'.join(ids)}。请回复空间名称后再执行，避免误删其他空间。"
+            ),
+        }
+    return {
+        "node_id": node.node_id,
+        "tool_id": node.tool_id,
+        "action": node.action,
+        "reason": "missing_required",
+        "field": "dataset_id",
+        "missing_fields": ["dataset_id"],
+        "question": "当前没有可清空的知识库空间。如需清空，请先在知识库页面确认空间名称。",
+    }
+
+
 def needs_clarification(
     plan: PlanGraph,
     tool_registry: dict[str, Any] | None = None,
+    context: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Detect missing write inputs and ambiguous targets before execution."""
     items: list[dict[str, Any]] = []
@@ -88,6 +127,14 @@ def needs_clarification(
             continue
         params = node.params or {}
         required = _action_required(node, tool_registry)
+
+        if (node.tool_id, node.action) == ("dataset_rag", "clear_dataset"):
+            resolved = _resolve_clear_dataset_target(node, params, required, context)
+            if resolved is not None:
+                items.append(resolved)
+                continue
+            if not _missing_fields(params, required):
+                continue
 
         if node.tool_id == "business_db" and node.action == "write":
             operation = str(params.get("operation") or "").strip().lower()

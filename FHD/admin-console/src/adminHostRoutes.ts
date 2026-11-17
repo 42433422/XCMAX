@@ -65,7 +65,7 @@ export const ADMIN_HOST_ROUTE_RECORDS: RouteRecordRaw[] = [
     path: '/server-functions',
     name: 'server-functions',
     component: () => import('./views/ServerFunctionsView.vue'),
-    meta: { title: '服务器功能模块', requiresAdminAccount: true, hostAdmin: true },
+    meta: { title: '每日摘要', requiresAdminAccount: true, hostAdmin: true },
   },
   // 常见手输地址：/admin/users → 用户管理（admin-entitlements，原守卫不变）
   { path: '/users', redirect: { name: 'admin-entitlements' } },

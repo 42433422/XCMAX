@@ -468,15 +468,17 @@ export const xcmaxAdminApi = {
       '/api/ops/autonomy/work-orders', { limit },
     );
   },
-  fetchCustomerTickets(search = '', offset = 0, submitterType = '', intent = '', status = '') {
+  fetchCustomerTickets(search = '', offset = 0, submitterType = '', intent = '', status = '', ticketType = '', ticketDomain = '', ticketSource = '') {
     return api.get<{ items: Record<string, unknown>[]; total: number }>(
       '/api/xcmax/admin/customer-service/tickets', {
-        search, submitter_type: submitterType, intent, status, offset, limit: 50,
+        search, submitter_type: submitterType, intent, status,
+        ticket_type: ticketType, ticket_domain: ticketDomain, ticket_source: ticketSource,
+        offset, limit: 50,
       },
     );
   },
   fetchCustomerTicket(ticketId: number) {
-    return api.get<{ ticket?: Record<string, unknown>; audit_logs?: Record<string, unknown>[]; actions?: Record<string, unknown>[]; decisions?: Record<string, unknown>[]; execution_overview?: Record<string, unknown> }>(
+    return api.get<{ ticket?: Record<string, unknown>; audit_logs?: Record<string, unknown>[]; actions?: Record<string, unknown>[]; decisions?: Record<string, unknown>[]; execution_overview?: Record<string, unknown>; custom_delivery?: Record<string, unknown> }>(
       `/api/xcmax/admin/customer-service/tickets/${ticketId}`,
     );
   },

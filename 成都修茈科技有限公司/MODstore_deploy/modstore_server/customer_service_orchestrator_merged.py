@@ -21,6 +21,7 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.customer_service_triage import (
     _parse_domain_clarify_reply as _parse_domain_clarify_reply,
     resolve_triage_lane as resolve_triage_lane,
+    ticket_taxonomy as ticket_taxonomy,
 )
 
 # --- from customer_service_orchestrator_part01.py ---
@@ -2312,6 +2313,11 @@ def ticket_payload(
         "ticket_no": row.ticket_no,
         "title": row.title,
         "intent": row.intent,
+        **ticket_taxonomy(
+            row.intent,
+            getattr(row, "submitter_type", None) or "unknown",
+            evidence,
+        ),
         "issue_domain": domain or None,
         "issue_domain_label": evidence.get("issue_domain_label")
         or _facade().ISSUE_DOMAIN_LABELS.get(domain)

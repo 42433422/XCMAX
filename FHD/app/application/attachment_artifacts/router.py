@@ -13,6 +13,7 @@ from app.application.attachment_artifacts.attachment_parser import (
     UnsupportedDocument,
     parse_file,
 )
+from app.application.attachment_artifacts.models import ArtifactScope
 from app.application.attachment_artifacts.store import ArtifactStore
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
@@ -45,26 +46,46 @@ async def _save_upload(upload: UploadFile, target: Path) -> int:
     return total
 
 
-def _ingest_identity(request: Request) -> tuple[int, int] | None:
-    """取当前会话的租户与用户；未登录或缺少租户时不登记 ELT 上传。"""
+def _ingest_identity(request: Request) -> tuple[int | None, int] | None:
+    """取当前会话的租户与用户；没有登录账号时不接收工件。"""
     try:
         from app.infrastructure.auth.dependencies import resolve_session_user
 
         user = resolve_session_user(request)
     except BOUNDARY_ERRORS:
         return None
+    if user is None:
+        return None
     tenant = getattr(user, "tenant_id", None)
     owner = getattr(user, "id", None)
-    if tenant is None or owner is None:
+    if owner is None:
         return None
-    return int(tenant), int(owner)
+    return (int(tenant) if tenant is not None else None), int(owner)
+
+
+def _request_scope(request: Request) -> ArtifactScope | None:
+    identity = _ingest_identity(request)
+    if identity is None:
+        return None
+    tenant, owner = identity
+    return ArtifactScope(
+        owner_user_id=str(owner),
+        tenant_id="" if tenant is None else str(tenant),
+    )
+
+
+def _require_scope(request: Request) -> ArtifactScope:
+    scope = _request_scope(request)
+    if scope is None:
+        raise HTTPException(status_code=401, detail="请先登录后使用附件")
+    return scope
 
 
 def _register_elt_upload(
-    target: Path, name: str, content_type: str | None, identity: tuple[int, int] | None
+    target: Path, name: str, content_type: str | None, identity: tuple[int | None, int] | None
 ) -> str:
     """把电子表格同时登记成 ELT 上传，数据对接中心可直接按文件名导入。"""
-    if identity is None or Path(name).suffix.lower() not in _ELT_SUFFIXES:
+    if identity is None or identity[0] is None or Path(name).suffix.lower() not in _ELT_SUFFIXES:
         return ""
     tenant, owner = identity
     try:
@@ -90,7 +111,7 @@ async def _ingest(
     index: int,
     tmpdir: Path,
     store: ArtifactStore,
-    identity: tuple[int, int] | None = None,
+    identity: tuple[int | None, int] | None = None,
 ) -> dict[str, Any]:
     name = _safe_name(upload, index)
     base: dict[str, Any] = {"name": name}
@@ -144,7 +165,7 @@ async def upload_attachments(
                 status_code=413,
                 detail=f"{_safe_name(upload, 0)} 超过 50MB 上限",
             )
-    store = ArtifactStore()
+    store = ArtifactStore(scope=_require_scope(request))
     identity = _ingest_identity(request)
     results: list[dict[str, Any]] = []
     with tempfile.TemporaryDirectory(prefix="xcagi_attachment_") as tmpdir:
@@ -154,20 +175,23 @@ async def upload_attachments(
 
 
 @router.get("/")
-async def list_attachments_api() -> dict[str, Any]:
-    return {"ok": True, "attachments": ArtifactStore().list_all()}
+async def list_attachments_api(request: Request) -> dict[str, Any]:
+    store = ArtifactStore(scope=_require_scope(request))
+    return {"ok": True, "attachments": store.list_all()}
 
 
 @router.get("/{artifact_id}")
-async def get_attachment(artifact_id: str) -> dict[str, Any]:
-    record = ArtifactStore().get(artifact_id)
+async def get_attachment(artifact_id: str, request: Request) -> dict[str, Any]:
+    store = ArtifactStore(scope=_require_scope(request))
+    record = store.get(artifact_id)
     if record is None:
         raise HTTPException(status_code=404, detail="附件不存在")
     return {"ok": True, "artifact": record.to_dict()}
 
 
 @router.delete("/{artifact_id}")
-async def delete_attachment(artifact_id: str) -> dict[str, Any]:
-    if not ArtifactStore().delete(artifact_id):
+async def delete_attachment(artifact_id: str, request: Request) -> dict[str, Any]:
+    store = ArtifactStore(scope=_require_scope(request))
+    if not store.delete(artifact_id):
         raise HTTPException(status_code=404, detail="附件不存在")
     return {"ok": True, "deleted": artifact_id}

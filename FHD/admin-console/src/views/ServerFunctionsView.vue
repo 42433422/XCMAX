@@ -3,7 +3,7 @@
     <div class="page-content admin-screen">
       <div class="page-header">
         <div>
-          <h2>服务器功能模块</h2>
+          <h2>每日摘要</h2>
         </div>
         <div class="header-actions">
           <button type="button"
@@ -27,47 +27,7 @@
         </div>
       </div>
 
-      <nav class="tabs" aria-label="服务器功能模块">
-        <button :class="{ active: activeTab === 'modules' }" :aria-pressed="activeTab === 'modules'" @click="activeTab = 'modules'">
-          服务器模块
-        </button>
-        <button :class="{ active: activeTab === 'digests' }" :aria-pressed="activeTab === 'digests'" @click="activeTab = 'digests'">
-          每日摘要记录
-        </button>
-      </nav>
-
-      <section v-if="activeTab === 'modules'" class="modules-panel">
-        <div class="module-metrics" aria-label="模块统计">
-          <div><span>注册模块</span><strong>{{ modulesKnown ? modules.length : '—' }}</strong></div>
-          <div><span>已启用</span><strong>{{ modulesKnown ? enabledModules : '—' }}</strong></div>
-          <div><span>已禁用</span><strong>{{ modulesKnown ? modules.length - enabledModules : '—' }}</strong></div>
-        </div>
-        <section class="card module-list">
-          <div class="module-toolbar">
-            <h3>模块列表 <small>{{ filteredModules.length }} / {{ modules.length }}</small></h3>
-            <div class="module-filters">
-              <input v-model="moduleQuery" type="search" aria-label="搜索模块" placeholder="搜索名称或 ID" />
-              <select v-model="moduleStatus" aria-label="模块状态"><option value="all">全部状态</option><option value="enabled">已启用</option><option value="disabled">已禁用</option></select>
-            </div>
-          </div>
-          <p v-if="modulesLoading" class="empty-hint" role="status">正在读取模块…</p>
-          <div v-else-if="modulesError" class="error-hint" role="alert">{{ modulesError }} <button class="btn btn-secondary" @click="loadModules">重试</button></div>
-          <div v-else-if="filteredModules.length" class="table-scroll">
-            <table class="data-table">
-              <thead><tr><th>模块</th><th>来源</th><th>状态</th><th>详情</th></tr></thead>
-              <tbody><tr v-for="mod in filteredModules" :key="mod.module_id">
-                <td><strong class="module-name">{{ mod.display_name || mod.name || '未命名模块' }}</strong><small class="module-id mono">{{ mod.module_id }}</small></td>
-                <td>{{ sourceLabel(mod.source) }}</td>
-                <td><span class="status-badge" :class="mod.active === false ? 'badge-dim' : 'badge-ok'">{{ mod.active === false ? '禁用' : '启用' }}</span></td>
-                <td><details class="module-detail"><summary>查看</summary><dl><dt>路由</dt><dd class="mono">{{ mod.route || '—' }}</dd><dt>同步范围</dt><dd>{{ mod.sync_scope || '—' }}</dd></dl></details></td>
-              </tr></tbody>
-            </table>
-          </div>
-          <p v-else class="empty-hint">{{ modules.length ? '没有匹配的模块' : '暂无模块数据' }}</p>
-        </section>
-      </section>
-
-      <section v-if="activeTab === 'digests'" class="digest-layout admin-pane">
+      <section class="digest-layout admin-pane">
         <div class="card digest-list-card">
           <div class="section-title">
             <h3>每日摘要存档</h3>
@@ -124,24 +84,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { api } from '@/api'
+import { onBeforeUnmount, onMounted, ref, type Ref } from 'vue'
 import { sanitizeChatBubbleHtml } from '@/utils/sanitizeHtml'
 import { useDigestPanel } from './serverFunctions/useDigestPanel'
 
-type AnyRow = Record<string, any>
-
-const activeTab = ref<'modules' | 'digests'>('modules')
+/** 页面已收敛为每日摘要；保留 TabKey 形状供轮询逻辑判断。 */
+const activeTab = ref('digests') as Ref<'modules' | 'digests'>
 const refreshing = ref(false)
-
-const modules = ref<AnyRow[]>([])
-const modulesLoading = ref(false), modulesKnown = ref(false), modulesError = ref('')
-const moduleQuery = ref(''), moduleStatus = ref('all')
-const enabledModules = computed(() => modules.value.filter(mod => mod.active !== false).length)
-const filteredModules = computed(() => modules.value.filter(mod => {
-  const matches = `${mod.display_name || mod.name || ''} ${mod.module_id || ''}`.toLowerCase().includes(moduleQuery.value.trim().toLowerCase())
-  return matches && (moduleStatus.value === 'all' || (moduleStatus.value === 'enabled' ? mod.active !== false : mod.active === false))
-}))
 
 const {
   digestRecords,
@@ -164,54 +113,23 @@ const {
   fetchLatestIdentityCode,
 } = useDigestPanel(activeTab)
 
-function sourceLabel(source: string) {
-  const map: Record<string, string> = { local: '本地 Mod', remote: '服务器', core: '系统内置', employee: '员工包' }
-  return map[source] || source || '未知'
-}
-
 function sanitizeHtml(raw: string) {
   return sanitizeChatBubbleHtml(raw)
-}
-
-async function loadModules() {
-  if (modulesLoading.value) return
-  modulesLoading.value = true
-  modulesError.value = ''
-  try {
-    const res = await api.get<any>('/api/xcmax/admin/modules')
-    if (res?.success === false || !Array.isArray(res?.data)) throw new Error('模块数据返回不完整')
-    modules.value = res.data
-    modulesKnown.value = true
-  } catch (e) {
-    modules.value = []
-    modulesKnown.value = false
-    modulesError.value = e instanceof Error ? e.message : '模块读取失败'
-  } finally { modulesLoading.value = false }
 }
 
 async function refreshActiveTab() {
   refreshing.value = true
   try {
-    if (activeTab.value === 'modules') await loadModules()
-    else if (activeTab.value === 'digests') await loadDigestRecords()
+    await loadDigestRecords()
   } finally {
     refreshing.value = false
   }
 }
 
-watch(activeTab, (tab) => {
-  if (tab === 'modules' && modules.value.length === 0) void loadModules()
-  if (tab === 'digests') {
-    void loadDigestRecords()
-    startDigestPolling()
-  } else {
-    stopDigestPolling()
-  }
-})
-
 onMounted(() => {
-  void loadModules()
+  void loadDigestRecords()
   void fetchLatestIdentityCode()
+  startDigestPolling()
 })
 
 onBeforeUnmount(() => {

@@ -7,10 +7,10 @@ import { ADMIN_HOST_ROUTE_RECORDS } from '../../../admin-console/src/adminHostRo
 import { ADMIN_OPERATOR_MENU_ITEMS, ADMIN_OPERATOR_ROUTE_NAMES } from '../../../admin-console/src/constants/adminOperatorNav'
 import { SIDEBAR_ROUTE_NAME_MAP } from '@/constants/sidebarRouteNameMap'
 
-const { list, detail, updateEta, push, route, put, post, get, prompt, confirm } = vi.hoisted(() => ({
-  get: vi.fn(), post: vi.fn(), put: vi.fn(), list: vi.fn(), detail: vi.fn(), updateEta: vi.fn(), push: vi.fn(), prompt: vi.fn(), confirm: vi.fn(), route: { params: {} as Record<string, string> },
+const { list, detail, updateEta, decideDelivery, push, route, put, post, get, prompt, confirm } = vi.hoisted(() => ({
+  get: vi.fn(), post: vi.fn(), put: vi.fn(), list: vi.fn(), detail: vi.fn(), updateEta: vi.fn(), decideDelivery: vi.fn(), push: vi.fn(), prompt: vi.fn(), confirm: vi.fn(), route: { params: {} as Record<string, string> },
 }))
-vi.mock('@/api/xcmaxAdmin', () => ({ xcmaxAdminApi: { fetchCustomerTickets: list, fetchCustomerTicket: detail, updateCustomerTicketExpectedCompletion: updateEta } }))
+vi.mock('@/api/xcmaxAdmin', () => ({ xcmaxAdminApi: { fetchCustomerTickets: list, fetchCustomerTicket: detail, updateCustomerTicketExpectedCompletion: updateEta, decideCustomDelivery: decideDelivery } }))
 vi.mock('@/api/core', () => ({ default: { get, put, post } }))
 vi.mock('@/utils/appDialog', () => ({ appConfirm: confirm, appPrompt: prompt }))
 vi.mock('vue-router', () => ({ useRouter: () => ({ push }), useRoute: () => route }))
@@ -33,7 +33,7 @@ beforeEach(() => {
   vi.resetAllMocks()
   route.params = {}
   list.mockResolvedValue({ items: [ticket], total: 1 }); detail.mockResolvedValue(payload); push.mockResolvedValue(undefined)
-  updateEta.mockResolvedValue(payload)
+  updateEta.mockResolvedValue(payload); decideDelivery.mockResolvedValue({ success: true })
 })
 
 describe('customer service ticket list', () => {
@@ -56,10 +56,10 @@ describe('customer service ticket list', () => {
     expect(row.text()).toContain('已完成')
     expect(row.text()).not.toContain('resolved')
     expect(row.text()).toContain('2026-10-18 00:37:23')
-    expect(row.find('.cs-badge').classes()).toContain('is-success')
+    expect(row.find('.el-tag').classes()).toContain('el-tag--success')
     await row.find('button').trigger('click')
     expect(push).toHaveBeenCalledWith({ name: 'customer-service-ticket-detail', params: { ticketId: '42' } })
-    await row.trigger('keydown.enter')
+    await row.trigger('click')
     expect(push).toHaveBeenCalledTimes(2)
     wrapper.unmount()
   })
@@ -68,41 +68,45 @@ describe('customer service ticket list', () => {
     list.mockReturnValueOnce(new Promise((_resolve, fail) => { reject = fail }))
     const wrapper = mount(CustomerServiceTicketsView)
     await wrapper.vm.$nextTick()
-    expect(wrapper.text()).toContain('正在读取客服工单')
-    expect(wrapper.text()).not.toContain('没有客服工单')
+    expect(wrapper.text()).toContain('正在读取')
+    expect(wrapper.text()).not.toContain('暂无工单')
     reject(new Error('403 forbidden')); await flushPromises()
     expect(wrapper.text()).toContain('403 forbidden')
-    expect(wrapper.text()).not.toContain('当前授权范围与搜索条件下没有客服工单')
+    expect(wrapper.text()).not.toContain('暂无工单')
     list.mockResolvedValueOnce({ success: false }); await wrapper.find('form').trigger('submit'); await flushPromises()
     expect(wrapper.text()).toContain('响应不完整')
     list.mockResolvedValueOnce({ items: [], total: 0 }); await wrapper.find('form').trigger('submit'); await flushPromises()
-    expect(wrapper.text()).toContain('当前授权范围与搜索条件下没有客服工单')
+    expect(wrapper.text()).toContain('暂无工单')
     wrapper.unmount()
   })
   it('searches suffix and original text server-side and paginates beyond the initial 50', async () => {
     list.mockResolvedValue({ items: [ticket], total: 51 })
     const wrapper = mount(CustomerServiceTicketsView); await flushPromises()
-    expect(wrapper.text()).toContain('第 1 / 2 页')
+    expect(wrapper.text()).toContain('共 51 单')
     await wrapper.find('input').setValue('290063'); await wrapper.find('form').trigger('submit'); await flushPromises()
-    expect(list).toHaveBeenLastCalledWith('290063', 0, '', '', '')
-    await wrapper.findAll('button').find(row => row.text() === '下一页')!.trigger('click'); await flushPromises()
-    expect(list).toHaveBeenLastCalledWith('290063', 50, '', '', '')
+    expect(list).toHaveBeenLastCalledWith('290063', 0, '', '', '', '', '', '')
+    await wrapper.find('.btn-next').trigger('click'); await flushPromises()
+    expect(list).toHaveBeenLastCalledWith('290063', 50, '', '', '', '', '', '')
     await wrapper.find('input').setValue('UPDATELOG-20261016')
-    await wrapper.findAll('button').find(row => row.text() === '上一页')!.trigger('click'); await flushPromises()
-    expect(list).toHaveBeenLastCalledWith('290063', 0, '', '', '')
+    await wrapper.find('.btn-prev').trigger('click'); await flushPromises()
+    expect(list).toHaveBeenLastCalledWith('290063', 0, '', '', '', '', '', '')
     await wrapper.find('form').trigger('submit'); await flushPromises()
-    expect(list).toHaveBeenLastCalledWith('UPDATELOG-20261016', 0, '', '', '')
+    expect(list).toHaveBeenLastCalledWith('UPDATELOG-20261016', 0, '', '', '', '', '', '')
     wrapper.unmount()
   })
-  it.each([['product_issue', 'customer', '产品问题', '客户提交'], ['custom_delivery', 'unknown', '定制交付', '提交人待确认']])('combines %s with status and submitter identity across pages', async (intent, submitter, category, identity) => {
-    list.mockResolvedValue({ items: [{ ...ticket, intent, submitter_type: submitter }], total: 51 })
+  it('combines ticket type, domain, source and status across pages', async () => {
+    list.mockResolvedValue({ items: [{ ...ticket, intent: 'product_issue', submitter_type: 'customer' }], total: 51 })
     const wrapper = mount(CustomerServiceTicketsView); await flushPromises()
-    for (const [label, value] of [['问题分类', intent], ['处理状态', 'resolved'], ['提交人身份', submitter]]) await wrapper.get(`select[aria-label="${label}"]`).setValue(value)
+    const selects = wrapper.findAllComponents({ name: 'ElSelect' })
+    for (const [index, value] of [['0', 'defect'], ['1', 'platform'], ['2', 'customer_chat'], ['3', 'resolved']] as const) {
+      selects[Number(index)].vm.$emit('update:modelValue', value)
+    }
+    await flushPromises()
     await wrapper.find('form').trigger('submit'); await flushPromises()
-    expect(list).toHaveBeenLastCalledWith('', 0, submitter, intent, 'resolved')
-    for (const label of [category, identity]) expect(wrapper.find('tbody tr').text()).toContain(label)
-    await wrapper.findAll('button').find(row => row.text() === '下一页')!.trigger('click'); await flushPromises()
-    expect(list).toHaveBeenLastCalledWith('', 50, submitter, intent, 'resolved')
+    expect(list).toHaveBeenLastCalledWith('', 0, '', '', 'resolved', 'defect', 'platform', 'customer_chat')
+    for (const label of ['缺陷', '平台', '客户对话']) expect(wrapper.find('tbody tr').text()).toContain(label)
+    await wrapper.find('.btn-next').trigger('click'); await flushPromises()
+    expect(list).toHaveBeenLastCalledWith('', 50, '', '', 'resolved', 'defect', 'platform', 'customer_chat')
     wrapper.unmount()
   })
 })
@@ -203,7 +207,7 @@ describe('customer service ticket detail', () => {
     complete(payload); await flushPromises()
     expect(updateEta).toHaveBeenCalledWith(42, '2026-10-21T11:30:00+08:00')
     expect(detail).toHaveBeenCalledTimes(2)
-    expect(wrapper.text()).toContain('另一张工单'); expect(wrapper.text()).not.toContain('已保存，客户工单页面会显示此时间。')
+    expect(wrapper.text()).toContain('另一张工单'); expect(wrapper.text()).not.toContain('已保存')
     wrapper.unmount()
   })
   it.each([false, true])('corrects original-ticket metadata with CAS and refreshed audit (classification=%s)', async classification => {
@@ -226,14 +230,14 @@ describe('customer service ticket detail', () => {
     await wrapper.find('form.cs-eta-editor').trigger('submit')
     await flushPromises()
     expect(updateEta).toHaveBeenCalledWith(42, '2026-10-21T11:30:00+08:00')
-    expect(wrapper.text()).toContain('已保存，客户工单页面会显示此时间。')
+    expect(wrapper.text()).toContain('已保存')
     wrapper.unmount()
   })
   it('opens the real internal id with header, original text and empty sections', async () => {
     const wrapper = mountDetail(); await flushPromises()
     expect(detail).toHaveBeenCalledWith(42)
     const text = wrapper.text()
-    for (const part of [ticket.ticket_no, ticket.summary, '暂无管理员指派记录', '暂无记录', '平台', '产品问题', '市场用户 ID 7', '会话 63', '2026-10-16 12:41:57', '未关闭', '北京时间']) {
+    for (const part of [ticket.ticket_no, ticket.summary, '暂无管理员指派记录', '暂无记录', '平台', '缺陷', '市场用户 ID 7', '会话 63', '2026-10-16 12:41:57', '未关闭', '北京时间']) {
       expect(text).toContain(part)
     }
     expect(wrapper.find('.cs-hero .cs-badge').text()).toBe('已完成')
@@ -306,6 +310,42 @@ describe('customer service ticket detail', () => {
     expect(wrapper.text()).toContain('404 not found')
     wrapper.unmount()
   })
+})
+
+it('shows delivery progress on the ticket detail and records acceptance or rework', async () => {
+  confirm.mockResolvedValue(true)
+  detail.mockResolvedValue({
+    ...payload,
+    ticket: { ...ticket, status: 'processing', intent: 'custom_delivery', evidence: { issue_domain: 'custom' } },
+    custom_delivery: {
+      stage: 'acceptance', stage_label: '质量门通过，待客户验收', gate_ok: true, acceptance_status: 'pending',
+      requirements: '读取质检单', acceptance_criteria: '用例全部通过', pricing_mode: 'initial_included',
+      runs: [{ attempt: 2, status: 'done', steps: [{ id: 'verify' }] }],
+      artifacts: [{ kind: 'module', id: 'coating-quality-private' }], install_receipts: [],
+    },
+  })
+  const wrapper = mountDetail(); await flushPromises()
+  await wrapper.findAll('button').find(button => button.text() === '交付进度')!.trigger('click')
+  await flushPromises()
+  const panel = wrapper.find('[aria-label="交付进度"]')
+  expect(panel.text()).toContain('质量门通过，待客户验收')
+  expect(panel.text()).toContain('coating-quality-private')
+  expect(panel.text()).toContain('待安装回执')
+  await panel.findAll('button').find(button => button.text() === '内部质量确认')!.trigger('click')
+  await flushPromises()
+  expect(confirm).toHaveBeenCalled()
+  expect(decideDelivery).toHaveBeenCalledWith(42, 'accept', '管理员仅完成内部质量确认，等待客户本人验收')
+  const refreshed = wrapper.find('[aria-label="交付进度"]')
+  await refreshed.find('input[type="text"]').setValue('不合格')
+  await refreshed.findAll('button').find(button => button.text() === '发起返工')!.trigger('click')
+  await flushPromises()
+  expect(wrapper.find('[aria-label="交付进度"]').text()).toContain('返工原因至少 4 个字')
+  const retry = wrapper.find('[aria-label="交付进度"]')
+  await retry.find('input[type="text"]').setValue('颜色比对用例缺失')
+  await retry.findAll('button').find(button => button.text() === '发起返工')!.trigger('click')
+  await flushPromises()
+  expect(decideDelivery).toHaveBeenCalledWith(42, 'rework', '颜色比对用例缺失')
+  wrapper.unmount()
 })
 
 it('sends a customer-visible reply without closing the original ticket', async () => {

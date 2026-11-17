@@ -32,6 +32,23 @@ export function useApprovalData(deps: { viewDetails: (requestId: number) => Prom
   const visibleInitiatedRequests = computed(() => fullListType.value === 'initiated' ? fullListItems.value : initiatedRequests.value)
   let fullListRequest = 0
 
+  // 工作台分组与筛选（统计卡点击 + 搜索）
+  const activeTab = ref<'pending' | 'initiated'>('pending')
+  const initiatedFilter = ref<'all' | 'approved' | 'rejected'>('all')
+  const listQuery = ref('')
+  const matchesQuery = (item: ApprovalRequest) => {
+    const query = listQuery.value.trim().toLowerCase()
+    return !query || item.title.toLowerCase().includes(query) || item.request_no.toLowerCase().includes(query)
+  }
+  const filteredPendingRequests = computed(() => visiblePendingRequests.value.filter(matchesQuery))
+  const filteredInitiatedRequests = computed(() => visibleInitiatedRequests.value
+    .filter(matchesQuery)
+    .filter((item) => initiatedFilter.value === 'all' || item.status === initiatedFilter.value))
+  const applyStatsFilter = (kind: 'pending' | 'initiated' | 'approved' | 'rejected') => {
+    activeTab.value = kind === 'pending' ? 'pending' : 'initiated'
+    initiatedFilter.value = kind === 'approved' || kind === 'rejected' ? kind : 'all'
+  }
+
   const loadFullListPage = async (page = fullListPage.value) => {
     const type = fullListType.value, scope = accountScope(), userId = getCurrentUserId()
     if (!active || !userId || !type || !Number.isSafeInteger(page) || page < 1 || page > fullListPageCount.value) return
@@ -174,6 +191,7 @@ export function useApprovalData(deps: { viewDetails: (requestId: number) => Prom
     stats, pendingRequests, initiatedRequests, loading,
     fullListType, fullListPage, fullListPageCount, fullListLoading, fullListError,
     visiblePendingRequests, visibleInitiatedRequests, viewAll, loadFullListPage, closeFullList,
+    activeTab, initiatedFilter, listQuery, filteredPendingRequests, filteredInitiatedRequests, applyStatsFilter,
     currentUserId, deepLinkOpened, getCurrentUserId, reloadAccount, loadData,
   }
 }

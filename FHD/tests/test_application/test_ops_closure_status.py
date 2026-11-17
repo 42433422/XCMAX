@@ -17,6 +17,7 @@ from app.application.ops_closure_status import (
     _duty_employee_area_map,
     _installed_employee_pack_ids,
     _next_actions,
+    _present_employee_pack_ids,
     build_ops_closure_status,
 )
 
@@ -46,6 +47,37 @@ def _shared_scope_case_0():
 
 
 class TestInstalledEmployeePackIds:
+    def test_present_packs_bypass_runtime_admission(self, tmp_path):
+        """Enterprise 准入过滤隐藏控制面员工包，但缺包检查必须按磁盘实际存在判断。"""
+        emp_dir = tmp_path / "_employees"
+        pack = emp_dir / "daily-orchestrator"
+        pack.mkdir(parents=True)
+        (pack / "manifest.json").write_text(
+            '{"id": "daily-orchestrator", "artifact": "employee_pack"}', encoding="utf-8"
+        )
+        other = emp_dir / "not-a-pack"
+        other.mkdir()
+        (other / "manifest.json").write_text('{"id": "not-a-pack", "artifact": "mod"}', encoding="utf-8")
+        broken = emp_dir / "broken"
+        broken.mkdir()
+        (broken / "manifest.json").write_text("{not json", encoding="utf-8")
+        (emp_dir / "no-manifest").mkdir()
+
+        assert _present_employee_pack_ids(str(tmp_path)) == {"daily-orchestrator"}
+
+        mock_mgr = MagicMock()
+        mock_mgr.all_mods_roots.return_value = [str(tmp_path)]
+        mock_mgr.list_loaded_mods.return_value = []
+        with (
+            patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mock_mgr),
+            patch("app.infrastructure.mods.employee_registry.EmployeeRegistry") as mock_reg_cls,
+        ):
+            mock_reg_cls.return_value.list_packs.return_value = []
+            assert "daily-orchestrator" in _installed_employee_pack_ids()
+
+    def test_present_packs_empty_when_root_missing(self, tmp_path):
+        assert _present_employee_pack_ids(str(tmp_path)) == set()
+
     def test_returns_empty_when_mod_manager_raises(self):
         with patch(
             "app.infrastructure.mods.mod_manager.get_mod_manager",

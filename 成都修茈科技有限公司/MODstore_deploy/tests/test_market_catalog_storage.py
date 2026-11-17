@@ -123,6 +123,91 @@ def test_graph_template_needs_snapshot_not_archive(client, auth_headers):
     assert client.get("/api/market/catalog", params={"q": pkg_id}).json()["total"] == 0
 
 
+def test_admin_catalog_review_lists_statuses_and_updates_listing(client, auth_headers):
+    token = auth_headers["Authorization"].split()[-1]
+    user_id = int(decode_access_token(token)["sub"])
+    with get_session_factory()() as db:
+        db.query(User).filter(User.id == user_id).one().is_admin = True
+        db.commit()
+        pending = CatalogItem(
+            pkg_id=f"review-pending-{uuid.uuid4().hex[:10]}",
+            version="1.0.0",
+            name="待审核员工",
+            artifact="employee_pack",
+            is_public=False,
+            compliance_status="under_review",
+            price=199,
+        )
+        listed = CatalogItem(
+            pkg_id=f"review-listed-{uuid.uuid4().hex[:10]}",
+            version="1.0.0",
+            name="在架员工",
+            artifact="employee_pack",
+            is_public=True,
+            compliance_status="approved",
+            price=0,
+        )
+        db.add_all([pending, listed])
+        db.commit()
+        pending_id, listed_id = pending.id, listed.id
+
+    filtered = client.get(
+        "/api/admin/catalog", params={"status": "pending"}, headers=auth_headers
+    ).json()
+    ids = [row["id"] for row in filtered["items"]]
+    assert pending_id in ids
+    assert all(row["compliance_status"] == "under_review" for row in filtered["items"])
+    assert filtered["counts"]["pending"] >= 1
+    assert filtered["counts"]["listed"] >= 1
+    row = next(item for item in filtered["items"] if item["id"] == pending_id)
+    assert row["compliance_status"] == "under_review"
+    assert row["author_name"] == ""
+
+    approved = client.post(
+        f"/api/admin/catalog/{pending_id}/review",
+        headers=auth_headers,
+        json={"action": "approve", "note": "材料齐全"},
+    )
+    assert approved.status_code == 200, approved.text
+    assert approved.json()["compliance_status"] == "approved"
+    assert approved.json()["is_public"] is True
+
+    delisted = client.post(
+        f"/api/admin/catalog/{pending_id}/review",
+        headers=auth_headers,
+        json={"action": "delist", "note": "质量证据不足"},
+    )
+    assert delisted.status_code == 200, delisted.text
+    assert delisted.json()["compliance_status"] == "delisted"
+    assert delisted.json()["is_public"] is False
+    assert delisted.json()["delist_reason"] == "质量证据不足"
+
+    restored = client.post(
+        f"/api/admin/catalog/{pending_id}/review",
+        headers=auth_headers,
+        json={"action": "restore", "note": "复核通过"},
+    )
+    assert restored.status_code == 200, restored.text
+    assert restored.json()["compliance_status"] == "approved"
+    assert restored.json()["is_public"] is True
+
+    restricted = client.post(
+        f"/api/admin/catalog/{listed_id}/review",
+        headers=auth_headers,
+        json={"action": "restrict", "note": "投诉处理中"},
+    )
+    assert restricted.status_code == 200, restricted.text
+    assert restricted.json()["compliance_status"] == "restricted"
+
+    invalid = client.post(
+        f"/api/admin/catalog/{listed_id}/review",
+        headers=auth_headers,
+        json={"action": "publish"},
+    )
+    assert invalid.status_code == 400
+    assert client.get("/api/admin/catalog", params={"status": "unknown"}, headers=auth_headers).status_code == 422
+
+
 def test_legacy_market_file_is_read_until_controlled_migration(monkeypatch, tmp_path):
     monkeypatch.setenv("MODSTORE_CATALOG_DIR", str(tmp_path / "persistent"))
     monkeypatch.setattr(catalog_store, "__file__", str(tmp_path / "legacy" / "catalog_store.py"))

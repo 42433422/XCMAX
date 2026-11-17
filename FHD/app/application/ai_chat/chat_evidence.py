@@ -26,8 +26,8 @@ _WRITE_REQUEST = re.compile(
     r"(?:删除|修改|新增|保存|导入|入库|出库|发货|下单|开单|审批|执行|创建|清理|清空|清除|重置)"
 )
 _KNOWLEDGE_CLEAR_REQUEST = re.compile(
-    r"(?:清理|清空|删除|清除|重置).{0,8}(?:知识库|知识|资料库|记忆)"
-    r"|(?:知识库|知识|资料库|记忆).{0,8}(?:清理|清空|删除|清除|重置)"
+    r"(?:清理|清空|删除|清除|重置).{0,20}(?:知识库|知识|资料库|文档库|空间|记忆)"
+    r"|(?:知识库|知识|资料库|文档库|空间|记忆).{0,20}(?:清理|清空|删除|清除|重置)"
 )
 _CONVERSATION_FOLLOWUP = re.compile(r"(?:刚才|之前|上次|上面|你记得|记不记得)")
 _CUSTOMER_LOOKUP = re.compile(
@@ -342,10 +342,32 @@ def prepare_chat_evidence(
                     )[:3000]
         except RECOVERABLE_ERRORS:
             logger.warning("chat confirmed memory recall unavailable", exc_info=True)
-        if _KNOWLEDGE_CLEAR_REQUEST.search(message):
-            result["chat_clearable_dataset_ids"] = _clearable_dataset_ids(tenant, access)
+        from app.application.dataset_rag_app_service import get_dataset_rag_app_service
+
+        service = get_dataset_rag_app_service()
+        catalog = service.status(
+            tenant_id=tenant,
+            access_context=access,
+            include_documents=False,
+        )
+        raw_datasets = catalog.get("datasets") if catalog.get("success") else {}
+        dataset_counts = {
+            str(dataset_id): int(info.get("document_count") or 0)
+            for dataset_id, info in (raw_datasets.items() if isinstance(raw_datasets, dict) else [])
+            if isinstance(info, dict)
+        }
+        # 数据集目录每轮都注入：写操作轮跳过检索，但仍需知道授权数据集，
+        # 否则模型会把「本轮未检索」误判为「没有任何知识库数据集」。
+        result["chat_knowledge_dataset_ids"] = [
+            dataset_id for dataset_id in sorted(dataset_counts) if dataset_counts[dataset_id] > 0
+        ][:16]
+        result["chat_clearable_dataset_ids"] = sorted({"persy-knowledge", *dataset_counts})
         if not knowledge_query:
             return result
+        eligible = [
+            dataset_id for dataset_id in sorted(dataset_counts) if dataset_counts[dataset_id] > 0
+        ][:16]
+        evidence: list[dict[str, Any]] = []
         # 知识库页面展示的是 Persy 记忆图谱，对话检索同一份记忆；
         # dataset_rag 文档索引有内容时再补充，两者合并为知识证据。
         memory_evidence = [
@@ -358,21 +380,6 @@ def prepare_chat_evidence(
             for item in recalled_memories
             if str(item.get("statement") or "").strip()
         ][:8]
-        from app.application.dataset_rag_app_service import get_dataset_rag_app_service
-
-        service = get_dataset_rag_app_service()
-        evidence: list[dict[str, Any]] = []
-        catalog = service.status(
-            tenant_id=tenant,
-            access_context=access,
-            include_documents=False,
-        )
-        datasets = catalog.get("datasets") if catalog.get("success") else {}
-        eligible = sorted(
-            str(dataset_id)
-            for dataset_id, info in (datasets.items() if isinstance(datasets, dict) else [])
-            if isinstance(info, dict) and int(info.get("document_count") or 0) > 0
-        )[:16]
 
         def query_dataset(dataset: str) -> tuple[str, dict[str, Any]]:
             response = service.query(
@@ -395,12 +402,6 @@ def prepare_chat_evidence(
                 logger.warning("chat dataset query failed", exc_info=True)
                 continue
             responses[dataset] = response
-        result["chat_knowledge_dataset_ids"] = [
-            dataset
-            for dataset in eligible
-            if isinstance(responses.get(dataset), dict)
-            and responses[dataset].get("success") is True
-        ]
         for dataset in eligible:
             dataset_response = responses.get(dataset)
             if not isinstance(dataset_response, dict) or not dataset_response.get("success"):

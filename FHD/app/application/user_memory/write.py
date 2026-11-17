@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 import uuid
+from contextlib import nullcontext
 from datetime import datetime, timedelta
 from typing import Any, Protocol
 
@@ -135,39 +136,43 @@ def remember(
     now = datetime.now()
     now_iso = now.isoformat()
     facts_store = store or default_memory_store()
-    memory = facts_store.get_memory(owner) or UserMemory(user_id=owner)
-    facts = list(getattr(memory, "recall_facts", []) or [])
-    for record in facts:
-        if record.get("scope") == scope_name and record.get("normalized") == normalized:
-            record["hits"] = int(record.get("hits") or 0) + 1
-            record["importance"] = min(1.0, _clamp_importance(record.get("importance")) + 0.05)
-            record["updated_at"] = now_iso
-            record["source"] = str(source or record.get("source") or "chat")
-            if ttl_days is not None:
-                record["expires_at"] = _expires_at(now, ttl_days)
-            memory.recall_facts = facts
-            facts_store.save_memory(owner, memory)
-            return {
-                "id": str(record.get("id") or ""),
-                "created": False,
-                "merged": True,
-                "truncated": truncated,
-            }
-    record = {
-        "id": f"rm_{uuid.uuid4().hex[:12]}",
-        "scope": scope_name,
-        "owner_id": owner,
-        "text": normalized,
-        "normalized": normalized,
-        "source": str(source or "chat"),
-        "importance": _clamp_importance(importance),
-        "hits": 1,
-        "created_at": now_iso,
-        "updated_at": now_iso,
-        "truncated": truncated,
-        "expires_at": _expires_at(now, ttl_days) if ttl_days is not None else None,
-    }
-    facts.insert(0, record)
-    memory.recall_facts = facts[:MAX_RECALL_FACTS]
-    facts_store.save_memory(owner, memory)
+    # 读改写必须在同一事务内完成：仅靠原子替换只能避免半截文件，
+    # 多 worker 并发仍会互相覆盖，跨进程锁需要覆盖整段读改写。
+    transaction = getattr(facts_store, "transaction", None)
+    with transaction() if callable(transaction) else nullcontext():
+        memory = facts_store.get_memory(owner) or UserMemory(user_id=owner)
+        facts = list(getattr(memory, "recall_facts", []) or [])
+        for record in facts:
+            if record.get("scope") == scope_name and record.get("normalized") == normalized:
+                record["hits"] = int(record.get("hits") or 0) + 1
+                record["importance"] = min(1.0, _clamp_importance(record.get("importance")) + 0.05)
+                record["updated_at"] = now_iso
+                record["source"] = str(source or record.get("source") or "chat")
+                if ttl_days is not None:
+                    record["expires_at"] = _expires_at(now, ttl_days)
+                memory.recall_facts = facts
+                facts_store.save_memory(owner, memory)
+                return {
+                    "id": str(record.get("id") or ""),
+                    "created": False,
+                    "merged": True,
+                    "truncated": truncated,
+                }
+        record = {
+            "id": f"rm_{uuid.uuid4().hex[:12]}",
+            "scope": scope_name,
+            "owner_id": owner,
+            "text": normalized,
+            "normalized": normalized,
+            "source": str(source or "chat"),
+            "importance": _clamp_importance(importance),
+            "hits": 1,
+            "created_at": now_iso,
+            "updated_at": now_iso,
+            "truncated": truncated,
+            "expires_at": _expires_at(now, ttl_days) if ttl_days is not None else None,
+        }
+        facts.insert(0, record)
+        memory.recall_facts = facts[:MAX_RECALL_FACTS]
+        facts_store.save_memory(owner, memory)
     return {"id": record["id"], "created": True, "merged": False, "truncated": truncated}

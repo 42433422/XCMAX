@@ -185,6 +185,41 @@
   font-weight: 600;
 }
 
+/* 注册表类型筛选与员工/模块徽标：员工包与系统模块分开呈现。 */
+.module-kind-tabs {
+  display: flex;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+
+.module-kind-tabs button {
+  padding: 4px 10px;
+  border: 1px solid rgba(15, 76, 129, 0.14);
+  border-radius: 999px;
+  background: #fff;
+  color: rgba(23, 32, 51, 0.65);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.module-kind-tabs button.is-active {
+  border-color: #1890ff;
+  background: #e8f3ff;
+  color: #0f6fc6;
+  font-weight: 600;
+}
+
+.kind-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.kind-module { background: #eef2ff; color: #4338ca; }
+.kind-employee { background: #ecfdf5; color: #047857; }
+
 .source-local { background: #f0f5ff; color: #2563eb; }
 .source-remote { background: #f0fdf4; color: #16a34a; }
 .source-core { background: #faf5ff; color: #7c3aed; }

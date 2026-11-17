@@ -1,142 +1,141 @@
 <template>
   <div class="admin-orders-tab">
-    <div class="page-header">
-      <h2>订单经营</h2>
-      <div class="header-actions">
-        <select v-model="statusFilter" class="form-control" @change="loadOrders">
-          <option value="">全部状态</option>
-          <option value="paid">已支付</option>
-          <option value="pending">待支付</option>
-          <option value="closed">已关闭</option>
-          <option value="refunded">已退款</option>
-        </select>
-        <button class="btn btn-secondary" type="button" :disabled="loading" @click="loadOrders">
-          <i class="fa fa-refresh" :class="{ 'fa-spin': loading }" aria-hidden="true"></i>
-          {{ loading ? '加载中...' : '刷新' }}
-        </button>
+    <div class="ot-head">
+      <div class="ot-head__title">
+        <h2>订单经营</h2>
+        <span class="ot-head__meta">数据源 {{ source || '—' }} · 已加载 {{ orders.length }} / 共 {{ total }}</span>
+      </div>
+      <div class="ot-head__actions">
+        <el-select v-model="statusFilter" size="small" class="ot-status-select" aria-label="订单状态" @change="loadOrders">
+          <el-option label="全部状态" value="" />
+          <el-option label="已支付" value="paid" />
+          <el-option label="待支付" value="pending" />
+          <el-option label="已关闭" value="closed" />
+          <el-option label="已退款" value="refunded" />
+        </el-select>
+        <el-button size="small" :loading="loading" @click="loadOrders">刷新</el-button>
       </div>
     </div>
 
-    <div class="admin-grid">
-      <div class="admin-card">
-        <div class="card-header">
-          <i class="fa fa-shopping-cart card-icon" aria-hidden="true"></i>
-          <h3>总订单</h3>
-        </div>
-        <dl class="card-info">
-          <dt>合计</dt><dd>{{ summary.total_orders ?? '—' }}</dd>
-          <dt>数据源</dt><dd>{{ source || '—' }}</dd>
-        </dl>
-      </div>
-      <div class="admin-card">
-        <div class="card-header">
-          <i class="fa fa-check card-icon" aria-hidden="true"></i>
-          <h3>已支付</h3>
-        </div>
-        <dl class="card-info">
-          <dt>笔数</dt><dd>{{ summary.paid_orders ?? '—' }}</dd>
-          <dt>收入</dt><dd>¥{{ formatAmount(summary.paid_revenue) }}</dd>
-        </dl>
-      </div>
-      <div class="admin-card">
-        <div class="card-header">
-          <i class="fa fa-clock-o card-icon" aria-hidden="true"></i>
-          <h3>待支付</h3>
-        </div>
-        <dl class="card-info">
-          <dt>笔数</dt><dd>{{ summary.pending_orders ?? '—' }}</dd>
-        </dl>
-      </div>
-      <div class="admin-card">
-        <div class="card-header">
-          <i class="fa fa-list card-icon" aria-hidden="true"></i>
-          <h3>状态分布</h3>
-        </div>
-        <dl class="card-info">
-          <template v-for="(count, st) in summary.by_status" :key="String(st)">
-            <dt>{{ st }}</dt>
-            <dd>{{ count }}</dd>
+    <div class="ot-kpis" role="list" aria-label="订单经营指标">
+      <article class="ot-kpi" role="listitem">
+        <span class="ot-kpi__label">总订单</span>
+        <strong class="ot-kpi__value">{{ summary.total_orders ?? '—' }}</strong>
+        <span class="ot-kpi__hint">全部状态合计</span>
+      </article>
+      <article class="ot-kpi" role="listitem">
+        <span class="ot-kpi__label">已支付</span>
+        <strong class="ot-kpi__value">{{ summary.paid_orders ?? '—' }} <small>笔</small></strong>
+        <span class="ot-kpi__hint">收入 ¥{{ formatAmount(summary.paid_revenue) }}</span>
+      </article>
+      <article class="ot-kpi" role="listitem">
+        <span class="ot-kpi__label">待支付</span>
+        <strong class="ot-kpi__value">{{ summary.pending_orders ?? '—' }} <small>笔</small></strong>
+        <span class="ot-kpi__hint">需跟进改价或关单</span>
+      </article>
+      <article class="ot-kpi ot-kpi--wide" role="listitem">
+        <span class="ot-kpi__label">状态分布</span>
+        <div class="ot-kpi__tags">
+          <template v-if="statusEntries.length">
+            <el-tag v-for="[st, count] in statusEntries" :key="st" size="small" :type="tagType(st)" effect="light">
+              {{ statusLabel(st) }} {{ count }}
+            </el-tag>
           </template>
-          <template v-if="!summary.by_status || Object.keys(summary.by_status).length === 0">
-            <dt>暂无</dt><dd>0</dd>
-          </template>
-        </dl>
-      </div>
+          <span v-else class="ot-kpi__hint">暂无</span>
+        </div>
+      </article>
     </div>
+
+    <el-alert v-if="error" class="ot-alert" type="error" show-icon :closable="false" :title="error" />
 
     <AdminSectionNav v-model="section" label="订单分区" :items="[{ value: 'orders', label: '订单列表' }, { value: 'refunds', label: '退款审核' }]" />
-    <div class="admin-pane" tabindex="0" aria-label="订单内容">
-    <div v-show="section === 'orders'" class="admin-card">
-      <div class="card-header">
-        <i class="fa fa-table card-icon" aria-hidden="true"></i>
-        <h3>订单列表</h3>
-        <span class="status-badge">{{ orders.length }} / {{ total }}</span>
-      </div>
-      <table class="order-table">
-        <thead>
-          <tr>
-            <th>订单号</th>
-            <th>商品</th>
-            <th>金额</th>
-            <th>用户ID</th>
-            <th>状态</th>
-            <th>创建时间</th>
-            <th>经营操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="o in orders" :key="String(o.out_trade_no || o.order_no || o.id)">
-            <td class="mono small">{{ o.out_trade_no || o.order_no || o.id }}</td>
-            <td>{{ o.subject }}</td>
-            <td>¥{{ formatAmount(o.total_amount) }}</td>
-            <td>{{ o.user_id }}</td>
-            <td><span :class="['status-badge', statusClass(o.status)]">{{ statusLabel(o.status) }}</span></td>
-            <td class="small">{{ o.created_at }}</td>
-            <td class="order-actions">
-              <button v-if="String(o.status) === 'pending'" type="button" class="btn-mini" :disabled="busyOrder === orderNo(o)" @click="reprice(o)">改价</button>
-              <button v-if="String(o.status) === 'pending'" type="button" class="btn-mini is-danger" :disabled="busyOrder === orderNo(o)" @click="cancel(o)">取消</button>
-              <button v-if="String(o.status) === 'paid'" type="button" class="btn-mini is-warn" :disabled="busyOrder === orderNo(o)" @click="requestRefund(o)">申请退款</button>
-              <span v-if="!['pending', 'paid'].includes(String(o.status))" class="small">终态只读</span>
-            </td>
-          </tr>
-          <tr v-if="!orders.length && !loading">
-            <td colspan="7" class="empty-cell">{{ error || '暂无订单数据' }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
 
-    <div v-show="section === 'refunds'" class="admin-card">
-      <div class="card-header">
-        <i class="fa fa-undo card-icon" aria-hidden="true"></i>
-        <h3>退款审核</h3>
-        <span class="status-badge" :class="pendingRefunds.length ? 'badge-warn' : 'badge-ok'">{{ pendingRefunds.length }} 待审</span>
+    <section v-show="section === 'orders'" class="ot-card" aria-label="订单列表">
+      <div class="ot-card__head">
+        <h3>订单列表</h3>
+        <span class="ot-card__count">{{ orders.length }} / {{ total }}</span>
       </div>
-      <table class="order-table">
-        <thead><tr><th>订单号</th><th>金额</th><th>原因</th><th>申请时间</th><th>操作</th></tr></thead>
-        <tbody>
-          <tr v-for="refund in pendingRefunds" :key="String(refund.id)">
-            <td class="mono small">{{ refund.order_no }}</td>
-            <td>¥{{ formatAmount(refund.amount) }}</td>
-            <td>{{ refund.reason }}</td>
-            <td class="small">{{ refund.created_at }}</td>
-            <td class="order-actions">
-              <button type="button" class="btn-mini is-danger" :disabled="busyRefund === Number(refund.id)" @click="reviewRefund(refund, 'approve')">通过并执行</button>
-              <button type="button" class="btn-mini" :disabled="busyRefund === Number(refund.id)" @click="reviewRefund(refund, 'reject')">驳回</button>
-            </td>
-          </tr>
-          <tr v-if="!pendingRefunds.length"><td colspan="5" class="empty-cell">暂无待审退款</td></tr>
-        </tbody>
-      </table>
-    </div>
-    </div>
+      <div class="ot-table-wrap">
+        <el-table :data="orders" height="100%" size="small" row-key="id" class="ot-table">
+          <el-table-column label="订单号" min-width="180" show-overflow-tooltip>
+            <template #default="{ row }"><span class="mono">{{ orderNo(row) }}</span></template>
+          </el-table-column>
+          <el-table-column label="商品" min-width="200" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.subject || '—' }}</template>
+          </el-table-column>
+          <el-table-column label="金额" width="110" align="right">
+            <template #default="{ row }"><span class="mono">¥{{ formatAmount(row.total_amount) }}</span></template>
+          </el-table-column>
+          <el-table-column label="用户 ID" width="120" show-overflow-tooltip>
+            <template #default="{ row }"><span class="mono">{{ row.user_id ?? '—' }}</span></template>
+          </el-table-column>
+          <el-table-column label="状态" width="104">
+            <template #default="{ row }">
+              <el-tag size="small" :type="tagType(row.status)" effect="light">{{ statusLabel(row.status) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="创建时间" width="168">
+            <template #default="{ row }"><span class="ot-time">{{ row.created_at || '—' }}</span></template>
+          </el-table-column>
+          <el-table-column label="经营操作" width="200">
+            <template #default="{ row }">
+              <div class="ot-actions">
+                <el-button v-if="String(row.status) === 'pending'" size="small" :loading="busyOrder === orderNo(row)" @click="reprice(row)">改价</el-button>
+                <el-button v-if="String(row.status) === 'pending'" size="small" type="danger" plain :loading="busyOrder === orderNo(row)" @click="cancel(row)">取消</el-button>
+                <el-button v-if="String(row.status) === 'paid'" size="small" type="warning" plain :loading="busyOrder === orderNo(row)" @click="requestRefund(row)">申请退款</el-button>
+                <span v-if="!['pending', 'paid'].includes(String(row.status))" class="ot-muted">终态只读</span>
+              </div>
+            </template>
+          </el-table-column>
+          <template #empty>
+            <el-empty :description="loading ? '正在读取订单…' : (error || '暂无订单数据')" :image-size="72" />
+          </template>
+        </el-table>
+      </div>
+    </section>
+
+    <section v-show="section === 'refunds'" class="ot-card" aria-label="退款审核">
+      <div class="ot-card__head">
+        <h3>退款审核</h3>
+        <el-tag size="small" :type="pendingRefunds.length ? 'warning' : 'success'" effect="light">{{ pendingRefunds.length }} 待审</el-tag>
+      </div>
+      <div class="ot-table-wrap">
+        <el-table :data="pendingRefunds" height="100%" size="small" row-key="id" class="ot-table">
+          <el-table-column label="订单号" min-width="180" show-overflow-tooltip>
+            <template #default="{ row }"><span class="mono">{{ row.order_no || '—' }}</span></template>
+          </el-table-column>
+          <el-table-column label="金额" width="110" align="right">
+            <template #default="{ row }"><span class="mono">¥{{ formatAmount(row.amount) }}</span></template>
+          </el-table-column>
+          <el-table-column label="原因" min-width="220" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.reason || '—' }}</template>
+          </el-table-column>
+          <el-table-column label="申请时间" width="168">
+            <template #default="{ row }"><span class="ot-time">{{ row.created_at || '—' }}</span></template>
+          </el-table-column>
+          <el-table-column label="操作" width="200">
+            <template #default="{ row }">
+              <div class="ot-actions">
+                <el-button size="small" type="danger" :loading="busyRefund === Number(row.id)" @click="reviewRefund(row, 'approve')">通过并执行</el-button>
+                <el-button size="small" :loading="busyRefund === Number(row.id)" @click="reviewRefund(row, 'reject')">驳回</el-button>
+              </div>
+            </template>
+          </el-table-column>
+          <template #empty>
+            <el-empty description="暂无待审退款" :image-size="72" />
+          </template>
+        </el-table>
+      </div>
+    </section>
   </div>
 </template>
 
 <script setup lang="ts">
 import AdminSectionNav from './AdminSectionNav.vue'
 const section = ref('orders')
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { ElAlert, ElButton, ElEmpty, ElOption, ElSelect, ElTable, ElTableColumn, ElTag } from 'element-plus'
+import 'element-plus/dist/index.css'
 import { statusLabel } from '../../utils/statusLabel'
 import { xcmaxAdminApi } from '@/api/xcmaxAdmin'
 import { appAlert, appConfirm, appPrompt } from '@/utils/appDialog'
@@ -154,8 +153,22 @@ const pendingRefunds = ref<OrderRow[]>([])
 const busyOrder = ref('')
 const busyRefund = ref<number | null>(null)
 
+const statusEntries = computed<[string, number][]>(() => {
+  const raw = summary.value.by_status
+  if (!raw || typeof raw !== 'object') return []
+  return Object.entries(raw as Record<string, unknown>).map(([key, value]) => [key, Number(value) || 0])
+})
+
 function orderNo(order: OrderRow): string {
   return String(order.out_trade_no || order.order_no || order.id || '')
+}
+
+function tagType(status: unknown): 'success' | 'warning' | 'info' | 'danger' {
+  const s = String(status || '')
+  if (s === 'paid') return 'success'
+  if (s === 'pending') return 'warning'
+  if (s === 'refunded') return 'danger'
+  return 'info'
 }
 
 function idempotencyKey(prefix: string): string {
@@ -168,13 +181,6 @@ function idempotencyKey(prefix: string): string {
 function formatAmount(value: unknown): string {
   if (value == null || value === '') return '—'
   return Number(value).toFixed(2)
-}
-
-function statusClass(status: unknown): string {
-  const s = String(status || '')
-  if (s === 'paid') return 'badge-ok'
-  if (s === 'pending') return 'badge-warn'
-  return 'badge-err'
 }
 
 async function loadOrders() {
@@ -276,123 +282,183 @@ onMounted(loadOrders)
 </script>
 
 <style scoped>
-/* 以下类与 XCmaxAdminView.vue 的 scoped 样式同名，但 Vue scoped 不会注入父级 scope 属性，
-   必须在本组件内显式补齐，否则订单面板的卡片/标题/按钮等失去样式。 */
-.page-header {
+/* 借鉴 Element Plus 管理后台的列表页布局：指标条 + 工具栏 + 自适应表格，首屏不滚动。 */
+.admin-orders-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+.ot-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 24px;
-  flex-wrap: wrap;
   gap: 12px;
+  flex: 0 0 auto;
 }
-.page-header h2 {
+.ot-head__title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.ot-head__title h2 {
   margin: 0;
-  font-size: 22px;
-  font-weight: 700;
+  font-size: 16px;
+  font-weight: 600;
   color: #172033;
 }
-.header-actions {
+.ot-head__meta {
+  color: rgba(23, 32, 51, 0.55);
+  font-size: 12px;
+}
+.ot-head__actions {
   display: flex;
-  gap: 10px;
+  align-items: center;
+  gap: 8px;
 }
-.admin-grid {
+.ot-status-select {
+  width: 128px;
+}
+.ot-kpis {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 18px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  flex: 0 0 auto;
 }
-.admin-card {
-  padding: 20px;
+.ot-kpi {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 2px;
+  min-width: 0;
+  padding: 10px 14px;
+  border: 1px solid rgba(15, 76, 129, 0.1);
+  border-radius: 10px;
+  background: #fff;
 }
-.card-header {
+.ot-kpi__label {
+  color: rgba(23, 32, 51, 0.55);
+  font-size: 12px;
+}
+.ot-kpi__value {
+  color: #172033;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+}
+.ot-kpi__value small {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(23, 32, 51, 0.55);
+}
+.ot-kpi__hint {
+  overflow: hidden;
+  color: rgba(23, 32, 51, 0.5);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ot-kpi__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+.ot-alert {
+  flex: 0 0 auto;
+}
+.ot-card {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid rgba(15, 76, 129, 0.1);
+  border-radius: 12px;
+  background: #fff;
+}
+.ot-card__head {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(15, 76, 129, 0.08);
 }
-.card-header h3 {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 700;
-  color: #172033;
+.ot-card__head h3 {
   flex: 1;
-}
-.card-icon {
-  font-size: 18px;
-  color: #1890ff;
-  width: 22px;
-  text-align: center;
-}
-.card-info {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 6px 14px;
   margin: 0;
-  font-size: 13px;
-}
-.card-info dt {
-  color: rgba(23, 32, 51, 0.55);
+  font-size: 14px;
   font-weight: 600;
-  white-space: nowrap;
-}
-.card-info dd {
-  margin: 0;
   color: #172033;
-  word-break: break-all;
 }
-.status-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 10px;
-  border-radius: 20px;
-  font-size: 11px;
-  font-weight: 700;
+.ot-card__count {
+  color: rgba(23, 32, 51, 0.55);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.ot-table-wrap {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-height: 0;
+}
+.ot-table {
+  flex: 1 1 0;
+  height: 100%;
+  min-height: 0;
+}
+.ot-table :deep(.el-table__inner-wrapper) {
+  height: 100%;
+}
+.ot-table :deep(th.el-table__cell) {
+  height: 36px;
+  padding: 0;
+  background: #f7fafd;
+  color: rgba(23, 32, 51, 0.6);
+  font-size: 12px;
+  font-weight: 600;
+}
+.ot-table :deep(td.el-table__cell) {
+  padding: 5px 0;
+  font-size: 12.5px;
+}
+.ot-table :deep(.cell) {
+  padding: 0 10px;
+}
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+.ot-time {
+  color: rgba(23, 32, 51, 0.55);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.badge-ok { background: #e6f9f0; color: #10b759; }
-.badge-warn { background: #fff7e0; color: #d97706; }
-.badge-err { background: #fff1f0; color: #e53e3e; }
-.btn {
-  display: inline-flex;
-  align-items: center;
+.ot-actions {
+  display: flex;
+  flex-wrap: wrap;
   gap: 6px;
-  padding: 8px 16px;
-  border-radius: 8px;
-  border: none;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
 }
-.btn:disabled { opacity: 0.55; cursor: not-allowed; }
-.btn-secondary { background: rgba(24, 144, 255, 0.1); color: #1890ff; }
-.btn-secondary:not(:disabled):hover { background: rgba(24, 144, 255, 0.18); }
-
-.order-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 0.5rem;
+.ot-muted {
+  color: rgba(23, 32, 51, 0.4);
+  font-size: 12px;
 }
-.order-table th,
-.order-table td {
-  text-align: left;
-  padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid var(--border-color, rgba(0, 0, 0, 0.08));
-  font-size: 0.85rem;
+@media (max-width: 1099px) {
+  .ot-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
-.order-table th {
-  font-weight: 600;
-  color: var(--text-muted, #666);
+@media (max-width: 899px), (max-height: 619px) {
+  .admin-orders-tab {
+    height: auto;
+    min-height: 100%;
+    overflow-y: auto;
+  }
+  .ot-card { min-height: 320px; }
 }
-.empty-cell {
-  text-align: center;
-  color: var(--text-muted, #999);
-  padding: 1.5rem;
-}
-.order-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.btn-mini { border: 1px solid #b8d2ec; border-radius: 7px; background: #eef6ff; color: #1769b0; padding: 5px 8px; font-size: 11px; font-weight: 700; cursor: pointer; }
-.btn-mini.is-danger { border-color: #efb7b7; background: #fff2f2; color: #c73a3a; }
-.btn-mini.is-warn { border-color: #e8c48d; background: #fff8e9; color: #a96516; }
-.btn-mini:disabled { opacity: .5; cursor: wait; }
 </style>
