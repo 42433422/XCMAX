@@ -1,5 +1,5 @@
 {
-  "lines": 2459651,
+  "lines": 2461593,
   "updated": "2026-11-17",
-  "note": "新增 tests/test_application/test_semantic_multiturn_deterministic.py（+308 行）覆盖 S1-S4 确定性多轮闭环；纯测试新增，无生产代码净增；用户批准提交推送"
+  "note": "AIOPEN 首批核心域语义 overlay（200 条，模型起草后过滤入库，+1930 行）"
 }

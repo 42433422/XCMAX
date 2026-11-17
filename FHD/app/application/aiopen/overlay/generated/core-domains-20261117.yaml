@@ -1,0 +1,1925 @@
+# AIOPEN 语义 overlay（模型起草，2026-11-17）。
+# 未逐条人工复核；仅据 method/path/summary 推断，不含编造字段与数值。
+# 回滚：删除本文件即可，人工条目见 ../operations.yaml。
+generated_at: '2026-11-17'
+operations:
+- operation_id: approval.active
+  when_to_use: 当需要切换指定审批流的启用状态时调用。
+  side_effects:
+  - 切换指定审批流的启用状态
+  preconditions:
+  - 已登录
+  - 具备审批流管理权限
+  returns: 审批流启用状态的更新结果
+  source: model-draft
+  reviewed: false
+- operation_id: approval.approve
+  when_to_use: 当需要批准指定审批请求时调用。
+  side_effects:
+  - 批准指定审批请求
+  preconditions:
+  - 已登录
+  - 具备审批权限
+  returns: 审批请求的批准结果
+  source: model-draft
+  reviewed: false
+- operation_id: approval.approve_post
+  when_to_use: 用于批准 AI 工具规则（按路径与摘要推断）。
+  side_effects:
+  - 更新 AI 工具规则的批准状态
+  preconditions:
+  - 已登录
+  - 具备 AI 工具规则审批权限
+  returns: AI 工具规则的批准结果
+  source: model-draft
+  reviewed: false
+- operation_id: approval.cleanup
+  when_to_use: 用于清理审批请求（按路径与摘要推断）。
+  side_effects:
+  - 执行审批请求清理操作
+  preconditions:
+  - 已登录
+  - 具备审批请求清理权限
+  returns: ''
+  source: model-draft
+  reviewed: false
+- operation_id: approval.flows
+  when_to_use: 需要查看可用的审批流程列表时调用。
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备审批模块读取权限
+  returns: 审批流程列表
+  source: model-draft
+  reviewed: false
+- operation_id: approval.flows_delete
+  when_to_use: 用于删除指定的审批流程。
+  side_effects:
+  - 删除审批流程
+  preconditions:
+  - 已登录
+  - 具备审批流程管理权限
+  - 审批流程存在
+  returns: ''
+  source: model-draft
+  reviewed: false
+- operation_id: approval.flows_get
+  when_to_use: 需要查看指定审批流程的详细信息时调用。
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备审批模块读取权限
+  returns: 指定审批流程的详情
+  source: model-draft
+  reviewed: false
+- operation_id: approval.flows_post
+  when_to_use: 用于创建审批流程。
+  side_effects:
+  - 创建审批流程记录
+  preconditions:
+  - 已登录
+  - 具备审批流程管理权限
+  returns: 新建的审批流程信息
+  source: model-draft
+  reviewed: false
+- operation_id: approval.flows_put
+  when_to_use: 用于按 flow_id 更新已有审批流程。
+  side_effects:
+  - 更新审批流程记录
+  preconditions:
+  - 已登录
+  - 已提供 flow_id
+  - 具备审批流程管理权限
+  returns: 更新后的审批流程信息
+  source: model-draft
+  reviewed: false
+- operation_id: approval.orphan_check
+  when_to_use: 需要检查指定用户是否属于孤立审批人时调用。
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备审批模块读取权限
+  returns: 指定审批人的孤立状态检查结果
+  source: model-draft
+  reviewed: false
+- operation_id: approval.pending
+  when_to_use: 需要查看待处理的 AI 审批工具规则时调用。
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备审批模块读取权限
+  returns: 待处理的 AI 审批工具规则列表
+  source: model-draft
+  reviewed: false
+- operation_id: approval.process_timeouts
+  when_to_use: 用于执行审批超时处理。
+  side_effects:
+  - 执行超时处理并产生写入
+  preconditions:
+  - 已登录
+  - 具备对应业务权限
+  returns: 超时处理结果
+  source: model-draft
+  reviewed: false
+- operation_id: approval.reject
+  when_to_use: 用于拒绝指定的审批请求。
+  side_effects:
+  - 更新审批请求状态为拒绝
+  preconditions:
+  - 已登录
+  - 已提供 request_id
+  - 具备审批处理权限
+  returns: 拒绝处理结果
+  source: model-draft
+  reviewed: false
+- operation_id: approval.reject_post
+  when_to_use: 用于拒绝 AI 审批工具规则相关操作（按路径与摘要推断）。
+  side_effects:
+  - 产生写入
+  preconditions:
+  - 已登录
+  - 具备对应业务权限
+  returns: ''
+  source: model-draft
+  reviewed: false
+- operation_id: approval.requests
+  when_to_use: 需要查看审批请求列表时调用。
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备审批模块读取权限
+  returns: 审批请求列表
+  source: model-draft
+  reviewed: false
+- operation_id: approval.requests_delete
+  when_to_use: 用于删除指定的审批请求。
+  side_effects:
+  - 删除审批请求
+  preconditions:
+  - 已登录
+  - 具备审批请求管理权限
+  - 审批请求存在
+  returns: ''
+  source: model-draft
+  reviewed: false
+- operation_id: approval.requests_get
+  when_to_use: 需要查看指定审批请求的详细信息时调用。
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备审批模块读取权限
+  returns: 指定审批请求的详情
+  source: model-draft
+  reviewed: false
+- operation_id: approval.requests_post
+  when_to_use: 用于提交审批请求。
+  side_effects:
+  - 创建审批请求记录
+  preconditions:
+  - 已登录
+  - 具备提交审批请求的权限
+  returns: 审批请求受理结果
+  source: model-draft
+  reviewed: false
+- operation_id: approval.tool_rules
+  when_to_use: 需要获取 AI 审批工具规则配置时调用。
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备审批模块读取权限
+  returns: AI 审批工具规则配置
+  source: model-draft
+  reviewed: false
+- operation_id: approval.tool_rules_post
+  when_to_use: 用于创建 AI 审批工具规则配置（按路径与摘要推断）。
+  side_effects:
+  - 产生写入
+  preconditions:
+  - 已登录
+  - 具备对应业务权限
+  returns: ''
+  source: model-draft
+  reviewed: false
+- operation_id: approval.users
+  when_to_use: 需要查看可参与审批的用户列表时调用。
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备审批模块读取权限
+  returns: 审批用户列表
+  source: model-draft
+  reviewed: false
+- operation_id: approval.withdraw
+  when_to_use: 用于撤回指定的审批请求。
+  side_effects:
+  - 更新审批请求状态为撤回
+  preconditions:
+  - 已登录
+  - 已提供 request_id
+  - 具备审批处理权限
+  returns: 撤回处理结果
+  source: model-draft
+  reviewed: false
+- operation_id: conversations.active
+  when_to_use: 用于查询当前处于活跃状态的会话列表（按路径与摘要推断）
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备会话查看权限
+  returns: 活跃会话列表（具体结构未提供）
+  source: model-draft
+  reviewed: false
+- operation_id: conversations.clear
+  when_to_use: 用于清除会话记录（按路径与摘要推断），以便重置已有会话内容。
+  side_effects:
+  - 清除会话数据
+  preconditions:
+  - 已登录
+  - 具备会话管理权限
+  returns: 清除操作结果
+  source: model-draft
+  reviewed: false
+- operation_id: conversations.delete
+  when_to_use: 用于删除指定的会话。
+  side_effects:
+  - 删除会话资源
+  preconditions:
+  - 已登录
+  - 具备会话管理权限
+  - 会话存在
+  returns: ''
+  source: model-draft
+  reviewed: false
+- operation_id: conversations.list
+  when_to_use: 用于按 conversation_id 获取指定会话的详情
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备会话查看权限
+  returns: 指定会话的信息（具体结构未提供）
+  source: model-draft
+  reviewed: false
+- operation_id: conversations.message
+  when_to_use: 用于保存一条会话消息（按路径与摘要推断）。
+  side_effects:
+  - 写入会话消息
+  preconditions:
+  - 已登录
+  - 具备会话消息写入权限
+  returns: 消息保存结果
+  source: model-draft
+  reviewed: false
+- operation_id: conversations.messages
+  when_to_use: 用于删除指定会话中的指定消息。
+  side_effects:
+  - 删除会话消息
+  preconditions:
+  - 已登录
+  - 具备会话消息管理权限
+  - 会话及消息存在
+  returns: ''
+  source: model-draft
+  reviewed: false
+- operation_id: conversations.messages_post
+  when_to_use: 用于向指定 conversation_id 对应的会话发布消息（按路径与摘要推断）。
+  side_effects:
+  - 写入会话消息
+  preconditions:
+  - 已登录
+  - conversation_id 对应的会话存在
+  - 具备会话消息发布权限
+  returns: 消息发布结果
+  source: model-draft
+  reviewed: false
+- operation_id: conversations.reconcile
+  when_to_use: 用于查询指定 turn_id 对话轮次的核对结果或状态
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备会话核对结果查看权限
+  returns: 该轮次的核对结果或状态（具体结构未提供）
+  source: model-draft
+  reviewed: false
+- operation_id: conversations.sessions
+  when_to_use: 用于查询会话相关的 session 列表（按路径与摘要推断）
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备会话查看权限
+  returns: session 列表（具体结构未提供）
+  source: model-draft
+  reviewed: false
+- operation_id: customers.batch_delete
+  when_to_use: 用于批量删除指定的客户资源。
+  side_effects:
+  - 批量删除客户资源
+  preconditions:
+  - 已登录
+  - 具备客户删除权限
+  - 已提供待删除的客户范围
+  returns: ''
+  source: model-draft
+  reviewed: false
+- operation_id: customers.create
+  when_to_use: 用于创建客户资源（按路径与摘要推断）。
+  side_effects:
+  - 创建客户资源
+  preconditions:
+  - 已登录
+  - 具备客户创建权限
+  returns: 客户创建结果
+  source: model-draft
+  reviewed: false
+- operation_id: customers.delete
+  when_to_use: 用于删除指定客户；调用前应确认 customer_id 对应的目标客户。
+  side_effects:
+  - 删除指定客户资源
+  preconditions:
+  - 已登录
+  - 具备客户管理权限
+  returns: ''
+  source: model-draft
+  reviewed: false
+- operation_id: customers.export
+  when_to_use: 用于导出客户数据；该接口摘要标记为 Stub，具体导出行为未说明
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备客户数据导出权限
+  returns: 导出结果（格式与内容未提供）
+  source: model-draft
+  reviewed: false
+- operation_id: customers.import
+  when_to_use: 用于导入客户数据（按路径与摘要推断）。
+  side_effects:
+  - 写入客户数据
+  preconditions:
+  - 已登录
+  - 具备客户导入权限
+  returns: 客户导入结果
+  source: model-draft
+  reviewed: false
+- operation_id: customers.list
+  when_to_use: 用于查询全部客户信息（按路径与摘要推断）
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备客户数据查看权限
+  returns: 全部客户信息（具体结构未提供）
+  source: model-draft
+  reviewed: false
+- operation_id: customers.list_get
+  when_to_use: 用于获取客户列表（按路径与摘要推断）
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备客户数据查看权限
+  returns: 客户列表（具体结构未提供）
+  source: model-draft
+  reviewed: false
+- operation_id: customers.list_get_2
+  when_to_use: 用于按 customer_id 获取指定客户的详情
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备客户数据查看权限
+  returns: 指定客户的信息（具体结构未提供）
+  source: model-draft
+  reviewed: false
+- operation_id: customers.match
+  when_to_use: 用于按请求条件匹配客户记录（按路径与摘要推断）
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备客户数据查询权限
+  returns: 匹配到的客户数据，具体结构未提供
+  source: model-draft
+  reviewed: false
+- operation_id: customers.update
+  when_to_use: 用于更新指定 customer_id 对应的客户信息（按路径与摘要推断）。
+  side_effects:
+  - 更新客户资源
+  preconditions:
+  - 已登录
+  - customer_id 对应的客户存在
+  - 具备客户更新权限
+  returns: 客户更新结果
+  source: model-draft
+  reviewed: false
+- operation_id: employees.list
+  when_to_use: 用于获取工作流员工别名列表（按路径与摘要推断）
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备员工数据查询权限
+  returns: 员工别名列表，具体字段未提供
+  source: model-draft
+  reviewed: false
+- operation_id: im.avatar
+  when_to_use: 用于获取指定 IM 用户的头像
+  side_effects: []
+  preconditions:
+  - 已登录
+  - user_id 对应可查询的用户
+  returns: 用户头像数据或相关响应
+  source: model-draft
+  reviewed: false
+- operation_id: im.contacts
+  when_to_use: 用于获取当前用户的 IM 联系人列表
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备联系人访问权限
+  returns: IM 联系人列表
+  source: model-draft
+  reviewed: false
+- operation_id: im.conversations
+  when_to_use: 用于获取当前用户可访问的 IM 会话列表
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备会话访问权限
+  returns: IM 会话列表
+  source: model-draft
+  reviewed: false
+- operation_id: im.direct
+  when_to_use: 用于创建直接会话（按路径与摘要推断）。
+  side_effects:
+  - 创建直接会话
+  preconditions:
+  - 已登录
+  - 具备即时通讯会话创建权限
+  returns: 直接会话创建结果
+  source: model-draft
+  reviewed: false
+- operation_id: im.inbox
+  when_to_use: 用于获取客服收件箱中的会话列表
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备客服收件箱访问权限
+  returns: 客服收件箱会话列表
+  source: model-draft
+  reviewed: false
+- operation_id: im.messages
+  when_to_use: 用于获取指定客服会话中的消息列表
+  side_effects: []
+  preconditions:
+  - 已登录
+  - conversation_id 对应可访问的会话
+  - 具备消息查看权限
+  returns: 指定会话中的消息列表
+  source: model-draft
+  reviewed: false
+- operation_id: im.messages_get
+  when_to_use: 用于获取远程企业客服消息（按路径与摘要推断）
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备企业客服消息访问权限
+  returns: 企业客服消息数据，具体结构未提供
+  source: model-draft
+  reviewed: false
+- operation_id: im.messages_get_2
+  when_to_use: 用于获取本地企业客服的消息列表（按路径与摘要推断）。
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备企业客服消息查看权限
+  returns: 企业客服消息列表
+  source: model-draft
+  reviewed: false
+- operation_id: im.messages_get_3
+  when_to_use: 用于按会话 ID 获取指定会话的消息列表。
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 会话存在且可访问
+  returns: 指定会话的消息列表
+  source: model-draft
+  reviewed: false
+- operation_id: im.messages_post
+  when_to_use: 用于通过远程企业客服通道发送消息（按路径与摘要推断）。
+  side_effects:
+  - 发送远程企业客服消息
+  preconditions:
+  - 已登录
+  - 具备远程企业客服消息发送权限
+  returns: 消息发送结果
+  source: model-draft
+  reviewed: false
+- operation_id: im.messages_post_2
+  when_to_use: 用于在本地企业客服（Enterprise CS）场景发送消息（按路径与摘要推断）
+  side_effects:
+  - 发送消息
+  - 写入消息记录
+  preconditions:
+  - 已登录
+  - 具备企业客服消息发送权限
+  returns: 消息发送结果
+  source: model-draft
+  reviewed: false
+- operation_id: im.messages_post_3
+  when_to_use: 用于向指定 IM 会话发送消息
+  side_effects:
+  - 向指定会话发送消息
+  - 新增消息记录
+  preconditions:
+  - 已登录
+  - 具备会话消息发送权限
+  - 指定会话存在且可访问
+  returns: 消息发送结果
+  source: model-draft
+  reviewed: false
+- operation_id: im.mode
+  when_to_use: 用于设置客服收件箱中指定会话的模式
+  side_effects:
+  - 更新指定会话的客服收件箱模式
+  preconditions:
+  - 已登录
+  - 具备客服收件箱操作权限
+  - 指定会话存在且可访问
+  returns: 模式设置结果
+  source: model-draft
+  reviewed: false
+- operation_id: im.read
+  when_to_use: 用于将指定 IM 会话标记为已读
+  side_effects:
+  - 更新指定会话的已读状态
+  preconditions:
+  - 已登录
+  - 具备会话操作权限
+  - 指定会话存在且可访问
+  returns: 已读标记结果
+  source: model-draft
+  reviewed: false
+- operation_id: im.reply
+  when_to_use: 用于在客服收件箱的指定会话中发送回复
+  side_effects:
+  - 向指定会话发送客服回复
+  - 新增回复消息记录
+  preconditions:
+  - 已登录
+  - 具备客服回复权限
+  - 指定会话存在且可访问
+  returns: 回复发送结果
+  source: model-draft
+  reviewed: false
+- operation_id: im.unread_total
+  when_to_use: 用于查询当前用户的即时通讯未读消息总数。
+  side_effects: []
+  preconditions:
+  - 已登录
+  returns: 未读消息总数
+  source: model-draft
+  reviewed: false
+- operation_id: knowledge.base
+  when_to_use: 用于通过基础路径别名访问知识库根入口（按路径与摘要推断）。
+  side_effects: []
+  preconditions:
+  - 具备知识库访问权限
+  returns: ''
+  source: model-draft
+  reviewed: false
+- operation_id: knowledge.cancel
+  when_to_use: 用于取消指定数据集的索引重建任务
+  side_effects:
+  - 取消索引重建任务
+  - 更新任务状态
+  preconditions:
+  - 已登录
+  - 具备知识库任务管理权限
+  - 指定重建任务存在
+  returns: 任务取消结果
+  source: model-draft
+  reviewed: false
+- operation_id: knowledge.confirm
+  when_to_use: 用于确认指定数据集下的 Persy 记忆
+  side_effects:
+  - 确认指定记忆
+  - 更新记忆确认状态
+  preconditions:
+  - 已登录
+  - 具备知识库记忆管理权限
+  - 指定数据集与记忆存在
+  returns: 记忆确认结果
+  source: model-draft
+  reviewed: false
+- operation_id: knowledge.datasets
+  when_to_use: 用于查询所有知识数据集的状态。
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备知识数据集查看权限
+  returns: 各知识数据集的状态信息
+  source: model-draft
+  reviewed: false
+- operation_id: knowledge.diff
+  when_to_use: 用于计算或比较指定数据集的版本差异
+  side_effects:
+  - 执行数据集版本差异处理
+  preconditions:
+  - 已登录
+  - 具备知识库版本比较权限
+  - 指定数据集存在且可访问
+  returns: 数据集版本差异结果
+  source: model-draft
+  reviewed: false
+- operation_id: knowledge.documents
+  when_to_use: 用于向指定数据集摄取文档
+  side_effects:
+  - 向数据集写入文档
+  - 触发文档处理
+  preconditions:
+  - 已登录
+  - 具备文档摄取权限
+  - dataset_id 对应可访问的数据集
+  returns: 文档摄取结果
+  source: model-draft
+  reviewed: false
+- operation_id: knowledge.documents_delete
+  when_to_use: 用于从指定数据集中删除指定知识文档；需确认 dataset_id 与 document_id。
+  side_effects:
+  - 删除指定数据集中的文档资源
+  preconditions:
+  - 已登录
+  - 具备知识文档管理权限
+  - 目标数据集和文档可访问
+  returns: ''
+  source: model-draft
+  reviewed: false
+- operation_id: knowledge.graph
+  when_to_use: 用于获取指定知识数据集的关系图数据。
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 数据集存在且可访问
+  returns: 指定数据集的关系图数据
+  source: model-draft
+  reviewed: false
+- operation_id: knowledge.health
+  when_to_use: 用于检查知识服务的健康状态。
+  side_effects: []
+  preconditions: []
+  returns: 知识服务健康状态
+  source: model-draft
+  reviewed: false
+- operation_id: knowledge.ingest
+  when_to_use: 用于向知识服务提交数据以执行摄取（按路径与摘要推断）
+  side_effects:
+  - 写入或处理待摄取数据
+  preconditions:
+  - 已登录
+  - 具备知识数据摄取权限
+  returns: 数据摄取结果
+  source: model-draft
+  reviewed: false
+- operation_id: knowledge.list
+  when_to_use: 用于通过知识库根路径别名访问知识库内容（按路径与摘要推断）。
+  side_effects: []
+  preconditions:
+  - 具备知识库访问权限
+  returns: ''
+  source: model-draft
+  reviewed: false
+- operation_id: knowledge.memories
+  when_to_use: 用于查看指定知识数据集的 Persy Memories 列表（按路径与摘要推断）
+  side_effects: []
+  preconditions:
+  - 已登录并具备知识数据集访问权限
+  - dataset_id 对应可访问的数据集
+  returns: 指定数据集的 Persy Memories 列表
+  source: model-draft
+  reviewed: false
+- operation_id: knowledge.memories_delete
+  when_to_use: 用于从指定数据集中删除指定记忆；需确认 dataset_id 与 memory_id。
+  side_effects:
+  - 删除指定数据集中的记忆资源
+  preconditions:
+  - 已登录
+  - 具备知识记忆管理权限
+  - 目标数据集和记忆可访问
+  returns: ''
+  source: model-draft
+  reviewed: false
+- operation_id: knowledge.memories_patch
+  when_to_use: 用于修正指定数据集中的 Persy 记忆
+  side_effects:
+  - 更新指定记忆
+  preconditions:
+  - 已登录
+  - 具备记忆修改权限
+  - 数据集与目标记忆可访问
+  returns: 记忆修正结果
+  source: model-draft
+  reviewed: false
+- operation_id: knowledge.omniscient
+  when_to_use: 用于查看知识模块的全景概览（按路径与摘要推断）
+  side_effects: []
+  preconditions:
+  - 已登录并具备知识模块访问权限
+  returns: 知识模块的概览信息
+  source: model-draft
+  reviewed: false
+- operation_id: knowledge.query
+  when_to_use: 用于向知识服务提交查询并获取知识结果（按路径与摘要推断）
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备知识查询权限
+  returns: 知识查询结果
+  source: model-draft
+  reviewed: false
+- operation_id: knowledge.query_post
+  when_to_use: 用于查询指定数据集中的知识内容
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备数据集查询权限
+  - dataset_id 对应可访问的数据集
+  returns: 指定数据集的查询结果
+  source: model-draft
+  reviewed: false
+- operation_id: knowledge.query_post_2
+  when_to_use: 用于查询指定数据集中的 Persy 记忆
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备记忆查询权限
+  - dataset_id 对应可访问的数据集
+  returns: Persy 记忆查询结果
+  source: model-draft
+  reviewed: false
+- operation_id: knowledge.query_post_3
+  when_to_use: 用于执行 Omniscient 综合查询（按路径与摘要推断）
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备综合查询权限
+  returns: 综合查询结果
+  source: model-draft
+  reviewed: false
+- operation_id: knowledge.rebuild
+  when_to_use: 用于在文档或数据变化后重建指定数据集的索引
+  side_effects:
+  - 重建数据集索引
+  preconditions:
+  - 已登录
+  - 具备索引重建权限
+  - dataset_id 对应可访问的数据集
+  returns: 索引重建结果
+  source: model-draft
+  reviewed: false
+- operation_id: knowledge.rebuild_get
+  when_to_use: 用于查询指定数据集的索引重建任务状态（按路径与摘要推断）
+  side_effects: []
+  preconditions:
+  - 已登录并具备知识数据集访问权限
+  - dataset_id 与 job_id 对应可访问的重建任务
+  returns: 指定索引重建任务的信息或状态
+  source: model-draft
+  reviewed: false
+- operation_id: knowledge.reject
+  when_to_use: 用于拒绝指定数据集中的某条 Persy Memory
+  side_effects:
+  - 更新记忆项的拒绝状态
+  preconditions:
+  - 目标数据集和记忆项存在
+  - 调用方具备知识库操作权限
+  returns: ''
+  source: model-draft
+  reviewed: false
+- operation_id: knowledge.rollback
+  when_to_use: 用于将指定数据集回滚到较早版本；调用前应确认目标数据集及回滚版本。
+  side_effects:
+  - 变更数据集版本状态
+  - 将数据集恢复到较早版本
+  preconditions:
+  - 已登录
+  - 具备数据集版本管理权限
+  - 目标数据集存在且可访问
+  returns: ''
+  source: model-draft
+  reviewed: false
+- operation_id: knowledge.status
+  when_to_use: 用于查看指定知识数据集的状态（按路径与摘要推断）
+  side_effects: []
+  preconditions:
+  - 已登录并具备知识数据集访问权限
+  - dataset_id 对应可访问的数据集
+  returns: 指定数据集的状态信息
+  source: model-draft
+  reviewed: false
+- operation_id: knowledge.status_get
+  when_to_use: 用于查看知识模块的整体状态（按路径与摘要推断）
+  side_effects: []
+  preconditions:
+  - 已登录并具备知识模块访问权限
+  returns: 知识模块的状态信息
+  source: model-draft
+  reviewed: false
+- operation_id: knowledge.upload
+  when_to_use: 用于向指定数据集上传文档
+  side_effects:
+  - 上传并保存文档
+  preconditions:
+  - 目标数据集存在
+  - 调用方具备文档上传权限
+  returns: ''
+  source: model-draft
+  reviewed: false
+- operation_id: orders.clear_all
+  when_to_use: 用于清空全部订单；仅在明确需要移除现有订单集合时调用。
+  side_effects:
+  - 删除全部订单资源
+  preconditions:
+  - 已登录
+  - 具备订单管理权限
+  returns: ''
+  source: model-draft
+  reviewed: false
+- operation_id: orders.clear_shipment
+  when_to_use: 用于清除订单中的配送信息（按路径与摘要推断）
+  side_effects:
+  - 更新并清除订单配送信息
+  preconditions:
+  - 调用方具备订单操作权限
+  returns: ''
+  source: model-draft
+  reviewed: false
+- operation_id: orders.create
+  when_to_use: 用于创建订单
+  side_effects:
+  - 创建订单记录
+  preconditions:
+  - 调用方具备订单创建权限
+  returns: ''
+  source: model-draft
+  reviewed: false
+- operation_id: orders.delete
+  when_to_use: 用于删除订单资源（按路径与摘要推断）；具体删除范围未明确。
+  side_effects:
+  - 删除订单资源
+  preconditions:
+  - 已登录
+  - 具备订单管理权限
+  returns: ''
+  source: model-draft
+  reviewed: false
+- operation_id: orders.export
+  when_to_use: 用于导出订单数据（按路径与摘要推断）
+  side_effects: []
+  preconditions:
+  - 已登录并具备订单导出权限
+  returns: 订单导出结果
+  source: model-draft
+  reviewed: false
+- operation_id: orders.latest
+  when_to_use: 用于查看最新订单信息（按路径与摘要推断）
+  side_effects: []
+  preconditions:
+  - 已登录并具备订单访问权限
+  returns: 最新订单信息
+  source: model-draft
+  reviewed: false
+- operation_id: orders.list
+  when_to_use: 用于查看订单列表（按路径与摘要推断）
+  side_effects: []
+  preconditions:
+  - 已登录并具备订单访问权限
+  returns: 订单列表
+  source: model-draft
+  reviewed: false
+- operation_id: orders.list_get
+  when_to_use: 用于按订单号获取单个订单详情（按路径与摘要推断）
+  side_effects: []
+  preconditions:
+  - 已提供订单号路径参数
+  - 已登录
+  - 具备订单查看权限
+  returns: 对应订单的详情信息
+  source: model-draft
+  reviewed: false
+- operation_id: orders.next_number
+  when_to_use: 用于获取下一个订单编号信息（按路径与摘要推断）
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备对应业务权限
+  returns: 下一个订单编号信息
+  source: model-draft
+  reviewed: false
+- operation_id: orders.next_number_get
+  when_to_use: 用于获取下一个订单编号信息（按路径与摘要推断）
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备对应业务权限
+  returns: 下一个订单编号信息
+  source: model-draft
+  reviewed: false
+- operation_id: orders.purchase_units
+  when_to_use: 用于获取订单的采购单元信息（按路径与摘要推断）
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备订单查看权限
+  returns: 订单采购单元相关信息
+  source: model-draft
+  reviewed: false
+- operation_id: orders.reset_sequence
+  when_to_use: 用于重置订单序列；仅在需要重新初始化订单序列状态时调用。
+  side_effects:
+  - 修改订单序列状态
+  preconditions:
+  - 已登录
+  - 具备订单管理权限
+  returns: ''
+  source: model-draft
+  reviewed: false
+- operation_id: orders.search
+  when_to_use: 用于按查询条件搜索订单（按路径与摘要推断）
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备订单查看权限
+  returns: 符合查询条件的订单结果
+  source: model-draft
+  reviewed: false
+- operation_id: orders.set_sequence
+  when_to_use: 用于设置订单的排序序号（按路径与摘要推断）
+  side_effects:
+  - 更新订单排序序号
+  preconditions:
+  - 调用方具备订单操作权限
+  returns: ''
+  source: model-draft
+  reviewed: false
+- operation_id: orders.update
+  when_to_use: 用于更新指定订单
+  side_effects:
+  - 更新订单数据
+  preconditions:
+  - 目标订单存在
+  - 调用方具备订单编辑权限
+  returns: ''
+  source: model-draft
+  reviewed: false
+- operation_id: orders.webhooks
+  when_to_use: 用于查看订单相关的 Webhook 信息（按路径与摘要推断）
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备对应业务权限
+  returns: 订单 Webhook 相关信息或列表
+  source: model-draft
+  reviewed: false
+- operation_id: print.confirmation
+  when_to_use: 用于确认指定的标签打印任务
+  side_effects:
+  - 更新标签任务的确认状态
+  preconditions:
+  - 目标标签任务存在
+  - 调用方具备打印确认权限
+  returns: ''
+  source: model-draft
+  reviewed: false
+- operation_id: print.create
+  when_to_use: 用于通过兼容打印接口提交配送文件打印请求（按路径与摘要推断）
+  side_effects:
+  - 触发打印处理
+  preconditions:
+  - 调用方具备打印权限
+  returns: ''
+  source: model-draft
+  reviewed: false
+- operation_id: print.default
+  when_to_use: 用于获取默认打印机信息（按路径与摘要推断）
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备打印相关权限
+  returns: 默认打印机信息
+  source: model-draft
+  reviewed: false
+- operation_id: print.diagnose
+  when_to_use: 用于获取打印兼容性诊断结果（按路径与摘要推断）
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备打印相关权限
+  returns: 打印兼容性诊断结果
+  source: model-draft
+  reviewed: false
+- operation_id: print.dispatch
+  when_to_use: 用于在工作流中下发标签打印任务（按路径与摘要推断）
+  side_effects:
+  - 触发标签打印工作流
+  preconditions:
+  - 具备工作流调度权限
+  returns: 工作流下发结果
+  source: model-draft
+  reviewed: false
+- operation_id: print.document
+  when_to_use: 用于提交文档打印请求
+  side_effects:
+  - 发起文档打印
+  - 产生打印相关写入
+  preconditions:
+  - 已登录
+  - 具备文档打印权限
+  returns: 文档打印受理结果
+  source: model-draft
+  reviewed: false
+- operation_id: print.document_printer
+  when_to_use: 用于获取文档打印机相关信息（按路径与摘要推断）
+  side_effects: []
+  preconditions:
+  - 具备对应打印资源访问权限
+  returns: 文档打印机相关信息
+  source: model-draft
+  reviewed: false
+- operation_id: print.file
+  when_to_use: 用于下载指定标签任务对应的标签文件（按路径与摘要推断）
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备对应标签任务访问权限
+  returns: 指定标签任务对应的标签文件
+  source: model-draft
+  reviewed: false
+- operation_id: print.jobs
+  when_to_use: 用于获取打印任务列表；该路径为打印任务接口别名（按路径与摘要推断）
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备打印任务查看权限
+  returns: 打印任务列表或相关信息
+  source: model-draft
+  reviewed: false
+- operation_id: print.label
+  when_to_use: 用于提交标签打印请求
+  side_effects:
+  - 发起标签打印
+  - 产生打印相关写入
+  preconditions:
+  - 已登录
+  - 具备标签打印权限
+  returns: 标签打印受理结果
+  source: model-draft
+  reviewed: false
+- operation_id: print.label_get
+  when_to_use: 用于获取指定文件名的标签图像（按路径与摘要推断）
+  side_effects: []
+  preconditions:
+  - 具备标签图像访问权限
+  returns: 指定文件名的标签图像内容
+  source: model-draft
+  reviewed: false
+- operation_id: print.label_jobs
+  when_to_use: 用于生成标签并创建标签打印作业（按路径与摘要推断）
+  side_effects:
+  - 创建标签打印作业
+  - 产生打印相关写入
+  preconditions:
+  - 已登录
+  - 具备标签生成权限
+  returns: 标签作业生成结果
+  source: model-draft
+  reviewed: false
+- operation_id: print.label_jobs_get
+  when_to_use: 用于获取指定标签任务的信息（按路径与摘要推断）
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备对应标签任务查看权限
+  returns: 指定标签任务的相关信息
+  source: model-draft
+  reviewed: false
+- operation_id: print.label_printer
+  when_to_use: 用于获取标签打印机相关信息（按路径与摘要推断）
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备打印设备查看权限
+  returns: 标签打印机相关信息
+  source: model-draft
+  reviewed: false
+- operation_id: print.list_labels
+  when_to_use: 用于获取标签列表（按路径与摘要推断）
+  side_effects: []
+  preconditions:
+  - 具备标签查看权限
+  returns: 标签列表
+  source: model-draft
+  reviewed: false
+- operation_id: print.pdf_labels
+  when_to_use: 用于通过兼容接口提交 PDF 标签打印请求
+  side_effects:
+  - 发起 PDF 标签打印
+  - 产生打印相关写入
+  preconditions:
+  - 已登录
+  - 具备标签打印权限
+  returns: 打印请求受理结果
+  source: model-draft
+  reviewed: false
+- operation_id: print.printer_selection
+  when_to_use: 用于获取打印机选择信息（按路径与摘要推断）
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备打印配置查看权限
+  returns: 打印机选择相关信息
+  source: model-draft
+  reviewed: false
+- operation_id: print.printer_selection_put
+  when_to_use: 用于保存或更新当前打印机选择
+  side_effects:
+  - 更新打印机选择配置
+  preconditions:
+  - 已登录
+  - 具备打印机配置权限
+  returns: 打印机选择保存结果
+  source: model-draft
+  reviewed: false
+- operation_id: print.printers
+  when_to_use: 用于获取可用打印机列表及基本信息（按路径与摘要推断）。
+  side_effects: []
+  preconditions:
+  - 具备打印模块访问权限
+  returns: 打印机列表或相关信息。
+  source: model-draft
+  reviewed: false
+- operation_id: print.products
+  when_to_use: 用于获取标签任务可选择的商品列表（按路径与摘要推断）。
+  side_effects: []
+  preconditions:
+  - 具备打印模块访问权限
+  returns: 可用于标签任务的商品列表。
+  source: model-draft
+  reviewed: false
+- operation_id: print.single_label
+  when_to_use: 用于通过兼容接口提交单个标签的打印请求
+  side_effects:
+  - 发起单个标签打印
+  - 产生打印相关写入
+  preconditions:
+  - 已登录
+  - 具备标签打印权限
+  returns: 标签打印受理结果
+  source: model-draft
+  reviewed: false
+- operation_id: print.submit
+  when_to_use: 用于提交指定标签打印作业
+  side_effects:
+  - 提交标签打印作业
+  - 更新作业提交状态
+  preconditions:
+  - 标签打印作业已存在
+  - 具备标签作业提交权限
+  returns: 标签作业提交结果
+  source: model-draft
+  reviewed: false
+- operation_id: print.templates
+  when_to_use: 用于通过模板别名接口获取打印模板列表（按路径与摘要推断）。
+  side_effects: []
+  preconditions:
+  - 具备打印模块访问权限
+  returns: 打印模板列表或相关信息。
+  source: model-draft
+  reviewed: false
+- operation_id: print.test
+  when_to_use: 用于检查打印服务的可用性或响应状态（按路径与摘要推断）。
+  side_effects: []
+  preconditions:
+  - 具备打印模块访问权限
+  returns: 打印服务测试结果或状态信息。
+  source: model-draft
+  reviewed: false
+- operation_id: print.test_post
+  when_to_use: 用于向打印服务提交测试打印请求。
+  side_effects:
+  - 提交测试打印任务
+  preconditions:
+  - 已登录
+  - 具备打印权限
+  returns: 测试打印提交结果
+  source: model-draft
+  reviewed: false
+- operation_id: print.validate
+  when_to_use: 用于校验打印机分离配置或相关状态（按路径与摘要推断）。
+  side_effects: []
+  preconditions:
+  - 具备打印模块访问权限
+  returns: 打印机分离校验结果或状态信息。
+  source: model-draft
+  reviewed: false
+- operation_id: products.add
+  when_to_use: 用于新增产品记录。
+  side_effects:
+  - 创建产品记录
+  preconditions:
+  - 已登录
+  - 具备产品新增权限
+  returns: 产品新增操作结果
+  source: model-draft
+  reviewed: false
+- operation_id: products.batch
+  when_to_use: 用于批量处理产品（按路径与摘要推断）；具体处理类型与范围未明确。
+  side_effects:
+  - 可能修改产品数据（按路径与摘要推断）
+  preconditions:
+  - 已登录
+  - 具备产品管理权限
+  returns: ''
+  source: model-draft
+  reviewed: false
+- operation_id: products.create
+  when_to_use: 用于通过 POST 更新指定产品（按路径与摘要推断）。
+  side_effects:
+  - 修改产品记录
+  preconditions:
+  - 已登录
+  - 目标产品已存在且可访问
+  - 具备产品更新权限
+  returns: 产品更新操作结果
+  source: model-draft
+  reviewed: false
+- operation_id: products.export_docx
+  when_to_use: 用于导出商品数据并获取 DOCX 格式文件（按路径与摘要推断）。
+  side_effects: []
+  preconditions:
+  - 具备商品导出权限
+  returns: DOCX 格式的商品导出文件。
+  source: model-draft
+  reviewed: false
+- operation_id: products.export_xlsx
+  when_to_use: 用于导出商品数据并获取 XLSX 格式文件（按路径与摘要推断）。
+  side_effects: []
+  preconditions:
+  - 具备商品导出权限
+  returns: XLSX 格式的商品导出文件。
+  source: model-draft
+  reviewed: false
+- operation_id: products.list_get
+  when_to_use: 用于根据商品 ID 获取单个商品的详细信息。
+  side_effects: []
+  preconditions:
+  - 商品 ID 有效
+  - 对应商品记录存在
+  - 具备商品查看权限
+  returns: 指定商品的详细信息。
+  source: model-draft
+  reviewed: false
+- operation_id: products.price_list_export
+  when_to_use: 用于导出产品价格清单（按路径与摘要推断）
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备产品业务权限
+  returns: 产品价格清单导出文件
+  source: model-draft
+  reviewed: false
+- operation_id: products.price_list_template
+  when_to_use: 用于导入价格清单模板相关数据（按路径与摘要推断）。
+  side_effects:
+  - 写入价格清单模板相关数据
+  preconditions:
+  - 已登录
+  - 具备产品导入权限
+  returns: 价格清单模板导入结果
+  source: model-draft
+  reviewed: false
+- operation_id: products.price_list_template_preview
+  when_to_use: 用于预览价格清单模板（按路径与摘要推断）
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备产品业务权限
+  returns: 价格清单模板预览内容
+  source: model-draft
+  reviewed: false
+- operation_id: products.product_names
+  when_to_use: 用于获取产品名称列表
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备产品业务权限
+  returns: 产品名称列表
+  source: model-draft
+  reviewed: false
+- operation_id: products.resolve_name_hints
+  when_to_use: 用于解析产品名称提示信息（按路径与摘要推断）。
+  side_effects:
+  - 写入名称解析相关数据
+  preconditions:
+  - 已登录
+  - 具备产品查询或解析权限
+  returns: 名称解析结果
+  source: model-draft
+  reviewed: false
+- operation_id: products.search_get
+  when_to_use: 用于按指定条件搜索产品
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备产品业务权限
+  returns: 符合搜索条件的产品信息
+  source: model-draft
+  reviewed: false
+- operation_id: products.units
+  when_to_use: 用于获取产品计量单位列表
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备产品业务权限
+  returns: 产品计量单位列表
+  source: model-draft
+  reviewed: false
+- operation_id: products.update
+  when_to_use: 用于通过 PUT 更新指定产品。
+  side_effects:
+  - 修改产品记录
+  preconditions:
+  - 已登录
+  - 目标产品已存在且可访问
+  - 具备产品更新权限
+  returns: 产品更新操作结果
+  source: model-draft
+  reviewed: false
+- operation_id: products.update_patch
+  when_to_use: 用于通过 PATCH 局部更新指定产品信息。
+  side_effects:
+  - 修改产品记录
+  preconditions:
+  - 已登录
+  - 目标产品已存在且可访问
+  - 具备产品更新权限
+  returns: 产品更新操作结果
+  source: model-draft
+  reviewed: false
+- operation_id: products.update_post
+  when_to_use: 用于通过 POST 更新产品信息。
+  side_effects:
+  - 修改产品记录
+  preconditions:
+  - 已登录
+  - 目标产品已存在且可访问
+  - 具备产品更新权限
+  returns: 产品更新操作结果
+  source: model-draft
+  reviewed: false
+- operation_id: shipment.clear_shipment
+  when_to_use: 用于清除发货订单中的发货信息或状态（按路径与摘要推断）。
+  side_effects:
+  - 更新或清除发货订单数据
+  preconditions:
+  - 已登录
+  - 具备发货订单操作权限
+  returns: 清除操作结果
+  source: model-draft
+  reviewed: false
+- operation_id: shipment.download
+  when_to_use: 用于下载路径参数指定的发货文件
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备发货业务权限
+  - 提供的文件名有效
+  returns: 指定的发货文件
+  source: model-draft
+  reviewed: false
+- operation_id: shipment.export
+  when_to_use: 用于导出发货记录
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备发货业务权限
+  returns: 发货记录导出文件
+  source: model-draft
+  reviewed: false
+- operation_id: shipment.generate
+  when_to_use: 用于生成发货信息或单据（按路径与摘要推断）。
+  side_effects:
+  - 生成并写入发货相关数据
+  preconditions:
+  - 已登录
+  - 具备发货业务权限
+  returns: 生成操作结果
+  source: model-draft
+  reviewed: false
+- operation_id: shipment.latest
+  when_to_use: 用于获取最新的发货订单
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备发货业务权限
+  returns: 最新发货订单信息
+  source: model-draft
+  reviewed: false
+- operation_id: shipment.next_number
+  when_to_use: 当需要获取下一个货运订单编号时
+  side_effects: []
+  preconditions: []
+  returns: 下一个订单编号相关信息
+  source: model-draft
+  reviewed: false
+- operation_id: shipment.orders
+  when_to_use: 当需要查询货运订单列表时
+  side_effects: []
+  preconditions: []
+  returns: 货运订单列表
+  source: model-draft
+  reviewed: false
+- operation_id: shipment.orders_get
+  when_to_use: 当需要按订单编号获取单个货运订单时
+  side_effects: []
+  preconditions: []
+  returns: 指定订单编号对应的货运订单
+  source: model-draft
+  reviewed: false
+- operation_id: shipment.print
+  when_to_use: 用于触发发货相关内容的打印操作（按路径与摘要推断）。
+  side_effects:
+  - 触发打印操作
+  preconditions:
+  - 已登录
+  - 具备发货打印权限
+  returns: 打印任务状态或结果
+  source: model-draft
+  reviewed: false
+- operation_id: shipment.purchase_units
+  when_to_use: 当需要查询货运订单下的采购单元时
+  side_effects: []
+  preconditions: []
+  returns: 货运订单关联的采购单元信息
+  source: model-draft
+  reviewed: false
+- operation_id: shipment.record
+  when_to_use: 用于创建发货记录。
+  side_effects:
+  - 创建发货记录并写入数据库
+  preconditions:
+  - 已登录
+  - 具备发货记录创建权限
+  returns: 创建操作结果
+  source: model-draft
+  reviewed: false
+- operation_id: shipment.record_patch
+  when_to_use: 用于部分更新已有的发货记录。
+  side_effects:
+  - 更新既有发货记录数据
+  preconditions:
+  - 已登录
+  - 具备发货记录编辑权限
+  - 待更新的发货记录存在
+  returns: 更新操作结果
+  source: model-draft
+  reviewed: false
+- operation_id: shipment.records
+  when_to_use: 当需要通过货运记录仪表盘别名查询记录时
+  side_effects: []
+  preconditions: []
+  returns: 货运记录仪表盘相关数据
+  source: model-draft
+  reviewed: false
+- operation_id: shipment.records_get
+  when_to_use: 当需要查询货运记录列表时
+  side_effects: []
+  preconditions: []
+  returns: 货运记录列表
+  source: model-draft
+  reviewed: false
+- operation_id: shipment.search
+  when_to_use: 当需要按条件搜索货运订单时
+  side_effects: []
+  preconditions: []
+  returns: 符合搜索条件的货运订单列表
+  source: model-draft
+  reviewed: false
+- operation_id: shipment.set_sequence
+  when_to_use: 用于设置发货订单的排列序号。
+  side_effects:
+  - 更新发货订单序号
+  preconditions:
+  - 已登录
+  - 具备发货订单编辑权限
+  returns: 序号设置结果
+  source: model-draft
+  reviewed: false
+- operation_id: shipment.units
+  when_to_use: 当需要查询货运记录中的单元列表时
+  side_effects: []
+  preconditions: []
+  returns: 货运记录关联的单元列表
+  source: model-draft
+  reviewed: false
+- operation_id: templates.abandon
+  when_to_use: 用于放弃已审核 Excel 分类的分析流程。
+  side_effects:
+  - 更新分类分析状态为放弃
+  preconditions:
+  - 已登录
+  - 具备模板分类操作权限
+  - 指定分类记录存在
+  returns: 放弃操作状态或结果
+  source: model-draft
+  reviewed: false
+- operation_id: templates.analyze
+  when_to_use: 用于发起已审核 Excel 分类的分析。
+  side_effects:
+  - 触发分析任务
+  - 写入分析任务或结果状态
+  preconditions:
+  - 已登录
+  - 具备模板分类分析权限
+  - 指定分类记录存在
+  returns: 分析任务状态或结果
+  source: model-draft
+  reviewed: false
+- operation_id: templates.analyze_post
+  when_to_use: 用于解析办公模板；当 auto_save=1 时按上传处理。
+  side_effects:
+  - 写入或更新模板相关数据
+  preconditions:
+  - 已登录
+  - 具备对应业务权限
+  returns: 模板解析结果或上传处理结果（按摘要推断）
+  source: model-draft
+  reviewed: false
+- operation_id: templates.archive_assets
+  when_to_use: 用于查看 Reviewed Excel 模板的归档资产信息。
+  side_effects: []
+  preconditions:
+  - 已登录或具有等效访问身份
+  - 具备模板归档查看权限
+  returns: 归档资产列表或相关信息
+  source: model-draft
+  reviewed: false
+- operation_id: templates.archive_classify
+  when_to_use: 用于对已审核 Excel 执行归档分类（按路径与摘要推断）。
+  side_effects:
+  - 写入归档分类数据
+  preconditions:
+  - 已登录
+  - 具备对应业务权限
+  returns: 归档分类结果（按路径与摘要推断）
+  source: model-draft
+  reviewed: false
+- operation_id: templates.archive_quota
+  when_to_use: 用于查看 Reviewed Excel 模板的归档配额信息。
+  side_effects: []
+  preconditions:
+  - 已登录或具有等效访问身份
+  - 具备模板归档查看权限
+  returns: 归档配额信息
+  source: model-draft
+  reviewed: false
+- operation_id: templates.archive_quota_post
+  when_to_use: 用于设置归档配额（按路径与摘要推断）。
+  side_effects:
+  - 更新归档配额配置
+  preconditions:
+  - 已登录
+  - 具备对应业务权限
+  returns: 归档配额设置结果（按路径与摘要推断）
+  source: model-draft
+  reviewed: false
+- operation_id: templates.auto_slices
+  when_to_use: 用于获取指定 Reviewed Excel 分类和版本的自动切片。
+  side_effects: []
+  preconditions:
+  - 已登录或具有等效访问身份
+  - 具备对应分类查看权限
+  - classification_id 与 version 已提供
+  returns: 指定分类与版本的自动切片信息
+  source: model-draft
+  reviewed: false
+- operation_id: templates.auto_slices_get
+  when_to_use: 用于下载指定 Reviewed Excel 分类、版本及索引对应的自动切片。
+  side_effects: []
+  preconditions:
+  - 已登录或具有等效访问身份
+  - 具备对应切片访问权限
+  - classification_id、version 与 index 已提供
+  returns: 指定自动切片的下载内容
+  source: model-draft
+  reviewed: false
+- operation_id: templates.candidate_result
+  when_to_use: 用于获取指定 Reviewed Excel 分类、版本及切片索引对应的候选结果。
+  side_effects: []
+  preconditions:
+  - 已登录或具有等效访问身份
+  - 具备对应分类查看权限
+  - classification_id、version 与 slice_index 已提供
+  returns: 对应切片索引的候选结果
+  source: model-draft
+  reviewed: false
+- operation_id: templates.classifications
+  when_to_use: 用于查看 Reviewed Excel 模板最近的分类列表。
+  side_effects: []
+  preconditions:
+  - 已登录或具有等效访问身份
+  - 具备模板分类查看权限
+  returns: 最近的 Reviewed Excel 分类列表
+  source: model-draft
+  reviewed: false
+- operation_id: templates.classifications_get
+  when_to_use: 用于查看指定 Reviewed Excel 分类的历史记录。
+  side_effects: []
+  preconditions:
+  - 已登录或具有等效访问身份
+  - 具备对应分类查看权限
+  - classification_id 已提供
+  returns: 指定分类的历史记录
+  source: model-draft
+  reviewed: false
+- operation_id: templates.classify
+  when_to_use: 用于对指定归档版本执行分类（按路径与摘要推断）。
+  side_effects:
+  - 写入归档版本分类信息
+  preconditions:
+  - 已登录
+  - 具备对应业务权限
+  returns: 归档版本分类结果（按路径与摘要推断）
+  source: model-draft
+  reviewed: false
+- operation_id: templates.classify_post
+  when_to_use: 用于对已审核 Excel 执行分类（按路径与摘要推断）。
+  side_effects:
+  - 写入已审核 Excel 的分类数据
+  preconditions:
+  - 已登录
+  - 具备对应业务权限
+  returns: 已审核 Excel 的分类结果（按路径与摘要推断）
+  source: model-draft
+  reviewed: false
+- operation_id: templates.confirm
+  when_to_use: 用于确认已审核 Excel 的分类结果（按路径与摘要推断）。
+  side_effects:
+  - 更新分类确认状态
+  preconditions:
+  - 已登录
+  - 具备对应业务权限
+  returns: 分类确认结果（按路径与摘要推断）
+  source: model-draft
+  reviewed: false
+- operation_id: templates.create
+  when_to_use: 用于创建当前租户的模板。
+  side_effects:
+  - 创建当前租户的模板记录
+  preconditions:
+  - 已登录
+  - 具备模板创建权限
+  - 已确定当前租户上下文
+  returns: 新建模板信息（按路径与摘要推断）
+  source: model-draft
+  reviewed: false
+- operation_id: templates.detail
+  when_to_use: 用于获取指定模板的详情信息。
+  side_effects: []
+  preconditions:
+  - 已登录或具有等效访问身份
+  - 具备模板查看权限
+  - template_id 已提供
+  returns: 指定模板的详情信息
+  source: model-draft
+  reviewed: false
+- operation_id: templates.download
+  when_to_use: 用于下载已审核 Excel 模板的指定归档版本（按路径与摘要推断）
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备对应模板资源访问权限
+  returns: 归档版本文件或下载响应，具体格式未提供
+  source: model-draft
+  reviewed: false
+- operation_id: templates.download_get
+  when_to_use: 用于下载指定模板对应的已审核 Excel 文件（按路径与摘要推断）
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备对应模板下载权限
+  returns: 已审核 Excel 文件或下载响应，具体格式未提供
+  source: model-draft
+  reviewed: false
+- operation_id: templates.download_get_2
+  when_to_use: 用于下载指定已审核 Excel 评审版本中的候选内容（按路径与摘要推断）
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备对应评审资源访问权限
+  returns: 候选内容或下载响应，具体格式未提供
+  source: model-draft
+  reviewed: false
+- operation_id: templates.extract_grid
+  when_to_use: 用于提取模板网格内容（按路径与摘要推断）。
+  side_effects:
+  - 写入或更新业务数据
+  preconditions:
+  - 已登录
+  - 具备对应业务权限
+  returns: 网格提取结果（按路径与摘要推断）
+  source: model-draft
+  reviewed: false
+- operation_id: templates.file
+  when_to_use: 用于读取指定模板原件以供在线预览（按路径与摘要推断）
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备对应模板资源访问权限
+  returns: 模板原件内容或预览响应，具体格式未提供
+  source: model-draft
+  reviewed: false
+- operation_id: templates.identity
+  when_to_use: 用于查询 Reviewed Excel 的身份信息（按路径与摘要推断）
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备 Reviewed Excel 查询权限
+  returns: 身份信息，具体结构未提供
+  source: model-draft
+  reviewed: false
+- operation_id: templates.intake_preview
+  when_to_use: 用于在正式保存 Reviewed Excel 模板前，预览导入内容的处理结果。
+  side_effects:
+  - 可能写入或更新服务端数据
+  preconditions:
+  - 已登录
+  - 具备模板业务权限
+  returns: 预览结果或处理状态
+  source: model-draft
+  reviewed: false
+- operation_id: templates.intake_retry
+  when_to_use: 用于针对指定 review_id 的审核记录重新执行导入处理。
+  side_effects:
+  - 写入或更新审核记录的处理状态
+  preconditions:
+  - 已登录
+  - 具备模板业务权限
+  - review_id 对应的记录存在
+  returns: 重试结果或处理状态
+  source: model-draft
+  reviewed: false
+- operation_id: templates.intake_status
+  when_to_use: 用于查询指定 Reviewed Excel 评审的接收状态（按路径与摘要推断）
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备对应评审资源访问权限
+  returns: 接收状态信息，具体结构未提供
+  source: model-draft
+  reviewed: false
+- operation_id: templates.list
+  when_to_use: 用于获取模板列表，兼容旧版列表路径（按路径与摘要推断）
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备模板列表查看权限
+  returns: 模板列表，具体结构未提供
+  source: model-draft
+  reviewed: false
+- operation_id: templates.list_get
+  when_to_use: 用于获取模板列表，兼容 XCAGI 前端调用（按路径与摘要推断）
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备模板列表查看权限
+  returns: 模板列表，具体结构未提供
+  source: model-draft
+  reviewed: false
+- operation_id: templates.list_get_2
+  when_to_use: 当需要查看指定模板的详情时调用。
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备模板查看权限
+  returns: 指定模板的详情
+  source: model-draft
+  reviewed: false
+- operation_id: templates.preview
+  when_to_use: 用于预览 Reviewed Excel 模板在保存或提交前的处理结果。
+  side_effects:
+  - 可能写入或更新服务端数据
+  preconditions:
+  - 已登录
+  - 具备模板业务权限
+  returns: 预览内容或处理状态
+  source: model-draft
+  reviewed: false
+- operation_id: templates.progress
+  when_to_use: 用于在上传或分析流程中按任务标识轮询模板解析进度。
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备对应任务查看权限
+  returns: 指定任务的模板解析进度
+  source: model-draft
+  reviewed: false
+- operation_id: templates.recover
+  when_to_use: 用于恢复指定的 Reviewed Excel 归档版本。
+  side_effects:
+  - 写入或更新归档版本状态
+  - 可能写入恢复相关数据
+  preconditions:
+  - 已登录
+  - 具备模板业务权限
+  - version_id 对应的归档版本存在
+  returns: 恢复结果或版本状态
+  source: model-draft
+  reviewed: false
+- operation_id: templates.recover_answer
+  when_to_use: 用于恢复指定 classification_id 对应的分类答案内容或状态。
+  side_effects:
+  - 写入或更新分类答案记录
+  preconditions:
+  - 已登录
+  - 具备模板业务权限
+  - classification_id 对应的记录存在
+  returns: 恢复结果或答案状态
+  source: model-draft
+  reviewed: false
+- operation_id: templates.refine
+  when_to_use: 用于对 Reviewed Excel 模板内容进行细化处理。
+  side_effects:
+  - 写入或更新细化后的数据
+  preconditions:
+  - 已登录
+  - 具备模板业务权限
+  returns: 细化结果或处理状态
+  source: model-draft
+  reviewed: false
+- operation_id: templates.reviews
+  when_to_use: 用于查询指定审核记录对应的 Reviewed Excel 历史（按路径与摘要推断）。
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备对应审核记录查看权限
+  returns: 指定审核记录的 Reviewed Excel 历史
+  source: model-draft
+  reviewed: false
+- operation_id: templates.save
+  when_to_use: 用于保存 Reviewed Excel 模板及相关处理结果。
+  side_effects:
+  - 持久化写入模板数据
+  preconditions:
+  - 已登录
+  - 具备模板业务权限
+  returns: 保存结果或资源标识
+  source: model-draft
+  reviewed: false
+- operation_id: templates.source
+  when_to_use: 用于获取指定归档分类的来源信息（按路径与摘要推断）。
+  side_effects: []
+  preconditions:
+  - 已登录
+  - 具备对应分类查看权限
+  returns: 指定归档分类的来源信息
+  source: model-draft
+  reviewed: false
+- operation_id: templates.state
+  when_to_use: 用于查看或更新指定归档资源的状态。
+  side_effects:
+  - 写入或更新归档资源状态
+  preconditions:
+  - 已登录
+  - 具备模板业务权限
+  - asset_id 对应的归档资源存在
+  returns: 资源状态或状态更新结果
+  source: model-draft
+  reviewed: false
+- operation_id: templates.template_families
+  when_to_use: 用于为已审核 Excel 的指定分类与版本创建或提交模板族信息。
+  side_effects:
+  - 写入模板族数据
+  preconditions:
+  - 已登录
+  - 具备模板管理权限
+  - 分类标识与版本有效
+  returns: ''
+  source: model-draft
+  reviewed: false
+- operation_id: templates.upload
+  when_to_use: 用于上传办公文件，解析文件内容并将结果创建到模板库。
+  side_effects:
+  - 解析上传文件
+  - 向模板库写入模板数据
+  preconditions:
+  - 已登录
+  - 具备模板上传权限
+  - 提供可解析的办公文件
+  returns: 返回文件解析及模板入库结果
+  source: model-draft
+  reviewed: false
+- operation_id: templates.versions
+  when_to_use: 用于为指定的 Reviewed Excel 归档资产创建新版本。
+  side_effects:
+  - 创建并归档新版本
+  preconditions:
+  - 已登录
+  - 具备模板版本管理权限
+  - 归档资产存在
+  returns: ''
+  source: model-draft
+  reviewed: false

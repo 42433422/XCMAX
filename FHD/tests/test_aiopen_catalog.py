@@ -47,6 +47,10 @@ def client(monkeypatch):
     def create_customer(payload: dict):
         return {"success": True, "payload": payload}
 
+    @business.get("/api/widgets", summary="Widgets All")
+    def list_widgets():
+        return {"items": []}
+
     @business.get("/api/admin/overview", summary="内部总览")
     def admin_overview():
         return {"success": True}
@@ -98,7 +102,8 @@ def test_catalog_applies_semantic_overlay(client):
     semantics = operations["products.list"].get("semantics") or {}
     assert semantics.get("when_to_use")
     assert operations["products.list"]["described"] is True
-    assert operations["products.create"]["described"] is False
+    assert operations["widgets.list"]["described"] is False
+    assert "semantics" not in operations["widgets.list"]
 
 
 def test_catalog_filters_by_risk_and_keyword(client):

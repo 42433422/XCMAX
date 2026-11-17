@@ -331,3 +331,6 @@ frontend/playwright-report/
 
 # 意图语义兜底模型：构建时用 scripts/dev/fetch_intent_semantic_model.py 下载，不入库
 assets/models/fastembed/
+
+# AIOPEN 语义草稿：生成物，审核后移入 overlay/generated/ 才提交
+app/application/aiopen/overlay/drafts/

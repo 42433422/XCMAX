@@ -24,6 +24,8 @@ from typing import Any
 
 import yaml
 
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
 FHD_ROOT = Path(__file__).resolve().parents[2]
 DRAFT_DIR = FHD_ROOT / "app" / "application" / "aiopen" / "overlay" / "drafts"
 
@@ -171,22 +173,37 @@ async def generate(
 
     collected: dict[str, dict[str, Any]] = {}
     for index, batch in enumerate(batches, start=1):
-        response = await chat_completion_openai_format(
-            build_messages(batch),
-            temperature=0.2,
-            max_tokens=2000,
-            profile=profile,
-            reasoning_enabled=False,
-        )
         content = ""
-        if isinstance(response, dict):
-            choices = response.get("choices") or []
-            if choices and isinstance(choices[0], dict):
-                content = str((choices[0].get("message") or {}).get("content") or "")
+        for attempt in (1, 2):
+            try:
+                response = await chat_completion_openai_format(
+                    build_messages(batch),
+                    temperature=0.2,
+                    max_tokens=4000,
+                    profile=profile,
+                    reasoning_enabled=False,
+                )
+            except RECOVERABLE_ERRORS as error:
+                print(f"[{index}/{len(batches)}] 第 {attempt} 次请求失败：{type(error).__name__}")
+                if attempt == 2:
+                    break
+                await asyncio.sleep(2.0)
+                continue
+            if isinstance(response, dict):
+                choices = response.get("choices") or []
+                if choices and isinstance(choices[0], dict):
+                    content = str((choices[0].get("message") or {}).get("content") or "")
+            if content:
+                break
+            print(f"[{index}/{len(batches)}] 模型返回空内容，重试")
+            await asyncio.sleep(2.0)
         drafts = parse_drafts(content, known_ids)
+        if content and not drafts:
+            print(f"[{index}/{len(batches)}] 输出无法解析（{len(content)} 字符），已跳过")
         for draft in drafts:
             collected[draft["operation_id"]] = draft
-        print(f"[{index}/{len(batches)}] 收到 {len(drafts)} 条语义草稿")
+        if drafts:
+            print(f"[{index}/{len(batches)}] 收到 {len(drafts)} 条语义草稿")
 
     if not collected:
         print("模型未返回可用草稿。")
