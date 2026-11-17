@@ -126,6 +126,55 @@ def test_identical_dataset_queries_read_fresh_results(tmp_path, monkeypatch, loc
     assert service.answer.call_count == 2
 
 
+def test_multi_query_route_runs_read_only_tool_across_datasets(
+    tmp_path, monkeypatch: pytest.MonkeyPatch, local_tools
+) -> None:
+    repo = InMemoryAgentRunRepository()
+    _configure_billing(monkeypatch, tmp_path)
+    service = MagicMock()
+    service.multi_answer.return_value = {
+        "success": True,
+        "dataset_ids": ["kb-a", "kb-b"],
+        "query": "跨库问题",
+        "answer": "跨库答案 [1].",
+        "chunks": [{"text": "跨库答案", "source": "policy.pdf", "dataset_id": "kb-b"}],
+        "citations": [{"index": 1, "source": "policy.pdf"}],
+    }
+
+    with (
+        _patch_agent_repo(repo),
+        patch(
+            "app.application.dataset_rag_app_service.get_dataset_rag_app_service",
+            return_value=service,
+        ),
+    ):
+        response = _client().post(
+            "/api/knowledge/v1/datasets/multi-query",
+            json={
+                "dataset_ids": ["kb-a", "kb-b"],
+                "query": "跨库问题",
+                "tenant_id": "tenant-a",
+                "include_answer": True,
+            },
+            headers=_dataset_headers(),
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["success"] is True
+
+    call_kwargs = service.multi_answer.call_args.kwargs
+    assert call_kwargs["dataset_ids"] == ["kb-a", "kb-b"]
+    assert call_kwargs["query"] == "跨库问题"
+
+    run = repo.get(payload["run_id"])
+    assert run is not None
+    assert run.intent == "dataset_rag_multi_query"
+    assert run.steps[0].risk == "low"
+    assert run.tool_calls[0].action == "multi_query"
+    assert run.tool_calls[0].permission == "dataset.read"
+
+
 def test_rebuild_explicit_idempotency_key_replays_and_rejects_changed_input(
     tmp_path, monkeypatch, local_tools
 ):

@@ -1773,6 +1773,15 @@
           ],
           "availability": "shared"
         },
+        "multi_query": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [
+            "dataset_ids",
+            "query"
+          ],
+          "availability": "shared"
+        },
         "diff_versions": {
           "risk": "low",
           "idempotent": true,

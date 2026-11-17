@@ -685,6 +685,193 @@ class DatasetRagApplicationService:
             context_window=1,
             history=history,
         )
+        return self._synthesize_answer(result, llm_call=llm_call)
+
+    def multi_query(
+        self,
+        *,
+        dataset_ids: list[str],
+        query: str,
+        top_k: int = 5,
+        tenant_id: str = "",
+        version: str | int = "",
+        metadata_filter: dict[str, Any] | None = None,
+        rerank: bool = False,
+        access_context: DatasetAccessContext | dict[str, Any] | None = None,
+        context_window: int = 0,
+        history: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        """Query several datasets and rank their pooled candidates on one scale.
+
+        Mature knowledge bases (Dify / FastGPT / RAGFlow) let one question span a
+        whole knowledge-base group; per-dataset query alone cannot answer that.
+        Per-dataset scores are rank-based and saturate at the same value, so fusion
+        pools each dataset's candidates and re-runs hybrid retrieval over the union
+        instead of comparing incomparable per-dataset scores. Each dataset keeps
+        its own tenant and ACL checks - pooling never widens visibility.
+        """
+        keys: list[str] = []
+        for raw in dataset_ids or []:
+            key = str(raw or "").strip()
+            if key and key not in keys:
+                keys.append(key)
+        if not keys:
+            return {
+                "success": False,
+                "message": "dataset_ids is required",
+                "dataset_ids": [],
+                "query": query,
+                "chunks": [],
+                "citations": [],
+                "answer": "",
+            }
+        original_query = query
+        rewritten = ""
+        if history:
+            from app.infrastructure.llm.query_rewrite import rewrite_query
+
+            rewritten = rewrite_query(query, history)
+            if rewritten:
+                query = rewritten
+        finals = max(1, min(int(top_k), 50))
+        candidate_k = max(finals * 4, 20)
+        results: list[tuple[str, dict[str, Any]]] = []
+        failures: list[dict[str, Any]] = []
+        pooled: list[dict[str, Any]] = []
+        for key in keys:
+            result = self.query(
+                dataset_id=key,
+                query=query,
+                top_k=candidate_k,
+                tenant_id=tenant_id,
+                version=version,
+                metadata_filter=metadata_filter,
+                rerank=False,
+                access_context=access_context,
+                context_window=context_window,
+            )
+            if not result.get("success"):
+                failures.append(
+                    {"dataset_id": key, "message": str(result.get("message") or "query failed")}
+                )
+                continue
+            results.append((key, result))
+            for row in result.get("chunks") or []:
+                if not isinstance(row, dict):
+                    continue
+                metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+                pooled.append(
+                    {
+                        **row,
+                        "dataset_id": key,
+                        "metadata": {**metadata, "_dataset_id": key},
+                    }
+                )
+        payload: dict[str, Any] = {
+            "success": bool(results),
+            "dataset_ids": keys,
+            "query": query,
+            "chunks": self._pool_retrieve(pooled, query, finals, rerank=rerank),
+            "citations": [],
+            "answer": "",
+            "tenant_id": str(results[0][1].get("tenant_id") if results else ""),
+            "version": str(version or ""),
+            "datasets": [
+                {
+                    "dataset_id": key,
+                    "vector_backend_used": bool(result.get("vector_backend_used")),
+                    "index": result.get("index") or {},
+                }
+                for key, result in results
+            ],
+        }
+        if rewritten:
+            payload["original_query"] = original_query
+            payload["query_rewritten"] = True
+        if failures:
+            payload["failed_datasets"] = failures
+        return payload
+
+    def _pool_retrieve(
+        self, pooled: list[dict[str, Any]], query: str, top_k: int, *, rerank: bool
+    ) -> list[dict[str, Any]]:
+        """Rank pooled candidates from several datasets on a single scoring scale."""
+        if not pooled:
+            return []
+        rows: dict[tuple[str, str, int], dict[str, Any]] = {}
+        for row in pooled:
+            metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+            key = (
+                str(metadata.get("_dataset_id") or ""),
+                str(metadata.get("document_id") or row.get("source") or ""),
+                int(row.get("chunk_index") or 0),
+            )
+            rows.setdefault(key, row)
+        chunks = [_dict_to_retrieved_chunk(row) for row in rows.values()]
+        retriever = HybridRetriever(embedder=self._vector.embedder, top_k=len(chunks))
+        retriever.index(chunks)
+        top = retriever.retrieve(query)
+        from app.application.dataset_rag.retrieval import (
+            _auto_rerank_available,
+            _rerank_chunks,
+            _semantic_rerank_chunks,
+        )
+
+        auto = False if rerank else _auto_rerank_available()
+        if rerank or auto:
+            top = _semantic_rerank_chunks(query, top, top_k=top_k, auto=auto) or _rerank_chunks(
+                query, top, top_k=top_k
+            )
+        else:
+            top = top[:top_k]
+        output: list[dict[str, Any]] = []
+        for chunk in top:
+            metadata = chunk.metadata or {}
+            key = (
+                str(metadata.get("_dataset_id") or ""),
+                str(metadata.get("document_id") or chunk.source or ""),
+                int(chunk.chunk_index or 0),
+            )
+            row = rows.get(key) or {}
+            output.append(
+                {
+                    **_chunk_to_dict(chunk, public=True),
+                    "dataset_id": str(row.get("dataset_id") or metadata.get("_dataset_id") or ""),
+                }
+            )
+        return output
+
+    def multi_answer(
+        self,
+        *,
+        dataset_ids: list[str],
+        query: str,
+        top_k: int = 5,
+        llm_call: Callable[[str, str], str] | None = None,
+        tenant_id: str = "",
+        version: str | int = "",
+        metadata_filter: dict[str, Any] | None = None,
+        rerank: bool = False,
+        access_context: DatasetAccessContext | dict[str, Any] | None = None,
+        history: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        result = self.multi_query(
+            dataset_ids=dataset_ids,
+            query=query,
+            top_k=top_k,
+            tenant_id=tenant_id,
+            version=version,
+            metadata_filter=metadata_filter,
+            rerank=rerank,
+            access_context=access_context,
+            context_window=1,
+            history=history,
+        )
+        return self._synthesize_answer(result, llm_call=llm_call)
+
+    def _synthesize_answer(
+        self, result: dict[str, Any], *, llm_call: Callable[[str, str], str] | None = None
+    ) -> dict[str, Any]:
         if not result.get("success") or not result.get("chunks"):
             result.setdefault("answer", "")
             result.setdefault("citations", [])

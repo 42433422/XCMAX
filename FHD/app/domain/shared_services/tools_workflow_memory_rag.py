@@ -12,7 +12,7 @@ def _registered_router_dataset_rag(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
     dataset_id = str(params.get("dataset_id") or "").strip()
-    if not dataset_id:
+    if not dataset_id and action != "multi_query":
         return {"success": False, "message": f"dataset_rag.{action} 缺少 dataset_id 参数"}
     from app.application.dataset_rag_app_service import (
         DATASET_READ_PERMISSION,
@@ -156,6 +156,37 @@ def _registered_router_dataset_rag(
             )
         return finalize(
             result, dataset_id=dataset_id, query=query, chunks=[], citations=[], answer=""
+        )
+    if action == "multi_query":
+        raw_ids = params.get("dataset_ids")
+        dataset_ids = [str(value) for value in raw_ids] if isinstance(raw_ids, list) else []
+        dataset_ids = [value for value in dataset_ids if value.strip()]
+        query = str(params.get("query") or params.get("question") or user_message or "").strip()
+        if not query:
+            return {"success": False, "message": "dataset_rag.multi_query 缺少 query 参数"}
+        if not dataset_ids:
+            return {"success": False, "message": "dataset_rag.multi_query 缺少 dataset_ids 参数"}
+        raw_history = params.get("history")
+        history = raw_history if isinstance(raw_history, list) else []
+        shared = {
+            "dataset_ids": dataset_ids,
+            "query": query,
+            "top_k": as_int(params.get("top_k"), 5),
+            "tenant_id": str(params.get("tenant_id") or ""),
+            "version": params.get("version") or "",
+            "metadata_filter": as_dict(params.get("metadata_filter")),
+            "rerank": as_bool(params.get("rerank"), default=False),
+            "access_context": access_context(DATASET_READ_PERMISSION),
+            "history": history,
+        }
+        if as_bool(params.get("include_answer"), default=True):
+            result = service.multi_answer(**shared)
+        else:
+            result = service.multi_query(
+                **shared, context_window=as_int(params.get("context_window"), 0)
+            )
+        return finalize(
+            result, dataset_ids=dataset_ids, query=query, chunks=[], citations=[], answer=""
         )
     if action == "diff_versions":
         source = str(params.get("source") or "").strip()

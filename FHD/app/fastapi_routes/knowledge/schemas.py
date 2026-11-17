@@ -254,6 +254,31 @@ class DatasetQueryRequest(BaseModel):
         return cleaned
 
 
+class DatasetMultiQueryRequest(DatasetQueryRequest):
+    """One question across several datasets; the server fuses rankings with RRF."""
+
+    dataset_ids: list[str] = Field(
+        ...,
+        min_length=1,
+        max_length=10,
+        description="datasets searched together (order defines RRF tie-breaking only)",
+    )
+
+    @field_validator("dataset_ids")
+    @classmethod
+    def validate_dataset_ids(cls, value: list[str]) -> list[str]:
+        cleaned: list[str] = []
+        for raw in value:
+            key = str(raw or "").strip()
+            if not key or len(key) > 160:
+                raise ValueError("dataset id must be 1-160 characters")
+            if key not in cleaned:
+                cleaned.append(key)
+        if not cleaned:
+            raise ValueError("dataset_ids cannot be empty")
+        return cleaned
+
+
 class DatasetVersionDiffRequest(BaseModel):
     source: str = Field(..., min_length=1, max_length=300, description="document source label")
     tenant_id: str = Field("", max_length=160, description="tenant/user isolation key")

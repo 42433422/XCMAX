@@ -17,6 +17,7 @@ from .schemas import (
     _DATASET_UPLOAD_EXTENSIONS,
     DatasetDocumentAclRequest,
     DatasetDocumentIngestRequest,
+    DatasetMultiQueryRequest,
     DatasetQueryRequest,
 )
 from .uploads import DocumentUpload
@@ -217,6 +218,28 @@ class DocumentRoutes:
             )
 
         self.query_dataset = query_dataset
+
+        @router.post("/datasets/multi-query")
+        def multi_query_datasets(req: DatasetMultiQueryRequest, request: Request) -> JSONResponse:
+            return dispatch()(
+                request=request,
+                action="multi_query",
+                route_path="/api/knowledge/v1/datasets/multi-query",
+                params={
+                    "dataset_ids": req.dataset_ids,
+                    "query": req.query,
+                    "top_k": req.top_k,
+                    "include_answer": req.include_answer,
+                    "tenant_id": req.tenant_id,
+                    "version": req.version,
+                    "metadata_filter": req.metadata_filter,
+                    "rerank": req.rerank,
+                    "context_window": req.context_window,
+                    "history": req.history,
+                },
+            )
+
+        self.multi_query_datasets = multi_query_datasets
 
         router = self.deletion = APIRouter()
 

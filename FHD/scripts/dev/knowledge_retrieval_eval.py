@@ -382,16 +382,17 @@ def _build_service(storage: Path):
     )
 
 
-def run(*, rerank: bool) -> dict[str, float]:
+def run(*, rerank: bool, multi: bool = False) -> dict[str, float]:
     from app.infrastructure.llm.embedding_service import get_default_embedding_service
 
     svc = get_default_embedding_service()
     mode = svc.mode if svc else "disabled"
+    dataset_ids = ["eval-0", "eval-1", "eval-2"] if multi else ["eval"]
     with tempfile.TemporaryDirectory(prefix="kb-eval-") as tmp:
         service = _build_service(Path(tmp) / "datasets")
-        for doc in DOCS:
+        for index, doc in enumerate(DOCS):
             service.ingest_document(
-                dataset_id="eval",
+                dataset_id=dataset_ids[index % len(dataset_ids)] if multi else "eval",
                 document_id=doc["id"],
                 source=doc["id"],
                 text=doc["text"],
@@ -402,12 +403,20 @@ def run(*, rerank: bool) -> dict[str, float]:
         hits_at = {1: 0, 3: 0, 5: 0}
         reciprocal = 0.0
         for item in QUERIES:
-            result = service.query(
-                dataset_id="eval",
-                query=str(item["q"]),
-                top_k=5,
-                rerank=rerank,
-            )
+            if multi:
+                result = service.multi_query(
+                    dataset_ids=dataset_ids,
+                    query=str(item["q"]),
+                    top_k=5,
+                    rerank=rerank,
+                )
+            else:
+                result = service.query(
+                    dataset_id="eval",
+                    query=str(item["q"]),
+                    top_k=5,
+                    rerank=rerank,
+                )
             doc_ids = [
                 str((chunk.get("metadata") or {}).get("document_id") or "")
                 for chunk in result.get("chunks") or []
@@ -422,26 +431,31 @@ def run(*, rerank: bool) -> dict[str, float]:
                     hits_at[k] += 1
             reciprocal += 1.0 / rank if rank else 0.0
         total = len(QUERIES)
-        return {
+        metrics = {
             "embedding_mode": mode,
+            "datasets": len(dataset_ids),
             "queries": total,
             "recall@1": round(hits_at[1] / total, 4),
             "recall@3": round(hits_at[3] / total, 4),
             "recall@5": round(hits_at[5] / total, 4),
             "mrr": round(reciprocal / total, 4),
         }
+        return metrics
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--rerank", action="store_true", help="启用精排（需 FHD_RERANK_* 配置）")
+    parser.add_argument(
+        "--multi", action="store_true", help="把文档拆到 3 个知识库并用 multi-query 融合检索"
+    )
     parser.add_argument("--json", action="store_true", help="只输出 JSON")
     args = parser.parse_args()
-    metrics = run(rerank=args.rerank)
+    metrics = run(rerank=args.rerank, multi=args.multi)
     if args.json:
         print(json.dumps(metrics, ensure_ascii=False))
     else:
-        print(f"知识库检索评测（{metrics['queries']} 条中文查询）")
+        print(f"知识库检索评测（{metrics['queries']} 条中文查询，{metrics['datasets']} 个知识库）")
         for key, value in metrics.items():
             print(f"  {key}: {value}")
     return 0

@@ -286,6 +286,7 @@ query = _legacy_routes.query
 ingest_dataset_document = _document_routes.ingest_dataset_document
 upload_dataset_document = _document_routes.upload_dataset_document
 query_dataset = _document_routes.query_dataset
+multi_query_datasets = _document_routes.multi_query_datasets
 dataset_status_all = _view_routes.dataset_status_all
 dataset_status = _view_routes.dataset_status
 dataset_document_chunks = _view_routes.dataset_document_chunks

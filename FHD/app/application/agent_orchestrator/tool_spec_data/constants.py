@@ -27,7 +27,9 @@ TOOL_ACTION_COST_OVERRIDES: dict[tuple[str, str], int] = {
 # instead of the generic ``f"tool.{tool_id}.{action}"`` fallback.
 PERMISSION_BARE_PREFIX_TOOLS: frozenset[str] = frozenset({"aiopen", "business_db", "employee"})
 # dataset_rag: read-style actions -> dataset.read, everything else dataset.write
-DATASET_RAG_READ_ACTIONS: frozenset[str] = frozenset({"query", "diff_versions"})
+DATASET_RAG_READ_ACTIONS: frozenset[str] = frozenset(
+    {"query", "multi_query", "diff_versions"}
+)
 DATASET_RAG_READ_PERMISSION = "dataset.read"
 DATASET_RAG_WRITE_PERMISSION = "dataset.write"
 # tool_id -> fixed permission string (action-independent).
