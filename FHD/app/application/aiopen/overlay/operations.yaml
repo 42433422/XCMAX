@@ -1,0 +1,23 @@
+# AIOPEN 语义 overlay：补充「何时用 / 副作用 / 前置条件 / 返回 / 示例」。
+# operation_id 由运行时目录生成；未匹配到任何路由的条目会被忽略，不会报错。
+# 只允许补充语义，不参与风险分级与 scope 计算。
+operations:
+  - operation_id: products.list
+    when_to_use: 需要浏览或筛选商品目录时使用，例如报价前确认可售商品。
+    side_effects: []
+    preconditions: ["已登录且具备商品读取权限"]
+    returns: 分页商品列表（编号、名称、价格、单位、状态）
+    examples:
+      - args: { page: 1, page_size: 20 }
+        note: 默认分页浏览
+    related: [products.search, customers.list]
+
+  - operation_id: products.search
+    when_to_use: 已知商品名称或关键字，需要定位具体商品时使用。
+    side_effects: []
+    preconditions: ["已登录且具备商品读取权限"]
+    returns: 匹配商品的最小字段集合
+    examples:
+      - args: { keyword: "螺丝" }
+        note: 按名称关键字检索
+    related: [products.list]

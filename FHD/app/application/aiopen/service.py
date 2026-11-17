@@ -64,6 +64,8 @@ from .installation import (
 from .installation import (
     build_mcp_url_config as build_mcp_url_config,
 )
+from .knowledge import knowledge_search as _knowledge_search
+from .knowledge import operation_describe as _operation_describe
 from .openclaw import OpenClawProxy
 from .protocols import InstallationBuilders, InternalHttpClient, UpstreamResponse
 from .result_text import format_tool_result_text as format_tool_result_text
@@ -166,6 +168,8 @@ _dispatcher = ToolDispatcher(
     lambda: _tool_api_catalog(),
     {
         "api_call": lambda app, args: _tool_api_call(app, args),
+        "knowledge_search": lambda app, args: _knowledge_search(app, args),
+        "operation_describe": lambda app, args: _operation_describe(app, args),
         "chat": lambda app, args: _tool_chat(app, args),
         "capability_loop": lambda app, args: _tool_capability_loop(app, args),
     },

@@ -108,6 +108,55 @@ def format_tool_result_text(tool_name: str, result: dict[str, Any]) -> str:
         if extra_data:
             return f"{detail}\n{json.dumps(extra_data, ensure_ascii=False, default=str)}"
         return str(detail)
+    if name == "knowledge_search":
+        if not ok:
+            return f"能力检索失败：{result.get('message', '')}"
+        raw_items = result.get("items")
+        items: list[Any] = list(raw_items) if isinstance(raw_items, list) else []
+        lines = [f"检索「{result.get('query', '')}」命中 {len(items)} 条："]
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            lines.append(
+                f"  · {item.get('operation_id')}  {item.get('method')} {item.get('path')}"
+                f"  [{item.get('risk')}] {item.get('summary', '')}"
+            )
+            if item.get("when_to_use"):
+                lines.append(f"      何时用：{item['when_to_use']}")
+        if not items:
+            lines.append("  未命中；可换用更短的关键字或去掉 domain 限定。")
+        return "\n".join(lines)
+    if name == "operation_describe":
+        if not ok:
+            return f"读取 operation 失败：{result.get('message', '')}"
+        operation = result.get("operation") if isinstance(result.get("operation"), dict) else {}
+        semantics = (
+            operation.get("semantics") if isinstance(operation.get("semantics"), dict) else {}
+        )
+        lines = [
+            f"{operation.get('operation_id')}  {operation.get('method')} {operation.get('path')}",
+            f"风险：{operation.get('risk')} · scope：{operation.get('scope')}"
+            f" · 工具集：{operation.get('toolset')}",
+            f"摘要：{operation.get('summary', '')}",
+        ]
+        for label, key in (
+            ("何时用", "when_to_use"),
+            ("副作用", "side_effects"),
+            ("前置条件", "preconditions"),
+            ("返回", "returns"),
+            ("示例", "examples"),
+        ):
+            value = semantics.get(key)
+            if value:
+                rendered = (
+                    "；".join(str(item) for item in value)
+                    if isinstance(value, list)
+                    else str(value)
+                )
+                lines.append(f"{label}：{rendered}")
+        if not semantics:
+            lines.append("语义：暂无 overlay，可按 path 与摘要判断用途。")
+        return "\n".join(lines)
     if not ok:
         return f"工具 {name} 失败：{result.get('message', result.get('code', 'unknown error'))}"
     return json.dumps(result, ensure_ascii=False, indent=2, default=str)

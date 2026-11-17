@@ -68,6 +68,36 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "knowledge_search",
+        "description": (
+            "在 AIOPEN 系统地图中检索业务能力：按关键字返回匹配的 operation、"
+            "风险等级、scope 与使用时机。替代一次性拉取全量目录。"
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "自然语言或关键字，如「创建订单」"},
+                "domain": {
+                    "type": "string",
+                    "description": "可选：限定业务域，如 products / orders",
+                },
+                "limit": {"type": "integer", "description": "返回条数，默认 10，最大 50"},
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "operation_describe",
+        "description": "读取单个 operation 的完整语义卡片：方法、路径、风险、scope 与使用时机、副作用、示例。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "operation_id": {"type": "string", "description": "来自 knowledge_search 的 operation_id"}
+            },
+            "required": ["operation_id"],
+        },
+    },
+    {
         "name": "chat",
         "description": "向 XCAGI AI 助手发送一条消息（unified_chat，source=aiopen），返回助手回复。",
         "inputSchema": {

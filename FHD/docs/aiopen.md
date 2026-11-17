@@ -15,6 +15,10 @@
 | `GET /api/aiopen/manifest` | 工具目录（名称 / 描述 / inputSchema） | 公开 |
 | `POST /api/aiopen/mcp` | MCP Streamable HTTP（JSON-RPC 2.0） | `X-AIOPEN-Key` |
 | `POST /api/aiopen/invoke` | REST 通用工具调用 `{tool, args}` | `X-AIOPEN-Key` |
+| `GET /api/aiopen/catalog/operations` | **系统地图**：运行时能力目录（关键字/风险/工具集过滤、分页） | `X-AIOPEN-Key` |
+| `GET /api/aiopen/catalog/operations/{operation_id}` | 单个 operation 的语义卡片 | `X-AIOPEN-Key` |
+| `GET /api/aiopen/catalog/schema/{entity}` | 实体字段字典（来自 OpenAPI） | `X-AIOPEN-Key` |
+| `GET /api/aiopen/coverage` | 开放面覆盖度（规模、风险分布、语义覆盖率） | `X-AIOPEN-Key` |
 | `GET /api/aiopen/panel` 等 | 控制台（白名单 / Key / 会话 / 开关） | LAN 门禁内 |
 | `WS /api/aiopen/ws` | 前端 screen 端（虚拟光标）连接 | LAN 门禁内 |
 
@@ -78,7 +82,8 @@ http://<主机>/api/aiopen/guide?format=markdown
 ```
 
 支持的 JSON-RPC 方法：`initialize`、`tools/list`、`tools/call`、`ping`、
-`notifications/initialized`（notification 返回 202）。
+`notifications/initialized`（notification 返回 202），以及只读资源
+`resources/list`、`resources/templates/list`、`resources/read`。
 
 响应头：`MCP-Protocol-Version`、`Mcp-Session-Id`（initialize 时下发）。
 `tools/call` 返回人类可读文本（非原始 JSON  dump）。
@@ -101,6 +106,8 @@ curl -X POST http://localhost:5000/api/aiopen/invoke \
 | 工具 | 说明 |
 |---|---|
 | `api_catalog` | 列出白名单内可调用的业务 API 路由（精确 + 前缀子路径） |
+| `knowledge_search` | 在系统地图中按关键字检索 operation（含风险、scope、使用时机） |
+| `operation_describe` | 读取单个 operation 的完整语义卡片 |
 | `api_call` | 调用白名单业务 API（GET/POST/PUT/PATCH/DELETE） |
 | `chat` | 发消息给 XCAGI AI 助手（unified_chat，source=`aiopen`） |
 | `capability_loop` | 全调用闭环自检：catalog → 抽样 api_call → chat → ui_sessions |
@@ -113,6 +120,22 @@ curl -X POST http://localhost:5000/api/aiopen/invoke \
 
 面板还可：`POST /api/aiopen/whitelist/seed` 一键开启侧栏全业务白名单；
 `POST /api/aiopen/loop/verify` 跑与 `capability_loop` 相同的闭环自检。
+
+## 系统地图（知）
+
+能力目录在运行时从应用 OpenAPI 生成，不手工维护；内部管理端、运行时通道与
+AIOPEN 自身路由不进入目录。每条 operation 带 `risk`（read/write/danger）与
+`scope`（如 `read:products`），语义说明来自 `app/application/aiopen/overlay/operations.yaml`。
+
+MCP 只读资源：
+
+| URI | 内容 |
+|---|---|
+| `xcmax://catalog/operations` | 全部可开放 operation |
+| `xcmax://catalog/operation/{operation_id}` | 单个 operation 语义卡片 |
+| `xcmax://catalog/schema/{entity}` | 实体字段字典（OpenAPI components.schemas） |
+
+推荐顺序：`knowledge_search` → `operation_describe` → `api_call`。
 
 默认白名单覆盖对话 / IM / 群聊 / 知识库 / 员工台 / 产品组织订单 / 出货打印 / Mod 等前缀；
 `api_call` 对已启用前缀的子路径自动放行（例如启用 `/api/products` 即可调 `/api/products/list`）。
@@ -151,6 +174,11 @@ curl -X POST http://localhost:5000/api/aiopen/invoke \
 - `ui_*` 受双重开关约束：服务端「远程操控总开关」+ 浏览器端「受控屏幕」开关
   （localStorage 持久化，默认关闭）
 - 面板与 keys 管理端点仍在 LAN 门禁内
+
+## 技术方案
+
+开放面的能力模型、权限矩阵与分期落地见
+[`docs/architecture/AIOPEN_FULL_SURFACE.md`](architecture/AIOPEN_FULL_SURFACE.md)。
 
 ## 相关代码
 
