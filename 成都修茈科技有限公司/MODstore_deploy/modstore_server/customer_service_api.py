@@ -457,6 +457,23 @@ async def ticket_detail(
     if isinstance(user, TicketReader):
         return reader_detail(db, ticket, user)
 
+    delivery: Dict[str, Any] = {}
+    if user.is_admin and ticket.intent == "custom_delivery":
+        from modstore_server.customer_service_delivery_api import _custom_delivery_payload
+
+        from modstore_server.customer_delivery_failure import reconcile_runtime_failures
+        from modstore_server.customer_service_delivery_payment_api import (
+            reconcile_custom_delivery_payment,
+        )
+
+        changed = reconcile_runtime_failures(db, ticket)
+        changed = await reconcile_custom_delivery_payment(db, ticket) or changed
+        if changed:
+            db.commit()
+            db.refresh(ticket)
+        payload = await _custom_delivery_payload(ticket)
+        delivery["custom_delivery"] = payload.get("custom_delivery") or {}
+
     def related(model: Any, descending: bool = False) -> list[Any]:
         order = model.id.desc() if descending else model.id.asc()
         return list(db.query(model).filter(model.ticket_id == ticket.id).order_by(order).all())
@@ -464,13 +481,6 @@ async def ticket_detail(
     decisions = [decision_payload(d) for d in related(CustomerServiceDecision, True)]
     actions = [action_payload(a) for a in related(CustomerServiceAction)]
     from modstore_server.customer_ticket_execution import ticket_execution_overview
-
-    delivery: Dict[str, Any] = {}
-    if user.is_admin and ticket.intent == "custom_delivery":
-        from modstore_server.customer_service_delivery_api import _custom_delivery_payload
-
-        payload = await _custom_delivery_payload(ticket)
-        delivery["custom_delivery"] = payload.get("custom_delivery") or {}
 
     return {
         **({"execution_overview": ticket_execution_overview(db, ticket)} if user.is_admin else {}),

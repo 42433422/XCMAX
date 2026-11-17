@@ -1011,13 +1011,31 @@ def test_custom_delivery_requires_quality_acceptance_and_install_receipt(
                 "artifact": None,
             }
         )
-        app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
-        reconciled = client.get("/api/customer-service/custom-deliveries")
+        app.dependency_overrides[customer_service_api._get_current_user] = lambda: admin
+        reconciled = client.get(f"/api/customer-service/tickets/{addon_ticket_id}")
         assert reconciled.status_code == 200, reconciled.text
-        paid = next(row for row in reconciled.json()["items"] if row["id"] == addon_ticket_id)
+        paid = reconciled.json()
         assert paid["custom_delivery"]["crm"]["payment"]["status"] == "paid"
         assert paid["custom_delivery"]["commerce_ready"] is True
         assert paid["custom_delivery"]["stage"] == "production"
+        again = client.get(f"/api/customer-service/tickets/{addon_ticket_id}")
+        assert again.status_code == 200
+        assert again.json()["custom_delivery"]["runs"] == paid["custom_delivery"]["runs"]
+        with get_session_factory()() as db:
+            assert (
+                db.query(CustomerServiceAuditLog)
+                .filter_by(ticket_id=addon_ticket_id, event_type="custom_delivery_payment_verified")
+                .count()
+                == 1
+            )
+        app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
+        listed = client.get("/api/customer-service/custom-deliveries").json()["items"]
+        assert (
+            next(row for row in listed if row["id"] == addon_ticket_id)["custom_delivery"]["crm"][
+                "payment"
+            ]["status"]
+            == "paid"
+        )
 
 
 @pytest.mark.parametrize(

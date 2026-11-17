@@ -389,3 +389,23 @@ it('keeps the commerce editor reachable in migrated ticket delivery details', as
   for (const label of ['保存指派', '保存报价', '保存合同', '保存收款']) expect(panel.text()).toContain(label)
   wrapper.unmount()
 })
+
+
+it('preserves optional mainline rework on the original ticket and resets it on navigation', async () => {
+  confirm.mockResolvedValue(true)
+  detail.mockResolvedValue({ ...payload, custom_delivery: { kind: 'module', suggested_id: 'sunbird-attendance-custom', stage: 'rework' } })
+  const wrapper = mountDetail(); await flushPromises()
+  await wrapper.findAll('button').find(button => button.text() === '交付进度')!.trigger('click')
+  const panel = wrapper.find('[aria-label="交付进度"]')
+  const checkbox = panel.get('input[type="checkbox"]')
+  expect((checkbox.element as HTMLInputElement).checked).toBe(false)
+  await checkbox.setValue(true)
+  await panel.get('input[type="text"]').setValue('使用维护主线重新构建')
+  await panel.findAll('button').find(button => button.text() === '发起返工')!.trigger('click')
+  await flushPromises()
+  expect(decideDelivery).toHaveBeenCalledWith(42, 'rework', '使用维护主线重新构建', 'versioned_main')
+  detail.mockResolvedValue({ ...payload, ticket: { ...ticket, id: 43 }, custom_delivery: { kind: 'module', suggested_id: 'sunbird-attendance-custom', stage: 'rework' } })
+  route.params.ticketId = '43'; await flushPromises()
+  expect((wrapper.get('[aria-label="交付进度"] input[type="checkbox"]').element as HTMLInputElement).checked).toBe(false)
+  wrapper.unmount()
+})

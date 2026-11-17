@@ -73,6 +73,7 @@
           <DeliveryCommercePanel :key="ticketId" :ticket="commerceTicket" @updated="updateDeliveryCommerce" />
           <p v-if="latestRun?.error" class="cs-error-text">{{ latestRun.error }}</p>
           <form class="cs-eta-editor" @submit.prevent>
+            <label v-if="canUseMainRework"><input v-model="mainRework" type="checkbox" />使用主线私有模块源码（保留原客户归属与权益）</label>
             <input v-model.trim="reworkNote" type="text" maxlength="4000" placeholder="返工原因（至少 4 个字）" />
             <button class="cs-btn" type="button" :disabled="saving" @click="requestDeliveryRework">发起返工</button>
             <button v-if="canAcceptDelivery" class="cs-btn cs-btn-primary" type="button" :disabled="saving" @click="acceptDelivery">内部质量确认</button>
@@ -250,7 +251,8 @@ const closeNote = ref(''), closeVerification = ref(''), closeRequestId = ref('')
 const replyNote = ref(''), replyRequestId = ref('')
 const assigneeId = ref(''), handleReason = ref('按客户描述核查员工图谱'), handleError = ref('')
 const sensitiveChange = ref('调整客户可见配置'), sensitiveActionId = ref(0)
-const reworkNote = ref(''), deliveryError = ref('')
+const reworkNote = ref(''), deliveryError = ref(''), mainRework = ref(false)
+const canUseMainRework = computed(() => detail.value?.custom_delivery?.kind === 'module' && detail.value?.custom_delivery?.suggested_id === 'sunbird-attendance-custom')
 watch(replyNote, () => { replyRequestId.value = '' })
 let generation = 0
 
@@ -358,12 +360,14 @@ async function requestDeliveryRework() {
   if (saving.value) return
   const id = ticketId.value, currentGeneration = generation
   const note = reworkNote.value.trim()
+  const useMain = mainRework.value && canUseMainRework.value
   if (note.length < 4) { deliveryError.value = '返工原因至少 4 个字'; return }
   if (!await appConfirm(`将工单 ${ticket.value.ticket_no || ticketId.value} 发回重新执行？`, { title: '发起返工', confirmText: '确认返工' })) return
   if (id !== ticketId.value || currentGeneration !== generation || saving.value) return
   saving.value = true; deliveryError.value = ''
   try {
-    await xcmaxAdminApi.decideCustomDelivery(id, 'rework', note)
+    if (useMain) await xcmaxAdminApi.decideCustomDelivery(id, 'rework', note, 'versioned_main')
+    else await xcmaxAdminApi.decideCustomDelivery(id, 'rework', note)
     if (id === ticketId.value && currentGeneration === generation) { reworkNote.value = ''; await load() }
   } catch (cause) { if (id === ticketId.value && currentGeneration === generation) deliveryError.value = apiError(cause) }
   finally { saving.value = false }
@@ -507,7 +511,7 @@ async function load() {
   } catch (cause) { if (request === generation) error.value = message(cause) }
   finally { if (request === generation) loading.value = false }
 }
-watch(ticketId, () => { replyNote.value = ''; replyRequestId.value = ''; closeDisposition.value = 'resolved'; closeNote.value = ''; closeVerification.value = ''; closeRequestId.value = ''; etaMessage.value = ''; etaError.value = ''; void load() }, { immediate: true })
+watch(ticketId, () => { reworkNote.value = ''; mainRework.value = false; deliveryError.value = ''; replyNote.value = ''; replyRequestId.value = ''; closeDisposition.value = 'resolved'; closeNote.value = ''; closeVerification.value = ''; closeRequestId.value = ''; etaMessage.value = ''; etaError.value = ''; void load() }, { immediate: true })
 onBeforeUnmount(() => { generation++ })
 </script>
 
