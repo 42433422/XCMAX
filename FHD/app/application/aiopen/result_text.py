@@ -139,6 +139,14 @@ def format_tool_result_text(tool_name: str, result: dict[str, Any]) -> str:
             f" · 工具集：{operation.get('toolset')}",
             f"摘要：{operation.get('summary', '')}",
         ]
+        review_status = str(semantics.get("review_status") or "").strip()
+        if review_status:
+            reviewer = str(semantics.get("reviewed_by") or "").strip()
+            reviewed_at = str(semantics.get("reviewed_at") or "").strip()
+            lines.append(
+                f"复核状态：{review_status}"
+                + (f"（{reviewer} {reviewed_at}）" if reviewer or reviewed_at else "")
+            )
         for label, key in (
             ("何时用", "when_to_use"),
             ("副作用", "side_effects"),

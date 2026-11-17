@@ -1,5 +1,5 @@
 {
-  "lines": 2459799,
+  "lines": 2459807,
   "updated": "2026-11-17",
-  "note": "Source Governance 基线登记并发保留的 ai_open.py 逐文件路由上限（+5 行 JSON），不加阈值、不整表放宽；用户批准提交推送"
+  "note": "AIOPEN 语义卡片展示复核状态（+8 行），避免外部 AI 把待核语义当作已确认规则"
 }
