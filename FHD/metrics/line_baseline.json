@@ -1,5 +1,5 @@
 {
-  "lines": 2469511,
+  "lines": 2469820,
   "updated": "2026-11-18",
-  "note": "知识库批量来源同步：refresh_documents 汇总 changed/unchanged/skipped、批量路由与注册表动作，含 4 条测试"
+  "note": "知识库新增语雀导入：REST 连接器 + yuque 刷新接线 + 路由字段 + 6 条测试"
 }

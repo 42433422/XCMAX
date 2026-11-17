@@ -11,7 +11,7 @@ from typing import Any
 SOURCE_KIND_KEY = "source_kind"
 SOURCE_REF_KEY = "source_ref"
 
-REFRESHABLE_KINDS = frozenset({"url", "confluence", "feishu", "notion"})
+REFRESHABLE_KINDS = frozenset({"url", "confluence", "feishu", "notion", "yuque"})
 
 
 def source_coordinates(metadata: dict[str, Any] | None) -> tuple[str, str] | None:
@@ -57,5 +57,14 @@ def fetch_source_text(kind: str, ref: str) -> tuple[str, str, dict[str, Any]]:
             notion.text,
             notion.title or f"notion:{notion.page_id}",
             {"notion_page_id": notion.page_id, "source_url": notion.url},
+        )
+    if kind == "yuque":
+        from app.application.document_parsing.yuque import fetch_document
+
+        doc = fetch_document(ref)
+        return (
+            doc.text,
+            doc.title or f"yuque:{ref}",
+            {"yuque_document_ref": ref, "source_url": doc.url},
         )
     raise ValueError(f"unsupported refresh source: {kind}")

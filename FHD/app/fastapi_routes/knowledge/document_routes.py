@@ -151,6 +151,22 @@ class DocumentRoutes:
                     "source_ref": notion.page_id,
                     "source_url": notion.url,
                 }
+            elif req.yuque_document_ref.strip():
+                from app.application.document_parsing.yuque import fetch_document as fetch_yuque_doc
+
+                try:
+                    yuque = fetch_yuque_doc(req.yuque_document_ref)
+                except ValueError as exc:
+                    return JSONResponse(status_code=400, content={"detail": str(exc)})
+                text = yuque.text
+                source = source or yuque.title or f"yuque:{req.yuque_document_ref}"
+                document_id = document_id or yuque.url
+                extra_metadata = {
+                    "yuque_document_ref": req.yuque_document_ref,
+                    "source_kind": "yuque",
+                    "source_ref": req.yuque_document_ref,
+                    "source_url": yuque.url,
+                }
             metadata = dict(req.metadata)
             metadata.update(extra_metadata)
             if extra_metadata:

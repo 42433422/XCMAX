@@ -131,6 +131,11 @@ class DatasetDocumentIngestRequest(BaseModel):
     notion_page_id: str = Field(
         "", max_length=64, description="Notion page id imported with the integration token"
     )
+    yuque_document_ref: str = Field(
+        "",
+        max_length=290,
+        description="Yuque document reference namespace/repo/doc imported with the personal token",
+    )
     source: str = Field("", max_length=300, description="source label")
     document_id: str = Field("", max_length=200, description="optional stable document id")
     tenant_id: str = Field("", max_length=160, description="tenant/user isolation key")
@@ -171,11 +176,12 @@ class DatasetDocumentIngestRequest(BaseModel):
             bool(self.confluence_page_id.strip()),
             bool(self.feishu_document_id.strip()),
             bool(self.notion_page_id.strip()),
+            bool(self.yuque_document_ref.strip()),
         ]
         if not any(provided):
             raise ValueError(
-                "text, file_path, url, s3_uri, confluence_page_id, feishu_document_id "
-                "or notion_page_id is required"
+                "text, file_path, url, s3_uri, confluence_page_id, feishu_document_id, "
+                "notion_page_id or yuque_document_ref is required"
             )
         if self.s3_uri.strip() and sum(provided) > 1:
             raise ValueError("s3_uri cannot be combined with text, file_path or url")
@@ -185,6 +191,8 @@ class DatasetDocumentIngestRequest(BaseModel):
             raise ValueError("feishu_document_id cannot be combined with other sources")
         if self.notion_page_id.strip() and sum(provided) > 1:
             raise ValueError("notion_page_id cannot be combined with other sources")
+        if self.yuque_document_ref.strip() and sum(provided) > 1:
+            raise ValueError("yuque_document_ref cannot be combined with other sources")
         if self.chunk_strategy == "fixed" and self.chunk_overlap >= self.chunk_size:
             raise ValueError("chunk_overlap must be smaller than chunk_size")
         return self

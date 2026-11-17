@@ -1,4 +1,5 @@
 ## Unreleased
+- 知识库新增语雀导入：入库接口支持 `yuque_document_ref`（`namespace/repo/doc`），调用语雀官方 REST `GET /api/v2/repos/{namespace}/docs/{slug}`（`X-Auth-Token`），读取标题与 Markdown 正文（缺正文时从 `body_html` 抽纯文本）；`XCAGI_YUQUE_TOKEN` 必填、`XCAGI_YUQUE_BASE_URL` 支持私有化域名，5MB/15s 限制、401/403/404 明确报错，并记录 `source_kind=yuque` 支持单篇与批量来源同步。
 - 知识库新增批量来源同步：`POST /api/knowledge/v1/datasets/{dataset_id}/documents/refresh?limit=`（默认 50、上限 200）按记录的外部来源坐标逐个刷新当前租户可见文档，返回 `total/processed/changed/unchanged/failed/skipped/truncated` 与逐文档状态；没有来源坐标的文档计入 `skipped` 而不是让整批失败，受写权限、租户与文档 ACL 约束。
 - 知识库前端新增分块预览与证据提示：资料列表点选文档后可在详情面板「分块」页按序查看分块（每页 50、可加载更多，复用 `GET .../documents/{id}/chunks`），召回面板显示 `grounding` 证据徽标（低于门槛时标注「未命中足够证据」），问答与召回不再只给一段文字。
 - 知识库新增低置信拒答：查询返回 `grounding`（问题词在前 5 个候选中的最高覆盖率，中文二元组、剔除疑问/虚词）与 `answer_grounded`；低于门槛时问答明确回复「知识库中没有找到与该问题足够相关的内容」且 `citations` 为空、`no_answer=true`，不再让模型拿无关片段作答。门槛默认 `0.1`（`XCAGI_KB_MIN_RELEVANCE` 可调），单次请求可用 `min_relevance`（0–1，0 表示用服务端默认）覆盖；单库与跨库问答都生效。69 条域内查询全部有证据（`answer_grounded_rate=1.0`，召回不变），12 条域外问题单库/跨库均 100% 拒答（`--ood`）。
