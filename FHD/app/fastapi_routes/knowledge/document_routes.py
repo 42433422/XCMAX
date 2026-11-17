@@ -57,6 +57,7 @@ class DocumentRoutes:
             source = req.source
             document_id = req.document_id
             staged_path: Path | None = None
+            extra_metadata: dict[str, object] = {}
             if req.url.strip():
                 from app.application.document_parsing.web_fetch import fetch_url_text
 
@@ -95,7 +96,22 @@ class DocumentRoutes:
                 file_path = str(staged_path)
                 source = source or fetched.filename
                 document_id = document_id or req.s3_uri
+            elif req.confluence_page_id.strip():
+                from app.application.document_parsing.confluence import fetch_page
+
+                try:
+                    page = fetch_page(req.confluence_page_id)
+                except ValueError as exc:
+                    return JSONResponse(status_code=400, content={"detail": str(exc)})
+                text = page.text
+                source = source or page.title or f"confluence:{page.page_id}"
+                document_id = document_id or page.url
+                extra_metadata = {
+                    "confluence_page_id": page.page_id,
+                    "source_url": page.url,
+                }
             metadata = dict(req.metadata)
+            metadata.update(extra_metadata)
             if req.acl:
                 metadata["acl"] = req.acl
             response = dispatch()(

@@ -1,4 +1,5 @@
 ## Unreleased
+- 知识库新增 Confluence 页面导入：入库接口支持 `confluence_page_id`，按管理员配置的站点（`XCAGI_CONFLUENCE_BASE_URL`）与凭据（`XCAGI_CONFLUENCE_API_TOKEN`，可选 `XCAGI_CONFLUENCE_EMAIL` 走 Basic Auth）读取页面 storage 内容，复用 trafilatura 提取正文（`parser` 仍为文本入库链路）；限制 5MB/15s，页面 ID 与来源互斥校验，失败返回 400。
 - 知识库支持本地保存的网页：上传或 S3 导入 `.html` / `.htm` 时复用 trafilatura 提取正文与标题（`parser=trafilatura_html`），与 URL 导入共用同一实现与错误回退。
 - 知识库新增多轮追问改写：`POST /api/knowledge/v1/datasets/{dataset_id}/query` 支持 `history`（最多 12 轮、总计 2 万字符，角色仅限 user/assistant），有平台模型时把追问改写为可独立检索的问题并回填 `original_query` 与 `query_rewritten`；未配置模型、超时或输出异常时沿用原问题，`XCAGI_KB_QUERY_REWRITE=0` 可关闭。
 - 知识库精排升级：默认 cross-encoder 从 `BAAI/bge-reranker-base` 换为多语言 int8 的 `BAAI/bge-reranker-v2-m3-int8`（fastembed/ONNX，约 0.57GB，无 torch）。50 条中文评测中开启精排后 fastembed 与 hash 两种向量模式均达到 recall@1=1.0、MRR=1.0（hash 无精排仅 0.22/0.40）；新增 `FHD_RERANK_AUTO=1` 允许 hash 降级时自动精排，默认仍不静默下载模型。
