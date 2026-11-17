@@ -440,3 +440,57 @@ def test_langgraph_runtime_dispatches_registered_tool(monkeypatch):
     result = XCAGILangGraphRuntime(tool_dispatcher=dispatch).run(plan)
     assert result.success
     assert calls == [("products", "query")]
+
+
+@pytest.mark.parametrize("failure_source", ["memory", "storage"])
+def test_workflow_lookup_failure_preserves_pending_approval(failure_source):
+    """A transient lookup outage must not commit cancellation or execute work."""
+    from app.application.approval_workspace.decisions import ApprovalDecisions
+    from app.application.approval_workspace.workflow_bridge import (
+        WorkflowApprovalBridge,
+    )
+
+    backend = MagicMock()
+    backend.approvals.return_value.get_pending_workflow.return_value = None
+    if failure_source == "memory":
+        backend.approvals.return_value.get_pending_workflow.side_effect = RuntimeError("offline")
+    else:
+        backend.pending_snapshot.side_effect = RuntimeError("offline")
+    bridge = WorkflowApprovalBridge(backend, (RuntimeError,), logging.getLogger(__name__))
+    workflows = SimpleNamespace(pending=bridge.has_pending, resume=MagicMock())
+    access = MagicMock()
+    access.workflow_reviewer.return_value = True
+    effects = MagicMock()
+    nodes = MagicMock()
+    decisions = ApprovalDecisions(
+        MagicMock(), access, nodes, workflows, effects, MagicMock(), MagicMock()
+    )
+    req = ApprovalRequest(
+        request_no="pending-1", status=ApprovalStatus.PENDING.value, business_data="{}"
+    )
+    db = MagicMock()
+    result = decisions.approve_workflow(db, req=req, actor=7, approver_name=None, opinion="同意")
+    assert result.status_code == 503
+    assert json.loads(result.body)["retryable"] is True
+    assert req.status == ApprovalStatus.PENDING.value
+    assert req.business_data == "{}"
+    assert req.rejection_reason is None
+    db.commit.assert_not_called()
+    db.add.assert_not_called()
+    effects.audit.assert_not_called()
+    effects.notify.assert_not_called()
+    workflows.resume.assert_not_called()
+    nodes.audit_node.assert_not_called()
+
+
+def test_pending_snapshot_propagates_storage_errors(monkeypatch):
+    from app.application.workflow.approval_persistence import (
+        load_durable_workflow_snapshot,
+    )
+    from sqlalchemy.exc import OperationalError
+
+    failure = OperationalError("SELECT", {}, RuntimeError("offline"))
+    monkeypatch.setattr("app.db.session.get_db", MagicMock(side_effect=failure))
+    assert load_durable_workflow_snapshot("pending-1") is None
+    with pytest.raises(OperationalError):
+        service._pending_snapshot("pending-1")

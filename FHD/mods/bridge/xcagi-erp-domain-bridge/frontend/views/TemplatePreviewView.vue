@@ -13,6 +13,25 @@
         </div>
       </div>
 
+      <div class="grid-tool-card">
+        <div class="grid-tool-title">Excel 网格映射工具</div>
+        <div class="grid-tool-actions">
+          <input ref="gridToolFileInput" class="grid-tool-file-input" type="file" accept=".xlsx,.xls" aria-label="选择 Excel 文件" tabindex="-1" :disabled="extractingGrid" @change="onGridToolFileSelected">
+          <button type="button" class="btn btn-sm btn-secondary" aria-describedby="grid-tool-file-name" :disabled="extractingGrid" @click="gridToolFileInput?.click()">选择文件</button>
+          <span id="grid-tool-file-name" class="grid-tool-file-name muted" role="status" :title="gridToolFile?.name">{{ gridToolFile?.name || '未选择文件' }}</span>
+          <button type="button" class="btn btn-sm btn-primary" :disabled="!gridToolFile || extractingGrid" @click="extractGridFromExcel">
+            {{ extractingGrid ? '提取中...' : '上传提取模板网格' }}
+          </button>
+          <button v-if="gridToolResult" type="button" class="btn btn-sm btn-secondary" @click="openGridToolPreview">
+            查看提取结果
+          </button>
+        </div>
+        <div v-if="gridToolResult" class="muted" style="font-size:12px;margin-top:6px;">
+          已提取：{{ gridToolResult.template_name || 'Excel模板' }} | 字段 {{ (gridToolResult.fields || []).length }} 项
+        </div>
+      </div>
+
+
       <p v-if="error" class="tpl-library__error" role="alert">{{ error }}</p>
 
       <div class="tpl-library__body">
@@ -70,6 +89,7 @@
       </div>
     </div>
 
+    <TpGridToolModal :tp="tp" />
     <TpCreateModal :tp="tp" />
     <TpPreviewModal :tp="tp" />
     <TpEditModal :tp="tp" />
@@ -78,8 +98,9 @@
 </template>
 
 <script setup lang="ts">
-import { getCurrentInstance } from 'vue'
+import { getCurrentInstance, ref } from 'vue'
 import { VueFinder, VueFinderPlugin, zhCN } from '@/components/template/vuefinder'
+import TpGridToolModal from './template-preview/TpGridToolModal.vue'
 import TpCreateModal from './template-preview/TpCreateModal.vue'
 import TpPreviewModal from './template-preview/TpPreviewModal.vue'
 import TpEditModal from './template-preview/TpEditModal.vue'
@@ -104,9 +125,12 @@ function ensureVueFinderPlugin() {
 ensureVueFinderPlugin()
 
 const tp = assembleTemplatePreview()
+const gridToolFileInput = ref<HTMLInputElement | null>(null)
 
 const {
   loading, error, refreshTemplates, openCreateModal,
+  gridToolFile, gridToolResult, extractingGrid, onGridToolFileSelected,
+  extractGridFromExcel, openGridToolPreview,
   getTemplateCategoryLabel, getTemplateScopeLabel, getTemplateSourceLabel,
   getTemplateDisplayTermsText, getTemplateCoverage, isGridTemplateCategory,
   canDeleteTemplate, startCreateForScope, previewTemplate, openTemplateTarget,

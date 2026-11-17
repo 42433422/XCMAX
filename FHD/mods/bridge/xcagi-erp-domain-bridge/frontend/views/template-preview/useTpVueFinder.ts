@@ -68,8 +68,9 @@ export function useTpVueFinder(tp: TemplatePreviewCtx) {
       const folder = folderFor(tpl)
       folders.add(folder)
       const basename = fileNameFor(tpl)
-      const dir = `${root}${folder}`
-      const path = `${dir}/${basename}`
+      const dir = `${root}${encodeURIComponent(folder)}`
+      // Identity is independent of the display name, including duplicate names.
+      const path = `${dir}/${encodeURIComponent(String(tpl.id))}`
       byPath.set(path, tpl)
       files.push({
         dir,
@@ -88,7 +89,7 @@ export function useTpVueFinder(tp: TemplatePreviewCtx) {
       dir: root,
       basename: name,
       extension: '',
-      path: `${root}${name}`,
+      path: `${root}${encodeURIComponent(name)}`,
       storage: STORAGE,
       type: 'dir',
       file_size: null,
@@ -98,7 +99,9 @@ export function useTpVueFinder(tp: TemplatePreviewCtx) {
     }))
     entries.value = [...dirs, ...files]
     libraryVersion.value += 1
-    if (selectedTemplate.value && !byPath.has(selectedPath)) selectedTemplate.value = null
+    if (selectedTemplate.value) {
+      selectedTemplate.value = byPath.get(selectedPath) || null
+    }
   }
 
   const driver = new ArrayDriver({ files: entries, storage: STORAGE, readOnly: true })

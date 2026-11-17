@@ -247,6 +247,7 @@ import { buildApprovalCardTrace } from '@/utils/chatOrchestrationTrace'
 import { approvalCardId } from '@/utils/chatApprovalCard'
 import { formatBusinessResultSummary } from '@/utils/businessResultSummary'
 import type { AgentRunTraceData } from '@/utils/agentRunTraceModel'
+import { chatMessageKey } from '@/utils/chatMessageIdentity'
 import { CHAT_HISTORY_WINDOW, useChatHistoryWindow } from '@/composables/useChatHistoryWindow'
 import { isFailedChatReply, proactiveReplyMessageId, type ProactiveReplySuggestion } from '@/composables/useProactiveReplySuggestions'
 import { chatFailureRecoveryText } from '@/components/chat/chatFailureRecovery'
@@ -398,16 +399,8 @@ const { start: windowStart, end: windowEnd, visibleMessages, moveWindow, showLat
 watch(() => props.proactiveSuggestions?.size, scrollToLatestIfFollowing, { flush: 'post' })
 type Presentation = { key: string; content: string; role: ChatMessage['role']; html?: string; canSpeak?: boolean; foldable?: boolean }
 let presentations = new WeakMap<ChatMessage, Presentation>()
-/** 渲染 key 必须来自消息身份而不是对象引用：服务端同步会替换对象，引用 key 会让整列消息重挂载闪烁。 */
-function stableMessageKey(message: ChatMessage): string {
-  const id = String(message.persistence?.id || '').trim()
-  if (id) return `id:${message.role}:${id}`
-  const turnId = String(message.turnId || '').trim()
-  if (turnId) return `turn:${message.role}:${turnId}`
-  return `local:${message.role}:${String(message.time || '')}:${String(message.content || '').length}`
-}
 function presentation(message: ChatMessage): Presentation {
-  const key = stableMessageKey(message)
+  const key = chatMessageKey(message)
   let entry = presentations.get(message)
   if (!entry || entry.key !== key || entry.content !== message.content || entry.role !== message.role) {
     entry = { key, content: message.content, role: message.role }

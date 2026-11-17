@@ -422,7 +422,13 @@ class ApprovalDecisions:
             return JSONResponse(
                 {"success": False, "message": "当前用户无权审批这条 AI 工作流"}, status_code=403
             )
-        if not self.workflows.pending(req.request_no):
+        pending = self.workflows.pending(req.request_no)
+        if pending is None:
+            return JSONResponse(
+                {"success": False, "retryable": True, "message": "暂时无法核实工作流状态，请稍后重试"},
+                status_code=503,
+            )
+        if not pending:
             return self._expire_stale_workflow(
                 db, req=req, actor=actor, approver_name=approver_name, opinion=opinion
             )

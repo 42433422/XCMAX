@@ -486,6 +486,7 @@ def load_durable_workflow_snapshot(
     request_id: str,
     *,
     allow_terminal: bool = False,
+    raise_storage_errors: bool = False,
 ) -> dict[str, Any] | None:
     """严格加载绑定 ``request_no`` 的可靠工作流快照（fail-closed）。
 
@@ -525,6 +526,8 @@ def load_durable_workflow_snapshot(
             return _validated_snapshot(persisted)
     except _APPROVAL_STORAGE_ERRORS:
         logger.warning("load durable workflow snapshot failed request_no=%s", request_id)
+        if raise_storage_errors:
+            raise
         return None
 
 

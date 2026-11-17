@@ -23,7 +23,7 @@ class ApprovalQueries:
         repository: ApprovalRepository,
         access: ApprovalAccess,
         view: RequestView,
-        pending: Callable[[str | None], bool],
+        pending: Callable[[str | None], bool | None],
         users: Callable[[Session], list[User]],
         roster: Callable[[], object],
         errors: tuple[type[Exception], ...],

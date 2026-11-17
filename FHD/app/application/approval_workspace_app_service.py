@@ -159,7 +159,9 @@ def _approval_backend() -> PendingApprovals:
 def _pending_snapshot(request_id: str) -> JsonObject | None:
     from app.application.workflow.approval_persistence import load_durable_workflow_snapshot
 
-    return load_durable_workflow_snapshot(request_id, allow_terminal=False)
+    return load_durable_workflow_snapshot(
+        request_id, allow_terminal=False, raise_storage_errors=True
+    )
 
 
 def _execution_snapshot(request_id: str) -> JsonObject | None:
@@ -201,7 +203,7 @@ def _workflow_bridge() -> WorkflowApprovalBridge:
     )
 
 
-def _has_pending_ai_workflow(request_no: str | None) -> bool:
+def _has_pending_ai_workflow(request_no: str | None) -> bool | None:
     return _workflow_bridge().has_pending(request_no)
 
 

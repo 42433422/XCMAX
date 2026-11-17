@@ -33,6 +33,8 @@ export interface ChatApprovalCard {
 }
 
 export interface UiChatMessage {
+  /** Local rendering identity, retained across cache reads and server reconciliation. */
+  uiKey?: string
   role: 'user' | 'ai' | 'task'
   content: string
   time: string

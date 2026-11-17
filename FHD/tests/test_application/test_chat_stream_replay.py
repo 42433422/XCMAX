@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 from fastapi import HTTPException
+from redis.exceptions import LockError
 from starlette.requests import Request
 
 from app.application import chat_stream_replay as replay
@@ -71,6 +74,17 @@ class _FakeRedis:
             self.streams[key] = self.streams[key][-maxlen:]
         return entry_id
 
+    def eval(self, script, count, stream, status, lease, token, action, value, ttl, maxlen):
+        if self.values.get(lease) != token:
+            return None
+        if action == "append":
+            return self.xadd(stream, {"payload": value}, maxlen=maxlen)
+        if action == "finish":
+            self.set(status, value, ex=ttl)
+        elif action == "clear":
+            self.delete(stream, status)
+        return 1
+
     def xrange(self, key, min="-", max="+"):
         rows = self.streams.get(key) or []
         if min in ("-", None):
@@ -121,7 +135,12 @@ def _reset_local() -> None:
     replay._status.clear()
     replay._running.clear()
     replay._touched.clear()
-    replay._leases.clear()
+    for scoped in list(replay._leases):
+        lease = replay._leases.pop(scoped)
+        try:
+            lease.release()
+        except (ConnectionError, LockError):
+            pass
 
 
 def _use_redis(fake: _FakeRedis) -> None:
@@ -169,6 +188,7 @@ def test_redis_stream_uses_entry_id_as_monotonic_cursor():
     fake = _FakeRedis()
     _use_redis(fake)
 
+    assert replay.claim_runner("turn-5", owner="7", tenant="2")
     first = replay.append("turn-5", {"type": "token", "text": "a"}, owner="7", tenant="2")
     replay.append("turn-5", {"type": "token", "text": "b"}, owner="7", tenant="2")
 
@@ -196,6 +216,7 @@ def test_redis_replay_does_not_leak_across_owners():
     fake = _FakeRedis()
     _use_redis(fake)
 
+    assert replay.claim_runner("turn-7", owner="7", tenant="2")
     replay.append("turn-7", {"type": "token", "text": "secret"}, owner="7", tenant="2")
 
     assert replay.events_after("turn-7", 0, owner="8", tenant="2") == []
@@ -234,8 +255,7 @@ def _http_request(headers: dict[str, str] | None = None) -> Request:
             "method": "GET",
             "path": "/api/ai/chat/stream/resume",
             "headers": [
-                (name.lower().encode(), value.encode())
-                for name, value in (headers or {}).items()
+                (name.lower().encode(), value.encode()) for name, value in (headers or {}).items()
             ],
         }
     )
@@ -243,9 +263,7 @@ def _http_request(headers: dict[str, str] | None = None) -> Request:
 
 async def test_resume_endpoint_rejects_anonymous_callers():
     with pytest.raises(HTTPException) as exc_info:
-        await compat_routes.ai_chat_stream_resume(
-            _http_request(), turn_id="turn-1", after="0"
-        )
+        await compat_routes.ai_chat_stream_resume(_http_request(), turn_id="turn-1", after="0")
 
     assert exc_info.value.status_code == 401
 
@@ -258,9 +276,138 @@ async def test_resume_endpoint_hides_another_owners_turn(monkeypatch):
     )
 
     with pytest.raises(HTTPException) as exc_info:
-        await compat_routes.ai_chat_stream_resume(
-            _http_request(), turn_id="turn-10", after="0"
-        )
+        await compat_routes.ai_chat_stream_resume(_http_request(), turn_id="turn-10", after="0")
 
     assert exc_info.value.status_code == 404
 
+
+@pytest.mark.parametrize("backend", ["fake", "lua"])
+@pytest.mark.parametrize("operation", ["append", "clear", "finish"])
+def test_expired_producer_cannot_mutate_replacement_replay(operation, backend):
+    fake = (
+        _FakeRedis()
+        if backend == "fake"
+        else pytest.importorskip("fakeredis").FakeRedis(decode_responses=True)
+    )
+    _use_redis(fake)
+    turn, owner, tenant = "turn-fenced", "7", "2"
+    assert replay.claim_runner(turn, owner=owner, tenant=tenant)
+    old = replay.runner_for(turn, owner=owner, tenant=tenant)
+    fake.delete(old.name)  # Redis expiry while the original worker remains alive.
+    assert replay.claim_runner(turn, owner=owner, tenant=tenant)
+    new = replay.runner_for(turn, owner=owner, tenant=tenant)
+    replay.clear(turn, owner=owner, tenant=tenant, runner=new)
+    replay.append(turn, {"text": "new"}, owner=owner, tenant=tenant, runner=new)
+    with pytest.raises(replay.ReplayBackendUnavailable):
+        if operation == "append":
+            replay.append(turn, {"text": "stale"}, owner=owner, tenant=tenant, runner=old)
+        elif operation == "clear":
+            replay.clear(turn, owner=owner, tenant=tenant, runner=old)
+        else:
+            replay.mark_finished(turn, owner=owner, tenant=tenant, runner=old)
+    assert replay.runner_for(turn, owner=owner, tenant=tenant) is new
+    assert replay.lease_alive(turn, owner=owner, tenant=tenant)
+    assert replay.finish_status(turn, owner=owner, tenant=tenant) is None
+    assert [row["payload"] for row in replay.events_after(turn, owner=owner, tenant=tenant)] == [
+        {"text": "new"}
+    ]
+
+
+def test_redis_retry_does_not_use_stale_local_terminal_state():
+    fake = _FakeRedis()
+    _use_redis(fake)
+    replay._status[replay.scope_key("retry", "7", "2")] = "done"
+    assert replay.claim_runner("retry", owner="7", tenant="2")
+    assert replay.finish_status("retry", owner="7", tenant="2") is None
+    fake.available = False
+    with pytest.raises(replay.ReplayBackendUnavailable):
+        replay.finish_status("retry", owner="7", tenant="2")
+
+
+async def test_producer_cancels_and_joins_heartbeat_after_losing_lease(monkeypatch):
+    fake = _FakeRedis()
+    _use_redis(fake)
+    assert replay.claim_runner("cancel", owner="7", tenant="2")
+    runner = replay.runner_for("cancel", owner="7", tenant="2")
+    started, closed = asyncio.Event(), asyncio.Event()
+    released = []
+
+    async def upstream(*args, **kwargs):
+        try:
+            started.set()
+            await asyncio.Event().wait()
+            yield ""
+        finally:
+            closed.set()
+
+    monkeypatch.setattr(compat_routes, "compat_chat_stream_async", upstream)
+    monkeypatch.setattr(
+        "app.middleware.chat_stream_limit.release_chat_stream_slot", lambda: released.append(True)
+    )
+    monkeypatch.setattr(replay, "LEASE_TTL_SECONDS", 1)
+    task = asyncio.create_task(
+        compat_routes._produce_replay(
+            _http_request(),
+            compat_routes.XcagiCompatChatBody(message="hello"),
+            ai_tier="p1",
+            turn_id="cancel",
+            owner="7",
+            tenant="2",
+            runner=runner,
+        )
+    )
+    await asyncio.wait_for(started.wait(), timeout=2)
+    fake.delete(runner.name)
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(task, timeout=3)
+    assert closed.is_set()
+    assert released == [True]
+    assert replay.finish_status("cancel", owner="7", tenant="2") is None
+    assert not any(t.get_coro().__name__ == "_renew_replay_lease" for t in asyncio.all_tasks())
+
+
+@pytest.mark.parametrize("cancel", [False, True])
+async def test_producer_completion_joins_heartbeat_and_releases_lease(monkeypatch, cancel):
+    fake = pytest.importorskip("fakeredis").FakeRedis(decode_responses=True)
+    _use_redis(fake)
+    assert replay.claim_runner("exit", owner="7", tenant="2")
+    runner = replay.runner_for("exit", owner="7", tenant="2")
+    started, closed = asyncio.Event(), asyncio.Event()
+    slots = []
+
+    async def upstream(*args, **kwargs):
+        try:
+            started.set()
+            if cancel:
+                await asyncio.Event().wait()
+            yield 'data: {"type": "token", "text": "kept"}\n\n'
+        finally:
+            closed.set()
+
+    monkeypatch.setattr(compat_routes, "compat_chat_stream_async", upstream)
+    monkeypatch.setattr(
+        "app.middleware.chat_stream_limit.release_chat_stream_slot", lambda: slots.append(True)
+    )
+    task = asyncio.create_task(
+        compat_routes._produce_replay(
+            _http_request(),
+            compat_routes.XcagiCompatChatBody(message="hello"),
+            ai_tier="p1",
+            turn_id="exit",
+            owner="7",
+            tenant="2",
+            runner=runner,
+        )
+    )
+    await asyncio.wait_for(started.wait(), timeout=2)
+    if cancel:
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+    else:
+        await task
+    assert closed.is_set() and slots == [True]
+    assert replay.runner_for("exit", owner="7", tenant="2") is None
+    assert not replay.lease_alive("exit", owner="7", tenant="2")
+    assert replay.finish_status("exit", owner="7", tenant="2") == ("aborted" if cancel else "done")
+    assert not any(t.get_coro().__name__ == "_renew_replay_lease" for t in asyncio.all_tasks())

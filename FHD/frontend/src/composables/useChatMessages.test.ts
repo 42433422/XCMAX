@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 const { chatStorageScope } = vi.hoisted(() => ({ chatStorageScope: { value: 'local' } }))
+import { chatMessageKey } from '@/utils/chatMessageIdentity'
 import { speakText, stopSpeaking } from '@/utils/tts'
 import { useChatMessageUi } from './useChatMessageUi'
 import { ref, nextTick } from 'vue'
@@ -168,6 +169,19 @@ describe('useChatMessages', () => {
     messages.addMessage('test', 'user')
     messages.clearMessages()
     expect(messages.messages.value.length).toBe(0)
+  })
+
+  it('persists distinct legacy rendering keys through reload and streaming updates', () => {
+    messages.loadMessages([
+      { role: 'ai', content: 'first', time: '10:00', turnId: 'shared' },
+      { role: 'ai', content: 'other', time: '10:00', turnId: 'shared' },
+    ])
+    const keys = messages.messages.value.map(chatMessageKey)
+    expect(new Set(keys).size).toBe(2)
+    messages.applyPlainTextToMessageIndex(0, 'first streamed response')
+    expect(messages.messages.value.map(chatMessageKey)).toEqual(keys)
+    messages.loadMessages(JSON.parse(JSON.stringify(messages.messages.value)))
+    expect(messages.messages.value.map(chatMessageKey)).toEqual(keys)
   })
 
   it('loadMessages replaces messages', () => {
@@ -390,6 +404,20 @@ describe('useChatMessages', () => {
     ])
     expect(messages.messages.value[0].role).toBe('user')
     expect(messages.messages.value[1].role).toBe('task')
+  })
+
+  it('keeps the rendered key when a legacy server row binds to a local message', async () => {
+    const chatApi = (await import('@/api/chat')).default
+    messages.loadMessages([{ role: 'ai', content: 'saved reply', time: '10:00', persistence: { id: 'local-42', status: 'local' } }])
+    const key = chatMessageKey(messages.messages.value[0])
+    vi.mocked(chatApi.getConversation).mockResolvedValueOnce({
+      messages: [{ id: 42, role: 'ai', content: 'saved reply', time: '10:00' }],
+    } as any)
+    await messages.syncFromServer()
+    expect(messages.messages.value).toHaveLength(1)
+    expect(chatMessageKey(messages.messages.value[0])).toBe(key)
+    messages.loadMessages(JSON.parse(JSON.stringify(messages.messages.value)))
+    expect(chatMessageKey(messages.messages.value[0])).toBe(key)
   })
 
   it('syncFromServer handles success', async () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, mount } from '@vue/test-utils'
-import { ref } from 'vue'
+import { nextTick, ref } from 'vue'
 import { afterEach } from 'vitest'
 enableAutoUnmount(afterEach)
 import ChatMessageList from './ChatMessageList.vue'
@@ -47,6 +47,21 @@ function mountList(showDiagnosticMetadata = false) {
 }
 
 describe('ChatMessageList', () => {
+  it('keeps distinct legacy rows mounted while streaming changes their length', async () => {
+    const messages = ref([
+      { role: 'ai' as const, content: 'first', time: '12:00', turnId: 'same-turn' },
+      { role: 'ai' as const, content: 'other', time: '12:00', turnId: 'same-turn' },
+    ])
+    const wrapper = mount(ChatMessageList, { props: { ...defaultProps, messages: messages.value } })
+    const first = wrapper.get('[data-message-index="0"]').element
+    const second = wrapper.get('[data-message-index="1"]').element
+    messages.value[0].content += ' streamed text'
+    await nextTick()
+    expect(wrapper.get('[data-message-index="0"]').element).toBe(first)
+    expect(wrapper.get('[data-message-index="1"]').element).toBe(second)
+    expect(first).not.toBe(second)
+  })
+
   it('renders a visible Business Harness result on the assistant message', () => {
     const wrapper = mount(ChatMessageList, {
       props: {

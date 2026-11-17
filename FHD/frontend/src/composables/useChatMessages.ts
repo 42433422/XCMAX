@@ -13,6 +13,7 @@ import { asRecord, asArray, asString, asBoolean } from '@/utils/typeGuards'
 import { formatChatMessageTime } from '@/utils/chatTaskLabels'
 import { stripModelToolProtocol } from '@/utils/chatModelProtocol'
 import { reconcileApprovalCards, restoreApprovalCard } from '@/utils/chatApprovalCard'
+import { chatMessageKey } from '@/utils/chatMessageIdentity'
 import { captureAuthSession } from '@/utils/authSessionCache'
 
 const WELCOME_MESSAGE_PREFIX = '您好！我是您的'
@@ -458,6 +459,7 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
         return {
           role,
           content,
+          uiKey: chatMessageKey(row as unknown as ChatMessage),
           time: asString(row.time).trim() || new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
           ...(streamingShell ? { streamingShell: true } : {}),
           ...(toolProgressLabel ? { toolProgressLabel } : {}),
@@ -604,7 +606,7 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
         const index = localList.findIndex((local, i) => !matched.has(i) && samePersistedMessage(local, server, toPlainText))
         if (index < 0) return server
         matched.add(index)
-        return Object.assign(localList[index], server)
+        return Object.assign(localList[index], server, { uiKey: chatMessageKey(localList[index]) })
       })
       const unsaved = localList.filter((local, index) => {
         if (matched.has(index)) return false
