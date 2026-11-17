@@ -185,11 +185,20 @@ def kitten_charts_inventory():
 
 
 @router.get("/api/ai/kitten/saved/list")
-def kitten_saved_list(type: str | None = Query(default=None)):
+def kitten_saved_list(request: Request, type: str | None = Query(default=None)):
     try:
         from app.application.facades.kitten_facade import analysis_save_service
 
-        analyses = analysis_save_service.list_saved_analyses(type)
+        user = resolve_session_user(request)
+        if user is None:
+            return JSONResponse({"success": False, "message": "请先登录"}, status_code=401)
+        is_admin = _admin_user(user)
+        analyses = analysis_save_service.list_saved_analyses(
+            type,
+            owner_id=getattr(user, "id", None),
+            tenant_id=getattr(user, "tenant_id", None),
+            allow_all=is_admin,
+        )
         stats = analysis_save_service.get_statistics_summary()
         return {"success": True, "analyses": analyses, "statistics": stats}
     except RECOVERABLE_ERRORS:
@@ -198,11 +207,19 @@ def kitten_saved_list(type: str | None = Query(default=None)):
 
 
 @router.get("/api/ai/kitten/saved/{analysis_id}")
-def kitten_saved_get(analysis_id: str):
+def kitten_saved_get(analysis_id: str, request: Request):
     try:
         from app.application.facades.kitten_facade import analysis_save_service
 
-        analysis = analysis_save_service.get_analysis(analysis_id)
+        user = resolve_session_user(request)
+        if user is None:
+            return JSONResponse({"success": False, "message": "请先登录"}, status_code=401)
+        is_admin = _admin_user(user)
+        analysis = analysis_save_service.get_analysis(
+            analysis_id,
+            owner_id=None if is_admin else getattr(user, "id", None),
+            tenant_id=None if is_admin else getattr(user, "tenant_id", None),
+        )
         if not analysis:
             return JSONResponse({"success": False, "message": "未找到该分析记录"}, status_code=404)
         return {"success": True, "data": analysis}
@@ -212,11 +229,19 @@ def kitten_saved_get(analysis_id: str):
 
 
 @router.get("/api/ai/kitten/saved/{analysis_id}/export")
-def kitten_saved_export(analysis_id: str):
+def kitten_saved_export(analysis_id: str, request: Request):
     try:
         from app.application.facades.kitten_facade import analysis_save_service
 
-        result = analysis_save_service.export_analysis_to_xlsx(analysis_id)
+        user = resolve_session_user(request)
+        if user is None:
+            return JSONResponse({"success": False, "message": "请先登录"}, status_code=401)
+        is_admin = _admin_user(user)
+        result = analysis_save_service.export_analysis_to_xlsx(
+            analysis_id,
+            owner_id=None if is_admin else getattr(user, "id", None),
+            tenant_id=None if is_admin else getattr(user, "tenant_id", None),
+        )
         if not result.get("success"):
             return JSONResponse(result, status_code=400)
         file_name = str(result.get("file_name") or "财务报告.xlsx")
