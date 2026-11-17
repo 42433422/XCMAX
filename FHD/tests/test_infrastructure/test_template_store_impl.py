@@ -312,3 +312,13 @@ class TestSaveTemplate:
             }
         )
         assert result["success"] is True
+
+
+def test_list_does_not_rediscover_deleted_database_files(store, tmp_path, monkeypatch):
+    path = tmp_path / "deleted-customer-template.xlsx"
+    path.write_bytes(b"synthetic template bytes")
+    monkeypatch.setattr(store, "_db_templates", lambda: [])
+    monkeypatch.setattr(store, "_legacy_templates", lambda: [])
+    monkeypatch.setattr(store, "_without_hidden_paths", lambda rows: rows)
+    assert store.list_templates() == []
+    assert path.exists(), "listing must not delete the retained source file"

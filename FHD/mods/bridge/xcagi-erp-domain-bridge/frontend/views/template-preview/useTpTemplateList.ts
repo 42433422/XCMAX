@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
 import templatePreviewApi from '@/api/templatePreview'
 import { TEMPLATE_SCOPE_CONFIG } from './tpScopeRules'
-import { createVirtualTemplate, getTemplateScopeKey, isExportTemplate } from './tpTemplateMeta'
+import { getTemplateScopeKey, isExportTemplate } from './tpTemplateMeta'
 import type { TplRecord } from './tpTemplateMeta'
 import type { TplDecomposeResponse, TplDetailResponse, TplListResponse } from './tpApiContracts'
 
@@ -21,23 +21,10 @@ export function useTpTemplateList() {
   /** 用于忽略过期的后台词条补全（快速连续点「刷新」时） */
   let templateListRefreshGen = 0
 
-  const exportScopedTemplates = computed<TplRecord[]>(() => {
-    const realTemplates = Array.isArray(templates.value) ? templates.value.filter(t => isExportTemplate(t)) : []
-    const scopedExcelTemplates = realTemplates.filter(t => t.category === 'excel')
-    const existingScopes = new Set(
-      scopedExcelTemplates
-        .map(t => getTemplateScopeKey(t))
-        .filter(Boolean)
-    )
-
-    for (const scopeKey of Object.keys(TEMPLATE_SCOPE_CONFIG)) {
-      if (scopeKey === 'custom') continue
-      if (!existingScopes.has(scopeKey)) {
-        realTemplates.push(createVirtualTemplate(scopeKey))
-      }
-    }
-    return realTemplates
-  })
+  /** 只展示后端返回的真实模板；不再为未出现的业务分组注入虚拟占位卡。 */
+  const exportScopedTemplates = computed<TplRecord[]>(() =>
+    Array.isArray(templates.value) ? templates.value.filter(t => isExportTemplate(t)) : []
+  )
 
   const filteredTemplates = computed<TplRecord[]>(() => {
     const scoped =

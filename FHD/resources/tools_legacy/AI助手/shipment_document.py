@@ -492,6 +492,8 @@ class ShipmentDocumentGenerator:
         worksheet.column_dimensions["E"].width = 12
         worksheet.column_dimensions["F"].width = 12
         worksheet.column_dimensions["G"].width = 12
+        worksheet.column_dimensions["H"].width = 12
+        worksheet.column_dimensions["I"].width = 12
 
         # 标题
         worksheet["A1"] = "成都国圣工业有限公司 送货单"
@@ -509,7 +511,17 @@ class ShipmentDocumentGenerator:
         worksheet.merge_cells("A2:J2")
 
         # 表头
-        headers = ["产品型号", "", "", "产品名称", "数量/件", "规格/KG", "数量/KG"]
+        headers = [
+            "产品型号",
+            "",
+            "",
+            "产品名称",
+            "数量/件",
+            "规格/KG",
+            "数量/KG",
+            "单价/元",
+            "金额/元",
+        ]
         for col, header in enumerate(headers, 1):
             cell = worksheet.cell(row=4, column=col, value=header)
             cell.font = Font(bold=True)
@@ -528,6 +540,8 @@ class ShipmentDocumentGenerator:
             worksheet.cell(row=row, column=5, value=product.get("quantity_tins", 0))
             worksheet.cell(row=row, column=6, value=product.get("tin_spec", 0))
             worksheet.cell(row=row, column=7, value=product.get("quantity_kg", 0))
+            worksheet.cell(row=row, column=8, value=product.get("unit_price", 0))
+            worksheet.cell(row=row, column=9, value=product.get("amount", 0))
 
         # 合计
         total_row = 5 + len(products)
