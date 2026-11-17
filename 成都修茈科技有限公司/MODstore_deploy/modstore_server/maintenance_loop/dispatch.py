@@ -9,8 +9,8 @@ from typing import Any, Dict, Optional, Tuple
 from modstore_server import (
     employee_executor,
     self_maintenance_quality_gate,
-    self_maintenance_retry,
     self_maintenance_remediation_prompts,
+    self_maintenance_retry,
 )
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 

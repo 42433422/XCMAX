@@ -29,7 +29,6 @@ def publisher_capability():
 
 
 def authorized_dispatch(runtime, employee_id):
-    from modstore_server.customer_ticket_github import authorized_incident
     from modstore_server.models import IncidentEvent, get_session_factory
 
     if runtime.get("_trusted_incident_team_execution") is not True:
@@ -39,6 +38,8 @@ def authorized_dispatch(runtime, employee_id):
         payload = json_loads(event.payload_json, {}) if event else {}
         if (payload.get("github_workspace") or {}).get("retort_run_id"):
             from modstore_server.retort_github_workspace import authorized_incident
+        else:
+            from modstore_server.customer_ticket_github import authorized_incident
         return bool(
             event
             and authorized_incident(db, payload, event.id)
