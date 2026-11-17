@@ -153,3 +153,7 @@ _CATALOG_PROVIDER_TIMEOUT_SEC = 12.0
 from modstore_server.platform_model_config_api import router as platform_model_config_router
 
 router.include_router(platform_model_config_router)
+
+from modstore_server.llm_router_config_api import router as llm_router_config_router
+
+router.include_router(llm_router_config_router)

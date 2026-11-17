@@ -179,6 +179,7 @@ async def chat_dispatch(
     fallback_model: Optional[str] = None,
     fallback_api_key: Optional[str] = None,
     fallback_base_url: Optional[str] = None,
+    fallbacks: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     if isinstance(api_key, PlatformApiKey) and api_key.configuration["provider"] != provider:
         return {"ok": False, "error": "平台密钥不允许跨供应商使用"}
@@ -186,6 +187,51 @@ async def chat_dispatch(
         base_url = api_key.configuration["base_url"]
     model = normalize_model(provider, model, base_url)
     has_fallback = bool(timeout_fallback_s and fallback_provider and fallback_model)
+
+    # LiteLLM Router 承担重试/冷却/fallback；不可用或不支持该协议时返回 None 降级到下面链路。
+    router_fallbacks = list(fallbacks or [])
+    if has_fallback:
+        router_fallbacks.append(
+            {
+                "provider": fallback_provider,
+                "model": fallback_model,
+                "api_key": fallback_api_key or api_key,
+                "base_url": fallback_base_url or base_url,
+            }
+        )
+    if isinstance(api_key, PlatformApiKey):
+        from modstore_server.llm_litellm_router import env_platform_fallbacks
+
+        known = {(row.get("provider"), row.get("model")) for row in router_fallbacks}
+        router_fallbacks.extend(
+            row
+            for row in env_platform_fallbacks(provider, model)
+            if (row.get("provider"), row.get("model")) not in known
+        )
+    if not (
+        messages_use_openai_multipart_content(messages)
+        and (
+            provider not in OAI_COMPAT_OPENAI_STYLE_PROVIDERS
+            or (provider == "minimax" and is_minimax_token_plan_key(api_key))
+        )
+    ):
+        from modstore_server.llm_litellm_router import chat as router_chat
+
+        routed = await router_chat(
+            provider,
+            api_key=api_key,
+            base_url=base_url,
+            model=model,
+            messages=messages,
+            max_tokens=max_tokens,
+            forbid_reasoning_fallback=forbid_reasoning_fallback,
+            response_format=response_format,
+            total_timeout_s=total_timeout_s,
+            primary_timeout_s=timeout_fallback_s if has_fallback else None,
+            fallbacks=router_fallbacks,
+        )
+        if routed is not None:
+            return routed
 
     async def _primary() -> Dict[str, Any]:
         if messages_use_openai_multipart_content(messages):
@@ -407,6 +453,7 @@ async def chat_dispatch_stream(
     max_tokens: Optional[int] = None,
     tools: Optional[List[Dict[str, Any]]] = None,
     tool_choice: Any = None,
+    fallbacks: Optional[List[Dict[str, Any]]] = None,
 ) -> AsyncIterator[Dict[str, Any]]:
     if isinstance(api_key, PlatformApiKey) and api_key.configuration["provider"] != provider:
         yield {"type": "error", "error": "平台密钥不允许跨供应商使用"}
@@ -440,6 +487,25 @@ async def chat_dispatch_stream(
         async for ev in _with_processing_status(_minimax()):
             yield ev
         return
+    # LiteLLM Router 流式：重试、冷却与 fallback；不可用时降级到原有 provider 适配。
+    if not (provider == "minimax" and is_minimax_token_plan_key(api_key)):
+        from modstore_server.llm_litellm_router import stream_events as router_stream_events
+
+        routed_events = router_stream_events(
+            provider,
+            api_key=api_key,
+            base_url=base_url,
+            model=model,
+            messages=messages,
+            max_tokens=max_tokens,
+            tools=tools,
+            tool_choice=tool_choice,
+            fallbacks=list(fallbacks or []),
+        )
+        if routed_events is not None:
+            async for ev in _with_processing_status(routed_events):
+                yield ev
+            return
     if provider in OAI_COMPAT_OPENAI_STYLE_PROVIDERS:
         b = _normalize_openai_base(provider, base_url, api_key)
         async for ev in _with_processing_status(
