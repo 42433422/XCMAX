@@ -188,7 +188,6 @@ function messageOf(cause: unknown): string {
 }
 
 async function load() {
-  if (loading.value) return
   const request = ++generation
   loading.value = true
   error.value = ''

@@ -85,7 +85,25 @@ describe('MarketOverviewPanel 运营台', () => {
     wrapper.unmount()
   })
 
-  it('approves a pending employee after confirmation', async () => {
+  it('keeps a newer filter result when an earlier request finishes late', async () => {
+    let finishOld!: (value: typeof payload) => void
+    listCatalog.mockImplementationOnce(() => new Promise((resolve) => { finishOld = resolve }))
+    const wrapper = mountPanel()
+    await flushPromises()
+    listCatalog.mockResolvedValueOnce({ ...payload, items: [{ ...pendingItem, name: '新筛选结果' }] })
+    await wrapper.find('input').setValue('新筛选')
+    await wrapper.find('input').trigger('keyup.enter')
+    await flushPromises()
+    expect(listCatalog).toHaveBeenLastCalledWith(50, 0, '', '新筛选')
+    expect(wrapper.text()).toContain('新筛选结果')
+    finishOld(payload)
+    await flushPromises()
+    expect(wrapper.text()).toContain('新筛选结果')
+    expect(wrapper.text()).not.toContain('合同审核员工')
+    wrapper.unmount()
+  })
+
+  it('approves a pending employee after confirmation' , async () => {
     const wrapper = mountPanel()
     await flushPromises()
     const approve = wrapper.findAll('button').find((row) => row.text() === '通过并上架')!

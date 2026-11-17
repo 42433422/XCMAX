@@ -123,7 +123,10 @@ def test_graph_template_needs_snapshot_not_archive(client, auth_headers):
     assert client.get("/api/market/catalog", params={"q": pkg_id}).json()["total"] == 0
 
 
-def test_admin_catalog_review_lists_statuses_and_updates_listing(client, auth_headers):
+def test_admin_catalog_review_lists_statuses_and_updates_listing(
+    client, auth_headers, monkeypatch, tmp_path
+):
+    monkeypatch.setenv("MODSTORE_CATALOG_DIR", str(tmp_path / "catalog"))
     token = auth_headers["Authorization"].split()[-1]
     user_id = int(decode_access_token(token)["sub"])
     with get_session_factory()() as db:
@@ -187,6 +190,31 @@ def test_admin_catalog_review_lists_statuses_and_updates_listing(client, auth_he
         headers=auth_headers,
         json={"action": "restore", "note": "复核通过"},
     )
+    assert restored.status_code == 409, restored.text
+    with get_session_factory()() as db:
+        current = db.get(CatalogItem, pending_id)
+        assert current.compliance_status == "delisted" and current.is_public is False
+        pkg_id, version = current.pkg_id, current.version
+    raw = b"retained-package"
+    archive = catalog_store.files_dir() / "retained.zip"
+    archive.write_bytes(raw)
+    catalog_store.save_store(
+        {
+            "packages": [
+                {
+                    "id": pkg_id,
+                    "version": version,
+                    "stored_filename": archive.name,
+                    "sha256": hashlib.sha256(raw).hexdigest(),
+                }
+            ]
+        }
+    )
+    restored = client.post(
+        f"/api/admin/catalog/{pending_id}/review",
+        headers=auth_headers,
+        json={"action": "restore", "note": "复核通过"},
+    )
     assert restored.status_code == 200, restored.text
     assert restored.json()["compliance_status"] == "approved"
     assert restored.json()["is_public"] is True
@@ -205,7 +233,12 @@ def test_admin_catalog_review_lists_statuses_and_updates_listing(client, auth_he
         json={"action": "publish"},
     )
     assert invalid.status_code == 400
-    assert client.get("/api/admin/catalog", params={"status": "unknown"}, headers=auth_headers).status_code == 422
+    assert (
+        client.get(
+            "/api/admin/catalog", params={"status": "unknown"}, headers=auth_headers
+        ).status_code
+        == 422
+    )
 
 
 def test_legacy_market_file_is_read_until_controlled_migration(monkeypatch, tmp_path):

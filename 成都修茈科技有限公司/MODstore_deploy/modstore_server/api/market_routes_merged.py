@@ -1586,12 +1586,16 @@ def api_admin_list_catalog(
             .limit(limit)
             .all()
         )
-        authors = {
-            int(u.id): u.username
-            for u in session.query(_facade().User)
-            .filter(_facade().User.id.in_([r.author_id for r in rows if r.author_id]))
-            .all()
-        } if rows else {}
+        authors = (
+            {
+                int(u.id): u.username
+                for u in session.query(_facade().User)
+                .filter(_facade().User.id.in_([r.author_id for r in rows if r.author_id]))
+                .all()
+            }
+            if rows
+            else {}
+        )
         counts = {
             "total": session.query(_facade().CatalogItem).count(),
             "pending": session.query(_facade().CatalogItem)
@@ -1651,7 +1655,9 @@ def api_admin_review_catalog_item(
         raise _facade().HTTPException(400, "action 必须是 approve/restrict/delist/restore")
     sf = _facade().get_session_factory()
     with sf() as session:
-        item = session.query(_facade().CatalogItem).filter(_facade().CatalogItem.id == item_id).first()
+        item = (
+            session.query(_facade().CatalogItem).filter(_facade().CatalogItem.id == item_id).first()
+        )
         if not item:
             raise _facade().HTTPException(404, "商品不存在")
         note = (body.note or "").strip()
@@ -1669,6 +1675,16 @@ def api_admin_review_catalog_item(
             item.delist_reason = note or "管理员下架"
             item.rank_score = 0.0
         else:
+            from modstore_server.catalog_store import (
+                catalog_archive_available,
+                get_package,
+            )
+
+            package = get_package(item.pkg_id, item.version)
+            if not package or not catalog_archive_available(
+                package.get("stored_filename"), package.get("sha256")
+            ):
+                raise _facade().HTTPException(409, "下载记录或文件缺失，请修复发布记录后再恢复上架")
             item.compliance_status = "approved"
             item.is_public = True
             item.delist_reason = ""
