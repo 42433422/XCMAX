@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   updateMemory: vi.fn(),
   deleteMemory: vi.fn(),
   deleteDocument: vi.fn(),
+  documentChunks: vi.fn(),
   ingestDocument: vi.fn(),
   uploadDocument: vi.fn(),
   rebuildIndex: vi.fn(),
@@ -129,6 +130,11 @@ describe('PersyKnowledgeView', () => {
       memory: { ...pendingMemory, status: 'active' },
     })
     for (const action of ['rejectMemory', 'updateMemory', 'deleteMemory', 'deleteDocument', 'rebuildIndex'] as const) mocks[action].mockResolvedValue({ success: true })
+    mocks.documentChunks.mockResolvedValue({
+      success: true,
+      total: 1,
+      chunks: [{ text: '续约需要财务审批。', chunk_index: 0 }],
+    })
     mocks.ingestDocument.mockResolvedValue({ success: true, chunk_count: 2 })
     mocks.query.mockResolvedValue({
       success: true,
@@ -241,6 +247,28 @@ describe('PersyKnowledgeView', () => {
     await flushPromises()
     expect(wrapper.find('.ask-dock__error').exists()).toBe(false)
     expect(wrapper.findAll('.evidence-list article')).toHaveLength(2)
+  })
+
+  it('shows the grounding badge when evidence is insufficient', async () => {
+    mocks.query.mockResolvedValueOnce({
+      success: true,
+      dataset_id: 'persy-knowledge',
+      query: '今天天气怎么样',
+      answer: '知识库中没有找到与该问题足够相关的内容，请补充资料或换个问法。',
+      answer_grounded: false,
+      grounding: 0.05,
+      min_relevance: 0.1,
+      no_answer: true,
+      chunks: [],
+    })
+    mocks.queryMemories.mockResolvedValue({ success: true, chunks: [] })
+    const wrapper = await mountKnowledge()
+    await wrapper.get('input[aria-label="向 Persy 提问"]').setValue('今天天气怎么样')
+    await wrapper.get('.ask-dock').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.get('.recall-grounding').text()).toContain('未命中足够证据')
+    expect(wrapper.get('.recall-grounding').classes()).toContain('is-weak')
   })
 
   it('admin omniscient auto-switches to nonempty space and heals empty graph once', async () => {
@@ -364,6 +392,8 @@ describe('PersyKnowledgeView', () => {
     expect(mocks.status).toHaveBeenLastCalledWith('persy-knowledge', { includeDocuments: true })
     await wrapper.get('.source-row__select').trigger('click')
     for (const value of ['续约.md', 'v2', '知识节点', '关联知识', 'K1']) expect(wrapper.get('.fact-list').text()).toContain(value)
+    await flushPromises()
+    expect(mocks.documentChunks).toHaveBeenCalledWith('persy-knowledge', 'doc-1', { limit: 50 })
     await wrapper.get('.node-question-button').trigger('click')
     expect((wrapper.get('input[aria-label="向 Persy 提问"]').element as HTMLInputElement).value).toContain('续约制度')
     expect(wrapper.get('.brain-inspector').classes()).not.toContain('is-open')
@@ -376,6 +406,8 @@ describe('PersyKnowledgeView', () => {
     await flushPromises()
     expect(mocks.deleteDocument).toHaveBeenLastCalledWith('persy-knowledge', 'doc-1')
     expect(wrapper.get('.page-toast').text()).toContain('已删除')
+    await clickLabel(wrapper, '.inspector-tabs button', '分块')
+    expect(wrapper.get('.chunk-list').text()).toContain('续约需要财务审批。')
   })
 
   it('filters cards and imports pasted knowledge into a switched dataset', async () => {

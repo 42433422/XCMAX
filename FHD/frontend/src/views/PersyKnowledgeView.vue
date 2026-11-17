@@ -170,7 +170,7 @@
           v-else
           :documents="documents"
           :deleting-document-id="deletingDocumentId"
-          @select="selectDocument"
+          @select="openDocument"
           @delete="deleteDocument"
           @import="openImport('file')"
         />
@@ -215,6 +215,16 @@
               @click="inspectorTab = 'recall'"
             >
               召回 <span v-if="resultChunks.length">{{ resultChunks.length }}</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              :aria-selected="inspectorTab === 'chunks'"
+              :class="{ active: inspectorTab === 'chunks' }"
+              :disabled="!chunkDocumentId"
+              @click="inspectorTab = 'chunks'"
+            >
+              分块 <span v-if="chunkTotal">{{ chunkTotal }}</span>
             </button>
           </div>
           <button type="button" class="inspector-mobile-close" aria-label="关闭详情" title="关闭详情" @click="mobileInspectorOpen = false">
@@ -314,9 +324,17 @@
           </div>
         </div>
 
-        <div v-else class="inspector-scroll recall-panel">
+        <div v-else-if="inspectorTab === 'recall'" class="inspector-scroll recall-panel">
           <template v-if="lastQuery">
             <span class="recall-panel__eyebrow">{{ lastQuery }}</span>
+            <span
+              v-if="answerGrounded !== null"
+              class="recall-grounding"
+              :class="{ 'is-weak': answerGrounded === false }"
+              role="status"
+            >
+              {{ answerGrounded ? `证据 ${Math.round((grounding || 0) * 100)}%` : '未命中足够证据' }}
+            </span>
             <template v-if="queryMessage">
               <p class="recall-empty" role="status">{{ knowledgeEmpty ? '当前知识空间暂无可检索资料。请先导入文档或文本，再发起查询。' : `${queryMessage}。本次仅检索已入库的资料与可用记忆，可调整关键词或补充资料。` }}</p>
               <button type="button" class="secondary-button" @click="openImport('file')">{{ knowledgeEmpty ? '导入第一份资料' : '补充知识资料' }}</button>
@@ -338,6 +356,37 @@
             <i class="fa fa-bolt" aria-hidden="true"></i>
             <strong>尚无召回轨迹</strong>
             <span>等待第一次知识召回</span>
+          </div>
+        </div>
+
+        <div v-else class="inspector-scroll chunk-panel">
+          <template v-if="chunkDocumentId">
+            <span class="recall-panel__eyebrow">{{ chunkDocumentLabel }} · {{ chunkTotal }} 块</span>
+            <p v-if="chunkLoading" class="recall-empty" role="status">正在加载分块…</p>
+            <p v-else-if="chunkError" class="recall-empty" role="alert">{{ chunkError }}</p>
+            <ol v-else class="chunk-list">
+              <li v-for="(chunk, index) in sourceChunks" :key="`${index}-${chunk.chunk_index}`">
+                <header>
+                  <span>#{{ chunk.chunk_index ?? index }}</span>
+                  <em>{{ (chunk.text || '').length }} 字</em>
+                </header>
+                <p>{{ chunk.text }}</p>
+              </li>
+            </ol>
+            <button
+              v-if="!chunkLoading && !chunkError && sourceChunks.length < chunkTotal"
+              type="button"
+              class="secondary-button"
+              :disabled="chunkLoadingMore"
+              @click="loadMoreChunks"
+            >
+              {{ chunkLoadingMore ? '加载中…' : '加载更多分块' }}
+            </button>
+          </template>
+          <div v-else class="inspector-empty">
+            <i class="fa fa-th-list" aria-hidden="true"></i>
+            <strong>选择资料来源</strong>
+            <span>在「资料」列表点选文档即可预览分块</span>
           </div>
         </div>
       </aside>
@@ -366,7 +415,7 @@ import PersyImportDrawer from '@/components/persy/PersyImportDrawer.vue'
 import PersyMemoryList from '@/components/persy/PersyMemoryList.vue'
 import PersyNodeCards from '@/components/persy/PersyNodeCards.vue'
 import PersySourceList from '@/components/persy/PersySourceList.vue'
-import type { KnowledgeGraphNode, PersyMemoryRecord } from '@/api/knowledgeBase'
+import type { KnowledgeBaseDocument, KnowledgeGraphNode, PersyMemoryRecord } from '@/api/knowledgeBase'
 import { usePersyKnowledgeData, type PersyKnowledgeViewMode } from '@/composables/usePersyKnowledgeData'
 import { usePersyRecallQuery } from '@/composables/usePersyRecallQuery'
 import { usePersyMemoryGovernance } from '@/composables/usePersyMemoryGovernance'
@@ -374,6 +423,7 @@ import { evidenceKey, formatScore, isMemoryChunk, nodeIcon, nodeTypeLabel, norma
 import { usePersyKnowledgeUiState } from './persy-knowledge/usePersyKnowledgeUiState'
 import { usePersyKnowledgeInspector } from './persy-knowledge/usePersyKnowledgeInspector'
 import { usePersyKnowledgeInteractions } from './persy-knowledge/usePersyKnowledgeInteractions'
+import { usePersySourceChunks } from './persy-knowledge/usePersySourceChunks'
 
 // 逻辑按领域拆分到 persy-knowledge/ 下的 composables，此处仅组装（模板与拆分前逐字一致）
 const ui = usePersyKnowledgeUiState()
@@ -410,6 +460,25 @@ const recall = usePersyRecallQuery({
   },
 })
 const { queryText, querying, queryMessage, queryError, answerText, lastQuery, resultChunks, recallState, queryKnowledge } = recall
+const { grounding, answerGrounded } = recall
+
+const sourceChunkState = usePersySourceChunks({ activeDatasetId })
+const {
+  documentId: chunkDocumentId,
+  documentLabel: chunkDocumentLabel,
+  chunks: sourceChunks,
+  total: chunkTotal,
+  loading: chunkLoading,
+  loadingMore: chunkLoadingMore,
+  error: chunkError,
+  open: openSourceChunks,
+  loadMore: loadMoreChunks,
+} = sourceChunkState
+
+function openDocument(doc: KnowledgeBaseDocument): void {
+  selectDocument(doc)
+  void openSourceChunks(doc)
+}
 
 // selectNode / selectMemory 与 usePersyMemoryGovernance 互为初始化依赖，保留在此（与拆分前同为提升函数声明）
 function dropKnowledgeFile(event: DragEvent): void {

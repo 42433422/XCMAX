@@ -185,6 +185,10 @@ export interface KnowledgeBaseQueryResponse {
   metadata_filter?: Record<string, unknown>
   vector_backend_used?: boolean
   index?: Record<string, unknown>
+  grounding?: number
+  min_relevance?: number
+  answer_grounded?: boolean
+  no_answer?: boolean
   message?: string
   error_code?: string
   run_id?: string
@@ -196,6 +200,18 @@ export interface KnowledgeBaseQueryResponse {
     retriever?: string
     error_code?: string
   }
+}
+
+export interface KnowledgeBaseChunkListResponse {
+  success: boolean
+  dataset_id?: string
+  document_id?: string
+  total?: number
+  offset?: number
+  limit?: number
+  chunks: KnowledgeBaseChunk[]
+  message?: string
+  error_code?: string
 }
 
 export interface PersyMemoryEntity {
@@ -429,6 +445,19 @@ export const knowledgeBaseApi = {
   async deleteDocument(datasetId: string, documentId: string): Promise<KnowledgeBaseStatus> {
     await primeCsrfCookie()
     return api.delete<KnowledgeBaseStatus>(datasetPath(datasetId, `/documents/${encodeURIComponent(documentId)}`))
+  },
+
+  documentChunks(
+    datasetId: string,
+    documentId: string,
+    options: { offset?: number; limit?: number } = {},
+  ): Promise<KnowledgeBaseChunkListResponse> {
+    const offset = Math.max(0, Number(options.offset) || 0)
+    const limit = Math.max(1, Math.min(Number(options.limit) || 50, 200))
+    const query = `?offset=${offset}&limit=${limit}`
+    return api.get<KnowledgeBaseChunkListResponse>(
+      datasetPath(datasetId, `/documents/${encodeURIComponent(documentId)}/chunks${query}`),
+    )
   },
 }
 

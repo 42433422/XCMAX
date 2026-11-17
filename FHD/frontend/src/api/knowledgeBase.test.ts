@@ -48,6 +48,14 @@ describe('knowledgeBaseApi', () => {
     expect(mocks.api.get).toHaveBeenCalledWith(`/api/knowledge/v1/datasets/${PERSY_KNOWLEDGE_DATASET_ID}/status?include_documents=false`)
   })
 
+  it('loads a bounded page of one document chunks', async () => {
+    await knowledgeBaseApi.documentChunks('team docs', 'doc 1', { offset: -3, limit: 999 })
+
+    expect(mocks.api.get).toHaveBeenCalledWith(
+      '/api/knowledge/v1/datasets/team%20docs/documents/doc%201/chunks?offset=0&limit=200',
+    )
+  })
+
   it('ingests text through dataset document route', async () => {
     await knowledgeBaseApi.ingestDocument({
       datasetId: 'persy docs',

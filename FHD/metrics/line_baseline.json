@@ -1,5 +1,5 @@
 {
-  "lines": 2468937,
+  "lines": 2469255,
   "updated": "2026-11-18",
-  "note": "知识库低置信拒答：grounding 判定 + min_relevance 参数/环境默认 + 跨库复用 + 6 条测试 + 评测 --ood"
+  "note": "知识库前端分块预览与证据徽标：usePersySourceChunks + 分块页签 + grounding 徽标 + 5 条前端测试"
 }

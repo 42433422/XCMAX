@@ -5,7 +5,7 @@ import PersyKnowledgeGraph from '@/components/persy/PersyKnowledgeGraph.vue'
 import PersyImportDrawer from '@/components/persy/PersyImportDrawer.vue'
 import type { PersyKnowledgeViewMode } from '@/composables/usePersyKnowledgeData'
 
-export type PersyInspectorTab = 'node' | 'recall'
+export type PersyInspectorTab = 'node' | 'recall' | 'chunks'
 
 export interface PersyKnowledgeUiState {
   viewMode: Ref<PersyKnowledgeViewMode>

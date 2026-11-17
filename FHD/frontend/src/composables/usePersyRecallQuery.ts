@@ -22,6 +22,9 @@ export function usePersyRecallQuery(options: {
   const answerText = ref('')
   const lastQuery = ref('')
   const resultChunks = ref<KnowledgeBaseChunk[]>([])
+  const grounding = ref<number | null>(null)
+  const answerGrounded = ref<boolean | null>(null)
+  const noAnswer = ref(false)
 
   const recallState = computed<PersyGraphRecall | null>(() =>
     lastQuery.value
@@ -38,6 +41,9 @@ export function usePersyRecallQuery(options: {
     resultChunks.value = []
     queryMessage.value = ''
     queryError.value = ''
+    grounding.value = null
+    answerGrounded.value = null
+    noAnswer.value = false
   }
 
   async function queryKnowledge(): Promise<void> {
@@ -103,6 +109,10 @@ export function usePersyRecallQuery(options: {
       lastQuery.value = query
       resultChunks.value = mergedChunks
       answerText.value = normalizeAnswer(knowledge?.answer, resultChunks.value.length)
+      grounding.value = typeof knowledge?.grounding === 'number' ? knowledge.grounding : null
+      answerGrounded.value =
+        typeof knowledge?.answer_grounded === 'boolean' ? knowledge.answer_grounded : null
+      noAnswer.value = knowledge?.no_answer === true
       const recalledMemoryCount = mergedChunks.filter((chunk) => isMemoryChunk(chunk)).length
       if (!answerText.value && recalledMemoryCount) {
         answerText.value = `已从长期记忆中召回 ${recalledMemoryCount} 条相关事实。`
@@ -129,6 +139,9 @@ export function usePersyRecallQuery(options: {
     answerText,
     lastQuery,
     resultChunks,
+    grounding,
+    answerGrounded,
+    noAnswer,
     recallState,
     resetRecall,
     queryKnowledge,
