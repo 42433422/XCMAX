@@ -191,6 +191,71 @@ def test_danger_rejects_rejected_ticket(client, app, state, monkeypatch):
     assert state["deleted"] is False
 
 
+def test_danger_auto_approves_when_both_switches_on(client, app, state, monkeypatch):
+    from app.application.aiopen import approval_bridge
+
+    monkeypatch.setenv("AIOPEN_ENABLE_WRITES", "1")
+    monkeypatch.setenv(approval_bridge.AUTO_APPROVE_ENV, "1")
+    calls: list[int] = []
+    monkeypatch.setattr(
+        approval_bridge,
+        "submit",
+        lambda entry, args, principal: {
+            "status": "pending",
+            "code": "APPROVAL_REQUIRED",
+            "approval_id": 93,
+            "request_no": "APR20261117-AUTO",
+            "message": "已提交审批",
+        },
+    )
+    monkeypatch.setattr(
+        approval_bridge,
+        "auto_approve",
+        lambda approval_id, principal: calls.append(approval_id) or True,
+    )
+    monkeypatch.setattr(
+        approval_bridge,
+        "consume",
+        lambda approval_id, entry, args, principal: {
+            "status": "approved",
+            "approval_id": approval_id,
+            "request_no": "APR20261117-AUTO",
+        },
+    )
+    operation_id = _operation_id(app, "DELETE", "/api/products/{product_id}")
+    body = _call(client, operation_id, params={"product_id": "P-1"}).json()
+    assert body["success"] is True
+    assert state["deleted"] is True
+    assert calls == [93]
+
+
+def test_danger_auto_approve_still_requires_writes(client, app, state, monkeypatch):
+    from app.application.aiopen import approval_bridge
+
+    monkeypatch.delenv("AIOPEN_ENABLE_WRITES", raising=False)
+    monkeypatch.setenv(approval_bridge.AUTO_APPROVE_ENV, "1")
+    monkeypatch.setattr(
+        approval_bridge,
+        "submit",
+        lambda entry, args, principal: {
+            "status": "pending",
+            "code": "APPROVAL_REQUIRED",
+            "approval_id": 94,
+            "request_no": "APR20261117-AUTO2",
+            "message": "已提交审批",
+        },
+    )
+    monkeypatch.setattr(
+        approval_bridge,
+        "auto_approve",
+        lambda approval_id, principal: True,
+    )
+    operation_id = _operation_id(app, "DELETE", "/api/products/{product_id}")
+    body = _call(client, operation_id, params={"product_id": "P-1"}).json()
+    assert body["code"] == "APPROVAL_REQUIRED"
+    assert state["deleted"] is False
+
+
 def test_api_call_write_is_gated(client, app, state):
     body = client.post(
         "/api/aiopen/invoke",

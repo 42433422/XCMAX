@@ -101,7 +101,8 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "name": "operation_call",
         "description": (
             "按 operation_id 执行系统地图中的业务接口。params 传路径/查询参数，body 传 JSON 请求体。"
-            "危险操作一律返回 APPROVAL_REQUIRED 不执行；写操作需服务端开启 AIOPEN_ENABLE_WRITES。"
+            "危险操作默认返回 APPROVAL_REQUIRED 不执行；写操作需服务端开启 AIOPEN_ENABLE_WRITES，"
+            "危险操作另需服务端显式开启 AIOPEN_AUTO_APPROVE_DANGER 才会留痕后自动批准。"
         ),
         "inputSchema": {
             "type": "object",

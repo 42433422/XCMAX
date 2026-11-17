@@ -21,6 +21,43 @@ from app.domain.aiopen.principal import ScreenPrincipal
 BUSINESS_TYPE = "aiopen.danger_operation"
 FLOW_KEY_ENV = "AIOPEN_APPROVAL_FLOW_KEY"
 DEFAULT_FLOW_KEY = "aiopen_danger_operation"
+# 显式开关：仅当服务端同时开启写入与自动批准时，危险操作才会在留痕后立即通过。
+AUTO_APPROVE_ENV = "AIOPEN_AUTO_APPROVE_DANGER"
+AUTO_APPROVE_ACTOR_NAME = "AIOPEN 自动批准"
+
+
+def auto_approve_enabled() -> bool:
+    return (os.environ.get(AUTO_APPROVE_ENV) or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def auto_approve(approval_id: int, principal: ScreenPrincipal | None) -> bool:
+    """把刚提交的危险操作审批单原地批准；保留审批记录与批准人，便于审计。
+
+    只在显式开关打开时调用。申请人必须是当前受控屏幕的账号，避免借用他人单据。
+    """
+
+    applicant_id = _applicant_id(principal)
+    if applicant_id is None:
+        return False
+    with _repository().session() as db:
+        request = ApprovalRepository.request(db, approval_id)
+        if request is None or str(request.business_type) != BUSINESS_TYPE:
+            return False
+        if str(request.status or "") != ApprovalStatus.PENDING.value:
+            return False
+        if int(request.applicant_id or 0) != applicant_id:
+            return False
+        request.status = ApprovalStatus.APPROVED.value
+        request.approved_at = datetime.now()
+        request.approved_by = applicant_id
+        request.approved_by_name = AUTO_APPROVE_ACTOR_NAME
+        db.commit()
+        return True
 
 
 def _repository() -> ApprovalRepository:

@@ -133,11 +133,34 @@ def _approval_outcome(
             "operation_id": entry.get("operation_id"),
             **outcome,
         }
+    outcome = bridge.submit(entry, args, principal)
+    # 显式开启“自动批准危险操作”时，仍先落审批记录，再由系统批准并立即消费，
+    # 保留申请人、批准人、参数摘要与消费时间，避免无痕执行。
+    if (
+        outcome.get("status") == "pending"
+        and writes_enabled()
+        and _auto_approve_enabled(bridge)
+    ):
+        approval_id = int(outcome.get("approval_id") or 0)
+        if approval_id and bridge.auto_approve(approval_id, principal):
+            consumed = bridge.consume(approval_id, entry, args, principal)
+            if consumed.get("status") == "approved":
+                return None
+            return {
+                "success": False,
+                "operation_id": entry.get("operation_id"),
+                **consumed,
+            }
     return {
         "success": False,
         "operation_id": entry.get("operation_id"),
-        **bridge.submit(entry, args, principal),
+        **outcome,
     }
+
+
+def _auto_approve_enabled(bridge: Any) -> bool:
+    checker = getattr(bridge, "auto_approve_enabled", None)
+    return bool(checker()) if callable(checker) else False
 
 
 def _blocked_by_risk(

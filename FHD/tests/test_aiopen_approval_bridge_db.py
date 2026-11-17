@@ -147,6 +147,33 @@ def test_consume_rejects_other_applicant(session_factory):
     assert other["code"] == "APPROVAL_MISMATCH"
 
 
+def test_auto_approve_marks_request_and_blocks_replay(session_factory):
+    _seed_flow(session_factory)
+    principal = ScreenPrincipal("7", "1")
+    args = {"params": {"product_id": "P-1"}}
+    submitted = approval_bridge.submit(_entry(), args, principal)
+    approval_id = submitted["approval_id"]
+
+    assert approval_bridge.auto_approve(approval_id, ScreenPrincipal("8", "1")) is False
+    assert approval_bridge.auto_approve(approval_id, principal) is True
+
+    with session_factory() as db:
+        request = db.query(ApprovalRequest).filter(ApprovalRequest.id == approval_id).first()
+        assert request.status == ApprovalStatus.APPROVED.value
+        assert request.approved_by == 7
+        assert request.approved_by_name == approval_bridge.AUTO_APPROVE_ACTOR_NAME
+
+    assert approval_bridge.consume(approval_id, _entry(), args, principal)["status"] == "approved"
+    assert approval_bridge.consume(approval_id, _entry(), args, principal)["code"] == "APPROVAL_CONSUMED"
+
+
+def test_auto_approve_is_off_by_default(monkeypatch):
+    monkeypatch.delenv(approval_bridge.AUTO_APPROVE_ENV, raising=False)
+    assert approval_bridge.auto_approve_enabled() is False
+    monkeypatch.setenv(approval_bridge.AUTO_APPROVE_ENV, "1")
+    assert approval_bridge.auto_approve_enabled() is True
+
+
 def test_submit_uses_request_scoped_principal(session_factory):
     _seed_flow(session_factory)
     principal = ScreenPrincipal("7", "1")
