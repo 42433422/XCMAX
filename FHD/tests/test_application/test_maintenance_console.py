@@ -99,10 +99,64 @@ def test_missing_upstream_auth_does_not_invalidate_admin_session(monkeypatch):
 
 def test_log_cleanup_requires_review(configured, monkeypatch):
     perform = Mock()
-    monkeypatch.setattr(svc, 'perform', perform)
-    result = svc.request_run('clear_logs', str(uuid4()), 'operator')
-    assert result['state'] == 'pending_approval'
+    monkeypatch.setattr(svc, "perform", perform)
+    result = svc.request_run("clear_logs", str(uuid4()), "operator")
+    assert result["state"] == "pending_approval"
     perform.assert_not_called()
-    record = svc.approvals.get_action_state(result['action_id'])
-    assert record['payload']['job_id'] == JOB
-    assert record['payload']['actor'] == 'operator'
+    record = svc.approvals.get_action_state(result["action_id"])
+    assert record["payload"]["job_id"] == JOB
+    assert record["payload"]["actor"] == "operator"
+
+
+def test_evidence_authorizes_job_before_reading_logs(configured, monkeypatch):
+    api = Mock(return_value={"job": {"id": str(uuid4())}})
+    monkeypatch.setattr(svc, "api", api)
+    with pytest.raises(ValueError):
+        svc.execution_evidence(7)
+    assert api.call_count == 1
+
+
+def test_evidence_uses_rundeck_logs_without_claiming_recovery(configured, monkeypatch):
+    api = Mock(
+        side_effect=[
+            {"id": 7, "job": {"id": JOB}, "status": "succeeded"},
+            {
+                "completed": True,
+                "entries": [
+                    {"log": "done", "node": "node-1", "stepctx": "1", "internal": "excluded"}
+                ],
+            },
+        ]
+    )
+    monkeypatch.setattr(svc, "api", api)
+    result = svc.execution_evidence(7)
+    assert result["recovery"] == "unverified"
+    assert result["entries"][0]["log"] == "done"
+    assert "internal" not in result["entries"][0]
+    api.assert_called_with("GET", "execution/7/output?lastlines=200")
+
+
+def test_monitor_read_does_not_require_second_login_but_writes_do(monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from app.fastapi_routes.admin_control.market_gateway import MarketGateway
+
+    transport = Mock()
+    transport.authorization_header.return_value = ""
+    transport.resolve_authorization = AsyncMock(return_value="")
+    transport.request = AsyncMock(return_value={"ok": True})
+    gateway = MarketGateway(
+        errors=Mock(),
+        gate=lambda request: None,
+        proxy=AsyncMock(),
+        maintenance=AsyncMock(),
+        transport=lambda: transport,
+    )
+    assert asyncio.run(
+        gateway._market_admin_proxy(Mock(), "GET", "/api/ops/self-maintenance/status?limit=80")
+    ) == {"ok": True}
+    response = asyncio.run(
+        gateway._market_admin_proxy(Mock(), "POST", "/api/ops/self-maintenance/run")
+    )
+    assert response.status_code == 409
+    assert transport.request.await_count == 1

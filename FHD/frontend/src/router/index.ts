@@ -45,6 +45,7 @@ function normalizeDutyRosterGraphView(raw: unknown): string {
   if (token === 'hub' || token === 'center' || token === '中心' || token === '中心图') return 'hub'
   if (token === 'legacy-area' || token === 'area' || token === '物理' || token === '物理分区') return 'legacy-area'
   if (token === 'client' || token === 'workshop' || token === '车间' || token === '客户端车间') return 'client'
+  if (token === 'loop') return 'loop'
   return DEFAULT_DUTY_ROSTER_GRAPH_VIEW
 }
 

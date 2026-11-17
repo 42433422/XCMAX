@@ -46,6 +46,7 @@ const adminModuleAliases = [
   'views/ApprovalHubView.vue',
   'views/EmployeeAutonomyView.vue',
   'components/workflow/DutyRosterGraphPanel.vue',
+  'components/workflow/SelfEvolutionLoopRuntimePanel.vue',
   'components/admin/XCmaxAdminAutonomyTab.vue',
   'components/contract/ContractEsignPanel.vue',
   'api/xcmaxAdmin.ts',
@@ -167,7 +168,7 @@ export default defineConfig(() => ({
       },
       {
         find: '@admin-console-inject/workflow/SelfEvolutionLoopRuntimePanel.vue',
-        replacement: path.join(hostSrc, 'components/workflow/SelfEvolutionLoopRuntimePanel.vue'),
+        replacement: path.join(adminSrc, 'components/workflow/SelfEvolutionLoopRuntimePanel.vue'),
       },
       {
         find: '@admin-console-inject/employeeWorkspace/EmployeeWorkspaceLoopConsole.vue',

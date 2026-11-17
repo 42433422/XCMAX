@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+from uuid import UUID
 
 from fastapi import Query, Request
 from fastapi.responses import JSONResponse
@@ -107,6 +108,41 @@ class CustomerTickets:
 
     async def admin_github_workspace(self, request: Request):
         return await self._customer_ticket_proxy(request, "/api/customer-service/github/workspace")
+
+    async def admin_retort_overview(
+        self,
+        request: Request,
+        offset: int = Query(0, ge=0),
+        limit: int = Query(8, ge=1, le=50),
+    ):
+        return await self._customer_ticket_proxy(
+            request, f"/api/retort-evolution?offset={offset}&limit={limit}"
+        )
+
+    async def admin_retort_create(self, request: Request, body: dict[str, Any]):
+        return await self._customer_ticket_proxy(
+            request, "/api/retort-evolution", method="POST", json_body=body
+        )
+
+    async def admin_retort_detail(self, request: Request, request_id: UUID):
+        return await self._customer_ticket_proxy(
+            request, f"/api/retort-evolution/{request_id}"
+        )
+
+    async def admin_retort_decision(
+        self, request: Request, request_id: UUID, body: dict[str, Any]
+    ):
+        return await self._customer_ticket_proxy(
+            request,
+            f"/api/retort-evolution/{request_id}/decision",
+            method="POST",
+            json_body=body,
+        )
+
+    async def admin_retort_resume(self, request: Request, request_id: UUID):
+        return await self._customer_ticket_proxy(
+            request, f"/api/retort-evolution/{request_id}/resume", method="POST"
+        )
 
     async def admin_ticket_github(self, request: Request, ticket_id: int):
         return await self._customer_ticket_proxy(request, f"/api/customer-service/tickets/{ticket_id}/github")

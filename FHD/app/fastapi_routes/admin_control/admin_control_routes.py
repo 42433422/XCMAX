@@ -71,6 +71,11 @@ def register_routes(
             ),
             ("/admin/autonomy/health", "GET", autonomy.admin_autonomy_health),
             ("/admin/autonomy/maintenance", "GET", autonomy.admin_maintenance_tasks),
+            (
+                "/admin/autonomy/maintenance/{execution_id}/evidence",
+                "GET",
+                autonomy.admin_maintenance_evidence,
+            ),
             ("/admin/autonomy/maintenance/run", "POST", autonomy.admin_maintenance_run),
             (
                 "/admin/autonomy/maintenance/{execution_id}/cancel",
@@ -299,11 +304,36 @@ def register_routes(
                 customer_tickets.admin_update_customer_ticket_expected_completion,
             ),
             ("/admin/customer-service/staff", "GET", customer_tickets.admin_customer_ticket_staff),
-            ("/admin/customer-service/github/workspace", "GET", customer_tickets.admin_github_workspace),
-            ("/admin/customer-service/tickets/{ticket_id}/github", "GET", customer_tickets.admin_ticket_github),
-            ("/admin/customer-service/tickets/{ticket_id}/github", "POST", customer_tickets.admin_ticket_github_publish),
-            ("/admin/customer-service/tickets/{ticket_id}/github/start", "POST", customer_tickets.admin_ticket_github_start),
-            ("/admin/customer-service/tickets/{ticket_id}/github/reconcile", "POST", customer_tickets.admin_ticket_github_reconcile),
+            ("/admin/retort-evolution", "GET", customer_tickets.admin_retort_overview),
+            ("/admin/retort-evolution", "POST", customer_tickets.admin_retort_create),
+            ("/admin/retort-evolution/{request_id}", "GET", customer_tickets.admin_retort_detail),
+            ("/admin/retort-evolution/{request_id}/decision", "POST", customer_tickets.admin_retort_decision),
+            ("/admin/retort-evolution/{request_id}/resume", "POST", customer_tickets.admin_retort_resume),
+            (
+                "/admin/customer-service/github/workspace",
+                "GET",
+                customer_tickets.admin_github_workspace,
+            ),
+            (
+                "/admin/customer-service/tickets/{ticket_id}/github",
+                "GET",
+                customer_tickets.admin_ticket_github,
+            ),
+            (
+                "/admin/customer-service/tickets/{ticket_id}/github",
+                "POST",
+                customer_tickets.admin_ticket_github_publish,
+            ),
+            (
+                "/admin/customer-service/tickets/{ticket_id}/github/start",
+                "POST",
+                customer_tickets.admin_ticket_github_start,
+            ),
+            (
+                "/admin/customer-service/tickets/{ticket_id}/github/reconcile",
+                "POST",
+                customer_tickets.admin_ticket_github_reconcile,
+            ),
             (
                 "/admin/customer-service/tickets/{ticket_id}/assign",
                 "POST",

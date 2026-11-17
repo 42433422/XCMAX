@@ -1,13 +1,13 @@
-"""Prompt 进化影子 A/B：历史失败任务回放，胜出则自动应用，失败则还原。"""
+"""Prompt improvement proposals use GEPA trials and require Retort acceptance."""
 
 from __future__ import annotations
 
 import json
 import logging
 import os
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from modstore_server.llm_crypto import decrypt_secret, encrypt_secret
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
@@ -28,15 +28,6 @@ def _override_filename(employee_id: str) -> str:
 
 def _ab_enabled() -> bool:
     return os.environ.get("MODSTORE_PROMPT_EVOLUTION_AB_ENABLED", "1").strip().lower() in (
-        "1",
-        "true",
-        "yes",
-        "on",
-    )
-
-
-def _auto_apply_enabled() -> bool:
-    return os.environ.get("MODSTORE_PROMPT_EVOLUTION_AUTO_APPLY", "1").strip().lower() in (
         "1",
         "true",
         "yes",
@@ -144,163 +135,36 @@ def get_effective_system_prompt(employee_id: str, manifest_prompt: str) -> str:
     return ov if ov else manifest_prompt
 
 
-def _fetch_failed_tasks(employee_id: str, *, lookback_hours: int, limit: int = 3) -> List[str]:
-    cutoff = datetime.now(UTC) - timedelta(hours=lookback_hours)
-    try:
-        from sqlalchemy import or_
-
-        from modstore_server.llm_failure_classifier import FAILURE_KIND_QUOTA
-        from modstore_server.models import EmployeeExecutionMetric, get_session_factory
-
-        sf = get_session_factory()
-        with sf() as session:
-            rows = (
-                session.query(EmployeeExecutionMetric)
-                .filter(
-                    EmployeeExecutionMetric.employee_id == employee_id,
-                    EmployeeExecutionMetric.created_at >= cutoff,
-                    EmployeeExecutionMetric.status != "success",
-                    # 排除配额/计费失败：拿额度耗尽的任务回放评审 prompt 既是无谓 LLM 调用，
-                    # 又会让 A/B 误判而还原本来更好的新 prompt。
-                    or_(
-                        EmployeeExecutionMetric.failure_kind.is_(None),
-                        EmployeeExecutionMetric.failure_kind != FAILURE_KIND_QUOTA,
-                    ),
-                )
-                .order_by(EmployeeExecutionMetric.id.desc())
-                .limit(limit)
-                .all()
-            )
-        return [str(r.task or "").strip() for r in rows if str(r.task or "").strip()]
-    except RECOVERABLE_ERRORS:
-        return []
-
-
-async def _judge_prompt_pair(
-    *,
-    task_brief: str,
-    prompt_before: str,
-    prompt_after: str,
-) -> str:
-    """LLM 判断哪条 prompt 更可能成功完成该失败任务。返回 before|after|tie。"""
-    from modstore_server.services.llm import (
-        chat_dispatch_via_platform_only,
-        resolve_platform_bench_llm,
-    )
-
-    prov, mdl = resolve_platform_bench_llm()
-    if not prov or not mdl:
-        return "tie"
-
-    messages = [
-        {
-            "role": "system",
-            "content": (
-                "你是员工 prompt 评审员。给定一条失败任务与两条 system_prompt，"
-                "判断哪条更可能让 AI 员工正确完成该任务。"
-                "只输出一个词：before、after 或 tie。"
-            ),
-        },
-        {
-            "role": "user",
-            "content": (
-                f"失败任务：\n{task_brief[:2000]}\n\n"
-                f"--- prompt_before ---\n{prompt_before[:4000]}\n\n"
-                f"--- prompt_after ---\n{prompt_after[:4000]}"
-            ),
-        },
-    ]
-    try:
-        out = await chat_dispatch_via_platform_only(prov, mdl, messages, max_tokens=16)
-        verdict = str(out or "").strip().lower()
-        if "after" in verdict:
-            return "after"
-        if "before" in verdict:
-            return "before"
-        return "tie"
-    except RECOVERABLE_ERRORS:
-        return "tie"
-
-
 def run_prompt_shadow_ab(
-    *,
-    employee_id: str,
-    prompt_before: str,
-    prompt_after: str,
-    lookback_hours: int = 24,
-    min_wins: int = 2,
+    *, employee_id: str, prompt_before: str, prompt_after: str,
+    lookback_hours: int = 24, min_wins: int = 2,
 ) -> Dict[str, Any]:
-    """同步入口：影子 A/B 回放。"""
-    if not _ab_enabled():
-        return {"ok": True, "skipped": True, "reason": "ab disabled"}
+    """Compatibility entry: compare real trials through GEPA, never an LLM vote."""
+    path = os.environ.get("MODSTORE_RETORT_RSI_PROTOCOL", "")
+    if not _ab_enabled() or not path:
+        return {"ok": True, "skipped": True, "improved_wins": False,
+                "reason": "awaiting_measured_baseline"}
+    from modstore_server.integrations.repository_packages import load_repository_module
 
-    from modstore_server.runtime_async import run_coro_sync
-
-    tasks = _fetch_failed_tasks(employee_id, lookback_hours=lookback_hours, limit=3)
-    if not tasks:
-        return {
-            "ok": True,
-            "skipped": True,
-            "reason": "no failed tasks for replay",
-            "verdict": "tie",
-        }
-
-    wins_after = 0
-    wins_before = 0
-    details: List[Dict[str, str]] = []
-    for task in tasks:
-        verdict = run_coro_sync(
-            _judge_prompt_pair(
-                task_brief=task,
-                prompt_before=prompt_before,
-                prompt_after=prompt_after,
-            )
-        )
-        details.append({"task_preview": task[:120], "verdict": verdict})
-        if verdict == "after":
-            wins_after += 1
-        elif verdict == "before":
-            wins_before += 1
-
-    improved_wins = wins_after >= min_wins and wins_after > wins_before
-    return {
-        "ok": True,
-        "verdict": "after" if improved_wins else ("before" if wins_before > wins_after else "tie"),
-        "wins_after": wins_after,
-        "wins_before": wins_before,
-        "replay_count": len(tasks),
-        "details": details,
-        "improved_wins": improved_wins,
-    }
+    optimizer = load_repository_module("retort_engine.evolution_optimizer")
+    result = optimizer.optimize_protocol(
+        Path(path), seed={"system_prompt": prompt_before},
+        proposer=lambda candidate, reflective_dataset, components_to_update:
+            {key: prompt_after for key in components_to_update},
+    )
+    return {"ok": True, **result, "improved_wins": result["status"] == "proposed",
+            "verdict": "after" if result["status"] == "proposed" else "tie"}
 
 
 def maybe_auto_apply_prompt_evolution(
-    *,
-    employee_id: str,
-    prompt_before: str,
-    prompt_after: str,
-    evolution_record_id: int = 0,
-    lookback_hours: int = 24,
+    *, employee_id: str, prompt_before: str, prompt_after: str,
+    evolution_record_id: int = 0, lookback_hours: int = 24,
 ) -> Dict[str, Any]:
-    """A/B 通过后自动应用 prompt override；失败则保持 suggested 状态。"""
-    ab = run_prompt_shadow_ab(
-        employee_id=employee_id,
-        prompt_before=prompt_before,
-        prompt_after=prompt_after,
-        lookback_hours=lookback_hours,
-    )
-    if not ab.get("improved_wins"):
-        return {"ok": True, "applied": False, "ab": ab}
-
-    if not _auto_apply_enabled():
-        return {"ok": True, "applied": False, "ab": ab, "reason": "auto_apply disabled"}
-
-    apply_out = apply_prompt_override(
-        employee_id,
-        prompt_after,
-        meta={"evolution_record_id": evolution_record_id, "ab": ab},
-    )
-    return {"ok": True, "applied": True, "ab": ab, "apply": apply_out}
+    """Legacy callers may propose; only the Retort approval flow may promote."""
+    ab = run_prompt_shadow_ab(employee_id=employee_id, prompt_before=prompt_before,
+                              prompt_after=prompt_after, lookback_hours=lookback_hours)
+    return {"ok": True, "applied": False, "ab": ab,
+            "reason": "awaiting_retort_acceptance" if ab.get("improved_wins") else ab.get("reason", "no_verified_improvement")}
 
 
 __all__ = [

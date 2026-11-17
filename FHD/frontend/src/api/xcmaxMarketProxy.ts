@@ -174,18 +174,8 @@ const xcmaxMarketProxy = {
   localEmployeeCronJobs: () => api.get(`${LOCAL_PREFIX}/employee-cron/jobs`) as Promise<unknown>,
   localRunEmployeeCronJob: (jobId: string, payload?: { task?: string; input_data?: unknown }) =>
     api.post(`${LOCAL_PREFIX}/employee-cron/jobs/${encodeURIComponent(jobId)}/run`, payload ?? {}) as Promise<unknown>,
-  selfMaintenanceRuntimeStatus: async (limit = 80) => {
-    const q = `limit=${encodeURIComponent(String(limit))}`
-    try {
-      return await api.get(`${LOCAL_PREFIX}/ops/self-maintenance/status?${q}`)
-    } catch (e: unknown) {
-      const err = e as { status?: number }
-      if (err?.status === 404) {
-        return marketReq(`ops/self-maintenance/status?${q}`)
-      }
-      throw e
-    }
-  },
+  selfMaintenanceRuntimeStatus: (limit = 80, signal?: AbortSignal) =>
+    api.get(`${LOCAL_PREFIX}/ops/self-maintenance/status`, { limit }, { signal, timeoutMs: 20000 }),
   selfMaintenanceGovernanceReview: async (payload: { note?: string } = {}) => {
     try {
       return await api.post(`${LOCAL_PREFIX}/ops/self-maintenance/governance-review`, payload)

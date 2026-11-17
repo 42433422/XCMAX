@@ -16,6 +16,7 @@ async def get_runtime_status_local(
     return await modstore_get(
         "/api/ops/self-maintenance/status",
         query=f"limit={bounded}",
+        timeout=15.0,
         authorization=authorization,
     )
 

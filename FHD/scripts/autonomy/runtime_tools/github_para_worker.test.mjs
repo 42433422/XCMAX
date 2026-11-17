@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { runGithubWorker } from './github_para_worker.mjs';
 
 const env = { GITHUB_ACTIONS: 'true', GITHUB_RUN_ATTEMPT: '1', GITHUB_RUN_ID: '123',
-  GITHUB_REPOSITORY: 'fixture/repo', PARA_GITHUB_REQUEST_ID: '12345678-1234-1234-1234-123456789abc',
+  GITHUB_REPOSITORY: 'fixture/repo', GITHUB_SHA: 'a'.repeat(40), PARA_GITHUB_REQUEST_ID: '12345678-1234-1234-1234-123456789abc',
   MODSTORE_PARA_DISPATCH_TOKEN: 'test-only-secret', PARA_CODEX_AUTH_JSON: 'private-auth' };
 const state = { request_id: env.PARA_GITHUB_REQUEST_ID, run_id: 123,
   repository: 'fixture/repo', issue_number: 42, finished: false };
@@ -43,6 +43,14 @@ test('the existing Para worker stops only after management acknowledges executio
         fetchStatus: async () => ({ ok: true, json: async () => ({ ...state, ...invalid }) }),
         spawnWorker: () => assert.fail('invalid dispatch must not start Para'),
       }), /management_/);
+    }
+    for (const invalid of [{ source_sha: 'b'.repeat(40) }, { request_id: 'other' }, { repository: 'other/repo' }]) {
+      await assert.rejects(runGithubWorker({ env: { ...env, PARA_GITHUB_EVIDENCE_DIR: root },
+        fetchStatus: async () => ({ ok: true, json: async () => ({ ...state,
+          benchmark_protocol: { source_sha: env.GITHUB_SHA, request_id: env.PARA_GITHUB_REQUEST_ID,
+            repository: env.GITHUB_REPOSITORY, ...invalid } }) }),
+        spawnWorker: () => assert.fail('changed approved source must not start Para'),
+      }), /retort_frozen_source_mismatch/);
     }
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

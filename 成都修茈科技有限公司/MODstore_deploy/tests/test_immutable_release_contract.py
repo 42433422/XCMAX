@@ -210,8 +210,14 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     assert '"$BUILD_ROOT/packages/retort_engine"' in script
     assert '"$BUILD_ROOT/packages/xcagi_common"' in script
     assert (
-        "retort-engine>=0.4.0,<0.5" in pyproject["project"]["optional-dependencies"]["governance"]
+        "retort-engine[evolution]>=0.4.0,<0.5"
+        in pyproject["project"]["optional-dependencies"]["governance"]
     )
+    assert (
+        '"$BUILD_ROOT/FHD/packages/xcagi_langgraph_checkpoint_backends/checkpoint-postgres"'
+        in script
+    )
+    assert 'load_repository_module("retort_engine.evolution_workflow")' in script
     assert "alembic>=1.16,<2" in pyproject["project"]["optional-dependencies"]["web"]
     assert "pandas>=2.0" in pyproject["project"]["optional-dependencies"]["evolution-metrics"]
     assert "import fastapi, pytest, pytest_cov, uvicorn, modstore_server.app" in script

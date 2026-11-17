@@ -27,6 +27,8 @@ def authorized_dispatch(runtime, employee_id):
     with get_session_factory()() as db:
         event = db.get(IncidentEvent, runtime.get("event_id"))
         payload = json_loads(event.payload_json, {}) if event else {}
+        if (payload.get("github_workspace") or {}).get("retort_run_id"):
+            from modstore_server.retort_github_workspace import authorized_incident
         return bool(
             event
             and authorized_incident(db, payload, event.id)
@@ -99,7 +101,7 @@ def _save(db, row, status, **result):
     db.commit()
 
 
-def _claim_worker_slot(db, row):
+def _claim_worker_slot(db, row, *, owner_key=None):
     from modstore_server.customer_ticket_github import _execution, github
     from modstore_server.db.mac_control import MacControlSyncLease
 
@@ -112,9 +114,15 @@ def _claim_worker_slot(db, row):
             db.rollback()
         slot = db.get(MacControlSyncLease, "github-worker")
     owner = slot.owner
-    if owner == str(row.id):
+    requested_owner = owner_key or str(row.id)
+    if owner == requested_owner:
         return True
-    if owner:
+    if owner.startswith("retort:"):
+        from modstore_server.retort_github_workspace import slot_finished
+
+        if not slot_finished(owner.removeprefix("retort:")):
+            return False
+    elif owner:
         previous = db.get(CustomerServiceAction, int(owner))
         if not previous:
             return False
@@ -137,7 +145,7 @@ def _claim_worker_slot(db, row):
     changed = (
         db.query(MacControlSyncLease)
         .filter_by(id="github-worker", owner=owner)
-        .update({"owner": str(row.id)}, synchronize_session=False)
+        .update({"owner": requested_owner}, synchronize_session=False)
     )
     db.commit()
     return bool(changed)
@@ -268,6 +276,11 @@ def run_status(db, request_id):
         None,
     )
     if row is None:
+        from modstore_server.models import RetortEvolutionRun
+        from modstore_server.retort_github_workspace import worker_status
+
+        if db.get(RetortEvolutionRun, str(request_id)) is not None:
+            return worker_status(str(request_id))
         raise HTTPException(404, "派工记录不存在")
     execution, jobs = _execution(db, row)
     finished = execution.get("execution_status") == "completed" or any(

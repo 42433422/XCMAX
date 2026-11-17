@@ -166,6 +166,23 @@ def execution_detail(execution_id):
     return item
 
 
+def execution_evidence(execution_id):
+    item = execution_detail(execution_id)
+    output = api("GET", f"execution/{int(execution_id)}/output?lastlines=200")
+    return {
+        "id": str(item["id"]),
+        "status": item.get("status", "unknown"),
+        "started_at": (item.get("date-started") or {}).get("date"),
+        "ended_at": (item.get("date-ended") or {}).get("date"),
+        "recovery": "unverified",
+        "log_complete": output.get("completed", False),
+        "entries": [
+            {key: row.get(key) for key in ("time", "level", "node", "stepctx", "log")}
+            for row in output.get("entries", [])[-200:]
+        ],
+    }
+
+
 def cancel(execution_id, actor):
     item = execution_detail(execution_id)
     if item.get("status") not in {"running", "scheduled"}:

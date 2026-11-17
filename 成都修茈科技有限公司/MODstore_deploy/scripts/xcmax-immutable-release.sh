@@ -446,9 +446,14 @@ else
   "$DEPLOY_DIR/.venv/bin/python" -m pip install -q --upgrade pip
   (cd "$DEPLOY_DIR" && .venv/bin/pip install -q \
     "$BUILD_ROOT/packages/retort_engine" "$BUILD_ROOT/packages/xcagi_common" \
+    "$BUILD_ROOT/FHD/packages/xcagi_langgraph_core" \
+    "$BUILD_ROOT/FHD/packages/xcagi_langgraph_checkpoint" \
+    "$BUILD_ROOT/FHD/packages/xcagi_langgraph_checkpoint_backends/checkpoint-sqlite" \
+    "$BUILD_ROOT/FHD/packages/xcagi_langgraph_checkpoint_backends/checkpoint-postgres" \
+    "$BUILD_ROOT/FHD/packages/xcagi_langgraph_prebuilt" "$BUILD_ROOT/FHD/packages/xcagi_langgraph_sdk" \
     -e '.[web,knowledge,evolution-metrics,governance]')
   "$DEPLOY_DIR/.venv/bin/python" -c \
-    'from modstore_server.integrations.repository_packages import load_repository_module; load_repository_module("retort_engine.intent_alignment"); load_repository_module("retort_engine.clarification"); load_repository_module("xcagi_common.employee_pack")'
+    'import langgraph.checkpoint.postgres; from modstore_server.integrations.repository_packages import load_repository_module; load_repository_module("retort_engine.intent_alignment"); load_repository_module("retort_engine.clarification"); load_repository_module("retort_engine.evolution_workflow"); load_repository_module("retort_engine.evolution_optimizer"); load_repository_module("xcagi_common.employee_pack")'
   mkdir -p "$BUILD_ROOT/.runtime-build"
   MODSTORE_ENV=production \
     MODSTORE_JWT_SECRET="$BUILD_JWT_SECRET" \

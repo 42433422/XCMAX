@@ -33,6 +33,11 @@ export async function runGithubWorker({ env = process.env, fetchStatus = fetch, 
   const accepted = await state();
   if (accepted.repository !== env.GITHUB_REPOSITORY || !Number.isSafeInteger(accepted.issue_number)
       || accepted.issue_number < 1) throw new Error('management_issue_identity_mismatch');
+  if (accepted.benchmark_protocol && (accepted.benchmark_protocol.source_sha !== env.GITHUB_SHA
+      || accepted.benchmark_protocol.request_id !== requestId
+      || accepted.benchmark_protocol.repository !== env.GITHUB_REPOSITORY)) {
+    throw new Error('retort_frozen_source_mismatch');
+  }
   if (accepted.finished) throw new Error('management_dispatch_already_finished');
   const agentEnv = { ...env };
   agentEnv.PARA_GITHUB_ISSUE_NUMBER = String(accepted.issue_number);

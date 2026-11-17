@@ -31,6 +31,34 @@
 MODstore 维护循环另见 `modstore_server/maintenance_loop/`，包含代码任务、审核、QA 和恢复。
 Rundeck 候选不替换这些代码修复及发布流程。
 
+## Retort 改进闭环
+
+管理端「改进闭环」使用既有 Element Plus；Retort 负责方案和吸收任务，
+LangGraph 1.2.10 负责持久执行、审批中断和恢复，GEPA 0.1.4 仅提供实测辅助方案
+（上游分别为 langchain-ai/langgraph、gepa-ai/gepa，MIT）。18 域及 108 项要求仍以
+`FHD/config/audit_benchmark_ssot.json` 为准，参考仓库不等于已经通过相应基准。
+
+固定流程：冻结要求、测试文件哈希与 main 提交 → Retort 方案 → 可选 GEPA 实验 →
+管理端批准公开任务 → GitHub Issue → 现有员工经 Para 在 Actions 执行 →
+独立 job 用固定镜像验证前后提交 → 管理端确认实际效果 → 已验收知识回流 Loop。
+GEPA 训练、验证、最终留出任务隔离；旧 prompt 入口不再通过模型投票自动覆盖员工提示词。
+辅助实验失败保留原方案并交管理员审阅。部署及 CI 使用仓库内固定版本的 LangGraph 包，
+PostgreSQL 检查点为带既有安全回补的 `3.1.1+xcagi.1`，不可替换成未回补的公共 `3.1.1`。
+检查通过只形成 E2 任务证据，不自动给域打分，也不代表合并、上线或客户验收。
+
+`MODSTORE_RETORT_CHECKPOINT_DSN` 选现有 PostgreSQL；`sqlite:///...` 仅供单机验收。
+原生数据库会话锁协调多个调度器，外部 Issue/执行先记意图；回执不明时只核对、不重复派发。
+现有 APScheduler 每 30 秒推进未结束任务，未配置持久存储时不运行。
+`MODSTORE_RETORT_PROTOCOLS` 指向受控验收方案 JSON：键为方案 ID，值含 name、criterion_ids、
+checks（id、criterion_ids、argv、files 的 SHA256、timeout_seconds）和固定 digest 的 container_image。
+测试在无网络、只读项目挂载的 Docker 中运行；原始日志与 Actions artifact digest 一起核验。
+验收前复用 Retort 的加密工件组件，将证据持久写入 `MODSTORE_RUNTIME_DIR/retort-evidence`，
+沿用 `RETORT_ARTIFACT_MASTER_KEY` 或已有 `MODSTORE_LLM_MASTER_KEY`；不能仅依赖 90 天的 Actions 附件。
+`MODSTORE_RETORT_RSI_PROTOCOL` 可选：project、check、container_image、evidence_dir、
+trainset/valset/holdout（唯一 id）及 max_metric_calls；评估命令从 stdin 读取 candidate/task，
+只输出 score（0–1）、output、feedback JSON。基线与留出结果均保留原始证据。
+配置及生产启用另行验收；组件测试不能代替云端真跑与原业务场景验收。
+
 ## 动作与边界
 
 | 范围 | 动作 |
@@ -102,6 +130,7 @@ Job 必须由运维预先绑定固定目标、超时和维护脚本，不能把�
 未知提交和失败任务需人工核对，不自动重试。Job 模板及固定动作脚本位于 `FHD/deploy/rundeck/`。
 部署前需核对目标节点、部署目录和本地健康端口；候选尚未完成目标服务器验收。
 命令成功只代表 Job 成功，仍需原健康检查确认实际恢复。
+管理端 Loop 复用 Element Plus、现有轮询及审批入口；Rundeck 日志经管理端会话校验和 Job 绑定检查后读取，无需单独登录。维护状态与操作固定使用同一目标，默认既有运营服务，仅 `MODSTORE_LOCAL_AUTOMATION=1` 选择本地；连接失败不跨目标重放。只读监控允许管理端会话读取，写入仍保留运营授权和原审批门控。
 该候选未覆盖代码修复流程、桌面自治或发布回滚，不能标为全量迁移完成。
 
 ## OpenIM 员工群迁移候选（默认关闭）

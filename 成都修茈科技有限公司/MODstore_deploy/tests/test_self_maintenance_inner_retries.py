@@ -49,7 +49,9 @@ def _patch_dispatch(monkeypatch, sequence: List[Dict[str, Any]]):
     calls: List[Dict[str, Any]] = []
 
     def _fake_dispatch(employee_id, task_text, input_data, *, user_id):
-        calls.append({"employee_id": employee_id, "task_text": task_text, "user_id": user_id})
+        calls.append(
+            {"employee_id": employee_id, "task_text": task_text, "user_id": user_id}
+        )
         if len(calls) > len(sequence):
             raise AssertionError(
                 f"dispatch called {len(calls)} times but only {len(sequence)} results queued"
@@ -172,13 +174,19 @@ def test_code_step_accepted_para_timeout_does_not_start_duplicate_retry(
     assert para_meta["task_id"] == "task-1"
     assert code_fix_rounds == 0
     assert len(calls) == 1
-    assert not [record for record in captured_ledger if record.get("phase") == "step_retry"]
+    assert not [
+        record for record in captured_ledger if record.get("phase") == "step_retry"
+    ]
     # Outer dispatch retry path must also refuse to treat this as transient.
     assert _maintenance_results._is_accepted_para_wait_timeout(timeout) is True
-    assert _maintenance_results._is_transient_employee_dispatch_failure(timeout) is False
+    assert (
+        _maintenance_results._is_transient_employee_dispatch_failure(timeout) is False
+    )
 
 
-def test_para_success_nested_delivery_validation_marks_completion(monkeypatch, captured_ledger):
+def test_para_success_nested_delivery_validation_marks_completion(
+    monkeypatch, captured_ledger
+):
     """Mock Para success + nested delivery_validation(all exit 0) → validate/writeback ok."""
     dv = {
         "commands": [
@@ -243,7 +251,9 @@ def test_para_success_nested_delivery_validation_marks_completion(monkeypatch, c
     assert gate["reason"] == "delivery_validation_passed"
     assert gate["delivery_validation"] is dv
     assert _maintenance_results._employee_result_ok(result) is True
-    assert not [record for record in captured_ledger if record.get("phase") == "step_retry"]
+    assert not [
+        record for record in captured_ledger if record.get("phase") == "step_retry"
+    ]
 
 
 def test_nested_delivery_validation_failure_blocks_completion_even_if_envelope_ok():
@@ -351,13 +361,15 @@ def test_review_step_incomplete_dimensions_protocol_rerun(monkeypatch, captured_
         ],
     )
 
-    _, ok, _, _, _, _, marker_rounds = _maintenance_dispatch._run_step_with_inner_retries(
-        employee_id="change-request-auditor",
-        step_name="review",
-        task_text="base review",
-        extra={},
-        user_id=1,
-        run_id="run-3b",
+    _, ok, _, _, _, _, marker_rounds = (
+        _maintenance_dispatch._run_step_with_inner_retries(
+            employee_id="change-request-auditor",
+            step_name="review",
+            task_text="base review",
+            extra={},
+            user_id=1,
+            run_id="run-3b",
+        )
     )
 
     assert ok is True
@@ -366,7 +378,9 @@ def test_review_step_incomplete_dimensions_protocol_rerun(monkeypatch, captured_
     assert "missing_dimensions" in calls[1]["task_text"]
 
 
-def test_qa_executor_outage_retries_fresh_report_only_task(monkeypatch, captured_ledger):
+def test_qa_executor_outage_retries_fresh_report_only_task(
+    monkeypatch, captured_ledger
+):
     """QA shell outage is infrastructure evidence, so retry QA instead of accepting FAIL."""
     outage_report = (
         "SELF_MAINTENANCE_QA_JSON: "
@@ -400,13 +414,15 @@ def test_qa_executor_outage_retries_fresh_report_only_task(monkeypatch, captured
         ],
     )
 
-    _, ok, _, _, report, _, marker_rounds = _maintenance_dispatch._run_step_with_inner_retries(
-        employee_id="test-qa-runner",
-        step_name="qa",
-        task_text="base qa",
-        extra={},
-        user_id=1,
-        run_id="run-qa-executor-retry",
+    _, ok, _, _, report, _, marker_rounds = (
+        _maintenance_dispatch._run_step_with_inner_retries(
+            employee_id="test-qa-runner",
+            step_name="qa",
+            task_text="base qa",
+            extra={},
+            user_id=1,
+            run_id="run-qa-executor-retry",
+        )
     )
 
     assert ok is True
@@ -455,13 +471,15 @@ def test_code_step_env_overrides_retry_count(monkeypatch, captured_ledger):
         ],
     )
 
-    _, ok, _, _, _, code_fix_rounds, _ = _maintenance_dispatch._run_step_with_inner_retries(
-        employee_id="vibe-coding-maintainer",
-        step_name="code",
-        task_text="base task",
-        extra={},
-        user_id=1,
-        run_id="run-5",
+    _, ok, _, _, _, code_fix_rounds, _ = (
+        _maintenance_dispatch._run_step_with_inner_retries(
+            employee_id="vibe-coding-maintainer",
+            step_name="code",
+            task_text="base task",
+            extra={},
+            user_id=1,
+            run_id="run-5",
+        )
     )
 
     assert ok is False
@@ -492,3 +510,29 @@ def test_step_retry_trace_does_not_pollute_final_phase(monkeypatch, captured_led
     phases = [r.get("phase") for r in captured_ledger]
     assert "step_retry" in phases
     assert "step" not in phases  # 调用方负责写最终 step
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        "Git 预检失败：fatal: Unable to read current working directory: No such file or directory",
+        "Git 预检失败：远程不存在分支 main",
+        "connection refused",
+        "device_busy_wait_timeout",
+    ],
+)
+def test_code_step_does_not_retry_environment_failures_as_code_repairs(
+    monkeypatch, captured_ledger, error
+):
+    calls = _patch_dispatch(monkeypatch, [_make_result(ok=False, error=error)])
+    _, ok, reason, _, _, rounds, _ = _maintenance_dispatch._run_step_with_inner_retries(
+        employee_id="vibe-coding-maintainer",
+        step_name="code",
+        task_text="repair",
+        extra={},
+        user_id=1,
+        run_id="environment-failed",
+    )
+    assert not ok and error in reason
+    assert len(calls) == 1 and rounds == 0
+    assert not captured_ledger

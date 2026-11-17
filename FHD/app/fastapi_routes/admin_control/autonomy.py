@@ -158,7 +158,6 @@ class AutonomyAdmin:
         gate = self._gate(request)
         if gate is not None:
             return gate
-        from app.application import self_maintenance_app_service as sm_svc
         from app.application.autonomy.admin_overview import (
             closure_gap_count,
             extract_loop_run_summary,
@@ -168,6 +167,7 @@ class AutonomyAdmin:
         from app.application.autonomy.approval_center import list_pending_actions
         from app.application.autonomy.audit_log import list_autonomy_audit, summarize_autonomy_audit
         from app.application.ops_closure_status import build_ops_closure_status
+        from app.fastapi_routes.xcmax_admin import _self_maintenance_local_or_proxy
 
         audit_items = list_autonomy_audit(limit=20)
         audit_summary = summarize_autonomy_audit(days=30)
@@ -176,7 +176,15 @@ class AutonomyAdmin:
         pending = list_pending_actions()
         runtime: dict[str, Any] = {}
         try:
-            runtime = await sm_svc.get_runtime_status_local(limit=40)
+            runtime = await _self_maintenance_local_or_proxy(
+                request, "GET", "/api/ops/self-maintenance/status?limit=40"
+            )
+            if isinstance(runtime, JSONResponse):
+                runtime = {
+                    "ok": False,
+                    "error": "维护监控服务不可用",
+                    "status": runtime.status_code,
+                }
         except self._errors.recoverable() as exc:
             self._errors.logger.warning("autonomy overview runtime status failed: %s", exc)
             runtime = {"ok": False, "error": str(exc)}
@@ -255,11 +263,11 @@ class AutonomyAdmin:
         return {"ok": True, **read_cross_tier_audit(tier=tier, limit=limit)}
 
     async def admin_force_self_maintenance_run(self, request: Request):
-        """Admin break-glass: force one self-maintenance loop via local MODstore."""
+        """Admin break-glass through the same configured target as runtime status."""
         gate = self._gate(request)
         if gate is not None:
             return gate
-        from app.application import self_maintenance_app_service as sm_svc
+        from app.fastapi_routes.xcmax_admin import _self_maintenance_local_or_proxy
 
         body = await read_json_object(request, self._errors) or {}
         reason = (
@@ -267,7 +275,14 @@ class AutonomyAdmin:
             or "admin_console_force_run"
         )
         try:
-            result = await sm_svc.force_run_local(reason=reason)
+            result = await _self_maintenance_local_or_proxy(
+                request,
+                "POST",
+                "/api/ops/self-maintenance/run",
+                json_body={"reason": reason},
+            )
+            if isinstance(result, JSONResponse):
+                return result
             return {"ok": True, "result": result}
         except self._errors.recoverable() as exc:
             self._errors.logger.warning("admin force self-maintenance failed: %s", exc)
@@ -275,6 +290,9 @@ class AutonomyAdmin:
 
     async def admin_maintenance_tasks(self, request: Request):
         return await self._maintenance_call(request, "snapshot")
+
+    async def admin_maintenance_evidence(self, execution_id: int, request: Request):
+        return await self._maintenance_call(request, "execution_evidence", execution_id)
 
     async def admin_maintenance_run(self, request: Request):
         body = await read_json_object(request, self._errors) or {}
@@ -290,11 +308,12 @@ class AutonomyAdmin:
         if denied is not None:
             return denied
         from starlette.concurrency import run_in_threadpool
+
         from app.application.autonomy import maintenance_console as service
 
         actor = self._approver(request)
         try:
-            if operation != "snapshot":
+            if operation not in {"snapshot", "execution_evidence"}:
                 args = (*args, actor)
             return {"ok": True, **await run_in_threadpool(getattr(service, operation), *args)}
         except (ValueError, KeyError, OSError):

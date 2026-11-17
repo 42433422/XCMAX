@@ -89,3 +89,57 @@ jobs:
           name: para-execution-${{ inputs.request_id }}
           path: ${{ runner.temp }}/para-evidence/execution.json
           if-no-files-found: warn
+
+  independent-verification:
+    needs: employee-workspace
+    runs-on: ubuntu-24.04
+    timeout-minutes: 130
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          path: verifier
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Read approved verification protocol
+        id: protocol
+        working-directory: verifier
+        env:
+          PARA_GITHUB_REQUEST_ID: ${{ inputs.request_id }}
+          MODSTORE_PARA_DISPATCH_TOKEN: ${{ secrets.MODSTORE_PARA_DISPATCH_TOKEN }}
+        run: |
+          python -m pip install ./packages/retort_engine 'jsonschema>=4.23,<5'
+          python FHD/scripts/autonomy/prepare_retort_verification.py
+      - uses: actions/checkout@v4
+        if: steps.protocol.outputs.retort == 'true'
+        with:
+          ref: ${{ github.sha }}
+          path: before
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        if: steps.protocol.outputs.retort == 'true'
+        with:
+          ref: ${{ steps.protocol.outputs.target_sha }}
+          path: after
+          persist-credentials: false
+      - name: Compare exact commits in isolated test containers
+        if: steps.protocol.outputs.retort == 'true'
+        working-directory: verifier
+        env:
+          RETORT_IMAGE: ${{ steps.protocol.outputs.image }}
+          RETORT_TARGET_SHA: ${{ steps.protocol.outputs.target_sha }}
+        run: |
+          docker pull "$RETORT_IMAGE"
+          python -m retort_engine.evolution_evidence \
+            --protocol "$RUNNER_TEMP/retort-protocol.json" \
+            --before "$GITHUB_WORKSPACE/before" --after "$GITHUB_WORKSPACE/after" \
+            --output "$RUNNER_TEMP/retort-verification" \
+            --run-id "$GITHUB_RUN_ID" --target-sha "$RETORT_TARGET_SHA"
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.protocol.outputs.retort == 'true'
+        with:
+          name: retort-verification-${{ inputs.request_id }}
+          path: ${{ runner.temp }}/retort-verification/
+          if-no-files-found: error
+          retention-days: 90

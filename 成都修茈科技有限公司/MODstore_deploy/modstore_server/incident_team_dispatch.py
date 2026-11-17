@@ -8,7 +8,6 @@ import os
 from datetime import UTC, datetime
 from typing import Any
 
-from modstore_server import incident_team_orchestrator as facade
 from modstore_server.incident_team_handler_digest import handler_output_digest
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
@@ -34,6 +33,8 @@ def dispatch_incident_team(event_id: int) -> dict[str, Any]:
 
 
 def _dispatch_incident_team_once(event_id: int) -> dict[str, Any]:
+    from modstore_server import incident_team_orchestrator as facade
+
     _env_bool = facade._env_bool
     build_incident_team = facade.build_incident_team
     get_session_factory = facade.get_session_factory
@@ -44,6 +45,13 @@ def _dispatch_incident_team_once(event_id: int) -> dict[str, Any]:
         return {"claimed": False, "ok": False, "reason": "incident_team_disabled"}
     with get_session_factory()() as session:
         saved = session.get(IncidentEvent, int(event_id))
+        if saved is not None and (
+            saved.event_type == "ops.retort.evolution" or _payload(saved).get("retort_run_id")
+        ):
+            from modstore_server.retort_github_workspace import authorized_incident
+
+            if not authorized_incident(session, _payload(saved), event_id):
+                return {"claimed": False, "ok": False, "reason": "retort_authorization_required"}
         if saved is not None and isinstance(_payload(saved).get("_team_claim"), dict):
             from modstore_server.incident_team_completion import reconcile_pending_teams
 
@@ -309,7 +317,7 @@ def member_runtime_input(
         runtime.update(
             github_workspace=workspace,
             repo_url=f"https://github.com/{workspace['repository']}.git",
-            branch="main",
+            branch=workspace.get("source_sha") or "main",
             allow_tool_fallback=False,
         )
         # The ephemeral worker owns its checkout; a CVM path is not a workspace there.

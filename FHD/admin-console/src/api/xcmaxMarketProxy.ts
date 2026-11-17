@@ -186,18 +186,8 @@ const xcmaxMarketProxy = {
       method: 'POST',
       body: { task, input_data: inputData ?? {} },
     }),
-  selfMaintenanceRuntimeStatus: async (limit = 80) => {
-    const q = `limit=${encodeURIComponent(String(limit))}`
-    try {
-      return await api.get(`${LOCAL_PREFIX}/ops/self-maintenance/status?${q}`)
-    } catch (e: unknown) {
-      const err = e as { status?: number }
-      if (err?.status === 404) {
-        return marketReq(`ops/self-maintenance/status?${q}`)
-      }
-      throw e
-    }
-  },
+  selfMaintenanceRuntimeStatus: (limit = 80, signal?: AbortSignal) =>
+    api.get(`${LOCAL_PREFIX}/ops/self-maintenance/status`, { limit }, { signal, timeoutMs: 20000 }),
   selfMaintenanceGovernanceReview: async (payload: { note?: string } = {}) => {
     try {
       return await api.post(`${LOCAL_PREFIX}/ops/self-maintenance/governance-review`, payload)

@@ -127,7 +127,12 @@ class MarketGateway:
             authorization = transport.authorization_header(authorization_override)
             if not authorization:
                 authorization = await transport.resolve_authorization(request, body_for_auth)
-        if not authorization:
+        # The monitor endpoint is read-only on MODstore. A verified local admin can
+        # inspect it without a separate market login; commands still require binding.
+        monitor_read = (
+            method.upper() == "GET" and path.split("?", 1)[0] == "/api/ops/self-maintenance/status"
+        )
+        if not authorization and not monitor_read:
             if sensitive:
                 return _platform_config_response(None, 401)
             return JSONResponse(
@@ -212,5 +217,7 @@ class MarketGateway:
         if method in {"POST", "PUT", "PATCH"}:
             json_body = await read_json_object(request, self._errors)
         if api_path.startswith("/api/ops/self-maintenance/"):
+            if request.url.query:
+                api_path += "?" + request.url.query
             return await self._maintenance(request, method, api_path, json_body=json_body)
         return await self._proxy(request, method, api_path, json_body=json_body)

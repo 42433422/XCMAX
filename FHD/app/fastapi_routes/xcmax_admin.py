@@ -136,6 +136,7 @@ get_all_hands_report_session = _digest.get_all_hands_report_session
 
 _maintenance = SelfMaintenance(
     errors=_errors,
+    gate=lambda request: _require_market_admin_session(request),
     proxy=lambda request, method, path, **kwargs: _market_admin_proxy(
         request, method, path, **kwargs
     ),

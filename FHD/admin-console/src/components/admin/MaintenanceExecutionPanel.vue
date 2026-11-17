@@ -15,13 +15,23 @@
     </div>
     <h4>执行记录</h4>
     <table v-if="executions.length"><thead><tr><th>任务</th><th>执行状态</th><th>开始时间</th><th>恢复结果</th><th>操作</th></tr></thead>
-      <tbody><tr v-for="row in executions" :key="row.id"><td>{{ row.label }}<small>编号 {{ row.id }}</small></td><td>{{ statusLabel(row.status) }}</td><td>{{ row.started_at || '未提供' }}</td><td>{{ row.recovery === 'verified' ? '已核实恢复' : '尚未核实' }}</td><td><button v-if="['running', 'scheduled'].includes(row.status)" :disabled="cancelling" @click="cancel(row.id)">取消任务</button><span v-else>—</span></td></tr></tbody>
+      <tbody><tr v-for="row in executions" :key="row.id"><td>{{ row.label }}<small>编号 {{ row.id }}</small></td><td>{{ statusLabel(row.status) }}</td><td>{{ row.started_at || '未提供' }}</td><td>{{ row.recovery === 'verified' ? '已核实恢复' : '尚未核实' }}</td><td><button @click="showEvidence(row.id)">执行日志</button> <button v-if="['running', 'scheduled'].includes(row.status)" :disabled="cancelling" @click="cancel(row.id)">取消任务</button><span v-else>—</span></td></tr></tbody>
     </table>
     <p v-else>{{ connected ? '暂无执行记录。' : '执行记录尚未读取成功。' }}</p>
+    <el-drawer v-model="evidenceOpen" title="维护执行日志" size="min(620px, 94vw)" append-to-body destroy-on-close>
+      <p v-if="evidenceLoading">正在读取执行日志…</p>
+      <p v-else-if="evidenceError" role="alert">{{ evidenceError }}</p>
+      <template v-else-if="evidence"><p>编号 {{ evidence.id }} · {{ statusLabel(evidence.status) }} · 恢复结果尚未核实</p>
+        <p>最近 200 行</p><pre class="execution-log">{{ evidence.entries.map(row => [row.time, row.node, row.stepctx, row.log].filter(Boolean).join(' ')).join('\n') || '暂无日志' }}</pre>
+      </template>
+    </el-drawer>
   </section>
 </template>
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
+import { ElDrawer } from 'element-plus'
+import 'element-plus/dist/index.css'
+import { useVisiblePolling } from '@host/composables/messenger/useVisiblePolling'
 import api from '@/api/core'
 import { appConfirm } from '@/utils/appDialog'
 const prefix = '/api/xcmax/admin/autonomy'
@@ -31,10 +41,24 @@ const tasks = ref<Task[]>([]), executions = ref<Execution[]>([])
 const pending = ref<Array<{ action_id: string; label: string }>>([])
 const connected = ref(false), loading = ref(false), busy = ref(false), cancelling = ref(false)
 const environment = ref('环境尚未核实'), error = ref(''), message = ref('')
-let timer: ReturnType<typeof setInterval> | undefined
+const evidenceOpen = ref(false), evidenceLoading = ref(false), evidenceError = ref('')
+const evidence = ref<{ id: string; status: string; entries: Record<string, string>[] } | null>(null)
+let evidenceRequest = 0
+async function showEvidence(id: string) {
+  const current = ++evidenceRequest
+  evidenceOpen.value = true; evidenceLoading.value = true; evidenceError.value = ''; evidence.value = null
+  try {
+    const data = await api.get<{ ok: boolean; id: string; status: string; entries: Record<string, string>[] }>(`${prefix}/maintenance/${encodeURIComponent(id)}/evidence`)
+    if (current !== evidenceRequest) return
+    if (!data.ok || !Array.isArray(data.entries)) throw new Error('执行日志返回不完整')
+    evidence.value = data
+  } catch (cause) { if (current === evidenceRequest) evidenceError.value = cause instanceof Error ? cause.message : '执行日志读取失败' }
+  finally { if (current === evidenceRequest) evidenceLoading.value = false }
+}
 let request = 0
 function statusLabel(status: string) { return ({ succeeded: '执行成功', failed: '执行失败', running: '执行中', scheduled: '等待执行', aborted: '已取消', timedout: '执行超时' } as Record<string, string>)[status] || '结果待核实' }
 async function load() {
+  if (loading.value) return false
   const current = ++request
   loading.value = true
   try {
@@ -42,11 +66,11 @@ async function load() {
     if (current !== request) return
     if (!data.ok || !Array.isArray(data.tasks) || !Array.isArray(data.executions) || !Array.isArray(data.pending)) throw new Error('维护状态返回不完整')
     connected.value = data.connected; environment.value = data.environment
-    tasks.value = data.tasks; executions.value = data.executions; pending.value = data.pending; error.value = ''
+    tasks.value = data.tasks; executions.value = data.executions; pending.value = data.pending; error.value = ''; return true
   } catch (cause) {
     if (current !== request) return
     connected.value = false; tasks.value = []; executions.value = []; pending.value = []
-    error.value = cause instanceof Error ? cause.message : '维护状态读取失败，请重新读取。'
+    error.value = cause instanceof Error ? cause.message : '维护状态读取失败，请重新读取。'; return false
   } finally { if (current === request) loading.value = false }
 }
 async function mutate(path: string, body: Record<string, unknown>, confirmation: string) {
@@ -64,10 +88,12 @@ async function mutate(path: string, body: Record<string, unknown>, confirmation:
 function run(task: Task) { return mutate('maintenance/run', { action: task.action, request_id: crypto.randomUUID() }, `申请${task.label}？该动作将经过风险检查，需要审批时会进入待办。`) }
 function review(id: string, action: string) { return mutate(`actions/${encodeURIComponent(id)}/${action}`, { reason: '管理端拒绝维护申请' }, action === 'resume' ? '批准并执行此维护任务？' : '拒绝此维护申请？') }
 function cancel(id: string) { return mutate(`maintenance/${encodeURIComponent(id)}/cancel`, {}, '请求取消此任务？已经发生的操作不会自动撤销。') }
-onMounted(() => { void load(); timer = setInterval(() => { if (!loading.value) void load() }, 10000) })
-onUnmounted(() => { ++request; if (timer) clearInterval(timer) })
+const polling = useVisiblePolling(async () => Boolean(await load()), 10000, 60000)
+onMounted(() => { void load(); polling.start() })
+onUnmounted(() => { ++request; ++evidenceRequest; polling.stop() })
 </script>
 <style scoped>
+.execution-log { white-space:pre-wrap; overflow-wrap:anywhere; font-size:12px; }
 .maintenance { padding: 20px; border: 1px solid var(--admin-border, #dce3ed); border-radius: 12px; }
 header,.actions,.approval { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
 h3 { margin:0; font-size:18px; } p,small { color:var(--admin-muted,#64748b); } small { display:block; }

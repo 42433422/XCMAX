@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import os
 import re
 from hashlib import sha256
 from typing import Any
@@ -41,8 +42,14 @@ def para_delegate_enabled() -> bool:
 
 
 def para_delegate_ready_for_dispatch() -> bool:
-    github_ready = all(_facade().os.environ.get(key, "").strip() for key in (
-        "MODSTORE_PARA_GITHUB_API_BASE", "MODSTORE_PARA_GITHUB_AUTH_TOKEN", "MODSTORE_PARA_GITHUB_DEVICE_ID"))
+    github_ready = all(
+        os.environ.get(key, "").strip()
+        for key in (
+            "MODSTORE_PARA_GITHUB_API_BASE",
+            "MODSTORE_PARA_GITHUB_AUTH_TOKEN",
+            "MODSTORE_PARA_GITHUB_DEVICE_ID",
+        )
+    )
     return bool(github_ready or _facade()._webhook_url() or _facade()._api_base())
 
 
@@ -143,7 +150,9 @@ def _build_request(
         if not re.fullmatch(r"[0-9a-f]{32}", attempt):
             raise ValueError("GitHub employee attempt identity is invalid")
         title = f"[xcmax:{sha256(request_key.encode()).hexdigest()[:32]}:{attempt}] {employee_id}"
-    workspace_root = "" if input_data.get("github_workspace") else _facade()._project_root(input_data)
+    workspace_root = (
+        "" if input_data.get("github_workspace") else _facade()._project_root(input_data)
+    )
     mode = _facade()._mode_for_employee(employee_id, input_data)
     report_only = _facade()._coerce_bool(
         input_data.get("report_only"), mode in {"review", "verify"}
@@ -330,11 +339,14 @@ def _get_para_token(
 ) -> _facade().Dict[str, str]:
     from modstore_server.cred_vault import get_credential
 
-    github_base = (_facade().os.environ.get("MODSTORE_PARA_GITHUB_API_BASE") or "").rstrip("/")
+    github_base = (os.environ.get("MODSTORE_PARA_GITHUB_API_BASE") or "").rstrip("/")
     if github_base and base == github_base:
         from modstore_server.para_github_runner import auth_headers
 
-        return {"token": auth_headers()["Authorization"].removeprefix("Bearer "), "source": "github_worker"}
+        return {
+            "token": auth_headers()["Authorization"].removeprefix("Bearer "),
+            "source": "github_worker",
+        }
 
     token = (
         get_credential(
@@ -411,20 +423,24 @@ def _git_preflight_branch(repo_url: str, branch: str) -> _facade().Dict[str, _fa
         return {"ok": True, "skipped": True}
     try:
         import subprocess
+        import tempfile
 
-        proc = subprocess.run(
-            ["git", "ls-remote", "--heads", "--exit-code", url, ref],
-            capture_output=True,
-            text=True,
-            timeout=float(_facade().os.environ.get("MODSTORE_PARA_GIT_PREFLIGHT_SEC") or "12"),
-            env={**_facade().os.environ, "GIT_TERMINAL_PROMPT": "0"},
-            check=False,
-        )
+        # The service may outlive a release directory. Git remote checks need no checkout.
+        with tempfile.TemporaryDirectory(prefix="xcagi-git-preflight-") as workdir:
+            proc = subprocess.run(
+                ["git", "ls-remote", "--heads", "--exit-code", url, ref],
+                cwd=workdir,
+                capture_output=True,
+                text=True,
+                timeout=float(os.environ.get("MODSTORE_PARA_GIT_PREFLIGHT_SEC") or "12"),
+                env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+                check=False,
+            )
         if proc.returncode != 0 or not (proc.stdout or "").strip():
             err = (proc.stderr or proc.stdout or "branch not found").strip()[:500]
             return {
                 "ok": False,
-                "error": f"Git 预检失败：远程不存在分支 {ref}（{err}）",
+                "error": f"Git 预检失败：无法访问仓库或分支 {ref}（{err}）",
                 "failure_kind": "git_prep",
             }
         return {"ok": True}
@@ -559,10 +575,13 @@ def _customer_ticket_cloud_route(input_data: dict) -> dict:
     否则保持原行为：MODSTORE_PARA_TICKET_DEVICE_ID + MODSTORE_PARA_TICKET_TOOL（默认 grok_bot）。
     """
     if input_data.get("github_workspace"):
-        device_id = (_facade().os.environ.get("MODSTORE_PARA_GITHUB_DEVICE_ID") or "").strip()
+        device_id = (os.environ.get("MODSTORE_PARA_GITHUB_DEVICE_ID") or "").strip()
         # Missing/removed configuration must never silently fall back to the Mac.
-        return {"device_id": device_id or "unconfigured-cloud-worker", "tool_name": "codex",
-                "allow_tool_fallback": "0"}
+        return {
+            "device_id": device_id or "unconfigured-cloud-worker",
+            "tool_name": "codex",
+            "allow_tool_fallback": "0",
+        }
     hops = _facade()._ticket_route_hops(input_data)
     if hops:
         return {**hops[0], "_ticket_route": hops}
@@ -1729,19 +1748,32 @@ def dispatch_para_delegate(
         from modstore_server.para_github_runner import authorized_dispatch
 
         if not authorized_dispatch(input_data, employee_id):
-            return {"handler": "para_delegate", "ok": False, "accepted": False,
-                    "queued": False, "status": "blocked_github_dispatch_identity"}
-        if input_data.get("role") == "verify" and not re.fullmatch(r"[0-9a-f]{40}", str(input_data.get("branch") or "")):
-            return {"handler": "para_delegate", "ok": False, "accepted": False,
-                    "queued": False, "status": "blocked_missing_fix_commit"}
+            return {
+                "handler": "para_delegate",
+                "ok": False,
+                "accepted": False,
+                "queued": False,
+                "status": "blocked_github_dispatch_identity",
+            }
+        if input_data.get("role") == "verify" and not re.fullmatch(
+            r"[0-9a-f]{40}", str(input_data.get("branch") or "")
+        ):
+            return {
+                "handler": "para_delegate",
+                "ok": False,
+                "accepted": False,
+                "queued": False,
+                "status": "blocked_missing_fix_commit",
+            }
     if not _facade().para_delegate_enabled():
         return {
             "handler": "para_delegate",
             "ok": False,
             "error": "MODSTORE_PARA_DELEGATE_ENABLED=0",
         }
-    if (_facade().os.environ.get("MODSTORE_MAC_CONTROL_EMPLOYEE_DISPATCH") == "1"
-            and not (input_data or {}).get("github_workspace")):
+    if _facade().os.environ.get("MODSTORE_MAC_CONTROL_EMPLOYEE_DISPATCH") == "1" and not (
+        input_data or {}
+    ).get("github_workspace"):
         from modstore_server.mac_control_delegate import accept_employee
 
         return accept_employee(task, dict(input_data or {}), employee_id)
