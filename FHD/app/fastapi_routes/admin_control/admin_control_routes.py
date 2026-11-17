@@ -307,8 +307,16 @@ def register_routes(
             ("/admin/retort-evolution", "GET", customer_tickets.admin_retort_overview),
             ("/admin/retort-evolution", "POST", customer_tickets.admin_retort_create),
             ("/admin/retort-evolution/{request_id}", "GET", customer_tickets.admin_retort_detail),
-            ("/admin/retort-evolution/{request_id}/decision", "POST", customer_tickets.admin_retort_decision),
-            ("/admin/retort-evolution/{request_id}/resume", "POST", customer_tickets.admin_retort_resume),
+            (
+                "/admin/retort-evolution/{request_id}/decision",
+                "POST",
+                customer_tickets.admin_retort_decision,
+            ),
+            (
+                "/admin/retort-evolution/{request_id}/resume",
+                "POST",
+                customer_tickets.admin_retort_resume,
+            ),
             (
                 "/admin/customer-service/github/workspace",
                 "GET",

@@ -125,13 +125,9 @@ class CustomerTickets:
         )
 
     async def admin_retort_detail(self, request: Request, request_id: UUID):
-        return await self._customer_ticket_proxy(
-            request, f"/api/retort-evolution/{request_id}"
-        )
+        return await self._customer_ticket_proxy(request, f"/api/retort-evolution/{request_id}")
 
-    async def admin_retort_decision(
-        self, request: Request, request_id: UUID, body: dict[str, Any]
-    ):
+    async def admin_retort_decision(self, request: Request, request_id: UUID, body: dict[str, Any]):
         return await self._customer_ticket_proxy(
             request,
             f"/api/retort-evolution/{request_id}/decision",
