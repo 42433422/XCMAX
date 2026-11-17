@@ -112,6 +112,32 @@ def test_refresh_all_due_sources_aggregates_then_skips_fresh(tmp_path) -> None:
     assert second["fresh"] == 2
 
 
+def test_status_reports_source_sync_health(tmp_path) -> None:
+    service = _service(tmp_path)
+    _seed(service, "kb1", "退款.md")
+    service.ingest_document(
+        dataset_id="kb1",
+        source="内联.md",
+        text="内联内容没有外部坐标。",
+        tenant_id="t1",
+        access_context=_ctx(),
+    )
+
+    before = service.status("kb1", tenant_id="t1", access_context=_ctx())["source_sync"]
+    assert before["refreshable_documents"] == 1
+    assert before["never_synced"] == 1
+    assert before["last_synced_at"] == ""
+
+    page = SimpleNamespace(text=_ORIGINAL, title="页面", url="https://docs.example.com")
+    with patch("app.application.document_parsing.web_fetch.fetch_url_text", return_value=page):
+        service.refresh_documents("kb1", tenant_id="t1", access_context=_ctx())
+
+    after = service.status("kb1", tenant_id="t1", access_context=_ctx())["source_sync"]
+    assert after["refreshable_documents"] == 1
+    assert after["never_synced"] == 0
+    assert after["last_synced_at"]
+
+
 def test_scheduler_start_stop(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("XCAGI_KB_AUTO_REFRESH_HOURS", raising=False)
     assert auto_sync_scheduler.start_auto_sync_scheduler() is False
