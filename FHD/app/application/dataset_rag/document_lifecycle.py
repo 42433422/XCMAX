@@ -250,9 +250,12 @@ class DocumentLifecycle:
                         return {"success": False, "error_code": "dataset_document_conflict"}
                 # 内容级去重（护栏）：同一租户下不同来源若是完全相同的正文，
                 # 成熟知识库会复用已有文档而不是再存一份，避免重复片段挤占召回。
+                # 仅用于纯文本/外部抓取入库；文件上传保持指纹幂等语义，避免
+                # 显式换 source / 混入内联文本时被跨来源去重吞掉（见文件幂等契约）。
                 if (
                     not allow_duplicate
                     and not requested_document_id
+                    and not file_path.strip()
                     and (version is None or str(version).strip() == "")
                 ):
                     existing = next(
