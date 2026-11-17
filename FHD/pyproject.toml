@@ -3,7 +3,7 @@ name = "xcagi"
 version = "1.0.0.7"
 description = "XCAGI - 企业 AI 员工平台（桌面版 + Web 版并行交付）"
 license = "Apache-2.0"
-requires-python = ">=3.11"
+requires-python = ">=3.11.5"
 # 运行时依赖见 optional-dependencies；CI/生产安装：requirements-server-api.txt（与 server-api extra 对齐）
 dependencies = [
     "langgraph==1.2.10",
@@ -22,6 +22,7 @@ xcagi-brain = "app.cli.brain:main"
 # 默认不安装；安装后由 XCAGI_DOC_PARSER=auto 自动启用。
 doc-parsing = [
     "docling>=2.0.0",
+    "soupsieve>=4,<5",
 ]
 # 意图语义兜底：FastEmbed 走 ONNX，不依赖 torch；未安装时自动降级为纯规则。
 intent-semantic = [
