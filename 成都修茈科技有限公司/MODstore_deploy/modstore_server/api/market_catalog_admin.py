@@ -1,8 +1,10 @@
 """Admin catalog listing and review; shares status predicates across filters and KPIs."""
 
+from typing import cast
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import and_, func, or_
+from sqlalchemy import and_, func, or_, update
 
 from modstore_server.api.deps import require_admin
 from modstore_server.duty_roster import employee_partition_meta
@@ -101,7 +103,7 @@ def api_admin_list_catalog(
                     "author_id": r.author_id,
                     "author_name": authors.get(int(r.author_id)) if r.author_id else "",
                     "created_at": r.created_at.isoformat() if r.created_at else "",
-                    **employee_partition_meta(r.pkg_id, r.artifact),
+                    **employee_partition_meta(cast(str, r.pkg_id), cast(str, r.artifact)),
                 }
                 for r in rows
             ],
@@ -125,28 +127,35 @@ def api_admin_review_catalog_item(
         if not item:
             raise HTTPException(404, "商品不存在")
         note = (body.note or "").strip()
+        updates: dict[str, str | bool | float]
         if action == "approve":
-            item.compliance_status = "approved"
-            item.is_public = True
-            item.delist_reason = ""
+            updates = {"compliance_status": "approved", "is_public": True, "delist_reason": ""}
         elif action == "restrict":
-            item.compliance_status = "restricted"
-            item.rank_score = max(0.0, float(item.rank_score or 100.0) - 30.0)
-            item.delist_reason = note
+            updates = {
+                "compliance_status": "restricted",
+                "rank_score": max(0.0, float(item.rank_score or 100.0) - 30.0),
+                "delist_reason": note,
+            }
         elif action == "delist":
-            item.compliance_status = "delisted"
-            item.is_public = False
-            item.delist_reason = note or "管理员下架"
-            item.rank_score = 0.0
+            updates = {
+                "compliance_status": "delisted",
+                "is_public": False,
+                "delist_reason": note or "管理员下架",
+                "rank_score": 0.0,
+            }
         else:
             from modstore_server.catalog_store import market_item_available
 
             if not market_item_available(item):
                 raise HTTPException(409, "商品文件或模板内容缺失，请修复发布记录后再恢复上架")
-            item.compliance_status = "approved"
-            item.is_public = True
-            item.delist_reason = ""
-            item.rank_score = max(float(item.rank_score or 0), 80.0)
+            updates = {
+                "compliance_status": "approved",
+                "is_public": True,
+                "delist_reason": "",
+                "rank_score": max(float(item.rank_score or 0), 80.0),
+            }
+        # Use the ORM's typed update API; legacy model attributes are Column descriptors.
+        session.execute(update(CatalogItem).where(CatalogItem.id == item_id).values(**updates))
         session.commit()
         result = {
             "ok": True,
