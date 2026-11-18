@@ -7,10 +7,10 @@ import os
 import threading
 import time
 from datetime import UTC, datetime, timedelta
-from typing import Any
 
-from sqlalchemy import column, func, table, update
+from sqlalchemy import func, update
 
+from app.db.models.elt import EltRun
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -18,20 +18,13 @@ logger = logging.getLogger(__name__)
 _INTERVAL_SECONDS = 30.0
 _STARTED_LOCK = threading.Lock()
 _STARTED = False
-_BATCH_KINDS = ("batch_execute", "batch_rollback")
-_ACTIVE_STATUSES = ("previewing", "executing")
-_RUNS: Any = table(
-    "elt_runs",
-    column("status"),
-    column("stage"),
-    column("error_code"),
-    column("error_message"),
-    column("operation_kind"),
-    column("operation_token"),
-    column("operation_lease_until"),
-    column("updated_at"),
-    column("target_type"),
-)
+_RUNS = EltRun.__table__
+_RELEASED = {
+    "operation_kind": None,
+    "operation_token": None,
+    "operation_lease_until": None,
+    "updated_at": func.current_timestamp(),
+}
 
 
 def stale_after_seconds() -> float:
@@ -42,59 +35,46 @@ def stale_after_seconds() -> float:
         return 900.0
 
 
-def _cutoff(seconds: float) -> datetime:
-    return datetime.now(UTC).replace(tzinfo=None) - timedelta(seconds=seconds)
-
-
-def _release(values: dict[str, Any]) -> dict[str, Any]:
-    return {
-        **values,
-        "operation_kind": None,
-        "operation_token": None,
-        "operation_lease_until": None,
-        "updated_at": func.current_timestamp(),
-    }
-
-
 def sweep_stale_runs() -> int:
     """把长时间无更新的进行态运行标为可重试，并释放租约。"""
     from app.db import get_engine
 
-    engine = get_engine()
-    cutoff = _cutoff(stale_after_seconds())
-    external_batch = _RUNS.c.operation_kind.in_(_BATCH_KINDS) & (_RUNS.c.target_type != "abnormal")
-    active = _RUNS.c.status.in_(_ACTIVE_STATUSES) & (_RUNS.c.updated_at <= cutoff)
+    runs = _RUNS.c
+    external = runs.operation_kind.in_(("batch_execute", "batch_rollback")) & (
+        runs.target_type != "abnormal"
+    )
+    cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(seconds=stale_after_seconds())
+    active = runs.status.in_(("previewing", "executing")) & (runs.updated_at <= cutoff)
+    sweeps = (
+        (
+            external,
+            "outcome_unknown",
+            "ELT_OUTCOME_UNKNOWN",
+            "外部批处理长时间无进展，结果无法确认，请核对后人工处理",
+        ),
+        (
+            ~external,
+            "interrupted",
+            "ELT_EXECUTION_INTERRUPTED",
+            "长时间没有进展，已停止等待；未写入业务数据，请重新导入",
+        ),
+    )
+    total = 0
     try:
-        with engine.begin() as connection:
-            unknown = connection.execute(
-                update(_RUNS)
-                .where(active, external_batch)
-                .values(
-                    **_release(
-                        {
-                            "status": "outcome_unknown",
-                            "stage": "outcome_unknown",
-                            "error_code": "ELT_OUTCOME_UNKNOWN",
-                            "error_message": "外部批处理长时间无进展，结果无法确认，请核对后人工处理",
-                        }
+        with get_engine().begin() as connection:
+            for where, status, code, message in sweeps:
+                result = connection.execute(
+                    update(_RUNS)
+                    .where(active, where)
+                    .values(
+                        status=status,
+                        stage=status,
+                        error_code=code,
+                        error_message=message,
+                        **_RELEASED,
                     )
                 )
-            )
-            interrupted = connection.execute(
-                update(_RUNS)
-                .where(active, ~external_batch)
-                .values(
-                    **_release(
-                        {
-                            "status": "interrupted",
-                            "stage": "interrupted",
-                            "error_code": "ELT_EXECUTION_INTERRUPTED",
-                            "error_message": "长时间没有进展，已停止等待；未写入业务数据，请重新导入",
-                        }
-                    )
-                )
-            )
-            total = int(unknown.rowcount or 0) + int(interrupted.rowcount or 0)
+                total += int(result.rowcount or 0)
     except RECOVERABLE_ERRORS:
         logger.exception("ELT 无进展运行回收失败")
         return 0
