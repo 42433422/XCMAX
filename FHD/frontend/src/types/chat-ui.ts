@@ -3,6 +3,7 @@ import type { AgentRunTraceData } from '@/utils/agentRunTraceModel'
 import type { AgentStepView } from '@/utils/agentStepChain'
 import type { ChatTraceItem } from '@/composables/chat-orchestration/chatOrchestrationShared'
 import type { ChatModelRoute } from '@/utils/chatModelRoute'
+import type { ChatStatus } from 'ai'
 
 export interface ChatExecutionProgressItem {
   phase: string
@@ -66,6 +67,8 @@ export interface UiChatMessage {
   }>
   contextSummary?: string
   streamingShell?: boolean
+  /** 请求生命周期独立于正文是否已经开始输出；仅当前会话使用，不落库。 */
+  streamStatus?: ChatStatus
   /** Heartbeat / idle copy while the shell is still waiting for visible text. */
   waitingHint?: string
   toolProgressLabel?: string

@@ -1,9 +1,10 @@
 import { resolvePlannerChatStreamPath } from '@/utils/plannerChatPaths'
+import { createParser } from 'eventsource-parser'
 import type { ChatTraceItem } from '@/composables/chat-orchestration/chatOrchestrationShared'
 
 export type PlannerSseEvent =
   | { type: 'route_metadata'; route_metadata: unknown }
-  /** 正文之前的工具执行轨迹（附件工件取数），由气泡「本轮执行」展示 */
+  /** 正文之前的工具执行轨迹（附件工件取数），由气泡「附件读取」展示 */
   | { type: 'trace'; items?: ChatTraceItem[]; turn_id?: string }
   | { type: 'model_activity' }
   /** 即时思考说明：执行线程在规划/审批/执行节点推来的过程文本 */
@@ -12,7 +13,7 @@ export type PlannerSseEvent =
   | { type: 'tool_progress'; label?: string; text?: string; phase?: string; run_id?: string }
   | {
       type: 'tool_call'
-      phase?: 'started' | 'finished'
+      phase?: 'started' | 'progress' | 'finished'
       node_id?: string
       tool_id?: string
       action?: string
@@ -23,6 +24,10 @@ export type PlannerSseEvent =
       error?: string
       retries?: number
       recovery_hint?: string
+      label?: string
+      progress?: number
+      processed_rows?: number
+      total_rows?: number
     }
   | { type: 'done'; result?: unknown }
   | { type: 'error'; result?: unknown; message?: string; status_code?: number; run_id?: string; route_metadata?: unknown; execution_outcome?: string; requires_reconciliation?: boolean }
@@ -32,18 +37,6 @@ export class IncompletePlannerSseError extends Error {
   constructor() {
     super('连接提前结束，尚未收到完成回执。请核对原任务状态，勿重复提交可能已执行的操作。')
     this.name = 'IncompletePlannerSseError'
-  }
-}
-
-function parseSseDataLine(line: string): PlannerSseEvent | null {
-  const s = line.trim()
-  if (!s.startsWith('data:')) return null
-  const jsonStr = s.slice(5).trim()
-  if (!jsonStr) return null
-  try {
-    return JSON.parse(jsonStr) as PlannerSseEvent
-  } catch {
-    return null
   }
 }
 
@@ -57,40 +50,32 @@ export async function readPlannerSseResponse(response: Response, onEvent: (ev: P
   signal?.addEventListener('abort', abort, { once: true })
   if (signal?.aborted) abort()
   const decoder = new TextDecoder()
-  let buffer = ''
   let terminalError = false
   let completed = false
-  const emitLine = (line: string) => {
-    const ev = parseSseDataLine(line)
-    if (ev) {
+  const parser = createParser({
+    onEvent: ({ data }) => {
+      if (terminalError || !data.trim()) return
+      let ev: PlannerSseEvent
+      try { ev = JSON.parse(data) as PlannerSseEvent } catch { return }
+      if (!ev || typeof ev.type !== 'string') return
       terminalError = ev.type === 'error'
       // The backend may end with an explicit authorization pause. Progress
       // after either receipt still requires a new terminal event before EOF.
       completed = ev.type === 'done' || ev.type === 'requires_token'
       onEvent(ev)
-    }
-    return terminalError
-  }
+    },
+  })
   try {
     while (true) {
       const { done, value } = await reader.read()
       if (signal?.aborted) throw new DOMException('请求已中断', 'AbortError')
       if (done) break
-      buffer += decoder.decode(value, { stream: true })
-      const parts = buffer.split('\n\n')
-      buffer = parts.pop() || ''
-      for (const part of parts) {
-        for (const line of part.split('\n')) {
-          if (emitLine(line)) return
-        }
-      }
+      parser.feed(decoder.decode(value, { stream: true }))
+      if (terminalError) return
     }
-    buffer += decoder.decode()
-    if (buffer.trim()) {
-      for (const line of buffer.split('\n')) {
-        if (emitLine(line)) return
-      }
-    }
+    // Retain the legacy endpoint's final event without a trailing separator.
+    parser.feed(decoder.decode() + '\n\n')
+    if (terminalError) return
     if (!completed) throw new IncompletePlannerSseError()
   } finally {
     signal?.removeEventListener('abort', abort)

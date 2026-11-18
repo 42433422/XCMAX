@@ -1,37 +1,64 @@
 <template>
-  <details v-if="rows.length" class="chat-turn-trace" data-testid="chat-turn-trace">
-    <summary class="chat-turn-trace__summary">
-      <span class="chat-turn-trace__title">本轮执行</span>
-      <span class="chat-turn-trace__count">{{ rows.length }} 项</span>
-      <i class="fa fa-angle-down chat-turn-trace__chevron" aria-hidden="true"></i>
-    </summary>
-    <ul class="chat-turn-trace__list">
-      <li
-        v-for="(row, index) in rows"
-        :key="`${row.tool}-${index}`"
-        class="chat-turn-trace__item"
-        :class="row.ok ? 'is-ok' : 'is-fail'"
-      >
-        <div class="chat-turn-trace__head">
-          <span class="chat-turn-trace__dot" :class="row.ok ? 'is-ok' : 'is-fail'" aria-hidden="true"></span>
-          <span class="chat-turn-trace__tool">{{ row.tool }}</span>
-          <span class="chat-turn-trace__ms">{{ row.ms }} ms</span>
-        </div>
-        <pre v-if="row.argsText" class="chat-turn-trace__args">{{ row.argsText }}</pre>
-        <p v-if="row.summary" class="chat-turn-trace__note">{{ row.summary }}</p>
-      </li>
-    </ul>
-  </details>
+  <Trace v-if="rows.length" class="chat-turn-trace" data-testid="chat-turn-trace">
+    <TraceCollapsible>
+      <TraceCollapsibleTrigger class="chat-turn-trace__summary">
+        <TraceLine>
+          <TraceIcon><i class="fa fa-paperclip"></i></TraceIcon>
+          <TraceTitle>附件读取</TraceTitle>
+          <TraceDescription>{{ rows.length }} 次</TraceDescription>
+        </TraceLine>
+      </TraceCollapsibleTrigger>
+      <TraceCollapsibleContent>
+        <ul class="chat-turn-trace__list">
+          <li v-for="(row, index) in rows" :key="`${row.tool}-${index}`" class="chat-turn-trace__item">
+            <TraceCollapsible>
+              <TraceCollapsibleTrigger class="chat-turn-trace__head">
+                <TraceLine :status="row.ok ? undefined : 'error'" class="chat-turn-trace__line">
+                  <TraceIcon><i class="fa" :class="row.ok ? 'fa-check-circle' : 'fa-times-circle'"></i></TraceIcon>
+                  <TraceTitle>{{ row.title }}</TraceTitle>
+                  <TraceDescription class="chat-turn-trace__ms">{{ row.ms }} ms</TraceDescription>
+                  <span class="sr-only">{{ row.ok ? '已完成' : '失败' }}</span>
+                </TraceLine>
+              </TraceCollapsibleTrigger>
+              <TraceCollapsibleContent>
+                <div class="chat-turn-trace__detail">
+                  <code>{{ row.tool }}</code>
+                  <pre v-if="row.argsText" class="chat-turn-trace__args">{{ row.argsText }}</pre>
+                  <p v-if="row.summary" class="chat-turn-trace__note">{{ row.summary }}</p>
+                </div>
+              </TraceCollapsibleContent>
+            </TraceCollapsible>
+          </li>
+        </ul>
+      </TraceCollapsibleContent>
+    </TraceCollapsible>
+  </Trace>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { ChatTraceItem } from '@/composables/chat-orchestration/chatOrchestrationShared'
+import {
+  Trace,
+  TraceCollapsible,
+  TraceCollapsibleContent,
+  TraceCollapsibleTrigger,
+  TraceDescription,
+  TraceIcon,
+  TraceLine,
+  TraceTitle,
+} from '@/components/ui/trace'
 
 const props = defineProps<{ items: ChatTraceItem[] }>()
 
 /** 单个参数值最长展示 120 字，避免长文件路径/表格内容撑爆气泡。 */
 const ARG_VALUE_LIMIT = 120
+const ATTACHMENT_TOOL_LABELS: Record<string, string> = {
+  list_attachments: '读取附件清单',
+  describe_attachment: '查看文件结构',
+  read_slice: '读取表格内容',
+  read_text: '读取文件内容',
+}
 
 function truncateArgValues(value: unknown): unknown {
   if (typeof value === 'string') {
@@ -39,9 +66,7 @@ function truncateArgValues(value: unknown): unknown {
   }
   if (Array.isArray(value)) return value.map(truncateArgValues)
   if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([key, item]) => [key, truncateArgValues(item)]),
-    )
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, item]) => [key, truncateArgValues(item)]))
   }
   return value
 }
@@ -49,11 +74,10 @@ function truncateArgValues(value: unknown): unknown {
 const rows = computed(() =>
   (props.items || []).map((item) => ({
     tool: item.tool,
+    title: ATTACHMENT_TOOL_LABELS[item.tool] || item.tool,
     ok: item.ok !== false,
     ms: Number.isFinite(item.ms) ? item.ms : 0,
-    argsText: item.args && Object.keys(item.args).length
-      ? JSON.stringify(truncateArgValues(item.args), null, 2)
-      : '',
+    argsText: item.args && Object.keys(item.args).length ? JSON.stringify(truncateArgValues(item.args), null, 2) : '',
     summary: String(item.summary || ''),
   })),
 )
@@ -62,93 +86,47 @@ const rows = computed(() =>
 <style scoped>
 .chat-turn-trace {
   margin: 6px 0;
-  border: 1px solid var(--app-border-subtle, #e5e7eb);
-  border-radius: 6px;
-  font-size: var(--app-font-size-caption, 12px);
-  color: var(--app-text-muted, #6b7280);
 }
-
+.chat-turn-trace__summary,
+.chat-turn-trace__head,
+.chat-turn-trace__line {
+  width: 100%;
+}
 .chat-turn-trace__summary {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  cursor: pointer;
-  list-style: none;
-  user-select: none;
+  padding: 2px 0;
 }
-
-.chat-turn-trace__summary::-webkit-details-marker {
-  display: none;
-}
-
-.chat-turn-trace[open] .chat-turn-trace__chevron {
-  transform: rotate(180deg);
-}
-
-.chat-turn-trace__title {
-  color: var(--app-text-primary, #333333);
-}
-
-.chat-turn-trace__chevron {
-  margin-left: auto;
-  transition: transform 0.15s ease;
-}
-
-.chat-turn-trace__list {
-  margin: 0;
-  padding: 0 8px 6px;
-  list-style: none;
-}
-
-.chat-turn-trace__item + .chat-turn-trace__item {
-  margin-top: 6px;
-  border-top: 1px dashed var(--app-border-subtle, #e5e7eb);
-  padding-top: 6px;
-}
-
-.chat-turn-trace__head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.chat-turn-trace__dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #166534;
-  flex: none;
-}
-
-.chat-turn-trace__dot.is-fail {
-  background: #991b1b;
-}
-
-.chat-turn-trace__tool {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-
+.chat-turn-trace__summary :deep(.xc-trace-chevron),
 .chat-turn-trace__ms {
   margin-left: auto;
-  opacity: 0.8;
 }
-
+.chat-turn-trace__list {
+  margin: 4px 0 0;
+  padding: 0 0 0 12px;
+  list-style: none;
+}
+.chat-turn-trace__item {
+  padding: 3px 0;
+}
+.chat-turn-trace__detail {
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--app-surface-muted, #f8fafc);
+}
 .chat-turn-trace__args {
   margin: 4px 0 0;
-  padding: 4px 6px;
   max-height: 180px;
   overflow: auto;
-  border-radius: 4px;
-  background: var(--app-surface-muted, rgba(255, 255, 255, 0.04));
-  font-size: var(--app-font-size-caption, 12px);
+  font:
+    11px/1.5 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
   white-space: pre-wrap;
-  word-break: break-all;
+  overflow-wrap: anywhere;
 }
-
 .chat-turn-trace__note {
   margin: 4px 0 0;
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 </style>

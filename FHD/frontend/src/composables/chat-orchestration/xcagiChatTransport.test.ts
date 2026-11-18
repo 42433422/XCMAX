@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { UIMessageChunk } from 'ai'
+import { useAiSdkChatRound } from './useAiSdkChatRound'
+import { stepsFromAiParts, type AgentStepView } from '@/utils/agentStepChain'
+import type { PlannerSseEvent } from '@/utils/chatSseStream'
 import { createXcagiChatTransport } from './xcagiChatTransport'
 
 const { sendChatStream } = vi.hoisted(() => ({ sendChatStream: vi.fn() }))
@@ -76,5 +79,50 @@ describe('xcagiChatTransport trace event', () => {
 
     const legacy = createXcagiChatTransport({})
     await expect(drain(await legacy.sendMessages({ body: {} }))).resolves.toBeInstanceOf(Array)
+  })
+})
+
+
+describe('native AI SDK tool stream', () => {
+  it('renders both tools and updates an earlier parallel tool before the result arrives', async () => {
+    let writer!: ReadableStreamDefaultController<Uint8Array>
+    const body = new ReadableStream<Uint8Array>({ start(controller) { writer = controller } })
+    sendChatStream.mockResolvedValueOnce({ ok: true, body } as Response)
+    const emit = (event: PlannerSseEvent) => writer.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`))
+    let steps: AgentStepView[] = []
+    let settled = false
+    const round = useAiSdkChatRound({ onMessage: message => { steps = stepsFromAiParts(message.parts) } })
+    const result = round.send({ message: '导入文件' }).finally(() => { settled = true })
+    emit({ type: 'tool_call', phase: 'started', node_id: 'import', tool_id: 'elt_import', action: 'preview' })
+    emit({ type: 'tool_call', phase: 'started', node_id: 'lookup', tool_id: 'crm', action: 'query' })
+    await vi.waitFor(() => expect(steps.map(step => step.state)).toEqual(['running', 'running']))
+    emit({ type: 'tool_call', phase: 'progress', node_id: 'import', tool_id: 'elt_import', label: '校验销售明细', progress: 35, processed_rows: 7, total_rows: 20 })
+    await vi.waitFor(() => expect(steps[0]).toMatchObject({ id: 'import', action: 'preview', hint: '校验销售明细', progress: 35, processedRows: 7, totalRows: 20 }))
+    expect(settled).toBe(false)
+    expect(round.text.value).toBe('')
+    emit({ type: 'tool_call', phase: 'finished', node_id: 'lookup', success: true, output_preview: '2 个客户' })
+    emit({ type: 'tool_call', phase: 'finished', node_id: 'import', success: false, error: '缺少数量字段', recovery_hint: '补充数量后继续', duration_ms: 400 })
+    emit({ type: 'token', text: '请补充数量字段。' })
+    emit({ type: 'done', result: { success: false } })
+    writer.close()
+    expect(await result).toMatchObject({ text: '请补充数量字段。', error: null, aborted: false })
+    expect(steps).toHaveLength(2)
+    expect(steps[0]).toMatchObject({ state: 'failed', error: '缺少数量字段', hint: '补充数量后继续', durationMs: 400 })
+    expect(steps[1]).toMatchObject({ state: 'success', output: '2 个客户' })
+  })
+
+  it('lets the SDK replace a retried tool and supports receipt-only replay', async () => {
+    const events: PlannerSseEvent[] = [
+      { type: 'tool_call', phase: 'finished', node_id: 'n1', tool_id: 'excel', action: 'read', success: false, error: '暂时失败' },
+      { type: 'tool_call', phase: 'started', node_id: 'n1', tool_id: 'excel', action: 'read', retries: 1 },
+      { type: 'tool_call', phase: 'finished', node_id: 'n1', success: true, output_preview: '20 行', retries: 1 },
+      { type: 'done' },
+    ]
+    sendChatStream.mockResolvedValueOnce(sseResponse(events.map(event => JSON.stringify(event))))
+    let steps: AgentStepView[] = []
+    const result = await useAiSdkChatRound({ onMessage: message => { steps = stepsFromAiParts(message.parts) } }).send({})
+    expect(result.error).toBeNull()
+    expect(steps).toHaveLength(1)
+    expect(steps[0]).toMatchObject({ state: 'success', error: undefined, retries: 1, output: '20 行' })
   })
 })

@@ -65,6 +65,7 @@ export function createXcagiChatTransport(options: XcagiChatTransportOptions) {
     return new ReadableStream<UIMessageChunk>({
       async start(controller) {
         let seq = 0
+        const toolCalls = new Set<string>()
         controller.enqueue({ type: 'start' })
         controller.enqueue({ type: 'start-step' })
         controller.enqueue({ type: 'text-start', id: TEXT_ID })
@@ -73,7 +74,7 @@ export function createXcagiChatTransport(options: XcagiChatTransportOptions) {
             response,
             (event) => {
               seq += 1
-              applyEvent(controller, event, seq)
+              applyEvent(controller, event, seq, toolCalls)
             },
             signal,
           )
@@ -101,6 +102,7 @@ export function createXcagiChatTransport(options: XcagiChatTransportOptions) {
     controller: ReadableStreamDefaultController<UIMessageChunk>,
     event: PlannerSseEvent,
     seq: number,
+    toolCalls: Set<string>,
   ): void {
     options.onEvent?.(event, seq)
     if (event.type === 'token') {
@@ -110,7 +112,28 @@ export function createXcagiChatTransport(options: XcagiChatTransportOptions) {
       return
     }
     if (event.type === 'tool_progress') {
-      controller.enqueue({ type: 'data-tool-progress', data: event })
+      controller.enqueue({ type: 'data-run-progress', id: 'run-progress', data: event })
+      return
+    }
+    if (event.type === 'tool_call') {
+      const id = String(event.node_id || '').trim()
+      if (!id) return
+      // Compatibility ends here: the SDK owns each tool's input/output state.
+      // A reconnect can begin with progress or a receipt, so seed its input once.
+      if (event.phase === 'started' || !toolCalls.has(id)) {
+        controller.enqueue({
+          type: 'tool-input-available', toolCallId: id,
+          toolName: [event.tool_id || 'tool', event.action].filter(Boolean).join('.'),
+          input: event.params || {}, dynamic: true,
+        })
+        toolCalls.add(id)
+      }
+      controller.enqueue({ type: 'data-tool-progress', id, data: event })
+      if (event.phase === 'finished') {
+        controller.enqueue(event.success
+          ? { type: 'tool-output-available', toolCallId: id, output: event.output_preview || '' }
+          : { type: 'tool-output-error', toolCallId: id, errorText: event.error || '工具执行失败' })
+      }
       return
     }
     if (event.type === 'route_metadata') {

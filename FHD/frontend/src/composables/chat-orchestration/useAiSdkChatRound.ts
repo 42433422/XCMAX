@@ -8,6 +8,8 @@ export interface AiSdkChatRoundOptions {
   onEvent?: (event: PlannerSseEvent, seq: number) => void
   onTrace?: (items: ChatTraceItem[], seq: number) => void
   onText?: (text: string) => void
+  /** SDK 原生工具状态和 data parts；没有新增正文时也会更新。 */
+  onMessage?: (message: XcagiUIMessage) => void
 }
 
 export interface AiSdkChatRoundResult {
@@ -64,6 +66,7 @@ export function useAiSdkChatRound(options: AiSdkChatRoundOptions) {
           if (!streamError) streamError = error
         },
       })) {
+        options.onMessage?.(message)
         const value = textFromMessage(message)
         if (value === finalText) continue
         finalText = value

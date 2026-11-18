@@ -8,8 +8,10 @@ import multiprocessing
 import os
 import shutil
 import tempfile
+import threading
 import time
 from contextlib import contextmanager, nullcontext
+from contextvars import copy_context
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -18,6 +20,73 @@ from typing import Any, cast
 import psutil
 
 from app.utils.operational_errors import BOUNDARY_ERRORS
+
+_STREAM_FRAME_LIMIT = 256 * 1024
+
+
+@contextmanager
+def _worker_stream(connection):
+    """Restore observation scope across spawn; the OS pipe bounds queued bytes."""
+    if connection is None:
+        yield
+        return
+    from app.infrastructure.chat_stream_lifetime import StreamLifetime, current_lifetime
+
+    lifetime = StreamLifetime()
+    lock = threading.Lock()
+
+    def send(kind, value):
+        encoded = json.dumps(
+            {"kind": kind, "value": value}, allow_nan=False, default=_json_scalar
+        ).encode("utf-8")
+        if len(encoded) > _STREAM_FRAME_LIMIT:
+            raise ValueError("tool stream frame exceeds transport limit")
+        # Never pickle a tool-controlled object. A slow receiver may apply
+        # backpressure, but the caller still reaps this process at its deadline.
+        with lock:
+            connection.send_bytes(encoded)
+
+    lifetime.observe_notes(lambda value: send("note", value))
+    lifetime.observe_deltas(lambda value: send("delta", value))
+    lifetime.observe_tools(lambda *, sequence, record: send("tool", record))
+    token = current_lifetime.set(lifetime)
+    try:
+        yield lambda: send("end", lifetime.reason == "tool_receipt_persistence_failed")
+    finally:
+        current_lifetime.reset(token)
+
+
+def _relay_stream(connection, lifetime, drained, failed, stopped):
+    """Deliver in order without letting an observer disable process deadlines."""
+    publishers = {
+        "note": (str, lifetime.publish_note),
+        "delta": (str, lifetime.publish_delta),
+        "tool": (dict, lifetime.publish_tool_record),
+    }
+    try:
+        while not stopped.is_set():
+            event = json.loads(connection.recv_bytes(_STREAM_FRAME_LIMIT))
+            if isinstance(event, dict) and event.get("kind") == "end":
+                if not isinstance(event.get("value"), bool):
+                    raise ValueError("invalid tool stream completion")
+                if event["value"]:
+                    failed.set()
+                break
+            if not isinstance(event, dict) or event.get("kind") not in publishers:
+                raise ValueError("invalid tool stream event")
+            value_type, publish = publishers[event["kind"]]
+            if not isinstance(event.get("value"), value_type):
+                raise ValueError("invalid tool stream value")
+            if not stopped.is_set():
+                publish(event["value"])
+    except BOUNDARY_ERRORS:
+        if not stopped.is_set():
+            failed.set()
+            logging.getLogger(__name__).warning("tool stream receipt failed", exc_info=True)
+    finally:
+        connection.close()
+        lifetime.worker_finished()
+        drained.set()
 
 
 def dump_tool_output(output: dict) -> str:
@@ -133,6 +202,7 @@ def _worker(
     llm_scope=None,
     catalog_profile=None,
     catalog_claim=None,
+    stream_connection=None,
 ):
     from app.application.agent_orchestrator.run_models import agent_step_from_dict
     from app.application.tool_execution_deadline import invocation_deadline
@@ -166,6 +236,7 @@ def _worker(
         return
     route_metadata: dict[str, str | int] = {}
     worker_client: tuple[Any, str] | None = None
+    finish_stream = None
 
     def restore_llm_scope():
         nonlocal worker_client
@@ -214,6 +285,7 @@ def _worker(
             restore_catalog_claim(catalog_claim),
             invocation_deadline(deadline) as budget,
             llm_client_factory_scope(restore_llm_scope) if llm_scope is not None else nullcontext(),
+            _worker_stream(stream_connection) as finish_stream,
         ):
             try:
                 output = executor_type().execute(
@@ -255,6 +327,18 @@ def _worker(
         )
         done.set()
     finally:
+        if stream_connection is not None:
+            try:
+                # A forked descendant can retain this FD. An ordered end frame
+                # drains our events without waiting for every descendant's EOF.
+                if finish_stream is not None:
+                    finish_stream()
+                else:
+                    stream_connection.send_bytes(b'{"kind":"end","value":false}')
+            except OSError:
+                pass  # The parent already records an interrupted/missing receipt.
+            finally:
+                stream_connection.close()
         # Keep ancestry intact until the parent has reaped tool-created children.
         start.clear()
         start.wait()
@@ -393,6 +477,7 @@ def _bind_worker_business_db(url: str, *, bind_workflow_db: bool = False) -> boo
 
 
 def execute_isolated(executor, step, context, deadline) -> dict[str, Any]:
+    from app.infrastructure.chat_stream_lifetime import current_lifetime
     from app.infrastructure.llm.client import capture_worker_llm_scope, record_worker_route_metadata
 
     try:
@@ -427,6 +512,10 @@ def execute_isolated(executor, step, context, deadline) -> dict[str, Any]:
     catalog_claim = capture_worker_claim() if catalog_profile is not None else None
     ctx = multiprocessing.get_context("spawn")
     ready, start, done = (ctx.Event() for _ in range(3))
+    lifetime = current_lifetime.get()
+    receiver, sender = ctx.Pipe(duplex=False) if lifetime is not None else (None, None)
+    drained, failed, stopped = (threading.Event() for _ in range(3))
+    relay = None
     folder = tempfile.mkdtemp(prefix="xcagi-tool-")
     llm_scope = capture_worker_llm_scope(context)
     process = ctx.Process(
@@ -442,6 +531,7 @@ def execute_isolated(executor, step, context, deadline) -> dict[str, Any]:
             llm_scope,
             catalog_profile,
             catalog_claim,
+            sender,
         ),
     )
     armed = False
@@ -449,14 +539,43 @@ def execute_isolated(executor, step, context, deadline) -> dict[str, Any]:
     result = {}
     try:
         process.start()
+        if sender is not None and lifetime is not None:
+            sender.close()  # Only the spawned child may keep the write endpoint alive.
+            lifetime.worker_started()
+            relay = threading.Thread(
+                target=copy_context().run,
+                args=(_relay_stream, receiver, lifetime, drained, failed, stopped),
+                daemon=True,
+                name="tool-stream-relay",
+            )
+            try:
+                relay.start()
+            except RuntimeError:
+                relay = None
+                lifetime.worker_finished()
+                raise
         if ready.wait(max(0, deadline - time.monotonic())) and time.monotonic() < deadline:
             armed = True
             start.set()
             if done.wait(max(0, deadline - time.monotonic())):
                 result = json.loads(Path(folder, "result").read_text(encoding="utf-8"))
+                if (
+                    relay is not None and not drained.wait(max(0, deadline - time.monotonic()))
+                ) or failed.is_set():
+                    result["output"] = {
+                        "outcome": "unknown",
+                        "error_code": "tool_stream_receipt_failed",
+                        "retryable": False,
+                        "reconciliation_evidence": result["output"],
+                    }
     except (OSError, RuntimeError, ValueError) as exc:
         logging.getLogger(__name__).warning("tool worker boundary failed: %s", type(exc).__name__)
     finally:
+        stopped.set()
+        if sender is not None:
+            sender.close()
+        if receiver is not None and relay is None:
+            receiver.close()
         if process.pid is not None:
             try:
                 clean = _reap(process)

@@ -189,7 +189,7 @@ class _StreamNoteQueue:
         self._lock = threading.Lock()
 
     def push(self, note: str) -> None:
-        text = str(note or "").strip()
+        text = str(note or "")
         if not text:
             return
         with self._lock:

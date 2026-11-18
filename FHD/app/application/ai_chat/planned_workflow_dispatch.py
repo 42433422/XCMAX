@@ -7,6 +7,7 @@ import uuid
 from typing import TYPE_CHECKING, Any, Protocol
 
 from app.application.ai_chat.excel_import_policy import _enrich_confirmation_inner
+from app.application.ai_chat.workflow_session import workflow_run_note
 
 if TYPE_CHECKING:
     from app.application.agent_orchestrator.run_models import AgentRun
@@ -367,7 +368,7 @@ class PlannedWorkflowDispatch:
                 runtime_context=runtime_ctx,
                 auto_execute=True,
             )
-            publish_stream_note("执行完成，正在整理结果…")
+            publish_stream_note(workflow_run_note(agent_run.status))
             if agent_run.status != "waiting_user":
                 return self.callbacks._format_agent_run_response(
                     plan, agent_run, thinking_steps=thinking_steps, user_message=str(message or "")

@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  applyToolCallEvent,
   buildLiveStep,
   chainDurationMs,
   chainState,
@@ -78,53 +77,6 @@ describe('withLiveStep', () => {
   it('已有终态步骤时追加新的进行中步骤', () => {
     const steps = stepsFromNodeResults([{ node_id: 'n', success: true, tool_id: 'x', action: 'y' }])
     expect(withLiveStep(steps, buildLiveStep('正在执行任务'))).toHaveLength(2)
-  })
-})
-
-describe('applyToolCallEvent', () => {
-  it('started 事件新增一个执行中步骤', () => {
-    const steps = applyToolCallEvent([], { phase: 'started', node_id: 'n1', tool_id: 'excel', action: 'write' })
-    expect(steps).toHaveLength(1)
-    expect(steps[0]).toMatchObject({ id: 'n1', title: '表格', subtitle: '写入', state: 'running' })
-  })
-
-  it('finished 事件按 node_id 原地更新为成功', () => {
-    let steps = applyToolCallEvent([], { phase: 'started', node_id: 'n1', tool_id: 'excel', action: 'write' })
-    steps = applyToolCallEvent(steps, {
-      phase: 'finished',
-      node_id: 'n1',
-      tool_id: 'excel',
-      action: 'write',
-      success: true,
-      duration_ms: 420,
-      output_preview: '已写入 3 行',
-    })
-    expect(steps).toHaveLength(1)
-    expect(steps[0]).toMatchObject({ state: 'success', durationMs: 420, output: '已写入 3 行' })
-  })
-
-  it('finished 失败事件保留错误与建议', () => {
-    const steps = applyToolCallEvent([], {
-      phase: 'finished',
-      node_id: 'n2',
-      tool_id: 'business_db',
-      action: 'write',
-      success: false,
-      error: '唯一约束冲突',
-      recovery_hint: '改用更新动作',
-      retries: 1,
-    })
-    expect(steps[0]).toMatchObject({ state: 'failed', error: '唯一约束冲突', hint: '改用更新动作', retries: 1 })
-  })
-
-  it('多个节点按到达顺序累积', () => {
-    let steps = applyToolCallEvent([], { phase: 'started', node_id: 'a', tool_id: 'x', action: 'query' })
-    steps = applyToolCallEvent(steps, { phase: 'started', node_id: 'b', tool_id: 'y', action: 'read' })
-    expect(steps.map((s) => s.id)).toEqual(['a', 'b'])
-  })
-
-  it('缺少 node_id 的事件被忽略', () => {
-    expect(applyToolCallEvent([], { phase: 'started', tool_id: 'x' })).toEqual([])
   })
 })
 
