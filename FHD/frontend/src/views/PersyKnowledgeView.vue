@@ -427,6 +427,14 @@
                   <span :class="{ memory: isMemoryChunk(chunk) }"> {{ isMemoryChunk(chunk) ? 'M' : 'K' }}{{ index + 1 }} </span>
                   <strong>{{ normalizeChunkSource(chunk) }}</strong>
                   <em>{{ formatScore(chunk.score) }}</em>
+                  <button
+                    v-if="!isMemoryChunk(chunk) && chunk.metadata?.document_id"
+                    type="button"
+                    class="evidence-open"
+                    @click="openRecallChunk(chunk)"
+                  >
+                    原文
+                  </button>
                 </header>
                 <p>{{ chunk.text }}</p>
               </article>
@@ -671,6 +679,14 @@ const {
 function openDocument(doc: KnowledgeBaseDocument): void {
   selectDocument(doc)
   void openSourceChunks(doc)
+}
+
+function openRecallChunk(chunk: { source?: string; metadata?: Record<string, unknown> }): void {
+  const documentId = String(chunk.metadata?.document_id || '')
+  if (!documentId) return
+  inspectorTab.value = 'chunks'
+  mobileInspectorOpen.value = true
+  void openSourceChunks({ document_id: documentId, source: chunk.source || documentId })
 }
 
 // selectNode / selectMemory 与 usePersyMemoryGovernance 互为初始化依赖，保留在此（与拆分前同为提升函数声明）

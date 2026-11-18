@@ -297,6 +297,21 @@ describe('PersyKnowledgeView', () => {
     expect(wrapper.get('.ask-dock__synonym-actions').text()).toContain('已保存 2 组术语')
   })
 
+  it('opens the original document chunks from an evidence row', async () => {
+    const wrapper = await mountKnowledge()
+    await wrapper.get('input[aria-label="向 Persy 提问"]').setValue('续约流程')
+    await wrapper.get('.ask-dock').trigger('submit')
+    await flushPromises()
+
+    await wrapper.get('.evidence-open').trigger('click')
+    await flushPromises()
+
+    expect(mocks.documentChunks).toHaveBeenCalledWith('persy-knowledge', 'doc-1', {
+      limit: 50,
+    })
+    expect(wrapper.get('.chunk-panel').text()).toContain('续约需要财务审批。')
+  })
+
   it('shows recorded knowledge gaps for an empty recall', async () => {
     mocks.query.mockResolvedValueOnce({
       success: true,

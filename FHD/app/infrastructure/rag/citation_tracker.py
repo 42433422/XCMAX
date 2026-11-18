@@ -25,6 +25,7 @@ class Citation:
     char_range: tuple[int, int]
     source_url: str = ""
     page: int | None = None
+    document_id: str = ""
 
 
 class CitationTracker:
@@ -63,6 +64,7 @@ class CitationTracker:
                         char_range=(c.char_start, c.char_end),
                         source_url=c.source_url,
                         page=c.page,
+                        document_id=str((c.metadata or {}).get("document_id") or ""),
                     )
                 )
 

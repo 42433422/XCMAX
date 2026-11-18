@@ -783,7 +783,7 @@
 
 .evidence-list header {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 7px;
 }
@@ -816,6 +816,16 @@
   color: #7b8881;
   font-size: 10px;
   font-style: normal;
+}
+
+.evidence-open {
+  padding: 1px 7px;
+  border: 1px solid #ccd7d2;
+  border-radius: 5px;
+  background: #ffffff;
+  color: #27352f;
+  font-size: 10px;
+  cursor: pointer;
 }
 
 .evidence-list p {

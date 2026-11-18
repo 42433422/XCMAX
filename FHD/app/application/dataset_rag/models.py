@@ -202,6 +202,7 @@ def _citation_to_dict(citation: Citation) -> dict[str, Any]:
         "char_range": list(citation.char_range),
         "source_url": citation.source_url,
         "page": citation.page,
+        "document_id": citation.document_id,
     }
 
 

@@ -160,6 +160,10 @@ export interface KnowledgeBaseCitation {
   text?: string
   chunk_index?: number
   score?: number
+  char_range?: number[]
+  source_url?: string
+  page?: number | null
+  document_id?: string
 }
 
 export interface KnowledgeBaseQueryPayload {
