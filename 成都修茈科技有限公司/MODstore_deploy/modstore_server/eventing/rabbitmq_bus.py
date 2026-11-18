@@ -34,11 +34,14 @@ import logging
 import os
 import socket
 import threading
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from modstore_server.eventing.bus import InMemoryNeuroBus
 from modstore_server.eventing.events import DomainEvent
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
+if TYPE_CHECKING:
+    from pika.adapters.blocking_connection import BlockingChannel, BlockingConnection
 
 logger = logging.getLogger(__name__)
 
@@ -85,8 +88,8 @@ class RabbitMqNeuroBus(InMemoryNeuroBus):
     def __init__(self) -> None:
         super().__init__()
         self._amqp_url = _default_amqp_url()
-        self._connection = None
-        self._channel = None
+        self._connection: BlockingConnection | None = None
+        self._channel: BlockingChannel | None = None
         self._queue_name = _queue_name()
         self._consumer_tag: str | None = None
         self._consumer_thread: threading.Thread | None = None
@@ -172,9 +175,9 @@ class RabbitMqNeuroBus(InMemoryNeuroBus):
                 on_message_callback=self._on_message,
                 auto_ack=True,
             )
-            while not self._stop_event.is_set():
+            while not self._stop_event.is_set() and (connection := self._connection) is not None:
                 try:
-                    self._connection.process_data_events(time_limit=1.0)
+                    connection.process_data_events(time_limit=1.0)
                 except RECOVERABLE_ERRORS:
                     if self._stop_event.is_set():
                         break
@@ -319,7 +322,7 @@ class RabbitMqNeuroBus(InMemoryNeuroBus):
                 self._channel.basic_publish(
                     exchange=_EXCHANGE,
                     routing_key=event.event_name,
-                    body=body,
+                    body=body.encode("utf-8"),
                     properties=pika.BasicProperties(
                         delivery_mode=2,
                         content_type="application/json",
