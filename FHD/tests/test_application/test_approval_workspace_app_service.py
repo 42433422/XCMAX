@@ -2136,6 +2136,16 @@ class TestDeleteRequest:
             mock_db.delete.assert_called_once_with(req)
 
 
+@pytest.fixture
+def platform_admin(monkeypatch):
+    """Authorize service behavior tests; HTTP security tests use persisted sessions."""
+    monkeypatch.setattr(
+        "app.application.approval_workspace_app_service.require_admin_user",
+        lambda request: SimpleNamespace(id=1),
+    )
+
+
+@pytest.mark.usefixtures("platform_admin")
 class TestGetApprovalUsers:
     def test_with_user_model(self):
         mock_db = MagicMock()
@@ -2161,7 +2171,7 @@ class TestGetApprovalUsers:
             ),
             patch("app.db.models.User", MockUser, create=True),
         ):
-            result = get_approval_users()
+            result = get_approval_users(Mock())
             assert result["success"] is True
             assert len(result["data"]) == 1
             assert result["data"][0]["id"] == 1
@@ -2183,11 +2193,12 @@ class TestGetApprovalUsers:
             ),
             patch("app.application.get_product_app_service", return_value=mock_product_svc),
         ):
-            result = get_approval_users()
+            result = get_approval_users(Mock())
             assert result["success"] is True
             assert "data" in result
 
 
+@pytest.mark.usefixtures("platform_admin")
 class TestCheckApproverOrphan:
     def test_no_orphan(self):
         mock_db = MagicMock()
@@ -2202,7 +2213,7 @@ class TestCheckApproverOrphan:
 
         with patch("app.application.approval_workspace_app_service.get_db") as mock_get_db:
             mock_get_db.return_value = _make_db_ctx(mock_db)
-            result = check_approver_orphan(99)
+            result = check_approver_orphan(99, Mock())
             assert result["success"] is True
             assert result["is_orphan_in_active_flows"] is False
 
@@ -2222,19 +2233,20 @@ class TestCheckApproverOrphan:
 
         with patch("app.application.approval_workspace_app_service.get_db") as mock_get_db:
             mock_get_db.return_value = _make_db_ctx(mock_db)
-            result = check_approver_orphan(99)
+            result = check_approver_orphan(99, Mock())
             assert result["success"] is True
             assert result["is_orphan_in_active_flows"] is True
             assert len(result["orphan_flows"]) == 1
 
 
+@pytest.mark.usefixtures("platform_admin")
 class TestProcessApprovalTimeoutsEndpoint:
     def test_success(self):
         with patch(
             "app.application.workflow.approval_service.process_approval_timeouts"
         ) as mock_pt:
             mock_pt.return_value = {"success": True, "timed_out": 0}
-            result = process_approval_timeouts_endpoint()
+            result = process_approval_timeouts_endpoint(Mock())
             assert result.status_code == 200
 
     def test_failure(self):
@@ -2242,7 +2254,7 @@ class TestProcessApprovalTimeoutsEndpoint:
             "app.application.workflow.approval_service.process_approval_timeouts"
         ) as mock_pt:
             mock_pt.return_value = {"success": False, "message": "error"}
-            result = process_approval_timeouts_endpoint()
+            result = process_approval_timeouts_endpoint(Mock())
             assert result.status_code == 500
 
 
@@ -2305,6 +2317,7 @@ class TestGetFlowDetail:
             assert result.status_code == 404
 
 
+@pytest.mark.usefixtures("platform_admin")
 class TestCreateFlow:
     def test_invalid_flow_payload_raises_400(self):
         request = Mock()
@@ -2448,6 +2461,7 @@ class TestCreateFlow:
             assert result["success"] is True
 
 
+@pytest.mark.usefixtures("platform_admin")
 class TestUpdateFlow:
     def test_not_found(self):
         request = Mock()
@@ -2488,6 +2502,7 @@ class TestUpdateFlow:
             mock_db.commit.assert_called()
 
 
+@pytest.mark.usefixtures("platform_admin")
 class TestToggleFlowActive:
     def test_not_found(self):
         request = Mock()
@@ -2549,6 +2564,7 @@ class TestToggleFlowActive:
             assert result["is_active"] is False
 
 
+@pytest.mark.usefixtures("platform_admin")
 class TestDeleteFlow:
     def test_not_found(self):
         request = Mock()
@@ -2580,6 +2596,7 @@ class TestDeleteFlow:
         mock_count_query = MagicMock()
         mock_db.query.return_value = mock_count_query
         mock_count_query.filter.return_value = mock_count_query
+        mock_count_query.execution_options.return_value = mock_count_query
         mock_count_query.count.return_value = 3
 
         with (
@@ -2613,6 +2630,7 @@ class TestDeleteFlow:
         flow_query.first.return_value = flow
 
         count_query.filter.return_value = count_query
+        count_query.execution_options.return_value = count_query
         count_query.count.return_value = 0
 
         with (

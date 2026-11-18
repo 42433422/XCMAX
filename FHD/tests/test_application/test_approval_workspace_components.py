@@ -103,8 +103,9 @@ def test_roster_fallback_uses_the_public_product_query(monkeypatch):
 
     monkeypatch.setattr(service, "get_db", session)
     monkeypatch.setattr(application, "get_product_app_service", lambda: products)
+    monkeypatch.setattr(service, "require_admin_user", lambda request: SimpleNamespace(id=1))
 
-    result = service.get_approval_users()
+    result = service.get_approval_users(MagicMock())
 
     assert result == {
         "success": True,

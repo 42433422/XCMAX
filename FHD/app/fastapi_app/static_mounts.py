@@ -14,6 +14,85 @@ from app.utils.path_io.path_utils import get_base_dir, resolve_fhd_repo_root
 
 logger = logging.getLogger(__name__)
 
+# The dashboard shares a repository root with runtime data and credentials.
+# Keep this finite list aligned with the nginx dashboard location; a directory
+# or extension wildcard would publish unrelated files added there later.
+_DASHBOARD_FILES = frozenset(
+    {
+        "XCAGI-Full-Pipeline.html",
+        "XCAGI-Five-Line.html",
+        "tree-worker.js",
+        "six_line_employee_map.json",
+        "xcmax-pytest-coverage.json",
+        "FHD/metrics/coverage-dual-summary.json",
+        "FHD/docs/evidence/m0-evidence-manifest.json",
+    }
+    | {
+        "docs/xcagi-dashboard/" + name
+        for name in (
+            "admin-tokens.css",
+            "dashboard.css",
+            "api-base.js",
+            "app.js",
+            "arch-graph-draw.js",
+            "daily_digest_node_employees.json",
+            "employee_labels_zh.json",
+            "emp-wf-action-items.js",
+            "emp-wf-node-staff.js",
+            "emp-wf-pan-zoom.js",
+            "emp-wf-radial-graph.js",
+            "emp-wf-stage-artifacts.js",
+            "emp-wf-surface-audit.js",
+            "event-arch-graph.js",
+            "event-merged-arch-graph.js",
+            "event-rail-ui.js",
+            "event-workflow-snake.js",
+            "mon-ai-biz.js",
+            "mon-live-dash.js",
+            "mon-m0-evidence.js",
+            "time_rail_workflow_graph.json",
+            "tree-worker.js",
+            "vendor/dagre.min.js",
+            "xcagi-dashboard-sot.js",
+        )
+    }
+    | {
+        f".cache/xcmax/xcmax-{name}.json"
+        for name in (
+            "tree-data",
+            "step-employee-coverage",
+            "line-coverage",
+            "path-employee-coverage",
+            "pytest-coverage",
+        )
+    }
+    | {
+        f"FHD/config/{name}.json"
+        for name in ("release_train", "six_line_event_routes", "six_line_employee_map")
+    }
+    | {
+        f"FHD/docs/evidence/slo/grafana-{kind}-m0-{name}-202606.png"
+        for kind in ("local", "staging")
+        for name in ("api-availability", "db-mod-sqlite-copies", "ai-chat-p95", "neurobus-delivery")
+    }
+    | {
+        f"FHD/docs/evidence/mod/{name}.png"
+        for name in ("01-listing", "02-store-page", "03-payment", "04-activated")
+    }
+)
+
+
+class _DashboardStaticFiles(StaticFiles):
+    def lookup_path(self, path: str) -> tuple[str, os.stat_result | None]:
+        if path not in _DASHBOARD_FILES:
+            return "", None
+        candidate = os.path.join(str(self.directory), path)
+        # StaticFiles confines symlinks to its root. Here the root also contains
+        # private files, so even a symlink *within* that root must be rejected.
+        if os.path.realpath(candidate) != candidate:
+            return "", None
+        return super().lookup_path(path)
+
 
 def _note_missing_dist(message: str, directory: str) -> None:
     """开发服由 Vite 提供页面，缺生产 dist 时不记警告。"""
@@ -51,6 +130,7 @@ def mount_xcmax_dashboard_static(app: FastAPI) -> None:
         logger.warning("xcmax-dashboard 目录未找到，跳过挂载（需 XCAGI-Full-Pipeline.html 于仓根）")
         return
     try:
+        dashboard = _DashboardStaticFiles(directory=os.path.realpath(directory))
 
         def xcmax_dashboard_pytest_coverage_compat():
             for rel in (
@@ -58,8 +138,8 @@ def mount_xcmax_dashboard_static(app: FastAPI) -> None:
                 "xcmax-pytest-coverage.json",
                 "FHD/metrics/coverage-dual-summary.json",
             ):
-                path = os.path.join(directory, rel)
-                if os.path.isfile(path):
+                path, info = dashboard.lookup_path(rel)
+                if info is not None and os.path.isfile(path):
                     return FileResponse(path, media_type="application/json")
             return JSONResponse(
                 {
@@ -83,7 +163,7 @@ def mount_xcmax_dashboard_static(app: FastAPI) -> None:
 
         app.mount(
             "/xcmax-dashboard",
-            StaticFiles(directory=directory, html=True),
+            dashboard,
             name="xcmax_dashboard",
         )
         logger.info("Mounted xcmax-dashboard: /xcmax-dashboard -> %s", directory)

@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from datetime import UTC, datetime
@@ -27,6 +28,7 @@ from modstore_server.eventing.contracts import EVENT_CONTRACTS
 from modstore_server.infrastructure.db import get_db
 from modstore_server.llm_crypto import encrypt_secret, fernet_configured, mask_api_key
 from modstore_server.models import User, WebhookDelivery, WebhookSubscription
+from modstore_server.openapi_connector_runtime import OutboundBlocked, pin_url_outbound_safe
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +120,15 @@ def _encrypt_secret_or_reject(secret: str) -> str:
     return encrypt_secret(secret)
 
 
+async def _validate_target_url(url: str) -> str:
+    url = url.strip()
+    try:
+        await asyncio.to_thread(pin_url_outbound_safe, url)
+    except (OutboundBlocked, OSError, ValueError) as exc:
+        raise HTTPException(400, "target_url 必须是安全的公网 HTTP(S) 链接") from exc
+    return url
+
+
 @router.get("/event-catalog", summary="可订阅的业务事件清单")
 async def list_event_catalog():
     """提供给前端展示可订阅事件的字典；与 ``eventing.contracts`` 单一真相源。"""
@@ -139,14 +150,13 @@ async def create_subscription(
     db: Session = Depends(get_db),
     user: User = Depends(_get_current_user),
 ):
-    if not (body.target_url.startswith("http://") or body.target_url.startswith("https://")):
-        raise HTTPException(400, "target_url 必须是 http(s) 链接")
+    target_url = await _validate_target_url(body.target_url)
     enabled = body.enabled_events or ["*"]
     row = WebhookSubscription(
         user_id=user.id,
         name=body.name.strip(),
         description=(body.description or "").strip(),
-        target_url=body.target_url.strip(),
+        target_url=target_url,
         secret_encrypted=_encrypt_secret_or_reject((body.secret or "").strip()),
         enabled_events_json=json.dumps(enabled, ensure_ascii=False),
         is_active=bool(body.is_active),
@@ -213,9 +223,7 @@ async def update_subscription(
     if body.description is not None:
         row.description = body.description.strip()
     if body.target_url is not None:
-        if not (body.target_url.startswith("http://") or body.target_url.startswith("https://")):
-            raise HTTPException(400, "target_url 必须是 http(s) 链接")
-        row.target_url = body.target_url.strip()
+        row.target_url = await _validate_target_url(body.target_url)
     if body.secret is not None:
         row.secret_encrypted = _encrypt_secret_or_reject(body.secret.strip())
     if body.enabled_events is not None:
@@ -272,7 +280,17 @@ async def list_deliveries(
     if status:
         q = q.filter(WebhookDelivery.status == status.strip().lower())
     rows = q.order_by(WebhookDelivery.started_at.desc()).limit(limit).offset(offset).all()
-    return [_serialize_delivery(r) for r in rows]
+    deliveries = []
+    for row in rows:
+        try:
+            event = json.loads(row.request_body or "{}")
+        except (TypeError, ValueError):
+            continue
+        # Legacy fanout rows may belong to this subscription but contain another
+        # account's event; preserve the audit row without exposing its payload.
+        if webhook_dispatcher._event_user_id(event) == user.id:
+            deliveries.append(_serialize_delivery(row))
+    return deliveries
 
 
 @router.post(
@@ -310,6 +328,8 @@ async def retry_delivery(
     except json.JSONDecodeError as exc:
         raise HTTPException(500, f"原始事件 JSON 损坏: {exc}") from exc
 
+    if webhook_dispatcher._event_user_id(event) != user.id:
+        raise HTTPException(403, "事件不属于当前用户")
     webhook_dispatcher._deliver_event_to_subscription(db, sub, event)
     db.commit()
     new_row = (

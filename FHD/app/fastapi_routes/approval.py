@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from app.application import approval_workspace_app_service as svc
 from app.fastapi_routes.domains.shipment import routes as tool_rules
 
-router = APIRouter(prefix="/api/approval", tags=["approval"])
+router = APIRouter(
+    prefix="/api/approval", tags=["approval"], dependencies=[Depends(svc.get_logged_in_user)]
+)
 
 router.add_api_route("/requests", svc.list_requests, methods=["GET"])
 router.add_api_route("/requests/cleanup", svc.cleanup_requests, methods=["POST"])

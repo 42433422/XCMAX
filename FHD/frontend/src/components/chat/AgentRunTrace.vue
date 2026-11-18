@@ -98,6 +98,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { escapeHtml } from '@/utils'
 import type {
   AgentRunTraceData,
   TracePhase,
@@ -314,7 +315,7 @@ async function renderMermaid() {
     const { svg } = await mermaid.render(id, source)
     mermaidSvg.value = svg
   } catch (error) {
-    mermaidSvg.value = `<div class="mermaid-fail">流程图解析失败：${(error as Error)?.message || error}</div>`
+    mermaidSvg.value = `<div class="mermaid-fail">流程图解析失败：${escapeHtml((error as Error)?.message || error)}</div>`
   }
 }
 
