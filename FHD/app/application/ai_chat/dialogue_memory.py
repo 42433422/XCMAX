@@ -84,6 +84,7 @@ def prepare_chat_turn(message: str, context: Mapping[str, Any] | None) -> dict[s
         turn_lock = _turn_lock(key, turn_id) if turn_id else None
         if turn_lock is not None:
             turn_lock.acquire(timeout=0)
+        persisted = False
         try:
             _append_user(data, text, turn_id, context)
             if turn_id:
@@ -93,10 +94,10 @@ def prepare_chat_turn(message: str, context: Mapping[str, Any] | None) -> dict[s
                     "at": time.time(),
                 }
             _write(key, data)
-        except BaseException:
-            if turn_lock is not None:
+            persisted = True
+        finally:
+            if not persisted and turn_lock is not None:
                 turn_lock.release()
-            raise
         if turn_lock is not None:
             _INFLIGHT[turn_lock.lock_file] = turn_lock
         return None
