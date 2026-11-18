@@ -29,6 +29,10 @@ intent-semantic = [
     "semantic-router>=1.1,<2",
     "fastembed>=0.7",
 ]
+# 主动提醒外发渠道（可选）：Apprise 负责飞书/钉钉/邮件等轻量 fanout（BSD-2）。
+proactive-push = [
+    "apprise>=1.12,<2",
+]
 server-api = [
     "fastapi>=0.136.1",
     "uvicorn[standard]>=0.27.0",

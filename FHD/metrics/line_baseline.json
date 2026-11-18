@@ -1,5 +1,5 @@
 {
-  "lines": 2453835,
+  "lines": 2454200,
   "updated": "2026-11-18",
-  "note": "写操作 diff/撤销与仓库技能：新增 write_preview 120 行、skill_registry 100 行及对应测试 150 行，规划规则接入与能力中心页面更新，合计净增 212 行；未删除无关代码。由用户要求复用成熟格式并全部提交。"
+  "note": "主动提醒：新增事件去重/outbox/Apprise 投递服务 141 行、CLI 与测试 47 行，合计净增 153 行（本 PR 累计 365 行）；Apprise 为可选 extra，不进入 server-api 默认安装。由用户选择站内+Apprise 方案。"
 }
