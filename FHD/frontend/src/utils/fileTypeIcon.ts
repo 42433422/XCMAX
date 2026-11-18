@@ -27,22 +27,30 @@ const KIND_SAMPLE_FILES: Record<string, string> = {
 export function fileIconName(filename: string, kind = ''): string {
   const name = String(filename || '').trim()
   const sample = KIND_SAMPLE_FILES[String(kind || '').trim().toLowerCase()] || ''
-  const target = name || sample
-  const icon = (target ? getIconForFile(target) : '') || DEFAULT_FILE
+  const namedIcon = name ? getIconForFile(name) : ''
+  const hasExtension = /\.[^./\\]+$/.test(name)
+  const icon = ((!name || (!hasExtension && (!namedIcon || namedIcon === DEFAULT_FILE))) && sample
+    ? getIconForFile(sample)
+    : namedIcon) || DEFAULT_FILE
   return `${VSCODE_PREFIX}${icon.replace(/\.svg$/i, '').replace(/_/g, '-')}`
 }
 
-let collection: Promise<void> | null = null
+let collection: Promise<boolean> | null = null
 
 /** 首次渲染文件图标时加载完整 VS Code 图标集；重复调用只加载一次。 */
-export function ensureFileTypeIcons(): Promise<void> {
+export function ensureFileTypeIcons(): Promise<boolean> {
   if (!collection) {
     collection = import('@iconify-json/vscode-icons/icons.json')
       .then((mod) => {
         const data = (mod as { default?: unknown }).default ?? mod
-        addCollection(data as Parameters<typeof addCollection>[0])
+        const added = addCollection(data as Parameters<typeof addCollection>[0])
+        if (!added) collection = null
+        return added
       })
-      .catch(() => undefined)
+      .catch(() => {
+        collection = null
+        return false
+      })
   }
   return collection
 }

@@ -21,3 +21,10 @@ describe('fileIconName', () => {
     expect(fileIconName('')).toBe('vscode-icons:default-file')
   })
 })
+
+it('uses kind for extensionless display names without overriding recognized names', () => {
+  expect(fileIconName('季度报告', 'excel')).toBe('vscode-icons:file-type-excel')
+  expect(fileIconName('下载文件', 'pdf')).toBe('vscode-icons:file-type-pdf')
+  expect(fileIconName('dockerfile', 'text')).toBe('vscode-icons:file-type-docker')
+  expect(fileIconName('report.pdf', 'excel')).toBe('vscode-icons:file-type-pdf')
+})

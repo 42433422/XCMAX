@@ -341,7 +341,8 @@ const props = defineProps<{
 const downloadFileName = computed(() => {
   const url = String(props.currentTask?.downloadUrl || '')
   const path = url.split(/[?#]/)[0]
-  return decodeURIComponent(path.split('/').pop() || '')
+  const name = path.split('/').pop() || ''
+  try { return decodeURIComponent(name) } catch { return name }
 })
 const emit = defineEmits<{
   'refresh-tasks': []
