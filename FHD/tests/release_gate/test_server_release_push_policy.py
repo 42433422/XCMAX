@@ -2,10 +2,12 @@ import hashlib
 import json
 import os
 import subprocess
+import tomllib
 from pathlib import Path
 
 import pytest
 import yaml
+from packaging.requirements import Requirement
 
 FHD_ROOT = Path(__file__).resolve().parents[2]
 REPO_ROOT = FHD_ROOT.parent
@@ -62,6 +64,22 @@ def test_server_release_bundles_and_bootstraps_vendored_langgraph() -> None:
     assert "xcagi_vendored_langgraph.pth" in apply and "_xcagi_root=next" in apply
     assert "assert_vendored_sources" in apply
     assert "FHD_SERVICE_PYTHON" in apply
+
+
+@pytest.mark.parametrize("name", ["jsonschema", "referencing"])
+def test_tarball_forced_runtime_pins_workflow_schema_dependencies(name: str) -> None:
+    requirements = {
+        item.name: item
+        for line in (FHD_ROOT / "ops/deploy/requirements-langgraph-runtime.txt")
+        .read_text(encoding="utf-8")
+        .splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+        for item in [Requirement(line)]
+    }
+    lock = tomllib.loads((FHD_ROOT / "uv.lock").read_text(encoding="utf-8"))
+    locked_versions = {item["version"] for item in lock["package"] if item["name"] == name}
+    assert len(locked_versions) == 1
+    assert str(requirements[name].specifier) == f"=={locked_versions.pop()}"
 
 
 def test_server_release_archive_strips_macos_extended_attributes() -> None:

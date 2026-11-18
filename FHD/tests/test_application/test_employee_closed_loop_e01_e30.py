@@ -1020,3 +1020,47 @@ def test_live_run_rejects_use_after_teardown() -> None:
     with pytest.raises(RuntimeError, match="after fixture teardown"):
         run.require()
     assert not held.exists()
+
+
+def test_live_run_keeps_spawn_worker_importable(monkeypatch, tmp_path) -> None:
+    import multiprocessing
+
+    # Collection imports other projects with their own tests package. Spawn must
+    # resolve this suite even though the parent already cached its real module.
+    foreign = tmp_path / "foreign"
+    package = foreign / "tests" / "fixtures"
+    package.mkdir(parents=True)
+    (package.parent / "__init__.py").write_text("")
+    (package / "__init__.py").write_text("")
+    monkeypatch.syspath_prepend(str(foreign))
+    run = ClosedLoopRun()
+    process = multiprocessing.get_context("spawn").Process(target=_now)
+    try:
+        run.open_resources()
+        process.start()
+        process.join(timeout=15)
+        assert process.exitcode == 0
+    finally:
+        if process.is_alive():
+            process.terminate()
+            process.join(timeout=5)
+        run.close()
+
+
+def test_failed_live_run_does_not_leave_a_deleted_database_registered() -> None:
+    from app.application.agent_orchestrator.task_execution_repository import locate_task_execution
+    from app.application.agent_orchestrator.task_execution_sql_repository import (
+        SQLAlchemyTaskExecutionRepository,
+    )
+
+    run = ClosedLoopRun()
+    try:
+        book = run.open_resources()
+        # A failure traceback can retain this queue after its database is removed.
+        retained = SQLAlchemyTaskExecutionRepository(session_factory=sessionmaker(bind=book.engine))
+        with pytest.raises(RuntimeError, match="failed setup"):
+            raise RuntimeError("failed setup")
+    finally:
+        run.close()
+    assert retained is not None
+    assert locate_task_execution("after-failed-closed-loop") == (None, None)
