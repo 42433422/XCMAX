@@ -104,17 +104,19 @@ class OpenAISdkProvider:
         )
         iterator = iter(stream)
         reasoning: list[str] = []
-        while True:
-            chunk = await asyncio.to_thread(next, iterator, None)
-            if chunk is None:
-                break
-            reasoning_text = _chunk_delta_reasoning(chunk)
-            if reasoning_text:
-                reasoning.append(reasoning_text)
-            text = _chunk_delta_text(chunk)
-            if text:
-                yield text
-        publish_reasoning("".join(reasoning))
+        try:
+            while True:
+                chunk = await asyncio.to_thread(next, iterator, None)
+                if chunk is None:
+                    break
+                reasoning_text = _chunk_delta_reasoning(chunk)
+                if reasoning_text:
+                    reasoning.append(reasoning_text)
+                text = _chunk_delta_text(chunk)
+                if text:
+                    yield text
+        finally:
+            publish_reasoning("".join(reasoning))
 
 
 def _chunk_delta_text(chunk: Any) -> str:
