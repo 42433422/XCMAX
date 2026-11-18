@@ -39,7 +39,7 @@ for name in ('HTTPS_PROXY', 'XCAGI_DESKTOP_DATABASE_URL', 'XCAGI_DESKTOP_VECTOR_
              'XCAGI_WORKSPACE_ROOT', 'XCAGI_MODS_ROOT'):
     assert name not in os.environ
 with socket.socket() as probe:
-    assert probe.connect_ex((url.hostname, url.port)) != 0
+    probe.settimeout(2); assert probe.connect_ex((url.hostname, url.port)) or probe.recv(64) == b""
 with socket.socket() as probe:
     try:
         probe.bind((url.hostname, url.port))

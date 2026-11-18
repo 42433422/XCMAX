@@ -145,7 +145,8 @@ class MarketHTTP:
                     request_headers = dict(headers)
                     if mutating:
                         try:
-                            await client.get(f"{api_base}/api/csrf")
+                            # Cap prefetch; a dead market must not overrun the login deadline.
+                            await client.get(f"{api_base}/api/csrf", timeout=min(timeout, 3.0))
                             csrf = client.cookies.get("csrf_token")
                             if csrf:
                                 request_headers["X-CSRF-Token"] = csrf
