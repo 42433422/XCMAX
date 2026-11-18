@@ -1,5 +1,5 @@
 {
-  "lines": 2453605,
+  "lines": 2453813,
   "updated": "2026-11-18",
-  "note": "修复 macOS 桌面 e2e 市场占位端口挂起与登录超时被前端中断；净增 3 行（2 行注释 + 1 行变更日志）"
+  "note": "新增模型推理持久化：provider 边界收集 reasoning_content 并经既有 thinking 事件写入消息 thinkingSteps，新增 reasoning_stream.py 约 40 行、测试约 90 行、provider/adapter 改动约 80 行；用户（账号所有者）在对话中明确要求开启 reasoning 持久化并批准实现。"
 }
