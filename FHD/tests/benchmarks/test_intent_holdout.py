@@ -100,13 +100,14 @@ def test_build_confusion_matrix_counts_expected_predicted():
 
 
 def test_predicted_domain_mapping():
-    assert runner._predicted_domain({}, {"tool_key": "materials"}) == "inventory"
-    assert runner._predicted_domain({}, {"tool_key": "shipment_generate"}) == "sales"
-    assert runner._predicted_domain({}, {"tool_key": None, "primary_intent": None}) == "unknown"
-    assert runner._predicted_domain({}, {"tool_key": "nonexistent_tool"}) == "unknown"
-    assert runner._predicted_domain({"check": "greeting"}, {"tool_key": None}) == "greeting"
-    assert runner._predicted_domain({"expect_negated": True}, {"is_negated": True}) == "rejection"
-    assert runner._predicted_domain({"expect_negated": True}, {}) == "unknown"
+    assert runner._predicted_domain({"tool_key": "materials"}) == "inventory"
+    assert runner._predicted_domain({"tool_key": "shipment_generate"}) == "sales"
+    assert runner._predicted_domain({"tool_key": None, "primary_intent": None}) == "unknown"
+    assert runner._predicted_domain({"tool_key": "nonexistent_tool"}) == "unknown"
+    assert runner._predicted_domain({"is_greeting": True}) == "greeting"
+    assert runner._predicted_domain({"is_negated": True}) == "rejection"
+    assert runner._predicted_domain({}) == "unknown"
+    assert runner._predicted_domain({"is_negated": True, "tool_key": "wechat_send"}) == "wechat"
 
 
 def test_domain_accuracy_and_round_agreement():

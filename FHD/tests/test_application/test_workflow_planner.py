@@ -12,6 +12,7 @@ from app.application.workflow.planner import (
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, validate_plan_graph
 from app.services.tools_execution.registry import get_workflow_tool_registry as get_tool_registry
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+from tests.fixtures.planner_model import goal_review_response
 
 # ========================= get_tool_registry =============================
 
@@ -61,9 +62,17 @@ def test_planner_repairs_workflow_output_without_nodes():
             }
         ),
     ]
-    completion = Mock(
-        side_effect=[{"choices": [{"message": {"content": text}}]} for text in replies]
-    )
+    responses = iter(replies)
+
+    def scripted_completion(**kwargs):
+        payload = json.loads(kwargs["messages"][1]["content"])
+        if payload.get("task") == "audit_goal_coverage":
+            return goal_review_response(
+                payload, source="查询产品 A1", node_ids=["n1"], outcome="execute"
+            )
+        return {"choices": [{"message": {"content": next(responses)}}]}
+
+    completion = Mock(side_effect=scripted_completion)
     planner = LLMWorkflowPlanner(
         ai_service=Mock(get_context=Mock(return_value=None)), completion=completion
     )
@@ -72,7 +81,7 @@ def test_planner_repairs_workflow_output_without_nodes():
 
     assert plan is not None
     assert [node.tool_id for node in plan.nodes] == ["products"]
-    assert completion.call_count == 2
+    assert completion.call_count == 3
 
 
 def test_planner_does_not_mix_global_history_into_an_explicit_conversation():
@@ -154,7 +163,15 @@ def test_employee_discovery_uses_verified_actor_and_replaces_client_catalog(
     captured = {}
     ai = Mock()
     ai.get_context.return_value = None
-    planner = LLMWorkflowPlanner(ai_service=ai)
+    planner = LLMWorkflowPlanner(
+        ai_service=ai,
+        completion=lambda **kwargs: goal_review_response(
+            json.loads(kwargs["messages"][1]["content"]),
+            source="介绍报表处理方式",
+            node_ids=["reply"],
+            outcome="reply",
+        ),
+    )
 
     def model(plan_id, user_id, message, registry, context):
         captured.update(context)
@@ -175,7 +192,7 @@ def test_employee_discovery_uses_verified_actor_and_replaces_client_catalog(
     monkeypatch.setattr(planner, "_plan_with_llm", model)
     planner.plan(
         "77",
-        "请处理报表",
+        "介绍报表处理方式",
         get_tool_registry(),
         context={**actor.context, "available_employees": [{"employee_id": "forged-worker"}]},
     )
@@ -185,7 +202,7 @@ def test_employee_discovery_uses_verified_actor_and_replaces_client_catalog(
     captured.clear()
     planner.plan(
         "untrusted",
-        "请处理报表",
+        "介绍报表处理方式",
         get_tool_registry(),
         context={"available_employees": [{"employee_id": "forged-worker"}]},
     )
@@ -324,7 +341,12 @@ class TestPlanWithLLM:
         captured = {}
 
         def completion(**kwargs):
-            captured.update(json.loads(kwargs["messages"][1]["content"]))
+            payload = json.loads(kwargs["messages"][1]["content"])
+            if payload.get("task") == "audit_goal_coverage":
+                return goal_review_response(
+                    payload, source="你好", node_ids=["model_reply"], outcome="reply"
+                )
+            captured.update(payload)
             return {
                 "choices": [
                     {
@@ -370,7 +392,12 @@ class TestPlanWithLLM:
         captured = {}
 
         def completion(**kwargs):
-            captured.update(json.loads(kwargs["messages"][1]["content"]))
+            payload = json.loads(kwargs["messages"][1]["content"])
+            if payload.get("task") == "audit_goal_coverage":
+                return goal_review_response(
+                    payload, source="查那个客户", node_ids=["query_customer"], outcome="execute"
+                )
+            captured.update(payload)
             return {
                 "choices": [
                     {
@@ -413,7 +440,7 @@ class TestPlanWithLLM:
 
         plan = planner.plan(
             "owner-41",
-            "查那个账单",
+            "查那个客户",
             get_tool_registry(),
             context=context,
         )

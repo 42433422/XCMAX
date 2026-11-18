@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
+
+from tests.fixtures.planner_model import goal_review_response
 
 
 @pytest.fixture(autouse=True)
@@ -66,6 +69,13 @@ def _planner_fallback_patches():
             nodes=[node],
         )
 
+    def scripted_goal_review(**kwargs):
+        payload = json.loads(kwargs["messages"][1]["content"])
+        source = payload["user_message"]
+        assert source in {"请把客户 星光贸易 写入数据库", "查数据库产品 XG-5003"}
+        node_id = "write_customer" if source.startswith("请把客户") else "read_products"
+        return goal_review_response(payload, source=source, node_ids=[node_id], outcome="execute")
+
     return (
         patch("app.application.workflow.planner.get_ai_conversation_service"),
         patch(
@@ -77,6 +87,10 @@ def _planner_fallback_patches():
             return_value="pro_default",
         ),
         patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
+        patch(
+            "app.application.workflow.planner.request_planner_completion",
+            side_effect=scripted_goal_review,
+        ),
     )
 
 
@@ -117,6 +131,7 @@ def test_agent_orchestrator_executes_low_risk_tool_and_records_events():
         patches[1],
         patches[2],
         patches[3],
+        patches[4],
         patch(
             "app.application.facades.tools_facade.execute_registered_workflow_tool",
             return_value={"success": True, "data": [{"model_number": "XG-5003"}]},
@@ -309,6 +324,7 @@ def test_agent_orchestrator_waits_for_user_on_medium_risk_step():
         patches[1],
         patches[2],
         patches[3],
+        patches[4],
         patch(
             "app.application.facades.tools_facade.execute_registered_workflow_tool"
         ) as mock_execute,
@@ -338,6 +354,7 @@ def test_agent_orchestrator_continues_waiting_run_after_approval():
         patches[1],
         patches[2],
         patches[3],
+        patches[4],
         patch(
             "app.application.facades.tools_facade.execute_registered_workflow_tool"
         ) as mock_execute,
@@ -487,6 +504,7 @@ def test_agent_orchestrator_ignores_continue_for_non_waiting_step():
         patches[1],
         patches[2],
         patches[3],
+        patches[4],
         patch(
             "app.application.facades.tools_facade.execute_registered_workflow_tool",
             return_value={"success": True, "message": "客户已写入"},

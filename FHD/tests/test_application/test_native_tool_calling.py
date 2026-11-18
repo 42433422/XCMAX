@@ -1,289 +1,189 @@
-"""原生 function calling：工具定义、tool_calls 转计划与生成链路。"""
-
-from __future__ import annotations
+"""Native and JSON planning share one typed, dependency-preserving envelope."""
 
 import json
+from unittest.mock import Mock
 
 import pytest
 
-from app.application.workflow.llm_plan_generation import LlmPlanGeneration
+from app.application.workflow.llm_plan_generation import LlmPlanGeneration, _decode_completion
 from app.application.workflow.tool_calling import (
-    build_function_tools,
-    function_name,
-    plan_from_tool_calls,
+    PLAN_SCHEMA,
+    SubmitWorkflowPlan,
+    native_plan_payload,
+    plan_function_tools,
     tool_calls_enabled,
 )
 
 
-def _registry() -> dict:
+def _graph():
     return {
-        "products": {
-            "description": "产品",
-            "actions": {
-                "query": {"risk": "low", "idempotent": True, "required_params": ["keyword"]},
+        "mode": "workflow",
+        "nodes": [
+            {
+                "node_id": "read",
+                "tool_id": "products",
+                "action": "query",
+                "params": {"keyword": "门"},
             },
-        }
+            {
+                "node_id": "export",
+                "tool_id": "reports",
+                "action": "export",
+                "params": {"source": "{{read.data}}"},
+                "depends_on": ["read"],
+            },
+        ],
     }
 
 
-def _tool_call(name: str, arguments: dict, call_id: str = "call_1") -> dict:
+def _native(graph=None, *, name="SubmitWorkflowPlan", arguments=None):
     return {
-        "id": call_id,
-        "type": "function",
-        "function": {"name": name, "arguments": json.dumps(arguments, ensure_ascii=False)},
+        "choices": [
+            {
+                "message": {
+                    "tool_calls": [
+                        {
+                            "id": "envelope_1",
+                            "type": "function",
+                            "function": {
+                                "name": name,
+                                "arguments": arguments
+                                if arguments is not None
+                                else json.dumps(graph or _graph()),
+                            },
+                        }
+                    ]
+                }
+            }
+        ]
     }
 
 
-def _payload(*calls: dict) -> dict:
-    return {
-        "choices": [{"message": {"role": "assistant", "content": "", "tool_calls": list(calls)}}]
-    }
+def _generator(completion):
+    return LlmPlanGeneration(Mock(get_context=Mock(return_value=None)), completion, Mock())
 
 
-def test_build_function_tools_maps_names_and_schema() -> None:
-    tools, lookup = build_function_tools(_registry())
-    names = [item["function"]["name"] for item in tools]
-    assert function_name("products", "query") in names
-    assert lookup[function_name("products", "query")] == ("products", "query")
-    entry = next(item for item in tools if item["function"]["name"] == "products__query")
-    assert entry["type"] == "function"
-    assert entry["function"]["parameters"]["type"] == "object"
+def test_native_envelope_retains_all_dependencies_and_result_references():
+    response = native_plan_payload(_native())
+    parsed, nodes = _decode_completion(response)
+    assert parsed["mode"] == "workflow"
+    assert [node.node_id for node in nodes] == ["read", "export"]
+    assert nodes[1].depends_on == ["read"]
+    assert nodes[1].params["source"] == "{{read.data}}"
+    assert plan_function_tools()[0]["function"]["name"] == SubmitWorkflowPlan.__name__
+    assert "depends_on" in PLAN_SCHEMA["$defs"]["PlanNode"]["properties"]
 
 
-def test_multi_native_calls_without_dependencies_are_rejected() -> None:
-    _tools, lookup = build_function_tools(_registry())
-    plan = plan_from_tool_calls(
-        _payload(
-            _tool_call("products__query", {"keyword": "门"}, "a"),
-            _tool_call("products__query", {"keyword": "窗"}, "b"),
-        ),
-        plan_id="p1",
-        message="查门和窗",
-        context=None,
-        lookup=lookup,
-    )
-    assert plan is None  # No validated dependency graph, so do not execute.
+def test_native_and_json_use_identical_validation():
+    graph = _graph()
+    native = _decode_completion(native_plan_payload(_native(graph)))
+    text = _decode_completion({"choices": [{"message": {"content": json.dumps(graph)}}]})
+    assert native == text
 
 
-def test_generate_rejects_multi_native_batch_without_retrying() -> None:
-    calls = []
-
-    class Conversation:
-        def get_context(self, user_id):
-            return None
-
-    def completion(**kwargs):
-        calls.append(kwargs)
-        return _payload(
-            _tool_call("products__query", {"keyword": "门"}, "a"),
-            _tool_call("products__query", {"keyword": "窗"}, "b"),
-        )
-
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        "[]",
+        "null",
+        "not-json",
+        '{"mode":"workflow"',
+        '{"mode":"workflow","nodes":[{"tool_id":"x","action":"y","params":{"value":NaN}}]}',
+    ],
+)
+def test_malformed_or_nonfinite_envelope_is_never_repaired_into_business_action(arguments):
+    completion = Mock(return_value=_native(arguments=arguments))
     context = {}
-    generator = LlmPlanGeneration(Conversation(), completion, lambda: None)
-    assert generator.generate("p1", "u1", "先查门再查窗", _registry(), context) is None
-    assert len(calls) == 1
+    assert _generator(completion).generate("p1", "u1", "查询并导出", {}, context) is None
+    assert completion.call_count == 1
     assert "planning_failure_reason" in context
 
 
-def test_native_tool_list_uses_same_selected_registry_as_json_prompt(monkeypatch) -> None:
+@pytest.mark.parametrize("name", ["products__query", "unknown", ""])
+def test_legacy_or_unknown_business_functions_cannot_bypass_complete_graph(name):
+    with pytest.raises(ValueError):
+        native_plan_payload(_native(name=name))
+
+
+def test_multiple_native_envelopes_are_rejected_without_partial_execution():
+    response = _native()
+    response["choices"][0]["message"]["tool_calls"] *= 2
+    completion = Mock(return_value=response)
+    assert _generator(completion).generate("p1", "u1", "先查询再导出", {}, {}) is None
+    assert completion.call_count == 1
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("params", []),
+        ("depends_on", "read"),
+        ("idempotent", "false"),
+        ("branches", [{"target": "n", "condition": []}]),
+    ],
+)
+def test_successful_json_responses_cannot_skip_type_validation(field, value):
+    graph = _graph()
+    graph["nodes"][0][field] = value
+    assert _decode_completion({"choices": [{"message": {"content": json.dumps(graph)}}]}) is None
+
+
+def test_tool_prefilter_is_the_authoritative_catalog_for_both_transports(monkeypatch):
     from app.application.workflow import llm_plan_generation as generation
 
-    captured = {}
-
-    class Conversation:
-        def get_context(self, user_id):
-            return None
-
-    def completion(**kwargs):
-        captured.update(kwargs)
-        return _payload(_tool_call("products__query", {"keyword": "门"}))
-
+    registry = {"products": {"actions": {"query": {}}}, "dangerous": {"actions": {"delete": {}}}}
     monkeypatch.setattr(
         generation,
         "select_tools_for_prompt",
-        lambda registry, message, context: {"products": registry["products"]},
+        lambda registry, *_: {"products": registry["products"]},
     )
-    registry = _registry()
-    registry["dangerous"] = {
-        "actions": {"delete": {"risk": "high", "idempotent": False}}
-    }
-    generator = LlmPlanGeneration(Conversation(), completion, lambda: None)
-    plan = generator.generate("p1", "u1", "查门", registry, {})
-    assert plan is not None
-    assert [item["function"]["name"] for item in captured["tools"]] == ["products__query"]
+    completion = Mock(return_value=_native())
+    plan = _generator(completion).generate("p1", "u1", "查询产品并导出", registry, {})
+    assert plan and plan.nodes[1].depends_on == ["read"]
+    request = json.loads(completion.call_args.kwargs["messages"][1]["content"])
+    assert [spec["tool_id"] for spec in request["tool_registry"]] == ["products"]
+    assert completion.call_args.kwargs["tools"] == plan_function_tools()
+    assert request["output_schema"] == PLAN_SCHEMA
+    # The generated graph is still untrusted here; planner admission checks actions.
 
 
-def test_plan_from_tool_calls_ignores_unknown_function() -> None:
-    _tools, lookup = build_function_tools(_registry())
-    plan = plan_from_tool_calls(
-        _payload(_tool_call("unknown__action", {})),
-        plan_id="p1",
-        message="x",
-        context=None,
-        lookup=lookup,
-    )
-    assert plan is None
-
-
-@pytest.mark.parametrize("payload", [None, {}, {"choices": []}, {"choices": [{"message": {}}]}])
-def test_plan_from_tool_calls_returns_none_without_calls(payload) -> None:
-    assert plan_from_tool_calls(payload, plan_id="p1", message="x", context=None, lookup={}) is None
-
-
-def test_tool_calls_switch(monkeypatch) -> None:
-    monkeypatch.delenv("XCAGI_PLAN_TOOL_CALLS", raising=False)
-    assert tool_calls_enabled() is True
-    monkeypatch.setenv("XCAGI_PLAN_TOOL_CALLS", "0")
-    assert tool_calls_enabled() is False
-
-
-def test_generate_uses_native_tool_calls() -> None:
-    captured: dict = {}
-
-    class Conversation:
-        def get_context(self, user_id: str):
-            return None
-
-    def completion(**kwargs):
-        captured.update(kwargs)
-        return _payload(_tool_call("products__query", {"keyword": "门"}))
-
-    generator = LlmPlanGeneration(Conversation(), completion, lambda: None)
-    plan = generator.generate("p1", "u1", "查门", _registry(), {})
-
-    assert plan is not None
-    assert plan.intent == "native_tool_calls"
-    assert plan.nodes[0].tool_id == "products"
-    assert plan.nodes[0].params == {"keyword": "门"}
-    assert captured["tool_choice"] == "auto"
-    assert captured["tools"]
-
-
-def test_generate_falls_back_when_completion_rejects_tools(monkeypatch) -> None:
-    class Conversation:
-        def get_context(self, user_id: str):
-            return None
-
-    calls: list[dict] = []
+def test_old_completion_transport_can_use_same_json_schema_without_tools():
+    calls = []
 
     def completion(**kwargs):
         calls.append(kwargs)
         if "tools" in kwargs:
             raise TypeError("unexpected keyword argument 'tools'")
-        return {"choices": [{"message": {"content": '{"mode":"reply","reply":"好的"}'}}]}
+        return {"choices": [{"message": {"content": json.dumps(_graph())}}]}
 
-    monkeypatch.setenv("XCAGI_PLAN_TOOL_CALLS", "1")
-    generator = LlmPlanGeneration(Conversation(), completion, lambda: None)
-    plan = generator.generate("p1", "u1", "查询产品", _registry(), {})
-
-    assert plan is not None
-    assert plan.metadata["response_mode"] == "reply"
-    assert len(calls) == 2
-    assert "tools" in calls[0] and "tools" not in calls[1]
+    plan = _generator(completion).generate("p1", "u1", "先查询再导出", {}, {})
+    assert plan and plan.nodes[1].depends_on == ["read"]
+    assert len(calls) == 2 and "tools" not in calls[-1]
 
 
-@pytest.mark.parametrize("arguments", ["", "[]", "null", "{broken", None, {"price": float("nan")}])
-def test_invalid_arguments_never_become_an_empty_business_filter(arguments):
-    _, lookup = build_function_tools(_registry())
-    call = _tool_call("products__query", {})
-    call["function"]["arguments"] = arguments
-    assert (
-        plan_from_tool_calls(_payload(call), plan_id="p1", message="x", context=None, lookup=lookup)
-        is None
+def test_unrelated_type_error_is_not_retried_as_legacy_transport():
+    completion = Mock(side_effect=TypeError("invalid business input"))
+    assert _generator(completion).generate("p1", "u1", "查询产品", {}, {}) is None
+    assert completion.call_count == 1
+
+
+def test_tool_calls_switch(monkeypatch):
+    monkeypatch.delenv("XCAGI_PLAN_TOOL_CALLS", raising=False)
+    assert tool_calls_enabled()
+    monkeypatch.setenv("XCAGI_PLAN_TOOL_CALLS", "0")
+    assert not tool_calls_enabled()
+
+
+def test_semantic_replan_expands_catalog_without_reviving_retired_tools():
+    registry = {
+        "customers": {"actions": {"query": {}}},
+        "excel_toolkit": {"actions": {"view": {}}},
+        "import_excel_to_database": {"actions": {"execute": {}}},
+    }
+    completion = Mock(return_value=_native())
+    generator = _generator(completion)
+    generator.generate(
+        "p1", "u1", "查询客户", registry, {}, coverage_feedback={"error": "遗漏附件核对"}
     )
-
-
-@pytest.mark.parametrize("bad", [None, {}, {"type": "not-function", "function": {}}])
-def test_a_bad_native_call_rejects_the_entire_batch(bad):
-    _, lookup = build_function_tools(_registry())
-    valid = _tool_call("products__query", {"keyword": "门"})
-    assert (
-        plan_from_tool_calls(
-            _payload(valid, bad), plan_id="p1", message="x", context=None, lookup=lookup
-        )
-        is None
-    )
-
-
-def test_oversized_or_replayed_native_batch_is_not_partially_executed():
-    _, lookup = build_function_tools(_registry())
-    for calls in [
-        [_tool_call("products__query", {}, str(i)) for i in range(13)],
-        [_tool_call("products__query", {}, "duplicate") for _ in range(2)],
-    ]:
-        assert (
-            plan_from_tool_calls(
-                _payload(*calls), plan_id="p1", message="x", context=None, lookup=lookup
-            )
-            is None
-        )
-
-
-@pytest.mark.parametrize(
-    "left, right",
-    [
-        (("x.y", "query"), ("x_y", "query")),
-        (("a__b", "c"), ("a", "b__c")),
-        (("x" * 70, "read"), ("x" * 69 + "y", "read")),
-        (("中文甲", "query"), ("中文乙", "query")),
-    ],
-)
-def test_function_names_do_not_alias_distinct_authorized_actions(left, right):
-    import re
-
-    assert function_name(*left) != function_name(*right)
-    assert re.fullmatch(r"[A-Za-z0-9_-]{1,64}", function_name(*left))
-    assert function_name(*left) == function_name(*left)
-
-
-def test_even_an_unexpected_name_collision_is_rejected(monkeypatch):
-    monkeypatch.setattr("app.application.workflow.tool_calling.function_name", lambda *args: "same")
-    registry = _registry()
-    registry["products"]["actions"]["export"] = {"risk": "low", "idempotent": True}
-    with pytest.raises(ValueError, match="冲突"):
-        build_function_tools(registry)
-
-
-def test_internal_type_error_does_not_charge_a_second_completion():
-    calls = []
-
-    class Conversation:
-        def get_context(self, user_id):
-            return None
-
-    def completion(**kwargs):
-        calls.append(kwargs)
-        raise TypeError("internal parsing bug")
-
-    generator = LlmPlanGeneration(Conversation(), completion, lambda: None)
-    assert generator.generate("p1", "u1", "查门", _registry(), {}) is None
-    assert len(calls) == 1
-
-
-def test_default_gateway_legacy_provider_signature_really_falls_back(monkeypatch):
-    from app.application.workflow.planner_llm_gateway import request_planner_completion
-
-    calls = []
-
-    class Conversation:
-        def get_context(self, user_id):
-            return None
-
-    class Provider:
-        async def chat_completion(self, *, messages, temperature, max_tokens):
-            calls.append(messages)
-            return {"choices": [{"message": {"content": '{"mode":"reply","reply":"好的"}'}}]}
-
-    monkeypatch.setattr(
-        "app.infrastructure.llm.providers.registry.get_active_provider", lambda **kwargs: Provider()
-    )
-    monkeypatch.setattr(
-        "app.application.workflow.planner_llm_gateway._meter_planner_completion",
-        lambda *args, **kwargs: None,
-    )
-    generator = LlmPlanGeneration(Conversation(), request_planner_completion, lambda: None)
-    plan = generator.generate("p1", "u1", "你好", _registry(), {})
-    assert plan is not None
-    assert plan.metadata["response_mode"] == "reply"
-    assert len(calls) == 1
+    prompt = json.loads(completion.call_args.kwargs["messages"][1]["content"])
+    assert {spec["tool_id"] for spec in prompt["tool_registry"]} == {"customers", "excel_toolkit"}

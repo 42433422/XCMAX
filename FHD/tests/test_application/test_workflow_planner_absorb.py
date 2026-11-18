@@ -7,6 +7,8 @@ Covers:
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from app.application.workflow.clarification_node import build_clarify_node, insert_clarify_node
@@ -18,14 +20,15 @@ from app.application.workflow.workflow_types import (
     validate_plan_graph,
 )
 from app.domain.neuro.cognition.plan_graph_hooks import finalize_planned_graph
+from tests.fixtures.planner_model import goal_review_response
 from tests.pure_builders import customers_registry as _customers_registry
 
 
-def _make_planner() -> LLMWorkflowPlanner:
+def _make_planner(completion=None) -> LLMWorkflowPlanner:
     from unittest.mock import patch
 
     with patch("app.application.workflow.planner.get_ai_conversation_service"):
-        return LLMWorkflowPlanner()
+        return LLMWorkflowPlanner(completion=completion)
 
 
 def _ambiguous_delete_plan(plan_id: str = "p_delete") -> PlanGraph:
@@ -66,9 +69,22 @@ class TestPlannerClarifyNode:
     def test_ambiguous_delete_inserts_clarify_at_head(self):
         from unittest.mock import patch
 
-        planner = _make_planner()
+        planner = _make_planner(
+            completion=lambda **kwargs: goal_review_response(
+                json.loads(kwargs["messages"][1]["content"]),
+                source="删除客户：北京智造科技",
+                node_ids=["clarify_delete_customer", "delete_customer"],
+                outcome="clarify",
+            )
+        )
         with (
             patch.object(planner, "_plan_with_llm", return_value=_ambiguous_delete_plan()),
+            patch(
+                "app.application.workflow.planning_graph_policy.build_clarify_node",
+                side_effect=lambda question, ambient: build_clarify_node(
+                    question, {**ambient, "node_id": "clarify_delete_customer"}
+                ),
+            ),
             patch(
                 "app.application.workflow.tool_profile.resolve_tool_execution_profile",
                 return_value="full",
@@ -109,7 +125,14 @@ class TestPlannerClarifyNode:
                 )
             ],
         )
-        planner = _make_planner()
+        planner = _make_planner(
+            completion=lambda **kwargs: goal_review_response(
+                json.loads(kwargs["messages"][1]["content"]),
+                source="看看有哪些客户",
+                node_ids=["query_customers"],
+                outcome="execute",
+            )
+        )
         with (
             patch.object(planner, "_plan_with_llm", return_value=plan_in),
             patch(
@@ -203,3 +226,19 @@ class TestFinalizeValidateDecoratedGraph:
         )
         assert result.metadata["planning_rejected"] is True
         assert result.nodes[0].tool_id == "clarify"
+
+
+def test_read_plan_without_independent_review_is_not_admitted():
+    from unittest.mock import patch
+
+    planner = _make_planner(completion=lambda **kwargs: None)
+    candidate = PlanGraph(
+        plan_id="read-without-review",
+        intent="query",
+        nodes=[WorkflowNode(node_id="query_customers", tool_id="customers", action="query")],
+    )
+    with patch.object(planner, "_plan_with_llm", return_value=candidate):
+        rejected = planner.plan("u1", "看看有哪些客户", _customers_registry())
+    assert rejected.metadata["planning_rejected"] is True
+    assert "目标覆盖" in rejected.metadata["rejection_reason"]
+    assert all(node.tool_id == "clarify" for node in rejected.nodes)

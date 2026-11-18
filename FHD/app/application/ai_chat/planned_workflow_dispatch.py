@@ -261,9 +261,16 @@ class PlannedWorkflowDispatch:
         if (plan.metadata or {}).get("planning_rejected") is True:
             reason = str((plan.metadata or {}).get("rejection_reason") or "").strip()
             unavailable = (plan.metadata or {}).get("planning_unavailable") is True
+            coverage_rejected = (plan.metadata or {}).get("goal_coverage_rejected") is True
             deterministic = (plan.metadata or {}).get("planning_source") == "deterministic_command"
             if deterministic and reason:
                 message_text = reason
+            elif coverage_rejected:
+                message_text = (
+                    "这次任务的目标、条件或先后顺序尚未核对完整，本次没有执行任何业务操作。"
+                    "请核对并补充任务要求后重试。"
+                )
+                reason = "任务目标、条件或顺序尚未核对完整"
             elif unavailable and "余额不足" in reason:
                 message_text = f"{reason.rstrip('。')}。本次没有执行任何业务操作。"
             elif unavailable:
@@ -283,7 +290,9 @@ class PlannedWorkflowDispatch:
                 "data": {
                     "text": message_text,
                     "action": "workflow_planning_failed",
-                    "error_code": "workflow_plan_unavailable"
+                    "error_code": "workflow_goal_coverage_rejected"
+                    if coverage_rejected
+                    else "workflow_plan_unavailable"
                     if unavailable
                     else "workflow_plan_rejected",
                     "execution_started": False,
@@ -409,7 +418,20 @@ class PlannedWorkflowDispatch:
             "approval_required": True,
             "approval_nodes": approval_metadata,
         }
-        self.callbacks._persist_plan_state(plan, runtime_ctx, status="pending_awaiting")
+        if not self.callbacks._persist_plan_state(plan, runtime_ctx, status="pending_awaiting"):
+            self.pending.pop(user_id, None)
+            message_text = "待确认计划未能保存，本次没有执行任何业务操作；请稍后重试。"
+            return {
+                "success": False,
+                "message": message_text,
+                "response": message_text,
+                "execution": self._no_write_execution(context),
+                "data": {
+                    "action": "workflow_persistence_failed",
+                    "plan_id": plan.plan_id,
+                    "execution_started": False,
+                },
+            }
         todo_text = "\n".join(f"- {step}" for step in plan.todo_steps or [])
         response_text = (
             f"我已根据语义生成动态工作流计划：\n{thinking_steps}\n\n{todo_text}\n\n"

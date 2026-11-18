@@ -83,7 +83,7 @@ def test_planner_intents_only_accept_a_clear_winner(monkeypatch):
         ],
     )
     # 模糊的「那你去提交一下呀」不能顺带注入员工/客户规则。
-    assert profile.detect_intents("那你去提交一下呀。") == set()
+    assert profile.detect_intents("那你去提交一下呀。") == {"product_issue"}
 
     monkeypatch.setattr(
         intent_pkg,
@@ -112,3 +112,39 @@ def test_ticket_resolution_accepts_semantic_product_issue(monkeypatch):
     }
     resolved = intake.resolve_issue_report_message("那你去提交一下呀。", context)
     assert "电话按键" in resolved
+
+
+def test_unknown_short_turn_preserves_tools_and_always_hides_direct_import(monkeypatch):
+    from app.application.workflow import planner_prompt_profile as profile
+
+    monkeypatch.setattr(profile, "_semantic_intents", lambda text: set())
+    registry = {
+        name: {}
+        for name in ("conversation", "elt_import", "foo-employee", "import_excel_to_database")
+    }
+    for text in ("第二个", "无法识别的请求" * 10, "交给员工"):
+        selected = profile.select_tools_for_prompt(registry, text)
+        assert selected == {
+            key: value for key, value in registry.items() if key != "import_excel_to_database"
+        }
+    assert profile.select_tools_for_prompt({"import_excel_to_database": {}}, "你好") == {}
+
+
+def test_history_does_not_change_current_turn_scene(monkeypatch):
+    from app.application.workflow import planner_prompt_profile as profile
+
+    monkeypatch.setattr(profile, "_semantic_intents", lambda text: set())
+    history = {"recent_messages": [{"role": "user", "content": "导出表格并交接员工"}]}
+    assert profile.detect_intents("查询客户", history) == {"customer"}
+    assert profile.select_rules_for_prompt("查询客户", history) == profile.select_rules_for_prompt(
+        "查询客户"
+    )
+
+
+def test_unresolved_followup_keeps_business_field_contracts(monkeypatch):
+    from app.application.workflow import planner_prompt_profile as profile
+
+    monkeypatch.setattr(profile, "_semantic_intents", lambda text: set())
+    rules = profile.select_rules_for_prompt("换成上个月")
+    assert any("payment_state" in rule for rule in rules)
+    assert all(rule in rules for rule in profile.BASE_RULES)

@@ -106,14 +106,6 @@ class SessionCallbacks(Protocol):
 
     workflow_planner: Any
 
-    def _dispatch_model_selection(
-        self,
-        user_id: str,
-        message: str,
-        source: str | None,
-        context: dict[str, Any],
-        text: str,
-    ) -> dict[str, Any] | None: ...
     @staticmethod
     def _task_owner_id(user_id: str, runtime_context: dict[str, Any]) -> str: ...
 
@@ -234,8 +226,20 @@ class WorkflowSession:
     ) -> bool:
         """保存计划快照；成功提交返回 True，失败返回 False，调用方据此决定是否完成操作。"""
         try:
+            from app.application.agent_task_context import scoped_conversation_user_id
+
             rc = dict(runtime_context or {})
-            user_id = str(rc.get("user_id") or "").strip() or None
+            # Match the namespace used by process_chat/pending/hydration without
+            # replacing the authenticated principal carried by runtime_context.
+            user_id = (
+                scoped_conversation_user_id(
+                    str(
+                        rc.get("user_id") or rc.get("conversation_id") or rc.get("session_id") or ""
+                    ),
+                    rc,
+                )
+                or None
+            )
             session_id = (
                 str(rc.get("session_id") or rc.get("conversation_id") or "").strip() or None
             )
@@ -266,7 +270,7 @@ class WorkflowSession:
                 user_id=user_id,
                 session_id=session_id,
                 message=message,
-                require_commit=status == "cancelled",
+                require_commit=True,
             )
             return True
         except RECOVERABLE_ERRORS:
@@ -299,7 +303,7 @@ class WorkflowSession:
                 != str(runtime.get("session_id") or runtime.get("conversation_id") or "")
             ):
                 return False
-            cancelled = orchestrator.cancel_run(run_id, requested_by=user_id)
+            cancelled = orchestrator.cancel_run(run_id, requested_by=run.user_id)
             return cancelled is not None and cancelled.status == "cancelled"
         except RECOVERABLE_ERRORS:
             logger.warning("待确认 AgentRun 取消未完成 run_id=%s", run_id)
@@ -773,6 +777,8 @@ class WorkflowSession:
         """Resolve only fields authorized by the server-owned clarification rule."""
         from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
 
+        if not str(text or "").strip():
+            return None
         detail = waiting.params.get("clarification")
         detail = detail if isinstance(detail, dict) else {}
         reason = str(detail.get("reason") or "")
@@ -879,6 +885,8 @@ class WorkflowSession:
                 if isinstance(item, dict) and item.get("key") in properties
             }
         if allowed:
+            if affirmative and reason in {"missing_required", "report_scope"}:
+                return None
             planner = getattr(self.callbacks, "workflow_planner", None)
             if planner is None or not hasattr(planner, "extract_clarification_parameters"):
                 from app.application.workflow.planner import LLMWorkflowPlanner
@@ -912,6 +920,13 @@ class WorkflowSession:
         runtime_ctx = dict(pending.get("runtime_context") or {})
         plan = cast("PlanGraph | None", pending.get("plan"))
         run_id = str(pending.get("agent_run_id") or "").strip()
+        if not text:
+            return _control_reply(
+                "请补充当前问题的答案，或回复「取消」结束原任务；原计划保持暂停。",
+                "clarification_required",
+                {"plan_id": getattr(plan, "plan_id", ""), "run_id": run_id},
+                message="需要补充信息",
+            )[1]
         if plan is None or not run_id:
             return _control_reply(
                 "澄清记录缺少可恢复的执行计划，未执行任何操作；请重新提交完整请求。",
@@ -957,7 +972,14 @@ class WorkflowSession:
                         success=False,
                         message="过期任务尚未终止",
                     )[1]
-                self.callbacks._persist_plan_state(plan, runtime_ctx, status="cancelled")
+                if not self.callbacks._persist_plan_state(plan, runtime_ctx, status="cancelled"):
+                    return _control_reply(
+                        "过期任务已停止，但取消状态尚未保存；待办仍保留，请重试。",
+                        "workflow_persistence_failed",
+                        {"run_id": run_id, "plan_id": plan.plan_id},
+                        success=False,
+                        message="取消状态未保存",
+                    )[1]
                 self.pending.pop(user_id, None)
                 return _control_reply(
                     "这条澄清已超时，原执行保持暂停且未继续；请重新提交请求。",
@@ -1088,46 +1110,14 @@ class WorkflowSession:
                         thinking_steps=str(pending.get("thinking_steps") or ""),
                         user_message=str(runtime_ctx.get("message") or run.message or ""),
                     )
-                if run.tool_calls or any(
-                    step.status == "completed" and (step.tool_id, step.action) != ("clarify", "ask")
-                    for step in run.steps
-                ):
-                    return _control_reply(
-                        "当前澄清未绑定具体业务步骤，且原计划已有步骤运行；为避免重复执行，原计划保持暂停。"
-                        "回复「取消」可结束该计划，再重新描述目标。",
-                        "workflow_clarification_unbound",
-                        {"run_id": run_id, "plan_id": plan.plan_id},
-                        success=False,
-                        message="澄清未绑定业务节点",
-                    )[1]
-                if not self._cancel_pending_agent_run(user_id, pending, runtime_ctx):
-                    return _control_reply(
-                        "原澄清计划无法安全结束，未启动新计划；请核对任务状态。",
-                        "workflow_resume_failed",
-                        {"run_id": run_id, "plan_id": plan.plan_id},
-                        success=False,
-                        message="原澄清计划仍暂停",
-                    )[1]
-                self.callbacks._persist_plan_state(plan, runtime_ctx, status="cancelled")
-                self.pending.pop(user_id, None)
-                combined = f"原始请求：{run.message}\n用户补充：{text}"
-                replanned = self.callbacks._dispatch_model_selection(
-                    user_id,
-                    combined,
-                    str(runtime_ctx.get("source") or ""),
-                    runtime_ctx,
-                    combined,
-                )
-                return (
-                    replanned
-                    or _control_reply(
-                        "补充信息已收到，但平台模型没有返回可执行计划；未执行任何业务操作，请重新描述目标。",
-                        "workflow_planning_failed",
-                        {"plan_id": plan.plan_id},
-                        success=False,
-                        message="补充后规划失败",
-                    )[1]
-                )
+                return _control_reply(
+                    "当前问题未绑定具体业务步骤，无法安全判断这条答复要修改哪个参数；原计划保持暂停。"
+                    "请回复「取消」结束原任务，再提交完整请求。",
+                    "workflow_clarification_unbound",
+                    {"run_id": run_id, "plan_id": plan.plan_id},
+                    success=False,
+                    message="澄清未绑定业务节点",
+                )[1]
             answer = self._clarification_answer(run, waiting, text)
             if answer is None:
                 question = str(
@@ -1136,7 +1126,8 @@ class WorkflowSession:
                     or "请按问题补充信息。"
                 )
                 return _control_reply(
-                    f"我还不能安全确定答案，请直接回答当前问题。\n{question}",
+                    f"我还不能安全确定答案，请直接回答当前问题。\n{question}\n"
+                    "如需处理新任务，请先回复「取消」，再提交新请求；原任务保持暂停。",
                     "clarification_required",
                     {"requires_confirmation": True, "run_id": run_id, "plan_id": plan.plan_id},
                     message="需要补充信息",

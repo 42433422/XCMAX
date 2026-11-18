@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.application.workflow.clarification_inputs import action_input_metadata
 from app.application.workflow.clarification_node import build_clarify_node, needs_clarification
 from app.application.workflow.workflow_types import (
     PlanGraph,
@@ -54,7 +55,7 @@ def apply_clarification(
     user_message: str = "",
     context: dict[str, Any] | None = None,
 ) -> PlanGraph:
-    """确定性反问规则：写/高风险节点存在关键参数缺失或多候选歧义时，在图首部插入 clarify 节点。
+    """确定性反问规则：节点存在关键参数缺失或多候选歧义时，在图首部插入 clarify 节点。
 
     复用 ``clarification_node.needs_clarification`` 检测，并用 ``build_clarify_node``
     生成反问节点，其 ``branches`` 依据用户确认结果路由回原操作节点。
@@ -77,6 +78,11 @@ def apply_clarification(
                 node
                 for node in existing_clarifications.get(target_id, [])
                 if node.node_id not in used_existing
+                and (
+                    not isinstance(node.params.get("clarification"), dict)
+                    or (node.params.get("clarification") or {}).get("reason")
+                    in (None, "", item.get("reason"))
+                )
             ),
             None,
         )
@@ -86,7 +92,7 @@ def apply_clarification(
         used_existing.add(existing.node_id)
         params = dict(existing.params or {})
         detail = dict(item)
-        detail["question"] = str(params.get("question") or item.get("question") or "")
+        detail["question"] = str(item.get("question") or params.get("question") or "")
         params["question"] = detail["question"]
         params["clarification"] = detail
         existing.params = params
@@ -110,7 +116,7 @@ def apply_clarification(
 
 def validate_required_params(plan: PlanGraph, tool_registry: dict[str, Any]) -> str | None:
     """Preflight every node against the current registry before graph execution."""
-    clarification_by_target: dict[str, dict[str, Any]] = {}
+    clarification_by_target: dict[str, list[dict[str, Any]]] = {}
     node_by_id = {node.node_id: node for node in plan.nodes or []}
     for candidate in plan.nodes or []:
         if candidate.tool_id != "clarify" or candidate.action != "ask":
@@ -128,12 +134,7 @@ def validate_required_params(plan: PlanGraph, tool_registry: dict[str, Any]) -> 
             ):
                 return f"澄清节点 {candidate.node_id} 未安全绑定到目标节点 {target_id}"
         if target_id and isinstance(detail, dict):
-            current = clarification_by_target.get(target_id)
-            if current is None or (
-                current.get("reason") != "missing_required"
-                and detail.get("reason") == "missing_required"
-            ):
-                clarification_by_target[target_id] = detail
+            clarification_by_target.setdefault(target_id, []).append(detail)
     for node in plan.nodes or []:
         if node.tool_id == "clarify" and node.action == "ask":
             if not str((node.params or {}).get("question") or "").strip():
@@ -157,23 +158,28 @@ def validate_required_params(plan: PlanGraph, tool_registry: dict[str, Any]) -> 
         if not isinstance(required_params, list):
             required_params = []
         params = node.params or {}
-        clarification = clarification_by_target.get(node.node_id) or {}
         allowed_missing: set[str] = set()
-        if clarification.get("reason") == "missing_required":
-            missing_fields = clarification.get("missing_fields")
-            if isinstance(missing_fields, list):
-                allowed_missing.update(
-                    str(value)
-                    for value in missing_fields
-                    if isinstance(value, (str, int)) and str(value).strip()
-                )
-        # Ambiguous target confirmation also supplies the required identifier.
-        # Permit only the exact field named by the server-created clarification;
-        # all other required fields remain subject to normal plan validation.
-        if clarification.get("reason") == "ambiguous_target":
-            field = clarification.get("field")
-            if isinstance(field, (str, int)) and str(field).strip():
-                allowed_missing.add(str(field))
+        for clarification in clarification_by_target.get(node.node_id, []):
+            if clarification.get("reason") == "missing_required":
+                missing_fields = clarification.get("missing_fields")
+                if isinstance(missing_fields, list):
+                    allowed_missing.update(
+                        str(value)
+                        for value in missing_fields
+                        if isinstance(value, (str, int)) and str(value).strip()
+                    )
+            if clarification.get("reason") == "ambiguous_target":
+                field = clarification.get("field")
+                if isinstance(field, (str, int)) and str(field).strip():
+                    allowed_missing.add(str(field))
+        schema = (
+            action_input_metadata(node.tool_id, node.action, action_meta).get("input_schema") or {}
+        )
+        allowed_missing.update(
+            key
+            for key in ("user_id", "tenant_id")
+            if key in (schema.get("required") or []) and params.get(key) in (None, "")
+        )
         from app.application.agent_orchestrator.param_references import (
             validate_plan_references,
         )

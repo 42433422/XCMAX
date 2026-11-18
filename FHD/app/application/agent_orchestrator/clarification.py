@@ -7,6 +7,11 @@ from typing import Any
 
 from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
 from app.application.agent_orchestrator.tool_spec import get_tool_action_spec, validate_tool_call
+from app.application.workflow.clarification_inputs import (
+    apply_input_fields,
+    input_field_schema,
+    missing_tool_fields,
+)
 
 
 class ClarificationAnswerError(ValueError):
@@ -96,56 +101,56 @@ def apply_clarification_answer(
     if target is None or target.status != "pending":
         raise ClarificationAnswerError("澄清目标已变化，请重新规划任务")
     spec = get_tool_action_spec(target.tool_id, target.action)
-    missing = {
-        key
-        for key in (spec.required_params if spec else [])
-        if target.params.get(key) in (None, "", [], {})
-    }
-    if target.tool_id == "sales" and target.action in {"quote", "create_order"}:
-        from app.application.sales_quote_inputs import missing_quote_fields
-
-        missing = set(missing_quote_fields(target.params))
-    if (target.tool_id, target.action) == ("inventory", "stock_in"):
-        from app.domain.app_pure.inventory_inputs import missing_stock_in_fields
-
-        missing = set(missing_stock_in_fields(target.params))
-    from app.application.shipment_inputs import missing_shipment_call_fields, shipment_call_payload
+    missing = set(missing_tool_fields(target.tool_id, target.action, target.params))
+    from app.application.shipment_inputs import shipment_call_payload
 
     shipment = shipment_call_payload(target.tool_id, target.action, target.params)
-    if shipment is not None:
-        missing = set(missing_shipment_call_fields(target.tool_id, target.action, target.params))
     detail = step.params.get("clarification")
     detail = detail if isinstance(detail, dict) else {}
     reason = str(detail.get("reason") or "")
     candidate = deepcopy(target.params)
+    pending_fields: set[str] = set()
+    for other in run.steps:
+        if (
+            other is step
+            or other.status != "pending"
+            or (other.tool_id, other.action) != ("clarify", "ask")
+            or other.params.get("target_node_id") != target.node_id
+        ):
+            continue
+        pending_detail = other.params.get("clarification") or {}
+        if not isinstance(pending_detail, dict):
+            continue
+        if pending_detail.get("reason") == "missing_required":
+            pending_fields.update(str(key) for key in pending_detail.get("missing_fields", []))
+        elif pending_detail.get("reason") == "ambiguous_target":
+            pending_fields.add(str(pending_detail.get("field") or "id"))
     allowed_missing: set[str] = set()
     if reason == "missing_required":
         allowed_missing = {str(value) for value in detail.get("missing_fields", [])}
-        if not missing <= allowed_missing or set(parameters) != missing:
+        if not parameters or not set(parameters) <= (missing & allowed_missing):
             raise ClarificationAnswerError("请一次补齐当前问题列出的全部必填参数")
-        if shipment is None:
-            candidate.update(deepcopy(parameters))
-        else:
-            payload = shipment_call_payload(target.tool_id, target.action, candidate)
-            assert payload is not None
-            for key, value in parameters.items():
-                parts = key.split(".")
-                if len(parts) == 1:
-                    payload[key] = deepcopy(value)
-                elif len(parts) == 3 and parts[0] == "products" and parts[1].isdigit():
-                    products = payload.get("products") or payload.get("items")
-                    index = int(parts[1])
-                    if (
-                        not isinstance(products, list)
-                        or index >= len(products)
-                        or not isinstance(products[index], dict)
-                    ):
-                        raise ClarificationAnswerError("商品明细已变化，请重新规划任务")
-                    products[index][parts[2]] = deepcopy(value)
-                else:
-                    raise ClarificationAnswerError("商品明细格式无效，请重新规划任务")
-            if missing_shipment_call_fields(target.tool_id, target.action, candidate):
-                raise ClarificationAnswerError("请提供有效的发货信息")
+        payload = (
+            shipment_call_payload(target.tool_id, target.action, candidate)
+            if shipment is not None
+            else candidate
+        )
+        assert payload is not None
+        # Shipment aliases share the same question paths as canonical products.
+        if (
+            shipment is not None
+            and "products" not in payload
+            and isinstance(payload.get("items"), list)
+        ):
+            payload["products"] = payload.pop("items")
+        try:
+            apply_input_fields(payload, deepcopy(parameters))
+        except (KeyError, IndexError, TypeError, ValueError) as exc:
+            raise ClarificationAnswerError("明细结构已变化，请重新规划任务") from exc
+        remaining = set(missing_tool_fields(target.tool_id, target.action, candidate))
+        if remaining & allowed_missing or remaining - pending_fields:
+            raise ClarificationAnswerError("请一次补齐当前问题列出的有效必填参数")
+        allowed_missing.clear()
     elif reason in {"ambiguous_target", "missing_target"}:
         if target.tool_id == "business_db" and target.action == "write":
             if set(parameters) == {"id"}:
@@ -238,15 +243,15 @@ def apply_clarification_answer(
             candidate["confirmed"] = True
     candidate.pop("candidates", None)
     candidate.pop("_candidates", None)
-    if (
-        reason == "missing_required"
-        and target.tool_id == "sales"
-        and target.action in {"quote", "create_order"}
-        and parameters
-    ):
-        from app.application.sales_quote_inputs import quote_answer_candidate
-
-        candidate = quote_answer_candidate(target.params, parameters)
+    allowed_missing.update(
+        pending_fields & set(missing_tool_fields(target.tool_id, target.action, candidate))
+    )
+    if spec is not None:
+        allowed_missing.update(
+            key
+            for key in ("user_id", "tenant_id")
+            if key in (spec.input_schema.get("required") or []) and candidate.get(key) in (None, "")
+        )
     validation = validate_tool_call(
         target.tool_id,
         target.action,
@@ -338,16 +343,9 @@ def apply_clarification_answer(
                 for value in detail.get("missing_fields", [])
                 if isinstance(value, (str, int))
             }
-            if target.tool_id == "sales" and target.action in {"quote", "create_order"}:
-                from app.application.sales_quote_inputs import missing_quote_fields
-
-                unresolved = fields & set(missing_quote_fields(target.params))
-            elif (target.tool_id, target.action) == ("inventory", "stock_in"):
-                from app.domain.app_pure.inventory_inputs import missing_stock_in_fields
-
-                unresolved = fields & set(missing_stock_in_fields(target.params))
-            else:
-                unresolved = {key for key in fields if target.params.get(key) in (None, "", [], {})}
+            unresolved = fields & set(
+                missing_tool_fields(target.tool_id, target.action, target.params)
+            )
             if not unresolved:
                 other.status = "completed"
                 other.output = {"answer_confirmed": True, "resolved_by_step_id": step.step_id}
@@ -406,29 +404,36 @@ def pause_for_clarification(run: AgentRun, step: AgentStep, outputs: dict | None
         "amount": "金额",
         "transaction_type": "收支类型",
     }
-    properties = spec.input_schema.get("properties", {}) if spec else {}
-    required_fields = spec.required_params if spec else []
-    if target and target.tool_id == "sales" and target.action in {"quote", "create_order"}:
-        from app.application.sales_quote_inputs import missing_quote_fields
-
-        required_fields = missing_quote_fields(target.params)
-    if target and (target.tool_id, target.action) == ("inventory", "stock_in"):
-        from app.domain.app_pure.inventory_inputs import missing_stock_in_fields
-
-        required_fields = missing_stock_in_fields(target.params)
+    required_fields = (
+        missing_tool_fields(target.tool_id, target.action, target.params) if target else []
+    )
+    detail = step.params.get("clarification") or {}
+    detail = detail if isinstance(detail, dict) else {}
+    if detail.get("reason") == "missing_required":
+        required_fields = [
+            key for key in required_fields if key in detail.get("missing_fields", [])
+        ]
+    elif detail.get("reason") == "ambiguous_target":
+        required_fields = [
+            key for key in required_fields if key == str(detail.get("field") or "id")
+        ]
     step.output["fields"] = [
         {
             "key": key,
-            "label": properties.get(key, {}).get("title") or labels.get(key, key),
-            "type": properties.get(key, {}).get("type", "string"),
+            "label": field.get("title") or field.get("description") or labels.get(key, key),
+            "type": field.get("type", "string"),
         }
         for key in required_fields
-        if target is not None and target.params.get(key) in (None, "", [], {})
+        for field in [input_field_schema(spec.input_schema if spec else {}, key)]
     ]
     if target and target.tool_id == "sales" and target.action in {"quote", "create_order"}:
         from app.application.sales_quote_inputs import quote_question_fields
 
-        step.output["fields"] = quote_question_fields(target.params)
+        step.output["fields"] = [
+            field
+            for field in quote_question_fields(target.params)
+            if field["key"] in required_fields
+        ]
     run.final_output = {"clarification": {"step_id": step.step_id, **step.output}}
     run.add_event("step.clarification_required", step.output["question"], run.final_output)
     return True

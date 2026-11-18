@@ -11,6 +11,47 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 
+def _scripted_model_response(task: dict, prompt: dict) -> dict | None:
+    """Return only a fixture's explicit generation/review response for its exact plan."""
+    if prompt.get("user_message") != task["message"]:
+        return None
+    response = task["model_response"]
+    if prompt.get("task") == "audit_goal_coverage":
+        review = task.get("goal_review")
+        if not isinstance(review, dict):
+            return None
+        expected_nodes = response.get("nodes") or [
+            {
+                "node_id": "model_reply",
+                "tool_id": "conversation",
+                "action": "reply",
+                "params": {"response": response.get("reply")},
+            }
+        ]
+        candidate_nodes = prompt.get("plan", {}).get("nodes", [])
+        defaults = {
+            "node_id": "",
+            "tool_id": "",
+            "action": "",
+            "params": {},
+            "depends_on": [],
+            "next": None,
+            "branches": [],
+        }
+        expected = [
+            {key: node.get(key, value) for key, value in defaults.items()}
+            for node in expected_nodes
+        ]
+        actual = [
+            {key: node.get(key, value) for key, value in defaults.items()}
+            for node in candidate_nodes
+        ]
+        if actual != expected:
+            return None
+        response = review
+    return {"choices": [{"message": {"content": json.dumps(response, ensure_ascii=False)}}]}
+
+
 def run_owned_attachment_task(task):
     from starlette.requests import Request
 
@@ -74,11 +115,8 @@ def run_owned_attachment_task(task):
 
     def completion(**kwargs):
         captured.append(kwargs["context"]["file_context"]["verified_uploads"][0]["text"])
-        return {
-            "choices": [
-                {"message": {"content": json.dumps(task["model_response"], ensure_ascii=False)}}
-            ]
-        }
+        prompt = json.loads(kwargs["messages"][1]["content"])
+        return _scripted_model_response(task, prompt)
 
     repo = InMemoryAgentRunRepository()
     checks = []

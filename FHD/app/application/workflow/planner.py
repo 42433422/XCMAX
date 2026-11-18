@@ -22,7 +22,7 @@ from .planning_graph_policy import (
     filter_registry_for_profile as _filter_tool_registry_for_profile,
 )
 from .tool_profile import resolve_tool_execution_profile
-from .workflow_types import PlanGraph, WorkflowNode, validate_plan_graph
+from .workflow_types import PlanGraph, WorkflowNode, plan_fingerprint, validate_plan_graph
 
 logger = logging.getLogger(__name__)
 _planner_http_client: httpx.Client | None = None
@@ -165,7 +165,14 @@ class LLMWorkflowPlanner:
         from app.application.workflow.workflow_types import normalize_workflow_risk
         from app.domain.neuro.cognition.plan_graph_hooks import finalize_planned_graph
 
+        reviewed_fingerprint: str | None = None
+
         def validate_candidate(candidate: PlanGraph) -> str | None:
+            if (
+                reviewed_fingerprint is not None
+                and plan_fingerprint(candidate) != reviewed_fingerprint
+            ):
+                return "目标核对后的计划发生变化，必须重新核对"
             if (candidate.metadata or {}).get("response_mode") == "reply":
                 reply_nodes = [
                     node
@@ -200,6 +207,11 @@ class LLMWorkflowPlanner:
                 user_message=message,
                 context=context,
             )
+            if (
+                reviewed_fingerprint is not None
+                and plan_fingerprint(candidate) != reviewed_fingerprint
+            ):
+                return "目标核对后的计划发生变化，必须重新核对"
             return validate_plan_graph(candidate) or validate_required_params(
                 candidate, registry_for_plan
             )
@@ -237,6 +249,58 @@ class LLMWorkflowPlanner:
                 if errors:
                     context["planning_failure_reason"] = str(errors[-1].get("message") or "")
                 logger.warning("计划修复未成功，本轮不执行: %s", repair_trace.get("errors"))
+        if planned is not None and planned.metadata.get("planning_tier") != "light":
+            from .goal_coverage import review_goal_coverage
+
+            # Review the final, repaired graph, never the planner's own claim of completeness.
+            # One full replan is allowed before execution; the old graph is not resumed.
+            for attempt in range(2):
+                with model_rate_limit_scope(context), model_response_scope():
+                    try:
+                        review, error = review_goal_coverage(
+                            planned, message, context, self.complete_messages
+                        )
+                    except RECOVERABLE_ERRORS:
+                        review, error = None, "目标覆盖核对暂不可用，本轮未执行任何操作"
+                        record_response_error()
+                if error is None and review is not None:
+                    planned.metadata["goal_coverage"] = review.model_dump()
+                    context.pop("goal_coverage_rejected", None)
+                    break
+                context["planning_failure_reason"] = str(error or "目标核对未完成")
+                context["goal_coverage_rejected"] = review is not None
+                if attempt or review is None:
+                    planned = None
+                    break
+                context.pop("goal_coverage_rejected", None)
+                with model_rate_limit_scope(context), model_response_scope():
+                    try:
+                        planned = self._generation().generate(
+                            plan_id,
+                            user_id,
+                            message,
+                            registry_for_plan,
+                            context,
+                            coverage_feedback={"review": review.model_dump(), "error": error},
+                        )
+                    except MarketModelError as exc:
+                        context["planning_failure_reason"] = str(exc)
+                        context.pop("goal_coverage_rejected", None)
+                        planned = None
+                        record_response_error()
+                    if planned is not None:
+                        planned, repair_trace = repair_plan(
+                            planned=planned,
+                            plan_id=plan_id,
+                            message=message,
+                            context=context,
+                            tool_registry=registry_for_plan,
+                            validate=validate_candidate,
+                            complete=self.complete_messages,
+                        )
+                if planned is None:
+                    break
+                context.pop("planning_failure_reason", None)
         # 统一 Agent Runtime 接缝：把 pre-plan 记忆召回落上计划元数据，
         # 供编排器转成 run.memory_references（主链路可观测闭合）。
         recall_meta = {
@@ -254,6 +318,8 @@ class LLMWorkflowPlanner:
                 planned.metadata["memory_recall"] = recall_meta
             except (AttributeError, TypeError):
                 logger.debug("plan metadata 不支持 memory_recall 附加", exc_info=True)
+        if planned is not None and "goal_coverage" in planned.metadata:
+            reviewed_fingerprint = plan_fingerprint(planned)
         final_plan = finalize_planned_graph(
             planned,
             plan_id=plan_id,
