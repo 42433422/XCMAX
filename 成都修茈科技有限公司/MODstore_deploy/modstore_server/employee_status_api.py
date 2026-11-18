@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends
 from sqlalchemy import func
 
-from modstore_server.api.deps import _get_current_user
+from modstore_server.api.deps import require_admin
 from modstore_server.models import (
     CatalogItem,
     EmployeeChangeRequest,
@@ -125,8 +125,8 @@ def _employee_status_summary() -> List[Dict[str, Any]]:
 
 @router.get("/employee-status", summary="员工任务状态看板")
 def get_employee_status(
-    user: User = Depends(_get_current_user),
+    user: User = Depends(require_admin),
 ):
-    """聚合所有员工的最近执行状态、pending ChangeRequest 数量和健康指标。"""
+    """仅管理员可读取跨账号任务详情、pending ChangeRequest 数量和健康指标。"""
     data = _employee_status_summary()
     return {"ok": True, "employees": data, "total": len(data)}

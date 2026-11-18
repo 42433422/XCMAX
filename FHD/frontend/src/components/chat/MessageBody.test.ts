@@ -2,8 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import MessageBody from './MessageBody.vue'
 
-vi.mock('@/utils/lightMarkdown', () => ({
-  renderMarkdown: vi.fn((text: string) => `<p>${text}</p>`),
+vi.mock('@/utils/sanitizeHtml', () => ({
+  sanitizeChatBubbleMarkdown: vi.fn((text: string) => `<p>${text}</p>`),
 }))
 
 vi.mock('@/utils/mermaidSanitize', () => ({
@@ -61,11 +61,11 @@ describe('MessageBody', () => {
     expect(wrapper.find('.msg-body').html()).not.toContain('msg-body__cursor')
   })
 
-  it('calls renderMarkdown with content', async () => {
-    const { renderMarkdown } = await import('@/utils/lightMarkdown')
+  it('calls sanitizeChatBubbleMarkdown with content', async () => {
+    const { sanitizeChatBubbleMarkdown } = await import('@/utils/sanitizeHtml')
     const wrapper = mountBody({ content: 'Markdown content' })
     await wrapper.vm.$nextTick()
-    expect(renderMarkdown).toHaveBeenCalledWith('Markdown content')
+    expect(sanitizeChatBubbleMarkdown).toHaveBeenCalledWith('Markdown content')
   })
 
   it('applies default content when content prop is undefined', () => {
@@ -125,88 +125,88 @@ describe('MessageBody', () => {
   })
 
   it('handles markdown code blocks', async () => {
-    const { renderMarkdown } = await import('@/utils/lightMarkdown')
-    vi.mocked(renderMarkdown).mockReturnValue('<pre><code>const x = 1;</code></pre>')
+    const { sanitizeChatBubbleMarkdown } = await import('@/utils/sanitizeHtml')
+    vi.mocked(sanitizeChatBubbleMarkdown).mockReturnValue('<pre><code>const x = 1;</code></pre>')
     const wrapper = mountBody({ content: '```js\nconst x = 1;\n```' })
     await wrapper.vm.$nextTick()
     expect(wrapper.find('.msg-body').html()).toContain('code')
   })
 
   it('handles markdown tables', async () => {
-    const { renderMarkdown } = await import('@/utils/lightMarkdown')
-    vi.mocked(renderMarkdown).mockReturnValue('<table><tr><th>Header</th></tr></table>')
+    const { sanitizeChatBubbleMarkdown } = await import('@/utils/sanitizeHtml')
+    vi.mocked(sanitizeChatBubbleMarkdown).mockReturnValue('<table><tr><th>Header</th></tr></table>')
     const wrapper = mountBody({ content: '| Header |\n|--------|\n| Cell |' })
     await wrapper.vm.$nextTick()
     expect(wrapper.find('.msg-body').html()).toContain('table')
   })
 
   it('handles markdown links', async () => {
-    const { renderMarkdown } = await import('@/utils/lightMarkdown')
-    vi.mocked(renderMarkdown).mockReturnValue('<a href="https://example.com" class="md-link">Link</a>')
+    const { sanitizeChatBubbleMarkdown } = await import('@/utils/sanitizeHtml')
+    vi.mocked(sanitizeChatBubbleMarkdown).mockReturnValue('<a href="https://example.com" class="md-link">Link</a>')
     const wrapper = mountBody({ content: '[Link](https://example.com)' })
     await wrapper.vm.$nextTick()
     expect(wrapper.find('.msg-body').html()).toContain('Link')
   })
 
   it('handles markdown images', async () => {
-    const { renderMarkdown } = await import('@/utils/lightMarkdown')
-    vi.mocked(renderMarkdown).mockReturnValue('<img src="test.png" class="md-img" alt="test" />')
+    const { sanitizeChatBubbleMarkdown } = await import('@/utils/sanitizeHtml')
+    vi.mocked(sanitizeChatBubbleMarkdown).mockReturnValue('<img src="test.png" class="md-img" alt="test" />')
     const wrapper = mountBody({ content: '![test](test.png)' })
     await wrapper.vm.$nextTick()
     expect(wrapper.find('.msg-body').html()).toContain('img')
   })
 
   it('handles markdown blockquotes', async () => {
-    const { renderMarkdown } = await import('@/utils/lightMarkdown')
-    vi.mocked(renderMarkdown).mockReturnValue('<blockquote class="md-quote">Quote</blockquote>')
+    const { sanitizeChatBubbleMarkdown } = await import('@/utils/sanitizeHtml')
+    vi.mocked(sanitizeChatBubbleMarkdown).mockReturnValue('<blockquote class="md-quote">Quote</blockquote>')
     const wrapper = mountBody({ content: '> Quote' })
     await wrapper.vm.$nextTick()
     expect(wrapper.find('.msg-body').html()).toContain('Quote')
   })
 
   it('handles markdown lists', async () => {
-    const { renderMarkdown } = await import('@/utils/lightMarkdown')
-    vi.mocked(renderMarkdown).mockReturnValue('<ul class="md-list"><li class="md-li">Item</li></ul>')
+    const { sanitizeChatBubbleMarkdown } = await import('@/utils/sanitizeHtml')
+    vi.mocked(sanitizeChatBubbleMarkdown).mockReturnValue('<ul class="md-list"><li class="md-li">Item</li></ul>')
     const wrapper = mountBody({ content: '- Item' })
     await wrapper.vm.$nextTick()
     expect(wrapper.find('.msg-body').html()).toContain('Item')
   })
 
   it('handles markdown headings', async () => {
-    const { renderMarkdown } = await import('@/utils/lightMarkdown')
-    vi.mocked(renderMarkdown).mockReturnValue('<h1 class="md-h md-h1">Title</h1>')
+    const { sanitizeChatBubbleMarkdown } = await import('@/utils/sanitizeHtml')
+    vi.mocked(sanitizeChatBubbleMarkdown).mockReturnValue('<h1 class="md-h md-h1">Title</h1>')
     const wrapper = mountBody({ content: '# Title' })
     await wrapper.vm.$nextTick()
     expect(wrapper.find('.msg-body').html()).toContain('Title')
   })
 
   it('handles markdown horizontal rules', async () => {
-    const { renderMarkdown } = await import('@/utils/lightMarkdown')
-    vi.mocked(renderMarkdown).mockReturnValue('<hr class="md-hr" />')
+    const { sanitizeChatBubbleMarkdown } = await import('@/utils/sanitizeHtml')
+    vi.mocked(sanitizeChatBubbleMarkdown).mockReturnValue('<hr class="md-hr" />')
     const wrapper = mountBody({ content: '---' })
     await wrapper.vm.$nextTick()
     expect(wrapper.find('.msg-body').html()).toContain('hr')
   })
 
   it('handles markdown inline code', async () => {
-    const { renderMarkdown } = await import('@/utils/lightMarkdown')
-    vi.mocked(renderMarkdown).mockReturnValue('<code class="md-code-inline">code</code>')
+    const { sanitizeChatBubbleMarkdown } = await import('@/utils/sanitizeHtml')
+    vi.mocked(sanitizeChatBubbleMarkdown).mockReturnValue('<code class="md-code-inline">code</code>')
     const wrapper = mountBody({ content: '`code`' })
     await wrapper.vm.$nextTick()
     expect(wrapper.find('.msg-body').html()).toContain('code')
   })
 
   it('handles math blocks', async () => {
-    const { renderMarkdown } = await import('@/utils/lightMarkdown')
-    vi.mocked(renderMarkdown).mockReturnValue('<div class="md-math-block">E=mc^2</div>')
+    const { sanitizeChatBubbleMarkdown } = await import('@/utils/sanitizeHtml')
+    vi.mocked(sanitizeChatBubbleMarkdown).mockReturnValue('<div class="md-math-block">E=mc^2</div>')
     const wrapper = mountBody({ content: '$$E=mc^2$$' })
     await wrapper.vm.$nextTick()
     expect(wrapper.find('.msg-body').html()).toContain('math')
   })
 
   it('handles inline math', async () => {
-    const { renderMarkdown } = await import('@/utils/lightMarkdown')
-    vi.mocked(renderMarkdown).mockReturnValue('<span class="md-math">x^2</span>')
+    const { sanitizeChatBubbleMarkdown } = await import('@/utils/sanitizeHtml')
+    vi.mocked(sanitizeChatBubbleMarkdown).mockReturnValue('<span class="md-math">x^2</span>')
     const wrapper = mountBody({ content: '$x^2$' })
     await wrapper.vm.$nextTick()
     expect(wrapper.find('.msg-body').html()).toContain('math')

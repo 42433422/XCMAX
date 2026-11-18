@@ -4,7 +4,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
-import { renderMarkdown } from '@/utils/lightMarkdown'
+import { sanitizeChatBubbleMarkdown } from '@/utils/sanitizeHtml'
 import { sanitizeMermaidSource } from '@/utils/mermaidSanitize'
 
 const props = defineProps<{
@@ -17,7 +17,7 @@ const hostRef = ref<HTMLDivElement | null>(null)
 
 const rendered = computed(() => {
   const text = props.content || ''
-  const html = renderMarkdown(text)
+  const html = sanitizeChatBubbleMarkdown(text)
   if (props.streaming && text.trim()) {
     return `${html}<span class="msg-body__cursor" aria-hidden="true">▍</span>`
   }
