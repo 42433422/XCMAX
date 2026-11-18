@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "_source": "BerriAI/litellm model_prices_and_context_window.json",
+  "_license": "MIT",
+  "_doc": "各模型可用的输入上下文窗口（tokens）。数据取自 LiteLLM 公开目录，运行时不做联网查询；新增模型在此登记，未登记的模型使用 default_window。",
+  "default_window": 16384,
+  "policy": {
+    "reserve_ratio": 0.5,
+    "floor": 8000,
+    "ceiling": 32000
+  },
+  "models": {
+    "deepseek-chat": 65536,
+    "deepseek-reasoner": 65536,
+    "gpt-4o": 128000,
+    "gpt-4o-mini": 128000,
+    "claude-3-5-sonnet": 200000,
+    "claude-sonnet-4": 200000
+  }
+}

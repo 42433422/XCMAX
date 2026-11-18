@@ -64,6 +64,7 @@ class ConversationLlmMixin:
                 provider=provider,
                 context=context,
                 reserved_tokens=max_tokens + schema_tokens,
+                model=getattr(self, "model", None),
             )
             result = await provider.chat_completion(
                 messages=compression.messages,
