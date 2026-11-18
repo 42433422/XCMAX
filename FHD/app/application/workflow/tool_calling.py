@@ -108,7 +108,7 @@ def plan_from_tool_calls(
     context: dict[str, Any] | None,
     lookup: dict[str, tuple[str, str]],
 ) -> PlanGraph | None:
-    """把 ``tool_calls`` 转成无依赖的并行计划节点；无可用调用时返回 None。"""
+    """Convert a single native tool call; reject batches without explicit dependencies."""
     if not isinstance(payload, dict):
         return None
     choices = payload.get("choices")
@@ -119,6 +119,12 @@ def plan_from_tool_calls(
         return None
     calls = message_obj.get("tool_calls")
     if not isinstance(calls, list) or not calls or len(calls) > _MAX_NATIVE_CALLS:
+        return None
+    # Native tool_calls contain no dependency graph.  Executing multiple calls
+    # as independent nodes can violate explicit "first X, then Y" user intent.
+    # Until the planner emits a validated dependency graph, accept only one call.
+    if len(calls) != 1:
+        logger.warning("Rejecting multi-tool native batch without dependency graph")
         return None
 
     nodes: list[WorkflowNode] = []
@@ -136,7 +142,7 @@ def plan_from_tool_calls(
             return None
         target = lookup.get(str(function.get("name") or ""))
         if target is None:
-            logger.warning("原生工具调用未匹配到已授权动作，回退文本计划")
+            logger.warning("原生工具调用未匹配到已授权动作，拒绝调用计划")
             return None
         params = _parse_arguments(function.get("arguments"))
         if params is None:

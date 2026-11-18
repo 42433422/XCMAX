@@ -495,14 +495,14 @@
     },
     "FHD/app/application/workflow/llm_plan_generation.py": {
       "base_file": "FHD/app/application/workflow/llm_plan_generation.py",
-      "base_blob": "8d8553a463bbb888abf78bc9ee68d484770fadba",
-      "head_blob": "3d9299838303194c3eed03b6b28a93d523a98b4c",
-      "before_lines": 801,
-      "after_lines": 953,
-      "reason": "审阅请求：整合模型真实回包计量、多轮上下文和结构化澄清；历史消息裁剪优先保留最新轮次并恢复时间顺序，沿用原有身份字段剔除与密钥净化。",
-      "boundary": "只负责模型交互与受控输出解析；业务完成指标仍在持久事务提交后记录，执行审批由原流程负责。",
-      "validation": "规划器26项回归通过，新增普通回复和工具规划两条长历史行为用例；知识外源68项回归通过。完整CI与人工架构审阅仍需独立确认，此登记不代表批准。",
-      "follow_up": "继续把上下文策略与纯解析放在既有专门模块，避免新增业务执行分支进入生成器。",
+      "base_blob": "3d9299838303194c3eed03b6b28a93d523a98b4c",
+      "head_blob": "fba8fdce546be20a063983c1036ba025f70417d6",
+      "before_lines": 953,
+      "after_lines": 971,
+      "reason": "评审请求：整合#3304，在既有生成器中统一原生工具与JSON计划的场景筛选；拒绝无依赖原生批次，并修复轻量回复重复规划、结构修复忽略原生调用两条路径。",
+      "boundary": "复用既有工具注册表、select_tools_for_prompt及工具计划转换器；无依赖图的多原生调用在转换器拒绝，仍保留JSON PlanGraph显式依赖计划、原风险和审批路径。",
+      "validation": "native调用及既有规划/吸收/组件/依赖图回归111项通过；两个新增失败用例在旧实现复现并在修复后通过。Ruff检查通过。整合PR完整CI必须通过；本登记不代表架构审批。",
+      "follow_up": "后续多意图依赖编译继续在既有规划层实现；本次仅阻止未经依赖验证的原生并行批次，不宣称意图审计整改全部完成。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/dataset_rag_app_service.py": {
