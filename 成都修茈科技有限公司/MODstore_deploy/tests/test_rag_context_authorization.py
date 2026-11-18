@@ -27,6 +27,8 @@ def knowledge_access(monkeypatch):
     engine = create_engine(
         "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
     )
+    with engine.connect() as connection:
+        connection.exec_driver_sql("PRAGMA foreign_keys=ON")
     tables = [
         models.User,
         models.CatalogItem,
@@ -51,6 +53,7 @@ def knowledge_access(monkeypatch):
             )
             for uid in range(1, 7)
         )
+        session.flush()
         for cid, pkg, public in [(21, "private-pack", False), (22, "public-pack", True)]:
             session.add(
                 models.CatalogItem(
@@ -87,6 +90,7 @@ def knowledge_access(monkeypatch):
                     visibility="public" if public else "private",
                 )
             )
+        session.flush()
         for cid, kind, grantee in [
             (107, "employee", "private-pack"),
             (108, "workflow", "701"),
@@ -225,9 +229,11 @@ def test_collection_permission_helper_does_not_trust_context(
 @pytest.mark.parametrize("uid", [0, 5, 999])
 def test_missing_or_deleted_principal_cannot_inherit_entity_knowledge(knowledge_access, uid):
     with knowledge_access.sf() as session:
-        session.query(models.CatalogItem).filter_by(id=21).update({"author_id": uid})
-        session.query(models.Workflow).filter_by(id=701).update({"user_id": uid})
-        session.commit()
+        # Missing callers cannot be persisted as FK-backed entity owners.
+        if session.get(models.User, uid) is not None:
+            session.query(models.CatalogItem).filter_by(id=21).update({"author_id": uid})
+            session.query(models.Workflow).filter_by(id=701).update({"user_id": uid})
+            session.commit()
         for context, private_ids in _CONTEXTS:
             rows = rag_service.visible_collection_ids(session, user_id=uid, **context)
             assert not private_ids.intersection(int(row.id) for row in rows)
@@ -239,6 +245,7 @@ def test_employee_purchase_or_execution_permission_is_not_private_knowledge_gran
         session.add(models.Purchase(user_id=4, catalog_id=21, amount=10))
         session.add(models.Entitlement(user_id=4, catalog_id=21, entitlement_type="item"))
         session.add(models.PlanTemplate(id="knowledge-test-plan", name="plan", price=10))
+        session.flush()
         session.add(models.UserPlan(user_id=4, plan_id="knowledge-test-plan", is_active=True))
         session.commit()
     for employee_id, private_ids in [("private-pack", [104, 107]), ("public-pack", [111])]:

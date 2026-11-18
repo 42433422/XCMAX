@@ -57,7 +57,7 @@ class ImWsHub:
                     continue
                 await ws.send_text(text)
                 sent += 1
-            except (WebSocketDisconnect, *RECOVERABLE_ERRORS):
+            except RECOVERABLE_ERRORS + (WebSocketDisconnect,):
                 dead.append(ws)
         for ws in dead:
             await self.disconnect(user_id, ws)

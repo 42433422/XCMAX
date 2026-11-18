@@ -40,6 +40,11 @@ def employee_access(tmp_path, monkeypatch):
     engine = create_engine(
         "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
     )
+
+    @event.listens_for(engine, "connect")
+    def enable_foreign_keys(connection, _record):
+        connection.execute("PRAGMA foreign_keys=ON")
+
     Base.metadata.create_all(
         engine,
         tables=[
@@ -98,6 +103,7 @@ def employee_access(tmp_path, monkeypatch):
                 is_admin=uid == 606,
             )
             db.add(users[uid])
+        db.flush()
         for pid, public, price in [
             ("private-employee", False, 10),
             ("public-free", True, 0),
@@ -142,6 +148,7 @@ def employee_access(tmp_path, monkeypatch):
                 )
             )
         db.add(PlanTemplate(id="generic", name="Generic subscription"))
+        db.flush()
         db.add(UserPlan(user_id=202, plan_id="generic", is_active=True))
         db.add(UserMod(user_id=101, mod_id="alice-local-draft"))
         db.add(Workflow(id=1, user_id=202, name="Bob workflow"))
@@ -520,6 +527,7 @@ def _workflow_chain(db, workflow_id, user_id, node_type, config):
     workflow = db.get(Workflow, workflow_id)
     if workflow is None:
         db.add(Workflow(id=workflow_id, user_id=user_id, name=f"Fixture {workflow_id}"))
+        db.flush()
     nodes = [
         WorkflowNode(
             workflow_id=workflow_id,
@@ -583,8 +591,6 @@ def test_own_child_workflow_preserves_actor_authority(
         (202, 0, 202, False),
         (101, 606, 606, False),
         (606, 0, 606, False),
-        (9999, 0, None, False),
-        (0, 0, None, False),
         (202, 0, None, True),
         (101, 606, None, True),
         (606, 0, None, True),
@@ -615,3 +621,19 @@ def test_workflow_default_execution_uses_verified_owner(
     else:
         execute_workflow(2, {}, user_id=actor_id)
     assert actors == ([] if expected_actor is None else [expected_actor])
+
+
+@pytest.mark.parametrize("owner_id", [9999, 0])
+def test_graph_entry_rejects_orphaned_legacy_owner(employee_access, owner_id):
+    from modstore_server.workflow_engine import WorkflowEngine
+
+    # Keep invalid legacy ownership out of FK-enforced storage, while checking
+    # the same graph-entry guard with real account lookups before any execution.
+    workflow = Workflow(id=2, user_id=owner_id, name="Orphaned legacy fixture")
+    with employee_access.factory() as db:
+        assert db.get(User, owner_id) is None
+        with pytest.raises(PermissionError, match="无权执行该工作流"):
+            WorkflowEngine()._run_graph(
+                db, workflow, {}, mock_employees=False, collect_trace=False, user_id=0
+            )
+        assert db.query(WorkflowExecution).count() == 0
