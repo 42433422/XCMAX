@@ -8,7 +8,6 @@ channels can retry; interrupted attempts stay uncertain until reconciled.
 from __future__ import annotations
 
 import hashlib
-import importlib
 import json
 import logging
 import os
@@ -90,8 +89,9 @@ def apprise_sender(urls: list[str] | None = None) -> Sender:
             configured = [item.strip() for item in raw.split(",") if item.strip()]
         if not configured:
             return False
-        apprise = importlib.import_module("apprise")
-        client = apprise.Apprise()
+        from apprise import Apprise
+
+        client = Apprise()
         for url in configured:
             if not client.add(url):
                 raise ValueError("Apprise 渠道配置无效")
