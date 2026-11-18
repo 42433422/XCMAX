@@ -17,7 +17,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Callable
 
-__all__ = ["ProactiveEvent", "ProactiveService", "apprise_sender", "proactive_root"]
+__all__ = [
+    "ProactiveEvent",
+    "ProactiveService",
+    "apprise_sender",
+    "in_app_sender",
+    "proactive_root",
+]
 
 DEDUPE_WINDOW_SECONDS = 24 * 60 * 60
 _MAX_OUTBOX_BYTES = 2 * 1024 * 1024
@@ -48,6 +54,20 @@ class ProactiveEvent:
 def proactive_root() -> Path:
     base = os.environ.get("MODSTORE_RUNTIME_DIR") or tempfile.gettempdir()
     return Path(base) / "proactive"
+
+
+def in_app_sender(event: ProactiveEvent) -> None:
+    """Push to online users through the process-local IM WebSocket hub."""
+    if not event.user_ids:
+        return
+    from app.infrastructure.im.ws_hub import im_ws_hub
+    from app.utils.async_runtime import run_coroutine_sync
+
+    run_coroutine_sync(
+        im_ws_hub.broadcast_members(
+            list(event.user_ids), {"type": "proactive", **event.as_dict()}
+        )
+    )
 
 
 def apprise_sender(urls: list[str] | None = None) -> Sender:

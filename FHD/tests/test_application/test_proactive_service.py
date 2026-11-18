@@ -7,6 +7,7 @@ from app.application.proactive.service import (
     ProactiveEvent,
     ProactiveService,
     apprise_sender,
+    in_app_sender,
 )
 
 
@@ -55,3 +56,8 @@ def test_successful_senders_are_recorded(tmp_path):
 def test_apprise_sender_is_noop_without_urls(monkeypatch):
     monkeypatch.delenv("PROACTIVE_APPRISE_URLS", raising=False)
     apprise_sender()(event())  # must not import apprise or raise
+
+
+def test_in_app_sender_skips_users_without_connections():
+    in_app_sender(event())  # no recipients: must not touch the WebSocket hub
+

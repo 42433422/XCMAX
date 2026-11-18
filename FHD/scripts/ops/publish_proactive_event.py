@@ -15,6 +15,7 @@ from app.application.proactive.service import (  # noqa: E402
     ProactiveEvent,
     ProactiveService,
     apprise_sender,
+    in_app_sender,
 )
 
 
@@ -28,7 +29,7 @@ def main() -> int:
     parser.add_argument("--no-apprise", action="store_true", help="只写站内 outbox，不外发")
     args = parser.parse_args()
 
-    senders = [] if args.no_apprise else [apprise_sender()]
+    senders = [in_app_sender] if args.no_apprise else [in_app_sender, apprise_sender()]
     service = ProactiveService(senders=senders)
     result = service.publish(
         ProactiveEvent(

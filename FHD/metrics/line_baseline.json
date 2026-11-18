@@ -1,5 +1,5 @@
 {
-  "lines": 2454200,
+  "lines": 2454488,
   "updated": "2026-11-18",
-  "note": "主动提醒：新增事件去重/outbox/Apprise 投递服务 141 行、CLI 与测试 47 行，合计净增 153 行（本 PR 累计 365 行）；Apprise 为可选 extra，不进入 server-api 默认安装。由用户选择站内+Apprise 方案。"
+  "note": "主动提醒补充站内 WebSocket 推送与测试、依赖锁记录，本 PR 累计净增 288 行；Apprise 仍为可选 extra，不进入默认安装。由用户选择站内+Apprise 方案。"
 }
