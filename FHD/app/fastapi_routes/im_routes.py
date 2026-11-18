@@ -134,21 +134,21 @@ def _require_admin_customer_service_session(request: Request, db) -> JSONRespons
 def _resolve_ws_user_id(ws: WebSocket) -> int | None:
     from app.infrastructure.auth.dependencies import _allow_x_user_id_header
 
+    cookie_name = getattr(Config, "SESSION_COOKIE_NAME", "session_id")
+    sid = ws.cookies.get(cookie_name) or ws.query_params.get("session_id")
+    if sid:
+        from app.application.facades.session_facade import get_session_service
+
+        user = get_session_service().validate_session(str(sid).strip())
+        if user is None or not getattr(user, "is_active", True):
+            return None
+        return int(user.id)
+
     if _allow_x_user_id_header():
         q_uid = ws.query_params.get("user_id")
         if q_uid and str(q_uid).strip().isdigit():
             return int(str(q_uid).strip())
-
-    cookie_name = getattr(Config, "SESSION_COOKIE_NAME", "session_id")
-    sid = ws.cookies.get(cookie_name) or ws.query_params.get("session_id")
-    if not sid:
-        return None
-    from app.application.facades.session_facade import get_session_service
-
-    user = get_session_service().validate_session(str(sid).strip())
-    if user is None:
-        return None
-    return int(user.id)
+    return None
 
 
 async def _notify_offline_im_members(

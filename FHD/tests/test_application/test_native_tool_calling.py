@@ -84,6 +84,7 @@ def test_native_and_json_use_identical_validation():
 @pytest.mark.parametrize(
     "arguments",
     [
+        "",
         "[]",
         "null",
         "not-json",
@@ -110,6 +111,94 @@ def test_multiple_native_envelopes_are_rejected_without_partial_execution():
     response["choices"][0]["message"]["tool_calls"] *= 2
     completion = Mock(return_value=response)
     assert _generator(completion).generate("p1", "u1", "先查询再导出", {}, {}) is None
+    assert completion.call_count == 1
+
+
+@pytest.mark.parametrize("call_id", ["", " ", 7, [], {}])
+def test_explicit_native_call_id_must_remain_a_nonempty_string(call_id):
+    response = _native()
+    response["choices"][0]["message"]["tool_calls"][0]["id"] = call_id
+    with pytest.raises(ValueError):
+        native_plan_payload(response)
+
+
+@pytest.mark.parametrize("omit", [False, True])
+def test_optional_native_call_id_does_not_replace_workflow_node_identity(omit):
+    response = _native()
+    call = response["choices"][0]["message"]["tool_calls"][0]
+    if omit:
+        call.pop("id")
+    else:
+        call["id"] = None
+    _, nodes = _decode_completion(native_plan_payload(response))
+    assert [node.node_id for node in nodes] == ["read", "export"]
+    assert nodes[1].depends_on == ["read"]
+
+
+@pytest.mark.parametrize("arguments", [None, {}, {"price": float("nan")}])
+def test_native_arguments_require_json_text(arguments):
+    response = _native()
+    response["choices"][0]["message"]["tool_calls"][0]["function"]["arguments"] = arguments
+    completion = Mock(return_value=response)
+    assert _generator(completion).generate("p1", "u1", "查询并导出", {}, {}) is None
+    assert completion.call_count == 1
+
+
+@pytest.mark.parametrize("transport", ["tool_calls", "function_call"])
+@pytest.mark.parametrize("mode", ["full", "light", "repair"])
+def test_native_actions_never_reinterpret_shadow_text_or_request_a_new_plan(mode, transport):
+    response = _native(name="unknown__write")
+    message = response["choices"][0]["message"]
+    if transport == "function_call":
+        message["function_call"] = message.pop("tool_calls")[0]["function"]
+    message["content"] = json.dumps(_graph())
+    completion = Mock(return_value=response)
+    generator = _generator(completion)
+    if mode == "repair":
+        plan = generator._repair_output_shape(
+            plan_id="p1", message="查询并导出", context={}, raw_content="invalid", error="invalid"
+        )
+    else:
+        plan = generator.generate("p1", "u1", "你好" if mode == "light" else "查询并导出", {}, {})
+    assert plan is None
+    assert completion.call_count == 1
+
+
+@pytest.mark.parametrize("mode", ["light", "repair"])
+def test_valid_native_envelope_is_rejected_when_that_protocol_was_not_offered(mode):
+    completion = Mock(return_value=_native())
+    generator = _generator(completion)
+    if mode == "repair":
+        plan = generator._repair_output_shape(
+            plan_id="p1", message="查询并导出", context={}, raw_content="invalid", error="invalid"
+        )
+    else:
+        plan = generator.generate("p1", "u1", "你好", {}, {})
+    assert plan is None
+    assert completion.call_count == 1
+
+
+@pytest.mark.parametrize("invalid", ["batch", "unknown_function", "legacy_function"])
+def test_rejected_native_response_stays_rejected_through_workflow_planner(invalid):
+    from app.application.workflow.planner import LLMWorkflowPlanner
+
+    response = _native()
+    message = response["choices"][0]["message"]
+    if invalid == "batch":
+        message["tool_calls"] *= 2
+    elif invalid == "unknown_function":
+        message["tool_calls"][0]["function"]["name"] = "unknown__write"
+    else:
+        message["function_call"] = message.pop("tool_calls")[0]["function"]
+    message["content"] = json.dumps(_graph())
+    completion = Mock(return_value=response)
+    planner = LLMWorkflowPlanner(
+        ai_service=Mock(get_context=Mock(return_value=None)), completion=completion
+    )
+    plan = planner.plan("u1", "先查询再导出", {}, {})
+    assert plan.metadata["planning_rejected"] is True
+    assert plan.metadata["planning_unavailable"] is True
+    assert all(node.tool_id == "clarify" for node in plan.nodes)
     assert completion.call_count == 1
 
 
@@ -165,6 +254,35 @@ def test_unrelated_type_error_is_not_retried_as_legacy_transport():
     completion = Mock(side_effect=TypeError("invalid business input"))
     assert _generator(completion).generate("p1", "u1", "查询产品", {}, {}) is None
     assert completion.call_count == 1
+
+
+def test_default_gateway_legacy_provider_signature_really_falls_back(monkeypatch):
+    from app.application.workflow.planner_llm_gateway import request_planner_completion
+
+    provider_calls = []
+
+    class Provider:
+        async def chat_completion(self, *, messages, temperature, max_tokens):
+            provider_calls.append(messages)
+            return {"choices": [{"message": {"content": json.dumps(_graph())}}]}
+
+    monkeypatch.setenv("XCAGI_PLAN_TOOL_CALLS", "1")
+    monkeypatch.setattr(
+        "app.infrastructure.llm.providers.registry.get_active_provider", lambda **kwargs: Provider()
+    )
+    meter = Mock()
+    monkeypatch.setattr(
+        "app.application.workflow.planner_llm_gateway._meter_planner_completion", meter
+    )
+    gateway = Mock(wraps=request_planner_completion)
+    plan = _generator(gateway).generate("p1", "u1", "先查询再导出", {}, {})
+    assert plan is not None
+    assert plan.nodes[1].depends_on == ["read"]
+    assert gateway.call_count == 2
+    assert gateway.call_args_list[0].kwargs["tools"] == plan_function_tools()
+    assert "tools" not in gateway.call_args_list[1].kwargs
+    assert len(provider_calls) == 1
+    meter.assert_called_once()
 
 
 def test_tool_calls_switch(monkeypatch):

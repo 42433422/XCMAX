@@ -58,9 +58,9 @@ def _trace_ai_message_save(payload: dict, *, body: dict) -> dict:
 
 def _history_actor(request: Request) -> str:
     from app.application.task_conversation_store import durable_user_id
-    from app.infrastructure.auth.dependencies import resolve_session_user
+    from app.infrastructure.auth.dependencies import get_logged_in_user
 
-    actor = durable_user_id(getattr(resolve_session_user(request), "id", None))
+    actor = durable_user_id(getattr(get_logged_in_user(request), "id", None))
     if actor is None:
         raise HTTPException(status_code=401, detail="请先登录后再访问会话。")
     return str(actor)

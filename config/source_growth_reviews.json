@@ -495,14 +495,14 @@
     },
     "FHD/app/application/workflow/llm_plan_generation.py": {
       "base_file": "FHD/app/application/workflow/llm_plan_generation.py",
-      "base_blob": "8d8553a463bbb888abf78bc9ee68d484770fadba",
-      "head_blob": "3d9299838303194c3eed03b6b28a93d523a98b4c",
-      "before_lines": 801,
-      "after_lines": 953,
-      "reason": "审阅请求：整合模型真实回包计量、多轮上下文和结构化澄清；历史消息裁剪优先保留最新轮次并恢复时间顺序，沿用原有身份字段剔除与密钥净化。",
-      "boundary": "只负责模型交互与受控输出解析；业务完成指标仍在持久事务提交后记录，执行审批由原流程负责。",
-      "validation": "规划器26项回归通过，新增普通回复和工具规划两条长历史行为用例；知识外源68项回归通过。完整CI与人工架构审阅仍需独立确认，此登记不代表批准。",
-      "follow_up": "继续把上下文策略与纯解析放在既有专门模块，避免新增业务执行分支进入生成器。",
+      "base_blob": "3d9299838303194c3eed03b6b28a93d523a98b4c",
+      "head_blob": "fba8fdce546be20a063983c1036ba025f70417d6",
+      "before_lines": 953,
+      "after_lines": 971,
+      "reason": "评审请求：整合#3304，在既有生成器中统一原生工具与JSON计划的场景筛选；拒绝无依赖原生批次，并修复轻量回复重复规划、结构修复忽略原生调用两条路径。",
+      "boundary": "复用既有工具注册表、select_tools_for_prompt及工具计划转换器；无依赖图的多原生调用在转换器拒绝，仍保留JSON PlanGraph显式依赖计划、原风险和审批路径。",
+      "validation": "native调用及既有规划/吸收/组件/依赖图回归111项通过；两个新增失败用例在旧实现复现并在修复后通过。Ruff检查通过。整合PR完整CI必须通过；本登记不代表架构审批。",
+      "follow_up": "后续多意图依赖编译继续在既有规划层实现；本次仅阻止未经依赖验证的原生并行批次，不宣称意图审计整改全部完成。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/dataset_rag_app_service.py": {
@@ -551,6 +551,18 @@
       "boundary": "仅模板结构新增3行，数据加载、权限、知识问答和所有现有视图不变；尺寸规则保留在现有persy-knowledge.css中，不新建组件模块。",
       "validation": "知识页、图谱和布局3文件31项测试通过，完整vue-tsc和目标ESLint通过；本地Chromium因socket权限未完成几何验收，CI现有浏览器测试待运行。",
       "follow_up": "@42433422 复核内容区与输入区的窗口尺寸适配；本次只是既有页面结构修复，无需仅为行数拆分组件，后续布局变更继续在独立CSS中维护。",
+      "review_owner": "@42433422"
+    },
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_executor_merged_mod2.py": {
+      "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_executor_merged_mod2.py",
+      "base_blob": "9ab2932e6bc76780275f774efac6ea1a96b7c963",
+      "head_blob": "ca417b7d810eb99e9dc2c8e58be185ff102a89b7",
+      "before_lines": 1106,
+      "after_lines": 1110,
+      "reason": "仅提交评审请求：在现有员工执行器入口解析实际员工包并验证账户授权，校验失败时不进入执行阶段、指标写入和生命周期钩子；该已有超长文件净增 4 行。",
+      "boundary": "只移动员工包加载并传递已有 user_id 与 execute 权限，权限策略复用 employee_runtime、User、CatalogItem、Entitlement 和 UserMod；不在执行器内复制授权实现。",
+      "validation": "员工权限、真实子工作流传递、原有执行器及沙盒定向回归通过；包含无权请求不进入执行阶段、不写指标，以及正常作者、明确授权、管理员和内部系统调用的保留路径。完整 CI 和维护者评审仍须完成，此记录不是批准。",
+      "follow_up": "后续员工执行阶段调整继续复用统一入口授权，避免把所有权判断散落到各阶段；维护者评审该 4 行增长及内部系统调用的保留边界。",
       "review_owner": "@42433422"
     }
   }

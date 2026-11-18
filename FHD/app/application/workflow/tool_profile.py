@@ -5,6 +5,9 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+# Import plans must use ELT preview/execute, including persisted plans resumed later.
+RETIRED_PLANNER_TOOLS = frozenset({"import_excel_to_database"})
+
 
 def resolve_tool_execution_profile(runtime_context: Mapping[str, Any] | None) -> str:
     context = runtime_context or {}

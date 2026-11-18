@@ -327,6 +327,15 @@ def model_plan_schema_error(payload: Any) -> str | None:
     return None
 
 
+def _has_native_tool_calls(payload: Any) -> bool:
+    choices = payload.get("choices") if isinstance(payload, dict) else None
+    first = choices[0] if isinstance(choices, list) and choices else None
+    message = first.get("message") if isinstance(first, dict) else None
+    return isinstance(message, dict) and bool(
+        message.get("tool_calls") or message.get("function_call")
+    )
+
+
 def _decode_completion(payload: dict[str, Any]) -> tuple[dict[str, Any], list[WorkflowNode]] | None:
     parsed, _raw = _model_payload(payload)
     if not isinstance(parsed, dict):
@@ -503,6 +512,9 @@ class LlmPlanGeneration:
                 raise _LightReplyUnavailable from exc
         if response is None:
             # 模型调用本身失败：轻量轮次已经花掉一次调用，不再重复打一次完整规划。
+            raise _LightReplyUnavailable
+        if _has_native_tool_calls(response):
+            context["planning_failure_reason"] = "轻量回复包含未授权工具调用，本轮未执行任何操作"
             raise _LightReplyUnavailable
         decoded = _decode_completion(response)
         if decoded is None:

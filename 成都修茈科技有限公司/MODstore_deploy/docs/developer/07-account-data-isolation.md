@@ -21,7 +21,8 @@
 
 ## 知识库 v2
 
-- `modstore_server/knowledge_v2_api.py` 与 `modstore_server/rag_service.py` 的 `visible_collection_ids`：以 `("user", str(user_id))` 等为身份，叠加授权（`KnowledgeMembership`）与 `visibility='public'` 的集合；**不会把他人私有集合默认当作当前用户可见**。
+- `modstore_server/knowledge_v2_api.py` 与 `modstore_server/rag_service.py` 的 `visible_collection_ids` 以当前用户为授权基础：普通账号可读取自己的用户集合、明确授予该用户的 `KnowledgeMembership` 和 `visibility='public'` 集合。请求中的 `employee_id`、`workflow_id`、`org_id` 不扩大普通账号的访问范围；只有每次数据库核验仍为有效平台管理员的账号可以派生这些实体权限。
+- 包作者、工作流所有者、购买记录、套餐或运行资格都不等于私有知识授权；实体归属改变或 ID 重用也不转移知识权限。需要向普通账号共享实体集合时，由集合管理员明确授予 `grantee_kind=user`。HTTP 检索、工作流知识节点与员工知识注入共用上述服务层检查。
 
 ## 与「domain isolation」测试的区别
 

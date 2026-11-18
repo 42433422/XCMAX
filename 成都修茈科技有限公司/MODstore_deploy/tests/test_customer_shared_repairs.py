@@ -1,9 +1,9 @@
 """Confirmed public repair reuse remains separate from each customer's acceptance."""
 
 import uuid
-from ipaddress import IPv6Address
 
 import pytest
+from fastapi.testclient import TestClient
 
 from modstore_server.customer_service_tools import json_dumps, json_loads
 from tests.test_customer_issue_delivery_pipeline import (
@@ -21,6 +21,14 @@ def _as(monkeypatch, user):
 
 
 @pytest.fixture
+def client(isolated_modstore):
+    return TestClient(
+        isolated_modstore["client"].app,
+        client=(f"shared-repairs-{uuid.uuid4().hex}", 50000),
+    )
+
+
+@pytest.fixture
 def pair(client, monkeypatch, tmp_path):
     from modstore_server.models import get_session_factory, init_db
     from modstore_server.models_cs import CustomerServiceTicket
@@ -29,7 +37,6 @@ def pair(client, monkeypatch, tmp_path):
     # Each case owns its CR records and request quota; production limits stay active.
     monkeypatch.setenv("MODSTORE_DB_PATH", str(tmp_path / "shared-repairs.sqlite"))
     init_db()
-    client.headers["X-Forwarded-For"] = str(IPv6Address(uuid.uuid4().int))
     monkeypatch.setattr("modstore_server.customer_issue_api._wake_owner_intake", lambda *args: None)
     source_user, source_id = make_ticket(client, monkeypatch)
     target_user, target_id = make_ticket(client, monkeypatch)

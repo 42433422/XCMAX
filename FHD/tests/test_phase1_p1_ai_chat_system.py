@@ -190,16 +190,28 @@ def misc_client() -> TestClient:
 
 
 @patch("app.infrastructure.db.sync_engine.switch_to_test_mode")
-def test_system_test_db_enable(mock_switch: MagicMock, misc_client: TestClient) -> None:
+def test_system_test_db_enable(
+    mock_switch: MagicMock, misc_client: TestClient, trusted_actor
+) -> None:
     mock_switch.return_value = {"success": True}
-    r = misc_client.post("/system/test-db/enable", json={"enabled": True})
+    r = misc_client.post(
+        "/system/test-db/enable",
+        json={"enabled": True},
+        headers=trusted_actor(role="admin", tier="admin").headers,
+    )
     assert r.status_code == 200
 
 
 @patch("app.infrastructure.db.sync_engine.switch_to_production_mode")
-def test_system_test_db_disable(mock_switch: MagicMock, misc_client: TestClient) -> None:
+def test_system_test_db_disable(
+    mock_switch: MagicMock, misc_client: TestClient, trusted_actor
+) -> None:
     mock_switch.return_value = {"success": True}
-    r = misc_client.post("/system/test-db/disable", json={})
+    r = misc_client.post(
+        "/system/test-db/disable",
+        json={},
+        headers=trusted_actor(role="admin", tier="admin").headers,
+    )
     assert r.status_code == 200
 
 

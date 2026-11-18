@@ -77,6 +77,8 @@ def native_plan_payload(response: dict[str, Any]) -> dict[str, Any] | None:
     choices = response.get("choices")
     first = choices[0] if isinstance(choices, list) and choices else None
     message = first.get("message") if isinstance(first, dict) else None
+    if isinstance(message, dict) and message.get("function_call"):
+        raise ValueError("原生计划不支持旧式函数信封")
     if not isinstance(message, dict) or not message.get("tool_calls"):
         return None
     calls = message["tool_calls"]
@@ -84,12 +86,14 @@ def native_plan_payload(response: dict[str, Any]) -> dict[str, Any] | None:
         raise ValueError("原生调用必须一次提交完整依赖图")
     call = calls[0]
     function = call.get("function") if isinstance(call, dict) else None
+    call_id = call.get("id") if isinstance(call, dict) else None
     if (
         not isinstance(function, dict)
         or call.get("type") != "function"
         or function.get("name") != SubmitWorkflowPlan.__name__
         or not isinstance(function.get("arguments"), str)
-        or message.get("function_call")
+        or call_id is not None
+        and (not isinstance(call_id, str) or not call_id.strip())
     ):
         raise ValueError("原生调用不是授权的计划输出函数")
     # Reject truncation and non-finite values before schema parsing.

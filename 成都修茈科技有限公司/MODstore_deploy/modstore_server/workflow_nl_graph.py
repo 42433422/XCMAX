@@ -21,7 +21,10 @@ from modstore_server.models import (
     WorkflowEdge as WorkflowEdge,
     WorkflowNode as WorkflowNode,
 )
-from modstore_server.services.employee import get_default_employee_client
+from modstore_server.services.employee import (
+    accessible_employee_pack_ids,
+    get_default_employee_client,
+)
 from modstore_server.services.llm import (
     chat_dispatch_via_session as chat_dispatch_via_session,
 )
@@ -174,19 +177,23 @@ JSON 结构：
 只输出 JSON，不要其它文字。"""
 
 
-def _catalog_lines(max_items: int = 40) -> str:
+def _catalog_lines(db: Session, user: User, max_items: int = 40) -> str:
     try:
         rows = get_default_employee_client().list_employees() or []
     except RECOVERABLE_ERRORS:
         rows = []
+    rows = [r for r in rows if isinstance(r, dict)]
+    visible_ids = accessible_employee_pack_ids(
+        db, user.id, (str(r.get("id") or "").strip() for r in rows), execute=True
+    )
     lines: List[str] = []
-    for r in rows[:max_items]:
-        if not isinstance(r, dict):
-            continue
+    for r in rows:
         eid = str(r.get("id") or "").strip()
         name = str(r.get("name") or "").strip()
-        if eid:
+        if eid in visible_ids:
             lines.append(f"- id={eid!r} name={name!r}")
+            if len(lines) >= max_items:
+                break
     if not lines:
         return "（当前目录无已上架员工包；employee 节点可填占位 employee_id，用户稍后在画布修改。）"
     return "可用员工目录（employee_id 须与下列 id 一致）：\n" + "\n".join(lines)

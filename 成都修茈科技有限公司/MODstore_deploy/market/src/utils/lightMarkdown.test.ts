@@ -44,6 +44,37 @@ describe('lightMarkdown.renderMarkdown', () => {
     expect(html).toContain('<code class="md-code-inline">npm run build</code>')
   })
 
+  it.each(['text', 'mermaid'])('escapes raw HTML immediately after a %s fence', (language) => {
+    const marker = '<span data-untrusted="after-fence">literal content</span>'
+    const content = `\`\`\`${language}\nexample\n\`\`\`\n${marker}`
+    const doc = new DOMParser().parseFromString(renderMarkdown(content), 'text/html')
+    expect(doc.querySelector('[data-untrusted]')).toBeNull()
+    expect(doc.body.textContent).toContain(marker)
+    expect(doc.querySelectorAll(language === 'mermaid' ? '.md-mermaid' : '.md-code')).toHaveLength(1)
+  })
+
+  it.each(['0', '999'])('does not trust a user-supplied placeholder %s', (index) => {
+    const marker = '<span data-untrusted="forged-token">literal content</span>'
+    const content = `\u0000MD_PLACEHOLDER_${index}\u0001${marker}`
+    const doc = new DOMParser().parseFromString(renderMarkdown(content), 'text/html')
+    expect(doc.querySelector('[data-untrusted]')).toBeNull()
+    expect(doc.body.textContent).toContain(marker)
+  })
+
+  it('does not substitute an input token with generated inline HTML', () => {
+    const content = '`example`\n\n\u0000MD_PLACEHOLDER_0\u0001'
+    const doc = new DOMParser().parseFromString(renderMarkdown(content), 'text/html')
+    expect(doc.querySelectorAll('.md-code-inline')).toHaveLength(1)
+    expect(doc.body.textContent).toContain('MD_PLACEHOLDER_0')
+  })
+
+  it('keeps a fenced block separate from adjacent paragraphs', () => {
+    const doc = new DOMParser().parseFromString(renderMarkdown('before\n```text\nexample\n```\nafter **bold**'), 'text/html')
+    expect(Array.from(doc.body.children, (node) => node.tagName)).toEqual(['P', 'PRE', 'P'])
+    expect(doc.querySelector('.md-code__body')?.textContent).toBe('example')
+    expect(doc.querySelector('strong')?.textContent).toBe('bold')
+  })
+
   it('renders tables', () => {
     const html = renderMarkdown('| 字段 | 类型 |\n| --- | --- |\n| name | string |\n| age | number |')
     expect(html).toContain('class="md-table"')

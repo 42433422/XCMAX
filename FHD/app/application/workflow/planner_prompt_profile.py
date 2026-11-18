@@ -16,6 +16,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.application.intent.route_catalog import INTENT_DESCRIPTIONS
+from app.application.workflow.tool_profile import RETIRED_PLANNER_TOOLS
 
 # 安全、格式与图结构约束：所有场景常驻，不参与裁剪。
 BASE_RULES: tuple[str, ...] = (
@@ -164,9 +165,6 @@ _DOCUMENT_TOOL_PREFIXES = (
     "csv-",
 )
 
-# 不再向规划器暴露的工具：导入统一走 ELT，避免绕过预演与回滚。
-_PLANNER_HIDDEN_TOOLS = frozenset({"import_excel_to_database"})
-
 # 始终保留的核心工具（裁剪时不受影响，按前缀匹配）。
 _CORE_TOOL_PREFIXES = (
     "conversation",
@@ -244,7 +242,7 @@ def select_tools_for_prompt(
 ) -> dict[str, Any]:
     """按意图裁剪工具注册表；无法判定或裁剪为空时回退原始注册表。"""
     tool_registry = {
-        key: spec for key, spec in tool_registry.items() if key not in _PLANNER_HIDDEN_TOOLS
+        key: spec for key, spec in tool_registry.items() if key not in RETIRED_PLANNER_TOOLS
     }
     if not tool_registry:
         return tool_registry

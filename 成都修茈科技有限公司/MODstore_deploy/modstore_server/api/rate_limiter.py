@@ -97,9 +97,8 @@ class _RedisBucket:
 
 
 def _client_ip(request: Request) -> str:
-    forwarded = (request.headers.get("x-forwarded-for") or "").strip()
-    if forwarded:
-        return forwarded.split(",", 1)[0].strip()[:64] or "unknown"
+    # Uvicorn resolves forwarding headers only for configured trusted proxies.
+    # Reading raw X-Forwarded-For here would let callers choose a fresh bucket.
     if request.client and request.client.host:
         return request.client.host[:64]
     return "unknown"
@@ -154,11 +153,8 @@ class RateLimiterMiddleware:
                 return
 
         client_ip = _client_ip(request)
-        user_hint = (
-            request.headers.get("x-modstore-user") or request.headers.get("x-user-id") or ""
-        )[:64]
         route = f"{request.method}:{path}"[:220]
-        key = f"rate:{client_ip}:{user_hint}:{route}"
+        key = f"rate:{client_ip}:{route}"
         limit = self._resolve_limit(request.method, path)
 
         allowed, retry_after = self._bucket.check(key, limit, self._window)

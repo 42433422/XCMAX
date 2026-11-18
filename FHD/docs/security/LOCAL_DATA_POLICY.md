@@ -22,7 +22,8 @@
 | 操作 | 要求 |
 |------|------|
 | 读取/导出诊断包 | **已登录会话**（`GET /api/desktop/support-bundle`） |
-| 上传临时文件 | **已登录会话**（`POST/DELETE /api/upload/temp`） |
+| 上传/删除临时文件 | **已登录会话**；删除须与上传时的账号及租户一致，无归属旧文件只由 TTL 清理（`POST/DELETE /api/upload/temp`） |
+| 工作区文件预览/修改提案 | **已登录会话**；提案绑定账号、租户与工作区，应用修改仍须 P2 授权并复核路径及原文件内容 |
 | 办公文件上传 | **已登录会话**（platform-shell office/chat upload） |
 | 模型下载/安装 | **已登录会话**（desktop models API） |
 | 冷启探测 | **无需登录**（`GET /api/desktop/status`） |
@@ -60,7 +61,10 @@ Wave 0 **不**在 Electron 冷启时自动 purge，避免误删；运维/用户�
 | `POST /api/desktop/models/download` | 登录 |
 | `POST /api/desktop/models/install-manifest` | 登录 |
 | `POST /api/upload/temp` | 登录 |
-| `DELETE /api/upload/temp/{filename}` | 登录 + `secure_filename` |
+| `DELETE /api/upload/temp/{filename}` | 登录 + 原账号/租户归属 + `secure_filename` |
+| `POST /api/code-editor/analyze`、`POST /api/code-editor/edit` | 登录 |
+| `GET /api/code-editor/diff/{edit_id}`、`POST /api/code-editor/apply/{edit_id}` | 登录 + 创建账号/租户/工作区一致；apply 另须 P2 |
+| `POST /api/code-editor/draft` | 登录 + P2 |
 | `POST /api/platform-shell/office-sample-upload` | 登录 |
 | `POST /api/platform-shell/chat-office-file-upload` | 登录 |
 

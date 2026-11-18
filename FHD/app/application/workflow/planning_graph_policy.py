@@ -6,6 +6,7 @@ from typing import Any
 
 from app.application.workflow.clarification_inputs import action_input_metadata
 from app.application.workflow.clarification_node import build_clarify_node, needs_clarification
+from app.application.workflow.tool_profile import RETIRED_PLANNER_TOOLS
 from app.application.workflow.workflow_types import (
     PlanGraph,
     WorkflowNode,
@@ -20,7 +21,7 @@ def filter_registry_for_profile(tool_registry: dict[str, Any], profile: str) -> 
     """
     filtered: dict[str, Any] = {}
     for tool_id, spec in tool_registry.items():
-        if not isinstance(spec, dict):
+        if not isinstance(spec, dict) or tool_id in RETIRED_PLANNER_TOOLS:
             continue
         tool_av = str(spec.get("availability") or "shared").strip().lower()
         if profile == "normal" and tool_av == "pro_only":
@@ -136,6 +137,8 @@ def validate_required_params(plan: PlanGraph, tool_registry: dict[str, Any]) -> 
         if target_id and isinstance(detail, dict):
             clarification_by_target.setdefault(target_id, []).append(detail)
     for node in plan.nodes or []:
+        if node.tool_id in RETIRED_PLANNER_TOOLS:
+            return f"节点 {node.node_id} 使用已停用工具 {node.tool_id}，请通过 ELT 预演与执行导入"
         if node.tool_id == "clarify" and node.action == "ask":
             if not str((node.params or {}).get("question") or "").strip():
                 return f"澄清节点 {node.node_id} 缺少 question"

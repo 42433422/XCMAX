@@ -354,6 +354,8 @@ class _WorkflowEnginePart02Mixin:
         node: _facade().WorkflowNode,
         data: _facade().Dict[str, _facade().Any],
         config: _facade().Dict[str, _facade().Any],
+        *,
+        user_id: int = 0,
     ) -> _facade().Dict[str, _facade().Any]:
         sub_workflow_id = config.get("workflow_id")
         if not sub_workflow_id:
@@ -374,7 +376,7 @@ class _WorkflowEnginePart02Mixin:
         if not isinstance(sub_input, dict):
             sub_input = {"value": sub_input}
         sub_input["_sub_workflow_depth"] = current_depth
-        sub_result = _facade().execute_workflow(int(sub_workflow_id), sub_input)
+        sub_result = _facade().execute_workflow(int(sub_workflow_id), sub_input, user_id=user_id)
         return {
             output_var: sub_result,
             "sub_workflow_id": int(sub_workflow_id),

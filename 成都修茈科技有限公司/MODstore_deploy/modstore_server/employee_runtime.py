@@ -7,8 +7,12 @@ import json
 import os
 import re
 import zipfile
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Iterable, Optional
+
+from sqlalchemy import or_
+from sqlalchemy.orm import Session
 
 from modstore_server.catalog_store import employee_pack_records_from_store, files_dir
 from modstore_server.duty_employee_registry import get_duty_employee_record
@@ -20,7 +24,7 @@ from modstore_server.employee_config_v2_adapter import (
     needs_executor_translation,
     translate_v2_to_executor_config,
 )
-from modstore_server.models import CatalogItem
+from modstore_server.models import CatalogItem, Entitlement, User, UserMod, UserPlan
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 EXECUTOR_ACTION_HANDLERS = frozenset(
@@ -257,11 +261,104 @@ def load_employee_pack(session, pack_id: str) -> Dict[str, Any]:
     }
 
 
+def accessible_employee_pack_ids(
+    session: Session,
+    user_id: int,
+    pack_ids: Iterable[str],
+    *,
+    execute: bool = False,
+    library_mod_ids: Optional[Dict[str, str]] = None,
+) -> set[str]:
+    """Resolve account visibility in bulk using persisted ownership and entitlements."""
+    ids = {pid.strip() for pid in pack_ids if pid.strip()}
+    if not ids:
+        return set()
+    user = session.query(User).filter(User.id == user_id).first()
+    if not user or user.deleted_at is not None:
+        return set()
+    if user.is_admin:
+        return ids
+    ids = {pid for pid in ids if not is_planned_duty_employee_pack(pid, "employee_pack")}
+    library_mod_ids = library_mod_ids or {}
+    # Library content is authorized by its actual directory, never a manifest's
+    # claim to the ID of an independently published catalog item.
+    rows = (
+        session.query(CatalogItem)
+        .filter(
+            CatalogItem.pkg_id.in_(ids - library_mod_ids.keys()),
+            CatalogItem.artifact == "employee_pack",
+        )
+        .all()
+    )
+    now = datetime.now(UTC)
+    entitled = {
+        row[0]
+        for row in session.query(Entitlement.catalog_id)
+        .filter(
+            Entitlement.user_id == user_id,
+            Entitlement.catalog_id.in_([row.id for row in rows]),
+            Entitlement.is_active.is_(True),
+            or_(Entitlement.expires_at.is_(None), Entitlement.expires_at > now),
+        )
+        .all()
+    }
+    plan_active = False
+    if execute and any(row.is_public and float(row.price or 0) > 0 for row in rows):
+        plan = (
+            session.query(UserPlan)
+            .filter(
+                UserPlan.user_id == user_id,
+                UserPlan.is_active.is_(True),
+                or_(UserPlan.expires_at.is_(None), UserPlan.expires_at > now),
+            )
+            .order_by(UserPlan.id.desc())
+            .first()
+        )
+        plan_active = plan is not None
+    allowed = {
+        str(row.pkg_id)
+        for row in rows
+        if row.author_id == user_id
+        or row.id in entitled
+        or (row.is_public and (not execute or float(row.price or 0) <= 0 or plan_active))
+    }
+    uncatalogued = ids - {str(row.pkg_id) for row in rows}
+    if uncatalogued:
+        owned_mods = {
+            row[0]
+            for row in session.query(UserMod.mod_id)
+            .filter(
+                UserMod.user_id == user_id,
+                UserMod.mod_id.in_([library_mod_ids.get(pid, pid) for pid in uncatalogued]),
+            )
+            .all()
+        }
+        allowed.update(pid for pid in uncatalogued if library_mod_ids.get(pid, pid) in owned_mods)
+    return allowed
+
+
+def user_may_access_employee_pack(
+    session: Session,
+    user_id: int,
+    pack_id: str,
+    *,
+    execute: bool = False,
+    library_mod_id: Optional[str] = None,
+) -> bool:
+    return pack_id in accessible_employee_pack_ids(
+        session,
+        user_id,
+        [pack_id],
+        execute=execute,
+        library_mod_ids={pack_id: library_mod_id} if library_mod_id else None,
+    )
+
+
 def library_manifest_fallback_enabled() -> bool:
     """未登记到 ``catalog_items`` / ``packages.json`` 时，是否允许从 Mod 库目录读取 ``manifest.json``。
 
     默认开启（``1``），便于「做员工」流水线 ``publish_to_catalog=False`` 后仍能打开工作台。
-    多租户部署若共享同一库目录且需禁止按 id 探测草稿包，可设 ``MODSTORE_EMPLOYEE_MANIFEST_LIBRARY_FALLBACK=0``。
+    账户入口仍须校验 ``UserMod`` 归属；可设 ``MODSTORE_EMPLOYEE_MANIFEST_LIBRARY_FALLBACK=0`` 完全关闭。
     """
     raw = (os.environ.get("MODSTORE_EMPLOYEE_MANIFEST_LIBRARY_FALLBACK") or "1").strip().lower()
     return raw not in ("0", "false", "no", "off")
@@ -280,18 +377,34 @@ def _candidate_employee_pack_ids(pack_id: str) -> list[str]:
     return candidates
 
 
-def load_employee_pack_resolved(session, pack_id: str) -> Dict[str, Any]:
+def load_employee_pack_resolved(
+    session,
+    pack_id: str,
+    *,
+    user_id: Optional[int] = None,
+    execute: bool = False,
+) -> Dict[str, Any]:
     """catalog_items / packages.json 优先；未登记时回退 Mod 库 manifest（与 employee_api 一致）。"""
     last_error: Optional[Exception] = None
+    pack = None
     for candidate in _candidate_employee_pack_ids(pack_id):
         try:
-            return load_employee_pack(session, candidate)
+            pack = load_employee_pack(session, candidate)
+            break
         except ValueError as exc:
             last_error = exc
-    for candidate in _candidate_employee_pack_ids(pack_id):
-        pack = try_load_employee_pack_from_library(candidate)
-        if pack:
-            return pack
+    if pack is None:
+        for candidate in _candidate_employee_pack_ids(pack_id):
+            pack = try_load_employee_pack_from_library(candidate)
+            if pack:
+                break
+    if pack is not None:
+        library_mod_id = pack.pop("_library_mod_id", None)
+        if user_id is not None and not user_may_access_employee_pack(
+            session, user_id, str(pack["pack_id"]), execute=execute, library_mod_id=library_mod_id
+        ):
+            raise PermissionError("您无权访问该员工包")
+        return pack
     cand_txt = ", ".join(repr(c) for c in _candidate_employee_pack_ids(pack_id)) or "(无)"
     if library_manifest_fallback_enabled():
         lib_hint = "已在 Mod 库目录按上述 id 查找，未找到有效 manifest.json。"
@@ -333,6 +446,7 @@ def try_load_employee_pack_from_library(pack_id: str) -> Optional[Dict[str, Any]
     normalize_manifest_legacy_deepseek_to_auto(manifest)
     return {
         "pack_id": mid,
+        "_library_mod_id": mod_dir.name,
         "name": name,
         "version": version,
         "stored_filename": "",
