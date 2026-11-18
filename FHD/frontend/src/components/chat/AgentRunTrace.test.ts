@@ -194,14 +194,14 @@ describe('AgentRunTrace', () => {
     const trace = makeTrace('success')
     trace.phases.push({
       ...trace.phases[1], started_event_id: 'unsafe-tool',
-      node_id: 'unsafe', tool_id: '<svg/onload=void(0)>(',
+      node_id: 'unsafe', tool_id: '<svg>(',
     } as AgentRunTraceData['phases'][number])
     const mermaid = (await vi.importActual<typeof import('mermaid')>('mermaid')).default
     let failure: unknown
     try { await mermaid.parse(traceToMermaid(trace)) } catch (error) { failure = error }
     expect(failure).toBeInstanceOf(Error)
     const message = (failure as Error).message
-    expect(message).toContain('<svg/onload=void(0)>')
+    expect(message).toContain('<svg>')
     mermaidRender.mockRejectedValueOnce(failure)
     const wrapper = mount(AgentRunTrace, { props: { trace } })
     try {

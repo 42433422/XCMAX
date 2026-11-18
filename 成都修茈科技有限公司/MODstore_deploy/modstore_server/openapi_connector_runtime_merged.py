@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import importlib
+import ipaddress
 from dataclasses import dataclass
 
 # --- from openapi_connector_runtime_part01.py ---
@@ -26,12 +27,12 @@ class OutboundBlocked(RuntimeError):
 
 def _ip_is_blocked(ip: str) -> bool:
     try:
-        addr = _facade().ipaddress.ip_address(ip)
+        addr = ipaddress.ip_address(ip)
     except ValueError:
         return False
     if addr.is_loopback or addr.is_link_local or addr.is_multicast:
         return True
-    if isinstance(addr, _facade().ipaddress.IPv6Address) and addr.is_site_local:
+    if isinstance(addr, ipaddress.IPv6Address) and addr.is_site_local:
         return True
     if not addr.is_global or addr.is_reserved or addr.is_unspecified:
         return True
