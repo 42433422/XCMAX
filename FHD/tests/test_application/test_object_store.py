@@ -170,11 +170,10 @@ def staged_objects(tmp_path, monkeypatch):
     return tmp_path
 
 
-@pytest.mark.parametrize("link", ["knowledge", "knowledge/kb"])
-def test_s3_staging_rejects_symlink_escape(staged_objects, tmp_path, link):
+def test_s3_staging_rejects_symlink_escape(staged_objects, tmp_path):
     outside = tmp_path.parent / f"{tmp_path.name}-outside"
     outside.mkdir()
-    target = staged_objects / link
+    target = staged_objects / "knowledge"
     target.parent.mkdir(parents=True, exist_ok=True)
     target.symlink_to(outside, target_is_directory=True)
     calls = []
@@ -182,6 +181,23 @@ def test_s3_staging_rejects_symlink_escape(staged_objects, tmp_path, link):
         response = client.post("/datasets/kb/documents", json={"s3_uri": "s3://kb/a.pdf"})
     assert response.status_code == 400 and "目录无效" in response.json()["detail"]
     assert not list(outside.iterdir()) and calls == []
+
+
+def test_s3_staging_ignores_dataset_named_paths(staged_objects, tmp_path):
+    outside = tmp_path.parent / f"{tmp_path.name}-outside"
+    outside.mkdir()
+    legacy_dataset_path = staged_objects / "knowledge" / "kb"
+    legacy_dataset_path.parent.mkdir(parents=True)
+    legacy_dataset_path.symlink_to(outside, target_is_directory=True)
+    calls = []
+    with _route_client(JSONResponse({"success": True}), calls) as client:
+        response = client.post("/datasets/kb/documents", json={"s3_uri": "s3://kb/a.pdf"})
+
+    assert response.status_code == 200
+    staged = Path(calls[0]["params"]["file_path"])
+    assert staged.parent == staged_objects / "knowledge"
+    assert staged.read_bytes() == b"private"
+    assert not list(outside.iterdir())
 
 
 @pytest.mark.parametrize("dataset_id", ["..", "../outside", "/absolute", "\\..\\escape"])
@@ -194,6 +210,7 @@ def test_s3_dataset_names_cannot_escape_upload_root(staged_objects, dataset_id):
     saved = []
 
     def dispatch(**kwargs):
+        assert kwargs["params"]["dataset_id"] == dataset_id
         saved.append(Path(kwargs["params"]["file_path"]))
         return JSONResponse({"success": True})
 
@@ -204,8 +221,27 @@ def test_s3_dataset_names_cannot_escape_upload_root(staged_objects, dataset_id):
         Request({"type": "http", "headers": []}),
     )
     assert response.status_code == 200
-    assert saved[0].resolve().is_relative_to(staged_objects / "knowledge")
+    assert saved[0].parent == staged_objects / "knowledge"
     assert saved[0].read_bytes() == b"private"
+
+
+@pytest.mark.parametrize("key", ["folder/report.PDF", "folder/../../report.pdf"])
+def test_s3_staging_uses_generated_names_and_canonical_extension(staged_objects, key):
+    calls = []
+    with _route_client(JSONResponse({"success": True}), calls) as client:
+        for dataset_id in ("first", "second"):
+            response = client.post(
+                f"/datasets/{dataset_id}/documents", json={"s3_uri": f"s3://kb/{key}"}
+            )
+            assert response.status_code == 200
+
+    paths = [Path(call["params"]["file_path"]) for call in calls]
+    assert paths[0] != paths[1]
+    for path in paths:
+        assert path.parent == staged_objects / "knowledge"
+        assert path.suffix == ".pdf"
+        assert path.name != "report.pdf"
+        assert path.read_bytes() == b"private"
 
 
 def test_s3_dispatch_failure_cleans_only_owned_file(staged_objects):

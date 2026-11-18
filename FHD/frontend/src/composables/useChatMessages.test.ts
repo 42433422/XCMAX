@@ -455,6 +455,37 @@ describe('useChatMessages', () => {
     expect(result).toBe(true)
   })
 
+  it.each([false, true])('reconciles attachment-enriched server text without repeating the user turn (busy=%s)', async isBusy => {
+    const chatApi = (await import('@/api/chat')).default
+    const chat = useChatMessages(ref('attachment-turn'), { isBusy: () => isBusy })
+    chat.loadMessages([
+      { role: 'user', content: '请读取附件', time: '12:00', turnId: 'attachment-turn', persistence: { id: 'local-attachment', status: 'local' } },
+    ])
+    const response = { messages: [
+      { id: 10, role: 'user', content: '请读取附件\n附件证据：合同正文', metadata: JSON.stringify({ business_harness: { turn_id: 'attachment-turn' } }) },
+      { id: 11, role: 'ai', content: '已读取合同', metadata: JSON.stringify({ business_harness: { turn_id: 'attachment-turn' } }) },
+    ] }
+    vi.mocked(chatApi.getConversation).mockResolvedValue(response)
+    expect(await chat.syncFromServer()).toBe(true)
+    expect(await chat.syncFromServer()).toBe(true)
+    expect(chat.messages.value).toHaveLength(2)
+    expect(chat.messages.value.filter(row => row.role === 'user')).toHaveLength(1)
+    expect(chat.messages.value[0].content).toContain('附件证据：合同正文')
+    expect(chatApi.saveMessage).not.toHaveBeenCalled()
+  })
+
+  it('preserves a different user turn still in flight while reconciling completed history', async () => {
+    const chatApi = (await import('@/api/chat')).default
+    const chat = useChatMessages(ref('in-flight-turn'), { isBusy: () => true })
+    chat.loadMessages([{ role: 'user', content: '接着审阅新附件', time: '12:01', turnId: 'next-turn' }])
+    vi.mocked(chatApi.getConversation).mockResolvedValueOnce({ messages: [
+      { id: 10, role: 'user', content: '上一份附件', metadata: JSON.stringify({ business_harness: { turn_id: 'previous-turn' } }) },
+    ] })
+    expect(await chat.syncFromServer()).toBe(true)
+    expect(chat.messages.value.map(row => row.turnId)).toEqual(['previous-turn', 'next-turn'])
+    expect(chat.messages.value[1].content).toBe('接着审阅新附件')
+  })
+
   it('does not append a provisional industry greeting to restored conversation history', async () => {
     const chatApi = (await import('@/api/chat')).default
     messages.loadMessages([{ role: 'ai', content: '你好，我是业务助手。<br>- 查数据与单据<br>- 导出打印<br>请说出需求。', time: '14:35' }])

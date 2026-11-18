@@ -12,6 +12,7 @@ import re
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
+from app.infrastructure.document_parsing.errors import DocumentSourceError
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
 MAX_BYTES = 5 * 1024 * 1024
@@ -65,14 +66,14 @@ def _base_url() -> str:
     base = (os.environ.get("XCAGI_NOTION_BASE_URL") or _DEFAULT_BASE).strip().rstrip("/")
     parsed = urlparse(base)
     if parsed.scheme != "https" or not parsed.hostname:
-        raise ValueError("未配置有效的 XCAGI_NOTION_BASE_URL")
+        raise DocumentSourceError("未配置有效的 XCAGI_NOTION_BASE_URL")
     return base
 
 
 def _headers() -> dict[str, str]:
     token = (os.environ.get("XCAGI_NOTION_TOKEN") or "").strip()
     if not token:
-        raise ValueError("未配置 XCAGI_NOTION_TOKEN")
+        raise DocumentSourceError("未配置 XCAGI_NOTION_TOKEN")
     return {
         "Authorization": f"Bearer {token}",
         "Notion-Version": NOTION_VERSION,
@@ -124,24 +125,24 @@ def _get_json(getter, url: str, headers: dict[str, str]) -> dict:
         response = getter(url, headers=headers, timeout=TIMEOUT_S)
     except BOUNDARY_ERRORS as exc:
         _LOGGER.exception("Notion request failed")
-        raise ValueError("Notion 请求失败") from exc
+        raise DocumentSourceError("Notion 请求失败") from exc
     if response.status_code >= 400:
-        raise ValueError(f"Notion 返回 HTTP {response.status_code}")
+        raise DocumentSourceError(f"Notion 返回 HTTP {response.status_code}")
     raw = bytes(response.content or b"")
     if len(raw) > MAX_BYTES:
-        raise ValueError(f"Notion 响应超过大小限制（>{MAX_BYTES // 1024 // 1024}MB）")
+        raise DocumentSourceError(f"Notion 响应超过大小限制（>{MAX_BYTES // 1024 // 1024}MB）")
     try:
         payload = response.json()
     except BOUNDARY_ERRORS as exc:
         _LOGGER.exception("Notion response decoding failed")
-        raise ValueError("Notion 响应无法解析") from exc
+        raise DocumentSourceError("Notion 响应无法解析") from exc
     if not isinstance(payload, dict):
-        raise ValueError("Notion 响应格式不正确")
+        raise DocumentSourceError("Notion 响应格式不正确")
     if payload.get("object") == "error":
         _LOGGER.warning(
             "Notion request rejected: %s", payload.get("message") or payload.get("code")
         )
-        raise ValueError("Notion 读取失败")
+        raise DocumentSourceError("Notion 读取失败")
     return payload
 
 
@@ -197,7 +198,7 @@ def fetch_page(page_id: str, *, getter=None) -> FetchedNotionPage:
     """读取 Notion 页面文本；失败抛 ValueError（调用方转 400）。"""
     pid = (page_id or "").strip()
     if not _PAGE_ID.fullmatch(pid):
-        raise ValueError("Notion 页面 ID 不合法")
+        raise DocumentSourceError("Notion 页面 ID 不合法")
     base = _base_url()
     headers = _headers()
     if getter is None:
@@ -209,7 +210,7 @@ def fetch_page(page_id: str, *, getter=None) -> FetchedNotionPage:
     lines = _children_text(pid, getter=getter, base=base, headers=headers, depth=0, budget=[500])
     text = "\n".join(line for line in lines if line.strip()).strip()
     if not text:
-        raise ValueError("Notion 页面没有可导入的文本")
+        raise DocumentSourceError("Notion 页面没有可导入的文本")
     if len(text) > MAX_CHARS:
         text = text[:MAX_CHARS]
     return FetchedNotionPage(

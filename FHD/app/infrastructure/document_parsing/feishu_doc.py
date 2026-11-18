@@ -14,6 +14,7 @@ import time
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
+from app.infrastructure.document_parsing.errors import DocumentSourceError
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
 MAX_BYTES = 5 * 1024 * 1024
@@ -43,7 +44,7 @@ def _base_url() -> str:
     base = (os.environ.get("XCAGI_FEISHU_BASE_URL") or _DEFAULT_BASE).strip().rstrip("/")
     parsed = urlparse(base)
     if parsed.scheme != "https" or not parsed.hostname:
-        raise ValueError("未配置有效的 XCAGI_FEISHU_BASE_URL")
+        raise DocumentSourceError("未配置有效的 XCAGI_FEISHU_BASE_URL")
     return base
 
 
@@ -51,7 +52,7 @@ def _credentials() -> tuple[str, str]:
     app_id = (os.environ.get("XCAGI_FEISHU_APP_ID") or "").strip()
     secret = (os.environ.get("XCAGI_FEISHU_APP_SECRET") or "").strip()
     if not app_id or not secret:
-        raise ValueError("未配置 XCAGI_FEISHU_APP_ID / XCAGI_FEISHU_APP_SECRET")
+        raise DocumentSourceError("未配置 XCAGI_FEISHU_APP_ID / XCAGI_FEISHU_APP_SECRET")
     return app_id, secret
 
 
@@ -71,19 +72,19 @@ def _tenant_token(base: str, poster) -> str:
         )
     except BOUNDARY_ERRORS as exc:
         _LOGGER.exception("Feishu authentication request failed")
-        raise ValueError("飞书鉴权请求失败") from exc
+        raise DocumentSourceError("飞书鉴权请求失败") from exc
     if response.status_code >= 400:
-        raise ValueError(f"飞书鉴权返回 HTTP {response.status_code}")
+        raise DocumentSourceError(f"飞书鉴权返回 HTTP {response.status_code}")
     try:
         payload = response.json()
     except BOUNDARY_ERRORS as exc:
         _LOGGER.exception("Feishu authentication response decoding failed")
-        raise ValueError("飞书鉴权响应无法解析") from exc
+        raise DocumentSourceError("飞书鉴权响应无法解析") from exc
     token = str((payload or {}).get("tenant_access_token") or "")
     if (payload or {}).get("code") not in (0, None) or not token:
         message = str((payload or {}).get("msg") or "未返回 tenant_access_token")
         _LOGGER.warning("Feishu authentication rejected: %s", message)
-        raise ValueError("飞书鉴权失败")
+        raise DocumentSourceError("飞书鉴权失败")
     expire = int((payload or {}).get("expire") or 3600)
     with _token_lock:
         _token_cache[cache_key] = (token, now + expire)
@@ -102,7 +103,7 @@ def fetch_document(document_id: str, *, getter=None, poster=None) -> FetchedFeis
     """读取飞书文档纯文本；失败抛 ValueError（调用方转 400）。"""
     doc_id = (document_id or "").strip()
     if not _DOC_ID.fullmatch(doc_id):
-        raise ValueError("飞书文档 ID 不合法")
+        raise DocumentSourceError("飞书文档 ID 不合法")
     base = _base_url()
     if getter is None or poster is None:
         import requests
@@ -119,24 +120,24 @@ def fetch_document(document_id: str, *, getter=None, poster=None) -> FetchedFeis
         )
     except BOUNDARY_ERRORS as exc:
         _LOGGER.exception("Feishu document request failed")
-        raise ValueError("飞书文档请求失败") from exc
+        raise DocumentSourceError("飞书文档请求失败") from exc
     if response.status_code >= 400:
-        raise ValueError(f"飞书文档返回 HTTP {response.status_code}")
+        raise DocumentSourceError(f"飞书文档返回 HTTP {response.status_code}")
     raw = bytes(response.content or b"")
     if len(raw) > MAX_BYTES:
-        raise ValueError(f"飞书文档超过大小限制（>{MAX_BYTES // 1024 // 1024}MB）")
+        raise DocumentSourceError(f"飞书文档超过大小限制（>{MAX_BYTES // 1024 // 1024}MB）")
     try:
         payload = response.json()
     except BOUNDARY_ERRORS as exc:
         _LOGGER.exception("Feishu document response decoding failed")
-        raise ValueError("飞书文档响应无法解析") from exc
+        raise DocumentSourceError("飞书文档响应无法解析") from exc
     if not isinstance(payload, dict) or payload.get("code") not in (0, None):
         message = payload.get("msg") if isinstance(payload, dict) else "响应格式不正确"
         _LOGGER.warning("Feishu document rejected: %s", message)
-        raise ValueError("飞书文档读取失败")
+        raise DocumentSourceError("飞书文档读取失败")
     text = str(((payload.get("data") or {}).get("content")) or "").strip()
     if not text:
-        raise ValueError("飞书文档内容为空")
+        raise DocumentSourceError("飞书文档内容为空")
     return FetchedFeishuDoc(
         document_id=doc_id,
         url=f"feishu://docx/{doc_id}",

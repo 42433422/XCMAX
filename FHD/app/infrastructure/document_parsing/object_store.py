@@ -10,6 +10,7 @@ import logging
 import os
 from dataclasses import dataclass
 
+from app.infrastructure.document_parsing.errors import DocumentSourceError
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
 _DEFAULT_MAX_BYTES = 25 * 1024 * 1024
@@ -41,15 +42,15 @@ def parse_s3_uri(uri: str) -> tuple[str, str]:
     """解析 ``s3://bucket/key``；非法输入抛 ValueError。"""
     text = (uri or "").strip()
     if not text.lower().startswith("s3://"):
-        raise ValueError("对象地址必须以 s3:// 开头")
+        raise DocumentSourceError("对象地址必须以 s3:// 开头")
     remainder = text[5:]
     bucket, _, key = remainder.partition("/")
     bucket = bucket.strip()
     key = key.strip().lstrip("/")
     if not bucket or not key:
-        raise ValueError("对象地址必须包含桶名和对象键")
+        raise DocumentSourceError("对象地址必须包含桶名和对象键")
     if "\\" in key or any(ord(ch) < 32 for ch in key):
-        raise ValueError("对象键包含非法字符")
+        raise DocumentSourceError("对象键包含非法字符")
     return bucket, key
 
 
@@ -71,17 +72,17 @@ def fetch_object(uri: str, *, client=None) -> FetchedObject:
     bucket, key = parse_s3_uri(uri)
     allowed = _allowed_buckets()
     if allowed and bucket not in allowed:
-        raise ValueError(f"桶不在允许列表中：{bucket}")
+        raise DocumentSourceError(f"桶不在允许列表中：{bucket}")
     limit = _max_bytes()
     s3 = client if client is not None else _client()
     try:
         response = s3.get_object(Bucket=bucket, Key=key)
     except BOUNDARY_ERRORS as exc:
         _LOGGER.exception("Object storage request failed")
-        raise ValueError("对象存储读取失败") from exc
+        raise DocumentSourceError("对象存储读取失败") from exc
     body = response.get("Body")
     if body is None:
-        raise ValueError("对象存储返回空响应体")
+        raise DocumentSourceError("对象存储返回空响应体")
     chunks: list[bytes] = []
     total = 0
     try:
@@ -90,12 +91,12 @@ def fetch_object(uri: str, *, client=None) -> FetchedObject:
                 chunk = body.read(min(1024 * 1024, limit - total + 1))
             except BOUNDARY_ERRORS as exc:
                 _LOGGER.exception("Object storage body read failed")
-                raise ValueError("对象读取失败") from exc
+                raise DocumentSourceError("对象读取失败") from exc
             if not chunk:
                 break
             total += len(chunk)
             if total > limit:
-                raise ValueError(f"对象超过大小限制（>{limit // 1024 // 1024}MB）")
+                raise DocumentSourceError(f"对象超过大小限制（>{limit // 1024 // 1024}MB）")
             chunks.append(chunk)
     finally:
         close = getattr(body, "close", None)

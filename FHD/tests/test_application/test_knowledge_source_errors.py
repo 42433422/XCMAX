@@ -11,6 +11,7 @@ from app.infrastructure.document_parsing import feishu_doc, object_store
 
 _PRIVATE_DETAIL = "internal-path=/srv/customer/private.json upstream-token=synthetic-only"
 _INPUTS = {
+    "url": {"url": "https://example.invalid/page"},
     "confluence": {"confluence_page_id": "123"},
     "feishu": {"feishu_document_id": "docx12345678"},
     "notion": {"notion_page_id": "0123456789abcdef0123456789abcdef"},
@@ -21,6 +22,16 @@ _INPUTS = {
 
 def _fail(*_args, **_kwargs):
     raise OSError(_PRIVATE_DETAIL)
+
+
+def _route_client():
+    def dispatch(**_kwargs):
+        pytest.fail("Failed sources must never be dispatched for ingestion")
+
+    routes = DocumentRoutes(dispatch=lambda: dispatch, uploads=lambda _get: None)
+    app = FastAPI()
+    app.include_router(routes.ingestion)
+    return TestClient(app)
 
 
 @pytest.mark.parametrize(
@@ -88,13 +99,7 @@ def test_ingestion_failure_keeps_details_in_server_logs_only(
     )
     monkeypatch.setattr(object_store, "_client", lambda: s3_client)
 
-    def dispatch(**_kwargs):
-        pytest.fail("Failed sources must never be dispatched for ingestion")
-
-    routes = DocumentRoutes(dispatch=lambda: dispatch, uploads=lambda _get: None)
-    app = FastAPI()
-    app.include_router(routes.ingestion)
-    with TestClient(app) as client:
+    with _route_client() as client:
         response = client.post("/datasets/kb/documents", json=_INPUTS[source])
 
     assert response.status_code == 400
@@ -102,3 +107,30 @@ def test_ingestion_failure_keeps_details_in_server_logs_only(
     assert _PRIVATE_DETAIL in caplog.text
     if not failure.endswith("error"):
         assert any(record.exc_info for record in caplog.records)
+
+
+@pytest.mark.parametrize(
+    ("source", "target", "public_message"),
+    [
+        ("url", "web_fetch.fetch_url_text", "网页导入失败"),
+        ("confluence", "confluence.fetch_page", "Confluence 导入失败"),
+        ("feishu", "feishu_doc.fetch_document", "飞书文档导入失败"),
+        ("notion", "notion.fetch_page", "Notion 导入失败"),
+        ("yuque", "yuque.fetch_document", "语雀文档导入失败"),
+        ("s3", "object_store.fetch_object", "对象暂存失败"),
+    ],
+)
+def test_unclassified_value_errors_do_not_become_public_messages(
+    monkeypatch, caplog, source, target, public_message
+):
+    def fail(*_args, **_kwargs):
+        raise ValueError(_PRIVATE_DETAIL)
+
+    monkeypatch.setattr(f"app.infrastructure.document_parsing.{target}", fail)
+    with _route_client() as client:
+        response = client.post("/datasets/kb/documents", json=_INPUTS[source])
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": public_message}
+    assert _PRIVATE_DETAIL in caplog.text
+    assert any(record.exc_info for record in caplog.records)

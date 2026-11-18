@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 
 from app.infrastructure.document_parsing import confluence
 from app.infrastructure.document_parsing.confluence import FetchedConfluencePage, fetch_page
+from app.infrastructure.document_parsing.errors import DocumentSourceError
 
 
 class _Response:
@@ -159,7 +160,7 @@ def test_route_maps_confluence_failure_to_400(monkeypatch: pytest.MonkeyPatch) -
         return JSONResponse({"success": True})
 
     def _boom(_pid):
-        raise ValueError("未配置 XCAGI_CONFLUENCE_API_TOKEN")
+        raise DocumentSourceError("未配置 XCAGI_CONFLUENCE_API_TOKEN")
 
     monkeypatch.setattr(confluence, "fetch_page", _boom)
     routes = DocumentRoutes(dispatch=lambda: _dispatch, uploads=lambda _get: None)

@@ -532,12 +532,12 @@
     "FHD/frontend/src/composables/useAiOpenCursor.ts": {
       "base_file": "FHD/frontend/src/composables/useAiOpenCursor.ts",
       "base_blob": "0f734f9e81d0571d35277109f253de9795e7dabc",
-      "head_blob": "e3272958ea6e9eef84c64209403a9c239e8d2ab7",
+      "head_blob": "43d0cac028f030c8643e5a041522026070d0571d",
       "before_lines": 376,
-      "after_lines": 886,
-      "reason": "扩展受控UI操作并修复上传URL请求伪造；下载强制同源HTTP协议、禁凭据和重定向。",
-      "boundary": "只执行经既有AIOPEN会话派发的动作；跨源下载及失败响应不能继续填充文件或触发上传。",
-      "validation": "前端动作回归覆盖同源成功、跨源和非HTTP拒绝、凭据、重定向、403和读取失败。",
+      "after_lines": 892,
+      "reason": "审阅请求：扩展受控UI动作并收紧上传URL；只从同源且经服务端用户、租户及摘要校验的Agent文件产物路由下载，标识经过既有范围校验与编码。",
+      "boundary": "沿用既有AIOPEN会话派发和same-origin凭据；禁止任意站内API、跨源、URL凭据、查询、片段、路径逃逸及重定向，其他文件通过base64或text传入。",
+      "validation": "三个前端动作套件96项通过，AIOPEN manifest/guide 8项通过；本次CodeQL消警须由新head远端扫描确认，登记不代表人工架构批准。",
       "follow_up": "后续将独立UI动作放入专门适配器，保留本次URL和权限边界，不以增长登记代替安全审查。",
       "review_owner": "@42433422"
     },

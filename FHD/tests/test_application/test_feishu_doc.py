@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
 from app.infrastructure.document_parsing import feishu_doc
+from app.infrastructure.document_parsing.errors import DocumentSourceError
 from app.infrastructure.document_parsing.feishu_doc import FetchedFeishuDoc, fetch_document
 
 
@@ -150,7 +151,7 @@ def test_route_maps_feishu_failure_and_exclusivity(monkeypatch: pytest.MonkeyPat
     calls: list[dict] = []
 
     def _boom(_doc_id):
-        raise ValueError("未配置 XCAGI_FEISHU_APP_SECRET")
+        raise DocumentSourceError("未配置 XCAGI_FEISHU_APP_SECRET")
 
     monkeypatch.setattr(feishu_doc, "fetch_document", _boom)
     client = _route_client(calls)

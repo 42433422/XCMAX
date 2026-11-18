@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
 from app.infrastructure.document_parsing import notion
+from app.infrastructure.document_parsing.errors import DocumentSourceError
 from app.infrastructure.document_parsing.notion import FetchedNotionPage, fetch_page
 
 PAGE_ID = "0123456789abcdef0123456789abcdef"
@@ -163,7 +164,7 @@ def test_route_maps_notion_failure_and_exclusivity(monkeypatch: pytest.MonkeyPat
         return JSONResponse({"success": True})
 
     def _boom(_pid):
-        raise ValueError("未配置 XCAGI_NOTION_TOKEN")
+        raise DocumentSourceError("未配置 XCAGI_NOTION_TOKEN")
 
     monkeypatch.setattr(notion, "fetch_page", _boom)
     routes = DocumentRoutes(dispatch=lambda: _dispatch, uploads=lambda _get: None)

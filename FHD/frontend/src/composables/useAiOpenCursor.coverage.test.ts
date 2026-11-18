@@ -470,15 +470,17 @@ describe('useAiOpenCursor - coverage ramp', () => {
         setAiOpenCursorEnabled(true)
       })
       afterEach(() => { vi.unstubAllGlobals() })
+      const artifactPath = '/api/agent/runs/run_1/artifacts/txt_1'
       const upload = (url: string) => runCommand('file', 'upload', { selector: '#upload-target', files: [{ name: 'invoice.txt', url }] })
 
-      it.each(['/api/files/invoice', `${window.location.origin}/api/files/invoice?revision=2`])('uploads same-origin bytes from %s', async url => {
+      it.each([artifactPath, `${window.location.origin}${artifactPath}`])('uploads authorized artifact bytes from %s', async url => {
         expect(await upload(url)).toEqual({ success: true, uploaded: ['invoice.txt'] })
-        expect(fetchFile).toHaveBeenCalledWith(new URL(url, window.location.href).href, {
+        expect(fetchFile).toHaveBeenCalledWith(artifactPath, {
           credentials: 'same-origin', mode: 'same-origin', redirect: 'error',
         })
         expect(input.files).toHaveLength(1)
         expect(await input.files![0].text()).toBe('invoice')
+        expect(input.files![0].type).toBe('text/plain')
         expect(change).toHaveBeenCalledTimes(2)
       })
 
@@ -494,13 +496,43 @@ describe('useAiOpenCursor - coverage ramp', () => {
         expect(change).not.toHaveBeenCalled()
       })
 
+      it.each([
+        '/api/auth/me', '/api/files/invoice', '/api/agent/runs/run_1/cancel',
+        '/api/agent/runs/run_1/artifacts/txt_1/extra',
+        '/api/agent/runs/run%2fother/artifacts/txt_1',
+        '/api/agent/runs/run_1/artifacts/%2e%2e/%2e%2e/%2e%2e/auth/me',
+        '/api/agent/runs/run_1/artifacts/txt%255c..%255csecret',
+        `/api/agent/runs/${'r'.repeat(161)}/artifacts/txt_1`,
+        `${artifactPath}?redirect=https://other.example`, `${artifactPath}#fragment`,
+      ])('rejects non-artifact or ambiguous routes before requesting: %s', async url => {
+        expect(await upload(url)).toMatchObject({ success: false, message: expect.stringContaining('Agent 文件产物') })
+        expect(fetchFile).not.toHaveBeenCalled()
+        expect(input.files).toHaveLength(0)
+        expect(change).not.toHaveBeenCalled()
+      })
+
+      it('keeps text and base64 uploads available without requesting any URL', async () => {
+        const result = await runCommand('inline-files', 'upload', {
+          selector: '#upload-target', files: [
+            { name: 'note.txt', text: '保留文本', type: 'text/plain' },
+            { name: 'binary.bin', base64: btoa('bytes'), type: 'application/octet-stream' },
+          ],
+        })
+        expect(result).toEqual({ success: true, uploaded: ['note.txt', 'binary.bin'] })
+        expect(fetchFile).not.toHaveBeenCalled()
+        expect(await input.files![0].text()).toBe('保留文本')
+        expect(await input.files![1].text()).toBe('bytes')
+        expect(input.files![1].type).toBe('application/octet-stream')
+        expect(change).toHaveBeenCalledTimes(2)
+      })
+
       it.each(['redirect', 'forbidden', 'unreadable'])('keeps the previous selection when the file request is %s', async failure => {
         const previous = [new File(['previous'], 'previous.txt')]
         Object.assign(input, { files: previous })
         if (failure === 'redirect') fetchFile.mockRejectedValueOnce(new TypeError('redirect mode is error'))
         else if (failure === 'forbidden') fetchFile.mockResolvedValueOnce({ ok: false, status: 403 })
         else fetchFile.mockResolvedValueOnce({ ok: true, blob: async () => { throw new Error('unreadable response') } })
-        expect(await upload('/api/files/invoice')).toMatchObject({ success: false, message: expect.stringContaining('读取文件失败') })
+        expect(await upload(artifactPath)).toMatchObject({ success: false, message: expect.stringContaining('读取文件失败') })
         expect(input.files).toBe(previous)
         expect(change).not.toHaveBeenCalled()
       })

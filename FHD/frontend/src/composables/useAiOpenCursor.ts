@@ -531,7 +531,13 @@ async function execUpload(params: Record<string, unknown>): Promise<Record<strin
         if (!['http:', 'https:'].includes(url.protocol) || url.origin !== window.location.origin || url.username || url.password) {
           return { success: false, message: '文件 URL 必须为当前站点的 HTTP(S) 地址，且不能包含凭据' }
         }
-        const response = await fetch(url.href, { credentials: 'same-origin', mode: 'same-origin', redirect: 'error' })
+        const artifact = /^\/api\/agent\/runs\/([A-Za-z0-9_-]{1,160})\/artifacts\/([A-Za-z0-9_-]{1,160})$/.exec(url.pathname)
+        if (!artifact || url.search || url.hash) {
+          return { success: false, message: '文件 URL 仅支持当前站点的 Agent 文件产物下载地址，不接受查询或片段；其他文件请传 base64 或 text' }
+        }
+        // The fixed download route checks run ownership and the stored file digest.
+        // Keep remote input in encoded IDs; never use it as a request URL or route.
+        const response = await fetch(`/api/agent/runs/${encodeURIComponent(artifact[1])}/artifacts/${encodeURIComponent(artifact[2])}`, { credentials: 'same-origin', mode: 'same-origin', redirect: 'error' })
         if (!response.ok) return { success: false, message: `读取文件失败：${spec.url} → HTTP ${response.status}` }
         blob = await response.blob()
       } catch (err) {

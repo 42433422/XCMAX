@@ -15,6 +15,7 @@ from urllib.parse import urljoin, urlsplit
 
 import urllib3
 
+from app.infrastructure.document_parsing.errors import DocumentSourceError
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
 MAX_BYTES = 5 * 1024 * 1024
@@ -47,18 +48,23 @@ def assert_public_http_url(url: str) -> str:
         or parsed.username is not None
         or parsed.password is not None
     ):
-        raise ValueError("URL 必须是有效的 http(s) 地址")
+        raise DocumentSourceError("URL 必须是有效的 http(s) 地址")
     try:
         infos = socket.getaddrinfo(parsed.hostname, parsed.port, type=socket.SOCK_STREAM)
     except OSError as exc:
-        raise ValueError(f"域名无法解析：{parsed.hostname}") from exc
+        raise DocumentSourceError(f"域名无法解析：{parsed.hostname}") from exc
     addresses = [ipaddress.ip_address(info[4][0]) for info in infos]
     if not addresses:
-        raise ValueError(f"域名无法解析：{parsed.hostname}")
+        raise DocumentSourceError(f"域名无法解析：{parsed.hostname}")
+    # ipaddress considers deprecated IPv6 site-local addresses global (RFC 3879).
     if not _allow_private() and any(
-        not ip.is_global or ip.is_multicast or ip.is_reserved for ip in addresses
+        not ip.is_global
+        or ip.is_multicast
+        or ip.is_reserved
+        or (isinstance(ip, ipaddress.IPv6Address) and ip.is_site_local)
+        for ip in addresses
     ):
-        raise ValueError(f"禁止抓取内网地址：{parsed.hostname}")
+        raise DocumentSourceError(f"禁止抓取内网地址：{parsed.hostname}")
     return str(addresses[0])
 
 
@@ -68,7 +74,7 @@ def _read_limited(response) -> bytes:
     for chunk in response.stream(64 * 1024, decode_content=True):
         total += len(chunk)
         if total > MAX_BYTES:
-            raise ValueError(f"网页体积超过限制（>{MAX_BYTES // 1024 // 1024}MB）")
+            raise DocumentSourceError(f"网页体积超过限制（>{MAX_BYTES // 1024 // 1024}MB）")
         chunks.append(chunk)
     return b"".join(chunks)
 
@@ -88,9 +94,9 @@ def extract_html_text(html: str, *, url: str = "") -> tuple[str, str]:
         meta = trafilatura.extract_metadata(html, default_url=url)
         title = str(getattr(meta, "title", "") or "")
     except BOUNDARY_ERRORS as exc:
-        raise ValueError("网页正文提取失败") from exc
+        raise DocumentSourceError("网页正文提取失败") from exc
     if not text or not text.strip():
-        raise ValueError("网页未提取到正文，可能是动态渲染页面")
+        raise DocumentSourceError("网页未提取到正文，可能是动态渲染页面")
     return text.strip(), title
 
 
@@ -104,18 +110,22 @@ def fetch_url_text(url: str) -> FetchedPage:
         authority = f"[{hostname}]" if ":" in hostname else hostname
         if parsed.port is not None:
             authority = f"{authority}:{parsed.port}"
+        # Prevent http.client from interpreting a numeric IPv6 suffix as a port.
+        port = parsed.port
+        if port is None:
+            port = 443 if parsed.scheme == "https" else 80
         # Pin the checked IP, while retaining the origin Host, TLS SNI and
         # certificate identity. Direct pools do not inherit environment proxies.
         pool = (
             urllib3.HTTPSConnectionPool(
                 address,
-                port=parsed.port,
+                port=port,
                 server_hostname=hostname,
                 assert_hostname=hostname,
                 cert_reqs="CERT_REQUIRED",
             )
             if parsed.scheme == "https"
-            else urllib3.HTTPConnectionPool(address, port=parsed.port)
+            else urllib3.HTTPConnectionPool(address, port=port)
         )
         target = parsed.path or "/"
         if parsed.query:
@@ -135,11 +145,11 @@ def fetch_url_text(url: str) -> FetchedPage:
                     if response.status in {301, 302, 303, 307, 308}:
                         location = response.headers.get("location") or ""
                         if not location:
-                            raise ValueError("重定向缺少 location")
+                            raise DocumentSourceError("重定向缺少 location")
                         current = urljoin(current, location)
                         continue
                     if response.status >= 400:
-                        raise ValueError(f"网页返回 HTTP {response.status}")
+                        raise DocumentSourceError(f"网页返回 HTTP {response.status}")
                     raw = _read_limited(response)
                     content_type = Message()
                     content_type["content-type"] = response.headers.get("content-type", "")
@@ -149,10 +159,10 @@ def fetch_url_text(url: str) -> FetchedPage:
                 finally:
                     response.close()
         except (urllib3.exceptions.HTTPError, OSError, LookupError) as exc:
-            raise ValueError("网页请求失败") from exc
+            raise DocumentSourceError("网页请求失败") from exc
         break
     else:
-        raise ValueError("重定向次数过多")
+        raise DocumentSourceError("重定向次数过多")
 
     text, title = extract_html_text(html, url=current)
     return FetchedPage(url=current, title=title, text=text)

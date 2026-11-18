@@ -14,6 +14,7 @@ import re
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
+from app.infrastructure.document_parsing.errors import DocumentSourceError
 from app.infrastructure.document_parsing.web_fetch import extract_html_text
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
@@ -35,7 +36,7 @@ def _base_url() -> str:
     base = (os.environ.get("XCAGI_CONFLUENCE_BASE_URL") or "").strip().rstrip("/")
     parsed = urlparse(base)
     if parsed.scheme not in {"http", "https"} or not parsed.hostname:
-        raise ValueError("未配置有效的 XCAGI_CONFLUENCE_BASE_URL")
+        raise DocumentSourceError("未配置有效的 XCAGI_CONFLUENCE_BASE_URL")
     return base
 
 
@@ -46,7 +47,7 @@ def _auth() -> tuple[dict[str, str], tuple[str, str] | None]:
         or ""
     ).strip()
     if not token:
-        raise ValueError("未配置 XCAGI_CONFLUENCE_API_TOKEN")
+        raise DocumentSourceError("未配置 XCAGI_CONFLUENCE_API_TOKEN")
     email = (os.environ.get("XCAGI_CONFLUENCE_EMAIL") or "").strip()
     if email:
         return {}, (email, token)
@@ -57,7 +58,7 @@ def fetch_page(page_id: str, *, getter=None) -> FetchedConfluencePage:
     """读取单个 Confluence 页面并抽取正文；失败抛 ValueError（调用方转 400）。"""
     pid = (page_id or "").strip()
     if not _PAGE_ID.fullmatch(pid):
-        raise ValueError("Confluence 页面 ID 不合法")
+        raise DocumentSourceError("Confluence 页面 ID 不合法")
     base = _base_url()
     headers, auth = _auth()
     url = f"{base}/rest/api/content/{pid}?expand=body.storage"
@@ -70,19 +71,19 @@ def fetch_page(page_id: str, *, getter=None) -> FetchedConfluencePage:
         response = requester(url, timeout=TIMEOUT_S, headers=headers, auth=auth)
     except BOUNDARY_ERRORS as exc:
         _LOGGER.exception("Confluence request failed")
-        raise ValueError("Confluence 请求失败") from exc
+        raise DocumentSourceError("Confluence 请求失败") from exc
     if response.status_code >= 400:
-        raise ValueError(f"Confluence 返回 HTTP {response.status_code}")
+        raise DocumentSourceError(f"Confluence 返回 HTTP {response.status_code}")
     raw = bytes(response.content or b"")
     if len(raw) > MAX_BYTES:
-        raise ValueError(f"Confluence 页面超过大小限制（>{MAX_BYTES // 1024 // 1024}MB）")
+        raise DocumentSourceError(f"Confluence 页面超过大小限制（>{MAX_BYTES // 1024 // 1024}MB）")
     try:
         payload = response.json()
     except BOUNDARY_ERRORS as exc:
         _LOGGER.exception("Confluence response decoding failed")
-        raise ValueError("Confluence 响应无法解析") from exc
+        raise DocumentSourceError("Confluence 响应无法解析") from exc
     if not isinstance(payload, dict):
-        raise ValueError("Confluence 响应格式不正确")
+        raise DocumentSourceError("Confluence 响应格式不正确")
     storage = ((payload.get("body") or {}).get("storage") or {}).get("value") or ""
     title = str(payload.get("title") or "")
     page_url = f"{base}/pages/{pid}"

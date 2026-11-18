@@ -7,6 +7,7 @@ from app.domain.shared_services.tools_workflow_shipments_docs_ops import (
     _registered_router_document_template,
 )
 from app.infrastructure.templates import template_preferences
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 def test_hide_templates_roundtrip(tmp_path, monkeypatch):
@@ -31,7 +32,8 @@ def test_merge_starter_templates_skips_hidden(monkeypatch):
     assert rows and all(row["id"] != "seed:sales-order" for row in rows)
 
 
-def test_clear_hides_builtin_templates_instead_of_failing():
+def test_clear_hides_builtin_templates_instead_of_failing(trusted_actor):
+    actor = trusted_actor()
     listed = {
         "templates": [
             {"id": "seed:sales-order", "name": "销售订单标准表"},
@@ -67,7 +69,7 @@ def test_clear_hides_builtin_templates_instead_of_failing():
         ),
         patch.object(template_preferences, "hide_templates", return_value=0) as legacy_hide,
     ):
-        result = _registered_router_document_template("clear", {}, {}, "", "")
+        result = _registered_router_document_template("clear", {}, actor.context, "", "")
 
     assert result["success"] is True
     assert result["deleted_templates"] == 1
@@ -76,4 +78,4 @@ def test_clear_hides_builtin_templates_instead_of_failing():
     assert captured["paths"] == ["/opt/templates/标准发货单.xlsx"]
     assert "已清理 1 个自定义模板" in result["message"]
     legacy_hide.assert_not_called()
-    service.purge_archive_assets.assert_called_once_with()
+    service.purge_archive_assets.assert_called_once_with(tenant_id=7, owner_id=actor.user_id)

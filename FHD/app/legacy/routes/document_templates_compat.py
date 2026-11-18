@@ -252,7 +252,7 @@ def run_archive_template_delete(
     elif template_id.isdigit():
         db_id = int(template_id)
     if db_id is not None:
-        from sqlalchemy import text
+        from sqlalchemy import DateTime, bindparam, text
 
         from app.db.init_db import init_template_tables
         from app.db.session import get_db
@@ -280,7 +280,7 @@ def run_archive_template_delete(
                 text(
                     f"UPDATE templates SET is_active = 0, updated_at = :updated_at "
                     f"WHERE id = :id AND ({tenant_sql})"
-                ),
+                ).bindparams(bindparam("updated_at", type_=DateTime())),
                 {"id": db_id, "updated_at": datetime.now(), **tenant_bind},
             )
             db.commit()

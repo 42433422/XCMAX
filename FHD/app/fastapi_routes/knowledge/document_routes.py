@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import re
+import logging
 from collections.abc import Callable
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -11,6 +11,7 @@ from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse
 
 from app.application.knowledge.http_port_contracts import DatasetAction
+from app.infrastructure.document_parsing.errors import DocumentSourceError
 
 from .schemas import (
     _DATASET_UPLOAD_EXTENSIONS,
@@ -21,10 +22,13 @@ from .schemas import (
 )
 from .uploads import DocumentUpload, _accepted_input
 
+_LOGGER = logging.getLogger(__name__)
 
-def _upload_segment(dataset_id: str) -> str:
-    segment = re.sub("[^A-Za-z0-9._-]+", "_", str(dataset_id or "default"))[:100]
-    return "default" if segment in {"", ".", ".."} else segment
+
+def _source_error(error: Exception, fallback: str) -> JSONResponse:
+    _LOGGER.warning("Knowledge source import failed", exc_info=error)
+    detail = error.public_detail if isinstance(error, DocumentSourceError) else fallback
+    return JSONResponse(status_code=400, content={"detail": detail})
 
 
 class DocumentRoutes:
@@ -54,7 +58,7 @@ class DocumentRoutes:
                 try:
                     page = fetch_url_text(req.url)
                 except ValueError as exc:
-                    return JSONResponse(status_code=400, content={"detail": str(exc)})
+                    return _source_error(exc, "网页导入失败")
                 text = page.text
                 source = source or page.title or page.url
                 document_id = document_id or page.url
@@ -71,19 +75,28 @@ class DocumentRoutes:
 
                 try:
                     _bucket, key = parse_s3_uri(req.s3_uri)
-                    suffix = Path(key).suffix.lower()
-                    if suffix not in _DATASET_UPLOAD_EXTENSIONS:
+                    raw_suffix = Path(key).suffix.lower()
+                    suffix = next(
+                        (
+                            allowed
+                            for allowed in _DATASET_UPLOAD_EXTENSIONS
+                            if allowed == raw_suffix
+                        ),
+                        None,
+                    )
+                    if suffix is None:
                         return JSONResponse(
                             status_code=400,
-                            content={"detail": f"不支持的对象类型：{suffix or '无扩展名'}"},
+                            content={"detail": f"不支持的对象类型：{raw_suffix or '无扩展名'}"},
                         )
                     fetched = fetch_object(req.s3_uri)
                     from app.utils.path_io.path_utils import get_upload_dir
 
                     base = Path(get_upload_dir()).resolve()
-                    upload_dir = (base / "knowledge" / _upload_segment(dataset_id)).resolve()
+                    # Dataset identity stays in dispatch params; staging paths are server-owned.
+                    upload_dir = (base / "knowledge").resolve()
                     if not upload_dir.is_relative_to(base) or upload_dir == base:
-                        raise ValueError("资料上传目录无效")
+                        raise DocumentSourceError("资料上传目录无效")
                     upload_dir.mkdir(parents=True, exist_ok=True)
                     with NamedTemporaryFile(dir=upload_dir, suffix=suffix, delete=False) as target:
                         staged_path = Path(target.name)
@@ -91,8 +104,7 @@ class DocumentRoutes:
                 except (ValueError, OSError) as exc:
                     if staged_path is not None:
                         staged_path.unlink(missing_ok=True)
-                    detail = str(exc) if isinstance(exc, ValueError) else "对象暂存失败"
-                    return JSONResponse(status_code=400, content={"detail": detail})
+                    return _source_error(exc, "对象暂存失败")
                 file_path = str(staged_path)
                 source = source or fetched.filename
                 document_id = document_id or req.s3_uri
@@ -103,7 +115,7 @@ class DocumentRoutes:
                 try:
                     confluence = fetch_page(req.confluence_page_id)
                 except ValueError as exc:
-                    return JSONResponse(status_code=400, content={"detail": str(exc)})
+                    return _source_error(exc, "Confluence 导入失败")
                 text = confluence.text
                 source = source or confluence.title or f"confluence:{confluence.page_id}"
                 document_id = document_id or confluence.url
@@ -119,7 +131,7 @@ class DocumentRoutes:
                 try:
                     doc = fetch_document(req.feishu_document_id)
                 except ValueError as exc:
-                    return JSONResponse(status_code=400, content={"detail": str(exc)})
+                    return _source_error(exc, "飞书文档导入失败")
                 text = doc.text
                 source = source or doc.title or f"feishu:{doc.document_id}"
                 document_id = document_id or doc.url
@@ -137,7 +149,7 @@ class DocumentRoutes:
                 try:
                     notion = fetch_notion_page(req.notion_page_id)
                 except ValueError as exc:
-                    return JSONResponse(status_code=400, content={"detail": str(exc)})
+                    return _source_error(exc, "Notion 导入失败")
                 text = notion.text
                 source = source or notion.title or f"notion:{notion.page_id}"
                 document_id = document_id or notion.url
@@ -155,7 +167,7 @@ class DocumentRoutes:
                 try:
                     yuque = fetch_yuque_doc(req.yuque_document_ref)
                 except ValueError as exc:
-                    return JSONResponse(status_code=400, content={"detail": str(exc)})
+                    return _source_error(exc, "语雀文档导入失败")
                 text = yuque.text
                 source = source or yuque.title or f"yuque:{req.yuque_document_ref}"
                 document_id = document_id or yuque.url

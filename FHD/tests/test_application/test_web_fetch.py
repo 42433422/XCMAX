@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import sys
 import types
+from contextlib import closing
 
 import pytest
 
 from app.infrastructure.document_parsing import web_fetch
+from app.infrastructure.document_parsing.errors import DocumentSourceError
 
 
 class _Response:
@@ -164,7 +166,17 @@ def test_fetch_url_text_rejects_oversize_body(monkeypatch: pytest.MonkeyPatch) -
 
 
 @pytest.mark.parametrize(
-    "address", ["0.0.0.0", "100.64.0.1", "169.254.169.254", "::1", "::ffff:127.0.0.1", "224.0.0.1"]
+    "address",
+    [
+        "0.0.0.0",
+        "100.64.0.1",
+        "169.254.169.254",
+        "::1",
+        "::ffff:127.0.0.1",
+        "224.0.0.1",
+        "fec0::1",
+        "feff::1",
+    ],
 )
 def test_url_rejects_nonpublic_and_mixed_dns_answers(monkeypatch, address):
     monkeypatch.setattr(
@@ -189,7 +201,10 @@ def test_url_rejects_credentials_and_invalid_ports(monkeypatch, url):
     assert pools == []
 
 
-def test_url_pins_checked_ip_against_dns_rebinding_and_preserves_tls_identity(monkeypatch):
+@pytest.mark.parametrize("explicit_port", [False, True])
+def test_url_pins_checked_ip_against_dns_rebinding_and_preserves_tls_identity(
+    monkeypatch, explicit_port
+):
     resolved = []
 
     def rebinding(host, *_a, **_k):
@@ -201,19 +216,101 @@ def test_url_pins_checked_ip_against_dns_rebinding_and_preserves_tls_identity(mo
     monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:8080")
     pools = _transport(monkeypatch, _Response())
     monkeypatch.setitem(sys.modules, "trafilatura", _fake_trafilatura("正文"))
-    web_fetch.fetch_url_text("https://example.com:8443/read?q=1#fragment")
+    authority = "example.com:8443" if explicit_port else "example.com"
+    web_fetch.fetch_url_text(f"https://{authority}/read?q=1#fragment")
     assert resolved == ["example.com"] and pools[0].address == "93.184.216.34"
     assert pools[0].options == {
-        "port": 8443,
+        "port": 8443 if explicit_port else 443,
         "server_hostname": "example.com",
         "assert_hostname": "example.com",
         "cert_reqs": "CERT_REQUIRED",
     }
     method, target, options = pools[0].calls[0]
     assert (method, target) == ("GET", "/read?q=1")
-    assert options["headers"]["Host"] == "example.com:8443"
+    assert options["headers"]["Host"] == authority
     assert options["preload_content"] is False and options["redirect"] is False
     assert options["retries"] is False
+
+
+@pytest.mark.parametrize(
+    "address,allow_private,port_suffix,port",
+    [
+        ("93.184.216.34", False, ":8080", 8080),
+        ("2606:4700:4700::1111", False, "", 80),
+        ("fec0::1", True, ":80", 80),
+    ],
+)
+def test_real_transport_keeps_authority_like_path_on_checked_address(
+    monkeypatch, address, allow_private, port_suffix, port
+):
+    """Exercise urllib3's real request path without allowing an outbound socket."""
+    from urllib3.util import connection
+
+    targets = []
+    client, server = web_fetch.socket.socketpair()
+
+    def connect(address, *_args, **_kwargs):
+        targets.append(address)
+        return client
+
+    monkeypatch.setattr(connection, "create_connection", connect)
+    monkeypatch.setattr(
+        web_fetch.socket,
+        "getaddrinfo",
+        lambda *_a, **_k: [(2, 1, 6, "", (address, 0))],
+    )
+    if allow_private:
+        monkeypatch.setenv("XCAGI_KB_ALLOW_PRIVATE_URLS", "1")
+    monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:9000")
+    monkeypatch.setenv("ALL_PROXY", "http://127.0.0.1:9000")
+    monkeypatch.setitem(sys.modules, "trafilatura", _fake_trafilatura("正文"))
+    with closing(client), closing(server):
+        server.settimeout(2)
+        server.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
+
+        page = web_fetch.fetch_url_text(
+            f"http://example.com{port_suffix}//169.254.169.254/latest/meta-data?next=http://127.0.0.1/"
+        )
+
+        wire_request = server.recv(8192)
+
+    assert page.text == "正文"
+    assert targets == [(address, port)]
+    assert f"Host: example.com{port_suffix}\r\n".encode() in wire_request
+    assert b"169.254.169.254/latest/meta-data?next=http://127.0.0.1/" in wire_request
+    assert client.fileno() == -1
+
+
+@pytest.mark.parametrize("address", ["fec0::1", "feff::1"])
+@pytest.mark.parametrize("redirect", [False, True])
+def test_real_transport_rejects_site_local_before_dial(monkeypatch, address, redirect):
+    from urllib3.util import connection
+
+    targets = []
+    client, server = web_fetch.socket.socketpair()
+
+    def resolve(host, *_args, **_kwargs):
+        ip = "93.184.216.34" if host == "public.example" else address
+        return [(2, 1, 6, "", (ip, 0))]
+
+    def connect(target, *_args, **_kwargs):
+        targets.append(target)
+        assert target == ("93.184.216.34", 80), "site-local address reached socket dial"
+        return client
+
+    monkeypatch.setattr(web_fetch.socket, "getaddrinfo", resolve)
+    monkeypatch.setattr(connection, "create_connection", connect)
+    destination = f"http://[{address}]:80/internal"
+    with closing(client), closing(server):
+        server.settimeout(2)
+        server.sendall(
+            f"HTTP/1.1 302 Found\r\nLocation: {destination}\r\nContent-Length: 0\r\n\r\n".encode()
+        )
+        with pytest.raises(DocumentSourceError, match="内网"):
+            web_fetch.fetch_url_text("http://public.example/" if redirect else destination)
+
+    assert targets == ([("93.184.216.34", 80)] if redirect else [])
+    assert client.fileno() == -1
 
 
 def test_url_allows_explicit_private_override_but_still_pins_ip(monkeypatch):
@@ -274,7 +371,7 @@ def test_ingest_route_maps_fetch_failure_to_400(monkeypatch: pytest.MonkeyPatch)
     calls: list[dict] = []
 
     def _boom(_url):
-        raise ValueError("禁止抓取内网地址")
+        raise DocumentSourceError("禁止抓取内网地址")
 
     monkeypatch.setattr(web_fetch, "fetch_url_text", _boom)
 

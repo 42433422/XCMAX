@@ -118,7 +118,7 @@ curl -X POST http://localhost:5000/api/aiopen/invoke \
 | `ui_click` | 虚拟光标移动并真实点击（`ref` 优先，兼容 selector / 可见文本） |
 | `ui_type` | 输入框写值（原型 setter + input/change 事件，兼容 v-model） |
 | `ui_select` | 下拉选择：原生 select 按 value/文本选中，自定义下拉点开后按 label 匹配 |
-| `ui_upload` | 向 file input 投放文件（同源 url / base64 / 纯文本），派发 input/change |
+| `ui_upload` | 向 file input 投放文件（同源 Agent 产物 url / base64 / 纯文本），派发 input/change |
 | `ui_wait` | 轮询等待元素出现/消失、页面文本或 URL 变化（最长 15s） |
 | `ui_verify` | 校验元素存在、控件值、页面文本与 URL，逐项返回结论 |
 | `ui_screenshot` | DOM 重绘截图（html-to-image，MIT），返回 data_url 与尺寸；不含跨域 iframe/视频 |
@@ -189,8 +189,8 @@ MCP 只读资源：
 确认写值生效。
 
 `ui_select` 对原生 `select` 直接按 `value`/文本选中；对 Element Plus / Ant 等自定义
-下拉，会真实点开再按 `label` 匹配可见选项。`ui_upload` 只接受同源 `url`、`base64`
-或 `text` 内容，由浏览器合成 `File` 后写入 `input.files`。
+下拉，会真实点开再按 `label` 匹配可见选项。`ui_upload` 的 `url` 仅支持同源
+`/api/agent/runs/{run_id}/artifacts/{artifact_id}` 文件产物下载地址（不含查询或片段），沿用服务端用户、租户和文件摘要校验；其他文件使用 `base64` 或 `text`，由浏览器合成 `File` 后写入 `input.files`。
 
 ### 指令协议（screen 端 WS）
 

@@ -236,7 +236,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
     {
         "name": "ui_upload",
         "description": (
-            "向文件输入框投放文件：files 每项提供 name 以及 url（同源可访问）或 base64 内容，"
+            "向文件输入框投放文件：files 每项提供 name 以及 url（同源 Agent 文件产物）或 base64/text 内容，"
             "必要时带 type。会派发 input/change 事件。"
         ),
         "inputSchema": {
@@ -250,7 +250,10 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                         "type": "object",
                         "properties": {
                             "name": {"type": "string"},
-                            "url": {"type": "string", "description": "同源文件地址"},
+                            "url": {
+                                "type": "string",
+                                "description": "同源 /api/agent/runs/{run_id}/artifacts/{artifact_id}，不接受查询或片段",
+                            },
                             "base64": {"type": "string", "description": "文件内容的 base64"},
                             "text": {"type": "string", "description": "纯文本内容"},
                             "type": {"type": "string", "description": "MIME 类型"},

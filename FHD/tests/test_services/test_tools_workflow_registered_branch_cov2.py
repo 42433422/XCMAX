@@ -56,6 +56,7 @@ from app.domain.shared_services.tools_workflow_registered import (
     _registered_router_unit_products_import,
     execute_registered_workflow_tool,
 )
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 def _assert_shared_write_customers_unsupported_op_0(self, _shared_literal_0, _shared_literal_1):
@@ -536,7 +537,8 @@ class TestDocumentTemplateRouter:
         mock.assert_called_once()
         assert result["http_status_code"] == 400
 
-    def test_clear_deletes_every_deletable_template(self):
+    def test_clear_deletes_every_deletable_template(self, trusted_actor):
+        actor = trusted_actor()
         templates = [
             {"id": "db:1"},
             {"id": "fs:custom.xlsx"},
@@ -551,14 +553,18 @@ class TestDocumentTemplateRouter:
         with (
             patch(
                 "app.application.get_template_app_service",
-                return_value=MagicMock(get_templates=lambda: {"templates": templates}),
+                return_value=MagicMock(
+                    get_templates=lambda **kwargs: {"templates": templates},
+                    hide_templates=lambda **kwargs: 0,
+                    purge_archive_assets=lambda **kwargs: 0,
+                ),
             ),
             patch(
                 "app.legacy.routes.document_templates_compat.run_archive_template_delete",
                 side_effect=delete_results,
             ) as delete,
         ):
-            result = _registered_router_document_template("clear", {}, {}, "admin", "")
+            result = _registered_router_document_template("clear", {}, actor.context, "admin", "")
         assert delete.call_count == 3
         assert result["success"] is True
         assert result["deleted_templates"] == 2
