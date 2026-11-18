@@ -27,6 +27,8 @@ READ_ONLY_MODE = 0o400
 # template. It shares owner-scoped ETL persistence so document resolution can
 # enforce tenant + owner isolation, but it must not be selectable for import.
 ELT_SHIPMENT_DOCUMENT_TEMPLATE_DESCRIPTION = "ELT_SHIPMENT_DOCUMENT_TEMPLATE"
+
+
 # 预演与执行共用这个池。批量导入时文件多，线程太少会让执行排在预演后面，
 # 表现为「状态 executing 但进度一直是 0」。这里保留余量，避免个别卡死任务
 # 占满全部槽位；长期无进展的任务由 stale_watchdog 回收并释放租约。

@@ -7,6 +7,9 @@ import os
 import threading
 import time
 from datetime import UTC, datetime, timedelta
+from typing import Any
+
+from sqlalchemy import column, func, table, update
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -15,6 +18,20 @@ logger = logging.getLogger(__name__)
 _INTERVAL_SECONDS = 30.0
 _STARTED_LOCK = threading.Lock()
 _STARTED = False
+_BATCH_KINDS = ("batch_execute", "batch_rollback")
+_ACTIVE_STATUSES = ("previewing", "executing")
+_RUNS: Any = table(
+    "elt_runs",
+    column("status"),
+    column("stage"),
+    column("error_code"),
+    column("error_message"),
+    column("operation_kind"),
+    column("operation_token"),
+    column("operation_lease_until"),
+    column("updated_at"),
+    column("target_type"),
+)
 
 
 def stale_after_seconds() -> float:
@@ -25,62 +42,57 @@ def stale_after_seconds() -> float:
         return 900.0
 
 
-def _cutoff_text(seconds: float) -> str:
-    return (datetime.now(UTC).replace(tzinfo=None) - timedelta(seconds=seconds)).strftime(
-        "%Y-%m-%d %H:%M:%S"
-    )
+def _cutoff(seconds: float) -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None) - timedelta(seconds=seconds)
+
+
+def _release(values: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **values,
+        "operation_kind": None,
+        "operation_token": None,
+        "operation_lease_until": None,
+        "updated_at": func.current_timestamp(),
+    }
 
 
 def sweep_stale_runs() -> int:
     """把长时间无更新的进行态运行标为可重试，并释放租约。"""
-    from sqlalchemy import text
-
     from app.db import get_engine
 
     engine = get_engine()
-    cutoff = _cutoff_text(stale_after_seconds())
-    sqlite = engine.dialect.name == "sqlite"
-    stale_condition = (
-        "datetime(updated_at) <= datetime(:cutoff)" if sqlite else "updated_at <= :cutoff"
-    )
-    released = (
-        "operation_kind = NULL, operation_token = NULL, operation_lease_until = NULL,"
-    )
+    cutoff = _cutoff(stale_after_seconds())
+    external_batch = _RUNS.c.operation_kind.in_(_BATCH_KINDS) & (_RUNS.c.target_type != "abnormal")
+    active = _RUNS.c.status.in_(_ACTIVE_STATUSES) & (_RUNS.c.updated_at <= cutoff)
     try:
         with engine.begin() as connection:
             unknown = connection.execute(
-                text(
-                    f"""
-                    UPDATE elt_runs
-                    SET status = 'outcome_unknown', stage = 'outcome_unknown',
-                        error_code = 'ELT_OUTCOME_UNKNOWN',
-                        error_message = '外部批处理长时间无进展，结果无法确认，请核对后人工处理',
-                        {released}
-                        updated_at = CURRENT_TIMESTAMP
-                    WHERE status IN ('previewing', 'executing')
-                      AND operation_kind IN ('batch_execute', 'batch_rollback')
-                      AND target_type != 'abnormal'
-                      AND {stale_condition}
-                    """
-                ),
-                {"cutoff": cutoff},
+                update(_RUNS)
+                .where(active, external_batch)
+                .values(
+                    **_release(
+                        {
+                            "status": "outcome_unknown",
+                            "stage": "outcome_unknown",
+                            "error_code": "ELT_OUTCOME_UNKNOWN",
+                            "error_message": "外部批处理长时间无进展，结果无法确认，请核对后人工处理",
+                        }
+                    )
+                )
             )
             interrupted = connection.execute(
-                text(
-                    f"""
-                    UPDATE elt_runs
-                    SET status = 'interrupted', stage = 'interrupted',
-                        error_code = 'ELT_EXECUTION_INTERRUPTED',
-                        error_message = '长时间没有进展，已停止等待；未写入业务数据，请重新导入',
-                        {released}
-                        updated_at = CURRENT_TIMESTAMP
-                    WHERE status IN ('previewing', 'executing')
-                      AND NOT (operation_kind IN ('batch_execute', 'batch_rollback')
-                               AND target_type != 'abnormal')
-                      AND {stale_condition}
-                    """
-                ),
-                {"cutoff": cutoff},
+                update(_RUNS)
+                .where(active, ~external_batch)
+                .values(
+                    **_release(
+                        {
+                            "status": "interrupted",
+                            "stage": "interrupted",
+                            "error_code": "ELT_EXECUTION_INTERRUPTED",
+                            "error_message": "长时间没有进展，已停止等待；未写入业务数据，请重新导入",
+                        }
+                    )
+                )
             )
             total = int(unknown.rowcount or 0) + int(interrupted.rowcount or 0)
     except RECOVERABLE_ERRORS:

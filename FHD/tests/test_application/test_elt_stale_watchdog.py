@@ -33,7 +33,18 @@ def _prepare(tmp_path, rows: list[tuple]) -> str:
 
 
 def _row(run_id: str, status: str, target: str, updated_at: str, kind: str = "preview") -> tuple:
-    return (run_id, status, status, None, None, kind, "tok", "2026-01-01 00:00:00", updated_at, target)
+    return (
+        run_id,
+        status,
+        status,
+        None,
+        None,
+        kind,
+        "tok",
+        "2026-01-01 00:00:00",
+        updated_at,
+        target,
+    )
 
 
 def test_stale_preview_is_interrupted(monkeypatch, tmp_path):
