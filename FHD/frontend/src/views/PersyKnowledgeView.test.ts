@@ -23,6 +23,8 @@ const mocks = vi.hoisted(() => ({
   rebuildIndex: vi.fn(),
   synonyms: vi.fn(),
   saveSynonyms: vi.fn(),
+  qaPairs: vi.fn(),
+  saveQaPairs: vi.fn(),
   queryGaps: vi.fn(),
   clearQueryGaps: vi.fn(),
   listApiKeys: vi.fn(),
@@ -298,6 +300,39 @@ describe('PersyKnowledgeView', () => {
       退款: ['退货', '退钱'],
     })
     expect(wrapper.get('.ask-dock__synonym-actions').text()).toContain('已保存 2 组术语')
+  })
+
+  it('imports and saves question answer pairs from the ask dock', async () => {
+    mocks.qaPairs.mockResolvedValue({
+      success: true,
+      pairs: [{ qa_id: 'qa_1', question: '退款多久到账？', answer: '1-3 个工作日' }],
+      total: 1,
+    })
+    mocks.saveQaPairs.mockResolvedValue({
+      success: true,
+      pairs: [
+        { qa_id: 'qa_1', question: '退款多久到账？', answer: '1-3 个工作日' },
+        { qa_id: 'qa_2', question: '如何开发票？', answer: '订单详情页申请' },
+      ],
+      total: 2,
+    })
+    const wrapper = await mountKnowledge()
+
+    await wrapper.findAll('.ask-dock__term')[1].trigger('click')
+    await flushPromises()
+    const editor = wrapper.get('textarea[aria-label="问答对"]')
+    expect((editor.element as HTMLTextAreaElement).value).toBe('退款多久到账？\t1-3 个工作日')
+
+    await editor.setValue('退款多久到账？\t1-3 个工作日\n如何开发票？\t订单详情页申请')
+    await clickLabel(wrapper, '.ask-dock__synonym-actions button', '保存问答对')
+
+    expect(mocks.qaPairs).toHaveBeenCalledWith('persy-knowledge')
+    expect(mocks.saveQaPairs).toHaveBeenCalledWith(
+      'persy-knowledge',
+      '退款多久到账？\t1-3 个工作日\n如何开发票？\t订单详情页申请',
+    )
+    expect(wrapper.get('.ask-dock__synonym-actions').text()).toContain('已保存 2 组问答')
+    expect(wrapper.get('.qa-pair-list').text()).toContain('如何开发票？')
   })
 
   it('highlights matched query terms in evidence text', async () => {

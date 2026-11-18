@@ -386,6 +386,16 @@ class DatasetSynonymsRequest(BaseModel):
     )
 
 
+class DatasetQaPairsRequest(BaseModel):
+    """问答对批量导入：结构化列表，或 CSV/TSV 文本（问题,答案）。"""
+
+    pairs: list[dict[str, object]] | str = Field(
+        default_factory=list,
+        description="question/answer pairs, or CSV/TSV text with two columns",
+    )
+    replace: bool = Field(default=True, description="true replaces tenant pairs; false appends")
+
+
 class DatasetImportRequest(BaseModel):
     """Portable dataset snapshot produced by the export endpoint."""
 

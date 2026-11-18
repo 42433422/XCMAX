@@ -176,5 +176,6 @@ class VectorIndexService:
             "vector_backend_synced_at": str(previous.get("vector_backend_synced_at") or ""),
             "vector_backend_error": str(previous.get("vector_backend_error") or ""),
             "synonyms": previous.get("synonyms", {}),
+            "qa_pairs": previous.get("qa_pairs", []),
             "updated_at": _utc_now_iso(),
         }

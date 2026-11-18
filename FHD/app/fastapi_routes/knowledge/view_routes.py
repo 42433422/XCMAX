@@ -17,6 +17,7 @@ from .schemas import (
     DatasetApiKeyRequest,
     DatasetFeedbackRequest,
     DatasetImportRequest,
+    DatasetQaPairsRequest,
     DatasetQueryRequest,
     DatasetSynonymsRequest,
 )
@@ -124,6 +125,26 @@ class DatasetViewRoutes:
             return views().update_synonyms(dataset_id, request, req)
 
         self.update_dataset_synonyms = update_dataset_synonyms
+
+        @router.get("/datasets/{dataset_id}/qa-pairs")
+        def dataset_qa_pairs(dataset_id: str, request: Request) -> dict[str, Any]:
+            return views().qa_pairs(dataset_id, request)
+
+        self.dataset_qa_pairs = dataset_qa_pairs
+
+        @router.put("/datasets/{dataset_id}/qa-pairs")
+        def update_dataset_qa_pairs(
+            dataset_id: str, req: DatasetQaPairsRequest, request: Request
+        ) -> dict[str, Any]:
+            return views().update_qa_pairs(dataset_id, request, req)
+
+        self.update_dataset_qa_pairs = update_dataset_qa_pairs
+
+        @router.delete("/datasets/{dataset_id}/qa-pairs")
+        def delete_dataset_qa_pairs(dataset_id: str, request: Request) -> dict[str, Any]:
+            return views().delete_qa_pairs(dataset_id, request)
+
+        self.delete_dataset_qa_pairs = delete_dataset_qa_pairs
 
         @router.get("/datasets/{dataset_id}/query-gaps")
         def dataset_query_gaps(

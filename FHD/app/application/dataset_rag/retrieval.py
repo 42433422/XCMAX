@@ -28,6 +28,12 @@ from app.application.dataset_rag.models import (
     _clean_key,
     _DatasetState,
 )
+from app.application.dataset_rag.qa_pairs import (
+    MAX_QA_PAIRS,
+    normalize_qa_pairs,
+    qa_chunks,
+    scoped_qa_pairs,
+)
 from app.application.dataset_rag.repository import DatasetRepository
 from app.application.dataset_rag.retrieval_policy import (
     _filter_chunks,
@@ -236,6 +242,12 @@ class DatasetRetrieval:
             chunks = list(state.chunks) if state is not None else []
             documents_in_state = list(state.documents.values()) if state is not None else []
             index_snapshot = dict(state.index or {}) if state is not None else {}
+        # 问答对与文档块共用同一召回/精排链路；index 快照里不带答案正文，避免响应过大。
+        qa_pairs = (
+            []
+            if metadata_filter
+            else scoped_qa_pairs({"qa_pairs": index_snapshot.pop("qa_pairs", None)}, tenant_key)
+        )
         scope_chunks = _filter_chunks(
             chunks, tenant_id=tenant_key, version=version, metadata_filter=metadata_filter or {}
         )
@@ -275,6 +287,8 @@ class DatasetRetrieval:
                 access_context,
             )
             index_snapshot["query_backend"] = "in_memory_hybrid"
+        if qa_pairs:
+            chunks = [*chunks, *qa_chunks(qa_pairs, tenant_id=tenant_key)]
         if not chunks:
             return {
                 "success": True,
@@ -527,6 +541,131 @@ class DatasetRetrieval:
             "synonyms": cleaned,
             "count": len(cleaned),
         }
+
+    def qa_pairs(
+        self,
+        dataset_id: str,
+        *,
+        tenant_id: str = "",
+        access_context: DatasetAccessContext | dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """按租户读取问答对（问题参与召回，答案作为引用证据）。"""
+        dataset_key = _clean_key(dataset_id, default="default")
+        context = _coerce_access_context(access_context)
+        tenant_key, denied = _resolve_tenant_for_access(
+            context,
+            tenant_id,
+            required_permission=DATASET_READ_PERMISSION,
+            default_without_context="",
+            dataset_id=dataset_key,
+        )
+        if denied is not None:
+            denied.update({"pairs": [], "total": 0})
+            return denied
+        with self._repository.lock:
+            state = self._repository.datasets.get(dataset_key)
+            rows = scoped_qa_pairs(state.index if state is not None else None, tenant_key)
+        return {
+            "success": True,
+            "dataset_id": dataset_key,
+            "pairs": rows,
+            "total": len(rows),
+        }
+
+    def set_qa_pairs(
+        self,
+        dataset_id: str,
+        payload: Any,
+        *,
+        tenant_id: str = "",
+        replace: bool = True,
+        access_context: DatasetAccessContext | dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """写入问答对；默认整租户替换，``replace=False`` 时按问题+答案追加去重。"""
+        dataset_key = _clean_key(dataset_id, default="default")
+        context = _coerce_access_context(access_context)
+        tenant_key, denied = _resolve_tenant_for_access(
+            context,
+            tenant_id,
+            required_permission=DATASET_WRITE_PERMISSION,
+            default_without_context="",
+            dataset_id=dataset_key,
+        )
+        if denied is not None:
+            return denied
+        try:
+            normalized = normalize_qa_pairs(payload)
+        except ValueError as exc:
+            return {"success": False, "dataset_id": dataset_key, "message": str(exc)}
+        incoming = [{**pair, "tenant_id": tenant_key} for pair in normalized]
+        with self._repository.lock:
+            state = self._repository.datasets.setdefault(dataset_key, _DatasetState(dataset_key))
+            existing = state.index.get("qa_pairs")
+            rows = (
+                [row for row in existing if isinstance(row, dict)]
+                if isinstance(existing, list)
+                else []
+            )
+            others = [row for row in rows if str(row.get("tenant_id") or "") != tenant_key]
+            kept = (
+                []
+                if replace
+                else [row for row in rows if str(row.get("tenant_id") or "") == tenant_key]
+            )
+            merged: list[dict[str, Any]] = []
+            seen: set[str] = set()
+            for row in [*kept, *incoming]:
+                key = str(row.get("qa_id") or "")
+                if key and key in seen:
+                    continue
+                if key:
+                    seen.add(key)
+                merged.append(row)
+            state.index["qa_pairs"] = [*others, *merged][:MAX_QA_PAIRS]
+            self._repository._persist_locked()
+        scoped = [row for row in merged if str(row.get("tenant_id") or "") == tenant_key]
+        return {
+            "success": True,
+            "dataset_id": dataset_key,
+            "pairs": scoped,
+            "count": len(incoming),
+            "total": len(scoped),
+        }
+
+    def delete_qa_pairs(
+        self,
+        dataset_id: str,
+        *,
+        tenant_id: str = "",
+        access_context: DatasetAccessContext | dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """清空当前租户的问答对，其它租户不受影响。"""
+        dataset_key = _clean_key(dataset_id, default="default")
+        context = _coerce_access_context(access_context)
+        tenant_key, denied = _resolve_tenant_for_access(
+            context,
+            tenant_id,
+            required_permission=DATASET_WRITE_PERMISSION,
+            default_without_context="",
+            dataset_id=dataset_key,
+        )
+        if denied is not None:
+            return denied
+        removed = 0
+        with self._repository.lock:
+            state = self._repository.datasets.get(dataset_key)
+            existing = state.index.get("qa_pairs") if state is not None else None
+            if state is not None and isinstance(existing, list):
+                keep = [
+                    row
+                    for row in existing
+                    if isinstance(row, dict) and str(row.get("tenant_id") or "") != tenant_key
+                ]
+                removed = len(existing) - len(keep)
+                state.index["qa_pairs"] = keep
+                if removed:
+                    self._repository._persist_locked()
+        return {"success": True, "dataset_id": dataset_key, "removed": removed}
 
     def knowledge_graph(
         self,

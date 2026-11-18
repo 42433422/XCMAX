@@ -118,6 +118,7 @@ from app.application.dataset_rag.retrieval_policy import (
 from app.application.dataset_rag.retrieval_policy import (
     evidence_grounding as evidence_grounding,
 )
+from app.application.dataset_rag.qa_pairs import normalize_qa_pairs, scoped_qa_pairs
 from app.application.dataset_rag.retrieval_policy import (
     resolve_min_relevance as resolve_min_relevance,
 )
@@ -1090,6 +1091,45 @@ class DatasetRagApplicationService:
     ) -> dict[str, Any]:
         return self._retrieval.set_synonyms(dataset_id, synonyms, access_context=access_context)
 
+    def qa_pairs(
+        self,
+        dataset_id: str,
+        *,
+        tenant_id: str = "",
+        access_context: DatasetAccessContext | dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        return self._retrieval.qa_pairs(
+            dataset_id, tenant_id=tenant_id, access_context=access_context
+        )
+
+    def set_qa_pairs(
+        self,
+        dataset_id: str,
+        payload: Any,
+        *,
+        tenant_id: str = "",
+        replace: bool = True,
+        access_context: DatasetAccessContext | dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        return self._retrieval.set_qa_pairs(
+            dataset_id,
+            payload,
+            tenant_id=tenant_id,
+            replace=replace,
+            access_context=access_context,
+        )
+
+    def delete_qa_pairs(
+        self,
+        dataset_id: str,
+        *,
+        tenant_id: str = "",
+        access_context: DatasetAccessContext | dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        return self._retrieval.delete_qa_pairs(
+            dataset_id, tenant_id=tenant_id, access_context=access_context
+        )
+
     def export_dataset(
         self,
         dataset_id: str,
@@ -1152,6 +1192,7 @@ class DatasetRagApplicationService:
                     }
                 )
             synonyms = normalize_synonyms((state.index or {}).get("synonyms"))
+            qa_pairs = scoped_qa_pairs(state.index, tenant_key)
         return {
             "success": True,
             "version": 1,
@@ -1161,8 +1202,10 @@ class DatasetRagApplicationService:
             "documents": [doc.to_dict() for doc in documents],
             "chunks": chunks,
             "synonyms": synonyms,
+            "qa_pairs": qa_pairs,
             "document_count": len(documents),
             "chunk_count": len(chunks),
+            "qa_pair_count": len(qa_pairs),
         }
 
     def import_dataset(
@@ -1208,6 +1251,10 @@ class DatasetRagApplicationService:
             synonyms = normalize_synonyms(data.get("synonyms"))
         except ValueError as exc:
             return {"success": False, "dataset_id": dataset_key, "message": str(exc)}
+        try:
+            qa_pairs = normalize_qa_pairs(data.get("qa_pairs"))
+        except ValueError as exc:
+            return {"success": False, "dataset_id": dataset_key, "message": str(exc)}
         documents: dict[str, DatasetDocument] = {}
         for row in documents_payload:
             if not isinstance(row, dict):
@@ -1249,11 +1296,16 @@ class DatasetRagApplicationService:
                     "message": "dataset already has documents; pass overwrite=true",
                     "error_code": "dataset_not_empty",
                 }
+            index: dict[str, Any] = {}
+            if synonyms:
+                index["synonyms"] = synonyms
+            if qa_pairs:
+                index["qa_pairs"] = [{**pair, "tenant_id": actor_tenant} for pair in qa_pairs]
             state = _DatasetState(
                 dataset_key,
                 documents=documents,
                 chunks=chunks,
-                index={"synonyms": synonyms} if synonyms else {},
+                index=index,
             )
             self._prepare_loaded_state(state)
             state.index.pop("_persist_after_load", None)
@@ -1265,6 +1317,7 @@ class DatasetRagApplicationService:
             "document_count": len(documents),
             "chunk_count": len(chunks),
             "synonym_count": len(synonyms),
+            "qa_pair_count": len(qa_pairs),
         }
 
     def create_api_key(

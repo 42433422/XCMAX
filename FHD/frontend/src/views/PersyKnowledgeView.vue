@@ -242,6 +242,7 @@
               </select>
             </label>
             <button type="button" class="ask-dock__term" @click="toggleSynonymEditor">术语</button>
+            <button type="button" class="ask-dock__term" @click="toggleQaPairs">问答</button>
             <button type="button" class="ask-dock__term" @click="toggleApiKeys">分享</button>
           </div>
           <div v-if="apiKeysOpen" class="ask-dock__synonyms" aria-label="外部 API 密钥">
@@ -281,6 +282,26 @@
               </button>
               <span v-if="synonymMessage" role="status">{{ synonymMessage }}</span>
             </div>
+          </div>
+          <div v-if="qaPairsOpen" class="ask-dock__synonyms" aria-label="问答对">
+            <textarea
+              v-model="qaPairsDraft"
+              rows="4"
+              placeholder="每行一对：问题,答案（也支持制表符分隔）"
+              aria-label="问答对"
+            ></textarea>
+            <div class="ask-dock__synonym-actions">
+              <button type="button" :disabled="qaPairsSaving" @click="saveQaPairs">
+                {{ qaPairsSaving ? '保存中…' : '保存问答对' }}
+              </button>
+              <span v-if="qaPairsMessage" role="status">{{ qaPairsMessage }}</span>
+            </div>
+            <ul v-if="qaPairItems.length" class="qa-pair-list">
+              <li v-for="item in qaPairItems" :key="item.qa_id || item.question">
+                <strong>{{ item.question }}</strong>
+                <span>{{ item.answer }}</span>
+              </li>
+            </ul>
           </div>
           <p v-if="querying" class="ask-dock__status" role="status">正在检索知识，请稍候…</p>
           <p v-else-if="queryError" class="ask-dock__error" role="alert">{{ queryError }}</p>
@@ -593,6 +614,11 @@ const synonymEditorOpen = ref(false)
 const synonymDraft = ref('')
 const synonymSaving = ref(false)
 const synonymMessage = ref('')
+const qaPairsOpen = ref(false)
+const qaPairsDraft = ref('')
+const qaPairsSaving = ref(false)
+const qaPairsMessage = ref('')
+const qaPairItems = ref<Array<{ qa_id?: string; question: string; answer: string }>>([])
 const gapsOpen = ref(false)
 const gapsLoading = ref(false)
 const gapMessage = ref('')
@@ -785,6 +811,41 @@ async function saveSynonyms(): Promise<void> {
     synonymMessage.value = '保存失败，请稍后重试'
   } finally {
     synonymSaving.value = false
+  }
+}
+
+function formatQaPairs(pairs: Array<{ question?: string; answer?: string }>): string {
+  return pairs
+    .map((pair) => `${pair.question || ''}\t${pair.answer || ''}`)
+    .join('\n')
+}
+
+async function toggleQaPairs(): Promise<void> {
+  qaPairsOpen.value = !qaPairsOpen.value
+  qaPairsMessage.value = ''
+  if (!qaPairsOpen.value) return
+  try {
+    const result = await knowledgeBaseApi.qaPairs(activeDatasetId.value)
+    qaPairItems.value = result.pairs || []
+    qaPairsDraft.value = formatQaPairs(qaPairItems.value)
+  } catch {
+    qaPairsMessage.value = '问答对加载失败'
+  }
+}
+
+async function saveQaPairs(): Promise<void> {
+  qaPairsSaving.value = true
+  qaPairsMessage.value = ''
+  try {
+    const result = await knowledgeBaseApi.saveQaPairs(activeDatasetId.value, qaPairsDraft.value)
+    qaPairItems.value = result.pairs || []
+    qaPairsMessage.value = result.success
+      ? `已保存 ${result.total ?? 0} 组问答`
+      : result.message || '保存失败'
+  } catch {
+    qaPairsMessage.value = '保存失败，请稍后重试'
+  } finally {
+    qaPairsSaving.value = false
   }
 }
 

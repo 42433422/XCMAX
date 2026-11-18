@@ -1,4 +1,5 @@
 ## Unreleased
+- 知识库新增问答对（FAQ 模式）：`GET/PUT/DELETE /api/knowledge/v1/datasets/{dataset_id}/qa-pairs` 按租户维护「问题 + 答案」（`PUT` 接受 `{question, answer}` 列表、JSON 或 CSV/TSV 文本，默认整租户替换、`replace=false` 追加，按问题+答案去重，单库上限 2000 对）；问答对随数据集快照持久化并参与混合召回与引用（`metadata.type="qa"`、`qa_id`、`question`），无文档也能命中，答案可直接作为证据；带 `metadata_filter` 的查询不混入问答对。导出/导入快照同步携带问答对。前端问答设置新增「问答」面板，粘贴「问题,答案」即可批量导入并预览。数据模型对齐 Dify / FastGPT 的问答对知识库，CSV/JSON 解析复用 Python 标准库。
 - 知识库检索命中高亮：查询结果在 `metadata.highlights` 返回命中词区间（中文按二字词、英文按整词、重叠合并、每块最多 20 段），正文保持原样；前端召回证据行按区间渲染 `<mark>`，长文档里一眼看到命中位置。
 - 知识库新增外部只读 API Key（公开分享）：`POST/GET /datasets/{id}/api-keys`、`DELETE .../api-keys/{token_id}`（需 `dataset.admin`），密钥仅存 SHA-256 哈希、明文只返回一次、可回收；外部通过 `POST /api/knowledge/v1/public/query` 带 `X-KB-Key` 检索，密钥绑定单一数据集与创建者租户，按文档 ACL 过滤，不返回答案/引用，也不暴露 `acl`/`tenant_id`。前端问答设置新增「分享」面板可生成/回收密钥。
 - 知识库支持导出/导入（备份迁移）：`GET /datasets/{dataset_id}/export` 返回可移植快照（文档、分块、术语表，剔除 `_embedding` 等内部字段，受租户与文档 ACL 过滤）；`POST /datasets/{dataset_id}/import` 恢复快照（需 `dataset.write`，非空数据集须 `overwrite=true`，导入强制使用操作者租户、单次上限 5000 篇/50000 块）。前端工具栏新增导出/导入按钮。

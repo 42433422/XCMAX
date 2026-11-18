@@ -236,6 +236,22 @@ export interface KnowledgeSynonymsResponse {
   message?: string
 }
 
+export interface KnowledgeQaPair {
+  qa_id?: string
+  question: string
+  answer: string
+}
+
+export interface KnowledgeQaPairsResponse {
+  success: boolean
+  dataset_id?: string
+  pairs?: KnowledgeQaPair[]
+  count?: number
+  total?: number
+  removed?: number
+  message?: string
+}
+
 export interface KnowledgeFeedbackPayload {
   datasetId?: string
   rating: 'up' | 'down'
@@ -667,6 +683,27 @@ export const knowledgeBaseApi = {
   ): Promise<KnowledgeSynonymsResponse> {
     await primeCsrfCookie()
     return api.put<KnowledgeSynonymsResponse>(datasetPath(datasetId, '/synonyms'), { synonyms })
+  },
+
+  qaPairs(datasetId = PERSY_KNOWLEDGE_DATASET_ID): Promise<KnowledgeQaPairsResponse> {
+    return api.get<KnowledgeQaPairsResponse>(datasetPath(datasetId, '/qa-pairs'))
+  },
+
+  async saveQaPairs(
+    datasetId: string,
+    pairs: KnowledgeQaPair[] | string,
+    replace = true,
+  ): Promise<KnowledgeQaPairsResponse> {
+    await primeCsrfCookie()
+    return api.put<KnowledgeQaPairsResponse>(datasetPath(datasetId, '/qa-pairs'), {
+      pairs,
+      replace,
+    })
+  },
+
+  async clearQaPairs(datasetId = PERSY_KNOWLEDGE_DATASET_ID): Promise<KnowledgeQaPairsResponse> {
+    await primeCsrfCookie()
+    return api.delete<KnowledgeQaPairsResponse>(datasetPath(datasetId, '/qa-pairs'))
   },
 
   memories(

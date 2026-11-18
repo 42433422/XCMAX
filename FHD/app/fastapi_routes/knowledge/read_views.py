@@ -202,6 +202,41 @@ class DatasetViews:
             ),
         )
 
+    def qa_pairs(self, dataset_id: str, request: Request) -> dict[str, Any]:
+        access = self._access(request)
+        return cast(
+            "dict[str, Any]",
+            self._service().qa_pairs(
+                dataset_id,
+                tenant_id=self._tenant_scope(access),
+                access_context=access,
+            ),
+        )
+
+    def update_qa_pairs(self, dataset_id: str, request: Request, payload: Any) -> dict[str, Any]:
+        access = self._access(request)
+        return cast(
+            "dict[str, Any]",
+            self._service().set_qa_pairs(
+                dataset_id,
+                getattr(payload, "pairs", []),
+                tenant_id=self._tenant_scope(access),
+                replace=bool(getattr(payload, "replace", True)),
+                access_context=access,
+            ),
+        )
+
+    def delete_qa_pairs(self, dataset_id: str, request: Request) -> dict[str, Any]:
+        access = self._access(request)
+        return cast(
+            "dict[str, Any]",
+            self._service().delete_qa_pairs(
+                dataset_id,
+                tenant_id=self._tenant_scope(access),
+                access_context=access,
+            ),
+        )
+
     def graph(self, dataset_id: str, request: Request, limit: int = 80) -> dict[str, Any]:
         from app.application.persy_memory_app_service import merge_memory_graph
 

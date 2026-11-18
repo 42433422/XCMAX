@@ -251,6 +251,24 @@ describe('knowledgeBaseApi', () => {
     )
   })
 
+  it('loads, saves and clears dataset question answer pairs', async () => {
+    await knowledgeBaseApi.qaPairs('office-docking')
+    await knowledgeBaseApi.saveQaPairs('office-docking', '退款多久到账？\t1-3 个工作日')
+    await knowledgeBaseApi.clearQaPairs('office-docking')
+
+    expect(mocks.api.get).toHaveBeenCalledWith(
+      '/api/knowledge/v1/datasets/office-docking/qa-pairs',
+    )
+    expect(mocks.primeCsrfCookie).toHaveBeenCalledTimes(2)
+    expect(mocks.api.put).toHaveBeenCalledWith(
+      '/api/knowledge/v1/datasets/office-docking/qa-pairs',
+      { pairs: '退款多久到账？\t1-3 个工作日', replace: true },
+    )
+    expect(mocks.api.delete).toHaveBeenCalledWith(
+      '/api/knowledge/v1/datasets/office-docking/qa-pairs',
+    )
+  })
+
   it('parses SSE knowledge query events', async () => {
     const encoder = new TextEncoder()
     const chunks = [

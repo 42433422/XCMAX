@@ -1071,6 +1071,33 @@
   font-size: 11px;
 }
 
+.qa-pair-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+  color: #3d4b45;
+  font-size: 11px;
+}
+
+.qa-pair-list li {
+  display: grid;
+  gap: 2px;
+  padding: 4px 6px;
+  border: 1px solid #e2e8df;
+  border-radius: 6px;
+  background: #fbfcf8;
+}
+
+.qa-pair-list li strong {
+  font-weight: 600;
+}
+
+.qa-pair-list li span {
+  color: #5d6b64;
+}
+
 .api-key-list li {
   display: flex;
   align-items: center;
