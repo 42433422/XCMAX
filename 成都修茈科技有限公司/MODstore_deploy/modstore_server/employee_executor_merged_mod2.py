@@ -24,7 +24,6 @@ _facade = _load_public_module
 
 
 def _execute_employee_phase_01(state):
-    state["pack"] = _facade().load_employee_pack_resolved(state["session"], state["employee_id"])
     state["manifest"], burn_in_eligibility = (state["pack"].get("manifest") or {}, {})
     (
         reviewed_contract,
@@ -893,8 +892,13 @@ def execute_employee_task(
     try:
         sf = _facade().get_session_factory()
         with sf() as session:
+            # Resolve aliases and authorize before actions, metrics or lifecycle hooks.
+            pack = _facade().load_employee_pack_resolved(
+                session, employee_id, user_id=user_id or None, execute=True
+            )
             try:
                 state = {
+                    "pack": pack,
                     "detail_log": detail_log,
                     "bench_llm_override": bench_llm_override,
                     "employee_id": employee_id,

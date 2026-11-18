@@ -31,9 +31,9 @@
           <div v-else class="message-html" v-html="messageHtml(msg)"></div>
         </MessageFold>
         <template v-else>
-          <ChatTypingIndicator v-if="msg.role === 'ai' && msg.streamingShell" :label="msg.waitingHint || '正在思考…'" show-elapsed />
+          <ChatTypingIndicator v-if="msg.role === 'ai' && isMessageStreaming(msg)" :label="msg.toolProgressLabel || msg.waitingHint || '正在处理任务…'" show-elapsed />
           <AgentRunTrace
-            v-if="msg.role === 'ai' && hasOrchestrationTrace(msg)"
+            v-if="msg.role === 'ai' && hasOrchestrationTrace(msg) && !(isMessageStreaming(msg) && msg.liveSteps?.length)"
             :trace="orchestrationTraceFor(msg)"
             @auto-approve-tool="approveMessage(msg)"
           />
@@ -48,7 +48,7 @@
           </div>
           <details v-if="msg.role === 'ai' && hasReceiptDetails(msg)" class="message-receipt">
             <summary>
-              <i v-if="msg.streamingShell" class="fa fa-spinner fa-spin message-receipt__spinner" aria-hidden="true"></i>
+              <i v-if="isMessageStreaming(msg)" class="fa fa-spinner fa-spin message-receipt__spinner" aria-hidden="true"></i>
               <i v-else class="fa fa-bolt message-receipt__icon" aria-hidden="true"></i>
               <span class="message-receipt__status" :class="`is-${receiptStatus(msg)}`">{{ receiptStatusLabel(msg) }}</span>
               <span class="execution-timeline__current" data-testid="chat-business-result">{{ receiptSummary(msg) }}</span>
@@ -103,7 +103,7 @@
           <details
             v-if="msg.role === 'ai' && msg.thinkingSteps"
             class="thinking-panel message-thinking"
-            :open="msg.streamingShell"
+            :open="isMessageStreaming(msg) && !msg.liveSteps?.length"
             :data-testid="`chat-thinking-${idx}`"
           >
             <summary>{{ $t('chat.viewThinkingSteps') }}</summary>
@@ -115,7 +115,6 @@
             v-html="messageHtml(msg)"
           ></div>
           <ChatTurnTrace v-if="msg.role === 'ai' && msg.trace?.length" :items="msg.trace" />
-          <ChatTypingIndicator v-if="msg.role === 'ai' && !msg.streamingShell && msg.waitingHint" :label="msg.waitingHint" show-elapsed />
           <div v-if="msg.role === 'ai' && msg.shipmentDownloadUrl" class="message-shipment-actions">
             <a class="btn btn-primary btn-sm" :href="msg.shipmentDownloadUrl" download @click="$emit('shipment-download-click')">
               {{ $t('chat.downloadShipment') }}
@@ -230,7 +229,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, watch, type Ref } from 'vue'
+import { computed, onMounted, ref, watch, type ComputedRef, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { ChatMessage } from '@/composables/useChatMessages'
 import { sanitizeChatBubbleHtml, sanitizeChatBubbleMarkdown, plainTextFromChatHtml } from '@/utils/sanitizeHtml'
@@ -299,8 +298,6 @@ function hasReceiptDetails(message: ChatMessage): boolean {
   if (message.role !== 'ai') return false
   if (message.executionProgress?.length) return true
   if (!hasOrchestrationTrace(message) && message.todoSteps?.length) return true
-  // 思考步骤是用户可见的过程信息，不受诊断开关限制。
-  if (!hasOrchestrationTrace(message) && message.thinkingSteps) return true
   if (!props.showDiagnosticMetadata) return false
   return Boolean(
     message.workflowAction
@@ -310,10 +307,22 @@ function hasReceiptDetails(message: ChatMessage): boolean {
   )
 }
 
-type ReceiptStatus = 'running' | 'done' | 'partial' | 'unknown' | 'failed'
+function isMessageStreaming(message: ChatMessage): boolean {
+  return message.streamStatus ? message.streamStatus === 'submitted' || message.streamStatus === 'streaming' : Boolean(message.streamingShell)
+}
+
+function hasUnreceiptedTools(message: ChatMessage): boolean {
+  if (!message.streamStatus || isMessageStreaming(message)
+    || message.approvalCard?.status === 'pending' || message.agentRunTrace?.status === 'waiting') return false
+  const receipts = new Set(message.nodeResults?.map(row => row.node_id))
+  return Boolean(message.liveSteps?.some(step => step.state === 'running' && !receipts.has(step.id)))
+}
+
+type ReceiptStatus = 'running' | 'waiting' | 'done' | 'partial' | 'unknown' | 'failed'
 
 const RECEIPT_STATUS_LABEL: Record<ReceiptStatus, string> = {
   running: '进行中',
+  waiting: '待确认',
   done: '已完成',
   partial: '部分完成',
   unknown: '待核对',
@@ -321,7 +330,9 @@ const RECEIPT_STATUS_LABEL: Record<ReceiptStatus, string> = {
 }
 
 function receiptStatus(message: ChatMessage): ReceiptStatus {
-  if (message.streamingShell) return 'running'
+  if (isMessageStreaming(message)) return 'running'
+  if (message.approvalCard?.status === 'pending' || message.agentRunTrace?.status === 'waiting') return 'waiting'
+  if (hasUnreceiptedTools(message)) return 'unknown'
   const outcome = String(message.execution?.outcome || '')
   if (outcome === 'unknown' || message.workflowAction === 'unknown') return 'unknown'
   if (outcome === 'partial' || message.execution?.effect === 'partial') return 'partial'
@@ -337,7 +348,7 @@ function receiptStatusLabel(message: ChatMessage): string {
 /** 回执摘要只留一句：业务结果优先，其次当前执行步骤；都没有就不占用标题行。 */
 function receiptSummary(message: ChatMessage): string {
   if (businessResultText(message)) return businessResultText(message)
-  if (message.toolProgressLabel) return message.toolProgressLabel
+  if (message.toolProgressLabel && !message.liveSteps?.length) return message.toolProgressLabel
   return message.executionProgress?.length ? latestExecutionLabel(message) : ''
 }
 
@@ -365,7 +376,7 @@ function confirmPreview(index: number) {
 }
 
 function suggestionsFor(message: ChatMessage): readonly ProactiveReplySuggestion[] {
-  if (message.role !== 'ai' || message.streamingShell || isFailedChatReply(message)) return []
+  if (message.role !== 'ai' || isMessageStreaming(message) || isFailedChatReply(message)) return []
   const messageId = proactiveReplyMessageId(message)
   return (props.proactiveSuggestions?.get(messageId) || [])
     .filter(item => item.scopeKey === (props.sessionKey || '') && item.messageId === messageId)
@@ -516,31 +527,33 @@ function approvalTraceFor(message: ChatMessage): AgentRunTraceData | null {
 }
 
 function hasOrchestrationTrace(message: ChatMessage): boolean {
+  if (hasUnreceiptedTools(message)) return false
   return Boolean(message.agentRunTrace || approvalTraceFor(message))
 }
 
 const EMPTY_STEPS: AgentStepView[] = []
-const stepChainCache = new WeakMap<ChatMessage, { sig: string; steps: AgentStepView[] }>()
+const stepChainCache = new WeakMap<ChatMessage, ComputedRef<AgentStepView[]>>()
 
-/**
- * 对话内执行链：终态步骤来自 node_results；流式阶段用进度文案挂一个「执行中」占位步骤。
- * 没有 agentRunTrace 的普通回合也能看到链路（此前单工具成功会被整体隐藏）。
- */
+/** Vue tracks every field read; progress on an earlier parallel node cannot stale the view. */
 function stepChainFor(message: ChatMessage): AgentStepView[] {
   if (message.role !== 'ai') return EMPTY_STEPS
-  const hint = message.streamingShell ? String(message.toolProgressLabel || message.waitingHint || '').trim() : ''
-  const liveCount = message.liveSteps?.length || 0
-  const liveSignature = liveCount ? `${liveCount}:${message.liveSteps?.[liveCount - 1]?.state || ''}` : '0'
-  const sig = `${message.nodeResults?.length || 0}|${message.streamingShell ? 1 : 0}|${hint}|${liveSignature}`
-  const cached = stepChainCache.get(message)
-  if (cached && cached.sig === sig) return cached.steps
-  // 终态 node_results 是权威来源；结束后不再保留流式累积的中间步骤。
-  const steps = stepsFromNodeResults(message.nodeResults)
-  const base = steps.length ? steps : message.liveSteps || EMPTY_STEPS
-  const hasRunning = base.some((step) => step.state === 'running' || step.state === 'waiting')
-  const merged = withLiveStep(base, hint && !hasRunning ? buildLiveStep(hint) : null)
-  stepChainCache.set(message, { sig, steps: merged })
-  return merged
+  let entry = stepChainCache.get(message)
+  if (!entry) {
+    entry = computed(() => {
+      const active = isMessageStreaming(message)
+      const finalSteps = stepsFromNodeResults(message.nodeResults)
+      const receipts = new Map(finalSteps.map(step => [step.id, step]))
+      const live = message.liveSteps || EMPTY_STEPS
+      const base = active && message.liveSteps?.length ? message.liveSteps
+        : [...live.map(step => receipts.get(step.id) || step), ...finalSteps.filter(step => !live.some(item => item.id === step.id))]
+      if (!active) return base.map(step => step.state === 'running'
+        ? { ...step, state: 'unknown' as const, hint: '执行结果待核对' } : step)
+      const hint = String(message.toolProgressLabel || message.waitingHint || '').trim()
+      return withLiveStep(base, !base.length ? buildLiveStep(hint) : null)
+    })
+    stepChainCache.set(message, entry)
+  }
+  return entry.value
 }
 
 function orchestrationTraceFor(message: ChatMessage): AgentRunTraceData {

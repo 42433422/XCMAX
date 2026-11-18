@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.fastapi_routes.code_editor import router as code_editor_router
+from app.infrastructure.auth.dependencies import get_logged_in_user
 
 
 @pytest.fixture
 def client() -> TestClient:
     app = FastAPI()
+    app.dependency_overrides[get_logged_in_user] = lambda: SimpleNamespace(id=1, tenant_id=10)
     app.include_router(code_editor_router)
     with TestClient(app) as c:
         yield c

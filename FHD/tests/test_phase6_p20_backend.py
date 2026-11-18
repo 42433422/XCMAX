@@ -1049,9 +1049,10 @@ class TestShipmentConfigApprovalRoute:
         assert r.status_code == 200
         assert r.json()["attendance_policy"] == {}
 
-    def test_config_approval_post_success(self, shipment_client: TestClient):
+    def test_config_approval_post_success(self, shipment_client: TestClient, logged_in_session):
         from app.application.agent_orchestrator import InMemoryAgentRunRepository
 
+        logged_in_session.tier = "admin"
         repo = InMemoryAgentRunRepository()
         with (
             patch("resources.config.approval_config.get_approval_config") as mock_get,
@@ -1079,7 +1080,10 @@ class TestShipmentConfigApprovalRoute:
         assert run.intent == "approval_config_update"
         cfg.save.assert_called_once()
 
-    def test_config_approval_post_with_attendance_policy(self, shipment_client: TestClient):
+    def test_config_approval_post_with_attendance_policy(
+        self, shipment_client: TestClient, logged_in_session
+    ):
+        logged_in_session.tier = "admin"
         with (
             patch("resources.config.approval_config.get_approval_config") as mock_get,
             patch("resources.config.approval_config.reload_approval_config"),
@@ -1101,7 +1105,10 @@ class TestShipmentConfigApprovalRoute:
         assert r.status_code == 200
         mock_norm.assert_called_once()
 
-    def test_config_approval_post_recoverable_error(self, shipment_client: TestClient):
+    def test_config_approval_post_recoverable_error(
+        self, shipment_client: TestClient, logged_in_session
+    ):
+        logged_in_session.tier = "admin"
         with patch("resources.config.approval_config.get_approval_config") as mock_get:
             mock_get.side_effect = RuntimeError("db down")
             r = shipment_client.post("/api/ai/config/approval", json={})

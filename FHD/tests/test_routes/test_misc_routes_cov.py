@@ -19,6 +19,7 @@ from app.fastapi_routes.domains.misc.misc_routes import (
     _test_db_toggle_from_body,
     router,
 )
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 # ---------------------------------------------------------------------------
 # TestClient fixture
@@ -30,6 +31,11 @@ def client():
     app = FastAPI()
     app.include_router(router)
     return TestClient(app, raise_server_exceptions=False)
+
+
+@pytest.fixture()
+def test_db_admin(client, trusted_actor):
+    client.headers.update(trusted_actor(role="admin", tier="admin").headers)
 
 
 # ===========================================================================
@@ -217,6 +223,7 @@ class TestSystemTestDbStatus:
 # ===========================================================================
 
 
+@pytest.mark.usefixtures("test_db_admin")
 class TestSystemTestDbEnable:
     def test_enable_with_explicit_true(self, client: TestClient):
         db_info = {"mode": "test", "backend": "sqlite", "current_db_name": "test.db"}
@@ -276,6 +283,7 @@ class TestSystemTestDbEnable:
 # ===========================================================================
 
 
+@pytest.mark.usefixtures("test_db_admin")
 class TestSystemTestDbDisable:
     def test_disable_switches_production(self, client: TestClient):
         db_info = {"mode": "production", "backend": "sqlite", "current_db_name": "prod.db"}

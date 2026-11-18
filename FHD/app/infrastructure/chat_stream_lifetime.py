@@ -122,6 +122,16 @@ class StreamLifetime:
             self._tool_sequence += 1
             sequence = self._tool_sequence
             callbacks = list(self._tool_observers)
+        if isinstance(record, dict) and record.get("phase") == "progress":
+            # Progress is observational; only lifecycle receipts must persist.
+            for callback in callbacks:
+                try:
+                    callback(sequence=sequence, record=record)
+                except BOUNDARY_ERRORS:
+                    logging.getLogger(__name__).debug(
+                        "stream progress observer failed", exc_info=True
+                    )
+            return
         with self._receipt_lock:
             self._tool_pending.extend((callback, sequence, record) for callback in callbacks)
         try:

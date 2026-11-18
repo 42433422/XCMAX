@@ -36,9 +36,14 @@ def _ensure_upload_folder() -> None:
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
+def _upload_owner_prefix(user) -> str:
+    tenant = "none" if user.tenant_id is None else str(int(user.tenant_id))
+    return f"t{tenant}_u{int(user.id)}_"
+
+
 @router.post("/temp")
 async def upload_temp(
-    file: UploadFile | None = File(default=None), _user=Depends(get_logged_in_user)
+    file: UploadFile | None = File(default=None), user=Depends(get_logged_in_user)
 ):
     try:
         _ensure_upload_folder()
@@ -59,10 +64,10 @@ async def upload_temp(
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         unique_id = uuid.uuid4().hex[:8]
         ext = original_filename.rsplit(".", 1)[1].lower() if "." in original_filename else "png"
-        new_filename = f"{timestamp}_{unique_id}.{ext}"
+        new_filename = f"{_upload_owner_prefix(user)}{timestamp}_{unique_id}.{ext}"
         file_path = os.path.join(UPLOAD_FOLDER, new_filename)
 
-        content = await file.read()
+        content = await file.read(MAX_CONTENT_LENGTH + 1)
         if len(content) > MAX_CONTENT_LENGTH:
             return JSONResponse({"success": False, "message": "文件过大"}, status_code=400)
 
@@ -92,12 +97,16 @@ async def upload_temp(
 
 
 @router.delete("/temp/{filename}")
-def delete_temp_file(filename: str, _user=Depends(get_logged_in_user)):
+def delete_temp_file(filename: str, user=Depends(get_logged_in_user)):
     try:
         base_name = os.path.basename(str(filename or "").replace("\\", "/"))
         safe_name = secure_filename(base_name)
         if not safe_name:
             return JSONResponse({"success": False, "message": "非法文件名"}, status_code=400)
+        # Filename ownership is assigned only by upload_temp from the verified session.
+        # Unowned legacy files stay available for the existing TTL cleanup, not user deletion.
+        if not safe_name.startswith(_upload_owner_prefix(user)):
+            return JSONResponse({"success": False, "message": "文件不存在"}, status_code=404)
         file_path = os.path.join(UPLOAD_FOLDER, safe_name)
         file_path = os.path.normpath(file_path)
         if not file_path.startswith(os.path.normpath(UPLOAD_FOLDER)):

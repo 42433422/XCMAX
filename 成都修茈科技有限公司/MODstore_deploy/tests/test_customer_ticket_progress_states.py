@@ -3,16 +3,21 @@
 import uuid
 
 import pytest
+from fastapi.testclient import TestClient
 
 from modstore_server.customer_service_tools import json_loads
 from tests.test_customer_issue_delivery_pipeline import make_ticket
 
 
 @pytest.fixture
-def progress_client(client, monkeypatch):
-    """Keep parametrized intake requests out of other tests' rate-limit bucket."""
-    monkeypatch.setitem(client.headers, "x-modstore-user", f"progress-{uuid.uuid4().hex}")
-    return client
+def progress_client(client):
+    """Isolate test connection peers without trusting HTTP identity headers."""
+    peer = (f"progress-{uuid.uuid4().hex}", 50000)
+
+    async def with_peer(scope, receive, send):
+        await client.app({**scope, "client": peer}, receive, send)
+
+    return TestClient(with_peer)
 
 
 @pytest.mark.parametrize("team_ok", [False, True])

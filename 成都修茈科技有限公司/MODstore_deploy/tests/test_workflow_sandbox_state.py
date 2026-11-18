@@ -9,9 +9,23 @@ import pytest
 def _initialized_workflow_database(client):
     # The singleton app may have been imported under another test's DB path.
     # Ensure this fixture's restored temporary database has its own schema.
-    from modstore_server.models import init_db
+    from modstore_server.models import User, get_session_factory, init_db
 
     init_db()
+    # Sandbox execution now verifies the persisted actor, not only the HTTP stub.
+    with get_session_factory()() as db:
+        for uid in (1, 2):
+            if db.get(User, uid) is None:
+                db.add(
+                    User(
+                        id=uid,
+                        username=f"sandbox-test-{uid}",
+                        email=f"sandbox-{uid}@example.test",
+                        password_hash="fixture",
+                        is_admin=True,
+                    )
+                )
+        db.commit()
 
 
 def _create_minimal_workflow(client):

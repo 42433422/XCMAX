@@ -251,17 +251,21 @@ async def run_in_sandbox(
     proc: Optional[asyncio.subprocess.Process] = None
     timed_out = False
     try:
-        env = os.environ.copy()
+        # Scripts receive runtime essentials, never the host's credentials or
+        # provider configuration. New secret names must remain isolated too.
+        env = {
+            key: value
+            for key, value in os.environ.items()
+            if key.upper()
+            in {"PATH", "SYSTEMROOT", "WINDIR", "TEMP", "TMP", "TMPDIR", "LANG", "LC_ALL", "TZ"}
+        }
+        if extra_env:
+            env.update(extra_env)
         env["PYTHONIOENCODING"] = "utf-8"
         env["PYTHONUNBUFFERED"] = "1"
         env["MODSTORE_RUNTIME_PORT"] = str(port)
         env["MODSTORE_RUNTIME_TOKEN"] = rpc.token
         env["MODSTORE_SANDBOX_WORK_DIR"] = str(work_dir.resolve())
-        # 子进程默认不应继承 LLM key 等敏感 env
-        for sensitive in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_API_KEY"):
-            env.pop(sensitive, None)
-        if extra_env:
-            env.update(extra_env)
 
         kwargs: Dict[str, Any] = {
             "cwd": str(work_dir),

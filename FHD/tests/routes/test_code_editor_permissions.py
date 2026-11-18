@@ -13,6 +13,7 @@ Covers the workspace code-editor endpoints:
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -21,11 +22,13 @@ from fastapi.testclient import TestClient
 
 from app.fastapi_routes import code_editor
 from app.fastapi_routes.code_editor import router
+from app.infrastructure.auth.dependencies import get_logged_in_user
 
 
 @pytest.fixture
 def client(tmp_path: Path) -> TestClient:
     app = FastAPI()
+    app.dependency_overrides[get_logged_in_user] = lambda: SimpleNamespace(id=1, tenant_id=10)
     app.include_router(router)
     with TestClient(app) as test_client:
         yield test_client

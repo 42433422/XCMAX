@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from app.cli.brain_client import BrainClient
 from app.cli.brain_session import SessionStore
 from app.fastapi_routes import code_editor
+from app.infrastructure.auth import dependencies as auth_dependencies
 from app.middleware.csrf import CSRFMiddleware
 
 
@@ -43,6 +44,14 @@ def brain_server(tmp_path, monkeypatch):
     )
     app = FastAPI()
     app.add_middleware(CSRFMiddleware)
+
+    def session_user(request):
+        username = state.sessions.get(auth_dependencies.session_id_from_request(request))
+        if not username or state.expired:
+            return None
+        return SimpleNamespace(id=1, username=username, tenant_id=username, is_active=True)
+
+    monkeypatch.setattr(auth_dependencies, "resolve_session_user", session_user)
 
     @app.middleware("http")
     async def record(request, call_next):

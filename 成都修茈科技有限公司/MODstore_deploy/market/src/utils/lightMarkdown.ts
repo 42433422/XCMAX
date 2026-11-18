@@ -51,6 +51,10 @@ class PlaceholderTable {
     return id
   }
 
+  has(text: string): boolean {
+    return this.items.has(text)
+  }
+
   flush(text: string): string {
     if (!this.items.size) return text
     let out = text
@@ -154,7 +158,8 @@ function isTableHeaderSep(line: string): boolean {
 /** 主入口：把 markdown 字符串渲染为安全 HTML 字符串。*/
 export function renderMarkdown(src: string): string {
   const ph = new PlaceholderTable()
-  const text = String(src ?? '').replace(/\r\n?/g, '\n')
+  // NUL is reserved for renderer-owned tokens; input must never impersonate one.
+  const text = String(src ?? '').replaceAll('\u0000', '\uFFFD').replace(/\r\n?/g, '\n')
 
   const fenceMatcher = /(^|\n)```([\w+-]*)\s*\n([\s\S]*?)\n?```(?=\n|$)/g
   const tokenized = text.replace(fenceMatcher, (_m, lead, lang, code) => {
@@ -190,10 +195,6 @@ export function renderMarkdown(src: string): string {
     if (!buf.length) return
     const joined = buf.join('\n').trim()
     if (!joined) return
-    if (joined.startsWith(VOID_PLACEHOLDER_PREFIX)) {
-      out.push(joined)
-      return
-    }
     out.push(`<p class="md-p">${inlineFormat(joined, ph)}</p>`)
   }
 
@@ -201,6 +202,15 @@ export function renderMarkdown(src: string): string {
 
   while (i < lines.length) {
     const line = lines[i]
+
+    if (ph.has(line)) {
+      flushParagraph(paraBuf)
+      paraBuf = []
+      flushList()
+      out.push(line)
+      i += 1
+      continue
+    }
 
     if (!line.trim()) {
       flushParagraph(paraBuf)

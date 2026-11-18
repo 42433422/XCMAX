@@ -38,6 +38,70 @@ def _plan():
     )
 
 
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [
+        ("completed", "执行完成，正在整理结果…"),
+        ("waiting_user", "执行已暂停，等待你确认或补充信息…"),
+        ("failed", "执行失败，正在整理失败回执…"),
+        ("blocked", "执行已阻断，正在整理处理说明…"),
+        ("running", "任务仍在执行，正在读取处理状态…"),
+    ],
+)
+def test_planned_workflow_stream_reports_the_actual_run_outcome(status, expected):
+    from app.application.ai_chat.planned_workflow_dispatch import (
+        PlannedWorkflowDispatch,
+        WorkflowDispatchCallbacks,
+    )
+    from app.infrastructure.chat_stream_lifetime import StreamLifetime, current_lifetime
+
+    callbacks = Mock(spec=WorkflowDispatchCallbacks)
+    callbacks._resume_pending_dynamic_workflow.return_value = (False, None)
+    callbacks._merge_tool_runtime_context.return_value = {}
+    callbacks._task_owner_id.return_value = "owner"
+    callbacks._build_workflow_thinking_steps.return_value = "读取产品记录"
+    dispatch = PlannedWorkflowDispatch(
+        {},
+        callbacks,
+        SimpleNamespace(plan=lambda **kwargs: _plan()),
+        SimpleNamespace(
+            evaluate=lambda **kwargs: SimpleNamespace(
+                allowed=True,
+                requires_confirmation=False,
+                denied_nodes=[],
+                blocking_nodes=[],
+                reason="只读",
+            )
+        ),
+        SimpleNamespace(get_approval_required_nodes=lambda plan: []),
+    )
+    notes = []
+    lifetime = StreamLifetime()
+    lifetime.observe_notes(notes.append)
+    token = current_lifetime.set(lifetime)
+    try:
+        with (
+            patch(
+                "app.application.facades.tools_facade.get_workflow_tool_registry", return_value={}
+            ),
+            patch("app.application.agent_orchestrator.AgentOrchestrator") as orchestrator,
+        ):
+            orchestrator.return_value.start_run_from_plan.return_value = SimpleNamespace(
+                status=status
+            )
+            dispatch.handle("owner", "查询产品", "chat", {}, "查询产品")
+    finally:
+        current_lifetime.reset(token)
+    assert notes[-1] == expected
+    if status == "waiting_user":
+        callbacks._capture_agent_run_interaction.assert_called_once()
+        callbacks._format_agent_run_response.assert_not_called()
+    else:
+        callbacks._format_agent_run_response.assert_called_once()
+    if status != "completed":
+        assert all("执行完成" not in note for note in notes)
+
+
 def test_history_uses_trusted_owner_and_stable_per_role_idempotency():
     store = Mock(spec=ConversationStore)
     context = {"session_id": "session-1", "turn_id": "turn-1", "local_user_id": 42}

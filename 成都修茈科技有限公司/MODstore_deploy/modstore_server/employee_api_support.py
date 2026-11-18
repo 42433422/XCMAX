@@ -6,9 +6,8 @@ import json
 import os
 import shutil
 import uuid
-from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, List, cast
+from typing import Any, Dict, List
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
@@ -18,8 +17,9 @@ from modstore_server.duty_roster import (
     all_planned_employee_ids,
     employee_partition_meta,
     is_planned_duty_employee_pack,
+    is_store_employee_pack,
 )
-from modstore_server.models import CatalogItem, Entitlement, User, UserPlan
+from modstore_server.models import User
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
@@ -245,56 +245,13 @@ def sync_triggers_after_registration(manifest: Dict) -> None:
 
 
 def _user_may_execute_employee_pack(db: Session, user_id: int, pack_id: str) -> bool:
-    """路径参数 ``employee_id`` 与 ``CatalogItem.pkg_id`` 一致（见 employee_runtime.load_employee_pack）。"""
-    u = db.query(User).filter(User.id == user_id).first()
-    if u and getattr(u, "is_admin", False):
-        return True
-    if is_planned_duty_employee_pack(pack_id, "employee_pack"):
+    from modstore_server.employee_runtime import load_employee_pack_resolved
+
+    try:
+        load_employee_pack_resolved(db, pack_id, user_id=user_id, execute=True)
+    except (PermissionError, ValueError):
         return False
-
-    row = (
-        db.query(CatalogItem)
-        .filter(
-            CatalogItem.pkg_id == pack_id.strip(),
-            CatalogItem.artifact == "employee_pack",
-        )
-        .first()
-    )
-    if not row:
-        return False
-    if row.author_id is not None and int(row.author_id) == int(user_id):
-        return True
-
-    ent = (
-        db.query(Entitlement)
-        .filter(
-            Entitlement.user_id == user_id,
-            Entitlement.catalog_id == row.id,
-            Entitlement.is_active.is_(True),
-        )
-        .first()
-    )
-    if ent:
-        return True
-
-    if bool(getattr(row, "is_public", False)) and float(row.price or 0) <= 0:
-        return True
-
-    now = datetime.now(UTC)
-    plan = (
-        db.query(UserPlan)
-        .filter(UserPlan.user_id == user_id, UserPlan.is_active.is_(True))
-        .order_by(UserPlan.id.desc())
-        .first()
-    )
-    if not plan:
-        return False
-    exp = plan.expires_at
-    if exp is None:
-        return True
-    if exp.tzinfo is None:
-        exp = exp.replace(tzinfo=UTC)
-    return cast(datetime, exp) > now
+    return True
 
 
 def _candidate_employee_pack_ids(employee_id: str) -> List[str]:
@@ -310,11 +267,13 @@ def _candidate_employee_pack_ids(employee_id: str) -> List[str]:
     return candidates
 
 
-def _load_employee_pack_with_aliases(db: Session, employee_id: str) -> Dict[str, Any]:
+def _load_employee_pack_with_aliases(
+    db: Session, employee_id: str, *, user_id: int | None = None
+) -> Dict[str, Any]:
     """目录（DB + ``packages.json``）优先；未命中时可选从 Mod 库目录读取。"""
     from modstore_server.employee_runtime import load_employee_pack_resolved
 
-    return load_employee_pack_resolved(db, employee_id)
+    return load_employee_pack_resolved(db, employee_id, user_id=user_id)
 
 
 def _employee_id_from_list_row(row: Dict[str, Any]) -> str:
@@ -330,6 +289,8 @@ def _annotate_employee_list_row(row: Dict[str, Any]) -> Dict[str, Any]:
     pid = _employee_id_from_list_row(out)
     artifact = str(out.get("artifact") or "employee_pack")
     out.update(employee_partition_meta(pid, artifact))
+    out["is_duty_employee"] = is_planned_duty_employee_pack(pid, artifact)
+    out["is_store_employee"] = is_store_employee_pack(pid, artifact)
     return out
 
 

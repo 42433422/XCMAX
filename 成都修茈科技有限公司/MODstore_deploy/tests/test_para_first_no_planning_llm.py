@@ -45,7 +45,7 @@ def guarded_executor(monkeypatch, fresh_db):
     import socket
 
     monkeypatch.setattr(socket.socket, "connect", _llm_must_not_run)
-    monkeypatch.setattr(ee, "load_employee_pack_resolved", lambda _s, _e: _pack(["agent"]))
+    monkeypatch.setattr(ee, "load_employee_pack_resolved", lambda _s, _e, **_kw: _pack(["agent"]))
     for name in (
         "chat_dispatch_via_session",
         "_cognition_sync",
@@ -96,7 +96,7 @@ def _metrics():
     ],
 )
 def test_para_first_skips_llm_and_records_zero_tokens(para_ready, monkeypatch, employee, handlers):
-    monkeypatch.setattr(ee, "load_employee_pack_resolved", lambda _s, _e: _pack(handlers))
+    monkeypatch.setattr(ee, "load_employee_pack_resolved", lambda _s, _e, **_kw: _pack(handlers))
     out = ee.execute_employee_task(
         employee,
         "处理原工单",

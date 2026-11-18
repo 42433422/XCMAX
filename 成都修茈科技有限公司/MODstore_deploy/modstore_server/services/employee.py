@@ -12,7 +12,16 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from threading import Lock
-from typing import Any, Dict, List, Optional, Tuple, cast
+from typing import Any, Dict, Iterable, List, Optional, Tuple, cast
+
+
+def accessible_employee_pack_ids(
+    session: Any, user_id: int, pack_ids: Iterable[str], *, execute: bool = False
+) -> set[str]:
+    """Resolve account visibility through the employee-domain service boundary."""
+    from modstore_server.employee_runtime import accessible_employee_pack_ids as resolve_ids
+
+    return resolve_ids(session, user_id, pack_ids, execute=execute)
 
 
 def encrypt_employee_policy(payload: str) -> str:

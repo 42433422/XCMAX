@@ -1,64 +1,83 @@
 <template>
-  <details
-    :class="['asc-chain', `is-${state}`]"
-    :open="userOpen ?? autoOpen"
-    data-testid="agent-step-chain"
-  >
-    <summary class="asc-summary" @click.prevent="toggle">
-      <i class="fa fa-sitemap asc-icon" aria-hidden="true"></i>
-      <span class="asc-title">执行链</span>
-      <span class="asc-count">{{ steps.length }} 步</span>
-      <span :class="['asc-pill', `is-${state}`]">{{ stateLabel }}</span>
-      <span v-if="durationLabel" class="asc-duration">{{ durationLabel }}</span>
-      <i class="fa fa-angle-down asc-chevron" aria-hidden="true"></i>
-    </summary>
-
-    <ol class="asc-steps">
-      <li v-for="step in steps" :key="step.id" :class="['asc-step', `is-${step.state}`]">
-        <details v-if="hasDetails(step)" class="asc-step-details">
-          <summary class="asc-step-row" @click.stop>
-            <span class="asc-step-icon" aria-hidden="true"><i class="fa" :class="iconFor(step)"></i></span>
-            <span class="asc-step-heading">
-              <span class="asc-step-title">{{ step.title }}</span>
-              <span v-if="step.subtitle" class="asc-step-subtitle">{{ step.subtitle }}</span>
-            </span>
-            <span v-if="step.retries" class="asc-badge is-retry">重试 {{ step.retries }}</span>
-            <span v-if="step.durationMs" class="asc-step-duration">{{ formatDuration(step.durationMs) }}</span>
-            <i class="fa asc-step-status" :class="statusIcon(step.state)" aria-hidden="true"></i>
-            <i class="fa fa-chevron-right asc-step-chevron" aria-hidden="true"></i>
-          </summary>
-          <div class="asc-step-body">
-            <section v-if="step.output" class="asc-section">
-              <div class="asc-label"><i class="fa fa-check-circle" aria-hidden="true"></i>输出</div>
-              <pre>{{ step.output }}</pre>
-            </section>
-            <section v-if="step.error" class="asc-section is-error">
-              <div class="asc-label"><i class="fa fa-exclamation-triangle" aria-hidden="true"></i>错误</div>
-              <pre>{{ step.error }}</pre>
-            </section>
-            <section v-if="step.hint" class="asc-section is-hint">
-              <div class="asc-label"><i class="fa fa-lightbulb-o" aria-hidden="true"></i>建议</div>
-              <p>{{ step.hint }}</p>
-            </section>
-          </div>
-        </details>
-
-        <div v-else class="asc-step-row is-static">
-          <span class="asc-step-icon" aria-hidden="true"><i class="fa" :class="iconFor(step)"></i></span>
-          <span class="asc-step-heading">
-            <span class="asc-step-title">{{ step.title }}</span>
-            <span v-if="step.subtitle" class="asc-step-subtitle">{{ step.subtitle }}</span>
-          </span>
-          <span v-if="step.durationMs" class="asc-step-duration">{{ formatDuration(step.durationMs) }}</span>
-          <i class="fa asc-step-status" :class="statusIcon(step.state)" aria-hidden="true"></i>
-        </div>
-      </li>
-    </ol>
-  </details>
+  <Trace :class="['asc-chain', `is-${state}`]" data-testid="agent-step-chain">
+    <TraceCollapsible :open="userOpen ?? autoOpen" @update:open="userOpen = $event">
+      <TraceCollapsibleTrigger class="asc-summary">
+        <TraceLine :status="traceStatus(state)">
+          <TraceIcon><i class="fa fa-sitemap"></i></TraceIcon>
+          <TraceTitle class="asc-title">执行链</TraceTitle>
+          <TraceDescription>{{ steps.length }} 步</TraceDescription>
+          <span :class="['asc-pill', `is-${state}`]">{{ stateLabel }}</span>
+          <TraceDescription v-if="durationLabel">{{ durationLabel }}</TraceDescription>
+        </TraceLine>
+      </TraceCollapsibleTrigger>
+      <TraceCollapsibleContent>
+        <ol class="asc-steps">
+          <li v-for="step in steps" :key="step.id" :class="['asc-step', `is-${step.state}`]">
+            <component :is="hasDetails(step) ? TraceCollapsible : 'div'" :class="{ 'asc-step-details': hasDetails(step) }">
+              <component
+                :is="hasDetails(step) ? TraceCollapsibleTrigger : 'div'"
+                class="asc-step-row"
+                :class="{ 'is-static': !hasDetails(step) }"
+              >
+                <TraceLine :status="traceStatus(step.state)" class="asc-step-line">
+                  <TraceIcon><i class="fa" :class="iconFor(step)"></i></TraceIcon>
+                  <TraceTitle>{{ step.title }}</TraceTitle>
+                  <TraceDescription v-if="step.subtitle" class="asc-step-subtitle">{{ step.subtitle }}</TraceDescription>
+                  <span v-if="step.retries" class="asc-badge">重试 {{ step.retries }}</span>
+                  <TraceDescription v-if="step.durationMs" class="asc-step-duration">{{
+                    formatStepDuration(step.durationMs)
+                  }}</TraceDescription>
+                  <TraceIcon class="asc-step-status"><i class="fa" :class="stepStateIcon(step.state)"></i></TraceIcon>
+                  <span class="sr-only">{{ stepStateLabel(step.state) }}</span>
+                </TraceLine>
+              </component>
+              <p v-if="(step.state === 'running' || step.state === 'unknown') && step.hint" class="asc-live-hint" role="status">
+                {{ step.hint }}
+              </p>
+              <div v-if="step.progress !== undefined" class="asc-progress">
+                <progress :value="step.progress" max="100" :aria-label="`${step.title}进度`"></progress>
+                <span>{{ step.progress }}%</span>
+                <span v-if="step.processedRows !== undefined && step.totalRows !== undefined"
+                  >已处理 {{ step.processedRows }} / {{ step.totalRows }} 行</span
+                >
+              </div>
+              <TraceCollapsibleContent v-if="hasDetails(step)">
+                <div class="asc-step-body">
+                  <p v-if="step.retries">已重试 {{ step.retries }} 次</p>
+                  <section v-if="step.output" class="asc-section">
+                    <div class="asc-label">输出</div>
+                    <pre>{{ step.output }}</pre>
+                  </section>
+                  <section v-if="step.error" class="asc-section is-error">
+                    <div class="asc-label">错误</div>
+                    <pre>{{ step.error }}</pre>
+                  </section>
+                  <section v-if="step.hint && step.state !== 'running' && step.state !== 'unknown'" class="asc-section">
+                    <div class="asc-label">建议</div>
+                    <p>{{ step.hint }}</p>
+                  </section>
+                </div>
+              </TraceCollapsibleContent>
+            </component>
+          </li>
+        </ol>
+      </TraceCollapsibleContent>
+    </TraceCollapsible>
+  </Trace>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import {
+  Trace,
+  TraceCollapsible,
+  TraceCollapsibleContent,
+  TraceCollapsibleTrigger,
+  TraceDescription,
+  TraceIcon,
+  TraceLine,
+  TraceTitle,
+} from '@/components/ui/trace'
 import {
   chainDurationMs,
   chainState,
@@ -83,28 +102,22 @@ const durationLabel = computed(() => {
 })
 
 /** 执行中自动展开，落终态自动收起；用户手动点过后以用户为准。 */
-const autoOpen = computed(() => state.value === 'running' || state.value === 'waiting' || state.value === 'failed')
+const autoOpen = computed(() => ['running', 'waiting', 'unknown', 'failed'].includes(state.value))
 const userOpen = ref<boolean>()
 
-function toggle() {
-  userOpen.value = !(userOpen.value ?? autoOpen.value)
+function traceStatus(value: AgentStepState): 'running' | 'error' | 'pending' | undefined {
+  if (value === 'failed' || value === 'blocked') return 'error'
+  if (value === 'waiting' || value === 'unknown') return 'pending'
+  return value === 'success' ? undefined : value
 }
 
 function hasDetails(step: AgentStepView): boolean {
-  return hasStepDetails(step)
+  return hasStepDetails({ ...step, hint: step.state === 'running' || step.state === 'unknown' ? undefined : step.hint })
 }
 
 function iconFor(step: AgentStepView): string {
-  if (step.live) return 'fa-circle-o-notch fa-spin'
+  if (step.live && step.state === 'running') return 'fa-circle-o-notch fa-spin'
   return toolIconClass(step.toolId, step.action)
-}
-
-function statusIcon(value: AgentStepState): string {
-  return stepStateIcon(value)
-}
-
-function formatDuration(ms: number): string {
-  return formatStepDuration(ms)
 }
 </script>
 

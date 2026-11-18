@@ -93,6 +93,15 @@ describe('chatSseStream', () => {
     expect(response.body?.locked).toBe(false)
   })
 
+  it('uses SSE framing across CRLF fragments, comments, and multiline data', async () => {
+    const events: unknown[] = []
+    await readPlannerSseResponse(mockSseResponse([
+      ': heartbeat\r', '\nevent: message\r\ndata: {"type":"token",\r',
+      '\ndata: "text":"中文进度"}\r\n\r', '\ndata: {"type":"done"}\r\n\r\n',
+    ]), event => events.push(event))
+    expect(events).toEqual([{ type: 'token', text: '中文进度' }, { type: 'done' }])
+  })
+
   it('ignores malformed JSON payloads', async () => {
     const events: string[] = []
     await readPlannerSseResponse(mockSseResponse(['data: {oops not json}\n\n', 'data: {"type":"done"}\n\n']), (ev) => events.push(ev.type))
