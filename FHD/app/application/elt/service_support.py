@@ -31,7 +31,7 @@ ELT_SHIPMENT_DOCUMENT_TEMPLATE_DESCRIPTION = "ELT_SHIPMENT_DOCUMENT_TEMPLATE"
 
 # 预演与执行共用这个池。批量导入时文件多，线程太少会让执行排在预演后面，
 # 表现为「状态 executing 但进度一直是 0」。这里保留余量，避免个别卡死任务
-# 占满全部槽位；长期无进展的任务由 stale_watchdog 回收并释放租约。
+# 占满全部槽位；stale_watchdog 只标记失效运行，不会终止工作线程。
 def _executor_workers() -> int:
     raw = str(os.environ.get("ELT_EXECUTOR_WORKERS") or "12").strip()
     try:

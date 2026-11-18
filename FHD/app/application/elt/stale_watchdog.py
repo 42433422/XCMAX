@@ -1,4 +1,4 @@
-"""回收长时间没有进展的 ELT 运行，避免僵尸任务占满线程池饿死后续导入。"""
+"""标记租约已失效的 ELT 运行；数据库状态回收不会终止工作线程。"""
 
 from __future__ import annotations
 
@@ -9,9 +9,9 @@ import time
 from datetime import UTC, datetime, timedelta
 from typing import cast
 
-from sqlalchemy import Table, func, update
+from sqlalchemy import Table, case, exists, func, or_, select, update
 
-from app.db.models.elt import EltRun
+from app.db.models.elt import EltRun, EltRunRow
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -37,33 +37,72 @@ def stale_after_seconds() -> float:
 
 
 def sweep_stale_runs() -> int:
-    """把长时间无更新的进行态运行标为可重试，并释放租约。"""
+    """仅回收已失效租约；未知批次保留令牌和回执供核对。"""
     from app.db import get_engine
 
     runs = _RUNS.c
-    external = runs.operation_kind.in_(("batch_execute", "batch_rollback")) & (
-        runs.target_type != "abnormal"
+    rows = cast("Table", EltRunRow.__table__).c
+    batch = runs.operation_kind.in_(("batch_execute", "batch_rollback"))
+    no_write = (
+        (runs.target_type == "abnormal")
+        & (runs.operation_kind == "batch_execute")
+        & runs.operation_token.is_not(None)
+        & (runs.executed_rows == 0)
+        & (runs.receipt_json == "{}")
+        & ~exists(
+            select(1).where(
+                rows.run_id == runs.id,
+                or_(
+                    rows.execution_status.is_not(None),
+                    rows.after_json.is_(None),
+                    rows.after_json != "{}",
+                ),
+            )
+        )
     )
     cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(seconds=stale_after_seconds())
-    active = runs.status.in_(("previewing", "executing")) & (runs.updated_at <= cutoff)
+    active = (
+        or_(
+            runs.status.in_(("previewing", "executing")), batch & (runs.status != "outcome_unknown")
+        )
+        & (runs.updated_at <= cutoff)
+        & or_(
+            runs.operation_token.is_(None), runs.operation_lease_until <= func.current_timestamp()
+        )
+    )
     sweeps = (
         (
-            external,
-            "outcome_unknown",
-            "ELT_OUTCOME_UNKNOWN",
-            "外部批处理长时间无进展，结果无法确认，请核对后人工处理",
-        ),
-        (
-            ~external,
+            no_write,
             "interrupted",
             "ELT_EXECUTION_INTERRUPTED",
-            "长时间没有进展，已停止等待；未写入业务数据，请重新导入",
+            "执行已中断，未写入业务数据，请重新导入",
+            _RELEASED,
+        ),
+        (
+            batch,
+            "outcome_unknown",
+            "ELT_OUTCOME_UNKNOWN",
+            "批处理长时间无进展，结果无法确认，请核对后人工处理",
+            {
+                "updated_at": func.current_timestamp(),
+                "rollback_status": case(
+                    (runs.operation_kind == "batch_rollback", "outcome_unknown"),
+                    else_=runs.rollback_status,
+                ),
+            },
+        ),
+        (
+            or_(~batch, runs.operation_kind.is_(None)),
+            "interrupted",
+            "ELT_EXECUTION_INTERRUPTED",
+            "长时间没有进展，请核对实际结果后重试",
+            _RELEASED,
         ),
     )
     total = 0
     try:
         with get_engine().begin() as connection:
-            for where, status, code, message in sweeps:
+            for where, status, code, message, values in sweeps:
                 result = connection.execute(
                     update(_RUNS)
                     .where(active, where)
@@ -72,7 +111,7 @@ def sweep_stale_runs() -> int:
                         stage=status,
                         error_code=code,
                         error_message=message,
-                        **_RELEASED,
+                        **values,
                     )
                 )
                 total += int(result.rowcount or 0)
