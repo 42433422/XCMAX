@@ -487,7 +487,7 @@
                     原文
                   </button>
                 </header>
-                <p>{{ chunk.text }}</p>
+                <p><template v-for="(segment, segmentIndex) in evidenceSegments(chunk)" :key="segmentIndex"><mark v-if="segment.match">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span></template></p>
               </article>
             </div>
           </template>
@@ -845,6 +845,24 @@ function openRecallChunk(chunk: { source?: string; metadata?: Record<string, unk
   inspectorTab.value = 'chunks'
   mobileInspectorOpen.value = true
   void openSourceChunks({ document_id: documentId, source: chunk.source || documentId })
+}
+
+function evidenceSegments(chunk: { text?: string; metadata?: Record<string, unknown> }) {
+  const text = String(chunk.text || '')
+  const raw = chunk.metadata?.highlights
+  const spans = Array.isArray(raw) ? (raw as Array<{ start?: number; end?: number }>) : []
+  if (!spans.length) return [{ text, match: false }]
+  const segments: Array<{ text: string; match: boolean }> = []
+  let cursor = 0
+  for (const span of spans) {
+    const start = Math.max(cursor, Math.min(Number(span.start ?? 0), text.length))
+    const end = Math.max(start, Math.min(Number(span.end ?? start), text.length))
+    if (start > cursor) segments.push({ text: text.slice(cursor, start), match: false })
+    if (end > start) segments.push({ text: text.slice(start, end), match: true })
+    cursor = end
+  }
+  if (cursor < text.length) segments.push({ text: text.slice(cursor), match: false })
+  return segments
 }
 
 // selectNode / selectMemory 与 usePersyMemoryGovernance 互为初始化依赖，保留在此（与拆分前同为提升函数声明）

@@ -818,6 +818,13 @@
   white-space: nowrap;
 }
 
+.evidence-list p mark {
+  padding: 0 1px;
+  border-radius: 2px;
+  background: #fdebc0;
+  color: inherit;
+}
+
 .evidence-list header em {
   color: #7b8881;
   font-size: 10px;

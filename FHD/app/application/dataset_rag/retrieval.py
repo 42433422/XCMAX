@@ -34,6 +34,7 @@ from app.application.dataset_rag.retrieval_policy import (
     _rerank_chunks,
     _semantic_rerank_chunks,
     evidence_grounding,
+    highlight_spans,
     mmr_rerank,
     resolve_min_relevance,
     resolve_mmr_lambda,
@@ -324,6 +325,11 @@ class DatasetRetrieval:
         else:
             top = top[:final_k]
         rows = [_chunk_to_dict(c, public=True) for c in top]
+        # 命中词高亮：只给前端标记区间，正文保持原样，避免 HTML 注入。
+        for row in rows:
+            spans = highlight_spans(str(row.get("text") or ""), query_text)
+            if spans:
+                row.setdefault("metadata", {})["highlights"] = spans
         # Excel text embeds sheet boundaries. Recover them for older indexed chunks
         # so rows from another worksheet cannot inherit a customer's identity.
         for row in rows:

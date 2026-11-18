@@ -300,6 +300,32 @@ describe('PersyKnowledgeView', () => {
     expect(wrapper.get('.ask-dock__synonym-actions').text()).toContain('已保存 2 组术语')
   })
 
+  it('highlights matched query terms in evidence text', async () => {
+    mocks.query.mockResolvedValueOnce({
+      success: true,
+      dataset_id: 'persy-knowledge',
+      answer: '七天内可退款。',
+      answer_grounded: true,
+      grounding: 0.9,
+      chunks: [
+        {
+          text: '退款政策：七天内可申请。',
+          source: '退款.md',
+          score: 0.9,
+          metadata: { document_id: 'doc-1', highlights: [{ start: 0, end: 2 }] },
+        },
+      ],
+    })
+    mocks.queryMemories.mockResolvedValue({ success: true, chunks: [] })
+    const wrapper = await mountKnowledge()
+    await wrapper.get('input[aria-label="向 Persy 提问"]').setValue('退款')
+    await wrapper.get('.ask-dock').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.get('.evidence-list mark').text()).toBe('退款')
+    expect(wrapper.get('.evidence-list p').text()).toContain('退款政策：七天内可申请。')
+  })
+
   it('creates and revokes an external read-only key from the ask dock', async () => {
     mocks.listApiKeys
       .mockResolvedValueOnce({ success: true, keys: [] })

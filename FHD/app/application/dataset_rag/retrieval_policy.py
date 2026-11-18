@@ -11,6 +11,45 @@ from app.application.dataset_rag.models import _clean_key
 from app.infrastructure.rag import RetrievedChunk
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
+_HIGHLIGHT_ASCII = re.compile(r"[A-Za-z0-9_]{2,}")
+_HIGHLIGHT_CJK_RUN = re.compile(r"[\u4e00-\u9fff]{2,}")
+_MAX_HIGHLIGHT_SPANS = 20
+
+
+def highlight_spans(text: str, query: str) -> list[dict[str, int]]:
+    """Locate query terms in ``text`` for UI highlighting.
+
+    CJK is matched by bigrams (single characters are too noisy) and ASCII by
+    whole words of two or more characters. Overlapping or adjacent spans are
+    merged so the frontend can render one ``<mark>`` per phrase.
+    """
+    body = str(text or "")
+    probe = str(query or "")
+    if not body or not probe:
+        return []
+    terms = {match.group(0).lower() for match in _HIGHLIGHT_ASCII.finditer(probe)}
+    for run in _HIGHLIGHT_CJK_RUN.findall(probe):
+        terms.update(run[index : index + 2] for index in range(len(run) - 1))
+    if not terms:
+        return []
+    lowered = body.lower()
+    spans: list[tuple[int, int]] = []
+    for term in terms:
+        start = lowered.find(term)
+        while start >= 0:
+            spans.append((start, start + len(term)))
+            start = lowered.find(term, start + 1)
+    if not spans:
+        return []
+    spans.sort()
+    merged: list[tuple[int, int]] = []
+    for start, end in spans:
+        if merged and start <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+        else:
+            merged.append((start, end))
+    return [{"start": start, "end": end} for start, end in merged[:_MAX_HIGHLIGHT_SPANS]]
+
 
 def _filter_chunks(
     chunks: list[RetrievedChunk],
