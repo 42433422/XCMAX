@@ -10,6 +10,8 @@ from typing import Any, cast
 from app.utils.metrics import record_ai_call
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
+from ..reasoning_stream import publish_reasoning, reasoning_from_message
+
 
 class OpenAISdkProvider:
     provider_id = "openai_sdk"
@@ -61,6 +63,7 @@ class OpenAISdkProvider:
         try:
             result = await asyncio.to_thread(_sync_call)
             record_ai_call(self.provider_id, "chat", "success", time.perf_counter() - t0)
+            publish_reasoning(reasoning_from_message(result))
             return result
         except RECOVERABLE_ERRORS:
             record_ai_call(self.provider_id, "chat", "error", time.perf_counter() - t0)
@@ -100,13 +103,18 @@ class OpenAISdkProvider:
             )
         )
         iterator = iter(stream)
+        reasoning: list[str] = []
         while True:
             chunk = await asyncio.to_thread(next, iterator, None)
             if chunk is None:
                 break
+            reasoning_text = _chunk_delta_reasoning(chunk)
+            if reasoning_text:
+                reasoning.append(reasoning_text)
             text = _chunk_delta_text(chunk)
             if text:
                 yield text
+        publish_reasoning("".join(reasoning))
 
 
 def _chunk_delta_text(chunk: Any) -> str:
@@ -119,3 +127,17 @@ def _chunk_delta_text(chunk: Any) -> str:
         return ""
     content = delta.get("content") if isinstance(delta, dict) else getattr(delta, "content", None)
     return str(content or "")
+
+
+def _chunk_delta_reasoning(chunk: Any) -> str:
+    """取 OpenAI 兼容流里的推理增量，不混入正文。"""
+    choices = chunk.get("choices") if isinstance(chunk, dict) else getattr(chunk, "choices", None)
+    if not isinstance(choices, (list, tuple)) or not choices:
+        return ""
+    first = choices[0]
+    delta = first.get("delta") if isinstance(first, dict) else getattr(first, "delta", None)
+    if isinstance(delta, dict):
+        return str(delta.get("reasoning_content") or delta.get("reasoning") or "")
+    if delta is None:
+        return ""
+    return str(getattr(delta, "reasoning_content", "") or getattr(delta, "reasoning", "") or "")

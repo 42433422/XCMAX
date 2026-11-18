@@ -120,6 +120,22 @@ def _stream_payload_carries_delta(payload: dict) -> bool:
     return False
 
 
+def _reasoning_delta(payload: dict) -> str:
+    """取平台 SSE 载荷里的推理增量；正文增量另走 content，二者互不混入。"""
+    holders: list[Any] = [payload.get("delta"), payload]
+    for choice in payload.get("choices") or []:
+        if isinstance(choice, dict):
+            holders.append(choice.get("delta"))
+    for holder in holders:
+        if not isinstance(holder, dict):
+            continue
+        for key in ("reasoning_content", "reasoning"):
+            value = holder.get(key)
+            if isinstance(value, str) and value:
+                return value
+    return ""
+
+
 def _stream_payload_has_content(payload: Any) -> bool:
     """True only for real answer events; keepalive/status events never count as progress."""
     if not isinstance(payload, dict) or not payload:
@@ -581,7 +597,12 @@ class ModstorePlatformAdapter:
         )
 
     def _absorb_stream_payload(
-        self, data: str, status_cb, pieces: list[str], ending: dict | None = None
+        self,
+        data: str,
+        status_cb,
+        pieces: list[str],
+        ending: dict | None = None,
+        reasoning: list[str] | None = None,
     ) -> None:
         # Only payloads that carry real answer content show the call is still producing;
         # market heartbeats must never extend the caller's idle wait.
@@ -598,6 +619,10 @@ class ModstorePlatformAdapter:
             status_cb()
         if not isinstance(payload, dict):
             return
+        if reasoning is not None:
+            reasoning_delta = _reasoning_delta(payload)
+            if reasoning_delta:
+                reasoning.append(reasoning_delta)
         if ending is not None:
             for key in ("finish_reason", "usage", "replayed"):
                 if payload.get(key) is not None:
@@ -618,7 +643,13 @@ class ModstorePlatformAdapter:
                 pieces.append(str(message["content"]))
 
     def _normalize_collected(
-        self, pieces: list[str], provider, model, ending: dict, max_tokens: int
+        self,
+        pieces: list[str],
+        provider,
+        model,
+        ending: dict,
+        max_tokens: int,
+        reasoning: str = "",
     ) -> Dict[str, Any]:
         route = self.last_route_metadata if isinstance(self.last_route_metadata, dict) else {}
         content = "".join(pieces)
@@ -641,6 +672,9 @@ class ModstorePlatformAdapter:
         if usage:
             raw["usage"] = usage
         response = normalize_market_chat_response(raw, str(raw["provider"]), str(raw["model"]))
+        if reasoning.strip():
+            # 推理文本与正文分开返回，供上层作为思考步骤展示与持久化。
+            response["reasoning_content"] = reasoning
         if ending.get("replayed") is True:
             response["replayed"] = True
         return response
@@ -658,12 +692,15 @@ class ModstorePlatformAdapter:
         kwargs.pop("_stream_status", None)
         status_cb = kwargs.get("_processing_status")
         pieces: list[str] = []
+        reasoning: list[str] = []
         ending: dict = {}
         async for data in self.stream_chat_completion(
             messages, temperature, max_tokens, provider, model, **kwargs
         ):
-            self._absorb_stream_payload(data, status_cb, pieces, ending)
-        return self._normalize_collected(pieces, provider, model, ending, max_tokens)
+            self._absorb_stream_payload(data, status_cb, pieces, ending, reasoning)
+        return self._normalize_collected(
+            pieces, provider, model, ending, max_tokens, "".join(reasoning)
+        )
 
     async def stream_chat_completion(
         self,
@@ -707,12 +744,15 @@ class ModstorePlatformAdapter:
         kwargs.pop("_stream_status", None)
         status_cb = kwargs.get("_processing_status")
         pieces: list[str] = []
+        reasoning: list[str] = []
         ending: dict = {}
         for data in self.stream_chat_completion_sync(
             messages, temperature, max_tokens, provider, model, **kwargs
         ):
-            self._absorb_stream_payload(data, status_cb, pieces, ending)
-        return self._normalize_collected(pieces, provider, model, ending, max_tokens)
+            self._absorb_stream_payload(data, status_cb, pieces, ending, reasoning)
+        return self._normalize_collected(
+            pieces, provider, model, ending, max_tokens, "".join(reasoning)
+        )
 
     def stream_chat_completion_sync(
         self,
