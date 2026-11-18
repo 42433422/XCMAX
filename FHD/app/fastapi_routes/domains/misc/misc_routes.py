@@ -8,7 +8,7 @@ import json
 import logging
 from typing import Any, cast
 
-from fastapi import APIRouter, Body, HTTPException, Query, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
 from app.application import tenant_workspace_prefs as _prefs
@@ -23,6 +23,7 @@ from app.infrastructure.auth.db_token import (
     configured_db_write_token,
     effective_db_read_token,
 )
+from app.infrastructure.auth.dependencies import require_admin_user
 from app.infrastructure.db.sync_engine import (
     get_db_status,
     resolve_mode,
@@ -149,8 +150,10 @@ def system_test_db_status() -> dict:
     }
 
 
-@router.post("/system/test-db/enable")
-@router.post("/system/test-db/enable/", include_in_schema=False)
+@router.post("/system/test-db/enable", dependencies=[Depends(require_admin_user)])
+@router.post(
+    "/system/test-db/enable/", include_in_schema=False, dependencies=[Depends(require_admin_user)]
+)
 def system_test_db_enable(body: dict | None = Body(default=None)) -> dict:
     body = body if isinstance(body, dict) else {}
     want = _test_db_toggle_from_body(body)
@@ -177,8 +180,10 @@ def system_test_db_enable(body: dict | None = Body(default=None)) -> dict:
     }
 
 
-@router.post("/system/test-db/disable")
-@router.post("/system/test-db/disable/", include_in_schema=False)
+@router.post("/system/test-db/disable", dependencies=[Depends(require_admin_user)])
+@router.post(
+    "/system/test-db/disable/", include_in_schema=False, dependencies=[Depends(require_admin_user)]
+)
 async def system_test_db_disable(body: dict | None = Body(default=None)) -> dict:
     merged: dict = dict(body) if isinstance(body, dict) else {}
     merged["enabled"] = False
