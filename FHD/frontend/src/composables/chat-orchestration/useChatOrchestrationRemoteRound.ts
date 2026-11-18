@@ -6,7 +6,7 @@ import type { useChatMessages } from '../useChatMessages'
 import type { useChatRequest, ChatRequestScope } from '../useChatRequest'
 import type { useChatResponseAttach } from '../useChatResponseAttach'
 import { readPlannerBusinessResult } from '@/utils/readPlannerBusinessResult'
-import { applyToolCallEvent } from '@/utils/agentStepChain'
+import { applyToolCallEvent, isDocumentTemplateChange } from '@/utils/agentStepChain'
 import type { useChatSessionActivity } from '../useChatSessionActivity'
 import type { ShipmentTask } from '../useShipmentTask'
 import type { ChatPlannerPayload } from '@/types/chat'
@@ -483,6 +483,14 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
             if (round.isActive() && streamMessage) {
               streamMessage.liveSteps = applyToolCallEvent(streamMessage.liveSteps || [], ev)
               if (ev.phase !== 'finished') delete streamMessage.waitingHint
+            }
+            // 模板库已在页面上时不重新挂载，用窗口事件让它按服务端真实状态刷新。
+            if (isDocumentTemplateChange(ev)) {
+              window.dispatchEvent(
+                new CustomEvent('xcagi:templates-updated', {
+                  detail: { source: 'chat', action: String(ev.action || '') },
+                }),
+              )
             }
           } else if (ev.type === 'token') {
             if (ev.ephemeral) {

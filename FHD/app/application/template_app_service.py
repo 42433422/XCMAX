@@ -73,8 +73,10 @@ class TemplateApplicationService:
 
         return hide_templates(ids=ids, paths=paths)
 
-    def purge_archive_assets(self) -> int:
-        """仅清理当前请求账号与租户的审阅归档资产。"""
+    def purge_archive_assets(
+        self, *, tenant_id: int | None = None, owner_id: int | None = None
+    ) -> int:
+        """仅清理指定账号与租户的审阅归档资产；显式值优先于当前请求。"""
         from app.application.elt.errors import EltError
         from app.db.models.elt_archive import EltArchiveAsset, EltArchiveVersion
         from app.db.session import get_db
@@ -83,11 +85,10 @@ class TemplateApplicationService:
 
         request = get_current_request()
         user = getattr(getattr(request, "state", None), "user", None)
-        tenant_id = getattr(user, "tenant_id", None)
-        owner_id = getattr(user, "id", None)
-        if tenant_id is None or owner_id is None:
+        tenant = int(tenant_id or getattr(user, "tenant_id", None) or 0)
+        owner = int(owner_id or getattr(user, "id", None) or 0)
+        if not tenant or not owner:
             return 0
-        tenant, owner = int(tenant_id), int(owner_id)
         try:
             with tenant_scope(tenant), get_db() as db:
                 asset_ids = [
