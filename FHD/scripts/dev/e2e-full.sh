@@ -98,14 +98,15 @@ export XCAGI_DESKTOP_MODE="1"
 # This gate verifies the local desktop login and ERP paths.  Keep it
 # deterministic and offline by exercising the repository's loopback-only demo
 # market shim instead of making CI availability depend on xiu-ci.com.
-# Reserve a loopback port without listening, so no existing service can receive
-# login requests and the normal offline shim remains the only successful path.
+# Reserve a loopback port that accepts then closes connections: unreachable, and
+# fast-failing on macOS where a bound-but-unlistened socket drops SYNs.
 "${PY}" - "${E2E_DATA_DIR}/market-port" <<'PY_GUARD' &
-import pathlib, signal, socket, sys
+import pathlib, socket, sys
 with socket.socket() as guard:
-    guard.bind(("127.0.0.1", 0))
+    guard.bind(("127.0.0.1", 0)); guard.listen(16)
     pathlib.Path(sys.argv[1]).write_text(str(guard.getsockname()[1]))
-    signal.pause()
+    while True:
+        conn, _ = guard.accept(); conn.close()
 PY_GUARD
 MARKET_GUARD_PID=$!
 for _ in $(seq 1 50); do
@@ -130,10 +131,8 @@ export SURFACE_AUDIT_DEMO_USER="${E2E_USER}" SURFACE_AUDIT_DEMO_PASSWORD="${E2E_
 # establishes its own session.  Authentication rate limiting has dedicated
 # middleware tests and would otherwise make this local concurrency gate flaky.
 export XCAGI_AUTH_RATE_LIMIT="${XCAGI_AUTH_RATE_LIMIT:-0}"
-# macOS drops SYNs to a bound-but-unlistened port, so each attempt burns the
-# full connect timeout; keep the budget far under the 30s frontend login deadline.
-export XCAGI_MARKET_HTTP_TIMEOUT="${XCAGI_MARKET_HTTP_TIMEOUT:-3}"
-export XCAGI_MARKET_HTTP_RETRIES="${XCAGI_MARKET_HTTP_RETRIES:-1}"
+export XCAGI_MARKET_HTTP_TIMEOUT="${XCAGI_MARKET_HTTP_TIMEOUT:-10}"
+export XCAGI_MARKET_HTTP_RETRIES="${XCAGI_MARKET_HTTP_RETRIES:-2}"
 export XCAGI_DESKTOP_FAST_START="${XCAGI_DESKTOP_FAST_START:-0}"
 export XCAGI_DATA_DIR="${E2E_DATA_DIR}"
 export DATABASE_URL="" VECTOR_DB_URL=""
