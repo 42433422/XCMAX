@@ -90,6 +90,39 @@ def test_run_failed_returns_stderr(tmp_path: Path) -> None:
     assert "boom" in res.stderr
 
 
+def test_sandbox_does_not_inherit_host_credentials(tmp_path: Path, monkeypatch) -> None:
+    from modstore_server.script_agent.static_checker import validate_script
+
+    names = ("MODSTORE_JWT_SECRET", "PAYMENT_SECRET_KEY", "DATABASE_URL", "NEW_PROVIDER_KEY")
+    for name in names:
+        monkeypatch.setenv(name, "sandbox-test-marker")
+    code = (
+        "import os\n"
+        f"assert all(name not in os.environ for name in {names!r})\n"
+        "assert os.environ['PYTHONIOENCODING'] == 'utf-8'\n"
+        "assert os.environ['MODSTORE_RUNTIME_TOKEN']\n"
+        "assert os.environ['MODSTORE_RUNTIME_TOKEN'] != 'caller-override'\n"
+        "assert os.environ['SANDBOX_TEST_INPUT'] == 'explicit-value'\n"
+        "print('host-credentials-isolated')\n"
+    )
+    assert validate_script(code) == []
+    result = asyncio.run(
+        sandbox_runner.run_in_sandbox(
+            user_id=1,
+            session_id="environment-boundary",
+            script_text=code,
+            files=[],
+            script_root=tmp_path,
+            extra_env={
+                "SANDBOX_TEST_INPUT": "explicit-value",
+                "MODSTORE_RUNTIME_TOKEN": "caller-override",
+            },
+        )
+    )
+    assert result.ok, result.stderr
+    assert result.stdout.strip() == "host-credentials-isolated"
+
+
 def test_runtime_sdk_module_is_importable_in_sandbox(tmp_path: Path) -> None:
     """脚本能 ``import modstore_runtime``（即 SDK 文件被复制进 work_dir）。
 

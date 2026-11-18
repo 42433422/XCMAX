@@ -10,10 +10,11 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from app.domain.ai.tier import assert_p2_elevated_claim_or_raise, resolve_ai_tier
+from app.infrastructure.auth.dependencies import get_logged_in_user
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -90,6 +91,17 @@ def _sha256_text(s: str) -> str:
     return hashlib.sha256(s.encode("utf-8", errors="replace")).hexdigest()
 
 
+def _proposal_scope(user: Any) -> tuple[int, int | None, str]:
+    return int(user.id), user.tenant_id, str(_workspace_root())
+
+
+def _owned_edit(edit_id: str, user: Any) -> dict[str, Any]:
+    row = _EDIT_STORE.get(edit_id)
+    if not row or row.get("scope") != _proposal_scope(user):
+        raise HTTPException(status_code=404, detail="unknown edit_id")
+    return row
+
+
 @router.get("/status")
 def code_editor_status() -> dict:
     return {
@@ -106,7 +118,7 @@ class AnalyzeBody(BaseModel):
 
 
 @router.post("/analyze")
-def code_editor_analyze(body: AnalyzeBody) -> dict:
+def code_editor_analyze(body: AnalyzeBody, _user: Any = Depends(get_logged_in_user)) -> dict:
     if not (body.path and str(body.path).strip()):
         return {"success": True, "kind": "noop"}
     rel = str(body.path).strip()
@@ -127,7 +139,7 @@ class EditBody(BaseModel):
 
 
 @router.post("/edit")
-def code_editor_edit(body: EditBody) -> dict:
+def code_editor_edit(body: EditBody, user: Any = Depends(get_logged_in_user)) -> dict:
     rel = str(body.path or "").strip()
     path = _safe_rel_path(rel)
     create = bool(body.create_if_missing)
@@ -154,6 +166,7 @@ def code_editor_edit(body: EditBody) -> dict:
     edit_id = f"edit_{uuid.uuid4().hex}"
     diff = _unified_diff(old, new, rel)
     _EDIT_STORE[edit_id] = {
+        "scope": _proposal_scope(user),
         "path": str(path),
         "rel": rel,
         "old": old,
@@ -171,24 +184,24 @@ def code_editor_edit(body: EditBody) -> dict:
 
 
 @router.get("/diff/{edit_id}")
-def code_editor_diff(edit_id: str) -> dict:
-    row = _EDIT_STORE.get(edit_id)
-    if not row:
-        raise HTTPException(status_code=404, detail="unknown edit_id")
+def code_editor_diff(edit_id: str, user: Any = Depends(get_logged_in_user)) -> dict:
+    row = _owned_edit(edit_id, user)
     return {"success": True, "unified_diff": row.get("unified_diff") or ""}
 
 
 @router.post("/apply/{edit_id}")
-def code_editor_apply(edit_id: str, request: Request) -> dict:
+def code_editor_apply(
+    edit_id: str, request: Request, user: Any = Depends(get_logged_in_user)
+) -> dict:
     if resolve_ai_tier(request) != "p2":
         raise HTTPException(status_code=403, detail="p2 required")
     assert_p2_elevated_claim_or_raise(request)
 
-    row = _EDIT_STORE.get(edit_id)
-    if not row:
-        raise HTTPException(status_code=404, detail="unknown edit_id")
+    row = _owned_edit(edit_id, user)
 
-    path = Path(row["path"])
+    path = _safe_rel_path(row["rel"])
+    if str(path) != row["path"]:
+        raise HTTPException(status_code=409, detail="file path changed")
     old_disk = ""
     if path.is_file():
         old_disk = path.read_text(encoding="utf-8", errors="replace")
@@ -216,7 +229,9 @@ class DraftBody(BaseModel):
 
 
 @router.post("/draft")
-def code_editor_draft(request: Request, body: DraftBody) -> dict:
+def code_editor_draft(
+    request: Request, body: DraftBody, _user: Any = Depends(get_logged_in_user)
+) -> dict:
     if resolve_ai_tier(request) != "p2":
         raise HTTPException(status_code=403, detail="p2 required")
     assert_p2_elevated_claim_or_raise(request)

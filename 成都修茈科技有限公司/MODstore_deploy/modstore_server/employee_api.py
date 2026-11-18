@@ -80,7 +80,10 @@ from modstore_server.employee_api_uploads import (
 )
 from modstore_server.employee_executor import get_employee_status
 from modstore_server.employee_executor import list_employees as list_employees_exec
-from modstore_server.employee_runtime import library_manifest_fallback_enabled
+from modstore_server.employee_runtime import (
+    accessible_employee_pack_ids,
+    library_manifest_fallback_enabled,
+)
 from modstore_server.infrastructure.db import get_db
 from modstore_server.models import CatalogItem, User
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
@@ -109,6 +112,11 @@ async def list_employees(
             raise HTTPException(403, "上岗员工仅管理端可见")
         effective_scope = ("all" if is_admin else "store") if raw_scope == "auto" else raw_scope
         employees = [_annotate_employee_list_row(e) for e in list_employees_exec()]
+        if not is_admin:
+            visible_ids = accessible_employee_pack_ids(
+                db, user.id, (_employee_id_from_list_row(e) for e in employees)
+            )
+            employees = [e for e in employees if _employee_id_from_list_row(e) in visible_ids]
         duty_rows = _list_duty_employee_rows()
         if effective_scope == "duty":
             employees = duty_rows
@@ -230,15 +238,22 @@ async def employee_catalog_manifest_diagnostics(
 @router.get("/{employee_id}/status", summary="获取员工状态")
 async def get_employee_status_endpoint(
     employee_id: str,
+    db: Session = Depends(get_db),
     user: User = Depends(_get_current_user),
 ):
     """获取员工的状态信息"""
     _assert_employee_scope_visible_to_user(employee_id, user)
     try:
+        pack = _load_employee_pack_with_aliases(db, employee_id, user_id=user.id)
+        employee_id = pack["pack_id"]
         status = get_employee_status(employee_id)
         if isinstance(status, dict):
             status.update(employee_partition_meta(employee_id, "employee_pack"))
         return status
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
+    except ValueError as e:
+        raise HTTPException(404, str(e))
     except RECOVERABLE_ERRORS as e:
         raise HTTPException(500, f"获取员工状态失败: {e}")
 
@@ -258,9 +273,11 @@ async def get_employee_manifest_endpoint(
     """
     _assert_employee_scope_visible_to_user(employee_id, user)
     try:
-        pack = _load_employee_pack_with_aliases(db, employee_id.strip())
+        pack = _load_employee_pack_with_aliases(db, employee_id.strip(), user_id=user.id)
         response.headers["Cache-Control"] = "private, no-store"
         return pack
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
     except ValueError as e:
         raise HTTPException(404, str(e))
     except RECOVERABLE_ERRORS as e:

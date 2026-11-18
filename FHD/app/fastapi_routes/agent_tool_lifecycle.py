@@ -61,6 +61,8 @@ def actor_from_request(request: Request) -> Actor:
         user = resolve_session_user(request)
     except BOUNDARY_ERRORS:
         user = None
+    if user is not None and not getattr(user, "is_active", True):
+        raise ToolLifecycleError("account_disabled", "账户已被禁用", 403)
     if user is not None and getattr(user, "id", None) is not None:
         role = _role_from_user(user)
         employee_id = str(getattr(user, "employee_id", "") or user.id)

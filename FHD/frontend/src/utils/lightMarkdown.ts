@@ -45,6 +45,10 @@ class PlaceholderTable {
     return id
   }
 
+  has(id: string): boolean {
+    return this.items.has(id)
+  }
+
   flush(text: string): string {
     if (!this.items.size) return text
     let out = text
@@ -155,7 +159,9 @@ export function normalizeModelLineBreaks(src: string): string {
 /** 主入口：把 markdown 字符串渲染为安全 HTML 字符串。*/
 export function renderMarkdown(src: string): string {
   const ph = new PlaceholderTable()
-  const text = normalizePackedMarkdownTables(normalizeModelLineBreaks(String(src ?? '').replace(/\r\n?/g, '\n')))
+  // Input cannot impersonate the internal placeholders generated below.
+  const source = String(src ?? '').replaceAll('\u0000', '\uFFFD').replace(/\r\n?/g, '\n')
+  const text = normalizePackedMarkdownTables(normalizeModelLineBreaks(source))
 
   const fenceMatcher = /(^|\n)```([\w+-]*)\s*\n([\s\S]*?)\n?```(?=\n|$)/g
   const tokenized = text.replace(fenceMatcher, (_m, lead, lang, code) => {
@@ -190,10 +196,6 @@ export function renderMarkdown(src: string): string {
     if (!buf.length) return
     const joined = buf.join('\n').trim()
     if (!joined) return
-    if (joined.startsWith(VOID_PLACEHOLDER_PREFIX)) {
-      out.push(joined)
-      return
-    }
     out.push(`<p class="md-p">${inlineFormat(joined, ph)}</p>`)
   }
 
@@ -206,6 +208,15 @@ export function renderMarkdown(src: string): string {
       flushParagraph(paraBuf)
       paraBuf = []
       flushList()
+      i += 1
+      continue
+    }
+
+    if (ph.has(line)) {
+      flushParagraph(paraBuf)
+      paraBuf = []
+      flushList()
+      out.push(line)
       i += 1
       continue
     }

@@ -262,18 +262,30 @@ class SandboxRpcServer:
     async def _handle_http_get(self, params: Dict[str, Any]) -> Any:
         import httpx
 
+        from modstore_server.openapi_connector_runtime import pin_url_outbound_safe
+
         url = str(params.get("url") or "")
-        if not url.startswith(("http://", "https://")):
-            raise RuntimeError("仅允许 http/https URL")
+        target = await asyncio.to_thread(pin_url_outbound_safe, url)
+        headers = httpx.Headers(params.get("headers") or {})
+        headers["Host"] = target.host_header
         timeout = float(params.get("timeout") or 30)
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            r = await client.get(
-                url,
+        async with httpx.AsyncClient(
+            timeout=timeout, trust_env=False, follow_redirects=False
+        ) as client:
+            async with client.stream(
+                "GET",
+                target.request_url,
                 params=params.get("params") or {},
-                headers=params.get("headers") or {},
-            )
-            return {
-                "status": r.status_code,
-                "text": r.text[:1_000_000],
-                "headers": dict(r.headers),
-            }
+                headers=headers,
+                extensions={"sni_hostname": target.server_hostname},
+            ) as response:
+                body = bytearray()
+                async for chunk in response.aiter_bytes(chunk_size=64 * 1024):
+                    if len(body) + len(chunk) > 1_000_000:
+                        raise RuntimeError("HTTP 响应过大（最多 1 MB）")
+                    body.extend(chunk)
+                return {
+                    "status": response.status_code,
+                    "text": body.decode(response.encoding or "utf-8", errors="replace"),
+                    "headers": dict(response.headers),
+                }

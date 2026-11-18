@@ -5,6 +5,8 @@
 from __future__ import annotations
 import importlib
 
+from modstore_server.models import User
+
 
 def _facade():
     return importlib.import_module("modstore_server.workflow_engine")
@@ -152,6 +154,16 @@ class __WorkflowEnginePart01MixinPart01Mixin:
         _facade().List[_facade().Dict[str, _facade().Any]],
         _facade().List[str],
     ]:
+        # Bind every graph entry, including sandbox and scheduled runs, to a
+        # persisted account. A missing caller never grants system authority.
+        user_id = int(user_id or workflow.user_id or 0)
+        actor = session.get(User, user_id) if user_id > 0 else None
+        if (
+            actor is None
+            or actor.deleted_at is not None
+            or (actor.id != workflow.user_id and not actor.is_admin)
+        ):
+            raise PermissionError("无权执行该工作流")
         nodes = (
             session.query(_facade().WorkflowNode)
             .filter(_facade().WorkflowNode.workflow_id == workflow.id)
@@ -346,7 +358,7 @@ class __WorkflowEnginePart01MixinPart01Mixin:
             return self._execute_parallel_mock(node, data, config)
         if node.node_type == "sub_workflow" and mock_employee:
             return self._execute_sub_workflow_mock(node, data, config)
-        if node.node_type in ("employee", "openapi_operation", "knowledge_search"):
+        if node.node_type in ("employee", "openapi_operation", "knowledge_search", "sub_workflow"):
             return executor(node, data, config, user_id=user_id)
         if node.node_type == "eskill":
             return executor(

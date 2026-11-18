@@ -404,7 +404,17 @@ def model_plan_schema_error(payload: Any) -> str | None:
     return f"{path}: {first.message}"
 
 
+def _has_native_tool_calls(payload: Any) -> bool:
+    choices = payload.get("choices") if isinstance(payload, dict) else None
+    first = choices[0] if isinstance(choices, list) and choices else None
+    message = first.get("message") if isinstance(first, dict) else None
+    return isinstance(message, dict) and bool(message.get("tool_calls"))
+
+
 def _decode_completion(payload: dict[str, Any]) -> tuple[dict[str, Any], list[WorkflowNode]] | None:
+    # Text decoding must never override a native batch, including repair responses.
+    if _has_native_tool_calls(payload):
+        return None
     choices = payload.get("choices")
     if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
         return None
@@ -425,7 +435,6 @@ def _decode_completion(payload: dict[str, Any]) -> tuple[dict[str, Any], list[Wo
             not response
             or len(response) > 12_000
             or parsed.get("nodes") not in (None, [])
-            or message.get("tool_calls")
             or message.get("function_call")
         ):
             return None
@@ -621,6 +630,9 @@ class LlmPlanGeneration:
         if response is None:
             # 模型调用本身失败：轻量轮次已经花掉一次调用，不再重复打一次完整规划。
             raise _LightReplyUnavailable
+        if _has_native_tool_calls(response):
+            context["planning_failure_reason"] = "轻量回复包含未授权工具调用，本轮未执行任何操作"
+            raise _LightReplyUnavailable
         decoded = _decode_completion(response)
         if decoded is None:
             return None
@@ -711,9 +723,8 @@ class LlmPlanGeneration:
                     return None
                 if light is not None:
                     return light
-            tool_specs = _tool_specs(
-                select_tools_for_prompt(tool_registry, routing_message, context)
-            )
+            selected_registry = select_tools_for_prompt(tool_registry, routing_message, context)
+            tool_specs = _tool_specs(selected_registry)
             conv_ctx = self.conversation.get_context(user_id)
             if (
                 not (context.get("session_id") or context.get("conversation_id"))
@@ -749,7 +760,7 @@ class LlmPlanGeneration:
             native_tools: list[dict[str, Any]] = []
             native_lookup: dict[str, tuple[str, str]] = {}
             if tool_calls_enabled():
-                native_tools, native_lookup = build_function_tools(tool_registry)
+                native_tools, native_lookup = build_function_tools(selected_registry)
             extra: dict[str, Any] = (
                 {"tools": native_tools, "tool_choice": "auto"} if native_tools else {}
             )
@@ -793,6 +804,13 @@ class LlmPlanGeneration:
             )
             if native_plan is not None:
                 return native_plan
+            # Do not reinterpret an unordered native batch as a text plan or
+            # retry it as a potentially different business operation.
+            if _has_native_tool_calls(response_data):
+                context["planning_failure_reason"] = (
+                    "原生工具调用无法安全建立任务依赖，本轮未执行任何操作"
+                )
+                return None
             decoded = _decode_completion(response_data)
             if decoded is None:
                 parsed_payload, raw_content = _model_payload(response_data)

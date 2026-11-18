@@ -5,7 +5,8 @@ from __future__ import annotations
 import os
 from io import BytesIO
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -20,7 +21,9 @@ def _make_client(*, authenticated: bool = True):
     app = FastAPI()
     app.include_router(router)
     if authenticated:
-        app.dependency_overrides[get_logged_in_user] = lambda: MagicMock(id=1, is_active=True)
+        app.dependency_overrides[get_logged_in_user] = lambda: SimpleNamespace(
+            id=1, tenant_id=None, is_active=True
+        )
     return TestClient(app, raise_server_exceptions=False)
 
 
@@ -161,20 +164,22 @@ class TestDeleteTempFile:
 
     def test_delete_file_success(self, tmp_path):
         client = _make_client()
-        f = tmp_path / "todelete.png"
-        f.write_bytes(b"data")
         with patch("app.fastapi_routes.upload.UPLOAD_FOLDER", str(tmp_path)):
-            resp = client.delete("/api/upload/temp/todelete.png")
+            uploaded = client.post(
+                "/api/upload/temp", files={"file": ("todelete.png", b"data", "image/png")}
+            )
+            f = tmp_path / Path(uploaded.json()["file_path"]).name
+            resp = client.delete(f"/api/upload/temp/{f.name}")
         assert resp.status_code == 200
         assert not f.exists()
 
     def test_delete_os_error(self, tmp_path):
         client = _make_client()
-        f = tmp_path / "target.png"
-        f.write_bytes(b"data")
-        with (
-            patch("app.fastapi_routes.upload.UPLOAD_FOLDER", str(tmp_path)),
-            patch("os.remove", side_effect=OSError("perm denied")),
-        ):
-            resp = client.delete("/api/upload/temp/target.png")
+        with patch("app.fastapi_routes.upload.UPLOAD_FOLDER", str(tmp_path)):
+            uploaded = client.post(
+                "/api/upload/temp", files={"file": ("target.png", b"data", "image/png")}
+            )
+            filename = Path(uploaded.json()["file_path"]).name
+            with patch("os.remove", side_effect=OSError("perm denied")):
+                resp = client.delete(f"/api/upload/temp/{filename}")
         assert resp.status_code == 500

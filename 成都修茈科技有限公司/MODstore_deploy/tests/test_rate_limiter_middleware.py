@@ -132,24 +132,47 @@ def test_rate_limiter_high_rate_market_catalog_override(monkeypatch):
         assert c.get("/api/market/catalog").status_code == 200
 
 
-def test_rate_limiter_uses_x_forwarded_for(monkeypatch):
-    monkeypatch.setenv("MODSTORE_RATE_LIMIT", "1")
-    monkeypatch.setenv("MODSTORE_RATE_WINDOW", "60")
-    monkeypatch.delenv("MODSTORE_REDIS_URL", raising=False)
+@pytest.mark.parametrize("header", ["X-Forwarded-For", "X-Modstore-User", "X-User-Id"])
+def test_rate_limiter_ignores_unverified_identity_headers(monkeypatch, header):
+    RateLimiterMiddleware, app = _shared_setup_rate_limiter_high_rate_0(monkeypatch, "1", "1")
 
-    from modstore_server.api.rate_limiter import RateLimiterMiddleware
-
-    app = FastAPI()
-
-    @app.get("/hit")
-    def hit():
+    @app.post("/api/auth/login")
+    def login():
         return {"ok": True}
 
     app.add_middleware(RateLimiterMiddleware)
     c = TestClient(app)
-    assert c.get("/hit", headers={"X-Forwarded-For": "1.2.3.4"}).status_code == 200
-    assert c.get("/hit", headers={"X-Forwarded-For": "5.6.7.8"}).status_code == 200
-    assert c.get("/hit", headers={"X-Forwarded-For": "1.2.3.4"}).status_code == 429
+    assert c.post("/api/auth/login").status_code == 200
+    for value in ("198.51.100.1", "198.51.100.2"):
+        response = c.post("/api/auth/login", headers={header: value})
+        assert response.status_code == 429
+        assert "Retry-After" in response.headers
+
+
+@pytest.mark.parametrize("trusted_proxy", [True, False])
+def test_rate_limiter_uses_only_server_validated_proxy_identity(monkeypatch, trusted_proxy):
+    from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+
+    RateLimiterMiddleware, app = _shared_setup_rate_limiter_high_rate_0(monkeypatch, "1", "1")
+
+    @app.post("/api/auth/login")
+    def login():
+        return {"ok": True}
+
+    app.add_middleware(RateLimiterMiddleware)
+    # Uvicorn, outside the application, resolves the first untrusted hop from
+    # the right; nginx appends the real peer after any caller-supplied values.
+    c = TestClient(
+        ProxyHeadersMiddleware(app, trusted_hosts=["testclient"] if trusted_proxy else [])
+    )
+    for forwarded, expected in (
+        ("203.0.113.1, 198.51.100.1", 200),
+        ("203.0.113.2, 198.51.100.1", 429),
+        ("203.0.113.3, 198.51.100.2", 200 if trusted_proxy else 429),
+        ("203.0.113.4, 198.51.100.2", 429),
+    ):
+        response = c.post("/api/auth/login", headers={"X-Forwarded-For": forwarded})
+        assert response.status_code == expected
 
 
 def test_rate_limiter_high_rate_limit_floor(monkeypatch):

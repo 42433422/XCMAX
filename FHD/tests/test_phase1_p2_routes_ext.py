@@ -342,11 +342,19 @@ def test_memory_v2_routes_govern_blocked_source(
 @patch("app.infrastructure.db.sync_engine.get_db_status")
 @patch("app.infrastructure.db.sync_engine.resolve_mode", return_value="production")
 def test_system_test_db_enable(
-    mock_mode: MagicMock, mock_status: MagicMock, mock_switch: MagicMock, misc_client: TestClient
+    mock_mode: MagicMock,
+    mock_status: MagicMock,
+    mock_switch: MagicMock,
+    misc_client: TestClient,
+    trusted_actor,
 ) -> None:
     mock_switch.return_value = {"success": True}
     mock_status.return_value = {"mode": "test", "current_db_name": "test.db"}
-    r = misc_client.post("/system/test-db/enable", json={"enabled": True})
+    r = misc_client.post(
+        "/system/test-db/enable",
+        json={"enabled": True},
+        headers=trusted_actor(role="admin", tier="admin").headers,
+    )
     assert r.status_code == 200
     assert r.json()["success"] is True
 

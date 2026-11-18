@@ -8,7 +8,7 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends
 from fastapi.responses import JSONResponse
 
-from app.infrastructure.auth.dependencies import get_logged_in_user
+from app.infrastructure.auth.dependencies import get_logged_in_user, require_admin_user
 from app.infrastructure.auth.tenant_context import tenant_id_for_user
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -110,7 +110,9 @@ def ai_config_approval_get():
 
 
 @router.post("/api/ai/config/approval")
-def ai_config_approval_post(body: dict = Body(default_factory=dict)):
+def ai_config_approval_post(
+    body: dict = Body(default_factory=dict), _user: Any = Depends(require_admin_user)
+):
     try:
         payload = body or {}
         enabled = payload.get("enabled", True)
