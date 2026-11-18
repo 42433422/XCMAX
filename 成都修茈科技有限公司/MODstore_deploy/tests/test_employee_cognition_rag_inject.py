@@ -39,10 +39,16 @@ def _bootstrap(tmp_path: Path, monkeypatch):
 
 def test_cognition_injects_rag_context_into_system_prompt(tmp_path, monkeypatch):
     models, ve, rag, ee = _bootstrap(tmp_path, monkeypatch)
-    from modstore_server.models import KnowledgeCollection, get_session_factory
+    from modstore_server.models import (
+        KnowledgeCollection,
+        KnowledgeMembership,
+        User,
+        get_session_factory,
+    )
 
     sf = get_session_factory()
     with sf() as session:
+        session.add(User(id=1, username="rag-owner", password_hash="external-jwt"))
         coll = KnowledgeCollection(
             owner_kind="employee",
             owner_id="emp-pack-1",
@@ -50,6 +56,15 @@ def test_cognition_injects_rag_context_into_system_prompt(tmp_path, monkeypatch)
             visibility="private",
         )
         session.add(coll)
+        session.flush()
+        session.add(
+            KnowledgeMembership(
+                collection_id=coll.id,
+                grantee_kind="user",
+                grantee_id="1",
+                permission="read",
+            )
+        )
         session.commit()
         session.refresh(coll)
 

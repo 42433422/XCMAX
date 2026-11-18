@@ -39,11 +39,13 @@ def test_visible_collections_owner_and_grantee(tmp_path, monkeypatch):
     from modstore_server.models import (
         KnowledgeCollection,
         KnowledgeMembership,
+        User,
         get_session_factory,
     )
 
     sf = get_session_factory()
     with sf() as session:
+        session.add(User(id=1, username="rag-owner", password_hash="external-jwt"))
         a = KnowledgeCollection(owner_kind="user", owner_id="1", name="my-a", visibility="private")
         b = KnowledgeCollection(
             owner_kind="employee",
@@ -61,13 +63,25 @@ def test_visible_collections_owner_and_grantee(tmp_path, monkeypatch):
         session.commit()
         for x in (a, b, c, d):
             session.refresh(x)
-        session.add(
-            KnowledgeMembership(
-                collection_id=c.id,
-                grantee_kind="user",
-                grantee_id="1",
-                permission="read",
-            )
+        # An employee context cannot grant access to its private collection.
+        assert {
+            row.name for row in rag.visible_collection_ids(session, user_id=1, employee_id="emp-x")
+        } == {"my-a", "other-public"}
+        session.add_all(
+            [
+                KnowledgeMembership(
+                    collection_id=b.id,
+                    grantee_kind="user",
+                    grantee_id="1",
+                    permission="write",
+                ),
+                KnowledgeMembership(
+                    collection_id=c.id,
+                    grantee_kind="user",
+                    grantee_id="1",
+                    permission="read",
+                ),
+            ]
         )
         session.commit()
 
@@ -75,19 +89,17 @@ def test_visible_collections_owner_and_grantee(tmp_path, monkeypatch):
     with sf() as session:
         rows = rag.visible_collection_ids(session, user_id=1, employee_id="emp-x")
         names = {r.name for r in rows}
-        assert "my-a" in names
-        assert "emp-x-a" in names
-        assert "other-a" in names  # 通过 grant
-        assert "other-public" in names  # 通过 visibility=public
+        assert names == {"my-a", "emp-x-a", "other-a", "other-public"}
+        assert names == {row.name for row in rag.visible_collection_ids(session, user_id=1)}
 
         rows_w = rag.visible_collection_ids(
             session, user_id=1, employee_id="emp-x", permission="write"
         )
         names_w = {r.name for r in rows_w}
-        assert "my-a" in names_w
-        assert "emp-x-a" in names_w
-        assert "other-a" not in names_w  # 仅 read 授权
-        assert "other-public" not in names_w  # public 不给写
+        assert names_w == {"my-a", "emp-x-a"}  # Read grants and public visibility grant no writes.
+        assert names_w == {
+            row.name for row in rag.visible_collection_ids(session, user_id=1, permission="write")
+        }
 
 
 def test_can_access_collection(tmp_path, monkeypatch):

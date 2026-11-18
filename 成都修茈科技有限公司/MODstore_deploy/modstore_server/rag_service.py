@@ -4,7 +4,7 @@
 调用方（员工 cognition / 工作流 knowledge_search 节点 / 前端聊天）只需要传：
 
 - ``user_id``（必填，作为身份基线，用于解析"我自己拥有 + 别人 grant 给我"的集合）
-- 可选 ``employee_id`` / ``workflow_id`` / ``org_id``：把对应实体拥有的集合一起加入候选
+- 可选实体 ID 仅供已核验的平台管理员派生实体权限；普通用户仍按自己的明确授权检索。
 - 可选 ``extra_collection_ids``：明确指定要查的集合（节点编辑器场景）
 - ``query``：检索文本
 
@@ -25,6 +25,7 @@ from modstore_server.embedding_service import EmbeddingConfigError, embed_texts
 from modstore_server.models import (
     KnowledgeCollection,
     KnowledgeMembership,
+    User,
     get_session_factory,
 )
 from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
@@ -77,6 +78,35 @@ class RetrievedChunk:
 # ---------------------------------------------------------------------------
 
 
+def _verified_entity_identities(
+    session: Session,
+    user_id: int,
+    employee_id: Optional[str],
+    workflow_id: Optional[int],
+    org_id: Optional[str],
+) -> List[tuple[str, str]]:
+    if user_id <= 0 or not (employee_id or workflow_id is not None or org_id):
+        return []
+    principal = (
+        session.query(User.id)
+        .filter(User.id == user_id, User.is_admin.is_(True), User.deleted_at.is_(None))
+        .first()
+    )
+    if principal is None:
+        return []
+    # Entity IDs are caller-controlled context, not credentials. Package authorship
+    # and workflow ownership can change or be reused independently of knowledge
+    # grants, so ordinary callers need an explicit user grant on the collection.
+    identities: List[tuple[str, str]] = []
+    if employee_id:
+        identities.append(("employee", str(employee_id)))
+    if workflow_id is not None:
+        identities.append(("workflow", str(int(workflow_id))))
+    if org_id:
+        identities.append(("org", str(org_id)))
+    return identities
+
+
 def visible_collection_ids(
     session: Session,
     *,
@@ -90,7 +120,7 @@ def visible_collection_ids(
 
     ``permission='read'`` 时返回：
         - 我自己 owned（owner_kind=user, owner_id=user_id）
-        - employee_id/workflow_id/org_id 自身 owned 的集合
+        - 平台管理员指定的实体 owned 集合（普通用户的实体上下文不扩大权限）
         - 任意 grant 给上述身份的集合（KnowledgeMembership）
         - visibility='public' 的集合
     ``permission='write'`` 时仅返回 owned 或 grantee.permission in (write, admin)。
@@ -99,12 +129,9 @@ def visible_collection_ids(
     write_only = perm_norm in ("write", "admin")
 
     identities: List[tuple[str, str]] = [("user", str(int(user_id)))]
-    if employee_id:
-        identities.append(("employee", str(employee_id)))
-    if workflow_id is not None:
-        identities.append(("workflow", str(int(workflow_id))))
-    if org_id:
-        identities.append(("org", str(org_id)))
+    identities.extend(
+        _verified_entity_identities(session, int(user_id), employee_id, workflow_id, org_id)
+    )
 
     candidates: Dict[int, KnowledgeCollection] = {}
 
