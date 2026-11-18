@@ -26,10 +26,12 @@ def test_connected_rabbitmq_bus_publishes_with_runtime_pika_import(monkeypatch) 
     event = new_event(
         "autonomy.proof.recorded",
         producer="test-suite",
-        subject_id="receipt-1",
+        subject_id="receipt-客户",
     )
 
     assert bus.publish(event) is True
+    assert isinstance(published["body"], bytes)
+    assert "客户" in published["body"].decode("utf-8")
     assert published["exchange"] == "modstore.events"
     assert published["routing_key"] == event.event_name
     assert published["properties"]["properties"]["delivery_mode"] == 2
