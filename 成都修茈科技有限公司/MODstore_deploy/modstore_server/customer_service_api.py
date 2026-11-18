@@ -296,10 +296,13 @@ async def list_tickets(
         if kind == "github_self_heal":
             q = q.filter(_github_self_heal_condition())
         else:
-            q = q.filter(CustomerServiceTicket.submitter_type == {
-                "admin_created": "admin",
-                "customer_chat": "customer",
-            }[kind])
+            q = q.filter(
+                CustomerServiceTicket.submitter_type
+                == {
+                    "admin_created": "admin",
+                    "customer_chat": "customer",
+                }[kind]
+            )
     term = search.strip()
     if term:
         matches = [

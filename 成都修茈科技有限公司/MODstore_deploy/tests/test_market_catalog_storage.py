@@ -205,7 +205,12 @@ def test_admin_catalog_review_lists_statuses_and_updates_listing(client, auth_he
         json={"action": "publish"},
     )
     assert invalid.status_code == 400
-    assert client.get("/api/admin/catalog", params={"status": "unknown"}, headers=auth_headers).status_code == 422
+    assert (
+        client.get(
+            "/api/admin/catalog", params={"status": "unknown"}, headers=auth_headers
+        ).status_code
+        == 422
+    )
 
 
 def test_legacy_market_file_is_read_until_controlled_migration(monkeypatch, tmp_path):

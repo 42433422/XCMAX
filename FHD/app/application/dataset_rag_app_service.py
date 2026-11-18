@@ -91,6 +91,7 @@ from app.application.dataset_rag.models import _rebuild_job_from_dict as _rebuil
 from app.application.dataset_rag.models import _source_synced_at as _source_synced_at
 from app.application.dataset_rag.models import _stable_document_id as _stable_document_id
 from app.application.dataset_rag.models import _utc_now_iso as _utc_now_iso
+from app.application.dataset_rag.qa_pairs import normalize_qa_pairs, scoped_qa_pairs
 from app.application.dataset_rag.query_gaps import DatasetQueryGapStore
 from app.application.dataset_rag.rebuild_coordinator import (
     REBUILD_TERMINAL_STATUSES as REBUILD_TERMINAL_STATUSES,
@@ -118,7 +119,6 @@ from app.application.dataset_rag.retrieval_policy import (
 from app.application.dataset_rag.retrieval_policy import (
     evidence_grounding as evidence_grounding,
 )
-from app.application.dataset_rag.qa_pairs import normalize_qa_pairs, scoped_qa_pairs
 from app.application.dataset_rag.retrieval_policy import (
     resolve_min_relevance as resolve_min_relevance,
 )

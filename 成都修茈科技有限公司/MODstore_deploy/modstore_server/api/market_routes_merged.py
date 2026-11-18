@@ -8,6 +8,7 @@ from __future__ import annotations
 import importlib
 
 from modstore_server import java_wallet_admin
+from modstore_server.models import CatalogItem
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 # --- from market_routes_part01_part01_part01.py ---
@@ -1554,19 +1555,19 @@ def api_admin_list_catalog(
 ):
     sf = _facade().get_session_factory()
     with sf() as session:
-        query = session.query(_facade().CatalogItem)
+        query = session.query(CatalogItem)
         kind = status.strip().lower()
         if kind == "pending":
-            query = query.filter(_facade().CatalogItem.compliance_status == "under_review")
+            query = query.filter(CatalogItem.compliance_status == "under_review")
         elif kind == "listed":
             query = query.filter(
-                _facade().CatalogItem.is_public.is_(True),
-                _facade().CatalogItem.compliance_status == "approved",
+                CatalogItem.is_public.is_(True),
+                CatalogItem.compliance_status == "approved",
             )
         elif kind == "restricted":
-            query = query.filter(_facade().CatalogItem.compliance_status == "restricted")
+            query = query.filter(CatalogItem.compliance_status == "restricted")
         elif kind == "delisted":
-            query = query.filter(_facade().CatalogItem.compliance_status == "delisted")
+            query = query.filter(CatalogItem.compliance_status == "delisted")
         elif kind:
             raise _facade().HTTPException(422, "商品状态筛选条件无效")
         term = search.strip()
@@ -1575,39 +1576,38 @@ def api_admin_list_catalog(
 
             query = query.filter(
                 or_(
-                    _facade().CatalogItem.name.contains(term, autoescape=True),
-                    _facade().CatalogItem.pkg_id.contains(term, autoescape=True),
+                    CatalogItem.name.contains(term, autoescape=True),
+                    CatalogItem.pkg_id.contains(term, autoescape=True),
                 )
             )
         total = query.count()
-        rows = (
-            query.order_by(_facade().CatalogItem.created_at.desc())
-            .offset(offset)
-            .limit(limit)
-            .all()
+        rows = query.order_by(CatalogItem.created_at.desc()).offset(offset).limit(limit).all()
+        authors = (
+            {
+                int(u.id): u.username
+                for u in session.query(_facade().User)
+                .filter(_facade().User.id.in_([r.author_id for r in rows if r.author_id]))
+                .all()
+            }
+            if rows
+            else {}
         )
-        authors = {
-            int(u.id): u.username
-            for u in session.query(_facade().User)
-            .filter(_facade().User.id.in_([r.author_id for r in rows if r.author_id]))
-            .all()
-        } if rows else {}
         counts = {
-            "total": session.query(_facade().CatalogItem).count(),
-            "pending": session.query(_facade().CatalogItem)
-            .filter(_facade().CatalogItem.compliance_status == "under_review")
+            "total": session.query(CatalogItem).count(),
+            "pending": session.query(CatalogItem)
+            .filter(CatalogItem.compliance_status == "under_review")
             .count(),
-            "listed": session.query(_facade().CatalogItem)
+            "listed": session.query(CatalogItem)
             .filter(
-                _facade().CatalogItem.is_public.is_(True),
-                _facade().CatalogItem.compliance_status == "approved",
+                CatalogItem.is_public.is_(True),
+                CatalogItem.compliance_status == "approved",
             )
             .count(),
-            "restricted": session.query(_facade().CatalogItem)
-            .filter(_facade().CatalogItem.compliance_status == "restricted")
+            "restricted": session.query(CatalogItem)
+            .filter(CatalogItem.compliance_status == "restricted")
             .count(),
-            "delisted": session.query(_facade().CatalogItem)
-            .filter(_facade().CatalogItem.compliance_status == "delisted")
+            "delisted": session.query(CatalogItem)
+            .filter(CatalogItem.compliance_status == "delisted")
             .count(),
         }
         return {
@@ -1651,7 +1651,7 @@ def api_admin_review_catalog_item(
         raise _facade().HTTPException(400, "action 必须是 approve/restrict/delist/restore")
     sf = _facade().get_session_factory()
     with sf() as session:
-        item = session.query(_facade().CatalogItem).filter(_facade().CatalogItem.id == item_id).first()
+        item = session.query(CatalogItem).filter(CatalogItem.id == item_id).first()
         if not item:
             raise _facade().HTTPException(404, "商品不存在")
         note = (body.note or "").strip()
