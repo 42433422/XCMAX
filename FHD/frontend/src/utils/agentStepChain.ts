@@ -170,6 +170,14 @@ export function applyToolCallEvent(steps: AgentStepView[], ev: ToolCallEventLike
   return copy
 }
 
+/**
+ * 模板库变更工具：完成事件需要让已挂载的模板库重新拉取列表，
+ * 否则聊天里清理/删除后页面仍显示旧条目。
+ */
+export function isDocumentTemplateChange(ev: ToolCallEventLike | undefined): boolean {
+  return ev?.phase === 'finished' && String(ev.tool_id || '').trim() === 'document_template'
+}
+
 export function chainState(steps: AgentStepView[]): AgentStepState {
   if (!steps.length) return 'pending'
   if (steps.some((step) => step.state === 'failed')) return 'failed'

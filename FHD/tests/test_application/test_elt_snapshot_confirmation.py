@@ -7,8 +7,9 @@ from unittest.mock import Mock
 import pytest
 
 from app.application.elt.errors import EltError
+from app.application.elt.preview_confirmation import REVIEW_KEY, _snapshot, publish_preview
 from app.application.elt.service_support import dump_json, load_json
-from app.db.models.elt import EltRun, EltUpload
+from app.db.models.elt import EltRun, EltRunRow, EltUpload
 from tests.test_application.test_etl_preview_confirmation import assert_unwritten, execute
 from tests.test_application.test_etl_preview_task_boundaries import preview_store as preview_store
 from tests.test_application.test_etl_preview_task_boundaries import ready_preview, snapshot
@@ -128,3 +129,83 @@ def test_replay_from_expired_original_requires_its_own_reviewed_revision(
     execute(store, replay["id"], replayed["preview_revision"])
     store.executor.futures[-1].result(timeout=10)
     assert snapshot(store, replay["id"])["summary"]["executed"] == 2
+
+
+def test_skip_rows_are_excluded_from_review_digest(preview_store, monkeypatch):
+    """skip 行不会写入业务库，改它不应让确认哈希失效。"""
+    store = preview_store
+    run_id = ready_preview(store, monkeypatch)
+    with store.factory() as db:
+        run = db.get(EltRun, run_id)
+        nonce = load_json(run.summary_json, {})[REVIEW_KEY]["nonce"]
+        row = db.query(EltRunRow).filter(EltRunRow.run_id == run_id).first()
+        row.final_action = "skip"
+        db.commit()
+        db.expire_all()
+        before, _ = _snapshot(db, db.get(EltRun, run_id), nonce)
+        row = db.query(EltRunRow).filter(EltRunRow.run_id == run_id).first()
+        row.normalized_json = dump_json({"changed": True})
+        db.commit()
+        db.expire_all()
+        after, _ = _snapshot(db, db.get(EltRun, run_id), nonce)
+    assert after == before
+
+
+def test_written_rows_still_change_review_digest(preview_store, monkeypatch):
+    """待写入行的内容变化必须继续让确认哈希失效。"""
+    store = preview_store
+    run_id = ready_preview(store, monkeypatch)
+    with store.factory() as db:
+        run = db.get(EltRun, run_id)
+        nonce = load_json(run.summary_json, {})[REVIEW_KEY]["nonce"]
+        before, _ = _snapshot(db, run, nonce)
+        row = db.query(EltRunRow).filter(EltRunRow.run_id == run_id).first()
+        row.normalized_json = dump_json({"changed": True})
+        db.commit()
+        db.expire_all()
+        after, _ = _snapshot(db, db.get(EltRun, run_id), nonce)
+    assert after != before
+
+
+@pytest.mark.parametrize("action", ["skip", "error"])
+@pytest.mark.parametrize(
+    "target,field",
+    [
+        ("shipment_records", "normalized_json"),
+        ("export_xlsx", "source_sheet"),
+        ("export_csv", "source_sheet"),
+    ],
+)
+def test_changed_nonwritten_export_rows_require_new_approval(
+    preview_store, monkeypatch, action, target, field
+):
+    """Skipped trace values and source sheet names still affect the approved output."""
+    store = preview_store
+    run_id = ready_preview(store, monkeypatch, target=target)
+    queued = Mock()
+    monkeypatch.setattr(store.service, "_submit_execution", queued)
+    with store.factory() as db:
+        run = db.get(EltRun, run_id)
+        row = db.query(EltRunRow).filter_by(run_id=run_id).order_by(EltRunRow.id).first()
+        setattr(run, f"{row.final_action}_rows", getattr(run, f"{row.final_action}_rows") - 1)
+        row.final_action = action
+        setattr(run, f"{action}_rows", getattr(run, f"{action}_rows") + 1)
+        draft = load_json(run.draft_json, {})
+        for mapping in draft.get("field_mappings") or []:
+            mapping["confirmed"] = True
+        run.draft_json = dump_json(draft)
+        if target != "shipment_records":
+            # Pre-snapshot previews still use their verified original upload.
+            details = load_json(run.summary_json, {})
+            details.pop("source_snapshot", None)
+            run.summary_json = dump_json(details)
+        publish_preview(db, run)
+        db.commit()
+        reviewed = load_json(run.summary_json, {})[REVIEW_KEY]["revision"]
+        setattr(row, field, dump_json({"amount": 999}) if field.endswith("_json") else "未确认表名")
+        db.commit()
+    with pytest.raises(EltError) as error:
+        execute(store, run_id, reviewed, valid_rows_only=True)
+    assert error.value.code == "ELT_PREVIEW_CHANGED"
+    queued.assert_not_called()
+    assert_unwritten(store, run_id)

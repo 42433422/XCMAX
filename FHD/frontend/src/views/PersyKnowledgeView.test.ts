@@ -659,4 +659,20 @@ describe('PersyKnowledgeView', () => {
     expect(mocks.status.mock.calls.length).toBeGreaterThan(initial)
   })
 
+  it('keeps the question form outside every switchable content view', async () => {
+    const wrapper = await mountKnowledge()
+    for (const tab of wrapper.findAll('.view-switch button')) {
+      await tab.trigger('click')
+      const stage = wrapper.get('.brain-stage').element
+      const body = wrapper.get('.brain-stage__body').element
+      const dock = wrapper.get('.ask-dock').element
+      expect(body.parentElement).toBe(stage)
+      expect(dock.parentElement).toBe(stage)
+      expect(body.nextElementSibling).toBe(dock)
+      expect(body.children.length).toBeGreaterThan(0)
+      expect(body.contains(dock)).toBe(false)
+      expect(wrapper.findAll('input[aria-label="向 Persy 提问"]')).toHaveLength(1)
+    }
+  })
+
 })

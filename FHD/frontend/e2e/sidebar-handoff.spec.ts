@@ -46,6 +46,8 @@ test.describe('Sidebar handoff real layout', () => {
         await expect(page.locator('.app-shell.is-ready')).toBeVisible({ timeout: 25_000 })
         await expect(page.locator('#messageInput')).toBeVisible()
         const settings = page.locator(viewport.width > 768 ? '.sidebar-menu-bottom' : '.top-bar').getByRole('button', { name: '系统设置', exact: true })
+        // No active tutorial: the fixture must not synthesize an empty run and overlay navigation.
+        await expect(page.locator('.tutorial-coach-shell')).toHaveCount(0)
         await expect(settings).toHaveCount(1)
         await settings.click(); await settings.click()
         await expect.poll(() => requested).toBe(true)

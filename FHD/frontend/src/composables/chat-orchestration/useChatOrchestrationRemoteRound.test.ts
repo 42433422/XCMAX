@@ -129,6 +129,7 @@ function setup(options: { tts?: boolean; multimodal?: number; excelContext?: boo
     startWaitProgressTimer: vi.fn(),
     buildPlannerChatRequestPayload: vi.fn((message: string, _opts?: unknown, requestScope?: ChatRequestScope) => ({
       body: { message, context: { turn_id: requestScope?.turnId || '', session_id: requestScope?.sessionId || '' } },
+      completeArtifacts: vi.fn(),
     })),
     stopLoadingProgress: vi.fn(),
     requestChatByModeWithTimeout: vi.fn(),
@@ -436,6 +437,25 @@ describe('executeRemoteChatRound AI MOD 交付', () => {
 })
 
 describe('executeRemoteChatRound 流式回合', () => {
+  it.each([true, false])('模板清理完成后通知已打开的模板库刷新（success=%s）', async (success) => {
+    const { round } = setup()
+    const updates: unknown[] = []
+    const onUpdate = (event: Event) => updates.push((event as CustomEvent).detail)
+    window.addEventListener('xcagi:templates-updated', onUpdate)
+    feed([
+      { type: 'tool_call', phase: 'started', node_id: 'tpl', tool_id: 'document_template', action: 'clear' },
+      { type: 'tool_call', phase: 'finished', node_id: 'other', tool_id: 'crm', action: 'create_customer', success: true },
+      { type: 'tool_call', phase: 'finished', node_id: 'tpl', tool_id: 'document_template', action: 'clear', success },
+      { type: 'done', result: { success, response: '模板清理已结束' } },
+    ])
+    try {
+      await round.executeRemoteChatRound(['清空模板库'], undefined, scope())
+      expect(updates).toEqual([{ source: 'chat', action: 'clear' }])
+    } finally {
+      window.removeEventListener('xcagi:templates-updated', onUpdate)
+    }
+  })
+
   it('按事件顺序维护思考、执行链、路线并落终态', async () => {
     const { round, deps, messages, stateSteps, currentTask, appliedTexts } = setup()
     const route = routePayload()

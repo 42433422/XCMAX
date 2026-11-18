@@ -182,7 +182,7 @@ vi.mock('./useChatRequest', () => ({
     chatBatchQueue: ref([]),
     enqueueChatBatchMessage: vi.fn(),
     cancelPendingChatBatch: vi.fn(),
-    buildPlannerChatRequestPayload: vi.fn(() => ({ body: { message: 'hello' } })),
+    buildPlannerChatRequestPayload: vi.fn(() => ({ body: { message: 'hello' }, completeArtifacts: vi.fn() })),
     requestChatByMode: vi.fn(),
     requestChatByModeBatch: vi.fn(),
     getChatBatchDebounceMs: () => 0,

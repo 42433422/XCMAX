@@ -6,7 +6,7 @@ import type { useChatMessages } from '../useChatMessages'
 import type { useChatRequest, ChatRequestScope } from '../useChatRequest'
 import type { useChatResponseAttach } from '../useChatResponseAttach'
 import { readPlannerBusinessResult } from '@/utils/readPlannerBusinessResult'
-import { applyToolCallEvent } from '@/utils/agentStepChain'
+import { applyToolCallEvent, isDocumentTemplateChange } from '@/utils/agentStepChain'
 import type { useChatSessionActivity } from '../useChatSessionActivity'
 import type { ShipmentTask } from '../useShipmentTask'
 import type { ChatPlannerPayload } from '@/types/chat'
@@ -33,7 +33,6 @@ import { noteModelPath } from '@/components/sidebar/modelPathHealth'
 import { modelOutcomeFromText, readChatExecution } from '@/components/chat/chatFailureRecovery'
 import type { PlannerChatOptions } from '../useChatRequest'
 import { isOfficeEltToolMessage } from '@/domain/optionalTemplateSelection'
-import { clearChatArtifactIds } from '@/utils/chatArtifactContext'
 
 /** Bound the initial model wait; once content or a tool marker arrives, use the reply budget. */
 export const CHAT_STREAM_STALL_MS = 40_000
@@ -430,7 +429,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       const ttsShouldSpeakThisMessage = ttsEnabled.value
       let receivedDone = false
       try {
-        const { body } = buildPlannerChatRequestPayload(primaryForStream, opts, requestScope)
+        const { body, completeArtifacts } = buildPlannerChatRequestPayload(primaryForStream, opts, requestScope)
         streamTextFromAi = true
         handlePlannerEventRef = (ev: PlannerSseEvent) => {
           if (replaying) {
@@ -484,6 +483,14 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
               streamMessage.liveSteps = applyToolCallEvent(streamMessage.liveSteps || [], ev)
               if (ev.phase !== 'finished') delete streamMessage.waitingHint
             }
+            // 模板库已在页面上时不重新挂载，用窗口事件让它按服务端真实状态刷新。
+            if (isDocumentTemplateChange(ev)) {
+              window.dispatchEvent(
+                new CustomEvent('xcagi:templates-updated', {
+                  detail: { source: 'chat', action: String(ev.action || '') },
+                }),
+              )
+            }
           } else if (ev.type === 'token') {
             if (ev.ephemeral) {
               const hint = String(ev.text || '').replace(/\s+/g, ' ').trim()
@@ -536,7 +543,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           throw new Error(sseError)
         }
         // 请求已成功送出并拿到流：本轮工件 id 用毕即清，避免串到下一轮。
-        clearChatArtifactIds()
+        completeArtifacts()
         if (awaitingAuthorization) {
           if (streamRunId) syncStreamRun({ run_id: streamRunId })
           return

@@ -12,7 +12,10 @@ from sqlalchemy import insert, select, text
 from app.application.template_app_service import TemplateApplicationService
 from app.db.models.elt_archive import EltArchiveAsset, EltArchiveVersion
 from app.domain.context.current_request import reset_current_request, set_current_request
-from app.domain.shared_services.tools_workflow_shipments_docs_ops import _clear_document_templates
+from app.domain.shared_services.tools_workflow_shipments_docs_ops import (
+    _clear_document_templates,
+    _registered_router_document_template,
+)
 from app.infrastructure.tenant_scope import (
     TenantScopeError,
     current_tenant_id,
@@ -115,6 +118,35 @@ def test_clear_uses_bound_actor_and_preserves_other_accounts_and_tenants(
     )
     assert (runtime / "tenants/7/template_preferences.json").is_file()
     assert not (runtime / "tenants/8/template_preferences.json").exists()
+
+
+@pytest.mark.parametrize("authorized", [True, False])
+def test_clear_router_notifies_stream_with_actual_cleanup_outcome(template_store, authorized):
+    from app.infrastructure.chat_stream_lifetime import StreamLifetime, current_lifetime
+
+    actor, _, engine, _ = template_store
+    before = _rows(engine)
+    records = []
+    lifetime = StreamLifetime()
+    lifetime.observe_tools(lambda **event: records.append(event["record"]))
+    token = current_lifetime.set(lifetime)
+    try:
+        result = _registered_router_document_template(
+            "clear", {}, actor.context if authorized else {}, "", ""
+        )
+    finally:
+        current_lifetime.reset(token)
+    assert result["success"] is authorized
+    assert result["http_status_code"] == (200 if authorized else 403)
+    assert len(records) == 1
+    assert records[0]["tool_id"] == "document_template"
+    assert records[0]["action"] == "clear" and records[0]["phase"] == "finished"
+    assert records[0]["success"] is authorized
+    if authorized:
+        assert result["deleted_archives"] == 1
+        assert _rows(engine)[1] == [("foreign",), ("peer",)]
+    else:
+        assert _rows(engine) == before
 
 
 @pytest.mark.parametrize(

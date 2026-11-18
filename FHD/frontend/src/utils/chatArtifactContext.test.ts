@@ -3,7 +3,9 @@ import {
   addChatArtifactIds,
   clearChatArtifactIds,
   listChatArtifactIds,
+  markChatArtifactsConsumed,
   removeChatArtifactId,
+  takeChatArtifactIds,
   uploadChatArtifacts,
   uploadChatArtifactsDetailed,
 } from './chatArtifactContext'
@@ -73,5 +75,32 @@ describe('chatArtifactContext', () => {
     removeChatArtifactId(' a1 ')
     removeChatArtifactId('')
     expect(listChatArtifactIds()).toEqual(['a2'])
+  })
+
+  it('上一轮已发出后重新上传，只保留本轮文件', () => {
+    addChatArtifactIds(['old-1', 'old-2'])
+    takeChatArtifactIds()
+    markChatArtifactsConsumed()
+
+    addChatArtifactIds(['new-1', 'new-2', 'new-3'])
+
+    expect(listChatArtifactIds()).toEqual(['new-1', 'new-2', 'new-3'])
+  })
+
+  it('失败重试沿用上一轮已提交的工件', () => {
+    addChatArtifactIds(['a1'])
+    takeChatArtifactIds()
+    markChatArtifactsConsumed()
+
+    expect(takeChatArtifactIds({ retry: true })).toEqual(['a1'])
+  })
+
+  it('非重试的新消息丢弃上一轮残留', () => {
+    addChatArtifactIds(['old'])
+    takeChatArtifactIds()
+    markChatArtifactsConsumed()
+
+    expect(takeChatArtifactIds()).toEqual([])
+    expect(listChatArtifactIds()).toEqual([])
   })
 })
