@@ -2315,6 +2315,11 @@ def _run_memory_v2_planner_context_task(task: dict[str, Any]) -> dict[str, Any]:
     from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context
     from app.infrastructure.auth.agent_principal import require_agent_principal
 
+    try:
+        from evals.owned_attachment_eval import _scripted_model_response
+    except ModuleNotFoundError:
+        from owned_attachment_eval import _scripted_model_response
+
     client = SimpleNamespace(headers={})
     expected = dict(task.get("expected") or {})
     checks: list[dict[str, Any]] = []
@@ -2373,7 +2378,11 @@ def _run_memory_v2_planner_context_task(task: dict[str, Any]) -> dict[str, Any]:
             {"conversation_id": str(task.get("user_id") or "eval-memory-user")}, principal
         )
         namespace = scoped_conversation_user_id(principal.user_id, context)
-        planner = LLMWorkflowPlanner()
+        planner = LLMWorkflowPlanner(
+            completion=lambda **kwargs: _scripted_model_response(
+                task, json.loads(kwargs["messages"][-1]["content"])
+            )
+        )
         with patch.object(planner, "_plan_with_llm", side_effect=fake_react):
             plan = planner.plan(
                 namespace,

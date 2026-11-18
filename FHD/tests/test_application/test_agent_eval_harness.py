@@ -30,6 +30,21 @@ def test_agent_eval_harness_baseline_passes(monkeypatch) -> None:
     assert missing_spec["details"]["publish_call_count"] == 0
 
 
+@pytest.mark.parametrize("invalid_review", ["missing", "foreign_plan"])
+def test_memory_planner_eval_requires_its_explicit_review(monkeypatch, invalid_review) -> None:
+    task = next(
+        row for row in eval_module.load_tasks() if row["kind"] == "memory_v2_planner_context"
+    )
+    if invalid_review == "missing":
+        task.pop("goal_review")
+    else:
+        task["model_response"]["nodes"][0]["params"]["keyword"] = "unrelated"
+    monkeypatch.setattr(eval_module, "load_tasks", lambda _path: [task])
+    result = run_eval()
+    assert result["failed"] == 1
+    assert result["results"][0]["passed"] is False
+
+
 @pytest.mark.parametrize("fail_task", [False, True])
 def test_eval_owns_real_approval_queue_and_restores_it(monkeypatch, fail_task) -> None:
     from app.application.agent_orchestrator import task_execution_repository as queues

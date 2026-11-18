@@ -75,6 +75,7 @@ from app.application.tools.workflow import (
 from app.application.workflow.planner import LLMWorkflowPlanner, _filter_tool_registry_for_profile
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, validate_plan_graph
 from app.services.tools_execution.registry import get_workflow_tool_registry as get_tool_registry
+from tests.fixtures.planner_model import goal_review_response
 
 # ===========================================================================
 # 1. app/application/ai_chat_app_service.py
@@ -899,7 +900,15 @@ class TestLLMWorkflowPlannerPlan:
 
     def test_plan_with_model_returns_valid(self) -> None:
         with patch("app.application.workflow.planner.get_ai_conversation_service"):
-            planner = LLMWorkflowPlanner()
+            completion = Mock(
+                side_effect=lambda **kwargs: goal_review_response(
+                    json.loads(kwargs["messages"][-1]["content"]),
+                    source="msg",
+                    node_ids=["n1"],
+                    outcome="execute",
+                )
+            )
+            planner = LLMWorkflowPlanner(completion=completion)
             valid_plan = PlanGraph(
                 plan_id="p1",
                 intent="test",
@@ -919,6 +928,7 @@ class TestLLMWorkflowPlannerPlan:
             ):
                 plan = planner.plan("u1", "msg", get_tool_registry())
                 assert plan.plan_id == "p1"
+                completion.assert_called_once()
 
     def test_invalid_model_plan_is_rejected_without_fallback(self) -> None:
         with patch("app.application.workflow.planner.get_ai_conversation_service"):

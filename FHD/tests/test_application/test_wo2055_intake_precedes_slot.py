@@ -14,6 +14,7 @@ from app.application.ai_chat_app_service import AIChatApplicationService
 from app.application.workflow.planner import LLMWorkflowPlanner
 from app.application.workflow.workflow_types import plan_fingerprint, plan_from_dict
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+from tests.fixtures.planner_model import goal_review_response
 
 SERVICE = "app.application.planner_compat_service"
 STREAM = "app.fastapi_routes.xcagi_compat_chat_stream"
@@ -54,6 +55,7 @@ def test_registered_intake_uses_authorized_planner_and_truthful_receipt(
     actor = trusted_actor(user_id=2055, tenant_id=7, role="user", permissions=[])
     calls = []
     planned = []
+    reviewed = []
     repo = InMemoryAgentRunRepository()
 
     async def submit(request, context, original, reply):
@@ -61,6 +63,18 @@ def test_registered_intake_uses_authorized_planner_and_truthful_receipt(
         return dict(guide)
 
     def completion(**kwargs):
+        payload = json.loads(kwargs["messages"][1]["content"])
+        if payload.get("task") == "audit_goal_coverage":
+            reviewed.append(payload)
+            node = payload["plan"]["nodes"][0]
+            assert (node["tool_id"], node["action"], node["params"]) == (
+                "client_product_issue",
+                "submit",
+                {},
+            )
+            return goal_review_response(
+                payload, source=message, node_ids=["submit"], outcome="execute"
+            )
         planned.append(kwargs)
         return {
             "choices": [
@@ -118,6 +132,7 @@ def test_registered_intake_uses_authorized_planner_and_truthful_receipt(
         )
         result = send(client, message)
         assert len(planned) == 1
+        assert len(reviewed) == 1
         assert calls == [], "medium-risk submit must wait for explicit approval"
         assert result["message"] == "等待确认", result
         result = send(client, "确认")
@@ -178,6 +193,7 @@ def test_registered_intake_uses_authorized_planner_and_truthful_receipt(
         [(e.event_type, e.data) for e in run.events],
     )
     assert len(planned) == 1, "confirmation resumes the frozen plan, not a new model plan"
+    assert len(reviewed) == 1, "approval resumes the reviewed plan without new model calls"
     text = str(result)
     assert "当前没有采购订单。" not in text
     assert run is not None and len(run.tool_calls) == 1

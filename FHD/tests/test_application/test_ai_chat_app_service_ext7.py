@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import math
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -11,6 +12,7 @@ import pytest
 
 from app.application.ai_chat_app_service import AIChatApplicationService
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from tests.fixtures.planner_model import goal_review_response
 from tests.test_application.ai_chat_test_helpers import (
     _make_svc,
 )
@@ -564,15 +566,21 @@ def _active_model_service(completion):
     return svc
 
 
-def _reply_completion():
-    return MagicMock(
-        return_value={"choices": [{"message": {"content": '{"mode":"reply","reply":"已读取"}'}}]}
-    )
+def _reply_completion(source):
+    def respond(**kwargs):
+        request = json.loads(kwargs["messages"][-1]["content"])
+        if request.get("task") == "audit_goal_coverage":
+            return goal_review_response(
+                request, source=source, node_ids=["model_reply"], outcome="reply"
+            )
+        return {"choices": [{"message": {"content": '{"mode":"reply","reply":"已读取"}'}}]}
+
+    return MagicMock(side_effect=respond)
 
 
 @pytest.mark.parametrize("event", ["received", "completed"])
 def test_neuro_failure_does_not_replace_model_or_bypass_attachment_authority(event):
-    completion = _reply_completion()
+    completion = _reply_completion("说明工作方式")
     svc = _active_model_service(completion)
     with patch(
         f"app.neuro_bus.application_neuro_bridge.neuro_notify_chat_{event}",
@@ -584,7 +592,10 @@ def test_neuro_failure_does_not_replace_model_or_bypass_attachment_authority(eve
         rejected = svc.process_chat("u1", "说明附件", context={"attachment_upload_ids": ["forged"]})
         assert rejected["success"] is False
         assert rejected["data"]["error_code"] == "attachment_reupload_required"
-    completion.assert_called_once()
+    assert completion.call_count == 2
+    assert json.loads(completion.call_args.kwargs["messages"][-1]["content"])["task"] == (
+        "audit_goal_coverage"
+    )
 
 
 @pytest.mark.parametrize(
@@ -625,12 +636,13 @@ def test_model_transport_error_is_fail_closed_without_old_chat_fallback(
 @pytest.mark.parametrize("sheet_name", [None, "Sheet2"])
 def test_registered_upload_reaches_real_planner_without_implicit_import(owned, sheet_name):
     context, _ = owned
-    completion = _reply_completion()
+    completion = _reply_completion("说明附件")
     svc = _active_model_service(completion)
     result = svc.process_chat(
         "u1", "说明附件", context=context, file_context={"sheet_name": sheet_name}
     )
     assert result["success"] is True
+    assert completion.call_count == 2
     evidence = completion.call_args.kwargs["context"]["file_context"]["verified_uploads"]
     assert "paint" in evidence[0]["text"]
     artifacts = result["data"]["artifacts"]
