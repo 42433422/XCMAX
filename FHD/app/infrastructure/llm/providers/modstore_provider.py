@@ -8,6 +8,8 @@ from typing import Any, cast
 from app.utils.metrics import record_ai_call
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
+from ..reasoning_stream import publish_reasoning, reasoning_from_message
+
 
 class ModstoreProvider:
     provider_id = "modstore"
@@ -38,6 +40,8 @@ class ModstoreProvider:
                 **kwargs,
             )
             record_ai_call(self.provider_id, "chat", "success", time.perf_counter() - t0)
+            if isinstance(result, dict):
+                publish_reasoning(reasoning_from_message(result))
             return cast("dict[str, Any] | None", result)
         except RECOVERABLE_ERRORS:
             record_ai_call(self.provider_id, "chat", "error", time.perf_counter() - t0)
@@ -59,21 +63,34 @@ class ModstoreProvider:
         stream = getattr(self._adapter, "stream_chat_completion", None)
         if stream is None:
             return
-        async for payload in stream(
-            messages=messages, temperature=temperature, max_tokens=max_tokens, **kwargs
-        ):
-            if not payload or payload.strip() == "[DONE]":
-                if payload.strip() == "[DONE]":
-                    break
-                continue
-            try:
-                chunk = json.loads(payload)
-            except ValueError:
-                continue
-            choices = chunk.get("choices") if isinstance(chunk, dict) else None
-            if not isinstance(choices, list) or not choices:
-                continue
-            delta = choices[0].get("delta") if isinstance(choices[0], dict) else None
-            text = delta.get("content") if isinstance(delta, dict) else None
-            if text:
-                yield str(text)
+        reasoning: list[str] = []
+        try:
+            async for payload in stream(
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                **kwargs,
+            ):
+                if not payload or payload.strip() == "[DONE]":
+                    if payload.strip() == "[DONE]":
+                        break
+                    continue
+                try:
+                    chunk = json.loads(payload)
+                except ValueError:
+                    continue
+                choices = chunk.get("choices") if isinstance(chunk, dict) else None
+                if not isinstance(choices, list) or not choices:
+                    continue
+                delta = choices[0].get("delta") if isinstance(choices[0], dict) else None
+                if isinstance(delta, dict):
+                    for key in ("reasoning_content", "reasoning"):
+                        value = delta.get(key)
+                        if isinstance(value, str) and value:
+                            reasoning.append(value)
+                            break
+                text = delta.get("content") if isinstance(delta, dict) else None
+                if text:
+                    yield str(text)
+        finally:
+            publish_reasoning("".join(reasoning))
