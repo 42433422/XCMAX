@@ -50,7 +50,7 @@ def test_build_function_tools_maps_names_and_schema() -> None:
     assert entry["function"]["parameters"]["type"] == "object"
 
 
-def test_plan_from_tool_calls_builds_parallel_nodes() -> None:
+def test_multi_native_calls_without_dependencies_are_rejected() -> None:
     _tools, lookup = build_function_tools(_registry())
     plan = plan_from_tool_calls(
         _payload(
@@ -62,11 +62,56 @@ def test_plan_from_tool_calls_builds_parallel_nodes() -> None:
         context=None,
         lookup=lookup,
     )
+    assert plan is None  # No validated dependency graph, so do not execute.
+
+
+def test_generate_rejects_multi_native_batch_without_retrying() -> None:
+    calls = []
+
+    class Conversation:
+        def get_context(self, user_id):
+            return None
+
+    def completion(**kwargs):
+        calls.append(kwargs)
+        return _payload(
+            _tool_call("products__query", {"keyword": "门"}, "a"),
+            _tool_call("products__query", {"keyword": "窗"}, "b"),
+        )
+
+    context = {}
+    generator = LlmPlanGeneration(Conversation(), completion, lambda: None)
+    assert generator.generate("p1", "u1", "先查门再查窗", _registry(), context) is None
+    assert len(calls) == 1
+    assert "planning_failure_reason" in context
+
+
+def test_native_tool_list_uses_same_selected_registry_as_json_prompt(monkeypatch) -> None:
+    from app.application.workflow import llm_plan_generation as generation
+
+    captured = {}
+
+    class Conversation:
+        def get_context(self, user_id):
+            return None
+
+    def completion(**kwargs):
+        captured.update(kwargs)
+        return _payload(_tool_call("products__query", {"keyword": "门"}))
+
+    monkeypatch.setattr(
+        generation,
+        "select_tools_for_prompt",
+        lambda registry, message, context: {"products": registry["products"]},
+    )
+    registry = _registry()
+    registry["dangerous"] = {
+        "actions": {"delete": {"risk": "high", "idempotent": False}}
+    }
+    generator = LlmPlanGeneration(Conversation(), completion, lambda: None)
+    plan = generator.generate("p1", "u1", "查门", registry, {})
     assert plan is not None
-    assert plan.intent == "native_tool_calls"
-    assert [node.node_id for node in plan.nodes] == ["call_1", "call_2"]
-    assert plan.nodes[0].params == {"keyword": "门"}
-    assert all(node.depends_on == [] for node in plan.nodes)
+    assert [item["function"]["name"] for item in captured["tools"]] == ["products__query"]
 
 
 def test_plan_from_tool_calls_ignores_unknown_function() -> None:
