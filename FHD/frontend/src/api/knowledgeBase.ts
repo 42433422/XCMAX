@@ -206,6 +206,28 @@ export interface KnowledgeQueryGapResponse {
   message?: string
 }
 
+export interface KnowledgeApiKey {
+  token_id?: string
+  dataset_id?: string
+  label?: string
+  prefix?: string
+  created_at?: string
+  last_used_at?: string
+  revoked_at?: string
+}
+
+export interface KnowledgeApiKeyListResponse {
+  success: boolean
+  dataset_id?: string
+  keys?: KnowledgeApiKey[]
+  total?: number
+  message?: string
+}
+
+export interface KnowledgeApiKeyCreateResponse extends KnowledgeApiKeyListResponse {
+  key?: string
+}
+
 export interface KnowledgeSynonymsResponse {
   success: boolean
   dataset_id?: string
@@ -591,6 +613,32 @@ export const knowledgeBaseApi = {
   async clearQueryGaps(datasetId = PERSY_KNOWLEDGE_DATASET_ID): Promise<KnowledgeQueryGapResponse> {
     await primeCsrfCookie()
     return api.delete<KnowledgeQueryGapResponse>(datasetPath(datasetId, '/query-gaps'))
+  },
+
+  listApiKeys(
+    datasetId = PERSY_KNOWLEDGE_DATASET_ID,
+  ): Promise<KnowledgeApiKeyListResponse> {
+    return api.get<KnowledgeApiKeyListResponse>(datasetPath(datasetId, '/api-keys'))
+  },
+
+  async createApiKey(
+    datasetId: string,
+    label = '',
+  ): Promise<KnowledgeApiKeyCreateResponse> {
+    await primeCsrfCookie()
+    return api.post<KnowledgeApiKeyCreateResponse>(datasetPath(datasetId, '/api-keys'), {
+      label,
+    })
+  },
+
+  async revokeApiKey(
+    datasetId: string,
+    tokenId: string,
+  ): Promise<Record<string, unknown>> {
+    await primeCsrfCookie()
+    return api.delete<Record<string, unknown>>(
+      datasetPath(datasetId, `/api-keys/${encodeURIComponent(tokenId)}`),
+    )
   },
 
   exportDataset(datasetId = PERSY_KNOWLEDGE_DATASET_ID): Promise<Record<string, unknown>> {

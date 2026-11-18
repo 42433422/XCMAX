@@ -14,6 +14,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .read_views import DatasetViews
 from .schemas import (
+    DatasetApiKeyRequest,
     DatasetFeedbackRequest,
     DatasetImportRequest,
     DatasetQueryRequest,
@@ -153,6 +154,28 @@ class DatasetViewRoutes:
             return views().import_dataset(dataset_id, request, req)
 
         self.import_dataset = import_dataset
+
+        @router.post("/datasets/{dataset_id}/api-keys")
+        def create_dataset_api_key(
+            dataset_id: str, req: DatasetApiKeyRequest, request: Request
+        ) -> dict[str, Any]:
+            return views().create_api_key(dataset_id, request, req)
+
+        self.create_dataset_api_key = create_dataset_api_key
+
+        @router.get("/datasets/{dataset_id}/api-keys")
+        def list_dataset_api_keys(dataset_id: str, request: Request) -> dict[str, Any]:
+            return views().list_api_keys(dataset_id, request)
+
+        self.list_dataset_api_keys = list_dataset_api_keys
+
+        @router.delete("/datasets/{dataset_id}/api-keys/{token_id}")
+        def revoke_dataset_api_key(
+            dataset_id: str, token_id: str, request: Request
+        ) -> dict[str, Any]:
+            return views().revoke_api_key(dataset_id, token_id, request)
+
+        self.revoke_dataset_api_key = revoke_dataset_api_key
 
         @router.get("/datasets/{dataset_id}/graph")
         def dataset_graph(

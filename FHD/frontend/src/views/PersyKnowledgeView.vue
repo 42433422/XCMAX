@@ -242,6 +242,31 @@
               </select>
             </label>
             <button type="button" class="ask-dock__term" @click="toggleSynonymEditor">术语</button>
+            <button type="button" class="ask-dock__term" @click="toggleApiKeys">分享</button>
+          </div>
+          <div v-if="apiKeysOpen" class="ask-dock__synonyms" aria-label="外部 API 密钥">
+            <div class="api-key-row">
+              <input v-model="apiKeyLabel" placeholder="用途（可选）" aria-label="密钥用途" />
+              <button type="button" :disabled="apiKeyBusy" @click="createApiKey">
+                生成只读密钥
+              </button>
+            </div>
+            <p v-if="newApiKey" class="api-key-new">
+              只显示一次：<code>{{ newApiKey }}</code>
+            </p>
+            <ul v-if="apiKeyItems.length" class="api-key-list">
+              <li v-for="item in apiKeyItems" :key="item.token_id">
+                <span>{{ item.label || '未命名' }} · {{ item.prefix }}…</span>
+                <button
+                  type="button"
+                  :disabled="apiKeyBusy || Boolean(item.revoked_at)"
+                  @click="revokeApiKey(item.token_id)"
+                >
+                  {{ item.revoked_at ? '已回收' : '回收' }}
+                </button>
+              </li>
+            </ul>
+            <span v-if="apiKeyMessage" role="status">{{ apiKeyMessage }}</span>
           </div>
           <div v-if="synonymEditorOpen" class="ask-dock__synonyms" aria-label="术语表">
             <textarea
@@ -574,6 +599,64 @@ const gapMessage = ref('')
 const queryGapItems = ref<Array<{ query?: string; count?: number }>>([])
 const importInput = ref<HTMLInputElement | null>(null)
 const transferMessage = ref('')
+const apiKeysOpen = ref(false)
+const apiKeyBusy = ref(false)
+const apiKeyLabel = ref('')
+const apiKeyMessage = ref('')
+const newApiKey = ref('')
+const apiKeyItems = ref<Array<{ token_id?: string; label?: string; prefix?: string; revoked_at?: string }>>([])
+
+async function toggleApiKeys(): Promise<void> {
+  apiKeysOpen.value = !apiKeysOpen.value
+  apiKeyMessage.value = ''
+  if (!apiKeysOpen.value) return
+  await loadApiKeys()
+}
+
+async function loadApiKeys(): Promise<void> {
+  try {
+    const result = await knowledgeBaseApi.listApiKeys(activeDatasetId.value)
+    apiKeyItems.value = result.success ? result.keys || [] : []
+    if (!result.success) apiKeyMessage.value = result.message || '密钥加载失败'
+  } catch {
+    apiKeyMessage.value = '密钥加载失败'
+  }
+}
+
+async function createApiKey(): Promise<void> {
+  apiKeyBusy.value = true
+  apiKeyMessage.value = ''
+  try {
+    const result = await knowledgeBaseApi.createApiKey(activeDatasetId.value, apiKeyLabel.value.trim())
+    if (result.success) {
+      newApiKey.value = result.key || ''
+      apiKeyLabel.value = ''
+      apiKeyMessage.value = '已生成，请立即复制保存'
+      await loadApiKeys()
+    } else {
+      apiKeyMessage.value = result.message || '生成失败'
+    }
+  } catch {
+    apiKeyMessage.value = '生成失败，请稍后重试'
+  } finally {
+    apiKeyBusy.value = false
+  }
+}
+
+async function revokeApiKey(tokenId?: string): Promise<void> {
+  if (!tokenId) return
+  apiKeyBusy.value = true
+  apiKeyMessage.value = ''
+  try {
+    await knowledgeBaseApi.revokeApiKey(activeDatasetId.value, tokenId)
+    apiKeyMessage.value = '已回收'
+    await loadApiKeys()
+  } catch {
+    apiKeyMessage.value = '回收失败，请稍后重试'
+  } finally {
+    apiKeyBusy.value = false
+  }
+}
 
 async function exportDatasetJson(): Promise<void> {
   transferMessage.value = ''

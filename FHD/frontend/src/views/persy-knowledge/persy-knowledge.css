@@ -1023,6 +1023,55 @@
   cursor: pointer;
 }
 
+.api-key-row {
+  display: flex;
+  gap: 8px;
+}
+
+.api-key-row input {
+  flex: 1;
+  border: 1px solid #ccd7d2;
+  border-radius: 6px;
+  padding: 5px 8px;
+  background: #ffffff;
+  color: #17211d;
+  font-size: 12px;
+}
+
+.api-key-row button,
+.api-key-list button {
+  padding: 2px 10px;
+  border: 1px solid #ccd7d2;
+  border-radius: 5px;
+  background: #ffffff;
+  color: #27352f;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.api-key-new {
+  margin: 0;
+  color: #1d6259;
+  font-size: 11px;
+  word-break: break-all;
+}
+
+.api-key-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: #3d4b45;
+  font-size: 11px;
+}
+
+.api-key-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 0;
+}
+
 .secondary-button {
   min-height: 36px;
   border: 1px solid #ccd7d2;

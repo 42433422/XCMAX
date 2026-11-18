@@ -395,6 +395,12 @@ class DatasetImportRequest(BaseModel):
     overwrite: bool = Field(False, description="replace an existing non-empty dataset")
 
 
+class DatasetApiKeyRequest(BaseModel):
+    """Label for a read-only external dataset key."""
+
+    label: str = Field("", max_length=80, description="human-readable purpose of the key")
+
+
 class DatasetVersionDiffRequest(BaseModel):
     source: str = Field(..., min_length=1, max_length=300, description="document source label")
     tenant_id: str = Field("", max_length=160, description="tenant/user isolation key")

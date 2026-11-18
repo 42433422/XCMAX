@@ -139,6 +139,30 @@ class DatasetViews:
             ),
         )
 
+    def create_api_key(self, dataset_id: str, request: Request, payload: Any) -> dict[str, Any]:
+        return cast(
+            "dict[str, Any]",
+            self._service().create_api_key(
+                dataset_id,
+                label=str(getattr(payload, "label", "") or ""),
+                access_context=self._access(request),
+            ),
+        )
+
+    def list_api_keys(self, dataset_id: str, request: Request) -> dict[str, Any]:
+        return cast(
+            "dict[str, Any]",
+            self._service().list_api_keys(dataset_id, access_context=self._access(request)),
+        )
+
+    def revoke_api_key(self, dataset_id: str, token_id: str, request: Request) -> dict[str, Any]:
+        return cast(
+            "dict[str, Any]",
+            self._service().revoke_api_key(
+                dataset_id, token_id, access_context=self._access(request)
+            ),
+        )
+
     def query_gaps(self, dataset_id: str, request: Request, *, limit: int = 20) -> dict[str, Any]:
         access = self._access(request)
         return cast(

@@ -25,6 +25,9 @@ const mocks = vi.hoisted(() => ({
   saveSynonyms: vi.fn(),
   queryGaps: vi.fn(),
   clearQueryGaps: vi.fn(),
+  listApiKeys: vi.fn(),
+  createApiKey: vi.fn(),
+  revokeApiKey: vi.fn(),
   resetGraphView: vi.fn(),
 }))
 
@@ -295,6 +298,34 @@ describe('PersyKnowledgeView', () => {
       退款: ['退货', '退钱'],
     })
     expect(wrapper.get('.ask-dock__synonym-actions').text()).toContain('已保存 2 组术语')
+  })
+
+  it('creates and revokes an external read-only key from the ask dock', async () => {
+    mocks.listApiKeys
+      .mockResolvedValueOnce({ success: true, keys: [] })
+      .mockResolvedValueOnce({
+        success: true,
+        keys: [{ token_id: 'key_1', label: '网站', prefix: 'kb_abc123', revoked_at: '' }],
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        keys: [{ token_id: 'key_1', label: '网站', prefix: 'kb_abc123', revoked_at: '2026-11-18' }],
+      })
+    mocks.createApiKey.mockResolvedValue({ success: true, key: 'kb_secret', token_id: 'key_1' })
+    mocks.revokeApiKey.mockResolvedValue({ success: true, revoked: true })
+    const wrapper = await mountKnowledge()
+
+    await clickLabel(wrapper, '.ask-dock__term', '分享')
+    expect(mocks.listApiKeys).toHaveBeenCalledWith('persy-knowledge')
+    await wrapper.get('input[aria-label="密钥用途"]').setValue('网站')
+    await clickLabel(wrapper, '.api-key-row button', '生成只读密钥')
+
+    expect(mocks.createApiKey).toHaveBeenCalledWith('persy-knowledge', '网站')
+    expect(wrapper.get('.api-key-new').text()).toContain('kb_secret')
+
+    await clickLabel(wrapper, '.api-key-list button', '回收')
+    expect(mocks.revokeApiKey).toHaveBeenCalledWith('persy-knowledge', 'key_1')
+    expect(wrapper.get('.api-key-list').text()).toContain('已回收')
   })
 
   it('opens the original document chunks from an evidence row', async () => {

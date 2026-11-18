@@ -39,6 +39,7 @@ from app.application.dataset_rag.access_policy import (
 from app.application.dataset_rag.access_policy import (
     _resolve_tenant_for_access as _resolve_tenant_for_access,
 )
+from app.application.dataset_rag.api_keys import DatasetApiKeyStore
 from app.application.dataset_rag.document_lifecycle import (
     _DATASET_DOWNLOAD_ERRORS as _DATASET_DOWNLOAD_ERRORS,
 )
@@ -273,6 +274,7 @@ class DatasetRagApplicationService:
         )
         self._feedback = DatasetFeedbackStore(chosen_path.with_name("dataset_feedback.json"))
         self._query_gaps = DatasetQueryGapStore(chosen_path.with_name("dataset_query_gaps.json"))
+        self._api_keys = DatasetApiKeyStore(chosen_path.with_name("dataset_api_keys.json"))
         self._documents = DocumentLifecycle(
             repository=self._repository,
             parser=self._parser,
@@ -1264,6 +1266,118 @@ class DatasetRagApplicationService:
             "chunk_count": len(chunks),
             "synonym_count": len(synonyms),
         }
+
+    def create_api_key(
+        self,
+        dataset_id: str,
+        *,
+        label: str = "",
+        access_context: DatasetAccessContext | dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Issue a read-only external key; the raw key is returned exactly once."""
+        dataset_key = _clean_key(dataset_id, default="default")
+        context = _coerce_access_context(access_context)
+        denied = _ensure_dataset_permission(
+            context, DATASET_ADMIN_PERMISSION, dataset_id=dataset_key
+        )
+        if denied is not None:
+            return denied
+        tenant = _clean_key(str(getattr(context, "tenant_id", "") or ""), default="")
+        if not tenant:
+            return {
+                "success": False,
+                "dataset_id": dataset_key,
+                "message": "actor tenant context is required for API keys",
+                "error_code": "dataset_permission_denied",
+            }
+        row = self._api_keys.create(dataset_id=dataset_key, tenant_id=tenant, label=label)
+        return {"success": True, "dataset_id": dataset_key, **row}
+
+    def list_api_keys(
+        self,
+        dataset_id: str,
+        *,
+        access_context: DatasetAccessContext | dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        dataset_key = _clean_key(dataset_id, default="default")
+        context = _coerce_access_context(access_context)
+        denied = _ensure_dataset_permission(
+            context, DATASET_ADMIN_PERMISSION, dataset_id=dataset_key
+        )
+        if denied is not None:
+            return denied
+        rows = self._api_keys.list(dataset_id=dataset_key)
+        return {
+            "success": True,
+            "dataset_id": dataset_key,
+            "keys": rows,
+            "total": len(rows),
+        }
+
+    def revoke_api_key(
+        self,
+        dataset_id: str,
+        token_id: str,
+        *,
+        access_context: DatasetAccessContext | dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        dataset_key = _clean_key(dataset_id, default="default")
+        context = _coerce_access_context(access_context)
+        denied = _ensure_dataset_permission(
+            context, DATASET_ADMIN_PERMISSION, dataset_id=dataset_key
+        )
+        if denied is not None:
+            return denied
+        removed = self._api_keys.revoke(dataset_id=dataset_key, token_id=str(token_id or ""))
+        return {"success": True, "dataset_id": dataset_key, "revoked": removed}
+
+    def public_query(
+        self,
+        *,
+        api_key: str,
+        query: str,
+        top_k: int = 5,
+        metadata_filter: dict[str, Any] | None = None,
+        retrieval_mode: str = "hybrid",
+        mmr_lambda: float = 0.0,
+        expand_section: bool = False,
+    ) -> dict[str, Any]:
+        """External read-only query authenticated by a dataset API key."""
+        resolved = self._api_keys.resolve(api_key)
+        if resolved is None:
+            return {
+                "success": False,
+                "error_code": "knowledge_api_key_invalid",
+                "message": "invalid or revoked API key",
+                "chunks": [],
+            }
+        context = DatasetAccessContext(
+            actor_id=f"api:{resolved['token_id']}",
+            tenant_id=resolved["tenant_id"],
+            permissions=frozenset({DATASET_READ_PERMISSION}),
+            is_admin=False,
+        )
+        result = self.query(
+            dataset_id=resolved["dataset_id"],
+            query=query,
+            top_k=max(1, min(int(top_k or 5), 20)),
+            tenant_id=resolved["tenant_id"],
+            metadata_filter=metadata_filter or {},
+            rerank=False,
+            access_context=context,
+            retrieval_mode=retrieval_mode,
+            mmr_lambda=mmr_lambda,
+            expand_section=expand_section,
+        )
+        for chunk in result.get("chunks") or []:
+            metadata = chunk.get("metadata")
+            if isinstance(metadata, dict):
+                metadata.pop("acl", None)
+                metadata.pop("tenant_id", None)
+        result.pop("citations", None)
+        result["answer"] = ""
+        result["dataset_id"] = resolved["dataset_id"]
+        return result
 
     def _resolve_file_path(self, file_path: str) -> Path:
         return self._parser._resolve_file_path(file_path)

@@ -105,6 +105,16 @@ def _csrf_exempt_public_auth(scope: Scope) -> bool:
     )
 
 
+def _csrf_exempt_knowledge_public(scope: Scope) -> bool:
+    """外部只读知识库查询使用 X-KB-Key（无浏览器 Cookie）。要求该请求头存在，
+    避免普通跨站表单请求借路绕过 CSRF；密钥本身在路由层校验、可撤销。"""
+    path = (scope.get("path") or "").rstrip("/")
+    if not path.endswith("/api/knowledge/v1/public/query"):
+        return False
+    headers = {k: v for k, v in (scope.get("headers") or [])}
+    return bool((headers.get(b"x-kb-key") or b"").strip())
+
+
 def _csrf_exempt_aiopen(scope: Scope) -> bool:
     """AIOPEN 对外 MCP/API 面：外部 Agent（Cursor/Claude）无 CSRF Cookie，安全由 X-AIOPEN-Key + LAN 承担。"""
     path = (scope.get("path") or "").rstrip("/")
@@ -255,6 +265,9 @@ class CSRFMiddleware:
                 await self.app(scope, receive, send)
                 return
             if _csrf_exempt_founder_autonomy_refresh(scope):
+                await self.app(scope, receive, send)
+                return
+            if _csrf_exempt_knowledge_public(scope):
                 await self.app(scope, receive, send)
                 return
             path = (scope.get("path") or "").rstrip("/")

@@ -192,6 +192,24 @@ describe('knowledgeBaseApi', () => {
     )
   })
 
+  it('manages external read-only dataset keys', async () => {
+    await knowledgeBaseApi.listApiKeys('office-docking')
+    await knowledgeBaseApi.createApiKey('office-docking', '网站')
+    await knowledgeBaseApi.revokeApiKey('office-docking', 'key / 1')
+
+    expect(mocks.api.get).toHaveBeenCalledWith(
+      '/api/knowledge/v1/datasets/office-docking/api-keys',
+    )
+    expect(mocks.primeCsrfCookie).toHaveBeenCalledTimes(2)
+    expect(mocks.api.post).toHaveBeenCalledWith(
+      '/api/knowledge/v1/datasets/office-docking/api-keys',
+      { label: '网站' },
+    )
+    expect(mocks.api.delete).toHaveBeenCalledWith(
+      '/api/knowledge/v1/datasets/office-docking/api-keys/key%20%2F%201',
+    )
+  })
+
   it('exports and imports a dataset snapshot', async () => {
     await knowledgeBaseApi.exportDataset('office-docking')
     await knowledgeBaseApi.importDataset('office-docking', { documents: [], chunks: [] }, true)
