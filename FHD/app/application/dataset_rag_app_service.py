@@ -123,7 +123,6 @@ from app.application.dataset_rag.retrieval_policy import (
     resolve_min_relevance as resolve_min_relevance,
 )
 from app.application.dataset_rag.status import DatasetStatus
-from app.application.dataset_rag.synonyms import normalize_synonyms
 from app.application.dataset_rag.vector_index import VectorIndexService
 from app.application.dataset_rag.vector_index import _embedding_metadata as _embedding_metadata
 from app.application.dataset_rag.vector_index import (
@@ -134,6 +133,7 @@ from app.application.document_parsing.source_refresh import (
     source_coordinates,
 )
 from app.domain.app_pure.dataset_rag_queue import DatasetStateLock
+from app.domain.app_pure.dataset_synonyms import normalize_synonyms
 from app.infrastructure.rag import (
     HybridRetriever,
     RetrievedChunk,

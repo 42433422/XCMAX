@@ -45,8 +45,8 @@ from app.application.dataset_rag.retrieval_policy import (
     resolve_min_relevance,
     resolve_mmr_lambda,
 )
-from app.application.dataset_rag.synonyms import expand_query, normalize_synonyms
 from app.application.dataset_rag.vector_index import VectorIndexService
+from app.domain.app_pure.dataset_synonyms import expand_query, normalize_synonyms
 from app.infrastructure.rag import RetrievedChunk
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 

@@ -348,7 +348,11 @@ def test_title_correction_is_admin_only_atomic_and_has_no_dispatch(
         assert current == {
             **original,
             "title": body["title"].strip(),
-            **({"intent": "product_issue"} if old_intent else {}),
+            **(
+                {"intent": "product_issue", "ticket_type": "defect", "ticket_type_label": "缺陷"}
+                if old_intent
+                else {}
+            ),
         }
         assert client.get("/api/customer-service/tickets").json()["total"] == count
         event = "ticket_classification_corrected" if old_intent else "ticket_title_corrected"
