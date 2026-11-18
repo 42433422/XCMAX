@@ -6,12 +6,14 @@ import hashlib
 import os
 import sqlite3
 import tempfile
+import weakref
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from threading import BrokenBarrierError
 from zoneinfo import ZoneInfo
 
+import pytest
 from sqlalchemy import create_engine, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
@@ -530,20 +532,26 @@ class ClosedLoopRun:
         self.book: Acceptance | None = None
         self.engine = None
         self._tmpdir: tempfile.TemporaryDirectory[str] | None = None
-        self._restore: list[tuple[object, str, object]] = []
-        self._env: dict[str, str | None] = {}
+        self._patches = pytest.MonkeyPatch()
 
     def open_resources(self) -> Acceptance:
         if self.closed:
             raise RuntimeError("closed-loop live run used after fixture teardown")
+        self._patches.syspath_prepend(str(Path(__file__).resolve().parents[2]))
+        from app.application.agent_orchestrator import task_execution_repository as task_queues
+
+        # Failed setup tracebacks retain queue objects after their temp database
+        # is removed; give this acceptance run its own registry and restore both.
+        self._patches.setattr(task_queues, "_OPEN_REPOSITORIES", weakref.WeakSet())
+        self._patches.setattr(task_queues, "_task_execution_repository", None)
         tmp = tempfile.TemporaryDirectory(prefix="closed-loop-")
         self._tmpdir = tmp
         root = Path(tmp.name)
-        self._setenv("XCAGI_DATA_DIR", str(root))
-        self._setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(root / "idempotency.sqlite"))
-        self._setenv("AUDIT_LOG_PATH", str(root / "audit.jsonl"))
-        self._setenv("SECRET_KEY", "closed-loop-acceptance-secret-32bytes")
-        self._setenv("XCAGI_PRODUCT_SKU", "enterprise")
+        self._patches.setenv("XCAGI_DATA_DIR", str(root))
+        self._patches.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(root / "idempotency.sqlite"))
+        self._patches.setenv("AUDIT_LOG_PATH", str(root / "audit.jsonl"))
+        self._patches.setenv("SECRET_KEY", "closed-loop-acceptance-secret-32bytes")
+        self._patches.setenv("XCAGI_PRODUCT_SKU", "enterprise")
         permissions.clear_idempotent_replay_for_tests()
         engine = create_engine(
             f"sqlite:///{root / 'business.sqlite'}",
@@ -559,18 +567,18 @@ class ClosedLoopRun:
         factory = seed_employee_identity(
             engine, session_id="employee-acceptance-session", username="employee-acceptance"
         )
-        self._patch(host_db, "HostSessionLocal", factory)
-        self._patch(db_session, "SessionLocal", factory)
-        self._setenv("DATABASE_URL", str(engine.url))
+        self._patches.setattr(host_db, "HostSessionLocal", factory)
+        self._patches.setattr(db_session, "SessionLocal", factory)
+        self._patches.setenv("DATABASE_URL", str(engine.url))
         binding = bind_agent_actor_scope(session_id="employee-acceptance-session", user_id="11")
         sessions, open_session = _session_factory(engine)
         import app.application.customer_app_service as customers
         import app.application.sales_app_service as sales
         import app.utils.path_io.path_utils as path_utils
 
-        self._patch(customers, "get_customers_session", open_session)
-        self._patch(sales, "get_db", sessions)
-        self._patch(path_utils, "get_data_dir", lambda: str(root / "data"))
+        self._patches.setattr(customers, "get_customers_session", open_session)
+        self._patches.setattr(sales, "get_db", sessions)
+        self._patches.setattr(path_utils, "get_data_dir", lambda: str(root / "data"))
         self.book = Acceptance(engine, root)
         self.book.actor_context = {"actor_id": "11", "_actor_authorization": binding}
         return self.book
@@ -585,26 +593,12 @@ class ClosedLoopRun:
             return
         self.closed = True
         permissions.clear_idempotent_replay_for_tests()
-        for obj, name, old in reversed(self._restore):
-            setattr(obj, name, old)
-        for key, old in self._env.items():
-            if old is None:
-                os.environ.pop(key, None)
-            else:
-                os.environ[key] = old
+        self._patches.undo()
         if self.engine is not None:
             self.engine.dispose()
         if self._tmpdir is not None:
             self._tmpdir.cleanup()
             self._tmpdir = None
-
-    def _setenv(self, key: str, value: str) -> None:
-        self._env[key] = os.environ.get(key)
-        os.environ[key] = value
-
-    def _patch(self, obj: object, name: str, value: object) -> None:
-        self._restore.append((obj, name, getattr(obj, name)))
-        setattr(obj, name, value)
 
 
 def _idempotency_scope(path: Path, expected: str, client_key: str) -> str:

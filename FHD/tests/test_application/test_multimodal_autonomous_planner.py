@@ -53,6 +53,8 @@ def test_owned_multimodal_planning_preserves_effects_and_approval(tmp_path, task
     result = run_eval(tasks)["results"][0]
     assert result["passed"], result["failed_checks"]
     run = result["details"]["run"]
+    if task["model_response"]["mode"] == "workflow":
+        assert run["metadata"]["plan"]["metadata"]["goal_coverage"] == task["goal_review"]
     source = run["artifacts"][0]
     assert source["source"] == "plan.metadata"
     assert source["metadata"]["parser_used"] == "owned_upload"
@@ -212,3 +214,56 @@ def test_plan_sources_never_gain_knowledge_authority_from_business_approval(
             assert not store.exists()
     finally:
         reset_dataset_rag_app_service_for_tests()
+
+
+def test_owned_attachment_without_review_cannot_execute(tmp_path):
+    from evals.run_agent_eval import load_tasks, run_eval
+
+    task = next(
+        task
+        for task in load_tasks()
+        if task["id"] == "multimodal_excel_artifact_autonomous_import_plan"
+    )
+    task.pop("goal_review")
+    tasks = tmp_path / "missing-attachment-review.jsonl"
+    tasks.write_text(json.dumps(task, ensure_ascii=False) + "\n", encoding="utf-8")
+    result = run_eval(tasks)["results"][0]
+    run = result["details"]["run"]
+    assert not result["passed"]
+    assert run["metadata"]["plan"]["metadata"]["planning_rejected"] is True
+    assert run["tool_calls"] == []
+    checks = {check["name"]: check for check in result["checks"]}
+    assert checks["approved_business_write"]["actual"] == 0
+    assert checks["no_business_write_before_approval"]["passed"] is True
+
+
+@pytest.mark.parametrize("mutation", ["source", "node", "action", "parameters", "dependency"])
+def test_attachment_review_fixture_never_approves_an_unrelated_plan(mutation):
+    import copy
+
+    from evals.owned_attachment_eval import _scripted_model_response
+    from evals.run_agent_eval import load_tasks
+
+    task = next(
+        task
+        for task in load_tasks()
+        if task["id"] == "multimodal_excel_artifact_autonomous_import_plan"
+    )
+    prompt = {
+        "task": "audit_goal_coverage",
+        "user_message": task["message"],
+        "plan": {"nodes": copy.deepcopy(task["model_response"]["nodes"])},
+    }
+    accepted = _scripted_model_response(task, prompt)
+    assert json.loads(accepted["choices"][0]["message"]["content"]) == task["goal_review"]
+    if mutation == "source":
+        prompt["user_message"] = "删除所有客户"
+    else:
+        field, value = {
+            "node": ("node_id", "other"),
+            "action": ("action", "delete"),
+            "parameters": ("params", {}),
+            "dependency": ("depends_on", ["other"]),
+        }[mutation]
+        prompt["plan"]["nodes"][0][field] = value
+    assert _scripted_model_response(task, prompt) is None

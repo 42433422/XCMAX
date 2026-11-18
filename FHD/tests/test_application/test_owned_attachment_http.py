@@ -15,6 +15,7 @@ from app.db.session import get_db
 from app.fastapi_routes.domains.agent import agent_routes
 from app.infrastructure.tenant_scope import tenant_scope
 from evals.run_agent_eval import _authenticated_route_fixture, _isolated_task_execution_queue
+from tests.fixtures.planner_model import goal_review_response
 
 
 def test_authenticated_http_resolves_owned_upload_and_rejects_changed_owner(tmp_path):
@@ -22,8 +23,19 @@ def test_authenticated_http_resolves_owned_upload_and_rejects_changed_owner(tmp_
     app.include_router(agent_routes.router)
     repo = InMemoryAgentRunRepository()
     seen = []
+    reviews = []
 
     def completion(**kwargs):
+        request = json.loads(kwargs["messages"][-1]["content"])
+        if request.get("task") == "audit_goal_coverage":
+            reviews.append(request)
+            assert kwargs["context"]["file_context"]["verified_uploads"] == seen[0]
+            return goal_review_response(
+                request,
+                source="Read the attached prices.",
+                node_ids=["model_reply"],
+                outcome="reply",
+            )
         seen.append(kwargs["context"]["file_context"]["verified_uploads"])
         return {
             "choices": [
@@ -81,6 +93,7 @@ def test_authenticated_http_resolves_owned_upload_and_rejects_changed_owner(tmp_
         assert denied["intent"] == "attachment_reupload_required"
         assert not denied["artifacts"]
         assert len(seen) == 1
+        assert len(reviews) == 1
         client.headers.pop("X-Session-ID")
         assert client.post("/api/agent/runs", json=payload).status_code == 401
 
@@ -94,8 +107,19 @@ def test_real_chat_routes_resolve_owned_attachment_before_model(tmp_path, endpoi
     app = FastAPI()
     app.include_router(router, prefix="/api")
     seen = []
+    reviews = []
 
     def completion(**kwargs):
+        request = json.loads(kwargs["messages"][-1]["content"])
+        if request.get("task") == "audit_goal_coverage":
+            reviews.append(request)
+            assert kwargs["context"]["file_context"]["verified_uploads"] == seen[0]
+            return goal_review_response(
+                request,
+                source="Summarize the attached file.",
+                node_ids=["model_reply"],
+                outcome="reply",
+            )
         seen.append(kwargs["context"]["file_context"]["verified_uploads"])
         return {
             "choices": [
@@ -148,3 +172,4 @@ def test_real_chat_routes_resolve_owned_attachment_before_model(tmp_path, endpoi
         assert denied.status_code == 200, denied.text
         assert "attachment_reupload_required" in denied.text
         assert len(seen) == 1
+        assert len(reviews) == 1

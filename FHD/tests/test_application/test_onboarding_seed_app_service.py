@@ -10,6 +10,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+from tests.fixtures.planner_model import goal_review_response
 
 
 def test_seed_demo_is_idempotent_and_visible_to_business_tools(tmp_path, monkeypatch) -> None:
@@ -78,7 +79,7 @@ def test_seeded_first_order_from_chat_runs_real_tools_and_persists_after_confirm
         seeded = seed_onboarding_demo_data(tenant_id=1, industry_id="通用")
     customer, product = seeded["customer"]["name"], seeded["product"]["name"]
     plan = {
-        "plan_id": "onboarding-first-order",
+        "mode": "workflow",
         "intent": "onboarding_first_order",
         "todo_steps": ["查询客户", "查询产品", "确认后创建出货单"],
         "risk_level": "medium",
@@ -122,9 +123,20 @@ def test_seeded_first_order_from_chat_runs_real_tools_and_persists_after_confirm
             },
         ],
     }
-    completion = Mock(
-        return_value={"choices": [{"message": {"content": json.dumps(plan, ensure_ascii=False)}}]}
-    )
+    prompt = f"查询客户{customer}和商品{product}，创建数量为1的演示出货单；涉及写入先让我确认。"
+
+    def respond(**kwargs):
+        request = json.loads(kwargs["messages"][-1]["content"])
+        if request.get("task") == "audit_goal_coverage":
+            return goal_review_response(
+                request,
+                source=prompt,
+                node_ids=["customer", "product", "shipment"],
+                outcome="execute",
+            )
+        return {"choices": [{"message": {"content": json.dumps(plan, ensure_ascii=False)}}]}
+
+    completion = Mock(side_effect=respond)
     conversation = Mock(get_context=Mock(return_value=None))
     with patch(
         "app.application.ai_chat_app_service.get_ai_conversation_service", return_value=conversation
@@ -140,7 +152,6 @@ def test_seeded_first_order_from_chat_runs_real_tools_and_persists_after_confirm
         "app.application.ai_chat.dialogue_memory.settle_chat_turn", lambda *a, **kw: None
     )
     context = {**actor.context, "tool_execution_profile": profile, "memory_capture_enabled": False}
-    prompt = f"查询客户{customer}和商品{product}，创建数量为1的演示出货单；涉及写入先让我确认。"
     with tenant_scope(1):
         waiting_payload = chat.process_chat(
             str(actor.user_id), prompt, source=source, context=context
@@ -182,7 +193,10 @@ def test_seeded_first_order_from_chat_runs_real_tools_and_persists_after_confirm
         completed = repository.get(run_id)
         assert completed.status == "completed", completed.error
         assert len(completed.tool_calls) == 3
-        completion.assert_called_once()
+        assert completion.call_count == 2
+        assert json.loads(completion.call_args.kwargs["messages"][-1]["content"])["task"] == (
+            "audit_goal_coverage"
+        )
         conversation.chat.assert_not_called()
         with actor.factory() as db:
             shipment = (

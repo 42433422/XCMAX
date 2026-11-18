@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 
 from scripts.dev.benchmark_evidence import evidence_identity, write_report
+from scripts.dev.intent_benchmark import match_rule_result
 
 GOLDEN_PATH = Path(__file__).with_name("intent_golden_set.json")
 
@@ -28,31 +29,11 @@ def _load_golden() -> list[dict]:
     return data
 
 
-def _match_case(result: dict, case: dict, text: str) -> bool:
-    check = case.get("check")
-    if check == "greeting":
-        from app.domain.shared_services.intent_service import is_greeting
-
-        return is_greeting(text)
-    if check == "goodbye":
-        from app.domain.shared_services.intent_service import is_goodbye
-
-        return is_goodbye(text)
-
-    exp_tool = case.get("expected_tool")
-    exp_primary = case.get("expected_primary")
-    tool = result.get("tool_key")
-    primary = result.get("primary_intent")
-    if exp_tool is not None and tool != exp_tool:
-        return False
-    if exp_primary is not None and primary != exp_primary:
-        return False
-    return True
-
-
-@pytest.fixture(scope="module")
-def golden_cases():
-    os.environ.setdefault("XCAGI_SKIP_INTENT_LLM", "1")
+@pytest.fixture()
+def golden_cases(monkeypatch):
+    monkeypatch.setenv("XCAGI_SKIP_INTENT_LLM", "1")
+    monkeypatch.setenv("FHD_INTENT_SEMANTIC_ENABLED", "0")
+    monkeypatch.setenv("XCAGI_INTENT_ENGINE", "off")
     return _load_golden()
 
 
@@ -71,7 +52,7 @@ def test_intent_golden_set_accuracy(golden_cases):
         text = case["text"]
         tier = str(case.get("tier", "core"))
         result = recognize_intents(text)
-        if _match_case(result, case, text):
+        if match_rule_result(case, result):
             correct += 1
             tier_stat.setdefault(tier, [0, 0])[0] += 1
         else:

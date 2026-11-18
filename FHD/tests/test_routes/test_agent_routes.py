@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -27,6 +28,7 @@ from app.application.agent_orchestrator.task_execution_repository import (
 from app.fastapi_routes.domains.agent.agent_routes import router
 from app.infrastructure.auth.agent_principal import AgentPrincipal, require_agent_principal
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+from tests.fixtures.planner_model import goal_review_response
 
 
 def test_agent_principal_keeps_actor_but_uses_verified_tutorial_tenant(trusted_actor) -> None:
@@ -405,6 +407,18 @@ def _planner_fallback_patches():
             nodes=[node],
         )
 
+    def review_completion(**kwargs):
+        payload = json.loads(kwargs["messages"][-1]["content"])
+        source = payload["user_message"]
+        nodes = {
+            "查数据库产品 XG-5003": ["read_products"],
+            "查产品": ["read_products"],
+            "请为星光贸易生成发货单": ["generate_shipment"],
+        }
+        return goal_review_response(
+            payload, source=source, node_ids=nodes[source], outcome="execute"
+        )
+
     return (
         patch("app.application.workflow.planner.get_ai_conversation_service"),
         patch(
@@ -416,6 +430,10 @@ def _planner_fallback_patches():
             return_value="pro_default",
         ),
         patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
+        patch(
+            "app.application.workflow.planner.request_planner_completion",
+            side_effect=review_completion,
+        ),
     )
 
 
@@ -431,6 +449,7 @@ def test_create_get_and_list_agent_run(local_tools, trusted_actor, monkeypatch) 
         patches[1],
         patches[2],
         patches[3],
+        patches[4],
         patch(
             "app.application.facades.tools_facade.execute_registered_workflow_tool",
             return_value={"success": True, "data": [{"model_number": "XG-5003"}]},
@@ -571,6 +590,7 @@ def test_continue_waiting_agent_run(local_tools) -> None:
         patches[1],
         patches[2],
         patches[3],
+        patches[4],
         patch(
             "app.application.facades.tools_facade.execute_registered_workflow_tool"
         ) as mock_execute,
@@ -624,6 +644,7 @@ def test_agent_routes_require_authentication_and_enforce_ownership() -> None:
         patches[1],
         patches[2],
         patches[3],
+        patches[4],
         patch(
             "app.application.facades.tools_facade.execute_registered_workflow_tool",
             return_value={"success": True, "data": []},
@@ -648,6 +669,7 @@ def test_continue_rejects_missing_mismatched_and_replayed_grants(
         patches[1],
         patches[2],
         patches[3],
+        patches[4],
         patch(
             "app.application.facades.tools_facade.execute_registered_workflow_tool",
             return_value={"success": True},
@@ -719,6 +741,7 @@ def test_approval_storage_failure_preserves_waiting_run_and_allows_retry(
             patches[1],
             patches[2],
             patches[3],
+            patches[4],
             patch(
                 "app.application.facades.tools_facade.execute_registered_workflow_tool",
                 return_value={"success": True},
@@ -1068,6 +1091,7 @@ def test_pause_resume_and_cancel_agent_run(local_tools, trusted_actor, monkeypat
         patches[1],
         patches[2],
         patches[3],
+        patches[4],
         patch(
             "app.application.facades.tools_facade.execute_registered_workflow_tool",
             return_value={"success": True, "data": []},
@@ -1112,6 +1136,7 @@ def test_retry_agent_run_preserves_task_identity_and_creates_new_attempt() -> No
         patches[1],
         patches[2],
         patches[3],
+        patches[4],
         patch(
             "app.application.facades.tools_facade.execute_registered_workflow_tool",
             return_value={"success": True, "data": []},

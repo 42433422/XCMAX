@@ -3,7 +3,7 @@
 import json
 from copy import deepcopy
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -82,7 +82,11 @@ def test_semantic_answer_resumes_same_plan_and_still_requires_write_approval(ans
         captured.update(json.loads(kwargs["messages"][1]["content"]))
         return {
             "choices": [
-                {"message": {"content": '```json\n{"resolved":true,"parameters":{"id":42}}\n```'}}
+                {
+                    "message": {
+                        "content": '```json\n{"turn_kind":"answer","resolved":true,"parameters":{"id":42}}\n```'
+                    }
+                }
             ]
         }
 
@@ -114,10 +118,13 @@ def test_semantic_answer_resumes_same_plan_and_still_requires_write_approval(ans
 @pytest.mark.parametrize(
     "response",
     [
-        {"resolved": True, "parameters": {"id": 999}},
-        {"resolved": True, "parameters": {"id": 42, "force": True}},
-        {"resolved": "true", "parameters": {"id": 42}},
-        {"resolved": False, "parameters": {}},
+        {"turn_kind": "answer", "resolved": True, "parameters": {"id": 999}},
+        {"turn_kind": "answer", "resolved": True, "parameters": {"id": 42, "force": True}},
+        {"turn_kind": "answer", "resolved": "true", "parameters": {"id": 42}},
+        {"turn_kind": "answer", "resolved": False, "parameters": {}},
+        {"turn_kind": "new_goal", "resolved": True, "parameters": {"id": 42}},
+        {"turn_kind": "unclear", "resolved": True, "parameters": {"id": 42}},
+        {"resolved": True, "parameters": {"id": 42}},
     ],
 )
 def test_invalid_model_choice_leaves_the_original_run_unchanged(response):
@@ -130,6 +137,86 @@ def test_invalid_model_choice_leaves_the_original_run_unchanged(response):
     session = WorkflowSession({}, SimpleNamespace(workflow_planner=planner))
     assert session._clarification_answer(run, run.steps[0], "另一个") is None
     assert run == before
+
+
+@pytest.mark.parametrize("answer", ["", "  ", "给客户乙创建新订单"])
+def test_empty_or_new_goal_cannot_resume_the_old_clarification(answer):
+    orchestrator, run = _waiting_run()
+    before = orchestrator.get_run(run.run_id)
+    completion = Mock(
+        return_value={
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "turn_kind": "new_goal",
+                                "resolved": True,
+                                "parameters": {"id": 42},
+                            }
+                        )
+                    }
+                }
+            ]
+        }
+    )
+    callbacks = Mock()
+    callbacks.workflow_planner = LLMWorkflowPlanner(ai_service=Mock(), completion=completion)
+    callbacks._task_owner_id.return_value = "owner"
+    callbacks._persist_plan_state.return_value = True
+    pending = {}
+    session = WorkflowSession(pending, callbacks)
+    session.capture_agent_run_interaction(user_id="owner", agent_run=run, runtime_context={})
+    with patch("app.application.agent_orchestrator.AgentOrchestrator", return_value=orchestrator):
+        response = session.continue_after_clarification("owner", pending["owner"], answer)
+    assert response["data"]["action"] == "clarification_required"
+    assert "取消" in response["response"]
+    assert orchestrator.get_run(run.run_id) == before
+    assert pending["owner"]["agent_run_id"] == run.run_id
+    callbacks._dispatch_model_selection.assert_not_called()
+    if not answer.strip():
+        completion.assert_not_called()
+
+
+@pytest.mark.parametrize("preview_completed", [False, True])
+def test_unbound_answer_preserves_the_original_run_without_replanning(preview_completed):
+    from app.application.agent_orchestrator.run_models import AgentRun
+
+    question = WorkflowNode(
+        "question",
+        "clarify",
+        "ask",
+        params={"question": "请补充信息", "clarification": {"reason": "missing_required"}},
+        idempotent=True,
+    )
+    nodes = [question]
+    if preview_completed:
+        nodes.insert(0, WorkflowNode("preview", "products", "query", idempotent=True))
+        question.depends_on = ["preview"]
+    plan = PlanGraph(plan_id="unbound-question", intent="query", nodes=nodes)
+    repository = InMemoryAgentRunRepository()
+    orchestrator = AgentOrchestrator(repository=repository)
+    run = AgentRun(user_id="owner", message="查产品", metadata={"runtime_context": {}})
+    orchestrator._apply_plan(run, plan)
+    run.status = run.steps[-1].status = "waiting_user"
+    if preview_completed:
+        run.steps[0].status = "completed"
+    before = repository.save(run)
+    callbacks = Mock()
+    callbacks._task_owner_id.return_value = "owner"
+    callbacks._persist_plan_state.return_value = True
+    pending = {}
+    session = WorkflowSession(pending, callbacks)
+    session.capture_agent_run_interaction(user_id="owner", agent_run=run, runtime_context={})
+    with patch("app.application.agent_orchestrator.AgentOrchestrator", return_value=orchestrator):
+        response = session.continue_after_clarification(
+            "owner", pending["owner"], "给客户乙创建新订单"
+        )
+    assert response["data"]["action"] == "workflow_clarification_unbound"
+    assert repository.get(run.run_id) == before
+    assert pending["owner"]["agent_run_id"] == run.run_id
+    callbacks._dispatch_model_selection.assert_not_called()
+    assert repository.latest_task_control(run.run_id) is None
 
 
 def test_direct_answer_api_cannot_escape_the_durable_candidate_set():

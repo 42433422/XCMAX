@@ -25,6 +25,7 @@ from app.db.models import (
     SalesOrderItem,
 )
 from app.infrastructure.tenant_scope import tenant_scope
+from tests.fixtures.planner_model import goal_review_response
 
 SENTENCE = (
     "帮我给测试客户 A 销售 10 件产品 B，每件 100 元。先检查客户和库存，生成订单给我确认。"
@@ -183,11 +184,30 @@ def _chat_service():
         "app.application.ai_chat_app_service.get_ai_conversation_service", return_value=conversation
     ):
         service = AIChatApplicationService()
+
+    def completion(**kwargs):
+        prompt = json.loads(kwargs["messages"][-1]["content"])
+        if prompt.get("task") == "audit_goal_coverage":
+            actual = prompt["plan"]["nodes"]
+            expected = json.loads(json.dumps(plan["nodes"]))
+            # The model sees business inputs, never execution idempotency authority.
+            for node in expected[:2]:
+                node["params"]["payload"].pop("idempotency_key")
+            fields = ("node_id", "tool_id", "action", "params", "depends_on")
+            assert [{field: node.get(field, []) for field in fields} for node in actual] == [
+                {field: node.get(field, []) for field in fields} for node in expected
+            ]
+            return goal_review_response(
+                prompt,
+                source=SENTENCE,
+                node_ids=["sales_execute_closed_loop", "verify_sales_result", "export_sales"],
+                outcome="execute",
+            )
+        return {"choices": [{"message": {"content": json.dumps(plan, ensure_ascii=False)}}]}
+
     service.workflow_planner = LLMWorkflowPlanner(
         ai_service=conversation,
-        completion=lambda **_: {
-            "choices": [{"message": {"content": json.dumps(plan, ensure_ascii=False)}}]
-        },
+        completion=completion,
     )
     return service
 

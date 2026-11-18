@@ -7,31 +7,30 @@
 用法：
     python scripts/dev/intent_benchmark.py                 # 跑分 + 写报告
     python scripts/dev/intent_benchmark.py --check         # 棘轮门禁（core 退步即失败）
-    python scripts/dev/intent_benchmark.py --llm           # 额外评测 LLM 兜底层
+    python scripts/dev/intent_benchmark.py --llm           # 额外评测配置模型的分类能力
     python scripts/dev/intent_benchmark.py --holdout       # 独立留出集（≥100 条，与回归集零重叠）
     python scripts/dev/intent_benchmark.py --holdout --repeat 3   # 整集跑 3 轮 + 一致率统计
-    python scripts/dev/intent_benchmark.py --llm --holdout --repeat 3  # 留出集加测真实 LLM 路由层
+    python scripts/dev/intent_benchmark.py --llm --holdout --repeat 3  # 留出集加测配置模型分类（不执行工具）
     python scripts/dev/intent_benchmark.py --holdout --record     # 建立留出基线（棘轮起点）
     python scripts/dev/intent_benchmark.py --holdout --check      # 留出棘轮：总/逐域准确率只升不降
 
 报告落盘 metrics/intent_benchmark_latest.json；基线 metrics/intent_benchmark_baseline.json。
 留出报告落盘 metrics/intent_holdout_latest.json（含逐条结果、混淆矩阵、数据集 sha256）；
 留出基线 metrics/intent_holdout_baseline.json。
---llm --holdout 时留出报告追加 llm 块（真实路由层逐轮准确率 + 轮间一致率 + 模型调用证据）。
+--llm --holdout 时留出报告追加 llm 块（配置模型的旧分类语料逐轮准确率 + 轮间一致率 + 模型调用证据）。
 """
 
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
-import subprocess
 import sys
 import time
 from collections import defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
+from unittest.mock import patch
 
 REPO = Path(__file__).resolve().parents[2]
 # 直接以脚本执行（python scripts/dev/intent_benchmark.py）时 sys.path 不含 FHD/，
@@ -40,6 +39,7 @@ if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
 from app.utils.operational_errors import BOUNDARY_ERRORS
+from scripts.dev.benchmark_evidence import evidence_identity
 
 GOLDEN_PATH = REPO / "tests" / "benchmarks" / "intent_golden_set.json"
 HOLDOUT_PATH = REPO / "tests" / "benchmarks" / "intent_holdout_set.json"
@@ -108,32 +108,48 @@ def _load_cases(path: Path = GOLDEN_PATH) -> list[dict]:
     return cases
 
 
-def _match_rule(case: dict, text: str) -> bool:
-    from app.domain.shared_services.intent_service import is_goodbye, is_greeting, recognize_intents
+def match_rule_result(case: dict, result: dict) -> bool:
+    """Shared CLI/pytest outcome matcher; empty expectations never pass."""
+    from app.domain.shared_services.intent_service import is_write_intent
 
-    if case.get("check") == "greeting":
-        return bool(is_greeting(text))
-    if case.get("check") == "goodbye":
-        return bool(is_goodbye(text))
-    if case.get("check") == "help":
-        return bool(recognize_intents(text).get("is_help"))
-    r = recognize_intents(text)
+    check = case.get("check")
+    if check in {"greeting", "goodbye", "help"}:
+        return bool(result.get(f"is_{check}")) and not result.get("tool_key")
     if case.get("expect_negated"):
-        return bool(r.get("is_negated") or r.get("is_negation_intent"))
+        return bool(result.get("is_negated") or result.get("is_negation_intent")) and not (
+            is_write_intent(result.get("tool_key"))
+        )
     if case.get("expected_out_of_scope"):
-        return not r.get("tool_key") and not r.get("primary_intent")
-    exp_tool = case.get("expected_tool")
-    exp_primary = case.get("expected_primary")
-    if exp_tool is None and exp_primary is None:
-        return False
-    if exp_tool is not None and r.get("tool_key") != exp_tool:
-        return False
-    if exp_primary is not None and r.get("primary_intent") != exp_primary:
-        return False
-    return True
+        return not any(
+            result.get(key)
+            for key in (
+                "tool_key",
+                "primary_intent",
+                "is_greeting",
+                "is_goodbye",
+                "is_help",
+                "is_negated",
+                "is_negation_intent",
+            )
+        )
+    expected = {
+        key: case[expected_key]
+        for key, expected_key in (
+            ("tool_key", "expected_tool"),
+            ("primary_intent", "expected_primary"),
+        )
+        if case.get(expected_key) is not None
+    }
+    return bool(expected) and all(result.get(key) == value for key, value in expected.items())
 
 
-def _run_layer(name: str, cases: list[dict], matcher, observer=None) -> dict:
+def _match_rule(case: dict, text: str) -> bool:
+    from app.domain.shared_services.intent_service import recognize_intents
+
+    return match_rule_result(case, recognize_intents(text))
+
+
+def _run_layer(name: str, cases: list[dict], matcher, observer) -> dict:
     stat = defaultdict(lambda: [0, 0])
     failures: dict[str, list[dict]] = defaultdict(list)
     for case in cases:
@@ -142,64 +158,40 @@ def _run_layer(name: str, cases: list[dict], matcher, observer=None) -> dict:
         got = {}
         error = None
         try:
-            if observer is not None:
-                got = observer(text)
-                ok = bool(matcher(case, got))
-            else:
-                ok = bool(matcher(case, text))
-        except BOUNDARY_ERRORS as exc:  # 评测隔离边界：单条异常记为 miss，不中断整场评测
+            got = observer(text)
+            ok = bool(matcher(case, got))
+        except BOUNDARY_ERRORS as exc:  # 单条失败记为 miss，不用规则假装模型成功。
             ok = False
             error = type(exc).__name__
         stat[tier][1] += 1
         if ok:
             stat[tier][0] += 1
         else:
-            try:
-                from app.domain.shared_services.intent_service import recognize_intents
-
-                if observer is None:
-                    r = recognize_intents(text)
-                    got = {"tool_key": r.get("tool_key"), "primary_intent": r.get("primary_intent")}
-            except BOUNDARY_ERRORS:  # 评测隔离边界：对照组失败记为空观测
-                pass
             failures[tier].append(
                 {
-                    "text": text,
+                    **case,
                     "got": got,
                     **({"error": error} if error else {}),
-                    **{
-                        k: case.get(k)
-                        for k in (
-                            "expected_tool",
-                            "expected_primary",
-                            "expected_route",
-                            "expected_slots",
-                            "expect_negated",
-                            "check",
-                        )
-                        if k in case
-                    },
                 }
             )
-    acc = {t: (round(c / n, 4) if n else 0.0) for t, (c, n) in stat.items()}
     return {
         "layer": name,
         "counts": {t: {"correct": c, "total": n} for t, (c, n) in stat.items()},
-        "accuracy": acc,
+        "accuracy": {t: (round(c / n, 4) if n else 0.0) for t, (c, n) in stat.items()},
         "failures": dict(failures),
     }
 
 
-def _predicted_domain(case: dict, r: dict) -> str:
-    """把实际路由结果映射回业务域；无法识别归 unknown。"""
-    if case.get("check") in ("greeting", "goodbye", "help"):
+def _predicted_domain(result: dict) -> str:
+    """Derive predictions only from observed outputs, never expected labels."""
+    tool = result.get("tool_key")
+    if tool:
+        return TOOL_TO_DOMAIN.get(str(tool), "unknown")
+    if result.get("is_negated") or result.get("is_negation_intent"):
+        return "rejection"
+    if any(result.get(f"is_{key}") for key in ("greeting", "goodbye", "help")):
         return "greeting"
-    if case.get("expect_negated"):
-        return "rejection" if (r.get("is_negated") or r.get("is_negation_intent")) else "unknown"
-    tool = r.get("tool_key") or r.get("primary_intent")
-    if not tool:
-        return "unknown"
-    return TOOL_TO_DOMAIN.get(str(tool), "unknown")
+    return TOOL_TO_DOMAIN.get(str(result.get("primary_intent")), "unknown")
 
 
 def _expected_domain(case: dict) -> str:
@@ -216,8 +208,9 @@ def build_confusion_matrix(per_case: list[dict]) -> dict[str, dict[str, int]]:
 
 
 def _run_holdout_round(cases: list[dict]) -> list[dict]:
-    from app.domain.shared_services.intent_service import is_goodbye, is_greeting, recognize_intents
+    from app.domain.shared_services.intent_service import _intent_cache, recognize_intents
 
+    _intent_cache.clear()  # Each repetition observes the rules, not a previous round cache.
     rows: list[dict] = []
     for case in cases:
         text = case["text"]
@@ -225,18 +218,8 @@ def _run_holdout_round(cases: list[dict]) -> list[dict]:
         error = None
         ok = False
         try:
-            if case.get("check") == "greeting":
-                ok = bool(is_greeting(text))
-                r = {"tool_key": "greeting" if ok else None}
-            elif case.get("check") == "goodbye":
-                ok = bool(is_goodbye(text))
-                r = {"tool_key": "goodbye" if ok else None}
-            elif case.get("check") == "help":
-                r = recognize_intents(text)
-                ok = bool(r.get("is_help"))
-            else:
-                r = recognize_intents(text)
-                ok = _match_rule(case, text)
+            r = recognize_intents(text)
+            ok = match_rule_result(case, r)
         except BOUNDARY_ERRORS as exc:  # 评测隔离边界：单条异常记为 miss，不中断整场评测
             ok = False
             error = type(exc).__name__
@@ -245,7 +228,7 @@ def _run_holdout_round(cases: list[dict]) -> list[dict]:
                 "text": text,
                 "tier": str(case.get("tier", "core")),
                 "expected_domain": _expected_domain(case),
-                "predicted_domain": _predicted_domain(case, r),
+                "predicted_domain": _predicted_domain(r),
                 "got_tool_key": r.get("tool_key"),
                 "got_primary": r.get("primary_intent"),
                 "correct": ok,
@@ -256,7 +239,7 @@ def _run_holdout_round(cases: list[dict]) -> list[dict]:
 
 
 def _run_holdout_llm_round(cases: list[dict]) -> list[dict]:
-    """留出集单轮 LLM 路由评测：走真实 normal router（含 LLM 意图闸），只看路由结果。"""
+    """Legacy classification corpus against the configured model; no tool execution."""
     from scripts.dev.intent_benchmark_llm import match_prediction, predict
 
     # 用例间节流：并发任务（acceptance + holdout）同打一个端点时，无间隔的
@@ -294,7 +277,7 @@ def _run_holdout_llm_round(cases: list[dict]) -> list[dict]:
     return rows
 
 
-def _round_agreement(rounds: list[list[dict]], key: str) -> float:
+def _round_agreement(rounds: list[list[dict]], *keys: str) -> float:
     """轮间一致率：(correct, key) 组合在后续轮与首轮完全一致的比例。"""
     if len(rounds) < 2 or not rounds[0]:
         return 1.0
@@ -304,7 +287,7 @@ def _round_agreement(rounds: list[list[dict]], key: str) -> float:
         1
         for later in rounds[1:]
         for a, b in zip(first, later, strict=True)
-        if (a["correct"], a.get(key)) == (b["correct"], b.get(key))
+        if all(a.get(key) == b.get(key) for key in ("correct", *keys))
     )
     return round(same / total, 4) if total else 1.0
 
@@ -332,17 +315,7 @@ def run_holdout(
     """留出集评测：整集跑 repeat 轮，规则层确定性 → 统计轮间一致率；产出混淆矩阵。"""
     rounds = [_run_holdout_round(cases) for _ in range(max(1, repeat))]
     per_case = rounds[0]
-    agreement = 1.0
-    if len(rounds) > 1:
-        total = len(per_case) * (len(rounds) - 1)
-        same = sum(
-            1
-            for later in rounds[1:]
-            for a, b in zip(per_case, later, strict=True)
-            if (a["correct"], a["got_tool_key"], a["predicted_domain"])
-            == (b["correct"], b["got_tool_key"], b["predicted_domain"])
-        )
-        agreement = round(same / total, 4) if total else 1.0
+    agreement = _round_agreement(rounds, "got_tool_key", "predicted_domain")
     correct = sum(1 for row in per_case if row["correct"])
     tier_stat: dict[str, list[int]] = {}
     for row in per_case:
@@ -424,11 +397,45 @@ def _check_ratchet(result: dict) -> int:
     return bad
 
 
+def _measurement_status(evidence: dict, expected: int) -> str:
+    return (
+        "measured"
+        if evidence.get("attempted") == evidence.get("completed") == expected > 0
+        and not evidence.get("errors")
+        else "unavailable_or_partial"
+    )
+
+
+def _model_gate(llm: dict, minimum: float | None) -> int:
+    if llm["measurement_status"] != "measured":
+        print(
+            "LLM measurement incomplete: see model_calls; this is not a passing acceptance result"
+        )
+        return 2
+    if minimum is not None and min(llm["round_accuracy"]) < minimum:
+        print(f"Routing acceptance failed: {min(llm['round_accuracy']):.2%} < {minimum:.2%}")
+        return 1
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
+    # Both semantic engines must be disabled for reproducible rule-only evidence.
+    with patch.dict(
+        os.environ,
+        {
+            "XCAGI_SKIP_INTENT_LLM": "1",
+            "FHD_INTENT_SEMANTIC_ENABLED": "0",
+            "XCAGI_INTENT_ENGINE": "off",
+        },
+    ):
+        return _main(argv)
+
+
+def _main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--check", action="store_true", help="棘轮门禁模式")
     ap.add_argument("--record", action="store_true", help="把本次跑分写为基线")
-    ap.add_argument("--llm", action="store_true", help="同时评测 LLM 兜底层（需平台模型配置）")
+    ap.add_argument("--llm", action="store_true", help="同时评测配置模型分类（不执行工具）")
     ap.add_argument(
         "--cases", type=Path, default=GOLDEN_PATH, help="独立脱敏留出集（不自动写回基线）"
     )
@@ -440,12 +447,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--min-routing-accuracy", type=float, help="显式的模型路由验收门槛（0..1）")
     args = ap.parse_args(argv)
     if args.min_routing_accuracy is not None and (
-        not args.llm or not 0 <= args.min_routing_accuracy <= 1
+        not args.llm or not 0 < args.min_routing_accuracy <= 1
     ):
-        ap.error("--min-routing-accuracy requires --llm and a value in [0,1]")
-
-    os.environ.setdefault("XCAGI_SKIP_INTENT_LLM", "1")
-    sys.path.insert(0, str(REPO))
+        ap.error("--min-routing-accuracy requires --llm and a value in (0,1]")
 
     output = args.output or (HOLDOUT_LATEST_PATH if args.holdout else LATEST_PATH)
 
@@ -453,15 +457,17 @@ def main(argv: list[str] | None = None) -> int:
         if args.repeat < 1:
             ap.error("--repeat must be >= 1")
         holdout_cases = _load_cases(HOLDOUT_PATH)
-        identity = subprocess.run(
-            ["git", "rev-parse", "HEAD"], cwd=REPO, capture_output=True, text=True, check=True
+        identity = evidence_identity(
+            HOLDOUT_PATH,
+            execution_mode="rule_and_model_classification" if args.llm else "rule_only",
         )
         holdout_result = run_holdout(
             holdout_cases,
             repeat=args.repeat,
-            dataset_sha256=hashlib.sha256(HOLDOUT_PATH.read_bytes()).hexdigest(),
-            source_sha=identity.stdout.strip(),
+            dataset_sha256=identity["dataset_sha256"],
+            source_sha=identity["source_sha"],
         )
+        holdout_result.update(identity)
         if args.llm:
             from scripts.dev.intent_benchmark_llm import observe_model_calls
 
@@ -484,12 +490,14 @@ def main(argv: list[str] | None = None) -> int:
                 "accuracy_by_domain": _domain_accuracy(first),
                 "round_agreement": _round_agreement(llm_rounds, "got_intent"),
                 "model_calls": evidence,
-                "measurement_status": (
-                    "measured"
-                    if evidence["completed"] and not evidence["errors"]
-                    else "unavailable_or_partial"
+                "measurement_status": _measurement_status(
+                    evidence, len(holdout_cases) * args.repeat
                 ),
+                "round_accuracy": [
+                    sum(row["correct"] for row in rows) / len(rows) for rows in llm_rounds
+                ],
                 "cases": first,
+                "later_rounds": llm_rounds[1:],
             }
         _record(holdout_result, output)
         print(
@@ -510,11 +518,17 @@ def main(argv: list[str] | None = None) -> int:
                 f"completed={llm['model_calls']['completed']})"
             )
         print(f"holdout report → {output}")
+        if args.llm:
+            failure = _model_gate(holdout_result["llm"], args.min_routing_accuracy)
+            if failure:
+                return failure
         if args.record:
             baseline_payload = {k: v for k, v in holdout_result.items() if k != "cases"}
             if isinstance(baseline_payload.get("llm"), dict):
                 baseline_payload["llm"] = {
-                    k: v for k, v in baseline_payload["llm"].items() if k != "cases"
+                    k: v
+                    for k, v in baseline_payload["llm"].items()
+                    if k not in {"cases", "later_rounds"}
                 }
             HOLDOUT_BASELINE_PATH.write_text(
                 json.dumps(baseline_payload, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -522,11 +536,6 @@ def main(argv: list[str] | None = None) -> int:
             print(f"holdout baseline written → {HOLDOUT_BASELINE_PATH}")
         if args.check:
             return _check_holdout_ratchet(holdout_result)
-        if args.llm and holdout_result["llm"]["measurement_status"] != "measured":
-            print(
-                "LLM measurement incomplete: see model_calls; this is not a passing acceptance result"
-            )
-            return 2
         return 0
 
     if args.record and (args.llm or args.cases != GOLDEN_PATH):
@@ -534,30 +543,28 @@ def main(argv: list[str] | None = None) -> int:
     if args.check and args.cases != GOLDEN_PATH:
         ap.error("--check requires the baseline's original dataset")
     cases = _load_cases(args.cases)
-    identity = subprocess.run(
-        ["git", "rev-parse", "HEAD"], cwd=REPO, capture_output=True, text=True, check=True
-    )
     result: dict = {
         "total": len(cases),
-        "source_sha": identity.stdout.strip(),
-        "dataset_sha256": hashlib.sha256(args.cases.read_bytes()).hexdigest(),
-        "measured_at": datetime.now(UTC).isoformat(),
+        **evidence_identity(
+            args.cases, execution_mode="rule_and_model_classification" if args.llm else "rule_only"
+        ),
     }
-    result["rule"] = _run_layer("rule", cases, _match_rule)
+    from app.domain.shared_services.intent_service import recognize_intents
+
+    result["rule"] = _run_layer("rule", cases, match_rule_result, observer=recognize_intents)
 
     if args.llm:
         from scripts.dev.intent_benchmark_llm import match_prediction, observe_model_calls, predict
 
         with observe_model_calls() as evidence:
             result["llm"] = _run_layer(
-                "normal_router_with_llm", cases, match_prediction, observer=predict
+                "configured_model_classification", cases, match_prediction, observer=predict
             )
         result["llm"]["model_calls"] = evidence
-        result["llm"]["measurement_status"] = (
-            "measured"
-            if evidence["completed"] and not evidence["errors"]
-            else "unavailable_or_partial"
-        )
+        result["llm"]["measurement_status"] = _measurement_status(evidence, len(cases))
+        result["llm"]["round_accuracy"] = [
+            sum(row["correct"] for row in result["llm"]["counts"].values()) / len(cases)
+        ]
 
     for layer in ("rule", "llm"):
         if layer in result:
@@ -567,18 +574,10 @@ def main(argv: list[str] | None = None) -> int:
             print(f"[{layer}] {accs}  (n={result[layer]['counts']})")
 
     _record(result, output)
-    if args.llm and result["llm"]["measurement_status"] != "measured":
-        print(
-            "LLM measurement incomplete: see model_calls; this is not a passing acceptance result"
-        )
-        return 2
-    if args.min_routing_accuracy is not None:
-        counts = result["llm"]["counts"].values()
-        correct = sum(item["correct"] for item in counts)
-        accuracy = correct / len(cases)
-        if accuracy < args.min_routing_accuracy:
-            print(f"Routing acceptance failed: {accuracy:.2%} < {args.min_routing_accuracy:.2%}")
-            return 1
+    if args.llm:
+        failure = _model_gate(result["llm"], args.min_routing_accuracy)
+        if failure:
+            return failure
     if args.record:
         BASELINE_PATH.write_text(
             json.dumps(

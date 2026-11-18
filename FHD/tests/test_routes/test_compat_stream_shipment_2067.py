@@ -13,9 +13,11 @@ from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
 from app.application.ai_chat_app_service import AIChatApplicationService
+from app.application.workflow.planner import LLMWorkflowPlanner
 from app.application.workflow.workflow_types import PlanGraph
 from app.fastapi_routes import xcagi_compat_chat_helpers as chat_helpers
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+from tests.fixtures.planner_model import goal_review_response
 
 ISSUE_MESSAGE = "客户闭环验收客户 发货单：客户闭环测试商品A 数量24 单价3.5"
 
@@ -111,6 +113,14 @@ def test_stream_entry_stages_order_with_explicit_quantity_and_price(monkeypatch)
         "app.application.workflow.planner.LLMWorkflowPlanner._plan_with_llm", lambda *_args: plan
     )
     body = _body(message=ISSUE_MESSAGE.replace("数量24", "数量24kg"), user_id="u-2067")
+    service.workflow_planner = LLMWorkflowPlanner(
+        completion=lambda **kwargs: goal_review_response(
+            json.loads(kwargs["messages"][1]["content"]),
+            source=body.message,
+            node_ids=["generate"],
+            outcome="execute",
+        )
+    )
     with patch("app.bootstrap.get_shipment_app_service", return_value=shipment_svc):
         events = _events(
             b"".join(chat_helpers._xcagi_planner_stream_bytes(_request(), body, ai_tier="P1"))
@@ -214,6 +224,7 @@ def test_cancel_reaches_pending_guard_before_smalltalk(monkeypatch, message, cas
 
 def test_stream_missing_spec_requests_clarification_without_document(monkeypatch):
     from app.application.shipment_app_service import ShipmentApplicationService
+    from app.application.workflow.clarification_lifecycle import build_clarify_node
     from app.application.workflow.workflow_types import WorkflowNode
 
     plan = PlanGraph(
@@ -235,6 +246,20 @@ def test_stream_missing_spec_requests_clarification_without_document(monkeypatch
         "app.application.workflow.planner.LLMWorkflowPlanner._plan_with_llm", lambda *_args: plan
     )
     service = AIChatApplicationService()
+    service.workflow_planner = LLMWorkflowPlanner(
+        completion=lambda **kwargs: goal_review_response(
+            json.loads(kwargs["messages"][1]["content"]),
+            source=ISSUE_MESSAGE,
+            node_ids=["clarify_shipment_unit", "generate"],
+            outcome="clarify",
+        )
+    )
+    monkeypatch.setattr(
+        "app.application.workflow.planning_graph_policy.build_clarify_node",
+        lambda question, ambient: build_clarify_node(
+            question, {**ambient, "node_id": "clarify_shipment_unit"}
+        ),
+    )
     monkeypatch.setattr("app.application.get_ai_chat_app_service", lambda: service)
     generator = MagicMock()
     shipment = ShipmentApplicationService(MagicMock(), generator, MagicMock())
@@ -270,7 +295,6 @@ def test_mainline_uses_owned_upload_not_caller_file_path(
     endpoint,
 ):
     from app.application.elt.service_uploads import UploadServiceMixin
-    from app.application.workflow.planner import LLMWorkflowPlanner
     from app.db.models.elt import EltUpload
     from app.infrastructure.tenant_scope import tenant_scope
     from app.legacy.routes.conversation.compat_routes import router
@@ -279,8 +303,18 @@ def test_mainline_uses_owned_upload_not_caller_file_path(
     secret = tmp_path / "not-an-upload.txt"
     secret.write_text("PRIVATE_LOCAL_CONTENT_MUST_NOT_BE_READ", encoding="utf-8")
     seen = []
+    reviewed = []
 
     def completion(**kwargs):
+        payload = json.loads(kwargs["messages"][1]["content"])
+        if payload.get("task") == "audit_goal_coverage":
+            reviewed.append(payload)
+            source = payload["user_message"]
+            assert source in {"Summarize attached prices.", "Explain the attached document."}
+            assert payload["plan"]["nodes"][0]["params"] == {"response": "已查看附件"}
+            return goal_review_response(
+                payload, source=source, node_ids=["model_reply"], outcome="reply"
+            )
         seen.append(kwargs["context"])
         return {
             "choices": [
@@ -316,6 +350,7 @@ def test_mainline_uses_owned_upload_not_caller_file_path(
         )
         assert response.status_code == 200, response.text
         assert len(seen) == 1
+        assert len(reviewed) == 1
         assert "paint" in seen[0]["file_context"]["verified_uploads"][0]["text"]
         assert "已查看附件" in response.text
         with tenant_scope(7), actor.factory.begin() as db:
@@ -330,6 +365,7 @@ def test_mainline_uses_owned_upload_not_caller_file_path(
         )
         assert "attachment_reupload_required" in denied.text
         assert len(seen) == 1
+        assert len(reviewed) == 1
         raw_path = client.post(
             endpoint,
             json={
@@ -343,6 +379,7 @@ def test_mainline_uses_owned_upload_not_caller_file_path(
         )
         assert raw_path.status_code == 200, raw_path.text
         assert len(seen) == 2
+        assert len(reviewed) == 2
         assert "PRIVATE_LOCAL_CONTENT_MUST_NOT_BE_READ" not in str(seen[-1])
         assert "verified_uploads" not in str(seen[-1].get("file_context", {}))
         assert "owned_upload" not in raw_path.text

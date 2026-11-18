@@ -17,6 +17,7 @@ from app.application.ai_chat_app_service import (
     AIChatApplicationService,
     _skip_pro_excel_deterministic_import,
 )
+from tests.fixtures.planner_model import goal_review_response
 from tests.test_application.ai_chat_test_helpers import (
     _make_svc as _make_service,
 )
@@ -1245,8 +1246,13 @@ def test_all_source_labels_execute_the_same_model_authored_reply_graph(source):
 
     from app.application.workflow.planner import LLMWorkflowPlanner
 
-    completion = Mock(
-        return_value={
+    def respond(**kwargs):
+        request = json.loads(kwargs["messages"][-1]["content"])
+        if request.get("task") == "audit_goal_coverage":
+            return goal_review_response(
+                request, source="解释一下工作方式", node_ids=["model_reply"], outcome="reply"
+            )
+        return {
             "choices": [
                 {
                     "message": {
@@ -1255,7 +1261,8 @@ def test_all_source_labels_execute_the_same_model_authored_reply_graph(source):
                 }
             ]
         }
-    )
+
+    completion = Mock(side_effect=respond)
     service = _make_service()
     service.workflow_planner = LLMWorkflowPlanner(
         ai_service=Mock(get_context=Mock(return_value=None)), completion=completion
@@ -1267,7 +1274,10 @@ def test_all_source_labels_execute_the_same_model_authored_reply_graph(source):
         patch("app.application.ai_chat.dialogue_memory.settle_chat_turn"),
     ):
         result = service.process_chat("unified-reply", "解释一下工作方式", source=source)
-    completion.assert_called_once()
+    assert completion.call_count == 2
+    assert json.loads(completion.call_args.kwargs["messages"][-1]["content"])["task"] == (
+        "audit_goal_coverage"
+    )
     assert result["success"] is True
     assert result["response"] == "这是模型生成的说明"
     assert result["data"]["workflow_runtime"] == "xcagi-langgraph"

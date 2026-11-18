@@ -1,4 +1,4 @@
-"""Detect missing or ambiguous write inputs; lifecycle helpers pause and resume safely."""
+"""Detect missing or ambiguous tool inputs; lifecycle helpers pause and resume safely."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from app.services.tools_execution.registry import (
 )
 
 from . import clarification_lifecycle as _lifecycle
+from .clarification_inputs import action_input_metadata, input_field_schema, missing_tool_fields
 from .workflow_types import PlanGraph, WorkflowNode
 
 build_clarify_node = _lifecycle.build_clarify_node
@@ -20,26 +21,18 @@ resolve_confirmed_target = _lifecycle.resolve_confirmed_target
 sweep_expired = _lifecycle.sweep_expired
 
 
-def _action_required(node: WorkflowNode, tool_registry: dict[str, Any] | None) -> list[str]:
+def _action_metadata(node: WorkflowNode, tool_registry: dict[str, Any] | None) -> dict[str, Any]:
     meta = tool_registry
     for key in (node.tool_id, "actions", node.action):
         meta = meta.get(key) if isinstance(meta, dict) else None
-    if isinstance(meta, dict) and isinstance(meta.get("required_params"), list):
-        return [str(x) for x in meta["required_params"]]
-    return list(_WRITE_REQUIRED_FALLBACK.get((node.tool_id, node.action), []))
-
-
-def _action_required_any(
-    node: WorkflowNode, tool_registry: dict[str, Any] | None
-) -> list[list[str]]:
-    """``required_any`` 声明「多个字段任选其一」，用于单文件/整批二选一的工具。"""
-    meta = tool_registry
-    for key in (node.tool_id, "actions", node.action):
-        meta = meta.get(key) if isinstance(meta, dict) else None
-    groups = meta.get("required_any") if isinstance(meta, dict) else None
-    if not isinstance(groups, list):
-        return []
-    return [[str(item) for item in group] for group in groups if isinstance(group, list) and group]
+    meta = (
+        meta
+        if isinstance(meta, dict)
+        else {
+            "required_params": list(_WRITE_REQUIRED_FALLBACK.get((node.tool_id, node.action), []))
+        }
+    )
+    return action_input_metadata(node.tool_id, node.action, meta)
 
 
 def _missing_fields(params: dict[str, Any], required: list[str]) -> list[str]:
@@ -54,12 +47,20 @@ def _missing_fields(params: dict[str, Any], required: list[str]) -> list[str]:
     ]
 
 
-def _build_missing_question(node: WorkflowNode, missing: list[str]) -> str:
-    labels = ["计量单位和每件/每桶规格" if key.endswith(".tin_spec") else key for key in missing]
-    return (
-        f"执行 {node.tool_id}.{node.action} 前需要补充必填参数："
-        f"{'、'.join(labels)}。请提供后再执行，避免误操作。"
-    )
+def _build_missing_question(node: WorkflowNode, missing: list[str], meta: dict[str, Any]) -> str:
+    labels = []
+    for key in missing:
+        field = input_field_schema(meta.get("input_schema") or {}, key)
+        label = str(field.get("title") or field.get("description") or key)
+        if key.endswith(".tin_spec"):
+            label = "计量单位和每件/每桶规格"
+        parts = key.split(".")
+        if len(parts) > 1 and parts[-2].isdigit():
+            label = f"第 {int(parts[-2]) + 1} 项的{label}"
+        labels.append(label)
+    action = node.description or meta.get("description") or "这项任务"
+    alternatives = "；可替代字段任选一种填写" if meta.get("required_any") else ""
+    return f"继续{action}前，请补充：{'、'.join(labels)}{alternatives}。"
 
 
 def _build_ambiguous_question(node: WorkflowNode, candidates: list[dict[str, Any]]) -> str:
@@ -130,15 +131,16 @@ def needs_clarification(
     tool_registry: dict[str, Any] | None = None,
     context: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
-    """Detect missing write inputs and ambiguous targets before execution."""
+    """Detect missing tool inputs and ambiguous targets before execution."""
     items: list[dict[str, Any]] = []
     for node in plan.nodes or []:
         if node.tool_id == "clarify":
             continue
-        if node.risk != "high" and node.idempotent:
-            continue
         params = node.params or {}
-        required = _action_required(node, tool_registry)
+        meta = _action_metadata(node, tool_registry)
+        required = (
+            meta.get("required_params") or (meta.get("input_schema") or {}).get("required") or []
+        )
 
         if (node.tool_id, node.action) == ("dataset_rag", "clear_dataset"):
             resolved = _resolve_clear_dataset_target(node, params, required, context)
@@ -179,42 +181,30 @@ def needs_clarification(
                             "question": question,
                         }
                     )
-                    continue
         general_candidates = params.get("_candidates") or params.get("candidates")
 
         # 多候选歧义优先：目标 id 未解析 && 存在 >1 个候选 → 反问确认目标。
-        if isinstance(general_candidates, list) and len(general_candidates) > 1:
-            if not _missing_fields(params, ["id"]) and params.get("id"):
-                continue
+        ambiguous = (
+            isinstance(general_candidates, list)
+            and len(general_candidates) > 1
+            and _missing_fields(params, ["id"])
+        )
+        if ambiguous and isinstance(general_candidates, list):
             items.append(
                 {
                     "node_id": node.node_id,
                     "tool_id": node.tool_id,
                     "action": node.action,
                     "reason": "ambiguous_target",
-                    "field": (required[0] if required else "target") or "id",
+                    "field": "id",
                     "candidates": general_candidates[:20],
                     "question": _build_ambiguous_question(node, general_candidates),
                 }
             )
-            continue
 
-        missing = _missing_fields(params, required)
-        for group in _action_required_any(node, tool_registry):
-            if all(_missing_fields(params, [key]) for key in group):
-                missing.append("/".join(group))
-        from app.application.shipment_inputs import missing_shipment_call_fields
-
-        missing += missing_shipment_call_fields(node.tool_id, node.action, params)
-        missing = list(dict.fromkeys(missing))
-        if (node.tool_id, node.action) == ("inventory", "stock_in"):
-            from app.domain.app_pure.inventory_inputs import missing_stock_in_fields
-
-            missing = missing_stock_in_fields(params)
-        if node.tool_id == "sales" and node.action in {"quote", "create_order"}:
-            from app.application.sales_quote_inputs import missing_quote_fields
-
-            missing = missing_quote_fields(params)
+        missing = missing_tool_fields(node.tool_id, node.action, params, meta)
+        if ambiguous:
+            missing = [key for key in missing if key != "id"]
         if missing:
             items.append(
                 {
@@ -224,14 +214,16 @@ def needs_clarification(
                     "reason": "missing_required",
                     "field": missing[0],
                     "missing_fields": missing,
-                    "question": _build_missing_question(node, missing),
+                    "question": _build_missing_question(node, missing, meta),
                 }
             )
     return items
 
 
-# 多单位换算：斤/公斤/吨/克/千克 等常见重量单位，出现多个单位字面量即视为换算歧义。
-_ERP_UNIT_RE = "斤|公斤|千克|克|吨|Kg|kg|KG|g|G|件|个|箱|包|瓶|米|卷"
+# Numeric quantity tokens only; names and unrelated clauses are not unit evidence.
+_ERP_UNIT_RE = (
+    r"(?<![A-Za-z\d.])\d+(?:\.\d+)?\s*(公斤|千克|kg|斤|吨|克|g|件|个|箱|包|瓶|米|卷|桶)(?![A-Za-z])"
+)
 
 
 def detect_erp_clarification(
@@ -245,31 +237,37 @@ def detect_erp_clarification(
     message = str(user_message or "").strip()
     ctx = context or {}
 
-    # 1) 多单位换算歧义
-    if message:
-        for node in plan.nodes or []:
-            if node.tool_id == "clarify":
-                continue
-            if node.tool_id in ("inventory", "sales", "purchase") and node.action in (
-                "stock_in",
-                "stock_out",
-                "transfer",
-                "quote",
-                "create_order",
-            ):
-                params = node.params or {}
-                quantity = params.get("quantity") or params.get("items")
-                if _has_multi_unit_text(quantity) or _has_multi_unit_text(message):
-                    items.append(
-                        _erp_clar(
-                            node.node_id,
-                            "multi_unit",
-                            "单位",
-                            "检测到数量涉及多个单位（斤/KG/吨等），请确认实际操作单位与换算口径后我再执行。",
-                            severity="high",
-                        )
+    # 1) Only compare quantities belonging to the same task/item. A whole-turn
+    # fallback is safe only for a single operation without a structured item list.
+    operations = [node for node in plan.nodes or [] if node.tool_id != "clarify"]
+    for node in operations:
+        if node.tool_id in ("inventory", "sales", "purchase") and node.action in (
+            "stock_in",
+            "stock_out",
+            "transfer",
+            "quote",
+            "create_order",
+        ):
+            params = node.params or {}
+            rows = params.get("items")
+            quantities = (
+                [item.get("quantity") for item in rows if isinstance(item, dict)]
+                if isinstance(rows, list)
+                else [params.get("quantity")]
+            )
+            ambiguous = any(_has_multi_unit_text(quantity) for quantity in quantities)
+            if not isinstance(rows, list) and len(operations) == 1:
+                ambiguous = ambiguous or _has_multi_unit_text(message)
+            if ambiguous:
+                items.append(
+                    _erp_clar(
+                        node.node_id,
+                        "multi_unit",
+                        "单位",
+                        "检测到数量涉及多个单位（斤/KG/吨等），请确认实际操作单位与换算口径后我再执行。",
+                        severity="high",
                     )
-                    break
+                )
 
     # 2) 报表口径缺失
     for node in plan.nodes or []:
@@ -421,8 +419,9 @@ def _has_multi_unit_text(value: Any) -> bool:
         return False
     # A single stated unit is concrete input, not ambiguity. Require at least two
     # distinct unit tokens before asking the user to choose a conversion basis.
-    raw_units = re.findall(rf"({_ERP_UNIT_RE})", text)
-    return len({u.lower() for u in raw_units}) >= 2
+    raw_units = re.findall(_ERP_UNIT_RE, text, flags=re.IGNORECASE)
+    aliases = {"公斤": "kg", "千克": "kg", "克": "g"}
+    return len({aliases.get(unit.lower(), unit.lower()) for unit in raw_units}) >= 2
 
 
 def _has_reversal_hint(text: str) -> bool:

@@ -6,11 +6,13 @@ registered authenticated tools and the durable approval/session regression suite
 
 from __future__ import annotations
 
+import json
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
 from app.application.ai_chat_app_service import AIChatApplicationService
+from tests.fixtures.planner_model import goal_review_response
 from tests.test_application.ai_chat_test_helpers import (
     _make_svc as _make_service,
 )
@@ -166,26 +168,44 @@ class TestResolveUnitPriceColumn:
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
-def _model_plan(payload, message="查询产品", source="normal", *, expected_model_calls=1):
-    import json
-
+def _model_plan(
+    payload,
+    message="查询产品",
+    source="normal",
+    *,
+    expected_model_calls=1,
+    review_node_ids=(),
+    review_outcome="execute",
+):
     from app.application.workflow.planner import LLMWorkflowPlanner
     from app.application.workflow_registry_app import get_workflow_tool_registry
 
-    completion = Mock(return_value={"choices": [{"message": {"content": json.dumps(payload)}}]})
+    def respond(**kwargs):
+        request = json.loads(kwargs["messages"][-1]["content"])
+        if request.get("task") == "audit_goal_coverage":
+            assert review_node_ids, "Structurally invalid plans must not reach goal review"
+            return goal_review_response(
+                request, source=message, node_ids=list(review_node_ids), outcome=review_outcome
+            )
+        return {"choices": [{"message": {"content": json.dumps(payload)}}]}
+
+    completion = Mock(side_effect=respond)
     planner = LLMWorkflowPlanner(
         ai_service=Mock(get_context=Mock(return_value=None)), completion=completion
     )
     plan = planner.plan("test", message, get_workflow_tool_registry(), {"source": source})
-    if expected_model_calls == 1:
-        completion.assert_called_once()
-    else:
-        assert completion.call_count == expected_model_calls
-        from app.application.workflow.planner_llm_gateway import planner_max_tokens
+    planning_calls = [
+        call
+        for call in completion.call_args_list
+        if json.loads(call.kwargs["messages"][-1]["content"]).get("task") != "audit_goal_coverage"
+    ]
+    assert len(planning_calls) == expected_model_calls
+    assert completion.call_count - len(planning_calls) == bool(review_node_ids)
+    from app.application.workflow.planner_llm_gateway import planner_max_tokens
 
-        for attempt in completion.call_args_list[1:]:
-            assert attempt.kwargs["temperature"] == 0.0
-            assert attempt.kwargs["max_tokens"] == planner_max_tokens()
+    for attempt in planning_calls[1:]:
+        assert attempt.kwargs["temperature"] == 0.0
+        assert attempt.kwargs["max_tokens"] == planner_max_tokens()
     return plan
 
 
@@ -217,7 +237,12 @@ def test_model_structured_tools_use_same_registered_plan_for_every_source(
         "intent": "用户指定业务",
         "nodes": [{"node_id": "business", "tool_id": tool, "action": action, "params": params}],
     }
-    plan = _model_plan(payload, source=source)
+    plan = _model_plan(
+        payload,
+        message=f"执行{tool}.{action}，参数为{json.dumps(params, ensure_ascii=False)}",
+        source=source,
+        review_node_ids=["business"],
+    )
     assert not plan.metadata.get("planning_rejected"), plan.metadata
     assert [(n.tool_id, n.action, n.params) for n in plan.nodes] == [(tool, action, params)]
     before = plan_fingerprint(plan)
@@ -241,11 +266,22 @@ def test_model_structured_tools_use_same_registered_plan_for_every_source(
     ],
 )
 def test_unknown_or_incomplete_business_plan_cannot_dispatch(monkeypatch, tool, action, params):
+    from app.application.workflow.clarification_lifecycle import build_clarify_node
+
     monkeypatch.setenv("XCAGI_PLAN_REPAIR_MAX", "2")
+    monkeypatch.setattr(
+        "app.application.workflow.planning_graph_policy.build_clarify_node",
+        lambda question, ambient: build_clarify_node(
+            question, {**ambient, "node_id": "clarify_missing"}
+        ),
+    )
     unauthorized = tool == "unknown_tool" or action == "unknown_action"
     plan = _model_plan(
         {"intent": "业务", "nodes": [{"tool_id": tool, "action": action, "params": params}]},
+        message=f"执行{tool}.{action}",
         expected_model_calls=3 if unauthorized else 1,
+        review_node_ids=() if unauthorized else ["clarify_missing", "node_1"],
+        review_outcome="clarify",
     )
     if tool == "unknown_tool" or action == "unknown_action":
         assert plan.metadata.get("planning_rejected") is True

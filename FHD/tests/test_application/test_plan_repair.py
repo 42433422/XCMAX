@@ -16,6 +16,7 @@ from app.application.workflow.plan_repair import (
 )
 from app.application.workflow.planner import LLMWorkflowPlanner
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+from tests.fixtures.planner_model import goal_review_response
 
 
 def _node(
@@ -255,7 +256,15 @@ def test_model_json_falls_back_to_repair() -> None:
 def test_planner_records_repair_trace(monkeypatch) -> None:
     ai = Mock()
     ai.get_context.return_value = None
-    planner = LLMWorkflowPlanner(ai_service=ai)
+    planner = LLMWorkflowPlanner(
+        ai_service=ai,
+        completion=lambda **kwargs: goal_review_response(
+            json.loads(kwargs["messages"][1]["content"]),
+            source="解释木门",
+            node_ids=["reply"],
+            outcome="reply",
+        ),
+    )
     reply_node = _node("reply", tool_id="conversation", action="reply", params={"response": "ok"})
     broken = _plan(reply_node)
     broken.metadata = {"response_mode": "reply", "reply": "ok"}
@@ -277,7 +286,7 @@ def test_planner_records_repair_trace(monkeypatch) -> None:
     )
 
     result = planner.plan(
-        "7", "查木门", {}, context={"session_id": "s1", "local_user_id": "7", "tenant_id": "t"}
+        "7", "解释木门", {}, context={"session_id": "s1", "local_user_id": "7", "tenant_id": "t"}
     )
     assert model_admission._MODEL_IDENTITY.get() == previous_identity
 

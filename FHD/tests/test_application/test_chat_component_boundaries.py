@@ -173,6 +173,70 @@ def test_confirmation_cannot_resume_another_sessions_pending_plan():
     assert pending["owner"]["runtime_context"]["session_id"] == "original"
 
 
+def test_scoped_cancellation_records_the_authenticated_task_owner():
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.agent_task_context import (
+        authenticated_task_owner,
+        scoped_conversation_user_id,
+    )
+
+    runtime = {"user_id": "42", "local_user_id": 42, "tenant_id": 1, "session_id": "same"}
+    scoped = scoped_conversation_user_id("42", runtime)
+    repository = InMemoryAgentRunRepository()
+    run = AgentRun(user_id="42", message="query", metadata={"runtime_context": runtime})
+    orchestrator = AgentOrchestrator(repository=repository)
+    plan = _plan()
+    orchestrator._apply_plan(run, plan)
+    run.status = run.steps[0].status = "waiting_user"
+    repository.save(run)
+    pending = {scoped: {"plan": plan, "runtime_context": runtime, "agent_run_id": run.run_id}}
+    callbacks = Mock(spec=SessionCallbacks)
+    callbacks._task_owner_id.side_effect = authenticated_task_owner
+    callbacks._persist_plan_state.return_value = True
+    session = WorkflowSession(pending, callbacks)
+
+    with patch("app.application.agent_orchestrator.AgentOrchestrator", return_value=orchestrator):
+        handled, response = session.resume_pending_dynamic_workflow(scoped, "取消", "取消", runtime)
+    assert handled and response["success"]
+    assert repository.get(run.run_id).status == "cancelled"
+    assert repository.latest_task_control(run.run_id).requested_by == "42"
+    assert pending == {}
+
+
+def test_dispatch_does_not_offer_confirmation_for_an_unpersisted_plan():
+    from app.application.ai_chat.planned_workflow_dispatch import PlannedWorkflowDispatch
+
+    plan = _plan()
+    callbacks = Mock()
+    callbacks._resume_pending_dynamic_workflow.return_value = (False, None)
+    callbacks._merge_tool_runtime_context.return_value = {"user_id": "owner"}
+    callbacks._persist_plan_state.return_value = False
+    decision = SimpleNamespace(
+        allowed=False,
+        requires_confirmation=True,
+        denied_nodes=[],
+        blocking_nodes=["read"],
+        reason="approval required",
+    )
+    dispatch = PlannedWorkflowDispatch(
+        {},
+        callbacks,
+        SimpleNamespace(plan=lambda **_: plan),
+        SimpleNamespace(evaluate=lambda **_: decision),
+        SimpleNamespace(get_approval_required_nodes=lambda _: [plan.nodes[0]]),
+    )
+    with (
+        patch("app.application.facades.tools_facade.get_workflow_tool_registry", return_value={}),
+        patch("app.application.agent_orchestrator.AgentOrchestrator") as orchestrator,
+    ):
+        response = dispatch.handle("owner", "查询产品", "chat", {}, "查询产品")
+    assert response["success"] is False
+    assert response["data"]["action"] == "workflow_persistence_failed"
+    assert response["execution"]["outcome"] == "not_executed"
+    assert dispatch.pending == {}
+    orchestrator.assert_not_called()
+
+
 @pytest.mark.parametrize("missing_spec", [False, True])
 def test_injected_validation_rejects_before_dispatch_or_billing(missing_spec):
     repository = InMemoryAgentRunRepository()

@@ -1,7 +1,7 @@
 """Bound model-assisted clarification to the server-owned candidate set."""
 
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Literal
 
 from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, ConfigDict, StrictBool
@@ -31,6 +31,7 @@ def plan_confirmation_decision(text: str) -> bool | None:
 
 class ClarificationExtraction(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    turn_kind: Literal["answer", "new_goal", "unclear"]
     resolved: StrictBool
     parameters: dict[str, Any]
 

@@ -15,6 +15,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.application.intent.route_catalog import INTENT_DESCRIPTIONS
+from app.application.workflow.tool_profile import RETIRED_PLANNER_TOOLS
+
 # 安全、格式与图结构约束：所有场景常驻，不参与裁剪。
 BASE_RULES: tuple[str, ...] = (
     "只输出 JSON，不要 markdown。",
@@ -162,9 +165,6 @@ _DOCUMENT_TOOL_PREFIXES = (
     "csv-",
 )
 
-# 不再向规划器暴露的工具：导入统一走 ELT，避免绕过预演与回滚。
-_PLANNER_HIDDEN_TOOLS = frozenset({"import_excel_to_database"})
-
 # 始终保留的核心工具（裁剪时不受影响，按前缀匹配）。
 _CORE_TOOL_PREFIXES = (
     "conversation",
@@ -181,9 +181,6 @@ _CORE_TOOL_PREFIXES = (
     "clarify",
     "excel_analysis",
 )
-
-# 无任何业务关键词且不超过该长度时视为闲聊，只保留核心工具。
-_SMALLTALK_MAX_CHARS = 20
 
 
 def is_employee_tool(tool_id: str) -> bool:
@@ -215,7 +212,7 @@ def _semantic_intents(text: str) -> set[str]:
         return {
             match.intent
             for match in matches
-            if match.confidence >= max(bar, floor) and match.intent in _SCENARIO_KEYWORDS
+            if match.confidence >= max(bar, floor) and match.intent in INTENT_DESCRIPTIONS
         }
     except RECOVERABLE_ERRORS:
         return set()
@@ -244,16 +241,15 @@ def select_tools_for_prompt(
     context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """按意图裁剪工具注册表；无法判定或裁剪为空时回退原始注册表。"""
+    tool_registry = {
+        key: spec for key, spec in tool_registry.items() if key not in RETIRED_PLANNER_TOOLS
+    }
     if not tool_registry:
         return tool_registry
     intents = detect_intents(message, context)
+    # Unknown short turns can be anaphora ("第二个", "继续用那个"). Preserve tools
+    # for model/context resolution instead of treating length as smalltalk evidence.
     if not intents:
-        text = str(message or "").strip()
-        if len(text) <= _SMALLTALK_MAX_CHARS:
-            core_only = {
-                tid: spec for tid, spec in tool_registry.items() if _is_core_tool(str(tid))
-            }
-            return core_only or tool_registry
         return tool_registry
     if "employee" in intents:
         return tool_registry
@@ -261,8 +257,6 @@ def select_tools_for_prompt(
     filtered: dict[str, Any] = {}
     for tool_id, spec in tool_registry.items():
         key = str(tool_id or "")
-        if key in _PLANNER_HIDDEN_TOOLS:
-            continue
         if _is_core_tool(key):
             filtered[tool_id] = spec
             continue
@@ -279,7 +273,9 @@ def select_rules_for_prompt(
     context: dict[str, Any] | None = None,
 ) -> list[str]:
     """基础规则常驻，业务域规则按识别出的场景追加。"""
-    intents = detect_intents(message, context)
+    # An unresolved follow-up still needs the tool field contracts for the prior task.
+    # Keep all existing rules when uncertain, without promoting history to a new goal.
+    intents = detect_intents(message, context) or set(SCENARIO_RULES)
     rules = list(BASE_RULES)
     for intent in sorted(intents):
         rules.extend(SCENARIO_RULES.get(intent, ()))
