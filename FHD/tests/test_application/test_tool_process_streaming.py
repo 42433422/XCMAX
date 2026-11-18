@@ -14,6 +14,7 @@ from app.application.agent_orchestrator import tool_process
 from app.application.agent_orchestrator.run_models import AgentStep
 from app.infrastructure.chat_stream_lifetime import (
     StreamLifetime,
+    StreamReceiptPersistenceError,
     current_lifetime,
     publish_stream_delta,
     publish_stream_note,
@@ -65,7 +66,7 @@ class StreamingExecutor:
                     else "committed once",
                 }
             )
-        except Exception:
+        except StreamReceiptPersistenceError:
             if step.action != "oversized":
                 raise
         return {"success": True, "pid": os.getpid(), "tenant_id": runtime_context["tenant_id"]}
