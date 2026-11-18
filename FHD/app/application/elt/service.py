@@ -119,9 +119,30 @@ def mark_interrupted_runs_on_startup(bind: Any) -> int:
                   AND operation_kind IN ('batch_execute', 'batch_rollback')
                   AND operation_lease_until <= CURRENT_TIMESTAMP
                   AND status != 'outcome_unknown'
+                  AND target_type != 'abnormal'
             """)
             )
-            return max(0, int(result.rowcount or 0)) + max(0, int(batch_result.rowcount or 0))
+            # 「未匹配固定业务表」批处理不写业务数据，租约过期即可安全重试，
+            # 不能像外部批处理那样一律标成结果未知。
+            abnormal_result = connection.execute(
+                text("""
+                UPDATE elt_runs
+                SET status = 'interrupted', stage = 'interrupted',
+                    error_code = 'ELT_EXECUTION_INTERRUPTED',
+                    error_message = '上次执行被中断，未写入业务数据，请重新导入',
+                    operation_kind = NULL, operation_token = NULL,
+                    operation_lease_until = NULL, updated_at = CURRENT_TIMESTAMP
+                WHERE status IN ('queued', 'previewing', 'executing')
+                  AND target_type = 'abnormal'
+                  AND operation_lease_until IS NOT NULL
+                  AND operation_lease_until <= CURRENT_TIMESTAMP
+            """)
+            )
+            return (
+                max(0, int(result.rowcount or 0))
+                + max(0, int(batch_result.rowcount or 0))
+                + max(0, int(abnormal_result.rowcount or 0))
+            )
     except RECOVERABLE_ERRORS:
         logger.exception("Unable to mark interrupted ETL runs during startup")
         return 0

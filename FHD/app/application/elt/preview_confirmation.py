@@ -172,6 +172,9 @@ def _snapshot(db: Session, run: EltRun, nonce: str) -> tuple[str, dict[str, Any]
             EltRunRow.run_id == run.id,
             EltRunRow.tenant_id == run.tenant_id,
             EltRunRow.owner_user_id == run.owner_user_id,
+            # 只校验会被写入的行：skip/error 行不进入业务库，全量重算会让
+            # 上万行重复文件的确认哈希慢到超过工具等待预算。
+            EltRunRow.final_action.in_(["new", "update"]),
         )
         .order_by(EltRunRow.id)
         .yield_per(500)

@@ -172,6 +172,16 @@ async def lifespan(app: FastAPI):
 
     mark_startup("lifespan_db_done")
 
+    try:
+        from app.application.elt.service import mark_interrupted_runs_on_startup
+        from app.db import get_engine
+
+        recovered = await asyncio.to_thread(mark_interrupted_runs_on_startup, get_engine())
+        if recovered:
+            logger.info("ELT 启动回收：%s 个中断运行已标记", recovered)
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("ELT 启动回收跳过: %s", exc)
+
     _log_ai_capability_status()
 
     _start_agent_tasks(app)
