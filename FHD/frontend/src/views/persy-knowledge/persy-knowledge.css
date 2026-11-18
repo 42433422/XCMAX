@@ -263,9 +263,18 @@
 
 .brain-stage {
   position: relative;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+}
+
+/* 图谱/卡片/列表占据剩余高度，提问坞作为独立一行，不再叠在内容上。 */
+.brain-stage__body {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .graph-hud,
@@ -749,17 +758,18 @@
 }
 
 .ask-dock {
-  position: absolute;
+  position: relative;
   z-index: 4;
-  right: 18px;
-  bottom: 16px;
-  left: 18px;
+  right: auto;
+  bottom: auto;
+  left: auto;
   display: grid;
+  flex: 0 0 auto;
   grid-template-columns: 34px minmax(0, 1fr) 38px;
   align-items: center;
   width: min(720px, calc(100% - 36px));
   min-height: 52px;
-  margin: 0 auto;
+  margin: 0 auto 14px;
   border: 1px solid rgba(185, 199, 192, 0.96);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.96);
@@ -993,9 +1003,10 @@
   }
 
   .ask-dock {
-    right: 10px;
-    bottom: 10px;
-    left: 10px;
+    right: auto;
+    bottom: auto;
+    left: auto;
     width: calc(100% - 20px);
+    margin-bottom: 10px;
   }
 }
