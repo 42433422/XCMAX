@@ -4,11 +4,9 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import Any, cast
-
-import bm25s
+from typing import TYPE_CHECKING, Any, Protocol, SupportsFloat, cast
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -54,13 +52,30 @@ def _index_text(chunk: RetrievedChunk) -> str:
     return chunk.text
 
 
+class _BM25Index(Protocol):
+    def index(self, corpus: list[list[str]], *, show_progress: bool) -> None: ...
+
+    def get_scores(self, query_tokens: list[str]) -> Iterable[SupportsFloat]: ...
+
+
+class _BM25Module(Protocol):
+    def BM25(self, *, k1: float, b: float, method: str) -> _BM25Index: ...
+
+
+# BM25S ships no typing metadata. Keep a static runtime import for frozen builds.
+if TYPE_CHECKING:
+    bm25s: _BM25Module
+else:
+    import bm25s
+
+
 class BM25:
     """BM25S adapter preserving the application's Chinese tokenization contract."""
 
     def __init__(self, k1: float = 1.5, b: float = 0.75) -> None:
         self.k1 = k1
         self.b = b
-        self._index: bm25s.BM25 | None = None
+        self._index: _BM25Index | None = None
         self._n_docs = 0
 
     def fit(self, docs: list[str]) -> None:
@@ -75,7 +90,7 @@ class BM25:
         q_tokens = self._tokenize(query)
         if self._index is None or not q_tokens:
             return [0.0] * self._n_docs
-        return self._index.get_scores(q_tokens).tolist()
+        return [float(score) for score in self._index.get_scores(q_tokens)]
 
     @staticmethod
     def _tokenize(text: str) -> list[str]:
