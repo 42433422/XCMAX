@@ -38,7 +38,7 @@ class StreamingExecutor:
         record = {"node_id": step.node_id, "tool_id": step.tool_id}
         publish_stream_tool_record({**record, "phase": "started", "action": step.action})
         if step.action == "flood":
-            while True:
+            for _ in range(128):  # Bounded burst; still exceeds the pipe buffer.
                 publish_stream_note("持续进度" * 8192)
         publish_stream_tool_record(
             {
