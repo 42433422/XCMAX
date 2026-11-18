@@ -78,13 +78,9 @@ class HybridRetriever:
             return vector_results[:final_top_k]
 
         try:
-            return self._fuse_with_bm25(
-                vector_results, query, corpus, bm25_top_k, final_top_k
-            )
+            return self._fuse_with_bm25(vector_results, query, corpus, bm25_top_k, final_top_k)
         except RECOVERABLE_ERRORS as exc:
-            logger.warning(
-                "HybridRetriever: BM25 fusion failed, using vector only: %s", exc
-            )
+            logger.warning("HybridRetriever: BM25 fusion failed, using vector only: %s", exc)
             return vector_results[:final_top_k]
 
     def _fuse_with_bm25(
@@ -117,21 +113,15 @@ class HybridRetriever:
         )[:bm25_top_k]
 
         records = {(chunk.collection_id, chunk.chunk_id): chunk for chunk in documents}
-        records.update(
-            {(chunk.collection_id, chunk.chunk_id): chunk for chunk in vector_results}
-        )
+        records.update({(chunk.collection_id, chunk.chunk_id): chunk for chunk in vector_results})
         rrf_scores: dict[tuple[int, str], float] = {}
         for ranking in (vector_results, [documents[i] for i in bm25_ranked]):
             keys = dict.fromkeys((chunk.collection_id, chunk.chunk_id) for chunk in ranking)
             for rank, key in enumerate(keys):
-                rrf_scores[key] = rrf_scores.get(key, 0.0) + 1.0 / (
-                    self.rrf_k + rank + 1
-                )
+                rrf_scores[key] = rrf_scores.get(key, 0.0) + 1.0 / (self.rrf_k + rank + 1)
         return [
             replace(records[key], score=rrf_scores[key])
-            for key in sorted(rrf_scores, key=lambda key: -rrf_scores[key])[
-                :final_top_k
-            ]
+            for key in sorted(rrf_scores, key=lambda key: -rrf_scores[key])[:final_top_k]
         ]
 
 

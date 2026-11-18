@@ -269,9 +269,7 @@ async def retrieve(
         if not scoped:
             return []
 
-    hybrid = (
-        os.environ.get("MODSTORE_RAG_RETRIEVAL_MODE") or "vector"
-    ).strip().lower() == "hybrid"
+    hybrid = (os.environ.get("MODSTORE_RAG_RETRIEVAL_MODE") or "vector").strip().lower() == "hybrid"
     query_vec = list(query_embedding) if query_embedding is not None else []
     if query_embedding is None:
         vecs = []
@@ -338,13 +336,9 @@ async def retrieve(
                         exc,
                     )
             retriever = get_hybrid_retriever()
-            chunks = retriever.fuse(
-                chunks, q, corpus=corpus, bm25_top_k=max(n, 10), final_top_k=n
-            )
+            chunks = retriever.fuse(chunks, q, corpus=corpus, bm25_top_k=max(n, 10), final_top_k=n)
         except RECOVERABLE_ERRORS as exc:
-            logger.warning(
-                "rag_service.retrieve: hybrid fusion failed, using vector: %s", exc
-            )
+            logger.warning("rag_service.retrieve: hybrid fusion failed, using vector: %s", exc)
 
     chunks = _maybe_rerank(q, chunks)
     return chunks
@@ -353,9 +347,7 @@ async def retrieve(
 def _chunk_from_row(coll: KnowledgeCollection, row: Dict[str, Any]) -> RetrievedChunk:
     meta = row.get("metadata") or {}
     try:
-        page_no = (
-            int(meta["page_no"]) if meta.get("page_no") not in (None, "", 0) else None
-        )
+        page_no = int(meta["page_no"]) if meta.get("page_no") not in (None, "", 0) else None
     except (TypeError, ValueError):
         page_no = None
     distance = float(row["distance"]) if row.get("distance") is not None else 1.0
@@ -389,8 +381,7 @@ def _maybe_rerank(query: str, chunks: List[RetrievedChunk]) -> List[RetrievedChu
     except BOUNDARY_ERRORS:  # noqa: BLE001
         return chunks
     model_name = (
-        os.environ.get("MODSTORE_RAG_RERANK_MODEL")
-        or "cross-encoder/ms-marco-MiniLM-L-6-v2"
+        os.environ.get("MODSTORE_RAG_RERANK_MODEL") or "cross-encoder/ms-marco-MiniLM-L-6-v2"
     ).strip()
     try:
         ce = CrossEncoder(model_name)
@@ -459,9 +450,7 @@ def inject_rag_into_messages(
     )
     if sys_idx >= 0:
         existing = out[sys_idx].get("content") or ""
-        out[sys_idx]["content"] = (
-            f"{existing}\n\n{suffix}" if existing.strip() else suffix
-        )
+        out[sys_idx]["content"] = f"{existing}\n\n{suffix}" if existing.strip() else suffix
     else:
         out.insert(0, {"role": "system", "content": suffix})
     return out
