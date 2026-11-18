@@ -411,14 +411,14 @@
     },
     "FHD/frontend/src/composables/chat-orchestration/useChatOrchestrationRemoteRound.ts": {
       "base_file": "FHD/frontend/src/composables/chat-orchestration/useChatOrchestrationRemoteRound.ts",
-      "base_blob": "03d0219f3b735490a71d498ececf9596e5953303",
-      "head_blob": "2fe3dcf44272068f1c34c249f00b375807aeb2f1",
-      "before_lines": 762,
-      "after_lines": 898,
-      "reason": "Review request only: Use the AI SDK round with animation-frame text batching, structured thinking and tool updates, trace accumulation, same-turn stream replay and delayed history reconciliation.",
-      "boundary": "Recovery is limited to one twenty-second replay when a stream run identifier exists plus a delayed history read, and depends on backend replay not re-executing tool effects.",
-      "validation": "Requires useAiSdkChatRound frame flushing, replay side-effect suppression, terminal-event recovery, artifact cleanup and late-history reconciliation regressions.",
-      "follow_up": "Verify disconnects before and after tool-call and done events so replay preserves final text and execution state without duplicating side effects.",
+      "base_blob": "2fe3dcf44272068f1c34c249f00b375807aeb2f1",
+      "head_blob": "59e6ea6fe512a36f58a4d73f9518ae650906bec7",
+      "before_lines": 898,
+      "after_lines": 905,
+      "reason": "整合开放PR #3289和#3290，完成回调绑定实际附件批次并将模板完成事件转发给已挂载的模板库，避免旧请求清空新附件和模板清理后页面残留。",
+      "boundary": "保留既有远程轮次编排职责，附件快照由useChatRequest与chatArtifactContext维护；此处仅消费完成回调和既有tool_call事件，不增加接口或租户授权路径。",
+      "validation": "本地附件相关218项、模板前端97项及后端79项通过，完整vue-tsc与目标ESLint通过；最终同头CI仍须通过，当前记录为审查请求而非人工批准。",
+      "follow_up": "@42433422 审查本次净增7行及附件/通知组合行为；后续继续将独立附件状态留在既有上下文模块，避免把业务清理搬入此编排文件。",
       "review_owner": "@42433422"
     },
     "FHD/frontend/src/composables/useChatOrchestration.ts": {
@@ -543,14 +543,14 @@
     },
     "FHD/frontend/src/views/PersyKnowledgeView.vue": {
       "base_file": "FHD/frontend/src/views/PersyKnowledgeView.vue",
-      "base_blob": "e633d3b71ad03d59d057a8524ecff31477b9b9da",
-      "head_blob": "d8029632bcfa07439dd3a4c60c5d575615e3bc00",
-      "before_lines": 492,
-      "after_lines": 1007,
-      "reason": "承接知识空间检索、引用、文档刷新、分享、反馈和FAQ等本次已授权功能的交互入口。",
-      "boundary": "视图调用已有知识API；租户、ACL、密钥权限和数据导入校验仍在服务端执行。",
-      "validation": "前端完整单测与类型检查覆盖页面契约；真实客户资料及部署验收不在本次本地结果中宣称完成。",
-      "follow_up": "后续按文档列表、问答设置和分享迁移拆出可复用组件，避免继续扩大单页面职责。",
+      "base_blob": "d8029632bcfa07439dd3a4c60c5d575615e3bc00",
+      "head_blob": "32b37f4b665221cc35211fe0b565901b5ae6ecc9",
+      "before_lines": 1007,
+      "after_lines": 1010,
+      "reason": "整合PR #3293，在既有知识库视图中增加内容区包裹层，使图谱和资料内容占剩余高度，提问框作为独立底行而不再覆盖图谱。",
+      "boundary": "仅模板结构新增3行，数据加载、权限、知识问答和所有现有视图不变；尺寸规则保留在现有persy-knowledge.css中，不新建组件模块。",
+      "validation": "知识页、图谱和布局3文件31项测试通过，完整vue-tsc和目标ESLint通过；本地Chromium因socket权限未完成几何验收，CI现有浏览器测试待运行。",
+      "follow_up": "@42433422 复核内容区与输入区的窗口尺寸适配；本次只是既有页面结构修复，无需仅为行数拆分组件，后续布局变更继续在独立CSS中维护。",
       "review_owner": "@42433422"
     }
   }

@@ -142,6 +142,9 @@ def _registered_router_document_template(
             return {"success": False, "message": "缺少 file_path 或 file_body"}
     else:
         return {"success": False, "message": f"未知 document_template action: {action}"}
+    from app.application.template_app_service import publish_document_template_change
+
     result = dict(data or {})
     result["http_status_code"] = int(status_code or (200 if result.get("success") else 400))
+    publish_document_template_change(action, result)
     return result

@@ -129,6 +129,26 @@ def clear_document_templates(runtime_context: dict) -> tuple[dict, int]:
     )
 
 
+def publish_document_template_change(action: str, result: dict) -> None:
+    """通知已打开的模板库刷新；观测通道失败不能改变工具执行结果。"""
+    from app.infrastructure.chat_stream_lifetime import publish_stream_tool_record
+    from app.utils.operational_errors import BOUNDARY_ERRORS
+
+    try:
+        publish_stream_tool_record(
+            {
+                "node_id": f"document-template-{action or 'change'}",
+                "tool_id": "document_template",
+                "action": str(action or ""),
+                "phase": "finished",
+                "success": bool(result.get("success")),
+                "output_preview": str(result.get("message") or "")[:200],
+            }
+        )
+    except BOUNDARY_ERRORS:
+        pass
+
+
 class TemplateApplicationService:
     """模板应用服务 - 负责模板相关的用例编排"""
 

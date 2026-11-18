@@ -131,6 +131,7 @@
 
     <div class="brain-workspace">
       <main class="brain-stage" @dragover.prevent @drop.prevent="dropKnowledgeFile">
+        <div class="brain-stage__body">
         <template v-if="viewMode === 'graph'">
           <PersyKnowledgeGraph
             ref="graphComponent"
@@ -200,6 +201,8 @@
           @delete="deleteDocument"
           @import="openImport('file')"
         />
+
+        </div>
 
         <form class="ask-dock" role="search" :aria-busy="querying" @submit.prevent="queryKnowledge">
           <span class="ask-dock__icon" aria-hidden="true">

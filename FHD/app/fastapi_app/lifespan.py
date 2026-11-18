@@ -172,6 +172,22 @@ async def lifespan(app: FastAPI):
 
     mark_startup("lifespan_db_done")
 
+    elt_watchdog_started = False
+    if not passive_node_enabled():
+        try:
+            from app.application.elt.service import mark_interrupted_runs_on_startup
+            from app.application.elt.stale_watchdog import start_stale_watchdog
+            from app.db import get_engine
+
+            recovered = await asyncio.to_thread(mark_interrupted_runs_on_startup, get_engine())
+            if recovered:
+                logger.info("ELT 启动回收：%s 个中断运行已标记", recovered)
+            elt_watchdog_started = start_stale_watchdog()
+            if elt_watchdog_started:
+                logger.info("ELT 无进展看门狗已启动")
+        except RECOVERABLE_ERRORS as exc:
+            logger.warning("ELT 启动回收跳过: %s", exc)
+
     _log_ai_capability_status()
 
     _start_agent_tasks(app)
@@ -265,6 +281,13 @@ async def lifespan(app: FastAPI):
 
         await asyncio.to_thread(wait_for_background_mod_load, app)
         _stop_agent_tasks(app)
+        if elt_watchdog_started:
+            try:
+                from app.application.elt.stale_watchdog import stop_stale_watchdog
+
+                await asyncio.to_thread(stop_stale_watchdog)
+            except RECOVERABLE_ERRORS as exc:
+                logger.warning("ELT 看门狗关闭失败: %s", exc)
         try:
             from app.application.dataset_rag.auto_sync_scheduler import (
                 stop_auto_sync_scheduler,

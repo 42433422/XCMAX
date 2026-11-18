@@ -6,7 +6,7 @@ import { plainTextFromChatHtml } from '@/utils/sanitizeHtml'
 import { createBusinessHarnessId } from '@/utils/businessHarnessIds'
 import { isOfficeEltToolMessage } from '@/domain/optionalTemplateSelection'
 import { isWorkflowControlMessage } from '@/utils/chatSseStream'
-import { clearChatArtifactIds, listChatArtifactIds } from '@/utils/chatArtifactContext'
+import { captureChatArtifacts } from '@/utils/chatArtifactContext'
 import { useApprovalMode } from './useApprovalMode'
 export type ChatRequestScope = {
   signal?: AbortSignal
@@ -54,12 +54,38 @@ export function useChatRequest(deps: UseChatRequestDeps) {
   let chatBatchTimer: number | null = null
   const chatBatchQueue: string[] = []
 
+  // 一个 turn 的首次提交决定附件；同 turn 重连和显式 retry 均复用快照。
+  const artifactBatches = new Map<string, ReturnType<typeof captureChatArtifacts>>()
+  function artifactsForTurn(session: string, turn: string, retryOf?: string, scope?: ChatRequestScope) {
+    // 按仍在界面历史中的 turn 保留，不能按发给模型的 40 条窗口淘汰可重试消息。
+    const history = [...(scope?.messages || []), ...(sessionId?.value === session ? messages.value : [])]
+    const visibleTurns = new Set(history.map(message => message.turnId).filter(Boolean))
+    if (visibleTurns.size) {
+      visibleTurns.add(turn)
+      if (retryOf) visibleTurns.add(retryOf)
+      for (const key of artifactBatches.keys()) {
+        const [owner, previousTurn] = JSON.parse(key) as [string, string]
+        if (owner === session && !visibleTurns.has(previousTurn)) artifactBatches.delete(key)
+      }
+    }
+    const key = JSON.stringify([session, retryOf || turn])
+    let batch = artifactBatches.get(key)
+    if (!batch) {
+      // 找不到原 turn 时不能误拿输入框中新选择的文件。
+      batch = retryOf ? { ids: [], complete: () => {} } : captureChatArtifacts()
+      artifactBatches.set(key, batch)
+    }
+    artifactBatches.set(JSON.stringify([session, turn]), batch)
+    return batch
+  }
+
   function buildPlannerChatRequestPayload(
     message: string,
     plannerOpts?: PlannerChatOptions,
     scope?: ChatRequestScope,
   ): {
     body: Record<string, unknown>
+    completeArtifacts: () => void
   } {
     const user_id = resolveChatUserId(scope)
     const compactHistory = (scope?.messages || messages.value || []).slice(-40).map((m) => ({
@@ -90,8 +116,9 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     contextParts.push(`最近对话 ${compactHistory.length} 条`)
     const hasExcelContext = !plannerOpts?.expectedWorkflowPlanId && injectExcelContextPayload(contextPayload, contextParts)
     if (!plannerOpts?.expectedWorkflowPlanId) consumeMultimodalIntoPlannerContext(contextPayload, contextParts)
-    // 选文件时登记的附件工件：后端按 id 取数，本轮发送后由发送方清空。
-    const artifactIds = listChatArtifactIds()
+    // 选文件时登记的附件工件：只认本轮上传，失败重试沿用同一批。
+    const artifactBatch = artifactsForTurn(scopedSessionId, turnId, plannerOpts?.retryOf, scope)
+    const artifactIds = artifactBatch.ids
     if (artifactIds.length) {
       contextPayload.artifact_ids = artifactIds
       contextParts.push(`后端工件 ${artifactIds.length} 个`)
@@ -109,6 +136,7 @@ export function useChatRequest(deps: UseChatRequestDeps) {
         : '【续跑要求】用户已确认二级写入令牌；本请求已附带 db_write_token。请直接调用 import_excel_to_database，避免重复开场白与无谓的 excel_analysis。'
     }
     return {
+      completeArtifacts: artifactBatch.complete,
       body: {
         message,
         source: 'normal',
@@ -131,10 +159,10 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     plannerOpts?: PlannerChatOptions,
     scope?: ChatRequestScope,
   ): Promise<ChatPlannerPayload> {
-    const { body } = buildPlannerChatRequestPayload(message, plannerOpts, scope)
+    const { body, completeArtifacts } = buildPlannerChatRequestPayload(message, plannerOpts, scope)
     const reqOpts = { signal: fetchOptions.signal }
     const payload = (await chatApi.sendUnifiedChat(body as unknown as ChatRequest, reqOpts)) as unknown as ChatPlannerPayload
-    clearChatArtifactIds()
+    completeArtifacts()
     return payload
   }
 
@@ -166,7 +194,8 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     contextParts.push(`最近对话 ${compactHistory.length} 条`)
     const hasExcelContext = injectExcelContextPayload(contextPayload, contextParts)
     consumeMultimodalIntoPlannerContext(contextPayload, contextParts)
-    const artifactIds = listChatArtifactIds()
+    const artifactBatch = artifactsForTurn(scopedSessionId, turnId, undefined, scope)
+    const artifactIds = artifactBatch.ids
     if (artifactIds.length) contextPayload.artifact_ids = artifactIds
     const linkedCount = compactHistory.length + (hasExcelContext ? 1 : 0)
     lastRequestContextSummary.value = `已关联上下文：${contextParts.join(' + ')}（共 ${linkedCount}）`
@@ -180,7 +209,7 @@ export function useChatRequest(deps: UseChatRequestDeps) {
       ...resolveChatDbTokensForPayload(),
     }
     const payload = (await chatApi.sendUnifiedChatBatch(batchBody as ChatRequest & { messages: string[] }, reqOpts)) as unknown as ChatPlannerPayload
-    clearChatArtifactIds()
+    artifactBatch.complete()
     return payload
   }
 

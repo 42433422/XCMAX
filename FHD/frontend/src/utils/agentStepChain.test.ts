@@ -5,6 +5,7 @@ import {
   chainDurationMs,
   chainState,
   hasStepDetails,
+  isDocumentTemplateChange,
   stepsFromNodeResults,
   withLiveStep,
 } from './agentStepChain'
@@ -151,5 +152,19 @@ describe('chainState / chainDurationMs', () => {
 
   it('无耗时返回 undefined', () => {
     expect(chainDurationMs([])).toBeUndefined()
+  })
+})
+
+describe('isDocumentTemplateChange', () => {
+  it('模板库工具完成时需要通知页面刷新', () => {
+    expect(
+      isDocumentTemplateChange({ phase: 'finished', tool_id: 'document_template', action: 'clear' }),
+    ).toBe(true)
+  })
+
+  it('执行中或其它工具不触发刷新', () => {
+    expect(isDocumentTemplateChange({ phase: 'started', tool_id: 'document_template' })).toBe(false)
+    expect(isDocumentTemplateChange({ phase: 'finished', tool_id: 'elt_import' })).toBe(false)
+    expect(isDocumentTemplateChange(undefined)).toBe(false)
   })
 })
