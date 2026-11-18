@@ -79,6 +79,7 @@
                 download
                 @click="$emit('shipment-download-click')"
               >
+                <FileTypeIcon :name="downloadFileName" :size="14" />
                 {{ $t('chat.downloadShipment') }}
               </a>
               <button
@@ -291,6 +292,7 @@ import type { TaskControlState, TaskSyncState } from '@/composables/useAgentTask
 import type { ShipmentTask } from '@/composables/useShipmentTask'
 import type { TaskFilter, TaskItem } from '@/composables/useChatPersistence'
 import AgentTaskRuntimePanel from './AgentTaskRuntimePanel.vue'
+import FileTypeIcon from '@/components/common/FileTypeIcon.vue'
 import { workflowProgressIsIdle } from '@/workflow/coreWorkflowTaskUi'
 import { normalizeTaskDisplayText } from '@/utils/chatTaskLabels'
 useI18n()
@@ -335,6 +337,13 @@ const props = defineProps<{
   workflowTaskDotStatusClass: (task: TaskItem) => string
   workflowTaskDotTitle: (task: TaskItem) => string
 }>()
+/** 下载链接只用来判断文件类型，展示层仍用按钮文案。 */
+const downloadFileName = computed(() => {
+  const url = String(props.currentTask?.downloadUrl || '')
+  const path = url.split(/[?#]/)[0]
+  const name = path.split('/').pop() || ''
+  try { return decodeURIComponent(name) } catch { return name }
+})
 const emit = defineEmits<{
   'refresh-tasks': []
   'confirm-task': []

@@ -27,7 +27,7 @@
       <div v-for="doc in visibleDocuments" :key="doc.document_id || `${doc.source}-${doc.version_label}`" class="source-row">
         <button type="button" class="source-row__select" @click="emit('select', doc)">
           <span class="source-row__icon">
-            <i class="fa fa-file-text-o" aria-hidden="true"></i>
+            <FileTypeIcon :name="doc.source" :size="18" />
           </span>
           <span class="source-row__main">
             <strong>{{ doc.source || '未命名资料' }}</strong>
@@ -62,7 +62,7 @@
       <button type="button" @click="activeTag = ''">查看全部资料</button>
     </div>
     <div v-else class="view-empty">
-      <i class="fa fa-file-text-o" aria-hidden="true"></i>
+      <FileTypeIcon :size="20" />
       <strong>还没有资料来源</strong>
       <button type="button" @click="emit('import')">导入第一份资料</button>
     </div>
@@ -71,6 +71,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import FileTypeIcon from '@/components/common/FileTypeIcon.vue'
 import type { KnowledgeBaseDocument } from '@/api/knowledgeBase'
 import { numberText, parserLabel, versionLabel } from '@/composables/persyKnowledgeFormatters'
 

@@ -168,3 +168,11 @@ describe('Visible Mac conversation task panel', () => {
     expect(router.currentRoute.value.query.conversation).toBe(identity === 'conversation' ? 'original-chat' : identity === 'workspace' ? 'business-space' : 'durable-1')
   })
 })
+
+
+it('keeps the shipment download usable when its URL contains malformed percent encoding', async () => {
+  const { view } = await open({ currentTask: { type: 'shipment_generate', completed: true, downloadUrl: '/api/reports/100%report.xlsx?download=1' } })
+  expect(view.get('a[download]').attributes('href')).toBe('/api/reports/100%report.xlsx?download=1')
+  await view.get('a[download]').trigger('click')
+  expect(view.emitted('shipment-download-click')).toEqual([[]])
+})

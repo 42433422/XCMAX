@@ -9,6 +9,8 @@ from typing import Any, cast
 from app.utils.metrics import record_ai_call
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
+from ..reasoning_stream import publish_reasoning, reasoning_from_message
+
 
 class OpenAICompatibleProvider:
     provider_id = "openai_compatible"
@@ -68,6 +70,8 @@ class OpenAICompatibleProvider:
                 **kwargs,
             )
             record_ai_call(self.provider_id, "chat", "success", time.perf_counter() - t0)
+            if isinstance(result, dict):
+                publish_reasoning(reasoning_from_message(result))
             return cast("dict[str, Any] | None", result)
         except RECOVERABLE_ERRORS:
             record_ai_call(self.provider_id, "chat", "error", time.perf_counter() - t0)

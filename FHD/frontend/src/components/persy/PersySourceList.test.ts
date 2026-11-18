@@ -1,6 +1,7 @@
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import type { KnowledgeBaseDocument } from '@/api/knowledgeBase'
+import FileTypeIcon from '@/components/common/FileTypeIcon.vue'
 import PersySourceList from './PersySourceList.vue'
 
 const documents: KnowledgeBaseDocument[] = [
@@ -41,6 +42,8 @@ describe('PersySourceList', () => {
     const wrapper = mountList()
 
     expect(wrapper.get('.source-total').text()).toContain('3 / 3')
+    expect(wrapper.findAllComponents(FileTypeIcon).map((icon) => icon.props('name')))
+      .toEqual(documents.map((document) => document.source))
     expect(wrapper.findAll('.source-row__tags em').map((item) => item.text())).toEqual([
       '售后',
       '财务',
@@ -58,6 +61,8 @@ describe('PersySourceList', () => {
 
     await finance!.trigger('click')
     expect(wrapper.findAll('.source-row')).toHaveLength(2)
+    expect(wrapper.findAllComponents(FileTypeIcon).map((icon) => icon.props('name')))
+      .toEqual(['退款.md', '发票.md'])
     expect(wrapper.get('.source-total').text()).toContain('2 / 3')
     expect(wrapper.get('.tag-filter__clear').exists()).toBe(true)
 
