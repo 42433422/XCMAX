@@ -894,7 +894,7 @@ def _lock(key: str) -> FileLock:
 
 def _turn_lock(key: str, turn_id: str) -> FileLock:
     digest = hashlib.sha256(turn_id.encode()).hexdigest()
-    return _lock(f"{key}-{digest}-turn")
+    return _lock(f"{key}.{digest}.turn")
 
 
 def _turn_is_live(key: str, turn_id: str) -> bool:

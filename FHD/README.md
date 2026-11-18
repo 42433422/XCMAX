@@ -96,7 +96,7 @@ cd XCMAX/FHD
 
 多轮澄清复用 [LangChain Core 1.5.3](https://github.com/langchain-ai/langchain/tree/01d8481ae3d457ec3751cbb0331ea3a4b720fa90/libs/core)（MIT）：`trim_messages` 保留有序会话窗口，`PydanticOutputParser` 解析字段与候选对象回答；暂停与续跑沿用已吸收的 LangGraph 1.2.10。版本固定在依赖清单；产品侧只保留会话归属、候选范围、工具字段和审批校验，不另建对话引擎。
 
-会话连续性复用 [LangChain 1.3.14 SummarizationMiddleware](https://github.com/langchain-ai/langchain/tree/01d8481ae3d457ec3751cbb0331ea3a4b720fa90/libs/langchain_v1)（MIT）及上述 Core 1.5.3，压缩入口同时覆盖普通/流式规划，预留输出和工具 schema，保存完整原文的已覆盖游标；摘要失败不伪造覆盖。跨进程文件互斥使用 [filelock 3.32.7](https://github.com/tox-dev/filelock/tree/3.32.7)（MIT，固定兼容的 3.x 补丁线）。SQLAlchemy 事务管理会话 revision、删除标记和整轮回执，JSON 只作为可重建投影；历史通过授权游标分页读取，保存失败仅重试原回执。
+会话连续性复用 [LangChain 1.3.14 SummarizationMiddleware](https://github.com/langchain-ai/langchain/tree/01d8481ae3d457ec3751cbb0331ea3a4b720fa90/libs/langchain_v1)（MIT）及上述 Core 1.5.3，压缩入口同时覆盖普通/流式规划，预留输出和工具 schema，保存完整原文的已覆盖游标；摘要失败不伪造覆盖。跨进程文件互斥使用 [filelock 4.2.4](https://github.com/tox-dev/filelock/tree/4.2.4)（MIT，统一跨进程锁依赖版本）。SQLAlchemy 事务管理会话 revision、删除标记和整轮回执，JSON 只作为可重建投影；历史通过授权游标分页读取，保存失败仅重试原回执。
 
 任务恢复接入已有 LangGraph 1.2.10 / checkpoint 4.3.0 / SQLite 3.1.2 / Postgres 3.1.1+xcagi.1 原生 saver（MIT，源码与许可见 `packages/xcagi_langgraph_*`），线程绑定任务与授权作用域。启动恢复和“重试”在原 run 内对账续跑安全余步，保留原计划、审批和幂等键；取消任务、未知写结果、未批准写入及缺失持久计划均需核对或新建业务任务。产品自有代码仅负责权限、版本 fencing、业务回执与 UI 适配。
 
