@@ -1,3 +1,5 @@
+from contextlib import nullcontext
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from app.domain.shared_services.tools_workflow_elt import (
@@ -24,6 +26,85 @@ def _run(status="preview_ready", **overrides):
 
 def _context():
     return {"user_id": 7, "tenant_id": 1}
+
+
+def test_wait_delivers_real_changes_before_preview_finishes(monkeypatch):
+    from app.domain.shared_services import tools_workflow_elt as elt
+    from app.infrastructure.chat_stream_lifetime import StreamLifetime, current_lifetime
+
+    snapshots = iter(
+        [
+            _run("previewing", stage="parsing", progress=5, processed_rows=0),
+            _run("previewing", stage="parsing", progress=5, processed_rows=0),
+            _run("previewing", stage="transforming", progress=20, processed_rows=2),
+            _run("previewing", stage="transforming", progress=30, processed_rows=3),
+            _run("preview_ready", progress=100, processed_rows=10),
+        ]
+    )
+    notes, events = [], []
+    lifetime = StreamLifetime()
+    lifetime.observe_notes(notes.append)
+    lifetime.observe_tools(lambda *, sequence, record: events.append(record))
+    token = current_lifetime.set(lifetime)
+    db = SimpleNamespace(expire_all=lambda: None)
+    monkeypatch.setattr(elt, "get_db", lambda: nullcontext(db))
+
+    def read_run(_db, *, run_id, owner_user_id):
+        assert (run_id, owner_user_id) == ("run-1", 7)
+        return {**next(snapshots), "file_name": "销售明细.xlsx"}
+
+    def while_pending(_seconds):
+        # Every wait observes progress already delivered, before a terminal result.
+        assert events and events[-1]["progress"] < 100
+
+    monkeypatch.setattr(elt.time, "sleep", while_pending)
+    try:
+        result = elt._wait(
+            SimpleNamespace(get_run=read_run),
+            "run-1",
+            7,
+            pending=elt.PREVIEW_PENDING,
+            timeout=5,
+            runtime_context={"node_id": "preview-node"},
+        )
+    finally:
+        current_lifetime.reset(token)
+    assert result["status"] == "preview_ready"
+    assert [event["progress"] for event in events] == [5, 20, 30, 100]
+    assert [event["processed_rows"] for event in events] == [0, 2, 3, 10]
+    assert all(event["node_id"] == "preview-node" for event in events)
+    assert all(event["phase"] == "progress" and "action" not in event for event in events)
+    assert len(notes) == 3  # Duplicate polls and row updates do not flood the prose.
+    assert "销售明细.xlsx" in notes[0]
+    assert "预演结果已生成" in notes[-1]
+
+
+def test_wait_timeout_does_not_invent_completion_or_orphan_nodes(monkeypatch):
+    from app.domain.shared_services import tools_workflow_elt as elt
+    from app.infrastructure.chat_stream_lifetime import StreamLifetime, current_lifetime
+
+    pending = _run("executing", stage="persisting", progress=None, processed_rows=10)
+    notes, events = [], []
+    lifetime = StreamLifetime()
+    lifetime.observe_notes(notes.append)
+    lifetime.observe_tools(lambda *, sequence, record: events.append(record))
+    token = current_lifetime.set(lifetime)
+    monkeypatch.setattr(
+        elt, "get_db", lambda: nullcontext(SimpleNamespace(expire_all=lambda: None))
+    )
+    try:
+        result = elt._wait(
+            SimpleNamespace(get_run=lambda *args, **kwargs: pending),
+            "run-1",
+            7,
+            pending=elt.EXECUTION_PENDING,
+            timeout=0,
+        )
+    finally:
+        current_lifetime.reset(token)
+    assert result is pending and result["status"] == "executing"
+    assert events == []  # Calls without a graph binding cannot create new graph steps.
+    assert notes == ["正在写入业务数据"]  # No percent or success without persisted evidence.
 
 
 def test_preview_returns_run_id_for_execute():

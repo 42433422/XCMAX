@@ -1,0 +1,134 @@
+/* shadcn-vue Trace layout/styles adapted to XCMAX tokens; upstream pin: ./index.ts. */
+.xc-trace {
+  --trace-muted: var(--app-text-muted, #6b7280);
+  --trace-foreground: var(--app-text-primary, #374151);
+  --trace-error: #dc3b3b;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  color: var(--trace-muted);
+  font-size: var(--app-font-size-caption, 12px);
+  line-height: 1.5;
+}
+.xc-trace :where([data-slot='trace-collapsible']) {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+}
+.xc-trace :where([data-slot='trace-collapsible-trigger'], [data-slot='trace-line']) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  max-width: 100%;
+  min-width: 0;
+  text-align: left;
+  color: var(--trace-muted);
+  transition: color 0.15s ease;
+}
+.xc-trace :where([data-slot='trace-collapsible-trigger']) {
+  border: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+.xc-trace :where([data-slot='trace-collapsible-trigger']:focus-visible) {
+  outline: 2px solid var(--xc-color-primary, #2563eb);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+.xc-trace :where([data-slot='trace-collapsible-trigger']:hover, button:hover [data-slot='trace-line']) {
+  color: var(--trace-foreground);
+}
+.xc-trace :where([data-slot='trace-line'][data-status='error']) {
+  color: var(--trace-error);
+}
+.xc-trace :where([data-slot='trace-line'][data-status='pending']) {
+  opacity: 0.6;
+}
+.xc-trace :where([data-slot='trace-title']) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.xc-trace :where([data-slot='trace-description']) {
+  flex-shrink: 0;
+  color: var(--trace-muted);
+  font-variant-numeric: tabular-nums;
+}
+.xc-trace :where([data-slot='trace-icon']) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 14px;
+  font-size: 11px;
+}
+.xc-trace :where([data-slot='trace-icon'] svg) {
+  pointer-events: none;
+}
+.xc-trace :where(.xc-trace-chevron) {
+  transition: transform 0.15s ease;
+}
+.xc-trace :where([aria-expanded='true'] > .xc-trace-chevron) {
+  transform: rotate(90deg);
+}
+.xc-trace :where([data-slot='trace-collapsible-content']) {
+  min-width: 0;
+  overflow: hidden;
+}
+.xc-trace :where([data-slot='trace-collapsible-content-inner']) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.xc-trace :where([data-slot='trace-collapsible-content'][data-state='open']) {
+  animation: xc-trace-expand 0.15s ease-out;
+}
+.xc-trace :where([data-slot='trace-collapsible-content'][data-state='closed']) {
+  animation: xc-trace-collapse 0.15s ease-out;
+}
+.xc-trace :where([data-status='running'] > [data-slot='trace-title']) {
+  background: linear-gradient(90deg, var(--trace-muted) 35%, var(--trace-foreground) 50%, var(--trace-muted) 65%);
+  background-size: 200% 100%;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: xc-trace-shimmer 2s linear infinite;
+}
+@keyframes xc-trace-expand {
+  from {
+    height: 0;
+  }
+  to {
+    height: var(--reka-collapsible-content-height);
+  }
+}
+@keyframes xc-trace-collapse {
+  from {
+    height: var(--reka-collapsible-content-height);
+  }
+  to {
+    height: 0;
+  }
+}
+@keyframes xc-trace-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .xc-trace :where([data-slot], .fa-spin) {
+    animation: none;
+    transition: none;
+  }
+  .xc-trace :where([data-status='running'] > [data-slot='trace-title']) {
+    background: none;
+    -webkit-text-fill-color: currentColor;
+  }
+}

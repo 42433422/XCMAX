@@ -1,13 +1,15 @@
 /**
  * 对话内「执行链」视图模型。
  *
- * 结构参照 Vercel AI Elements 的 Tool / Steps / Task 组件（ToolUIPart 状态机）：
- * pending → running → success / failed / waiting(需确认) / blocked。
- * 数据来源为后端终态 node_results，以及流式阶段的 tool_progress 文案占位。
+ * 流式工具生命周期由 AI SDK 的 ToolUIPart 管理，此处只负责中文标签和展示投影。
+ * 历史回执兼容 node_results；界面复用 shadcn-vue Trace。
  */
+import { getToolName, isToolUIPart, type UIMessage } from 'ai'
+import type { PlannerSseEvent } from '@/utils/chatSseStream'
+import { asRecord } from '@/utils/typeGuards'
 import { actionDisplayName, toolDisplayName } from '@/utils/toolLabels'
 
-export type AgentStepState = 'pending' | 'running' | 'success' | 'failed' | 'waiting' | 'blocked'
+export type AgentStepState = 'pending' | 'running' | 'success' | 'failed' | 'waiting' | 'blocked' | 'unknown'
 
 export interface ChatNodeResultLike {
   node_id: string
@@ -35,6 +37,9 @@ export interface AgentStepView {
   error?: string
   hint?: string
   retries: number
+  progress?: number
+  processedRows?: number
+  totalRows?: number
   /** 流式阶段由进度文案生成的临时步骤，完成后会被真实 node_results 替换 */
   live: boolean
 }
@@ -46,6 +51,7 @@ const STATE_LABELS: Record<AgentStepState, string> = {
   failed: '失败',
   waiting: '待确认',
   blocked: '已阻断',
+  unknown: '待核对',
 }
 
 const STATE_ICONS: Record<AgentStepState, string> = {
@@ -55,6 +61,7 @@ const STATE_ICONS: Record<AgentStepState, string> = {
   failed: 'fa-times-circle',
   waiting: 'fa-pause-circle',
   blocked: 'fa-ban',
+  unknown: 'fa-question-circle',
 }
 
 export function stepStateLabel(state: AgentStepState): string {
@@ -122,52 +129,39 @@ export function withLiveStep(steps: AgentStepView[], live: AgentStepView | null)
   return hasRunning ? steps : [...steps, live]
 }
 
-/** 后端流式 tool_call 事件（工具开始/结束）。 */
-export interface ToolCallEventLike {
-  phase?: 'started' | 'finished'
-  node_id?: string
-  tool_id?: string
-  action?: string
-  params?: Record<string, unknown>
-  success?: boolean
-  duration_ms?: number
-  output_preview?: string
-  error?: string
-  retries?: number
-  recovery_hint?: string
-}
+export type ToolCallEventLike = Omit<Extract<PlannerSseEvent, { type: 'tool_call' }>, 'type'>
 
-/**
- * 把一条 tool_call 事件合并进当前执行链。
- * `started` 生成/重置为执行中；`finished` 落到成功或失败，并按 node_id 原地更新。
- */
-export function applyToolCallEvent(steps: AgentStepView[], ev: ToolCallEventLike | undefined): AgentStepView[] {
-  if (!ev) return steps
-  const nodeId = String(ev.node_id || '').trim()
-  if (!nodeId) return steps
-  const index = steps.findIndex((step) => step.id === nodeId)
-  const base = index >= 0 ? steps[index] : undefined
-  const toolId = String(ev.tool_id || base?.toolId || '').trim()
-  const action = String(ev.action || base?.action || '').trim()
-  const finished = ev.phase === 'finished'
-  const next: AgentStepView = {
-    id: nodeId,
-    toolId,
-    action,
-    title: toolDisplayName(toolId),
-    subtitle: actionDisplayName(action),
-    state: finished ? (ev.success ? 'success' : 'failed') : 'running',
-    durationMs: ev.duration_ms && ev.duration_ms > 0 ? ev.duration_ms : base?.durationMs,
-    output: String(ev.output_preview || '').trim() || base?.output,
-    error: finished && !ev.success ? String(ev.error || '').trim() || base?.error || '工具执行失败' : base?.error,
-    hint: String(ev.recovery_hint || '').trim() || base?.hint,
-    retries: Number(ev.retries ?? base?.retries ?? 0),
-    live: false,
-  }
-  if (index < 0) return [...steps, next]
-  const copy = steps.slice()
-  copy[index] = next
-  return copy
+/** 原生 SDK parts 的纯展示投影：不再维护第二套工具状态机。 */
+export function stepsFromAiParts(parts: UIMessage['parts']): AgentStepView[] {
+  const progress = new Map(parts.flatMap(part =>
+    part.type === 'data-tool-progress' && part.id ? [[part.id, asRecord(part.data)] as const] : [],
+  ))
+  return parts.filter(isToolUIPart).map(part => {
+    const detail = progress.get(part.toolCallId) || {}
+    const name = getToolName(part)
+    const separator = name.lastIndexOf('.')
+    const toolId = String(detail.tool_id || (separator < 0 ? name : name.slice(0, separator)))
+    const action = String(detail.action || (separator < 0 ? '' : name.slice(separator + 1)))
+    const state: AgentStepState = part.state === 'output-available' ? 'success'
+      : part.state === 'output-error' ? 'failed'
+        : part.state === 'output-denied' ? 'blocked'
+          : part.state === 'approval-requested' ? 'waiting'
+            : part.state === 'approval-responded' && !part.approval.approved ? 'blocked' : 'running'
+    const percent = detail.progress
+    const count = (value: unknown) => typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined
+    return {
+      id: part.toolCallId, toolId, action,
+      title: toolDisplayName(toolId), subtitle: actionDisplayName(action), state,
+      durationMs: count(detail.duration_ms),
+      output: typeof part.output === 'string' ? part.output : undefined,
+      error: part.state === 'output-error' ? part.errorText : undefined,
+      hint: String((state === 'running' ? detail.label : detail.recovery_hint) || '') || undefined,
+      retries: count(detail.retries) || 0,
+      progress: typeof percent === 'number' && Number.isFinite(percent) ? Math.max(0, Math.min(100, percent)) : undefined,
+      processedRows: count(detail.processed_rows), totalRows: count(detail.total_rows),
+      live: false,
+    }
+  })
 }
 
 /**
@@ -181,6 +175,7 @@ export function isDocumentTemplateChange(ev: ToolCallEventLike | undefined): boo
 export function chainState(steps: AgentStepView[]): AgentStepState {
   if (!steps.length) return 'pending'
   if (steps.some((step) => step.state === 'failed')) return 'failed'
+  if (steps.some((step) => step.state === 'unknown')) return 'unknown'
   if (steps.some((step) => step.state === 'blocked')) return 'blocked'
   if (steps.some((step) => step.state === 'waiting')) return 'waiting'
   if (steps.some((step) => step.state === 'running' || step.state === 'pending')) return 'running'

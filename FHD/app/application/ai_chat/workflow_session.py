@@ -29,6 +29,23 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def workflow_run_note(status: str) -> str:
+    """Only a confirmed completed run may announce execution completion."""
+    return {
+        "completed": "执行完成，正在整理结果…",
+        "waiting_user": "执行已暂停，等待你确认或补充信息…",
+        "paused": "执行已暂停，正在整理当前状态…",
+        "failed": "执行失败，正在整理失败回执…",
+        "blocked": "执行已阻断，正在整理处理说明…",
+        "cancelled": "执行已取消，正在核对已执行的步骤…",
+        "rejected": "执行请求已被拒绝，正在整理处理说明…",
+        "queued": "任务正在等待执行…",
+        "planning": "任务仍在规划中…",
+        "retrying": "任务正在重试…",
+        "running": "任务仍在执行，正在读取处理状态…",
+    }.get(status, "执行结果尚待核对，正在整理回执…")
+
+
 def _control_reply(
     text: str,
     action: str,
@@ -1335,6 +1352,7 @@ class WorkflowSession:
                         success=False,
                         message="工作流续跑失败",
                     )
+                publish_stream_note(workflow_run_note(continued.status))
                 if continued.status == "waiting_user":
                     interaction = self.capture_agent_run_interaction(
                         user_id=user_id,
@@ -1346,7 +1364,6 @@ class WorkflowSession:
                     )
                     return (True, interaction)
                 self.pending.pop(user_id, None)
-                publish_stream_note("执行完成，正在整理结果…")
                 continued_plan = plan_from_dict(continued.metadata.get("plan")) or pending_plan
                 self.callbacks._persist_plan_state(
                     continued_plan,

@@ -6,7 +6,7 @@ import type { useChatMessages } from '../useChatMessages'
 import type { useChatRequest, ChatRequestScope } from '../useChatRequest'
 import type { useChatResponseAttach } from '../useChatResponseAttach'
 import { readPlannerBusinessResult } from '@/utils/readPlannerBusinessResult'
-import { applyToolCallEvent, isDocumentTemplateChange } from '@/utils/agentStepChain'
+import { stepsFromAiParts, isDocumentTemplateChange } from '@/utils/agentStepChain'
 import type { useChatSessionActivity } from '../useChatSessionActivity'
 import type { ShipmentTask } from '../useShipmentTask'
 import type { ChatPlannerPayload } from '@/types/chat'
@@ -365,7 +365,10 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       armDeadline()
       const msgIndex = pushStreamingAiShell()
       const streamMessage = messages.value[msgIndex]
-      if (streamMessage) streamMessage.turnId = requestScope.turnId
+      if (streamMessage) {
+        streamMessage.turnId = requestScope.turnId
+        streamMessage.streamStatus = 'submitted'
+      }
       // token 逐条到达时合并到一帧渲染：长回复下把 O(tokens) 次重渲染压成 O(帧)。
       let streamFrame = 0
       const flushStreamFrame = () => {
@@ -404,7 +407,12 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       let handlePlannerEventRef: ((event: PlannerSseEvent) => void) | null = null
       const aiChatRound = useAiSdkChatRound({
         onEvent: (event) => plannerEventHandler?.(event),
-        // 附件工件取数轨迹：累积到当前 assistant 消息，气泡「本轮执行」按需展开。
+        onMessage: (message) => {
+          if (!round.isActive() || !streamMessage) return
+          streamMessage.streamStatus = 'streaming'
+          streamMessage.liveSteps = stepsFromAiParts(message.parts)
+        },
+        // 附件工件取数轨迹：累积到当前 assistant 消息，气泡「附件读取」按需展开。
         onTrace: (items) => {
           if (replaying || !round.isActive() || !streamMessage || !items.length) return
           streamMessage.trace = [...(streamMessage.trace || []), ...items]
@@ -449,10 +457,10 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           if (!isOwnerCurrent()) { controller.abort(); return }
           const heartbeat = (ev.type === 'token' && ev.ephemeral === true)
             || (ev.type === 'tool_progress' && ev.phase === 'accepted')
-          if ((ev.type === 'token' || ev.type === 'tool_progress' || ev.type === 'model_activity' || ev.type === 'thinking') && !heartbeat) {
+          if ((ev.type === 'token' || ev.type === 'tool_progress' || ev.type === 'tool_call' || ev.type === 'model_activity' || ev.type === 'thinking') && !heartbeat) {
             // Legacy tools send a visible call marker, then can execute silently
             // for minutes. Run creation alone is not evidence of model progress.
-            if (ev.type === 'model_activity' || ev.type === 'thinking' || (ev.type === 'token' && ev.text.trim())
+            if (ev.type === 'model_activity' || ev.type === 'thinking' || ev.type === 'tool_call' || (ev.type === 'token' && ev.text.trim())
               || (ev.type === 'tool_progress' && ev.phase !== 'started')) {
               window.clearTimeout(stallTimer)
             }
@@ -463,12 +471,13 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           } else if (ev.type === 'tool_progress') {
             streamRunId = ev.run_id || streamRunId
             const hint = String(ev.text || ev.label || '').trim()
-            if (round.isActive() && streamMessage && hint) {
+            const hasLiveTool = streamMessage?.liveSteps?.some(step => step.state === 'running')
+            if (round.isActive() && streamMessage && hint && !hasLiveTool) {
               streamMessage.waitingHint = hint
               // 执行链的流式占位步骤：轮到哪个动作就显示哪个，不等整轮结束。
               streamMessage.toolProgressLabel = hint
             }
-            setLoadingProgress(hint || '正在执行任务…', requestScope.sessionId)
+            if (!hasLiveTool) setLoadingProgress(hint || '正在执行任务…', requestScope.sessionId)
             if (streamRunId) syncStreamRun({ run_id: streamRunId })
           } else if (ev.type === 'thinking') {
             const delta = String(ev.delta || '').trim()
@@ -478,10 +487,13 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
               delete streamMessage.waitingHint
             }
           } else if (ev.type === 'tool_call') {
-            // 结构化工具事件：按 node_id 原地增改，执行链随执行进度实时长出来。
+            // 工具 parts 由 AI SDK 组装；旁路只处理控制面与既有业务刷新。
             if (round.isActive() && streamMessage) {
-              streamMessage.liveSteps = applyToolCallEvent(streamMessage.liveSteps || [], ev)
               if (ev.phase !== 'finished') delete streamMessage.waitingHint
+              if (ev.label) {
+                streamMessage.toolProgressLabel = ev.label
+                setLoadingProgress(ev.label, requestScope.sessionId)
+              }
             }
             // 模板库已在页面上时不重新挂载，用窗口事件让它按服务端真实状态刷新。
             if (isDocumentTemplateChange(ev)) {
@@ -709,6 +721,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         plannerEventHandler = null
         streamTextFromAi = false
         cancelStreamFrame()
+        if (streamMessage) streamMessage.streamStatus = streamMessage.workflowAction === 'failed' ? 'error' : 'ready'
         if (round.isActive() && streamMessage) delete streamMessage.waitingHint
         if (round.isActive() && streamMessage?.streamingShell) {
           const leftover = streamPlain.trim()

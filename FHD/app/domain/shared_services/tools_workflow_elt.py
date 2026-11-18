@@ -221,14 +221,89 @@ def _batch_result_note(action: str, label: str, out: dict[str, Any]) -> None:
     _publish_note(_batch_result_text(action, label, out))
 
 
-def _wait(service, run_id: str, owner_id: int, *, pending: set[str], timeout: float) -> dict:
+def _progress_record(data: dict, runtime_context: dict[str, Any]) -> dict[str, Any]:
+    """Project persisted ELT progress into the existing tool event contract."""
+    status = str(data.get("status") or "")
+    stage = (
+        status
+        if status not in PREVIEW_PENDING | EXECUTION_PENDING
+        else str(data.get("stage") or status)
+    )
+    label = {
+        "queued": "等待处理",
+        "previewing": "正在生成预演",
+        "parsing": "正在解析文件",
+        "loading": "正在保存源数据",
+        "source_loaded": "源数据已保存",
+        "transforming": "正在校验数据",
+        "validating": "正在校验数据",
+        "preview_ready": "预演结果已生成",
+        "executing": "正在执行导入",
+        "persisting": "正在写入业务数据",
+        "completed": "业务数据已写入",
+        "partial": "部分数据已写入",
+        "failed": "数据处理失败",
+        "cancelled": "数据处理已取消",
+        "interrupted": "数据处理已中断",
+        "outcome_unknown": "数据处理结果待核对",
+    }.get(stage, "正在读取数据处理状态")
+    name = Path(str(data.get("file_name") or "").replace("\\", "/")).name
+    if name:
+        label = f"「{' '.join(name.split())[:120]}」{label}"
+    record: dict[str, Any] = {
+        "phase": "progress",
+        "node_id": str(runtime_context.get("node_id") or ""),
+        "tool_id": "elt_import",
+        "label": label,
+    }
+    progress = data.get("progress")
+    if (
+        isinstance(progress, (int, float))
+        and not isinstance(progress, bool)
+        and 0 <= progress <= 100
+    ):
+        record["progress"] = progress
+        record["label"] += f" · {progress:g}%"
+    for field in ("processed_rows", "total_rows"):
+        # ELT retains preview's processed_rows during execution; it is not a write count.
+        if field == "processed_rows" and status not in PREVIEW_PENDING | {"preview_ready"}:
+            continue
+        value = data.get(field)
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+            record[field] = value
+    if record.get("total_rows") and "processed_rows" in record:
+        record["label"] += f" · 已处理 {record['processed_rows']}/{record['total_rows']} 行"
+    return record
+
+
+def _wait(
+    service,
+    run_id: str,
+    owner_id: int,
+    *,
+    pending: set[str],
+    timeout: float,
+    runtime_context: dict[str, Any] | None = None,
+) -> dict:
     deadline = time.monotonic() + timeout
+    previous_record = None
+    previous_stage = None
     while True:
         with get_db() as db:
             db.expire_all()
             data = service.get_run(db, run_id=run_id, owner_user_id=owner_id)
         if not isinstance(data, dict):
             return {}
+        record = _progress_record(data, runtime_context or {})
+        stage = (data.get("status"), data.get("stage"), data.get("file_name"))
+        if stage != previous_stage:
+            _publish_note(record["label"])
+        if record != previous_record and record["node_id"]:
+            try:
+                publish_stream_tool_record(record)
+            except BOUNDARY_ERRORS:
+                pass  # Observability must not change the persisted import result.
+        previous_record, previous_stage = record, stage
         if str(data.get("status") or "") not in pending:
             return data
         if time.monotonic() >= deadline:
@@ -1055,6 +1130,7 @@ def _preview(params: dict, runtime_context: dict) -> dict:
         actor.id,
         pending=PREVIEW_PENDING,
         timeout=_wait_timeout(params, runtime_context, PREVIEW_TIMEOUT_SECONDS),
+        runtime_context=runtime_context,
     )
     summary = _summary(data)
     if not summary.get("target_type"):
@@ -1268,6 +1344,7 @@ def _execute(params: dict, runtime_context: dict) -> dict:
                     actor.id,
                     pending=PREVIEW_PENDING,
                     timeout=_wait_timeout(params, runtime_context, PREVIEW_TIMEOUT_SECONDS),
+                    runtime_context=runtime_context,
                 )
                 with get_db() as wait_db:
                     current = service.get_run(wait_db, run_id=run_id, owner_user_id=actor.id)
@@ -1293,10 +1370,11 @@ def _execute(params: dict, runtime_context: dict) -> dict:
         actor.id,
         pending=EXECUTION_PENDING,
         timeout=_wait_timeout(params, runtime_context, EXECUTION_TIMEOUT_SECONDS),
+        runtime_context=runtime_context,
     )
     summary = _summary(data)
     ok = data.get("status") == "completed"
-    companion = _execute_linked_companion(service, actor, data) if ok else {}
+    companion = _execute_linked_companion(service, actor, data, runtime_context) if ok else {}
     if companion:
         summary["customer_products"] = companion
     # 业务数据已入库；知识库与模板库并行写，一个慢或失败不影响另一个。
@@ -1316,7 +1394,9 @@ def _execute(params: dict, runtime_context: dict) -> dict:
     }
 
 
-def _execute_linked_companion(service, actor, data: dict) -> dict[str, Any]:
+def _execute_linked_companion(
+    service, actor, data: dict, runtime_context: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """同一文件附表生成的「客户及产品」预演，在主运单执行时一并落库。
 
     只预演不执行会让客户库/产品库永远没有数据，而用户看到的是「导入完成」。
@@ -1347,7 +1427,14 @@ def _execute_linked_companion(service, actor, data: dict) -> dict[str, Any]:
                 preview_revision=revision or None,
                 accept_suggested=True,
             )
-        waited = _wait(service, run_id, actor.id, pending=EXECUTION_PENDING, timeout=30.0)
+        waited = _wait(
+            service,
+            run_id,
+            actor.id,
+            pending=EXECUTION_PENDING,
+            timeout=30.0,
+            runtime_context=runtime_context,
+        )
     except EltError:
         return {"run_id": run_id, "status": "failed"}
     result = _summary(waited)

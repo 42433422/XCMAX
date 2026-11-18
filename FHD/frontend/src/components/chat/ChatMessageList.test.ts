@@ -6,6 +6,8 @@ enableAutoUnmount(afterEach)
 import ChatMessageList from './ChatMessageList.vue'
 import AgentRunTrace from './AgentRunTrace.vue'
 import { proactiveReplyMessageId } from '@/composables/useProactiveReplySuggestions'
+import type { ChatMessage } from '@/composables/useChatMessages'
+import type { AgentStepView } from '@/utils/agentStepChain'
 
 const defaultProps = {
   isLoading: false, isStreamingReply: false, loadingProgressText: '',
@@ -46,6 +48,13 @@ function mountList(showDiagnosticMetadata = false) {
   })
 }
 
+function runningStep(overrides: Partial<AgentStepView> = {}): AgentStepView {
+  return {
+    id: 'node-a', toolId: 'elt_import', action: 'execute', title: '导入明细 A', subtitle: '执行',
+    state: 'running', retries: 0, live: false, ...overrides,
+  }
+}
+
 describe('ChatMessageList', () => {
   it('keeps distinct legacy rows mounted while streaming changes their length', async () => {
     const messages = ref([
@@ -60,6 +69,119 @@ describe('ChatMessageList', () => {
     expect(wrapper.get('[data-message-index="0"]').element).toBe(first)
     expect(wrapper.get('[data-message-index="1"]').element).toBe(second)
     expect(first).not.toBe(second)
+  })
+
+  it('keeps the activity indicator and receipt running after visible text removes the streaming shell', async () => {
+    const messages = ref<ChatMessage[]>([{
+      role: 'ai', content: '已开始读取附件。', time: '12:00', streamingShell: false, streamStatus: 'streaming',
+      executionProgress: [{ phase: 'read', label: '正在读取附件', status: 'running', at: '12:00' }],
+    }])
+    const wrapper = mount(ChatMessageList, {
+      props: { ...defaultProps, messages: messages.value, isLoading: true, isStreamingReply: true },
+    })
+    expect(wrapper.get('.message-html').text()).toContain('已开始读取附件')
+    expect(wrapper.find('.chat-typing-indicator').exists()).toBe(true)
+    expect(wrapper.find('.message-receipt__spinner').exists()).toBe(true)
+    expect(wrapper.get('.message-receipt__status').text()).toBe('进行中')
+
+    messages.value[0].content += '正在写入。'
+    await nextTick()
+    expect(wrapper.find('.chat-typing-indicator').exists()).toBe(true)
+    expect(wrapper.get('.message-receipt__status').text()).toBe('进行中')
+    messages.value[0].streamStatus = 'ready'
+    messages.value[0].executionProgress![0].status = 'success'
+    await nextTick()
+    expect(wrapper.find('.chat-typing-indicator').exists()).toBe(false)
+    expect(wrapper.find('.message-receipt__spinner').exists()).toBe(false)
+    expect(wrapper.get('.message-receipt__status').text()).toBe('已完成')
+  })
+
+  it('updates the first parallel node without waiting for the last node or replacing the message', async () => {
+    const messages = ref<ChatMessage[]>([{
+      role: 'ai', content: '正在并行导入两份附件。', time: '12:00', streamStatus: 'streaming',
+      toolProgressLabel: '正在并行导入两份附件', thinkingSteps: '旧的过程说明',
+      nodeResults: [{ node_id: 'preview', tool_id: 'elt_import', action: 'preview', success: true }],
+      agentRunTrace: { run_id: 'run-a', intent: 'import', status: 'success', terminal: true, phases: [] },
+      liveSteps: [
+        runningStep({ hint: 'A 已处理 20 行', progress: 10, processedRows: 20, totalRows: 200 }),
+        runningStep({ id: 'node-b', title: '导入明细 B', hint: 'B 已处理 60 行', progress: 60, processedRows: 60, totalRows: 100 }),
+      ],
+    }])
+    const wrapper = mount(ChatMessageList, {
+      props: { ...defaultProps, messages: messages.value, isLoading: true, isStreamingReply: true },
+    })
+    const messageElement = wrapper.get('[data-message-index="0"]').element
+    expect(wrapper.find('[data-testid="agent-run-trace"]').exists()).toBe(false)
+    expect(wrapper.get('.message-thinking').attributes('open')).toBeUndefined()
+    expect(wrapper.get('.message-thinking').text()).toContain('旧的过程说明')
+    expect(wrapper.find('.message-receipt').exists()).toBe(false)
+    expect(wrapper.findAll('.asc-step')).toHaveLength(2)
+    expect(wrapper.findAll('.asc-step')[0].get('progress').attributes('value')).toBe('10')
+    expect(wrapper.findAll('.asc-step')[1].get('progress').attributes('value')).toBe('60')
+
+    Object.assign(messages.value[0].liveSteps![0], { hint: 'A 已处理 100 行', progress: 50, processedRows: 100 })
+    await nextTick()
+    const rows = wrapper.findAll('.asc-step')
+    expect(wrapper.get('[data-message-index="0"]').element).toBe(messageElement)
+    expect(rows[0].get('.asc-live-hint').text()).toBe('A 已处理 100 行')
+    expect(rows[0].get('progress').attributes('value')).toBe('50')
+    expect(rows[0].text()).toContain('已处理 100 / 200 行')
+    expect(rows[1].get('.asc-live-hint').text()).toBe('B 已处理 60 行')
+    expect(rows[1].get('progress').attributes('value')).toBe('60')
+    expect(rows[1].text()).toContain('已处理 60 / 100 行')
+  })
+
+  it.each([false, true])('shows missing tool receipts as needing reconciliation and removes active spinners (legacy trace=%s)', async withLegacyTrace => {
+    const messages = ref<ChatMessage[]>([{
+      role: 'ai', content: '已开始导入。', time: '12:00', streamStatus: 'streaming',
+      liveSteps: [runningStep({ hint: '等待写入结果', progress: 50 })],
+      executionProgress: [{ phase: 'import', label: '等待写入结果', status: 'running', at: '12:00' }],
+      agentRunTrace: withLegacyTrace ? {
+        run_id: 'run-a', intent: 'import', status: 'running', terminal: false,
+        phases: [{
+          kind: 'tool', status: 'running', started_event_id: 'phase-a', title: '导入',
+          node_id: 'node-a', tool_id: 'elt_import', action: 'execute',
+          observations: [], waiting_approval: false, retries: 0, repair_history: [],
+        }],
+      } : undefined,
+    }])
+    const wrapper = mount(ChatMessageList, {
+      props: { ...defaultProps, messages: messages.value, isLoading: true, isStreamingReply: true },
+    })
+    expect(wrapper.find('.fa-spin').exists()).toBe(true)
+    messages.value[0].streamStatus = 'ready'
+    await wrapper.setProps({ isLoading: false, isStreamingReply: false })
+    expect(wrapper.find('.chat-typing-indicator').exists()).toBe(false)
+    expect(wrapper.find('.fa-spin').exists()).toBe(false)
+    expect(wrapper.get('.asc-pill').text()).toBe('待核对')
+    expect(wrapper.get('.asc-live-hint').text()).toBe('执行结果待核对')
+    expect(wrapper.get('[data-testid="agent-step-chain"]').text()).not.toContain('待确认')
+    expect(wrapper.get('.message-receipt__status').text()).toBe('待核对')
+    // Display projection must not fabricate a terminal tool receipt or mutate SDK-derived state.
+    expect(messages.value[0].liveSteps![0].state).toBe('running')
+  })
+
+  it('keeps a parallel node without a receipt visible when only another node has a final result', async () => {
+    const messages = ref<ChatMessage[]>([{
+      role: 'ai', content: '正在导入两个附件。', time: '12:00', streamStatus: 'streaming',
+      liveSteps: [runningStep(), runningStep({ id: 'node-b', title: '导入明细 B' })],
+    }])
+    const wrapper = mount(ChatMessageList, {
+      props: { ...defaultProps, messages: messages.value, isLoading: true, isStreamingReply: true },
+    })
+    messages.value[0].nodeResults = [{
+      node_id: 'node-a', tool_id: 'elt_import', action: 'execute', success: true, output_preview: '附件 A 已写入',
+    }]
+    messages.value[0].streamStatus = 'ready'
+    await wrapper.setProps({ isLoading: false, isStreamingReply: false })
+    const rows = wrapper.findAll('.asc-step')
+    expect(rows).toHaveLength(2)
+    expect(rows[0].classes()).toContain('is-success')
+    expect(rows[1].classes()).toContain('is-unknown')
+    expect(rows[1].text()).toContain('导入明细 B')
+    expect(rows[1].get('.asc-live-hint').text()).toBe('执行结果待核对')
+    expect(wrapper.find('.fa-spin').exists()).toBe(false)
+    expect(messages.value[0].liveSteps!.map(step => step.state)).toEqual(['running', 'running'])
   })
 
   it('renders a visible Business Harness result on the assistant message', () => {
@@ -202,11 +324,13 @@ describe('ChatMessageList', () => {
     const trace = { run_id: 'run_wait_2', intent: 'stock_out', status: 'waiting' as const, terminal: false, phases: [] }
     const wrapper = mount(ChatMessageList, {
       props: {
-        messages: [{ role: 'ai' as const, content: '等待确认', time: '12:00', agentRunTrace: trace }],
+        messages: [{ role: 'ai' as const, content: '等待确认', time: '12:00', streamStatus: 'ready', agentRunTrace: trace,
+          liveSteps: [runningStep({ state: 'waiting' })] }],
         ...defaultProps,
       },
     })
     await wrapper.get('[data-testid="chat-run-approve"]').trigger('click')
+    expect(wrapper.text()).not.toContain('待核对')
     expect(wrapper.emitted('approve-run')).toEqual([['run_wait_2']])
     wrapper.getComponent(AgentRunTrace).vm.$emit('auto-approve-tool', 'business_db')
     expect(wrapper.emitted('approve-run')).toEqual([['run_wait_2'], ['run_wait_2']])
