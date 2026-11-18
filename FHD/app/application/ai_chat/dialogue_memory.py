@@ -117,11 +117,13 @@ def prepare_chat_turn(message: str, context: Mapping[str, Any] | None) -> dict[s
             lease = _turn_lock(key, turn_id)
             lease.acquire(timeout=0)
             _INFLIGHT[key, turn_id] = lease
+        persisted = False
         try:
             _write(key, data)
-        except BaseException:
-            _release_turn(key, turn_id)
-            raise
+            persisted = True
+        finally:
+            if not persisted:
+                _release_turn(key, turn_id)
         return None
 
 

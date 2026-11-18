@@ -216,9 +216,15 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
     earlierMessagesError.value = ''
   }
   function setHistoryPage(page: Record<string, unknown>) {
+    const revision = typeof page.revision === 'number' ? page.revision : null
+    if (historyRevision !== null && revision !== historyRevision) {
+      historyEpoch++
+      earlierMessagesLoading.value = false
+      earlierMessagesError.value = ''
+    }
     beforeMessageId = Number(page.next_before_id) || undefined
     messagesHaveEarlier.value = page.has_more === true && beforeMessageId !== undefined
-    historyRevision = typeof page.revision === 'number' ? page.revision : null
+    historyRevision = revision
   }
   function fromServerRows(rows: unknown[]): ChatMessage[] {
     return rows.map(raw => {
