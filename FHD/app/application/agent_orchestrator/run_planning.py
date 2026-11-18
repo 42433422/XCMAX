@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
 
 from app.application.agent_orchestrator.run_models import AgentRun
@@ -53,6 +54,9 @@ class RunPlanning:
                 metadata={"attachment_rejected": True},
             )
         context.setdefault("message", run.message)
+        skill_lines = _active_skill_rules(run.message)
+        if skill_lines:
+            context["active_skills"] = skill_lines
         self.recall_knowledge_for_run(run, context=context)
         from app.infrastructure.llm.model_admission import model_rate_limit_scope
 
@@ -187,3 +191,16 @@ class RunPlanning:
                 elif isinstance(value, str) and value.strip():
                     return value.strip()[:600]
         return str(run.error or run.status or "")[:600]
+
+
+def _active_skill_rules(message: str) -> list[str]:
+    """按消息触发条件加载仓库技能；未配置或读取失败时保持原规划行为。"""
+    if os.environ.get("XCAGI_AGENT_SKILLS_ENABLED", "1") == "0":
+        return []
+    try:
+        from app.application.skills.skill_registry import skill_rules
+
+        return skill_rules(message)
+    except RECOVERABLE_ERRORS:
+        logger.debug("skill registry skipped", exc_info=True)
+        return []

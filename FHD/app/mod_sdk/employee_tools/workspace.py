@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .employee_tool_ports import Payload, WorkspacePorts
 from .results import _err, _ok
+from .write_preview import restore_snapshot, snapshot_payload
 
 
 async def tail_logs(ports: WorkspacePorts, params: Payload, ctx: Payload) -> Payload:
@@ -89,7 +90,10 @@ async def list_workbench_sessions(ports: WorkspacePorts, params: Payload, ctx: P
 
 
 async def write_file(ports: WorkspacePorts, params: Payload, ctx: Payload) -> Payload:
-    """写入文件内容（受 scope_globs 约束，需 confirm=True 二次确认）。"""
+    """写入文件内容（受 scope_globs 约束，需 confirm=True 二次确认）。
+
+    传入 ``undo_snapshot_id`` 时撤销该次写入；否则返回 diff 与快照编号。
+    """
     if not params.get("confirm"):
         return _err("write_file 需 params.confirm=True 二次确认")
     rel_path = str(params.get("path") or "").strip()
@@ -103,6 +107,19 @@ async def write_file(ports: WorkspacePorts, params: Payload, ctx: Payload) -> Pa
         target.relative_to(root)
     except ValueError:
         return _err(f"路径 {rel_path} 越出 workspace_root")
+    undo_id = str(params.get("undo_snapshot_id") or "").strip()
+    if undo_id:
+        restored = restore_snapshot(undo_id, target)
+        if not restored.get("ok"):
+            return _err(str(restored.get("error") or "撤销失败"))
+        return _ok(f"已撤销 {rel_path} 的本次写入", path=rel_path, undo_snapshot_id=undo_id)
+    before: str | None = None
+    if target.is_file():
+        try:
+            before = target.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            before = None
+    preview = snapshot_payload(rel_path, before, content)
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
@@ -112,6 +129,7 @@ async def write_file(ports: WorkspacePorts, params: Payload, ctx: Payload) -> Pa
         f"已写入 {rel_path}（{len(content)} 字符）",
         path=rel_path,
         bytes_written=len(content.encode()),
+        **preview,
     )
 
 
@@ -132,7 +150,12 @@ async def patch_file(ports: WorkspacePorts, params: Payload, ctx: Payload) -> Pa
         return _err(f"路径 {rel_path} 越出 workspace_root")
     if not target.is_file():
         return _err(f"目标文件不存在: {rel_path}")
+    try:
+        before = target.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        before = None
     patch_tmp: Path | None = None
+    after = ""
     try:
         with tempfile.NamedTemporaryFile(
             mode="w",
@@ -154,13 +177,18 @@ async def patch_file(ports: WorkspacePorts, params: Payload, ctx: Payload) -> Pa
         apply = await ports.run(["git", "apply", str(patch_tmp)], cwd=root, timeout=15)
         if not apply.get("ok"):
             return _err(f"patch 应用失败: {apply.get('stderr', '')[:500]}")
+        try:
+            after = target.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            after = ""
     finally:
         if patch_tmp is not None:
             try:
                 patch_tmp.unlink(missing_ok=True)
             except OSError:
                 pass
-    return _ok(f"已应用 patch 到 {rel_path}", path=rel_path)
+    preview = snapshot_payload(rel_path, before, after)
+    return _ok(f"已应用 patch 到 {rel_path}", path=rel_path, **preview)
 
 
 def _within(root: Path, name: str) -> Path | None:

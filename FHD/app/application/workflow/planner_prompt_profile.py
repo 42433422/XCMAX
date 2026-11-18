@@ -269,4 +269,7 @@ def select_rules_for_prompt(
     rules = list(BASE_RULES)
     for intent in sorted(intents):
         rules.extend(SCENARIO_RULES.get(intent, ()))
+    active_skills = context.get("active_skills") if isinstance(context, dict) else None
+    if isinstance(active_skills, list):
+        rules.extend(str(item) for item in active_skills if str(item).strip())
     return rules
