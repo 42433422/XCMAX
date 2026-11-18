@@ -6,7 +6,11 @@ import { plainTextFromChatHtml } from '@/utils/sanitizeHtml'
 import { createBusinessHarnessId } from '@/utils/businessHarnessIds'
 import { isOfficeEltToolMessage } from '@/domain/optionalTemplateSelection'
 import { isWorkflowControlMessage } from '@/utils/chatSseStream'
-import { clearChatArtifactIds, listChatArtifactIds } from '@/utils/chatArtifactContext'
+import {
+  clearChatArtifactIds,
+  markChatArtifactsConsumed,
+  takeChatArtifactIds,
+} from '@/utils/chatArtifactContext'
 import { useApprovalMode } from './useApprovalMode'
 export type ChatRequestScope = {
   signal?: AbortSignal
@@ -90,12 +94,13 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     contextParts.push(`最近对话 ${compactHistory.length} 条`)
     const hasExcelContext = !plannerOpts?.expectedWorkflowPlanId && injectExcelContextPayload(contextPayload, contextParts)
     if (!plannerOpts?.expectedWorkflowPlanId) consumeMultimodalIntoPlannerContext(contextPayload, contextParts)
-    // 选文件时登记的附件工件：后端按 id 取数，本轮发送后由发送方清空。
-    const artifactIds = listChatArtifactIds()
+    // 选文件时登记的附件工件：只认本轮上传，失败重试沿用同一批。
+    const artifactIds = takeChatArtifactIds({ retry: Boolean(plannerOpts?.retryOf) })
     if (artifactIds.length) {
       contextPayload.artifact_ids = artifactIds
       contextParts.push(`后端工件 ${artifactIds.length} 个`)
     }
+    markChatArtifactsConsumed()
     const linkedCount = compactHistory.length + (hasExcelContext ? 1 : 0)
     lastRequestContextSummary.value = `已关联上下文：${contextParts.join(' + ')}（共 ${linkedCount}）`
     if (plannerOpts?.fromWriteUnlock) {
@@ -166,8 +171,9 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     contextParts.push(`最近对话 ${compactHistory.length} 条`)
     const hasExcelContext = injectExcelContextPayload(contextPayload, contextParts)
     consumeMultimodalIntoPlannerContext(contextPayload, contextParts)
-    const artifactIds = listChatArtifactIds()
+    const artifactIds = takeChatArtifactIds()
     if (artifactIds.length) contextPayload.artifact_ids = artifactIds
+    markChatArtifactsConsumed()
     const linkedCount = compactHistory.length + (hasExcelContext ? 1 : 0)
     lastRequestContextSummary.value = `已关联上下文：${contextParts.join(' + ')}（共 ${linkedCount}）`
     const reqOpts = { signal: fetchOptions.signal }
