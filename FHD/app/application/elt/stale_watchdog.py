@@ -7,8 +7,9 @@ import os
 import threading
 import time
 from datetime import UTC, datetime, timedelta
+from typing import cast
 
-from sqlalchemy import func, update
+from sqlalchemy import Table, func, update
 
 from app.db.models.elt import EltRun
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -18,7 +19,7 @@ logger = logging.getLogger(__name__)
 _INTERVAL_SECONDS = 30.0
 _STARTED_LOCK = threading.Lock()
 _STARTED = False
-_RUNS = EltRun.__table__
+_RUNS = cast("Table", EltRun.__table__)
 _RELEASED = {
     "operation_kind": None,
     "operation_token": None,
