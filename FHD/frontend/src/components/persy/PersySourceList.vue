@@ -5,17 +5,36 @@
         <span class="section-kicker">Sources</span>
         <h3>资料来源</h3>
       </div>
-      <span class="source-total">{{ documents.length }} 个来源</span>
+      <span class="source-total">{{ visibleDocuments.length }} / {{ documents.length }} 个来源</span>
     </div>
-    <div v-if="documents.length" class="source-list">
-      <div v-for="doc in documents" :key="doc.document_id || `${doc.source}-${doc.version_label}`" class="source-row">
+    <div v-if="tags.length" class="tag-filter" aria-label="按标签筛选">
+      <button
+        v-for="tag in tags"
+        :key="tag"
+        type="button"
+        class="tag-filter__item"
+        :class="{ active: activeTag === tag }"
+        :aria-pressed="activeTag === tag"
+        @click="toggleTag(tag)"
+      >
+        {{ tag }}
+      </button>
+      <button v-if="activeTag" type="button" class="tag-filter__clear" @click="activeTag = ''">
+        清除
+      </button>
+    </div>
+    <div v-if="visibleDocuments.length" class="source-list">
+      <div v-for="doc in visibleDocuments" :key="doc.document_id || `${doc.source}-${doc.version_label}`" class="source-row">
         <button type="button" class="source-row__select" @click="emit('select', doc)">
           <span class="source-row__icon">
-            <i class="fa fa-file-text-o" aria-hidden="true"></i>
+            <FileTypeIcon :name="doc.source" :size="18" />
           </span>
           <span class="source-row__main">
             <strong>{{ doc.source || '未命名资料' }}</strong>
             <span>{{ parserLabel(doc.parser) }} · {{ numberText(doc.text_length) }} 字符</span>
+            <span v-if="documentTags(doc).length" class="source-row__tags">
+              <em v-for="tag in documentTags(doc)" :key="tag">{{ tag }}</em>
+            </span>
           </span>
           <span class="source-row__metric">
             <strong>{{ numberText(doc.chunk_count) }}</strong>
@@ -37,8 +56,13 @@
         </button>
       </div>
     </div>
+    <div v-else-if="documents.length" class="view-empty">
+      <i class="fa fa-filter" aria-hidden="true"></i>
+      <strong>该标签下没有资料</strong>
+      <button type="button" @click="activeTag = ''">查看全部资料</button>
+    </div>
     <div v-else class="view-empty">
-      <i class="fa fa-file-text-o" aria-hidden="true"></i>
+      <FileTypeIcon :size="20" />
       <strong>还没有资料来源</strong>
       <button type="button" @click="emit('import')">导入第一份资料</button>
     </div>
@@ -46,10 +70,12 @@
 </template>
 
 <script setup lang="ts">
+import { computed, ref } from 'vue'
+import FileTypeIcon from '@/components/common/FileTypeIcon.vue'
 import type { KnowledgeBaseDocument } from '@/api/knowledgeBase'
 import { numberText, parserLabel, versionLabel } from '@/composables/persyKnowledgeFormatters'
 
-defineProps<{
+const props = defineProps<{
   documents: KnowledgeBaseDocument[]
   deletingDocumentId: string
 }>()
@@ -59,6 +85,33 @@ const emit = defineEmits<{
   delete: [doc: KnowledgeBaseDocument]
   import: []
 }>()
+
+const activeTag = ref('')
+
+function documentTags(doc: KnowledgeBaseDocument): string[] {
+  const raw = (doc.metadata || {}).tags
+  if (Array.isArray(raw)) {
+    return raw.map((tag) => String(tag).trim()).filter(Boolean)
+  }
+  return typeof raw === 'string' && raw.trim() ? [raw.trim()] : []
+}
+
+const tags = computed(() => {
+  const seen = new Set<string>()
+  for (const doc of props.documents) {
+    for (const tag of documentTags(doc)) seen.add(tag)
+  }
+  return [...seen].sort((left, right) => left.localeCompare(right, 'zh-Hans-CN'))
+})
+
+const visibleDocuments = computed(() => {
+  if (!activeTag.value) return props.documents
+  return props.documents.filter((doc) => documentTags(doc).includes(activeTag.value))
+})
+
+function toggleTag(tag: string): void {
+  activeTag.value = activeTag.value === tag ? '' : tag
+}
 </script>
 
 <style scoped>
@@ -144,6 +197,53 @@ const emit = defineEmits<{
   display: flex;
   min-width: 0;
   flex-direction: column;
+}
+
+.tag-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 14px;
+}
+
+.tag-filter__item,
+.tag-filter__clear {
+  padding: 3px 10px;
+  border: 1px solid #d2dcd7;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #4c615a;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tag-filter__item.active {
+  border-color: #1d6259;
+  background: #e6f2ee;
+  color: #1d6259;
+}
+
+.tag-filter__clear {
+  border-style: dashed;
+  color: #8a5a2b;
+}
+
+.source-row__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.source-row__tags em {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #eef3f1;
+  color: #4c615a;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
 }
 
 .source-row > .fa-angle-right {
