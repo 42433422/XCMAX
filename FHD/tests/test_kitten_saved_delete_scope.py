@@ -54,18 +54,14 @@ def test_legacy_unowned_requires_admin(tmp_path):
     assert denied["code"] == "ANALYSIS_OWNER_UNKNOWN"
     assert path.exists()
 
-    allowed = service.delete_analysis(
-        "analysis_4", owner_id=7, tenant_id=1, allow_unowned=True
-    )
+    allowed = service.delete_analysis("analysis_4", owner_id=7, tenant_id=1, allow_unowned=True)
     assert allowed is True
     assert not path.exists()
 
 
 def test_save_records_owner_metadata(tmp_path):
     service = AnalysisSaveService(str(tmp_path))
-    saved = service.save_analysis(
-        "financial", {"k": "v"}, owner_id=7, tenant_id=1
-    )
+    saved = service.save_analysis("financial", {"k": "v"}, owner_id=7, tenant_id=1)
     assert saved["success"] is True
     payload = json.loads(Path(saved["filepath"]).read_text(encoding="utf-8"))
     assert payload["owner_id"] == "7"

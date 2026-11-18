@@ -6,12 +6,14 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass
 
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
 _DEFAULT_MAX_BYTES = 25 * 1024 * 1024
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -75,22 +77,26 @@ def fetch_object(uri: str, *, client=None) -> FetchedObject:
     try:
         response = s3.get_object(Bucket=bucket, Key=key)
     except BOUNDARY_ERRORS as exc:
-        raise ValueError(f"对象存储读取失败：{exc}") from exc
+        _LOGGER.exception("Object storage request failed")
+        raise ValueError("对象存储读取失败") from exc
     body = response.get("Body")
     if body is None:
         raise ValueError("对象存储返回空响应体")
     chunks: list[bytes] = []
     total = 0
     try:
-        chunk = body.read(1024 * 1024)
-        while chunk:
+        while total <= limit:
+            try:
+                chunk = body.read(min(1024 * 1024, limit - total + 1))
+            except BOUNDARY_ERRORS as exc:
+                _LOGGER.exception("Object storage body read failed")
+                raise ValueError("对象读取失败") from exc
+            if not chunk:
+                break
             total += len(chunk)
             if total > limit:
                 raise ValueError(f"对象超过大小限制（>{limit // 1024 // 1024}MB）")
             chunks.append(chunk)
-            chunk = body.read(1024 * 1024)
-    except BOUNDARY_ERRORS as exc:
-        raise ValueError(f"对象读取失败：{exc}") from exc
     finally:
         close = getattr(body, "close", None)
         if callable(close):

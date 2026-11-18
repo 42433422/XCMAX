@@ -443,7 +443,7 @@ describe('demoHelpers', () => {
     it('applies outline style and clears after timeout', () => {
       const el = document.createElement('div')
       highlightElement(el, 200)
-      expect(el.style.outline).toContain('2px solid #3b82f6')
+      expect(el.style.outline).toBe('2px solid rgb(59, 130, 246)')
       vi.advanceTimersByTime(200)
       expect(el.style.outline).toBe('')
     })

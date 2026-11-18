@@ -425,7 +425,11 @@ class ApprovalDecisions:
         pending = self.workflows.pending(req.request_no)
         if pending is None:
             return JSONResponse(
-                {"success": False, "retryable": True, "message": "暂时无法核实工作流状态，请稍后重试"},
+                {
+                    "success": False,
+                    "retryable": True,
+                    "message": "暂时无法核实工作流状态，请稍后重试",
+                },
                 status_code=503,
             )
         if not pending:

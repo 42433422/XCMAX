@@ -55,9 +55,7 @@ def test_semantic_rerank_uses_model_scores(monkeypatch):
 
 
 def test_semantic_rerank_falls_back_when_disabled(monkeypatch):
-    monkeypatch.setattr(
-        "app.infrastructure.rag.reranker.get_default_reranker", lambda: None
-    )
+    monkeypatch.setattr("app.infrastructure.rag.reranker.get_default_reranker", lambda: None)
     chunks = [_chunk("a", 0.5)]
     assert _semantic_rerank_chunks("a", chunks, top_k=1) is None
 

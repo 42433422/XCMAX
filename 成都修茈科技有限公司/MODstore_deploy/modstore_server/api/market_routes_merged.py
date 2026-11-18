@@ -8,7 +8,6 @@ from __future__ import annotations
 import importlib
 
 from modstore_server import java_wallet_admin
-from modstore_server.models import CatalogItem
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 # --- from market_routes_part01_part01_part01.py ---
@@ -1433,16 +1432,6 @@ class CatalogItemAdminPatchDTO(_facade().BaseModel):
     is_public: bool
 
 
-class CatalogItemReviewDTO(_facade().BaseModel):
-    """管理员审核商品：通过 / 限制 / 下架 / 恢复。"""
-
-    action: str
-    note: str = ""
-
-
-CATALOG_REVIEW_ACTIONS = {"approve", "restrict", "delist", "restore"}
-
-
 @_facade().router.post("/admin/catalog", summary="管理员上传 MOD 到市场（支持文件上传）")
 async def api_admin_upload_catalog(
     pkg_id: str = _facade().Form(..., min_length=1, max_length=128),
@@ -1543,148 +1532,6 @@ def api_admin_sync_xc_catalog_packages(
         )
         session.commit()
     return {"ok": True, **out}
-
-
-@_facade().router.get("/admin/catalog")
-def api_admin_list_catalog(
-    limit: int = _facade().Query(50, ge=1, le=200),
-    offset: int = _facade().Query(0, ge=0),
-    status: str = _facade().Query("", max_length=24),
-    search: str = _facade().Query("", max_length=200),
-    user: _facade().User = _facade().Depends(_facade()._require_admin),
-):
-    sf = _facade().get_session_factory()
-    with sf() as session:
-        query = session.query(CatalogItem)
-        kind = status.strip().lower()
-        if kind == "pending":
-            query = query.filter(CatalogItem.compliance_status == "under_review")
-        elif kind == "listed":
-            query = query.filter(
-                CatalogItem.is_public.is_(True),
-                CatalogItem.compliance_status == "approved",
-            )
-        elif kind == "restricted":
-            query = query.filter(CatalogItem.compliance_status == "restricted")
-        elif kind == "delisted":
-            query = query.filter(CatalogItem.compliance_status == "delisted")
-        elif kind:
-            raise _facade().HTTPException(422, "商品状态筛选条件无效")
-        term = search.strip()
-        if term:
-            from sqlalchemy import or_
-
-            query = query.filter(
-                or_(
-                    CatalogItem.name.contains(term, autoescape=True),
-                    CatalogItem.pkg_id.contains(term, autoescape=True),
-                )
-            )
-        total = query.count()
-        rows = query.order_by(CatalogItem.created_at.desc()).offset(offset).limit(limit).all()
-        authors = (
-            {
-                int(u.id): u.username
-                for u in session.query(_facade().User)
-                .filter(_facade().User.id.in_([r.author_id for r in rows if r.author_id]))
-                .all()
-            }
-            if rows
-            else {}
-        )
-        counts = {
-            "total": session.query(CatalogItem).count(),
-            "pending": session.query(CatalogItem)
-            .filter(CatalogItem.compliance_status == "under_review")
-            .count(),
-            "listed": session.query(CatalogItem)
-            .filter(
-                CatalogItem.is_public.is_(True),
-                CatalogItem.compliance_status == "approved",
-            )
-            .count(),
-            "restricted": session.query(CatalogItem)
-            .filter(CatalogItem.compliance_status == "restricted")
-            .count(),
-            "delisted": session.query(CatalogItem)
-            .filter(CatalogItem.compliance_status == "delisted")
-            .count(),
-        }
-        return {
-            "items": [
-                {
-                    "id": r.id,
-                    "pkg_id": r.pkg_id,
-                    "version": r.version,
-                    "name": r.name,
-                    "description": r.description,
-                    "price": r.price,
-                    "artifact": r.artifact,
-                    "industry": getattr(r, "industry", None) or "通用",
-                    "stored_filename": r.stored_filename,
-                    "sha256": r.sha256,
-                    "is_public": r.is_public,
-                    "compliance_status": r.compliance_status or "approved",
-                    "delist_reason": r.delist_reason or "",
-                    "rank_score": r.rank_score,
-                    "install_count": r.install_count,
-                    "author_id": r.author_id,
-                    "author_name": authors.get(int(r.author_id)) if r.author_id else "",
-                    "created_at": r.created_at.isoformat() if r.created_at else "",
-                    **_facade().employee_partition_meta(r.pkg_id, r.artifact),
-                }
-                for r in rows
-            ],
-            "total": total,
-            "counts": counts,
-        }
-
-
-@_facade().router.post("/admin/catalog/{item_id}/review", summary="管理员审核并上下架商品")
-def api_admin_review_catalog_item(
-    item_id: int,
-    body: CatalogItemReviewDTO,
-    user: _facade().User = _facade().Depends(_facade()._require_admin),
-):
-    action = (body.action or "").strip().lower()
-    if action not in CATALOG_REVIEW_ACTIONS:
-        raise _facade().HTTPException(400, "action 必须是 approve/restrict/delist/restore")
-    sf = _facade().get_session_factory()
-    with sf() as session:
-        item = session.query(CatalogItem).filter(CatalogItem.id == item_id).first()
-        if not item:
-            raise _facade().HTTPException(404, "商品不存在")
-        note = (body.note or "").strip()
-        if action == "approve":
-            item.compliance_status = "approved"
-            item.is_public = True
-            item.delist_reason = ""
-        elif action == "restrict":
-            item.compliance_status = "restricted"
-            item.rank_score = max(0.0, float(item.rank_score or 100.0) - 30.0)
-            item.delist_reason = note
-        elif action == "delist":
-            item.compliance_status = "delisted"
-            item.is_public = False
-            item.delist_reason = note or "管理员下架"
-            item.rank_score = 0.0
-        else:
-            item.compliance_status = "approved"
-            item.is_public = True
-            item.delist_reason = ""
-            item.rank_score = max(float(item.rank_score or 0), 80.0)
-        session.commit()
-        result = {
-            "ok": True,
-            "id": item.id,
-            "compliance_status": item.compliance_status,
-            "is_public": bool(item.is_public),
-            "delist_reason": item.delist_reason or "",
-        }
-    from modstore_server.market_catalog_api import _invalidate_market_catalog_caches
-
-    _invalidate_market_catalog_caches()
-    return result
 
 
 @_facade().router.post("/admin/upload/initiate", summary="初始化分块上传")

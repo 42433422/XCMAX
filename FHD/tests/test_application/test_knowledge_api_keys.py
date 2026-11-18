@@ -10,15 +10,78 @@
 
 from __future__ import annotations
 
+import json
+from unittest.mock import Mock
+
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.application.dataset_rag.api_keys import DatasetApiKeyStore
 from app.application.dataset_rag.models import DatasetAccessContext
 from app.application.dataset_rag_app_service import DatasetRagApplicationService
 from app.fastapi_routes import knowledge_public
 
 _REFUND = "退货政策：签收后七天内可以申请无理由退货，审核通过后原路退回。" * 6
 _INVOICE = "发票规则：支持开具电子发票，红冲需要提供原发票号码。" * 6
+
+
+def test_key_verifiers_are_salted_and_keys_remain_bound_and_revocable(tmp_path):
+    path = tmp_path / "keys.json"
+    store = DatasetApiKeyStore(path)
+    first = store.create(dataset_id="kb", tenant_id="tenant-a")
+    second = store.create(dataset_id="kb", tenant_id="tenant-b")
+    rows = json.loads(path.read_text())["datasets"]["kb"]
+    assert all(row["key_hash"].startswith("pbkdf2:sha256:600000$") for row in rows)
+    assert rows[0]["key_hash"].split("$")[1] != rows[1]["key_hash"].split("$")[1]
+    assert first["key"] not in path.read_text() and second["key"] not in path.read_text()
+    assert store.resolve(first["key"])["tenant_id"] == "tenant-a"
+    assert store.resolve(second["key"])["tenant_id"] == "tenant-b"
+    wrong = first["key"][:-1] + ("0" if first["key"][-1] != "0" else "1")
+    assert store.resolve(wrong) is None
+    assert store.revoke(dataset_id="kb", token_id=first["token_id"])
+    assert store.resolve(first["key"]) is None
+    assert all(row["requires_reissue"] is False for row in store.list(dataset_id="kb"))
+
+
+@pytest.mark.parametrize("encoded", ["0" * 64, "plain$secret", "pbkdf2:sha256:1$salt$hash"])
+def test_old_or_weak_verifiers_require_reissue_without_hash_work(tmp_path, monkeypatch, encoded):
+    path = tmp_path / "keys.json"
+    path.write_text(
+        json.dumps(
+            {
+                "datasets": {
+                    "kb": [
+                        {
+                            "token_id": "key_" + "a" * 16,
+                            "key_hash": encoded,
+                        }
+                    ]
+                }
+            }
+        )
+    )
+    verify = Mock(side_effect=AssertionError("weak verifier must not be evaluated"))
+    monkeypatch.setattr("app.application.dataset_rag.api_keys.check_password_hash", verify)
+    store = DatasetApiKeyStore(path)
+    assert store.resolve("kb_" + "a" * 16 + "_" + "b" * 48) is None
+    assert store.resolve("kb_" + "b" * 48) is None
+    assert store.list(dataset_id="kb")[0]["requires_reissue"] is True
+    verify.assert_not_called()
+
+
+def test_key_validation_performs_at_most_one_expensive_hash(tmp_path, monkeypatch):
+    row = {"token_id": "key_" + "a" * 16, "key_hash": "pbkdf2:sha256:600000$salt$hash"}
+    path = tmp_path / "keys.json"
+    path.write_text(json.dumps({"datasets": {"kb": [row] * 50, "other": [row] * 50}}))
+    verify = Mock(return_value=False)
+    monkeypatch.setattr("app.application.dataset_rag.api_keys.check_password_hash", verify)
+    store = DatasetApiKeyStore(path)
+    for invalid in ("kb_" + "a" * 100000, "kb_" + "c" * 16 + "_" + "b" * 48):
+        assert store.resolve(invalid) is None
+    verify.assert_not_called()
+    assert store.resolve("kb_" + "a" * 16 + "_" + "b" * 48) is None
+    verify.assert_called_once()
 
 
 def _service(tmp_path) -> DatasetRagApplicationService:

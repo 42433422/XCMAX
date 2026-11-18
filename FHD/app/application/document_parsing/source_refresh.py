@@ -27,44 +27,44 @@ def source_coordinates(metadata: dict[str, Any] | None) -> tuple[str, str] | Non
 def fetch_source_text(kind: str, ref: str) -> tuple[str, str, dict[str, Any]]:
     """重新抓取来源，返回 (正文, 来源标签, 需要合并的元数据)。"""
     if kind == "url":
-        from app.application.document_parsing.web_fetch import fetch_url_text
+        from app.infrastructure.document_parsing.web_fetch import fetch_url_text
 
         page = fetch_url_text(ref)
         return page.text, page.title or page.url, {"source_url": page.url}
     if kind == "confluence":
-        from app.application.document_parsing.confluence import fetch_page
+        from app.infrastructure.document_parsing.confluence import fetch_page as fetch_confluence
 
-        page = fetch_page(ref)
+        confluence = fetch_confluence(ref)
         return (
-            page.text,
-            page.title or f"confluence:{page.page_id}",
-            {"confluence_page_id": page.page_id, "source_url": page.url},
+            confluence.text,
+            confluence.title or f"confluence:{confluence.page_id}",
+            {"confluence_page_id": confluence.page_id, "source_url": confluence.url},
         )
     if kind == "feishu":
-        from app.application.document_parsing.feishu_doc import fetch_document
+        from app.infrastructure.document_parsing.feishu_doc import fetch_document as fetch_feishu
 
-        doc = fetch_document(ref)
+        feishu = fetch_feishu(ref)
         return (
-            doc.text,
-            doc.title or f"feishu:{doc.document_id}",
-            {"feishu_document_id": doc.document_id, "source_url": doc.url},
+            feishu.text,
+            feishu.title or f"feishu:{feishu.document_id}",
+            {"feishu_document_id": feishu.document_id, "source_url": feishu.url},
         )
     if kind == "notion":
-        from app.application.document_parsing.notion import fetch_page
+        from app.infrastructure.document_parsing.notion import fetch_page as fetch_notion
 
-        notion = fetch_page(ref)
+        notion = fetch_notion(ref)
         return (
             notion.text,
             notion.title or f"notion:{notion.page_id}",
             {"notion_page_id": notion.page_id, "source_url": notion.url},
         )
     if kind == "yuque":
-        from app.application.document_parsing.yuque import fetch_document
+        from app.infrastructure.document_parsing.yuque import fetch_document as fetch_yuque
 
-        doc = fetch_document(ref)
+        yuque = fetch_yuque(ref)
         return (
-            doc.text,
-            doc.title or f"yuque:{ref}",
-            {"yuque_document_ref": ref, "source_url": doc.url},
+            yuque.text,
+            yuque.title or f"yuque:{ref}",
+            {"yuque_document_ref": ref, "source_url": yuque.url},
         )
     raise ValueError(f"unsupported refresh source: {kind}")

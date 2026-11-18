@@ -168,9 +168,7 @@ def test_danger_executes_with_approved_ticket(client, app, state, monkeypatch):
         },
     )
     operation_id = _operation_id(app, "DELETE", "/api/products/{product_id}")
-    body = _call(
-        client, operation_id, params={"product_id": "P-1"}, approval_id=91
-    ).json()
+    body = _call(client, operation_id, params={"product_id": "P-1"}, approval_id=91).json()
     assert body["success"] is True
     assert state["deleted"] is True
 
@@ -188,9 +186,7 @@ def test_danger_rejects_rejected_ticket(client, app, state, monkeypatch):
         },
     )
     operation_id = _operation_id(app, "DELETE", "/api/products/{product_id}")
-    body = _call(
-        client, operation_id, params={"product_id": "P-1"}, approval_id=91
-    ).json()
+    body = _call(client, operation_id, params={"product_id": "P-1"}, approval_id=91).json()
     assert body["code"] == "APPROVAL_PENDING"
     assert state["deleted"] is False
 
@@ -309,9 +305,7 @@ def test_missing_path_param_is_rejected(client, app):
 
 
 def test_scope_limits_operation_call(client, app):
-    created = generate_api_key(
-        "scoped", scopes=["read:products"], expires_at=None
-    )
+    created = generate_api_key("scoped", scopes=["read:products"], expires_at=None)
     key = created["key"]
     products = _operation_id(app, "GET", "/api/products")
     orders = _operation_id(app, "GET", "/api/orders")

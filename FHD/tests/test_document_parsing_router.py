@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from app.application.document_parsing import router
+from app.infrastructure.document_parsing import router
 
 
 def _legacy() -> tuple[str, str, dict]:

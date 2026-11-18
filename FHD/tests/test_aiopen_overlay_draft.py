@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -47,7 +50,7 @@ def test_parse_drafts_drops_unknown_and_invalid_entries():
 
 def test_parse_drafts_recovers_objects_from_reasoning_text():
     raw = (
-        '先分析这批接口。\n'
+        "先分析这批接口。\n"
         '{"operation_id":"orders.create","when_to_use":"创建订单","side_effects":["写数据库"],'
         '"preconditions":["已登录"],"returns":""}\n'
         "以上。"
@@ -81,6 +84,28 @@ def test_select_targets_respects_domains():
     operations = [_operation("products.list", "read"), _operation("orders.list", "read")]
     targets = draft_tool.select_targets(operations, limit=0, domains={"orders"})
     assert [item["operation_id"] for item in targets] == ["orders.list"]
+
+
+def test_standalone_dry_run_bootstraps_project_imports(tmp_path):
+    catalog = tmp_path / "catalog.json"
+    catalog.write_text(json.dumps({"operations": [_operation("products.list", "read")]}))
+    env = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"}
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(_FHD / "scripts/dev/aiopen_overlay_draft.py"),
+            "--catalog-json",
+            str(catalog),
+            "--dry-run",
+        ],
+        cwd=tmp_path,
+        env=env,
+        text=True,
+        capture_output=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "products.list" in result.stdout and "dry-run 未调用模型" in result.stdout
 
 
 @pytest.mark.asyncio
@@ -155,9 +180,7 @@ def test_loader_reads_generated_but_not_drafts(monkeypatch, tmp_path):
         encoding="utf-8",
     )
     (generated / "batch-02.jsonl").write_text(
-        json.dumps(
-            {"operation_id": "print.test", "when_to_use": "打印自检"}, ensure_ascii=False
-        )
+        json.dumps({"operation_id": "print.test", "when_to_use": "打印自检"}, ensure_ascii=False)
         + "\n",
         encoding="utf-8",
     )

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
-import { ref } from 'vue'
+import { nextTick, ref } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 
 const sendMessageMock = vi.fn()
@@ -274,7 +274,10 @@ describe('FloatingChatAssistant', () => {
     const el = toggle.element as HTMLElement
     const capture = vi.fn(), release = vi.fn()
     Object.assign(el, { setPointerCapture: capture, hasPointerCapture: () => true, releasePointerCapture: release })
-    const pointer = (kind: string, properties = {}) => toggle.trigger(kind, { button: 0, pointerId: 7, clientX: 100, clientY: 100, ...properties })
+    const pointer = async (kind: string, properties: PointerEventInit = {}) => {
+      el.dispatchEvent(new PointerEvent(kind, { bubbles: true, button: 0, pointerId: 7, clientX: 100, clientY: 100, ...properties }))
+      await nextTick()
+    }
     await pointer('pointerdown', { button: 2 })
     expect(capture).not.toHaveBeenCalled()
     await pointer('pointerdown')

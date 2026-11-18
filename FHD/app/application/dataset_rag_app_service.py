@@ -304,7 +304,11 @@ class DatasetRagApplicationService:
         from app.application.dataset_rag.vector_index import backfill_missing_embeddings
 
         _recover_rebuild_jobs_locked(state)
-        dirty = backfill_missing_embeddings(self._vector.embedder, state)
+        # A queued rebuild must claim and persist ownership before model IO.
+        # Rehydration runs under the repository lock; probing the embedder here
+        # would block the host before the queued job can become running.
+        rebuilding = any(job.status in {"queued", "running"} for job in state.rebuild_jobs.values())
+        dirty = False if rebuilding else backfill_missing_embeddings(self._vector.embedder, state)
         self._renumber_chunks(state)
         self._vector._sync_vector_index_locked(state)
         self._vector._refresh_index_metadata(state)
@@ -612,7 +616,8 @@ class DatasetRagApplicationService:
             is_changed = bool(outcome.get("changed"))
             changed += int(is_changed)
             unchanged += int(not is_changed)
-            document = outcome.get("document") if isinstance(outcome.get("document"), dict) else {}
+            raw_document = outcome.get("document")
+            document = raw_document if isinstance(raw_document, dict) else {}
             results.append(
                 {
                     "document_id": doc_id,
@@ -1401,7 +1406,7 @@ class DatasetRagApplicationService:
             return {
                 "success": False,
                 "error_code": "knowledge_api_key_invalid",
-                "message": "invalid or revoked API key",
+                "message": "invalid, revoked or legacy API key; issue a new key",
                 "chunks": [],
             }
         context = DatasetAccessContext(
@@ -1629,7 +1634,8 @@ class DatasetRagApplicationService:
             for row in result.get("chunks") or []:
                 if not isinstance(row, dict):
                     continue
-                metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+                raw_metadata = row.get("metadata")
+                metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
                 pooled.append(
                     {
                         **row,
@@ -1694,7 +1700,8 @@ class DatasetRagApplicationService:
             return []
         rows: dict[tuple[str, str, int], dict[str, Any]] = {}
         for row in pooled:
-            metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+            raw_metadata = row.get("metadata")
+            metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
             key = (
                 str(metadata.get("_dataset_id") or ""),
                 str(metadata.get("document_id") or row.get("source") or ""),

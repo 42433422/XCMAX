@@ -527,7 +527,9 @@ def test_workflow_queries_preserve_unknown_availability(availability, endpoint, 
     result = (
         queries.get_request_detail(1)
         if endpoint == "detail"
-        else queries.list_requests(7 if endpoint == "reviewer_list" else None, None, None, None, 1, 20)
+        else queries.list_requests(
+            7 if endpoint == "reviewer_list" else None, None, None, None, 1, 20
+        )
     )
     if status not in ("pending", "in_progress"):
         pending.assert_not_called()

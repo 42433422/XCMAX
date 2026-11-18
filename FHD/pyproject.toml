@@ -6,6 +6,7 @@ license = "Apache-2.0"
 requires-python = ">=3.11.5"
 # 运行时依赖见 optional-dependencies；CI/生产安装：requirements-server-api.txt（与 server-api extra 对齐）
 dependencies = [
+    "langchain-core==1.5.3",
     "langgraph==1.2.10",
     "langgraph-checkpoint==4.3.0",
     "langgraph-checkpoint-sqlite==3.1.2",
@@ -32,6 +33,10 @@ pdf-ocr = [
 intent-semantic = [
     "semantic-router>=1.1,<2",
     "fastembed>=0.7",
+]
+# 主动提醒外发渠道（可选）：Apprise 负责飞书/钉钉/邮件等轻量 fanout（BSD-2）。
+proactive-push = [
+    "apprise>=1.12,<2",
 ]
 server-api = [
     "fastapi>=0.136.1",
@@ -120,6 +125,7 @@ dev = [
     "ruff>=0.8,<0.16",
     "import-linter>=2.15,<3",
     "mypy>=1.8",
+    "boto3-stubs[s3]==1.44.5",
     "types-redis",
     "types-requests",
     "types-pyyaml",
@@ -280,8 +286,10 @@ module = [
     "barcode.*",
     "cv2.*",
     "docling.*",
+    "rapidocr_onnxruntime.*",
     "easyocr.*",
     "faster_whisper.*",
+    "fastembed.*",
     "google.*",
     "jsonschema.*",
     "keyring.*",

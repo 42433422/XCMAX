@@ -1,4 +1,5 @@
 import { app } from 'electron'
+import { isDesktopPackaged } from './desktop-config'
 import { autoUpdater } from 'electron-updater'
 import { resolveDesktopInstallIdentity } from './installation-identity'
 import { desktopRuntime } from './runtime-state'
@@ -17,7 +18,7 @@ import {
 export function getDesktopInstallIdentity() {
   return resolveDesktopInstallIdentity({
     platform: process.platform,
-    isPackaged: app.isPackaged,
+    isPackaged: isDesktopPackaged(),
     executablePath: process.execPath,
   })
 }

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from app.application.dataset_rag.document_parser import _pdf_ocr_enabled
-from app.application.document_parsing import ocr
+from app.infrastructure.document_parsing import ocr
 
 
 def test_ocr_mode_defaults_to_auto(monkeypatch):
@@ -36,7 +36,7 @@ def test_image_document_uses_ocr(monkeypatch, tmp_path):
     image_path = tmp_path / "note.png"
     Image.new("RGB", (60, 30), "white").save(image_path)
     monkeypatch.setattr(
-        "app.application.document_parsing.ocr.ocr_image_text",
+        "app.infrastructure.document_parsing.ocr.ocr_image_text",
         lambda path, **kwargs: "图片里的文字",
     )
     parser = DocumentParser(

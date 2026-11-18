@@ -625,7 +625,7 @@ async def test_real_chat_errors_never_return_upstream_keys(upstream, caplog, str
 
 
 @pytest.mark.asyncio
-async def test_stream_and_byok_keep_their_own_endpoints(upstream):
+async def test_stream_and_byok_keep_their_own_endpoints(upstream, monkeypatch):
     from modstore_server.llm_chat_proxy import chat_dispatch, chat_dispatch_stream
 
     save()
@@ -643,6 +643,9 @@ async def test_stream_and_byok_keep_their_own_endpoints(upstream):
     assert events == [{"type": "delta", "delta": "OK"}]
     assert upstream["pinned"] == [BASE + "/chat/completions"]
     upstream["stream"] = False
+    # This fixture exercises the legacy HTTP transport. Router deployments have
+    # their own isolated transport tests and must not escape this fixture.
+    monkeypatch.setattr("modstore_server.llm_litellm_router.available", lambda: False)
     await chat_dispatch(
         "openai",
         api_key="user-only-test-key",

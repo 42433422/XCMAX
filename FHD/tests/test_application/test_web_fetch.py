@@ -7,7 +7,7 @@ import types
 
 import pytest
 
-from app.application.document_parsing import web_fetch
+from app.infrastructure.document_parsing import web_fetch
 
 
 class _Response:
@@ -19,19 +19,54 @@ class _Response:
         headers: dict[str, str] | None = None,
         encoding: str = "utf-8",
     ) -> None:
-        self.status_code = status_code
+        self.status = status_code
         self._body = body
-        self.headers = headers or {}
-        self.encoding = encoding
-        self.apparent_encoding = encoding
+        self.headers = {"content-type": f"text/html; charset={encoding}", **(headers or {})}
+        self.closed = False
+        self.bytes_read = 0
 
-    @property
-    def is_redirect(self) -> bool:
-        return self.status_code in {301, 302, 303, 307, 308}
-
-    def iter_content(self, chunk_size: int):
+    def stream(self, chunk_size: int, *, decode_content: bool):
+        assert decode_content is True
         for start in range(0, len(self._body), chunk_size):
-            yield self._body[start : start + chunk_size]
+            chunk = self._body[start : start + chunk_size]
+            self.bytes_read += len(chunk)
+            yield chunk
+
+    def close(self):
+        self.closed = True
+
+
+@pytest.fixture(autouse=True)
+def _public_dns(monkeypatch):
+    monkeypatch.delenv("XCAGI_KB_ALLOW_PRIVATE_URLS", raising=False)
+    monkeypatch.setattr(
+        web_fetch.socket, "getaddrinfo", lambda *_a, **_k: [(2, 1, 6, "", ("93.184.216.34", 0))]
+    )
+
+
+def _transport(monkeypatch, *responses):
+    pools = []
+    pending = iter(responses)
+
+    class Pool:
+        def __init__(self, address, **options):
+            self.address, self.options = address, options
+            self.calls, self.closed = [], False
+            pools.append(self)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            self.closed = True
+
+        def request(self, method, target, **options):
+            self.calls.append((method, target, options))
+            return next(pending)
+
+    monkeypatch.setattr(web_fetch.urllib3, "HTTPConnectionPool", Pool)
+    monkeypatch.setattr(web_fetch.urllib3, "HTTPSConnectionPool", Pool)
+    return pools
 
 
 def _fake_trafilatura(text: str | None, title: str = ""):
@@ -76,11 +111,8 @@ def test_assert_public_http_url_rejects_unresolved_domain(monkeypatch: pytest.Mo
 
 
 def test_fetch_url_text_extracts_article(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("XCAGI_KB_ALLOW_PRIVATE_URLS", "1")
-    monkeypatch.setattr(
-        "requests.get",
-        lambda *_a, **_k: _Response(body="<html><body>正文内容</body></html>".encode()),
-    )
+    response = _Response(body="<html><body>正文内容</body></html>".encode())
+    pools = _transport(monkeypatch, response)
     monkeypatch.setitem(sys.modules, "trafilatura", _fake_trafilatura("正文内容", "示例标题"))
 
     page = web_fetch.fetch_url_text("https://example.com/read")
@@ -88,6 +120,7 @@ def test_fetch_url_text_extracts_article(monkeypatch: pytest.MonkeyPatch) -> Non
     assert page.text == "正文内容"
     assert page.title == "示例标题"
     assert page.url == "https://example.com/read"
+    assert response.closed and pools[0].closed
 
 
 def test_fetch_url_text_validates_each_redirect_hop(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -100,22 +133,20 @@ def test_fetch_url_text_validates_each_redirect_hop(monkeypatch: pytest.MonkeyPa
         return [(2, 1, 6, "", (ip, 0))]
 
     monkeypatch.setattr(web_fetch.socket, "getaddrinfo", _resolve)
-    monkeypatch.setattr(
-        "requests.get",
-        lambda *_a, **_k: _Response(
-            status_code=302, headers={"location": "http://internal.example.com/secret"}
-        ),
+    redirect = _Response(
+        status_code=302, headers={"location": "http://internal.example.com/secret"}
     )
+    pools = _transport(monkeypatch, redirect)
 
     with pytest.raises(ValueError, match="内网"):
         web_fetch.fetch_url_text("https://example.com/start")
 
     assert resolved == ["example.com", "internal.example.com"]
+    assert len(pools) == 1 and pools[0].closed and redirect.closed
 
 
 def test_fetch_url_text_rejects_empty_article(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("XCAGI_KB_ALLOW_PRIVATE_URLS", "1")
-    monkeypatch.setattr("requests.get", lambda *_a, **_k: _Response())
+    _transport(monkeypatch, _Response())
     monkeypatch.setitem(sys.modules, "trafilatura", _fake_trafilatura(None))
 
     with pytest.raises(ValueError, match="未提取到正文"):
@@ -123,13 +154,86 @@ def test_fetch_url_text_rejects_empty_article(monkeypatch: pytest.MonkeyPatch) -
 
 
 def test_fetch_url_text_rejects_oversize_body(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("XCAGI_KB_ALLOW_PRIVATE_URLS", "1")
-    monkeypatch.setattr(
-        "requests.get", lambda *_a, **_k: _Response(body=b"x" * (web_fetch.MAX_BYTES + 1))
-    )
+    response = _Response(body=b"x" * (web_fetch.MAX_BYTES * 2))
+    pools = _transport(monkeypatch, response)
 
     with pytest.raises(ValueError, match="体积超过限制"):
         web_fetch.fetch_url_text("https://example.com/huge")
+    assert response.bytes_read <= web_fetch.MAX_BYTES + 64 * 1024
+    assert response.closed and pools[0].closed
+
+
+@pytest.mark.parametrize(
+    "address", ["0.0.0.0", "100.64.0.1", "169.254.169.254", "::1", "::ffff:127.0.0.1", "224.0.0.1"]
+)
+def test_url_rejects_nonpublic_and_mixed_dns_answers(monkeypatch, address):
+    monkeypatch.setattr(
+        web_fetch.socket,
+        "getaddrinfo",
+        lambda *_a, **_k: [(2, 1, 6, "", ("93.184.216.34", 0)), (2, 1, 6, "", (address, 0))],
+    )
+    pools = _transport(monkeypatch)
+    with pytest.raises(ValueError, match="内网"):
+        web_fetch.fetch_url_text("http://example.com/")
+    assert pools == []
+
+
+@pytest.mark.parametrize(
+    "url",
+    ["https://user:secret@example.com/", "https://example.com:65536/", "https://example.com:bad/"],
+)
+def test_url_rejects_credentials_and_invalid_ports(monkeypatch, url):
+    pools = _transport(monkeypatch)
+    with pytest.raises(ValueError):
+        web_fetch.fetch_url_text(url)
+    assert pools == []
+
+
+def test_url_pins_checked_ip_against_dns_rebinding_and_preserves_tls_identity(monkeypatch):
+    resolved = []
+
+    def rebinding(host, *_a, **_k):
+        resolved.append(host)
+        address = "93.184.216.34" if len(resolved) == 1 else "127.0.0.1"
+        return [(2, 1, 6, "", (address, 0))]
+
+    monkeypatch.setattr(web_fetch.socket, "getaddrinfo", rebinding)
+    monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:8080")
+    pools = _transport(monkeypatch, _Response())
+    monkeypatch.setitem(sys.modules, "trafilatura", _fake_trafilatura("正文"))
+    web_fetch.fetch_url_text("https://example.com:8443/read?q=1#fragment")
+    assert resolved == ["example.com"] and pools[0].address == "93.184.216.34"
+    assert pools[0].options == {
+        "port": 8443,
+        "server_hostname": "example.com",
+        "assert_hostname": "example.com",
+        "cert_reqs": "CERT_REQUIRED",
+    }
+    method, target, options = pools[0].calls[0]
+    assert (method, target) == ("GET", "/read?q=1")
+    assert options["headers"]["Host"] == "example.com:8443"
+    assert options["preload_content"] is False and options["redirect"] is False
+    assert options["retries"] is False
+
+
+def test_url_allows_explicit_private_override_but_still_pins_ip(monkeypatch):
+    monkeypatch.setenv("XCAGI_KB_ALLOW_PRIVATE_URLS", "1")
+    monkeypatch.setattr(
+        web_fetch.socket, "getaddrinfo", lambda *_a, **_k: [(2, 1, 6, "", ("127.0.0.1", 0))]
+    )
+    pools = _transport(monkeypatch, _Response())
+    monkeypatch.setitem(sys.modules, "trafilatura", _fake_trafilatura("正文"))
+    web_fetch.fetch_url_text("http://internal.example.com/")
+    assert pools[0].address == "127.0.0.1"
+
+
+def test_url_closes_all_redirects_and_enforces_hop_limit(monkeypatch):
+    responses = [_Response(status_code=302, headers={"location": "/next"}) for _ in range(4)]
+    pools = _transport(monkeypatch, *responses)
+    with pytest.raises(ValueError, match="次数过多"):
+        web_fetch.fetch_url_text("https://example.com/start")
+    assert all(response.closed for response in responses)
+    assert all(pool.closed for pool in pools)
 
 
 def _route_client(calls: list[dict]):

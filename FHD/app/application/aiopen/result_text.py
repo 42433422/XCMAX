@@ -92,9 +92,12 @@ def format_tool_result_text(tool_name: str, result: dict[str, Any]) -> str:
             ref = el.get("ref") or el.get("selector") or "?"
             label = str(el.get("name") or el.get("text") or el.get("label") or "")[:60]
             role = el.get("role") or el.get("tag") or ""
-            state = el.get("state") if isinstance(el.get("state"), dict) else {}
+            raw_state = el.get("state")
+            state = raw_state if isinstance(raw_state, dict) else {}
             marks = "".join(
-                f" {key}" for key in ("disabled", "checked", "expanded", "selected") if state.get(key)
+                f" {key}"
+                for key in ("disabled", "checked", "expanded", "selected")
+                if state.get(key)
             )
             lines.append(f"  · [{role}]{marks} {label!r} → {ref}")
         if len(elements or []) > 60:
@@ -103,7 +106,8 @@ def format_tool_result_text(tool_name: str, result: dict[str, Any]) -> str:
             lines.append("  （节点过多已截断，可用 ui_navigate 缩小范围后重新快照）")
         return "\n".join(lines)
     if name == "ui_verify":
-        checks = result.get("checks") if isinstance(result.get("checks"), list) else []
+        raw_checks = result.get("checks")
+        checks = raw_checks if isinstance(raw_checks, list) else []
         lines = [f"页面校验：{'通过' if ok else '未通过'}"]
         for check in checks:
             if not isinstance(check, dict):
@@ -151,10 +155,7 @@ def format_tool_result_text(tool_name: str, result: dict[str, Any]) -> str:
             detail = f"审批单 #{ticket}" if ticket else ""
             if number:
                 detail += f"（{number}）"
-            return (
-                f"{operation_id} 需要人工审批，尚未执行。{detail}\n"
-                f"{result.get('message', '')}"
-            )
+            return f"{operation_id} 需要人工审批，尚未执行。{detail}\n{result.get('message', '')}"
         if code == "WRITE_DISABLED":
             return f"{operation_id} 为写操作，服务端未启用。\n{result.get('message', '')}"
         if not ok:
@@ -190,10 +191,10 @@ def format_tool_result_text(tool_name: str, result: dict[str, Any]) -> str:
     if name == "operation_describe":
         if not ok:
             return f"读取 operation 失败：{result.get('message', '')}"
-        operation = result.get("operation") if isinstance(result.get("operation"), dict) else {}
-        semantics = (
-            operation.get("semantics") if isinstance(operation.get("semantics"), dict) else {}
-        )
+        raw_operation = result.get("operation")
+        operation = raw_operation if isinstance(raw_operation, dict) else {}
+        raw_semantics = operation.get("semantics")
+        semantics = raw_semantics if isinstance(raw_semantics, dict) else {}
         lines = [
             f"{operation.get('operation_id')}  {operation.get('method')} {operation.get('path')}",
             f"风险：{operation.get('risk')} · scope：{operation.get('scope')}"

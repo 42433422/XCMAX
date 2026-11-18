@@ -48,7 +48,7 @@ beforeEach(async () => {
     if (url.endsWith('/api/templates')) return response({ success: true, templates: savedTemplates })
     if (url.endsWith('/api/templates/db:42')) return failDetail ? response({ message: '模板载入失败' }, 503) : response({ success: true, template })
     if (url.endsWith('/api/print/label-jobs')) return failGenerate ? response({ message: '字段缺少产品绑定' }, 400) : response({ success: true, job: baseJob })
-    if (url.endsWith('/file')) return new Response(new Blob(['%PDF-1.7 real generated test artifact'], { type: 'application/pdf' }), { headers: { 'Content-Type': 'application/pdf' } })
+    if (url.endsWith('/file')) return new Response('%PDF-1.7 real generated test artifact', { headers: { 'Content-Type': 'application/pdf' } })
     if (url.endsWith('/confirmation')) return response({ success: true, job: baseJob, confirm_token: 'confirmed-on-server-123456', confirm_prompt: '确认将 3 张 80 × 50 mm 标签提交到 LabelPrinter？' })
     if (url.endsWith('/submit')) {
       if (submitMode === 'network') throw new Error('连接中断')
@@ -231,6 +231,7 @@ describe('actual Mod label output flow', () => {
     expect(generate[1].headers['X-CSRF-Token']).toBe('label-csrf')
     expect(wrapper!.get('iframe').attributes('src')).toBe('blob:label-file')
     expect(wrapper!.get('a[download]').attributes('href')).toBe('blob:label-file')
+    expect(await (vi.mocked(URL.createObjectURL).mock.calls[0][0] as Blob).text()).toBe('%PDF-1.7 real generated test artifact')
     expect(fetchMock.mock.calls.find(call => call[0].endsWith('/file'))![1].credentials).toBe('include')
     expect(fetchMock.mock.calls.filter(call => call[0].endsWith('/submit'))).toHaveLength(0)
     await button('准备打印').trigger('click'); await flushPromises()

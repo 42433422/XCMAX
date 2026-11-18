@@ -30,9 +30,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def test_ambiguous_write_returns_candidates_and_accepts_ordinal(
-    trusted_actor, monkeypatch
-) -> None:
+def test_ambiguous_write_returns_candidates_and_accepts_ordinal(trusted_actor, monkeypatch) -> None:
     from app.application import get_ai_chat_app_service
     from app.db.models import Product
     from app.infrastructure.tenant_scope import tenant_scope
@@ -141,4 +139,3 @@ def test_full_multiturn_scenarios_report(trusted_actor, monkeypatch) -> None:
             rows.append(row)
             print("ACCEPTANCE", row, flush=True)
     assert rows, "未产生验收记录"
-

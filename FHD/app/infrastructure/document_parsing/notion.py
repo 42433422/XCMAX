@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from dataclasses import dataclass
@@ -20,6 +21,7 @@ MAX_BLOCK_PAGES = 5
 TIMEOUT_S = 15
 NOTION_VERSION = "2022-06-28"
 _DEFAULT_BASE = "https://api.notion.com/v1"
+_LOGGER = logging.getLogger(__name__)
 _PAGE_ID = re.compile(r"^[0-9a-fA-F]{32}$|^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$")
 
 _TEXT_BLOCKS = frozenset(
@@ -121,7 +123,8 @@ def _get_json(getter, url: str, headers: dict[str, str]) -> dict:
     try:
         response = getter(url, headers=headers, timeout=TIMEOUT_S)
     except BOUNDARY_ERRORS as exc:
-        raise ValueError(f"Notion 请求失败：{exc}") from exc
+        _LOGGER.exception("Notion request failed")
+        raise ValueError("Notion 请求失败") from exc
     if response.status_code >= 400:
         raise ValueError(f"Notion 返回 HTTP {response.status_code}")
     raw = bytes(response.content or b"")
@@ -130,11 +133,15 @@ def _get_json(getter, url: str, headers: dict[str, str]) -> dict:
     try:
         payload = response.json()
     except BOUNDARY_ERRORS as exc:
-        raise ValueError(f"Notion 响应无法解析：{exc}") from exc
+        _LOGGER.exception("Notion response decoding failed")
+        raise ValueError("Notion 响应无法解析") from exc
     if not isinstance(payload, dict):
         raise ValueError("Notion 响应格式不正确")
     if payload.get("object") == "error":
-        raise ValueError(f"Notion 读取失败：{payload.get('message') or payload.get('code')}")
+        _LOGGER.warning(
+            "Notion request rejected: %s", payload.get("message") or payload.get("code")
+        )
+        raise ValueError("Notion 读取失败")
     return payload
 
 

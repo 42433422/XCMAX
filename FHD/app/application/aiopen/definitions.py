@@ -92,7 +92,10 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "operation_id": {"type": "string", "description": "来自 knowledge_search 的 operation_id"}
+                "operation_id": {
+                    "type": "string",
+                    "description": "来自 knowledge_search 的 operation_id",
+                }
             },
             "required": ["operation_id"],
         },

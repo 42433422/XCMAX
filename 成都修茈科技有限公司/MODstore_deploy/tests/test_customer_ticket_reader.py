@@ -266,9 +266,18 @@ def test_grants_fail_closed_and_revocation_is_immediate(reader_case, change):
     assert client.get("/api/customer-service/tickets", headers=headers).status_code == 401
 
 
-@pytest.mark.parametrize("old_intent", [None, "account_support", "general"])
+@pytest.mark.parametrize(
+    ("old_intent", "correct_intent"),
+    [
+        (None, False),
+        ("account_support", False),
+        ("general", False),
+        ("account_support", True),
+        ("general", True),
+    ],
+)
 def test_title_correction_is_admin_only_atomic_and_has_no_dispatch(
-    reader_case, monkeypatch, old_intent
+    reader_case, monkeypatch, old_intent, correct_intent
 ):
     from modstore_server import customer_service_api
     from modstore_server.models import get_session_factory
@@ -286,13 +295,14 @@ def test_title_correction_is_admin_only_atomic_and_has_no_dispatch(
 
     body = {"title": "  员工图谱无法正常显示  ", "expected_title": "Ticket 0"}
     if old_intent:
+        set_ticket(intent=old_intent)
+    if correct_intent:
         body.update(
             title="Ticket 0",
             intent="product_issue",
             expected_intent=old_intent,
             reason="原描述明确是软件功能故障，纠正误分类",
         )
-        set_ticket(intent=old_intent)
 
     def forbidden(*args, **kwargs):
         raise AssertionError("metadata correction must not enter chat or dispatch")
@@ -320,12 +330,12 @@ def test_title_correction_is_admin_only_atomic_and_has_no_dispatch(
                     ({"intent": "refund"}, 422),
                     ({"expected_intent": stale_intent}, 409),
                 ]
-                if old_intent
+                if correct_intent
                 else [({"reason": "未选择分类"}, 422)]
             ),
         ]:
             assert client.put(url, json={**body, **changes}).status_code == status
-        if old_intent:
+        if correct_intent:
             for values in (
                 {"status": "resolved"},
                 {"closed_at": datetime.now(UTC)},
@@ -338,7 +348,9 @@ def test_title_correction_is_admin_only_atomic_and_has_no_dispatch(
         response = client.put(url, json=body)
         assert response.status_code == 200, response.text
         assert response.json()["ticket"]["title"] == body["title"].strip()
-        assert response.json()["ticket"].get("intent") == ("product_issue" if old_intent else None)
+        assert response.json()["ticket"].get("intent") == (
+            "product_issue" if correct_intent else None
+        )
         assert client.put(url, json=body).status_code == 200
         assert client.put(url, json={**body, "title": "another"}).status_code == 409
         detail = client.get(detail_url).json()
@@ -350,17 +362,17 @@ def test_title_correction_is_admin_only_atomic_and_has_no_dispatch(
             "title": body["title"].strip(),
             **(
                 {"intent": "product_issue", "ticket_type": "defect", "ticket_type_label": "缺陷"}
-                if old_intent
+                if correct_intent
                 else {}
             ),
         }
         assert client.get("/api/customer-service/tickets").json()["total"] == count
-        event = "ticket_classification_corrected" if old_intent else "ticket_title_corrected"
+        event = "ticket_classification_corrected" if correct_intent else "ticket_title_corrected"
         audits = [r for r in detail["audit_logs"] if r["event_type"] == event]
         assert len(audits) == 1
         assert audits[0]["actor_user_id"] == admin.id and audits[0]["actor_type"] == "admin"
         assert audits[0]["detail"]["old_title"] == "Ticket 0"
-        if old_intent:
+        if correct_intent:
             assert audits[0]["detail"] == {
                 "old_title": "Ticket 0",
                 "new_title": "Ticket 0",

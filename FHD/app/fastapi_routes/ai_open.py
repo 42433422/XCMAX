@@ -302,9 +302,7 @@ def _authorize_tool_call(
     return authorize_api_key(key, scope or tool)
 
 
-def _mcp_authorize(
-    msg: dict[str, Any], key: str | None, app: Any
-) -> dict[str, Any] | None:
+def _mcp_authorize(msg: dict[str, Any], key: str | None, app: Any) -> dict[str, Any] | None:
     """仅对 tools/call 做 Key 策略校验；其余方法沿用原有鉴权。"""
     if msg.get("method") != "tools/call":
         return None

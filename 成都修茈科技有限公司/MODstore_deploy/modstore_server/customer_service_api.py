@@ -14,7 +14,7 @@ from typing import Any, Dict, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import get_current_user, get_db, require_admin
@@ -75,8 +75,8 @@ _require_admin = require_admin
 def _evidence_markers(key: str, value: str) -> list:
     """evidence_json 是文本列；按序列化常见写法匹配，供管理端派生分类筛选。"""
     return [
-        CustomerServiceTicket.evidence_json.like(f'%"{key}": "{value}"%'),
-        CustomerServiceTicket.evidence_json.like(f'%"{key}":"{value}"%'),
+        func.coalesce(CustomerServiceTicket.evidence_json, "{}").like(f'%"{key}": "{value}"%'),
+        func.coalesce(CustomerServiceTicket.evidence_json, "{}").like(f'%"{key}":"{value}"%'),
     ]
 
 
@@ -238,6 +238,7 @@ async def list_tickets(
     ticket_type: str = Query("", max_length=24),
     ticket_domain: str = Query("", max_length=24),
     ticket_source: str = Query("", max_length=24),
+    account_id: int = Query(0, ge=0),
     search: str = Query("", max_length=200),
     source_ref: str = Query("", max_length=128),
     offset: int = Query(0, ge=0),
@@ -260,6 +261,8 @@ async def list_tickets(
             CustomerServiceTicket.ticket_no
             == request_identity(user.id, "customer_feedback", source_ref),
         )
+    if user.is_admin and account_id:
+        q = q.filter(CustomerServiceTicket.user_id == account_id)
     if status:
         q = q.filter(CustomerServiceTicket.status == status)
     # 分类筛选只对管理端启用；客户仍只能读取自己的工单。
@@ -276,7 +279,10 @@ async def list_tickets(
         if kind == "incident":
             q = q.filter(_github_self_heal_condition())
         elif kind in TICKET_TYPE_INTENTS:
-            q = q.filter(CustomerServiceTicket.intent.in_(TICKET_TYPE_INTENTS[kind]))
+            q = q.filter(
+                ~_github_self_heal_condition(),
+                CustomerServiceTicket.intent.in_(TICKET_TYPE_INTENTS[kind]),
+            )
         else:
             raise HTTPException(status_code=422, detail="工单类型筛选条件无效")
     if user.is_admin and ticket_domain.strip():
@@ -297,11 +303,12 @@ async def list_tickets(
             q = q.filter(_github_self_heal_condition())
         else:
             q = q.filter(
+                ~_github_self_heal_condition(),
                 CustomerServiceTicket.submitter_type
                 == {
                     "admin_created": "admin",
                     "customer_chat": "customer",
-                }[kind]
+                }[kind],
             )
     term = search.strip()
     if term:
@@ -450,6 +457,23 @@ async def ticket_detail(
     if isinstance(user, TicketReader):
         return reader_detail(db, ticket, user)
 
+    delivery: Dict[str, Any] = {}
+    if user.is_admin and ticket.intent == "custom_delivery":
+        from modstore_server.customer_service_delivery_api import _custom_delivery_payload
+
+        from modstore_server.customer_delivery_failure import reconcile_runtime_failures
+        from modstore_server.customer_service_delivery_payment_api import (
+            reconcile_custom_delivery_payment,
+        )
+
+        changed = reconcile_runtime_failures(db, ticket)
+        changed = await reconcile_custom_delivery_payment(db, ticket) or changed
+        if changed:
+            db.commit()
+            db.refresh(ticket)
+        payload = await _custom_delivery_payload(ticket)
+        delivery["custom_delivery"] = payload.get("custom_delivery") or {}
+
     def related(model: Any, descending: bool = False) -> list[Any]:
         order = model.id.desc() if descending else model.id.asc()
         return list(db.query(model).filter(model.ticket_id == ticket.id).order_by(order).all())
@@ -457,13 +481,6 @@ async def ticket_detail(
     decisions = [decision_payload(d) for d in related(CustomerServiceDecision, True)]
     actions = [action_payload(a) for a in related(CustomerServiceAction)]
     from modstore_server.customer_ticket_execution import ticket_execution_overview
-
-    delivery: Dict[str, Any] = {}
-    if user.is_admin and ticket.intent == "custom_delivery":
-        from modstore_server.customer_service_delivery_api import _custom_delivery_payload
-
-        payload = await _custom_delivery_payload(ticket)
-        delivery["custom_delivery"] = payload.get("custom_delivery") or {}
 
     return {
         **({"execution_overview": ticket_execution_overview(db, ticket)} if user.is_admin else {}),

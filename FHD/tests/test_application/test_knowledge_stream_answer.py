@@ -140,3 +140,21 @@ def test_stream_route_emits_sse() -> None:
         next(line for line in done_block.splitlines() if line.startswith("data: "))[6:]
     )
     assert done_data["answer"] == "退款"
+
+
+def test_stream_route_redacts_internal_errors_and_logs_for_operators(caplog) -> None:
+    from app.fastapi_routes.knowledge.view_routes import DatasetViewRoutes
+
+    class FailedViews(FakeViews):
+        async def stream_answer(self, *_args):
+            yield {"event": "meta", "data": {}}
+            raise RuntimeError("upstream secret-key at /private/customer.sqlite")
+
+    app = FastAPI()
+    app.include_router(DatasetViewRoutes(views=lambda: FailedViews()).router)
+    with TestClient(app) as client:
+        response = client.post("/datasets/kb/query/stream", json={"query": "退款"})
+    assert response.status_code == 200 and "event: error" in response.text
+    assert "请稍后重试" in response.text
+    assert "secret-key" not in response.text and "/private/" not in response.text
+    assert "Knowledge answer stream failed" in caplog.text

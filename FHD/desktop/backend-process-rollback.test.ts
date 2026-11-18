@@ -27,6 +27,7 @@ vi.mock('./desktop-config', () => ({
   backendEditionEnv: () => ({}),
   backendExecutable: () => ({ command: 'inert-test-backend', args: ['--desktop'], cwd: ports.userData }),
   isPortAvailable: ports.available,
+  isDesktopPackaged: () => false,
   packagedBackendCandidates: () => [], portOccupiedHint: () => '',
   readPackagedProductSku: () => '', repoRoot: () => ports.userData,
 }))

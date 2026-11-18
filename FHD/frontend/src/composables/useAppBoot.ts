@@ -91,7 +91,7 @@ export function useAppBoot(viewPending: Ref<boolean> = ref(false)) {
     if (publicEntry.value) { splash.dismissStartupSplashImmediate(); return }
     void splash.runStartup(async (current, stage, signal) => {
       stage('正在确认登录和工作空间…')
-      void import('@/views/ImMessengerView.vue')
+      void import('@/views/ImMessengerView.vue').catch(() => { /* Navigation retries an unavailable prefetched chunk. */ })
       let fontError: unknown
       const fontsReady = waitForCriticalFonts().catch(error => { fontError = error })
       const auth = await authenticate(current, signal)

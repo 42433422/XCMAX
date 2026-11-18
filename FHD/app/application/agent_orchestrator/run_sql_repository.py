@@ -12,6 +12,7 @@ from typing import cast
 from sqlalchemy import Table
 from sqlalchemy.orm import Session
 
+from app.application.agent_orchestrator import run_terminal_metrics
 from app.application.agent_orchestrator.run_models import (
     AgentRun,
     RunEvent,
@@ -383,11 +384,7 @@ class SQLAlchemyAgentRunRepository:
         preserve_catalog_run_authority(db, run, previous)
         preserve_run_evidence(run, previous)
         ensure_terminal_business_result(run)
-        from app.application.agent_orchestrator.run_terminal_metrics import (
-            record_terminal_transition,
-        )
-
-        record_terminal_transition(run, previous, db)
+        run_terminal_metrics.record_terminal_transition(run, previous, db)
         run.touch()
         payload = json.dumps(run.to_dict(), ensure_ascii=False, default=str)
         if record is None:

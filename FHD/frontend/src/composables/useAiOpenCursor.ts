@@ -527,7 +527,11 @@ async function execUpload(params: Record<string, unknown>): Promise<Record<strin
     let blob: Blob | null = null
     if (spec.url) {
       try {
-        const response = await fetch(String(spec.url), { credentials: 'same-origin' })
+        const url = new URL(String(spec.url), window.location.href)
+        if (!['http:', 'https:'].includes(url.protocol) || url.origin !== window.location.origin || url.username || url.password) {
+          return { success: false, message: '文件 URL 必须为当前站点的 HTTP(S) 地址，且不能包含凭据' }
+        }
+        const response = await fetch(url.href, { credentials: 'same-origin', mode: 'same-origin', redirect: 'error' })
         if (!response.ok) return { success: false, message: `读取文件失败：${spec.url} → HTTP ${response.status}` }
         blob = await response.blob()
       } catch (err) {

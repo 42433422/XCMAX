@@ -82,7 +82,7 @@ def test_refresh_returns_unchanged_without_new_version(tmp_path) -> None:
     document_id = _seed(service)
 
     with patch(
-        "app.application.document_parsing.web_fetch.fetch_url_text",
+        "app.infrastructure.document_parsing.web_fetch.fetch_url_text",
         return_value=_page(_ORIGINAL),
     ):
         result = service.refresh_document("kb", document_id, tenant_id="t1", access_context=_ctx())
@@ -98,7 +98,7 @@ def test_refresh_creates_new_version_when_content_changed(tmp_path) -> None:
     document_id = _seed(service)
 
     with patch(
-        "app.application.document_parsing.web_fetch.fetch_url_text",
+        "app.infrastructure.document_parsing.web_fetch.fetch_url_text",
         return_value=_page(_UPDATED),
     ):
         result = service.refresh_document("kb", document_id, tenant_id="t1", access_context=_ctx())
@@ -148,7 +148,7 @@ def test_refresh_missing_document_and_fetch_failure(tmp_path) -> None:
 
     missing = service.refresh_document("kb", "doc_missing", tenant_id="t1", access_context=_ctx())
     with patch(
-        "app.application.document_parsing.web_fetch.fetch_url_text",
+        "app.infrastructure.document_parsing.web_fetch.fetch_url_text",
         side_effect=ValueError("网页不可访问"),
     ):
         failed = service.refresh_document("kb", document_id, tenant_id="t1", access_context=_ctx())
@@ -182,7 +182,7 @@ def test_batch_refresh_summarizes_changed_unchanged_and_skipped(tmp_path) -> Non
         text = _UPDATED if url.endswith("退款.md") else _ORIGINAL
         return SimpleNamespace(text=text, title="页面", url=url)
 
-    with patch("app.application.document_parsing.web_fetch.fetch_url_text", side_effect=_fetch):
+    with patch("app.infrastructure.document_parsing.web_fetch.fetch_url_text", side_effect=_fetch):
         result = service.refresh_documents("kb", tenant_id="t1", access_context=_ctx())
 
     assert result["success"] is True
@@ -204,7 +204,7 @@ def test_batch_refresh_respects_limit_and_acl(tmp_path) -> None:
     _seed(service, acl={"allow_actors": ["alice"]}, source="秘密.md", allow_duplicate=True)
 
     with patch(
-        "app.application.document_parsing.web_fetch.fetch_url_text",
+        "app.infrastructure.document_parsing.web_fetch.fetch_url_text",
         return_value=_page(_ORIGINAL),
     ):
         limited = service.refresh_documents("kb", tenant_id="t1", access_context=_ctx(), limit=1)
@@ -269,7 +269,7 @@ def test_refresh_records_last_source_sync_at(tmp_path) -> None:
     document_id = _seed(service)
 
     with patch(
-        "app.application.document_parsing.web_fetch.fetch_url_text",
+        "app.infrastructure.document_parsing.web_fetch.fetch_url_text",
         return_value=_page(_ORIGINAL),
     ):
         service.refresh_document("kb", document_id, tenant_id="t1", access_context=_ctx())
@@ -284,7 +284,7 @@ def test_batch_refresh_skips_sources_synced_within_max_age(tmp_path) -> None:
     document_id = _seed(service)
 
     with patch(
-        "app.application.document_parsing.web_fetch.fetch_url_text",
+        "app.infrastructure.document_parsing.web_fetch.fetch_url_text",
         return_value=_page(_ORIGINAL),
     ):
         first = service.refresh_documents(
@@ -302,7 +302,7 @@ def test_batch_refresh_skips_sources_synced_within_max_age(tmp_path) -> None:
     state = service._repository.datasets["kb"]
     state.documents[document_id].metadata["last_source_sync_at"] = "2020-01-01T00:00:00Z"
     with patch(
-        "app.application.document_parsing.web_fetch.fetch_url_text",
+        "app.infrastructure.document_parsing.web_fetch.fetch_url_text",
         return_value=_page(_ORIGINAL),
     ):
         third = service.refresh_documents(
@@ -330,7 +330,7 @@ def test_refresh_reuses_connector_for_notion_sources(tmp_path) -> None:
         url="https://notion.so/page-1",
     )
 
-    with patch("app.application.document_parsing.notion.fetch_page", return_value=page):
+    with patch("app.infrastructure.document_parsing.notion.fetch_page", return_value=page):
         result = service.refresh_document("kb", document_id, tenant_id="t1", access_context=_ctx())
 
     assert result["changed"] is True
@@ -357,7 +357,7 @@ def test_refresh_route_dispatches_and_ingest_records_source_coordinates() -> Non
     client = TestClient(app, raise_server_exceptions=False)
 
     with patch(
-        "app.application.document_parsing.web_fetch.fetch_url_text",
+        "app.infrastructure.document_parsing.web_fetch.fetch_url_text",
         return_value=_page(_ORIGINAL),
     ):
         ingested = client.post(

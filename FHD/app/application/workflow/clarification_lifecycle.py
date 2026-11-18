@@ -132,49 +132,48 @@ def _chinese_ordinal(text: str) -> int | None:
     """
     import re
 
-    pattern = re.compile(r"第\s*([0-9]+|[零一二两三四五六七八九十]+)\s*(?:个|项|条|位|号)?")
-    valid: list[int] = []
-    for match in pattern.finditer(text):
-        prefix = text[max(0, match.start() - 3) : match.start()]
-        if any(token in prefix for token in ("不是", "不要", "别", "非", "不选")):
-            continue
-        raw = match.group(1)
-        if raw.isdigit():
-            valid.append(int(raw))
-        elif "十" in raw:
-            before, _, after = raw.partition("十")
-            tens = _CN_DIGITS.get(before, 1) if before else 1
-            ones = _CN_DIGITS.get(after, 0) if after else 0
-            valid.append(tens * 10 + ones)
-        elif len(raw) == 1 and _CN_DIGITS.get(raw):
-            valid.append(int(_CN_DIGITS[raw]))
-    return valid[-1] if valid else None
+    ordinal = r"第\s*([0-9]+|[一二两三四五六七八九]?十[一二三四五六七八九]?|[一二两三四五六七八九])\s*(?:个|项|条|位|号)?"
+    normalized = text.strip().rstrip("。!！")
+    correction = re.fullmatch(rf"(?:不是|不要|不选){ordinal}\s*[,，]\s*(.+)", normalized)
+    if correction:
+        normalized = correction.group(2)
+    match = re.fullmatch(rf"(?:就|选|选择|要|是)?\s*{ordinal}", normalized)
+    if match is None:
+        return None
+    raw = match.group(1)
+    if raw.isdigit():
+        return int(raw)
+    if "十" in raw:
+        before, _, after = raw.partition("十")
+        return (_CN_DIGITS[before] if before else 1) * 10 + (_CN_DIGITS[after] if after else 0)
+    return _CN_DIGITS[raw]
 
 
 def resolve_confirmed_target(
     message: str,
     candidates: list[dict[str, Any]],
 ) -> dict[str, Any] | None:
-    """Resolve a candidate by exact ID, name, or one-based list position."""
+    """Accept only a unique exact ID, name, or unambiguous one-based position."""
     if not candidates:
         return None
     text = str(message or "").strip()
     if not text:
         return None
-    for candidate in candidates:
-        candidate_id = str(candidate.get("id") or "").strip()
-        if candidate_id and candidate_id == text:
-            return {"id": candidate_id}
-    for candidate in candidates:
-        name = str(
-            candidate.get("name")
-            or candidate.get("customer_name")
-            or candidate.get("unit_name")
-            or ""
-        ).strip()
-        if name and (name == text or name in text or text in name):
-            return {"id": str(candidate.get("id") or "")}
+    matches = {
+        str(candidate["id"])
+        for candidate in candidates
+        if isinstance(candidate, dict)
+        and candidate.get("id") not in (None, "")
+        and text
+        in {
+            str(candidate.get(key) or "").strip()
+            for key in ("id", "name", "customer_name", "unit_name", "product_name", "material_name")
+        }
+    }
     index = int(text) if text.isdigit() else _chinese_ordinal(text)
-    if index is not None and 1 <= index <= len(candidates):
-        return {"id": str(candidates[index - 1].get("id") or "")}
-    return None
+    if index is not None:
+        if 1 <= index <= len(candidates):
+            candidate = candidates[index - 1]
+            if isinstance(candidate, dict) and candidate.get("id") not in (None, ""):
+                matches.add(str(candidate["id"]))
+    return {"id": matches.pop()} if len(matches) == 1 else None

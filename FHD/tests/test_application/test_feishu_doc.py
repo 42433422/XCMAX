@@ -9,8 +9,8 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
-from app.application.document_parsing import feishu_doc
-from app.application.document_parsing.feishu_doc import FetchedFeishuDoc, fetch_document
+from app.infrastructure.document_parsing import feishu_doc
+from app.infrastructure.document_parsing.feishu_doc import FetchedFeishuDoc, fetch_document
 
 
 class _Response:

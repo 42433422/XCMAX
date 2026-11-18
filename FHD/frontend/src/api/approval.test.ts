@@ -126,11 +126,15 @@ describe('approvalApi', () => {
       expect(result).toEqual({ success: true })
     })
 
-    it('returns error on failure', async () => {
-      apiPostMock.mockRejectedValue(new Error('fail'))
+    it.each([
+      [{ message: '  运行态已过期  ', status: 409, data: { expired: true } }, '运行态已过期', 409, true],
+      [new Error('fail'), 'fail', undefined, false],
+      [{ message: ' ' }, '审批通过失败', undefined, false],
+      [null, '审批通过失败', undefined, false],
+    ])('preserves useful approve errors and falls back when absent (%s)', async (error, message, status, expired) => {
+      apiPostMock.mockRejectedValue(error)
       const result = await approvalApi.approve(1, 5, 'ok')
-      expect(result.success).toBe(false)
-      expect(result.message).toBe('审批通过失败')
+      expect(result).toEqual({ success: false, message, status, expired })
     })
   })
 
@@ -146,11 +150,15 @@ describe('approvalApi', () => {
       expect(result).toEqual({ success: true })
     })
 
-    it('returns error on failure', async () => {
-      apiPostMock.mockRejectedValue(new Error('fail'))
+    it.each([
+      [{ message: '  运行态已过期  ', status: 409, data: { expired: true } }, '运行态已过期', 409, true],
+      [new Error('fail'), 'fail', undefined, false],
+      [{ message: ' ' }, '审批拒绝失败', undefined, false],
+      [null, '审批拒绝失败', undefined, false],
+    ])('preserves useful reject errors and falls back when absent (%s)', async (error, message, status, expired) => {
+      apiPostMock.mockRejectedValue(error)
       const result = await approvalApi.reject(1, 5, 'bad')
-      expect(result.success).toBe(false)
-      expect(result.message).toBe('审批拒绝失败')
+      expect(result).toEqual({ success: false, message, status, expired })
     })
   })
 

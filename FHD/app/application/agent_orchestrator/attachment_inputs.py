@@ -61,7 +61,7 @@ def _decode(raw: bytes, suffix: str) -> tuple[str, dict[str, Any]]:
             workbook.close()
     if suffix == ".pdf":
         try:
-            from app.application.document_parsing.router import parse_pdf_bytes_with_docling
+            from app.infrastructure.document_parsing.router import parse_pdf_bytes_with_docling
 
             docling_text = parse_pdf_bytes_with_docling(raw)
         except BOUNDARY_ERRORS:

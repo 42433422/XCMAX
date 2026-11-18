@@ -9,6 +9,7 @@ from modstore_server import (
     llm_api,
     llm_catalog,
     llm_chat_proxy,
+    llm_litellm_router,
     llm_quota_monitor,
     llm_runtime_autopilot,
 )
@@ -86,6 +87,7 @@ async def test_minimax_token_plan_catalog_uses_anthropic_endpoint(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_minimax_token_plan_chat_dispatch_uses_anthropic_protocol(monkeypatch):
+    monkeypatch.setattr(llm_litellm_router, "available", lambda: False)
     call = AsyncMock(return_value={"ok": True, "content": "ok", "usage": {}})
     monkeypatch.setattr(llm_chat_proxy, "chat_anthropic_compatible", call)
 
@@ -110,6 +112,7 @@ async def test_minimax_token_plan_chat_dispatch_uses_anthropic_protocol(monkeypa
 
 @pytest.mark.asyncio
 async def test_minimax_payg_key_keeps_openai_compatible_protocol(monkeypatch):
+    monkeypatch.setattr(llm_litellm_router, "available", lambda: False)
     call = AsyncMock(return_value={"ok": True, "content": "ok", "usage": {}})
     monkeypatch.setattr(llm_chat_proxy, "chat_openai_compatible", call)
 
@@ -123,6 +126,85 @@ async def test_minimax_payg_key_keeps_openai_compatible_protocol(monkeypatch):
 
     assert result["ok"] is True
     assert call.await_args.args[0] == "https://api.minimaxi.com/v1"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "key,base,expected_model,expected_base,expected_key",
+    [
+        (
+            "minimaxsk-cp-example",
+            "https://api.minimax.io",
+            "anthropic/MiniMax-M2.7",
+            "https://api.minimax.io/anthropic",
+            "sk-cp-example",
+        ),
+        (
+            "sk-payg-example",
+            "https://api.minimaxi.com",
+            "openai/MiniMax-M2.7",
+            "https://api.minimaxi.com/v1",
+            "sk-payg-example",
+        ),
+    ],
+)
+async def test_minimax_router_preserves_protocol_and_credentials(
+    monkeypatch, key, base, expected_model, expected_base, expected_key
+):
+    captured = {}
+    completion = AsyncMock(
+        return_value=SimpleNamespace(
+            choices=[
+                SimpleNamespace(message=SimpleNamespace(content="ok", reasoning_content=None))
+            ],
+            usage={},
+            model="MiniMax-M2.7",
+            _hidden_params={"model_id": "modstore-primary"},
+        )
+    )
+
+    class FakeRouter:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        async def acompletion(self, **kwargs):
+            return await completion(**kwargs)
+
+    legacy = AsyncMock(side_effect=AssertionError("Router should handle this request"))
+    monkeypatch.setattr(llm_chat_proxy, "chat_anthropic_compatible", legacy)
+    monkeypatch.setattr(llm_chat_proxy, "chat_openai_compatible", legacy)
+    monkeypatch.setattr(llm_litellm_router, "available", lambda: True)
+    monkeypatch.setattr(llm_litellm_router, "_ROUTER_CACHE", {})
+    monkeypatch.setattr(
+        llm_litellm_router, "_load_litellm", lambda: SimpleNamespace(Router=FakeRouter)
+    )
+
+    result = await llm_chat_proxy.chat_dispatch(
+        "minimax",
+        api_key=key,
+        base_url=base,
+        model="MiniMax-M2.7",
+        messages=[{"role": "user", "content": "ping"}],
+        max_tokens=32,
+    )
+
+    assert result["ok"] is True
+    assert result["provider"] == "minimax"
+    assert result["model"] == "MiniMax-M2.7"
+    assert result["router"] == "litellm"
+    params = captured["model_list"][0]["litellm_params"]
+    assert params["model"] == expected_model
+    assert params["api_base"] == expected_base
+    assert params["api_key"] == expected_key
+    if is_minimax_token_plan_key(key):
+        assert params["extra_headers"]["anthropic-version"] == "2023-06-01"
+    completion.assert_awaited_once_with(
+        model="modstore-primary",
+        messages=[{"role": "user", "content": "ping"}],
+        max_tokens=32,
+        response_format=None,
+    )
+    legacy.assert_not_awaited()
 
 
 @pytest.mark.asyncio

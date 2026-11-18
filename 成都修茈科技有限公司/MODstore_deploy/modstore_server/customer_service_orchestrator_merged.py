@@ -18,6 +18,7 @@ from modstore_server.customer_issue_delivery_contract import (
     team_succeeded,
 )
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
+from modstore_server.customer_service_ticket_view import serialize_ticket
 from modstore_server.customer_service_triage import (
     _parse_domain_clarify_reply as _parse_domain_clarify_reply,
     resolve_triage_lane as resolve_triage_lane,
@@ -2290,54 +2291,13 @@ def ticket_lifecycle_payload(
     }
 
 
-def ticket_payload(
-    row: _facade().CustomerServiceTicket,
-) -> _facade().Dict[str, _facade().Any]:
-    life = _facade().ticket_lifecycle_payload(row.status, row.decision_status)
-    evidence = _facade().json_loads(row.evidence_json, {})
-    if not isinstance(evidence, dict):
-        evidence = {}
-    domain = str(evidence.get("issue_domain") or "").strip().lower()
-    if domain not in _facade().ISSUE_DOMAINS:
-        domain = ""
-    expected_completion_at = getattr(row, "expected_completion_at", None)
-    if expected_completion_at is not None and expected_completion_at.tzinfo is None:
-        expected_completion_at = expected_completion_at.replace(tzinfo=_facade().timezone.utc)
-    return {
-        "id": row.id,
-        # 管理端必须用稳定的市场用户 ID 把交付工单关联到客户资料。
-        "user_id": row.user_id,
-        "submitter_type": getattr(row, "submitter_type", None) or "unknown",
-        "assigned_admin_id": row.assigned_admin_id,
-        "session_id": row.session_id,
-        "ticket_no": row.ticket_no,
-        "title": row.title,
-        "intent": row.intent,
-        **ticket_taxonomy(
-            row.intent,
-            getattr(row, "submitter_type", None) or "unknown",
-            evidence,
-        ),
-        "issue_domain": domain or None,
-        "issue_domain_label": evidence.get("issue_domain_label")
-        or _facade().ISSUE_DOMAIN_LABELS.get(domain)
-        or None,
-        "subject_type": row.subject_type,
-        "subject_id": row.subject_id,
-        "status": row.status,
-        "priority": row.priority,
-        "evidence": evidence,
-        "summary": row.summary,
-        "decision_status": row.decision_status,
-        "automation_level": row.automation_level,
-        "created_at": row.created_at.isoformat() if row.created_at else "",
-        "updated_at": row.updated_at.isoformat() if row.updated_at else "",
-        "closed_at": row.closed_at.isoformat() if row.closed_at else "",
-        "expected_completion_at": (
-            expected_completion_at.isoformat() if expected_completion_at else None
-        ),
-        **life,
-    }
+def ticket_payload(row: _facade().CustomerServiceTicket) -> dict[str, Any]:
+    return serialize_ticket(
+        row,
+        lifecycle=_facade().ticket_lifecycle_payload(row.status, row.decision_status),
+        issue_domains=_facade().ISSUE_DOMAINS,
+        domain_labels=_facade().ISSUE_DOMAIN_LABELS,
+    )
 
 
 def decision_payload(

@@ -74,6 +74,8 @@ async def list_chat_failover_candidates(
     user_id: int,
     primary_provider: str,
     primary_model: str,
+    *,
+    include_platform_fallbacks: bool = False,
 ) -> list[tuple[str, str]]:
     """主模型 + 其它有 Key 厂商的首个可用模型（去重，最多 failover_max）。"""
     from modstore_server.llm_catalog import get_models_for_provider
@@ -98,6 +100,14 @@ async def list_chat_failover_candidates(
         out.append(key)
 
     _add(primary_p, primary_m)
+
+    # Add only route identities here; the billed caller resolves and authorizes each snapshot.
+    if include_platform_fallbacks:
+        from modstore_server.llm_router_config import settings
+
+        for item in settings()["platform_fallbacks"]:
+            provider, _, model = str(item).partition("/")
+            _add(provider, model)
 
     async def first_model_id(provider: str) -> str:
         try:

@@ -449,6 +449,63 @@ describe('useAiOpenCursor - coverage ramp', () => {
       return sent?.result || {}
     }
 
+    describe('upload URL boundary', () => {
+      let input: HTMLInputElement
+      let fetchFile: ReturnType<typeof vi.fn>
+      let change: ReturnType<typeof vi.fn>
+      beforeEach(() => {
+        input = document.createElement('input')
+        input.type = 'file'; input.id = 'upload-target'
+        Object.defineProperty(input, 'files', { writable: true, value: [] })
+        document.body.appendChild(input)
+        change = vi.fn()
+        input.addEventListener('input', change); input.addEventListener('change', change)
+        // jsdom has no DataTransfer; keep native Blob/File and capture the transfer boundary.
+        vi.stubGlobal('DataTransfer', class {
+          files: File[] = []
+          items = { add: (file: File) => this.files.push(file) }
+        })
+        fetchFile = vi.fn().mockResolvedValue({ ok: true, blob: async () => new Blob(['invoice'], { type: 'text/plain' }) })
+        vi.stubGlobal('fetch', fetchFile)
+        setAiOpenCursorEnabled(true)
+      })
+      afterEach(() => { vi.unstubAllGlobals() })
+      const upload = (url: string) => runCommand('file', 'upload', { selector: '#upload-target', files: [{ name: 'invoice.txt', url }] })
+
+      it.each(['/api/files/invoice', `${window.location.origin}/api/files/invoice?revision=2`])('uploads same-origin bytes from %s', async url => {
+        expect(await upload(url)).toEqual({ success: true, uploaded: ['invoice.txt'] })
+        expect(fetchFile).toHaveBeenCalledWith(new URL(url, window.location.href).href, {
+          credentials: 'same-origin', mode: 'same-origin', redirect: 'error',
+        })
+        expect(input.files).toHaveLength(1)
+        expect(await input.files![0].text()).toBe('invoice')
+        expect(change).toHaveBeenCalledTimes(2)
+      })
+
+      it.each([
+        'https://other.example/file', '//other.example/file', 'http://127.0.0.1:9000/file',
+        'https://localhost.other.example/file', 'file:///etc/passwd', 'data:text/plain,private',
+        `blob:${window.location.origin}/file`, 'javascript:alert(1)',
+        `${window.location.protocol}//user:pass@${window.location.host}/file`,
+      ])('rejects an untrusted URL before fetching or uploading: %s', async url => {
+        expect(await upload(url)).toMatchObject({ success: false, message: expect.stringContaining('当前站点') })
+        expect(fetchFile).not.toHaveBeenCalled()
+        expect(input.files).toHaveLength(0)
+        expect(change).not.toHaveBeenCalled()
+      })
+
+      it.each(['redirect', 'forbidden', 'unreadable'])('keeps the previous selection when the file request is %s', async failure => {
+        const previous = [new File(['previous'], 'previous.txt')]
+        Object.assign(input, { files: previous })
+        if (failure === 'redirect') fetchFile.mockRejectedValueOnce(new TypeError('redirect mode is error'))
+        else if (failure === 'forbidden') fetchFile.mockResolvedValueOnce({ ok: false, status: 403 })
+        else fetchFile.mockResolvedValueOnce({ ok: true, blob: async () => { throw new Error('unreadable response') } })
+        expect(await upload('/api/files/invoice')).toMatchObject({ success: false, message: expect.stringContaining('读取文件失败') })
+        expect(input.files).toBe(previous)
+        expect(change).not.toHaveBeenCalled()
+      })
+    })
+
     it('receiving a command marks the agent active', async () => {
       setAiOpenCursorEnabled(true)
       const ws = lastWs()!

@@ -149,7 +149,7 @@ async def test_run_billed_llm_chat_failsover_on_quota(monkeypatch):
             "request_id": "r1",
         }
 
-    async def fake_candidates(db, user_id, primary_provider, primary_model):
+    async def fake_candidates(db, user_id, primary_provider, primary_model, **_kwargs):
         return [
             ("openai", "gpt-4o-mini"),
             ("deepseek", "deepseek-chat"),
@@ -207,3 +207,39 @@ async def test_run_billed_respects_allow_failover_false(monkeypatch):
         )
     assert ei.value.status_code == 429
     llm_api.list_chat_failover_candidates.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("include_platform", [False, True])
+async def test_configured_platform_candidates_are_explicit_ordered_and_bounded(
+    monkeypatch, include_platform
+):
+    async def models(*args, **kwargs):
+        return {"models": [], "runtime_models": []}
+
+    monkeypatch.setattr("modstore_server.llm_catalog.get_models_for_provider", models)
+    monkeypatch.setattr(
+        "modstore_server.llm_chat_failover.resolve_api_key", lambda *args: ("dummy", "platform")
+    )
+    monkeypatch.setattr(
+        "modstore_server.llm_router_config.settings",
+        lambda: {
+            "platform_fallbacks": [
+                "deepseek/backup",
+                "deepseek/backup",
+                "unknown/no",
+                "xiaomi/third",
+            ]
+        },
+    )
+    monkeypatch.setenv("MODSTORE_LLM_CHAT_FAILOVER_MAX", "2")
+    db = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = None
+    result = await list_chat_failover_candidates(
+        db, 1, "openai", "primary", include_platform_fallbacks=include_platform
+    )
+    assert result == (
+        [("openai", "primary"), ("deepseek", "backup")]
+        if include_platform
+        else [("openai", "primary")]
+    )

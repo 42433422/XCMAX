@@ -1,4 +1,5 @@
 import { app } from 'electron'
+import { isDesktopPackaged } from './desktop-config'
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -293,7 +294,7 @@ function replaceDirectoryFromStaging(source: string, destination: string, appBun
 }
 
 export function resolvePackagedBackendPath(): string {
-  if (!app.isPackaged) return ''
+  if (!isDesktopPackaged()) return ''
   const backendDir = path.join(process.resourcesPath, 'backend')
   const exe = process.platform === 'win32' ? 'xcagi-backend.exe' : 'xcagi-backend'
   const candidates = [
@@ -308,7 +309,7 @@ export function resolvePackagedBackendPath(): string {
 }
 
 export function resolvePackagedAppPath(): string {
-  return app.isPackaged ? app.getPath('exe') : ''
+  return isDesktopPackaged() ? app.getPath('exe') : ''
 }
 
 function resolveMacOSAppBundlePath(appPath: string): string {
@@ -322,7 +323,7 @@ function resolveMacOSAppBundlePath(appPath: string): string {
 
 function currentVersionIdentity(): string {
   const version = app.getVersion() || 'unknown'
-  if (!app.isPackaged) return version
+  if (!isDesktopPackaged()) return version
   for (const candidate of ['build-info.json', 'backend/build-info.json']) {
     try {
       const parsed = JSON.parse(fs.readFileSync(path.join(process.resourcesPath, candidate), 'utf8')) as { gitSha?: string; buildSha?: string }
@@ -337,7 +338,7 @@ function currentVersionIdentity(): string {
 
 /** Back up the current packaged app before electron-updater replaces it. */
 export async function prepareRollback(toVersion: string): Promise<void> {
-  if (!app.isPackaged) {
+  if (!isDesktopPackaged()) {
     return
   }
   if (checkPendingRollback()) {

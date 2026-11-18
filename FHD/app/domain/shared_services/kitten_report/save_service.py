@@ -223,9 +223,7 @@ class AnalysisSaveService(NeuroEventPublisherMixin):
             from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
             from openpyxl.utils import get_column_letter
 
-            analysis = self.get_analysis(
-                analysis_id, owner_id=owner_id, tenant_id=tenant_id
-            )
+            analysis = self.get_analysis(analysis_id, owner_id=owner_id, tenant_id=tenant_id)
 
             if not analysis:
                 return {"success": False, "message": "Analysis not found"}

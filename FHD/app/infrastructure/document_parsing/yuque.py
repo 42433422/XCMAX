@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from dataclasses import dataclass
@@ -18,8 +19,9 @@ MAX_BYTES = 5 * 1024 * 1024
 MAX_CHARS = 200_000
 TIMEOUT_S = 15
 _DEFAULT_BASE = "https://www.yuque.com"
+_LOGGER = logging.getLogger(__name__)
 _DOC_REF = re.compile(r"^[A-Za-z0-9_.-]{1,80}/[A-Za-z0-9_.-]{1,80}/[A-Za-z0-9_.-]{1,120}$")
-_TAG = re.compile(r"<[^>]+>")
+_TAG = re.compile(r"<[^<>]+>")
 
 
 @dataclass(frozen=True)
@@ -73,7 +75,8 @@ def fetch_document(ref: str, *, getter=None) -> FetchedYuqueDoc:
     try:
         response = getter(url, headers=headers, timeout=TIMEOUT_S)
     except BOUNDARY_ERRORS as exc:
-        raise ValueError(f"语雀请求失败：{exc}") from exc
+        _LOGGER.exception("Yuque request failed")
+        raise ValueError("语雀请求失败") from exc
     if response.status_code in {401, 403}:
         raise ValueError("语雀鉴权失败，请检查 XCAGI_YUQUE_TOKEN 与文档权限")
     if response.status_code == 404:
@@ -86,7 +89,8 @@ def fetch_document(ref: str, *, getter=None) -> FetchedYuqueDoc:
     try:
         payload = response.json()
     except BOUNDARY_ERRORS as exc:
-        raise ValueError(f"语雀响应无法解析：{exc}") from exc
+        _LOGGER.exception("Yuque response decoding failed")
+        raise ValueError("语雀响应无法解析") from exc
     data = payload.get("data") if isinstance(payload, dict) else None
     if not isinstance(data, dict):
         raise ValueError("语雀响应缺少 data")

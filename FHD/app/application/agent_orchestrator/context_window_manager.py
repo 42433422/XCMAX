@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from app.application.agent_orchestrator.run_models import LLMCall
+from app.infrastructure.llm.model_context_windows import resolve_token_budget
 from app.infrastructure.llm.token_estimator import (
     estimate_messages_tokens as _estimate_messages_tokens,
 )
@@ -38,7 +39,7 @@ _DEFAULT_TOKEN_BUDGET = 8000
 _DEFAULT_RECENT_KEEP = 6
 _DEFAULT_SUMMARIZE_THRESHOLD = 12
 _DEFAULT_SUMMARIZE_MAX_TOKENS = 300  # 摘要输出上限（约 200 汉字）
-CONTEXT_WINDOW_MANAGER_VERSION = "1.1.0"
+CONTEXT_WINDOW_MANAGER_VERSION = "1.2.0"
 
 _SUMMARY_SYSTEM_PROMPT = "你是对话历史压缩器。请用 200 字以内总结以下对话历史的关键信息，保留用户意图、关键实体和未完成的事项，不要添加新的信息。"
 _SUMMARY_CONTENT_PREFIX = "对话历史摘要："
@@ -90,13 +91,16 @@ class ContextWindowManager:
     def __init__(
         self,
         *,
-        token_budget: int = _DEFAULT_TOKEN_BUDGET,
+        token_budget: int | None = None,
         recent_keep: int = _DEFAULT_RECENT_KEEP,
         summarize_threshold: int = _DEFAULT_SUMMARIZE_THRESHOLD,
         summarize_max_tokens: int = _DEFAULT_SUMMARIZE_MAX_TOKENS,
         enabled: bool | None = None,
     ) -> None:
-        self._token_budget = max(1, int(token_budget))
+        # ``None`` means "resolve from the active model's context window"; an explicit
+        # value keeps the historical fixed-budget behaviour used by callers and tests.
+        self._explicit_budget = max(1, int(token_budget)) if token_budget is not None else None
+        self._token_budget = self._explicit_budget or _DEFAULT_TOKEN_BUDGET
         self._recent_keep = max(0, int(recent_keep))
         self._summarize_threshold = max(1, int(summarize_threshold))
         self._summarize_max_tokens = max(1, int(summarize_max_tokens))
@@ -112,6 +116,12 @@ class ContextWindowManager:
     def token_budget(self) -> int:
         return self._token_budget
 
+    def budget_for(self, model: str | None) -> int:
+        """Resolve the input budget for ``model``; explicit budgets always win."""
+        if self._explicit_budget is not None:
+            return self._explicit_budget
+        return resolve_token_budget(model)
+
     async def compress(
         self,
         messages: list[dict[str, str]] | None,
@@ -121,6 +131,7 @@ class ContextWindowManager:
         provider: Any | None = None,
         context: Any | None = None,
         reserved_tokens: int = 0,
+        model: str | None = None,
     ) -> ContextCompressionResult:
         if context is not None:
             lock = getattr(context, "_compression_lock", None)
@@ -129,18 +140,24 @@ class ContextWindowManager:
                 context._compression_lock = lock
             async with lock:
                 return await self._compress(
-                    messages or [], user_id, trace_id, provider, context, reserved_tokens
+                    messages or [],
+                    user_id,
+                    trace_id,
+                    provider,
+                    context,
+                    reserved_tokens,
+                    model,
                 )
         return await self._compress(
-            messages or [], user_id, trace_id, provider, None, reserved_tokens
+            messages or [], user_id, trace_id, provider, None, reserved_tokens, model
         )
 
     async def _compress(
-        self, messages, user_id, trace_id, provider, context, reserved_tokens
+        self, messages, user_id, trace_id, provider, context, reserved_tokens, model=None
     ) -> ContextCompressionResult:
         started = time.perf_counter()
         pre_tokens = estimate_messages_tokens(messages)
-        budget = self._token_budget - max(0, int(reserved_tokens))
+        budget = self.budget_for(model) - max(0, int(reserved_tokens))
         compressed, strategy, summary_call = list(messages), "noop", None
         if self._enabled and messages:
             system = [m for m in messages if m.get("role") == "system"]
@@ -185,6 +202,8 @@ class ContextWindowManager:
                         user_id=user_id,
                         trace_id=trace_id,
                         provider=provider,
+                        budget=budget,
+                        model=model,
                     )
                     if old
                     else ("", None)
@@ -237,6 +256,8 @@ class ContextWindowManager:
         user_id: str,
         trace_id: str | None,
         provider: Any | None,
+        budget: int,
+        model: str | None = None,
     ) -> tuple[str, LLMCall | None]:
         """调 LLM 摘要 ``to_summarize`` 消息列表。
 
@@ -254,7 +275,7 @@ class ContextWindowManager:
             {"role": "user", "content": f"请总结以下对话历史：\n\n{history_text}"},
         ]
 
-        summary_room = self._token_budget - estimate_messages_tokens(summary_messages)
+        summary_room = budget - estimate_messages_tokens(summary_messages)
         if summary_room <= 0:
             return "", None
         t0 = time.perf_counter()
@@ -294,6 +315,7 @@ class ContextWindowManager:
                 messages=summary_messages,
                 temperature=0.3,  # 摘要用低温度
                 max_tokens=min(self._summarize_max_tokens, summary_room),
+                **({"model": model} if model else {}),
             )
 
             latency_ms = (time.perf_counter() - t0) * 1000.0
@@ -430,8 +452,7 @@ def get_context_window_manager() -> ContextWindowManager:
     global _cwm_singleton
     if _cwm_singleton is None:
         _cwm_singleton = ContextWindowManager(
-            token_budget=_coerce_int(os.environ.get("FHD_CONTEXT_WINDOW_TOKEN_BUDGET"))
-            or _DEFAULT_TOKEN_BUDGET,
+            token_budget=_coerce_int(os.environ.get("FHD_CONTEXT_WINDOW_TOKEN_BUDGET")) or None,
             recent_keep=_coerce_int(os.environ.get("FHD_CONTEXT_WINDOW_RECENT_KEEP"))
             or _DEFAULT_RECENT_KEEP,
             summarize_threshold=_coerce_int(

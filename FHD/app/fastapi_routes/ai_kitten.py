@@ -284,9 +284,7 @@ def kitten_saved_delete(analysis_id: str, request: Request):
             return JSONResponse(result, status_code=status_code)
         if result:
             return {"success": True, "message": "删除成功"}
-        return JSONResponse(
-            {"success": False, "message": "Analysis not found"}, status_code=400
-        )
+        return JSONResponse({"success": False, "message": "Analysis not found"}, status_code=400)
     except RECOVERABLE_ERRORS:
         logger.exception("kitten saved delete failed")
         return JSONResponse({"success": False, "message": _KITTEN_UNAVAILABLE}, status_code=500)

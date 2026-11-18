@@ -220,4 +220,6 @@ class MarketGateway:
             if request.url.query:
                 api_path += "?" + request.url.query
             return await self._maintenance(request, method, api_path, json_body=json_body)
+        if api_path == "/api/admin/catalog" and request.url.query:
+            api_path += "?" + request.url.query
         return await self._proxy(request, method, api_path, json_body=json_body)

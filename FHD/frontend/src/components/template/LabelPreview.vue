@@ -5,6 +5,8 @@
 </template>
 
 <script>
+import { markRaw } from 'vue'
+
 export default {
   name: 'LabelPreview',
   props: {
@@ -45,7 +47,8 @@ export default {
     initCanvas() {
       this.canvas = this.$refs.labelCanvas
       if (this.canvas) {
-        this.ctx = this.canvas.getContext('2d')
+        const context = this.canvas.getContext('2d')
+        this.ctx = context ? markRaw(context) : null
         this.canvas.width = this.width
         this.canvas.height = this.height
       }

@@ -57,7 +57,9 @@ class TestInstalledEmployeePackIds:
         )
         other = emp_dir / "not-a-pack"
         other.mkdir()
-        (other / "manifest.json").write_text('{"id": "not-a-pack", "artifact": "mod"}', encoding="utf-8")
+        (other / "manifest.json").write_text(
+            '{"id": "not-a-pack", "artifact": "mod"}', encoding="utf-8"
+        )
         broken = emp_dir / "broken"
         broken.mkdir()
         (broken / "manifest.json").write_text("{not json", encoding="utf-8")

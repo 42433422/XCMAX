@@ -88,6 +88,6 @@ def _read_pptx(path: Path) -> str:
 
 def extract_text(path: Path) -> tuple[str, str, dict[str, Any]]:
     """返回 (文本, 解析器, 元数据)；复杂文档优先 Docling，失败回退轻量解析。"""
-    from app.application.document_parsing.router import parse_document
+    from app.infrastructure.document_parsing.router import parse_document
 
     return parse_document(path, lambda: _legacy_text(path))

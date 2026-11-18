@@ -214,6 +214,7 @@ def persist_chat_turn(
         ensure_ascii=False,
         default=str,
     )[:12000]
+    clarification_candidates = inner_payload.get("candidates")
     meta_assistant = json.dumps(
         {
             "role_hint": "assistant",
@@ -226,9 +227,8 @@ def persist_chat_turn(
             "business_harness": harness_metadata,
             "ui": ui_payload,
             **(
-                {"clarification_candidates": inner_payload.get("candidates")[:20]}
-                if isinstance(inner_payload.get("candidates"), list)
-                and inner_payload.get("candidates")
+                {"clarification_candidates": clarification_candidates[:20]}
+                if isinstance(clarification_candidates, list) and clarification_candidates
                 else {}
             ),
         },

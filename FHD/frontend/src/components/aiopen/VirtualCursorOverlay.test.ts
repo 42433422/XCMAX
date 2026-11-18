@@ -8,6 +8,7 @@ vi.mock('@/composables/useAiOpenCursor', async () => {
   const { ref } = await import('vue')
   const cursorX = ref(0)
   const cursorY = ref(0)
+  const cursorTilt = ref(0)
   const cursorVisible = ref(false)
   const cursorClicking = ref(false)
   const cursorActionLabel = ref('')
@@ -17,6 +18,7 @@ vi.mock('@/composables/useAiOpenCursor', async () => {
   const initAiOpenCursor = vi.fn()
   container.mocks.cursorX = cursorX
   container.mocks.cursorY = cursorY
+  container.mocks.cursorTilt = cursorTilt
   container.mocks.cursorVisible = cursorVisible
   container.mocks.cursorClicking = cursorClicking
   container.mocks.cursorActionLabel = cursorActionLabel
@@ -27,6 +29,7 @@ vi.mock('@/composables/useAiOpenCursor', async () => {
   return {
     cursorX,
     cursorY,
+    cursorTilt,
     cursorVisible,
     cursorClicking,
     cursorActionLabel,
@@ -42,6 +45,7 @@ import VirtualCursorOverlay from './VirtualCursorOverlay.vue'
 const cursorState = container.mocks as {
   cursorX: { value: number }
   cursorY: { value: number }
+  cursorTilt: { value: number }
   cursorVisible: { value: boolean }
   cursorClicking: { value: boolean }
   cursorActionLabel: { value: string }
@@ -75,6 +79,7 @@ describe('VirtualCursorOverlay', () => {
     vi.clearAllMocks()
     cursorState.cursorX.value = 0
     cursorState.cursorY.value = 0
+    cursorState.cursorTilt.value = 0
     cursorState.cursorVisible.value = false
     cursorState.cursorClicking.value = false
     cursorState.cursorActionLabel.value = ''
@@ -109,9 +114,11 @@ describe('VirtualCursorOverlay', () => {
     cursorState.cursorVisible.value = true
     cursorState.cursorX.value = 100
     cursorState.cursorY.value = 200
+    cursorState.cursorTilt.value = 5
     await mountComponent()
     const cursor = document.querySelector('.aiopen-cursor') as HTMLElement
     expect(cursor.getAttribute('style')).toContain('translate(100px, 200px)')
+    expect(cursor.getAttribute('style')).toContain('rotate(5deg)')
   })
 
   it('applies clicking class when cursorClicking is true', async () => {

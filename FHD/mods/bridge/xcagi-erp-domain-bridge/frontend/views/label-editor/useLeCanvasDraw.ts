@@ -1,4 +1,4 @@
-import { ref, type Ref } from 'vue'
+import { ref, shallowRef, type Ref } from 'vue'
 import type { LeField, LeFieldId, LeGrid } from './leTypes'
 
 // Draw the current editable template only; missing templates never acquire sample fields.
@@ -16,7 +16,7 @@ export function useLeCanvasDraw(deps: {
   const labelCanvas = ref<HTMLCanvasElement | null>(null)
   const canvasWidth = ref(900)
   const canvasHeight = ref(600)
-  const ctx = ref<CanvasRenderingContext2D | null>(null)
+  const ctx = shallowRef<CanvasRenderingContext2D | null>(null)
 
   function initCanvas() {
     if (labelCanvas.value) {

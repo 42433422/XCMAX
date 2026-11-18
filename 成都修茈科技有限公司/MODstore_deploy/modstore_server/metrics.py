@@ -51,6 +51,30 @@ MOD_INSTALL_TOTAL = Counter(
     ("operation", "status", "device_scope"),
 )
 
+LLM_ROUTER_REQUESTS = Counter(
+    "modstore_llm_router_requests_total",
+    "LLM calls dispatched through the LiteLLM router.",
+    ("provider", "model", "mode", "outcome"),
+)
+
+LLM_ROUTER_LATENCY = Histogram(
+    "modstore_llm_router_duration_seconds",
+    "LiteLLM router call latency.",
+    ("provider", "model", "mode"),
+    buckets=(0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 20, 30, 60, 120),
+)
+
+
+def observe_llm_router(
+    provider: str,
+    model: str,
+    mode: str,
+    outcome: str,
+    elapsed_seconds: float,
+) -> None:
+    LLM_ROUTER_REQUESTS.labels(provider, model, mode, outcome).inc()
+    LLM_ROUTER_LATENCY.labels(provider, model, mode).observe(elapsed_seconds)
+
 
 def observe_csp_violation() -> None:
     CSP_REPORT_ONLY_VIOLATIONS.inc()

@@ -9,8 +9,8 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
-from app.application.document_parsing import notion
-from app.application.document_parsing.notion import FetchedNotionPage, fetch_page
+from app.infrastructure.document_parsing import notion
+from app.infrastructure.document_parsing.notion import FetchedNotionPage, fetch_page
 
 PAGE_ID = "0123456789abcdef0123456789abcdef"
 

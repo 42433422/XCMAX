@@ -435,7 +435,7 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
         result = response.json()
         if isinstance(result, dict):
             try:
-                from app.infrastructure.llm.platform_billing_pass import attach_billing_meta
+                from .billing_metadata import attach_billing_meta
 
                 attach_billing_meta(result, headers=response.headers)
             except RECOVERABLE_ERRORS:

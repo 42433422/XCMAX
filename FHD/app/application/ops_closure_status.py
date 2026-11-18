@@ -11,11 +11,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
 def _present_employee_pack_ids(mods_root: str) -> set[str]:
-    """列出 ``mods/_employees`` 下真实存在的员工包，不套运行时准入规则。
-
-    Enterprise SKU 会把控制面员工包从 ``EmployeeRegistry.list_packs`` 过滤掉（那是执行面
-    准入），但闭环状态检查的是「运行端是否缺包」，按过滤后的列表判断会把已存在的包误报缺失。
-    """
+    """列出 mods/_employees 下真实存在的员工包，不套执行面准入过滤，避免把已在磁盘上的控制面包误报缺失。"""
     ids: set[str] = set()
     try:
         from app.infrastructure.mods.artifact_constants import (

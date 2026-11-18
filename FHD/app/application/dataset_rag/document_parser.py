@@ -13,7 +13,7 @@ from app.utils.security.safe_download_path import resolve_under_allowed_dirs
 
 def _pdf_ocr_enabled() -> bool:
     """扫描件 OCR 开关：XCAGI_PDF_OCR=off 关闭，其余（默认 auto）启用空页 OCR。"""
-    from app.application.document_parsing.ocr import ocr_mode
+    from app.infrastructure.document_parsing.ocr import ocr_mode
 
     return ocr_mode() != "off"
 
@@ -70,7 +70,7 @@ class DocumentParser:
 
     def _extract_file_text(self, path: Path) -> tuple[str, str, dict[str, Any]]:
         """按格式路由：复杂文档优先 Docling，表格与文本保持原实现。"""
-        from app.application.document_parsing.router import parse_document
+        from app.infrastructure.document_parsing.router import parse_document
 
         return parse_document(path, lambda: self._extract_legacy_file_text(path))
 
@@ -90,7 +90,7 @@ class DocumentParser:
             text, encoding = self._read_text_with_fallback(path)
             return (text, "text_file", {"extension": suffix, "encoding": encoding})
         if suffix in {".html", ".htm"}:
-            from app.application.document_parsing.web_fetch import extract_html_text
+            from app.infrastructure.document_parsing.web_fetch import extract_html_text
 
             raw, encoding = self._read_text_with_fallback(path)
             text, title = extract_html_text(raw)
@@ -99,7 +99,7 @@ class DocumentParser:
                 metadata["title"] = title
             return (text, "trafilatura_html", metadata)
         if suffix in {".png", ".jpg", ".jpeg", ".webp", ".bmp"}:
-            from app.application.document_parsing.ocr import ocr_image_text
+            from app.infrastructure.document_parsing.ocr import ocr_image_text
 
             text = ocr_image_text(path).strip()
             if not text:
@@ -150,7 +150,7 @@ class DocumentParser:
                             table_count += 1
                 # 扫描件兜底：文本层为空时才 OCR，避免文本版 PDF 付多余算力
                 if not page_text and len(ocr_pages) < max_ocr_pages and _pdf_ocr_enabled():
-                    from app.application.document_parsing.ocr import ocr_page_text
+                    from app.infrastructure.document_parsing.ocr import ocr_page_text
 
                     page_text = ocr_page_text(page).strip()
                     if page_text:

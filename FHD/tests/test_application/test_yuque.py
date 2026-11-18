@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -13,7 +15,7 @@ from fastapi.testclient import TestClient
 
 from app.application.dataset_rag.models import DatasetAccessContext
 from app.application.dataset_rag_app_service import DatasetRagApplicationService
-from app.application.document_parsing.yuque import fetch_document
+from app.infrastructure.document_parsing.yuque import fetch_document
 
 
 class _Response:
@@ -64,6 +66,19 @@ def test_fetch_document_falls_back_to_html(monkeypatch: pytest.MonkeyPatch) -> N
     assert "可编辑" in doc.text
 
 
+def test_html_fallback_handles_adversarial_unclosed_tags_in_bounded_time() -> None:
+    subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from app.infrastructure.document_parsing.yuque import _plain; "
+            "text = '<' * 200000; assert _plain(text) == text",
+        ],
+        check=True,
+        timeout=5,
+    )
+
+
 def test_fetch_document_rejects_bad_ref_and_missing_config(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("XCAGI_YUQUE_TOKEN", "token-123")
     with pytest.raises(ValueError, match="引用不合法"):
@@ -106,7 +121,7 @@ def test_ingest_route_records_yuque_coordinates() -> None:
     app.include_router(routes.ingestion)
     client = TestClient(app, raise_server_exceptions=False)
 
-    with patch("app.application.document_parsing.yuque.fetch_document", return_value=doc):
+    with patch("app.infrastructure.document_parsing.yuque.fetch_document", return_value=doc):
         response = client.post(
             "/datasets/kb/documents",
             json={"yuque_document_ref": "team/docs/refund", "tenant_id": "t1"},
@@ -152,7 +167,7 @@ def test_refresh_reuses_yuque_connector(tmp_path) -> None:
         url="https://www.yuque.com/team/docs/refund",
     )
 
-    with patch("app.application.document_parsing.yuque.fetch_document", return_value=refreshed):
+    with patch("app.infrastructure.document_parsing.yuque.fetch_document", return_value=refreshed):
         result = service.refresh_document(
             "kb",
             ingested["document"]["document_id"],

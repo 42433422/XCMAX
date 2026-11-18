@@ -11,8 +11,8 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
-from app.application.document_parsing import confluence
-from app.application.document_parsing.confluence import FetchedConfluencePage, fetch_page
+from app.infrastructure.document_parsing import confluence
+from app.infrastructure.document_parsing.confluence import FetchedConfluencePage, fetch_page
 
 
 class _Response:

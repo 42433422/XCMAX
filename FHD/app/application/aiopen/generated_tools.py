@@ -52,7 +52,7 @@ def find_operation_by_request(app: Any, method: str, path: str) -> dict[str, Any
     raw = str(path or "").split("?", 1)[0].rstrip("/")
     target = [part for part in raw.split("/") if part]
     for entry in get_catalog(app).get("operations") or []:
-        if entry.get("method") != verb:
+        if not isinstance(entry, dict) or entry.get("method") != verb:
             continue
         template = [part for part in str(entry.get("path") or "").split("/") if part]
         if len(template) != len(target):
@@ -72,7 +72,8 @@ def _encode(value: Any) -> str:
 def build_request(entry: dict[str, Any], args: dict[str, Any]) -> dict[str, Any] | str:
     """按目录参数拼装请求；返回错误说明字符串表示参数不合法。"""
     path = str(entry.get("path") or "")
-    params = args.get("params") if isinstance(args.get("params"), dict) else {}
+    raw_params = args.get("params")
+    params = raw_params if isinstance(raw_params, dict) else {}
     query: list[str] = []
     for spec in entry.get("parameters") or []:
         if not isinstance(spec, dict):
@@ -128,19 +129,19 @@ def _approval_outcome(
                 "message": "approval_id 必须是审批单编号。",
             }
         outcome = bridge.consume(parsed, entry, args, principal)
-        return None if outcome.get("status") == "approved" else {
-            "success": False,
-            "operation_id": entry.get("operation_id"),
-            **outcome,
-        }
+        return (
+            None
+            if outcome.get("status") == "approved"
+            else {
+                "success": False,
+                "operation_id": entry.get("operation_id"),
+                **outcome,
+            }
+        )
     outcome = bridge.submit(entry, args, principal)
     # 显式开启“自动批准危险操作”时，仍先落审批记录，再由系统批准并立即消费，
     # 保留申请人、批准人、参数摘要与消费时间，避免无痕执行。
-    if (
-        outcome.get("status") == "pending"
-        and writes_enabled()
-        and _auto_approve_enabled(bridge)
-    ):
+    if outcome.get("status") == "pending" and writes_enabled() and _auto_approve_enabled(bridge):
         approval_id = int(outcome.get("approval_id") or 0)
         if approval_id and bridge.auto_approve(approval_id, principal):
             consumed = bridge.consume(approval_id, entry, args, principal)
@@ -231,7 +232,7 @@ def guarded_api_call(
     entry = find_operation_by_request(app, method, str((args or {}).get("path") or ""))
     if entry is None:
         return call(app, args)
-    normalized = {
+    normalized: dict[str, Any] = {
         "params": {},
         "body": args.get("body") if isinstance(args.get("body"), dict) else {},
         "approval_id": args.get("approval_id"),

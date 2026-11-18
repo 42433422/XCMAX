@@ -16,10 +16,11 @@ def test_post_deploy_smoke_skipped_when_disabled(monkeypatch) -> None:
     assert out.get("skipped") is True
 
 
-def test_post_deploy_smoke_mock_probes(monkeypatch) -> None:
+def test_post_deploy_smoke_mock_probes(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("MODSTORE_POST_DEPLOY_SMOKE_ENABLED", "1")
     monkeypatch.setenv("MODSTORE_DEPLOY_HEALTH_URL", "http://127.0.0.1:8000/health")
     monkeypatch.setenv("MODSTORE_POST_DEPLOY_MARKET_URL", "https://example.com/market/download")
+    monkeypatch.setenv("MODSTORE_POST_DEPLOY_SMOKE_STATE_FILE", str(tmp_path / "smoke.json"))
 
     from modstore_server import post_deploy_smoke as pds
 

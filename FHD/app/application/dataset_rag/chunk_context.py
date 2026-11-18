@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-_HEADING = re.compile(r"(?m)^(#{1,6})\s+(.+?)\s*$")
+_HEADING = re.compile(r"(?m)^(#{1,6})[ \t]([^\n]*)")
 _MAX_SECTION_CHARS = 200
 
 

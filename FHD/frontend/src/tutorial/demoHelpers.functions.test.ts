@@ -242,7 +242,7 @@ describe('demoHelpers', () => {
     it('sets outline styles on element', () => {
       const el = document.createElement('div')
       highlightElement(el, 100)
-      expect(el.style.outline).toBe('2px solid #3b82f6')
+      expect(el.style.outline).toBe('2px solid rgb(59, 130, 246)')
       expect(el.style.outlineOffset).toBe('4px')
       expect(el.style.transition).toContain('outline')
     })
@@ -258,9 +258,9 @@ describe('demoHelpers', () => {
     it('uses default duration when not specified', () => {
       const el = document.createElement('div')
       highlightElement(el)
-      expect(el.style.outline).toBe('2px solid #3b82f6')
+      expect(el.style.outline).toBe('2px solid rgb(59, 130, 246)')
       vi.advanceTimersByTime(1500 * TUTORIAL_DEMO_SPEED - 1)
-      expect(el.style.outline).toBe('2px solid #3b82f6')
+      expect(el.style.outline).toBe('2px solid rgb(59, 130, 246)')
       vi.advanceTimersByTime(1)
       expect(el.style.outline).toBe('')
     })

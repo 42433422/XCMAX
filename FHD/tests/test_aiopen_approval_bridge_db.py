@@ -87,15 +87,13 @@ def test_missing_flow_fails_closed(session_factory):
 def test_submit_creates_pending_request(session_factory):
     _seed_flow(session_factory)
     principal = ScreenPrincipal("7", "1")
-    outcome = approval_bridge.submit(
-        _entry(), {"params": {"product_id": "P-1"}}, principal
-    )
+    outcome = approval_bridge.submit(_entry(), {"params": {"product_id": "P-1"}}, principal)
     assert outcome["status"] == "pending"
     assert outcome["code"] == "APPROVAL_REQUIRED"
     with session_factory() as db:
-        request = db.query(ApprovalRequest).filter(
-            ApprovalRequest.id == outcome["approval_id"]
-        ).first()
+        request = (
+            db.query(ApprovalRequest).filter(ApprovalRequest.id == outcome["approval_id"]).first()
+        )
         assert request.status == ApprovalStatus.PENDING.value
         assert request.business_type == approval_bridge.BUSINESS_TYPE
         assert request.applicant_id == 7
@@ -122,9 +120,7 @@ def test_consume_requires_approval_then_executes_once(session_factory):
 def test_consume_rejects_argument_mismatch(session_factory):
     _seed_flow(session_factory)
     principal = ScreenPrincipal("7", "1")
-    submitted = approval_bridge.submit(
-        _entry(), {"params": {"product_id": "P-1"}}, principal
-    )
+    submitted = approval_bridge.submit(_entry(), {"params": {"product_id": "P-1"}}, principal)
     _approve(session_factory, submitted["approval_id"])
     mismatch = approval_bridge.consume(
         submitted["approval_id"], _entry(), {"params": {"product_id": "P-2"}}, principal
@@ -164,7 +160,10 @@ def test_auto_approve_marks_request_and_blocks_replay(session_factory):
         assert request.approved_by_name == approval_bridge.AUTO_APPROVE_ACTOR_NAME
 
     assert approval_bridge.consume(approval_id, _entry(), args, principal)["status"] == "approved"
-    assert approval_bridge.consume(approval_id, _entry(), args, principal)["code"] == "APPROVAL_CONSUMED"
+    assert (
+        approval_bridge.consume(approval_id, _entry(), args, principal)["code"]
+        == "APPROVAL_CONSUMED"
+    )
 
 
 def test_auto_approve_is_off_by_default(monkeypatch):

@@ -8,17 +8,19 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
-from app.application.document_parsing.web_fetch import extract_html_text
+from app.infrastructure.document_parsing.web_fetch import extract_html_text
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
 MAX_BYTES = 5 * 1024 * 1024
 TIMEOUT_S = 15
 _PAGE_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -67,7 +69,8 @@ def fetch_page(page_id: str, *, getter=None) -> FetchedConfluencePage:
     try:
         response = requester(url, timeout=TIMEOUT_S, headers=headers, auth=auth)
     except BOUNDARY_ERRORS as exc:
-        raise ValueError(f"Confluence 请求失败：{exc}") from exc
+        _LOGGER.exception("Confluence request failed")
+        raise ValueError("Confluence 请求失败") from exc
     if response.status_code >= 400:
         raise ValueError(f"Confluence 返回 HTTP {response.status_code}")
     raw = bytes(response.content or b"")
@@ -76,7 +79,8 @@ def fetch_page(page_id: str, *, getter=None) -> FetchedConfluencePage:
     try:
         payload = response.json()
     except BOUNDARY_ERRORS as exc:
-        raise ValueError(f"Confluence 响应无法解析：{exc}") from exc
+        _LOGGER.exception("Confluence response decoding failed")
+        raise ValueError("Confluence 响应无法解析") from exc
     if not isinstance(payload, dict):
         raise ValueError("Confluence 响应格式不正确")
     storage = ((payload.get("body") or {}).get("storage") or {}).get("value") or ""

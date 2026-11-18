@@ -159,13 +159,48 @@ def apply_clarification_answer(
                 raise ClarificationAnswerError("答案只能指定一个唯一目标 ID")
             if candidate_id in (None, ""):
                 raise ClarificationAnswerError("请提供唯一目标 ID")
-            payload = dict(candidate.get("payload") or {})
-            payload["id"] = candidate_id
-            candidate["payload"] = payload
         else:
             candidate_id = parameters.get("id")
             if candidate_id in (None, "") or set(parameters) != {"id"}:
                 raise ClarificationAnswerError("答案只能指定一个唯一目标 ID")
+        candidates = detail.get("candidates") or []
+        selected = [
+            item
+            for item in candidates
+            if isinstance(item, dict)
+            and item.get("id") not in (None, "")
+            and str(item["id"]) == str(candidate_id)
+        ]
+        if reason == "ambiguous_target" or candidates:
+            if len(selected) != 1:
+                raise ClarificationAnswerError(
+                    "请选择当前问题列出的候选对象，目标范围不能在回答中更换"
+                )
+            candidate_id = selected[0]["id"]
+        destination = detail.get("field_path")
+        if destination:
+            from app.application.agent_orchestrator.param_references import (
+                UnresolvedReference,
+                substitute_selected_reference,
+            )
+
+            try:
+                parent: Any = candidate
+                for key in destination[:-1]:
+                    parent = parent[key]
+                original = parent[destination[-1]]
+                if not isinstance(original, str):
+                    raise UnresolvedReference("澄清目标引用已变化")
+                parent[destination[-1]] = substitute_selected_reference(
+                    original, detail["reference"], selected[0]["source_value"]
+                )
+            except (KeyError, IndexError, TypeError, UnresolvedReference) as exc:
+                raise ClarificationAnswerError("澄清目标引用已变化，请重新规划任务") from exc
+        elif target.tool_id == "business_db" and target.action == "write":
+            payload = dict(candidate.get("payload") or {})
+            payload["id"] = candidate_id
+            candidate["payload"] = payload
+        else:
             candidate[str(detail.get("field") or "id")] = candidate_id
     elif reason in {
         "multi_unit",
@@ -399,12 +434,13 @@ def pause_for_clarification(run: AgentRun, step: AgentStep, outputs: dict | None
     return True
 
 
-def _candidate_rows(rows: list[Any]) -> list[dict[str, Any]]:
+def _candidate_rows(rows: list[Any], projections: list[Any] | None = None) -> list[dict[str, Any]]:
     candidates: list[dict[str, Any]] = []
-    for row in rows[:20]:
+    for index, row in enumerate(rows[:20]):
+        source = {"source_value": deepcopy(projections[index])} if projections is not None else {}
         if not isinstance(row, dict):
             if row not in (None, ""):
-                candidates.append({"id": row})
+                candidates.append({"id": row, **source})
             continue
         candidate_id = next(
             (
@@ -431,29 +467,29 @@ def _candidate_rows(rows: list[Any]) -> list[dict[str, Any]]:
             ),
             "",
         )
-        candidates.append({"id": candidate_id, **({"name": name} if name else {})})
+        candidates.append({"id": candidate_id, **({"name": name} if name else {}), **source})
     return candidates
 
 
-def _ambiguous_field(params: Any, path: str) -> str:
+def _ambiguous_field(params: Any, path: str) -> list[str | int]:
     token = "{{" + path + "}}"
 
-    def walk(value: Any, key: str) -> str:
+    def walk(value: Any, destination: list[str | int]) -> list[str | int]:
         if isinstance(value, dict):
             for child_key, child in value.items():
-                found = walk(child, str(child_key))
+                found = walk(child, [*destination, str(child_key)])
                 if found:
                     return found
         elif isinstance(value, (list, tuple)):
-            for child in value:
-                found = walk(child, key)
+            for index, child in enumerate(value):
+                found = walk(child, [*destination, index])
                 if found:
                     return found
         elif isinstance(value, str) and token in value:
-            return key
-        return ""
+            return destination
+        return []
 
-    return walk(params, "id")
+    return walk(params, [])
 
 
 def pause_for_ambiguous_target(
@@ -462,11 +498,14 @@ def pause_for_ambiguous_target(
     rows: list[Any],
     *,
     field: str = "",
+    field_path: list[str | int] | None = None,
+    reference: str = "",
+    projections: list[Any] | None = None,
 ) -> bool:
     """执行期把「多候选引用」转为澄清：插入 clarify 步骤并等待用户选择。"""
     from app.application.workflow.workflow_types import WorkflowNode, plan_from_dict, plan_to_dict
 
-    candidates = _candidate_rows(rows)
+    candidates = _candidate_rows(rows, projections)
     if not candidates:
         return False
     target_field = str(field or "id")
@@ -476,22 +515,24 @@ def pause_for_ambiguous_target(
         cid = str(candidate.get("id") or "")
         labels.append(f"{index}. {name}（#{cid}）" if name else f"{index}. #{cid}")
     question = "检测到多个匹配目标，请选择要操作的对象：\n" + "\n".join(labels)
-    detail = {
+    detail: dict[str, Any] = {
         "reason": "ambiguous_target",
         "node_id": step.node_id,
         "field": target_field,
         "candidates": candidates,
         "question": question,
     }
+    if field_path:
+        detail.update(field_path=list(field_path), reference=reference)
     plan = plan_from_dict(run.metadata.get("plan")) if run.metadata.get("plan") else None
     used_ids = {item.node_id for item in run.steps}
     if plan is not None:
         used_ids.update(node.node_id for node in plan.nodes)
     base_id = f"{step.node_id}_clarify"
     clarify_node_id = next(
-        candidate
+        node_id
         for index in range(len(used_ids) + 1)
-        if (candidate := base_id if index == 0 else f"{base_id}_{index}") not in used_ids
+        if (node_id := base_id if index == 0 else f"{base_id}_{index}") not in used_ids
     )
     params = {
         "question": question,

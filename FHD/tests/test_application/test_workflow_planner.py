@@ -92,6 +92,50 @@ def test_planner_does_not_mix_global_history_into_an_explicit_conversation():
     assert "FOREIGN_SESSION_MARKER" not in json.dumps(captured["recent_messages"])
 
 
+@pytest.mark.parametrize("light_reply", [False, True])
+def test_long_history_keeps_latest_constraints_in_order(light_reply, monkeypatch, tmp_path):
+    from app.application.workflow.llm_plan_generation import LlmPlanGeneration
+
+    monkeypatch.setenv("XCAGI_DIALOGUE_MEMORY_DIR", str(tmp_path))
+    captured = {}
+
+    def completion(**kwargs):
+        captured.update(json.loads(kwargs["messages"][1]["content"]))
+        return {"choices": [{"message": {"content": '{"mode":"reply","reply":"ready"}'}}]}
+
+    history = [
+        {"role": "user" if index % 2 == 0 else "assistant", "content": "旧说明" * 3000}
+        for index in range(4)
+    ] + [
+        {"role": "user", "content": "最新约束：保持金额。api_key=history-secret"},
+        {"role": "assistant", "content": "最新确认：金额保持。Bearer private-history-token"},
+    ]
+    context = {
+        "local_user_id": 31,
+        "tenant_id": 5,
+        "conversation_id": "long-owned-history",
+        "_chat_evidence_authorized": True,
+        "chat_owned_history": history,
+    }
+    generator = LlmPlanGeneration(Mock(get_context=Mock(return_value=None)), completion, Mock())
+    plan = (
+        generator._light_reply("p1", "你好", context)
+        if light_reply
+        else generator.generate("p1", "31", "查询客户", {}, context)
+    )
+
+    assert plan is not None
+    recent = captured["recent_messages"]
+    assert [item["role"] for item in recent[-2:]] == ["user", "assistant"]
+    assert recent[-2]["content"].startswith("最新约束：保持金额。")
+    assert recent[-1]["content"].startswith("最新确认：金额保持。")
+    serialized = json.dumps(captured, ensure_ascii=False)
+    assert "history-secret" not in serialized
+    assert "private-history-token" not in serialized
+    if not light_reply:
+        assert captured["context"]["chat_owned_history"][-1] == recent[-1]
+
+
 def test_employee_discovery_uses_verified_actor_and_replaces_client_catalog(
     monkeypatch, trusted_actor
 ):
@@ -536,25 +580,12 @@ class TestPlannerStageMetrics:
     def test_valid_reply_plan_records_first_pass(self, monkeypatch):
         from app.infrastructure.observability import metrics
 
-        def reply(plan_id, user_id, message, registry, context):
-            return PlanGraph(
-                plan_id=plan_id,
-                intent="conversation_reply",
-                nodes=[
-                    WorkflowNode(
-                        node_id="model_reply",
-                        tool_id="conversation",
-                        action="reply",
-                        params={"response": "ready"},
-                        risk="low",
-                        idempotent=True,
-                    )
-                ],
-                metadata={"response_mode": "reply", "reply": "ready"},
-            )
-
-        planner = LLMWorkflowPlanner(ai_service=Mock())
-        monkeypatch.setattr(planner, "_plan_with_llm", reply)
+        planner = LLMWorkflowPlanner(
+            ai_service=Mock(),
+            completion=lambda **kwargs: {
+                "choices": [{"message": {"content": '{"mode":"reply","reply":"ready"}'}}]
+            },
+        )
 
         before = metrics.snapshot()
         plan = planner.plan("u-metric-valid", "hello", get_tool_registry(), {})

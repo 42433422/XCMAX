@@ -2,6 +2,7 @@ import { BrowserWindow, app, net, session } from 'electron'
 import type { Session } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import type { UpdateInfo } from 'electron-updater'
+import { isDesktopPackaged } from './desktop-config'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -97,7 +98,7 @@ export function getUpdateStatus(): { type: string; data?: unknown } | null {
 }
 
 function buildInfoCandidates(): string[] {
-  if (!app.isPackaged) {
+  if (!isDesktopPackaged()) {
     return []
   }
   return [
@@ -172,7 +173,7 @@ export function isForceUpgradeRequired(): boolean {
 }
 
 export function readLocalBuildSha(): string {
-  if (!app.isPackaged) {
+  if (!isDesktopPackaged()) {
     return String(process.env.XCAGI_BUILD_SHA || '').trim()
   }
   for (const filePath of buildInfoCandidates()) {
@@ -194,7 +195,7 @@ export function readLocalBuildSha(): string {
 
 /** Local package time for same-version rebuild ordering (builtAt, else build-info mtime). */
 export function readLocalBuildTimeMs(): number {
-  if (!app.isPackaged) {
+  if (!isDesktopPackaged()) {
     const fromEnv = Date.parse(String(process.env.XCAGI_BUILD_TIME || '').trim())
     return Number.isFinite(fromEnv) ? fromEnv : 0
   }
@@ -413,7 +414,7 @@ export function configureUpdater(
   setTimeout(() => void checkAndNotify(), 60_000)
 
   setInterval(() => {
-    if (!app.isPackaged && !process.env.XCAGI_UPDATE_URL) {
+    if (!isDesktopPackaged() && !process.env.XCAGI_UPDATE_URL) {
       return
     }
     void checkAndNotify()
@@ -482,7 +483,7 @@ function parseYamlBlock(content: string, field: string): string {
 }
 
 export async function checkForUpdates(): Promise<unknown> {
-  if (!app.isPackaged && !process.env.XCAGI_UPDATE_URL) {
+  if (!isDesktopPackaged() && !process.env.XCAGI_UPDATE_URL) {
     return { skipped: true, reason: 'dev-mode-without-XCAGI_UPDATE_URL' }
   }
   remoteProductVersion = ''

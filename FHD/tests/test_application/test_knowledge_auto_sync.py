@@ -101,7 +101,7 @@ def test_refresh_all_due_sources_aggregates_then_skips_fresh(tmp_path) -> None:
     _seed(service, "kb2", "退款.md")
 
     page = SimpleNamespace(text=_ORIGINAL, title="页面", url="https://docs.example.com")
-    with patch("app.application.document_parsing.web_fetch.fetch_url_text", return_value=page):
+    with patch("app.infrastructure.document_parsing.web_fetch.fetch_url_text", return_value=page):
         first = service.refresh_all_due_sources(max_age_hours=24)
         second = service.refresh_all_due_sources(max_age_hours=24)
 
@@ -129,7 +129,7 @@ def test_status_reports_source_sync_health(tmp_path) -> None:
     assert before["last_synced_at"] == ""
 
     page = SimpleNamespace(text=_ORIGINAL, title="页面", url="https://docs.example.com")
-    with patch("app.application.document_parsing.web_fetch.fetch_url_text", return_value=page):
+    with patch("app.infrastructure.document_parsing.web_fetch.fetch_url_text", return_value=page):
         service.refresh_documents("kb1", tenant_id="t1", access_context=_ctx())
 
     after = service.status("kb1", tenant_id="t1", access_context=_ctx())["source_sync"]

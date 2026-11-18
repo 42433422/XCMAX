@@ -32,6 +32,7 @@ def without_runtime_identity(raw: dict[str, Any]) -> dict[str, Any]:
     for key in (
         "workspace_root",
         "node_outputs",
+        "active_skills",
         "tenant_id",
         "user_id",
         "actor_id",

@@ -100,22 +100,31 @@ describe('DeliveryCenterView', () => {
   })
 
   it('keeps delivery tabs without a custom ticket tab and shows the real roster data', async () => {
-    const wrapper = mount(DeliveryCenterView)
-    await flushPromises()
-    const tabs = wrapper.get('.delivery-tabs').text()
-    expect(tabs).toContain('购买交付 2')
-    expect(tabs).toContain('体验交付 1')
-    expect(tabs).toContain('企业客户 3')
-    expect(tabs).toContain('Mac 设备')
-    expect(tabs).not.toContain('定制工单')
-    expect(wrapper.find('#delivery-custom-orders').exists()).toBe(false)
-    expect(wrapper.text()).toContain('企业客户交付台账')
-    expect(wrapper.text()).toContain('国圣化工')
-    expect(wrapper.text()).toContain('购买账户标准交付台账')
-    expect(wrapper.text()).toContain('¥99 体验账户交付台账')
-    expect(listStandardDeliveries).toHaveBeenCalledTimes(1)
-    expect(listTrialDeliveries).toHaveBeenCalledTimes(1)
-    expect(listUsers).toHaveBeenCalledWith(200, 0, true)
+    const host = document.body.appendChild(document.createElement('div'))
+    const wrapper = mount(DeliveryCenterView, { attachTo: host })
+    try {
+      await flushPromises()
+      const tabs = wrapper.get('.delivery-tabs').text()
+      expect(tabs).toContain('购买交付 2')
+      expect(tabs).toContain('体验交付 1')
+      expect(tabs).toContain('企业客户 3')
+      expect(tabs).toContain('Mac 设备')
+      expect(tabs).not.toContain('定制工单')
+      expect(wrapper.find('#delivery-custom-orders').exists()).toBe(false)
+      expect(wrapper.text()).toContain('企业客户交付台账')
+      expect(wrapper.text()).toContain('国圣化工')
+      expect(wrapper.text()).toContain('购买账户标准交付台账')
+      expect(wrapper.text()).toContain('¥99 体验账户交付台账')
+      expect(listStandardDeliveries).toHaveBeenCalledTimes(1)
+      expect(listTrialDeliveries).toHaveBeenCalledTimes(1)
+      expect(listUsers).toHaveBeenCalledWith(200, 0, true)
+      for (const [index, active] of ['standard', 'trial', 'enterprise'].entries()) {
+        await wrapper.get('.delivery-tabs').findAll('button')[index].trigger('click')
+        for (const roster of ['standard', 'trial', 'enterprise']) {
+          expect(wrapper.get(`#delivery-${roster}-roster`).isVisible()).toBe(roster === active)
+        }
+      }
+    } finally { wrapper.unmount(); host.remove() }
   })
 
   it('opens the customer service ticket list for enterprise custom work', async () => {
@@ -123,7 +132,7 @@ describe('DeliveryCenterView', () => {
     await flushPromises()
     const button = wrapper.findAll('button').find((row) => row.text().includes('查看定制工单'))!
     await button.trigger('click')
-    expect(push).toHaveBeenCalledWith({ name: 'customer-service-tickets', query: { q: '国圣化工' } })
+    expect(push).toHaveBeenCalledWith({ name: 'customer-service-tickets', query: { account_id: '72', type: 'delivery' } })
   })
 
   it('shows unknown counts on failure and recovers with retry', async () => {

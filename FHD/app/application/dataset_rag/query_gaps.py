@@ -7,6 +7,7 @@ into one row with a counter instead of growing without bound.
 
 from __future__ import annotations
 
+import builtins
 import json
 import threading
 from datetime import UTC, datetime
@@ -52,7 +53,7 @@ class DatasetQueryGapStore:
 
     def list(
         self, *, dataset_id: str, tenant_id: str = "", limit: int = 20
-    ) -> list[dict[str, Any]]:
+    ) -> builtins.list[dict[str, Any]]:
         with self._lock:
             rows = [
                 dict(row)
@@ -82,7 +83,7 @@ class DatasetQueryGapStore:
             self._persist(payload)
         return removed
 
-    def _load(self) -> dict[str, list[dict[str, Any]]]:
+    def _load(self) -> dict[str, builtins.list[dict[str, Any]]]:
         try:
             raw = json.loads(self.path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
@@ -96,7 +97,7 @@ class DatasetQueryGapStore:
             if isinstance(rows, list)
         }
 
-    def _persist(self, items: dict[str, list[dict[str, Any]]]) -> None:
+    def _persist(self, items: dict[str, builtins.list[dict[str, Any]]]) -> None:
         payload = {"version": 1, "datasets": items}
         self.path.parent.mkdir(parents=True, exist_ok=True)
         tmp_path = self.path.with_suffix(self.path.suffix + ".tmp")

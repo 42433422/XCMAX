@@ -209,7 +209,7 @@ async function load(nextOffset: number, applySearch = false) {
     const type = applySearch ? typeFilter.value : appliedType
     const domain = applySearch ? domainFilter.value : appliedDomain
     const source = applySearch ? sourceFilter.value : appliedSource
-    const result = await xcmaxAdminApi.fetchCustomerTickets(term, nextOffset, '', '', status, type, domain, source)
+    const result = await xcmaxAdminApi.fetchCustomerTickets(term, nextOffset, '', '', status, type, domain, source, String(route.query?.account_id || ''))
     if (request !== generation) return
     if (!Array.isArray(result.items) || !Number.isInteger(result.total) || result.total < 0) throw new Error('响应不完整')
     appliedSearch = term

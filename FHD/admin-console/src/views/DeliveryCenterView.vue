@@ -166,7 +166,7 @@ async function loadAll() {
 function openCustomTickets(user: MarketAdminUser) {
   void router.push({
     name: 'customer-service-tickets',
-    query: { q: String(user.company || user.username || user.id) },
+    query: { account_id: String(user.id), type: 'delivery' },
   })
 }
 

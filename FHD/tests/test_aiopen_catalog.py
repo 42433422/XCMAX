@@ -122,9 +122,7 @@ def test_catalog_filters_by_risk_and_keyword(client):
 
 
 def test_catalog_requires_key(client):
-    response = client.get(
-        "/api/aiopen/catalog/operations", headers={"X-AIOPEN-Key": "invalid-key"}
-    )
+    response = client.get("/api/aiopen/catalog/operations", headers={"X-AIOPEN-Key": "invalid-key"})
     assert response.status_code == 401
 
 
@@ -153,9 +151,7 @@ def test_mcp_resources_list_and_read(client):
     payload = json.loads(catalog["result"]["contents"][0]["text"])
     assert payload["count"] >= 5
 
-    card = _rpc(
-        client, "resources/read", {"uri": "xcmax://catalog/operation/products.list"}
-    )
+    card = _rpc(client, "resources/read", {"uri": "xcmax://catalog/operation/products.list"})
     operation = json.loads(card["result"]["contents"][0]["text"])
     assert operation["operation_id"] == "products.list"
     assert operation["semantics"]["when_to_use"]

@@ -94,8 +94,7 @@ def operation_path_segments(path: str) -> list[str]:
 def is_excluded_path(path: str) -> bool:
     normalized = "/" + str(path or "").lstrip("/")
     if any(
-        normalized == prefix or normalized.startswith(prefix + "/")
-        for prefix in EXCLUDED_PREFIXES
+        normalized == prefix or normalized.startswith(prefix + "/") for prefix in EXCLUDED_PREFIXES
     ):
         return True
     segments = {part.lower() for part in normalized.strip("/").split("/")}
@@ -214,16 +213,12 @@ def _overlay_document() -> tuple[dict[str, dict[str, Any]], dict[str, list[str]]
                     continue
                 operation_id = str(item.get("operation_id") or "").strip()
                 if operation_id:
-                    entries[operation_id] = {
-                        k: v for k, v in item.items() if k != "operation_id"
-                    }
+                    entries[operation_id] = {k: v for k, v in item.items() if k != "operation_id"}
             for domain, aliases in (raw.get("glossary") or {}).items():
                 key = _slug(str(domain))
                 if key and isinstance(aliases, list):
                     known = glossary.setdefault(key, [])
-                    known.extend(
-                        str(alias).strip() for alias in aliases if str(alias).strip()
-                    )
+                    known.extend(str(alias).strip() for alias in aliases if str(alias).strip())
         _OVERLAY_CACHE["signature"] = signature
         _OVERLAY_CACHE["entries"] = entries
         _OVERLAY_CACHE["glossary"] = glossary
@@ -262,7 +257,8 @@ def _parameter_specs(parameters: Any) -> list[dict[str, Any]]:
         name = str(item.get("name") or "").strip()
         if not name or location not in {"path", "query", "header"}:
             continue
-        schema = item.get("schema") if isinstance(item.get("schema"), dict) else {}
+        raw_schema = item.get("schema")
+        schema = raw_schema if isinstance(raw_schema, dict) else {}
         specs.append(
             {
                 "name": name,
@@ -318,9 +314,7 @@ def build_operations(app: Any) -> list[dict[str, Any]]:
             parameters = operation.get("parameters")
             entry: dict[str, Any] = {
                 "operation_id": operation_id,
-                "tool_name": _unique(
-                    f"{domain}_{action}", taken_tools, f"_{method.lower()}"
-                ),
+                "tool_name": _unique(f"{domain}_{action}", taken_tools, f"_{method.lower()}"),
                 "method": method,
                 "path": path,
                 "domain": domain,
@@ -372,7 +366,7 @@ def get_catalog(app: Any) -> dict[str, Any]:
 def find_operation(catalog: dict[str, Any], operation_id: str) -> dict[str, Any] | None:
     target = str(operation_id or "").strip().lower()
     for entry in catalog.get("operations") or []:
-        if str(entry.get("operation_id") or "").lower() == target:
+        if isinstance(entry, dict) and str(entry.get("operation_id") or "").lower() == target:
             return entry
     return None
 

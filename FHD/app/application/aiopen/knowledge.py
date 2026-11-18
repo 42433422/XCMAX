@@ -38,7 +38,8 @@ def _document(entry: dict[str, Any], glossary: dict[str, list[str]]) -> str:
     domain = str(entry.get("domain") or "")
     parts.extend(glossary.get(domain, []) * 2)
     parts.extend(_ACTION_ALIASES.get(str(entry.get("risk") or "read"), ()))
-    semantics = entry.get("semantics") if isinstance(entry.get("semantics"), dict) else {}
+    raw_semantics = entry.get("semantics")
+    semantics = raw_semantics if isinstance(raw_semantics, dict) else {}
     for key in _SEMANTIC_KEYS:
         value = semantics.get(key)
         if isinstance(value, list):
@@ -90,7 +91,8 @@ def _rank(entries: list[dict[str, Any]], query: str) -> list[tuple[float, dict[s
 
 
 def _search_item(score: float, entry: dict[str, Any]) -> dict[str, Any]:
-    semantics = entry.get("semantics") if isinstance(entry.get("semantics"), dict) else {}
+    raw_semantics = entry.get("semantics")
+    semantics = raw_semantics if isinstance(raw_semantics, dict) else {}
     item = {
         "operation_id": entry.get("operation_id"),
         "method": entry.get("method"),

@@ -84,7 +84,8 @@ class ApprovalQueries:
                 if (
                     self.access.is_workflow(req)
                     and not req.current_node
-                    and req.status in (ApprovalStatus.PENDING.value, ApprovalStatus.IN_PROGRESS.value)
+                    and req.status
+                    in (ApprovalStatus.PENDING.value, ApprovalStatus.IN_PROGRESS.value)
                 ):
                     pending = self.pending(req.request_no)
                     if pending is None:

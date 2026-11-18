@@ -74,4 +74,4 @@
 | verify_sales_contract_template_env.py | `scripts/verify_sales_contract_template_env.py` | verify | no | stdlib |
 | verify_six_line_event_rail.py | `scripts/verify_six_line_event_rail.py` | verify | no | stdlib |
 
-合计：17 已纳入 ssot / 49 已登记清单 / 1 新游离
+合计：17 已纳入 ssot / 50 已登记清单 / 0 新游离

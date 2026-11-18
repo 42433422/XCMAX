@@ -91,6 +91,14 @@ function saveButton() {
 }
 
 describe('selected label template editing', () => {
+  it('paints the selected template using the native canvas backend', async () => {
+    vi.mocked(HTMLCanvasElement.prototype.getContext).mockRestore()
+    await openEditor()
+    const canvas = wrapper!.get<HTMLCanvasElement>('canvas').element
+    expect([canvas.width, canvas.height]).toEqual([640, 400])
+    expect(canvas.getContext('2d')!.getImageData(30, 52, 1, 1).data[3]).toBe(255)
+  })
+
   it('opens only the selected ID and renders its fetched name, fields and canvas layout', async () => {
     const router = await openEditor('/list')
     await wrapper!.get('button').trigger('click')

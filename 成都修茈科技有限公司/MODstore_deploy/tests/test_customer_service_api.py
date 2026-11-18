@@ -1011,13 +1011,31 @@ def test_custom_delivery_requires_quality_acceptance_and_install_receipt(
                 "artifact": None,
             }
         )
-        app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
-        reconciled = client.get("/api/customer-service/custom-deliveries")
+        app.dependency_overrides[customer_service_api._get_current_user] = lambda: admin
+        reconciled = client.get(f"/api/customer-service/tickets/{addon_ticket_id}")
         assert reconciled.status_code == 200, reconciled.text
-        paid = next(row for row in reconciled.json()["items"] if row["id"] == addon_ticket_id)
+        paid = reconciled.json()
         assert paid["custom_delivery"]["crm"]["payment"]["status"] == "paid"
         assert paid["custom_delivery"]["commerce_ready"] is True
         assert paid["custom_delivery"]["stage"] == "production"
+        again = client.get(f"/api/customer-service/tickets/{addon_ticket_id}")
+        assert again.status_code == 200
+        assert again.json()["custom_delivery"]["runs"] == paid["custom_delivery"]["runs"]
+        with get_session_factory()() as db:
+            assert (
+                db.query(CustomerServiceAuditLog)
+                .filter_by(ticket_id=addon_ticket_id, event_type="custom_delivery_payment_verified")
+                .count()
+                == 1
+            )
+        app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
+        listed = client.get("/api/customer-service/custom-deliveries").json()["items"]
+        assert (
+            next(row for row in listed if row["id"] == addon_ticket_id)["custom_delivery"]["crm"][
+                "payment"
+            ]["status"]
+            == "paid"
+        )
 
 
 @pytest.mark.parametrize(
@@ -1619,3 +1637,60 @@ def test_waiting_refund_still_accepts_its_order_number(client, monkeypatch):
         assert second["ticket"]["id"] == first["ticket"]["id"]
         assert second["ticket"]["intent"] == "refund"
         assert second["decision"]["decision"] == "approved"
+
+
+def test_admin_account_and_taxonomy_filters_match_displayed_identity(client):
+    admin, customer = (
+        _make_user("taxonomy_admin", admin=True),
+        _make_user("taxonomy_customer"),
+    )
+    marker = f"TAXONOMY-{uuid.uuid4().hex}"
+    with get_session_factory()() as db:
+        incident = _make_ticket(
+            db,
+            admin,
+            ticket_no=marker + "-incident",
+            summary=marker,
+            intent="account_support",
+            submitter_type="admin",
+            evidence_json='{"source":"github_self_heal"}',
+        )
+        account = _make_ticket(
+            db,
+            customer,
+            ticket_no=marker + "-account",
+            summary=marker,
+            intent="account_support",
+            submitter_type="customer",
+            evidence_json="{}",
+        )
+        # Legacy SQL NULL evidence must remain visible under ordinary taxonomy.
+        from sqlalchemy import update
+
+        from modstore_server.models_cs import CustomerServiceTicket
+
+        db.execute(
+            update(CustomerServiceTicket)
+            .where(CustomerServiceTicket.id == account.id)
+            .values(evidence_json=None)
+        )
+        incident_id, account_id = incident.id, account.id
+        db.commit()
+    with _as_user(admin):
+        for filters, expected in [
+            ({"ticket_type": "incident"}, [incident_id]),
+            ({"ticket_type": "account"}, [account_id]),
+            ({"ticket_source": "admin_created"}, []),
+            ({"account_id": customer.id}, [account_id]),
+        ]:
+            response = client.get(
+                "/api/customer-service/tickets", params={"search": marker, **filters}
+            )
+            assert response.status_code == 200, response.text
+            assert [row["id"] for row in response.json()["items"]] == expected
+    with _as_user(customer):
+        response = client.get(
+            "/api/customer-service/tickets",
+            params={"search": marker, "account_id": admin.id},
+        )
+        assert [row["id"] for row in response.json()["items"]] == [account_id]

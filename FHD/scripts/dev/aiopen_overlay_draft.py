@@ -24,9 +24,12 @@ from typing import Any
 
 import yaml
 
+FHD_ROOT = Path(__file__).resolve().parents[2]
+if str(FHD_ROOT) not in sys.path:
+    sys.path.insert(0, str(FHD_ROOT))
+
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-FHD_ROOT = Path(__file__).resolve().parents[2]
 DRAFT_DIR = FHD_ROOT / "app" / "application" / "aiopen" / "overlay" / "drafts"
 
 _SYSTEM_PROMPT = """你是企业软件的能力目录编辑。给你一批后端接口（operation），
@@ -274,7 +277,8 @@ async def generate(
         "profile": profile,
         "reviewed": False,
         "operations": [
-            {**draft, "reviewed": False} for draft in sorted(collected.values(), key=lambda d: d["operation_id"])
+            {**draft, "reviewed": False}
+            for draft in sorted(collected.values(), key=lambda d: d["operation_id"])
         ],
     }
     path.write_text(

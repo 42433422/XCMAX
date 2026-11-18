@@ -18,6 +18,7 @@ _EMBEDDED = re.compile(r"\{\{([^{}]+)\}\}")
 _TOKEN = re.compile(r"\[(\d+)\]|\.?([A-Za-z_\u4e00-\u9fff][\w\-\u4e00-\u9fff]*)")
 _ALIASES = {"data_preview": "data", "rows": "data", "items": "data", "result": "data"}
 _PREFIXES = ("node_outputs", "outputs", "steps", "nodes")
+_NO_SELECTION = object()
 
 
 class UnresolvedReference(ValueError):
@@ -31,6 +32,7 @@ class AmbiguousReference(UnresolvedReference):
         super().__init__(message)
         self.rows = rows
         self.path = path
+        self.expected_type = ""
 
 
 def validate_plan_references(value: Any, allowed_sources: set[str] | frozenset[str]) -> str | None:
@@ -82,11 +84,13 @@ def _tokens(path: str) -> list[str | int]:
     return tokens
 
 
-def _single(rows: list[Any], path: str) -> Any:
+def _single(rows: list[Any], path: str, selected_row: Any = _NO_SELECTION) -> Any:
     if len(rows) == 1:
         return rows[0]
     if not rows:
         raise UnresolvedReference(f"{{{{{path}}}}} 引用的前序结果为空")
+    if selected_row is not _NO_SELECTION and any(row is selected_row for row in rows):
+        return selected_row
     raise AmbiguousReference(
         f"{{{{{path}}}}} 引用的前序结果有 {len(rows)} 条，无法确定是哪一条",
         rows=rows,
@@ -94,7 +98,13 @@ def _single(rows: list[Any], path: str) -> Any:
     )
 
 
-def _lookup(outputs: dict[str, Any], path: str, expected_type: str = "") -> Any:
+def _lookup(
+    outputs: dict[str, Any],
+    path: str,
+    expected_type: str = "",
+    *,
+    selected_row: Any = _NO_SELECTION,
+) -> Any:
     tokens = _tokens(path.strip())
     head = tokens[0] if tokens else ""
     if not isinstance(head, str) or head not in outputs:
@@ -104,11 +114,11 @@ def _lookup(outputs: dict[str, Any], path: str, expected_type: str = "") -> Any:
         if isinstance(token, int):
             if not isinstance(current, list) or token != 0:
                 raise UnresolvedReference(f"{{{{{path}}}}} 的下标无法唯一确定")
-            current = _single(current, path)
+            current = _single(current, path, selected_row)
             continue
         for _ in range(3):
             if isinstance(current, list):
-                current = _single(current, path)
+                current = _single(current, path, selected_row)
             elif isinstance(current, dict):
                 key = token if token in current else _ALIASES.get(token, token)
                 if key in current:
@@ -128,10 +138,25 @@ def _lookup(outputs: dict[str, Any], path: str, expected_type: str = "") -> Any:
 
         return deepcopy(current)
     if isinstance(current, list):
-        current = _single(current, path)
+        current = _single(current, path, selected_row)
     if current is None or current == "" or isinstance(current, (dict, list)):
         raise UnresolvedReference(f"{{{{{path}}}}} 没有解析出具体值")
     return current
+
+
+def substitute_selected_reference(value: str, path: str, selected: Any) -> Any:
+    """Replace only the answered reference, preserving other text and placeholders."""
+    full = _FULL.match(value)
+    if full and full.group(1).strip() == path.strip():
+        from copy import deepcopy
+
+        return deepcopy(selected)
+    if not any(match.group(1).strip() == path.strip() for match in _EMBEDDED.finditer(value)):
+        raise UnresolvedReference("澄清目标引用已变化，请重新规划任务")
+    return _EMBEDDED.sub(
+        lambda match: str(selected) if match.group(1).strip() == path.strip() else match.group(0),
+        value,
+    )
 
 
 def resolve_references(
@@ -162,6 +187,7 @@ def resolve_references(
             return _lookup(outputs, full.group(1), str(schema.get("type") or ""))
         return _EMBEDDED.sub(lambda m: str(_lookup(outputs, m.group(1))), value)
     except AmbiguousReference as exc:
+        exc.expected_type = str(schema.get("type") or "")
         problems.append(str(exc))
         if ambiguities is not None:
             ambiguities.append(exc)
@@ -231,8 +257,27 @@ def refuse_unresolved_step(run: Any, step: Any, node_outputs: dict[str, Any]) ->
         )
 
         ambiguity = ambiguities[0]
-        field = _ambiguous_field(step.params, ambiguity.path)
-        if pause_for_ambiguous_target(run, step, ambiguity.rows, field=field):
+        destination = _ambiguous_field(step.params, ambiguity.path)
+        try:
+            projections = [
+                _lookup(node_outputs, ambiguity.path, ambiguity.expected_type, selected_row=row)
+                for row in ambiguity.rows[:20]
+            ]
+        except UnresolvedReference:
+            projections = []
+        if (
+            destination
+            and projections
+            and pause_for_ambiguous_target(
+                run,
+                step,
+                ambiguity.rows,
+                field=str(destination[-1]),
+                field_path=destination,
+                reference=ambiguity.path,
+                projections=projections,
+            )
+        ):
             return True
     from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
 

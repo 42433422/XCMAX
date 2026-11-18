@@ -232,7 +232,7 @@ def _registered_router_dataset_rag(
         tags = [str(tag) for tag in params.get("tags") or [] if str(tag).strip()]
         if tags:
             metadata_filter = {**metadata_filter, "tags": tags}
-        shared = {
+        shared: dict[str, Any] = {
             "dataset_ids": dataset_ids,
             "query": query,
             "top_k": as_int(params.get("top_k"), 5),

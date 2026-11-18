@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import subprocess
+import sys
+
 import pytest
 
 from app.application.dataset_rag.chunk_context import (
@@ -46,6 +49,23 @@ def test_section_title_returns_nearest_heading() -> None:
     assert section_title(_MARKDOWN, first) == "退款政策"
     assert section_title(_MARKDOWN, at_time) == "到账时间"
     assert section_title("没有标题的纯文本", 3) == ""
+
+
+def test_heading_whitespace_cannot_trigger_backtracking_or_cross_lines() -> None:
+    subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from app.application.dataset_rag.chunk_context import section_title; "
+            "title = 'a' + '\\t' * 200000 + 'b'; text = '# ' + title + '\\r\\nbody'; "
+            "assert section_title(text, len(text)) == title[:200]",
+        ],
+        check=True,
+        timeout=5,
+    )
+    assert section_title("# \nbody without heading", 30) == ""
+    assert section_title("###\tTitle  \r\nbody", 30) == "Title"
+    assert section_title("####### invalid\nbody", 30) == ""
 
 
 def test_expanded_context_stays_inside_same_document() -> None:

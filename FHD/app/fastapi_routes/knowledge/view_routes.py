@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import AsyncIterator, Callable
 from typing import Any
 
@@ -21,6 +22,8 @@ from .schemas import (
     DatasetQueryRequest,
     DatasetSynonymsRequest,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def _sse(event: dict[str, Any]) -> bytes:
@@ -46,8 +49,11 @@ class DatasetViewRoutes:
                 try:
                     async for event in views().stream_answer(dataset_id, request, req):
                         yield _sse(event)
-                except RECOVERABLE_ERRORS as exc:
-                    yield _sse({"event": "error", "data": {"message": str(exc)}})
+                except RECOVERABLE_ERRORS:
+                    _LOGGER.exception("Knowledge answer stream failed")
+                    yield _sse(
+                        {"event": "error", "data": {"message": "知识库回答暂时不可用，请稍后重试"}}
+                    )
 
             return StreamingResponse(
                 _events(),

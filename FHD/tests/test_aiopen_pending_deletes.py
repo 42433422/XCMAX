@@ -106,7 +106,9 @@ def test_excel_template_delete_is_soft_delete(sqlite_db):
             )
         )
         conn.execute(
-            text("INSERT INTO templates (id, template_name, is_active, tenant_id) VALUES (1, 'T', 1, :tid)"),
+            text(
+                "INSERT INTO templates (id, template_name, is_active, tenant_id) VALUES (1, 'T', 1, :tid)"
+            ),
             {"tid": TENANT_ID},
         )
 
@@ -118,9 +120,7 @@ def test_excel_template_delete_is_soft_delete(sqlite_db):
     assert body["success"] is True
 
     with engine.connect() as conn:
-        row = conn.execute(
-            text("SELECT is_active FROM templates WHERE id = 1")
-        ).first()
+        row = conn.execute(text("SELECT is_active FROM templates WHERE id = 1")).first()
         assert row is not None, "模板行不应被物理删除"
         assert row[0] == 0, "删除必须表现为 is_active=0"
 
@@ -221,18 +221,14 @@ def test_knowledge_memory_delete_is_soft_status(tmp_path, monkeypatch):
         assert result["success"] is True
         assert result["memory"]["status"] == "deleted"
 
-        records = [
-            r for r in memory_service.list_memories("u1") if r.get("memory_id") == memory_id
-        ]
+        records = [r for r in memory_service.list_memories("u1") if r.get("memory_id") == memory_id]
         assert len(records) == 1, "知识库删除不得物理移除记忆行"
         assert records[0]["status"] == "deleted"
         assert records[0].get("deleted_at")
 
         stored = json.loads((tmp_path / "memory_store.json").read_text(encoding="utf-8"))
         persisted = [
-            r
-            for r in stored["u1"]["memory_v2_records"]
-            if r.get("memory_id") == memory_id
+            r for r in stored["u1"]["memory_v2_records"] if r.get("memory_id") == memory_id
         ]
         assert persisted and persisted[0]["status"] == "deleted"
     finally:
@@ -279,9 +275,7 @@ def test_mobile_ai_group_delete_rewrites_catalog_but_keeps_messages(tmp_path):
     repository = GroupChatRepository(tmp_path)
     repository.append_group({"id": "g1", "user_id": 7, "name": "A"})
     repository.append_group({"id": "g2", "user_id": 8, "name": "B"})
-    repository.append_messages(
-        [{"group_id": "g1", "user_id": 7, "text": "should survive"}]
-    )
+    repository.append_messages([{"group_id": "g1", "user_id": 7, "text": "should survive"}])
     messages_before = repository._messages_path.read_bytes()
 
     store = GroupStore(
@@ -322,9 +316,7 @@ def test_mods_delete_removes_mod_directory(tmp_path, monkeypatch):
     mod_dir = root / "demo-mod"
     mod_dir.mkdir(parents=True)
     (mod_dir / "manifest.json").write_text(
-        json.dumps(
-            {"id": "demo-mod", "name": "Demo", "version": "1.0.0", "scope": "global"}
-        ),
+        json.dumps({"id": "demo-mod", "name": "Demo", "version": "1.0.0", "scope": "global"}),
         encoding="utf-8",
     )
     (mod_dir / "index.py").write_text("VALUE = 1\n", encoding="utf-8")
@@ -343,12 +335,8 @@ def test_mods_delete_removes_mod_directory(tmp_path, monkeypatch):
         "app.application.mod_uninstall.resolve_workspace_owner_id",
         lambda request, user: "workspace-owner",
     )
-    monkeypatch.setattr(
-        "app.infrastructure.mods.mod_manager.get_mod_manager", lambda: manager
-    )
-    monkeypatch.setattr(
-        "app.infrastructure.mods.mod_manager.get_mod_registry", lambda: _Registry()
-    )
+    monkeypatch.setattr("app.infrastructure.mods.mod_manager.get_mod_manager", lambda: manager)
+    monkeypatch.setattr("app.infrastructure.mods.mod_manager.get_mod_registry", lambda: _Registry())
 
     ok, message = uninstall_mod_for_request(object(), "demo-mod")
     assert ok is True, message
@@ -374,6 +362,6 @@ def test_products_delete_is_hard_delete(sqlite_db):
     assert result["success"] is True
 
     with factory() as db:
-        assert (
-            db.query(Product).filter(Product.id == product_id).first() is None
-        ), "产品删除必须是物理删除，行不应保留"
+        assert db.query(Product).filter(Product.id == product_id).first() is None, (
+            "产品删除必须是物理删除，行不应保留"
+        )

@@ -29,8 +29,9 @@ def _route(provider="xiaomi", model="mimo-v2.6-flash", source="platform", revisi
 @pytest.mark.asyncio
 @pytest.mark.parametrize("stream", [False, True])
 @pytest.mark.parametrize("minimax_alias", [False, True])
+@pytest.mark.parametrize("fixed_snapshot", [False, True])
 async def test_bound_snapshot_survives_rotation_and_returns_actual_receipt(
-    monkeypatch, stream, minimax_alias
+    monkeypatch, stream, minimax_alias, fixed_snapshot
 ):
     route = _route()
     if minimax_alias:
@@ -85,6 +86,12 @@ async def test_bound_snapshot_survives_rotation_and_returns_actual_receipt(
         messages=[{"role": "user", "content": "synthetic"}],
         route_snapshot=route,
     )
+    if not fixed_snapshot:
+        args.pop("route_snapshot")
+        args["allow_failover"] = False
+        monkeypatch.setattr(
+            llm_billed_chat, "resolve_chat_route_snapshot", Mock(return_value=route)
+        )
     if stream:
         response = await llm_billed_chat.stream_billed_llm_chat(**args)
         frames = [frame async for frame in response.body_iterator]
@@ -113,7 +120,7 @@ async def test_primary_credential_snapshot_precedes_catalog_await(monkeypatch):
     resolver = Mock(return_value=before)
     monkeypatch.setattr(llm_billed_chat, "resolve_chat_route_snapshot", resolver)
 
-    async def candidates(*_args):
+    async def candidates(*_args, **_kwargs):
         resolver.return_value = _route(provider="openai", model="one", revision="after")
         return [("openai", "one"), ("openai", "two")]
 
@@ -340,3 +347,101 @@ def test_failed_receipt_preserves_reconciliation_fields_and_excludes_credentials
     assert detail["request_id"] == "request" and detail["hold_no"] == "hold"
     assert detail["route_state"] == "failed"
     assert all(field not in detail for field in ("api_key", "base_url", "route_token"))
+
+
+@pytest.mark.asyncio
+async def test_stream_does_not_failover_after_emitting_tool_call(monkeypatch, failed_billed_case):
+    route, args, wallet = failed_billed_case
+    args.pop("route_snapshot")
+    monkeypatch.setattr(
+        llm_billed_chat,
+        "resolve_chat_route_snapshot",
+        lambda db, uid, provider, model, **kw: _route(provider, model),
+    )
+    candidates = AsyncMock(
+        return_value=[(route.provider, route.model), ("deepseek", "deepseek-chat")]
+    )
+    monkeypatch.setattr(llm_billed_chat, "list_chat_failover_candidates", candidates)
+    dispatched = []
+
+    async def dispatch(provider, **kwargs):
+        dispatched.append(provider)
+        yield {
+            "type": "toolcall",
+            "choices": [
+                {
+                    "delta": {
+                        "tool_calls": [
+                            {"id": "call-1", "function": {"name": "read", "arguments": "{}"}}
+                        ]
+                    }
+                }
+            ],
+        }
+        yield {"type": "error", "status": 503, "error": "temporarily unavailable"}
+
+    monkeypatch.setattr(llm_billed_chat, "chat_dispatch_stream", dispatch)
+    response = await llm_billed_chat.stream_billed_llm_chat(**args)
+    events = [_frame(frame) async for frame in response.body_iterator]
+    assert dispatched == [route.provider]
+    assert [event for event, _ in events] == ["meta", "toolcall", "error"]
+    assert candidates.await_args.kwargs["include_platform_fallbacks"] is True
+    wallet.settle.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stream", [False, True])
+async def test_fallback_preauthorizes_and_settles_actual_route(
+    monkeypatch, failed_billed_case, stream
+):
+    route, args, wallet = failed_billed_case
+    args.pop("route_snapshot")
+    monkeypatch.setattr(
+        llm_billed_chat,
+        "resolve_chat_route_snapshot",
+        lambda db, uid, provider, model, **kw: _route(provider, model),
+    )
+    candidates = AsyncMock(
+        return_value=[(route.provider, route.model), ("deepseek", "deepseek-chat")]
+    )
+    monkeypatch.setattr(llm_billed_chat, "list_chat_failover_candidates", candidates)
+    charge = Mock(return_value=Decimal(".02"))
+    saved = Mock(return_value=11)
+    for module in (llm_billed_chat, llm_billed_once):
+        monkeypatch.setattr(module, "calculate_charge", charge)
+        monkeypatch.setattr(
+            module, "usage_from_response", lambda *a: SimpleNamespace(total_tokens=2)
+        )
+        monkeypatch.setattr(module, "save_success_log", saved)
+
+    async def dispatch(provider, **kw):
+        if provider == route.provider:
+            return {"ok": False, "status": 503, "error": "temporarily unavailable"}
+        return {"ok": True, "content": "backup answer", "usage": {}}
+
+    async def dispatch_stream(provider, **kw):
+        if provider == route.provider:
+            yield {"type": "error", "status": 503, "error": "temporarily unavailable"}
+        else:
+            yield {"type": "delta", "delta": "backup answer"}
+
+    monkeypatch.setattr(llm_billed_once, "chat_dispatch", dispatch)
+    monkeypatch.setattr(llm_billed_chat, "chat_dispatch_stream", dispatch_stream)
+    if stream:
+        response = await llm_billed_chat.stream_billed_llm_chat(**args)
+        events = dict([_frame(frame) async for frame in response.body_iterator])
+        result = events["done"]
+    else:
+        result = await llm_billed_chat.run_billed_llm_chat(**args)
+    assert (result["provider"], result["model"]) == ("deepseek", "deepseek-chat")
+    assert [call.args[2:4] for call in wallet.preauthorize.await_args_list] == [
+        (route.provider, route.model),
+        ("deepseek", "deepseek-chat"),
+    ]
+    assert charge.call_args.args[1:3] == ("deepseek", "deepseek-chat")
+    assert (saved.call_args.kwargs["provider"], saved.call_args.kwargs["model"]) == (
+        "deepseek",
+        "deepseek-chat",
+    )
+    assert wallet.release.await_count == 1
+    assert wallet.settle.await_count == 1
