@@ -33,7 +33,6 @@ import { noteModelPath } from '@/components/sidebar/modelPathHealth'
 import { modelOutcomeFromText, readChatExecution } from '@/components/chat/chatFailureRecovery'
 import type { PlannerChatOptions } from '../useChatRequest'
 import { isOfficeEltToolMessage } from '@/domain/optionalTemplateSelection'
-import { clearChatArtifactIds } from '@/utils/chatArtifactContext'
 
 /** Bound the initial model wait; once content or a tool marker arrives, use the reply budget. */
 export const CHAT_STREAM_STALL_MS = 40_000
@@ -430,7 +429,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       const ttsShouldSpeakThisMessage = ttsEnabled.value
       let receivedDone = false
       try {
-        const { body } = buildPlannerChatRequestPayload(primaryForStream, opts, requestScope)
+        const { body, completeArtifacts } = buildPlannerChatRequestPayload(primaryForStream, opts, requestScope)
         streamTextFromAi = true
         handlePlannerEventRef = (ev: PlannerSseEvent) => {
           if (replaying) {
@@ -536,7 +535,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           throw new Error(sseError)
         }
         // 请求已成功送出并拿到流：本轮工件 id 用毕即清，避免串到下一轮。
-        clearChatArtifactIds()
+        completeArtifacts()
         if (awaitingAuthorization) {
           if (streamRunId) syncStreamRun({ run_id: streamRunId })
           return

@@ -116,7 +116,7 @@ const {
   mockQueueVoice: vi.fn(),
   mockClearVoiceQueue: vi.fn(),
   mockSyncFromServer: vi.fn().mockResolvedValue(undefined),
-  mockBuildPlannerChatRequestPayload: vi.fn(() => ({ body: { message: 'hello' } })),
+  mockBuildPlannerChatRequestPayload: vi.fn(() => ({ body: { message: 'hello' }, completeArtifacts: vi.fn() })),
   mockSetLoadingProgress: vi.fn(),
   mockStartWaitProgressTimer: vi.fn(),
   mockStopLoadingProgress: vi.fn(),
@@ -423,7 +423,7 @@ function resetMockState() {
   mockHydrateTaskOrderNumber.mockResolvedValue(undefined)
   mockEnrichShipmentPreviewProducts.mockResolvedValue(undefined)
   mockGetLastAiMessageRef.mockReturnValue('0')
-  mockBuildPlannerChatRequestPayload.mockReturnValue({ body: { message: 'hello' } })
+  mockBuildPlannerChatRequestPayload.mockReturnValue({ body: { message: 'hello' }, completeArtifacts: vi.fn() })
   mockResolveChatTimeoutMs.mockReturnValue(30_000)
   mockGetConversation.mockRejectedValue(new Error('history unavailable'))
 }

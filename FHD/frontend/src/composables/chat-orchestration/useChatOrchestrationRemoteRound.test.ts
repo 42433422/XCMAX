@@ -129,6 +129,7 @@ function setup(options: { tts?: boolean; multimodal?: number; excelContext?: boo
     startWaitProgressTimer: vi.fn(),
     buildPlannerChatRequestPayload: vi.fn((message: string, _opts?: unknown, requestScope?: ChatRequestScope) => ({
       body: { message, context: { turn_id: requestScope?.turnId || '', session_id: requestScope?.sessionId || '' } },
+      completeArtifacts: vi.fn(),
     })),
     stopLoadingProgress: vi.fn(),
     requestChatByModeWithTimeout: vi.fn(),

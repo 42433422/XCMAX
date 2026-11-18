@@ -13,9 +13,11 @@ const pendingArtifactIds = new Set<string>()
 // 本轮 id 是否已经被一次请求带走。之后的「重新上传」或「非重试的新消息」
 // 都算新一轮，必须丢弃上一轮失败留下的残留，避免历史工件串进本次导入。
 let consumedByRequest = false
+let artifactRevision = 0
 
 /** 收集工件 id（去重）。重新上传时以本批为准，不继承上一轮残留。 */
 export function addChatArtifactIds(ids: Array<string | null | undefined>): void {
+  artifactRevision += 1
   if (consumedByRequest) {
     pendingArtifactIds.clear()
     consumedByRequest = false
@@ -51,13 +53,27 @@ export function markChatArtifactsConsumed(): void {
 /** 移除单个待发送工件：输入框里删掉芯片后，这条 id 不应再随下一条消息提交。 */
 export function removeChatArtifactId(id: string | null | undefined): void {
   const value = String(id || '').trim()
-  if (value) pendingArtifactIds.delete(value)
+  if (value && pendingArtifactIds.delete(value)) artifactRevision += 1
 }
 
 /** 发送成功后清空本轮工件 id。 */
 export function clearChatArtifactIds(): void {
+  artifactRevision += 1
   pendingArtifactIds.clear()
   consumedByRequest = false
+}
+
+/** 捕获实际提交批次；迟到完成不能清掉后来上传（即使 id 相同）的附件。 */
+export function captureChatArtifacts() {
+  const ids = takeChatArtifactIds()
+  markChatArtifactsConsumed()
+  const revision = artifactRevision
+  return {
+    ids,
+    complete: () => {
+      if (revision === artifactRevision) clearChatArtifactIds()
+    },
+  }
 }
 
 export type UploadedChatArtifact = { id: string; name: string }
