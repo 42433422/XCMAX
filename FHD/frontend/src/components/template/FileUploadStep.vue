@@ -36,7 +36,7 @@
 
         <div v-else class="file-info">
           <div style="font-size: 36px; margin-bottom: 10px">
-            <i class="fa" :class="getFileIconClass()" aria-hidden="true"></i>
+            <FileTypeIcon :name="localSelectedFile.name" :size="36" />
           </div>
           <div style="font-weight: 500">{{ localSelectedFile.name }}</div>
           <div class="muted" style="font-size: 12px; margin-top: 5px">
@@ -66,9 +66,11 @@ import {
   templateMediaUploadHint,
   isTemplateMediaKind,
 } from '@/constants/templateMediaKinds'
+import FileTypeIcon from '@/components/common/FileTypeIcon.vue'
 
 export default {
   name: 'FileUploadStep',
+  components: { FileTypeIcon },
   props: {
     templateName: {
       type: String,

@@ -18,7 +18,7 @@
       <LabelPreview :fields="fields" :width="labelWidth" :height="labelHeight" />
     </div>
     <div v-else class="tp-card-placeholder" :class="`tp-card-placeholder--${mediaKind}`">
-      <i class="fa" :class="iconClass" aria-hidden="true"></i>
+      <FileTypeIcon :name="displayName" :kind="resolvedMediaKind" :size="28" />
       <span class="tmp-file-name">{{ displayName }}</span>
       <span v-if="statusHint" class="tmp-status muted">{{ statusHint }}</span>
     </div>
@@ -28,6 +28,7 @@
 <script>
 import ExcelPreview from '@/components/template/ExcelPreview.vue'
 import LabelPreview from '@/components/template/LabelPreview.vue'
+import FileTypeIcon from '@/components/common/FileTypeIcon.vue'
 import {
   isTemplateMediaKind,
   normalizeTemplateMediaKind,
@@ -37,7 +38,7 @@ import {
 
 export default {
   name: 'TemplateMediaPreview',
-  components: { ExcelPreview, LabelPreview },
+  components: { ExcelPreview, LabelPreview, FileTypeIcon },
   props: {
     template: { type: Object, default: null },
     mediaKind: { type: String, default: '' },

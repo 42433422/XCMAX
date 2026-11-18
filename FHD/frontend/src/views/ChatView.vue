@@ -140,7 +140,7 @@
           class="composer-attachment"
           role="listitem"
         >
-          <i class="fa fa-file-excel-o" aria-hidden="true"></i>
+          <FileTypeIcon :name="row.filename" :size="16" />
           <span class="composer-attachment__name" :title="row.filename">{{ row.filename }}</span>
           <button
             type="button"
@@ -158,11 +158,7 @@
           class="composer-attachment"
           role="listitem"
         >
-          <i
-            class="fa"
-            :class="row.kind === 'image' ? 'fa-picture-o' : row.kind === 'pdf' ? 'fa-file-pdf-o' : 'fa-file-text-o'"
-            aria-hidden="true"
-          ></i>
+          <FileTypeIcon :name="row.filename" :kind="row.kind" :size="16" />
           <span class="composer-attachment__name" :title="row.filename">{{ row.filename }}</span>
           <button
             type="button"
@@ -328,6 +324,7 @@ import ChatMessageList from '@/components/chat/ChatMessageList.vue'
 import ChatModelRecovery from '@/components/chat/ChatModelRecovery.vue'
 import ChatSidePanel from '@/components/chat/ChatSidePanel.vue'
 import ChatInputToolbar from '@/components/chat/ChatInputToolbar.vue'
+import FileTypeIcon from '@/components/common/FileTypeIcon.vue'
 import ChatHistoryModal from '@/components/chat/ChatHistoryModal.vue'
 import ChatOfficeDockingReview from '@/components/chat/ChatOfficeDockingReview.vue'
 import TaskWorkspaceContextBar from '@/components/chat/TaskWorkspaceContextBar.vue'
