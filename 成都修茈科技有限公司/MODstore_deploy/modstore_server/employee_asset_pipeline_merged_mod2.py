@@ -537,6 +537,9 @@ async def run_asset_employee_scaffold_async(
         dest = _facade().import_zip(tmp_path, lib, replace=replace)
     finally:
         tmp_path.unlink(missing_ok=True)
+    from modstore_server.models import add_user_mod
+
+    add_user_mod(user.id, dest.name)
     saved_package: _facade().Dict[str, _facade().Any] = {}
     if publish_to_catalog:
         with _facade().tempfile.NamedTemporaryFile(suffix=".xcemp", delete=False) as tmp:
