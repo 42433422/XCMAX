@@ -84,35 +84,30 @@ def _registered_router_label_template_generator(
     return result if isinstance(result, dict) else {"success": False, "message": "技能返回值无效"}
 
 
-def _registered_router_document_template(
-    action: str, params: dict, runtime_context: dict, profile: str, user_message: str
-) -> dict:
-    payload = dict(params or {})
-    if action == "create":
-        from app.legacy.routes.document_templates_compat import run_archive_template_create
+def _runtime_int(value: object) -> int | None:
+    try:
+        number = int(str(value or "").strip())
+    except (TypeError, ValueError):
+        return None
+    return number or None
 
-        data, status_code = run_archive_template_create(payload)
-    elif action == "update":
-        from app.legacy.routes.document_templates_compat import run_archive_template_update
 
-        data, status_code = run_archive_template_update(payload)
-    elif action == "delete":
-        from app.legacy.routes.document_templates_compat import run_archive_template_delete
+def _clear_document_templates(runtime_context: dict) -> tuple[dict, int]:
+    """清空模板库；工具 worker 没有请求态，必须用运行时上下文显式绑定租户与账号。"""
+    from app.application import get_template_app_service
+    from app.infrastructure.tenant_scope import tenant_scope
+    from app.legacy.routes.document_templates_compat import run_archive_template_delete
 
-        data, status_code = run_archive_template_delete(
-            payload, base_dir=str(runtime_context.get("template_base_dir") or "") or None
-        )
-    elif action == "clear":
-        from app.application import get_template_app_service
-        from app.legacy.routes.document_templates_compat import run_archive_template_delete
-
-        service = get_template_app_service()
-        listed = service.get_templates() or {}
+    tenant_id = _runtime_int(runtime_context.get("tenant_id"))
+    owner_id = _runtime_int(runtime_context.get("user_id"))
+    service = get_template_app_service()
+    deleted = skipped = 0
+    base_dir = str(runtime_context.get("template_base_dir") or "") or None
+    starter_ids: list[str] = []
+    builtin_paths: list[str] = []
+    with tenant_scope(tenant_id):
+        listed = service.get_templates(tenant_id=tenant_id) or {}
         rows = listed.get("templates") if isinstance(listed, dict) else None
-        deleted = skipped = 0
-        base_dir = str(runtime_context.get("template_base_dir") or "") or None
-        starter_ids: list[str] = []
-        builtin_paths: list[str] = []
         for item in rows or []:
             if not isinstance(item, dict):
                 continue
@@ -144,28 +139,52 @@ def _registered_router_document_template(
         hidden = service.hide_templates(ids=starter_ids, paths=builtin_paths)
         # 模板库页面实际列出的是审阅归档（elt_archive_assets），只清 elt_templates
         # 会让「清理后页面仍满屏」；同一动作必须一并清掉当前账号的归档资产。
-        deleted_archives = service.purge_archive_assets()
-        if deleted or hidden:
-            message = f"已清理 {deleted} 个自定义模板，隐藏 {hidden} 个内置模板"
-        elif skipped:
-            message = f"模板库未能清理：{skipped} 个模板不支持删除"
-        else:
-            message = "模板库已经是空的"
-        if deleted_archives:
-            message += f"，同时清掉 {deleted_archives} 个已归档模板"
-        if skipped and (deleted or hidden):
-            message += f"，{skipped} 个未能清理"
-        data, status_code = (
-            {
-                "success": not skipped or bool(deleted or hidden),
-                "message": message,
-                "deleted_templates": deleted,
-                "hidden_templates": hidden,
-                "deleted_archives": deleted_archives,
-                "skipped_templates": skipped,
-            },
-            200,
+        deleted_archives = service.purge_archive_assets(
+            tenant_id=tenant_id, owner_id=owner_id
         )
+    if deleted or hidden:
+        message = f"已清理 {deleted} 个自定义模板，隐藏 {hidden} 个内置模板"
+    elif skipped:
+        message = f"模板库未能清理：{skipped} 个模板不支持删除"
+    else:
+        message = "模板库已经是空的"
+    if deleted_archives:
+        message += f"，同时清掉 {deleted_archives} 个已归档模板"
+    if skipped and (deleted or hidden):
+        message += f"，{skipped} 个未能清理"
+    return (
+        {
+            "success": not skipped or bool(deleted or hidden),
+            "message": message,
+            "deleted_templates": deleted,
+            "hidden_templates": hidden,
+            "deleted_archives": deleted_archives,
+            "skipped_templates": skipped,
+        },
+        200,
+    )
+
+
+def _registered_router_document_template(
+    action: str, params: dict, runtime_context: dict, profile: str, user_message: str
+) -> dict:
+    payload = dict(params or {})
+    if action == "create":
+        from app.legacy.routes.document_templates_compat import run_archive_template_create
+
+        data, status_code = run_archive_template_create(payload)
+    elif action == "update":
+        from app.legacy.routes.document_templates_compat import run_archive_template_update
+
+        data, status_code = run_archive_template_update(payload)
+    elif action == "delete":
+        from app.legacy.routes.document_templates_compat import run_archive_template_delete
+
+        data, status_code = run_archive_template_delete(
+            payload, base_dir=str(runtime_context.get("template_base_dir") or "") or None
+        )
+    elif action == "clear":
+        data, status_code = _clear_document_templates(runtime_context)
     elif action in ("ingest", "upload"):
         from app.application.office_template_ingest_app_service import (
             ingest_office_bytes_to_template_library,
