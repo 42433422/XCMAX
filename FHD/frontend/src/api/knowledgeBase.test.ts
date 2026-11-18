@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PERSY_KNOWLEDGE_DATASET_ID, knowledgeBaseApi, normalizeKnowledgeDatasetId } from './knowledgeBase'
 
 const mocks = vi.hoisted(() => ({
@@ -18,6 +18,16 @@ vi.mock('./core', () => ({
   buildFullApiUrl: (path: string) => path,
 }))
 
+function streamResponse(chunks: Array<string | Uint8Array>): Response {
+  const encoder = new TextEncoder()
+  return new Response(new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const chunk of chunks) controller.enqueue(typeof chunk === 'string' ? encoder.encode(chunk) : chunk)
+      controller.close()
+    },
+  }), { headers: { 'Content-Type': 'text/event-stream' } })
+}
+
 describe('knowledgeBaseApi', () => {
   beforeEach(() => {
     mocks.api.get.mockReset().mockResolvedValue({ success: true })
@@ -26,6 +36,49 @@ describe('knowledgeBaseApi', () => {
     mocks.api.patch.mockReset().mockResolvedValue({ success: true })
     mocks.api.delete.mockReset().mockResolvedValue({ success: true })
     mocks.primeCsrfCookie.mockReset().mockResolvedValue(undefined)
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    document.cookie = 'csrf_token=; Max-Age=0; Path=/'
+  })
+
+  it.each([
+    ['runtime health', () => knowledgeBaseApi.health(), '/api/knowledge/v1/health'],
+    ['dataset catalog', () => knowledgeBaseApi.listDatasets(), '/api/knowledge/v1/datasets'],
+    ['omniscient overview', () => knowledgeBaseApi.omniscient(), '/api/knowledge/v1/omniscient'],
+  ] as const)('returns the %s response from its read-only route', async (_name, request, route) => {
+    const response = { success: true, dataset_count: 2 }
+    mocks.api.get.mockResolvedValueOnce(response)
+    await expect(request()).resolves.toBe(response)
+    expect(mocks.api.get).toHaveBeenCalledWith(route)
+    expect(mocks.primeCsrfCookie).not.toHaveBeenCalled()
+  })
+
+  it.each([undefined, 12])('waits for CSRF before an omniscient query with topK=%s', async (topK) => {
+    let finishPrime!: () => void
+    mocks.primeCsrfCookie.mockReturnValueOnce(new Promise<void>((resolve) => { finishPrime = resolve }))
+    const pending = knowledgeBaseApi.omniscientQuery({ query: '退款流程', topK })
+    expect(mocks.api.post).not.toHaveBeenCalled()
+    finishPrime()
+    await pending
+    expect(mocks.api.post).toHaveBeenCalledWith('/api/knowledge/v1/omniscient/query', {
+      query: '退款流程', top_k: topK ?? 8, include_citations: true,
+    })
+  })
+
+  it('preserves dataset, tenant and version boundaries in maintenance requests', async () => {
+    const dataset = ' team / docs '
+    const prefix = '/api/knowledge/v1/datasets/team%20%2F%20docs'
+    await knowledgeBaseApi.diffVersions(dataset, { leftVersion: 'v1', rightVersion: 'v2', tenantId: 'tenant7' })
+    await knowledgeBaseApi.rollbackVersion(dataset, { version: 'v1', tenantId: 'tenant7' })
+    await knowledgeBaseApi.rebuildIndex(dataset)
+    expect(mocks.primeCsrfCookie).toHaveBeenCalledTimes(3)
+    expect(mocks.api.post.mock.calls).toEqual([
+      [`${prefix}/versions/diff`, { left_version: 'v1', right_version: 'v2', tenant_id: 'tenant7' }],
+      [`${prefix}/versions/rollback`, { version: 'v1', tenant_id: 'tenant7' }],
+      [`${prefix}/index/rebuild`, { tenant_id: '' }],
+    ])
   })
 
   it('normalizes blank dataset id to Persy default', () => {
@@ -303,6 +356,84 @@ describe('knowledgeBaseApi', () => {
     vi.unstubAllGlobals()
   })
 
+  it('decodes fragmented UTF-8 and a final SSE block while carrying CSRF, scope and cancellation', async () => {
+    document.cookie = 'csrf_token=tenant%2Fguard; Path=/'
+    const text = '\n\n: keepalive\n\ndata: {malformed\n\nevent: delta\ndata: {"text":"退款"}\n\nevent: done\ndata: {"answer":"退款流程"}'
+    const chunks = Array.from(new TextEncoder().encode(text), (byte) => Uint8Array.of(byte))
+    const fetchMock = vi.fn().mockResolvedValue(streamResponse(chunks))
+    vi.stubGlobal('fetch', fetchMock)
+    const onDelta = vi.fn()
+    const onDone = vi.fn()
+    const controller = new AbortController()
+    await knowledgeBaseApi.queryStream({
+      datasetId: ' team / docs ', query: '退款流程', topK: 9, includeAnswer: false,
+      tenantId: 'tenant7', version: 'v2', metadataFilter: { department: 'sales' },
+      rerank: true, retrievalMode: 'vector', expandSection: true, mmrLambda: 0.4,
+    }, { onDelta, onDone }, controller.signal)
+    expect(onDelta.mock.calls).toEqual([['退款']])
+    expect(onDone.mock.calls).toEqual([[{ answer: '退款流程' }]])
+    expect(mocks.primeCsrfCookie).toHaveBeenCalledOnce()
+    const [url, options] = fetchMock.mock.calls[0]
+    expect(url).toBe('/api/knowledge/v1/datasets/team%20%2F%20docs/query/stream')
+    expect(options).toMatchObject({
+      method: 'POST', credentials: 'include', signal: controller.signal,
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': 'tenant/guard' },
+    })
+    expect(JSON.parse(options.body)).toEqual({
+      query: '退款流程', top_k: 9, include_answer: false, tenant_id: 'tenant7', version: 'v2',
+      metadata_filter: { department: 'sales' }, rerank: true, retrieval_mode: 'vector',
+      expand_section: true, mmr_lambda: 0.4,
+    })
+  })
+
+  it.each([503, 200])('rejects an HTTP %s response without a readable stream', async (status) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status })))
+    const onDone = vi.fn()
+    await expect(knowledgeBaseApi.queryStream({ query: '退款' }, { onDone }))
+      .rejects.toThrow(`stream failed: ${status}`)
+    expect(onDone).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['{"message":"来源不可用"}', '来源不可用'],
+    ['{}', 'stream error'],
+  ])('propagates a stream error %s without reporting later completion', async (data, message) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(streamResponse([
+      `event: error\ndata: ${data}\n\nevent: done\ndata: {"answer":"ignored"}\n\n`,
+    ])))
+    const onDone = vi.fn()
+    await expect(knowledgeBaseApi.queryStream({ query: '退款' }, { onDone })).rejects.toThrow(message)
+    expect(onDone).not.toHaveBeenCalled()
+  })
+
+  it.each(['', 'event: delta\ndata: {"text":"partial"}\n\n'])('rejects a stream ending before done: %s', async (text) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(streamResponse([text])))
+    const onDelta = vi.fn()
+    const onDone = vi.fn()
+    await expect(knowledgeBaseApi.queryStream({ query: '退款' }, { onDelta, onDone }))
+      .rejects.toThrow('stream ended before done')
+    expect(onDelta.mock.calls).toEqual(text ? [['partial']] : [])
+    expect(onDone).not.toHaveBeenCalled()
+  })
+
+  it('propagates a reader failure without converting it into successful completion', async () => {
+    const failure = new Error('connection interrupted')
+    const body = new ReadableStream<Uint8Array>({ start(controller) { controller.error(failure) } })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(body)))
+    const onDone = vi.fn()
+    await expect(knowledgeBaseApi.queryStream({ query: '退款' }, { onDone })).rejects.toBe(failure)
+    expect(onDone).not.toHaveBeenCalled()
+  })
+
+  it('does not start a stream request when CSRF preparation fails', async () => {
+    const failure = new Error('CSRF unavailable')
+    mocks.primeCsrfCookie.mockRejectedValueOnce(failure)
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(knowledgeBaseApi.queryStream({ query: '退款' })).rejects.toBe(failure)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
   it('loads and queries governed Persy memories', async () => {
     await knowledgeBaseApi.memories('persy-knowledge', { status: 'pending', limit: 5000 })
     await knowledgeBaseApi.queryMemories({
@@ -317,6 +448,25 @@ describe('knowledgeBaseApi', () => {
       top_k: 20,
       reinforce: true,
     })
+  })
+
+  it('encodes memory filters and enforces the lower page bound', async () => {
+    await knowledgeBaseApi.memories('team / docs', { status: 'pending', memoryType: 'user / decision', limit: -5 })
+    const url = new URL(mocks.api.get.mock.calls[0][0], 'https://app.example.test')
+    expect(url.pathname).toBe('/api/knowledge/v1/datasets/team%20%2F%20docs/memories')
+    expect(Object.fromEntries(url.searchParams)).toEqual({ status: 'pending', memory_type: 'user / decision', limit: '1' })
+  })
+
+  it('preserves a memory rejection reason and propagates authorization failure', async () => {
+    const failure = new Error('permission denied')
+    mocks.api.post.mockRejectedValueOnce(failure)
+    await expect(knowledgeBaseApi.rejectMemory('team / docs', 'mem / 1', 'incorrect recipient'))
+      .rejects.toBe(failure)
+    expect(mocks.primeCsrfCookie).toHaveBeenCalledOnce()
+    expect(mocks.api.post).toHaveBeenCalledWith(
+      '/api/knowledge/v1/datasets/team%20%2F%20docs/memories/mem%20%2F%201/reject',
+      { reason: 'incorrect recipient' },
+    )
   })
 
   it('mutates memories and deletes documents through CSRF-protected routes', async () => {

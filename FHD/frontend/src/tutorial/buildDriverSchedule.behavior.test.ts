@@ -11,9 +11,16 @@ vi.mock('./demoHelpers', () => ({
 }))
 vi.mock('@/utils/platformShellApi', () => ({ fetchEmployeePlannerStatus: mocks.status }))
 
-beforeEach(() => { vi.useFakeTimers(); vi.clearAllMocks(); document.body.innerHTML = '' })
-afterEach(() => { vi.useRealTimers(); document.body.innerHTML = '' })
+beforeEach(() => { vi.useFakeTimers(); vi.clearAllMocks(); document.body.replaceChildren() })
+afterEach(() => { vi.useRealTimers(); document.body.replaceChildren() })
 const step = (extra: Partial<TutorialStep> = {}): TutorialStep => ({ id: 'example', title: 'Example', description: 'Demo', targetSelector: '#target', actionType: 'observe', ...extra })
+function appendTarget(text = 'Target') {
+  const target = document.createElement('div')
+  target.id = 'target'
+  target.textContent = text
+  document.body.append(target)
+  return target
+}
 function demo(input: TutorialStep) {
   const timers = { set: (callback: () => void, ms: number) => setTimeout(callback, ms), clear: vi.fn() }
   expect(buildDriverScheduleFromTutorialSteps([input])[0].demo(timers)).toEqual({ ok: true })
@@ -22,7 +29,13 @@ function demo(input: TutorialStep) {
 
 describe('tutorial demo interactions', () => {
   it('falls back to the legacy target when its mapped click target is absent', async () => {
-    document.body.innerHTML = '<aside class="sidebar"><button data-view="chat">Chat</button></aside>'
+    const sidebar = document.createElement('aside')
+    sidebar.className = 'sidebar'
+    const button = document.createElement('button')
+    button.dataset.view = 'chat'
+    button.textContent = 'Chat'
+    sidebar.append(button)
+    document.body.append(sidebar)
     mocks.safeClick.mockReturnValue(false)
     demo(step({ targetSelector: '.sidebar [data-view="chat"]', actionType: 'click' }))
     await vi.advanceTimersByTimeAsync(450)
@@ -31,7 +44,7 @@ describe('tutorial demo interactions', () => {
   })
 
   it('observes the original target when the highlight target is absent', async () => {
-    document.body.innerHTML = '<div id="target">Target</div>'
+    appendTarget()
     demo(step({ highlightSelector: '#missing' }))
     await vi.advanceTimersByTimeAsync(400)
     expect(mocks.moveTo).toHaveBeenCalledWith(document.querySelector('#target'), { duration: 650, label: '看这里' })
@@ -48,7 +61,7 @@ describe('tutorial demo interactions', () => {
   })
 
   it('retries employee readiness after a transient failure until tools are registered', async () => {
-    document.body.innerHTML = '<div id="target">Installing</div>'
+    appendTarget('Installing')
     mocks.status.mockRejectedValueOnce(new Error('temporarily unavailable')).mockResolvedValueOnce({ office_ready: true, registered_tool_count: 0 }).mockResolvedValueOnce({ office_ready: true, registered_tool_count: 1 })
     demo(step({ id: 'office-pack-wait-ready' }))
     await vi.advanceTimersByTimeAsync(400)
@@ -65,8 +78,7 @@ describe('tutorial demo interactions', () => {
 
 describe('waitForSelector visibility', () => {
   it('waits for nonzero layout dimensions, not just DOM presence', async () => {
-    document.body.innerHTML = '<div id="target"></div>'
-    const target = document.querySelector<HTMLElement>('#target')!
+    const target = appendTarget('')
     const size = vi.spyOn(target, 'getBoundingClientRect').mockReturnValue({ width: 0, height: 0 } as DOMRect)
     const pending = waitForSelector('#target', 500, 100)
     await vi.advanceTimersByTimeAsync(100)

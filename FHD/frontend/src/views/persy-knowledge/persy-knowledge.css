@@ -54,16 +54,10 @@
 
 .dataset-switch {
   display: inline-flex;
-  flex: 0 0 auto;
   align-items: center;
   gap: 6px;
   font-size: 12px;
   color: #4d6359;
-  white-space: nowrap;
-}
-
-.dataset-switch span {
-  white-space: nowrap;
 }
 
 .dataset-switch select {
@@ -180,14 +174,8 @@
 }
 
 .toolbar-actions {
-  flex-wrap: nowrap;
   justify-content: flex-end;
   gap: 8px;
-  min-width: 0;
-}
-
-.toolbar-actions > * {
-  flex: 0 0 auto;
 }
 
 .transfer-status {
@@ -297,7 +285,7 @@
   position: absolute;
   z-index: 4;
   left: 50%;
-  bottom: 116px;
+  bottom: 72px;
   display: flex;
   gap: 8px;
   transform: translateX(-50%);
@@ -931,7 +919,6 @@
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  row-gap: 6px;
   padding: 0 10px 8px;
   color: #4b5a53;
   font-size: 11px;
@@ -939,10 +926,8 @@
 
 .ask-dock__options label {
   display: inline-flex;
-  flex: 0 0 auto;
   align-items: center;
   gap: 4px;
-  white-space: nowrap;
 }
 
 .ask-dock__options select {
@@ -952,7 +937,6 @@
   background: #ffffff;
   color: #17211d;
   font-size: 11px;
-  white-space: nowrap;
 }
 
 .ask-dock__toggle input {
@@ -967,7 +951,6 @@
   color: #27352f;
   font-size: 11px;
   cursor: pointer;
-  white-space: nowrap;
 }
 
 .ask-dock__synonyms {
@@ -1188,6 +1171,28 @@
 
   .brain-workspace {
     grid-template-columns: minmax(0, 1fr) 292px;
+  }
+}
+
+@media (max-width: 1280px) {
+  .brain-toolbar {
+    grid-template-columns: minmax(180px, 1fr) auto;
+    row-gap: 6px;
+  }
+
+  .view-switch {
+    grid-row: 2;
+    grid-column: 1 / -1;
+    justify-self: center;
+  }
+
+  /* 右侧操作区在中等窗口放不下时，先收起说明文字，保留按钮完整宽度。 */
+  .retrieval-state {
+    display: none;
+  }
+
+  .toolbar-actions {
+    gap: 6px;
   }
 }
 

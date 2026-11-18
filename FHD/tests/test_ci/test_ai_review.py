@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -263,6 +264,32 @@ class TestMatchRules:
         assert "n-plus-one-inline" in rules
         assert "bare-except-pass" in rules
 
+    @pytest.mark.parametrize(
+        "line",
+        [
+            'for snapshot in sorted(snapshots, key=lambda item: str(item.get("document_id") or "")):',
+            'for row in {"rows": values}.get("rows", []): pass',
+            'for row in rows: message = "db.get(row)"',
+        ],
+    )
+    def test_iterable_colons_and_strings_are_not_inline_queries(self, line: str) -> None:
+        hunks = [review.DiffHunk("service.py", 579, [(579, "+", line)], "@@ -579 +579 @@")]
+        assert all(f.rule != "n-plus-one-inline" for f in review.match_high_risk_rules(hunks))
+
+    @pytest.mark.parametrize(
+        "line",
+        [
+            "for user in users: db.query(User).get(user.id)",
+            'for user in sorted(users, key=lambda item: item.get("id")): db.execute(sql)',
+            'for user in {"users": values}.get("users"): session.get(User, user.id)',
+            "for user in users: db.execute(",
+        ],
+    )
+    def test_actual_or_incomplete_inline_queries_still_require_review(self, line: str) -> None:
+        hunks = [review.DiffHunk("service.py", 10, [(10, "+", line)], "@@ -10 +10 @@")]
+        findings = review.match_high_risk_rules(hunks)
+        assert any(f.rule == "n-plus-one-inline" and f.severity == "medium" for f in findings)
+
     def test_only_added_lines_checked(self) -> None:
         """删除行（'-'）中的高危代码不应触发 finding。"""
         hunks = [
@@ -383,6 +410,48 @@ def _review_finding() -> review.Finding:
 
 
 class TestCallLlmReview:
+    @pytest.mark.parametrize("route", ["endpoint", "openai", "anthropic"])
+    def test_bounded_fetchall_sends_sql_and_bindings_in_every_protocol(
+        self, monkeypatch: pytest.MonkeyPatch, route: str
+    ) -> None:
+        hunk = review.DiffHunk(
+            "service.py",
+            202,
+            [
+                (202, " ", "def recent(limit=20, user_id=None):"),
+                (203, " ", "    limit = min(100, max(1, int(limit)))"),
+                (204, " ", "    rows = db.execute("),
+                (0, "-", '        "SELECT obsolete FROM events LIMIT 999",'),
+                (205, "+", '        "SELECT payload FROM events WHERE user_id=? LIMIT ?",'),
+                (206, " ", "        (user_id, limit),"),
+                (207, "+", "    ).fetchall()"),
+            ],
+            "@@ -202,6 +202,6 @@",
+        )
+        finding = next(
+            f for f in review.match_high_risk_rules([hunk]) if f.rule == "fetchall-unbounded"
+        )
+        monkeypatch.setenv("XCAGI_LLM_ENDPOINT", _LLM_ENDPOINT if route == "endpoint" else "")
+        monkeypatch.setenv("XCAGI_LLM_BASE_URL", "https://review.example.test")
+        monkeypatch.setenv("XCAGI_LLM_MODEL", "review-model")
+        client = MagicMock()
+        client.post.return_value.status_code = 200
+        client.post.return_value.json.return_value = {"verdict": "medium"}
+        key = "sk-cp-test" if route == "anthropic" else "test-key"
+        assert review.call_llm_review(finding, api_key=key, client=client) == "medium"
+        payload = client.post.call_args.kwargs["json"]
+        evidence = (
+            payload
+            if route == "endpoint"
+            else json.loads(payload["messages"][0]["content"].split("Evidence: ", 1)[1])
+        )
+        assert evidence["snippet"] == ").fetchall()"
+        assert "203:     limit = min(100, max(1, int(limit)))" in evidence["context"]
+        assert "SELECT payload FROM events WHERE user_id=? LIMIT ?" in evidence["context"]
+        assert "206:         (user_id, limit)," in evidence["context"]
+        assert "obsolete" not in evidence["context"]
+        assert "LIMIT 999" not in evidence["context"]
+
     @pytest.mark.parametrize("base_url", [None, "https://llm.internal.test"])
     def test_missing_endpoint_never_sends_key(self, monkeypatch, base_url) -> None:
         for name in ("XCAGI_LLM_ENDPOINT", "XCAGI_LLM_BASE_URL", "XCAGI_LLM_MODEL"):
@@ -602,6 +671,32 @@ class TestFetchPrDiff:
 
 
 class TestMain:
+    @pytest.mark.parametrize(
+        "source,rule",
+        [
+            ("for user in users: db.query(User).get(user.id)", "n-plus-one-inline"),
+            (
+                'rows = db.execute(\n    "SELECT payload FROM events"\n).fetchall()',
+                "fetchall-unbounded",
+            ),
+        ],
+    )
+    def test_confirmed_performance_findings_still_block(
+        self, monkeypatch: pytest.MonkeyPatch, source: str, rule: str
+    ) -> None:
+        diff = "diff --git a/service.py b/service.py\n@@ -1,0 +1,3 @@\n"
+        diff += "\n".join("+" + line for line in source.splitlines()) + "\n"
+        monkeypatch.setattr(review, "fetch_pr_diff", lambda *a, **k: diff)
+        reviewer = MagicMock(return_value="medium")
+        commenter = MagicMock(return_value=True)
+        monkeypatch.setattr(review, "call_llm_review", reviewer)
+        monkeypatch.setattr(review, "post_line_comment", commenter)
+        assert review.main(["--pr-number", "1"]) == 1
+        finding = reviewer.call_args.args[0]
+        assert (finding.rule, finding.severity) == (rule, "medium")
+        assert finding.snippet in finding.context
+        commenter.assert_called_once()
+
     def test_no_pr_number_blocks(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("PR_NUMBER", raising=False)
         monkeypatch.delenv("GITHUB_EVENT_PATH", raising=False)

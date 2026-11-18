@@ -7,9 +7,10 @@
  *
  * 模块级单例：VirtualCursorOverlay（App.vue 挂载）与 AIOpenPanel 共享状态。
  */
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import type { Router } from 'vue-router'
 import { getApiBase } from '@/utils/apiBase'
+import { captureAuthSession } from '@/utils/authSessionCache'
 import { disableTrail, ensureTrail, moveTrail, pulseTrail } from './useAiOpenCursorTrail'
 
 const STORAGE_KEY = 'xcagi_aiopen_remote_control'
@@ -45,6 +46,7 @@ let ws: WebSocket | null = null
 let routerRef: Router | null = null
 let reconnectTimer: number | null = null
 let agentIdleTimer: number | null = null
+let stopSessionWatch: (() => void) | null = null
 
 /** Agent 活动窗口：收到指令即点亮，静默一段时间后自动收起。 */
 function markAgentActive() {
@@ -300,7 +302,19 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms))
 }
 
-async function animateCursorTo(x: number, y: number, label: string): Promise<void> {
+function assertCommandCurrent(isCurrent: () => boolean): void {
+  if (!isCurrent()) throw new Error('指令已取消')
+}
+
+function dispatchInputChange(el: HTMLElement, isCurrent: () => boolean): void {
+  for (const type of ['input', 'change']) {
+    assertCommandCurrent(isCurrent)
+    el.dispatchEvent(new Event(type, { bubbles: true }))
+  }
+  assertCommandCurrent(isCurrent)
+}
+
+async function animateCursorTo(x: number, y: number, label: string, isCurrent: () => boolean): Promise<void> {
   const dx = x - cursorX.value
   cursorVisible.value = true
   cursorActionLabel.value = label
@@ -309,8 +323,10 @@ async function animateCursorTo(x: number, y: number, label: string): Promise<voi
   cursorX.value = x
   cursorY.value = y
   await ensureTrail()
+  assertCommandCurrent(isCurrent)
   moveTrail(x, y)
   await sleep(CURSOR_MOVE_MS + 60)
+  assertCommandCurrent(isCurrent)
   cursorTilt.value = 0
 }
 
@@ -375,7 +391,7 @@ async function execNavigate(params: Record<string, unknown>): Promise<Record<str
   return { success: true, route: routerRef.currentRoute.value.fullPath }
 }
 
-async function execClick(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function execClick(params: Record<string, unknown>, isCurrent: () => boolean): Promise<Record<string, unknown>> {
   const ref = params.ref ? String(params.ref) : undefined
   const selector = params.selector ? String(params.selector) : undefined
   const text = params.text ? String(params.text) : undefined
@@ -388,19 +404,23 @@ async function execClick(params: Record<string, unknown>): Promise<Record<string
   }
   el.scrollIntoView({ block: 'center', behavior: 'smooth' })
   await sleep(260)
+  assertCommandCurrent(isCurrent)
   const rect = el.getBoundingClientRect()
-  await animateCursorTo(rect.x + rect.width / 2, rect.y + rect.height / 2, '点击')
+  await animateCursorTo(rect.x + rect.width / 2, rect.y + rect.height / 2, '点击', isCurrent)
+  assertCommandCurrent(isCurrent)
   cursorClicking.value = true
   pulseTrail(rect.x + rect.width / 2, rect.y + rect.height / 2)
   await sleep(180)
+  assertCommandCurrent(isCurrent)
   el.click()
+  assertCommandCurrent(isCurrent)
   cursorClicking.value = false
   const label = accessibleName(el) || selector || text || ref || ''
   pushLog(`click → ${label}`)
   return { success: true, clicked: label }
 }
 
-async function execType(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function execType(params: Record<string, unknown>, isCurrent: () => boolean): Promise<Record<string, unknown>> {
   const ref = params.ref ? String(params.ref) : undefined
   const selector = params.selector ? String(params.selector) : undefined
   const text = String(params.text ?? '')
@@ -408,9 +428,12 @@ async function execType(params: Record<string, unknown>): Promise<Record<string,
   if (!el) return { success: false, message: `未找到输入框：${describeTarget(params)}` }
   el.scrollIntoView({ block: 'center', behavior: 'smooth' })
   await sleep(260)
+  assertCommandCurrent(isCurrent)
   const rect = el.getBoundingClientRect()
-  await animateCursorTo(rect.x + rect.width / 2, rect.y + rect.height / 2, '输入')
+  await animateCursorTo(rect.x + rect.width / 2, rect.y + rect.height / 2, '输入', isCurrent)
+  assertCommandCurrent(isCurrent)
   el.focus()
+  assertCommandCurrent(isCurrent)
   const input = el as HTMLInputElement | HTMLTextAreaElement
   // 经原型 setter 写值，确保 Vue v-model 等响应式绑定能收到 input 事件
   const proto = el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
@@ -420,8 +443,7 @@ async function execType(params: Record<string, unknown>): Promise<Record<string,
   } else {
     input.value = text
   }
-  input.dispatchEvent(new Event('input', { bubbles: true }))
-  input.dispatchEvent(new Event('change', { bubbles: true }))
+  dispatchInputChange(input, isCurrent)
   const target = ref || selector || ''
   pushLog(`type → ${target}（${text.slice(0, 30)}）`)
   return { success: true, ref: ref || undefined, selector, typed: text }
@@ -444,7 +466,7 @@ async function execScroll(params: Record<string, unknown>): Promise<Record<strin
   return { success: true, delta_y: deltaY }
 }
 
-async function execSelect(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function execSelect(params: Record<string, unknown>, isCurrent: () => boolean): Promise<Record<string, unknown>> {
   const el = findElement(
     params.ref ? String(params.ref) : undefined,
     params.selector ? String(params.selector) : undefined,
@@ -468,8 +490,7 @@ async function execSelect(params: Record<string, unknown>): Promise<Record<strin
     if (!matched) {
       return { success: false, message: `下拉中没有匹配项：${[...values, label].filter(Boolean).join(', ')}` }
     }
-    el.dispatchEvent(new Event('input', { bubbles: true }))
-    el.dispatchEvent(new Event('change', { bubbles: true }))
+    dispatchInputChange(el, isCurrent)
     return { success: true, selected: Array.from(el.selectedOptions).map((option) => option.text.trim()) }
   }
 
@@ -478,10 +499,13 @@ async function execSelect(params: Record<string, unknown>): Promise<Record<strin
   if (!needle) return { success: false, message: '自定义下拉需要 label 或 value 作为选项文本' }
   el.scrollIntoView({ block: 'center', behavior: 'smooth' })
   await sleep(200)
+  assertCommandCurrent(isCurrent)
   const rect = el.getBoundingClientRect()
-  await animateCursorTo(rect.x + rect.width / 2, rect.y + rect.height / 2, '选择')
+  await animateCursorTo(rect.x + rect.width / 2, rect.y + rect.height / 2, '选择', isCurrent)
+  assertCommandCurrent(isCurrent)
   el.click()
   await sleep(320)
+  assertCommandCurrent(isCurrent)
   const candidates = document.querySelectorAll(
     '[role="option"], [role="menuitem"], .el-select-dropdown__item, .ant-select-item-option, li'
   )
@@ -490,6 +514,7 @@ async function execSelect(params: Record<string, unknown>): Promise<Record<strin
     const text = elementText(option)
     if (text === needle || text.includes(needle)) {
       ;(option as HTMLElement).click()
+      assertCommandCurrent(isCurrent)
       pushLog(`select → ${needle}`)
       return { success: true, selected: text }
     }
@@ -504,7 +529,7 @@ function decodeBase64(source: string): ArrayBuffer {
   return bytes.buffer as ArrayBuffer
 }
 
-async function execUpload(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function execUpload(params: Record<string, unknown>, isCurrent: () => boolean): Promise<Record<string, unknown>> {
   let el = findElement(
     params.ref ? String(params.ref) : undefined,
     params.selector ? String(params.selector) : undefined,
@@ -538,8 +563,10 @@ async function execUpload(params: Record<string, unknown>): Promise<Record<strin
         // The fixed download route checks run ownership and the stored file digest.
         // Keep remote input in encoded IDs; never use it as a request URL or route.
         const response = await fetch(`/api/agent/runs/${encodeURIComponent(artifact[1])}/artifacts/${encodeURIComponent(artifact[2])}`, { credentials: 'same-origin', mode: 'same-origin', redirect: 'error' })
+        assertCommandCurrent(isCurrent)
         if (!response.ok) return { success: false, message: `读取文件失败：${spec.url} → HTTP ${response.status}` }
         blob = await response.blob()
+        assertCommandCurrent(isCurrent)
       } catch (err) {
         return { success: false, message: `读取文件失败：${spec.url}（${String((err as Error)?.message || err)}）` }
       }
@@ -555,8 +582,7 @@ async function execUpload(params: Record<string, unknown>): Promise<Record<strin
     return { success: false, message: 'files 为空或缺少可用内容（url / base64 / text）' }
   }
   el.files = transfer.files
-  el.dispatchEvent(new Event('input', { bubbles: true }))
-  el.dispatchEvent(new Event('change', { bubbles: true }))
+  dispatchInputChange(el, isCurrent)
   const names = Array.from(transfer.files).map((file) => file.name)
   pushLog(`upload → ${names.join(', ')}`)
   return { success: true, uploaded: names }
@@ -594,14 +620,15 @@ function waitConditions(params: Record<string, unknown>): Array<{ unmet: string 
   return checks
 }
 
-async function execWait(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function execWait(params: Record<string, unknown>, isCurrent: () => boolean): Promise<Record<string, unknown>> {
   const timeout = Math.min(Math.max(Number(params.timeout_ms) || 5000, 300), WAIT_MAX_MS)
   const startedAt = Date.now()
-  const probes = waitConditions(params)
-  if (probes.length === 0) {
-    return { success: false, message: '至少提供一个等待条件（ref/selector/text/url_contains/gone_*）' }
-  }
   for (;;) {
+    if (!isCurrent()) return { success: false, message: '等待已取消' }
+    const probes = waitConditions(params)
+    if (probes.length === 0) {
+      return { success: false, message: '至少提供一个等待条件（ref/selector/text/url_contains/gone_*）' }
+    }
     const unmet = probes.map((probe) => probe.unmet).filter((item): item is string => Boolean(item))
     if (unmet.length === 0) {
       return {
@@ -668,7 +695,7 @@ async function execVerify(params: Record<string, unknown>): Promise<Record<strin
   return { success: checks.every((check) => check.ok), checks }
 }
 
-async function execScreenshot(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function execScreenshot(params: Record<string, unknown>, isCurrent: () => boolean): Promise<Record<string, unknown>> {
   const ref = params.ref ? String(params.ref) : ''
   const selector = params.selector ? String(params.selector) : ''
   const targetEl = ref || selector ? findElement(ref || undefined, selector || undefined) : document.body
@@ -686,6 +713,7 @@ async function execScreenshot(params: Record<string, unknown>): Promise<Record<s
   await sleep(80)
   try {
     const { toPng } = await import('html-to-image')
+    if (!isCurrent()) return { success: false, message: '截图已取消' }
     const dataUrl = await toPng(targetEl as HTMLElement, {
       pixelRatio,
       cacheBust: true,
@@ -699,6 +727,7 @@ async function execScreenshot(params: Record<string, unknown>): Promise<Record<s
       image.onerror = () => reject(new Error('截图解码失败'))
       image.src = dataUrl
     })
+    if (!isCurrent()) return { success: false, message: '截图已取消' }
     const bytes = Math.round((dataUrl.length - dataUrl.indexOf(',') - 1) * 0.75)
     pushLog(`screenshot → ${size.width}×${size.height}`)
     return {
@@ -712,30 +741,30 @@ async function execScreenshot(params: Record<string, unknown>): Promise<Record<s
   } catch (err) {
     return { success: false, message: `截图失败：${String((err as Error)?.message || err)}` }
   } finally {
-    cursorVisible.value = cursorWasVisible
+    if (isCurrent()) cursorVisible.value = cursorWasVisible
   }
 }
 
-async function executeCommand(action: string, params: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function executeCommand(action: string, params: Record<string, unknown>, isCurrent: () => boolean): Promise<Record<string, unknown>> {
   switch (action) {
     case 'snapshot':
       return execSnapshot()
     case 'navigate':
       return execNavigate(params)
     case 'click':
-      return execClick(params)
+      return execClick(params, isCurrent)
     case 'type':
-      return execType(params)
+      return execType(params, isCurrent)
     case 'select':
-      return execSelect(params)
+      return execSelect(params, isCurrent)
     case 'upload':
-      return execUpload(params)
+      return execUpload(params, isCurrent)
     case 'wait':
-      return execWait(params)
+      return execWait(params, isCurrent)
     case 'verify':
       return execVerify(params)
     case 'screenshot':
-      return execScreenshot(params)
+      return execScreenshot(params, isCurrent)
     case 'scroll':
       return execScroll(params)
     default:
@@ -756,11 +785,20 @@ function connect() {
     scheduleReconnect()
     return
   }
+  const connection = ws
+  const sessionCurrent = captureAuthSession()
+  const isCurrent = () => aiopenCursorEnabled.value && ws === connection && sessionCurrent()
+  stopSessionWatch = watch(sessionCurrent, () => {
+    disconnect()
+    scheduleReconnect()
+  }, { flush: 'sync' })
   ws.onopen = () => {
+    if (!isCurrent()) return
     aiopenCursorConnected.value = true
     pushLog('已连接 AIOPEN 操控通道')
   }
   ws.onmessage = async (event) => {
+    if (!isCurrent()) return
     let msg: Record<string, unknown> | null = null
     try {
       msg = JSON.parse(String(event.data || ''))
@@ -780,28 +818,29 @@ function connect() {
       pushLog(`收到指令：${action}`)
       let result: Record<string, unknown>
       try {
-        result = await executeCommand(action, params)
+        result = await executeCommand(action, params, isCurrent)
       } catch (err) {
         result = { success: false, message: String((err as Error)?.message || err) }
       }
+      if (!isCurrent()) return
       if (!SILENT_ACTIONS.has(action)) {
         // 快照/等待/校验/截图不收光标；操作类指令完成后短暂保留再淡出
         window.setTimeout(() => {
+          if (!isCurrent()) return
           cursorVisible.value = false
           cursorActionLabel.value = ''
         }, 4000)
       }
       try {
-        ws?.send(JSON.stringify({ type: 'result', id: msg.id, result }))
+        connection.send(JSON.stringify({ type: 'result', id: msg.id, result }))
       } catch {
         /* 连接已断，无法回执 */
       }
     }
   }
   ws.onclose = () => {
-    aiopenCursorConnected.value = false
-    aiopenCursorSessionId.value = ''
-    ws = null
+    if (ws !== connection) return
+    disconnect()
     if (aiopenCursorEnabled.value) {
       pushLog('连接断开，准备重连…')
       scheduleReconnect()
@@ -821,6 +860,8 @@ function scheduleReconnect() {
 }
 
 function disconnect() {
+  stopSessionWatch?.()
+  stopSessionWatch = null
   if (reconnectTimer != null) {
     window.clearTimeout(reconnectTimer)
     reconnectTimer = null
@@ -836,6 +877,10 @@ function disconnect() {
   aiopenCursorConnected.value = false
   aiopenCursorSessionId.value = ''
   cursorVisible.value = false
+  cursorClicking.value = false
+  cursorTilt.value = 0
+  cursorActionLabel.value = ''
+  resetRefs()
   clearAgentActive()
   disableTrail()
 }

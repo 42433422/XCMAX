@@ -12,6 +12,7 @@ const TRAIL_COLORS = ['#60a5fa', '#3b82f6', '#93c5fd', '#1d4ed8'] as const
 
 let effect: CursorEffectResult | null = null
 let loading: Promise<void> | null = null
+let generation = 0
 
 function emit(type: 'mousemove' | 'mousedown', x: number, y: number) {
   document.dispatchEvent(
@@ -32,16 +33,18 @@ export async function ensureTrail(): Promise<void> {
   // 单测环境没有 canvas 2d 上下文，直接跳过，避免刷屏
   if (import.meta.env.MODE === 'test') return
   if (effect || loading) return loading || undefined
+  const currentGeneration = generation
   loading = (async () => {
     try {
       const mod = await import('cursor-effects')
+      if (currentGeneration !== generation) return
       const Ctor = (mod as unknown as { fairyDustCursor: TrailConstructor }).fairyDustCursor
       effect = new Ctor({ colors: TRAIL_COLORS })
     } catch {
       // 库不可用（旧浏览器 / jsdom）时静默降级为无拖尾
-      effect = null
+      if (currentGeneration === generation) effect = null
     } finally {
-      loading = null
+      if (currentGeneration === generation) loading = null
     }
   })()
   return loading
@@ -60,10 +63,13 @@ export function pulseTrail(x: number, y: number): void {
 }
 
 export function disableTrail(): void {
+  generation += 1
+  loading = null
+  const retiredEffect = effect
+  effect = null
   try {
-    effect?.destroy()
+    retiredEffect?.destroy()
   } catch {
     /* 已销毁 */
   }
-  effect = null
 }

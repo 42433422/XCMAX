@@ -532,12 +532,12 @@
     "FHD/frontend/src/composables/useAiOpenCursor.ts": {
       "base_file": "FHD/frontend/src/composables/useAiOpenCursor.ts",
       "base_blob": "0f734f9e81d0571d35277109f253de9795e7dabc",
-      "head_blob": "43d0cac028f030c8643e5a041522026070d0571d",
+      "head_blob": "0db8c3a087eef4b09f6396d1007c2a85fe03f336",
       "before_lines": 376,
-      "after_lines": 892,
-      "reason": "审阅请求：扩展受控UI动作并收紧上传URL；只从同源且经服务端用户、租户及摘要校验的Agent文件产物路由下载，标识经过既有范围校验与编码。",
-      "boundary": "沿用既有AIOPEN会话派发和same-origin凭据；禁止任意站内API、跨源、URL凭据、查询、片段、路径逃逸及重定向，其他文件通过base64或text传入。",
-      "validation": "三个前端动作套件96项通过，AIOPEN manifest/guide 8项通过；本次CodeQL消警须由新head远端扫描确认，登记不代表人工架构批准。",
+      "after_lines": 937,
+      "reason": "审阅请求：扩展受控UI动作并收紧上传URL；复用现有身份会话代际与Vue监听，在账号切换、关闭和重连时退役旧任务，并让等待条件每轮重查。",
+      "boundary": "保留固定Agent产物授权路由、同源凭据和禁止重定向；异步恢复后及DOM事件间核验连接与身份，旧引用、回执和拖尾失效，不新建身份或请求通道。",
+      "validation": "四个前端动作与拖尾套件125项、type-check和目标ESLint通过；原上传URL的CodeQL告警在b515扫描消失；最终组合完整CI待远端，登记不代表人工架构批准。",
       "follow_up": "后续将独立UI动作放入专门适配器，保留本次URL和权限边界，不以增长登记代替安全审查。",
       "review_owner": "@42433422"
     },

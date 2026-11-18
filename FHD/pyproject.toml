@@ -276,6 +276,12 @@ exclude = [
 module = "modstore_server.*"
 ignore_missing_imports = true
 
+# Apprise belongs to the optional proactive-push extra, absent from core CI.
+# Enabled installations are checked by delivery tests and frozen-plugin collection.
+[[tool.mypy.overrides]]
+module = "apprise"
+ignore_missing_imports = true
+
 # Optional heavyweight/platform adapters are imported behind runtime feature
 # probes.  Their availability is validated by the owning capability, while the
 # core type gate remains independent of platform-only or ML-only distributions.

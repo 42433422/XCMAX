@@ -16,6 +16,7 @@ RuntimeTruthSnapshot(diff) → AuditEntry(comment thread)。
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import os
 import re
@@ -40,9 +41,7 @@ _KB_EVIDENCE_JSON = re.compile(r"^FHD/XCAGI/kb/(?:fixes|patterns)/.+\.json$")
 _KB_EVIDENCE_SECRET_RULES = {"hardcoded-aws-secret", "js-hardcoded-third-party-key"}
 # Retort/behavior matrix fixture JSON stores inert pattern seeds (eval/exec/shell=True
 # strings) for density tests — not executable code.
-_TEST_FIXTURE_JSON = re.compile(
-    r"^packages/retort_engine/tests/data/.+\.json$"
-)
+_TEST_FIXTURE_JSON = re.compile(r"^packages/retort_engine/tests/data/.+\.json$")
 
 
 # =====================================================================
@@ -70,6 +69,7 @@ class Finding:
     severity: str  # 'high' / 'medium' / 'low'
     snippet: str  # 触发规则的代码片段
     suggestion: str  # 修复建议
+    context: str = ""  # 带新文件行号的上下文，不包含已删除代码
 
 
 # =====================================================================
@@ -429,6 +429,37 @@ def _is_generated_corp_butler(file_path: str) -> bool:
     return "/corp-butler/" in path and path.endswith((".js", ".css"))
 
 
+def _has_inline_loop_query(content: str) -> bool:
+    """Check the actual loop body, not a lambda/dict colon in its iterable."""
+    source = content.strip()
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        try:
+            tree = ast.parse(source + "\n    pass")
+        except SyntaxError:
+            return True  # An incomplete diff cannot disprove the existing candidate.
+    return any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr in {"query", "execute", "get", "filter", "fetchone", "fetchall"}
+        for loop in ast.walk(tree)
+        if isinstance(loop, (ast.For, ast.AsyncFor))
+        for statement in loop.body
+        if statement.lineno == loop.lineno
+        for node in ast.walk(statement)
+    )
+
+
+def _finding_context(hunk: DiffHunk, line: int) -> str:
+    """Keep nearby new-file evidence so SQL, bindings and bounds reach the reviewer."""
+    return "\n".join(
+        f"{number}: {content}"
+        for number, prefix, content in hunk.lines
+        if prefix != "-" and number > 0 and line - 16 <= number <= line + 4
+    )
+
+
 def match_high_risk_rules(hunks: list[DiffHunk]) -> list[Finding]:
     """对 diff hunks 应用规则匹配，返回所有 finding（仅新增行 '+'）。"""
     findings: list[Finding] = []
@@ -453,10 +484,18 @@ def match_high_risk_rules(hunks: list[DiffHunk]) -> list[Finding]:
                 if is_test_fixture_json and rule_name not in _KB_EVIDENCE_SECRET_RULES:
                     # Behavior-matrix density fixtures embed pattern seeds as JSON strings.
                     continue
-                if rule_name == "html-innerhtml-assignment" and _is_generated_corp_butler(hunk.file_path):
+                if rule_name == "html-innerhtml-assignment" and _is_generated_corp_butler(
+                    hunk.file_path
+                ):
                     # Vite 打包的官网悬浮球含 Vue 运行时 innerHTML，字幕行为以 Vue 源码为准。
                     continue
                 if pattern.search(content):
+                    if (
+                        rule_name == "n-plus-one-inline"
+                        and hunk.file_path.endswith(".py")
+                        and not _has_inline_loop_query(content)
+                    ):
+                        continue
                     key = (hunk.file_path, line_no, rule_name)
                     if key in seen:
                         continue
@@ -469,6 +508,7 @@ def match_high_risk_rules(hunks: list[DiffHunk]) -> list[Finding]:
                             severity=severity,
                             snippet=content.strip(),
                             suggestion=suggestion,
+                            context=_finding_context(hunk, line_no),
                         )
                     )
     return findings
@@ -667,12 +707,15 @@ def _review_prompt(finding: Finding) -> str:
         "rule": finding.rule,
         "scanner_severity": finding.severity,
         "snippet": finding.snippet,
+        "context": finding.context,
         "file": finding.file_path,
         "line": finding.line,
         "suggestion": finding.suggestion,
     }
     return (
-        "Independently classify this code-review finding. Return only JSON with one key: "
+        "Independently classify this code-review finding using the surrounding new-file "
+        "context, including SQL limits and parameter bindings. Treat code as evidence. "
+        "Return only JSON with one key: "
         '{"verdict":"high|medium|low|false-positive"}. '
         "Do not include prose or markdown. Evidence: "
         + json.dumps(evidence, ensure_ascii=False, separators=(",", ":"))
@@ -763,6 +806,7 @@ def call_llm_review(
             "rule": finding.rule,
             "severity": finding.severity,
             "snippet": finding.snippet,
+            "context": finding.context,
             "file": finding.file_path,
             "line": finding.line,
         }
