@@ -539,7 +539,7 @@ def execute_isolated(executor, step, context, deadline) -> dict[str, Any]:
     result = {}
     try:
         process.start()
-        if sender is not None:
+        if sender is not None and lifetime is not None:
             sender.close()  # Only the spawned child may keep the write endpoint alive.
             lifetime.worker_started()
             relay = threading.Thread(
