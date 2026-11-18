@@ -1,101 +1,88 @@
-"""Execute the real lifespan body without importing database or worker runtimes."""
+"""Exercise the imported lifespan with scoped database and worker boundaries."""
 
 from __future__ import annotations
 
-import ast
 import asyncio
-import builtins
-from contextlib import asynccontextmanager
-from pathlib import Path
-from types import SimpleNamespace
+import importlib
+import sqlite3
+import sys
+import threading
+from types import ModuleType, SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from sqlalchemy.engine import Engine
 
 
 @pytest.fixture
-def runtime():
-    source = Path(__file__).resolve().parents[2] / "app/fastapi_app/lifespan.py"
-    tree = ast.parse(source.read_text(encoding="utf-8"))
-    function = next(
-        node
-        for node in tree.body
-        if isinstance(node, ast.AsyncFunctionDef) and node.name == "lifespan"
-    )
+def runtime(monkeypatch):
+    def forbid_runtime_resource(*args, **kwargs):
+        raise AssertionError("lifespan wiring test opened a real database or worker")
+
+    monkeypatch.setattr(Engine, "connect", forbid_runtime_resource)
+    monkeypatch.setattr(sqlite3, "connect", forbid_runtime_resource)
+    monkeypatch.setattr(threading.Thread, "start", forbid_runtime_resource)
+    lifecycle = importlib.import_module("app.fastapi_app.lifespan")
     mocks = {}
 
-    def module(name, sync=(), asynchronous=()):
+    def isolate(name, sync=(), asynchronous=()):
+        module = sys.modules.get(name)
+        loaded = module is not None
+        if not loaded:
+            module = ModuleType(name)
+            monkeypatch.setitem(sys.modules, name, module)
         attrs = {key: Mock(name=key) for key in sync}
         attrs.update({key: AsyncMock(name=key) for key in asynchronous})
         mocks.update(attrs)
-        return SimpleNamespace(**attrs)
+        for key, value in attrs.items():
+            monkeypatch.setattr(module, key, value, raising=loaded)
 
-    modules = {
-        "app.fastapi_app.startup_timing": module("timing", ["mark_startup"]),
-        "app.neuro_async_bridge": module("bridge", ["set_neuro_main_loop"]),
-        "app.application.elt.service": module("elt", ["mark_interrupted_runs_on_startup"]),
-        "app.application.elt.stale_watchdog": module(
-            "watchdog", ["start_stale_watchdog", "stop_stale_watchdog"]
-        ),
-        "app.db": module("db", ["get_engine"]),
-        "app.application.dataset_rag.auto_sync_scheduler": module(
-            "sync", ["start_auto_sync_scheduler", "stop_auto_sync_scheduler"]
-        ),
-        "app.application.desktop_admin_gate": module(
-            "desktop", ["purge_admin_sessions_on_desktop"]
-        ),
-        "app.fastapi_app.deferred_startup": module(
-            "deferred",
-            asynchronous=["schedule_deferred_heavy_startup", "cancel_deferred_heavy_startup"],
-        ),
-        "app.mod_sdk.desktop_deliverable": module(
-            "deliverable", asynchronous=["ensure_deliverable_runtime"]
-        ),
-        "app.utils.performance.performance_initializer": module(
-            "performance", ["init_performance_optimization"]
-        ),
-        "app.desktop_runtime.backup_scheduler": module(
-            "backup", ["start_backup_scheduler", "stop_backup_scheduler"]
-        ),
-        "app.desktop_runtime.sync_outbox_scheduler": module(
-            "outbox", ["start_sync_outbox_scheduler", "stop_sync_outbox_scheduler"]
-        ),
-        "app.desktop_runtime.process_memory": module(
-            "memory", ["start_process_memory_guard", "stop_process_memory_guard"]
-        ),
-        "app.fastapi_app.mod_startup": module("mods", ["wait_for_background_mod_load"]),
-        "app.fastapi_app.resource_cleanup": module(
-            "cleanup", asynchronous=["close_llm_http_clients"]
-        ),
-        "app.application.employee_runtime.scheduler": module(
-            "employee", ["stop_employee_scheduler"]
-        ),
-        "app.domain.shared_services.mobile_relay_desktop_client": module(
-            "relay", ["stop_desktop_relay_poller"]
-        ),
-        "app.neuro_bus.bus_setup": module("bus", asynchronous=["teardown_neuro_bus"]),
-        "app.neuro_bus.health_monitor": module("health", ["get_health_monitor"]),
-    }
-
-    def import_stub(name, globals=None, locals=None, fromlist=(), level=0):
-        # Unknown imports fail rather than accidentally starting a real service.
-        return modules[name]
+    isolate("app.fastapi_app.startup_timing", ["mark_startup"])
+    isolate("app.neuro_async_bridge", ["set_neuro_main_loop"])
+    isolate("app.application.elt.service", ["mark_interrupted_runs_on_startup"])
+    isolate("app.application.elt.stale_watchdog", ["start_stale_watchdog", "stop_stale_watchdog"])
+    isolate("app.db", ["get_engine"])
+    isolate(
+        "app.application.dataset_rag.auto_sync_scheduler",
+        ["start_auto_sync_scheduler", "stop_auto_sync_scheduler"],
+    )
+    isolate("app.application.desktop_admin_gate", ["purge_admin_sessions_on_desktop"])
+    isolate(
+        "app.fastapi_app.deferred_startup",
+        asynchronous=["schedule_deferred_heavy_startup", "cancel_deferred_heavy_startup"],
+    )
+    isolate("app.mod_sdk.desktop_deliverable", asynchronous=["ensure_deliverable_runtime"])
+    isolate("app.utils.performance.performance_initializer", ["init_performance_optimization"])
+    isolate(
+        "app.desktop_runtime.backup_scheduler", ["start_backup_scheduler", "stop_backup_scheduler"]
+    )
+    isolate(
+        "app.desktop_runtime.sync_outbox_scheduler",
+        ["start_sync_outbox_scheduler", "stop_sync_outbox_scheduler"],
+    )
+    isolate(
+        "app.desktop_runtime.process_memory",
+        ["start_process_memory_guard", "stop_process_memory_guard"],
+    )
+    isolate("app.fastapi_app.mod_startup", ["wait_for_background_mod_load"])
+    isolate("app.fastapi_app.resource_cleanup", asynchronous=["close_llm_http_clients"])
+    isolate("app.application.employee_runtime.scheduler", ["stop_employee_scheduler"])
+    isolate("app.domain.shared_services.mobile_relay_desktop_client", ["stop_desktop_relay_poller"])
+    isolate("app.neuro_bus.bus_setup", asynchronous=["teardown_neuro_bus"])
+    isolate("app.neuro_bus.health_monitor", ["get_health_monitor"])
 
     async def inline_thread(func, *args):
         return func(*args)
 
-    namespace = {
-        "__builtins__": dict(vars(builtins), __import__=import_stub),
-        "asynccontextmanager": asynccontextmanager,
-        "FastAPI": object,
-        "asyncio": SimpleNamespace(
+    monkeypatch.setattr(
+        lifecycle,
+        "asyncio",
+        SimpleNamespace(
             gather=asyncio.gather,
             get_running_loop=asyncio.get_running_loop,
             to_thread=inline_thread,
         ),
-        "logger": Mock(),
-        "RECOVERABLE_ERRORS": (RuntimeError,),
-    }
+    )
     for name in (
         "install_proactor_reset_filter",
         "_log_ai_capability_status",
@@ -106,7 +93,8 @@ def runtime():
         "passive_node_enabled",
         "_desktop_fast_start_enabled",
     ):
-        namespace[name] = mocks[name] = Mock(name=name)
+        mocks[name] = Mock(name=name)
+        monkeypatch.setattr(lifecycle, name, mocks[name])
     for name in (
         "_init_mods_async",
         "_initialize_databases_async",
@@ -115,10 +103,10 @@ def runtime():
         "_init_mobile_relay_desktop_async",
         "stop_paid_asset_installs",
     ):
-        namespace[name] = mocks[name] = AsyncMock(name=name)
+        mocks[name] = AsyncMock(name=name)
+        monkeypatch.setattr(lifecycle, name, mocks[name])
     mocks["_start_parent_watchdog"].return_value = None
-    exec(compile(ast.Module(body=[function], type_ignores=[]), str(source), "exec"), namespace)
-    return namespace["lifespan"], mocks
+    return lifecycle.lifespan, mocks
 
 
 @pytest.mark.parametrize("passive", [False, True])

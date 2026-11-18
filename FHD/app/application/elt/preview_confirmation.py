@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import or_
+from sqlalchemy import true
 from sqlalchemy.orm import Session
 
 from app.application.elt.errors import EltConflict
@@ -175,10 +175,9 @@ def _snapshot(db: Session, run: EltRun, nonce: str) -> tuple[str, dict[str, Any]
             EltRunRow.owner_user_id == run.owner_user_id,
             # 导出仍使用 skip/error 行的追踪值或表名，必须绑定它们的确认。
             # 其他目标只哈希写入行，避免全量判重时的逐行序列化开销。
-            or_(
-                run.target_type in {"shipment_records", "export_xlsx", "export_csv"},
-                EltRunRow.final_action.in_(["new", "update"]),
-            ),
+            true()
+            if run.target_type in {"shipment_records", "export_xlsx", "export_csv"}
+            else EltRunRow.final_action.in_(["new", "update"]),
         )
         .order_by(EltRunRow.id)
         .yield_per(500)
