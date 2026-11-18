@@ -40,6 +40,7 @@ vi.mock('@/composables/useStartupAuth', () => ({ useStartupAuth: () => ({ ensure
 vi.mock('@/composables/useAppShellBridge', () => ({ useAppShellBridge: () => state.bridge }))
 vi.mock('@/composables/useXcmaxSync', () => ({ useXcmaxSync: () => state.sync }))
 vi.mock('@/utils/adminConsoleUrl', () => ({ isAdminConsoleSpa: () => false }))
+vi.mock('@/views/ImMessengerView.vue', () => ({ default: {} }))
 
 import { useAppBoot } from './useAppBoot'
 import { startupPageReadyKey, startupReadyKey } from './useStartupSplash'

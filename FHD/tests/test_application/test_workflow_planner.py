@@ -16,6 +16,65 @@ from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 # ========================= get_tool_registry =============================
 
 
+def test_planner_token_budget_is_configurable_for_reasoning_models(monkeypatch):
+    from app.application.workflow.planner_llm_gateway import planner_max_tokens
+
+    monkeypatch.delenv("XCAGI_PLANNER_MAX_TOKENS", raising=False)
+    assert planner_max_tokens() == 4096
+    monkeypatch.setenv("XCAGI_PLANNER_MAX_TOKENS", "8192")
+    assert planner_max_tokens() == 8192
+    monkeypatch.setenv("XCAGI_PLANNER_MAX_TOKENS", "not-a-number")
+    assert planner_max_tokens() == 4096
+
+
+def test_plan_schema_flags_workflow_without_nodes():
+    from app.application.workflow.llm_plan_generation import model_plan_schema_error
+
+    assert "nodes" in (model_plan_schema_error({"mode": "workflow"}) or "")
+    assert "reply" in (model_plan_schema_error({"mode": "reply"}) or "")
+    assert (
+        model_plan_schema_error(
+            {
+                "mode": "workflow",
+                "nodes": [{"tool_id": "products", "action": "query", "params": {}}],
+            }
+        )
+        is None
+    )
+
+
+def test_planner_repairs_workflow_output_without_nodes():
+    replies = [
+        json.dumps({"mode": "workflow"}),
+        json.dumps(
+            {
+                "mode": "workflow",
+                "intent": "查询产品 A1",
+                "nodes": [
+                    {
+                        "node_id": "n1",
+                        "tool_id": "products",
+                        "action": "query",
+                        "params": {"keyword": "A1"},
+                    }
+                ],
+            }
+        ),
+    ]
+    completion = Mock(
+        side_effect=[{"choices": [{"message": {"content": text}}]} for text in replies]
+    )
+    planner = LLMWorkflowPlanner(
+        ai_service=Mock(get_context=Mock(return_value=None)), completion=completion
+    )
+
+    plan = planner.plan("7", "查询产品 A1", get_tool_registry(), {"source": "normal"})
+
+    assert plan is not None
+    assert [node.tool_id for node in plan.nodes] == ["products"]
+    assert completion.call_count == 2
+
+
 def test_planner_does_not_mix_global_history_into_an_explicit_conversation():
     captured = {}
     ai = Mock()
@@ -31,6 +90,50 @@ def test_planner_does_not_mix_global_history_into_an_explicit_conversation():
         "7", "hello", get_tool_registry(), context={"session_id": "isolated-conversation"}
     )
     assert "FOREIGN_SESSION_MARKER" not in json.dumps(captured["recent_messages"])
+
+
+@pytest.mark.parametrize("light_reply", [False, True])
+def test_long_history_keeps_latest_constraints_in_order(light_reply, monkeypatch, tmp_path):
+    from app.application.workflow.llm_plan_generation import LlmPlanGeneration
+
+    monkeypatch.setenv("XCAGI_DIALOGUE_MEMORY_DIR", str(tmp_path))
+    captured = {}
+
+    def completion(**kwargs):
+        captured.update(json.loads(kwargs["messages"][1]["content"]))
+        return {"choices": [{"message": {"content": '{"mode":"reply","reply":"ready"}'}}]}
+
+    history = [
+        {"role": "user" if index % 2 == 0 else "assistant", "content": "旧说明" * 3000}
+        for index in range(4)
+    ] + [
+        {"role": "user", "content": "最新约束：保持金额。api_key=history-secret"},
+        {"role": "assistant", "content": "最新确认：金额保持。Bearer private-history-token"},
+    ]
+    context = {
+        "local_user_id": 31,
+        "tenant_id": 5,
+        "conversation_id": "long-owned-history",
+        "_chat_evidence_authorized": True,
+        "chat_owned_history": history,
+    }
+    generator = LlmPlanGeneration(Mock(get_context=Mock(return_value=None)), completion, Mock())
+    plan = (
+        generator._light_reply("p1", "你好", context)
+        if light_reply
+        else generator.generate("p1", "31", "查询客户", {}, context)
+    )
+
+    assert plan is not None
+    recent = captured["recent_messages"]
+    assert [item["role"] for item in recent[-2:]] == ["user", "assistant"]
+    assert recent[-2]["content"].startswith("最新约束：保持金额。")
+    assert recent[-1]["content"].startswith("最新确认：金额保持。")
+    serialized = json.dumps(captured, ensure_ascii=False)
+    assert "history-secret" not in serialized
+    assert "private-history-token" not in serialized
+    if not light_reply:
+        assert captured["context"]["chat_owned_history"][-1] == recent[-1]
 
 
 def test_employee_discovery_uses_verified_actor_and_replaces_client_catalog(
@@ -449,3 +552,45 @@ class TestPlanWithLLM:
                 result = planner._plan_with_llm("p1", "u1", "hello", get_tool_registry(), {})
 
         assert result is None
+
+
+class TestPlannerStageMetrics:
+    """规划指标必须区分「模型返回了」「计划校验通过」，不能用单点 success 代替。"""
+
+    @staticmethod
+    def _delta(before: dict, after: dict, *, stage: str, outcome: str) -> float:
+        key = f"xcagi_plan_stage_total{{outcome={outcome},stage={stage}}}"
+        return float(after.get(key, 0.0)) - float(before.get(key, 0.0))
+
+    def test_missing_model_plan_is_not_counted_as_success(self, monkeypatch):
+        from app.infrastructure.observability import metrics
+
+        planner = LLMWorkflowPlanner(ai_service=Mock())
+        monkeypatch.setattr(planner, "_plan_with_llm", lambda *args, **kwargs: None)
+
+        before = metrics.snapshot()
+        plan = planner.plan("u-metric-empty", "请把客户写入数据库", get_tool_registry(), {})
+        after = metrics.snapshot()
+
+        assert plan.metadata.get("planning_rejected") is True
+        assert self._delta(before, after, stage="model_returned", outcome="empty") == 1
+        assert self._delta(before, after, stage="plan_valid", outcome="rejected") == 1
+        assert self._delta(before, after, stage="plan_valid", outcome="valid_first_pass") == 0
+
+    def test_valid_reply_plan_records_first_pass(self, monkeypatch):
+        from app.infrastructure.observability import metrics
+
+        planner = LLMWorkflowPlanner(
+            ai_service=Mock(),
+            completion=lambda **kwargs: {
+                "choices": [{"message": {"content": '{"mode":"reply","reply":"ready"}'}}]
+            },
+        )
+
+        before = metrics.snapshot()
+        plan = planner.plan("u-metric-valid", "hello", get_tool_registry(), {})
+        after = metrics.snapshot()
+
+        assert plan.metadata.get("response_mode") == "reply"
+        assert self._delta(before, after, stage="model_returned", outcome="returned") == 1
+        assert self._delta(before, after, stage="plan_valid", outcome="valid_first_pass") == 1

@@ -36,6 +36,19 @@ describe('aiopenMcpInstall', () => {
     expect(line).toContain('127.0.0.1:5100')
     expect(line).toContain('guide?format=markdown')
     expect(line).toContain('key1')
+    expect(line).toContain('tools/list')
+    expect(line).toContain('ui_sessions')
+  })
+
+  it('one liner points empty-screen hint at the current console', () => {
+    const admin = buildAiopenOneLiner('http://127.0.0.1:5100', '', 'http://localhost:5011/admin')
+    expect(admin).toContain('http://localhost:5011/admin')
+    const host = buildAiopenOneLiner(
+      'http://127.0.0.1:5100',
+      '',
+      'http://127.0.0.1:42423/ai-ecosystem'
+    )
+    expect(host).toContain('/ai-ecosystem')
   })
 
   it('toggles installed client markers in localStorage', () => {

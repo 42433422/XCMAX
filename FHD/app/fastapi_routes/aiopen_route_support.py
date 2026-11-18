@@ -179,6 +179,7 @@ async def handle_mcp_message(
     invoke: Callable[..., Any],
     format_result: Callable[[str, dict[str, Any]], str],
     trace_call: Callable[..., str],
+    resources: dict[str, Callable[..., Any]] | None = None,
 ) -> dict[str, Any] | None:
     """Handle one stateless MCP JSON-RPC request or notification."""
     method = str(message.get("method") or "")
@@ -190,19 +191,22 @@ async def handle_mcp_message(
         params = message.get("params") if isinstance(message.get("params"), dict) else {}
         negotiated = resolve_mcp_protocol_version(params)
         manifest_payload = manifest()
+        capabilities: dict[str, Any] = {"tools": {"listChanged": False}}
+        if resources is not None:
+            capabilities["resources"] = {"listChanged": False, "subscribe": False}
         return jsonrpc_result(
             request_id,
             {
                 "protocolVersion": negotiated,
-                "capabilities": {"tools": {"listChanged": False}},
+                "capabilities": capabilities,
                 "serverInfo": {
                     "name": manifest_payload["name"],
                     "version": manifest_payload["version"],
                 },
                 "instructions": (
                     f"{manifest_payload['tagline']}\n"
-                    "操作流程：ui_sessions → ui_snapshot → ui_click/ui_type/ui_navigate。"
-                    "业务数据用 api_catalog + api_call；对话用 chat。"
+                    "先知后做：knowledge_search 检索能力 → operation_describe 读语义卡片 → "
+                    "api_call 执行业务；页面操作用 ui_sessions → ui_snapshot → ui_click/ui_type。"
                 ),
             },
         )
@@ -210,6 +214,20 @@ async def handle_mcp_message(
         return jsonrpc_result(request_id, {})
     if method == "tools/list":
         return jsonrpc_result(request_id, {"tools": manifest()["tools"]})
+    if resources is not None and method == "resources/list":
+        return jsonrpc_result(request_id, {"resources": resources["list"](app)})
+    if resources is not None and method == "resources/templates/list":
+        return jsonrpc_result(request_id, {"resourceTemplates": resources["templates"]()})
+    if resources is not None and method == "resources/read":
+        params = message.get("params") if isinstance(message.get("params"), dict) else {}
+        uri = str((params or {}).get("uri") or "").strip()
+        if not uri:
+            return jsonrpc_error(request_id, -32602, "resources/read 需要 uri")
+        try:
+            payload = resources["read"](app, uri)
+        except ValueError as error:
+            return jsonrpc_error(request_id, -32602, str(error))
+        return jsonrpc_result(request_id, payload)
     if method == "tools/call":
         raw_params = message.get("params")
         call_params: dict[str, Any] = raw_params if isinstance(raw_params, dict) else {}

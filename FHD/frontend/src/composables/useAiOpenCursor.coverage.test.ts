@@ -4,24 +4,27 @@
  * 聚焦未覆盖分支：WebSocket 连接生命周期、指令执行（snapshot/navigate/click/type/scroll）、
  * 元素定位与选择器构建、日志溢出、重连调度等。
  *
- * Mock 最小化：仅 mock 全局 WebSocket 构造器与 @/utils/apiBase（外部边界），
- * 被测 composable 真实调用。
+ * 替换 WebSocket/API、文件传输及截图渲染边界；命令分发与 DOM 状态使用真实 composable。
  *
  * 注意：useAiOpenCursor 模块级有 ws / routerRef / reconnectTimer 等模块级变量，
  * 在测试间会持久存在。每个用例必须通过 setAiOpenCursorEnabled(false) 清理状态。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
+import { invalidateEnterpriseSessionCache } from '@/utils/authSessionCache'
+import { updateProductReadAccountScope } from '@/utils/productReadAccountScope'
 import {
   aiopenCursorEnabled,
   aiopenCursorConnected,
   aiopenCursorSessionId,
   aiopenCursorLogs,
+  aiopenAgentActive,
   cursorX,
   cursorY,
   cursorVisible,
   cursorClicking,
   cursorActionLabel,
+  cursorTilt,
   setAiOpenCursorEnabled,
   initAiOpenCursor,
 } from './useAiOpenCursor'
@@ -29,6 +32,8 @@ import {
 vi.mock('@/utils/apiBase', () => ({
   getApiBase: () => 'http://127.0.0.1:5000',
 }))
+const { toPng, loadRenderer } = vi.hoisted(() => ({ toPng: vi.fn(), loadRenderer: vi.fn() }))
+vi.mock('html-to-image', async () => { await loadRenderer(); return { toPng } })
 
 // ---------------------------------------------------------------------------
 // WebSocket mock：捕获实例并允许手动触发 onopen/onmessage/onclose/onerror
@@ -36,7 +41,7 @@ vi.mock('@/utils/apiBase', () => ({
 interface MockWebSocket {
   url: string
   onopen: (() => void) | null
-  onmessage: ((event: { data: unknown }) => void) | null
+  onmessage: ((event: { data: unknown }) => void | Promise<void>) | null
   onclose: (() => void) | null
   onerror: (() => void) | null
   send: ReturnType<typeof vi.fn>
@@ -50,7 +55,7 @@ let wsCtorError: Error | null = null
 class WebSocketMock {
   url: string
   onopen: (() => void) | null = null
-  onmessage: ((event: { data: unknown }) => void) | null = null
+  onmessage: ((event: { data: unknown }) => void | Promise<void>) | null = null
   onclose: (() => void) | null = null
   onerror: (() => void) | null = null
   send = vi.fn()
@@ -150,6 +155,7 @@ describe('useAiOpenCursor - coverage ramp', () => {
     setActivePinia(createPinia())
     localStorage.clear()
     resetCursorState()
+    updateProductReadAccountScope({ tenantId: 'A', marketUserId: 1 })
     mockWsInstances = []
     wsCtorError = null
     vi.useFakeTimers()
@@ -232,6 +238,29 @@ describe('useAiOpenCursor - coverage ramp', () => {
       // 3s 后重连
       vi.advanceTimersByTime(3000)
       expect(mockWsInstances.length).toBe(2)
+    })
+
+    it('ignores a late open event after remote control is disabled', () => {
+      setAiOpenCursorEnabled(true)
+      const oldSocket = lastWs()!
+      setAiOpenCursorEnabled(false)
+      oldSocket.onopen!()
+      expect(aiopenCursorConnected.value).toBe(false)
+    })
+
+    it('keeps a replacement connection when the old socket closes later', async () => {
+      setAiOpenCursorEnabled(true)
+      const oldSocket = lastWs()!
+      setAiOpenCursorEnabled(false)
+      setAiOpenCursorEnabled(true)
+      const replacement = lastWs()!
+      replacement.onopen!()
+      oldSocket.onclose!()
+      expect(aiopenCursorConnected.value).toBe(true)
+      await replacement.onmessage!({ data: JSON.stringify({ type: 'command', id: 'current', action: 'snapshot', params: {} }) })
+      expect(replacement.send).toHaveBeenCalledWith(expect.stringContaining('"id":"current"'))
+      await vi.advanceTimersByTimeAsync(3000)
+      expect(mockWsInstances).toHaveLength(2)
     })
 
     it('onclose does not reconnect when disabled', () => {
@@ -424,6 +453,518 @@ describe('useAiOpenCursor - coverage ramp', () => {
         })
         .find((m) => m && m.type === 'result' && m.id === 'r3')
       expect(sent.result.elements.length).toBeLessThanOrEqual(120)
+    })
+
+    async function runCommand(
+      id: string,
+      action: string,
+      params: Record<string, unknown>
+    ): Promise<Record<string, any>> {
+      const ws = lastWs()!
+      ws.onmessage!({
+        data: JSON.stringify({ type: 'command', id, action, params }),
+      })
+      await vi.runAllTimersAsync()
+      const sent = ws.send.mock.calls
+        .map((call) => {
+          try {
+            return JSON.parse(call[0] as string)
+          } catch {
+            return null
+          }
+        })
+        .find((message) => message && message.type === 'result' && message.id === id)
+      return sent?.result || {}
+    }
+
+    describe('upload URL boundary', () => {
+      let input: HTMLInputElement
+      let fetchFile: ReturnType<typeof vi.fn>
+      let change: ReturnType<typeof vi.fn>
+      beforeEach(() => {
+        input = document.createElement('input')
+        input.type = 'file'; input.id = 'upload-target'
+        Object.defineProperty(input, 'files', { writable: true, value: [] })
+        document.body.appendChild(input)
+        change = vi.fn()
+        input.addEventListener('input', change); input.addEventListener('change', change)
+        // jsdom has no DataTransfer; keep native Blob/File and capture the transfer boundary.
+        vi.stubGlobal('DataTransfer', class {
+          files: File[] = []
+          items = { add: (file: File) => this.files.push(file) }
+        })
+        fetchFile = vi.fn().mockResolvedValue({ ok: true, blob: async () => new Blob(['invoice'], { type: 'text/plain' }) })
+        vi.stubGlobal('fetch', fetchFile)
+        setAiOpenCursorEnabled(true)
+      })
+      afterEach(() => { vi.unstubAllGlobals() })
+      const artifactPath = '/api/agent/runs/run_1/artifacts/txt_1'
+      const upload = (url: string) => runCommand('file', 'upload', { selector: '#upload-target', files: [{ name: 'invoice.txt', url }] })
+
+      it.each([artifactPath, `${window.location.origin}${artifactPath}`])('uploads authorized artifact bytes from %s', async url => {
+        expect(await upload(url)).toEqual({ success: true, uploaded: ['invoice.txt'] })
+        expect(fetchFile).toHaveBeenCalledWith(artifactPath, {
+          credentials: 'same-origin', mode: 'same-origin', redirect: 'error',
+        })
+        expect(input.files).toHaveLength(1)
+        expect(await input.files![0].text()).toBe('invoice')
+        expect(input.files![0].type).toBe('text/plain')
+        expect(change).toHaveBeenCalledTimes(2)
+      })
+
+      it.each([
+        'https://other.example/file', '//other.example/file', 'http://127.0.0.1:9000/file',
+        'https://localhost.other.example/file', 'file:///etc/passwd', 'data:text/plain,private',
+        `blob:${window.location.origin}/file`, 'javascript:alert(1)',
+        `${window.location.protocol}//user:pass@${window.location.host}/file`,
+      ])('rejects an untrusted URL before fetching or uploading: %s', async url => {
+        expect(await upload(url)).toMatchObject({ success: false, message: expect.stringContaining('当前站点') })
+        expect(fetchFile).not.toHaveBeenCalled()
+        expect(input.files).toHaveLength(0)
+        expect(change).not.toHaveBeenCalled()
+      })
+
+      it.each([
+        '/api/auth/me', '/api/files/invoice', '/api/agent/runs/run_1/cancel',
+        '/api/agent/runs/run_1/artifacts/txt_1/extra',
+        '/api/agent/runs/run%2fother/artifacts/txt_1',
+        '/api/agent/runs/run_1/artifacts/%2e%2e/%2e%2e/%2e%2e/auth/me',
+        '/api/agent/runs/run_1/artifacts/txt%255c..%255csecret',
+        `/api/agent/runs/${'r'.repeat(161)}/artifacts/txt_1`,
+        `${artifactPath}?redirect=https://other.example`, `${artifactPath}#fragment`,
+      ])('rejects non-artifact or ambiguous routes before requesting: %s', async url => {
+        expect(await upload(url)).toMatchObject({ success: false, message: expect.stringContaining('Agent 文件产物') })
+        expect(fetchFile).not.toHaveBeenCalled()
+        expect(input.files).toHaveLength(0)
+        expect(change).not.toHaveBeenCalled()
+      })
+
+      it('keeps text and base64 uploads available without requesting any URL', async () => {
+        const result = await runCommand('inline-files', 'upload', {
+          selector: '#upload-target', files: [
+            { name: 'note.txt', text: '保留文本', type: 'text/plain' },
+            { name: 'binary.bin', base64: btoa('bytes'), type: 'application/octet-stream' },
+          ],
+        })
+        expect(result).toEqual({ success: true, uploaded: ['note.txt', 'binary.bin'] })
+        expect(fetchFile).not.toHaveBeenCalled()
+        expect(await input.files![0].text()).toBe('保留文本')
+        expect(await input.files![1].text()).toBe('bytes')
+        expect(input.files![1].type).toBe('application/octet-stream')
+        expect(change).toHaveBeenCalledTimes(2)
+      })
+
+      it.each(['redirect', 'forbidden', 'unreadable'])('keeps the previous selection when the file request is %s', async failure => {
+        const previous = [new File(['previous'], 'previous.txt')]
+        Object.assign(input, { files: previous })
+        if (failure === 'redirect') fetchFile.mockRejectedValueOnce(new TypeError('redirect mode is error'))
+        else if (failure === 'forbidden') fetchFile.mockResolvedValueOnce({ ok: false, status: 403 })
+        else fetchFile.mockResolvedValueOnce({ ok: true, blob: async () => { throw new Error('unreadable response') } })
+        expect(await upload(artifactPath)).toMatchObject({ success: false, message: expect.stringContaining('读取文件失败') })
+        expect(input.files).toBe(previous)
+        expect(change).not.toHaveBeenCalled()
+      })
+
+      it.each(['fetch', 'body'])('does not upload old-account bytes when %s finishes after logout', async stage => {
+        const previous = [new File(['existing selection'], 'previous.txt')]
+        Object.assign(input, { files: previous })
+        let finish!: (value: unknown) => void
+        const delayed = new Promise(resolve => { finish = resolve })
+        const blob = new Blob(['old account document'], { type: 'text/plain' })
+        const response = { ok: true, blob: () => stage === 'body' ? delayed : Promise.resolve(blob) }
+        fetchFile.mockReturnValue(stage === 'fetch' ? delayed : Promise.resolve(response))
+        const socket = lastWs()!
+        const pending = socket.onmessage!({ data: JSON.stringify({ type: 'command', id: 'old-upload', action: 'upload', params: {
+          selector: '#upload-target', files: [{ name: 'private.txt', url: artifactPath }],
+        } }) })
+        await vi.advanceTimersByTimeAsync(0)
+        invalidateEnterpriseSessionCache()
+        finish(stage === 'fetch' ? response : blob)
+        await pending
+        expect(input.files).toBe(previous)
+        expect(change).not.toHaveBeenCalled()
+        expect(socket.send).not.toHaveBeenCalled()
+      })
+    })
+
+    it('receiving a command marks the agent active', async () => {
+      setAiOpenCursorEnabled(true)
+      const ws = lastWs()!
+      ws.onopen!()
+      expect(aiopenAgentActive.value).toBe(false)
+      ws.onmessage!({
+        data: JSON.stringify({ type: 'command', id: 'agent1', action: 'snapshot', params: {} }),
+      })
+      // 只推进 microtask，保留 8s 空闲计时器，便于验证点亮状态
+      await vi.advanceTimersByTimeAsync(0)
+      expect(aiopenAgentActive.value).toBe(true)
+      // 静默 8s 后自动收起
+      vi.advanceTimersByTime(8100)
+      expect(aiopenAgentActive.value).toBe(false)
+    })
+
+    it('snapshot assigns stable refs with role, name and state', async () => {
+      const btn = document.createElement('button')
+      btn.id = 'ref-btn'
+      btn.setAttribute('aria-label', '保存')
+      btn.disabled = true
+      document.body.appendChild(btn)
+      makeVisible(btn)
+
+      setAiOpenCursorEnabled(true)
+      const result = await runCommand('ref1', 'snapshot', {})
+      expect(result.success).toBe(true)
+      expect(result.elements[0].ref).toBe('e1')
+      expect(result.elements[0].role).toBe('button')
+      expect(result.elements[0].name).toBe('保存')
+      expect(result.elements[0].selector).toBe('#ref-btn')
+      expect(result.elements[0].state.disabled).toBe(true)
+    })
+
+    it('click resolves element by ref from the latest snapshot', async () => {
+      const btn = document.createElement('button')
+      setElementText(btn, '提交')
+      document.body.appendChild(btn)
+      makeVisible(btn)
+
+      setAiOpenCursorEnabled(true)
+      await runCommand('ref2', 'snapshot', {})
+      const result = await runCommand('ref3', 'click', { ref: 'e1' })
+      expect(result.success).toBe(true)
+      expect(btn.click).toHaveBeenCalled()
+    })
+
+    it('retires snapshot refs when the connection changes even if the same DOM node remains', async () => {
+      const button = document.createElement('button')
+      makeVisible(button); document.body.appendChild(button)
+      setAiOpenCursorEnabled(true)
+      const snapshot = await runCommand('before-reconnect', 'snapshot', {})
+      const ref = snapshot.elements[0].ref
+      setAiOpenCursorEnabled(false)
+      setAiOpenCursorEnabled(true)
+      expect(await runCommand('stale-ref', 'click', { ref })).toMatchObject({ success: false })
+      expect(button.click).not.toHaveBeenCalled()
+      const refreshed = await runCommand('after-reconnect', 'snapshot', {})
+      expect(await runCommand('fresh-ref', 'click', { ref: refreshed.elements[0].ref })).toMatchObject({ success: true })
+      expect(button.click).toHaveBeenCalledOnce()
+    })
+
+    it.each(['click', 'type', 'select'])('stops delayed %s before mutating the next account page', async action => {
+      const target = document.createElement(action === 'type' ? 'input' : 'button')
+      target.id = 'delayed'; makeVisible(target); document.body.appendChild(target)
+      if (target instanceof HTMLInputElement) target.value = 'original'
+      const inputEvent = vi.fn()
+      target.addEventListener('input', inputEvent)
+      const option = document.createElement('div')
+      option.setAttribute('role', 'option'); option.textContent = 'Next'; makeVisible(option); document.body.appendChild(option)
+      setAiOpenCursorEnabled(true)
+      const socket = lastWs()!
+      const pending = socket.onmessage!({ data: JSON.stringify({ type: 'command', id: 'delayed', action, params: {
+        selector: '#delayed', text: 'changed', label: 'Next',
+      } }) })
+      await vi.advanceTimersByTimeAsync(100)
+      invalidateEnterpriseSessionCache()
+      await vi.runAllTimersAsync()
+      await pending
+      expect(target.click).not.toHaveBeenCalled()
+      expect(option.click).not.toHaveBeenCalled()
+      expect(inputEvent).not.toHaveBeenCalled()
+      if (target instanceof HTMLInputElement) expect(target.value).toBe('original')
+      expect(cursorVisible.value).toBe(false)
+      expect(socket.send).not.toHaveBeenCalled()
+    })
+
+    it('clears a pending click animation when control is disabled before the click', async () => {
+      const button = document.createElement('button')
+      button.id = 'click-pulse'; makeVisible(button); document.body.appendChild(button)
+      setAiOpenCursorEnabled(true)
+      const pending = lastWs()!.onmessage!({ data: JSON.stringify({ type: 'command', id: 'pulse', action: 'click', params: { selector: '#click-pulse' } }) })
+      await vi.advanceTimersByTimeAsync(850)
+      expect(cursorClicking.value).toBe(true)
+      setAiOpenCursorEnabled(false)
+      try {
+        expect(cursorClicking.value).toBe(false)
+        expect(cursorTilt.value).toBe(0)
+        expect(cursorActionLabel.value).toBe('')
+      } finally {
+        await vi.runAllTimersAsync()
+        await pending
+      }
+      expect(button.click).not.toHaveBeenCalled()
+    })
+
+    it('click with stale ref reports failure', async () => {
+      setAiOpenCursorEnabled(true)
+      const result = await runCommand('ref4', 'click', { ref: 'e99' })
+      expect(result.success).toBe(false)
+      expect(result.message).toContain('ref')
+    })
+
+    it('verify returns per-check conclusions', async () => {
+      const input = document.createElement('input')
+      input.id = 'verify-input'
+      input.value = 'abc'
+      document.body.appendChild(input)
+      makeVisible(input)
+
+      setAiOpenCursorEnabled(true)
+      await runCommand('ref5', 'snapshot', {})
+      const result = await runCommand('ref6', 'verify', { ref: 'e1', value: 'abc' })
+      expect(result.success).toBe(true)
+      expect(result.checks.length).toBe(2)
+      expect(result.checks.every((check: any) => check.ok)).toBe(true)
+    })
+
+    it('select picks native option by value', async () => {
+      const select = document.createElement('select')
+      select.id = 'verify-select'
+      for (const value of ['a', 'b']) {
+        const option = document.createElement('option')
+        option.value = value
+        option.text = value.toUpperCase()
+        select.appendChild(option)
+      }
+      document.body.appendChild(select)
+      makeVisible(select)
+
+      setAiOpenCursorEnabled(true)
+      await runCommand('ref7', 'snapshot', {})
+      const result = await runCommand('ref8', 'select', { ref: 'e1', value: 'b' })
+      expect(result.success).toBe(true)
+      expect(select.value).toBe('b')
+    })
+
+    it('wait returns immediately when condition already holds', async () => {
+      const node = document.createElement('div')
+      node.id = 'wait-target'
+      document.body.appendChild(node)
+      makeVisible(node)
+
+      setAiOpenCursorEnabled(true)
+      const result = await runCommand('ref9', 'wait', { selector: '#wait-target', timeout_ms: 500 })
+      expect(result.success).toBe(true)
+      expect(result.waited_ms).toBeGreaterThanOrEqual(0)
+    })
+
+    it('wait without conditions returns argument error', async () => {
+      setAiOpenCursorEnabled(true)
+      const result = await runCommand('ref10', 'wait', { timeout_ms: 500 })
+      expect(result.success).toBe(false)
+      expect(result.message).toContain('等待条件')
+    })
+
+    describe('wait observes live page state', () => {
+      let originalUrl: string
+      let originalInnerText: PropertyDescriptor | undefined
+      beforeEach(() => {
+        originalUrl = window.location.href
+        originalInnerText = Object.getOwnPropertyDescriptor(document.body, 'innerText')
+        Object.defineProperty(document.body, 'innerText', { configurable: true, get: () => document.body.textContent })
+        setAiOpenCursorEnabled(true)
+      })
+      afterEach(() => {
+        window.history.replaceState(null, '', originalUrl)
+        if (originalInnerText) Object.defineProperty(document.body, 'innerText', originalInnerText)
+        else Reflect.deleteProperty(document.body, 'innerText')
+      })
+
+      it('waits until the appearing element, text, URL and disappearing loader all match', async () => {
+        const loader = document.createElement('div')
+        loader.id = 'loading'; makeVisible(loader); document.body.appendChild(loader)
+        const socket = lastWs()!
+        const pending = socket.onmessage!({ data: JSON.stringify({ type: 'command', id: 'live', action: 'wait', params: {
+          selector: '#result', text: 'Import complete', url_contains: '#import-ready', gone_selector: '#loading', timeout_ms: 500,
+        } }) })
+        await vi.advanceTimersByTimeAsync(100)
+        const result = document.createElement('div')
+        result.id = 'result'; result.textContent = 'Import complete'; makeVisible(result); document.body.appendChild(result)
+        window.history.replaceState(null, '', '#import-ready')
+        await vi.advanceTimersByTimeAsync(100)
+        expect(socket.send).not.toHaveBeenCalled()
+        loader.remove()
+        await vi.advanceTimersByTimeAsync(100)
+        expect(socket.send).toHaveBeenCalledWith(expect.stringContaining('"success":true'))
+        await pending
+        const response = JSON.parse(socket.send.mock.calls[0][0]).result
+        expect(response.waited_ms).toBe(300)
+        expect(response.matched).toContain('元素消失')
+      })
+
+      it('times out at a bounded polling interval and reports only conditions still unmet', async () => {
+        window.setTimeout(() => { document.body.textContent = 'Import complete' }, 100)
+        const result = await runCommand('timeout', 'wait', { text: 'Import complete', url_contains: '#never-ready', timeout_ms: 350 })
+        expect(result.success).toBe(false)
+        expect(result.waited_ms).toBe(400)
+        expect(result.message).toContain('URL 包含「#never-ready」')
+        expect(result.message).not.toContain('页面文本')
+      })
+
+      it('stops a pending wait when control is disabled and does not send its result to a new connection', async () => {
+        const oldSocket = lastWs()!
+        let settled = false
+        const pending = Promise.resolve(oldSocket.onmessage!({ data: JSON.stringify({ type: 'command', id: 'cancelled', action: 'wait', params: {
+          selector: '#never-appears', timeout_ms: 15000,
+        } }) })).then(() => { settled = true })
+        await vi.advanceTimersByTimeAsync(100)
+        setAiOpenCursorEnabled(false)
+        setAiOpenCursorEnabled(true)
+        await vi.advanceTimersByTimeAsync(100)
+        try {
+          expect(settled).toBe(true)
+          expect(oldSocket.send).not.toHaveBeenCalled()
+          expect(lastWs()!.send).not.toHaveBeenCalled()
+        } finally {
+          await vi.runAllTimersAsync()
+          await pending
+        }
+      })
+
+      it.each(['logout', 'account round trip'])('retires the connection and pending wait on %s', async change => {
+        const socket = lastWs()!
+        let settled = false
+        const pending = Promise.resolve(socket.onmessage!({ data: JSON.stringify({ type: 'command', id: 'old-account', action: 'wait', params: {
+          text: 'new account content', timeout_ms: 15000,
+        } }) })).then(() => { settled = true })
+        await vi.advanceTimersByTimeAsync(100)
+        if (change === 'logout') invalidateEnterpriseSessionCache()
+        else {
+          updateProductReadAccountScope({ tenantId: 'B', marketUserId: 2 })
+          updateProductReadAccountScope({ tenantId: 'A', marketUserId: 1 })
+        }
+        document.body.textContent = 'new account content'
+        await vi.advanceTimersByTimeAsync(100)
+        try {
+          expect(socket.close).toHaveBeenCalledOnce()
+          expect(settled).toBe(true)
+          expect(socket.send).not.toHaveBeenCalled()
+          expect(aiopenCursorEnabled.value).toBe(true)
+          await socket.onmessage!({ data: JSON.stringify({ type: 'hello', session_id: 'stale-session' }) })
+          await socket.onmessage!({ data: JSON.stringify({ type: 'command', id: 'stale-command', action: 'snapshot', params: {} }) })
+          expect(aiopenCursorSessionId.value).toBe('')
+          expect(socket.send).not.toHaveBeenCalled()
+          await vi.advanceTimersByTimeAsync(3000)
+          expect(lastWs()).not.toBe(socket)
+        } finally {
+          await vi.runAllTimersAsync()
+          await pending
+        }
+      })
+    })
+
+    describe('screenshot result and cursor lifecycle', () => {
+      const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aY4kAAAAASUVORK5CYII='
+      let decodeFails: boolean
+      beforeEach(() => {
+        decodeFails = false
+        toPng.mockReset().mockResolvedValue(png)
+        vi.stubGlobal('Image', class {
+          naturalWidth = 1
+          naturalHeight = 1
+          onload: (() => void) | null = null
+          onerror: (() => void) | null = null
+          set src(_value: string) { if (decodeFails) this.onerror?.(); else this.onload?.() }
+        })
+        setAiOpenCursorEnabled(true)
+      })
+      afterEach(() => { vi.unstubAllGlobals() })
+
+      it('does not capture a new account page when the renderer import finishes after logout', async () => {
+        let finish!: () => void
+        loadRenderer.mockReturnValueOnce(new Promise<void>(resolve => { finish = resolve }))
+        const socket = lastWs()!
+        const pending = socket.onmessage!({ data: JSON.stringify({ type: 'command', id: 'loading-renderer', action: 'screenshot', params: {} }) })
+        await vi.advanceTimersByTimeAsync(80)
+        invalidateEnterpriseSessionCache()
+        finish()
+        await pending
+        expect(toPng).not.toHaveBeenCalled()
+        expect(socket.send).not.toHaveBeenCalled()
+      })
+
+      it.each([false, true])('captures the target without the cursor and restores visibility=%s', async visible => {
+        const target = document.createElement('section')
+        target.id = 'capture'; document.body.appendChild(target)
+        vi.spyOn(target, 'getBoundingClientRect').mockReturnValue({ width: 2400, height: 800 } as DOMRect)
+        cursorVisible.value = visible
+        toPng.mockImplementation(async () => { expect(cursorVisible.value).toBe(false); return png })
+        const result = await runCommand('capture', 'screenshot', { selector: '#capture', max_width: 1200 })
+        expect(toPng).toHaveBeenCalledWith(target, expect.objectContaining({ pixelRatio: 0.5, width: 2400, height: 800 }))
+        expect(result).toMatchObject({ success: true, data_url: png, width: 1, height: 1, target: '#capture' })
+        expect(result.bytes).toBeGreaterThan(0)
+        expect(cursorVisible.value).toBe(visible)
+      })
+
+      it('reports a missing screenshot target without invoking the renderer or hiding the cursor', async () => {
+        cursorVisible.value = true
+        expect(await runCommand('missing', 'screenshot', { selector: '#missing' })).toMatchObject({ success: false, message: expect.stringContaining('未找到截图区域') })
+        expect(toPng).not.toHaveBeenCalled()
+        expect(cursorVisible.value).toBe(true)
+      })
+
+      it.each(['render', 'decode'])('restores the cursor and reports a %s failure', async stage => {
+        cursorVisible.value = true
+        if (stage === 'render') toPng.mockRejectedValue(new Error('renderer unavailable'))
+        else decodeFails = true
+        const result = await runCommand(stage, 'screenshot', {})
+        expect(result).toEqual({ success: false, message: stage === 'render' ? '截图失败：renderer unavailable' : '截图失败：截图解码失败' })
+        expect(cursorVisible.value).toBe(true)
+      })
+
+      it.each(['disabled', 'logout', 'account round trip'])('keeps the cursor hidden and discards a pending screenshot after %s', async change => {
+        let finish!: (data: string) => void
+        toPng.mockReturnValue(new Promise<string>(resolve => { finish = resolve }))
+        cursorVisible.value = true
+        const oldSocket = lastWs()!
+        const pending = oldSocket.onmessage!({ data: JSON.stringify({ type: 'command', id: 'old-capture', action: 'screenshot', params: {} }) })
+        await vi.advanceTimersByTimeAsync(80)
+        expect(toPng).toHaveBeenCalledOnce()
+        if (change === 'disabled') {
+          setAiOpenCursorEnabled(false)
+          setAiOpenCursorEnabled(true)
+        } else if (change === 'logout') invalidateEnterpriseSessionCache()
+        else {
+          updateProductReadAccountScope({ tenantId: 'B', marketUserId: 2 })
+          updateProductReadAccountScope({ tenantId: 'A', marketUserId: 1 })
+        }
+        finish(png)
+        await pending
+        expect(cursorVisible.value).toBe(false)
+        expect(oldSocket.send).not.toHaveBeenCalled()
+        expect(lastWs()!.send).not.toHaveBeenCalled()
+      })
+
+      it('does not start rendering when control is disabled during screenshot preparation', async () => {
+        cursorVisible.value = true
+        const socket = lastWs()!
+        const pending = socket.onmessage!({ data: JSON.stringify({ type: 'command', id: 'cancel-before-render', action: 'screenshot', params: {} }) })
+        setAiOpenCursorEnabled(false)
+        await vi.advanceTimersByTimeAsync(80)
+        await pending
+        expect(toPng).not.toHaveBeenCalled()
+        expect(cursorVisible.value).toBe(false)
+        expect(socket.send).not.toHaveBeenCalled()
+      })
+    })
+
+    it('does not let an old connection fade out the current action cursor', async () => {
+      const button = document.createElement('button')
+      button.id = 'fade-target'; makeVisible(button); document.body.appendChild(button)
+      setAiOpenCursorEnabled(true)
+      const command = () => lastWs()!.onmessage!({ data: JSON.stringify({ type: 'command', id: 'click', action: 'click', params: { selector: '#fade-target' } }) })
+      const oldClick = command()
+      await vi.advanceTimersByTimeAsync(1000)
+      await oldClick
+      setAiOpenCursorEnabled(false)
+      setAiOpenCursorEnabled(true)
+      const newClick = command()
+      await vi.advanceTimersByTimeAsync(1000)
+      await newClick
+      expect(cursorVisible.value).toBe(true)
+      await vi.advanceTimersByTimeAsync(3000)
+      expect(cursorVisible.value).toBe(true)
+      expect(cursorActionLabel.value).toBe('点击')
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(cursorVisible.value).toBe(false)
     })
 
     it('navigate with empty path returns error', async () => {
@@ -1010,7 +1551,17 @@ describe('useAiOpenCursor - coverage ramp', () => {
       expect(mockWsInstances.length).toBe(beforeCount)
     })
 
-    it('localStorage error falls back to false (no connect)', () => {
+    it('connects by default when no stored preference exists', () => {
+      const router = {
+        currentRoute: { value: { fullPath: '/' } },
+        push: vi.fn(),
+      } as any
+      initAiOpenCursor(router)
+      expect(aiopenCursorEnabled.value).toBe(true)
+      expect(mockWsInstances.length).toBe(1)
+    })
+
+    it('localStorage error falls back to default standby', () => {
       const original = localStorage.getItem
       localStorage.getItem = () => {
         throw new Error('SecurityError')
@@ -1020,9 +1571,20 @@ describe('useAiOpenCursor - coverage ramp', () => {
         push: vi.fn(),
       } as any
       initAiOpenCursor(router)
+      expect(aiopenCursorEnabled.value).toBe(true)
+      expect(mockWsInstances.length).toBe(1)
+      localStorage.getItem = original
+    })
+
+    it('stays off when user explicitly disabled it', () => {
+      localStorage.setItem('xcagi_aiopen_remote_control', '0')
+      const router = {
+        currentRoute: { value: { fullPath: '/' } },
+        push: vi.fn(),
+      } as any
+      initAiOpenCursor(router)
       expect(aiopenCursorEnabled.value).toBe(false)
       expect(mockWsInstances.length).toBe(0)
-      localStorage.getItem = original
     })
   })
 

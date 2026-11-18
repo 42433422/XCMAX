@@ -47,6 +47,7 @@ describe('packaged backend build identity resource handoff', () => {
   let root: string
   let resources: string
   let originalResources: PropertyDescriptor | undefined
+  let originalDefaultApp: PropertyDescriptor | undefined
 
   beforeEach(() => {
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'xcagi-build-identity-'))
@@ -66,6 +67,7 @@ describe('packaged backend build identity resource handoff', () => {
     const binary = process.platform === 'win32' ? 'xcagi-backend.exe' : 'xcagi-backend'
     fs.writeFileSync(path.join(resources, 'backend', binary), 'inert fixture; never executed')
     originalResources = Object.getOwnPropertyDescriptor(process, 'resourcesPath')
+    originalDefaultApp = Object.getOwnPropertyDescriptor(process, 'defaultApp')
     Object.defineProperty(process, 'resourcesPath', { value: resources, configurable: true })
     state.spawn.mockImplementation((_command: string, args: string[]) => {
       const child = Object.assign(new EventEmitter(), {
@@ -88,6 +90,8 @@ describe('packaged backend build identity resource handoff', () => {
     }
     if (originalResources) Object.defineProperty(process, 'resourcesPath', originalResources)
     else Reflect.deleteProperty(process, 'resourcesPath')
+    if (originalDefaultApp) Object.defineProperty(process, 'defaultApp', originalDefaultApp)
+    else Reflect.deleteProperty(process, 'defaultApp')
     vi.unstubAllEnvs()
     fs.rmSync(root, { recursive: true, force: true })
   })
@@ -118,6 +122,36 @@ describe('packaged backend build identity resource handoff', () => {
     expect(options.env.XCAGI_DATA_DIR).toBe(state.userData)
     expect(options.env.XCAGI_DESKTOP_RESOURCES).not.toBe(state.userData)
     expect(options.env.XCAGI_PARENT_PID).toBe(String(process.pid))
+  })
+
+  it.each([
+    { defaultApp: true, appPackaged: true, packaged: false },
+    { defaultApp: true, appPackaged: false, packaged: false },
+    { defaultApp: undefined, appPackaged: true, packaged: true },
+    { defaultApp: undefined, appPackaged: false, packaged: false },
+    { defaultApp: false, appPackaged: true, packaged: true },
+    { defaultApp: false, appPackaged: false, packaged: false },
+  ])('starts the correct backend with defaultApp=$defaultApp and app.isPackaged=$appPackaged', async ({ defaultApp, appPackaged, packaged }) => {
+    Object.defineProperty(process, 'defaultApp', { value: defaultApp, configurable: true })
+    state.packaged = appPackaged
+    vi.stubEnv('PYTHON', 'python-from-test')
+    const { isDesktopPackaged, repoRoot, readPackagedAppVersion } = await import('./desktop-config.js')
+    const sourceRoot = path.resolve(__dirname, '..', '..')
+    const binary = process.platform === 'win32' ? 'xcagi-backend.exe' : 'xcagi-backend'
+
+    expect(isDesktopPackaged()).toBe(packaged)
+    expect(repoRoot()).toBe(packaged ? resources : sourceRoot)
+    expect(readPackagedAppVersion()).toBe(packaged ? '1.0.0.1' : 'dev')
+    await startBackend()
+
+    expect(state.spawn).toHaveBeenCalledOnce()
+    const [command, args, options] = state.spawn.mock.calls[0]
+    expect(command).toBe(packaged ? path.join(resources, 'backend', binary) : 'python-from-test')
+    expect(args[0]).toBe(packaged ? '--desktop' : path.join(sourceRoot, 'XCAGI', 'run.py'))
+    expect(args).toContain('--desktop')
+    expect(options.cwd).toBe(packaged ? path.join(resources, 'backend') : sourceRoot)
+    expect(options.env.XCAGI_DESKTOP_RESOURCES).toBe(packaged ? resources : undefined)
+    expect(options.env.XCAGI_DATA_DIR).toBe(state.userData)
   })
 
   it('hands the same Resources to the actual migration spawn', async () => {

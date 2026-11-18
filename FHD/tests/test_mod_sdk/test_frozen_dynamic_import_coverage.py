@@ -24,6 +24,8 @@ import re
 from functools import lru_cache
 from pathlib import Path
 
+import pytest
+
 FHD = Path(__file__).resolve().parents[2]
 SPEC_PATH = FHD / "scripts" / "package" / "xcagi_backend.spec"
 HOST_SERVICES_PATH = FHD / "app" / "mod_sdk" / "host_services.py"
@@ -129,7 +131,7 @@ def _dynamic_targets() -> dict[str, str]:
             if not node.args or not isinstance(node.args[0], ast.Constant):
                 continue
             module = node.args[0].value
-            if isinstance(module, str) and module.startswith("app"):
+            if isinstance(module, str) and (module == "app" or module.startswith("app.")):
                 targets.setdefault(module, f"importlib 字面量：{path.relative_to(FHD)}")
     return targets
 
@@ -197,6 +199,32 @@ def test_dynamic_targets_exist_in_source_tree():
     assert not missing, "动态引用指向已不存在的模块：\n" + "\n".join(
         f"  {module} <- {ref}" for module, ref in sorted(missing.items())
     )
+
+
+def test_dynamic_scan_preserves_host_guard_without_matching_third_party_prefixes(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "service.py"
+    source.write_text(
+        "import importlib\n"
+        'importlib.import_module("apprise")\n'
+        'importlib.import_module("appdirs")\n'
+        'importlib.import_module("application")\n'
+        'importlib.import_module("app")\n'
+        'importlib.import_module("app.missing_host")\n'
+        '__import__("app.legacy.lan")\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setitem(globals(), "FHD", tmp_path)
+    monkeypatch.setitem(globals(), "_exports", lambda: {})
+    monkeypatch.setitem(globals(), "_iter_dynamic_literal_files", lambda: [source])
+    _dynamic_targets.cache_clear()
+    try:
+        assert set(_dynamic_targets()) == {"app", "app.missing_host", "app.legacy.lan"}
+        with pytest.raises(AssertionError, match=r"app\.missing_host"):
+            test_dynamic_targets_exist_in_source_tree()
+    finally:
+        _dynamic_targets.cache_clear()
 
 
 def test_dynamic_targets_covered_by_frozen_spec_or_static_import():

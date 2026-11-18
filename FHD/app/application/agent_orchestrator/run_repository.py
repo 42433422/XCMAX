@@ -108,7 +108,8 @@ class InMemoryAgentRunRepository:
         from app.application.agent_orchestrator.run_sql_repository import preserve_run_evidence
 
         with self._lock:
-            preserve_run_evidence(run, self._runs.get(run.run_id))
+            previous = self._runs.get(run.run_id)
+            preserve_run_evidence(run, previous)
             ensure_terminal_business_result(run)
             run.touch()
             self._runs[run.run_id] = copy.deepcopy(run)
@@ -118,6 +119,11 @@ class InMemoryAgentRunRepository:
                 self._run_task_id(run),
             )
             self._tasks[key] = copy.deepcopy(task_from_run(run, existing=self._tasks.get(key)))
+            from app.application.agent_orchestrator.run_terminal_metrics import (
+                record_terminal_transition,
+            )
+
+            record_terminal_transition(run, previous)
             return copy.deepcopy(run)
 
     def save_stream_interruption_if_unchanged(self, run: AgentRun, previous: AgentRun) -> bool:

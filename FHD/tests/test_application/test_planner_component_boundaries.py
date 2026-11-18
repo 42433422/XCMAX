@@ -341,6 +341,18 @@ def test_auto_approval_mode_skips_plan_confirmation_and_starts_run():
     assert "owner" not in dispatch.pending
 
 
+def test_write_intent_requires_natural_key_instead_of_query_first():
+    from app.application.workflow.planner_prompt_profile import (
+        detect_intents,
+        select_rules_for_prompt,
+    )
+
+    for message in ("把产品型号 B2 的价格改成 88 元", "删除产品 A1"):
+        assert "database" in detect_intents(message)
+        rules = select_rules_for_prompt(message)
+        assert any("自然键" in rule and "不要先生成查询节点" in rule for rule in rules)
+
+
 def test_import_request_exposes_elt_tool_and_hides_direct_import():
     from app.application.workflow.planner_prompt_profile import (
         detect_intents,

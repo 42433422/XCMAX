@@ -314,6 +314,77 @@ def test_chat_evidence_recovers_active_session_when_request_omits_session_id(sto
     assert result["recent_messages"] == [{"role": "user", "content": "之前说的是宗南产品"}]
 
 
+def test_persist_chat_turn_keeps_clarification_candidates() -> None:
+    from app.application.ai_chat.conversation_history import persist_chat_turn
+
+    class _CapturingStore:
+        def __init__(self) -> None:
+            self.calls: list[dict] = []
+
+        def save_message(self, **kwargs):
+            self.calls.append(kwargs)
+            return 1
+
+    store = _CapturingStore()
+    persist_chat_turn(
+        "41",
+        "改价格",
+        {
+            "session_id": "candidate-persist",
+            "local_user_id": 41,
+            "actor_id": 41,
+            "turn_id": "t1",
+        },
+        {
+            "success": True,
+            "response": "检测到多个候选目标，请确认。",
+            "data": {
+                "action": "clarification_required",
+                "data": {"candidates": [{"id": 11, "name": "甲型涂料"}]},
+            },
+        },
+        store=store,
+    )
+
+    assistant = next(call for call in store.calls if call["role"] == "assistant")
+    metadata = json.loads(assistant["metadata"])
+    assert metadata["clarification_candidates"] == [{"id": 11, "name": "甲型涂料"}]
+
+
+def test_chat_evidence_keeps_clarification_candidates_for_followup(
+    store: TaskConversationStore, monkeypatch
+) -> None:
+    from app.application.ai_chat.chat_evidence import prepare_chat_evidence
+
+    store.save_message(session_id="candidate-chat", user_id=41, role="user", content="改价格")
+    store.save_message(
+        session_id="candidate-chat",
+        user_id=41,
+        role="assistant",
+        content="检测到多个候选目标，请确认。",
+        metadata=json.dumps(
+            {
+                "clarification_candidates": [
+                    {"id": 11, "name": "甲型涂料"},
+                    {"id": 12, "name": "乙型涂料"},
+                ]
+            },
+            ensure_ascii=False,
+        ),
+    )
+
+    result = prepare_chat_evidence(
+        object(),
+        {"local_user_id": 41, "actor_id": 41, "session_id": "candidate-chat"},
+        "就第二个",
+    )
+
+    assistant = result["recent_messages"][-1]
+    assert assistant["role"] == "assistant"
+    assert "1. 甲型涂料（#11）" in assistant["content"]
+    assert "2. 乙型涂料（#12）" in assistant["content"]
+
+
 def test_delete_session_removes_messages_and_is_owner_scoped(store: TaskConversationStore) -> None:
     store.save_message(session_id="owner-a", user_id=41, role="user", content="A")
     store.save_message(session_id="owner-b", user_id=42, role="user", content="B")

@@ -84,7 +84,7 @@ class WorkflowApprovalBridge:
         self.errors = errors
         self.logger = logger
 
-    def has_pending(self, request_no: str | None) -> bool:
+    def has_pending(self, request_no: str | None) -> bool | None:
         request_id = str(request_no or "").strip()
         if not request_id:
             return False
@@ -94,7 +94,7 @@ class WorkflowApprovalBridge:
             return self.backends.pending_snapshot(request_id) is not None
         except self.errors:
             self.logger.warning("check pending AI workflow failed request_no=%s", request_id)
-            return False
+            return None
 
     @staticmethod
     def failure(request_id: str, code: str, **details: object) -> JsonObject:

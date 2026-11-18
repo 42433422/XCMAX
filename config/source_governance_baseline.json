@@ -165,6 +165,11 @@
       "routes": 23,
       "soft_cap": 20
     },
+    "FHD/app/fastapi_routes/ai_open.py": {
+      "stack": "fhd_backend",
+      "routes": 22,
+      "soft_cap": 20
+    },
     "FHD/mods/bridge/xcagi-lan-license-bridge/backend/blueprints.py": {
       "stack": "fhd_vue",
       "routes": 23,

@@ -32,6 +32,68 @@ def test_unique_previous_output_resolves_with_type(template):
     assert problems == []
 
 
+def test_ambiguous_reference_carries_rows_for_clarification():
+    from app.application.agent_orchestrator.param_references import AmbiguousReference
+
+    problems: list[str] = []
+    ambiguities: list[AmbiguousReference] = []
+    resolve_references(
+        {"product_id": "{{q.data.id}}"},
+        {"q": {"data": [{"id": 7}, {"id": 8}]}},
+        problems,
+        None,
+        ambiguities,
+    )
+    assert len(problems) == 1
+    assert len(ambiguities) == 1
+    assert [row["id"] for row in ambiguities[0].rows] == [7, 8]
+
+
+def test_runtime_ambiguity_inserts_clarify_before_write():
+    from app.application.agent_orchestrator.clarification import pause_for_ambiguous_target
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, plan_to_dict
+
+    run = AgentRun(user_id="u", message="改价", status="running")
+    step = AgentStep(
+        node_id="write1",
+        tool_id="business_db",
+        action="write",
+        params={"payload": {"id": "{{q.data.id}}"}},
+        risk="high",
+    )
+    run.steps = [step]
+    run.metadata["plan"] = plan_to_dict(
+        PlanGraph(
+            plan_id="p",
+            intent="改价",
+            todo_steps=[],
+            nodes=[
+                WorkflowNode(
+                    node_id="write1",
+                    tool_id="business_db",
+                    action="write",
+                    params=step.params,
+                    risk="high",
+                )
+            ],
+            risk_level="high",
+        )
+    )
+
+    paused = pause_for_ambiguous_target(
+        run,
+        step,
+        [{"id": 7, "name": "A1-甲"}, {"id": 8, "name": "A1-乙"}],
+        field="id",
+    )
+
+    assert paused is True
+    assert run.status == "waiting_user"
+    assert run.steps[0].tool_id == "clarify"
+    assert run.steps[1].node_id == "write1"
+    assert run.steps[0].params["clarification"]["candidates"][1]["id"] == 8
+
+
 @pytest.mark.parametrize(
     "outputs",
     [
@@ -142,15 +204,17 @@ def test_resolved_reference_is_frozen_before_the_confirmation_gate():
     executor.execute.assert_not_called()
 
 
-def test_unresolvable_reference_fails_before_any_tool_call():
+def test_ambiguous_reference_pauses_for_target_selection_before_any_tool_call():
     orchestrator, executor = _orchestrator()
     run = _run([PRODUCT_ROW, {"id": 8, "name": "另一个"}])
     orchestrator._execute_ready_steps(run, runtime_context={}, approved_step_id="stock_out")
-    step = run.steps[1]
-    assert run.status == "failed" and step.status == "failed", (run.status, run.error, step.output)
-    assert step.output["error_code"] == UNRESOLVED_CODE
-    assert "执行库存出库" in step.error and "本步骤未执行" in step.error
-    assert "2 条" in step.error
+
+    clarify, target = run.steps[1], run.steps[2]
+    assert run.status == "waiting_user"
+    assert clarify.tool_id == "clarify"
+    assert clarify.params["target_node_id"] == "stock_out"
+    assert target.node_id == "stock_out" and target.status == "pending"
+    assert len(clarify.params["clarification"]["candidates"]) == 2
     executor.execute.assert_not_called()
 
 

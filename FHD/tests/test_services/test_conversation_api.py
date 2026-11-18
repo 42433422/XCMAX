@@ -51,6 +51,40 @@ class _ConcreteApi(ApiMixin):
         }
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("requested_model", [None, "tiny"])
+async def test_budget_uses_selected_provider_or_explicit_model(monkeypatch, requested_model):
+    from app.application.agent_orchestrator.context_window_manager import (
+        reset_context_window_manager,
+    )
+    from app.infrastructure.llm import model_context_windows as windows
+    from app.infrastructure.llm.instrumented_provider import InstrumentedProvider
+    from app.infrastructure.llm.model_admission import RateLimitedProvider
+
+    reset_context_window_manager()
+    monkeypatch.setattr(windows, "load_catalog", lambda: {"models": {"tiny": 100, "large": 128000}})
+    service = _ConcreteApi()
+    service.model = "large"
+    inner = SimpleNamespace(
+        provider_id="openai_compatible",
+        is_configured=True,
+        _adapter=SimpleNamespace(model_name="large" if requested_model else "tiny"),
+        chat_completion=AsyncMock(),
+    )
+    selected = InstrumentedProvider(RateLimitedProvider(inner))
+    with patch(
+        "app.infrastructure.llm.providers.registry.get_active_provider", return_value=selected
+    ):
+        result = await service.call_llm_api(
+            [{"role": "user", "content": "x" * 400}],
+            max_tokens=30,
+            **({"model": requested_model} if requested_model else {}),
+        )
+    assert result["error"]["code"] == "context_window_exceeded"
+    inner.chat_completion.assert_not_called()
+    reset_context_window_manager()
+
+
 # ---------------------------------------------------------------------------
 # _make_ai_response_cache_key
 # ---------------------------------------------------------------------------
@@ -515,7 +549,7 @@ class TestContextWindowManagerIntegration:
         assert trace["pre_compression_message_count"] == 1
         assert trace["post_compression_message_count"] == 1
         assert trace["tokens_saved"] == 0
-        assert trace["context_window_manager_version"] == "1.1.0"
+        assert trace["context_window_manager_version"] == "1.2.0"
         assert trace["compression_latency_ms"] == 0.5
 
     @pytest.mark.asyncio

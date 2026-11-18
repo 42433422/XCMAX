@@ -6,15 +6,24 @@ from typing import Any
 
 from app.application.dataset_rag.access_policy import (
     DATASET_READ_PERMISSION,
+    _coerce_access_context,
     _resolve_tenant_for_access,
 )
-from app.application.dataset_rag.models import DatasetAccessContext, _clean_key, _DatasetState
+from app.application.dataset_rag.document_acl import document_visible_to
+from app.application.dataset_rag.models import (
+    DatasetAccessContext,
+    _clean_key,
+    _DatasetState,
+    _source_synced_at,
+    _utc_now_iso,
+)
 from app.application.dataset_rag.rebuild_coordinator import (
     RebuildCoordinator,
     _empty_rebuild_queue_summary,
 )
 from app.application.dataset_rag.repository import DatasetRepository
 from app.application.dataset_rag.vector_index import _semantic_embedding_available
+from app.application.document_parsing.source_refresh import source_coordinates
 
 
 class DatasetStatus:
@@ -41,6 +50,7 @@ class DatasetStatus:
         )
         if denied is not None:
             return denied
+        context = _coerce_access_context(access_context)
         with self._repository.lock:
             if dataset_id.strip():
                 dataset_key = _clean_key(dataset_id, default="default")
@@ -50,10 +60,15 @@ class DatasetStatus:
                     state,
                     tenant_id_filter=tenant_filter,
                     include_documents=include_documents,
+                    access_context=context,
                 )
             datasets = {
                 key: self._status_for_state(
-                    key, state, tenant_id_filter=tenant_filter, include_documents=include_documents
+                    key,
+                    state,
+                    tenant_id_filter=tenant_filter,
+                    include_documents=include_documents,
+                    access_context=context,
                 )
                 for key, state in sorted(self._repository.datasets.items())
             }
@@ -74,6 +89,7 @@ class DatasetStatus:
         *,
         tenant_id_filter: str = "",
         include_documents: bool = True,
+        access_context: DatasetAccessContext | dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         if state is None:
             empty_index = {
@@ -88,6 +104,12 @@ class DatasetStatus:
                 "documents": [],
                 "tenant_ids": [],
                 "versions": [],
+                "source_sync": {
+                    "refreshable_documents": 0,
+                    "never_synced": 0,
+                    "last_synced_at": "",
+                    "checked_at": _utc_now_iso(),
+                },
                 "index": empty_index,
                 "rebuild_jobs": [],
                 "rebuild_job_count": 0,
@@ -100,13 +122,17 @@ class DatasetStatus:
         documents = [
             doc
             for doc in state.documents.values()
-            if not tenant_id_filter or doc.tenant_id == tenant_id_filter
+            if (not tenant_id_filter or doc.tenant_id == tenant_id_filter)
+            and document_visible_to(doc.metadata, access_context)
         ]
         chunks = [
             chunk
             for chunk in state.chunks
-            if not tenant_id_filter
-            or str((chunk.metadata or {}).get("tenant_id") or "") == tenant_id_filter
+            if (
+                not tenant_id_filter
+                or str((chunk.metadata or {}).get("tenant_id") or "") == tenant_id_filter
+            )
+            and document_visible_to(chunk.metadata, access_context)
         ]
         rebuild_job_records = [
             job
@@ -133,6 +159,18 @@ class DatasetStatus:
         index["semantic_embedding_available"] = _semantic_embedding_available(
             int(index.get("embedding_count") or 0)
         )
+        refreshable = [doc for doc in documents if source_coordinates(doc.metadata)]
+        synced_times = [
+            synced for doc in refreshable if (synced := _source_synced_at(doc.metadata)) is not None
+        ]
+        source_sync = {
+            "refreshable_documents": len(refreshable),
+            "never_synced": len(refreshable) - len(synced_times),
+            "last_synced_at": (
+                max(synced_times).isoformat().replace("+00:00", "Z") if synced_times else ""
+            ),
+            "checked_at": _utc_now_iso(),
+        }
         rebuild_jobs = [
             self._rebuild._rebuild_job_to_dict_locked(state, job)
             for job in sorted(rebuild_job_records, key=lambda item: item.created_at, reverse=True)[
@@ -147,6 +185,7 @@ class DatasetStatus:
             "documents": [doc.to_dict() for doc in documents] if include_documents else [],
             "tenant_ids": sorted({doc.tenant_id for doc in documents}),
             "versions": sorted({doc.version_label for doc in documents}),
+            "source_sync": source_sync,
             "index": index,
             "rebuild_jobs": rebuild_jobs,
             "rebuild_job_count": len(rebuild_jobs),

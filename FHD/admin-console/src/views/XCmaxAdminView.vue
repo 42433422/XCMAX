@@ -30,8 +30,8 @@
         </div>
       </div>
 
-      <AdminSectionNav v-model="overviewSection" label="总览内容" :items="[{ value: 'health', label: '服务健康' }, { value: 'release', label: '版本发布' }, { value: 'sync', label: '同步与冲突' }, { value: 'modules', label: '模块注册' }, { value: 'employees', label: '远端员工' }]" />
-      <div class="admin-grid admin-pane" tabindex="0" aria-label="总览内容区">
+      <AdminSectionNav v-model="overviewSection" view-transition label="总览内容" :items="[{ value: 'health', label: '服务健康' }, { value: 'release', label: '版本发布' }, { value: 'sync', label: '同步与冲突' }, { value: 'modules', label: '模块注册' }]" />
+      <div class="admin-grid admin-pane" :class="{ 'is-entering': overviewEntering }" tabindex="0" aria-label="总览内容区">
         <!-- 本地节点 -->
         <div v-show="overviewSection === 'health'" class="admin-card">
           <div class="card-header">
@@ -41,7 +41,11 @@
               {{ observationLabel(localStatus.state) || (localStatus.ok ? '服务健康' : '服务异常') }}
             </span>
           </div>
-          <p v-if="localStatus.state !== 'ready'" class="card-state" :class="`is-${localStatus.state}`">{{ ({ loading: '正在读取…', error: '读取失败，请点右上角「刷新状态」重试' })[localStatus.state] || '尚未读取，点右上角「刷新状态」获取' }}</p>
+          <div v-if="localStatus.state === 'loading'" class="card-state card-state--skeleton" role="status" aria-busy="true">
+            <el-skeleton animated :rows="3" />
+            <span class="sr-only">正在读取…</span>
+          </div>
+          <p v-else-if="localStatus.state !== 'ready'" class="card-state" :class="`is-${localStatus.state}`">{{ ({ error: '读取失败，请点右上角「刷新状态」重试' })[localStatus.state] || '尚未读取，点右上角「刷新状态」获取' }}</p>
           <dl v-else class="card-info">
             <dt>版本</dt><dd>{{ localStatus.version || '—' }}</dd>
             <dt>数据库</dt><dd>{{ localStatus.database || '—' }}</dd>
@@ -59,7 +63,11 @@
               {{ observationLabel(remoteStatus.state) || (remoteStatus.reachable ? '在线' : '离线') }}
             </span>
           </div>
-          <p v-if="remoteStatus.state !== 'ready'" class="card-state" :class="`is-${remoteStatus.state}`">{{ ({ loading: '正在读取…', error: '读取失败，请点右上角「刷新状态」重试' })[remoteStatus.state] || '尚未读取，点右上角「刷新状态」获取' }}</p>
+          <div v-if="remoteStatus.state === 'loading'" class="card-state card-state--skeleton" role="status" aria-busy="true">
+            <el-skeleton animated :rows="3" />
+            <span class="sr-only">正在读取…</span>
+          </div>
+          <p v-else-if="remoteStatus.state !== 'ready'" class="card-state" :class="`is-${remoteStatus.state}`">{{ ({ error: '读取失败，请点右上角「刷新状态」重试' })[remoteStatus.state] || '尚未读取，点右上角「刷新状态」获取' }}</p>
           <dl v-else class="card-info">
             <dt>地址</dt><dd>{{ remoteStatus.address || '—' }}</dd>
             <dt>延迟</dt><dd>{{ remoteStatus.latencyMs != null ? `${remoteStatus.latencyMs} ms` : '—' }}</dd>
@@ -110,7 +118,11 @@
               {{ observationLabel(syncStatus.state) || (syncStatus.healthy ? '队列已清空' : '待同步') }}
             </span>
           </div>
-          <p v-if="syncStatus.state !== 'ready'" class="card-state" :class="`is-${syncStatus.state}`">{{ ({ loading: '正在读取…', error: '读取失败，请点右上角「刷新状态」重试' })[syncStatus.state] || '尚未读取，点右上角「刷新状态」获取' }}</p>
+          <div v-if="syncStatus.state === 'loading'" class="card-state card-state--skeleton" role="status" aria-busy="true">
+            <el-skeleton animated :rows="4" />
+            <span class="sr-only">正在读取…</span>
+          </div>
+          <p v-else-if="syncStatus.state !== 'ready'" class="card-state" :class="`is-${syncStatus.state}`">{{ ({ error: '读取失败，请点右上角「刷新状态」重试' })[syncStatus.state] || '尚未读取，点右上角「刷新状态」获取' }}</p>
           <dl v-else class="card-info">
             <dt>本地游标</dt><dd>{{ syncStatus.localCursor ?? '—' }}</dd>
             <dt>已拉取服务器游标</dt><dd>{{ syncStatus.remoteCursor ?? '—' }}</dd>
@@ -133,14 +145,26 @@
           <div class="card-header">
             <i class="fa fa-puzzle-piece card-icon" aria-hidden="true"></i>
             <h3>模块注册表</h3>
-            <span class="status-badge badge-info">{{ modules.length }} 个模块</span>
+            <span class="status-badge badge-info">{{ systemModules.length }} 个模块 · {{ employeeModules.length }} 名员工</span>
           </div>
-          <div v-if="modules.length" class="module-table-scroll">
+          <div class="module-kind-tabs" role="tablist" aria-label="注册项类型">
+            <button
+              v-for="tab in MODULE_KIND_TABS"
+              :key="tab.value"
+              type="button"
+              role="tab"
+              :aria-selected="moduleKind === tab.value"
+              :class="{ 'is-active': moduleKind === tab.value }"
+              @click="moduleKind = tab.value"
+            >{{ tab.label }} {{ tab.count }}</button>
+          </div>
+          <div v-if="visibleModules.length" class="module-table-scroll">
             <table class="module-table">
               <thead>
                 <tr>
                   <th>模块 ID</th>
                   <th>名称</th>
+                  <th>类型</th>
                   <th>版本</th>
                   <th>来源</th>
                   <th>状态</th>
@@ -148,9 +172,12 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="mod in modules" :key="mod.module_id">
+                <tr v-for="mod in visibleModules" :key="`${mod.kind}:${mod.module_id}`">
                   <td class="mono">{{ mod.module_id }}</td>
                   <td>{{ mod.display_name }}</td>
+                  <td>
+                    <span class="kind-badge" :class="`kind-${mod.kind}`">{{ mod.kind === 'employee' ? '员工' : '模块' }}</span>
+                  </td>
                   <td class="mono">{{ mod.version || '—' }}</td>
                   <td>
                     <span class="source-badge" :class="`source-${mod.source}`">{{ sourceLabel(mod.source) }}</span>
@@ -165,44 +192,13 @@
               </tbody>
             </table>
           </div>
-          <p v-else class="empty-hint">暂无已注册模块，可点右上角「刷新状态」重试</p>
-        </div>
-
-        <!-- 远端员工 (yuangon) -->
-        <div v-show="overviewSection === 'employees'" class="admin-card admin-card--wide">
-          <div class="card-header">
-            <i class="fa fa-users card-icon" aria-hidden="true"></i>
-            <h3>远端服务器员工</h3>
-            <span class="status-badge badge-info">{{ remoteEmployees.length }} 名</span>
-          </div>
-          <div class="card-actions" style="margin-bottom:12px">
-            <button class="btn btn-secondary btn-sm" :disabled="syncingEmployees" @click="syncEmployees">
-              {{ syncingEmployees ? '同步中...' : '同步服务器员工' }}
-            </button>
-          </div>
-          <div v-if="remoteEmployees.length" class="module-table-scroll">
-            <table class="module-table">
-              <thead>
-                <tr><th>ID</th><th>名称</th><th>职能域</th><th>区域</th><th>版本</th></tr>
-              </thead>
-              <tbody>
-                <tr v-for="emp in remoteEmployees" :key="emp.employee_id">
-                  <td class="mono small">{{ emp.employee_id }}</td>
-                  <td>{{ emp.name }}</td>
-                  <td class="small">{{ emp.domain || '—' }}</td>
-                  <td>{{ emp.area || '—' }}</td>
-                  <td class="mono">{{ emp.version || '—' }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <p v-else class="empty-hint">暂无远端员工信息，点击上方按钮同步</p>
+          <p v-else class="empty-hint">{{ modules.length ? '当前分类下没有注册项' : '暂无已注册模块，可点右上角「刷新状态」重试' }}</p>
         </div>
 
         <!-- 冲突列表 -->
         <div v-show="overviewSection === 'sync'" class="admin-card admin-card--wide" v-if="syncStatus.conflictCount > 0">
           <div class="card-header">
-            <i class="fa fa-exclamation-circle card-icon" style="color:#d97706" aria-hidden="true"></i>
+            <i class="fa fa-exclamation-circle card-icon card-icon--warn" aria-hidden="true"></i>
             <h3>同步冲突</h3>
             <span class="status-badge badge-warn">{{ syncStatus.conflictCount }} 条待处理</span>
           </div>
@@ -281,7 +277,7 @@ export default { name: 'XCmaxAdminView' }
 <script setup>
 import AdminSectionNav from '../components/admin/AdminSectionNav.vue'
 const overviewSection = ref('health')
-import { onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
+import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import XCmaxAdminInfraTab from '@/components/admin/XCmaxAdminInfraTab.vue'
 import XCmaxAdminDutyTab from '@/components/admin/XCmaxAdminDutyTab.vue'
@@ -316,19 +312,33 @@ function applyTabFromRoute() {
 watch(() => route.query.tab, applyTabFromRoute, { immediate: true })
 
 const {
-  syncingEmployees,
   localStatus,
   remoteStatus,
   modules,
-  remoteEmployees,
   recentErrors,
   sourceLabel,
   loadLocalStatus,
   loadRemoteStatus,
   loadModules,
-  loadRemoteEmployees,
-  syncEmployees,
 } = useXcmaxOverview()
+
+const moduleKind = ref('all')
+const typedModules = computed(() => (Array.isArray(modules.value) ? modules.value : []).map((mod) => ({
+  ...mod,
+  kind: mod.source === 'employee' ? 'employee' : 'module',
+})))
+const systemModules = computed(() => typedModules.value.filter((mod) => mod.kind === 'module'))
+const employeeModules = computed(() => typedModules.value.filter((mod) => mod.kind === 'employee'))
+const visibleModules = computed(() => {
+  if (moduleKind.value === 'employee') return employeeModules.value
+  if (moduleKind.value === 'module') return systemModules.value
+  return typedModules.value
+})
+const MODULE_KIND_TABS = computed(() => [
+  { value: 'all', label: '全部', count: typedModules.value.length },
+  { value: 'module', label: '系统模块', count: systemModules.value.length },
+  { value: 'employee', label: '员工包', count: employeeModules.value.length },
+])
 
 const {
   syncing,
@@ -351,6 +361,15 @@ const {
 
 const refreshing = ref(false)
 const deployModalOpen = ref(false)
+/** 仅首屏播放卡片级联入场；之后的分区切换交给原生 View Transition，避免快照截到半透明卡片。 */
+const overviewEntering = ref(true)
+let enterTimer = null
+onMounted(() => {
+  enterTimer = window.setTimeout(() => { overviewEntering.value = false }, 700)
+})
+onBeforeUnmount(() => {
+  if (enterTimer) window.clearTimeout(enterTimer)
+})
 const releaseStatusCard = ref(null)
 /** 首次进入时拉取；之后依赖缓存与「刷新状态」 */
 const overviewBootstrapped = ref(false)
@@ -376,7 +395,6 @@ async function refreshAll() {
       loadRemoteStatus(),
       loadSyncStatus(),
       loadModules(),
-      loadRemoteEmployees(),
       releaseStatusCard.value?.refresh?.(),
       loadAutonomyHealth(),
     ])

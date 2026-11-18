@@ -147,6 +147,15 @@ class TestRevokeApiKeyExt:
 
 
 class TestListApiKeysExt:
+    @pytest.fixture(autouse=True)
+    def _isolate_runtime_keys(self):
+        saved = dict(AIOPEN_STATE.get("runtime_keys") or {})
+        AIOPEN_STATE["runtime_keys"] = {}
+        try:
+            yield
+        finally:
+            AIOPEN_STATE["runtime_keys"] = saved
+
     def test_env_and_runtime_keys_combined(self):
         with patch.dict("os.environ", {"AIOPEN_API_KEY": "envkey"}, clear=False):
             saved = AIOPEN_STATE.setdefault("runtime_keys", {})
@@ -418,8 +427,8 @@ class TestFormatToolResultTextExt:
         text = format_tool_result_text("ui_sessions", result)
         assert "XCAGI 前端" in text
 
-    def test_ui_snapshot_more_than_40_elements(self):
-        elements = [{"selector": f"#e{i}", "text": f"t{i}", "role": "btn"} for i in range(45)]
+    def test_ui_snapshot_more_than_60_elements(self):
+        elements = [{"selector": f"#e{i}", "text": f"t{i}", "role": "btn"} for i in range(65)]
         result = {
             "success": True,
             "url": "http://x",
@@ -427,11 +436,11 @@ class TestFormatToolResultTextExt:
             "elements": elements,
         }
         text = format_tool_result_text("ui_snapshot", result)
-        assert "45 个" in text
-        assert "另有 5 个元素" in text
+        assert "65 个" in text
+        assert "另有 5 个节点" in text
 
-    def test_ui_snapshot_exactly_40_elements_no_overflow_message(self):
-        elements = [{"selector": f"#e{i}", "text": f"t{i}", "role": "btn"} for i in range(40)]
+    def test_ui_snapshot_exactly_60_elements_no_overflow_message(self):
+        elements = [{"selector": f"#e{i}", "text": f"t{i}", "role": "btn"} for i in range(60)]
         result = {
             "success": True,
             "url": "http://x",
@@ -439,7 +448,7 @@ class TestFormatToolResultTextExt:
             "elements": elements,
         }
         text = format_tool_result_text("ui_snapshot", result)
-        assert "40 个" in text
+        assert "60 个" in text
         assert "另有" not in text
 
     def test_ui_snapshot_non_dict_element_skipped(self):
@@ -856,7 +865,8 @@ class TestInvokeToolExt:
                 mock_hub.dispatch = AsyncMock(return_value={"success": True})
                 await invoke_tool("ui_snapshot", {}, MagicMock())
                 call_kwargs = mock_hub.dispatch.call_args.kwargs
-                assert call_kwargs["timeout"] == 10.0
+                # 快照要遍历可访问性节点，回执超时单独放宽到 20s
+                assert call_kwargs["timeout"] == 20.0
         finally:
             AIOPEN_STATE["remote_control_enabled"] = saved
 
@@ -1035,6 +1045,9 @@ class TestAiopenManifestExt:
         expected = {
             "api_catalog",
             "api_call",
+            "knowledge_search",
+            "operation_describe",
+            "operation_call",
             "chat",
             "capability_loop",
             "ui_sessions",
@@ -1042,6 +1055,11 @@ class TestAiopenManifestExt:
             "ui_navigate",
             "ui_click",
             "ui_type",
+            "ui_select",
+            "ui_upload",
+            "ui_wait",
+            "ui_verify",
+            "ui_screenshot",
             "ui_scroll",
         }
         assert names == expected

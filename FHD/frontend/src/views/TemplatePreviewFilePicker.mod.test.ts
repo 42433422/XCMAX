@@ -6,6 +6,10 @@ import { useTpGridTool } from '../../../mods/bridge/xcagi-erp-domain-bridge/fron
 
 const mocks = vi.hoisted(() => ({ assemble: vi.fn(), extractGrid: vi.fn(), alert: vi.fn() }))
 vi.mock('../../../mods/bridge/xcagi-erp-domain-bridge/frontend/views/template-preview/assemble', () => ({ assembleTemplatePreview: mocks.assemble }))
+vi.mock('@/components/template/vuefinder', () => ({
+  VueFinder: { template: '<div />' }, VueFinderPlugin: { install() {} }, zhCN: {},
+  ArrayDriver: class {},
+}))
 vi.mock('@/api/templatePreview', () => ({ default: { extractGrid: mocks.extractGrid } }))
 vi.mock('@/utils/appDialog', () => ({ appAlert: mocks.alert }))
 

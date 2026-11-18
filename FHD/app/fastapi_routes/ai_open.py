@@ -31,6 +31,17 @@ from app.application.agent_orchestrator.chat_trace import (
     attach_chat_trace_run,
     create_chat_trace_run,
 )
+from app.application.aiopen.catalog_builder import (
+    entity_schema,
+    find_operation,
+    get_catalog,
+)
+from app.application.aiopen.knowledge import catalog_coverage
+from app.application.aiopen.resources import (
+    list_resource_templates,
+    list_resources,
+    read_resource,
+)
 from app.application.aiopen.service import (
     AIOPEN_STATE,
     MCP_DEFAULT_PROTOCOL_VERSION,
@@ -44,9 +55,11 @@ from app.application.aiopen.service import (
     format_tool_result_text,
     generate_api_key,
     invoke_tool,
+    is_path_whitelisted,
     list_api_keys,
     openclaw_chat_proxy,
     record_api_key_use,
+    required_operation_scope,
     revoke_api_key,
     seed_capability_whitelist,
     verify_api_key,
@@ -215,7 +228,7 @@ async def aiopen_invoke(
     args: dict[str, Any] = raw_args if isinstance(raw_args, dict) else {}
     if not tool:
         return JSONResponse({"success": False, "message": "tool 不能为空"}, status_code=400)
-    decision = authorize_api_key(x_aiopen_key, tool)
+    decision = _authorize_tool_call(request.app, x_aiopen_key, tool, args)
     if not decision.get("ok"):
         return _denied_response(decision)
     started = time.perf_counter()
@@ -268,6 +281,11 @@ async def _handle_mcp_message(
         invoke=invoke_tool,
         format_result=format_tool_result_text,
         trace_call=_trace_aiopen_tool_call,
+        resources={
+            "list": list_resources,
+            "templates": list_resource_templates,
+            "read": read_resource,
+        },
     )
 
 
@@ -276,11 +294,22 @@ def _mcp_tool_name(msg: dict[str, Any]) -> str:
     return str((params or {}).get("name") or "").strip()
 
 
-def _mcp_authorize(msg: dict[str, Any], key: str | None) -> dict[str, Any] | None:
+def _authorize_tool_call(
+    app: Any, key: str | None, tool: str, args: dict[str, Any]
+) -> dict[str, Any]:
+    """operation_call 按目标 operation 的 scope 鉴权，其余工具按工具名。"""
+    scope = required_operation_scope(app, tool, args)
+    return authorize_api_key(key, scope or tool)
+
+
+def _mcp_authorize(msg: dict[str, Any], key: str | None, app: Any) -> dict[str, Any] | None:
     """仅对 tools/call 做 Key 策略校验；其余方法沿用原有鉴权。"""
     if msg.get("method") != "tools/call":
         return None
-    decision = authorize_api_key(key, _mcp_tool_name(msg))
+    params = msg.get("params") if isinstance(msg.get("params"), dict) else {}
+    raw_args = (params or {}).get("arguments")
+    args: dict[str, Any] = raw_args if isinstance(raw_args, dict) else {}
+    decision = _authorize_tool_call(app, key, _mcp_tool_name(msg), args)
     return None if decision.get("ok") else decision
 
 
@@ -340,7 +369,7 @@ async def aiopen_mcp(
                 if item.get("method") == "initialize":
                     protocol_version = _resolve_mcp_protocol_version(item_params)
                     is_initialize = True
-                denied = _mcp_authorize(item, x_aiopen_key)
+                denied = _mcp_authorize(item, x_aiopen_key, request.app)
                 if denied is not None:
                     responses.append(
                         _jsonrpc_error(
@@ -370,7 +399,7 @@ async def aiopen_mcp(
             status_code=400,
             protocol_version=protocol_version,
         )
-    denied = _mcp_authorize(body, x_aiopen_key)
+    denied = _mcp_authorize(body, x_aiopen_key, request.app)
     if denied is not None:
         return _wrap_mcp_json(
             _jsonrpc_error(
@@ -393,6 +422,110 @@ async def aiopen_mcp(
         protocol_version=protocol_version,
         new_session=is_initialize,
     )
+
+
+# ---------------------------------------------------------------------------
+# 系统地图（知）：目录 / 语义卡片 / 实体字典 / 覆盖度
+# ---------------------------------------------------------------------------
+
+
+def _catalog_denied(key: str | None) -> JSONResponse | None:
+    decision = authorize_api_key(key)
+    return None if decision.get("ok") else _denied_response(decision)
+
+
+def _catalog_item(entry: dict[str, Any]) -> dict[str, Any]:
+    path = str(entry.get("path") or "")
+    return {**entry, "whitelisted": is_path_whitelisted(path)}
+
+
+@router.get("/api/aiopen/catalog/operations")
+def aiopen_catalog_operations(
+    request: Request,
+    x_aiopen_key: AiOpenKeyHeader = None,
+    q: str = Query(default=""),
+    risk: str = Query(default=""),
+    toolset: str = Query(default=""),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+):
+    """运行时能力目录：支持关键字、风险与工具集过滤。"""
+    denied = _catalog_denied(x_aiopen_key)
+    if denied is not None:
+        return denied
+    operations = list(get_catalog(request.app).get("operations") or [])
+    keyword = str(q or "").strip().lower()
+    if keyword:
+        operations = [
+            entry
+            for entry in operations
+            if keyword
+            in f"{entry.get('operation_id')} {entry.get('path')} {entry.get('summary')}".lower()
+        ]
+    wanted_risk = str(risk or "").strip().lower()
+    if wanted_risk:
+        operations = [entry for entry in operations if entry.get("risk") == wanted_risk]
+    wanted_toolset = str(toolset or "").strip().lower()
+    if wanted_toolset:
+        operations = [entry for entry in operations if entry.get("toolset") == wanted_toolset]
+    total = len(operations)
+    window = operations[offset : offset + limit]
+    items = [_catalog_item(entry) for entry in window]
+    return {
+        "success": True,
+        "total": total,
+        "offset": offset,
+        "limit": limit,
+        "count": len(items),
+        "items": items,
+    }
+
+
+@router.get("/api/aiopen/catalog/operations/{operation_id}")
+def aiopen_catalog_operation(
+    operation_id: str,
+    request: Request,
+    x_aiopen_key: AiOpenKeyHeader = None,
+):
+    """单个 operation 的完整语义卡片（含 overlay）。"""
+    denied = _catalog_denied(x_aiopen_key)
+    if denied is not None:
+        return denied
+    entry = find_operation(get_catalog(request.app), operation_id)
+    if entry is None:
+        return JSONResponse(
+            {"success": False, "code": "OPERATION_NOT_FOUND", "message": operation_id},
+            status_code=404,
+        )
+    return {"success": True, "operation": _catalog_item(entry)}
+
+
+@router.get("/api/aiopen/catalog/schema/{entity}")
+def aiopen_catalog_schema(
+    entity: str,
+    request: Request,
+    x_aiopen_key: AiOpenKeyHeader = None,
+):
+    """实体字段字典（来自应用 OpenAPI components.schemas）。"""
+    denied = _catalog_denied(x_aiopen_key)
+    if denied is not None:
+        return denied
+    payload = entity_schema(request.app, entity)
+    if payload is None:
+        return JSONResponse(
+            {"success": False, "code": "ENTITY_NOT_FOUND", "message": entity},
+            status_code=404,
+        )
+    return {"success": True, **payload}
+
+
+@router.get("/api/aiopen/coverage")
+def aiopen_coverage(request: Request, x_aiopen_key: AiOpenKeyHeader = None):
+    """开放面覆盖度：规模、风险分布、语义覆盖率。"""
+    denied = _catalog_denied(x_aiopen_key)
+    if denied is not None:
+        return denied
+    return catalog_coverage(request.app)
 
 
 # ---------------------------------------------------------------------------
@@ -623,6 +756,16 @@ def aiopen_openclaw_chat(
 # ---------------------------------------------------------------------------
 
 
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+
+
+def _hostname(raw: str) -> str:
+    value = str(raw or "").strip().lower()
+    if value.startswith("["):
+        return value.split("]", 1)[0].lstrip("[")
+    return value.split(":", 1)[0]
+
+
 def _trusted_screen_origin(ws: WebSocket) -> bool:
     """Reject cross-site WebSocket hijacking; cross-origin UIs require an explicit allowlist."""
     raw_origin = str(ws.headers.get("origin") or "").strip()
@@ -646,6 +789,13 @@ def _trusted_screen_origin(ws: WebSocket) -> bool:
         origin_scheme = {"ws": "http", "wss": "https"}.get(request_scheme, request_scheme)
         if parsed.scheme.lower() == origin_scheme and parsed.netloc.lower() == host:
             return True
+        # 本地开发时浏览器在 42423、后端在 42422（或经 vite 代理改变 Host），
+        # 端口不同但同属回环地址；这仍是同一台机器，放行不会扩大跨站风险。
+        if parsed.scheme.lower() == origin_scheme:
+            origin_host = str(parsed.hostname or "").strip("[]").lower()
+            request_host = _hostname(host)
+            if origin_host in _LOOPBACK_HOSTS and request_host in _LOOPBACK_HOSTS:
+                return True
         allowed = {
             origin.strip().rstrip("/").lower()
             for origin in os.environ.get("XCAGI_AIOPEN_WS_ALLOWED_ORIGINS", "").split(",")
@@ -690,8 +840,10 @@ async def aiopen_screen_ws(ws: WebSocket):
             handled = aiopen_cursor_hub.handle_client_message(raw, session_id=session_id)
             if not handled:
                 logger.debug("aiopen ws ignored unmatched message")
-    except WebSocketDisconnect:
-        pass
+    except WebSocketDisconnect as err:
+        logger.info(
+            "aiopen screen ws closed session=%s code=%s", session_id, getattr(err, "code", "")
+        )
     except RECOVERABLE_ERRORS:
         logger.exception("aiopen screen ws error session=%s", session_id)
     finally:

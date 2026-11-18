@@ -36,22 +36,27 @@ class ImWsHub:
             if conns is not None and len(conns) == 0:
                 self._connections.pop(user_id, None)
 
-    async def send_to_user(self, user_id: int, payload: dict[str, Any]) -> None:
+    async def send_to_user(self, user_id: int, payload: dict[str, Any]) -> int:
         text = json.dumps(payload, ensure_ascii=False)
         async with self._lock:
             targets = list(self._connections.get(user_id, ()))
         dead: list[WebSocket] = []
+        sent = 0
         for ws in targets:
             try:
                 await ws.send_text(text)
+                sent += 1
             except RECOVERABLE_ERRORS:
                 dead.append(ws)
         for ws in dead:
             await self.disconnect(user_id, ws)
+        return sent
 
-    async def broadcast_members(self, user_ids: list[int], payload: dict[str, Any]) -> None:
-        for uid in user_ids:
-            await self.send_to_user(uid, payload)
+    async def broadcast_members(self, user_ids: list[int], payload: dict[str, Any]) -> int:
+        sent = 0
+        for uid in dict.fromkeys(user_ids):
+            sent += await self.send_to_user(uid, payload)
+        return sent
 
 
 im_ws_hub = ImWsHub()

@@ -30,7 +30,7 @@
       <div class="top-bar">
         <div class="page-title-wrap">
           <div class="page-kicker">{{ topKickerText }}</div>
-          <div class="page-title">{{ currentViewTitle }}</div>
+          <div class="page-title" :key="currentViewTitle">{{ currentViewTitle }}</div>
           <div v-if="accountUsername && displayBrand" class="page-account-sub muted">
             {{ accountUsername }}
           </div>
@@ -212,7 +212,7 @@ const viewTitlesBase = {
   'delivery-center': '客户交付中心',
   'automation-policy': '自动化方针',
   'duty-roster-graph': '员工可视化',
-  'server-functions': '服务器功能模块',
+  'server-functions': '每日摘要',
 }
 
 const routeNameMap = SIDEBAR_ROUTE_NAME_MAP

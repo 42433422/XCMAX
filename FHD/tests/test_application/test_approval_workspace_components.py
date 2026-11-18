@@ -440,3 +440,119 @@ def test_langgraph_runtime_dispatches_registered_tool(monkeypatch):
     result = XCAGILangGraphRuntime(tool_dispatcher=dispatch).run(plan)
     assert result.success
     assert calls == [("products", "query")]
+
+
+@pytest.mark.parametrize("failure_source", ["memory", "storage"])
+def test_workflow_lookup_failure_preserves_pending_approval(failure_source):
+    """A transient lookup outage must not commit cancellation or execute work."""
+    from app.application.approval_workspace.decisions import ApprovalDecisions
+    from app.application.approval_workspace.workflow_bridge import (
+        WorkflowApprovalBridge,
+    )
+
+    backend = MagicMock()
+    backend.approvals.return_value.get_pending_workflow.return_value = None
+    if failure_source == "memory":
+        backend.approvals.return_value.get_pending_workflow.side_effect = RuntimeError("offline")
+    else:
+        backend.pending_snapshot.side_effect = RuntimeError("offline")
+    bridge = WorkflowApprovalBridge(backend, (RuntimeError,), logging.getLogger(__name__))
+    workflows = SimpleNamespace(pending=bridge.has_pending, resume=MagicMock())
+    access = MagicMock()
+    access.workflow_reviewer.return_value = True
+    effects = MagicMock()
+    nodes = MagicMock()
+    decisions = ApprovalDecisions(
+        MagicMock(), access, nodes, workflows, effects, MagicMock(), MagicMock()
+    )
+    req = ApprovalRequest(
+        request_no="pending-1", status=ApprovalStatus.PENDING.value, business_data="{}"
+    )
+    db = MagicMock()
+    result = decisions.approve_workflow(db, req=req, actor=7, approver_name=None, opinion="同意")
+    assert result.status_code == 503
+    assert json.loads(result.body)["retryable"] is True
+    assert req.status == ApprovalStatus.PENDING.value
+    assert req.business_data == "{}"
+    assert req.rejection_reason is None
+    db.commit.assert_not_called()
+    db.add.assert_not_called()
+    effects.audit.assert_not_called()
+    effects.notify.assert_not_called()
+    workflows.resume.assert_not_called()
+    nodes.audit_node.assert_not_called()
+
+
+def test_pending_snapshot_propagates_storage_errors(monkeypatch):
+    from sqlalchemy.exc import OperationalError
+
+    from app.application.workflow.approval_persistence import (
+        load_durable_workflow_snapshot,
+    )
+
+    failure = OperationalError("SELECT", {}, RuntimeError("offline"))
+    monkeypatch.setattr("app.db.session.get_db", MagicMock(side_effect=failure))
+    assert load_durable_workflow_snapshot("pending-1") is None
+    with pytest.raises(OperationalError):
+        service._pending_snapshot("pending-1")
+
+
+@pytest.mark.parametrize(
+    "status",
+    ["pending", "in_progress", "approved", "rejected", "withdrawn", "cancelled", "completed"],
+)
+@pytest.mark.parametrize("availability", [None, False, True])
+@pytest.mark.parametrize("endpoint", ["detail", "list", "reviewer_list"])
+def test_workflow_queries_preserve_unknown_availability(availability, endpoint, status):
+    from app.application.approval_workspace.queries import ApprovalQueries
+
+    req = ApprovalRequest(request_no="pending-1", status=status, business_data="{}")
+    req.current_node = None
+    db = MagicMock()
+    query = db.query.return_value
+    for method in ("filter", "order_by", "offset", "limit"):
+        getattr(query, method).return_value = query
+    query.all.return_value = [req]
+    query.count.return_value = 1
+    repository = MagicMock()
+    repository.session.return_value.__enter__.return_value = db
+    repository.request.return_value = req
+    access = MagicMock()
+    access.is_workflow.return_value = True
+    access.workflow_reviewer.return_value = True
+    pending = MagicMock(return_value=availability)
+    queries = ApprovalQueries(
+        repository, access, lambda *_args, **_kwargs: {}, pending, MagicMock(), MagicMock(), ()
+    )
+    result = (
+        queries.get_request_detail(1)
+        if endpoint == "detail"
+        else queries.list_requests(
+            7 if endpoint == "reviewer_list" else None, None, None, None, 1, 20
+        )
+    )
+    if status not in ("pending", "in_progress"):
+        pending.assert_not_called()
+        assert result["success"] is True
+        data = result["data"]
+        if endpoint == "reviewer_list":
+            assert data == []
+        else:
+            assert "runtime_available" not in (data if endpoint == "detail" else data[0])
+        assert req.status == status
+        db.commit.assert_not_called()
+        return
+    pending.assert_called_once_with("pending-1")
+    if availability is None:
+        assert result.status_code == 503
+        payload = json.loads(result.body)
+        assert payload["retryable"] is True
+        assert "data" not in payload
+        assert "expired" not in payload
+    elif endpoint == "reviewer_list" and availability is False:
+        assert result["data"] == []
+    else:
+        data = result["data"] if endpoint == "detail" else result["data"][0]
+        assert data["runtime_available"] is availability
+    assert req.status == status
+    db.commit.assert_not_called()

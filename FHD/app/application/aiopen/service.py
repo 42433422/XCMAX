@@ -28,6 +28,9 @@ from .definitions import (
     _API_CALL_METHODS as _API_CALL_METHODS,
 )
 from .definitions import (
+    _UI_ACTION_TIMEOUTS as _UI_ACTION_TIMEOUTS,
+)
+from .definitions import (
     _UI_ACTIONS as _UI_ACTIONS,
 )
 from .definitions import (
@@ -52,6 +55,9 @@ from .definitions import (
     TOOL_DEFINITIONS as TOOL_DEFINITIONS,
 )
 from .dispatch import ToolDispatcher, call_chat
+from .generated_tools import guarded_api_call as _guarded_api_call
+from .generated_tools import operation_call as _operation_call_impl
+from .generated_tools import required_scope as _required_scope
 from .installation import (
     InstallationComposer,
 )
@@ -64,6 +70,8 @@ from .installation import (
 from .installation import (
     build_mcp_url_config as build_mcp_url_config,
 )
+from .knowledge import knowledge_search as _knowledge_search
+from .knowledge import operation_describe as _operation_describe
 from .openclaw import OpenClawProxy
 from .protocols import InstallationBuilders, InternalHttpClient, UpstreamResponse
 from .result_text import format_tool_result_text as format_tool_result_text
@@ -166,12 +174,16 @@ _dispatcher = ToolDispatcher(
     lambda: _tool_api_catalog(),
     {
         "api_call": lambda app, args: _tool_api_call(app, args),
+        "knowledge_search": lambda app, args: _knowledge_search(app, args),
+        "operation_describe": lambda app, args: _operation_describe(app, args),
+        "operation_call": lambda app, args: _operation_call_impl(app, args, _gateway.call),
         "chat": lambda app, args: _tool_chat(app, args),
         "capability_loop": lambda app, args: _tool_capability_loop(app, args),
     },
     lambda: aiopen_cursor_hub,
     lambda: _UI_ACTIONS,
     lambda: _UI_TOOL_TIMEOUT_SECONDS,
+    lambda: _UI_ACTION_TIMEOUTS,
 )
 _openclaw = OpenClawProxy(
     lambda: _state.openclaw_base,
@@ -208,6 +220,11 @@ def generate_api_key(
 
 def authorize_api_key(provided: str | None, tool: str = "") -> dict[str, Any]:
     return _keys.authorize(provided, tool)
+
+
+def required_operation_scope(app: ASGIApp, tool: str, args: dict[str, Any]) -> str:
+    """写操作的 scope 由目标 operation 决定，供路由层做 Key 鉴权。"""
+    return _required_scope(app, tool, args)
 
 
 def record_api_key_use(
@@ -278,7 +295,7 @@ def _tool_api_catalog() -> dict[str, Any]:
 
 
 def _tool_api_call(app: ASGIApp, args: dict[str, Any]) -> dict[str, Any]:
-    return _gateway.call(app, args)
+    return _guarded_api_call(app, args, _gateway.call)
 
 
 def _tool_chat(app: ASGIApp, args: dict[str, Any]) -> dict[str, Any]:

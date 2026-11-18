@@ -1,5 +1,6 @@
 # Top-level pins from local pip install (requirements-server-api.txt)
 # Regenerate: pip install -r requirements-server-api.txt && python3 scripts/dev/regenerate_requirements_lock.py
+langchain-core==1.5.3
 fastapi==0.141.1
 uvicorn==0.52.4
 starlette==1.6.0
@@ -21,6 +22,8 @@ python-dotenv==1.2.3
 httpx==0.28.1
 requests==2.34.2
 urllib3==2.8.0
+trafilatura==2.3.1
+boto3==1.44.4
 python-alipay-sdk==3.4.0
 edge-tts==7.2.8
 SQLAlchemy==2.0.52

@@ -2,7 +2,7 @@ import { Notification, app, clipboard, dialog, ipcMain, shell } from 'electron'
 import type { IpcMainInvokeEvent } from 'electron'
 import fs from 'node:fs'
 import { networkInterfaces } from 'node:os'
-import { APP_NAME, DEFAULT_PORT, readPackagedAppVersion } from './desktop-config'
+import { APP_NAME, DEFAULT_PORT, isDesktopPackaged, readPackagedAppVersion } from './desktop-config'
 import { desktopRuntime } from './runtime-state'
 import { isTrustedIpcSender } from './ipc-sender-guard'
 import { broadcastToRenderer, desktopWindowCount, openAuxiliaryWindow } from './window-manager'
@@ -108,7 +108,7 @@ export function registerDesktopIpcHandlers(): void {
   handleTrusted('xcagi:get-app-identity', () => ({
     name: app.getName(),
     version: readPackagedAppVersion(),
-    isPackaged: app.isPackaged,
+    isPackaged: isDesktopPackaged(),
     install: getDesktopInstallIdentity(),
   }))
   handleTrusted('xcagi:open-kellai-desktop', () => openKellaiDesktop())

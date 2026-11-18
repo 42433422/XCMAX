@@ -236,6 +236,23 @@ def _add_aiopen_tool_specs(specs: dict[tuple[str, str], ToolActionSpecV2]) -> No
                     "output": {"success": True, "data": {"reply": "你好"}},
                 }
             ]
+        elif action == "ui_upload":
+            fixture = [
+                {
+                    "name": "upload_text_file",
+                    "input": {
+                        "selector": "input[type=file]",
+                        "files": [
+                            {
+                                "name": "sample.txt",
+                                "text": "AIOPEN upload sample",
+                                "type": "text/plain",
+                            }
+                        ],
+                    },
+                    "output": {"success": True, "uploaded": ["sample.txt"]},
+                }
+            ]
         specs[("aiopen", action)] = ToolActionSpecV2(
             tool_id="aiopen",
             action=action,

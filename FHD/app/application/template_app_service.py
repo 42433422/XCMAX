@@ -34,6 +34,101 @@ def persist_workflow_preview_template(payload: dict[str, Any]) -> dict[str, Any]
     return {"success": True, "template_id": template_id}
 
 
+def _positive_runtime_id(value: object) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, (str, int)):
+        return None
+    try:
+        number = int(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+    return number if number > 0 else None
+
+
+def clear_document_templates(runtime_context: dict) -> tuple[dict, int]:
+    """清空模板库；工具 worker 没有请求态，必须用运行时上下文显式绑定租户与账号。"""
+    from app.application import get_template_app_service
+    from app.infrastructure.auth.agent_mod_scope import AgentModAuthorizationError, _bound_actor
+    from app.infrastructure.tenant_scope import owned_tenant_id, owned_tenant_scope
+    from app.legacy.routes.document_templates_compat import run_archive_template_delete
+
+    tenant_id = _positive_runtime_id(runtime_context.get("tenant_id"))
+    owner_id = _positive_runtime_id(runtime_context.get("user_id"))
+    denied = {
+        "success": False,
+        "error_code": "template_scope_required",
+        "message": "清理模板需要当前账号与租户的有效身份授权",
+    }
+    if tenant_id is None or owner_id is None:
+        return denied, 403
+    try:
+        actor = _bound_actor(runtime_context)
+        if actor.id != owner_id or owned_tenant_id() not in (None, tenant_id):
+            return denied, 403
+    except AgentModAuthorizationError:
+        return denied, 403
+    service = get_template_app_service()
+    deleted = skipped = 0
+    base_dir = str(runtime_context.get("template_base_dir") or "") or None
+    starter_ids: list[str] = []
+    builtin_paths: list[str] = []
+    with owned_tenant_scope(tenant_id):
+        listed = service.get_templates(tenant_id=tenant_id) or {}
+        rows = listed.get("templates") if isinstance(listed, dict) else None
+        for item in rows or []:
+            if not isinstance(item, dict):
+                continue
+            template_id = str(item.get("id") or "").strip()
+            if not template_id:
+                continue
+            if template_id.startswith("seed:"):
+                starter_ids.append(template_id)
+                continue
+            if not (
+                template_id.startswith("fs:")
+                or template_id.startswith("db:")
+                or template_id.isdigit()
+            ):
+                skipped += 1
+                continue
+            item_data, item_status = run_archive_template_delete(
+                {"id": template_id}, base_dir=base_dir
+            )
+            if item_status == 200 and item_data.get("success"):
+                deleted += 1
+                continue
+            # 安装目录里的内置表格不能删字节；改为按租户隐藏，保证列表真的被清空。
+            installed_path = str(item.get("path") or item.get("file_path") or "").strip()
+            if item_status == 403 and installed_path:
+                builtin_paths.append(installed_path)
+                continue
+            skipped += 1
+        hidden = service.hide_templates(ids=starter_ids, paths=builtin_paths)
+        # 模板库页面实际列出的是审阅归档（elt_archive_assets），只清 elt_templates
+        # 会让「清理后页面仍满屏」；同一动作必须一并清掉当前账号的归档资产。
+        deleted_archives = service.purge_archive_assets(tenant_id=tenant_id, owner_id=owner_id)
+    if deleted or hidden or deleted_archives:
+        message = f"已清理 {deleted} 个自定义模板，隐藏 {hidden} 个内置模板"
+    elif skipped:
+        message = f"模板库未能清理：{skipped} 个模板不支持删除"
+    else:
+        message = "模板库已经是空的"
+    if deleted_archives:
+        message += f"，同时清掉 {deleted_archives} 个已归档模板"
+    if skipped and (deleted or hidden or deleted_archives):
+        message += f"，{skipped} 个未能清理"
+    return (
+        {
+            "success": not skipped or bool(deleted or hidden or deleted_archives),
+            "message": message,
+            "deleted_templates": deleted,
+            "hidden_templates": hidden,
+            "deleted_archives": deleted_archives,
+            "skipped_templates": skipped,
+        },
+        200,
+    )
+
+
 class TemplateApplicationService:
     """模板应用服务 - 负责模板相关的用例编排"""
 
@@ -73,50 +168,43 @@ class TemplateApplicationService:
 
         return hide_templates(ids=ids, paths=paths)
 
-    def purge_archive_assets(self) -> int:
-        """仅清理当前请求账号与租户的审阅归档资产。"""
-        from app.application.elt.errors import EltError
+    def purge_archive_assets(self, *, tenant_id: int, owner_id: int) -> int:
+        """清理已授权账号的归档；身份必须显式传入，不能回退到其他请求。"""
         from app.db.models.elt_archive import EltArchiveAsset, EltArchiveVersion
         from app.db.session import get_db
-        from app.domain.context.current_request import get_current_request
-        from app.infrastructure.tenant_scope import tenant_scope
+        from app.infrastructure.tenant_scope import TenantScopeError, owned_tenant_id, tenant_scope
 
-        request = get_current_request()
-        user = getattr(getattr(request, "state", None), "user", None)
-        tenant_id = getattr(user, "tenant_id", None)
-        owner_id = getattr(user, "id", None)
-        if tenant_id is None or owner_id is None:
-            return 0
-        tenant, owner = int(tenant_id), int(owner_id)
-        try:
-            with tenant_scope(tenant), get_db() as db:
-                asset_ids = [
-                    row[0]
-                    for row in db.query(EltArchiveAsset.id)
-                    .filter(
-                        EltArchiveAsset.tenant_id == tenant,
-                        EltArchiveAsset.owner_user_id == owner,
-                    )
-                    .all()
-                ]
-                if not asset_ids:
-                    return 0
-                db.query(EltArchiveVersion).filter(
-                    EltArchiveVersion.tenant_id == tenant,
-                    EltArchiveVersion.asset_id.in_(asset_ids),
-                ).delete(synchronize_session=False)
-                removed = (
-                    db.query(EltArchiveAsset)
-                    .filter(
-                        EltArchiveAsset.tenant_id == tenant,
-                        EltArchiveAsset.owner_user_id == owner,
-                    )
-                    .delete(synchronize_session=False)
+        tenant = _positive_runtime_id(tenant_id)
+        owner = _positive_runtime_id(owner_id)
+        if tenant is None or owner is None or owned_tenant_id() not in (None, tenant):
+            raise TenantScopeError("清理归档缺少有效账号与租户")
+        with tenant_scope(tenant), get_db() as db:
+            asset_ids = [
+                row[0]
+                for row in db.query(EltArchiveAsset.id)
+                .filter(
+                    EltArchiveAsset.tenant_id == tenant,
+                    EltArchiveAsset.owner_user_id == owner,
                 )
-                db.commit()
-                return int(removed or 0)
-        except (EltError, RuntimeError, ValueError):
-            return 0
+                .all()
+            ]
+            if not asset_ids:
+                return 0
+            db.query(EltArchiveVersion).filter(
+                EltArchiveVersion.tenant_id == tenant,
+                EltArchiveVersion.owner_user_id == owner,
+                EltArchiveVersion.asset_id.in_(asset_ids),
+            ).delete(synchronize_session=False)
+            removed = (
+                db.query(EltArchiveAsset)
+                .filter(
+                    EltArchiveAsset.tenant_id == tenant,
+                    EltArchiveAsset.owner_user_id == owner,
+                )
+                .delete(synchronize_session=False)
+            )
+            db.commit()
+            return int(removed or 0)
 
     def get_template(self, template_id: int) -> dict[str, Any]:
         """

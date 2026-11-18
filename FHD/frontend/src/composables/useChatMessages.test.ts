@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 const { chatStorageScope } = vi.hoisted(() => ({ chatStorageScope: { value: 'local' } }))
+import { chatMessageKey } from '@/utils/chatMessageIdentity'
 import { speakText, stopSpeaking } from '@/utils/tts'
 import { useChatMessageUi } from './useChatMessageUi'
 import { ref, nextTick } from 'vue'
@@ -168,6 +169,19 @@ describe('useChatMessages', () => {
     messages.addMessage('test', 'user')
     messages.clearMessages()
     expect(messages.messages.value.length).toBe(0)
+  })
+
+  it('persists distinct legacy rendering keys through reload and streaming updates', () => {
+    messages.loadMessages([
+      { role: 'ai', content: 'first', time: '10:00', turnId: 'shared' },
+      { role: 'ai', content: 'other', time: '10:00', turnId: 'shared' },
+    ])
+    const keys = messages.messages.value.map(chatMessageKey)
+    expect(new Set(keys).size).toBe(2)
+    messages.applyPlainTextToMessageIndex(0, 'first streamed response')
+    expect(messages.messages.value.map(chatMessageKey)).toEqual(keys)
+    messages.loadMessages(JSON.parse(JSON.stringify(messages.messages.value)))
+    expect(messages.messages.value.map(chatMessageKey)).toEqual(keys)
   })
 
   it('loadMessages replaces messages', () => {
@@ -392,6 +406,43 @@ describe('useChatMessages', () => {
     expect(messages.messages.value[1].role).toBe('task')
   })
 
+  it('keeps the rendered key when a legacy server row binds to a local message', async () => {
+    const chatApi = (await import('@/api/chat')).default
+    messages.loadMessages([{ role: 'ai', content: 'saved reply', time: '10:00', persistence: { id: 'local-42', status: 'local' } }])
+    const key = chatMessageKey(messages.messages.value[0])
+    vi.mocked(chatApi.getConversation).mockResolvedValueOnce({
+      messages: [{ id: 42, role: 'ai', content: 'saved reply', time: '10:00' }],
+    } as any)
+    await messages.syncFromServer()
+    expect(messages.messages.value).toHaveLength(1)
+    expect(chatMessageKey(messages.messages.value[0])).toBe(key)
+    messages.loadMessages(JSON.parse(JSON.stringify(messages.messages.value)))
+    expect(chatMessageKey(messages.messages.value[0])).toBe(key)
+  })
+
+  it('persists reconciled fields even when every message object is reused', async () => {
+    const chatApi = (await import('@/api/chat')).default
+    messages.loadMessages([{ role: 'ai', content: 'old reply', time: '10:00',
+      persistence: { id: 'server:42', status: 'failed', error: 'save uncertain' } }])
+    const original = messages.messages.value[0]
+    const key = chatMessageKey(original)
+    vi.mocked(chatApi.getConversation).mockResolvedValueOnce({
+      messages: [{ id: 42, role: 'ai', content: 'confirmed reply', time: '11:00' }],
+    } as any)
+    expect(await messages.syncFromServer()).toBe(true)
+    expect(messages.messages.value[0]).toBe(original)
+    const cached = JSON.parse(localStorage.getItem('chat_session-1_') || '[]')[0]
+    expect(cached.content).toContain('confirmed reply')
+    expect(cached.time).toBe('11:00')
+    expect(cached.persistence.status).toBe('saved')
+    expect(cached.persistence.error).toBeUndefined()
+    resetChatMessageStores()
+    const reopened = useChatMessages(ref('session-1'))
+    expect(reopened.messages.value[0].content).toContain('confirmed reply')
+    expect(reopened.messages.value[0].persistence?.status).toBe('saved')
+    expect(chatMessageKey(reopened.messages.value[0])).toBe(key)
+  })
+
   it('syncFromServer handles success', async () => {
     const chatApi = (await import('@/api/chat')).default
     vi.mocked(chatApi.getConversation).mockResolvedValueOnce({
@@ -402,6 +453,37 @@ describe('useChatMessages', () => {
     })
     const result = await messages.syncFromServer()
     expect(result).toBe(true)
+  })
+
+  it.each([false, true])('reconciles attachment-enriched server text without repeating the user turn (busy=%s)', async isBusy => {
+    const chatApi = (await import('@/api/chat')).default
+    const chat = useChatMessages(ref('attachment-turn'), { isBusy: () => isBusy })
+    chat.loadMessages([
+      { role: 'user', content: '请读取附件', time: '12:00', turnId: 'attachment-turn', persistence: { id: 'local-attachment', status: 'local' } },
+    ])
+    const response = { messages: [
+      { id: 10, role: 'user', content: '请读取附件\n附件证据：合同正文', metadata: JSON.stringify({ business_harness: { turn_id: 'attachment-turn' } }) },
+      { id: 11, role: 'ai', content: '已读取合同', metadata: JSON.stringify({ business_harness: { turn_id: 'attachment-turn' } }) },
+    ] }
+    vi.mocked(chatApi.getConversation).mockResolvedValue(response)
+    expect(await chat.syncFromServer()).toBe(true)
+    expect(await chat.syncFromServer()).toBe(true)
+    expect(chat.messages.value).toHaveLength(2)
+    expect(chat.messages.value.filter(row => row.role === 'user')).toHaveLength(1)
+    expect(chat.messages.value[0].content).toContain('附件证据：合同正文')
+    expect(chatApi.saveMessage).not.toHaveBeenCalled()
+  })
+
+  it('preserves a different user turn still in flight while reconciling completed history', async () => {
+    const chatApi = (await import('@/api/chat')).default
+    const chat = useChatMessages(ref('in-flight-turn'), { isBusy: () => true })
+    chat.loadMessages([{ role: 'user', content: '接着审阅新附件', time: '12:01', turnId: 'next-turn' }])
+    vi.mocked(chatApi.getConversation).mockResolvedValueOnce({ messages: [
+      { id: 10, role: 'user', content: '上一份附件', metadata: JSON.stringify({ business_harness: { turn_id: 'previous-turn' } }) },
+    ] })
+    expect(await chat.syncFromServer()).toBe(true)
+    expect(chat.messages.value.map(row => row.turnId)).toEqual(['previous-turn', 'next-turn'])
+    expect(chat.messages.value[1].content).toBe('接着审阅新附件')
   })
 
   it('does not append a provisional industry greeting to restored conversation history', async () => {

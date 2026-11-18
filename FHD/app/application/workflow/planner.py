@@ -10,12 +10,13 @@ from typing import Any, cast
 
 import httpx
 
-from app.infrastructure.observability.metrics import observe_plan_generation
+from app.infrastructure.observability.metrics import observe_plan_stage
 from app.services import get_ai_conversation_service
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .llm_plan_generation import LlmPlanGeneration, PlannerCompletion, PlannerConversation
-from .planner_llm_gateway import request_planner_completion
+from .model_response_metrics import model_response_scope, record_response_error
+from .planner_llm_gateway import planner_max_tokens, request_planner_completion
 from .planning_graph_policy import apply_clarification, validate_required_params
 from .planning_graph_policy import (
     filter_registry_for_profile as _filter_tool_registry_for_profile,
@@ -209,18 +210,13 @@ class LLMWorkflowPlanner:
         from app.infrastructure.modstore_transport import MarketModelError
 
         started = time.perf_counter()
-        try:
-            planned = self._plan_with_llm(plan_id, user_id, message, registry_for_plan, context)
-        except MarketModelError as exc:
-            context["planning_failure_reason"] = str(exc)
-            planned = None
-            observe_plan_generation(
-                outcome="failure", duration_ms=(time.perf_counter() - started) * 1000
-            )
-        else:
-            observe_plan_generation(
-                outcome="success", duration_ms=(time.perf_counter() - started) * 1000
-            )
+        with model_response_scope():
+            try:
+                planned = self._plan_with_llm(plan_id, user_id, message, registry_for_plan, context)
+            except MarketModelError as exc:
+                context["planning_failure_reason"] = str(exc)
+                planned = None
+                record_response_error()
         repair_trace: dict[str, Any] = {}
         if planned is not None:
             from app.application.workflow.plan_repair import repair_plan
@@ -258,18 +254,27 @@ class LLMWorkflowPlanner:
                 planned.metadata["memory_recall"] = recall_meta
             except (AttributeError, TypeError):
                 logger.debug("plan metadata 不支持 memory_recall 附加", exc_info=True)
-        return cast(
-            "PlanGraph",
-            finalize_planned_graph(
-                planned,
-                plan_id=plan_id,
-                context=context,
-                validate=validate_candidate,
-                warn=logger.warning,
-                plan_type=PlanGraph,
-                node_type=WorkflowNode,
-            ),
+        final_plan = finalize_planned_graph(
+            planned,
+            plan_id=plan_id,
+            context=context,
+            validate=validate_candidate,
+            warn=logger.warning,
+            plan_type=PlanGraph,
+            node_type=WorkflowNode,
         )
+        if planned is None or (final_plan.metadata or {}).get("planning_rejected"):
+            valid_outcome = "rejected"
+        elif repair_trace.get("first_pass_valid"):
+            valid_outcome = "valid_first_pass"
+        else:
+            valid_outcome = "valid_after_repair"
+        observe_plan_stage(
+            stage="plan_valid",
+            outcome=valid_outcome,
+            duration_ms=(time.perf_counter() - started) * 1000,
+        )
+        return cast("PlanGraph", final_plan)
 
     def _generation(self) -> LlmPlanGeneration:
         return LlmPlanGeneration(
@@ -286,7 +291,7 @@ class LLMWorkflowPlanner:
         messages: list[dict[str, str]],
         context: dict[str, Any] | None = None,
         temperature: float = 0.1,
-        max_tokens: int = 1200,
+        max_tokens: int | None = None,
         **extra: Any,
     ) -> dict[str, Any] | None:
         """Send a bounded model task through this planner's configured provider."""
@@ -299,7 +304,7 @@ class LLMWorkflowPlanner:
             messages=messages,
             http_client_factory=self._http_client_factory or _get_planner_http_client,
             temperature=temperature,
-            max_tokens=max_tokens,
+            max_tokens=max_tokens or planner_max_tokens(),
             **extra,
         )
 
@@ -324,6 +329,7 @@ class LLMWorkflowPlanner:
         current_params: dict[str, Any],
         allowed_fields: set[str],
         context: dict[str, Any],
+        candidates: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any] | None:
         from app.infrastructure.llm.model_admission import model_rate_limit_scope
 
@@ -337,4 +343,5 @@ class LLMWorkflowPlanner:
                 current_params=current_params,
                 allowed_fields=allowed_fields,
                 context=context,
+                candidates=candidates,
             )

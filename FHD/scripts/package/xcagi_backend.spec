@@ -264,6 +264,12 @@ for module in ["docx", "openpyxl", "xlrd", "pptx", "xlsxwriter", "pypdf", "repor
         datas.extend(collect_data_files(module, include_py_files=False))
     except Exception:
         pass
+# Optional proactive-push extra: Apprise discovers notification plugins dynamically.
+# Keep minimal builds optional, but collect the full installed channel runtime.
+if importlib.util.find_spec("apprise") is not None:
+    hiddenimports.extend(collect_submodules("apprise", on_error="raise"))
+    datas.extend(collect_data_files("apprise", include_py_files=False))
+
 # de-dupe while preserving order
 _seen = set()
 _deduped = []

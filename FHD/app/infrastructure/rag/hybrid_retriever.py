@@ -17,6 +17,11 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
+# 中文功能字：几乎每条文本都有，保留会稀释 BM25 关键词信号。
+_CJK_STOP_CHARS = frozenset(
+    "的了呢吧啊哦呀吗嘛么是在有和与或及就都也还我你他她它个这那怎什请问可需要多少几天内已未被把让给对从向于为以之其"
+)
+
 
 @dataclass
 class RetrievedChunk:
@@ -31,6 +36,25 @@ class RetrievedChunk:
     metadata: dict[str, Any] | None = None
     source_url: str = ""
     page: int | None = None
+
+
+def _non_negative(value: Any, default: float) -> float:
+    """权重必须非负；负数或非数值回落到默认值。"""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return default
+    return number if number >= 0 else default
+
+
+def _index_text(chunk: RetrievedChunk) -> str:
+    """BM25 索引文本：正文 + 自动生成的问题（Q&A 增强）；向量仍按正文计算。"""
+    questions = (chunk.metadata or {}).get("auto_questions")
+    if isinstance(questions, (list, tuple)):
+        extra = [str(question).strip() for question in questions if str(question).strip()]
+        if extra:
+            return chunk.text + "\n" + "\n".join(extra)
+    return chunk.text
 
 
 class BM25:
@@ -85,13 +109,14 @@ class BM25:
     def _tokenize(text: str) -> list[str]:
         if not text:
             return []
-        # 支持中英：英文按词、中文按字
+        # 支持中英：英文按词、中文按字（去掉高频功能字）
         tokens: list[str] = []
         for part in re.split(r"([\u4e00-\u9fff])", text):
             if not part:
                 continue
             if re.match(r"[\u4e00-\u9fff]", part):
-                tokens.extend(list(part))
+                if part not in _CJK_STOP_CHARS:
+                    tokens.append(part)
             else:
                 tokens.extend(re.findall(r"[A-Za-z0-9]+", part.lower()))
         return [t for t in tokens if t]
@@ -112,6 +137,10 @@ class HybridRetriever:
     DEFAULT_TOP_K_VECTOR = 10
     DEFAULT_TOP_K_BM25 = 10
     DEFAULT_TOP_K = 5
+    DEFAULT_MODE = "hybrid"
+    MODES = frozenset({"hybrid", "vector", "keyword"})
+    DEFAULT_VECTOR_WEIGHT = 1.0
+    DEFAULT_KEYWORD_WEIGHT = 1.0
 
     def __init__(
         self,
@@ -121,12 +150,19 @@ class HybridRetriever:
         top_k_vector: int = DEFAULT_TOP_K_VECTOR,
         top_k_bm25: int = DEFAULT_TOP_K_BM25,
         top_k: int = DEFAULT_TOP_K,
+        mode: str = DEFAULT_MODE,
+        vector_weight: float = DEFAULT_VECTOR_WEIGHT,
+        keyword_weight: float = DEFAULT_KEYWORD_WEIGHT,
     ) -> None:
         self._embedder = embedder
         self._k = k
         self._top_k_vector = top_k_vector
         self._top_k_bm25 = top_k_bm25
         self._top_k = top_k
+        normalized_mode = str(mode or self.DEFAULT_MODE).strip().lower()
+        self._mode = normalized_mode if normalized_mode in self.MODES else self.DEFAULT_MODE
+        self._vector_weight = _non_negative(vector_weight, self.DEFAULT_VECTOR_WEIGHT)
+        self._keyword_weight = _non_negative(keyword_weight, self.DEFAULT_KEYWORD_WEIGHT)
         self._chunks: list[RetrievedChunk] = []
         self._chunk_texts: list[str] = []
         self._bm25 = BM25()
@@ -134,7 +170,7 @@ class HybridRetriever:
 
     def index(self, chunks: list[RetrievedChunk]) -> None:
         self._chunks = list(chunks)
-        self._chunk_texts = [c.text for c in chunks]
+        self._chunk_texts = [_index_text(c) for c in chunks]
         self._bm25.fit(self._chunk_texts)
         precomputed: list[list[Any]] = []
         for chunk in chunks:
@@ -168,15 +204,19 @@ class HybridRetriever:
 
         # 1) BM25
         bm25_scores = self._bm25.score(query)
-        bm25_ranked = sorted(
-            (i for i in range(len(self._chunks)) if bm25_scores[i] > 0),
-            key=lambda i: bm25_scores[i],
-            reverse=True,
-        )[: self._top_k_bm25]
+        bm25_ranked = (
+            sorted(
+                (i for i in range(len(self._chunks)) if bm25_scores[i] > 0),
+                key=lambda i: bm25_scores[i],
+                reverse=True,
+            )[: self._top_k_bm25]
+            if self._mode in {"hybrid", "keyword"}
+            else []
+        )
 
         # 2) Vector
         vector_ranked: list[int] = []
-        if self._embedder is not None and self._embeddings:
+        if self._mode in {"hybrid", "vector"} and self._embedder is not None and self._embeddings:
             try:
                 q_vec = self._embedder(query)
                 sims = [self._cosine(q_vec, e) for e in self._embeddings]
@@ -189,12 +229,12 @@ class HybridRetriever:
             except RECOVERABLE_ERRORS as e:
                 logger.warning("向量检索失败: %s", e)
 
-        # 3) RRF
+        # 3) RRF（可加权：精确编号依赖关键词、语义改写依赖向量）
         scores: dict[int, float] = {}
         for rank, idx in enumerate(vector_ranked):
-            scores[idx] = scores.get(idx, 0.0) + 1.0 / (self._k + rank + 1)
+            scores[idx] = scores.get(idx, 0.0) + self._vector_weight / (self._k + rank + 1)
         for rank, idx in enumerate(bm25_ranked):
-            scores[idx] = scores.get(idx, 0.0) + 1.0 / (self._k + rank + 1)
+            scores[idx] = scores.get(idx, 0.0) + self._keyword_weight / (self._k + rank + 1)
 
         # 4) 取 top_k
         ranked = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)[:limit]

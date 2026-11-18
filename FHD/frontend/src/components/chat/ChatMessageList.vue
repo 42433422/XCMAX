@@ -247,6 +247,7 @@ import { buildApprovalCardTrace } from '@/utils/chatOrchestrationTrace'
 import { approvalCardId } from '@/utils/chatApprovalCard'
 import { formatBusinessResultSummary } from '@/utils/businessResultSummary'
 import type { AgentRunTraceData } from '@/utils/agentRunTraceModel'
+import { chatMessageKey } from '@/utils/chatMessageIdentity'
 import { CHAT_HISTORY_WINDOW, useChatHistoryWindow } from '@/composables/useChatHistoryWindow'
 import { isFailedChatReply, proactiveReplyMessageId, type ProactiveReplySuggestion } from '@/composables/useProactiveReplySuggestions'
 import { chatFailureRecoveryText } from '@/components/chat/chatFailureRecovery'
@@ -396,13 +397,13 @@ const copyLabels = ref(new Map<ChatMessage, string>())
 const { start: windowStart, end: windowEnd, visibleMessages, moveWindow, showLatest, onScroll, revealMessage, scrollToLatestIfFollowing } =
   useChatHistoryWindow(() => props.messages, messagesHostRef, () => props.sessionKey)
 watch(() => props.proactiveSuggestions?.size, scrollToLatestIfFollowing, { flush: 'post' })
-type Presentation = { key: number; content: string; role: ChatMessage['role']; html?: string; canSpeak?: boolean; foldable?: boolean }
+type Presentation = { key: string; content: string; role: ChatMessage['role']; html?: string; canSpeak?: boolean; foldable?: boolean }
 let presentations = new WeakMap<ChatMessage, Presentation>()
-let nextKey = 0
 function presentation(message: ChatMessage): Presentation {
+  const key = chatMessageKey(message)
   let entry = presentations.get(message)
-  if (!entry || entry.content !== message.content || entry.role !== message.role) {
-    entry = { key: entry?.key ?? nextKey++, content: message.content, role: message.role }
+  if (!entry || entry.key !== key || entry.content !== message.content || entry.role !== message.role) {
+    entry = { key, content: message.content, role: message.role }
     presentations.set(message, entry)
   }
   return entry
@@ -423,7 +424,7 @@ function canCollapseMessageOf(message: ChatMessage): boolean {
   return entry.foldable
 }
 watch(
-  [() => props.sessionKey, () => props.messages, () => props.canSpeakMessage, () => props.canCollapseMessage],
+  [() => props.sessionKey, () => props.canSpeakMessage, () => props.canCollapseMessage],
   () => {
     presentations = new WeakMap()
     copyLabels.value.clear()

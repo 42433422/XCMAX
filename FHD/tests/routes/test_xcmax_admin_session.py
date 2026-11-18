@@ -84,8 +84,28 @@ def customer_ticket_identity(monkeypatch):
     forbidden.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    "filters, expected_filters",
+    [
+        ({}, {"account_id": ["0"]}),
+        (
+            {
+                "ticket_type": "incident",
+                "ticket_domain": "software",
+                "ticket_source": "admin_created",
+                "account_id": 72,
+            },
+            {
+                "ticket_type": ["incident"],
+                "ticket_domain": ["software"],
+                "ticket_source": ["admin_created"],
+                "account_id": ["72"],
+            },
+        ),
+    ],
+)
 def test_customer_ticket_proxy_preserves_search_and_market_identity(
-    client, customer_ticket_identity
+    client, customer_ticket_identity, filters, expected_filters
 ):
     from unittest.mock import AsyncMock
     from urllib.parse import parse_qs, urlsplit
@@ -104,6 +124,7 @@ def test_customer_ticket_proxy_preserves_search_and_market_identity(
                 "status": "processing",
                 "offset": 50,
                 "limit": 50,
+                **filters,
             },
             headers={
                 "X-Session-ID": "current-session",
@@ -121,11 +142,15 @@ def test_customer_ticket_proxy_preserves_search_and_market_identity(
             "status": ["processing"],
             "offset": ["50"],
             "limit": ["50"],
+            **expected_filters,
         }
         assert kwargs["authorization"] == "Bearer test-bound-market-identity"
         assert kwargs["json_body"] is None
         assert client.get("/api/xcmax/admin/customer-service/tickets?offset=-1").status_code == 422
         assert client.get("/api/xcmax/admin/customer-service/tickets?limit=101").status_code == 422
+        assert (
+            client.get("/api/xcmax/admin/customer-service/tickets?account_id=-1").status_code == 422
+        )
         assert proxy.await_count == 1
         assert (
             client.get(

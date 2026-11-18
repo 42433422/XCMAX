@@ -115,7 +115,14 @@ const xcmaxMarketProxy = {
     marketReq('admin/duty-graph/runs', { method: 'POST', body: payload }),
   adminDutyGraphRunDetail: (runId: number | string) =>
     marketReq(`admin/duty-graph/runs/${encodeURIComponent(String(runId))}`),
-  adminYuangonOnboardStatus: () => marketReq('admin/yuangon-onboard/status'),
+  adminYuangonOnboardStatus: () =>
+    marketReq<{
+      yuangon_employee_count?: number
+      catalog_employee_pack_count?: number
+      missing_in_catalog?: string[]
+      in_catalog_not_in_yuangon_sample?: string[]
+      parse_errors?: string[]
+    }>('admin/yuangon-onboard/status'),
   adminYuangonOnboardRun: (
     payload: { pkg_ids?: string[] | string; dry_run?: boolean; force?: boolean } = {},
   ) => {
@@ -205,6 +212,24 @@ const xcmaxMarketProxy = {
   /** 市场总览业务指标（MODstore /api/admin/status）。 */
   adminMarketStatus: () =>
     marketReq<{ ok?: boolean; total_catalog_items?: number; total_users?: number }>('admin/status'),
+  /** 市场商品明细（员工包 / Mod / 能力包），可按审核状态筛选并按上架时间倒序。 */
+  adminListCatalog: (limit = 100, offset = 0, status = '', search = '') =>
+    marketReq<{ items?: Record<string, unknown>[]; total?: number; counts?: Record<string, number> }>(
+      `admin/catalog?limit=${encodeURIComponent(String(limit))}&offset=${encodeURIComponent(String(offset))}`
+      + `&status=${encodeURIComponent(status)}&search=${encodeURIComponent(search)}`,
+    ),
+  /** 管理员审核商品：approve / restrict / delist / restore。 */
+  adminReviewCatalog: (itemId: number, action: 'approve' | 'restrict' | 'delist' | 'restore', note = '') =>
+    marketReq<{ ok?: boolean; compliance_status?: string; is_public?: boolean }>(
+      `admin/catalog/${encodeURIComponent(String(itemId))}/review`,
+      { method: 'POST', body: { action, note } },
+    ),
+  /** 员工变更申请（市场侧员工自治治理队列）。 */
+  adminListChangeRequests: (status = 'pending', limit = 50) =>
+    marketReq<{ items?: Record<string, unknown>[]; count?: number }>(
+      `admin/change-requests?status=${encodeURIComponent(status)}&limit=${encodeURIComponent(String(limit))}`,
+    ),
+  /** 编制员工与 Catalog 上架对齐状态见 adminYuangonOnboardStatus。 */
   llmStatus: () => marketReq('llm/status'),
   llmResolveChatDefault: () => marketReq('llm/resolve-chat-default'),
   llmChat: (provider: string, model: string, messages: unknown[], maxTokens = 1024) =>

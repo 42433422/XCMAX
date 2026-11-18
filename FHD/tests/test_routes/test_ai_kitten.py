@@ -21,6 +21,7 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -28,6 +29,15 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.fastapi_routes import ai_kitten as kitten_module
+
+
+@pytest.fixture(autouse=True)
+def _logged_in(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        kitten_module,
+        "resolve_session_user",
+        lambda request: SimpleNamespace(id=7, tenant_id=1, tier="user", role="user"),
+    )
 
 
 def _shared_setup_financial_report_0():
@@ -325,7 +335,9 @@ def test_saved_list_with_type_filter(client: TestClient, monkeypatch: pytest.Mon
     monkeypatch.setattr(f"{_FACADE}.analysis_save_service", fake_save_svc)
     r = client.get("/api/ai/kitten/saved/list", params={"type": "financial"})
     assert r.status_code == 200
-    fake_save_svc.list_saved_analyses.assert_called_once_with("financial")
+    fake_save_svc.list_saved_analyses.assert_called_once_with(
+        "financial", owner_id=7, tenant_id=1, allow_all=False
+    )
 
 
 def test_saved_list_no_type_filter(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -334,7 +346,9 @@ def test_saved_list_no_type_filter(client: TestClient, monkeypatch: pytest.Monke
     fake_save_svc.get_statistics_summary.return_value = {}
     monkeypatch.setattr(f"{_FACADE}.analysis_save_service", fake_save_svc)
     r = client.get("/api/ai/kitten/saved/list")
-    fake_save_svc.list_saved_analyses.assert_called_once_with(None)
+    fake_save_svc.list_saved_analyses.assert_called_once_with(
+        None, owner_id=7, tenant_id=1, allow_all=False
+    )
 
 
 def test_saved_list_recoverable_error(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:

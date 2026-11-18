@@ -7,6 +7,15 @@ import { readJsonTextFile } from './backend-env-utils'
 
 export const APP_NAME = 'XCAGI'
 
+/**
+ * Electron 45 从源码运行（开发模式）时也会把 `app.isPackaged` 报告为 true，
+ * 导致桌面壳误按安装包路径查找后端而无法启动。`process.defaultApp` 仅在
+ * 以应用路径启动默认应用时存在，是"未打包"的可靠信号；打包后为 undefined。
+ */
+export function isDesktopPackaged(): boolean {
+  return process.defaultApp ? false : app.isPackaged
+}
+
 /** 桌面端统一使用 17500，避开 macOS AirPlay 与 Windows 本机常见 5000 端口冲突。 */
 export function resolveDefaultDesktopPort(): number {
   const env = process.env.XCAGI_DESKTOP_PORT
@@ -102,7 +111,7 @@ export function desktopInitialUrl(): string {
 }
 
 export function readPackagedProductSku(): ProductSku | null {
-  if (!app.isPackaged) {
+  if (!isDesktopPackaged()) {
     const sku = String(process.env.XCAGI_PRODUCT_SKU || '').trim().toLowerCase()
     if (sku === 'personal' || sku === 'enterprise') {
       return sku
@@ -163,7 +172,7 @@ export function backendEditionEnv(): Record<string, string> {
 }
 
 export function repoRoot(): string {
-  return app.isPackaged ? process.resourcesPath : path.resolve(__dirname, '..', '..')
+  return isDesktopPackaged() ? process.resourcesPath : path.resolve(__dirname, '..', '..')
 }
 
 /** 托盘与窗口图标：与 dist 同级打包的 resources（由 beforePack 生成）。 */
@@ -194,7 +203,7 @@ export function findPackagedBackendExecutable(): string {
 
 export function backendExecutable(): { command: string; args: string[]; cwd: string } {
   const dataDir = app.getPath('userData')
-  if (!app.isPackaged) {
+  if (!isDesktopPackaged()) {
     const root = repoRoot()
     return {
       command: process.env.PYTHON || 'python',
@@ -232,7 +241,7 @@ export function backendExecutable(): { command: string; args: string[]; cwd: str
 }
 
 export function readPackagedAppVersion(): string {
-  if (!app.isPackaged) return 'dev'
+  if (!isDesktopPackaged()) return 'dev'
   for (const relative of ['build-info.json', 'backend/version.txt', 'backend/_internal/version.txt']) {
     try {
       const filePath = path.join(process.resourcesPath, relative)

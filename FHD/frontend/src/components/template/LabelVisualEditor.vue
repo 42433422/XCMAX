@@ -76,7 +76,7 @@
 </template>
 
 <script>
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { markRaw, onBeforeUnmount, onMounted, ref } from 'vue'
 import PaneResizeHandle from '@/components/PaneResizeHandle.vue'
 import { useResizablePane } from '@/composables/useResizablePane'
 
@@ -193,7 +193,8 @@ export default {
     console.log('LabelVisualEditor mounted - canvas ref:', this.$refs.labelCanvas)
     console.log('LabelVisualEditor mounted - canvas exists:', !!this.$refs.labelCanvas)
     if (this.$refs.labelCanvas) {
-      this.ctx = this.$refs.labelCanvas.getContext('2d')
+      const context = this.$refs.labelCanvas.getContext('2d')
+      this.ctx = context ? markRaw(context) : null
       console.log('LabelVisualEditor - ctx:', this.ctx)
     }
     console.log('LabelVisualEditor mounted - fields:', this.fields)

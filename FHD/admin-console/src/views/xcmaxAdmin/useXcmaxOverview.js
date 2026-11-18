@@ -1,11 +1,7 @@
 import { ref } from 'vue'
 import { api } from '@/api'
-import { appAlert } from '@/utils/appDialog'
-import { getPersonnelModApiBase } from '@/constants/personnelModApi'
 
 export function useXcmaxOverview() {
-  const syncingEmployees = ref(false)
-
   const localStatus = ref({ state: 'unknown', ok: null, version: '', database: '', uptime: '', address: window.location.host })
   const remoteStatus = ref({
     state: 'unknown', reachable: null,
@@ -16,7 +12,6 @@ export function useXcmaxOverview() {
     address: '',
   })
   const modules = ref([])
-  const remoteEmployees = ref([])
   const recentErrors = ref([])
 
   function sourceLabel(source) {
@@ -86,53 +81,14 @@ export function useXcmaxOverview() {
     }
   }
 
-  async function loadRemoteEmployees() {
-    try {
-      const base = getPersonnelModApiBase()
-      const r = await api.get(`${base}/employees`, { page: 1, page_size: 200, search: '' })
-      if (r?.success && r?.data?.items) {
-        remoteEmployees.value = r.data.items.map(e => ({
-          employee_id: e.employee_no || e.user_id || e.id,
-          name: e.employee_name,
-          domain: e.position,
-          area: e.department,
-          version: ''
-        }))
-      }
-    } catch {
-      remoteEmployees.value = []
-    }
-  }
-
-  async function syncEmployees() {
-    if (syncingEmployees.value) return
-    syncingEmployees.value = true
-    try {
-      const res = await api.post(`${getPersonnelModApiBase()}/employees/sync-remote-yuangon`, {})
-      if (!res?.success) throw new Error(res?.message || '同步失败')
-      const d = res.data || {}
-      await appAlert(`同步完成：${d.employees || 0} 名员工，${d.departments || 0} 个分组`)
-      await loadRemoteEmployees()
-    } catch (e) {
-      recentErrors.value.unshift({ time: new Date().toLocaleTimeString(), message: `同步员工失败: ${e.message}` })
-      await appAlert('同步员工失败: ' + (e.message || '未知错误'))
-    } finally {
-      syncingEmployees.value = false
-    }
-  }
-
   return {
-    syncingEmployees,
     localStatus,
     remoteStatus,
     modules,
-    remoteEmployees,
     recentErrors,
     sourceLabel,
     loadLocalStatus,
     loadRemoteStatus,
     loadModules,
-    loadRemoteEmployees,
-    syncEmployees,
   }
 }

@@ -71,6 +71,27 @@ def test_screen_origin_scheme_must_match_transport_scheme(
     assert ai_open_routes._trusted_screen_origin(websocket) is expected
 
 
+@pytest.mark.parametrize(
+    ("origin", "host", "expected"),
+    [
+        # 本地开发：浏览器 42423，后端（或代理改写后）42422，同属回环
+        ("http://127.0.0.1:42423", "127.0.0.1:42422", True),
+        ("http://localhost:5173", "localhost:5100", True),
+        ("http://[::1]:5173", "[::1]:5100", True),
+        # 非回环地址的不同端口仍按跨源处理
+        ("http://192.168.1.10:5173", "192.168.1.10:5100", False),
+        ("http://evil.example", "127.0.0.1:42422", False),
+    ],
+)
+def test_screen_origin_allows_loopback_cross_port_only(monkeypatch, origin, host, expected):
+    monkeypatch.delenv("XCAGI_AIOPEN_WS_ALLOWED_ORIGINS", raising=False)
+    websocket = SimpleNamespace(
+        headers={"origin": origin, "host": host},
+        url=SimpleNamespace(scheme="ws"),
+    )
+    assert ai_open_routes._trusted_screen_origin(websocket) is expected
+
+
 def test_screen_explicit_cross_origin_allowlist(monkeypatch):
     monkeypatch.setenv("XCAGI_AIOPEN_WS_ALLOWED_ORIGINS", "https://frontend.example")
     monkeypatch.setattr(

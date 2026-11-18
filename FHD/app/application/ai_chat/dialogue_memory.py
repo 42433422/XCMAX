@@ -12,6 +12,8 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from langchain_core.messages import convert_to_openai_messages, trim_messages
+
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _SYSTEM = (
@@ -178,7 +180,17 @@ def recent_conversation_messages(
     data = _read(key)
     maximum = max(1, min(int(limit), _MODEL_HISTORY_MAX_TURNS))
     turn_id = str((context or {}).get("turn_id") or "")
-    return _model_messages(data, turn_id, exclude_current_user=True)[1:][-maximum:]
+    messages = _model_messages(data, turn_id, exclude_current_user=True)[1:]
+    if not messages and (context or {}).get("_chat_evidence_authorized") is True:
+        # The HTTP boundary loads this transcript after owner/tenant validation.
+        messages = [
+            {"role": item["role"], "content": str(item.get("content") or "")}
+            for item in (context or {}).get("chat_owned_history") or []
+            if isinstance(item, dict) and item.get("role") in {"user", "assistant"}
+        ]
+    return convert_to_openai_messages(
+        trim_messages(messages, max_tokens=maximum, token_counter=len, start_on="human")
+    )
 
 
 def enrich_model_messages(
@@ -252,18 +264,6 @@ def _model_messages(
         and time.time() - float(item["at"]) <= _MEMORY_TTL_SECONDS
     ][-_MODEL_HISTORY_MAX_TURNS:]
     summary_text, turns = _apply_summary(data.get("summary"), turns)
-    budgeted: list[dict[str, Any]] = []
-    char_count = 0
-    for item in reversed(turns):
-        content = str(item.get("content") or "")
-        remaining = _MODEL_HISTORY_MAX_CHARS - char_count
-        if remaining <= 0:
-            break
-        if len(content) > remaining:
-            content = content[-remaining:]
-        budgeted.append({**item, "content": content})
-        char_count += len(content)
-    turns = list(reversed(budgeted))
     interrupted = any(
         item.get("role") == "assistant"
         and item.get("status") == "interrupted"
@@ -280,7 +280,12 @@ def _model_messages(
     for item in turns:
         if not isinstance(item, dict) or item.get("role") not in {"user", "assistant"}:
             continue
-        if exclude_current_user and item.get("role") == "user" and item.get("turn_id") == turn_id:
+        if (
+            exclude_current_user
+            and turn_id
+            and item.get("role") == "user"
+            and item.get("turn_id") == turn_id
+        ):
             continue
         content = _SECRET_TEXT.sub(
             lambda match: f"{match.group(1) or match.group(3)}[已隐藏]",
@@ -294,7 +299,14 @@ def _model_messages(
         if names:
             content += "\n附件：" + "、".join(names)
         messages.append({"role": str(item["role"]), "content": content})
-    return messages
+    window = trim_messages(
+        messages[1:],
+        max_tokens=_MODEL_HISTORY_MAX_CHARS,
+        token_counter=lambda rows: sum(len(str(row.content)) for row in rows),
+        strategy="last",
+        start_on="human",
+    )
+    return [messages[0], *convert_to_openai_messages(window)]
 
 
 def _turns_fingerprint(turns: Sequence[Mapping[str, Any]]) -> str:

@@ -19,6 +19,25 @@ def _default_save_dir() -> str:
     return str(Path.cwd() / "saved_analyses")
 
 
+def _owned(
+    data: dict[str, Any],
+    *,
+    owner_id: Any,
+    tenant_id: Any,
+    allow_unowned: bool = False,
+) -> bool:
+    """归属校验：无主历史记录默认不可见，调用方显式 allow_unowned 才放行。"""
+    stored_owner = str(data.get("owner_id") or "").strip()
+    stored_tenant = str(data.get("tenant_id") or "").strip()
+    if not stored_owner and not stored_tenant:
+        return allow_unowned
+    if stored_owner and str(owner_id or "").strip() != stored_owner:
+        return False
+    if stored_tenant and str(tenant_id or "").strip() != stored_tenant:
+        return False
+    return True
+
+
 class AnalysisSaveService(NeuroEventPublisherMixin):
     def __init__(self, save_dir: str | None = None):
         self.save_dir = save_dir or _default_save_dir()
@@ -29,6 +48,9 @@ class AnalysisSaveService(NeuroEventPublisherMixin):
         analysis_type: str,
         data: dict[str, Any],
         metadata: dict[str, Any] | None = None,
+        *,
+        owner_id: Any = None,
+        tenant_id: Any = None,
     ) -> dict[str, Any]:
         try:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -42,6 +64,10 @@ class AnalysisSaveService(NeuroEventPublisherMixin):
                 "metadata": metadata or {},
                 "data": data,
             }
+            if owner_id is not None:
+                save_data["owner_id"] = str(owner_id)
+            if tenant_id is not None:
+                save_data["tenant_id"] = str(tenant_id)
 
             with open(filepath, "w", encoding="utf-8") as f:
                 json.dump(save_data, f, ensure_ascii=False, indent=2, default=str)
@@ -59,7 +85,15 @@ class AnalysisSaveService(NeuroEventPublisherMixin):
             logger.exception("Failed to save analysis")
             return {"success": False, "message": "分析保存服务暂时不可用，请稍后重试"}
 
-    def list_saved_analyses(self, analysis_type: str | None = None) -> list[dict[str, Any]]:
+    def list_saved_analyses(
+        self,
+        analysis_type: str | None = None,
+        *,
+        owner_id: Any = None,
+        tenant_id: Any = None,
+        allow_all: bool = False,
+    ) -> list[dict[str, Any]]:
+        restricted = owner_id is not None or tenant_id is not None
         try:
             analyses = []
 
@@ -75,6 +109,13 @@ class AnalysisSaveService(NeuroEventPublisherMixin):
                 try:
                     with open(filepath, encoding="utf-8") as f:
                         data = json.load(f)
+
+                    if (
+                        not allow_all
+                        and restricted
+                        and not _owned(data, owner_id=owner_id, tenant_id=tenant_id)
+                    ):
+                        continue
 
                     analyses.append(
                         {
@@ -96,7 +137,9 @@ class AnalysisSaveService(NeuroEventPublisherMixin):
             logger.exception("Failed to list analyses: %s", e)
             return []
 
-    def get_analysis(self, analysis_id: str) -> dict[str, Any] | None:
+    def get_analysis(
+        self, analysis_id: str, *, owner_id: Any = None, tenant_id: Any = None
+    ) -> dict[str, Any] | None:
         try:
             for filename in os.listdir(self.save_dir):
                 if not filename.endswith(".json"):
@@ -107,21 +150,57 @@ class AnalysisSaveService(NeuroEventPublisherMixin):
                 with open(filepath, encoding="utf-8") as f:
                     data = json.load(f)
 
-                if data.get("id") == analysis_id:
-                    data["filepath"] = filepath
-                    return cast("dict[str, Any] | None", data)
+                if data.get("id") != analysis_id:
+                    continue
+                if (owner_id is not None or tenant_id is not None) and not _owned(
+                    data, owner_id=owner_id, tenant_id=tenant_id
+                ):
+                    return None
+                data["filepath"] = filepath
+                return cast("dict[str, Any] | None", data)
 
             return None
         except RECOVERABLE_ERRORS as e:
             logger.exception("Failed to get analysis: %s", e)
             return None
 
-    def delete_analysis(self, analysis_id: str) -> bool:
+    def delete_analysis(
+        self,
+        analysis_id: str,
+        *,
+        owner_id: Any = None,
+        tenant_id: Any = None,
+        allow_unowned: bool = False,
+    ) -> bool | dict[str, Any]:
         try:
             analysis = self.get_analysis(analysis_id)
 
             if not analysis:
                 return False
+
+            stored_owner = str(analysis.get("owner_id") or "").strip()
+            stored_tenant = str(analysis.get("tenant_id") or "").strip()
+            if not stored_owner and not stored_tenant:
+                # 历史文件没有归属信息：默认拒绝，仅管理员可清理。
+                if not allow_unowned:
+                    return {
+                        "success": False,
+                        "code": "ANALYSIS_OWNER_UNKNOWN",
+                        "message": "该分析记录缺少归属信息，需管理员处理。",
+                    }
+            else:
+                if stored_owner and str(owner_id or "").strip() != stored_owner:
+                    return {
+                        "success": False,
+                        "code": "ANALYSIS_FORBIDDEN",
+                        "message": "无权删除该分析记录。",
+                    }
+                if stored_tenant and str(tenant_id or "").strip() != stored_tenant:
+                    return {
+                        "success": False,
+                        "code": "ANALYSIS_FORBIDDEN",
+                        "message": "无权删除该分析记录。",
+                    }
 
             filepath = analysis.get("filepath")
 
@@ -134,7 +213,9 @@ class AnalysisSaveService(NeuroEventPublisherMixin):
             logger.exception("Failed to delete analysis: %s", e)
             return False
 
-    def export_analysis_to_xlsx(self, analysis_id: str) -> dict[str, Any]:
+    def export_analysis_to_xlsx(
+        self, analysis_id: str, *, owner_id: Any = None, tenant_id: Any = None
+    ) -> dict[str, Any]:
         try:
             from io import BytesIO
 
@@ -142,7 +223,7 @@ class AnalysisSaveService(NeuroEventPublisherMixin):
             from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
             from openpyxl.utils import get_column_letter
 
-            analysis = self.get_analysis(analysis_id)
+            analysis = self.get_analysis(analysis_id, owner_id=owner_id, tenant_id=tenant_id)
 
             if not analysis:
                 return {"success": False, "message": "Analysis not found"}

@@ -14,7 +14,7 @@ from typing import Any, Dict, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import get_current_user, get_db, require_admin
@@ -42,6 +42,11 @@ from modstore_server.customer_service_api_helpers import (
 )
 from modstore_server import customer_service_customer_view as customer_view
 from modstore_server.customer_service_tools import json_dumps, json_loads
+from modstore_server.customer_service_triage import (
+    TICKET_DOMAINS,
+    TICKET_SOURCES,
+    TICKET_TYPE_INTENTS,
+)
 from modstore_server.models import User
 from modstore_server.customer_ticket_reader import (
     TicketReader,
@@ -65,6 +70,18 @@ router = APIRouter(prefix="/api/customer-service", tags=["customer-service"])
 
 _get_current_user = get_current_user
 _require_admin = require_admin
+
+
+def _evidence_markers(key: str, value: str) -> list:
+    """evidence_json 是文本列；按序列化常见写法匹配，供管理端派生分类筛选。"""
+    return [
+        func.coalesce(CustomerServiceTicket.evidence_json, "{}").like(f'%"{key}": "{value}"%'),
+        func.coalesce(CustomerServiceTicket.evidence_json, "{}").like(f'%"{key}":"{value}"%'),
+    ]
+
+
+def _github_self_heal_condition():
+    return or_(*_evidence_markers("source", "github_self_heal"))
 
 
 def _publish_customer_ticket_incident(payload: Dict[str, Any]) -> None:
@@ -218,6 +235,10 @@ async def list_tickets(
     status: str = "",
     intent: str = Query("", max_length=64),
     submitter_type: str = Query("", max_length=16),
+    ticket_type: str = Query("", max_length=24),
+    ticket_domain: str = Query("", max_length=24),
+    ticket_source: str = Query("", max_length=24),
+    account_id: int = Query(0, ge=0),
     search: str = Query("", max_length=200),
     source_ref: str = Query("", max_length=128),
     offset: int = Query(0, ge=0),
@@ -240,6 +261,8 @@ async def list_tickets(
             CustomerServiceTicket.ticket_no
             == request_identity(user.id, "customer_feedback", source_ref),
         )
+    if user.is_admin and account_id:
+        q = q.filter(CustomerServiceTicket.user_id == account_id)
     if status:
         q = q.filter(CustomerServiceTicket.status == status)
     # 分类筛选只对管理端启用；客户仍只能读取自己的工单。
@@ -251,6 +274,42 @@ async def list_tickets(
         if kind not in {"admin", "customer", "unknown"}:
             raise HTTPException(status_code=422, detail="提交人身份筛选条件无效")
         q = q.filter(CustomerServiceTicket.submitter_type == kind)
+    if user.is_admin and ticket_type.strip():
+        kind = ticket_type.strip().lower()
+        if kind == "incident":
+            q = q.filter(_github_self_heal_condition())
+        elif kind in TICKET_TYPE_INTENTS:
+            q = q.filter(
+                ~_github_self_heal_condition(),
+                CustomerServiceTicket.intent.in_(TICKET_TYPE_INTENTS[kind]),
+            )
+        else:
+            raise HTTPException(status_code=422, detail="工单类型筛选条件无效")
+    if user.is_admin and ticket_domain.strip():
+        kind = ticket_domain.strip().lower()
+        if kind not in TICKET_DOMAINS:
+            raise HTTPException(status_code=422, detail="业务域筛选条件无效")
+        domain_filter = or_(*_evidence_markers("issue_domain", kind))
+        q = q.filter(
+            or_(domain_filter, CustomerServiceTicket.intent == "custom_delivery")
+            if kind == "custom"
+            else domain_filter
+        )
+    if user.is_admin and ticket_source.strip():
+        kind = ticket_source.strip().lower()
+        if kind not in TICKET_SOURCES:
+            raise HTTPException(status_code=422, detail="来源筛选条件无效")
+        if kind == "github_self_heal":
+            q = q.filter(_github_self_heal_condition())
+        else:
+            q = q.filter(
+                ~_github_self_heal_condition(),
+                CustomerServiceTicket.submitter_type
+                == {
+                    "admin_created": "admin",
+                    "customer_chat": "customer",
+                }[kind],
+            )
     term = search.strip()
     if term:
         matches = [
@@ -398,6 +457,23 @@ async def ticket_detail(
     if isinstance(user, TicketReader):
         return reader_detail(db, ticket, user)
 
+    delivery: Dict[str, Any] = {}
+    if user.is_admin and ticket.intent == "custom_delivery":
+        from modstore_server.customer_service_delivery_api import _custom_delivery_payload
+
+        from modstore_server.customer_delivery_failure import reconcile_runtime_failures
+        from modstore_server.customer_service_delivery_payment_api import (
+            reconcile_custom_delivery_payment,
+        )
+
+        changed = reconcile_runtime_failures(db, ticket)
+        changed = await reconcile_custom_delivery_payment(db, ticket) or changed
+        if changed:
+            db.commit()
+            db.refresh(ticket)
+        payload = await _custom_delivery_payload(ticket)
+        delivery["custom_delivery"] = payload.get("custom_delivery") or {}
+
     def related(model: Any, descending: bool = False) -> list[Any]:
         order = model.id.desc() if descending else model.id.asc()
         return list(db.query(model).filter(model.ticket_id == ticket.id).order_by(order).all())
@@ -408,6 +484,7 @@ async def ticket_detail(
 
     return {
         **({"execution_overview": ticket_execution_overview(db, ticket)} if user.is_admin else {}),
+        **delivery,
         "ticket": (
             ticket_payload(ticket) if user.is_admin else customer_view.customer_ticket_row(ticket)
         ),

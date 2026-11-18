@@ -1830,7 +1830,9 @@ class TestAnswerBoundary:
     def test_no_chunks_returns_empty_answer(self, tmp_path):
         svc = _make_svc(tmp_path)
         result = svc.answer(dataset_id="ds1", query="test")
-        assert result["answer"] == ""
+        # 空知识库明确拒答，而不是给用户一个空字符串。
+        assert result["no_answer"] is True
+        assert "没有找到" in result["answer"]
 
     def test_with_llm_call(self, tmp_path):
         svc = _make_svc(tmp_path)

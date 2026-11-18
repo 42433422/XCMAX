@@ -427,3 +427,103 @@ jobs:
           name: intent-holdout-llm-report
           path: FHD/metrics/intent_holdout_latest.json
           if-no-files-found: error
+
+  # 任务级留出集（τ-bench 口径）：与 golden set 零重叠，用真实模型链路跑 pass^k。
+  # 仅 schedule / workflow_dispatch 触发（token 成本）；不进 PR/push 门禁。
+  # 与 acceptance 的区别：acceptance 验证发布口径，本 job 只建立当前主线的真实
+  # 任务成功率基线，报告与运行标记随 metrics 回流主线供审计。
+  task-holdout:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      OPENAI_API_KEY: ${{ secrets.XCAGI_LLM_API_KEY }}
+      OPENAI_BASE_URL: ${{ secrets.XCAGI_LLM_BASE_URL }}
+      OPENAI_MODEL: ${{ secrets.XCAGI_LLM_MODEL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.CI_COMMIT_TOKEN || github.token }}
+
+      - name: Detect LLM credentials
+        id: creds
+        env:
+          LLM_KEY: ${{ secrets.XCAGI_LLM_API_KEY }}
+        run: |
+          if [ -n "${LLM_KEY}" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "task holdout skipped: XCAGI_LLM_API_KEY secret not configured"
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Python
+        if: steps.creds.outputs.available == 'true'
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        if: steps.creds.outputs.available == 'true'
+        run: |
+          pip install -r requirements-server-api.txt pytest pytest-asyncio
+
+      - name: Run task holdout benchmark (real LLM, 3 trials)
+        if: steps.creds.outputs.available == 'true'
+        env:
+          TASK_BENCHMARK_RUN: "1"
+          TASK_BENCHMARK_SET: "holdout"
+          TASK_BENCHMARK_TRIALS: "3"
+          # 留出集只报告；先建立真实基线，再单独起棘轮。
+          TASK_BENCHMARK_HOLDOUT_MIN_PASS: "0"
+        run: |
+          python -m pytest tests/benchmarks/test_task_success.py -v --tb=short
+
+      - name: Verify holdout evidence (report exists, sample count)
+        if: steps.creds.outputs.available == 'true'
+        run: |
+          set -euo pipefail
+          python scripts/dev/verify_task_holdout_evidence.py
+
+      # main 受分支保护，证据经 automation 分支 + PR 回流。
+      - name: Commit task holdout evidence
+        if: steps.creds.outputs.available == 'true' && always()
+        env:
+          GH_TOKEN: ${{ secrets.CI_COMMIT_TOKEN || github.token }}
+          GH_RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p metrics
+          for f in task_holdout_report.json task_holdout_run_mode.json; do
+            [ -f "test_reports/$f" ] && cp "test_reports/$f" "metrics/$f"
+          done
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add metrics/
+          if git diff --staged --quiet; then
+            echo "No task holdout changes"
+            exit 0
+          fi
+          branch="automation/task-holdout-${GH_RUN_ID}"
+          title="chore(metrics): task holdout benchmark (run ${GH_RUN_ID})"
+          git switch -c "$branch"
+          git commit -m "$title"
+          git pull --rebase origin "$GITHUB_REF_NAME"
+          git push --set-upstream origin "$branch"
+          pr_url="$(gh pr create \
+            --base "$GITHUB_REF_NAME" \
+            --head "$branch" \
+            --title "$title" \
+            --body "任务级留出集真实模型基线（run ${GH_RUN_ID}，τ-bench pass^k）。合并后 metrics/ 为唯一事实来源。")"
+          gh pr merge "$pr_url" --auto --squash --delete-branch
+
+      - name: Upload task holdout report
+        if: steps.creds.outputs.available == 'true' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: task-holdout-report
+          path: |
+            FHD/test_reports/task_holdout_report.json
+            FHD/test_reports/task_holdout_run_mode.json
+          if-no-files-found: error

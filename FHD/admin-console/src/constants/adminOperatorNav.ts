@@ -11,7 +11,7 @@ export const ADMIN_OPERATOR_MENU_ITEMS: CoreMenuCatalogItem[] = [
   { key: 'delivery-center', name: '客户交付中心', iconClass: 'fa-truck' },
   { key: 'market-overview', name: '市场总览', iconClass: 'fa-line-chart' },
   { key: 'founder-autonomy', name: '创始人状态', iconClass: 'fa-compass' },
-  { key: 'server-functions', name: '服务器功能模块', iconClass: 'fa-server' },
+  { key: 'server-functions', name: '每日摘要', iconClass: 'fa-file-text-o' },
   { key: 'approval-hub', name: '自治审批中心', iconClass: 'fa-check-square-o' },
   { key: 'employee-autonomy', name: '员工自治', iconClass: 'fa-users' },
 ]

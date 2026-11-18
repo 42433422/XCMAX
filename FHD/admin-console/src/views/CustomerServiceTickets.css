@@ -14,10 +14,6 @@
 .cs-card-title { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; font-size: 15px; color: var(--cs-text); }
 .cs-count { padding: 0 8px; border-radius: 999px; background: var(--cs-accent-soft); color: var(--cs-accent); font-size: 12px; }
 .cs-state { padding: 20px 0; text-align: center; }
-.cs-toolbar { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; padding: 14px 20px; }
-.cs-search { display: flex; flex: 1 1 320px; flex-direction: column; gap: 6px; color: var(--cs-muted); font-size: 12px; }
-.cs-filter { display: flex; flex: 0 1 170px; flex-direction: column; gap: 6px; color: var(--cs-muted); font-size: 12px; }
-.cs-search input:focus { outline: none; border-color: var(--cs-accent); box-shadow: 0 0 0 3px var(--cs-accent-soft); }
 .cs-banner-error { margin: 0 0 16px; padding: 10px 14px; border: 1px solid #ffa39e; border-radius: 10px; background: #fff1f0; color: #cf1322; }
 .cs-table-wrap { overflow-x: auto; }
 .cs-table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -25,15 +21,8 @@
 .cs-table td { padding: 10px 12px; border-bottom: 1px solid var(--cs-line); vertical-align: top; }
 .cs-table tbody tr:last-child td { border-bottom: none; }
 .cs-table-compact { margin-top: 12px; }
-.cs-row { cursor: pointer; }
-.cs-row:hover, .cs-row:focus { background: #f3f8ff; outline: none; }
-.cs-link { display: block; padding: 0; border: none; background: none; color: var(--cs-accent); font: 600 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; cursor: pointer; text-align: left; word-break: break-all; }
-.cs-title-cell { min-width: 160px; max-width: 360px; }
-.cs-nowrap { white-space: nowrap; }
 .cs-time { white-space: nowrap; color: var(--cs-muted); font-variant-numeric: tabular-nums; }
 .cs-summary { max-width: 520px; overflow-wrap: anywhere; white-space: pre-wrap; }
-.cs-pager { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; color: var(--cs-muted); font-size: 12px; }
-.cs-pager div { display: flex; gap: 8px; }
 .cs-badges, .cs-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .cs-chips { margin: 8px 0 0; padding: 0; list-style: none; font-size: 12px; }
 .cs-badge { display: inline-flex; align-items: center; padding: 1px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
@@ -83,7 +72,6 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
   .cs-view { padding: 16px 12px 112px; }
   .cs-card { padding: 14px; }
   .cs-steps li { font-size: 11px; }
-  .cs-pager { flex-direction: column; align-items: flex-start; }
 }
 .cs-eta-editor { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-top:12px; }
 .cs-eta-editor label { flex-basis:100%; }

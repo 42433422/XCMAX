@@ -47,7 +47,7 @@
     } catch (e) {
       error.value =
         e instanceof ApiError && e.status === 404
-          ? '当前服务尚未接通 GitHub 工作空间'
+          ? '当前服务版本未包含 GitHub 工作空间接口，请升级服务端后再试'
           : e instanceof Error
             ? e.message
             : 'GitHub 工作空间暂不可用';

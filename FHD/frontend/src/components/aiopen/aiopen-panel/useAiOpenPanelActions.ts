@@ -235,7 +235,9 @@ export function useAiOpenPanelActions(state: AiOpenPanelState, options: { setCur
   }
 
   const copyOneLiner = async () => {
-    if (!hasConnectConfig.value && panelAvailable.value) await createKey()
+    // 面板里可能已有历史 Key，但拿不到明文；复制时若无本次生成的 Key 就补一个，
+    // 否则这句话交给 AI 后没有连接口令，接入会 401。
+    if (!activeKey.value && panelAvailable.value) await createKey()
     await copyText(oneLinerText.value)
     try { localStorage.setItem('aiopen_oneliner_copied', '1') } catch { /* ignore */ }
     oneLinerCopied.value = true
@@ -245,7 +247,7 @@ export function useAiOpenPanelActions(state: AiOpenPanelState, options: { setCur
   }
 
   const copyAiAssistantPrompt = async () => {
-    if (!hasConnectConfig.value && panelAvailable.value) await createKey()
+    if (!activeKey.value && panelAvailable.value) await createKey()
     await loadInstallBundle()
     await copyText(aiAssistantPrompt.value)
     accessResult.value = '已复制配置话术 · 粘贴到任意 AI 助手对话框'

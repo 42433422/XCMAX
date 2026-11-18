@@ -3,17 +3,55 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 _DATASET_UPLOAD_EXTENSIONS = frozenset(
-    {".pdf", ".docx", ".pptx", ".xlsx", ".xls", ".txt", ".md", ".csv", ".json", ".log"}
+    {
+        ".pdf",
+        ".docx",
+        ".pptx",
+        ".xlsx",
+        ".xls",
+        ".txt",
+        ".md",
+        ".csv",
+        ".json",
+        ".log",
+        # 保存的网页：复用 trafilatura 提取正文（与 URL 导入同一实现）
+        ".html",
+        ".htm",
+        # 图片走 RapidOCR 识别（需安装 pdf-ocr 可选依赖）
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".webp",
+        ".bmp",
+    }
 )
 _DATASET_UPLOAD_MAX_BYTES = 25 * 1024 * 1024
 _DATASET_INLINE_MAX_CHARS = 5_000_000
 _DATASET_METADATA_MAX_BYTES = 64 * 1024
 _PERSY_DATASET_ID = "persy-knowledge"
+_MAX_TAGS = 20
+_MAX_TAG_LENGTH = 32
+
+
+def _normalize_tags(value: list[str]) -> list[str]:
+    """Tags are trimmed, de-duplicated, bounded, and case-preserving."""
+    cleaned: list[str] = []
+    for raw in value:
+        tag = str(raw or "").strip()
+        if not tag:
+            continue
+        if len(tag) > _MAX_TAG_LENGTH:
+            raise ValueError(f"tag cannot exceed {_MAX_TAG_LENGTH} characters")
+        if tag not in cleaned:
+            cleaned.append(tag)
+    if len(cleaned) > _MAX_TAGS:
+        raise ValueError(f"tags cannot exceed {_MAX_TAGS} entries")
+    return cleaned
 
 
 def _ensure_bounded_metadata(value: Any, *, max_bytes: int = _DATASET_METADATA_MAX_BYTES) -> None:
@@ -100,6 +138,22 @@ class StatusResponse(BaseModel):
 class DatasetDocumentIngestRequest(BaseModel):
     text: str = Field("", max_length=_DATASET_INLINE_MAX_CHARS, description="inline document text")
     file_path: str = Field("", max_length=4096, description="allowed local file path")
+    url: str = Field("", max_length=4096, description="http(s) page to extract as document")
+    s3_uri: str = Field("", max_length=2048, description="s3://bucket/key object to ingest")
+    confluence_page_id: str = Field(
+        "", max_length=64, description="Confluence content id imported through the configured site"
+    )
+    feishu_document_id: str = Field(
+        "", max_length=64, description="Feishu docx document id imported with app credentials"
+    )
+    notion_page_id: str = Field(
+        "", max_length=64, description="Notion page id imported with the integration token"
+    )
+    yuque_document_ref: str = Field(
+        "",
+        max_length=290,
+        description="Yuque document reference namespace/repo/doc imported with the personal token",
+    )
     source: str = Field("", max_length=300, description="source label")
     document_id: str = Field("", max_length=200, description="optional stable document id")
     tenant_id: str = Field("", max_length=160, description="tenant/user isolation key")
@@ -113,6 +167,21 @@ class DatasetDocumentIngestRequest(BaseModel):
     chunk_size: int = Field(500, ge=50, le=5000)
     chunk_overlap: int = Field(50, ge=0, le=500)
     metadata: dict[str, Any] = Field(default_factory=dict)
+    tags: list[str] = Field(
+        default_factory=list, max_length=_MAX_TAGS, description="document tags used for filtering"
+    )
+    acl: dict[str, Any] = Field(
+        default_factory=dict, description="document-level allow_actors / deny_actors"
+    )
+    allow_duplicate: bool = Field(
+        False,
+        description="store content identical to another source instead of reusing the existing document",
+    )
+
+    @field_validator("tags")
+    @classmethod
+    def validate_tags(cls, value: list[str]) -> list[str]:
+        return _normalize_tags(value)
 
     @field_validator("metadata")
     @classmethod
@@ -120,13 +189,56 @@ class DatasetDocumentIngestRequest(BaseModel):
         _ensure_bounded_metadata(value)
         return value
 
+    @field_validator("acl")
+    @classmethod
+    def validate_acl(cls, value: dict[str, Any]) -> dict[str, Any]:
+        from app.application.dataset_rag.document_acl import normalize_document_acl
+
+        return normalize_document_acl(value)
+
     @model_validator(mode="after")
     def validate_document_input(self):
-        if not self.text.strip() and (not self.file_path.strip()):
-            raise ValueError("text or file_path is required")
+        provided = [
+            bool(self.text.strip()),
+            bool(self.file_path.strip()),
+            bool(self.url.strip()),
+            bool(self.s3_uri.strip()),
+            bool(self.confluence_page_id.strip()),
+            bool(self.feishu_document_id.strip()),
+            bool(self.notion_page_id.strip()),
+            bool(self.yuque_document_ref.strip()),
+        ]
+        if not any(provided):
+            raise ValueError(
+                "text, file_path, url, s3_uri, confluence_page_id, feishu_document_id, "
+                "notion_page_id or yuque_document_ref is required"
+            )
+        if self.s3_uri.strip() and sum(provided) > 1:
+            raise ValueError("s3_uri cannot be combined with text, file_path or url")
+        if self.confluence_page_id.strip() and sum(provided) > 1:
+            raise ValueError("confluence_page_id cannot be combined with other sources")
+        if self.feishu_document_id.strip() and sum(provided) > 1:
+            raise ValueError("feishu_document_id cannot be combined with other sources")
+        if self.notion_page_id.strip() and sum(provided) > 1:
+            raise ValueError("notion_page_id cannot be combined with other sources")
+        if self.yuque_document_ref.strip() and sum(provided) > 1:
+            raise ValueError("yuque_document_ref cannot be combined with other sources")
         if self.chunk_strategy == "fixed" and self.chunk_overlap >= self.chunk_size:
             raise ValueError("chunk_overlap must be smaller than chunk_size")
         return self
+
+
+class DatasetDocumentAclRequest(BaseModel):
+    """Replace one document's access list (empty acl restores tenant-wide visibility)."""
+
+    acl: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("acl")
+    @classmethod
+    def validate_acl(cls, value: dict[str, Any]) -> dict[str, Any]:
+        from app.application.dataset_rag.document_acl import normalize_document_acl
+
+        return normalize_document_acl(value)
 
 
 class DatasetQueryRequest(BaseModel):
@@ -140,13 +252,163 @@ class DatasetQueryRequest(BaseModel):
         "", max_length=80, description="document version number, vN, latest, or empty"
     )
     metadata_filter: dict[str, Any] = Field(default_factory=dict)
+    tags: list[str] = Field(
+        default_factory=list, max_length=_MAX_TAGS, description="only return documents with any tag"
+    )
+    min_relevance: float = Field(
+        0.0,
+        ge=0.0,
+        le=1.0,
+        description="evidence coverage floor; 0 uses the server default (XCAGI_KB_MIN_RELEVANCE)",
+    )
+    max_context_chars: int = Field(
+        0,
+        ge=0,
+        le=200_000,
+        description="prompt evidence budget; 0 uses XCAGI_KB_MAX_CONTEXT_CHARS (default 6000)",
+    )
     rerank: bool = Field(False, description="apply cross-encoder reranking with safe fallback")
+    retrieval_mode: Literal["hybrid", "vector", "keyword"] = Field(
+        "hybrid", description="hybrid RRF | vector only | keyword (BM25) only"
+    )
+    vector_weight: float = Field(
+        1.0, ge=0.0, le=10.0, description="RRF weight for the vector lane (hybrid mode)"
+    )
+    keyword_weight: float = Field(
+        1.0, ge=0.0, le=10.0, description="RRF weight for the BM25 lane (hybrid mode)"
+    )
+    mmr_lambda: float = Field(
+        0.0,
+        ge=0.0,
+        le=1.0,
+        description="MMR diversity weight; 0 disables, 1 keeps pure relevance",
+    )
+    context_window: int = Field(
+        0,
+        ge=0,
+        le=2,
+        description="expand each hit with neighbouring chunks from the same document",
+    )
+    expand_section: bool = Field(
+        False,
+        description="return the whole Markdown section around each hit (small-to-big)",
+    )
+    history: list[dict[str, str]] = Field(
+        default_factory=list,
+        max_length=12,
+        description="prior turns ({role, content}) used to rewrite the follow-up question",
+    )
 
     @field_validator("metadata_filter")
     @classmethod
     def validate_metadata_filter(cls, value: dict[str, Any]) -> dict[str, Any]:
         _ensure_bounded_metadata(value)
         return value
+
+    @field_validator("tags")
+    @classmethod
+    def validate_query_tags(cls, value: list[str]) -> list[str]:
+        return _normalize_tags(value)
+
+    @field_validator("history")
+    @classmethod
+    def validate_history(cls, value: list[dict[str, str]]) -> list[dict[str, str]]:
+        cleaned: list[dict[str, str]] = []
+        total = 0
+        for turn in value:
+            if not isinstance(turn, dict):
+                raise ValueError("history turns must be objects")
+            role = str(turn.get("role") or "").strip().lower()
+            content = str(turn.get("content") or "").strip()
+            if role not in {"user", "assistant"}:
+                raise ValueError("history role must be user or assistant")
+            if len(content) > 4000:
+                raise ValueError("history turn cannot exceed 4000 characters")
+            total += len(content)
+            cleaned.append({"role": role, "content": content})
+        if total > 20000:
+            raise ValueError("history cannot exceed 20000 characters in total")
+        return cleaned
+
+
+class DatasetMultiQueryRequest(DatasetQueryRequest):
+    """One question across several datasets; the server fuses rankings with RRF."""
+
+    dataset_ids: list[str] = Field(
+        ...,
+        min_length=1,
+        max_length=10,
+        description="datasets searched together (order defines RRF tie-breaking only)",
+    )
+
+    @field_validator("dataset_ids")
+    @classmethod
+    def validate_dataset_ids(cls, value: list[str]) -> list[str]:
+        cleaned: list[str] = []
+        for raw in value:
+            key = str(raw or "").strip()
+            if not key or len(key) > 160:
+                raise ValueError("dataset id must be 1-160 characters")
+            if key not in cleaned:
+                cleaned.append(key)
+        if not cleaned:
+            raise ValueError("dataset_ids cannot be empty")
+        return cleaned
+
+
+class DatasetFeedbackRequest(BaseModel):
+    """Thumb up/down on one answer, used for quality review rather than ranking."""
+
+    rating: str = Field(..., min_length=2, max_length=4, description="up or down")
+    query: str = Field("", max_length=2000, description="question that produced the answer")
+    answer: str = Field("", max_length=4000, description="answer text the user judged")
+    comment: str = Field("", max_length=1000, description="optional free-form reason")
+    citations: list[dict[str, object]] = Field(
+        default_factory=list, max_length=10, description="evidence rows shown with the answer"
+    )
+    tenant_id: str = Field("", max_length=160, description="tenant isolation key")
+
+    @field_validator("rating")
+    @classmethod
+    def validate_rating(cls, value: str) -> str:
+        cleaned = str(value or "").strip().lower()
+        if cleaned not in {"up", "down"}:
+            raise ValueError("rating must be 'up' or 'down'")
+        return cleaned
+
+
+class DatasetSynonymsRequest(BaseModel):
+    """Term -> expansions used to expand queries at retrieval time."""
+
+    synonyms: dict[str, list[str]] = Field(
+        default_factory=dict,
+        description="map of user term to corpus-side synonyms (max 200 groups)",
+    )
+
+
+class DatasetQaPairsRequest(BaseModel):
+    """问答对批量导入：结构化列表，或 CSV/TSV 文本（问题,答案）。"""
+
+    pairs: list[dict[str, object]] | str = Field(
+        default_factory=list,
+        description="question/answer pairs, or CSV/TSV text with two columns",
+    )
+    replace: bool = Field(default=True, description="true replaces tenant pairs; false appends")
+
+
+class DatasetImportRequest(BaseModel):
+    """Portable dataset snapshot produced by the export endpoint."""
+
+    payload: dict[str, object] = Field(
+        default_factory=dict, description="exported documents/chunks/synonyms"
+    )
+    overwrite: bool = Field(False, description="replace an existing non-empty dataset")
+
+
+class DatasetApiKeyRequest(BaseModel):
+    """Label for a read-only external dataset key."""
+
+    label: str = Field("", max_length=80, description="human-readable purpose of the key")
 
 
 class DatasetVersionDiffRequest(BaseModel):

@@ -9,16 +9,21 @@ from typing import Any
 import pytest
 
 from app.application import attachment_evidence as module
-from app.application.attachment_artifacts.models import ArtifactRecord, SheetInfo
+from app.application.attachment_artifacts.models import (
+    ArtifactRecord,
+    ArtifactScope,
+    SheetInfo,
+)
 from app.application.attachment_artifacts.store import ArtifactStore
 from app.application.attachment_artifacts.tools import execute_tool as real_execute_tool
 
 ARTIFACT_ID = "a1b2c3d4e5f6a7b8"
+SCOPE = ArtifactScope(owner_user_id="101", tenant_id="7")
 
 
 @pytest.fixture()
 def store(tmp_path: Path) -> ArtifactStore:
-    artifact_store = ArtifactStore(tmp_path)
+    artifact_store = ArtifactStore(tmp_path, scope=SCOPE)
     artifact_store.save(
         ArtifactRecord(
             id=ARTIFACT_ID,
@@ -168,6 +173,34 @@ async def test_memory_hits_prepended(monkeypatch: pytest.MonkeyPatch, store: Art
     assert result["evidence"].startswith("【历史记忆】")
     assert "2025 版模板" in result["evidence"]
     assert "【工件 订单.xlsx / 概览】" in result["evidence"]
+
+
+async def test_foreign_artifact_id_is_never_read(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    foreign = ArtifactStore(tmp_path, scope=ArtifactScope(owner_user_id="202", tenant_id="7"))
+    foreign.save(
+        ArtifactRecord(
+            id=ARTIFACT_ID,
+            name="别人的订单.xlsx",
+            suffix=".xlsx",
+            size=128,
+            sha1=ARTIFACT_ID,
+            created_at="2026-11-15T10:00:00",
+        )
+    )
+
+    async def _boom(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("越权工件不应触发模型规划")
+
+    called: list[Any] = []
+    monkeypatch.setattr(module, "chat_completion_openai_format", _boom)
+    monkeypatch.setattr(module, "execute_tool", lambda *args, **kwargs: called.append(args))
+
+    current = ArtifactStore(tmp_path, scope=SCOPE)
+    result = await module.collect_evidence("看看这个表", [ARTIFACT_ID], store=current)
+    assert result == {"evidence": "", "trace": [], "artifacts": []}
+    assert called == []
 
 
 def test_evidence_system_block_text() -> None:

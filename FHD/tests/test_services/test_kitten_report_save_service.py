@@ -159,17 +159,10 @@ class TestGetAnalysis:
 # ---------------------------------------------------------------------------
 class TestDeleteAnalysis:
     def test_deletes_existing_analysis(self, svc):
-        saved = svc.save_analysis("financial", {"key": "val"})
-        # get_analysis reads from file which doesn't have filepath,
-        # so delete_analysis uses list_saved_analyses to find the file
-        # Let's verify the file exists first
+        saved = svc.save_analysis("financial", {"key": "val"}, owner_id=7, tenant_id=1)
         analyses = svc.list_saved_analyses()
         assert len(analyses) == 1
-        # delete by finding the analysis with the correct id
-        result = svc.delete_analysis(saved["id"])
-        # The source code reads from file which lacks filepath,
-        # so deletion may report "File not found" but the analysis is gone
-        # Let's just verify the method doesn't crash
+        result = svc.delete_analysis(saved["id"], owner_id=7, tenant_id=1)
         assert result is True
 
     def test_delete_nonexistent_analysis(self, svc):
@@ -177,13 +170,10 @@ class TestDeleteAnalysis:
         assert result is False
 
     def test_delete_file_already_removed(self, svc, save_dir):
-        saved = svc.save_analysis("financial", {"key": "val"})
-        # Remove the file manually
+        saved = svc.save_analysis("financial", {"key": "val"}, owner_id=7, tenant_id=1)
         filepath = os.path.join(save_dir, saved["filename"])
         os.remove(filepath)
-        # The analysis metadata is still in memory from get_analysis
-        # but the file is gone, so filepath won't exist
-        result = svc.delete_analysis(saved["id"])
+        result = svc.delete_analysis(saved["id"], owner_id=7, tenant_id=1)
         assert result is False
 
 

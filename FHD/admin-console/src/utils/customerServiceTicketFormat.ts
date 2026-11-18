@@ -109,6 +109,40 @@ export const intentLabel = plain({
 export const submitterTypeLabel = plain({
   admin: '管理员提交', customer: '客户提交', unknown: '提交人待确认',
 })
+
+/** 三维分类：服务端派生字段优先，旧数据按 intent/来源就地回退。 */
+const TICKET_TYPE_LABELS: Record<string, string> = {
+  incident: '事故', defect: '缺陷', request: '服务请求', question: '咨询', complaint: '投诉', delivery: '交付实施', account: '账号权益',
+}
+const TICKET_TYPE_BY_INTENT: Record<string, string> = {
+  product_issue: 'defect', custom_delivery: 'delivery', refund: 'request', catalog_review: 'request',
+  llm_extension: 'request', catalog_complaint: 'complaint', account_support: 'account', general: 'question', greeting: 'question',
+}
+const TICKET_DOMAIN_LABELS: Record<string, string> = { platform: '平台', software: '软件', custom: '客户定制' }
+const TICKET_SOURCE_LABELS: Record<string, string> = { customer_chat: '客户对话', admin_created: '管理员自建', github_self_heal: 'GitHub 自愈' }
+
+export function ticketTypeLabel(ticket: Row): string {
+  const raw = String(ticket.ticket_type || '').trim()
+  if (raw) return String(ticket.ticket_type_label || TICKET_TYPE_LABELS[raw] || raw)
+  if (String(ticket.ticket_source || '') === 'github_self_heal') return TICKET_TYPE_LABELS.incident
+  const derived = TICKET_TYPE_BY_INTENT[String(ticket.intent || '').trim()]
+  return derived ? TICKET_TYPE_LABELS[derived] : ''
+}
+
+export function ticketDomainLabel(ticket: Row): string {
+  const raw = String(ticket.ticket_domain || '').trim()
+  if (raw) return String(ticket.ticket_domain_label || TICKET_DOMAIN_LABELS[raw] || raw)
+  if (String(ticket.intent || '') === 'custom_delivery') return TICKET_DOMAIN_LABELS.custom
+  return String(ticket.issue_domain_label || '')
+}
+
+export function ticketSourceLabel(ticket: Row): string {
+  const raw = String(ticket.ticket_source || '').trim()
+  if (raw) return String(ticket.ticket_source_label || TICKET_SOURCE_LABELS[raw] || raw)
+  const submitter = String(ticket.submitter_type || '').trim()
+  return submitter === 'admin' ? TICKET_SOURCE_LABELS.admin_created : submitter === 'customer' ? TICKET_SOURCE_LABELS.customer_chat : ''
+}
+
 export const priorityLabel = plain({ low: '低', normal: '普通', high: '高', urgent: '紧急' })
 export const roleLabel = plain({ scout: '排查', fix: '修复', verify: '验证' })
 export const actorLabel = plain({ ai: 'AI 客服', system: '系统', user: '客户', customer: '客户', admin: '管理员', employee: '数字员工' })

@@ -64,20 +64,71 @@ def _build_missing_question(node: WorkflowNode, missing: list[str]) -> str:
 
 def _build_ambiguous_question(node: WorkflowNode, candidates: list[dict[str, Any]]) -> str:
     lines = [f"检测到 {node.tool_id}.{node.action} 存在多个候选目标，请确认实际要操作的对象："]
-    for index, cand in enumerate(candidates[:10], start=1):
+    for index, cand in enumerate(candidates[:20], start=1):
         name = str(
-            cand.get("name") or cand.get("customer_name") or cand.get("unit_name") or ""
+            cand.get("name")
+            or cand.get("customer_name")
+            or cand.get("unit_name")
+            or cand.get("product_name")
+            or cand.get("material_name")
+            or ""
         ).strip()
         cid = str(cand.get("id") or "").strip()
         label = f"{name}（#{cid}）" if name and cid else (name or cid or f"候选{index}")
+        details = " / ".join(
+            str(cand[key])
+            for key in ("model_number", "specification", "contact_person", "address")
+            if cand.get(key)
+        )
+        if details:
+            label += f" — {details}"
         lines.append(f"{index}. {label}")
-    lines.append("请回复序号或唯一 ID 以确认目标。")
+    lines.append("请回复「第几个」、唯一 ID（如 ID 123）或能区分对象的名称/属性。")
     return "\n".join(lines)
+
+
+def _resolve_clear_dataset_target(
+    node: WorkflowNode,
+    params: dict[str, Any],
+    required: list[str],
+    context: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """清空知识库时从会话上下文解析目标空间，避免向用户索要内部 dataset_id。"""
+    if "dataset_id" not in required or str(params.get("dataset_id") or "").strip():
+        return None
+    raw_ids = (context or {}).get("chat_clearable_dataset_ids") or []
+    ids = [str(item).strip() for item in raw_ids if str(item).strip()]
+    if len(ids) == 1:
+        params["dataset_id"] = ids[0]
+        return None
+    if len(ids) > 1:
+        return {
+            "node_id": node.node_id,
+            "tool_id": node.tool_id,
+            "action": node.action,
+            "reason": "missing_required",
+            "field": "dataset_id",
+            "missing_fields": ["dataset_id"],
+            "question": (
+                "要清空哪个知识空间？可选："
+                f"{'、'.join(ids)}。请回复空间名称后再执行，避免误删其他空间。"
+            ),
+        }
+    return {
+        "node_id": node.node_id,
+        "tool_id": node.tool_id,
+        "action": node.action,
+        "reason": "missing_required",
+        "field": "dataset_id",
+        "missing_fields": ["dataset_id"],
+        "question": "当前没有可清空的知识库空间。如需清空，请先在知识库页面确认空间名称。",
+    }
 
 
 def needs_clarification(
     plan: PlanGraph,
     tool_registry: dict[str, Any] | None = None,
+    context: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Detect missing write inputs and ambiguous targets before execution."""
     items: list[dict[str, Any]] = []
@@ -88,6 +139,14 @@ def needs_clarification(
             continue
         params = node.params or {}
         required = _action_required(node, tool_registry)
+
+        if (node.tool_id, node.action) == ("dataset_rag", "clear_dataset"):
+            resolved = _resolve_clear_dataset_target(node, params, required, context)
+            if resolved is not None:
+                items.append(resolved)
+                continue
+            if not _missing_fields(params, required):
+                continue
 
         if node.tool_id == "business_db" and node.action == "write":
             operation = str(params.get("operation") or "").strip().lower()

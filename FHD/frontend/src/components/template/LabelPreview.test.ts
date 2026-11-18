@@ -53,9 +53,16 @@ describe('LabelPreview', () => {
     setActivePinia(createPinia())
   })
 
-  it('renders canvas element', () => {
-    const { wrapper } = mountLabel()
-    expect(wrapper.find('.label-canvas').exists()).toBe(true)
+  it('paints and updates the native canvas without proxying its context', async () => {
+    const wrapper = mount(LabelPreview)
+    try {
+      await wrapper.vm.$nextTick()
+      const canvas = wrapper.get<HTMLCanvasElement>('.label-canvas').element
+      expect([canvas.width, canvas.height]).toEqual([300, 200])
+      expect(canvas.getContext('2d')!.getImageData(15, 15, 1, 1).data[3]).toBe(255)
+      await wrapper.setProps({ fields: [{ label: '产品', value: '已更新', type: 'fixed' }] })
+      expect(wrapper.vm.getImageData()).toMatch(/^data:image\/png;base64,/)
+    } finally { wrapper.unmount() }
   })
 
   it('renders label-preview container', () => {

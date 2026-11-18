@@ -2,10 +2,43 @@
 
 from __future__ import annotations
 
+import json
+import os
 from typing import Any
 
 from app.mod_sdk.duty_roster import all_planned_duty_employee_ids, load_duty_roster_document
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+
+def _present_employee_pack_ids(mods_root: str) -> set[str]:
+    """列出 mods/_employees 下真实存在的员工包，不套执行面准入过滤，避免把已在磁盘上的控制面包误报缺失。"""
+    ids: set[str] = set()
+    try:
+        from app.infrastructure.mods.artifact_constants import (
+            ARTIFACT_EMPLOYEE_PACK,
+            normalize_artifact,
+        )
+        from app.infrastructure.mods.employee_registry import employees_root
+
+        root = employees_root(mods_root)
+        if not os.path.isdir(root):
+            return ids
+        for name in sorted(os.listdir(root)):
+            manifest = os.path.join(root, name, "manifest.json")
+            if not os.path.isfile(manifest):
+                continue
+            try:
+                with open(manifest, encoding="utf-8") as fh:
+                    data = json.load(fh)
+            except (OSError, json.JSONDecodeError):
+                continue
+            if not isinstance(data, dict) or normalize_artifact(data) != ARTIFACT_EMPLOYEE_PACK:
+                continue
+            pid = str(data.get("id") or name).strip() or name
+            ids.add(pid)
+    except RECOVERABLE_ERRORS:
+        pass
+    return ids
 
 
 def _installed_employee_pack_ids() -> set[str]:
@@ -29,6 +62,7 @@ def _installed_employee_pack_ids() -> set[str]:
         for mods_root in roots:
             if not mods_root:
                 continue
+            ids |= _present_employee_pack_ids(mods_root)
             registry = EmployeeRegistry(mods_root)
             for pack in registry.list_packs():
                 pid = str(pack.get("id") or "").strip()

@@ -1,9 +1,9 @@
 import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useTpTemplateList } from './useTpTemplateList'
+import { useTpGridTool } from './useTpGridTool'
 import { useTpCreateFlow } from './useTpCreateFlow'
 import { useTpTemplateActions } from './useTpTemplateActions'
-import { useTpGridTool } from './useTpGridTool'
 import { buildScopeOptions, buildScopeTabs, getRequiredTermsByScope, getScopeIconClass } from './tpScopeRules'
 import {
   canDeleteTemplate,
@@ -33,6 +33,7 @@ export const TEMPLATE_SEARCH_STORAGE_KEY = 'xcagi_template_search_keyword'
  */
 export function assembleTemplatePreview() {
   const route = useRoute()
+  const router = useRouter()
 
   const list = useTpTemplateList()
   const create = useTpCreateFlow({ refreshTemplates: list.refreshTemplates })
@@ -41,6 +42,7 @@ export function assembleTemplatePreview() {
     templates: list.templates,
     exportScopedTemplates: list.exportScopedTemplates,
   })
+
   const gridTool = useTpGridTool()
 
   const scopeTabs = computed(() => buildScopeTabs())
@@ -115,7 +117,18 @@ export function assembleTemplatePreview() {
     create.stopProgressTimer()
   })
 
+  async function resetLibraryFilters() {
+    list.searchKeyword.value = ''
+    list.activeScopeTab.value = 'all'
+    try { sessionStorage.removeItem(TEMPLATE_SEARCH_STORAGE_KEY) } catch { /* Storage may be unavailable. */ }
+    const query = { ...route.query }
+    delete query.keyword
+    delete query.scope
+    await router.replace({ query })
+  }
+
   return {
+    resetLibraryFilters,
     ...list,
     ...create,
     ...actions,

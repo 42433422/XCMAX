@@ -998,6 +998,21 @@ _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
             _success(dataset_id="platform-docs", document_id="doc_1", deleted_chunks=1),
         )
     ],
+    ("dataset_rag", "update_document_acl"): [
+        _sample(
+            "update_dataset_document_acl",
+            {
+                "dataset_id": "platform-docs",
+                "document_id": "doc_1",
+                "acl": {"allow_actors": ["user-a"], "deny_actors": []},
+            },
+            _success(
+                dataset_id="platform-docs",
+                document_id="doc_1",
+                acl={"allow_actors": ["user-a"]},
+            ),
+        )
+    ],
     ("dataset_rag", "clear_dataset"): [
         _sample(
             "clear_dataset_documents",

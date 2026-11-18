@@ -1,5 +1,5 @@
 import { computed, ref, type ComputedRef, type Ref } from 'vue'
-import { PERSY_KNOWLEDGE_DATASET_ID, knowledgeBaseApi, type KnowledgeBaseChunk } from '@/api/knowledgeBase'
+import { PERSY_KNOWLEDGE_DATASET_ID, knowledgeBaseApi, type KnowledgeBaseChunk, type KnowledgeBaseQueryResponse } from '@/api/knowledgeBase'
 import type { PersyGraphRecall } from '@/components/persy/PersyKnowledgeGraph.vue'
 import { errorText, isMemoryChunk, normalizeAnswer } from '@/composables/persyKnowledgeFormatters'
 
@@ -10,18 +10,29 @@ export function usePersyRecallQuery(options: {
   refreshMemories: () => Promise<void>
   refreshGraph: () => Promise<void>
   onRecallCommitted: () => void
+  crossDatasetIds?: Ref<string[]>
 }) {
   const { activeDatasetId, adminOmniscient, omniscientQueryEnabled, refreshMemories, refreshGraph, onRecallCommitted } = options
 
   const queryText = ref('')
   const topK = ref(6)
   const rerank = ref(true)
+  const retrievalMode = ref<'hybrid' | 'vector' | 'keyword'>('hybrid')
+  const expandSection = ref(false)
+  const mmrLambda = ref(0)
+  const streaming = ref(true)
+  const crossDataset = ref(false)
   const querying = ref(false)
   const queryMessage = ref('')
   const queryError = ref('')
   const answerText = ref('')
   const lastQuery = ref('')
   const resultChunks = ref<KnowledgeBaseChunk[]>([])
+  const grounding = ref<number | null>(null)
+  const answerGrounded = ref<boolean | null>(null)
+  const noAnswer = ref(false)
+  const feedbackRating = ref<'up' | 'down' | ''>('')
+  const feedbackMessage = ref('')
 
   const recallState = computed<PersyGraphRecall | null>(() =>
     lastQuery.value
@@ -38,6 +49,11 @@ export function usePersyRecallQuery(options: {
     resultChunks.value = []
     queryMessage.value = ''
     queryError.value = ''
+    grounding.value = null
+    answerGrounded.value = null
+    noAnswer.value = false
+    feedbackRating.value = ''
+    feedbackMessage.value = ''
   }
 
   async function queryKnowledge(): Promise<void> {
@@ -55,19 +71,61 @@ export function usePersyRecallQuery(options: {
       let memory: Awaited<ReturnType<typeof knowledgeBaseApi.queryMemories>> | null = null
       let knowledgeFailure: unknown = null
       let memoryFailure: unknown = null
+      const payload = {
+        datasetId: activeDatasetId.value,
+        query,
+        topK: boundedTopK,
+        rerank: rerank.value,
+        retrievalMode: retrievalMode.value,
+        expandSection: expandSection.value,
+        mmrLambda: mmrLambda.value,
+      }
       try {
-        knowledge =
-          adminOmniscient.value && omniscientQueryEnabled.value
-            ? await knowledgeBaseApi.omniscientQuery({
-                query,
-                topK: boundedTopK,
-              })
-            : await knowledgeBaseApi.query({
-                datasetId: activeDatasetId.value,
-                query,
-                topK: boundedTopK,
-                rerank: rerank.value,
-              })
+        if (adminOmniscient.value && omniscientQueryEnabled.value) {
+          knowledge = await knowledgeBaseApi.omniscientQuery({
+            query,
+            topK: boundedTopK,
+          })
+        } else if (crossDataset.value && (options.crossDatasetIds?.value.length ?? 0) > 1) {
+          knowledge = await knowledgeBaseApi.multiQuery({
+            ...payload,
+            datasetIds: options.crossDatasetIds?.value || [],
+          })
+        } else if (streaming.value) {
+          let meta: Record<string, unknown> = {}
+          let done: Record<string, unknown> = {}
+          let streamed = ''
+          try {
+            await knowledgeBaseApi.queryStream(payload, {
+              onMeta: (data) => {
+                meta = data
+                if (Array.isArray(data.chunks)) {
+                  resultChunks.value = data.chunks as KnowledgeBaseChunk[]
+                }
+              },
+              onDelta: (text) => {
+                streamed += text
+                answerText.value = streamed
+              },
+              onDone: (data) => {
+                done = data
+              },
+            })
+            knowledge = {
+              ...(meta as unknown as KnowledgeBaseQueryResponse),
+              ...(done as unknown as KnowledgeBaseQueryResponse),
+              success: true,
+              dataset_id: activeDatasetId.value,
+              chunks: Array.isArray(meta.chunks)
+                ? (meta.chunks as KnowledgeBaseChunk[])
+                : [],
+            }
+          } catch {
+            knowledge = await knowledgeBaseApi.query(payload)
+          }
+        } else {
+          knowledge = await knowledgeBaseApi.query(payload)
+        }
       } catch (error) {
         knowledgeFailure = error
       }
@@ -103,6 +161,10 @@ export function usePersyRecallQuery(options: {
       lastQuery.value = query
       resultChunks.value = mergedChunks
       answerText.value = normalizeAnswer(knowledge?.answer, resultChunks.value.length)
+      grounding.value = typeof knowledge?.grounding === 'number' ? knowledge.grounding : null
+      answerGrounded.value =
+        typeof knowledge?.answer_grounded === 'boolean' ? knowledge.answer_grounded : null
+      noAnswer.value = knowledge?.no_answer === true
       const recalledMemoryCount = mergedChunks.filter((chunk) => isMemoryChunk(chunk)).length
       if (!answerText.value && recalledMemoryCount) {
         answerText.value = `已从长期记忆中召回 ${recalledMemoryCount} 条相关事实。`
@@ -119,16 +181,53 @@ export function usePersyRecallQuery(options: {
     }
   }
 
+  async function submitAnswerFeedback(rating: 'up' | 'down'): Promise<void> {
+    if (feedbackRating.value || !lastQuery.value || !answerText.value) return
+    feedbackMessage.value = ''
+    try {
+      const result = await knowledgeBaseApi.submitFeedback({
+        datasetId: activeDatasetId.value,
+        rating,
+        query: lastQuery.value,
+        answer: answerText.value,
+        citations: resultChunks.value.slice(0, 10).map((chunk) => ({
+          source: chunk.source,
+          chunk_index: chunk.chunk_index,
+          score: chunk.score,
+        })),
+      })
+      if (result.success) {
+        feedbackRating.value = rating
+        feedbackMessage.value = '感谢反馈'
+      } else {
+        feedbackMessage.value = result.message || '反馈未保存，请稍后重试'
+      }
+    } catch {
+      feedbackMessage.value = '反馈未保存，请稍后重试'
+    }
+  }
+
   return {
     queryText,
     topK,
     rerank,
+    retrievalMode,
+    expandSection,
+    mmrLambda,
+    streaming,
+    crossDataset,
     querying,
     queryMessage,
     queryError,
     answerText,
     lastQuery,
     resultChunks,
+    grounding,
+    answerGrounded,
+    feedbackRating,
+    feedbackMessage,
+    submitAnswerFeedback,
+    noAnswer,
     recallState,
     resetRecall,
     queryKnowledge,

@@ -76,7 +76,9 @@ def test_api_call_allows_prefix_child(client):
     assert data["data"]["items"][0]["id"] == 1
 
 
-def test_whitelist_seed_and_loop_verify(client):
+@pytest.mark.parametrize("writes_enabled", [False, True])
+def test_whitelist_seed_and_loop_verify(client, monkeypatch, writes_enabled):
+    monkeypatch.setenv("AIOPEN_ENABLE_WRITES", "1" if writes_enabled else "0")
     seeded = client.post("/api/aiopen/whitelist/seed", json={"enabled": True, "merge": True})
     assert seeded.status_code == 200
     assert seeded.json()["success"] is True
@@ -87,12 +89,14 @@ def test_whitelist_seed_and_loop_verify(client):
     )
     assert loop.status_code == 200
     body = loop.json()
-    assert body["success"] is True
-    assert body["closed_loop"] is True
+    assert body["success"] is writes_enabled
+    assert body["closed_loop"] is writes_enabled
     steps = {s["step"]: s for s in body["steps"]}
     assert steps["api_catalog"]["ok"] is True
     assert steps["api_call"]["ok"] is True
-    assert steps["chat"]["ok"] is True
+    assert steps["chat"]["ok"] is writes_enabled
+    if not writes_enabled:
+        assert "写操作未启用" in steps["chat"]["message"]
 
 
 def test_manifest_includes_capability_loop(client):

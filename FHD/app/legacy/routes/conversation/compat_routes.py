@@ -9,6 +9,8 @@ import asyncio
 import json
 import logging
 import time
+from contextlib import aclosing
+from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -147,19 +149,46 @@ def _replay_line(row: dict) -> bytes:
     return b"id: " + seq + b"\ndata: " + json.dumps(payload, ensure_ascii=False).encode() + b"\n\n"
 
 
-async def _follow_replay(turn_id: str, after: int = 0, *, idle_timeout: float = 600.0):
+def _replay_error_line(code: str, message: str) -> bytes:
+    payload = {"type": "error", "code": code, "message": message}
+    return b"data: " + json.dumps(payload, ensure_ascii=False).encode() + b"\n\n"
+
+
+async def _follow_replay(
+    turn_id: str,
+    after: str | int = 0,
+    *,
+    owner: str,
+    tenant: str,
+    idle_timeout: float = 600.0,
+):
     """从回放缓冲跟随一个 turn，直到它落终态；客户端断开只会停止本协程。"""
-    cursor = max(0, int(after))
-    deadline = time.monotonic() + idle_timeout
+    cursor = after
+    started = time.monotonic()
+    deadline = started + idle_timeout
     idle_ticks = 0
     while True:
-        rows = chat_stream_replay.events_after(turn_id, cursor)
-        for row in rows:
-            cursor = max(cursor, int(row.get("seq") or 0))
-            yield _replay_line(row)
-        if chat_stream_replay.finish_status(turn_id):
-            for row in chat_stream_replay.events_after(turn_id, cursor):
+        try:
+            rows = chat_stream_replay.events_after(turn_id, cursor, owner=owner, tenant=tenant)
+            for row in rows:
+                cursor = row.get("seq") or cursor
                 yield _replay_line(row)
+            if chat_stream_replay.finish_status(turn_id, owner=owner, tenant=tenant):
+                for row in chat_stream_replay.events_after(
+                    turn_id, cursor, owner=owner, tenant=tenant
+                ):
+                    cursor = row.get("seq") or cursor
+                    yield _replay_line(row)
+                return
+            # 租约消失且无终态：生产端已失联，明确落中断事件而不是空等到超时。
+            if (
+                time.monotonic() - started > chat_stream_replay.LEASE_TTL_SECONDS + 5
+                and not chat_stream_replay.lease_alive(turn_id, owner=owner, tenant=tenant)
+            ):
+                yield _replay_error_line("STREAM_INTERRUPTED", "对话流已中断，请重试。")
+                return
+        except chat_stream_replay.ReplayBackendUnavailable:
+            yield _replay_error_line("REPLAY_UNAVAILABLE", "断线续传服务暂不可用，请稍后重试。")
             return
         if time.monotonic() > deadline:
             yield b": replay idle timeout\n\n"
@@ -170,29 +199,114 @@ async def _follow_replay(turn_id: str, after: int = 0, *, idle_timeout: float = 
         await asyncio.sleep(0.1)
 
 
+async def _stream_live(request: Request, body: XcagiCompatChatBody, *, ai_tier: str):
+    """匿名请求直连上游事件流：不写回放，也就没有可被他人读取的续传入口。"""
+    from app.middleware.chat_stream_limit import release_chat_stream_slot
+
+    try:
+        async for chunk in compat_chat_stream_async(request, body, ai_tier=ai_tier):
+            yield chunk
+    finally:
+        release_chat_stream_slot()
+
+
+async def _renew_replay_lease(runner: Any, producer: asyncio.Task[Any]) -> None:
+    """The producer owns this heartbeat and awaits it on every exit path."""
+    try:
+        while not producer.done():
+            await asyncio.sleep(max(1.0, chat_stream_replay.LEASE_TTL_SECONDS / 3))
+            if producer.done():
+                break
+            renewal = asyncio.create_task(asyncio.to_thread(runner.reacquire))
+            try:
+                renewed = await asyncio.shield(renewal)
+            finally:
+                # Cancellation must not leave a Redis call running past task teardown.
+                if not renewal.done():
+                    await renewal
+            if not renewed:
+                raise chat_stream_replay.ReplayBackendUnavailable("生产权租约已失效")
+    except RECOVERABLE_ERRORS:
+        producer.cancel()
+
+
 async def _produce_replay(
-    request: Request, body: XcagiCompatChatBody, *, ai_tier: str, turn_id: str
+    request: Request,
+    body: XcagiCompatChatBody,
+    *,
+    ai_tier: str,
+    turn_id: str,
+    owner: str,
+    tenant: str,
+    runner: Any = None,
 ) -> None:
     """后台消费真实事件流并写入回放缓冲；与 HTTP 连接生命周期无关。"""
     from app.middleware.chat_stream_limit import release_chat_stream_slot
     from app.utils.operational_errors import RECOVERABLE_ERRORS
 
+    producer = asyncio.current_task()
+    heartbeat = (
+        asyncio.create_task(_renew_replay_lease(runner, producer))
+        if runner is not None and producer is not None
+        else None
+    )
     status = "done"
     try:
-        async for chunk in compat_chat_stream_async(request, body, ai_tier=ai_tier):
-            for payload in _sse_payloads(chunk):
-                chat_stream_replay.append(turn_id, payload)
+        async with aclosing(compat_chat_stream_async(request, body, ai_tier=ai_tier)) as stream:
+            async for chunk in stream:
+                for payload in _sse_payloads(chunk):
+                    chat_stream_replay.append(
+                        turn_id, payload, owner=owner, tenant=tenant, runner=runner
+                    )
+    except chat_stream_replay.ReplayBackendUnavailable:
+        # 回放后端不可用：停止生产，租约过期后跟随方会收到中断事件。
+        status = "error"
+        logger.warning("chat stream replay backend unavailable", exc_info=True)
     except asyncio.CancelledError:
         status = "aborted"
         raise
     except RECOVERABLE_ERRORS as exc:
         status = "error"
         message = str(exc).strip() or exc.__class__.__name__
-        chat_stream_replay.append(turn_id, {"type": "error", "message": message})
+        try:
+            chat_stream_replay.append(
+                turn_id,
+                {"type": "error", "message": message},
+                owner=owner,
+                tenant=tenant,
+                runner=runner,
+            )
+        except chat_stream_replay.ReplayBackendUnavailable:
+            pass
         logger.warning("chat stream producer failed", exc_info=True)
     finally:
-        chat_stream_replay.mark_finished(turn_id, status)
-        release_chat_stream_slot()
+        try:
+            if heartbeat is not None:
+                heartbeat.cancel()
+                try:
+                    await heartbeat
+                except asyncio.CancelledError:
+                    pass
+        finally:
+            try:
+                chat_stream_replay.mark_finished(
+                    turn_id, status, owner=owner, tenant=tenant, runner=runner
+                )
+            except chat_stream_replay.ReplayBackendUnavailable:
+                logger.warning("chat stream terminal state rejected after lease loss")
+            finally:
+                release_chat_stream_slot()
+
+
+def _replay_unavailable_response() -> JSONResponse:
+    return JSONResponse(
+        status_code=503,
+        content={
+            "success": False,
+            "code": "REPLAY_UNAVAILABLE",
+            "message": "断线续传服务暂不可用，请稍后重试",
+        },
+    )
 
 
 @router.post("/ai/unified_chat/stream")
@@ -201,19 +315,38 @@ async def ai_unified_chat_stream(request: Request, body: XcagiCompatChatBody):
     from app.middleware.chat_stream_limit import acquire_chat_stream_slot
 
     body = _prepare_compat_chat_body(request, body)
-    turn_id = str((body.context or {}).get("turn_id") or "")
+    context = body.context or {}
+    turn_id = str(context.get("turn_id") or "")
+    owner = str(context.get("local_user_id") or context.get("user_id") or "")
+    tenant = str(context.get("tenant_id") or "")
     assert_p2_elevated_claim_or_raise(request)
     tier = resolve_ai_tier(request)
 
+    # 匿名请求没有可校验归属：不写回放、不开续传，直接一次性流式返回。
+    if not owner:
+        if not acquire_chat_stream_slot():
+            return JSONResponse(
+                status_code=429,
+                content={
+                    "success": False,
+                    "code": "CHAT_STREAM_LIMIT",
+                    "message": "流式对话并发已满，请稍后重试",
+                },
+            )
+        return _sse_response(_stream_live(request, body, ai_tier=tier))
+
+    try:
+        claimed = chat_stream_replay.claim_runner(turn_id, owner=owner, tenant=tenant)
+    except chat_stream_replay.ReplayBackendUnavailable:
+        return _replay_unavailable_response()
     # 同一 turn 仍在生产：本次连接只跟随，不重复执行（断线重连）。
-    if not chat_stream_replay.claim_runner(turn_id):
-        return _sse_response(_follow_replay(turn_id))
-    # 已结束的 turn 再次 POST 视为重试：清掉旧回放，重新执行。
-    chat_stream_replay.clear(turn_id)
-    chat_stream_replay.claim_runner(turn_id)
+    if not claimed:
+        return _sse_response(_follow_replay(turn_id, owner=owner, tenant=tenant))
+    # 抢占已原子清除旧回放；此处不得再次清除新生产周期的数据。
+    runner = chat_stream_replay.runner_for(turn_id, owner=owner, tenant=tenant)
 
     if not acquire_chat_stream_slot():
-        chat_stream_replay.release_runner(turn_id)
+        chat_stream_replay.release_runner(turn_id, owner=owner, tenant=tenant, runner=runner)
         return JSONResponse(
             status_code=429,
             content={
@@ -222,19 +355,40 @@ async def ai_unified_chat_stream(request: Request, body: XcagiCompatChatBody):
                 "message": "流式对话并发已满，请稍后重试",
             },
         )
-    asyncio.create_task(_produce_replay(request, body, ai_tier=tier, turn_id=turn_id))
-    return _sse_response(_follow_replay(turn_id))
+    asyncio.create_task(
+        _produce_replay(
+            request,
+            body,
+            ai_tier=tier,
+            turn_id=turn_id,
+            owner=owner,
+            tenant=tenant,
+            runner=runner,
+        )
+    )
+    return _sse_response(_follow_replay(turn_id, owner=owner, tenant=tenant))
 
 
 @router.get("/ai/chat/stream/resume")
 async def ai_chat_stream_resume(
+    request: Request,
     turn_id: str = Query(..., min_length=1),
-    after: int = Query(0, ge=0),
+    after: str = Query("0"),
 ):
-    """断线后按 ``turn_id`` + 最后事件序号继续读取；已结束则直接回放终态。"""
-    if not chat_stream_replay.has_replay(turn_id) and not chat_stream_replay.finish_status(turn_id):
+    """断线后按 ``turn_id`` + 游标继续读取；仅限已登录且流属于当前主体。"""
+    from app.infrastructure.auth.agent_principal import require_agent_principal
+
+    principal = require_agent_principal(request, x_user_id=None)
+    owner = str(principal.user_id)
+    tenant = str(principal.tenant_id or "")
+    try:
+        has_replay = chat_stream_replay.has_replay(turn_id, owner=owner, tenant=tenant)
+        status = chat_stream_replay.finish_status(turn_id, owner=owner, tenant=tenant)
+    except chat_stream_replay.ReplayBackendUnavailable:
+        raise HTTPException(status_code=503, detail="断线续传服务暂不可用，请稍后重试。") from None
+    if not has_replay and not status:
         raise HTTPException(status_code=404, detail="没有可续传的流")
-    return _sse_response(_follow_replay(turn_id, after))
+    return _sse_response(_follow_replay(turn_id, after, owner=owner, tenant=tenant))
 
 
 @router.post("/ai/chat")

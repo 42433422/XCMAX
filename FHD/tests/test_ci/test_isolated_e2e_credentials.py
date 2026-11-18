@@ -183,7 +183,10 @@ sockets = [socket.socket(), socket.socket()]
 for sock in sockets:
     sock.bind(('127.0.0.1', 0))
     sock.listen()
-pathlib.Path(sys.argv[1]).write_text(json.dumps([s.getsockname()[1] for s in sockets]))
+ready = pathlib.Path(sys.argv[1])
+pending = ready.with_suffix('.tmp')
+pending.write_text(json.dumps([s.getsockname()[1] for s in sockets]))
+pending.replace(ready)
 time.sleep(60)
 """,
             str(ready),

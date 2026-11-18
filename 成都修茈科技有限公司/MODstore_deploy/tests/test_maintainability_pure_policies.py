@@ -7,6 +7,7 @@ import pytest
 from modstore_server.customer_service_triage import (
     _parse_domain_clarify_reply,
     resolve_triage_lane,
+    ticket_taxonomy,
 )
 from modstore_server.employee_executor_policies import (
     _flag_enabled,
@@ -47,6 +48,30 @@ def test_clarify_domain_compatibility(message, domain):
 )
 def test_triage_lane_compatibility(intent, lane):
     assert resolve_triage_lane(intent) == lane
+
+
+@pytest.mark.parametrize(
+    ("intent", "submitter", "evidence", "expected"),
+    [
+        ("product_issue", "customer", {"issue_domain": "platform"}, ("缺陷", "平台", "客户对话")),
+        (
+            "custom_delivery",
+            "admin",
+            {"issue_domain": "custom"},
+            ("交付实施", "客户定制", "管理员自建"),
+        ),
+        ("refund", "customer", {}, ("服务请求", "", "客户对话")),
+        ("account_support", "unknown", {"source": "github_self_heal"}, ("事故", "", "GitHub 自愈")),
+        ("general", "unknown", {}, ("咨询", "", "")),
+    ],
+)
+def test_ticket_taxonomy_derivation(intent, submitter, evidence, expected):
+    taxonomy = ticket_taxonomy(intent, submitter, evidence)
+    assert (
+        taxonomy["ticket_type_label"],
+        taxonomy["ticket_domain_label"],
+        taxonomy["ticket_source_label"],
+    ) == expected
 
 
 @pytest.mark.parametrize(

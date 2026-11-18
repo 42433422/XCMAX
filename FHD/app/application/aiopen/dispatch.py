@@ -35,6 +35,7 @@ class ToolDispatcher:
         cursor: Callable[[], CursorHub],
         actions: Callable[[], Mapping[str, str]],
         timeout: Callable[[], float],
+        action_timeouts: Callable[[], Mapping[str, float]] | None = None,
     ) -> None:
         self._state = state
         self._catalog = catalog
@@ -42,6 +43,7 @@ class ToolDispatcher:
         self._cursor = cursor
         self._actions = actions
         self._timeout = timeout
+        self._action_timeouts = action_timeouts or (lambda: {})
 
     async def invoke(self, name: str, args: dict[str, Any] | None, app: ASGIApp) -> dict[str, Any]:
         arguments = args if isinstance(args, dict) else {}
@@ -69,7 +71,9 @@ class ToolDispatcher:
                 }
             session_id = str(arguments.get("session_id") or "") or None
             params = {key: value for key, value in arguments.items() if key != "session_id"}
+            action = actions[name]
+            timeout = float(self._action_timeouts().get(action) or self._timeout())
             return await self._cursor().dispatch(
-                actions[name], params, session_id=session_id, timeout=self._timeout()
+                action, params, session_id=session_id, timeout=timeout
             )
         return {"success": False, "message": f"未知工具：{name}", "code": "UNKNOWN_TOOL"}

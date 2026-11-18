@@ -481,6 +481,17 @@ def test_build_tool_specs_v2_exposes_aiopen_mcp_contracts() -> None:
     assert invalid_ui_type.error_code == "schema_validation_failed"
     assert "text" in invalid_ui_type.message
 
+    upload = specs[("aiopen", "ui_upload")].contract_samples[0]["input"]
+    assert upload["files"][0] == {
+        "name": "sample.txt",
+        "text": "AIOPEN upload sample",
+        "type": "text/plain",
+    }
+    assert validate_tool_call("aiopen", "ui_upload", upload).ok
+    invalid_upload = validate_tool_call("aiopen", "ui_upload", {"files": [{"text": "sample"}]})
+    assert not invalid_upload.ok
+    assert "name" in invalid_upload.message
+
 
 def test_build_tool_specs_v2_provides_fixture_for_every_registry_action() -> None:
     specs = build_tool_specs_v2()

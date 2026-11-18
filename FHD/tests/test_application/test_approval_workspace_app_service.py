@@ -2652,7 +2652,7 @@ class TestHasPendingAiWorkflow:
             ) as mock_load,
         ):
             assert _has_pending_ai_workflow("req-1") is True
-        mock_load.assert_called_once_with("req-1", allow_terminal=False)
+        mock_load.assert_called_once_with("req-1", allow_terminal=False, raise_storage_errors=True)
 
     def test_memory_miss_no_snapshot_false(self):
         svc = MagicMock()
@@ -2670,7 +2670,7 @@ class TestHasPendingAiWorkflow:
         svc = MagicMock()
         svc.get_pending_workflow.side_effect = RuntimeError("boom")
         with patch("app.application.workflow.get_approval_service", return_value=svc):
-            assert _has_pending_ai_workflow("req-1") is False
+            assert _has_pending_ai_workflow("req-1") is None
 
 
 class TestResumePendingAiWorkflow:

@@ -84,19 +84,57 @@ def format_tool_result_text(tool_name: str, result: dict[str, Any]) -> str:
         lines = [
             f"页面：{title or '(无标题)'}",
             f"URL：{url or '(未知)'}",
-            f"可交互元素 {len(elements or [])} 个：",
+            f"可交互节点 {len(elements or [])} 个（优先用 ref）：",
         ]
-        for el in elements[:40]:
+        for el in elements[:60]:
             if not isinstance(el, dict):
                 continue
-            sel = el.get("selector") or el.get("ref") or "?"
-            text = str(el.get("text") or el.get("label") or "")[:60]
+            ref = el.get("ref") or el.get("selector") or "?"
+            label = str(el.get("name") or el.get("text") or el.get("label") or "")[:60]
             role = el.get("role") or el.get("tag") or ""
-            lines.append(f"  · [{role}] {text!r} → {sel}")
-        if len(elements or []) > 40:
-            lines.append(f"  … 另有 {len(elements or []) - 40} 个元素")
+            raw_state = el.get("state")
+            state = raw_state if isinstance(raw_state, dict) else {}
+            marks = "".join(
+                f" {key}"
+                for key in ("disabled", "checked", "expanded", "selected")
+                if state.get(key)
+            )
+            lines.append(f"  · [{role}]{marks} {label!r} → {ref}")
+        if len(elements or []) > 60:
+            lines.append(f"  … 另有 {len(elements or []) - 60} 个节点")
+        if result.get("truncated"):
+            lines.append("  （节点过多已截断，可用 ui_navigate 缩小范围后重新快照）")
         return "\n".join(lines)
-    if name in {"ui_click", "ui_type", "ui_navigate", "ui_scroll"}:
+    if name == "ui_verify":
+        raw_checks = result.get("checks")
+        checks = raw_checks if isinstance(raw_checks, list) else []
+        lines = [f"页面校验：{'通过' if ok else '未通过'}"]
+        for check in checks:
+            if not isinstance(check, dict):
+                continue
+            mark = "✓" if check.get("ok") else "✗"
+            lines.append(f"  {mark} {check.get('check')} — {check.get('detail', '')}")
+        return "\n".join(lines)
+    if name == "ui_wait":
+        if not ok:
+            return f"等待未满足：{result.get('message', '')}"
+        return f"等待完成（{result.get('waited_ms', 0)}ms）：{result.get('matched', '')}"
+    if name == "ui_screenshot":
+        if not ok:
+            return f"截图失败：{result.get('message', '')}"
+        return (
+            f"截图已生成：{result.get('width')}×{result.get('height')}"
+            f"，约 {result.get('bytes', 0)} 字节"
+            f"，参考：{result.get('target', 'viewport')}"
+        )
+    if name in {
+        "ui_click",
+        "ui_type",
+        "ui_select",
+        "ui_upload",
+        "ui_navigate",
+        "ui_scroll",
+    }:
         if not ok:
             return f"{name} 失败：{result.get('message', '')}"
         detail = result.get("message") or result.get("detail") or "操作已执行"
@@ -108,6 +146,87 @@ def format_tool_result_text(tool_name: str, result: dict[str, Any]) -> str:
         if extra_data:
             return f"{detail}\n{json.dumps(extra_data, ensure_ascii=False, default=str)}"
         return str(detail)
+    if name == "operation_call":
+        operation_id = result.get("operation_id", "")
+        code = result.get("code", "")
+        if code == "APPROVAL_REQUIRED":
+            ticket = result.get("approval_id")
+            number = result.get("request_no")
+            detail = f"审批单 #{ticket}" if ticket else ""
+            if number:
+                detail += f"（{number}）"
+            return f"{operation_id} 需要人工审批，尚未执行。{detail}\n{result.get('message', '')}"
+        if code == "WRITE_DISABLED":
+            return f"{operation_id} 为写操作，服务端未启用。\n{result.get('message', '')}"
+        if not ok:
+            return f"{operation_id} 执行失败：{result.get('message', code)}"
+        status = result.get("status_code", "?")
+        data = result.get("data")
+        body = (
+            json.dumps(data, ensure_ascii=False, indent=2, default=str)
+            if data is not None
+            else "(empty)"
+        )
+        if len(body) > 4000:
+            body = body[:4000] + "\n…(truncated)"
+        return f"{operation_id} → HTTP {status}\n\n{body}"
+    if name == "knowledge_search":
+        if not ok:
+            return f"能力检索失败：{result.get('message', '')}"
+        raw_items = result.get("items")
+        items: list[Any] = list(raw_items) if isinstance(raw_items, list) else []
+        lines = [f"检索「{result.get('query', '')}」命中 {len(items)} 条："]
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            lines.append(
+                f"  · {item.get('operation_id')}  {item.get('method')} {item.get('path')}"
+                f"  [{item.get('risk')}] {item.get('summary', '')}"
+            )
+            if item.get("when_to_use"):
+                lines.append(f"      何时用：{item['when_to_use']}")
+        if not items:
+            lines.append("  未命中；可换用更短的关键字或去掉 domain 限定。")
+        return "\n".join(lines)
+    if name == "operation_describe":
+        if not ok:
+            return f"读取 operation 失败：{result.get('message', '')}"
+        raw_operation = result.get("operation")
+        operation = raw_operation if isinstance(raw_operation, dict) else {}
+        raw_semantics = operation.get("semantics")
+        semantics = raw_semantics if isinstance(raw_semantics, dict) else {}
+        lines = [
+            f"{operation.get('operation_id')}  {operation.get('method')} {operation.get('path')}",
+            f"风险：{operation.get('risk')} · scope：{operation.get('scope')}"
+            f" · 工具集：{operation.get('toolset')}",
+            f"摘要：{operation.get('summary', '')}",
+        ]
+        review_status = str(semantics.get("review_status") or "").strip()
+        if review_status:
+            reviewer = str(semantics.get("reviewed_by") or "").strip()
+            reviewed_at = str(semantics.get("reviewed_at") or "").strip()
+            lines.append(
+                f"复核状态：{review_status}"
+                + (f"（{reviewer} {reviewed_at}）" if reviewer or reviewed_at else "")
+            )
+        for label, key in (
+            ("何时用", "when_to_use"),
+            ("副作用", "side_effects"),
+            ("前置条件", "preconditions"),
+            ("返回", "returns"),
+            ("示例", "examples"),
+        ):
+            value = semantics.get(key)
+            if value:
+                rendered = (
+                    "；".join(str(item) for item in value)
+                    if isinstance(value, list)
+                    else str(value)
+                )
+                lines.append(f"{label}：{rendered}")
+        if not semantics:
+            lines.append("语义：暂无 overlay，可按 path 与摘要判断用途。")
+        return "\n".join(lines)
     if not ok:
         return f"工具 {name} 失败：{result.get('message', result.get('code', 'unknown error'))}"
     return json.dumps(result, ensure_ascii=False, indent=2, default=str)

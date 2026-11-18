@@ -17,13 +17,20 @@ from .protocols import ApprovalAccess, RequestView, WorkspaceResponse
 from .repository import ApprovalRepository
 
 
+def _availability_unavailable() -> JSONResponse:
+    return JSONResponse(
+        {"success": False, "retryable": True, "message": "暂时无法核实工作流状态，请稍后重试"},
+        status_code=503,
+    )
+
+
 class ApprovalQueries:
     def __init__(
         self,
         repository: ApprovalRepository,
         access: ApprovalAccess,
         view: RequestView,
-        pending: Callable[[str | None], bool],
+        pending: Callable[[str | None], bool | None],
         users: Callable[[Session], list[User]],
         roster: Callable[[], object],
         errors: tuple[type[Exception], ...],
@@ -73,6 +80,17 @@ class ApprovalQueries:
             result: list[dict[str, Any]] = []
             for req in items:
                 data = self.view(req, include_records=False)
+                # 查询失败不是过期；不能把未知状态呈现为不可恢复的工作流。
+                if (
+                    self.access.is_workflow(req)
+                    and not req.current_node
+                    and req.status
+                    in (ApprovalStatus.PENDING.value, ApprovalStatus.IN_PROGRESS.value)
+                ):
+                    pending = self.pending(req.request_no)
+                    if pending is None:
+                        return _availability_unavailable()
+                    data["runtime_available"] = pending
                 if approver_id is not None:
                     node = req.current_node
                     if self.access.is_workflow(req) and (not node):
@@ -81,7 +99,7 @@ class ApprovalQueries:
                             ApprovalStatus.IN_PROGRESS.value,
                         ):
                             continue
-                        if not self.pending(req.request_no):
+                        if data["runtime_available"] is False:
                             continue
                         if not self.access.workflow_reviewer(db, req, approver_id):
                             continue
@@ -115,7 +133,17 @@ class ApprovalQueries:
                 return JSONResponse(
                     {"success": False, "message": "审批请求不存在", "data": None}, status_code=404
                 )
-            return {"success": True, "data": self.view(req, include_records=True)}
+            data = self.view(req, include_records=True)
+            if (
+                self.access.is_workflow(req)
+                and not req.current_node
+                and req.status in (ApprovalStatus.PENDING.value, ApprovalStatus.IN_PROGRESS.value)
+            ):
+                pending = self.pending(req.request_no)
+                if pending is None:
+                    return _availability_unavailable()
+                data["runtime_available"] = pending
+            return {"success": True, "data": data}
 
     def list_flows(self, is_active: bool | None, business_type: str | None) -> WorkspaceResponse:
         with self.repository.session() as db:

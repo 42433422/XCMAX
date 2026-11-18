@@ -176,6 +176,17 @@ async def lifespan(app: FastAPI):
 
     _start_agent_tasks(app)
 
+    if not passive_node_enabled():
+        try:
+            from app.application.dataset_rag.auto_sync_scheduler import (
+                start_auto_sync_scheduler,
+            )
+
+            if start_auto_sync_scheduler():
+                logger.info("✅ 知识库来源定时同步已启动")
+        except RECOVERABLE_ERRORS as exc:
+            logger.warning("知识库来源定时同步启动失败: %s", exc)
+
     start_paid_asset_installs()
 
     try:
@@ -254,6 +265,14 @@ async def lifespan(app: FastAPI):
 
         await asyncio.to_thread(wait_for_background_mod_load, app)
         _stop_agent_tasks(app)
+        try:
+            from app.application.dataset_rag.auto_sync_scheduler import (
+                stop_auto_sync_scheduler,
+            )
+
+            stop_auto_sync_scheduler()
+        except RECOVERABLE_ERRORS as exc:
+            logger.warning("知识库来源定时同步关闭失败: %s", exc)
         await stop_paid_asset_installs()
         from app.fastapi_app.resource_cleanup import close_llm_http_clients
 

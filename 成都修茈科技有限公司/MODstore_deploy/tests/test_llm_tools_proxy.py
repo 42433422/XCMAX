@@ -166,9 +166,10 @@ def test_stream_openai_compatible_accumulates_and_emits_tool_calls():
     assert tc["function"]["arguments"] == '{"city":"beijing"}'
 
 
-def test_chat_dispatch_stream_forwards_tools_to_openai_branch():
+def test_chat_dispatch_stream_forwards_tools_to_openai_branch(monkeypatch):
     from modstore_server import llm_chat_proxy
 
+    monkeypatch.setenv("MODSTORE_LLM_ROUTER_ENABLED", "false")
     captured = {}
 
     async def fake_stream_openai_compatible(

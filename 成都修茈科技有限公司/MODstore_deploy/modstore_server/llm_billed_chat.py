@@ -134,7 +134,11 @@ async def run_billed_llm_chat(
     primary_provider, primary_model = primary.provider, primary.model
     if allow_failover and route_snapshot is None:
         candidates = await list_chat_failover_candidates(
-            db, int(user.id), primary_provider, primary_model
+            db,
+            int(user.id),
+            primary_provider,
+            primary_model,
+            include_platform_fallbacks=primary.key_source == "platform",
         )
     else:
         candidates = [(primary_provider, primary_model)]
@@ -250,7 +254,11 @@ async def stream_billed_llm_chat(
 
     if allow_failover and route_snapshot is None:
         candidates = await list_chat_failover_candidates(
-            db, int(user.id), primary_provider, primary_model
+            db,
+            int(user.id),
+            primary_provider,
+            primary_model,
+            include_platform_fallbacks=primary.key_source == "platform",
         )
     else:
         candidates = [(primary_provider, primary_model)]
@@ -484,6 +492,7 @@ async def stream_billed_llm_chat(
                     if ev.get("type") == "toolcall":
                         choices = ev.get("choices") or []
                         if choices:
+                            emitted_delta = True
                             yield _sse("toolcall", {"choices": choices})
                         continue
                     if ev.get("type") == "delta":

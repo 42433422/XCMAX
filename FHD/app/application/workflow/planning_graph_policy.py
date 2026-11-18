@@ -59,7 +59,7 @@ def apply_clarification(
     复用 ``clarification_node.needs_clarification`` 检测，并用 ``build_clarify_node``
     生成反问节点，其 ``branches`` 依据用户确认结果路由回原操作节点。
     """
-    items = needs_clarification(plan, tool_registry)
+    items = needs_clarification(plan, tool_registry, context)
     from .clarification_node import detect_erp_clarification
 
     items = list(items) + detect_erp_clarification(plan, user_message=user_message, context=context)

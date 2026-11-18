@@ -202,11 +202,24 @@ def _citation_to_dict(citation: Citation) -> dict[str, Any]:
         "char_range": list(citation.char_range),
         "source_url": citation.source_url,
         "page": citation.page,
+        "document_id": citation.document_id,
     }
 
 
 def _utc_now_iso() -> str:
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+
+
+def _source_synced_at(metadata: dict[str, Any] | None) -> datetime | None:
+    """解析来源上次同步时间；缺失或格式异常都视为「从未同步」。"""
+    raw = str((metadata or {}).get("last_source_sync_at") or "").strip()
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
 
 
 def _renumber_chunks(state: _DatasetState) -> None:

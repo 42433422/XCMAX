@@ -159,14 +159,49 @@ def apply_clarification_answer(
                 raise ClarificationAnswerError("答案只能指定一个唯一目标 ID")
             if candidate_id in (None, ""):
                 raise ClarificationAnswerError("请提供唯一目标 ID")
-            payload = dict(candidate.get("payload") or {})
-            payload["id"] = candidate_id
-            candidate["payload"] = payload
         else:
             candidate_id = parameters.get("id")
             if candidate_id in (None, "") or set(parameters) != {"id"}:
                 raise ClarificationAnswerError("答案只能指定一个唯一目标 ID")
-            candidate["id"] = candidate_id
+        candidates = detail.get("candidates") or []
+        selected = [
+            item
+            for item in candidates
+            if isinstance(item, dict)
+            and item.get("id") not in (None, "")
+            and str(item["id"]) == str(candidate_id)
+        ]
+        if reason == "ambiguous_target" or candidates:
+            if len(selected) != 1:
+                raise ClarificationAnswerError(
+                    "请选择当前问题列出的候选对象，目标范围不能在回答中更换"
+                )
+            candidate_id = selected[0]["id"]
+        destination = detail.get("field_path")
+        if destination:
+            from app.application.agent_orchestrator.param_references import (
+                UnresolvedReference,
+                substitute_selected_reference,
+            )
+
+            try:
+                parent: Any = candidate
+                for key in destination[:-1]:
+                    parent = parent[key]
+                original = parent[destination[-1]]
+                if not isinstance(original, str):
+                    raise UnresolvedReference("澄清目标引用已变化")
+                parent[destination[-1]] = substitute_selected_reference(
+                    original, detail["reference"], selected[0]["source_value"]
+                )
+            except (KeyError, IndexError, TypeError, UnresolvedReference) as exc:
+                raise ClarificationAnswerError("澄清目标引用已变化，请重新规划任务") from exc
+        elif target.tool_id == "business_db" and target.action == "write":
+            payload = dict(candidate.get("payload") or {})
+            payload["id"] = candidate_id
+            candidate["payload"] = payload
+        else:
+            candidate[str(detail.get("field") or "id")] = candidate_id
     elif reason in {
         "multi_unit",
         "report_scope",
@@ -203,7 +238,12 @@ def apply_clarification_answer(
             candidate["confirmed"] = True
     candidate.pop("candidates", None)
     candidate.pop("_candidates", None)
-    if target.tool_id == "sales" and target.action in {"quote", "create_order"} and parameters:
+    if (
+        reason == "missing_required"
+        and target.tool_id == "sales"
+        and target.action in {"quote", "create_order"}
+        and parameters
+    ):
         from app.application.sales_quote_inputs import quote_answer_candidate
 
         candidate = quote_answer_candidate(target.params, parameters)
@@ -391,4 +431,161 @@ def pause_for_clarification(run: AgentRun, step: AgentStep, outputs: dict | None
         step.output["fields"] = quote_question_fields(target.params)
     run.final_output = {"clarification": {"step_id": step.step_id, **step.output}}
     run.add_event("step.clarification_required", step.output["question"], run.final_output)
+    return True
+
+
+def _candidate_rows(rows: list[Any], projections: list[Any] | None = None) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    for index, row in enumerate(rows[:20]):
+        source = {"source_value": deepcopy(projections[index])} if projections is not None else {}
+        if not isinstance(row, dict):
+            if row not in (None, ""):
+                candidates.append({"id": row, **source})
+            continue
+        candidate_id = next(
+            (
+                row[key]
+                for key in ("id", "product_id", "customer_id", "material_id", "record_id")
+                if row.get(key) not in (None, "")
+            ),
+            None,
+        )
+        if candidate_id in (None, ""):
+            continue
+        name = next(
+            (
+                str(row[key]).strip()
+                for key in (
+                    "name",
+                    "product_name",
+                    "unit_name",
+                    "customer_name",
+                    "material_name",
+                    "model_number",
+                )
+                if str(row.get(key) or "").strip()
+            ),
+            "",
+        )
+        candidates.append({"id": candidate_id, **({"name": name} if name else {}), **source})
+    return candidates
+
+
+def _ambiguous_field(params: Any, path: str) -> list[str | int]:
+    token = "{{" + path + "}}"
+
+    def walk(value: Any, destination: list[str | int]) -> list[str | int]:
+        if isinstance(value, dict):
+            for child_key, child in value.items():
+                found = walk(child, [*destination, str(child_key)])
+                if found:
+                    return found
+        elif isinstance(value, (list, tuple)):
+            for index, child in enumerate(value):
+                found = walk(child, [*destination, index])
+                if found:
+                    return found
+        elif isinstance(value, str) and token in value:
+            return destination
+        return []
+
+    return walk(params, [])
+
+
+def pause_for_ambiguous_target(
+    run: AgentRun,
+    step: AgentStep,
+    rows: list[Any],
+    *,
+    field: str = "",
+    field_path: list[str | int] | None = None,
+    reference: str = "",
+    projections: list[Any] | None = None,
+) -> bool:
+    """执行期把「多候选引用」转为澄清：插入 clarify 步骤并等待用户选择。"""
+    from app.application.workflow.workflow_types import WorkflowNode, plan_from_dict, plan_to_dict
+
+    candidates = _candidate_rows(rows, projections)
+    if not candidates:
+        return False
+    target_field = str(field or "id")
+    labels: list[str] = []
+    for index, candidate in enumerate(candidates, start=1):
+        name = str(candidate.get("name") or "").strip()
+        cid = str(candidate.get("id") or "")
+        labels.append(f"{index}. {name}（#{cid}）" if name else f"{index}. #{cid}")
+    question = "检测到多个匹配目标，请选择要操作的对象：\n" + "\n".join(labels)
+    detail: dict[str, Any] = {
+        "reason": "ambiguous_target",
+        "node_id": step.node_id,
+        "field": target_field,
+        "candidates": candidates,
+        "question": question,
+    }
+    if field_path:
+        detail.update(field_path=list(field_path), reference=reference)
+    plan = plan_from_dict(run.metadata.get("plan")) if run.metadata.get("plan") else None
+    used_ids = {item.node_id for item in run.steps}
+    if plan is not None:
+        used_ids.update(node.node_id for node in plan.nodes)
+    base_id = f"{step.node_id}_clarify"
+    clarify_node_id = next(
+        node_id
+        for index in range(len(used_ids) + 1)
+        if (node_id := base_id if index == 0 else f"{base_id}_{index}") not in used_ids
+    )
+    params = {
+        "question": question,
+        "answer_key": "confirmed",
+        "target_node_id": step.node_id,
+        "clarification": detail,
+    }
+    clarify_node = WorkflowNode(
+        node_id=clarify_node_id,
+        tool_id="clarify",
+        action="ask",
+        params=params,
+        risk="low",
+        idempotent=True,
+        description="多候选目标澄清",
+    )
+    clarify_step = AgentStep(
+        node_id=clarify_node_id,
+        tool_id="clarify",
+        action="ask",
+        params=dict(params),
+        risk="low",
+        idempotent=True,
+        description="多候选目标澄清",
+        status="waiting_user",
+        output={
+            "requires_confirmation": True,
+            "question": question,
+            "target_node_id": step.node_id,
+            "candidates": candidates,
+        },
+    )
+    index = next(
+        (position for position, item in enumerate(run.steps) if item.step_id == step.step_id),
+        len(run.steps),
+    )
+    run.steps.insert(index, clarify_step)
+    step.status = "pending"
+    step.error = ""
+    step.output = {}
+    if plan is not None:
+        node_index = next(
+            (position for position, node in enumerate(plan.nodes) if node.node_id == step.node_id),
+            len(plan.nodes),
+        )
+        plan.nodes.insert(node_index, clarify_node)
+        run.metadata["plan"] = plan_to_dict(plan)
+    run.status = "waiting_user"
+    run.error = ""
+    run.final_output = {"clarification": {"step_id": clarify_step.step_id, **clarify_step.output}}
+    run.add_event(
+        "run.ambiguous_target_paused",
+        "前序结果存在多个候选，已暂停并请求用户选择",
+        {"node_id": step.node_id, "candidates": len(candidates), "field": target_field},
+    )
     return True

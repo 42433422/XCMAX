@@ -300,3 +300,68 @@ def complete_structured_sync(
     if "result" not in box:
         raise StructuredOutputError(0, ["sync bridge timeout"], "")
     return cast(StructuredResult, box["result"])
+
+
+def message_text(response: dict[str, Any] | None) -> str:
+    """Extract assistant text from an OpenAI-compatible completion payload."""
+    choices = (response or {}).get("choices") or []
+    if not choices or not isinstance(choices[0], dict):
+        return ""
+    message = choices[0].get("message") or {}
+    content = message.get("content")
+    if isinstance(content, list):
+        parts = [
+            str(part.get("text") or "")
+            for part in content
+            if isinstance(part, dict) and part.get("type", "text") == "text"
+        ]
+        return "".join(parts).strip()
+    return str(content or "").strip()
+
+
+async def complete_text(
+    messages: list[dict[str, str]],
+    *,
+    timeout_seconds: float = 60.0,
+    **kwargs: Any,
+) -> str:
+    """Plain-text completion through the shared invoke entry (no schema repair)."""
+    response = await asyncio.wait_for(
+        invoke.chat_completion_openai_format(messages, **kwargs),
+        timeout=timeout_seconds,
+    )
+    return message_text(response)
+
+
+def complete_text_sync(
+    messages: list[dict[str, str]],
+    *,
+    timeout_seconds: float = 60.0,
+    **kwargs: Any,
+) -> str:
+    """Sync bridge for worker-thread callers (FastAPI sync endpoints / tools)."""
+
+    def run() -> str:
+        return asyncio.run(complete_text(messages, timeout_seconds=timeout_seconds, **kwargs))
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return run()
+
+    box: dict[str, Any] = {}
+
+    def runner() -> None:
+        try:
+            box["result"] = run()
+        except BOUNDARY_ERRORS as exc:
+            box["error"] = exc
+
+    thread = threading.Thread(target=contextvars.copy_context().run, args=(runner,), daemon=True)
+    thread.start()
+    thread.join(timeout=timeout_seconds + 5)
+    if "error" in box:
+        raise box["error"]
+    if "result" not in box:
+        raise TimeoutError("sync completion timeout")
+    return cast(str, box["result"])

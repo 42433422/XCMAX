@@ -15,6 +15,10 @@
 | `GET /api/aiopen/manifest` | 工具目录（名称 / 描述 / inputSchema） | 公开 |
 | `POST /api/aiopen/mcp` | MCP Streamable HTTP（JSON-RPC 2.0） | `X-AIOPEN-Key` |
 | `POST /api/aiopen/invoke` | REST 通用工具调用 `{tool, args}` | `X-AIOPEN-Key` |
+| `GET /api/aiopen/catalog/operations` | **系统地图**：运行时能力目录（关键字/风险/工具集过滤、分页） | `X-AIOPEN-Key` |
+| `GET /api/aiopen/catalog/operations/{operation_id}` | 单个 operation 的语义卡片 | `X-AIOPEN-Key` |
+| `GET /api/aiopen/catalog/schema/{entity}` | 实体字段字典（来自 OpenAPI） | `X-AIOPEN-Key` |
+| `GET /api/aiopen/coverage` | 开放面覆盖度（规模、风险分布、语义覆盖率） | `X-AIOPEN-Key` |
 | `GET /api/aiopen/panel` 等 | 控制台（白名单 / Key / 会话 / 开关） | LAN 门禁内 |
 | `WS /api/aiopen/ws` | 前端 screen 端（虚拟光标）连接 | LAN 门禁内 |
 
@@ -78,7 +82,8 @@ http://<主机>/api/aiopen/guide?format=markdown
 ```
 
 支持的 JSON-RPC 方法：`initialize`、`tools/list`、`tools/call`、`ping`、
-`notifications/initialized`（notification 返回 202）。
+`notifications/initialized`（notification 返回 202），以及只读资源
+`resources/list`、`resources/templates/list`、`resources/read`。
 
 响应头：`MCP-Protocol-Version`、`Mcp-Session-Id`（initialize 时下发）。
 `tools/call` 返回人类可读文本（非原始 JSON  dump）。
@@ -101,31 +106,91 @@ curl -X POST http://localhost:5000/api/aiopen/invoke \
 | 工具 | 说明 |
 |---|---|
 | `api_catalog` | 列出白名单内可调用的业务 API 路由（精确 + 前缀子路径） |
+| `knowledge_search` | 在系统地图中按关键字检索 operation（含风险、scope、使用时机） |
+| `operation_describe` | 读取单个 operation 的完整语义卡片 |
+| `operation_call` | 按 operation_id 执行接口；危险操作拒绝执行，写操作需服务端开启 |
 | `api_call` | 调用白名单业务 API（GET/POST/PUT/PATCH/DELETE） |
 | `chat` | 发消息给 XCAGI AI 助手（unified_chat，source=`aiopen`） |
 | `capability_loop` | 全调用闭环自检：catalog → 抽样 api_call → chat → ui_sessions |
 | `ui_sessions` | 列出在线虚拟光标 screen 会话 |
-| `ui_snapshot` | 页面快照：URL / 标题 / 可交互元素（selector / 文本 / 位置） |
+| `ui_snapshot` | 可访问性树快照：每个节点分配稳定 `ref`，附角色 / 可访问名称 / 状态 / 位置；`selector` 仅作兼容回退 |
 | `ui_navigate` | 前端路由跳转（router.push） |
-| `ui_click` | 虚拟光标移动并真实点击（selector 或按可见文本匹配） |
+| `ui_click` | 虚拟光标移动并真实点击（`ref` 优先，兼容 selector / 可见文本） |
 | `ui_type` | 输入框写值（原型 setter + input/change 事件，兼容 v-model） |
+| `ui_select` | 下拉选择：原生 select 按 value/文本选中，自定义下拉点开后按 label 匹配 |
+| `ui_upload` | 向 file input 投放文件（同源 Agent 产物 url / base64 / 纯文本），派发 input/change |
+| `ui_wait` | 轮询等待元素出现/消失、页面文本或 URL 变化（最长 15s） |
+| `ui_verify` | 校验元素存在、控件值、页面文本与 URL，逐项返回结论 |
+| `ui_screenshot` | DOM 重绘截图（html-to-image，MIT），返回 data_url 与尺寸；不含跨域 iframe/视频 |
 | `ui_scroll` | 滚动页面或将元素滚动到可见区域 |
 
 面板还可：`POST /api/aiopen/whitelist/seed` 一键开启侧栏全业务白名单；
 `POST /api/aiopen/loop/verify` 跑与 `capability_loop` 相同的闭环自检。
+
+## 系统地图（知）
+
+能力目录在运行时从应用 OpenAPI 生成，不手工维护；内部管理端、运行时通道与
+AIOPEN 自身路由不进入目录。每条 operation 带 `risk`（read/write/danger）与
+`scope`（如 `read:products`），语义说明来自 `app/application/aiopen/overlay/operations.yaml`。
+
+MCP 只读资源：
+
+| URI | 内容 |
+|---|---|
+| `xcmax://catalog/operations` | 全部可开放 operation |
+| `xcmax://catalog/operation/{operation_id}` | 单个 operation 语义卡片 |
+| `xcmax://catalog/schema/{entity}` | 实体字段字典（OpenAPI components.schemas） |
+
+推荐顺序：`knowledge_search` → `operation_describe` → `api_call`。
+
+### 执行闸门（P1）
+
+`operation_call` 按目录中的风险等级执行，不靠 AI 自觉：
+
+| 风险 | 行为 |
+|---|---|
+| `read` | 直接执行，Key 需具备 `read:<domain>` 或以 `*` 全量授权 |
+| `write` | 默认返回 `WRITE_DISABLED`；服务端设置 `AIOPEN_ENABLE_WRITES=1` 后才执行 |
+| `danger` | 发起审批（复用审批中心）；通过后携带 `approval_id` 重试，审批单只能执行一次 |
+
+审批流程：服务端设置 `AIOPEN_APPROVAL_FLOW_KEY`（默认 `aiopen_danger_operation`），
+并先在审批中心创建同名 `flow_key` 且配置启用节点；未配置时危险操作一律拒绝。
+幂等创建用 `python scripts/dev/ensure_aiopen_approval_flow.py --approver-id <用户ID>`
+（缺省自动取 admin/superadmin；找不到审批人时退出码 2，不会创建无人可批的空流程）。
+审批单记录 operation、参数指纹与申请人，执行时校验三者一致并写入消费时间防重放。
+
+生产前置顺序：先确保审批流程与启用节点存在，再设置 `AIOPEN_ENABLE_WRITES=1` 放行写操作；
+两者都完成前，写操作返回 `WRITE_DISABLED`，危险操作返回 `APPROVAL_FLOW_NOT_CONFIGURED`。
+
+`params` 传路径与查询参数（键名见 operation 卡片），`body` 传 JSON 请求体。
+`api_call` 命中目录条目时套用同一套读写/危险闸门，未命中目录的自定义路径保持原白名单行为。
+
+语义草稿由 `scripts/dev/aiopen_overlay_draft.py` 批量生成到 `overlay/drafts/`（运行时不加载），
+人工审核后移入 `overlay/generated/*.yaml|*.jsonl` 生效；大规模语义用 jsonl（每行一条）存储。
 
 默认白名单覆盖对话 / IM / 群聊 / 知识库 / 员工台 / 产品组织订单 / 出货打印 / Mod 等前缀；
 `api_call` 对已启用前缀的子路径自动放行（例如启用 `/api/products` 即可调 `/api/products/list`）。
 
 ## 虚拟光标（AI 模拟操作）
 
-1. 在 XCAGI 前端打开 **AI生态应用 → AIOPEN 开放智控**
-2. 开启「远程操控总开关」（服务端）与「本浏览器作为受控屏幕」
-3. 页面右下角出现「AI 操控通道已连接」徽标，外部 Agent 即可经 `ui_*` 工具操作
-4. 执行 `ui_click` / `ui_type` 时页面会出现蓝色虚拟光标动画与「AI 点击/输入」标签
+页面加载后自动静默待命，**不需要用户先点任何开关**：
 
-典型流程：`ui_snapshot` 取元素 → `ui_click {"selector": "..."} ` 或
-`ui_click {"text": "员工商店"}` → 再次 `ui_snapshot` 验证结果。
+1. 打开 XCAGI 页面即在后台连接 `WS /api/aiopen/ws` 并登记为受控屏幕
+2. 待命期间不显示光标和徽标；外部 Agent 下发 `ui_*` 指令时才出现
+3. 执行 `ui_click` / `ui_type` 时出现蓝色虚拟光标与「AI 点击/输入」标签，并短暂显示「AI 正在操作本页」徽标
+4. 用户可在 **AIOPEN 开放智控 → 更多设置** 关闭「本页待命」，关闭状态会持久化（`localStorage`）
+
+安全边界不变：仍需服务端「允许 AI 远程操控」总开关与有效 `X-AIOPEN-Key`，屏幕按用户与租户授权。
+
+典型流程：`ui_snapshot` 取节点 `ref` → `ui_click {"ref": "e3"}` 或
+`ui_click {"text": "员工商店"}` → `ui_wait` 等待结果 → `ui_verify` 校验 → 必要时
+`ui_screenshot` 留证。`ref` 只在下一次 `ui_snapshot` 前有效，页面重渲染后会自动失效，
+需重新快照；找不到时会明确提示。输入后可用 `ui_verify {"ref": "e5", "value": "..."}`
+确认写值生效。
+
+`ui_select` 对原生 `select` 直接按 `value`/文本选中；对 Element Plus / Ant 等自定义
+下拉，会真实点开再按 `label` 匹配可见选项。`ui_upload` 的 `url` 仅支持同源
+`/api/agent/runs/{run_id}/artifacts/{artifact_id}` 文件产物下载地址（不含查询或片段），沿用服务端用户、租户和文件摘要校验；其他文件使用 `base64` 或 `text`，由浏览器合成 `File` 后写入 `input.files`。
 
 ### 指令协议（screen 端 WS）
 
@@ -141,16 +206,22 @@ curl -X POST http://localhost:5000/api/aiopen/invoke \
 { "type": "result", "id": "<hex>", "result": { "success": true, "clicked": "保存" } }
 ```
 
-`action ∈ snapshot | navigate | click | type | scroll`；回执超时 10s。
+`action ∈ snapshot | navigate | click | type | select | upload | wait | verify | screenshot | scroll`；
+普通操作回执超时 10s，`wait`/`upload` 20s，`screenshot` 30s。
 
 ## 安全模型
 
 - 对外三端点（manifest/invoke/mcp）越过 LAN 门禁与订阅门禁，**安全完全由
   `X-AIOPEN-Key` 承担**——生产必须配置 `AIOPEN_API_KEY`
 - `api_call` 仅放行白名单路由（面板可视化管理）
-- `ui_*` 受双重开关约束：服务端「远程操控总开关」+ 浏览器端「受控屏幕」开关
-  （localStorage 持久化，默认关闭）
+- `ui_*` 受双重开关约束：服务端「远程操控总开关」+ 浏览器端「本页待命」开关
+  （默认开启、静默待命；用户明确关闭后以 localStorage 持久化为准）
 - 面板与 keys 管理端点仍在 LAN 门禁内
+
+## 技术方案
+
+开放面的能力模型、权限矩阵与分期落地见
+[`docs/architecture/AIOPEN_FULL_SURFACE.md`](architecture/AIOPEN_FULL_SURFACE.md)。
 
 ## 相关代码
 

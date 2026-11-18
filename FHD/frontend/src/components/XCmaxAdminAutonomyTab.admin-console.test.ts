@@ -22,7 +22,7 @@ it('replaces stale metrics with an unknown state while independent gate and audi
   await flushPromises()
   expect(wrapper.get('.kpi-value').text()).toBe('待核实')
   expect(wrapper.get('[role="alert"]').text()).toContain('运营总览读取失败')
-  expect(wrapper.text()).toContain('跨端门禁：已读取')
+  expect(wrapper.get('.at-head__meta').text()).toMatch(/跨端门禁\s+已读取/)
   expect(wrapper.text()).toContain('数据源已接入，但尚无审计记录')
   expect(wrapper.text()).toContain('部署记录尚未核实')
   expect(xcmaxAdminApi.forceSelfMaintenanceRun).not.toHaveBeenCalled()

@@ -194,22 +194,10 @@ export const HOST_PAGE_HIGHLIGHTS: Record<string, TutorialPageHighlight[]> = {
       targetSelector: '#view-template-preview .page-header',
     },
     {
-      idSuffix: 'toolbar',
-      title: '模板库 · 范围与操作',
-      description: '横排按钮切换业务范围、刷新列表、创建模板',
-      targetSelector: '#view-template-preview .template-preview-toolbar',
-    },
-    {
-      idSuffix: 'grid-tool',
-      title: '模板库 · 网格映射工具',
-      description: '上传 Excel 可提取字段并查看结果，用于对照或辅助配置模板结构',
-      targetSelector: '#view-template-preview .grid-tool-card',
-    },
-    {
-      idSuffix: 'cards',
-      title: '模板库 · 模板卡片',
-      description: '各卡片展示预览、词条与操作按钮（预览/编辑/删除等，以当前模板类型为准）',
-      targetSelector: '#view-template-preview .template-preview-section',
+      idSuffix: 'browser',
+      title: '模板库 · 模板浏览',
+      description: '按业务文件夹浏览、搜索模板，双击直接预览',
+      targetSelector: '#view-template-preview .tpl-library__browser',
     },
   ],
   settings: [

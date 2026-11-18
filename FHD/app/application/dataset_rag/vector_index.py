@@ -29,15 +29,23 @@ def _embedding_metadata(embedder: Callable[[str], list[float]] | None, text: str
 def backfill_missing_embeddings(
     embedder: Callable[[str], list[float]] | None, state: _DatasetState
 ) -> bool:
-    """Fill chunks that were stored before an embedder existed. Returns whether any changed."""
+    """Fill chunks that were stored before an embedder existed.
+
+    Also recomputes vectors whose dimension no longer matches the current embedder
+    (e.g. switching hash 64 → 192 or hash ↔ fastembed), otherwise stale vectors
+    silently score zero.
+    """
     if embedder is None:
         return False
+    probe = _embedding_metadata(embedder, "_dim_probe_").get("_embedding")
+    expected_dim = len(probe) if isinstance(probe, list) else 0
     changed = False
     for chunk in state.chunks:
         meta = chunk.metadata if isinstance(chunk.metadata, dict) else {}
         existing = meta.get("_embedding")
         if isinstance(existing, list) and existing:
-            continue
+            if not expected_dim or len(existing) == expected_dim:
+                continue
         extra = _embedding_metadata(embedder, chunk.text)
         if not extra:
             continue
@@ -47,13 +55,18 @@ def backfill_missing_embeddings(
 
 
 def _semantic_embedding_available(embedding_count: int = 0) -> bool:
-    """UI contract: true when a live embedder exists or chunks already carry vectors."""
-    if int(embedding_count or 0) > 0:
-        return True
-    try:
-        from app.infrastructure.rag import get_default_embedder
+    """语义向量是否真正生效。
 
-        return get_default_embedder() is not None
+    hash 向量只是离线降级（64 维词袋哈希），不能当作语义检索；
+    只有 local/remote embedding 模式才算语义可用。``embedding_count`` 不再作为判据，
+    因为旧数据里的 hash 向量同样会累计计数。
+    """
+    del embedding_count  # 保留参数兼容既有调用
+    try:
+        from app.infrastructure.llm.embedding_service import get_default_embedding_service
+
+        svc = get_default_embedding_service()
+        return bool(svc is not None and svc.is_semantic())
     except RECOVERABLE_ERRORS:
         return False
 
@@ -162,5 +175,7 @@ class VectorIndexService:
             "vector_backend_synced_chunks": int(previous.get("vector_backend_synced_chunks") or 0),
             "vector_backend_synced_at": str(previous.get("vector_backend_synced_at") or ""),
             "vector_backend_error": str(previous.get("vector_backend_error") or ""),
+            "synonyms": previous.get("synonyms", {}),
+            "qa_pairs": previous.get("qa_pairs", []),
             "updated_at": _utc_now_iso(),
         }

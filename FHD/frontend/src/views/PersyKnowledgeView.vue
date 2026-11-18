@@ -38,6 +38,32 @@
           </select>
         </label>
         <button
+          type="button"
+          class="icon-button"
+          title="导出知识空间"
+          aria-label="导出知识空间"
+          @click="exportDatasetJson"
+        >
+          <i class="fa fa-download" aria-hidden="true"></i>
+        </button>
+        <button
+          type="button"
+          class="icon-button"
+          title="导入知识空间"
+          aria-label="导入知识空间"
+          @click="pickImportFile"
+        >
+          <i class="fa fa-upload" aria-hidden="true"></i>
+        </button>
+        <input
+          ref="importInput"
+          type="file"
+          accept=".json,application/json"
+          hidden
+          @change="importDatasetFile"
+        />
+        <span v-if="transferMessage" class="transfer-status" role="status">{{ transferMessage }}</span>
+        <button
           v-if="adminOmniscient"
           type="button"
           class="icon-button"
@@ -170,7 +196,7 @@
           v-else
           :documents="documents"
           :deleting-document-id="deletingDocumentId"
-          @select="selectDocument"
+          @select="openDocument"
           @delete="deleteDocument"
           @import="openImport('file')"
         />
@@ -190,6 +216,93 @@
           <button type="submit" :disabled="querying" aria-label="发送问题" title="发送问题">
             <i :class="querying ? 'fa fa-circle-o-notch fa-spin' : 'fa fa-arrow-right'" aria-hidden="true"></i>
           </button>
+          <div class="ask-dock__options" aria-label="检索设置">
+            <label>
+              <span>模式</span>
+              <select v-model="retrievalMode" aria-label="检索模式">
+                <option value="hybrid">混合</option>
+                <option value="vector">语义</option>
+                <option value="keyword">关键词</option>
+              </select>
+            </label>
+            <label class="ask-dock__toggle">
+              <input v-model="expandSection" type="checkbox" />
+              <span>整章扩展</span>
+            </label>
+            <label v-if="datasetOptions.length > 1" class="ask-dock__toggle">
+              <input v-model="crossDataset" type="checkbox" />
+              <span>跨库</span>
+            </label>
+            <label>
+              <span>多样性</span>
+              <select v-model.number="mmrLambda" aria-label="MMR 多样性">
+                <option :value="0">关</option>
+                <option :value="0.5">中</option>
+                <option :value="0.7">强</option>
+              </select>
+            </label>
+            <button type="button" class="ask-dock__term" @click="toggleSynonymEditor">术语</button>
+            <button type="button" class="ask-dock__term" @click="toggleQaPairs">问答</button>
+            <button type="button" class="ask-dock__term" @click="toggleApiKeys">分享</button>
+          </div>
+          <div v-if="apiKeysOpen" class="ask-dock__synonyms" aria-label="外部 API 密钥">
+            <div class="api-key-row">
+              <input v-model="apiKeyLabel" placeholder="用途（可选）" aria-label="密钥用途" />
+              <button type="button" :disabled="apiKeyBusy" @click="createApiKey">
+                生成只读密钥
+              </button>
+            </div>
+            <p v-if="newApiKey" class="api-key-new">
+              只显示一次：<code>{{ newApiKey }}</code>
+            </p>
+            <ul v-if="apiKeyItems.length" class="api-key-list">
+              <li v-for="item in apiKeyItems" :key="item.token_id">
+                <span>{{ item.label || '未命名' }} · {{ item.prefix }}…</span>
+                <button
+                  type="button"
+                  :disabled="apiKeyBusy || Boolean(item.revoked_at)"
+                  @click="revokeApiKey(item.token_id)"
+                >
+                  {{ item.revoked_at ? '已回收' : '回收' }}
+                </button>
+              </li>
+            </ul>
+            <span v-if="apiKeyMessage" role="status">{{ apiKeyMessage }}</span>
+          </div>
+          <div v-if="synonymEditorOpen" class="ask-dock__synonyms" aria-label="术语表">
+            <textarea
+              v-model="synonymDraft"
+              rows="3"
+              placeholder="每行一组：退款=退货,退钱"
+              aria-label="术语表"
+            ></textarea>
+            <div class="ask-dock__synonym-actions">
+              <button type="button" :disabled="synonymSaving" @click="saveSynonyms">
+                {{ synonymSaving ? '保存中…' : '保存术语' }}
+              </button>
+              <span v-if="synonymMessage" role="status">{{ synonymMessage }}</span>
+            </div>
+          </div>
+          <div v-if="qaPairsOpen" class="ask-dock__synonyms" aria-label="问答对">
+            <textarea
+              v-model="qaPairsDraft"
+              rows="4"
+              placeholder="每行一对：问题,答案（也支持制表符分隔）"
+              aria-label="问答对"
+            ></textarea>
+            <div class="ask-dock__synonym-actions">
+              <button type="button" :disabled="qaPairsSaving" @click="saveQaPairs">
+                {{ qaPairsSaving ? '保存中…' : '保存问答对' }}
+              </button>
+              <span v-if="qaPairsMessage" role="status">{{ qaPairsMessage }}</span>
+            </div>
+            <ul v-if="qaPairItems.length" class="qa-pair-list">
+              <li v-for="item in qaPairItems" :key="item.qa_id || item.question">
+                <strong>{{ item.question }}</strong>
+                <span>{{ item.answer }}</span>
+              </li>
+            </ul>
+          </div>
           <p v-if="querying" class="ask-dock__status" role="status">正在检索知识，请稍候…</p>
           <p v-else-if="queryError" class="ask-dock__error" role="alert">{{ queryError }}</p>
         </form>
@@ -215,6 +328,16 @@
               @click="inspectorTab = 'recall'"
             >
               召回 <span v-if="resultChunks.length">{{ resultChunks.length }}</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              :aria-selected="inspectorTab === 'chunks'"
+              :class="{ active: inspectorTab === 'chunks' }"
+              :disabled="!chunkDocumentId"
+              @click="inspectorTab = 'chunks'"
+            >
+              分块 <span v-if="chunkTotal">{{ chunkTotal }}</span>
             </button>
           </div>
           <button type="button" class="inspector-mobile-close" aria-label="关闭详情" title="关闭详情" @click="mobileInspectorOpen = false">
@@ -314,14 +437,61 @@
           </div>
         </div>
 
-        <div v-else class="inspector-scroll recall-panel">
+        <div v-else-if="inspectorTab === 'recall'" class="inspector-scroll recall-panel">
           <template v-if="lastQuery">
             <span class="recall-panel__eyebrow">{{ lastQuery }}</span>
+            <span
+              v-if="answerGrounded !== null"
+              class="recall-grounding"
+              :class="{ 'is-weak': answerGrounded === false }"
+              role="status"
+            >
+              {{ answerGrounded ? `证据 ${Math.round((grounding || 0) * 100)}%` : '未命中足够证据' }}
+            </span>
             <template v-if="queryMessage">
               <p class="recall-empty" role="status">{{ knowledgeEmpty ? '当前知识空间暂无可检索资料。请先导入文档或文本，再发起查询。' : `${queryMessage}。本次仅检索已入库的资料与可用记忆，可调整关键词或补充资料。` }}</p>
               <button type="button" class="secondary-button" @click="openImport('file')">{{ knowledgeEmpty ? '导入第一份资料' : '补充知识资料' }}</button>
+              <button type="button" class="secondary-button" @click="toggleQueryGaps">查看知识缺口</button>
+              <div v-if="gapsOpen" class="gap-list" aria-label="知识缺口">
+                <p v-if="gapsLoading" class="recall-empty" role="status">正在加载知识缺口…</p>
+                <p v-else-if="!queryGapItems.length" class="recall-empty">暂无未命中问题</p>
+                <ol v-else>
+                  <li v-for="(gap, index) in queryGapItems" :key="`${index}-${gap.query}`">
+                    <span>{{ gap.query }}</span>
+                    <em>×{{ gap.count }}</em>
+                  </li>
+                </ol>
+                <button
+                  v-if="queryGapItems.length"
+                  type="button"
+                  class="gap-clear"
+                  @click="clearQueryGaps"
+                >
+                  清空缺口
+                </button>
+              </div>
+              <p v-if="gapMessage" role="status">{{ gapMessage }}</p>
             </template>
             <div v-else-if="answerText" class="recall-answer">{{ answerText }}</div>
+            <div v-if="answerText && !queryMessage" class="recall-feedback" aria-label="答案反馈">
+              <button
+                type="button"
+                :class="{ 'is-active': feedbackRating === 'up' }"
+                :disabled="feedbackRating !== ''"
+                @click="submitAnswerFeedback('up')"
+              >
+                有帮助
+              </button>
+              <button
+                type="button"
+                :class="{ 'is-active': feedbackRating === 'down' }"
+                :disabled="feedbackRating !== ''"
+                @click="submitAnswerFeedback('down')"
+              >
+                没帮助
+              </button>
+              <span v-if="feedbackMessage" role="status">{{ feedbackMessage }}</span>
+            </div>
 
             <div v-if="resultChunks.length" class="evidence-list">
               <article v-for="(chunk, index) in resultChunks" :key="evidenceKey(chunk, index)">
@@ -329,8 +499,16 @@
                   <span :class="{ memory: isMemoryChunk(chunk) }"> {{ isMemoryChunk(chunk) ? 'M' : 'K' }}{{ index + 1 }} </span>
                   <strong>{{ normalizeChunkSource(chunk) }}</strong>
                   <em>{{ formatScore(chunk.score) }}</em>
+                  <button
+                    v-if="!isMemoryChunk(chunk) && chunk.metadata?.document_id"
+                    type="button"
+                    class="evidence-open"
+                    @click="openRecallChunk(chunk)"
+                  >
+                    原文
+                  </button>
                 </header>
-                <p>{{ chunk.text }}</p>
+                <p><template v-for="(segment, segmentIndex) in evidenceSegments(chunk)" :key="segmentIndex"><mark v-if="segment.match">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span></template></p>
               </article>
             </div>
           </template>
@@ -338,6 +516,37 @@
             <i class="fa fa-bolt" aria-hidden="true"></i>
             <strong>尚无召回轨迹</strong>
             <span>等待第一次知识召回</span>
+          </div>
+        </div>
+
+        <div v-else class="inspector-scroll chunk-panel">
+          <template v-if="chunkDocumentId">
+            <span class="recall-panel__eyebrow">{{ chunkDocumentLabel }} · {{ chunkTotal }} 块</span>
+            <p v-if="chunkLoading" class="recall-empty" role="status">正在加载分块…</p>
+            <p v-else-if="chunkError" class="recall-empty" role="alert">{{ chunkError }}</p>
+            <ol v-else class="chunk-list">
+              <li v-for="(chunk, index) in sourceChunks" :key="`${index}-${chunk.chunk_index}`">
+                <header>
+                  <span>#{{ chunk.chunk_index ?? index }}</span>
+                  <em>{{ (chunk.text || '').length }} 字</em>
+                </header>
+                <p>{{ chunk.text }}</p>
+              </li>
+            </ol>
+            <button
+              v-if="!chunkLoading && !chunkError && sourceChunks.length < chunkTotal"
+              type="button"
+              class="secondary-button"
+              :disabled="chunkLoadingMore"
+              @click="loadMoreChunks"
+            >
+              {{ chunkLoadingMore ? '加载中…' : '加载更多分块' }}
+            </button>
+          </template>
+          <div v-else class="inspector-empty">
+            <i class="fa fa-th-list" aria-hidden="true"></i>
+            <strong>选择资料来源</strong>
+            <span>在「资料」列表点选文档即可预览分块</span>
           </div>
         </div>
       </aside>
@@ -360,13 +569,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onActivated, onMounted, watch } from 'vue'
+import { computed, onActivated, onMounted, ref, watch } from 'vue'
 import PersyKnowledgeGraph from '@/components/persy/PersyKnowledgeGraph.vue'
 import PersyImportDrawer from '@/components/persy/PersyImportDrawer.vue'
 import PersyMemoryList from '@/components/persy/PersyMemoryList.vue'
 import PersyNodeCards from '@/components/persy/PersyNodeCards.vue'
 import PersySourceList from '@/components/persy/PersySourceList.vue'
-import type { KnowledgeGraphNode, PersyMemoryRecord } from '@/api/knowledgeBase'
+import type { KnowledgeBaseDocument, KnowledgeGraphNode, PersyMemoryRecord } from '@/api/knowledgeBase'
+import { knowledgeBaseApi } from '@/api/knowledgeBase'
 import { usePersyKnowledgeData, type PersyKnowledgeViewMode } from '@/composables/usePersyKnowledgeData'
 import { usePersyRecallQuery } from '@/composables/usePersyRecallQuery'
 import { usePersyMemoryGovernance } from '@/composables/usePersyMemoryGovernance'
@@ -374,6 +584,7 @@ import { evidenceKey, formatScore, isMemoryChunk, nodeIcon, nodeTypeLabel, norma
 import { usePersyKnowledgeUiState } from './persy-knowledge/usePersyKnowledgeUiState'
 import { usePersyKnowledgeInspector } from './persy-knowledge/usePersyKnowledgeInspector'
 import { usePersyKnowledgeInteractions } from './persy-knowledge/usePersyKnowledgeInteractions'
+import { usePersySourceChunks } from './persy-knowledge/usePersySourceChunks'
 
 // 逻辑按领域拆分到 persy-knowledge/ 下的 composables，此处仅组装（模板与拆分前逐字一致）
 const ui = usePersyKnowledgeUiState()
@@ -397,10 +608,252 @@ const knowledgeEmpty = computed(() => {
   return scope?.success === true && scope.document_count === 0 && scope.chunk_count === 0 && memories.value.length === 0
 })
 
+const crossDatasetIds = computed(() => datasetOptions.value.map((item) => item.id))
+
+const synonymEditorOpen = ref(false)
+const synonymDraft = ref('')
+const synonymSaving = ref(false)
+const synonymMessage = ref('')
+const qaPairsOpen = ref(false)
+const qaPairsDraft = ref('')
+const qaPairsSaving = ref(false)
+const qaPairsMessage = ref('')
+const qaPairItems = ref<Array<{ qa_id?: string; question: string; answer: string }>>([])
+const gapsOpen = ref(false)
+const gapsLoading = ref(false)
+const gapMessage = ref('')
+const queryGapItems = ref<Array<{ query?: string; count?: number }>>([])
+const importInput = ref<HTMLInputElement | null>(null)
+const transferMessage = ref('')
+const apiKeysOpen = ref(false)
+const apiKeyBusy = ref(false)
+const apiKeyLabel = ref('')
+const apiKeyMessage = ref('')
+const newApiKey = ref('')
+const apiKeyItems = ref<Array<{ token_id?: string; label?: string; prefix?: string; revoked_at?: string }>>([])
+
+async function toggleApiKeys(): Promise<void> {
+  apiKeysOpen.value = !apiKeysOpen.value
+  apiKeyMessage.value = ''
+  if (!apiKeysOpen.value) return
+  await loadApiKeys()
+}
+
+async function loadApiKeys(): Promise<void> {
+  try {
+    const result = await knowledgeBaseApi.listApiKeys(activeDatasetId.value)
+    apiKeyItems.value = result.success ? result.keys || [] : []
+    if (!result.success) apiKeyMessage.value = result.message || '密钥加载失败'
+  } catch {
+    apiKeyMessage.value = '密钥加载失败'
+  }
+}
+
+async function createApiKey(): Promise<void> {
+  apiKeyBusy.value = true
+  apiKeyMessage.value = ''
+  try {
+    const result = await knowledgeBaseApi.createApiKey(activeDatasetId.value, apiKeyLabel.value.trim())
+    if (result.success) {
+      newApiKey.value = result.key || ''
+      apiKeyLabel.value = ''
+      apiKeyMessage.value = '已生成，请立即复制保存'
+      await loadApiKeys()
+    } else {
+      apiKeyMessage.value = result.message || '生成失败'
+    }
+  } catch {
+    apiKeyMessage.value = '生成失败，请稍后重试'
+  } finally {
+    apiKeyBusy.value = false
+  }
+}
+
+async function revokeApiKey(tokenId?: string): Promise<void> {
+  if (!tokenId) return
+  apiKeyBusy.value = true
+  apiKeyMessage.value = ''
+  try {
+    await knowledgeBaseApi.revokeApiKey(activeDatasetId.value, tokenId)
+    apiKeyMessage.value = '已回收'
+    await loadApiKeys()
+  } catch {
+    apiKeyMessage.value = '回收失败，请稍后重试'
+  } finally {
+    apiKeyBusy.value = false
+  }
+}
+
+async function exportDatasetJson(): Promise<void> {
+  transferMessage.value = ''
+  try {
+    const data = await knowledgeBaseApi.exportDataset(activeDatasetId.value)
+    if (data.success === false) {
+      transferMessage.value = String(data.message || '导出失败')
+      return
+    }
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `${activeDatasetId.value}-knowledge.json`
+    anchor.click()
+    URL.revokeObjectURL(url)
+    transferMessage.value = `已导出 ${Number(data.document_count || 0)} 篇资料`
+  } catch {
+    transferMessage.value = '导出失败，请稍后重试'
+  }
+}
+
+function pickImportFile(): void {
+  importInput.value?.click()
+}
+
+async function importDatasetFile(event: Event): Promise<void> {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  transferMessage.value = ''
+  try {
+    const payload = JSON.parse(await file.text()) as Record<string, unknown>
+    const overwrite = window.confirm('导入将覆盖当前知识空间的资料与术语，确定继续？')
+    if (!overwrite) return
+    const result = await knowledgeBaseApi.importDataset(activeDatasetId.value, payload, true)
+    if (result.success === false) {
+      transferMessage.value = String(result.message || '导入失败')
+      return
+    }
+    transferMessage.value = `已导入 ${Number(result.document_count || 0)} 篇资料`
+    await refreshAll()
+  } catch {
+    transferMessage.value = '导入失败：文件不是有效的知识库导出'
+  }
+}
+
+async function toggleQueryGaps(): Promise<void> {
+  gapsOpen.value = !gapsOpen.value
+  gapMessage.value = ''
+  if (!gapsOpen.value) return
+  gapsLoading.value = true
+  try {
+    const result = await knowledgeBaseApi.queryGaps(activeDatasetId.value, 20)
+    queryGapItems.value = result.success ? result.gaps || [] : []
+    if (!result.success) gapMessage.value = result.message || '知识缺口加载失败'
+  } catch {
+    gapMessage.value = '知识缺口加载失败'
+  } finally {
+    gapsLoading.value = false
+  }
+}
+
+async function clearQueryGaps(): Promise<void> {
+  gapMessage.value = ''
+  try {
+    const result = await knowledgeBaseApi.clearQueryGaps(activeDatasetId.value)
+    if (result.success) {
+      queryGapItems.value = []
+      gapMessage.value = `已清空 ${result.removed ?? 0} 条缺口`
+    } else {
+      gapMessage.value = result.message || '清空失败'
+    }
+  } catch {
+    gapMessage.value = '清空失败，请稍后重试'
+  }
+}
+
+function formatSynonyms(groups: Record<string, string[]>): string {
+  return Object.entries(groups)
+    .map(([term, values]) => `${term}=${(values || []).join(',')}`)
+    .join('\n')
+}
+
+function parseSynonyms(text: string): Record<string, string[]> {
+  const groups: Record<string, string[]> = {}
+  for (const line of text.split('\n')) {
+    const [termRaw, valuesRaw] = line.split(/[=:：]/)
+    const term = (termRaw || '').trim().slice(0, 32)
+    if (!term) continue
+    const values = (valuesRaw || '')
+      .split(/[,，;；\s]+/)
+      .map((value) => value.trim().slice(0, 32))
+      .filter(Boolean)
+      .slice(0, 10)
+    if (values.length) groups[term] = values
+  }
+  return Object.fromEntries(Object.entries(groups).slice(0, 200))
+}
+
+async function toggleSynonymEditor(): Promise<void> {
+  synonymEditorOpen.value = !synonymEditorOpen.value
+  synonymMessage.value = ''
+  if (!synonymEditorOpen.value) return
+  try {
+    const result = await knowledgeBaseApi.synonyms(activeDatasetId.value)
+    synonymDraft.value = formatSynonyms(result.synonyms || {})
+  } catch {
+    synonymMessage.value = '术语表加载失败'
+  }
+}
+
+async function saveSynonyms(): Promise<void> {
+  synonymSaving.value = true
+  synonymMessage.value = ''
+  try {
+    const result = await knowledgeBaseApi.saveSynonyms(
+      activeDatasetId.value,
+      parseSynonyms(synonymDraft.value),
+    )
+    synonymMessage.value = result.success
+      ? `已保存 ${result.count ?? 0} 组术语`
+      : result.message || '保存失败'
+  } catch {
+    synonymMessage.value = '保存失败，请稍后重试'
+  } finally {
+    synonymSaving.value = false
+  }
+}
+
+function formatQaPairs(pairs: Array<{ question?: string; answer?: string }>): string {
+  return pairs
+    .map((pair) => `${pair.question || ''}\t${pair.answer || ''}`)
+    .join('\n')
+}
+
+async function toggleQaPairs(): Promise<void> {
+  qaPairsOpen.value = !qaPairsOpen.value
+  qaPairsMessage.value = ''
+  if (!qaPairsOpen.value) return
+  try {
+    const result = await knowledgeBaseApi.qaPairs(activeDatasetId.value)
+    qaPairItems.value = result.pairs || []
+    qaPairsDraft.value = formatQaPairs(qaPairItems.value)
+  } catch {
+    qaPairsMessage.value = '问答对加载失败'
+  }
+}
+
+async function saveQaPairs(): Promise<void> {
+  qaPairsSaving.value = true
+  qaPairsMessage.value = ''
+  try {
+    const result = await knowledgeBaseApi.saveQaPairs(activeDatasetId.value, qaPairsDraft.value)
+    qaPairItems.value = result.pairs || []
+    qaPairsMessage.value = result.success
+      ? `已保存 ${result.total ?? 0} 组问答`
+      : result.message || '保存失败'
+  } catch {
+    qaPairsMessage.value = '保存失败，请稍后重试'
+  } finally {
+    qaPairsSaving.value = false
+  }
+}
+
 const recall = usePersyRecallQuery({
   activeDatasetId,
   adminOmniscient,
   omniscientQueryEnabled,
+  crossDatasetIds,
   refreshMemories,
   refreshGraph,
   onRecallCommitted: () => {
@@ -409,7 +862,69 @@ const recall = usePersyRecallQuery({
     viewMode.value = 'graph'
   },
 })
-const { queryText, querying, queryMessage, queryError, answerText, lastQuery, resultChunks, recallState, queryKnowledge } = recall
+const {
+  queryText,
+  querying,
+  retrievalMode,
+  expandSection,
+  mmrLambda,
+  crossDataset,
+  feedbackRating,
+  feedbackMessage,
+  submitAnswerFeedback,
+  queryMessage,
+  queryError,
+  answerText,
+  lastQuery,
+  resultChunks,
+  recallState,
+  queryKnowledge,
+} = recall
+const { grounding, answerGrounded } = recall
+
+const sourceChunkState = usePersySourceChunks({ activeDatasetId })
+const {
+  documentId: chunkDocumentId,
+  documentLabel: chunkDocumentLabel,
+  chunks: sourceChunks,
+  total: chunkTotal,
+  loading: chunkLoading,
+  loadingMore: chunkLoadingMore,
+  error: chunkError,
+  open: openSourceChunks,
+  loadMore: loadMoreChunks,
+} = sourceChunkState
+
+function openDocument(doc: KnowledgeBaseDocument): void {
+  selectDocument(doc)
+  void openSourceChunks(doc)
+}
+
+function openRecallChunk(chunk: { source?: string; metadata?: Record<string, unknown> }): void {
+  const documentId = String(chunk.metadata?.document_id || '')
+  if (!documentId) return
+  inspectorTab.value = 'chunks'
+  mobileInspectorOpen.value = true
+  void openSourceChunks({ document_id: documentId, source: chunk.source || documentId })
+}
+
+function evidenceSegments(chunk: { text?: string; metadata?: Record<string, unknown> }) {
+  const text = String(chunk.text || '')
+  const raw = chunk.metadata?.highlights
+  const spans = Array.isArray(raw) ? (raw as Array<{ start?: number; end?: number }>) : []
+  if (!spans.length) return [{ text, match: false }]
+  const segments: Array<{ text: string; match: boolean }> = []
+  let cursor = 0
+  for (const span of spans) {
+    const start = Math.max(cursor, Math.min(Number(span.start ?? 0), text.length))
+    const end = Math.max(start, Math.min(Number(span.end ?? start), text.length))
+    if (start > cursor) segments.push({ text: text.slice(cursor, start), match: false })
+    if (end > start) segments.push({ text: text.slice(start, end), match: true })
+    cursor = end
+  }
+  if (cursor < text.length) segments.push({ text: text.slice(cursor), match: false })
+  return segments
+}
 
 // selectNode / selectMemory 与 usePersyMemoryGovernance 互为初始化依赖，保留在此（与拆分前同为提升函数声明）
 function dropKnowledgeFile(event: DragEvent): void {

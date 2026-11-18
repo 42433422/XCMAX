@@ -1,10 +1,16 @@
 import { mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
+import { nextTick } from 'vue'
 import SidebarMenuItem from './SidebarMenuItem.vue'
 
 const prefetchShellRoute = vi.hoisted(() => vi.fn())
 vi.mock('@/utils/shellRoutePrefetch', () => ({ prefetchShellRoute }))
 vi.mock('vue-router', () => ({ useRouter: () => ({}) }))
+
+async function pointerUp(element: Element, button = 0) {
+  element.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button }))
+  await nextTick()
+}
 
 const employeeWorkflowItem = {
   key: 'employee-workflow',
@@ -56,7 +62,7 @@ describe('SidebarMenuItem.vue', () => {
       })
       const child = wrapper.get('button.submenu-item[data-view="workflow-employee-space"]')
 
-      await child.trigger('pointerup', { button: 0 })
+      await pointerUp(child.element)
       await child.trigger('click')
 
       expect(wrapper.emitted('select-view')).toEqual([['workflow-employee-space']])
@@ -219,7 +225,7 @@ describe('SidebarMenuItem.vue', () => {
       },
     })
     const child = wrapper.get('button.submenu-item[data-view="workflow-employee-space"]')
-    await child.trigger('pointerup', { button: 2 }) // right click
+    await pointerUp(child.element, 2) // right click
     expect(wrapper.emitted('select-view')).toBeUndefined()
   })
 
@@ -235,14 +241,14 @@ describe('SidebarMenuItem.vue', () => {
       })
       const child = wrapper.get('button.submenu-item[data-view="workflow-employee-space"]')
       // First pointerup should emit
-      await child.trigger('pointerup', { button: 0 })
+      await pointerUp(child.element)
       expect(wrapper.emitted('select-view')).toHaveLength(1)
       // Rapid second pointerup should be deduplicated (within 80ms)
-      await child.trigger('pointerup', { button: 0 })
+      await pointerUp(child.element)
       expect(wrapper.emitted('select-view')).toHaveLength(1)
       // Advance past 80ms
       vi.advanceTimersByTime(100)
-      await child.trigger('pointerup', { button: 0 })
+      await pointerUp(child.element)
       expect(wrapper.emitted('select-view')).toHaveLength(2)
     } finally {
       vi.useRealTimers()

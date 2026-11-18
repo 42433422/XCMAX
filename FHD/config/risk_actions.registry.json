@@ -1773,6 +1773,15 @@
           ],
           "availability": "shared"
         },
+        "multi_query": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [
+            "dataset_ids",
+            "query"
+          ],
+          "availability": "shared"
+        },
         "diff_versions": {
           "risk": "low",
           "idempotent": true,
@@ -1816,6 +1825,33 @@
           "required_params": [
             "dataset_id",
             "document_id"
+          ],
+          "availability": "shared"
+        },
+        "update_document_acl": {
+          "risk": "high",
+          "idempotent": true,
+          "required_params": [
+            "dataset_id",
+            "document_id",
+            "acl"
+          ],
+          "availability": "shared"
+        },
+        "refresh_document": {
+          "risk": "medium",
+          "idempotent": true,
+          "required_params": [
+            "dataset_id",
+            "document_id"
+          ],
+          "availability": "shared"
+        },
+        "refresh_documents": {
+          "risk": "medium",
+          "idempotent": true,
+          "required_params": [
+            "dataset_id"
           ],
           "availability": "shared"
         },

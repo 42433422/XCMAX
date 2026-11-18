@@ -6,13 +6,14 @@ import { speakText, stopSpeaking, cleanTextForSpeech } from '../utils/tts'
 import { useModsStore } from '@/stores/mods'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { useIndustryStore } from '@/stores/industry'
-import { getIndustryWelcomeMarkdown, isIndustryWelcomePlainText } from '@/constants/industryPresets'
+import { getIndustryWelcomeMarkdown } from '@/constants/industryPresets'
 import { buildChatMessagesKey, buildChatSessionMetaKey, resolveChatIdentity, resolveChatStorageScope } from '@/utils/chatStorageKeys'
 import { readChatModelRoute, recordChatModelRoute } from '@/utils/chatModelRoute'
 import { asRecord, asArray, asString, asBoolean } from '@/utils/typeGuards'
 import { formatChatMessageTime } from '@/utils/chatTaskLabels'
 import { stripModelToolProtocol } from '@/utils/chatModelProtocol'
 import { reconcileApprovalCards, restoreApprovalCard } from '@/utils/chatApprovalCard'
+import { chatMessageKey } from '@/utils/chatMessageIdentity'
 import { captureAuthSession } from '@/utils/authSessionCache'
 
 const WELCOME_MESSAGE_PREFIX = '您好！我是您的'
@@ -458,6 +459,7 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
         return {
           role,
           content,
+          uiKey: chatMessageKey(row as unknown as ChatMessage),
           time: asString(row.time).trim() || new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
           ...(streamingShell ? { streamingShell: true } : {}),
           ...(toolProgressLabel ? { toolProgressLabel } : {}),
@@ -595,14 +597,23 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
       })
       const sanitized = sanitizeMessagesList(mapped)
       if (!sanitized.length) { if (options.required) throw new Error('当前会话内容无法读取，请重试'); return false }
-      const matched = new Set<number>()
       const localList = messages.value
       const lastLocal = localList[localList.length - 1]
       const serverTurnIds = new Set(sanitized.map(message => message.turnId).filter(Boolean))
-      const unsaved = localList.filter(local => {
-        const index = sanitized.findIndex((server, i) => !matched.has(i) && samePersistedMessage(local, server, toPlainText))
-        if (index >= 0) { matched.add(index); sanitized[index] = { ...local, ...sanitized[index] }; return false }
+      // 原地复用本地消息对象：对象身份稳定，列表 key 才不会在同步后整列变化。
+      const matched = new Set<number>()
+      const mergedServer = sanitized.map((server) => {
+        const index = localList.findIndex((local, i) => !matched.has(i) && samePersistedMessage(local, server, toPlainText))
+        if (index < 0) return server
+        matched.add(index)
+        return Object.assign(localList[index], server, { uiKey: chatMessageKey(localList[index]) })
+      })
+      const unsaved = localList.filter((local, index) => {
+        if (matched.has(index)) return false
         if (local.persistence?.status === 'saved') return false
+        // 服务端已有同一轮次：本地这条只是同一问题的副本（附件证据会改写服务端正文，
+        // 按文本匹配不到）。保留它会在每次同步时追加到末尾并再次落库，形成重复提问。
+        if (local.role === 'user' && local.turnId && serverTurnIds.has(local.turnId)) return false
         // 没有进行中的轮次、且本轮 turnId 不在服务端：这是从未真正发出的孤儿提问
         // （例如视图已被替换导致请求没发出去），保留它只会在每次同步时被追加到末尾。
         if (local.role === 'user' && local.turnId && !busy() && !serverTurnIds.has(local.turnId)) return false
@@ -614,7 +625,10 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
         }
         return true
       })
-      loadMessages(withoutRepeatedWelcomes([...sanitized, ...unsaved.filter(message => !isWelcomeMessage(message))]))
+      const next = withoutRepeatedWelcomes([...mergedServer, ...unsaved.filter(message => !isWelcomeMessage(message))])
+      const unchanged = next.length === localList.length && next.every((message, index) => message === localList[index])
+      if (!unchanged) loadMessages(next)
+      else persistMessagesCache()
       return true
     } catch (_e) {
       if (options.required) throw _e

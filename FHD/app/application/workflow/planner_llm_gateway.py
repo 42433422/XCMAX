@@ -1,11 +1,26 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+_ENV_MAX_TOKENS = "XCAGI_PLANNER_MAX_TOKENS"
+# 推理模型（如 MiMo / MiniMax M3）会先消耗 reasoning token，1200 的旧默认
+# 会让正文为空（finish_reason=length）。默认放宽到 4096，仍可用环境变量收紧。
+_DEFAULT_MAX_TOKENS = 4096
+
+
+def planner_max_tokens() -> int:
+    raw = (os.environ.get(_ENV_MAX_TOKENS) or "").strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        return _DEFAULT_MAX_TOKENS
+    return max(256, min(16000, value))
 
 
 def _meter_planner_completion(payload: dict[str, Any] | None, *, model: str) -> None:
@@ -42,7 +57,7 @@ def stream_planner_completion(
     context: dict[str, Any] | None,
     messages: list[dict[str, str]],
     temperature: float = 0.1,
-    max_tokens: int = 1200,
+    max_tokens: int | None = None,
 ) -> Any:
     """返回正文增量的异步生成器；provider 不支持流式时返回 None。"""
     from app.infrastructure.llm.providers.registry import get_active_provider
@@ -51,7 +66,11 @@ def stream_planner_completion(
     stream = getattr(provider, "stream_chat_completion", None) if provider is not None else None
     if stream is None:
         return None
-    return stream(messages=messages, temperature=temperature, max_tokens=max_tokens)
+    return stream(
+        messages=messages,
+        temperature=temperature,
+        max_tokens=max_tokens or planner_max_tokens(),
+    )
 
 
 def request_planner_completion(
@@ -61,7 +80,7 @@ def request_planner_completion(
     messages: list[dict[str, str]],
     http_client_factory: Any = None,  # call-site compat; unused
     temperature: float = 0.1,
-    max_tokens: int = 1200,
+    max_tokens: int | None = None,
     **extra: Any,
 ) -> dict[str, Any] | None:
     """Use the same request-scoped provider and model as nested Agent tools."""
@@ -79,7 +98,7 @@ def request_planner_completion(
                 provider.chat_completion(
                     messages=messages,
                     temperature=temperature,
-                    max_tokens=max_tokens,
+                    max_tokens=max_tokens or planner_max_tokens(),
                     **extra,
                 )
             )

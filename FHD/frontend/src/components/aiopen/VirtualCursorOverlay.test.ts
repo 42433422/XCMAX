@@ -8,28 +8,34 @@ vi.mock('@/composables/useAiOpenCursor', async () => {
   const { ref } = await import('vue')
   const cursorX = ref(0)
   const cursorY = ref(0)
+  const cursorTilt = ref(0)
   const cursorVisible = ref(false)
   const cursorClicking = ref(false)
   const cursorActionLabel = ref('')
   const enabled = ref(false)
   const connected = ref(false)
+  const agentActive = ref(false)
   const initAiOpenCursor = vi.fn()
   container.mocks.cursorX = cursorX
   container.mocks.cursorY = cursorY
+  container.mocks.cursorTilt = cursorTilt
   container.mocks.cursorVisible = cursorVisible
   container.mocks.cursorClicking = cursorClicking
   container.mocks.cursorActionLabel = cursorActionLabel
   container.mocks.enabled = enabled
   container.mocks.connected = connected
+  container.mocks.agentActive = agentActive
   container.mocks.initAiOpenCursor = initAiOpenCursor
   return {
     cursorX,
     cursorY,
+    cursorTilt,
     cursorVisible,
     cursorClicking,
     cursorActionLabel,
     aiopenCursorEnabled: enabled,
     aiopenCursorConnected: connected,
+    aiopenAgentActive: agentActive,
     initAiOpenCursor,
   }
 })
@@ -39,11 +45,13 @@ import VirtualCursorOverlay from './VirtualCursorOverlay.vue'
 const cursorState = container.mocks as {
   cursorX: { value: number }
   cursorY: { value: number }
+  cursorTilt: { value: number }
   cursorVisible: { value: boolean }
   cursorClicking: { value: boolean }
   cursorActionLabel: { value: string }
   enabled: { value: boolean }
   connected: { value: boolean }
+  agentActive: { value: boolean }
   initAiOpenCursor: ReturnType<typeof vi.fn>
 }
 
@@ -71,11 +79,13 @@ describe('VirtualCursorOverlay', () => {
     vi.clearAllMocks()
     cursorState.cursorX.value = 0
     cursorState.cursorY.value = 0
+    cursorState.cursorTilt.value = 0
     cursorState.cursorVisible.value = false
     cursorState.cursorClicking.value = false
     cursorState.cursorActionLabel.value = ''
     cursorState.enabled.value = false
     cursorState.connected.value = false
+    cursorState.agentActive.value = false
   })
 
   afterEach(() => {
@@ -104,9 +114,11 @@ describe('VirtualCursorOverlay', () => {
     cursorState.cursorVisible.value = true
     cursorState.cursorX.value = 100
     cursorState.cursorY.value = 200
+    cursorState.cursorTilt.value = 5
     await mountComponent()
     const cursor = document.querySelector('.aiopen-cursor') as HTMLElement
     expect(cursor.getAttribute('style')).toContain('translate(100px, 200px)')
+    expect(cursor.getAttribute('style')).toContain('rotate(5deg)')
   })
 
   it('applies clicking class when cursorClicking is true', async () => {
@@ -160,18 +172,28 @@ describe('VirtualCursorOverlay', () => {
     expect(document.querySelector('.aiopen-control-badge')).toBeNull()
   })
 
-  it('renders control badge when enabled and connected are true', async () => {
+  it('renders control badge only while an agent is active', async () => {
     cursorState.enabled.value = true
     cursorState.connected.value = true
+    cursorState.agentActive.value = true
     await mountComponent()
     const badge = document.querySelector('.aiopen-control-badge')
     expect(badge).not.toBeNull()
-    expect(badge!.textContent).toContain('AI 操控通道已连接')
+    expect(badge!.textContent).toContain('AI 正在操作本页')
+  })
+
+  it('hides control badge while idle even when connected', async () => {
+    cursorState.enabled.value = true
+    cursorState.connected.value = true
+    cursorState.agentActive.value = false
+    await mountComponent()
+    expect(document.querySelector('.aiopen-control-badge')).toBeNull()
   })
 
   it('does not render control badge when only enabled is true', async () => {
     cursorState.enabled.value = true
     cursorState.connected.value = false
+    cursorState.agentActive.value = true
     await mountComponent()
     expect(document.querySelector('.aiopen-control-badge')).toBeNull()
   })

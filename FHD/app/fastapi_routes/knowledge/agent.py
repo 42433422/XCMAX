@@ -85,7 +85,7 @@ class DatasetAgent:
         user_id = self._actor(request, data)
         request_key = str(request.headers.get("Idempotency-Key") or "").strip()
         claim_key = ""
-        if request_key and action not in {"query", "diff_versions"}:
+        if request_key and action not in {"query", "multi_query", "diff_versions"}:
             if len(request_key) > 200:
                 return JSONResponse({"success": False, "message": "幂等键过长"}, status_code=400)
             from app.application.agent_orchestrator.tool_permission import begin_idempotent_replay

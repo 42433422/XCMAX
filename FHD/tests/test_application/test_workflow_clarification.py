@@ -218,7 +218,8 @@ class TestResolveConfirmedTarget:
         assert resolve_confirmed_target("cust_2", self.CANDIDATES) == {"id": "cust_2"}
 
     def test_resolve_by_name(self):
-        assert resolve_confirmed_target("北京智造科技", self.CANDIDATES) == {"id": "cust_1"}
+        assert resolve_confirmed_target("北京智造科技", self.CANDIDATES) is None
+        assert resolve_confirmed_target("北京智造科技", self.CANDIDATES[:1]) == {"id": "cust_1"}
 
     def test_unresolvable_returns_none(self):
         assert resolve_confirmed_target("3", self.CANDIDATES) is None
@@ -427,3 +428,24 @@ def test_shipment_inputs_shared_by_clarification_and_execution(params, expected,
     if not expected:
         for key in ("contact_person", "contact_phone"):
             assert svc.create_shipment.call_args.kwargs[key] == params[key]
+
+
+def test_resolve_confirmed_target_accepts_chinese_ordinals():
+    from app.application.workflow.clarification_lifecycle import resolve_confirmed_target
+
+    candidates = [{"id": 1, "name": "甲型涂料"}, {"id": 2, "name": "乙型涂料"}]
+    assert resolve_confirmed_target("就第二个", candidates) == {"id": "2"}
+    assert resolve_confirmed_target("第二个", candidates) == {"id": "2"}
+    assert resolve_confirmed_target("不是第一个，是第二个", candidates) == {"id": "2"}
+    assert resolve_confirmed_target("不是第二个", candidates) is None
+    assert resolve_confirmed_target("第二项", candidates) == {"id": "2"}
+    assert resolve_confirmed_target("2", candidates) == {"id": "2"}
+
+
+@pytest.mark.parametrize(
+    "answer",
+    ["不要第二个", "第二个吗？", "第二个还是第一个", "第二个不行", "我问的是第二个", "第十十个"],
+)
+def test_ordinal_mentions_do_not_authorize_candidate_selection(answer):
+    candidates = [{"id": "first"}, {"id": "second"}]
+    assert resolve_confirmed_target(answer, candidates) is None

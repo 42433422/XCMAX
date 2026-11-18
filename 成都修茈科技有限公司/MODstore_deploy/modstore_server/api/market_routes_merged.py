@@ -1534,45 +1534,6 @@ def api_admin_sync_xc_catalog_packages(
     return {"ok": True, **out}
 
 
-@_facade().router.get("/admin/catalog")
-def api_admin_list_catalog(
-    limit: int = _facade().Query(50, ge=1, le=200),
-    offset: int = _facade().Query(0, ge=0),
-    user: _facade().User = _facade().Depends(_facade()._require_admin),
-):
-    sf = _facade().get_session_factory()
-    with sf() as session:
-        total = session.query(_facade().CatalogItem).count()
-        rows = (
-            session.query(_facade().CatalogItem)
-            .order_by(_facade().CatalogItem.created_at.desc())
-            .offset(offset)
-            .limit(limit)
-            .all()
-        )
-        return {
-            "items": [
-                {
-                    "id": r.id,
-                    "pkg_id": r.pkg_id,
-                    "version": r.version,
-                    "name": r.name,
-                    "description": r.description,
-                    "price": r.price,
-                    "artifact": r.artifact,
-                    "industry": getattr(r, "industry", None) or "通用",
-                    "stored_filename": r.stored_filename,
-                    "sha256": r.sha256,
-                    "is_public": r.is_public,
-                    "created_at": r.created_at.isoformat() if r.created_at else "",
-                    **_facade().employee_partition_meta(r.pkg_id, r.artifact),
-                }
-                for r in rows
-            ],
-            "total": total,
-        }
-
-
 @_facade().router.post("/admin/upload/initiate", summary="初始化分块上传")
 def api_initiate_upload(
     file_name: str = _facade().Form(...),

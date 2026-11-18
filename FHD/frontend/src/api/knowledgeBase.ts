@@ -1,4 +1,5 @@
-import { api, primeCsrfCookie } from './core'
+import { api, buildFullApiUrl, primeCsrfCookie } from './core'
+import { readCsrfTokenFromCookie, shouldAttachCsrfHeader } from '@/utils/csrfCookie'
 
 export const PERSY_KNOWLEDGE_DATASET_ID = 'persy-knowledge'
 
@@ -159,6 +160,10 @@ export interface KnowledgeBaseCitation {
   text?: string
   chunk_index?: number
   score?: number
+  char_range?: number[]
+  source_url?: string
+  page?: number | null
+  document_id?: string
 }
 
 export interface KnowledgeBaseQueryPayload {
@@ -170,6 +175,132 @@ export interface KnowledgeBaseQueryPayload {
   version?: string
   metadataFilter?: Record<string, unknown>
   rerank?: boolean
+  retrievalMode?: 'hybrid' | 'vector' | 'keyword'
+  expandSection?: boolean
+  mmrLambda?: number
+}
+
+export interface KnowledgeBaseMultiQueryPayload extends KnowledgeBaseQueryPayload {
+  datasetIds: string[]
+}
+
+export interface KnowledgeStreamHandlers {
+  onMeta?: (data: Record<string, unknown>) => void
+  onDelta?: (text: string) => void
+  onDone?: (data: Record<string, unknown>) => void
+}
+
+export interface KnowledgeQueryGap {
+  query?: string
+  count?: number
+  last_at?: string
+  created_at?: string
+}
+
+export interface KnowledgeQueryGapResponse {
+  success: boolean
+  dataset_id?: string
+  gaps?: KnowledgeQueryGap[]
+  total?: number
+  removed?: number
+  message?: string
+}
+
+export interface KnowledgeApiKey {
+  token_id?: string
+  dataset_id?: string
+  label?: string
+  prefix?: string
+  created_at?: string
+  last_used_at?: string
+  revoked_at?: string
+}
+
+export interface KnowledgeApiKeyListResponse {
+  success: boolean
+  dataset_id?: string
+  keys?: KnowledgeApiKey[]
+  total?: number
+  message?: string
+}
+
+export interface KnowledgeApiKeyCreateResponse extends KnowledgeApiKeyListResponse {
+  key?: string
+}
+
+export interface KnowledgeSynonymsResponse {
+  success: boolean
+  dataset_id?: string
+  synonyms?: Record<string, string[]>
+  count?: number
+  message?: string
+}
+
+export interface KnowledgeQaPair {
+  qa_id?: string
+  question: string
+  answer: string
+}
+
+export interface KnowledgeQaPairsResponse {
+  success: boolean
+  dataset_id?: string
+  pairs?: KnowledgeQaPair[]
+  count?: number
+  total?: number
+  removed?: number
+  message?: string
+}
+
+export interface KnowledgeFeedbackPayload {
+  datasetId?: string
+  rating: 'up' | 'down'
+  query?: string
+  answer?: string
+  comment?: string
+  citations?: KnowledgeBaseCitation[]
+}
+
+export interface KnowledgeFeedbackRecord {
+  feedback_id?: string
+  dataset_id?: string
+  rating?: string
+  query?: string
+  answer?: string
+  comment?: string
+  created_at?: string
+}
+
+export interface KnowledgeFeedbackResponse {
+  success: boolean
+  dataset_id?: string
+  feedback?: KnowledgeFeedbackRecord
+  message?: string
+}
+
+export interface KnowledgeFeedbackSummary {
+  success: boolean
+  dataset_id?: string
+  total?: number
+  up?: number
+  down?: number
+  satisfaction?: number | null
+  latest?: KnowledgeFeedbackRecord[]
+}
+
+function knowledgeQueryBody(payload: KnowledgeBaseQueryPayload): Record<string, unknown> {
+  return {
+    query: payload.query,
+    top_k: payload.topK || 5,
+    include_answer: payload.includeAnswer !== false,
+    tenant_id: payload.tenantId || '',
+    version: payload.version || '',
+    metadata_filter: payload.metadataFilter || {},
+    rerank: payload.rerank === true,
+    retrieval_mode: payload.retrievalMode || 'hybrid',
+    expand_section: payload.expandSection === true,
+    mmr_lambda: Math.max(0, Math.min(Number(payload.mmrLambda) || 0, 1)),
+  }
 }
 
 export interface KnowledgeBaseQueryResponse {
@@ -185,6 +316,10 @@ export interface KnowledgeBaseQueryResponse {
   metadata_filter?: Record<string, unknown>
   vector_backend_used?: boolean
   index?: Record<string, unknown>
+  grounding?: number
+  min_relevance?: number
+  answer_grounded?: boolean
+  no_answer?: boolean
   message?: string
   error_code?: string
   run_id?: string
@@ -196,6 +331,18 @@ export interface KnowledgeBaseQueryResponse {
     retriever?: string
     error_code?: string
   }
+}
+
+export interface KnowledgeBaseChunkListResponse {
+  success: boolean
+  dataset_id?: string
+  document_id?: string
+  total?: number
+  offset?: number
+  limit?: number
+  chunks: KnowledgeBaseChunk[]
+  message?: string
+  error_code?: string
 }
 
 export interface PersyMemoryEntity {
@@ -370,15 +517,193 @@ export const knowledgeBaseApi = {
 
   async query(payload: KnowledgeBaseQueryPayload): Promise<KnowledgeBaseQueryResponse> {
     await primeCsrfCookie()
-    return api.post<KnowledgeBaseQueryResponse>(datasetPath(payload.datasetId || PERSY_KNOWLEDGE_DATASET_ID, '/query'), {
-      query: payload.query,
-      top_k: payload.topK || 5,
-      include_answer: payload.includeAnswer !== false,
-      tenant_id: payload.tenantId || '',
-      version: payload.version || '',
-      metadata_filter: payload.metadataFilter || {},
-      rerank: payload.rerank === true,
+    return api.post<KnowledgeBaseQueryResponse>(
+      datasetPath(payload.datasetId || PERSY_KNOWLEDGE_DATASET_ID, '/query'),
+      knowledgeQueryBody(payload),
+    )
+  },
+
+  async multiQuery(payload: KnowledgeBaseMultiQueryPayload): Promise<KnowledgeBaseQueryResponse> {
+    await primeCsrfCookie()
+    const datasetIds = Array.from(
+      new Set((payload.datasetIds || []).map((id) => id.trim()).filter(Boolean)),
+    )
+    return api.post<KnowledgeBaseQueryResponse>('/api/knowledge/v1/datasets/multi-query', {
+      ...knowledgeQueryBody(payload),
+      dataset_ids: datasetIds,
     })
+  },
+
+  async queryStream(
+    payload: KnowledgeBaseQueryPayload,
+    handlers: KnowledgeStreamHandlers = {},
+    signal?: AbortSignal,
+  ): Promise<void> {
+    await primeCsrfCookie()
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (shouldAttachCsrfHeader('POST', headers)) {
+      const token = readCsrfTokenFromCookie()
+      if (token) headers['X-CSRF-Token'] = token
+    }
+    const response = await fetch(
+      buildFullApiUrl(datasetPath(payload.datasetId || PERSY_KNOWLEDGE_DATASET_ID, '/query/stream')),
+      {
+        method: 'POST',
+        credentials: 'include',
+        headers,
+        body: JSON.stringify(knowledgeQueryBody(payload)),
+        signal,
+      },
+    )
+    if (!response.ok || !response.body) {
+      throw new Error(`stream failed: ${response.status}`)
+    }
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let finished = false
+    const dispatch = (block: string) => {
+      const event = /^event:\s*(.+)$/m.exec(block)?.[1]?.trim() || 'message'
+      const dataLine = /^data:\s*(.+)$/m.exec(block)?.[1] || ''
+      let data: Record<string, unknown> = {}
+      try {
+        data = dataLine ? JSON.parse(dataLine) : {}
+      } catch {
+        data = {}
+      }
+      if (event === 'meta') handlers.onMeta?.(data)
+      else if (event === 'delta') handlers.onDelta?.(String(data.text || ''))
+      else if (event === 'done') {
+        finished = true
+        handlers.onDone?.(data)
+      } else if (event === 'error') {
+        finished = true
+        throw new Error(String(data.message || 'stream error'))
+      }
+    }
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      let boundary = buffer.indexOf('\n\n')
+      while (boundary >= 0) {
+        const block = buffer.slice(0, boundary)
+        buffer = buffer.slice(boundary + 2)
+        if (block.trim()) dispatch(block)
+        boundary = buffer.indexOf('\n\n')
+      }
+    }
+    if (buffer.trim()) dispatch(buffer)
+    if (!finished) throw new Error('stream ended before done')
+  },
+
+  async submitFeedback(payload: KnowledgeFeedbackPayload): Promise<KnowledgeFeedbackResponse> {
+    await primeCsrfCookie()
+    return api.post<KnowledgeFeedbackResponse>(
+      datasetPath(payload.datasetId || PERSY_KNOWLEDGE_DATASET_ID, '/feedback'),
+      {
+        rating: payload.rating,
+        query: payload.query || '',
+        answer: payload.answer || '',
+        comment: payload.comment || '',
+        citations: payload.citations || [],
+      },
+    )
+  },
+
+  feedbackSummary(datasetId = PERSY_KNOWLEDGE_DATASET_ID, limit = 20): Promise<KnowledgeFeedbackSummary> {
+    const bounded = Math.max(1, Math.min(Number(limit) || 20, 100))
+    return api.get<KnowledgeFeedbackSummary>(datasetPath(datasetId, `/feedback?limit=${bounded}`))
+  },
+
+  queryGaps(
+    datasetId = PERSY_KNOWLEDGE_DATASET_ID,
+    limit = 20,
+  ): Promise<KnowledgeQueryGapResponse> {
+    const bounded = Math.max(1, Math.min(Number(limit) || 20, 100))
+    return api.get<KnowledgeQueryGapResponse>(
+      datasetPath(datasetId, `/query-gaps?limit=${bounded}`),
+    )
+  },
+
+  async clearQueryGaps(datasetId = PERSY_KNOWLEDGE_DATASET_ID): Promise<KnowledgeQueryGapResponse> {
+    await primeCsrfCookie()
+    return api.delete<KnowledgeQueryGapResponse>(datasetPath(datasetId, '/query-gaps'))
+  },
+
+  listApiKeys(
+    datasetId = PERSY_KNOWLEDGE_DATASET_ID,
+  ): Promise<KnowledgeApiKeyListResponse> {
+    return api.get<KnowledgeApiKeyListResponse>(datasetPath(datasetId, '/api-keys'))
+  },
+
+  async createApiKey(
+    datasetId: string,
+    label = '',
+  ): Promise<KnowledgeApiKeyCreateResponse> {
+    await primeCsrfCookie()
+    return api.post<KnowledgeApiKeyCreateResponse>(datasetPath(datasetId, '/api-keys'), {
+      label,
+    })
+  },
+
+  async revokeApiKey(
+    datasetId: string,
+    tokenId: string,
+  ): Promise<Record<string, unknown>> {
+    await primeCsrfCookie()
+    return api.delete<Record<string, unknown>>(
+      datasetPath(datasetId, `/api-keys/${encodeURIComponent(tokenId)}`),
+    )
+  },
+
+  exportDataset(datasetId = PERSY_KNOWLEDGE_DATASET_ID): Promise<Record<string, unknown>> {
+    return api.get<Record<string, unknown>>(datasetPath(datasetId, '/export'))
+  },
+
+  async importDataset(
+    datasetId: string,
+    payload: Record<string, unknown>,
+    overwrite = false,
+  ): Promise<Record<string, unknown>> {
+    await primeCsrfCookie()
+    return api.post<Record<string, unknown>>(datasetPath(datasetId, '/import'), {
+      payload,
+      overwrite,
+    })
+  },
+
+  synonyms(datasetId = PERSY_KNOWLEDGE_DATASET_ID): Promise<KnowledgeSynonymsResponse> {
+    return api.get<KnowledgeSynonymsResponse>(datasetPath(datasetId, '/synonyms'))
+  },
+
+  async saveSynonyms(
+    datasetId: string,
+    synonyms: Record<string, string[]>,
+  ): Promise<KnowledgeSynonymsResponse> {
+    await primeCsrfCookie()
+    return api.put<KnowledgeSynonymsResponse>(datasetPath(datasetId, '/synonyms'), { synonyms })
+  },
+
+  qaPairs(datasetId = PERSY_KNOWLEDGE_DATASET_ID): Promise<KnowledgeQaPairsResponse> {
+    return api.get<KnowledgeQaPairsResponse>(datasetPath(datasetId, '/qa-pairs'))
+  },
+
+  async saveQaPairs(
+    datasetId: string,
+    pairs: KnowledgeQaPair[] | string,
+    replace = true,
+  ): Promise<KnowledgeQaPairsResponse> {
+    await primeCsrfCookie()
+    return api.put<KnowledgeQaPairsResponse>(datasetPath(datasetId, '/qa-pairs'), {
+      pairs,
+      replace,
+    })
+  },
+
+  async clearQaPairs(datasetId = PERSY_KNOWLEDGE_DATASET_ID): Promise<KnowledgeQaPairsResponse> {
+    await primeCsrfCookie()
+    return api.delete<KnowledgeQaPairsResponse>(datasetPath(datasetId, '/qa-pairs'))
   },
 
   memories(
@@ -429,6 +754,19 @@ export const knowledgeBaseApi = {
   async deleteDocument(datasetId: string, documentId: string): Promise<KnowledgeBaseStatus> {
     await primeCsrfCookie()
     return api.delete<KnowledgeBaseStatus>(datasetPath(datasetId, `/documents/${encodeURIComponent(documentId)}`))
+  },
+
+  documentChunks(
+    datasetId: string,
+    documentId: string,
+    options: { offset?: number; limit?: number } = {},
+  ): Promise<KnowledgeBaseChunkListResponse> {
+    const offset = Math.max(0, Number(options.offset) || 0)
+    const limit = Math.max(1, Math.min(Number(options.limit) || 50, 200))
+    const query = `?offset=${offset}&limit=${limit}`
+    return api.get<KnowledgeBaseChunkListResponse>(
+      datasetPath(datasetId, `/documents/${encodeURIComponent(documentId)}/chunks${query}`),
+    )
   },
 }
 

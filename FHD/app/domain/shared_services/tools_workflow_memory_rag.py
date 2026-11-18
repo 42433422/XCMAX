@@ -8,11 +8,39 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
+def _positive_float(value: Any) -> float | None:
+    """正数参数（如 max_age_hours）；缺省/非法/非正数都表示不启用。"""
+    if value in (None, ""):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if number > 0 else None
+
+
+def _retrieval_mode(value: Any) -> str:
+    """检索模式；非法值回落到默认 hybrid 而不是报错。"""
+    cleaned = str(value or "hybrid").strip().lower()
+    return cleaned if cleaned in {"hybrid", "vector", "keyword"} else "hybrid"
+
+
+def _weight(value: Any, default: float = 1.0) -> float:
+    """RRF 通道权重：0–10，缺省/非法回落默认 1.0。"""
+    if value in (None, ""):
+        return default
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return default
+    return number if 0.0 <= number <= 10.0 else default
+
+
 def _registered_router_dataset_rag(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
     dataset_id = str(params.get("dataset_id") or "").strip()
-    if not dataset_id:
+    if not dataset_id and action != "multi_query":
         return {"success": False, "message": f"dataset_rag.{action} 缺少 dataset_id 参数"}
     from app.application.dataset_rag_app_service import (
         DATASET_READ_PERMISSION,
@@ -45,6 +73,15 @@ def _registered_router_dataset_rag(
             return int(value)
         except (TypeError, ValueError):
             return default
+
+    def as_float(value: Any, default: float) -> float:
+        if value in (None, ""):
+            return default
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return default
+        return max(0.0, min(number, 1.0))
 
     def as_dict(value: Any) -> dict[str, Any]:
         return dict(value) if isinstance(value, dict) else {}
@@ -113,6 +150,7 @@ def _registered_router_dataset_rag(
             tenant_id=str(params.get("tenant_id") or ""),
             version=params.get("version") or "",
             version_label=str(params.get("version_label") or ""),
+            allow_duplicate=as_bool(params.get("allow_duplicate"), default=False),
             access_context=access_context(DATASET_WRITE_PERMISSION),
         )
         return finalize(result, dataset_id=dataset_id)
@@ -124,9 +162,20 @@ def _registered_router_dataset_rag(
         tenant_id = str(params.get("tenant_id") or "")
         version = params.get("version") or ""
         metadata_filter = as_dict(params.get("metadata_filter"))
+        tags = [str(tag) for tag in params.get("tags") or [] if str(tag).strip()]
+        if tags:
+            metadata_filter = {**metadata_filter, "tags": tags}
         rerank = as_bool(params.get("rerank"), default=False)
         read_context = access_context(DATASET_READ_PERMISSION)
         include_answer = as_bool(params.get("include_answer"), default=True)
+        raw_history = params.get("history")
+        history = raw_history if isinstance(raw_history, list) else []
+        min_relevance = as_float(params.get("min_relevance"), 0.0)
+        mmr_lambda = as_float(params.get("mmr_lambda"), 0.0)
+        retrieval_mode = _retrieval_mode(params.get("retrieval_mode"))
+        vector_weight = _weight(params.get("vector_weight"))
+        keyword_weight = _weight(params.get("keyword_weight"))
+        expand_section = as_bool(params.get("expand_section"), default=False)
         if include_answer:
             result = service.answer(
                 dataset_id=dataset_id,
@@ -137,6 +186,14 @@ def _registered_router_dataset_rag(
                 metadata_filter=metadata_filter,
                 rerank=rerank,
                 access_context=read_context,
+                history=history,
+                min_relevance=min_relevance,
+                max_context_chars=as_int(params.get("max_context_chars"), 0),
+                mmr_lambda=mmr_lambda,
+                retrieval_mode=retrieval_mode,
+                vector_weight=vector_weight,
+                keyword_weight=keyword_weight,
+                expand_section=expand_section,
             )
         else:
             result = service.query(
@@ -148,10 +205,84 @@ def _registered_router_dataset_rag(
                 metadata_filter=metadata_filter,
                 rerank=rerank,
                 access_context=read_context,
+                context_window=as_int(params.get("context_window"), 0),
+                history=history,
+                min_relevance=min_relevance,
+                mmr_lambda=mmr_lambda,
+                retrieval_mode=retrieval_mode,
+                vector_weight=vector_weight,
+                keyword_weight=keyword_weight,
+                expand_section=expand_section,
             )
         return finalize(
             result, dataset_id=dataset_id, query=query, chunks=[], citations=[], answer=""
         )
+    if action == "multi_query":
+        raw_ids = params.get("dataset_ids")
+        dataset_ids = [str(value) for value in raw_ids] if isinstance(raw_ids, list) else []
+        dataset_ids = [value for value in dataset_ids if value.strip()]
+        query = str(params.get("query") or params.get("question") or user_message or "").strip()
+        if not query:
+            return {"success": False, "message": "dataset_rag.multi_query 缺少 query 参数"}
+        if not dataset_ids:
+            return {"success": False, "message": "dataset_rag.multi_query 缺少 dataset_ids 参数"}
+        raw_history = params.get("history")
+        history = raw_history if isinstance(raw_history, list) else []
+        metadata_filter = as_dict(params.get("metadata_filter"))
+        tags = [str(tag) for tag in params.get("tags") or [] if str(tag).strip()]
+        if tags:
+            metadata_filter = {**metadata_filter, "tags": tags}
+        shared: dict[str, Any] = {
+            "dataset_ids": dataset_ids,
+            "query": query,
+            "top_k": as_int(params.get("top_k"), 5),
+            "tenant_id": str(params.get("tenant_id") or ""),
+            "version": params.get("version") or "",
+            "metadata_filter": metadata_filter,
+            "rerank": as_bool(params.get("rerank"), default=False),
+            "access_context": access_context(DATASET_READ_PERMISSION),
+            "history": history,
+            "min_relevance": as_float(params.get("min_relevance"), 0.0),
+            "mmr_lambda": as_float(params.get("mmr_lambda"), 0.0),
+            "retrieval_mode": _retrieval_mode(params.get("retrieval_mode")),
+            "vector_weight": _weight(params.get("vector_weight")),
+            "keyword_weight": _weight(params.get("keyword_weight")),
+            "expand_section": as_bool(params.get("expand_section"), default=False),
+        }
+        if as_bool(params.get("include_answer"), default=True):
+            result = service.multi_answer(
+                **shared, max_context_chars=as_int(params.get("max_context_chars"), 0)
+            )
+        else:
+            result = service.multi_query(
+                **shared, context_window=as_int(params.get("context_window"), 0)
+            )
+        return finalize(
+            result, dataset_ids=dataset_ids, query=query, chunks=[], citations=[], answer=""
+        )
+    if action == "refresh_document":
+        document_id = str(params.get("document_id") or "").strip()
+        if not document_id:
+            return {
+                "success": False,
+                "message": "dataset_rag.refresh_document 缺少 document_id 参数",
+            }
+        result = service.refresh_document(
+            dataset_id=dataset_id,
+            document_id=document_id,
+            tenant_id=str(params.get("tenant_id") or ""),
+            access_context=access_context(DATASET_WRITE_PERMISSION),
+        )
+        return finalize(result, dataset_id=dataset_id, document_id=document_id)
+    if action == "refresh_documents":
+        result = service.refresh_documents(
+            dataset_id=dataset_id,
+            tenant_id=str(params.get("tenant_id") or ""),
+            access_context=access_context(DATASET_WRITE_PERMISSION),
+            limit=as_int(params.get("limit"), 50),
+            max_age_hours=_positive_float(params.get("max_age_hours")),
+        )
+        return finalize(result, dataset_id=dataset_id, documents=[])
     if action == "diff_versions":
         source = str(params.get("source") or "").strip()
         from_version = params.get("from_version") or ""
@@ -220,6 +351,20 @@ def _registered_router_dataset_rag(
                 access_context=write_context,
             )
         return finalize(result, dataset_id=dataset_id)
+    if action == "update_document_acl":
+        document_id = str(params.get("document_id") or "").strip()
+        if not document_id:
+            return {
+                "success": False,
+                "message": "dataset_rag.update_document_acl 缺少 document_id 参数",
+            }
+        result = service.update_document_acl(
+            dataset_id,
+            document_id,
+            acl=as_dict(params.get("acl")),
+            access_context=access_context(DATASET_WRITE_PERMISSION),
+        )
+        return finalize(result, dataset_id=dataset_id, document_id=document_id)
     if action == "delete_document":
         document_id = str(params.get("document_id") or "").strip()
         if not document_id:

@@ -65,6 +65,24 @@ export const getWorkflowExecutionStatusLabel = (execution?: ApprovalWorkflowExec
   return '已触发执行'
 }
 
+/** 列表行执行状态徽标；无执行记录时返回 null，不占位。 */
+export const getExecutionBadge = (execution?: ApprovalWorkflowExecution) => {
+  if (!execution) return null
+  if (!execution.workflow_executed) return { label: '未触发执行', tone: 'muted' }
+  if (execution.success === true) return { label: '执行完成', tone: 'ok' }
+  if (execution.success === false) return { label: '执行失败', tone: 'fail' }
+  return { label: '执行中', tone: 'running' }
+}
+
+export const getStatusTone = (status: string) =>
+  status === 'approved' ? 'ok'
+    : status === 'rejected' ? 'fail'
+      : status === 'pending' ? 'warn'
+        : status === 'in_progress' ? 'info' : 'muted'
+
+export const getApplicantLabel = (request: ApprovalRequest) =>
+  request.applicant_id ? `发起人 #${request.applicant_id}` : '发起人未知'
+
 export const buildWorkflowExecutionAlert = (execution?: ApprovalWorkflowExecution) => {
   if (!execution) return ''
   const status = getWorkflowExecutionStatusLabel(execution)

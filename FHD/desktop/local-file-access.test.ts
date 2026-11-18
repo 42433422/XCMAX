@@ -18,7 +18,7 @@ vi.mock('electron', () => ({
   dialog: { showOpenDialog: mocks.openDialog },
   Notification: Object.assign(vi.fn(), { isSupported: () => true }),
 }))
-vi.mock('./desktop-config', () => ({ APP_NAME: 'test', DEFAULT_PORT: 18500, readPackagedAppVersion: vi.fn() }))
+vi.mock('./desktop-config', () => ({ APP_NAME: 'test', DEFAULT_PORT: 18500, isDesktopPackaged: () => false, readPackagedAppVersion: vi.fn() }))
 vi.mock('./window-manager', () => ({ broadcastToRenderer: vi.fn() }))
 vi.mock('./backend-process', () => ({ writeBackendLog: vi.fn(), stopBackend: vi.fn(), runBackendMigrationWithRollback: vi.fn() }))
 vi.mock('./app-shell', () => ({}))

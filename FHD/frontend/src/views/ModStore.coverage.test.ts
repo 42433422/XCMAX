@@ -1819,3 +1819,62 @@ describe('ModStore.coverage – refreshHostMods', () => {
     wrapper.unmount()
   })
 })
+
+describe('ModStore market discovery presentation', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockFetchMarketCatalog.mockResolvedValue({ items: [] })
+    mockApiFetch.mockResolvedValue({ ok: true, json: async () => ({ success: true, data: { available: [] } }) })
+    mockCatalogStoreCollection.mockImplementation((row: any) => row?.store_collection || '')
+  })
+
+  it('counts featured employee packs from the full catalog rather than the filtered list', async () => {
+    mockApiFetch.mockResolvedValue({ ok: true, json: async () => ({ success: true, data: { available: [
+        makeMod({ id: 'workflow-a', store_collection: 'workflow_employee', is_installed: true }),
+        makeMod({ id: 'workflow-b', store_collection: 'workflow_employee', is_installed: false }),
+        makeMod({ id: 'industry-a', store_collection: 'industry_mod', is_installed: true }),
+      ] } }) })
+    const { wrapper } = await mountModStore({ tab: 'all' })
+    try {
+      await waitForAsync()
+      const vm = wrapper.vm as any
+      vm.filteredMods = []
+      await flushPromises()
+      const packs = wrapper.findAll('.store-feature')
+      expect(packs.map(pack => pack.get('.store-feature__name').text())).toEqual(['办公员工包', '办公员工附属包1', '工作流员工', '行业扩展'])
+      expect(packs[0].get('.store-feature__meta').text()).toContain('10 个员工')
+      expect(packs[1].get('.store-feature__meta').text()).toContain('5 个员工')
+      expect(packs[2].get('.store-feature__meta').text()).toContain('2 个员工 · 已装 1')
+      expect(packs[3].get('.store-feature__meta').text()).toContain('1 个员工 · 已装 1')
+    } finally { wrapper.unmount() }
+  })
+
+  it('searches from a visible hot keyword and preserves the selected query', async () => {
+    const { wrapper } = await mountModStore({ tab: 'ai_employee' })
+    try {
+      await waitForAsync()
+      mockFetchMarketCatalog.mockClear()
+      await wrapper.findAll('.store-hot__item')[1].trigger('click')
+      await waitForAsync()
+      expect((wrapper.get('.store-search__input').element as HTMLInputElement).value).toBe('BOM')
+      expect(mockFetchMarketCatalog).toHaveBeenCalled()
+      expect(mockFetchMarketCatalog.mock.calls.some(([options]) => options?.q === 'BOM')).toBe(true)
+    } finally { wrapper.unmount() }
+  })
+
+  it('hides a failed avatar while keeping the employee name and icon visible', async () => {
+    const { wrapper } = await mountModStore()
+    try {
+      await waitForAsync()
+      ;(wrapper.vm as any).filteredMods = [makeMod({ name: '报表助手' })]
+      await flushPromises()
+      const avatar = wrapper.get('.store-card__avatar img')
+      expect(avatar.attributes('src')).toBeTruthy()
+      await avatar.trigger('error')
+      expect((avatar.element as HTMLImageElement).style.display).toBe('none')
+      expect(wrapper.get('.store-card').text()).toContain('报表助手')
+      expect(wrapper.find('.store-card__avatar i').exists()).toBe(true)
+    } finally { wrapper.unmount() }
+  })
+})

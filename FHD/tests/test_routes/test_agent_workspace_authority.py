@@ -106,7 +106,11 @@ def test_persisted_root_rebound_and_turn_cannot_replace_it(roots, monkeypatch):
 
 def test_shared_ingress_sanitizer_strips_root_without_mutating_input(roots):
     server, outside = roots
-    raw = {"workspace_root": str(outside), "source": "chat"}
+    raw = {
+        "workspace_root": str(outside),
+        "source": "chat",
+        "active_skills": ["caller-supplied instructions"],
+    }
     assert without_runtime_identity(raw) == {"source": "chat"}
     assert raw["workspace_root"] == str(outside)
     context = authenticated_runtime_context(raw, AgentPrincipal(user_id="17", tenant_id="29"))

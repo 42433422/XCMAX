@@ -12,6 +12,19 @@
 | 构建 | `npm run build` → `FHD/templates/admin-vue-dist/`（Vite 配置：`frontend/adminConsole.vite.config.js`） |
 | 访问 | 开发：**http://127.0.0.1:5011/admin/login**；构建产物示例：**http://127.0.0.1:5003/admin/** |
 
+## 动效与组件来源（成熟实现复用）
+
+管理端交互与动效不引入新依赖，全部复用既有成熟实现：
+
+| 来源 | 版本/身份 | 许可证 | 用途 |
+|------|-----------|--------|------|
+| [Ludi-Herry/desktop-agent-ui](https://github.com/Ludi-Herry/desktop-agent-ui) | `main@3ef90c4e`（2026-11-17 引入） | MIT | 设计规范：骨架屏 105° 扫光、按钮六态、0.5px 描边、同心圆角、等宽数字、减弱动效守卫 |
+| Element Plus | `package.json` 已锁定 | MIT | `el-skeleton` 骨架屏；按钮/表格/标签沿用既有组件语义 |
+| 原生 CSS / View Transitions API | Chromium 115+，渐进增强 | - | 分区切换视图过渡、层级阴影与缓动令牌；不支持的浏览器直接切换 |
+
+动效令牌在 `docs/xcagi-dashboard/admin-tokens.css`，共用样式在 `src/styles/adminMotion.css`。
+新增动效必须复用上述令牌与组件，不另起动画库或硬编码时长/曲线。
+
 ## 端口 SSOT
 
 | 进程 | 端口 | 模式 |

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from typing import Any, cast
 
 from fastapi import Request
@@ -56,6 +56,184 @@ class DatasetViews:
                     access_context=access,
                     include_documents=bool(include_documents),
                 )
+            ),
+        )
+
+    def document_chunks(
+        self,
+        dataset_id: str,
+        document_id: str,
+        request: Request,
+        *,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        access = self._access(request)
+        return cast(
+            "dict[str, Any]",
+            _public_dataset_payload(
+                self._service().document_chunks(
+                    dataset_id,
+                    document_id,
+                    tenant_id=self._tenant_scope(access),
+                    offset=offset,
+                    limit=limit,
+                    access_context=access,
+                )
+            ),
+        )
+
+    def record_feedback(self, dataset_id: str, request: Request, payload: Any) -> dict[str, Any]:
+        """Record one thumb up/down on the answer the user just saw."""
+        access = self._access(request)
+        citations = [
+            dict(row) for row in (getattr(payload, "citations", []) or []) if isinstance(row, dict)
+        ]
+        return cast(
+            "dict[str, Any]",
+            self._service().record_feedback(
+                dataset_id=dataset_id,
+                rating=str(payload.rating),
+                query=str(getattr(payload, "query", "") or ""),
+                answer=str(getattr(payload, "answer", "") or ""),
+                comment=str(getattr(payload, "comment", "") or ""),
+                citations=citations,
+                tenant_id=str(getattr(payload, "tenant_id", "") or ""),
+                access_context=access,
+            ),
+        )
+
+    def feedback_summary(
+        self, dataset_id: str, request: Request, *, limit: int = 20
+    ) -> dict[str, Any]:
+        access = self._access(request)
+        return cast(
+            "dict[str, Any]",
+            self._service().feedback_summary(
+                dataset_id,
+                tenant_id=self._tenant_scope(access),
+                limit=limit,
+                access_context=access,
+            ),
+        )
+
+    def export_dataset(self, dataset_id: str, request: Request) -> dict[str, Any]:
+        access = self._access(request)
+        return cast(
+            "dict[str, Any]",
+            self._service().export_dataset(
+                dataset_id,
+                tenant_id=self._tenant_scope(access),
+                access_context=access,
+            ),
+        )
+
+    def import_dataset(self, dataset_id: str, request: Request, payload: Any) -> dict[str, Any]:
+        return cast(
+            "dict[str, Any]",
+            self._service().import_dataset(
+                dataset_id,
+                dict(getattr(payload, "payload", {}) or {}),
+                overwrite=bool(getattr(payload, "overwrite", False)),
+                access_context=self._access(request),
+            ),
+        )
+
+    def create_api_key(self, dataset_id: str, request: Request, payload: Any) -> dict[str, Any]:
+        return cast(
+            "dict[str, Any]",
+            self._service().create_api_key(
+                dataset_id,
+                label=str(getattr(payload, "label", "") or ""),
+                access_context=self._access(request),
+            ),
+        )
+
+    def list_api_keys(self, dataset_id: str, request: Request) -> dict[str, Any]:
+        return cast(
+            "dict[str, Any]",
+            self._service().list_api_keys(dataset_id, access_context=self._access(request)),
+        )
+
+    def revoke_api_key(self, dataset_id: str, token_id: str, request: Request) -> dict[str, Any]:
+        return cast(
+            "dict[str, Any]",
+            self._service().revoke_api_key(
+                dataset_id, token_id, access_context=self._access(request)
+            ),
+        )
+
+    def query_gaps(self, dataset_id: str, request: Request, *, limit: int = 20) -> dict[str, Any]:
+        access = self._access(request)
+        return cast(
+            "dict[str, Any]",
+            self._service().query_gaps(
+                dataset_id,
+                tenant_id=self._tenant_scope(access),
+                limit=limit,
+                access_context=access,
+            ),
+        )
+
+    def clear_query_gaps(self, dataset_id: str, request: Request) -> dict[str, Any]:
+        access = self._access(request)
+        return cast(
+            "dict[str, Any]",
+            self._service().clear_query_gaps(
+                dataset_id,
+                tenant_id=self._tenant_scope(access),
+                access_context=access,
+            ),
+        )
+
+    def synonyms(self, dataset_id: str, request: Request) -> dict[str, Any]:
+        return cast(
+            "dict[str, Any]",
+            self._service().synonyms(dataset_id, access_context=self._access(request)),
+        )
+
+    def update_synonyms(self, dataset_id: str, request: Request, payload: Any) -> dict[str, Any]:
+        return cast(
+            "dict[str, Any]",
+            self._service().set_synonyms(
+                dataset_id,
+                dict(getattr(payload, "synonyms", {}) or {}),
+                access_context=self._access(request),
+            ),
+        )
+
+    def qa_pairs(self, dataset_id: str, request: Request) -> dict[str, Any]:
+        access = self._access(request)
+        return cast(
+            "dict[str, Any]",
+            self._service().qa_pairs(
+                dataset_id,
+                tenant_id=self._tenant_scope(access),
+                access_context=access,
+            ),
+        )
+
+    def update_qa_pairs(self, dataset_id: str, request: Request, payload: Any) -> dict[str, Any]:
+        access = self._access(request)
+        return cast(
+            "dict[str, Any]",
+            self._service().set_qa_pairs(
+                dataset_id,
+                getattr(payload, "pairs", []),
+                tenant_id=self._tenant_scope(access),
+                replace=bool(getattr(payload, "replace", True)),
+                access_context=access,
+            ),
+        )
+
+    def delete_qa_pairs(self, dataset_id: str, request: Request) -> dict[str, Any]:
+        access = self._access(request)
+        return cast(
+            "dict[str, Any]",
+            self._service().delete_qa_pairs(
+                dataset_id,
+                tenant_id=self._tenant_scope(access),
+                access_context=access,
             ),
         )
 
@@ -117,6 +295,31 @@ class DatasetViews:
                 }
             ),
         )
+
+    async def stream_answer(
+        self, dataset_id: str, request: Request, payload: Any
+    ) -> AsyncIterator[dict[str, Any]]:
+        """逐事件转发知识库流式答案（meta / delta / done）。"""
+        access = self._access(request)
+        async for event in self._service().stream_answer(
+            dataset_id=dataset_id,
+            query=str(payload.query),
+            top_k=int(payload.top_k),
+            tenant_id=str(getattr(payload, "tenant_id", "") or ""),
+            version=getattr(payload, "version", "") or "",
+            metadata_filter=dict(getattr(payload, "metadata_filter", {}) or {}),
+            rerank=bool(getattr(payload, "rerank", False)),
+            history=list(getattr(payload, "history", []) or []),
+            min_relevance=getattr(payload, "min_relevance", 0.0),
+            max_context_chars=getattr(payload, "max_context_chars", 0),
+            mmr_lambda=getattr(payload, "mmr_lambda", 0.0),
+            retrieval_mode=str(getattr(payload, "retrieval_mode", "hybrid") or "hybrid"),
+            vector_weight=float(getattr(payload, "vector_weight", 1.0)),
+            keyword_weight=float(getattr(payload, "keyword_weight", 1.0)),
+            expand_section=bool(getattr(payload, "expand_section", False)),
+            access_context=access,
+        ):
+            yield event
 
     def query_all(
         self, req: QueryRequest, request: Request, *, rag_enabled: Callable[[], bool]

@@ -44,7 +44,8 @@ describe('SettingsView.vue', () => {
     vi.stubEnv('VITE_XCMAX_ADMIN_CONSOLE', '1')
     const router = makeRouter()
     await router.push('/settings')
-    const wrapper = mount(SettingsView, { global: { plugins: [router], stubs: globalStubs } })
+    const host = document.body.appendChild(document.createElement('div'))
+    const wrapper = mount(SettingsView, { attachTo: host, global: { plugins: [router], stubs: globalStubs } })
     try {
       await flushPromises()
       expect(wrapper.get('#settings-group-system').isVisible()).toBe(true)
@@ -60,6 +61,7 @@ describe('SettingsView.vue', () => {
       expect(details.open).toBe(true)
     } finally {
       wrapper.unmount()
+      host.remove()
       vi.unstubAllEnvs()
     }
   })

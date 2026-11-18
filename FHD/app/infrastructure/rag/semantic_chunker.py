@@ -126,11 +126,14 @@ class SemanticChunker:
         """固定窗口分块（fallback）。"""
         if not text or not text.strip():
             return []
+        size = max(1, int(chunk_size))
+        # overlap 必须小于窗口，否则游标不前进会死循环；同时保证每次至少前进 1 字符。
+        overlap = max(0, min(int(chunk_overlap), size - 1))
         chunks: list[Chunk] = []
         i = 0
         idx = 0
         while i < len(text):
-            j = min(i + chunk_size, len(text))
+            j = min(i + size, len(text))
             seg = text[i:j]
             if seg.strip():
                 chunks.append(
@@ -143,9 +146,9 @@ class SemanticChunker:
                     )
                 )
                 idx += 1
-            if j == len(text):
+            if j >= len(text):
                 break
-            i = j - chunk_overlap
+            i = max(j - overlap, i + 1)
         return chunks
 
     @staticmethod

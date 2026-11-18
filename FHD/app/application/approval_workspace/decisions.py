@@ -348,6 +348,66 @@ class ApprovalDecisions:
                 data["workflow_execution"] = workflow_execution
             return {"success": True, "data": data}
 
+    def _expire_stale_workflow(
+        self,
+        db: Session,
+        *,
+        req: ApprovalRequest,
+        actor: int,
+        approver_name: str | None,
+        opinion: str,
+    ) -> WorkspaceResponse:
+        """运行态已丢失（通常是应用重启）：收敛挂起单，避免每次点击都返回 409。"""
+        message = (
+            "该审批已失效：AI 工作流运行态已过期（通常由应用重启导致），"
+            "已自动关闭，请重新发起任务。"
+        )
+        audit_node = self.nodes.audit_node(db, req)
+        if audit_node is not None:
+            db.add(
+                ApprovalRecord(
+                    request_id=req.id,
+                    node_id=audit_node.id,
+                    node_name=audit_node.node_name,
+                    node_order=audit_node.node_order,
+                    approver_id=actor,
+                    approver_name=approver_name,
+                    action=ApprovalAction.CANCEL.value,
+                    opinion=opinion or "AI 工作流运行态已过期",
+                    is_passed=False,
+                )
+            )
+        req.status = ApprovalStatus.CANCELLED.value
+        req.rejection_reason = "workflow_runtime_expired"
+        self.effects.audit(
+            db,
+            actor=actor,
+            action="approval.ai_workflow_runtime_expired",
+            payload={
+                "request_id": req.id,
+                "request_no": req.request_no,
+                "reason": "workflow_runtime_expired",
+            },
+        )
+        db.commit()
+        db.refresh(req)
+        if req.applicant_id:
+            self.effects.notify(
+                int(req.applicant_id),
+                "审批已失效",
+                f"《{req.title or req.request_no}》已自动关闭：{message}",
+                {"route": f"/app/approval/{req.id}", "request_id": str(req.id)},
+            )
+        return JSONResponse(
+            {
+                "success": False,
+                "expired": True,
+                "data": self.view(req, include_records=False),
+                "message": message,
+            },
+            status_code=409,
+        )
+
     def approve_workflow(
         self,
         db: Session,
@@ -362,10 +422,19 @@ class ApprovalDecisions:
             return JSONResponse(
                 {"success": False, "message": "当前用户无权审批这条 AI 工作流"}, status_code=403
             )
-        if not self.workflows.pending(req.request_no):
+        pending = self.workflows.pending(req.request_no)
+        if pending is None:
             return JSONResponse(
-                {"success": False, "message": "AI 工作流运行态不存在或已过期，请重新发起任务"},
-                status_code=409,
+                {
+                    "success": False,
+                    "retryable": True,
+                    "message": "暂时无法核实工作流状态，请稍后重试",
+                },
+                status_code=503,
+            )
+        if not pending:
+            return self._expire_stale_workflow(
+                db, req=req, actor=actor, approver_name=approver_name, opinion=opinion
             )
         audit_node = self.nodes.audit_node(db, req)
         if audit_node is None:

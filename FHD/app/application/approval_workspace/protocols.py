@@ -89,7 +89,7 @@ class ApprovalNodes:
 
 @dataclass(frozen=True)
 class WorkflowActions:
-    pending: Callable[[str | None], bool]
+    pending: Callable[[str | None], bool | None]
     resume: ResumeWorkflow
     reject: RejectWorkflow
 

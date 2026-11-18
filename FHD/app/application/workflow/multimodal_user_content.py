@@ -82,7 +82,7 @@ def _maybe_downscale_image_jpeg(raw: bytes, mime: str) -> tuple[str, str]:
 
 def _pdf_bytes_to_text(raw: bytes, filename: str) -> str:
     try:
-        from app.application.document_parsing.router import parse_pdf_bytes_with_docling
+        from app.infrastructure.document_parsing.router import parse_pdf_bytes_with_docling
 
         docling_text = parse_pdf_bytes_with_docling(raw)
     except RECOVERABLE_ERRORS:

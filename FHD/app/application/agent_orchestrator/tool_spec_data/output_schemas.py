@@ -518,6 +518,14 @@ _SPECIAL_OUTPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
         deleted_chunks="integer",
         error_code="string",
     ),
+    ("dataset_rag", "update_document_acl"): _result(
+        required=["success", "dataset_id", "document_id"],
+        dataset_id="string",
+        document_id="string",
+        document="object",
+        acl="object",
+        error_code="string",
+    ),
     ("dataset_rag", "clear_dataset"): _result(
         required=["success", "dataset_id"],
         dataset_id="string",

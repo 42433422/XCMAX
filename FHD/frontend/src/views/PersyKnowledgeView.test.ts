@@ -17,9 +17,19 @@ const mocks = vi.hoisted(() => ({
   updateMemory: vi.fn(),
   deleteMemory: vi.fn(),
   deleteDocument: vi.fn(),
+  documentChunks: vi.fn(),
   ingestDocument: vi.fn(),
   uploadDocument: vi.fn(),
   rebuildIndex: vi.fn(),
+  synonyms: vi.fn(),
+  saveSynonyms: vi.fn(),
+  qaPairs: vi.fn(),
+  saveQaPairs: vi.fn(),
+  queryGaps: vi.fn(),
+  clearQueryGaps: vi.fn(),
+  listApiKeys: vi.fn(),
+  createApiKey: vi.fn(),
+  revokeApiKey: vi.fn(),
   resetGraphView: vi.fn(),
 }))
 
@@ -129,6 +139,11 @@ describe('PersyKnowledgeView', () => {
       memory: { ...pendingMemory, status: 'active' },
     })
     for (const action of ['rejectMemory', 'updateMemory', 'deleteMemory', 'deleteDocument', 'rebuildIndex'] as const) mocks[action].mockResolvedValue({ success: true })
+    mocks.documentChunks.mockResolvedValue({
+      success: true,
+      total: 1,
+      chunks: [{ text: '续约需要财务审批。', chunk_index: 0 }],
+    })
     mocks.ingestDocument.mockResolvedValue({ success: true, chunk_count: 2 })
     mocks.query.mockResolvedValue({
       success: true,
@@ -241,6 +256,181 @@ describe('PersyKnowledgeView', () => {
     await flushPromises()
     expect(wrapper.find('.ask-dock__error').exists()).toBe(false)
     expect(wrapper.findAll('.evidence-list article')).toHaveLength(2)
+  })
+
+  it('shows the grounding badge when evidence is insufficient', async () => {
+    mocks.query.mockResolvedValueOnce({
+      success: true,
+      dataset_id: 'persy-knowledge',
+      query: '今天天气怎么样',
+      answer: '知识库中没有找到与该问题足够相关的内容，请补充资料或换个问法。',
+      answer_grounded: false,
+      grounding: 0.05,
+      min_relevance: 0.1,
+      no_answer: true,
+      chunks: [],
+    })
+    mocks.queryMemories.mockResolvedValue({ success: true, chunks: [] })
+    const wrapper = await mountKnowledge()
+    await wrapper.get('input[aria-label="向 Persy 提问"]').setValue('今天天气怎么样')
+    await wrapper.get('.ask-dock').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.get('.recall-grounding').text()).toContain('未命中足够证据')
+    expect(wrapper.get('.recall-grounding').classes()).toContain('is-weak')
+  })
+
+  it('edits and saves dataset synonyms from the ask dock', async () => {
+    mocks.synonyms.mockResolvedValue({
+      success: true,
+      synonyms: { 退款: ['退货'] },
+    })
+    mocks.saveSynonyms.mockResolvedValue({ success: true, count: 2 })
+    const wrapper = await mountKnowledge()
+
+    await wrapper.get('.ask-dock__term').trigger('click')
+    await flushPromises()
+    const editor = wrapper.get('textarea[aria-label="术语表"]')
+    expect((editor.element as HTMLTextAreaElement).value).toBe('退款=退货')
+    await editor.setValue('退款=退货,退钱')
+    await clickLabel(wrapper, '.ask-dock__synonym-actions button', '保存术语')
+
+    expect(mocks.synonyms).toHaveBeenCalledWith('persy-knowledge')
+    expect(mocks.saveSynonyms).toHaveBeenCalledWith('persy-knowledge', {
+      退款: ['退货', '退钱'],
+    })
+    expect(wrapper.get('.ask-dock__synonym-actions').text()).toContain('已保存 2 组术语')
+  })
+
+  it('imports and saves question answer pairs from the ask dock', async () => {
+    mocks.qaPairs.mockResolvedValue({
+      success: true,
+      pairs: [{ qa_id: 'qa_1', question: '退款多久到账？', answer: '1-3 个工作日' }],
+      total: 1,
+    })
+    mocks.saveQaPairs.mockResolvedValue({
+      success: true,
+      pairs: [
+        { qa_id: 'qa_1', question: '退款多久到账？', answer: '1-3 个工作日' },
+        { qa_id: 'qa_2', question: '如何开发票？', answer: '订单详情页申请' },
+      ],
+      total: 2,
+    })
+    const wrapper = await mountKnowledge()
+
+    await wrapper.findAll('.ask-dock__term')[1].trigger('click')
+    await flushPromises()
+    const editor = wrapper.get('textarea[aria-label="问答对"]')
+    expect((editor.element as HTMLTextAreaElement).value).toBe('退款多久到账？\t1-3 个工作日')
+
+    await editor.setValue('退款多久到账？\t1-3 个工作日\n如何开发票？\t订单详情页申请')
+    await clickLabel(wrapper, '.ask-dock__synonym-actions button', '保存问答对')
+
+    expect(mocks.qaPairs).toHaveBeenCalledWith('persy-knowledge')
+    expect(mocks.saveQaPairs).toHaveBeenCalledWith(
+      'persy-knowledge',
+      '退款多久到账？\t1-3 个工作日\n如何开发票？\t订单详情页申请',
+    )
+    expect(wrapper.get('.ask-dock__synonym-actions').text()).toContain('已保存 2 组问答')
+    expect(wrapper.get('.qa-pair-list').text()).toContain('如何开发票？')
+  })
+
+  it('highlights matched query terms in evidence text', async () => {
+    mocks.query.mockResolvedValueOnce({
+      success: true,
+      dataset_id: 'persy-knowledge',
+      answer: '七天内可退款。',
+      answer_grounded: true,
+      grounding: 0.9,
+      chunks: [
+        {
+          text: '退款政策：七天内可申请。',
+          source: '退款.md',
+          score: 0.9,
+          metadata: { document_id: 'doc-1', highlights: [{ start: 0, end: 2 }] },
+        },
+      ],
+    })
+    mocks.queryMemories.mockResolvedValue({ success: true, chunks: [] })
+    const wrapper = await mountKnowledge()
+    await wrapper.get('input[aria-label="向 Persy 提问"]').setValue('退款')
+    await wrapper.get('.ask-dock').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.get('.evidence-list mark').text()).toBe('退款')
+    expect(wrapper.get('.evidence-list p').text()).toContain('退款政策：七天内可申请。')
+  })
+
+  it('creates and revokes an external read-only key from the ask dock', async () => {
+    mocks.listApiKeys
+      .mockResolvedValueOnce({ success: true, keys: [] })
+      .mockResolvedValueOnce({
+        success: true,
+        keys: [{ token_id: 'key_1', label: '网站', prefix: 'kb_abc123', revoked_at: '' }],
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        keys: [{ token_id: 'key_1', label: '网站', prefix: 'kb_abc123', revoked_at: '2026-11-18' }],
+      })
+    mocks.createApiKey.mockResolvedValue({ success: true, key: 'kb_secret', token_id: 'key_1' })
+    mocks.revokeApiKey.mockResolvedValue({ success: true, revoked: true })
+    const wrapper = await mountKnowledge()
+
+    await clickLabel(wrapper, '.ask-dock__term', '分享')
+    expect(mocks.listApiKeys).toHaveBeenCalledWith('persy-knowledge')
+    await wrapper.get('input[aria-label="密钥用途"]').setValue('网站')
+    await clickLabel(wrapper, '.api-key-row button', '生成只读密钥')
+
+    expect(mocks.createApiKey).toHaveBeenCalledWith('persy-knowledge', '网站')
+    expect(wrapper.get('.api-key-new').text()).toContain('kb_secret')
+
+    await clickLabel(wrapper, '.api-key-list button', '回收')
+    expect(mocks.revokeApiKey).toHaveBeenCalledWith('persy-knowledge', 'key_1')
+    expect(wrapper.get('.api-key-list').text()).toContain('已回收')
+  })
+
+  it('opens the original document chunks from an evidence row', async () => {
+    const wrapper = await mountKnowledge()
+    await wrapper.get('input[aria-label="向 Persy 提问"]').setValue('续约流程')
+    await wrapper.get('.ask-dock').trigger('submit')
+    await flushPromises()
+
+    await wrapper.get('.evidence-open').trigger('click')
+    await flushPromises()
+
+    expect(mocks.documentChunks).toHaveBeenCalledWith('persy-knowledge', 'doc-1', {
+      limit: 50,
+    })
+    expect(wrapper.get('.chunk-panel').text()).toContain('续约需要财务审批。')
+  })
+
+  it('shows recorded knowledge gaps for an empty recall', async () => {
+    mocks.query.mockResolvedValueOnce({
+      success: true,
+      dataset_id: 'persy-knowledge',
+      answer: '',
+      chunks: [],
+    })
+    mocks.queryMemories.mockResolvedValue({ success: true, chunks: [] })
+    mocks.queryGaps.mockResolvedValue({
+      success: true,
+      total: 1,
+      gaps: [{ query: '报价单模板', count: 2 }],
+    })
+    mocks.clearQueryGaps.mockResolvedValue({ success: true, removed: 1 })
+    const wrapper = await mountKnowledge()
+    await wrapper.get('input[aria-label="向 Persy 提问"]').setValue('报价单模板')
+    await wrapper.get('.ask-dock').trigger('submit')
+    await flushPromises()
+
+    await clickLabel(wrapper, '.secondary-button', '查看知识缺口')
+    expect(mocks.queryGaps).toHaveBeenCalledWith('persy-knowledge', 20)
+    expect(wrapper.get('.gap-list').text()).toContain('报价单模板')
+    expect(wrapper.get('.gap-list').text()).toContain('×2')
+
+    await clickLabel(wrapper, '.gap-clear', '清空缺口')
+    expect(mocks.clearQueryGaps).toHaveBeenCalledWith('persy-knowledge')
+    expect(wrapper.find('.gap-list ol').exists()).toBe(false)
   })
 
   it('admin omniscient auto-switches to nonempty space and heals empty graph once', async () => {
@@ -364,6 +554,8 @@ describe('PersyKnowledgeView', () => {
     expect(mocks.status).toHaveBeenLastCalledWith('persy-knowledge', { includeDocuments: true })
     await wrapper.get('.source-row__select').trigger('click')
     for (const value of ['续约.md', 'v2', '知识节点', '关联知识', 'K1']) expect(wrapper.get('.fact-list').text()).toContain(value)
+    await flushPromises()
+    expect(mocks.documentChunks).toHaveBeenCalledWith('persy-knowledge', 'doc-1', { limit: 50 })
     await wrapper.get('.node-question-button').trigger('click')
     expect((wrapper.get('input[aria-label="向 Persy 提问"]').element as HTMLInputElement).value).toContain('续约制度')
     expect(wrapper.get('.brain-inspector').classes()).not.toContain('is-open')
@@ -376,6 +568,8 @@ describe('PersyKnowledgeView', () => {
     await flushPromises()
     expect(mocks.deleteDocument).toHaveBeenLastCalledWith('persy-knowledge', 'doc-1')
     expect(wrapper.get('.page-toast').text()).toContain('已删除')
+    await clickLabel(wrapper, '.inspector-tabs button', '分块')
+    expect(wrapper.get('.chunk-list').text()).toContain('续约需要财务审批。')
   })
 
   it('filters cards and imports pasted knowledge into a switched dataset', async () => {

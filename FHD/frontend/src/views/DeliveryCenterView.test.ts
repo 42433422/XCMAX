@@ -6,9 +6,7 @@ const listCustomDeliveries = vi.fn()
 const listStandardDeliveries = vi.fn()
 const listUsers = vi.fn()
 const listTrialDeliveries = vi.fn()
-const decideCustomDelivery = vi.fn()
-const appAlert = vi.fn().mockResolvedValue(undefined)
-const appConfirm = vi.fn().mockResolvedValue(true)
+const push = vi.fn()
 
 vi.mock('@/api/xcmaxAdmin', () => ({
   xcmaxAdminApi: {
@@ -16,14 +14,10 @@ vi.mock('@/api/xcmaxAdmin', () => ({
     listStandardDeliveries: (...args: unknown[]) => listStandardDeliveries(...args),
     listUsers: (...args: unknown[]) => listUsers(...args),
     listTrialDeliveries: (...args: unknown[]) => listTrialDeliveries(...args),
-    decideCustomDelivery: (...args: unknown[]) => decideCustomDelivery(...args),
   },
 }))
-
-vi.mock('@/utils/appDialog', () => ({
-  appAlert: (...args: unknown[]) => appAlert(...args),
-  appConfirm: (...args: unknown[]) => appConfirm(...args),
-}))
+vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
+vi.mock('@/utils/appDialog', () => ({ appAlert: vi.fn(), appConfirm: vi.fn() }))
 
 const delivery = {
   id: 9,
@@ -33,17 +27,13 @@ const delivery = {
   updated_at: '2026-08-27T06:00:00Z',
   custom_delivery: {
     kind: 'bundle',
-    requirements: '读取质检单并核对批次、颜色与检验结论。',
-    acceptance_criteria: '沙箱和真实执行用例全部通过。',
     stage: 'acceptance',
     stage_label: '质量门通过，待您验收',
     gate_ok: true,
-    gate_message: '产物和质量门已通过',
     runs: [{ attempt: 2, status: 'done', steps: [{ id: 'verify', status: 'done' }] }],
     artifacts: [{ kind: 'module', id: 'coating-quality-private' }],
     install_receipts: [],
     pricing_mode: 'initial_included',
-    pricing_label: '首次交付内含，交付前开发免费',
     commerce_ready: true,
   },
 }
@@ -70,23 +60,7 @@ const standardDeliveries = [
     account: { id: 81, username: 'standard-co', company: '标准交付企业', is_enterprise: true },
     plan: { id: 'saas-permanent-starter', title: '企业启航版', account_tier: 'normal', license_type: 'permanent' },
     order: { order_no: 'ORDER-002', status: 'paid' },
-    install: {
-      ok: true,
-      installed_devices: 1,
-      latest_receipt: {
-        platform: 'win32',
-        installed_version: '1.0.0.2',
-        status: 'failed',
-      },
-      latest_installed_receipt: {
-        platform: 'win32',
-        installed_version: '1.0.0.1',
-        installed_build_sha: 'customer-build-sha',
-        status: 'installed',
-        device_scope: 'customer',
-        reported_at: '2026-08-27T06:55:00Z',
-      },
-    },
+    install: { ok: true, installed_devices: 1, latest_receipt: null },
     first_login: { ok: true, at: '2026-08-27T07:00:00Z' },
     completion_rule: 'installed_and_first_login',
     available_installers: ['macOS', 'Windows'],
@@ -103,17 +77,10 @@ const trialDeliveries = [
     delivery_no: 'STD-ORDER-TRIAL-001',
     delivery_type: 'standard_desktop',
     license_type: 'trial',
-    expires_at: '2026-09-29T09:05:00+00:00',
     status: 'pending_install',
     status_label: '账号已创建，待安装',
     account: { id: 95, username: 'trial-user', company: '体验测试用户', is_enterprise: false },
-    plan: {
-      id: 'saas-trial-30',
-      title: '30 天全功能体验',
-      account_tier: 'normal',
-      license_type: 'trial',
-      amount_cents: 9900,
-    },
+    plan: { id: 'saas-trial-30', title: '30 天全功能体验', account_tier: 'normal', license_type: 'trial' },
     order: { order_no: 'ORDER-TRIAL-001', status: 'entitlement_granted' },
     install: { ok: false, installed_devices: 0, latest_receipt: null },
     first_login: { ok: false, at: '' },
@@ -129,125 +96,43 @@ describe('DeliveryCenterView', () => {
     listTrialDeliveries.mockResolvedValue({ items: structuredClone(trialDeliveries), total: 1 })
     listCustomDeliveries.mockResolvedValue({ items: [structuredClone(delivery)] })
     listUsers.mockResolvedValue({ users: structuredClone(enterpriseUsers), total: enterpriseUsers.length })
-    decideCustomDelivery.mockResolvedValue({ success: true })
-    appConfirm.mockResolvedValue(true)
+    push.mockResolvedValue(undefined)
   })
 
-  it.each(['rework', 'delivered', 'future_stage', ''])('explains the current stage and next step without inventing progress (%s)', async stage => {
-    const ticket = structuredClone(delivery)
-    ticket.custom_delivery.stage = stage; ticket.custom_delivery.stage_label = ''
-    listCustomDeliveries.mockResolvedValue({ items: [ticket] })
-    const wrapper = mount(DeliveryCenterView); await flushPromises()
-    expect(wrapper.get('.delivery-next-step').text()).toContain('下一步：')
-    if (stage === 'rework') expect(wrapper.get('.delivery-next-step').text()).toContain('核对本轮失败原因')
-    else if (stage === 'delivered') expect(wrapper.get('.delivery-next-step').text()).toContain('客户验收回执')
-    else { expect(wrapper.get('.delivery-next-step').text()).toContain('阶段待核实'); expect(wrapper.find('[aria-current="step"]').exists()).toBe(false) }
-    wrapper.unmount()
-  })
-
-  it.each([[true, true, true], [true, true, false], [false, false, true]])(
-    'separates commerce %s, acceptance %s and artifacts %s', async (commerce, accepted, artifacts) => {
-      const ticket = structuredClone(delivery)
-      ticket.custom_delivery.commerce_ready = commerce
-      ticket.custom_delivery.gate_ok = accepted
-      if (!artifacts) ticket.custom_delivery.artifacts = []
-      listCustomDeliveries.mockResolvedValue({ items: [ticket] })
-      const wrapper = mount(DeliveryCenterView)
+  it('keeps delivery tabs without a custom ticket tab and shows the real roster data', async () => {
+    const host = document.body.appendChild(document.createElement('div'))
+    const wrapper = mount(DeliveryCenterView, { attachTo: host })
+    try {
       await flushPromises()
-      const panel = wrapper.get('.delivery-commerce')
-      expect(panel.text()).toContain(commerce ? '商务已就绪' : '商务未就绪')
-      expect(panel.text()).toContain(accepted && artifacts ? '验收通过且已有产物' : '待验收或缺少产物，不可安装')
-      expect(panel.text()).not.toContain('可进入客户安装')
-    },
-  )
-
-  it('renders the real customer, quality gate, artifact, and receipt state', async () => {
-    const ticket = structuredClone(delivery)
-    ticket.custom_delivery.pricing_mode = 'post_delivery_addon'
-    ticket.custom_delivery.pricing_label = '新增报价与付款'
-    listCustomDeliveries.mockResolvedValue({ items: [ticket] })
-    const wrapper = mount(DeliveryCenterView)
-    await flushPromises()
-    expect(wrapper.text()).toContain('客户交付中心')
-    expect(wrapper.text()).toContain('企业客户交付台账')
-    expect(wrapper.text()).toContain('未绑定购买套餐')
-    expect(wrapper.findAll('.enterprise-customer-roster__grid article')).toHaveLength(3)
-    expect(wrapper.get('.delivery-tabs').text()).toContain('企业客户 3')
-    expect(wrapper.text()).toContain('国圣化工')
-    expect(wrapper.text()).toContain('生产质量门已通过')
-    expect(wrapper.text()).toContain('coating-quality-private')
-    expect(wrapper.text()).toContain('0/1 已安装')
-    expect(wrapper.text()).toContain('待客户安装回执')
-    expect(wrapper.text()).toContain('购买账户标准交付台账')
-    const timeline = wrapper.findAll('.delivery-timeline li')
-    expect(timeline).toHaveLength(5)
-    expect(timeline[0].text()).toContain('需求受理')
-    expect(wrapper.text()).toContain('本次执行步骤1 项')
-    expect(wrapper.text()).toContain('企业成长版')
-    expect(wrapper.text()).toContain('安装并首次登录完成')
-    expect(wrapper.text()).toContain('当前版本 1.0.0.1')
-    expect(wrapper.text()).toContain('Windows')
-    expect(wrapper.text()).not.toContain('当前版本 1.0.0.2')
-    expect(wrapper.get('.proof-pill.is-version').attributes('title')).toContain('构建 customer-build-sha')
-    expect(wrapper.text()).toContain('新增报价与付款')
-    expect(wrapper.text()).not.toContain('权益快速通道')
-    expect(wrapper.text()).not.toContain('终端同源快捷模式')
-    expect(wrapper.text()).toContain('¥99 体验账户交付台账')
-    expect(wrapper.text()).toContain('30 天体验')
-    expect(listStandardDeliveries).toHaveBeenCalledTimes(1)
-    expect(listTrialDeliveries).toHaveBeenCalledTimes(1)
-    expect(listUsers).toHaveBeenCalledWith(200, 0, true)
-
-    await wrapper.get('input[placeholder*="安装版本"]').setValue('1.0.0.1')
-    expect(wrapper.findAll('.enterprise-roster').at(0)?.findAll('article')).toHaveLength(1)
-    expect(wrapper.findAll('.enterprise-roster').at(0)?.text()).toContain('标准交付企业')
+      const tabs = wrapper.get('.delivery-tabs').text()
+      expect(tabs).toContain('购买交付 2')
+      expect(tabs).toContain('体验交付 1')
+      expect(tabs).toContain('企业客户 3')
+      expect(tabs).toContain('Mac 设备')
+      expect(tabs).not.toContain('定制工单')
+      expect(wrapper.find('#delivery-custom-orders').exists()).toBe(false)
+      expect(wrapper.text()).toContain('企业客户交付台账')
+      expect(wrapper.text()).toContain('国圣化工')
+      expect(wrapper.text()).toContain('购买账户标准交付台账')
+      expect(wrapper.text()).toContain('¥99 体验账户交付台账')
+      expect(listStandardDeliveries).toHaveBeenCalledTimes(1)
+      expect(listTrialDeliveries).toHaveBeenCalledTimes(1)
+      expect(listUsers).toHaveBeenCalledWith(200, 0, true)
+      for (const [index, active] of ['standard', 'trial', 'enterprise'].entries()) {
+        await wrapper.get('.delivery-tabs').findAll('button')[index].trigger('click')
+        for (const roster of ['standard', 'trial', 'enterprise']) {
+          expect(wrapper.get(`#delivery-${roster}-roster`).isVisible()).toBe(roster === active)
+        }
+      }
+    } finally { wrapper.unmount(); host.remove() }
   })
 
-  it('shows the trial summary card and keeps trial accounts out of the permanent roster', async () => {
+  it('opens the customer service ticket list for enterprise custom work', async () => {
     const wrapper = mount(DeliveryCenterView)
     await flushPromises()
-
-    expect(wrapper.get('.delivery-tabs').text()).toContain('体验交付 1')
-
-    const rosters = wrapper.findAll('.enterprise-roster')
-    expect(rosters.length).toBe(2)
-    expect(rosters[0].text()).not.toContain('体验测试用户')
-    expect(rosters[1].text()).toContain('体验测试用户')
-    expect(rosters[1].text()).toContain('1 个体验账户')
-  })
-
-  it('renders enterprise cards without pretending they are permanent purchases', async () => {
-    listCustomDeliveries.mockResolvedValue({ items: [] })
-    listStandardDeliveries.mockResolvedValue({ items: [], total: 0, ssot: 'active_permanent_user_plan' })
-    listTrialDeliveries.mockResolvedValue({ items: [], total: 0, ssot: 'active_trial_user_plan' })
-
-    const wrapper = mount(DeliveryCenterView)
-    await flushPromises()
-
-    expect(wrapper.get('section[aria-label="企业客户交付台账"]').text()).toContain('无套餐企业')
-    expect(wrapper.get('section[aria-label="企业客户交付台账"]').text()).toContain('3 家')
-    expect(wrapper.get('section[aria-label="企业客户交付台账"]').text()).toContain('未绑定购买套餐')
-    expect(wrapper.text()).toContain('尚无有效的永久购买账户')
-    expect(wrapper.text()).toContain('尚无有效的体验账户')
-    expect(wrapper.text()).toContain('暂无定制交付工单')
-    expect(wrapper.text()).not.toContain('无需定制的企业用户仍在上方企业客户台账中')
-  })
-
-  it('keeps one queue visible and opens customer-specific custom work', async () => {
-    const wrapper = mount(DeliveryCenterView)
-    await flushPromises()
-    expect(wrapper.get('#delivery-standard-roster').isVisible()).toBe(true)
-    expect(wrapper.get('#delivery-trial-roster').isVisible()).toBe(false)
-    expect(wrapper.get('#delivery-enterprise-roster').isVisible()).toBe(false)
-    expect(wrapper.find('.mac-control').exists()).toBe(false)
-    await wrapper.get('#delivery-standard-roster button').trigger('click')
-    await flushPromises()
-    expect(wrapper.get('#delivery-custom-orders').isVisible()).toBe(true)
-    expect(wrapper.get('#delivery-standard-roster').attributes('style')).toContain('display: none')
-    expect(wrapper.get<HTMLInputElement>('#delivery-custom-orders input').element.value).toBe('国圣化工')
-    expect(wrapper.get('details.delivery-ticket').attributes('open')).toBeUndefined()
-    expect(wrapper.findAll('details.delivery-ticket')).toHaveLength(1)
-    wrapper.unmount()
+    const button = wrapper.findAll('button').find((row) => row.text().includes('查看定制工单'))!
+    await button.trigger('click')
+    expect(push).toHaveBeenCalledWith({ name: 'customer-service-tickets', query: { account_id: '72', type: 'delivery' } })
   })
 
   it('shows unknown counts on failure and recovers with retry', async () => {
@@ -255,56 +140,13 @@ describe('DeliveryCenterView', () => {
     const wrapper = mount(DeliveryCenterView)
     await flushPromises()
     expect(wrapper.get('[role="alert"]').text()).toContain('连接失败')
-    expect(wrapper.findAll('.delivery-stats strong').map(row => row.text())).toEqual(['—', '—', '—', '—'])
+    expect(wrapper.findAll('.delivery-stats strong').map((row) => row.text())).toEqual(['—', '—', '—', '—'])
     expect(wrapper.find('#delivery-standard-roster').exists()).toBe(false)
     await wrapper.get('[role="alert"] button').trigger('click')
     await flushPromises()
     expect(wrapper.find('[role="alert"]').exists()).toBe(false)
     expect(wrapper.get('#delivery-standard-roster').isVisible()).toBe(true)
-    expect(wrapper.findAll('.delivery-stats strong').map(row => row.text())).toEqual(['1', '0', '1', '1'])
+    expect(wrapper.findAll('.delivery-stats strong').map((row) => row.text())).toEqual(['1', '0', '1', '1'])
     wrapper.unmount()
   })
-
-  it('writes an audited acceptance decision through the real delivery endpoint', async () => {
-    const wrapper = mount(DeliveryCenterView)
-    await flushPromises()
-    const accept = wrapper.findAll('button').find((button) => button.text().includes('内部质量确认'))
-    expect(accept).toBeTruthy()
-    await accept!.trigger('click')
-    await flushPromises()
-    expect(appConfirm).toHaveBeenCalled()
-    expect(decideCustomDelivery).toHaveBeenCalledWith(
-      9,
-      'accept',
-      '管理员仅完成内部质量确认，等待客户本人验收',
-    )
-  })
-
-  it('requires a concrete rework reason before restarting production', async () => {
-    const wrapper = mount(DeliveryCenterView)
-    await flushPromises()
-    const rework = wrapper.findAll('button').find((button) => button.text().includes('发起返工'))
-    await rework!.trigger('click')
-    expect(appAlert).toHaveBeenCalledWith('请填写至少 4 个字的具体返工原因')
-    expect(decideCustomDelivery).not.toHaveBeenCalled()
-
-    await wrapper.find('.delivery-actions__controls input').setValue('颜色比对用例缺失')
-    await rework!.trigger('click')
-    await flushPromises()
-    expect(decideCustomDelivery).toHaveBeenCalledWith(9, 'rework', '颜色比对用例缺失')
-  })
-
-})
-
-it('explicitly selects the repaired main source on the original Sunbird delivery', async () => {
-  listCustomDeliveries.mockResolvedValue({ items: [{ ...delivery, id: 34, user_id: 29,
-    custom_delivery: { ...delivery.custom_delivery, kind: 'module', suggested_id: 'sunbird-attendance-custom', stage: 'rework' },
-  }] })
-  const wrapper = mount(DeliveryCenterView)
-  await flushPromises()
-  await wrapper.get('.delivery-actions__controls input[type="checkbox"]').setValue(true)
-  await wrapper.get('.delivery-actions__controls input[type="text"]').setValue('原单使用主线已修复的SDK前端与业务探针返工')
-  await wrapper.findAll('button').find(button => button.text().includes('发起返工'))!.trigger('click')
-  await flushPromises()
-  expect(decideCustomDelivery).toHaveBeenCalledWith(34, 'rework', '原单使用主线已修复的SDK前端与业务探针返工', 'versioned_main')
 })
