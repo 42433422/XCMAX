@@ -174,17 +174,31 @@ async def lifespan(app: FastAPI):
 
     try:
         from app.application.elt.service import mark_interrupted_runs_on_startup
+        from app.application.elt.stale_watchdog import start_stale_watchdog
         from app.db import get_engine
 
         recovered = await asyncio.to_thread(mark_interrupted_runs_on_startup, get_engine())
         if recovered:
             logger.info("ELT 启动回收：%s 个中断运行已标记", recovered)
+        if start_stale_watchdog():
+            logger.info("ELT 无进展看门狗已启动")
     except RECOVERABLE_ERRORS as exc:
         logger.warning("ELT 启动回收跳过: %s", exc)
 
     _log_ai_capability_status()
 
     _start_agent_tasks(app)
+
+    if not passive_node_enabled():
+        try:
+            from app.application.dataset_rag.auto_sync_scheduler import (
+                start_auto_sync_scheduler,
+            )
+
+            if start_auto_sync_scheduler():
+                logger.info("✅ 知识库来源定时同步已启动")
+        except RECOVERABLE_ERRORS as exc:
+            logger.warning("知识库来源定时同步启动失败: %s", exc)
 
     start_paid_asset_installs()
 
@@ -264,6 +278,14 @@ async def lifespan(app: FastAPI):
 
         await asyncio.to_thread(wait_for_background_mod_load, app)
         _stop_agent_tasks(app)
+        try:
+            from app.application.dataset_rag.auto_sync_scheduler import (
+                stop_auto_sync_scheduler,
+            )
+
+            stop_auto_sync_scheduler()
+        except RECOVERABLE_ERRORS as exc:
+            logger.warning("知识库来源定时同步关闭失败: %s", exc)
         await stop_paid_asset_installs()
         from app.fastapi_app.resource_cleanup import close_llm_http_clients
 
