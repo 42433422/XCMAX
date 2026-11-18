@@ -443,6 +443,45 @@ describe('useChatMessages', () => {
     expect(chatMessageKey(reopened.messages.value[0])).toBe(key)
   })
 
+  it('removes cached deleted server history instead of restoring it as a local fallback', async () => {
+    const api = (await import('@/api/chat')).default
+    const chat = useChatMessages(ref('deleted-server-history'))
+    chat.loadMessages([{ role: 'user', content: 'withdrawn content', time: '', persistence: { id: 'server:12', status: 'saved' } }])
+    vi.mocked(api.getConversation).mockResolvedValueOnce({ success: true, durable: true, revision: null, messages: [] } as never)
+    await chat.syncFromServer()
+    expect(chat.messages.value).toEqual([])
+  })
+
+  it('loads older cursor pages on demand and preserves chronological order', async () => {
+    const api = (await import('@/api/chat')).default
+    const chat = useChatMessages(ref('paged-history'))
+    vi.mocked(api.getConversation).mockResolvedValueOnce({ success: true, id: 'paged-history', revision: 0,
+      has_more: true, next_before_id: 4, messages: [4, 5].map(id => ({ id, role: 'ai', content: `message-${id}` })) } as never)
+    expect(await chat.syncFromServer()).toBe(true)
+    expect(chat.messagesHaveEarlier.value).toBe(true)
+    expect(chat.messages.value).toHaveLength(2)
+    vi.mocked(api.getConversation).mockResolvedValueOnce({ success: true, revision: 0, has_more: false,
+      messages: [1, 2, 3].map(id => ({ id, role: 'ai', content: `message-${id}` })) } as never)
+    await chat.loadEarlierMessages()
+    expect(api.getConversation).toHaveBeenLastCalledWith('paged-history', { before_id: 4, limit: 80 })
+    expect(chat.messages.value.map(row => row.content)).toEqual([1, 2, 3, 4, 5].map(id => `message-${id}`))
+    expect(chat.messagesHaveEarlier.value).toBe(false)
+  })
+
+  it('discards a late history page after switching sessions', async () => {
+    const api = (await import('@/api/chat')).default
+    const sid = ref('old-history'), chat = useChatMessages(sid)
+    chat.loadMessages([{ role: 'ai', content: 'latest', time: '' }], { revision: 0, has_more: true, next_before_id: 4 })
+    let release!: (page: never) => void
+    vi.mocked(api.getConversation).mockReturnValueOnce(new Promise(resolve => { release = resolve }))
+    const pending = chat.loadEarlierMessages()
+    sid.value = 'new-history'
+    release({ success: true, revision: 0, messages: [{ id: 1, role: 'ai', content: 'old private history' }] } as never)
+    await pending
+    expect(chat.messages.value.some(row => row.content.includes('old private history'))).toBe(false)
+    expect(chat.messagesHaveEarlier.value).toBe(false)
+  })
+
   it('syncFromServer handles success', async () => {
     const chatApi = (await import('@/api/chat')).default
     vi.mocked(chatApi.getConversation).mockResolvedValueOnce({

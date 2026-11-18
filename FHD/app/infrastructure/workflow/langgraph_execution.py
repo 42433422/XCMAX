@@ -16,6 +16,7 @@ from app.application.workflow.workflow_types import (
 from app.domain.task_lifecycle.control import RETRYABLE_CODES
 from app.domain.task_lifecycle.machine import DEFAULT_MAX_ATTEMPTS
 from app.infrastructure.workflow.langgraph_runtime import (
+    _INTERNAL_CHANNELS,
     _now_iso,
     _ReadersWriterGate,
     _summarize_output,
@@ -50,6 +51,8 @@ class LangGraphExecutionMixin:
     _dispatch: Any
     _publisher: StateEventPublisher | None
     _callback: Any
+    _native_checkpointer: Any
+    _thread_id: str
 
     if TYPE_CHECKING:
 
@@ -424,6 +427,7 @@ class LangGraphExecutionMixin:
         initial: dict[str, Any],
         checkpointer: CheckpointStore | None,
         parallel: bool = True,
+        receipts_authoritative: bool = False,
     ) -> dict[str, Any]:
         """Stream ``stream_mode="values"`` and checkpoint after each successful superstep.
 
@@ -441,10 +445,53 @@ class LangGraphExecutionMixin:
         reader_ids = {n.node_id for n in plan.nodes if _ReadersWriterGate.is_reader(n)}
         batches: list[dict[str, Any]] = []
         prev_executed = set(initial.get("executed") or [])
+        config: dict[str, Any] = {"recursion_limit": self._recursion_limit(plan)}
+        graph_input: Any = dict(initial)
+        stream_options: dict[str, Any] = {}
+        if self._native_checkpointer is not None:
+            from langgraph.channels import BinaryOperatorAggregate
+            from langgraph.types import Overwrite
+
+            config["configurable"] = {"thread_id": self._thread_id}
+            snapshot = graph.get_state(config)
+            if snapshot.values:
+                saved = snapshot.values
+                if saved.get("plan_audit") != initial.get("plan_audit"):
+                    raise ValueError("原生检查点未绑定当前已审核计划，拒绝恢复")
+                # The business receipt is committed before the graph checkpoint.
+                # A crash between them must seed the confirmed SQL projection,
+                # rather than dispatch an already-completed write once more.
+                same_receipts = set(saved.get("executed") or []) == prev_executed and all(
+                    (saved.get("node_outputs") or {}).get(node_id)
+                    == (initial.get("node_outputs") or {}).get(node_id)
+                    for node_id in prev_executed
+                )
+                same_inputs = all(
+                    saved.get(key) == value
+                    for key, value in initial.items()
+                    if key not in _INTERNAL_CHANNELS
+                )
+                if not receipts_authoritative or (
+                    snapshot.next and same_receipts and same_inputs and not saved.get("failure")
+                ):
+                    graph_input = None  # native pending-task recovery
+                    final = dict(saved)
+                else:
+                    # Approval answers and safe retries are new inputs on the
+                    # same thread. Replace reducers, retaining immutable native
+                    # history while excluding failed/unapproved nodes from done.
+                    graph_input = {
+                        key: Overwrite(value)
+                        if isinstance(graph.channels[key], BinaryOperatorAggregate)
+                        else value
+                        for key, value in initial.items()
+                    }
+            stream_options["durability"] = "sync"
         for chunk in graph.stream(
-            dict(initial),
-            config={"recursion_limit": self._recursion_limit(plan)},
+            graph_input,
+            config=config,
             stream_mode="values",
+            **stream_options,
         ):
             final = chunk
             executed = chunk.get("executed") or []

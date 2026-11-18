@@ -271,10 +271,66 @@ async def _execute_compat_chat_batch_impl(
 
 
 def _prepare_compat_chat_body(request: Request, body: XcagiCompatChatBody) -> XcagiCompatChatBody:
-    context = _runtime_context_with_authenticated_actor(request, body.context or {})
+    from app.application.ai_chat.dialogue_memory import bind_chat_turn_context
+
+    incoming = dict(body.context or {})
+    for key in ("_conversation_revision", "_conversation_input_fingerprint"):
+        incoming.pop(key, None)
+    context = _runtime_context_with_authenticated_actor(request, incoming)
     if not str(context.get("turn_id") or "").strip():
         context["turn_id"] = uuid.uuid4().hex
+    if not (context.get("conversation_id") or context.get("session_id")):
+        from app.application.ai_chat.active_conversation import active_conversation_for
+
+        active = active_conversation_for(
+            context.get("local_user_id"),
+            tenant_id=str(context.get("tenant_id") or ""),
+            mod_id=str(context.get("mod_id") or context.get("active_mod_id") or ""),
+        )
+        context["conversation_id"] = str(
+            active
+            or body.user_id
+            or context.get("local_user_id")
+            or context.get("actor_id")
+            or "default"
+        )
+    bind_chat_turn_context(body.message, context)
     return body.model_copy(update={"context": context})
+
+
+async def _with_attachment_evidence(
+    body: XcagiCompatChatBody,
+) -> tuple[XcagiCompatChatBody, list[dict[str, Any]]]:
+    from app.application.attachment_artifacts.models import artifact_scope_from_context
+    from app.application.attachment_artifacts.store import ArtifactStore
+    from app.application.attachment_evidence import collect_evidence, evidence_system_block
+
+    try:
+        raw_ids = (body.context or {}).get("artifact_ids") or []
+        if isinstance(raw_ids, str):
+            raw_ids = [raw_ids]
+        scope = artifact_scope_from_context(body.context)
+        if scope is None or not isinstance(raw_ids, (list, tuple, set)) or not raw_ids:
+            return body, []
+        evidence = await collect_evidence(
+            body.message,
+            list(raw_ids),
+            store=ArtifactStore(scope=scope),
+            user_id=scope.owner_user_id,
+        )
+        block = evidence_system_block(evidence["evidence"])
+        if block:
+            context = dict(body.context or {})
+            file_context = context.get("file_context")
+            context["file_context"] = {
+                **(file_context if isinstance(file_context, dict) else {}),
+                "attachment_evidence": block,
+            }
+            body = body.model_copy(update={"context": context})
+        return body, evidence["trace"]
+    except BOUNDARY_ERRORS:
+        logger.warning("attachment evidence collection failed", exc_info=True)
+        return body, []
 
 
 def _settle_dialogue_turn(body: XcagiCompatChatBody, payload: dict[str, Any], status: str) -> None:
@@ -316,7 +372,18 @@ def _settle_dialogue_turn(body: XcagiCompatChatBody, payload: dict[str, Any], st
 def _persist_compat_chat_turn(body: XcagiCompatChatBody, payload: dict[str, Any]) -> None:
     from app.application import get_ai_chat_app_service
     from app.application.task_conversation_store import durable_user_id
+    from app.infrastructure.database.conversation_lifecycle import ConversationRevisionError
 
+    acknowledgement = payload.get("history_persistence")
+    if isinstance(acknowledgement, dict) and acknowledgement.get("status") in {
+        "saved",
+        "failed",
+        "invalidated",
+    }:
+        return
+    details = payload.get("data")
+    if isinstance(details, dict) and details.get("replay"):
+        return
     context = body.context or {}
     owner = durable_user_id(context.get("local_user_id"))
     if (
@@ -325,9 +392,29 @@ def _persist_compat_chat_turn(body: XcagiCompatChatBody, payload: dict[str, Any]
         or not (context.get("session_id") or context.get("conversation_id"))
     ):
         return
+    revision = context.get("_conversation_revision")
+    if type(revision) is not int or revision < 0:
+        payload["history_persistence"] = {"status": "invalidated", "retry": "none"}
+        return
     try:
-        get_ai_chat_app_service()._persist_chat_turn(str(owner), body.message, context, payload)
+        payload["history_persistence"] = get_ai_chat_app_service()._persist_chat_turn(
+            str(owner),
+            body.message,
+            context,
+            payload,
+        )
+    except ConversationRevisionError:
+        payload["history_persistence"] = {"status": "invalidated", "retry": "none"}
+        return
     except RECOVERABLE_ERRORS:
+        payload["history_persistence"] = {
+            "status": "failed",
+            "retry": "save_only",
+            "turn_id": context.get("turn_id"),
+            "revision": revision,
+            "conversation_id": context.get("session_id") or context.get("conversation_id"),
+            "message": "本轮结果已返回，但历史尚未保存，请仅重试保存。",
+        }
         logger.warning("compat chat history persistence failed", exc_info=True)
     if payload.get("success") and context.get("memory_capture_enabled") is not False:
         try:
@@ -364,6 +451,7 @@ async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> Pa
             request_llm_mode(body.mode),
             llm_client_factory_scope(lambda: create_modstore_openai_client_from_request(request)),
         ):
+            body, _ = await _with_attachment_evidence(body)
             payload = await _execute_compat_chat_impl(request, body)
     except HTTPException as exc:
         metadata = request_route_metadata(request)
@@ -436,41 +524,9 @@ async def compat_chat_stream_async(
             request_llm_mode(body.mode),
             llm_client_factory_scope(lambda: create_modstore_openai_client_from_request(request)),
         ):
-            # 附件证据只进入本轮模型输入，不写回 body，避免污染落库的对话历史。
-            stream_body = body
-            try:
-                from app.application.attachment_artifacts.models import (
-                    artifact_scope_from_context,
-                )
-                from app.application.attachment_artifacts.store import ArtifactStore
-                from app.application.attachment_evidence import (
-                    collect_evidence,
-                    evidence_system_block,
-                )
-
-                raw_ids = (body.context or {}).get("artifact_ids") or []
-                if isinstance(raw_ids, str):
-                    raw_ids = [raw_ids]
-                # 归属只认服务端重建的身份上下文；匿名请求不启用附件证据。
-                scope = artifact_scope_from_context(body.context)
-                if scope is not None and isinstance(raw_ids, (list, tuple, set)) and raw_ids:
-                    evidence = await collect_evidence(
-                        body.message,
-                        list(raw_ids),
-                        store=ArtifactStore(scope=scope),
-                        user_id=scope.owner_user_id,
-                    )
-                    if evidence["trace"]:
-                        yield _sse_event(
-                            {"type": "trace", "items": evidence["trace"], "turn_id": turn_id}
-                        )
-                    block = evidence_system_block(evidence["evidence"])
-                    if block:
-                        stream_body = body.model_copy(
-                            update={"message": f"{block}\n\n{body.message}"}
-                        )
-            except BOUNDARY_ERRORS:
-                logger.warning("attachment evidence collection failed", exc_info=True)
+            stream_body, attachment_trace = await _with_attachment_evidence(body)
+            if attachment_trace:
+                yield _sse_event({"type": "trace", "items": attachment_trace, "turn_id": turn_id})
             async with aclosing(stream.run(request, stream_body, ai_tier=ai_tier)) as chunks:
                 async for chunk in chunks:
                     if not pending and not chunk.startswith((b"data", b"event:")):

@@ -324,8 +324,8 @@ def get_agent_task_dispatcher() -> AgentTaskDispatcher:
 def reconcile_interrupted_runs() -> int:
     """启动对账：收敛上一进程遗留的 running 任务（M15）。
 
-    放在 dispatcher 启动前，保证在重新认领执行之前先把已经中断的 run 收敛为
-    failed；被动节点不启动 dispatcher，因此也不会误改运行状态。
+    在重新认领执行之前恢复可证明安全的余步，其余中断任务保护停机；
+    被动节点不启动 dispatcher，因此也不会误改运行状态。
     """
     from app.application.agent_orchestrator.stale_run_reconciler import (
         reconcile_stale_running_runs,

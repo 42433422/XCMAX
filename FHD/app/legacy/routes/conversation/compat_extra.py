@@ -16,6 +16,7 @@ from fastapi import APIRouter, Body, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
 from app.application.task_conversation_store import (
+    ConversationRevisionError,
     durable_user_id,
     task_conversation_store,
 )
@@ -145,6 +146,9 @@ def conversations_save_message(
 
     numeric_user_id = durable_user_id(user_id)
     if numeric_user_id is not None:
+        expected_revision = body.get("expected_revision", 0)
+        if type(expected_revision) is not int or expected_revision < 0:
+            raise HTTPException(status_code=422, detail="invalid expected_revision")
         try:
             message_id = task_conversation_store.save_message(
                 session_id=session_id,
@@ -154,9 +158,12 @@ def conversations_save_message(
                 intent=str(body.get("intent") or ""),
                 metadata=str(body.get("metadata") or ""),
                 client_message_id=client_message_id,
+                expected_revision=expected_revision,
             )
         except PermissionError as exc:
             raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except ConversationRevisionError as exc:
+            raise HTTPException(status_code=409, detail="会话已变更，请重新读取历史记录") from exc
         except ValueError as exc:
             raise HTTPException(
                 status_code=409, detail="消息标识与原消息不匹配，请核对原记录"
@@ -178,6 +185,7 @@ def conversations_save_message(
             "saved": True,
             "message_id": message_id,
             "client_message_id": client_message_id,
+            "revision": expected_revision,
             "mod_id": mod_id,
             "durable": True,
         }

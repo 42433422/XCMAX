@@ -14,7 +14,7 @@ from app.application.ai_chat.dialogue_memory import enrich_model_messages
 
 
 @pytest.fixture
-def memory_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+def memory_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, dialogue_db) -> Path:
     monkeypatch.setenv("XCAGI_DIALOGUE_MEMORY_DIR", str(tmp_path))
     return tmp_path
 
@@ -30,6 +30,10 @@ def _ctx(conversation_id: str, turn: str, **extra: object) -> dict[str, object]:
 
 
 def test_restart_state_points_at_the_previous_conversation(memory_dir: Path) -> None:
+    from app.application.task_conversation_store import task_conversation_store
+
+    for session_id in ("conv-kept", "other"):
+        task_conversation_store.prepare_revision(session_id=session_id, user_id=1)
     remember_active_conversation(_ctx("conv-kept", "9"), conversation_id="conv-kept")
     assert active_conversation_for(1, tenant_id="1") == "conv-kept"
     remember_active_conversation(_ctx("other", "1", tenant_id=2), conversation_id="other")

@@ -82,7 +82,13 @@ def conversations_active(request: Request):
 
 
 @router.get("/api/conversations/{session_id}")
-def conversations_get(request: Request, session_id: str, limit: int = Query(default=50)):
+def conversations_get(
+    request: Request,
+    session_id: str,
+    limit: int = Query(default=50, ge=1, le=200),
+    before_id: int | None = Query(default=None, ge=1),
+    turn_id: str | None = Query(default=None, max_length=256),
+):
     from app.application.ai_chat.conversation_history import apply_history_fault
     from app.application.task_conversation_store import task_conversation_store
     from app.request_active_mod_ctx import get_request_active_mod_id
@@ -92,8 +98,35 @@ def conversations_get(request: Request, session_id: str, limit: int = Query(defa
             session_id=session_id.strip(),
             user_id=int(_history_actor(request)),
             mod_id=get_request_active_mod_id() or "",
+            limit=limit,
+            before_id=before_id,
+            turn_id=turn_id,
         )
     )
+
+
+@router.post("/api/conversations/{session_id}/turns/{turn_id}/persist")
+def conversations_retry_persistence(
+    request: Request,
+    session_id: str,
+    turn_id: str,
+    expected_revision: int = Body(embed=True, ge=0),
+):
+    from app.application.ai_chat.conversation_history import retry_stored_chat_turn
+    from app.fastapi_routes.domains.agent.route_support import request_runtime_context
+    from app.infrastructure.database.conversation_lifecycle import ConversationRevisionError
+
+    owner = int(_history_actor(request))
+    context = request_runtime_context(request, {})
+    context.update(
+        local_user_id=owner, actor_id=owner, session_id=session_id, conversation_id=session_id
+    )
+    try:
+        return retry_stored_chat_turn(context, turn_id, expected_revision)
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="无权访问该会话") from None
+    except (ConversationRevisionError, LookupError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
 
 
 @router.delete("/api/conversations/{session_id}")
@@ -162,6 +195,7 @@ def ai_message_save(request: Request, body: dict = Body(default_factory=dict)):
     from app.application.facades.conversation_facade import (
         get_conversation_service as get_conversation_app_service,
     )
+    from app.infrastructure.database.conversation_lifecycle import ConversationRevisionError
 
     service = get_conversation_app_service()
     if not body:
@@ -184,11 +218,26 @@ def ai_message_save(request: Request, body: dict = Body(default_factory=dict)):
 
     user_id_str = _history_actor(request)
     body = {**body, "user_id": user_id_str}
+    expected_revision = body.get("expected_revision", 0)
+    if type(expected_revision) is not int or expected_revision < 0:
+        raise HTTPException(status_code=422, detail="invalid expected_revision")
     try:
-        message_id = service.save_message(session_id, user_id_str, role, content, intent, metadata)
-        return _trace_ai_message_save({"success": True, "message_id": message_id}, body=body)
+        message_id = service.save_message(
+            session_id,
+            user_id_str,
+            role,
+            content,
+            intent,
+            metadata,
+            expected_revision=expected_revision,
+        )
+        return _trace_ai_message_save(
+            {"success": True, "message_id": message_id, "revision": expected_revision}, body=body
+        )
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail="无权写入该会话。") from exc
+    except ConversationRevisionError as exc:
+        raise HTTPException(status_code=409, detail="会话已变更，请重新读取历史记录") from exc
     except RECOVERABLE_ERRORS:
         logger.exception("conversation message save failed")
         traced = _trace_ai_message_save({"success": False, "message": "消息保存失败"}, body=body)

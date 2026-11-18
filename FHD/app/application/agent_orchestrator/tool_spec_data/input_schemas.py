@@ -136,6 +136,44 @@ _OCR_EXTRACT_INPUT = _object_schema(["text"], {"text": {"type": "string"}})
 
 _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
     **REPORT_INPUT_SCHEMAS,
+    ("conversation_history", "read"): {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "before_id": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "读取该原始消息编号之前的消息，与after_id/message_id互斥",
+            },
+            "after_id": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "读取该原始消息编号之后的消息，与before_id/message_id互斥",
+            },
+            "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 20,
+                "description": "消息数量上限，默认10",
+            },
+            "message_id": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "精确读取当前会话内的SQL消息编号",
+            },
+            "offset": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "单条消息正文字符偏移，默认0；使用上次next_offset继续",
+            },
+            "max_chars": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 12000,
+                "description": "单次返回正文总字符预算，默认6000；非全文片段会注明total_chars/next_offset",
+            },
+        },
+    },
     ("business_db", "read"): _object_schema(
         ["entity"],
         {

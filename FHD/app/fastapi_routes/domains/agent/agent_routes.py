@@ -583,9 +583,14 @@ def retry_agent_run(
         if error is not None:
             return error
         assert run is not None
-        if run.status not in {"failed", "cancelled", "blocked"}:
+        if (
+            run.status in {"queued", "running", "retrying"}
+            and (run.metadata.get("recovery") or {}).get("state") == "safe_checkpoint_resume"
+        ):
+            return _run_reference_response(run)
+        if run.status not in {"failed", "blocked"}:
             return JSONResponse(
-                {"success": False, "message": "只有失败、取消或阻塞的任务可以重试"},
+                {"success": False, "message": "只有失败或阻塞任务可续跑；重新执行业务请提交新任务"},
                 status_code=409,
             )
         if requires_retry_reconciliation(run):
@@ -601,14 +606,15 @@ def retry_agent_run(
                 run_id,
                 requested_by=principal.user_id,
                 auto_execute=False,
+                authenticated_binding=principal.mod_authorization,
             )
-            if retried is not None and retried.status == "running":
-                retried = orchestrator.stage_run_for_dispatch(
-                    retried.run_id,
-                    requested_by=principal.user_id,
-                )
-                if retried is not None:
+            if retried is not None and retried.status == "queued":
+                if isinstance(get_agent_run_repository(), SQLAlchemyAgentRunRepository):
+                    notify_agent_task_dispatcher()
+                else:
                     _enqueue_run(retried, requested_by=principal.user_id)
             return _run_reference_response(retried)
+        except (ApprovalGrantError, ValueError) as exc:
+            return JSONResponse({"success": False, "message": str(exc)}, status_code=409)
         except RECOVERABLE_ERRORS:
             return _internal_error_response("retry agent run")

@@ -30,10 +30,10 @@ class UnifiedTaskResult:
 
 
 def task_capabilities(run: AgentRun) -> dict[str, bool]:
+    from app.application.agent_orchestrator.run_lifecycle import safe_continuation_error
+
     status = str(run.status or "")
-    retryable = status in {"failed", "cancelled", "blocked"} and not bool(
-        run.metadata.get("non_retryable")
-    )
+    retryable = status in {"failed", "blocked"} and not safe_continuation_error(run)
     return {
         "pause": status in {"queued", "planning", "running", "retrying", "waiting_user"},
         "cancel": status

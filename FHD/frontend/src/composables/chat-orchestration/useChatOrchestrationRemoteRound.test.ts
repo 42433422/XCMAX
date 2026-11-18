@@ -558,7 +558,7 @@ describe('executeRemoteChatRound 流式回合', () => {
 
     await round.executeRemoteChatRound(['继续'], undefined, scope())
 
-    expect(h.getConversation).toHaveBeenCalledWith('session-1')
+    expect(h.getConversation).toHaveBeenCalledWith('session-1', { turn_id: 'turn-1' })
     expect(appliedTexts().at(-1)).toBe('服务端已完成')
     expect(deps.showTaskConfirm).not.toHaveBeenCalled()
   })
@@ -720,6 +720,40 @@ describe('executeRemoteChatRound 断线续传与超时', () => {
     expect(messages.value[0].workflowAction).toBe('completed')
     expect(messages.value[0].waitingHint).toBeUndefined()
     expect(deps.flushMessagesCache).toHaveBeenCalled()
+  })
+
+  it('binds both visible messages to the atomic server receipt so recall uses the server id', async () => {
+    const { round, messages } = setup()
+    messages.value.push({ role: 'user', content: 'query', time: '', turnId: 'turn-1' })
+    h.state.sseScript = async emit => emit({ type: 'done', result: {
+      success: true, response: 'answer', history_persistence: { status: 'saved', turn_id: 'turn-1', message_ids: [101, 102], revision: 0 },
+    } })
+    await round.executeRemoteChatRound(['query'], undefined, scope())
+    expect(messages.value.map(message => message.persistence)).toEqual([
+      { id: 'server:101', status: 'saved' }, { id: 'server:102', status: 'saved' },
+    ])
+  })
+
+  it.each(['failed', 'waiting_approval', 'waiting_user'])('重连完整应用 %s 回执和审批/业务状态', async status => {
+    const { round, deps, messages } = setup()
+    let attempt = 0
+    const payload = { success: status !== 'failed', response: '真实终态', execution_state: status,
+      data: { status, data: { approval_card: { id: 'approval-1' }, state_updates: [{ type: 'state.update', node_id: 'read', status: 'failed' }] } } }
+    h.state.sseScript = async emit => {
+      if (++attempt === 1) {
+        emit({ type: 'tool_progress', text: '执行中', run_id: 'run-resume' })
+        throw new TypeError('network error')
+      }
+      emit({ type: 'done', result: payload })
+    }
+    await round.executeRemoteChatRound(['执行'], undefined, scope())
+    expect(attempt).toBe(2)
+    expect(messages.value[0].workflowAction).toBe(status)
+    expect(messages.value[0].content).toBe('真实终态')
+    expect(deps.attachApprovalCardToLastAiMessage).toHaveBeenCalledWith(payload)
+    expect(deps.attachBusinessResultToLastAiMessage).toHaveBeenCalledWith(payload)
+    expect(deps.syncTaskFromChatResponse).toHaveBeenCalledWith(payload, '执行')
+    expect(deps.stateSteps.value).toEqual([{ node_id: 'read', status: 'failed', output_summary: '' }])
   })
 
   it('续传也失败时给出连接中断回执', async () => {
@@ -1188,7 +1222,7 @@ describe('executeRemoteChatRound 状态保护与边界分支', () => {
     expect(attempt).toBe(2)
     expect(deps.handleChatRequiresToken).not.toHaveBeenCalled()
     expect(messages.value[0].workflowAction).toBe('unknown')
-    expect(deps.applyPlainTextToMessageIndex).toHaveBeenLastCalledWith(0, '续传正文')
+    expect(messages.value[0].content).toContain('结果未知')
   })
 
   it('回读历史期间会话切换则放弃回执', async () => {

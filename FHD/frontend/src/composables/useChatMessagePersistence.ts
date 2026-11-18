@@ -31,6 +31,7 @@ export function useChatMessagePersistence(deps: {
   messages: Ref<UiChatMessage[]>
   sessionId: Ref<string>
   scope: () => string
+  revision?: (sessionId: string) => number
   read: (sessionId: string) => UiChatMessage[]
   persist: (messages: UiChatMessage[], sessionId: string) => void
   plainText: (html: string) => string
@@ -51,17 +52,27 @@ export function useChatMessagePersistence(deps: {
     deps.persist(list, sessionId)
     const save = (async () => {
       try {
-        const response = await chatApi.saveMessage({
+        const response = await (request.turn_id
+          ? chatApi.retryTurnPersistence(sessionId, request.turn_id, request.expected_revision ?? 0)
+          : chatApi.saveMessage({
           session_id: sessionId,
           user_id: 'default',
           client_message_id: state.id,
           ...request,
-        }) as { success?: boolean; saved?: boolean; durable?: boolean }
+        })) as { success?: boolean; saved?: boolean; durable?: boolean; message_ids?: number[] }
         if (deps.scope() !== scope) return
         if (response?.success !== true || response.saved !== true) throw new Error('save not acknowledged')
         state.status = response.durable === true ? 'saved' : 'local'
         state.error = response.durable === true ? '' : '服务端未确认持久保存，当前仅保留本机副本。'
-        if (state.status === 'saved') delete state.request
+        if (state.status === 'saved') {
+          delete state.request
+          if (request.turn_id && response.message_ids?.length) {
+            for (const row of list) if (row.turnId === request.turn_id && row !== message) {
+              const ids = response.message_ids
+              row.persistence = { id: `server:${row.role === 'user' ? ids[0] : ids[ids.length - 1]}`, status: 'saved' }
+            }
+          }
+        }
       } catch {
         if (deps.scope() !== scope) return
         state.status = 'failed'
@@ -100,7 +111,7 @@ export function useChatMessagePersistence(deps: {
     message.persistence ||= localMessagePersistence()
     const ui = { ...(message.turnId ? { turnId: message.turnId } : {}), ...(extras || {}) }
     delete ui.persistence
-    message.persistence.request ||= { role, content: visible, ...(Object.keys(ui).length ? { metadata: JSON.stringify({ ui }) } : {}) }
+    message.persistence.request ||= { role, content: visible, expected_revision: deps.revision?.(sid) ?? 0, ...(Object.keys(ui).length ? { metadata: JSON.stringify({ ui }) } : {}) }
     await persistMessage(message, list, sid)
   }
 

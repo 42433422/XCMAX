@@ -132,8 +132,9 @@ def test_long_history_keeps_latest_constraints_in_order(light_reply, monkeypatch
     serialized = json.dumps(captured, ensure_ascii=False)
     assert "history-secret" not in serialized
     assert "private-history-token" not in serialized
+    assert captured["conversation_history"][-2:] == recent[-2:]
     if not light_reply:
-        assert captured["context"]["chat_owned_history"][-1] == recent[-1]
+        assert "chat_owned_history" not in captured["context"]
 
 
 def test_employee_discovery_uses_verified_actor_and_replaces_client_catalog(
@@ -316,7 +317,7 @@ class TestPlanWithLLM:
         assert completion.call_args.kwargs["max_tokens"] == 300
 
     def test_planner_receives_current_conversation_history_without_turn_classifier(
-        self, monkeypatch, tmp_path
+        self, monkeypatch, tmp_path, dialogue_db
     ):
         from app.application.ai_chat.dialogue_memory import prepare_chat_turn, settle_chat_turn
 
@@ -404,6 +405,9 @@ class TestPlanWithLLM:
         planner = LLMWorkflowPlanner(ai_service=ai_service, completion=completion)
         context = {
             "recent_messages": [{"role": "user", "content": "之前提到宗南账单"}],
+            "chat_owned_history": [{"role": "user", "content": "之前提到宗南账单"}],
+            "local_user_id": 41,
+            "session_id": "owned-knowledge-history",
             "chat_knowledge_evidence": [
                 {"dataset": "business-documents", "source": "宗南账单.xlsx", "text": "订单 SO-91"}
             ],
@@ -420,7 +424,8 @@ class TestPlanWithLLM:
 
         assert plan.nodes
         model_context = captured["context"]
-        assert model_context["recent_messages"][0]["content"] == "之前提到宗南账单"
+        assert captured["conversation_history"][0]["content"] == "之前提到宗南账单"
+        assert "recent_messages" not in model_context
         assert model_context["chat_knowledge_evidence"][0]["text"] == "订单 SO-91"
         assert "_chat_evidence_authorized" not in model_context
         assert "tenant_id" not in model_context

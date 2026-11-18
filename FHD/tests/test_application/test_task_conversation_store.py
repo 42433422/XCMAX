@@ -103,6 +103,7 @@ def test_task_conversation_survives_store_recreation_and_lists_metadata(
     ]
     assert restarted_store.list_sessions(user_id=41, limit=20)[0] == {
         "session_id": "task-conversation-1",
+        "revision": 0,
         "title": "查询客户列表",
         "summary": "当前客户库暂无数据。",
         "message_count": 2,
@@ -311,7 +312,9 @@ def test_chat_evidence_recovers_active_session_when_request_omits_session_id(sto
     )
 
     assert result["conversation_id"] == "active-chat"
-    assert result["recent_messages"] == [{"role": "user", "content": "之前说的是宗南产品"}]
+    assert result["recent_messages"] == [
+        {"role": "user", "content": "[原文消息 #1]\n之前说的是宗南产品"}
+    ]
 
 
 def test_persist_chat_turn_keeps_clarification_candidates() -> None:
@@ -321,9 +324,11 @@ def test_persist_chat_turn_keeps_clarification_candidates() -> None:
         def __init__(self) -> None:
             self.calls: list[dict] = []
 
-        def save_message(self, **kwargs):
-            self.calls.append(kwargs)
-            return 1
+        def save_turn(self, *, messages, session_id, user_id, **kwargs):
+            self.calls.extend(
+                {**message, "session_id": session_id, "user_id": user_id} for message in messages
+            )
+            return list(range(1, len(messages) + 1))
 
     store = _CapturingStore()
     persist_chat_turn(

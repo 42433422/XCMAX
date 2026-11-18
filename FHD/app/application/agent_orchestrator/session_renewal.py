@@ -13,7 +13,7 @@ def renew_approval_session(
     authenticated_binding: dict[str, Any] | None,
     operation: str = "approval",
 ) -> None:
-    if operation not in {"approval", "resume"}:
+    if operation not in {"approval", "resume", "retry"}:
         raise ApprovalGrantError("无效的会话续期操作")
     context = dict(run.metadata.get("runtime_context") or {})
     previous = context.get("_mod_authorization")
@@ -39,8 +39,13 @@ def renew_approval_session(
             raise ApprovalGrantError("任务会话绑定无效")
     if previous == authenticated_binding:
         return
-    expected_status = "waiting_user" if operation == "approval" else "paused"
-    if run.status != expected_status or any(step.status == "running" for step in run.steps):
+    expected = {"approval": {"waiting_user"}, "resume": {"paused"}, "retry": {"failed", "blocked"}}
+    from app.application.agent_orchestrator.run_lifecycle import safe_continuation_error
+
+    unsettled = any(step.status == "running" for step in run.steps)
+    if run.status not in expected[operation] or (
+        unsettled and (operation != "retry" or safe_continuation_error(run))
+    ):
         raise ApprovalGrantError("任务执行状态不允许更新会话")
     context["_mod_authorization"] = dict(authenticated_binding)
     run.metadata["runtime_context"] = context

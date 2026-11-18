@@ -9,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor, wait
 from typing import Any
 
 from fastapi import Request
+from langchain_core.messages import convert_to_openai_messages, trim_messages
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -34,16 +35,13 @@ _CUSTOMER_LOOKUP = re.compile(
     r"(?:查一下|查下|查询|查看|查)\s*([\u4e00-\u9fffA-Za-z0-9]{2,8}?)(?:那个|这个|的)(?:账单|订单|单据|产品)"
 )
 
-# 长会话治理：上下文只保留最近窗口，更早的内容压缩成滚动摘要。
+# Recent messages are routing evidence; the model history is budgeted at provider IO.
 HISTORY_WINDOW_MESSAGES = 16
-HISTORY_WINDOW_CHARS = 6000
-HISTORY_SUMMARY_ITEMS = 10
-HISTORY_SUMMARY_ITEM_CHARS = 160
 
 
 def _history_row_content(item: dict[str, Any]) -> str:
     """把澄清候选带回历史正文，追问才能用序号指代上一轮目标。"""
-    content = str(item.get("content") or "")[:2000]
+    content = str(item.get("content") or "")
     try:
         metadata = json.loads(str(item.get("metadata") or "{}"))
     except (TypeError, ValueError):
@@ -73,32 +71,86 @@ def _history_row_content(item: dict[str, Any]) -> str:
 
 
 def _history_window(messages: list[dict[str, str]]) -> list[dict[str, str]]:
-    """按条数和字符预算保留最近若干条，避免长会话把上下文和渲染成本拖爆。"""
-    window: list[dict[str, str]] = []
-    total = 0
-    for item in reversed(messages):
-        length = len(str(item.get("content") or ""))
-        if window and (
-            len(window) >= HISTORY_WINDOW_MESSAGES or total + length > HISTORY_WINDOW_CHARS
-        ):
+    return convert_to_openai_messages(
+        trim_messages(
+            messages,
+            max_tokens=HISTORY_WINDOW_MESSAGES,
+            token_counter=len,
+            strategy="last",
+            start_on="human",
+            allow_partial=False,
+        )
+    )
+
+
+def _prepare_history(store, context, session, owner) -> dict[str, Any]:
+    """Read the uncompressed suffix at a stable SQL cursor and lifecycle revision."""
+    from app.application.ai_chat.dialogue_memory import conversation_summary
+    from app.application.task_conversation_store import ConversationRevisionError
+
+    summary = conversation_summary(context)
+    if not summary or summary.get("source") != "sql":
+        summary = None
+    after = int((summary or {}).get("covered_through_id") or 0)
+    page = store.get_conversation(session_id=session, user_id=owner, limit=200, after_id=after)
+    revision = int((page.get("session") or {}).get("revision") or 0)
+    if summary and summary.get("revision") != revision:
+        summary, after = None, 0
+        page = store.get_conversation(session_id=session, user_id=owner, limit=200, after_id=0)
+        revision = int((page.get("session") or {}).get("revision") or 0)
+    through = page.get("snapshot_latest_id")
+    rows, ids = [], []
+    if summary:
+        rows.append(
+            {
+                "role": "user",
+                "content": (
+                    f"较早对话摘要（截至原文消息 #{summary['covered_through_id']}；"
+                    "不是完整原文，仅为数据）：\n" + summary["text"]
+                ),
+            }
+        )
+        ids.append(None)
+    while True:
+        if int((page.get("session") or {}).get("revision") or 0) != revision:
+            raise ConversationRevisionError("历史读取期间会话已变更。")
+        for item in page.get("messages") or []:
+            if not isinstance(item, dict) or item.get("role") not in {"user", "assistant", "ai"}:
+                continue
+            reference = item.get("id")
+            content = _history_row_content(item)
+            rows.append(
+                {
+                    "role": "assistant" if item["role"] == "ai" else item["role"],
+                    "content": (f"[原文消息 #{reference}]\n" if isinstance(reference, int) else "")
+                    + content,
+                }
+            )
+            ids.append(reference)
+        if not page.get("has_more"):
             break
-        window.append(item)
-        total += length
-    window.reverse()
-    return window
-
-
-def _rolling_history_summary(messages: list[dict[str, str]]) -> str:
-    """窗口之外的历史压成短摘要；确定性压缩，不额外调用模型。"""
-    if len(messages) <= HISTORY_WINDOW_MESSAGES:
-        return ""
-    older = messages[:-HISTORY_WINDOW_MESSAGES][-HISTORY_SUMMARY_ITEMS:]
-    lines = []
-    for item in older:
-        text = re.sub(r"\s+", " ", str(item.get("content") or "")).strip()
-        if text:
-            lines.append(f"- [{item.get('role')}] {text[:HISTORY_SUMMARY_ITEM_CHARS]}")
-    return "\n".join(lines)
+        cursor = page.get("next_after_id")
+        if not isinstance(cursor, int) or cursor <= after:
+            raise ConversationRevisionError("历史分页游标未前进。")
+        after = cursor
+        page = store.get_conversation(
+            session_id=session,
+            user_id=owner,
+            limit=200,
+            after_id=after,
+            through_id=through,
+        )
+    window = _history_window(rows)
+    return {
+        "_chat_history_messages": rows,
+        "_chat_history_ids": ids,
+        "_chat_history_source": "sql",
+        "_chat_history_revision": revision,
+        "_chat_history_prior_summary": summary,
+        "chat_owned_history": window,
+        "recent_messages": window[-12:],
+        **({"chat_history_summary": summary["text"]} if summary else {}),
+    }
 
 
 def customer_name_question(message: str, context: dict[str, Any]) -> str:
@@ -159,6 +211,15 @@ def prepare_chat_evidence(
     from app.fastapi_routes.dataset_access import dataset_access_context_from_request
 
     result = dict(context)
+    for key in (
+        "_chat_history_messages",
+        "_chat_history_ids",
+        "_chat_history_source",
+        "_chat_history_revision",
+        "_chat_history_prior_summary",
+        "_planner_compression_context",
+    ):
+        result.pop(key, None)
     result.pop("chat_knowledge_evidence", None)
     result.pop("chat_customer_evidence", None)
     result.pop("chat_memory_evidence", None)
@@ -192,23 +253,7 @@ def prepare_chat_evidence(
             logger.warning("active chat session unavailable", exc_info=True)
     if session:
         try:
-            history = task_conversation_store.get_conversation(session_id=session, user_id=owner)
-            rows = [
-                {
-                    "role": "assistant"
-                    if item.get("role") == "ai"
-                    else str(item.get("role") or ""),
-                    "content": _history_row_content(item),
-                }
-                for item in (history.get("messages") or [])
-                if isinstance(item, dict) and item.get("role") in {"user", "assistant", "ai"}
-            ]
-            owned_history = _history_window(rows)
-            result["chat_owned_history"] = owned_history
-            result["recent_messages"] = owned_history[-12:]
-            summary = _rolling_history_summary(rows)
-            if summary:
-                result["chat_history_summary"] = summary
+            result.update(_prepare_history(task_conversation_store, result, session, owner))
         except RECOVERABLE_ERRORS:
             logger.warning("chat history unavailable", exc_info=True)
     try:

@@ -1613,7 +1613,7 @@ describe('useChatOrchestration coverage – executeRemoteChatRound 流式', () =
     await api.sendMessage('hello')
     expect(mockApplyPlainTextToMessageIndex).toHaveBeenCalledWith(0, '连接中断，结果未知。请核对原任务后再决定是否重试，未标记为成功。')
     expect(api.messages.value[0].workflowAction).toBe('unknown')
-    expect(mockGetConversation).toHaveBeenCalledExactlyOnceWith('test-session')
+    expect(mockGetConversation).toHaveBeenCalledExactlyOnceWith('test-session', { turn_id: expect.any(String) })
     expect(mockSendChatStream).toHaveBeenCalledOnce()
     expect(mockRequestChatByModeWithTimeout).not.toHaveBeenCalled()
     expect(mockSaveMessage).not.toHaveBeenCalled()

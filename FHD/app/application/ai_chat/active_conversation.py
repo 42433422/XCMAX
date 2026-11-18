@@ -10,8 +10,12 @@ import hashlib
 import json
 from typing import Any, Mapping
 
-from app.application.ai_chat.dialogue_memory import _memory_dir
-from app.application.task_conversation_store import durable_user_id
+from app.application.ai_chat.dialogue_memory import _lock, _memory_dir
+from app.application.task_conversation_store import durable_user_id, task_conversation_store
+from app.infrastructure.database.conversation_lifecycle import (
+    begin_conversation_write,
+    lock_conversation_session,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
@@ -25,8 +29,19 @@ def remember_active_conversation(
     path = _memory_dir() / f"{key}-active.json"
     temporary = path.with_suffix(".json.tmp")
     try:
-        temporary.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-        temporary.replace(path)
+        from app.application.task_conversation_store import get_db
+
+        with _lock(f"{key}-active"), get_db() as db:
+            begin_conversation_write(db)
+            lock_conversation_session(
+                db,
+                session_id=payload["conversation_id"],
+                user_id=int(payload["owner"]),
+                expected_revision=(context or {}).get("_conversation_revision"),
+            )
+            temporary.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+            temporary.replace(path)
+            db.commit()
     except RECOVERABLE_ERRORS:
         return
 
@@ -48,7 +63,17 @@ def active_conversation_for(owner: Any, *, tenant_id: str = "", mod_id: str = ""
         return ""
     if str(data.get("tenant_id") or "") != str(tenant_id or ""):
         return ""
-    return str(data.get("conversation_id") or "").strip()
+    conversation_id = str(data.get("conversation_id") or "").strip()
+    if (
+        not conversation_id
+        or task_conversation_store.memory_snapshot(
+            session_id=conversation_id,
+            user_id=int(data["owner"]),
+        )
+        is None
+    ):
+        return ""
+    return conversation_id
 
 
 def _scope(

@@ -9,10 +9,27 @@ class RuntimeContextOwnershipError(ValueError):
     """A continuation attempted to change the task's authenticated data scope."""
 
 
+CONVERSATION_CONTEXT_FIELDS = (
+    "conversation_id",
+    "session_id",
+    "_conversation_revision",
+    "local_user_id",
+    "workspace_id",
+)
+
+
+def validate_conversation_context(stored: dict[str, Any], incoming: dict[str, Any]) -> None:
+    for key in CONVERSATION_CONTEXT_FIELDS:
+        if key in incoming and stored.get(key) != incoming[key]:
+            raise RuntimeContextOwnershipError("不能更改任务绑定的会话、历史版本或持久用户")
+
+
 def merge_runtime_context(run: AgentRun, updates: dict[str, Any] | None) -> dict[str, Any]:
     context = dict(run.metadata.get("runtime_context") or {})
     updates = dict(updates or {})
+    validate_conversation_context(context, updates)
     for key in (
+        *CONVERSATION_CONTEXT_FIELDS,
         "_mod_authorization",
         "_actor_authorization",
         "_bulk_preview_scope",

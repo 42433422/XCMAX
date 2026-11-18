@@ -1150,8 +1150,16 @@ def overlay_resume_context(
     stored: dict[str, Any] | None, incoming: dict[str, Any] | None
 ) -> dict[str, Any]:
     """Resume may add notes. It cannot replace tenant, actor, or employee authority."""
+    from app.application.agent_orchestrator.runtime_context import (
+        CONVERSATION_CONTEXT_FIELDS,
+        validate_conversation_context,
+    )
+
     merged = dict(stored or {})
+    validate_conversation_context(merged, dict(incoming or {}))
     for key, value in dict(incoming or {}).items():
+        if key in CONVERSATION_CONTEXT_FIELDS:
+            continue
         if key in _SERVER_FIELDS and merged.get(key) not in (None, "", [], {}):
             continue
         if key in _UNTRUSTED_CONTROL:

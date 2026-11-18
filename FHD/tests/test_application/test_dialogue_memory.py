@@ -19,7 +19,7 @@ from app.application.ai_chat.dialogue_memory import (
 
 
 @pytest.fixture
-def memory_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+def memory_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, dialogue_db) -> Path:
     monkeypatch.setenv("XCAGI_DIALOGUE_MEMORY_DIR", str(tmp_path))
     return tmp_path
 
@@ -116,7 +116,13 @@ def test_transcript_is_scoped_to_owner_tenant_and_mod(
     settle_chat_turn("只属于当前会话的文字", original, {"response": "收到"}, "completed")
     other = {**original, **changed, "turn_id": "2"}
 
-    assert recent_conversation_messages(other) == []
+    if "local_user_id" in changed:
+        from app.infrastructure.database.conversation_lifecycle import ConversationRevisionError
+
+        with pytest.raises(ConversationRevisionError):
+            recent_conversation_messages(other)
+    else:
+        assert recent_conversation_messages(other) == []
     assert conversation_key(original) != conversation_key(other)
 
 
@@ -158,7 +164,7 @@ def test_transcript_is_encrypted_and_legacy_plaintext_is_migrated(memory_dir: Pa
     assert turn_status(key, "first") == "processing"
 
 
-def test_older_turns_are_summarized_to_disk_and_reused(memory_dir: Path) -> None:
+def test_saving_transcript_never_invents_summary_coverage(memory_dir: Path) -> None:
     from app.application.ai_chat import dialogue_memory as memory
     from app.application.ai_chat.dialogue_memory import enrich_model_messages
 
@@ -172,22 +178,13 @@ def test_older_turns_are_summarized_to_disk_and_reused(memory_dir: Path) -> None
 
     key = conversation_key(_context("summary", "0"))
     stored = memory._read(key)
-    summary = stored["summary"]
-    assert summary and summary["text"]
-    assert summary["count"] == len(stored["turns"]) - memory._SUMMARY_KEEP_RECENT
-    assert summary["text"].startswith("用户：第0条消息")
-    # 摘要与已落盘前缀一致，下一次读取直接复用，不会重新生成。
-    assert memory._apply_summary(summary, stored["turns"])[0] == summary["text"]
-
+    assert stored.get("summary") is None
     next_context = _context("summary", "next")
     enriched = enrich_model_messages(
         [{"role": "user", "content": "下一条消息"}], "下一条消息", next_context
     )
-    system = enriched[0]["content"]
-    assert "较早对话摘录" in system
-    assert "第0条消息" in system
-    history_text = json.dumps(enriched[1:], ensure_ascii=False)
-    assert "第0条消息" not in history_text
+    history_text = json.dumps(enriched, ensure_ascii=False)
+    assert all(f"第{index}条消息" in history_text for index in range(25))
 
 
 def test_summary_is_cleared_when_transcript_is_too_short(memory_dir: Path) -> None:

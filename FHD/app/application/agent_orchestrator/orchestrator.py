@@ -536,31 +536,6 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         )
         return cast("AgentRun | None", self._repo.save(run))
 
-    def resume_failed_safe_steps(self, run_id: str) -> AgentRun | None:
-        """Re-run only failed low-risk idempotent steps. Completed business writes stay completed."""
-        run = self._repo.get(run_id)
-        if run is None or run.status not in {"failed", "blocked"}:
-            return cast("AgentRun | None", run)
-        requeued = False
-        for step in run.steps:
-            if step.status == "completed":
-                continue
-            if step.status == "failed" and self._can_auto_execute(step):
-                step.status = "pending"
-                step.error = ""
-                step.output = {}
-                requeued = True
-                continue
-            if step.status == "failed":
-                return cast("AgentRun | None", self._repo.save(run))
-        if not requeued:
-            return cast("AgentRun | None", self._repo.save(run))
-        run.status = "running"
-        run.error = ""
-        context = dict(run.metadata.get("runtime_context") or {})
-        self._execute_with_durable_lease(run, runtime_context=context)
-        return cast("AgentRun | None", self._repo.save(run))
-
     @staticmethod
     def _durable_plan(run: AgentRun) -> PlanGraph | None:
 
@@ -569,11 +544,14 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
     @staticmethod
     def _preflight_resume_plan(run: AgentRun, context: dict[str, Any]) -> str:
         """Revalidate the complete persisted plan and live tool contracts before resume."""
+        from app.application.agent_orchestrator.run_lifecycle import continuation_conversation_error
         from app.application.agent_orchestrator.tool_permission import actor_tool_denial
         from app.application.workflow.planning_graph_policy import validate_required_params
         from app.application.workflow.workflow_types import validate_plan_graph
         from app.application.workflow_registry_app import get_workflow_tool_registry
 
+        if error := continuation_conversation_error(run, context):
+            return error
         plan = AgentOrchestrator._durable_plan(run)
         if plan is None or not plan.nodes or plan.plan_id != run.plan_id:
             return "持久化执行计划缺失或标识不匹配，拒绝续跑"
@@ -895,6 +873,13 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         from app.application.agent_orchestrator.tool_permission import seal_server_context
 
         runtime_context = seal_server_context(runtime_context)
+        from app.application.agent_orchestrator.run_lifecycle import continuation_conversation_error
+
+        if error := continuation_conversation_error(run, runtime_context):
+            run.status, run.error = "blocked", error
+            run.add_event("workflow.conversation_rejected", error, {"execution_started": False})
+            self._repo.save(run)
+            return
         node_outputs: dict[str, Any] = {
             step.node_id: dict(step.output or {})
             for step in run.steps
@@ -1391,17 +1376,34 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 return {**dict(step.output or {}), "success": False, "message": run.error}
 
         try:
-            graph_result = XCAGILangGraphRuntime(tool_dispatcher=dispatch).run(
-                plan,
-                runtime_context={
-                    **runtime_context,
-                    "node_outputs": node_outputs,
-                    "executed": [step.node_id for step in run.steps if step.status == "completed"],
-                    "blocked": [step.node_id for step in run.steps if step.status == "skipped"],
-                },
-                max_retries=0,
-                parallel=plan_parallel_enabled(),
+            from app.infrastructure.workflow.checkpoint_bridge import (
+                open_run_checkpointer,
+                run_checkpoint_thread,
             )
+
+            parallel = plan_parallel_enabled()
+            with open_run_checkpointer(self._repo) as saver:
+                thread_id = run_checkpoint_thread(run, plan, parallel=parallel) if saver else ""
+                if saver is not None:
+                    run.metadata["checkpoint"] = {
+                        "backend": "langgraph",
+                        "schema_version": 1,
+                        "thread_id": thread_id,
+                    }
+                    self._repo.save(run)
+                graph_result = XCAGILangGraphRuntime(
+                    tool_dispatcher=dispatch, native_checkpointer=saver, thread_id=thread_id
+                ).run(
+                    plan,
+                    runtime_context={
+                        **runtime_context,
+                        "node_outputs": node_outputs,
+                        "executed": [s.node_id for s in run.steps if s.status == "completed"],
+                        "blocked": [s.node_id for s in run.steps if s.status == "skipped"],
+                    },
+                    max_retries=0,
+                    parallel=parallel,
+                )
         except (ValueError, RuntimeError) as exc:
             run.status, run.error = "blocked", f"计划图校验或执行失败：{exc}"
             run.add_event("workflow.graph_rejected", run.error, {"run_id": run.run_id})

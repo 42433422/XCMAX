@@ -226,7 +226,7 @@ def test_extract_excel_import_dual_price_columns(chat_svc: AIChatApplicationServ
 def test_persist_chat_turn_with_session(
     mock_conv: MagicMock, chat_svc: AIChatApplicationService
 ) -> None:
-    mock_conv.return_value.save_message = MagicMock()
+    mock_conv.return_value.save_turn = MagicMock(return_value=[1, 2])
     chat_svc._persist_chat_turn(
         "u1",
         "hello",
@@ -237,7 +237,7 @@ def test_persist_chat_turn_with_session(
             "data": {"action": "followup", "data": {"intent": "chat"}},
         },
     )
-    assert mock_conv.return_value.save_message.call_count == 2
+    assert mock_conv.return_value.save_turn.call_count == 1
 
 
 @patch("app.application.get_excel_vector_search_app_service")

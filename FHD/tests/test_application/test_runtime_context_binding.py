@@ -23,6 +23,59 @@ def test_continuation_rejects_tenant_change_before_state_or_command_writes(metho
 
 
 @pytest.mark.parametrize(
+    "method,status",
+    [
+        ("resume_run", "paused"),
+        ("stage_resume_run", "paused"),
+        ("retry_run", "failed"),
+    ],
+)
+@pytest.mark.parametrize(
+    "key,original,replacement",
+    [
+        ("conversation_id", "old-chat", "other-chat"),
+        ("session_id", "old-chat", "other-chat"),
+        ("_conversation_revision", 7, 8),
+        ("local_user_id", 17, 18),
+        ("workspace_id", "original-task", "other-workspace"),
+    ],
+)
+@pytest.mark.parametrize("previously_bound", [False, True])
+def test_continuation_cannot_replace_or_invent_history_identity(
+    method,
+    status,
+    key,
+    original,
+    replacement,
+    previously_bound,
+):
+    repository = InMemoryAgentRunRepository()
+    run = AgentRun(user_id="owner", message="stored history", status=status)
+    run.metadata["runtime_context"] = {key: original} if previously_bound else {}
+    repository.save(run)
+    before = repository.get(run.run_id).to_dict()
+    with pytest.raises(ValueError, match="会话"):
+        getattr(AgentOrchestrator(repository=repository), method)(
+            run.run_id,
+            runtime_context={key: replacement},
+        )
+    assert repository.get(run.run_id).to_dict() == before
+    assert repository.latest_task_control(run.run_id) is None
+
+
+@pytest.mark.parametrize("original", [{}, {"_conversation_revision": 7}])
+def test_approval_and_clarification_cannot_adopt_a_new_revision_after_clear(original):
+    from app.application.agent_orchestrator.tool_permission import overlay_resume_context
+
+    with pytest.raises(ValueError, match="历史版本"):
+        overlay_resume_context(original, {"_conversation_revision": 8})
+    assert overlay_resume_context(original, {"user_note": "continue"}) == {
+        **original,
+        "user_note": "continue",
+    }
+
+
+@pytest.mark.parametrize(
     "metadata",
     [
         {"non_retryable": True},
