@@ -203,7 +203,7 @@ def render_employee_pack_employee_py(
         "    'agent': _handle_agent,\n"
         "}\n\n\n"
         "async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:\n"
-        "    logger.info('[employee:%s] run keys=%s', EMPLOYEE_ID, list((payload or {}).keys())[:12])\n"
+        "    logger.info('employee run payload_field_count=%d', len(payload or {}))\n"
         "    payload = payload or {}\n"
         "    ctx = ctx or {}\n"
         "    manifest = _load_manifest()\n"
