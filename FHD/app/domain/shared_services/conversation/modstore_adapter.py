@@ -46,7 +46,11 @@ from app.application.market_llm.responses import (
 )
 from app.infrastructure import modstore_transport as _transport
 from app.infrastructure.llm.modstore_chat_failover import is_market_chat_failoverable
-from app.infrastructure.llm.modstore_response_normalize import normalize_market_chat_response
+from app.infrastructure.llm.modstore_response_normalize import (
+    absorb_stream_payload,
+    normalize_collected_stream,
+    normalize_market_chat_response,
+)
 from app.legacy.market_llm import openai_compat
 from app.legacy.market_llm.openai_compat import (
     _market_sse_payload_has_content as _market_sse_payload_has_content,
@@ -118,22 +122,6 @@ def _stream_payload_carries_delta(payload: dict) -> bool:
             if isinstance(holder, dict) and _delta_fields_have_content(holder):
                 return True
     return False
-
-
-def _reasoning_delta(payload: dict) -> str:
-    """取平台 SSE 载荷里的推理增量；正文增量另走 content，二者互不混入。"""
-    holders: list[Any] = [payload.get("delta"), payload]
-    for choice in payload.get("choices") or []:
-        if isinstance(choice, dict):
-            holders.append(choice.get("delta"))
-    for holder in holders:
-        if not isinstance(holder, dict):
-            continue
-        for key in ("reasoning_content", "reasoning"):
-            value = holder.get(key)
-            if isinstance(value, str) and value:
-                return value
-    return ""
 
 
 def _stream_payload_has_content(payload: Any) -> bool:
@@ -604,43 +592,14 @@ class ModstorePlatformAdapter:
         ending: dict | None = None,
         reasoning: list[str] | None = None,
     ) -> None:
-        # Only payloads that carry real answer content show the call is still producing;
-        # market heartbeats must never extend the caller's idle wait.
-        if not data:
-            return
-        try:
-            payload = json.loads(data)
-        except (ValueError, TypeError):
-            pieces.append(str(data))
-            if status_cb is not None:
-                status_cb()
-            return
-        if _stream_payload_has_content(payload) and status_cb is not None:
-            status_cb()
-        if not isinstance(payload, dict):
-            return
-        if reasoning is not None:
-            reasoning_delta = _reasoning_delta(payload)
-            if reasoning_delta:
-                reasoning.append(reasoning_delta)
-        if ending is not None:
-            for key in ("finish_reason", "usage", "replayed"):
-                if payload.get(key) is not None:
-                    ending[key] = payload[key]
-            for choice in payload.get("choices") or []:
-                if isinstance(choice, dict) and choice.get("finish_reason"):
-                    ending["finish_reason"] = choice["finish_reason"]
-        if payload.get("status") == "processing" or payload.get("state") == "accepted":
-            return
-        delta = payload.get("delta")
-        content = delta if isinstance(delta, str) and delta else payload.get("content")
-        if isinstance(content, str) and content:
-            pieces.append(content)
-            return
-        for choice in payload.get("choices") or []:
-            message = choice.get("delta") if isinstance(choice, dict) else None
-            if isinstance(message, dict) and message.get("content"):
-                pieces.append(str(message["content"]))
+        absorb_stream_payload(
+            data,
+            status_cb,
+            pieces,
+            ending,
+            reasoning,
+            payload_has_content=_stream_payload_has_content,
+        )
 
     def _normalize_collected(
         self,
@@ -651,33 +610,17 @@ class ModstorePlatformAdapter:
         max_tokens: int,
         reasoning: str = "",
     ) -> Dict[str, Any]:
-        route = self.last_route_metadata if isinstance(self.last_route_metadata, dict) else {}
-        content = "".join(pieces)
-        raw = {
-            "content": content,
-            "provider": route.get("provider") or provider or self.default_provider,
-            "model": route.get("model") or model or self.default_model,
-            **{key: value for key, value in route.items() if key not in {"provider", "model"}},
-        }
-        ending = ending if isinstance(ending, dict) else {}
-        finish = ending.get("finish_reason")
-        usage_value = ending.get("usage")
-        usage: dict = usage_value if isinstance(usage_value, dict) else {}
-        completion = usage.get("completion_tokens")
-        if not finish and isinstance(completion, int) and max_tokens and completion >= max_tokens:
-            # A market that does not relay finish_reason still reports the spent budget.
-            finish = "length"
-        if finish:
-            raw["choices"] = [{"message": {"content": content}, "finish_reason": finish}]
-        if usage:
-            raw["usage"] = usage
-        response = normalize_market_chat_response(raw, str(raw["provider"]), str(raw["model"]))
-        if reasoning.strip():
-            # 推理文本与正文分开返回，供上层作为思考步骤展示与持久化。
-            response["reasoning_content"] = reasoning
-        if ending.get("replayed") is True:
-            response["replayed"] = True
-        return response
+        return normalize_collected_stream(
+            pieces,
+            provider,
+            model,
+            ending,
+            max_tokens,
+            reasoning,
+            route=self.last_route_metadata,
+            default_provider=self.default_provider,
+            default_model=self.default_model,
+        )
 
     async def chat_completion(
         self,

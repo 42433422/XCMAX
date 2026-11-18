@@ -54,7 +54,9 @@ async def test_reasoning_is_published_as_thinking_note_not_body():
 
 @pytest.mark.asyncio
 async def test_reasoning_without_stream_context_is_silent():
-    provider = ModstoreProvider(_Adapter([{"choices": [{"delta": {"reasoning_content": "想一下"}}]}]))
+    provider = ModstoreProvider(
+        _Adapter([{"choices": [{"delta": {"reasoning_content": "想一下"}}]}])
+    )
     body = [chunk async for chunk in provider.stream_chat_completion([])]
     assert body == []
 
@@ -77,7 +79,9 @@ def test_full_response_keeps_reasoning_out_of_content():
         {},
         reasoning,
     )
-    response = adapter._normalize_collected(pieces, "provider", "model", {}, 100, "".join(reasoning))
+    response = adapter._normalize_collected(
+        pieces, "provider", "model", {}, 100, "".join(reasoning)
+    )
     assert "".join(pieces) == "答"
     assert response["reasoning_content"] == "想一想"
 
