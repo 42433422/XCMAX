@@ -611,6 +611,9 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
       const unsaved = localList.filter((local, index) => {
         if (matched.has(index)) return false
         if (local.persistence?.status === 'saved') return false
+        // 服务端已有同一轮次：本地这条只是同一问题的副本（附件证据会改写服务端正文，
+        // 按文本匹配不到）。保留它会在每次同步时追加到末尾并再次落库，形成重复提问。
+        if (local.role === 'user' && local.turnId && serverTurnIds.has(local.turnId)) return false
         // 没有进行中的轮次、且本轮 turnId 不在服务端：这是从未真正发出的孤儿提问
         // （例如视图已被替换导致请求没发出去），保留它只会在每次同步时被追加到末尾。
         if (local.role === 'user' && local.turnId && !busy() && !serverTurnIds.has(local.turnId)) return false
