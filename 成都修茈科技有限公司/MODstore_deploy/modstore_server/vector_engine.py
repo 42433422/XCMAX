@@ -17,7 +17,7 @@ import os
 import sys
 import threading
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, Iterator, List, Optional, Sequence
 
 from modstore_server.operational_errors import BOUNDARY_ERRORS
 
@@ -272,11 +272,47 @@ def query(
             {
                 "id": str(_id),
                 "document": str(docs[i]) if i < len(docs) else "",
-                "metadata": dict(metas[i]) if i < len(metas) and isinstance(metas[i], dict) else {},
+                "metadata": dict(metas[i])
+                if i < len(metas) and isinstance(metas[i], dict)
+                else {},
                 "distance": float(dists[i]) if i < len(dists) else 1.0,
             }
         )
     return items
+
+
+def iter_documents(
+    collection_name: str, *, batch_size: int = 1000
+) -> Iterator[Dict[str, Any]]:
+    """Read a collection's lexical corpus independently of nearest neighbours."""
+    coll = get_collection(collection_name)
+    limit = max(1, int(batch_size))
+    offset = 0
+    while True:
+        try:
+            page = coll.get(
+                limit=limit, offset=offset, include=["documents", "metadatas"]
+            )
+        except BOUNDARY_ERRORS as exc:
+            raise VectorEngineError(
+                f"读取集合语料失败 collection={collection_name}: {exc}"
+            ) from exc
+        ids = page.get("ids") or []
+        documents = page.get("documents") or []
+        metadata = page.get("metadatas") or []
+        for index, chunk_id in enumerate(ids):
+            yield {
+                "id": str(chunk_id),
+                "document": str(documents[index] or "")
+                if index < len(documents)
+                else "",
+                "metadata": dict(metadata[index] or {})
+                if index < len(metadata)
+                else {},
+            }
+        if len(ids) < limit:
+            break
+        offset += len(ids)
 
 
 def delete(
@@ -371,6 +407,7 @@ __all__ = [
     "drop_collection",
     "upsert",
     "query",
+    "iter_documents",
     "delete",
     "count",
     "status",

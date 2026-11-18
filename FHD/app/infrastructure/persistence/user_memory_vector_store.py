@@ -95,9 +95,10 @@ class PgUserMemoryVectorStore(VectorStorePort):
         if not chunks:
             return 0
         now = time.time()
+        written = 0
         with self._engine.begin() as conn:
             for chunk in chunks:
-                conn.execute(
+                inserted = conn.execute(
                     text(
                         """
                         INSERT INTO user_memory_vector_chunks(chunk_id, index_id, content, embedding, metadata, created_at)
@@ -115,6 +116,18 @@ class PgUserMemoryVectorStore(VectorStorePort):
                             metadata = EXCLUDED.metadata,
                             created_at = EXCLUDED.created_at,
                             index_id = EXCLUDED.index_id
+                        WHERE user_memory_vector_chunks.index_id = EXCLUDED.index_id
+                          AND COALESCE((user_memory_vector_chunks.metadata->>'source_revision')::bigint, 0)
+                              <= COALESCE((EXCLUDED.metadata->>'source_revision')::bigint, 0)
+                          AND (
+                              COALESCE((user_memory_vector_chunks.metadata->>'source_revision')::bigint, 0)
+                                  < COALESCE((EXCLUDED.metadata->>'source_revision')::bigint, 0)
+                              OR user_memory_vector_chunks.content = EXCLUDED.content
+                              OR (
+                                  user_memory_vector_chunks.metadata->>'source_revision' IS NULL
+                                  AND EXCLUDED.metadata->>'source_revision' IS NULL
+                              )
+                          )
                         """
                     ),
                     {
@@ -126,6 +139,7 @@ class PgUserMemoryVectorStore(VectorStorePort):
                         "created_at": now,
                     },
                 )
+                written += max(0, int(inserted.rowcount or 0))
 
             conn.execute(
                 text(
@@ -141,7 +155,7 @@ class PgUserMemoryVectorStore(VectorStorePort):
                 {"updated_at": now, "index_id": index_id},
             )
 
-        return len(chunks)
+        return written
 
     def query(
         self,
@@ -157,6 +171,8 @@ class PgUserMemoryVectorStore(VectorStorePort):
         except (TypeError, ValueError):
             created_after = None
         created_clause = " AND created_at >= :created_after" if created_after is not None else ""
+        if query_filter.get("governed_only"):
+            created_clause += " AND metadata->>'source_owner_id' = :index_id AND metadata->>'source_memory_id' IS NOT NULL"
         params = {
             "index_id": index_id,
             "query_vector": json.dumps(query_vector, ensure_ascii=False),
@@ -256,6 +272,25 @@ class PgUserMemoryVectorStore(VectorStorePort):
             )
         return [dict(row) for row in rows]
 
+    def delete_source(self, *, index_id: str, source_memory_id: str) -> int:
+        with self._engine.begin() as conn:
+            result = conn.execute(
+                text(
+                    "DELETE FROM user_memory_vector_chunks WHERE index_id = :index_id "
+                    "AND metadata->>'source_memory_id' = :source_id"
+                ),
+                {"index_id": index_id, "source_id": source_memory_id},
+            )
+            conn.execute(
+                text(
+                    "UPDATE user_memory_vector_indexes SET chunk_count = "
+                    "(SELECT COUNT(*) FROM user_memory_vector_chunks WHERE index_id = :index_id) "
+                    "WHERE index_id = :index_id"
+                ),
+                {"index_id": index_id},
+            )
+        return max(0, int(result.rowcount or 0))
+
     def delete_index(self, index_id: str) -> bool:
         with self._engine.begin() as conn:
             result = conn.execute(
@@ -331,9 +366,10 @@ class SQLiteUserMemoryVectorStore(VectorStorePort):
         if not chunks:
             return 0
         now = time.time()
+        written = 0
         with self._get_conn() as conn:
             for chunk in chunks:
-                conn.execute(
+                inserted = conn.execute(
                     """
                     INSERT INTO user_memory_vector_chunks(chunk_id, index_id, content, embedding, metadata, created_at)
                     VALUES(?, ?, ?, ?, ?, ?)
@@ -343,6 +379,18 @@ class SQLiteUserMemoryVectorStore(VectorStorePort):
                         embedding = excluded.embedding,
                         metadata = excluded.metadata,
                         created_at = excluded.created_at
+                    WHERE user_memory_vector_chunks.index_id = excluded.index_id
+                      AND COALESCE(CAST(json_extract(user_memory_vector_chunks.metadata, '$.source_revision') AS INTEGER), 0)
+                          <= COALESCE(CAST(json_extract(excluded.metadata, '$.source_revision') AS INTEGER), 0)
+                      AND (
+                          COALESCE(CAST(json_extract(user_memory_vector_chunks.metadata, '$.source_revision') AS INTEGER), 0)
+                              < COALESCE(CAST(json_extract(excluded.metadata, '$.source_revision') AS INTEGER), 0)
+                          OR user_memory_vector_chunks.content = excluded.content
+                          OR (
+                              json_extract(user_memory_vector_chunks.metadata, '$.source_revision') IS NULL
+                              AND json_extract(excluded.metadata, '$.source_revision') IS NULL
+                          )
+                      )
                     """,
                     (
                         str(chunk["chunk_id"]),
@@ -353,6 +401,7 @@ class SQLiteUserMemoryVectorStore(VectorStorePort):
                         now,
                     ),
                 )
+                written += max(0, int(inserted.rowcount or 0))
 
             conn.execute(
                 """
@@ -366,7 +415,7 @@ class SQLiteUserMemoryVectorStore(VectorStorePort):
                 (index_id, now, index_id),
             )
             conn.commit()
-        return len(chunks)
+        return written
 
     @staticmethod
     def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
@@ -393,6 +442,9 @@ class SQLiteUserMemoryVectorStore(VectorStorePort):
         if created_after is not None:
             where += " AND created_at >= ?"
             parameters.append(created_after)
+        if query_filter.get("governed_only"):
+            where += " AND json_extract(metadata, '$.source_owner_id') = ? AND json_extract(metadata, '$.source_memory_id') IS NOT NULL"
+            parameters.append(index_id)
         query_arr = np.array(query_vector, dtype=np.float32)
         with self._get_conn() as conn:
             rows = conn.execute(
@@ -474,6 +526,22 @@ class SQLiteUserMemoryVectorStore(VectorStorePort):
             }
             for r in rows
         ]
+
+    def delete_source(self, *, index_id: str, source_memory_id: str) -> int:
+        with self._get_conn() as conn:
+            result = conn.execute(
+                "DELETE FROM user_memory_vector_chunks WHERE index_id = ? "
+                "AND json_extract(metadata, '$.source_memory_id') = ?",
+                (index_id, source_memory_id),
+            )
+            conn.execute(
+                "UPDATE user_memory_vector_indexes SET chunk_count = "
+                "(SELECT COUNT(*) FROM user_memory_vector_chunks WHERE index_id = ?) "
+                "WHERE index_id = ?",
+                (index_id, index_id),
+            )
+            conn.commit()
+        return max(0, int(result.rowcount or 0))
 
     def delete_index(self, index_id: str) -> bool:
         with self._get_conn() as conn:

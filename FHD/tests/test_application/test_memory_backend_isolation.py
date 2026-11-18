@@ -1,23 +1,31 @@
-"""Memory adapters must authorize stored identities before any mutation."""
+"""Projection adapters authorize stored owners and preserve revision ordering."""
 
 from copy import deepcopy
-from types import SimpleNamespace
 
 import pytest
 
 from app.infrastructure.memory import mem0_backend as mod
-from app.infrastructure.memory.consolidation import consolidate
+from tests.fixtures.governed_memory_runtime import owner_id
+
+ALICE = owner_id()
+BOB = owner_id(8)
 
 
-def row(mid, owner="alice", mod_id="sales", **meta):
+def row(mid, owner=ALICE, mod_id="sales", **meta):
     return {
         "id": mid,
         "user_id": owner,
         "memory": "retained original",
         "metadata": {
+            "user_id": owner,
             "mod_id": mod_id,
             "memory_type": "fact",
-            "fact_key": "budget",
+            "source": "memory_v2",
+            "source_owner_id": owner,
+            "source_memory_id": f"source-{mid}",
+            "source_revision": 2,
+            "valid_to": "",
+            "superseded_by": "",
             "custom": "keep",
             **meta,
         },
@@ -38,11 +46,23 @@ class Store:
 
     def update(self, memory_id, text=None, metadata=None):
         self.mutations.append(("update", memory_id))
-        self.rows[memory_id].update(memory=text, metadata=metadata)
+        self.rows[memory_id].update(memory=text, metadata=deepcopy(metadata))
+
+    def add(self, *, messages, user_id, metadata, infer):
+        assert infer is False
+        mid = f"created-{len(self.rows)}"
+        self.mutations.append(("add", mid))
+        self.rows[mid] = {
+            "id": mid,
+            "user_id": user_id,
+            "memory": messages[0]["content"],
+            "metadata": deepcopy(metadata),
+        }
+        return {"results": [{"id": mid}]}
 
     def get_all(self, *, filters, top_k=20, show_expired=False):
         assert show_expired is True
-        # A faulty adapter returning foreign records must still be harmless.
+        # A faulty adapter returning foreign rows must not authorize their mutation.
         return {"results": list(self.rows.values())[:top_k]}
 
     def delete_all(self, user_id=None):
@@ -54,8 +74,9 @@ class Store:
 
 
 @pytest.fixture
-def service(monkeypatch):
-    store = Store([row("old"), row("new"), row("foreign", "bob"), row("other", mod_id="other")])
+def service(monkeypatch, tmp_path):
+    monkeypatch.setenv("XCAGI_LONG_TERM_MEMORY_DIR", str(tmp_path / "projection-locks"))
+    store = Store([row("old"), row("new"), row("foreign", BOB), row("other", mod_id="other")])
     backend = mod.Mem0LongTermMemory()
     monkeypatch.setattr(backend, "_active", lambda: store)
     return backend, store
@@ -64,9 +85,7 @@ def service(monkeypatch):
 def test_mixed_ids_delete_only_the_owner_and_requested_mod(service):
     backend, store = service
     assert (
-        backend.forget(
-            user_id="alice", memory_ids=["foreign", "old", "old", "other"], mod_id="sales"
-        )
+        backend.forget(user_id=ALICE, memory_ids=["foreign", "old", "old", "other"], mod_id="sales")
         == 1
     )
     assert store.mutations == [("delete", "old")]
@@ -76,110 +95,157 @@ def test_mixed_ids_delete_only_the_owner_and_requested_mod(service):
 @pytest.mark.parametrize("kwargs", [{"memory_ids": []}, {"mod_id": ""}, {"user_id": ""}])
 def test_empty_identifiers_never_expand_into_bulk_deletion(service, kwargs):
     backend, store = service
-    assert backend.forget(**{"user_id": "alice", **kwargs}) == 0
+    assert backend.forget(**{"user_id": ALICE, **kwargs}) == 0
     assert store.mutations == []
 
 
 @pytest.mark.parametrize(
-    "mid,new_id",
-    [("foreign", "new"), ("old", "foreign"), ("old", ""), ("old", "old"), ("missing", "new")],
+    "kwargs",
+    [
+        {"source_memory_id": ""},
+        {"user_id": ""},
+        {"revision": 0},
+        {"revision": True},
+        {"text": ""},
+        {"text": "  "},
+    ],
 )
-def test_supersede_rejects_foreign_missing_and_self_replacements(service, mid, new_id):
+def test_invalid_projection_identifiers_never_mutate_existing_rows(service, kwargs):
     backend, store = service
-    assert (
-        backend.supersede_fact("alice", mid, content="injected", new_id=new_id, today="2026-11-15")
-        is False
+    request = {
+        "user_id": ALICE,
+        "source_memory_id": "source-old",
+        "revision": 3,
+        "text": "new revision",
+    }
+    assert backend.upsert_governed(**{**request, **kwargs}) is False
+    assert store.mutations == []
+
+
+@pytest.mark.parametrize("revision,text", [(1, "obsolete"), (2, "same revision forgery")])
+def test_revision_guard_rejects_stale_and_conflicting_replays(service, revision, text):
+    backend, store = service
+    assert not backend.upsert_governed(
+        user_id=ALICE, source_memory_id="source-old", revision=revision, text=text
     )
     assert store.mutations == []
+    assert store.rows["old"]["memory"] == "retained original"
+
+
+def test_revision_update_changes_only_the_selected_owned_source(service):
+    backend, store = service
+    before = deepcopy(store.rows)
+    assert backend.upsert_governed(
+        user_id=ALICE,
+        source_memory_id="source-old",
+        revision=3,
+        text="confirmed correction",
+        metadata={"custom": "new governed metadata"},
+    )
+    assert store.mutations == [("update", "old")]
+    current = store.rows["old"]
+    assert current["memory"] == "confirmed correction"
+    assert current["metadata"]["source_revision"] == 3
+    assert current["metadata"]["source_owner_id"] == ALICE
+    assert current["metadata"]["source_memory_id"] == "source-old"
+    assert all(store.rows[mid] == before[mid] for mid in ("foreign", "new", "other"))
+
+
+def test_source_identifier_cannot_delete_another_owner_or_another_source(service):
+    backend, store = service
+    assert backend.forget_source(user_id=ALICE, source_memory_id="source-foreign") == 0
+    assert store.mutations == []
+    assert backend.forget_source(user_id=ALICE, source_memory_id="source-old") == 1
+    assert store.mutations == [("delete", "old")]
+    assert set(store.rows) == {"new", "foreign", "other"}
 
 
 @pytest.mark.parametrize(
     "record",
     [
         {"id": "old", "metadata": {}},
-        row("old", user_id="bob"),
+        row("old", user_id=BOB),
         {**row("old"), "id": "different"},
     ],
 )
 def test_unknown_conflicting_or_wrong_record_identity_is_denied(service, record):
     backend, store = service
     store.rows["old"] = record
-    assert backend.forget(user_id="alice", memory_ids=["old"]) == 0
+    assert backend.forget(user_id=ALICE, memory_ids=["old"]) == 0
     assert store.mutations == []
-
-
-def test_supersede_preserves_old_content_and_all_existing_metadata(service):
-    backend, store = service
-    assert backend.supersede_fact(
-        "alice", "old", content="untrusted stale text", new_id="new", today="2026-11-15"
-    )
-    assert store.rows["old"]["memory"] == "retained original"
-    meta = store.rows["old"]["metadata"]
-    assert meta["valid_to"] == "2026-11-15" and meta["superseded_by"] == "new"
-    assert meta["custom"] == "keep" and meta["fact_key"] == "budget"
-    assert store.rows["new"]["metadata"].get("valid_to") is None
 
 
 def test_mod_deletion_does_not_touch_other_mods_or_users(service):
     backend, store = service
-    assert backend.forget(user_id="alice", mod_id="sales") == 2
+    assert backend.forget(user_id=ALICE, mod_id="sales") == 2
     assert set(store.rows) == {"foreign", "other"}
     assert all(op != "delete_all" for op, _ in store.mutations)
 
 
 def test_explicit_user_bulk_deletion_retains_other_users(service):
     backend, store = service
-    assert backend.forget(user_id="alice") == 3
+    assert backend.forget(user_id=ALICE) == 3
     assert set(store.rows) == {"foreign"}
 
 
-def test_sdk_internal_type_error_is_not_retried(service, monkeypatch):
+@pytest.mark.parametrize("operation", ["update", "add"])
+def test_sdk_internal_type_error_is_not_retried(service, monkeypatch, operation):
     backend, store = service
     calls = []
 
-    def update(memory_id, text=None, metadata=None):
-        calls.append(memory_id)
+    def broken(*args, **kwargs):
+        calls.append((args, kwargs))
         raise TypeError("internal SDK bug, not keyword rejection")
 
-    monkeypatch.setattr(store, "update", update)
+    monkeypatch.setattr(store, operation, broken)
     with pytest.raises(TypeError, match="internal SDK bug"):
-        backend.supersede_fact("alice", "old", content="", new_id="new", today="2026-11-15")
-    assert calls == ["old"]
+        backend.upsert_governed(
+            user_id=ALICE,
+            source_memory_id="source-old" if operation == "update" else "new-source",
+            revision=3,
+            text="confirmed new value",
+        )
+    assert len(calls) == 1
+    assert store.rows["old"]["memory"] == "retained original"
 
 
-def test_failed_replacement_never_invalidates_existing_fact():
-    writes = []
-    store = SimpleNamespace(
-        search_facts=lambda *a, **kw: [
-            {
-                "chunk_id": "old",
-                "content": "old",
-                "metadata": {"fact_key": "budget", "fact_value": "old"},
-            }
-        ],
-        add_fact=lambda *a, **kw: None,
-        supersede_fact=lambda *a, **kw: writes.append(kw),
+def test_failed_projection_update_preserves_stored_data_and_reports_retry(service, monkeypatch):
+    backend, store = service
+    before = deepcopy(store.rows)
+
+    def unavailable(*args, **kwargs):
+        raise OSError("projection disk unavailable")
+
+    monkeypatch.setattr(store, "update", unavailable)
+    assert not backend.upsert_governed(
+        user_id=ALICE, source_memory_id="source-old", revision=3, text="new"
     )
-    result = consolidate(store, user_id="alice", facts=[{"key": "budget", "value": "new"}])
-    assert result[0]["action"] == "SKIPPED" and result[0]["reason"] == "add_unconfirmed"
-    assert writes == []
+    assert store.rows == before and store.mutations == []
+
+
+def test_unconfirmed_sdk_add_result_does_not_delete_existing_projection(service, monkeypatch):
+    backend, store = service
+    before = deepcopy(store.rows)
+    monkeypatch.setattr(store, "add", lambda **kwargs: {"results": []})
+    assert not backend.upsert_governed(
+        user_id=ALICE, source_memory_id="new-source", revision=1, text="new"
+    )
+    assert store.rows == before and store.mutations == []
 
 
 def test_mod_deletion_bounds_continuously_growing_pages_without_widening(service, monkeypatch):
     backend, store = service
     pages = []
-    monkeypatch.setattr(mod, "_MAX_MOD_DELETE_PAGES", 2, raising=False)
+    monkeypatch.setattr(mod, "_MAX_MOD_DELETE_PAGES", 2)
 
     def growing_pages(*, filters, top_k=20, show_expired=False):
         pages.append(filters)
-        if len(pages) > 3:
-            return {"results": []}
         mid = f"incoming-{len(pages)}"
         store.rows[mid] = row(mid)
         return {"results": [store.rows[mid]]}
 
     monkeypatch.setattr(store, "get_all", growing_pages)
-    assert backend.forget(user_id="alice", mod_id="sales") == 2
+    assert backend.forget(user_id=ALICE, mod_id="sales") == 2
     assert len(pages) == 2
     assert store.mutations == [("delete", "incoming-1"), ("delete", "incoming-2")]
     assert set(store.rows) == {"old", "new", "foreign", "other"}

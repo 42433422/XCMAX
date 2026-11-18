@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import uuid
 from typing import Any, Protocol
 
 from app.infrastructure.modstore_transport import safe_route_metadata
+
+logger = logging.getLogger(__name__)
 
 _SECRET_TEXT = re.compile(
     r"(?i)(\b(?:api[_ -]?key|access[_ -]?token|refresh[_ -]?token|password|passwd|secret|密码|口令)\b\s*[:=]\s*)([^\s,;]+)|"
@@ -313,9 +316,8 @@ def authorized_memory_context(
         except access_errors:
             return None
         required = "dataset.write" if write else "dataset.read"
-        if not principal.is_admin and required not in principal.permissions:
-            return None
-        access = principal.to_dict()
+        if principal.is_admin or required in principal.permissions:
+            access = principal.to_dict()
     memory_namespace = scoped_personal_memory_id(context)
     if not memory_namespace:
         return None
@@ -335,7 +337,9 @@ def persist_recallable_chat_turn(
     authorized = authorized_memory_context(user_id, context, write=True)
     if authorized is None:
         return
-    normalized_user_id, access_context = authorized
+    _memory_namespace, access_context = authorized
+    if access_context is None and context.get("persy_memory_scope") == "tenant":
+        return  # A private-memory capability never authorizes a tenant-wide write.
     raw_inner = response_data.get("data")
     inner: dict[str, Any] = raw_inner if isinstance(raw_inner, dict) else {}
     action = str(response_data.get("action") or inner.get("action") or "").strip().lower()
@@ -360,59 +364,30 @@ def persist_recallable_chat_turn(
         assistant_text = str(inner.get("text") or inner.get("message") or "").strip()
     if not assistant_text or sensitive.search(f"{message}\n{assistant_text}"):
         return
-    from app.application.user_memory_vector_app_service import (
-        get_user_memory_vector_ingest_app_service,
-    )
+    # Raw dialogue remains in the conversation store. Long-term model evidence
+    # comes only from candidates explicitly confirmed in MemoryV2.
+    from app.application.persy_memory_app_service import get_persy_memory_app_service
 
-    service = get_user_memory_vector_ingest_app_service()
-    from app.application.ai_feature_isolation import tag_mapping
-
-    tagged = tag_mapping(context)
-    chunk = service.build_chat_turn_chunk(
-        user_id=normalized_user_id,
-        user_message=message,
-        assistant_message=assistant_text,
-        session_id=str(tagged.get("session_id") or tagged.get("conversation_id") or ""),
-        source=str(source or tagged.get("ai_feature_channel") or "chat"),
-    )
-    if tagged.get("ai_feature_channel"):
-        chunk.metadata["ai_feature_channel"] = tagged["ai_feature_channel"]
-    session_scope = str(context.get("session_id") or context.get("conversation_id") or "")
-    service.ingest_chunks(normalized_user_id, [chunk])
-    from app.infrastructure.memory.mem0_backend import (
-        get_long_term_memory,
-        schedule_fact_consolidation,
-    )
-    from app.infrastructure.memory.memory_units import extract_facts
-
-    long_term = get_long_term_memory()
-    if long_term.enabled:
-        # mem0 作为跨会话长期记忆镜像写入；未启用时仅保留原有向量库链路。
-        long_term.remember(
-            user_id=normalized_user_id,
-            user_message=message,
-            assistant_message=assistant_text,
-            metadata={
-                "session_id": session_scope,
-                "source": str(source or tagged.get("ai_feature_channel") or "chat"),
-                "ai_feature_channel": str(tagged.get("ai_feature_channel") or ""),
-            },
-        )
-        # 热路径只做规则抽取与入队，合并（去重/失效）在后台线程完成。
-        schedule_fact_consolidation(
-            user_id=normalized_user_id,
-            facts=extract_facts(message),
-        )
+    service = get_persy_memory_app_service()
     if access_context is not None:
-        from app.application.persy_memory_app_service import get_persy_memory_app_service
-
-        get_persy_memory_app_service().capture_conversation_turn(
+        captured = service.capture_conversation_turn(
             access_context=access_context,
             user_message=message,
             assistant_message=assistant_text,
             session_id=str(context.get("session_id") or context.get("conversation_id") or ""),
             source=str(source or "chat"),
-            scope="tenant"
-            if str(context.get("persy_memory_scope") or "").strip().lower() == "tenant"
-            else "user",
+            scope=str(context.get("persy_memory_scope") or "user"),
+        )
+    else:
+        captured = service.capture_personal_turn(
+            user_id=user_id,
+            context=context,
+            user_message=message,
+            assistant_message=assistant_text,
+            source=str(source or "chat"),
+        )
+    if isinstance(captured, dict) and not captured.get("success"):
+        logger.warning(
+            "memory candidate capture incomplete: %s",
+            captured.get("errors") or captured.get("error_code"),
         )

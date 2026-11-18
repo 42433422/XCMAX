@@ -220,6 +220,7 @@ def prepare_chat_evidence(
         if authorized_memory is not None:
             memory_user_id, _memory_access = authorized_memory
             result["_chat_memory_evidence_authorized"] = True
+            from app.application.user_memory.governance import filter_recalled_memories
             from app.application.user_memory_vector_app_service import (
                 get_user_memory_rag_app_service,
             )
@@ -230,52 +231,33 @@ def prepare_chat_evidence(
             )
 
             summaries = []
+            confirmed = get_user_memory_service().format_memory_v2_for_prompt(
+                user_id=memory_user_id, max_items=6
+            )
+            if confirmed and "无已确认记忆" not in confirmed:
+                summaries.append(confirmed)
+            result["chat_memory_evidence"] = "\n".join(summaries)[:3000]
             long_term = get_long_term_memory()
-            long_term_hits = (
+            long_term_hits = filter_recalled_memories(
+                memory_user_id,
                 long_term.recall(user_id=memory_user_id, query=message, limit=3)
                 if long_term.enabled
-                else []
+                else [],
             )
             long_term_summary = format_recalled_memories(long_term_hits)
             if long_term_summary:
                 summaries.append(long_term_summary)
-            rag = get_user_memory_rag_app_service()
-            hits: list[dict[str, Any]] = []
             if not long_term_hits:
+                rag = get_user_memory_rag_app_service()
                 hits = (
                     rag.query(user_id=memory_user_id, query_text=message, top_k=3).get("hits") or []
                 )
-                # Read the prior session-scoped index during migration. New turns are
-                # written to the stable owner namespace by persist_recallable_chat_turn.
-                if scoped_user != memory_user_id:
-                    old_hits = (
-                        rag.query(user_id=scoped_user, query_text=message, top_k=3).get("hits")
-                        or []
+                if hits:
+                    summaries.append(
+                        rag.format_for_prompt(
+                            user_id=memory_user_id, query_text=message, hits=hits, max_hits=3
+                        )
                     )
-                    merged = {
-                        str(hit.get("chunk_id") or f"stable:{index}"): hit
-                        for index, hit in enumerate(hits)
-                        if isinstance(hit, dict)
-                    }
-                    for index, hit in enumerate(old_hits):
-                        if isinstance(hit, dict):
-                            merged.setdefault(str(hit.get("chunk_id") or f"legacy:{index}"), hit)
-                    hits = sorted(
-                        merged.values(),
-                        key=lambda hit: float(hit.get("score") or 0),
-                        reverse=True,
-                    )[:3]
-            if hits:
-                summaries.append(
-                    rag.format_for_prompt(
-                        user_id=scoped_user, query_text=message, hits=hits, max_hits=3
-                    )
-                )
-            confirmed = get_user_memory_service().format_memory_v2_for_prompt(
-                user_id=str(owner), max_items=6
-            )
-            if confirmed and "无已确认记忆" not in confirmed:
-                summaries.append(confirmed)
             result["chat_memory_evidence"] = "\n".join(summaries)[:3000]
     except RECOVERABLE_ERRORS:
         logger.warning("chat personal memory recall unavailable", exc_info=True)
@@ -283,7 +265,12 @@ def prepare_chat_evidence(
         return result
     try:
         access = dataset_access_context_from_request(request)
-        if not access or str(access.actor_id) != str(owner) or str(access.tenant_id) != tenant:
+        if (
+            not access
+            or str(access.actor_id) != str(owner)
+            or str(access.tenant_id) != tenant
+            or access.mod_id != str(context.get("mod_id") or context.get("active_mod_id") or "")
+        ):
             return result
         result["_chat_evidence_authorized"] = True
         result["_chat_memory_evidence_authorized"] = True
@@ -330,7 +317,9 @@ def prepare_chat_evidence(
             )
             memories = recalled.get("memories") if recalled.get("success") else []
             if memories:
-                recalled_memories = [item for item in memories if isinstance(item, dict)]
+                from app.application.user_memory.governance import is_recallable_memory
+
+                recalled_memories = [item for item in memories if is_recallable_memory(item)]
                 # 知识问句的记忆会作为知识证据注入；其他问句仍保留在个人记忆里。
                 if not knowledge_query:
                     prior = str(result.get("chat_memory_evidence") or "")
@@ -376,6 +365,11 @@ def prepare_chat_evidence(
                 "source": "Persy 记忆",
                 "sheet": "",
                 "text": str(item.get("statement") or "")[:1800],
+                "memory_id": item.get("memory_id"),
+                "source_revision": item.get("revision"),
+                "scope": item.get("scope"),
+                "status": item.get("status"),
+                "eligible_for_planner": item.get("eligible_for_planner"),
             }
             for item in recalled_memories
             if str(item.get("statement") or "").strip()

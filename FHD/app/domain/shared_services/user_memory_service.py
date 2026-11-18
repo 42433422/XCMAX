@@ -359,6 +359,18 @@ class UserMemoryService(NeuroEventPublisherMixin):
     def record_memory_recall(self, user_id: str, memory_id: str) -> dict[str, Any]:
         return self._candidates.record_recall(user_id, memory_id)
 
+    def filter_recalled_memories(
+        self, user_id: str, hits: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        from app.application.user_memory.governance import filter_recalled_memories
+
+        return filter_recalled_memories(user_id, hits, memory_service=self)
+
+    def rebuild_memory_projections(self, user_id: str) -> dict[str, int]:
+        from app.application.user_memory.projections import rebuild_memory_projections
+
+        return rebuild_memory_projections(user_id, memory_service=self)
+
     def get_memory_v2_summary(self, user_id: str) -> dict[str, Any]:
         return self._queries.get_memory_v2_summary(user_id)
 

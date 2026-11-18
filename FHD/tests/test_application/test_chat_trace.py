@@ -249,6 +249,7 @@ def test_attach_chat_trace_run_records_rag_retrieval() -> None:
     assert len(run.retrieval_calls) == 1
     assert run.retrieval_calls[0].query == "合同付款条款"
     assert run.retrieval_calls[0].source == "contracts"
+    assert run.retrieval_calls[0].metadata["outcome"] == "success"
     assert run.retrieval_calls[0].chunks[0]["source"] == "contract.pdf"
     assert run.retrieval_calls[0].citations[0]["source"] == "contract.pdf"
     assert run.metadata["retrieval_call_count"] == 1
@@ -260,6 +261,52 @@ def test_attach_chat_trace_run_records_rag_retrieval() -> None:
         "rag.retrieved",
         "run.completed",
     ]
+
+
+@pytest.mark.parametrize("succeeded", [True, False])
+def test_chat_trace_records_empty_and_failed_retrieval(succeeded) -> None:
+    repo = InMemoryAgentRunRepository()
+    payload = {
+        "success": True,
+        "response": "No evidence found",
+        "data": {
+            "success": succeeded,
+            "query": "synthetic fruit code",
+            "dataset_id": "fruit",
+            "rag_enabled": True,
+            "chunks": [],
+            "citations": [],
+            "top_k": 4,
+            "message": "" if succeeded else "retrieval provider unavailable",
+        },
+    }
+    with patch(
+        "app.application.agent_orchestrator.chat_trace.get_agent_run_repository", return_value=repo
+    ):
+        result = _shared_setup_attach_chat_trace_run_0(payload, case_value_1="fruit")
+    run = repo.get(result["run_id"])
+    assert run is not None and len(run.retrieval_calls) == 1
+    call = run.retrieval_calls[0]
+    assert call.status == ("completed" if succeeded else "failed")
+    assert call.metadata["outcome"] == ("empty" if succeeded else "failed")
+    assert call.error == payload["data"]["message"]
+    assert call.top_k == 4 and call.chunks == []
+    assert run.metadata["retrieval_call_count"] == 1
+    assert run.metadata["retrieval_chunk_count"] == 0
+    assert run.final_output["retrieval_calls"][0]["metadata"]["outcome"] == call.metadata["outcome"]
+    assert ("rag.retrieved" if succeeded else "rag.failed") in [
+        event.event_type for event in run.events
+    ]
+
+
+@pytest.mark.parametrize("data", [{"rag_enabled": True}, {"rag_enabled": False, "chunks": []}])
+def test_chat_trace_does_not_invent_retrieval_from_configuration(data) -> None:
+    repo = InMemoryAgentRunRepository()
+    with patch(
+        "app.application.agent_orchestrator.chat_trace.get_agent_run_repository", return_value=repo
+    ):
+        result = _shared_setup_attach_chat_trace_run_0({"success": True, "data": data}, "fruit")
+    assert repo.get(result["run_id"]).retrieval_calls == []
 
 
 def test_attach_chat_trace_run_records_user_memory_reference() -> None:

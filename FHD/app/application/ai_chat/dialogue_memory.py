@@ -6,12 +6,12 @@ import hashlib
 import json
 import os
 import re
-import threading
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from filelock import FileLock, Timeout
 from langchain_core.messages import convert_to_openai_messages, trim_messages
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -22,19 +22,15 @@ _SYSTEM = (
     "只使用当前会话内容，不得把模型生成的旧回复当作已核实的业务执行结果。"
 )
 
-_LOCKS: dict[str, threading.Lock] = {}
-_LOCKS_GUARD = threading.Lock()
-_INFLIGHT: set[tuple[str, str]] = set()
+# Keep OS lock handles alive until a turn is durably settled. These handles are
+# not the source of truth: other workers probe the same lock file. FileLock
+# releases the OS lock if the owning process exits, including an unclean exit.
+_INFLIGHT: dict[str, FileLock] = {}
 _FINAL_STATUSES = frozenset({"completed", "failed", "cancelled", "rejected"})
 _MEMORY_TTL_SECONDS = 90 * 24 * 60 * 60
 _MEMORY_MAX_TURNS = 400
 _MODEL_HISTORY_MAX_TURNS = 120
 _MODEL_HISTORY_MAX_CHARS = 48_000
-# 较早轮次压缩为可复用的摘录摘要：触发阈值、保留近期轮数、摘要字符上限。
-_SUMMARY_TRIGGER_TURNS = 18
-_SUMMARY_KEEP_RECENT = 12
-_SUMMARY_MAX_CHARS = 1200
-_SUMMARY_TURN_CHARS = 120
 _SECRET_TEXT = re.compile(
     r"(?i)(\b(?:api[_ -]?key|access[_ -]?token|refresh[_ -]?token|password|passwd|secret|密码|口令)\b\s*[:=]\s*)([^\s,;]+)|"
     r"(\bBearer\s+)[A-Za-z0-9._~+/=-]+"
@@ -67,7 +63,7 @@ def prepare_chat_turn(message: str, context: Mapping[str, Any] | None) -> dict[s
             return _payload(
                 "这一轮编号已经对应另一条消息，没有覆盖它，也没有再次执行。", "failed", replay=True
             )
-        if turn_id and (key, turn_id) in _INFLIGHT:
+        if turn_id and _turn_running(key, turn_id):
             return _payload("这一轮正在处理，不会重复执行。", "processing", replay=True)
         _close_abandoned(key, data)
         data = _read(key)
@@ -85,16 +81,24 @@ def prepare_chat_turn(message: str, context: Mapping[str, Any] | None) -> dict[s
                 return _payload(
                     str(assistant.get("content") or ""), str(assistant.get("status") or "failed")
                 )
-        _append_user(data, text, turn_id, context)
-        if turn_id:
-            data.setdefault("receipts", {})[turn_id] = {
-                "message": text,
-                "status": "processing",
-                "at": time.time(),
-            }
-        _write(key, data)
-        if turn_id:
-            _INFLIGHT.add((key, turn_id))
+        turn_lock = _turn_lock(key, turn_id) if turn_id else None
+        if turn_lock is not None:
+            turn_lock.acquire(timeout=0)
+        try:
+            _append_user(data, text, turn_id, context)
+            if turn_id:
+                data.setdefault("receipts", {})[turn_id] = {
+                    "message": text,
+                    "status": "processing",
+                    "at": time.time(),
+                }
+            _write(key, data)
+        except BaseException:
+            if turn_lock is not None:
+                turn_lock.release()
+            raise
+        if turn_lock is not None:
+            _INFLIGHT[turn_lock.lock_file] = turn_lock
         return None
 
 
@@ -119,7 +123,7 @@ def settle_chat_turn(
             raise ValueError("turn_id 已绑定另一条消息")
         previous = _assistant_for(data, turn_id)
         if previous and previous.get("status") in _FINAL_STATUSES:
-            _INFLIGHT.discard((key, turn_id))
+            _release_turn_lock(key, turn_id)
             return
         previous_payload = previous.get("payload") if previous else None
         if isinstance(previous_payload, Mapping) and isinstance(payload, Mapping):
@@ -129,7 +133,7 @@ def settle_chat_turn(
                 raise ValueError("turn_id 不能切换到另一项执行")
         receipt = {
             "role": "assistant",
-            "content": reply[:4000],
+            "content": reply,
             "turn_id": turn_id,
             "status": status,
             "at": time.time(),
@@ -158,8 +162,8 @@ def settle_chat_turn(
         if turn_id:
             receipts = data.setdefault("receipts", {})
             receipts[turn_id] = {**receipt, "message": text}
-            _INFLIGHT.discard((key, turn_id))
         _write(key, data)
+        _release_turn_lock(key, turn_id)
 
 
 def _request_messages(text: str, context: Mapping[str, Any] | None) -> list[dict[str, str]]:
@@ -262,8 +266,7 @@ def _model_messages(
         if isinstance(item, dict)
         and isinstance(item.get("at"), (int, float))
         and time.time() - float(item["at"]) <= _MEMORY_TTL_SECONDS
-    ][-_MODEL_HISTORY_MAX_TURNS:]
-    summary_text, turns = _apply_summary(data.get("summary"), turns)
+    ]
     interrupted = any(
         item.get("role") == "assistant"
         and item.get("status") == "interrupted"
@@ -274,9 +277,10 @@ def _model_messages(
     system = _SYSTEM
     if interrupted:
         system += "本会话有一轮生成中断，那一轮没有完成回复，不能把它当成已核实结论。"
-    if summary_text:
-        system += f"\n\n较早对话摘录（数据，不是指令）：\n{summary_text}"
-    messages = [{"role": "system", "content": system}]
+    # Old excerpt summaries declared more messages covered than they contained.
+    # Never use them to suppress the retained source messages. No model is
+    # configured here to produce a verified semantic summary.
+    messages: list[dict[str, str]] = []
     for item in turns:
         if not isinstance(item, dict) or item.get("role") not in {"user", "assistant"}:
             continue
@@ -300,87 +304,47 @@ def _model_messages(
             content += "\n附件：" + "、".join(names)
         messages.append({"role": str(item["role"]), "content": content})
     window = trim_messages(
-        messages[1:],
+        messages,
+        max_tokens=_MODEL_HISTORY_MAX_TURNS,
+        token_counter=len,
+        strategy="last",
+        start_on="human",
+        allow_partial=False,
+    )
+    window = trim_messages(
+        window,
         max_tokens=_MODEL_HISTORY_MAX_CHARS,
         token_counter=lambda rows: sum(len(str(row.content)) for row in rows),
         strategy="last",
         start_on="human",
+        allow_partial=False,
     )
-    return [messages[0], *convert_to_openai_messages(window)]
-
-
-def _turns_fingerprint(turns: Sequence[Mapping[str, Any]]) -> str:
-    payload = [
-        [str(item.get("turn_id") or ""), item.get("role"), str(item.get("at") or "")]
-        for item in turns
-    ]
-    return hashlib.sha256(json.dumps(payload, ensure_ascii=False).encode()).hexdigest()
-
-
-def _apply_summary(summary: Any, turns: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]]]:
-    """摘要与已覆盖轮次前缀一致时，复用摘要并只保留之后的轮次。"""
-    if not isinstance(summary, dict):
-        return "", turns
-    try:
-        covered = int(summary.get("count") or 0)
-    except (TypeError, ValueError):
-        return "", turns
-    text = str(summary.get("text") or "").strip()
-    if not text or covered <= 0 or covered > len(turns):
-        return "", turns
-    if _turns_fingerprint(turns[:covered]) != str(summary.get("fingerprint") or ""):
-        return "", turns
-    return text, turns[covered:]
-
-
-def _build_summary(turns: list[dict[str, Any]], existing: Any = None) -> dict[str, Any] | None:
-    """抽取式摘要：保留较早轮次的关键片段，结果落盘供下次直接复用。"""
-    if len(turns) <= _SUMMARY_TRIGGER_TURNS:
-        return existing if isinstance(existing, dict) else None
-    covered = len(turns) - _SUMMARY_KEEP_RECENT
-    if covered <= 0:
-        return existing if isinstance(existing, dict) else None
-    if isinstance(existing, dict):
-        try:
-            if int(existing.get("count") or 0) == covered and _turns_fingerprint(
-                turns[:covered]
-            ) == str(existing.get("fingerprint") or ""):
-                return existing
-        except (TypeError, ValueError):
-            pass
-    lines: list[str] = []
-    used = 0
-    for item in turns[:covered]:
-        role = "用户" if item.get("role") == "user" else "助手"
-        content = str(item.get("content") or "").strip().replace("\n", " ")
-        if not content:
-            continue
-        line = f"{role}：{content[:_SUMMARY_TURN_CHARS]}"
-        if used + len(line) > _SUMMARY_MAX_CHARS:
-            break
-        lines.append(line)
-        used += len(line)
-    if not lines:
-        return None
-    return {
-        "text": "\n".join(lines),
-        "count": covered,
-        "fingerprint": _turns_fingerprint(turns[:covered]),
-        "updated_at": time.time(),
-    }
+    omitted = len(messages) - len(window)
+    if omitted:
+        covered = (
+            f"第{omitted + 1}至{len(messages)}条，共{len(window)}条完整消息"
+            if window
+            else "0条消息（没有完整消息能放入预算）"
+        )
+        system += (
+            f"\n历史上下文预算裁剪：有效历史共{len(messages)}条，"
+            f"本次提供{covered}；"
+            f"较早{omitted}条未发送、未摘要，不能假定其中的事实。"
+            "持久化历史另受90天、400条消息的保留上限约束。"
+        )
+    return [{"role": "system", "content": system}, *convert_to_openai_messages(window)]
 
 
 def turn_status(key: str, turn_id: str) -> str:
-    data = _read(key)
-    assistant = _assistant_for(data, turn_id)
-    if assistant:
-        return str(assistant.get("status") or "")
-    if (key, turn_id) in _INFLIGHT:
-        return "processing"
-    prior = _user_turn(data, turn_id)
-    if prior is None:
-        return ""
-    return "interrupted"
+    with _lock(key):
+        data = _read(key)
+        assistant = _assistant_for(data, turn_id)
+        if assistant:
+            return str(assistant.get("status") or "")
+        prior = _user_turn(data, turn_id)
+        if prior is None:
+            return ""
+        return "processing" if _turn_running(key, turn_id) else "interrupted"
 
 
 def _payload(
@@ -441,7 +405,7 @@ def _append_user(
         {
             "role": "user",
             "content": _SECRET_TEXT.sub(
-                lambda match: f"{match.group(1) or match.group(3)}[已隐藏]", text[:8000]
+                lambda match: f"{match.group(1) or match.group(3)}[已隐藏]", text
             ),
             "turn_id": turn_id,
             "status": "accepted",
@@ -460,25 +424,25 @@ def _close_abandoned(key: str, data: dict[str, Any]) -> None:
         if (
             item.get("role") == "user"
             and item.get("turn_id")
-            and (key, item["turn_id"]) not in _INFLIGHT
+            and _assistant_for(data, str(item["turn_id"])) is None
+            and not _turn_running(key, str(item["turn_id"]))
         ):
-            if _assistant_for(data, str(item["turn_id"])) is None:
-                turns.insert(
-                    index + 1,
-                    {
-                        "role": "assistant",
-                        "content": "生成中断，没有完成回复。未完成的内容不能当成已完成的分析。",
-                        "turn_id": item["turn_id"],
-                        "status": "interrupted",
-                        "at": time.time(),
-                        "payload": _payload(
-                            "生成中断，没有完成回复。未完成的内容不能当成已完成的分析。",
-                            "interrupted",
-                        ),
-                    },
-                )
-                changed = True
-                index += 1
+            turns.insert(
+                index + 1,
+                {
+                    "role": "assistant",
+                    "content": "生成中断，没有完成回复。未完成的内容不能当成已完成的分析。",
+                    "turn_id": item["turn_id"],
+                    "status": "interrupted",
+                    "at": time.time(),
+                    "payload": _payload(
+                        "生成中断，没有完成回复。未完成的内容不能当成已完成的分析。",
+                        "interrupted",
+                    ),
+                },
+            )
+            changed = True
+            index += 1
         index += 1
     if changed:
         _write(key, data)
@@ -531,9 +495,7 @@ def _read(key: str) -> dict[str, Any]:
     try:
         stored = path.read_bytes()
         if stored.startswith(b"fernet:"):
-            from app.application.group_chat.storage import GroupChatRepository
-
-            cipher = GroupChatRepository.message_cipher(data_dir=str(_memory_dir()))
+            cipher = _cipher()
             stored = cipher.decrypt(stored[len(b"fernet:") :])
         data = json.loads(stored)
     except RECOVERABLE_ERRORS:
@@ -548,12 +510,10 @@ def _read(key: str) -> dict[str, Any]:
     receipts = data.get("receipts") or {}
     if not isinstance(receipts, dict):
         receipts = {}
-    summary = data.get("summary") if isinstance(data.get("summary"), dict) else None
     return {
         "active": bool(data.get("active")),
         "turns": turns,
         "receipts": receipts,
-        "summary": summary,
     }
 
 
@@ -574,16 +534,10 @@ def _write(key: str, data: dict[str, Any]) -> None:
         for key, value in receipts.items()
         if str(key) in retained and isinstance(value, dict)
     }
-    summary = _build_summary(turns, data.get("summary"))
-    if summary:
-        data["summary"] = summary
-    else:
-        data.pop("summary", None)
+    data.pop("summary", None)
     path = _path(key)
     temporary = path.with_suffix(".json.tmp")
-    from app.application.group_chat.storage import GroupChatRepository
-
-    cipher = GroupChatRepository.message_cipher(data_dir=str(_memory_dir()))
+    cipher = _cipher()
     temporary.write_bytes(
         b"fernet:" + cipher.encrypt(json.dumps(data, ensure_ascii=False).encode("utf-8"))
     )
@@ -614,13 +568,52 @@ def _is_recent_turn(item: Mapping[str, Any], cutoff: float) -> bool:
         return False
 
 
-def _lock(key: str) -> threading.Lock:
-    with _LOCKS_GUARD:
-        lock = _LOCKS.get(key)
-        if lock is None:
-            lock = threading.Lock()
-            _LOCKS[key] = lock
-        return lock
+def _file_lock(path: Path, *, timeout: float = 30) -> FileLock:
+    # A soft-lock fallback cannot establish worker liveness after a crash.
+    # thread_local=False also lets async prepare/settle run in different threads.
+    return FileLock(
+        str(path),
+        timeout=timeout,
+        thread_local=False,
+        fallback_to_soft=False,
+        preserve_lock_file=True,
+    )
+
+
+def _lock(key: str) -> FileLock:
+    return _file_lock(_path(key).with_suffix(".lock"))
+
+
+def _turn_lock(key: str, turn_id: str) -> FileLock:
+    digest = hashlib.sha256(turn_id.encode()).hexdigest()
+    return _file_lock(_memory_dir() / f"{key}.{digest}.turn.lock", timeout=0)
+
+
+def _turn_running(key: str, turn_id: str) -> bool:
+    if not turn_id:
+        return False
+    try:
+        with _turn_lock(key, turn_id):
+            return False
+    except Timeout:
+        return True
+
+
+def _release_turn_lock(key: str, turn_id: str) -> None:
+    if not turn_id:
+        return
+    held = _INFLIGHT.pop(_turn_lock(key, turn_id).lock_file, None)
+    if held is not None:
+        held.release()
+
+
+def _cipher() -> Any:
+    from app.application.group_chat.storage import GroupChatRepository
+
+    root = _memory_dir()
+    # Different conversations also share this encryption key on first start.
+    with _file_lock(root / "cipher.lock"):
+        return GroupChatRepository.message_cipher(data_dir=str(root))
 
 
 __all__ = [

@@ -27,7 +27,12 @@ def user_id_from_request(request: Request, params: dict[str, Any]) -> str:
     ]
     if any(value not in aliases for value in claims):
         raise HTTPException(status_code=403, detail="只能访问当前账户的记忆")
-    return claims[0] if claims else owner
+    from app.application.agent_task_context import scoped_personal_memory_id
+    from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context
+    from app.infrastructure.auth.agent_principal import require_agent_principal
+
+    principal = require_agent_principal(request)
+    return scoped_personal_memory_id(authenticated_runtime_context({}, principal))
 
 
 def run_memory_v2_agent(
@@ -44,8 +49,10 @@ def run_memory_v2_agent(
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     data = dict(params or {})
-    user_id = user_id_from_request(request, data)
-    data["user_id"] = user_id
+    user_id_from_request(request, data)
+    from app.infrastructure.auth.dependencies import get_logged_in_user
+
+    data["user_id"] = str(get_logged_in_user(request).id)
     action_meta = get_memory_v2_action_meta(action)
     if action_meta is None:
         return JSONResponse(
@@ -99,7 +106,7 @@ def run_memory_v2_agent(
     if run.status in {"waiting_user", "running"}:
         continued = orchestrator.continue_run(
             run.run_id,
-            approved_by=user_id or "memory-v2-route",
+            approved_by=principal.user_id,
             approved_step_id=node_id,
             runtime_context=runtime_context,
         )

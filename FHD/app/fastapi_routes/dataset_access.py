@@ -104,6 +104,7 @@ def dataset_access_context_from_request(
             tenant_id=tenant,
             permissions=frozenset(permissions),
             is_admin=is_admin,
+            mod_id=_session_mod_id(request),
         )
 
     if not _trusted_dataset_headers_enabled(request):
@@ -138,6 +139,7 @@ def dataset_access_context_from_request(
             tenant_id=tenant,
             permissions=header_permissions,
             is_admin=is_admin,
+            mod_id=_gateway_mod_id(request),
         )
 
     if allow_local_default_read and _local_default_access_enabled(request):
@@ -148,6 +150,23 @@ def dataset_access_context_from_request(
             is_admin=False,
         )
     return DatasetAccessContext()
+
+
+def _gateway_mod_id(request: Request) -> str:
+    from app.request_active_mod_ctx import parse_active_mod_header
+
+    return parse_active_mod_header(request.headers)
+
+
+def _session_mod_id(request: Request) -> str:
+    """A selected Mod is scoped only after the host checks this session's entitlement."""
+    mod_id = _gateway_mod_id(request)
+    if mod_id:
+        from app.infrastructure.auth.agent_principal import require_agent_principal
+
+        principal = require_agent_principal(request)
+        return str((principal.actor_authorization or {}).get("mod_id") or "")
+    return ""
 
 
 def require_legacy_global_knowledge(request: Request) -> None:

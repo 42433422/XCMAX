@@ -1,4 +1,4 @@
-"""mem0 长期记忆后端：离线写入/召回与停用降级。"""
+"""Mem0 is a projection of confirmed authority, never a raw-turn bypass."""
 
 from __future__ import annotations
 
@@ -9,6 +9,8 @@ import pytest
 
 from app.infrastructure.llm.embedding_service import EmbeddingService
 from app.infrastructure.memory import mem0_backend
+from tests.fixtures.governed_memory_runtime import governed_memory as governed_memory
+from tests.fixtures.governed_memory_runtime import owner_id
 
 _HAS_MEM0 = importlib.util.find_spec("mem0") is not None and (
     importlib.util.find_spec("qdrant_client") is not None
@@ -29,20 +31,41 @@ def backend(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
 
 @pytest.mark.skipif(not _HAS_MEM0, reason="mem0 未安装")
-def test_remember_then_recall_across_sessions(backend) -> None:
-    assert backend.enabled is True
-    assert backend.remember(
-        user_id="owner-1",
-        user_message="客户 张三 木门 订单 单价 二百元",
-        assistant_message="已记录单价",
-        metadata={"session_id": "s1", "source": "chat"},
+def test_confirmed_authority_is_recalled_across_sessions(governed_memory) -> None:
+    from app.application.agent_task_context import scoped_personal_memory_id
+
+    runtime = governed_memory
+    candidate = runtime.propose("客户张三的木门单价为二百元", key="customer.price")
+    assert runtime.backend.recall(user_id=owner_id(), query="张三 单价", limit=3) == []
+    record = runtime.confirm(candidate)
+    later_owner = scoped_personal_memory_id(
+        {"local_user_id": 7, "tenant_id": 2, "mod_id": "sales", "session_id": "later-session"}
     )
-    hits = backend.recall(user_id="owner-1", query="张三 单价", limit=3)
+    assert later_owner == owner_id()
+    hits = runtime.backend.recall(user_id=later_owner, query="张三 单价", limit=3)
     assert hits
     assert "张三" in hits[0]["content"]
     assert hits[0]["metadata"]["source"] == "long_term_memory"
-    # 其他用户不可见。
-    assert backend.recall(user_id="owner-2", query="张三 单价", limit=3) == []
+    assert hits[0]["metadata"]["source_memory_id"] == record["memory_id"]
+    assert hits[0]["metadata"]["source_revision"] == record["revision"]
+    assert runtime.rag.query(later_owner, "张三 单价")["hits"]
+    for foreign in (owner_id(8), owner_id(tenant=3), owner_id(mod="finance")):
+        assert runtime.backend.recall(user_id=foreign, query="张三 单价", limit=3) == []
+        assert runtime.rag.query(foreign, "张三 单价")["hits"] == []
+
+
+def test_raw_remember_is_retained_only_as_untrusted_archive(governed_memory) -> None:
+    runtime = governed_memory
+    assert runtime.backend.remember(
+        user_id=owner_id(),
+        user_message="客户张三的单价为9999元",
+        assistant_message="未确认建议",
+        metadata={"session_id": "raw", "source": "chat"},
+    )
+    assert len(runtime.native_rows()) == 1
+    assert runtime.backend.recall(user_id=owner_id(), query="张三 单价", limit=3) == []
+    assert runtime.rag.query(owner_id(), "张三 单价")["hits"] == []
+    assert runtime.authority.list_memories(owner_id()) == []
 
 
 @pytest.mark.skipif(not _HAS_MEM0, reason="mem0 未安装")

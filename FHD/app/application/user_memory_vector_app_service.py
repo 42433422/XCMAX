@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import hashlib
 import os
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
@@ -36,6 +38,49 @@ class UserMemoryVectorIngestApplicationService:
         if hasattr(self._vector_store, "create_or_update_index"):
             # index_id 直接映射为 user_id，便于 RAG 查询只传 user_id。
             self._vector_store.create_or_update_index(index_id=user_id, user_id=user_id)
+
+    def upsert_governed(
+        self,
+        *,
+        user_id: str,
+        source_memory_id: str,
+        revision: int,
+        text: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> bool:
+        if (
+            not user_id
+            or not source_memory_id
+            or type(revision) is not int
+            or revision < 1
+            or not text.strip()
+        ):
+            return False
+        chunk_id = (
+            "memory-v2:" + hashlib.sha256(f"{user_id}\0{source_memory_id}".encode()).hexdigest()
+        )
+        result = self.ingest_chunks(
+            user_id,
+            [
+                UserMemoryVectorChunk(
+                    chunk_id=chunk_id,
+                    content=text,
+                    metadata={
+                        **(metadata or {}),
+                        "source_memory_id": source_memory_id,
+                        "source_revision": revision,
+                        "source_owner_id": user_id,
+                    },
+                )
+            ],
+        )
+        return bool(result.get("success") and result.get("written"))
+
+    def forget_source(self, *, user_id: str, source_memory_id: str) -> int:
+        delete = getattr(self._vector_store, "delete_source", None)
+        if not callable(delete):
+            return -1
+        return int(delete(index_id=user_id, source_memory_id=source_memory_id))
 
     def ingest_chunks(
         self,
@@ -85,127 +130,6 @@ class UserMemoryVectorIngestApplicationService:
             )
         return {"success": True, "index_id": user_id, "written": written, "chunk_count": written}
 
-    def build_action_chunk(
-        self, user_id: str, intent: str, slots: dict[str, Any], message: str
-    ) -> UserMemoryVectorChunk:
-        ts = datetime.now().isoformat()
-        # content 既用于 embedding 也用于“调试可读”，尽量包含关键槽位与意图。
-        slot_brief: dict[str, Any] = {}
-        for k in (
-            "unit_name",
-            "product_name",
-            "model_number",
-            "tin_spec",
-            "quantity_tins",
-            "keyword",
-            "customer_name",
-            "unit_price",
-        ):
-            if k in (slots or {}) and (slots or {}).get(k) not in (None, ""):
-                slot_brief[k] = (slots or {}).get(k)
-        content = (
-            f"[user_action] intent={intent}; "
-            f"slots={slot_brief}; "
-            f"message={str(message or '').strip()[:120]}"
-        )
-        return UserMemoryVectorChunk(
-            chunk_id=uuid.uuid4().hex,
-            content=content,
-            metadata={
-                "source": "action",
-                "intent": intent,
-                "slots": slot_brief,
-                "last_used": ts,
-                "message_preview": str(message or "").strip()[:200],
-                "ts": ts,
-                "user_id": user_id,
-            },
-        )
-
-    def build_feedback_chunk(
-        self,
-        user_id: str,
-        message: str,
-        recognized_intent: str,
-        feedback: str,
-        corrected_intent: str | None,
-        slots: dict[str, Any] | None = None,
-    ) -> UserMemoryVectorChunk:
-        ts = datetime.now().isoformat()
-        slot_brief: dict[str, Any] = {}
-        slots = slots or {}
-        for k in (
-            "unit_name",
-            "product_name",
-            "model_number",
-            "tin_spec",
-            "quantity_tins",
-            "keyword",
-            "customer_name",
-            "field_name",
-            "field_value",
-        ):
-            if k in slots and slots.get(k) not in (None, ""):
-                slot_brief[k] = slots.get(k)
-
-        content = (
-            "[user_feedback] "
-            f"recognized_intent={recognized_intent}; feedback={feedback}; "
-            f"corrected_intent={corrected_intent or ''}; "
-            f"slots={slot_brief}; "
-            f"message={str(message or '').strip()[:120]}"
-        )
-        return UserMemoryVectorChunk(
-            chunk_id=uuid.uuid4().hex,
-            content=content,
-            metadata={
-                "source": "feedback",
-                "recognized_intent": recognized_intent,
-                "user_feedback": feedback,
-                "corrected_intent": corrected_intent,
-                "slots": slot_brief,
-                "last_used": ts,
-                "message_preview": str(message or "").strip()[:200],
-                "ts": ts,
-                "user_id": user_id,
-            },
-        )
-
-    def build_chat_turn_chunk(
-        self,
-        *,
-        user_id: str,
-        user_message: str,
-        assistant_message: str,
-        session_id: str = "",
-        source: str = "chat",
-    ) -> UserMemoryVectorChunk:
-        """Build a recallable, tenant-scoped conversation turn chunk."""
-        ts = datetime.now().isoformat()
-        user_text = str(user_message or "").strip()
-        assistant_text = str(assistant_message or "").strip()
-        from app.application.ai_feature_isolation import SMART_CHAT, tag_mapping
-
-        return UserMemoryVectorChunk(
-            chunk_id=uuid.uuid4().hex,
-            content=(f"[chat_turn] user={user_text[:500]}; assistant={assistant_text[:1000]}"),
-            metadata=tag_mapping(
-                {
-                    "source": str(source or "chat"),
-                    "session_id": str(session_id or ""),
-                    "user_id": user_id,
-                    "user_message_preview": user_text[:200],
-                    "assistant_message_preview": assistant_text[:300],
-                    "last_used": ts,
-                    "ts": ts,
-                },
-                channel=SMART_CHAT
-                if str(source or "chat").strip().lower()
-                not in {"office_docking", "chat_office_docking", "business_docking", "elt"}
-                else None,
-            ),
-        )
-
 
 def _memory_vector_limits() -> tuple[int, int]:
     try:
@@ -238,9 +162,18 @@ class UserMemoryRagApplicationService:
         self,
         vector_store: VectorStorePort | None = None,
         embedder: HashEmbedder | None = None,
+        recall_validator: Callable[[list[dict[str, Any]]], list[dict[str, Any]]] | None = None,
     ) -> None:
         self._vector_store = vector_store or get_user_memory_vector_store()
         self._embedder = embedder or HashEmbedder()
+        self._recall_validator = recall_validator
+
+    def _validated_hits(self, user_id: str, hits: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        from app.application.user_memory.governance import filter_recalled_memories
+
+        if self._recall_validator is not None:
+            return self._recall_validator(hits)
+        return filter_recalled_memories(user_id, hits)
 
     def query(
         self, user_id: str, query_text: str, top_k: int = 5, min_score: float | None = None
@@ -264,7 +197,10 @@ class UserMemoryRagApplicationService:
             index_id=user_id,
             query_vector=query_vector,
             top_k=max(1, min(20, int(top_k))),
-            filters={"created_after": time.time() - ttl_days * 24 * 60 * 60},
+            filters={
+                "created_after": time.time() - ttl_days * 24 * 60 * 60,
+                "governed_only": self._recall_validator is None,
+            },
         )
         from app.application.ai_feature_isolation import allows_channel, current_ai_feature_channel
 
@@ -276,6 +212,11 @@ class UserMemoryRagApplicationService:
                 if allows_channel(hit.get("metadata") if isinstance(hit, dict) else None, channel)
             ]
         safe_hits: list[dict[str, Any]] = []
+        hits = self._validated_hits(user_id, hits)
+        if not hits and self._recall_validator is None:
+            from app.application.user_memory.governance import recall_authoritative_memories
+
+            hits = recall_authoritative_memories(user_id, query_text, max(1, min(20, int(top_k))))
         for hit in hits:
             if not isinstance(hit, dict):
                 continue
@@ -309,6 +250,7 @@ class UserMemoryRagApplicationService:
             if max_chars is None
             else int(max_chars)
         )
+        hits = self._validated_hits(user_id, hits)
         if not hits:
             message = "【UserMemoryRAG】未召回用户记忆片段。"
             return message if len(message) <= budget else ""

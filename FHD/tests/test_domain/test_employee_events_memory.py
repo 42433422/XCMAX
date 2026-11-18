@@ -55,11 +55,14 @@ class TestTriggerBinding:
 class TestMemoryScope:
     def test_long_term_index_default(self):
         scope = MemoryScope(employee_id="pdf-gen")
-        assert scope.long_term_index() == "emp:pdf-gen"
+        assert scope.user_scoped is True
+        assert scope.long_term_index("42") == ""
 
     def test_long_term_index_user_scoped(self):
-        scope = MemoryScope(employee_id="e1", user_scoped=True)
-        assert scope.long_term_index("42") == "emp:e1:usr:42"
+        scope = MemoryScope(employee_id="e1", tenant_id=1)
+        assert scope.long_term_index("42").startswith("emp:v2:")
+        assert scope.long_term_index("42") != scope.long_term_index("43")
+        assert scope.long_term_index("42") != MemoryScope("e1", tenant_id=2).long_term_index("42")
 
     def test_from_config_disabled_types(self):
         for t in ("none", "stateless", "off"):

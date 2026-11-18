@@ -546,6 +546,19 @@ wheels = [
 ]
 
 [[package]]
+name = "bm25s"
+version = "0.3.16"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "numpy", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/95/de/f888ccc0787164b4cf60b318b2225dbc21519beaf099cf2cf7424ca6f616/bm25s-0.3.16.tar.gz", hash = "sha256:96301f99558c2318a889abfe1bc27cf53dc225f3860cdf03b0aaa5e72f8f4a2e", size = 81944, upload-time = "2026-10-28T18:49:06.05Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/dc/5f/73f19cc86ecfd4533f0a82e55e689d5cbc4b5f845526a191316c17d38ee6/bm25s-0.3.16-py3-none-any.whl", hash = "sha256:65d973bd496de883ae525955379e3e7cf90a12c3d54ed175036315ae677512c9", size = 76043, upload-time = "2026-10-28T18:49:04.47Z" },
+]
+
+[[package]]
 name = "boolean-py"
 version = "5.0"
 source = { registry = "https://pypi.org/simple" }
@@ -8430,6 +8443,7 @@ server-api = [
     { name = "alembic" },
     { name = "apscheduler" },
     { name = "av" },
+    { name = "bm25s" },
     { name = "boto3" },
     { name = "celery" },
     { name = "defusedxml" },
@@ -8437,6 +8451,7 @@ server-api = [
     { name = "email-validator" },
     { name = "fastapi" },
     { name = "faster-whisper" },
+    { name = "filelock" },
     { name = "gevent" },
     { name = "gunicorn" },
     { name = "httpx" },
@@ -8486,13 +8501,14 @@ server-api = [
 
 [package.metadata]
 requires-dist = [
-    { name = "apprise", marker = "extra == 'proactive-push'", specifier = ">=1.12,<2" },
     { name = "accelerate", marker = "extra == 'ml'", specifier = ">=0.25.0" },
     { name = "aiofiles", marker = "extra == 'server-api'", specifier = ">=23.2.1" },
     { name = "alembic", marker = "extra == 'server-api'", specifier = ">=1.13.0" },
+    { name = "apprise", marker = "extra == 'proactive-push'", specifier = ">=1.12,<2" },
     { name = "apscheduler", marker = "extra == 'server-api'", specifier = ">=3.10,<4" },
     { name = "av", marker = "extra == 'server-api'", specifier = ">=17.1,<18" },
     { name = "bandit", marker = "extra == 'dev'", specifier = ">=1.7" },
+    { name = "bm25s", marker = "extra == 'server-api'", specifier = "==0.3.16" },
     { name = "boto3", marker = "extra == 'server-api'", specifier = ">=1.34,<2" },
     { name = "boto3-stubs", extras = ["s3"], marker = "extra == 'dev'", specifier = "==1.44.5" },
     { name = "celery", marker = "extra == 'server-api'", specifier = "==5.6.3" },
@@ -8505,6 +8521,7 @@ requires-dist = [
     { name = "fastembed", marker = "extra == 'intent-semantic'", specifier = ">=0.7" },
     { name = "faster-whisper", marker = "extra == 'ml'", specifier = ">=1.0.0" },
     { name = "faster-whisper", marker = "extra == 'server-api'", specifier = ">=1.0.0" },
+    { name = "filelock", marker = "extra == 'server-api'", specifier = "==4.2.4" },
     { name = "gevent", marker = "extra == 'server-api'", specifier = ">=25.4.2" },
     { name = "gunicorn", marker = "extra == 'server-api'", specifier = ">=22.0.0" },
     { name = "httpx", marker = "extra == 'server-api'", specifier = "==0.28.1" },

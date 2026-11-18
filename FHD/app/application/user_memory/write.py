@@ -1,22 +1,11 @@
-"""写入时抽取去重：把回合事实收敛进现有用户记忆快照。
-
-存储复用 ``UserMemoryStore`` 的 JSON 快照（``user_memory/memory_store.json``），
-记录落在 ``UserMemory.recall_facts``，键为 ``scope + owner_id + 归一化文本``，
-不新增独立数据库。
-"""
+"""Compatibility adapters for proposing governed MemoryV2 candidates."""
 
 from __future__ import annotations
 
 import re
-import uuid
-from contextlib import nullcontext
-from datetime import datetime, timedelta
 from typing import Any, Protocol
 
-from app.application.user_memory.models import UserMemory
-
 MAX_MEMORY_CHARS = 500
-MAX_RECALL_FACTS = 500
 
 # 结尾语气词：命中则循环剥离，让「我喜欢蓝色呢」与「我喜欢蓝色」归一为同一条记忆。
 _END_PARTICLES = frozenset("呢吧啊哦嘛呀哈啦喔噢呐咯")
@@ -82,31 +71,6 @@ def normalize_memory_text(text: str) -> str:
     return normalized
 
 
-def _truncate(text: str) -> tuple[str, bool]:
-    """单条记忆上限 500 字；超长截断并返回 truncated 标记。"""
-    if len(text) <= MAX_MEMORY_CHARS:
-        return text, False
-    return text[:MAX_MEMORY_CHARS], True
-
-
-def _clamp_importance(value: Any, default: float = 0.5) -> float:
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return default
-    return min(1.0, max(0.0, number))
-
-
-def _expires_at(now: datetime, ttl_days: int | float) -> str | None:
-    try:
-        days = float(ttl_days)
-    except (TypeError, ValueError):
-        return None
-    if days <= 0:
-        return None
-    return (now + timedelta(days=days)).isoformat()
-
-
 def remember(
     text: str,
     *,
@@ -117,62 +81,43 @@ def remember(
     ttl_days: int | float | None = None,
     store: MemoryFactsStore | None = None,
 ) -> dict[str, Any]:
-    """写入一条回合事实，相同 scope+owner_id+归一化文本合并为同一条记录。
+    """Compatibility entry: propose an audited candidate in the scoped authority.
 
-    已存在时 ``hits += 1``、``importance = min(1.0, importance + 0.05)``、
-    刷新 ``updated_at``，不新增重复行。
+    The old recall_facts collection is retained for audit but never updated or
+    promoted into model evidence. Confirmation is performed through MemoryV2.
     """
+    import hashlib
+
+    from app.domain.shared_services.user_memory_service import get_user_memory_service
+
     owner = str(owner_id or "").strip()
-    normalized, truncated = _truncate(normalize_memory_text(text))
-    if not owner or not normalized:
+    normalized = normalize_memory_text(text)
+    truncated = len(normalized) > MAX_MEMORY_CHARS
+    normalized = normalized[:MAX_MEMORY_CHARS]
+    if not owner.startswith(("personal-memory:v1:", "enterprise-memory:v1:")) or not normalized:
         return {
             "id": "",
             "created": False,
             "merged": False,
             "truncated": truncated,
-            "reason": "missing_owner_id" if not owner else "empty_text",
+            "reason": "scoped_owner_required" if normalized else "empty_text",
         }
-    scope_name = str(scope or "chat").strip() or "chat"
-    now = datetime.now()
-    now_iso = now.isoformat()
-    facts_store = store or default_memory_store()
-    # 读改写必须在同一事务内完成：仅靠原子替换只能避免半截文件，
-    # 多 worker 并发仍会互相覆盖，跨进程锁需要覆盖整段读改写。
-    transaction = getattr(facts_store, "transaction", None)
-    with transaction() if callable(transaction) else nullcontext():
-        memory = facts_store.get_memory(owner) or UserMemory(user_id=owner)
-        facts = list(getattr(memory, "recall_facts", []) or [])
-        for record in facts:
-            if record.get("scope") == scope_name and record.get("normalized") == normalized:
-                record["hits"] = int(record.get("hits") or 0) + 1
-                record["importance"] = min(1.0, _clamp_importance(record.get("importance")) + 0.05)
-                record["updated_at"] = now_iso
-                record["source"] = str(source or record.get("source") or "chat")
-                if ttl_days is not None:
-                    record["expires_at"] = _expires_at(now, ttl_days)
-                memory.recall_facts = facts
-                facts_store.save_memory(owner, memory)
-                return {
-                    "id": str(record.get("id") or ""),
-                    "created": False,
-                    "merged": True,
-                    "truncated": truncated,
-                }
-        record = {
-            "id": f"rm_{uuid.uuid4().hex[:12]}",
-            "scope": scope_name,
-            "owner_id": owner,
-            "text": normalized,
-            "normalized": normalized,
-            "source": str(source or "chat"),
-            "importance": _clamp_importance(importance),
-            "hits": 1,
-            "created_at": now_iso,
-            "updated_at": now_iso,
-            "truncated": truncated,
-            "expires_at": _expires_at(now, ttl_days) if ttl_days is not None else None,
-        }
-        facts.insert(0, record)
-        memory.recall_facts = facts[:MAX_RECALL_FACTS]
-        facts_store.save_memory(owner, memory)
-    return {"id": record["id"], "created": True, "merged": False, "truncated": truncated}
+    service = get_user_memory_service()
+    if store is not None and store is not service._store:
+        return {"id": "", "created": False, "merged": False, "reason": "unsupported_store"}
+    result = service.propose_memory_candidate(
+        owner,
+        "entity",
+        "statement:" + hashlib.sha256(normalized.encode()).hexdigest()[:24],
+        {"statement": normalized},
+        source="chat_trace",
+        confidence=importance,
+        evidence=[{"source": source, "legacy_scope": scope, "kind": "explicit_statement"}],
+    )
+    record = result.get("candidate") or {}
+    return {
+        **result,
+        "id": record.get("memory_id", ""),
+        "merged": result.get("created") is False,
+        "truncated": truncated,
+    }

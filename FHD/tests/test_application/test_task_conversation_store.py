@@ -171,7 +171,17 @@ def test_chat_evidence_reads_only_current_owner_and_tenant(store, monkeypatch, t
     monkeypatch.setattr(
         "app.application.persy_memory_app_service.get_persy_memory_app_service",
         lambda: SimpleNamespace(
-            query=lambda **_: {"success": True, "memories": [{"statement": "客户偏好蓝色"}]}
+            query=lambda **_: {
+                "success": True,
+                "memories": [
+                    {
+                        "statement": "客户偏好蓝色",
+                        "status": "active",
+                        "eligible_for_planner": True,
+                        "source_policy": "observed",
+                    }
+                ],
+            }
         ),
     )
 

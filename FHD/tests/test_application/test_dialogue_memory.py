@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
+import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -21,7 +24,13 @@ from app.application.ai_chat.dialogue_memory import (
 @pytest.fixture
 def memory_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     monkeypatch.setenv("XCAGI_DIALOGUE_MEMORY_DIR", str(tmp_path))
-    return tmp_path
+    yield tmp_path
+    from app.application.ai_chat import dialogue_memory as memory
+
+    for path, held in list(memory._INFLIGHT.items()):
+        if Path(path).parent == tmp_path:
+            held.release()
+            memory._INFLIGHT.pop(path, None)
 
 
 def _context(session: str, turn: str, **extra: object) -> dict[str, object]:
@@ -67,12 +76,22 @@ def test_same_turn_replays_receipt_and_rejects_changed_message(memory_dir: Path)
 
 def test_abandoned_turn_is_not_treated_as_completed(memory_dir: Path) -> None:
     context = _context("half", "open")
-    assert prepare_chat_turn("查询客户", context) is None
-    assert turn_status(conversation_key(context), "open") == "processing"
-
-    from app.application.ai_chat import dialogue_memory as memory
-
-    memory._INFLIGHT.clear()
+    # A real worker exits without settling; the OS must release its turn lock.
+    subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            """
+import json, os, sys
+from app.application.ai_chat.dialogue_memory import prepare_chat_turn
+assert prepare_chat_turn('查询客户', json.loads(sys.argv[1])) is None
+os._exit(0)
+""",
+            json.dumps(context),
+        ],
+        check=True,
+        timeout=30,
+    )
     prepare_chat_turn("下一条消息", _context("half", "next"))
     assert turn_status(conversation_key(context), "open") == "interrupted"
 
@@ -158,13 +177,15 @@ def test_transcript_is_encrypted_and_legacy_plaintext_is_migrated(memory_dir: Pa
     assert turn_status(key, "first") == "processing"
 
 
-def test_older_turns_are_summarized_to_disk_and_reused(memory_dir: Path) -> None:
+def test_middle_facts_and_complete_messages_survive_without_a_summary_model(
+    memory_dir: Path,
+) -> None:
     from app.application.ai_chat import dialogue_memory as memory
     from app.application.ai_chat.dialogue_memory import enrich_model_messages
 
     for index in range(25):
         context = _context("summary", str(index))
-        message = f"第{index}条消息"
+        message = f"第{index}条消息:" + "detail" * 25 + f":FACT-{index:02d}"
         prepare_chat_turn(message, context)
         settle_chat_turn(
             message, context, {"success": True, "response": f"第{index}条回复"}, "completed"
@@ -172,22 +193,67 @@ def test_older_turns_are_summarized_to_disk_and_reused(memory_dir: Path) -> None
 
     key = conversation_key(_context("summary", "0"))
     stored = memory._read(key)
-    summary = stored["summary"]
-    assert summary and summary["text"]
-    assert summary["count"] == len(stored["turns"]) - memory._SUMMARY_KEEP_RECENT
-    assert summary["text"].startswith("用户：第0条消息")
-    # 摘要与已落盘前缀一致，下一次读取直接复用，不会重新生成。
-    assert memory._apply_summary(summary, stored["turns"])[0] == summary["text"]
+    assert "summary" not in stored
+    assert len(stored["turns"]) == 50
 
     next_context = _context("summary", "next")
     enriched = enrich_model_messages(
         [{"role": "user", "content": "下一条消息"}], "下一条消息", next_context
     )
-    system = enriched[0]["content"]
-    assert "较早对话摘录" in system
-    assert "第0条消息" in system
     history_text = json.dumps(enriched[1:], ensure_ascii=False)
-    assert "第0条消息" not in history_text
+    for index in range(25):
+        assert f"FACT-{index:02d}" in history_text
+    assert "未摘要" not in enriched[0]["content"]
+
+
+def test_legacy_excerpt_summary_cannot_hide_its_retained_source(memory_dir: Path) -> None:
+    from app.application.ai_chat import dialogue_memory as memory
+
+    data = {
+        "turns": [
+            {"role": "user", "content": f"FACT-{i}", "turn_id": str(i), "at": time.time()}
+            for i in range(40)
+        ],
+        "summary": {"count": 28, "text": "only the first few excerpts"},
+    }
+    path = memory_dir / f"{conversation_key(_context('legacy-summary', '1'))}.json"
+    path.write_text(json.dumps(data))
+    messages = memory._model_messages(memory._read(path.stem), "next")
+    assert all(f"FACT-{i}" in json.dumps(messages) for i in range(40))
+
+
+def test_model_budget_reports_the_actual_complete_message_window(memory_dir, monkeypatch):
+    from app.application.ai_chat import dialogue_memory as memory
+
+    monkeypatch.setattr(memory, "_MODEL_HISTORY_MAX_TURNS", 4)
+    data = {
+        "turns": [
+            {
+                "role": "user" if i % 2 == 0 else "assistant",
+                "content": f"fact-{i}",
+                "at": time.time(),
+            }
+            for i in range(6)
+        ]
+    }
+    messages = memory._model_messages(data, "")
+    assert [row["content"] for row in messages[1:]] == [f"fact-{i}" for i in range(2, 6)]
+    assert "第3至6条，共4条完整消息" in messages[0]["content"]
+    assert "较早2条未发送、未摘要" in messages[0]["content"]
+
+
+def test_oversized_message_is_stored_whole_and_never_partially_claimed_as_history(memory_dir):
+    from app.application.ai_chat import dialogue_memory as memory
+
+    context = _context("large", "1")
+    text = "完整原文" * 13000 + "TAIL-MARKER"
+    prepare_chat_turn(text, context)
+    stored = memory._read(conversation_key(context))
+    assert stored["turns"][0]["content"] == text
+    messages = memory._model_messages(stored, "1")
+    assert len(messages) == 1
+    assert "本次提供0条消息" in messages[0]["content"]
+    assert "较早1条未发送、未摘要" in messages[0]["content"]
 
 
 def test_summary_is_cleared_when_transcript_is_too_short(memory_dir: Path) -> None:
@@ -208,5 +274,129 @@ def test_failed_transcript_write_does_not_leave_turn_in_flight(memory_dir, monke
         patch.setattr(memory, "_write", lambda *_: (_ for _ in ()).throw(OSError("disk")))
         with pytest.raises(OSError):
             prepare_chat_turn("private message", context)
-    assert (key, "first") not in memory._INFLIGHT
+    assert not memory._turn_running(key, "first")
     assert prepare_chat_turn("private message", context) is None
+
+
+def test_failed_settlement_keeps_the_turn_lock_until_receipt_is_durable(memory_dir, monkeypatch):
+    from app.application.ai_chat import dialogue_memory as memory
+
+    context = _context("settle-failure", "first")
+    key = conversation_key(context)
+    assert prepare_chat_turn("task", context) is None
+    with monkeypatch.context() as patch:
+        patch.setattr(memory, "_write", lambda *_: (_ for _ in ()).throw(OSError("disk")))
+        with pytest.raises(OSError):
+            settle_chat_turn("task", context, {"response": "done"}, "completed")
+    assert turn_status(key, "first") == "processing"
+    settle_chat_turn("task", context, {"response": "done"}, "completed")
+    assert turn_status(key, "first") == "completed"
+    assert not memory._turn_running(key, "first")
+
+
+def test_two_live_processes_replay_processing_then_the_durable_receipt(memory_dir):
+    context = _context("two-workers", "same-turn")
+    script = """
+import json,sys
+from app.application.ai_chat.dialogue_memory import prepare_chat_turn, settle_chat_turn
+c=json.loads(sys.argv[1])
+print(json.dumps(prepare_chat_turn('task',c)),flush=True)
+sys.stdin.readline()
+settle_chat_turn('task',c,{'run_id':'real-run','response':'finished'},'completed')
+"""
+    owner = subprocess.Popen(
+        [sys.executable, "-c", script, json.dumps(context)],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env={**os.environ, "XCAGI_DIALOGUE_MEMORY_DIR": str(memory_dir)},
+    )
+    try:
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            assert pool.submit(owner.stdout.readline).result(timeout=30).strip() == "null"
+        retry_script = """
+import json,sys
+from app.application.ai_chat.dialogue_memory import prepare_chat_turn
+print(json.dumps(prepare_chat_turn('task',json.loads(sys.argv[1]))))
+"""
+        retry = subprocess.run(
+            [sys.executable, "-c", retry_script, json.dumps(context)],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=30,
+        )
+        assert owner.poll() is None
+        assert json.loads(retry.stdout)["data"]["status"] == "processing"
+        owner.communicate("settle\n", timeout=30)
+        assert owner.returncode == 0
+        replay = subprocess.run(
+            [sys.executable, "-c", retry_script, json.dumps(context)],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=30,
+        )
+        receipt = json.loads(replay.stdout)
+        assert receipt["run_id"] == "real-run"
+        assert receipt["execution_state"] == "completed"
+    finally:
+        if owner.poll() is None:
+            owner.kill()
+        owner.communicate(timeout=30)
+
+
+def test_prepare_and_settle_can_use_different_threads(memory_dir):
+    context = _context("thread-pool", "one")
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        assert pool.submit(prepare_chat_turn, "task", context).result() is None
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        pool.submit(settle_chat_turn, "task", context, {"response": "done"}, "completed").result()
+    assert turn_status(conversation_key(context), "one") == "completed"
+    from app.application.ai_chat import dialogue_memory as memory
+
+    assert not memory._turn_running(conversation_key(context), "one")
+
+
+def test_concurrent_process_writes_preserve_both_workers_messages(memory_dir, monkeypatch):
+    from app.application.ai_chat import dialogue_memory as memory
+
+    monkeypatch.delenv("SECRET_KEY", raising=False)
+    monkeypatch.delenv("XCAGI_SECRET_KEY", raising=False)
+    script = """
+import sys
+from app.application.ai_chat.dialogue_memory import prepare_chat_turn, settle_chat_turn
+sys.stdin.readline()
+for i in range(10):
+    turn=f'{sys.argv[1]}-{i}'
+    c={'local_user_id':1,'tenant_id':1,'conversation_id':'concurrent','turn_id':turn}
+    assert prepare_chat_turn(turn,c) is None
+    settle_chat_turn(turn,c,{'response':turn+'-done'},'completed')
+"""
+    workers = [
+        subprocess.Popen(
+            [sys.executable, "-c", script, name],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        for name in ("first", "second")
+    ]
+    try:
+        for worker in workers:
+            worker.stdin.write("go\n")
+            worker.stdin.flush()
+        for worker in workers:
+            _, error = worker.communicate(timeout=30)
+            assert worker.returncode == 0, error
+    finally:
+        for worker in workers:
+            if worker.poll() is None:
+                worker.kill()
+            worker.communicate(timeout=30)
+    stored = memory._read(conversation_key(_context("concurrent", "unused")))
+    assert len(stored["turns"]) == 40
+    assert len(stored["receipts"]) == 20
+    assert all(receipt["status"] == "completed" for receipt in stored["receipts"].values())

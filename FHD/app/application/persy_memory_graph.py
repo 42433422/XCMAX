@@ -22,6 +22,7 @@ from app.application.persy_memory_utils import (
     _memory_owners,
     _memory_type_label,
     _permission_denied,
+    _personal_preference,
     _public_memory_record,
     _scope_denied,
     _truncate,
@@ -233,6 +234,18 @@ class PersyMemoryGraphMixin:
                 }
             scope_name, owner_id = owner
             normalized_action = str(action or "").strip().lower()
+            if scope_name == "global_preference" and normalized_action in {"confirm", "correct"}:
+                current = next(
+                    row
+                    for row in self.memory_service.list_memories(owner_id)
+                    if row.get("memory_id") == target_id
+                )
+                if not _personal_preference({**current, **(patch or {})}):
+                    return {
+                        "success": False,
+                        "error_code": "global_preference_only",
+                        "message": "跨企业共享仅适用于明确声明的个人偏好",
+                    }
             if normalized_action == "confirm":
                 result = self.memory_service.confirm_memory_candidate(
                     owner_id,

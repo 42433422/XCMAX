@@ -195,6 +195,9 @@ def test_memory_v2_routes_lifecycle_and_preference_sync(
         user_id=7, role="admin", permissions=["memory_v2.read", "memory_v2.write"]
     )
     misc_client.headers.update(actor.headers)
+    from app.application.agent_task_context import scoped_personal_memory_id
+
+    memory_owner = scoped_personal_memory_id(actor.context)
     import app.domain.shared_services.user_memory_service as memory_mod
 
     memory_dir = tmp_path / "memory"
@@ -233,7 +236,7 @@ def test_memory_v2_routes_lifecycle_and_preference_sync(
         assert confirmed["memory"]["status"] == "active"
 
         svc = memory_mod.get_user_memory_service()
-        assert svc.get_preference("7", "default_customer") == "七彩乐园"
+        assert svc.get_preference(memory_owner, "default_customer") == "七彩乐园"
 
         corrected = misc_client.patch(
             f"/memory/v2/{memory_id}",
@@ -245,8 +248,8 @@ def test_memory_v2_routes_lifecycle_and_preference_sync(
             },
         ).json()
         assert corrected["memory"]["key"] == "favorite_customer"
-        assert svc.get_preference("7", "default_customer") is None
-        assert svc.get_preference("7", "favorite_customer") == "彩虹乐园"
+        assert svc.get_preference(memory_owner, "default_customer") is None
+        assert svc.get_preference(memory_owner, "favorite_customer") == "彩虹乐园"
 
         summary = misc_client.get("/memory/v2/summary", params={"user_id": "7"}).json()
         assert summary["summary"]["by_status"]["active"] == 1
@@ -257,7 +260,7 @@ def test_memory_v2_routes_lifecycle_and_preference_sync(
             params={"user_id": "7", "reason": "用户删除"},
         ).json()
         assert deleted["memory"]["status"] == "deleted"
-        assert svc.get_preference("7", "favorite_customer") is None
+        assert svc.get_preference(memory_owner, "favorite_customer") is None
 
         final_summary = misc_client.get("/memory/v2/summary", params={"user_id": "7"}).json()
         assert final_summary["summary"]["by_status"]["deleted"] == 1

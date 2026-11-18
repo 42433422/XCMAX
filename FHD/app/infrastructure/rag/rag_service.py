@@ -135,7 +135,7 @@ def get_default_embedder() -> Callable[[str], list[float]] | None:
         svc = get_default_embedding_service()
         if svc is None:
             return None
-        return lambda text: svc.embed_query(text)
+        return svc.embed_query
     except RECOVERABLE_ERRORS as e:
         logger.debug("默认 embedder 不可用: %s", e)
         return None

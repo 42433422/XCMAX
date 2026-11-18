@@ -329,32 +329,22 @@ def _persist_compat_chat_turn(body: XcagiCompatChatBody, payload: dict[str, Any]
         get_ai_chat_app_service()._persist_chat_turn(str(owner), body.message, context, payload)
     except RECOVERABLE_ERRORS:
         logger.warning("compat chat history persistence failed", exc_info=True)
-    if payload.get("success") and context.get("memory_capture_enabled") is not False:
-        try:
-            from app.application.persy_memory_app_service import get_persy_memory_app_service
-            from app.infrastructure.auth.agent_mod_scope import agent_dataset_access_context
+    try:
+        from app.application.agent_task_context import scoped_conversation_user_id
+        from app.application.ai_chat.conversation_history import persist_recallable_chat_turn
 
-            get_persy_memory_app_service().capture_conversation_turn(
-                access_context=agent_dataset_access_context(context),
-                user_message=body.message,
-                assistant_message=str(payload.get("response") or payload.get("message") or ""),
-                session_id=str(context.get("session_id") or context.get("conversation_id") or ""),
-                source=str(body.source or "chat"),
-            )
-        except RECOVERABLE_ERRORS:
-            logger.warning("compat chat memory capture failed", exc_info=True)
-
-    if payload.get("success") and context.get("memory_capture_enabled") is not False:
-        try:
-            from app.application.user_memory.turn_capture import capture_turn
-
-            capture_turn(
-                user_message=body.message,
-                assistant_reply=str(payload.get("response") or payload.get("message") or ""),
-                owner_id=str(owner),
-            )
-        except RECOVERABLE_ERRORS:
-            logger.warning("compat chat recall_facts capture failed", exc_info=True)
+        persist_recallable_chat_turn(
+            user_id=scoped_conversation_user_id(str(owner), context),
+            message=body.message,
+            source=str(body.source or "chat"),
+            context=context,
+            response_data={
+                **payload,
+                "response": payload.get("response") or payload.get("message") or "",
+            },
+        )
+    except RECOVERABLE_ERRORS:
+        logger.warning("compat chat memory capture failed", exc_info=True)
 
 
 async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> Payload:
@@ -459,6 +449,7 @@ async def compat_chat_stream_async(
                         list(raw_ids),
                         store=ArtifactStore(scope=scope),
                         user_id=scope.owner_user_id,
+                        memory_context=body.context,
                     )
                     if evidence["trace"]:
                         yield _sse_event(

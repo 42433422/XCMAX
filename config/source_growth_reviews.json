@@ -507,14 +507,14 @@
     },
     "FHD/app/application/dataset_rag_app_service.py": {
       "base_file": "FHD/app/application/dataset_rag_app_service.py",
-      "base_blob": "800fa7998b12f1972f242d9dbf1adcff29aa7feb",
-      "head_blob": "b31d82649613ecfe99d78f1c842c610e023910dd",
-      "before_lines": 789,
-      "after_lines": 2141,
-      "reason": "整合知识库连接器、ACL、问答设置、反馈、分享与迁移用例；本次将外部解析适配器归位基础设施层并修复重建状态。",
-      "boundary": "保留应用用例编排；存储、向量、文档生命周期和来源抓取仍由专门组件承担，读写保留租户和文档ACL。",
-      "validation": "整合后287项知识库、解析、共享密钥、流式脱敏和重建回归通过；最终远端完整CI仍必须通过。",
-      "follow_up": "该应用服务仍超过建议规模，后续按分享迁移和问答配置用例提取职责，保持现有权限与持久化边界。",
+      "base_blob": "b31d82649613ecfe99d78f1c842c610e023910dd",
+      "head_blob": "8e6d449a713d75dcd19ea63f3ce353d1d74e47e6",
+      "before_lines": 2141,
+      "after_lines": 2143,
+      "reason": "审阅申请：为同维度模型变化补齐指纹失效和已有重建任务启动保护；在现有服务增加2行参数调用，不增加新协调器。本记录不是评审批准。",
+      "boundary": "只改变加载数据集时的向量回填参数；queued/running阶段禁止模型IO，任务认领与持久化完成后由原worker重建。",
+      "validation": "模型同维度替换、不可用及排队任务无模型IO回归已通过；合并最新main后的定向套件和必需CI另行核验。",
+      "follow_up": "后续模型迁移继续使用现有重建协调器和来源指纹；保持初始化不加载模型的契约，新增语料规模时独立验证延迟。",
       "review_owner": "@42433422"
     },
     "FHD/app/fastapi_routes/ai_open.py": {

@@ -795,109 +795,39 @@ class TestUserMemoryVectorIngestApplicationService:
         assert result["success"] is True
         assert result["written"] == 1
 
-    def test_build_action_chunk_with_slots(self):
-        store = _make_fake_vector_store()
-        svc = UserMemoryVectorIngestApplicationService(vector_store=store)
-        chunk = svc.build_action_chunk(
-            user_id="u1",
-            intent="search",
-            slots={"unit_name": "Acme", "product_name": "Widget", "ignored": "x"},
-            message="find widget",
-        )
-        assert "user_action" in chunk.content
-        assert "intent=search" in chunk.content
-        assert "Acme" in chunk.content
-        assert "Widget" in chunk.content
-        assert "ignored" not in chunk.content
-        assert chunk.metadata["source"] == "action"
-        assert chunk.metadata["intent"] == "search"
-
-    def test_build_action_chunk_with_none_slots(self):
-        store = _make_fake_vector_store()
-        svc = UserMemoryVectorIngestApplicationService(vector_store=store)
-        chunk = svc.build_action_chunk(user_id="u1", intent="search", slots=None, message="")
-        assert "slots={}" in chunk.content
-        assert chunk.metadata["slots"] == {}
-
-    def test_build_action_chunk_message_truncated(self):
-        store = _make_fake_vector_store()
-        svc = UserMemoryVectorIngestApplicationService(vector_store=store)
-        long_msg = "x" * 500
-        chunk = svc.build_action_chunk(user_id="u1", intent="i", slots={}, message=long_msg)
-        # content has [:120] truncation
-        assert len(chunk.content) < 500
-
-    def test_build_feedback_chunk_full(self):
-        store = _make_fake_vector_store()
-        svc = UserMemoryVectorIngestApplicationService(vector_store=store)
-        chunk = svc.build_feedback_chunk(
-            user_id="u1",
-            message="msg",
-            recognized_intent="intent_a",
-            feedback="wrong",
-            corrected_intent="intent_b",
-            slots={"unit_name": "Acme", "field_name": "f1"},
-        )
-        assert "user_feedback" in chunk.content
-        assert "intent_a" in chunk.content
-        assert "wrong" in chunk.content
-        assert "intent_b" in chunk.content
-        assert chunk.metadata["source"] == "feedback"
-        assert chunk.metadata["corrected_intent"] == "intent_b"
-
-    def test_build_feedback_chunk_no_corrected_intent(self):
-        store = _make_fake_vector_store()
-        svc = UserMemoryVectorIngestApplicationService(vector_store=store)
-        chunk = svc.build_feedback_chunk(
-            user_id="u1",
-            message="",
-            recognized_intent="i",
-            feedback="f",
-            corrected_intent=None,
-        )
-        assert "corrected_intent=" in chunk.content
-        assert chunk.metadata["corrected_intent"] is None
-
-    def test_build_feedback_chunk_slots_filtered(self):
-        store = _make_fake_vector_store()
-        svc = UserMemoryVectorIngestApplicationService(vector_store=store)
-        chunk = svc.build_feedback_chunk(
-            user_id="u1",
-            message="m",
-            recognized_intent="i",
-            feedback="f",
-            corrected_intent=None,
-            slots={"field_name": "v", "ignored": "x", "empty": None},
-        )
-        assert "field_name" in chunk.metadata["slots"]
-        assert "ignored" not in chunk.metadata["slots"]
-        assert "empty" not in chunk.metadata["slots"]
-
 
 class TestUserMemoryRagApplicationService:
     def test_query_missing_user_id(self):
         store = _make_fake_vector_store()
-        svc = UserMemoryRagApplicationService(vector_store=store)
+        svc = UserMemoryRagApplicationService(
+            vector_store=store, recall_validator=lambda hits: hits
+        )
         result = svc.query("", "text")
         assert result["success"] is False
 
     def test_query_missing_query_text(self):
         store = _make_fake_vector_store()
-        svc = UserMemoryRagApplicationService(vector_store=store)
+        svc = UserMemoryRagApplicationService(
+            vector_store=store, recall_validator=lambda hits: hits
+        )
         result = svc.query("u1", "")
         assert result["success"] is False
         assert "query_text" in result["message"]
 
     def test_query_none_query_text(self):
         store = _make_fake_vector_store()
-        svc = UserMemoryRagApplicationService(vector_store=store)
+        svc = UserMemoryRagApplicationService(
+            vector_store=store, recall_validator=lambda hits: hits
+        )
         result = svc.query("u1", None)
         assert result["success"] is False
 
     def test_query_success(self):
         store = _make_fake_vector_store()
         store.query = MagicMock(return_value=[{"content": "hit", "score": 0.9}])
-        svc = UserMemoryRagApplicationService(vector_store=store)
+        svc = UserMemoryRagApplicationService(
+            vector_store=store, recall_validator=lambda hits: hits
+        )
         result = svc.query("u1", "hello", top_k=3)
         assert result["success"] is True
         assert result["user_id"] == "u1"
@@ -907,13 +837,17 @@ class TestUserMemoryRagApplicationService:
 
     def test_format_for_prompt_empty_hits(self):
         store = _make_fake_vector_store()
-        svc = UserMemoryRagApplicationService(vector_store=store)
+        svc = UserMemoryRagApplicationService(
+            vector_store=store, recall_validator=lambda hits: hits
+        )
         result = svc.format_for_prompt("u1", "q", [])
         assert "未召回" in result
 
     def test_format_for_prompt_with_hits(self):
         store = _make_fake_vector_store()
-        svc = UserMemoryRagApplicationService(vector_store=store)
+        svc = UserMemoryRagApplicationService(
+            vector_store=store, recall_validator=lambda hits: hits
+        )
         hits = [
             {
                 "score": 0.95,
@@ -934,7 +868,9 @@ class TestUserMemoryRagApplicationService:
 
     def test_format_for_prompt_truncates_long_content(self):
         store = _make_fake_vector_store()
-        svc = UserMemoryRagApplicationService(vector_store=store)
+        svc = UserMemoryRagApplicationService(
+            vector_store=store, recall_validator=lambda hits: hits
+        )
         long_content = "x" * 500
         hits = [{"score": 0.5, "content": long_content, "metadata": {}}]
         result = svc.format_for_prompt("u1", "q", hits)
@@ -942,7 +878,9 @@ class TestUserMemoryRagApplicationService:
 
     def test_format_for_prompt_max_hits_limit(self):
         store = _make_fake_vector_store()
-        svc = UserMemoryRagApplicationService(vector_store=store)
+        svc = UserMemoryRagApplicationService(
+            vector_store=store, recall_validator=lambda hits: hits
+        )
         hits = [{"score": 0.1 * i, "content": f"c{i}", "metadata": {}} for i in range(10)]
         result = svc.format_for_prompt("u1", "q", hits, max_hits=3)
         # Only 3 hits should be formatted
@@ -950,7 +888,9 @@ class TestUserMemoryRagApplicationService:
 
     def test_format_for_prompt_feedback_metadata(self):
         store = _make_fake_vector_store()
-        svc = UserMemoryRagApplicationService(vector_store=store)
+        svc = UserMemoryRagApplicationService(
+            vector_store=store, recall_validator=lambda hits: hits
+        )
         hits = [
             {
                 "score": 0.8,

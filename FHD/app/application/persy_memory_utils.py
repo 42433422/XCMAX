@@ -24,11 +24,22 @@ _SENTENCE_SPLIT = re.compile(r"[。！？!?；;\n]+")
 def extract_explicit_memories(message: str) -> list[dict[str, Any]]:
     """Extract only explicit, bounded facts; every result still requires confirmation."""
 
+    if re.search(
+        r"[?？]|(?:是否|假如|假设|如果|例如|比如|据说|听说|可能|也许|是谁|是什么)",
+        str(message or ""),
+    ):
+        return []
     results: list[dict[str, Any]] = []
     fingerprints: set[str] = set()
     for raw_sentence in _SENTENCE_SPLIT.split(str(message or "")):
         sentence = re.sub(r"\s+", " ", raw_sentence).strip(" ，,。！？!?；;")
         if len(sentence) < 3 or len(sentence) > 500:
+            continue
+        # This is an offline fallback, not an inference engine. Questions and
+        # hypothetical/quoted claims must not become personal facts.
+        if re.search(
+            r"[?？]|(?:吗|么|是否|假如|假设|如果|例如|比如|据说|听说|可能|也许)", raw_sentence
+        ):
             continue
 
         candidates: list[tuple[str, str, str, str, float]] = []
@@ -212,6 +223,8 @@ def _public_memory_record(record: dict[str, Any], scope: str) -> dict[str, Any]:
             "last_recalled_at",
             "recall_count",
             "correction_count",
+            "revision",
+            "history",
         )
     }
     public["scope"] = scope
@@ -258,11 +271,16 @@ def _coerce_access_context(
         tenant_id=str(value.get("tenant_id") or "").strip(),
         permissions=permissions,
         is_admin=bool(value.get("is_admin")),
+        mod_id=str(value.get("mod_id") or "").strip(),
     )
 
 
 def _memory_owners(access: DatasetAccessContext) -> list[tuple[str, str]]:
-    owners = [("user", access.actor_id), ("tenant", _tenant_owner_id(access.tenant_id))]
+    owners = [
+        ("user", _memory_owner_id(access, "user")),
+        ("tenant", _memory_owner_id(access, "tenant")),
+        ("global_preference", _memory_owner_id(access, "global_preference")),
+    ]
     seen: set[str] = set()
     unique: list[tuple[str, str]] = []
     for scope, owner in owners:
@@ -272,8 +290,35 @@ def _memory_owners(access: DatasetAccessContext) -> list[tuple[str, str]]:
     return unique
 
 
-def _tenant_owner_id(tenant_id: str) -> str:
-    return f"tenant:{str(tenant_id or '').strip()}" if str(tenant_id or "").strip() else ""
+def _tenant_owner_id(tenant_id: str, mod_id: str = "") -> str:
+    if not str(tenant_id or "").strip():
+        return ""
+    payload = json.dumps([str(tenant_id), str(mod_id)], ensure_ascii=False)
+    return "enterprise-memory:v1:" + hashlib.sha256(payload.encode()).hexdigest()
+
+
+def _memory_owner_id(access: DatasetAccessContext, scope: str = "user") -> str:
+    from app.application.agent_task_context import scoped_personal_memory_id
+
+    if scope == "tenant":
+        return _tenant_owner_id(access.tenant_id, access.mod_id)
+    if scope == "global_preference":
+        return "global-preference:v1:" + hashlib.sha256(access.actor_id.encode()).hexdigest()
+    scoped = scoped_personal_memory_id(access.to_dict())
+    if scoped:
+        return scoped
+    # Trusted gateways may use nonnumeric actor ids; retain the same scope tuple.
+    payload = json.dumps([access.tenant_id, access.actor_id, access.mod_id], ensure_ascii=False)
+    return "personal-memory:v1:" + hashlib.sha256(payload.encode()).hexdigest()
+
+
+def _personal_preference(record: dict[str, Any]) -> bool:
+    value = record.get("value")
+    return (
+        record.get("memory_type") == "preference"
+        and isinstance(value, dict)
+        and str(value.get("subject") or "").casefold() in {"用户", "本人", "user", "self"}
+    )
 
 
 def _scope_denied() -> dict[str, Any]:

@@ -192,29 +192,42 @@ class ConversationService(NeuroEventPublisherMixin):
 
         return message_id
 
-    def get_session_messages(self, session_id: str, limit: int = 50) -> list[tuple]:
+    def get_session_messages(
+        self, session_id: str, limit: int = 50, *, user_id: Any = None
+    ) -> list[tuple]:
         """
-        获取会话消息
+        获取最近的会话消息，再按时间正序返回。
 
         Args:
             session_id: 会话 ID
             limit: 返回数量限制
+            user_id: 提供时同时校验会话所有者及消息所有者
 
         Returns:
             消息列表，每个元素是元组 (id, session_id, user_id, role, content, intent, metadata, created_at)
         """
         with get_db() as db:
             try:
+                query = db.query(AIConversation).filter(AIConversation.session_id == session_id)
+                if user_id is not None:
+                    owner = self._normalize_user_id(user_id)
+                    if isinstance(user_id, bool) or owner is None or owner <= 0:
+                        return []
+                    query = query.join(
+                        AIConversationSession,
+                        AIConversationSession.session_id == AIConversation.session_id,
+                    ).filter(
+                        AIConversationSession.user_id == owner,
+                        AIConversation.user_id == str(owner),
+                    )
                 messages = (
-                    db.query(AIConversation)
-                    .filter(AIConversation.session_id == session_id)
-                    .order_by(AIConversation.created_at.asc())
+                    query.order_by(AIConversation.created_at.desc(), AIConversation.id.desc())
                     .limit(limit)
                     .all()
                 )
 
                 result = []
-                for msg in messages:
+                for msg in reversed(messages):
                     result.append(
                         (
                             msg.id,

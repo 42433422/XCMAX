@@ -44,6 +44,7 @@ def _iter_retrieval_payloads(
             isinstance(chunks, list)
             or isinstance(citations, list)
             or rag_enabled is True
+            or item.get("retrieval_attempted") is True
             or rag_error
         ):
             yield item
@@ -65,8 +66,15 @@ def _retrieval_call_from_payload(
         if isinstance(citation, dict)
     ]
     error = str(item.get("rag_error") or item.get("retrieval_error") or item.get("error") or "")
-    if not chunks and (not citations) and (not error):
+    attempted = item.get("rag_enabled") is not False and (
+        isinstance(raw_chunks, list)
+        or isinstance(raw_citations, list)
+        or item.get("retrieval_attempted") is True
+    )
+    if not chunks and not citations and not error and not attempted:
         return None
+    if item.get("success") is False and not error:
+        error = str(item.get("message") or "retrieval failed")
     status: Literal["completed", "failed"] = "failed" if error else "completed"
     query = str(item.get("query") or item.get("user_message") or default_query or "")
     retriever = str(item.get("retriever") or item.get("retriever_id") or "rag")
@@ -89,6 +97,7 @@ def _retrieval_call_from_payload(
         error=error,
         metadata={
             "rag_enabled": bool(item.get("rag_enabled", True)),
+            "outcome": "failed" if error else ("success" if chunks or citations else "empty"),
             "raw_trace": _trace_safe_value(
                 {
                     key: item.get(key)
@@ -101,6 +110,8 @@ def _retrieval_call_from_payload(
                         "top_k",
                         "rag_enabled",
                         "rag_error",
+                        "success",
+                        "retrieval_attempted",
                     )
                     if key in item
                 }
@@ -159,6 +170,7 @@ def _append_retrieval_calls_to_run(run: AgentRun, calls: list[RetrievalCall]) ->
                 "citation_count": len(call.citations),
                 "citation_sources": citation_sources,
                 "error": call.error,
+                "outcome": call.metadata.get("outcome"),
             },
         )
     if run.retrieval_calls:

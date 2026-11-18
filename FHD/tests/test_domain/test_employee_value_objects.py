@@ -204,20 +204,45 @@ class TestEmployeeEvents:
 
 class TestMemoryScope:
     def test_long_term_index_default(self):
-        scope = MemoryScope(employee_id="emp1")
-        assert scope.long_term_index() == "emp:emp1"
+        scope = MemoryScope(employee_id="emp1", tenant_id=1)
+        assert scope.user_scoped is True
+        assert scope.long_term_index() == ""
 
     def test_long_term_index_user_scoped(self):
-        scope = MemoryScope(employee_id="emp1", user_scoped=True)
-        assert scope.long_term_index("u9") == "emp:emp1:usr:u9"
+        scope = MemoryScope(employee_id="emp1", tenant_id=1)
+        assert scope.long_term_index("9").startswith("emp:v2:")
+        assert scope.long_term_index("9") != scope.long_term_index("10")
 
     def test_long_term_index_user_scoped_but_no_uid(self):
-        scope = MemoryScope(employee_id="emp1", user_scoped=True)
-        assert scope.long_term_index("  ") == "emp:emp1"
+        scope = MemoryScope(employee_id="emp1", tenant_id=1)
+        assert scope.long_term_index("  ") == ""
 
     def test_long_term_index_not_user_scoped_ignores_uid(self):
-        scope = MemoryScope(employee_id="emp1", user_scoped=False)
-        assert scope.long_term_index("u9") == "emp:emp1"
+        scope = MemoryScope(employee_id="emp1", user_scoped=False, tenant_id=1)
+        assert scope.long_term_index("9") == scope.long_term_index("10")
+        assert scope.long_term_index("9") != MemoryScope(
+            "emp1", user_scoped=False, tenant_id=2
+        ).long_term_index("9")
+
+    @pytest.mark.parametrize("scope_name", ["tenant", "enterprise", "tenant_shared"])
+    def test_explicit_enterprise_scope_still_requires_tenant_and_actor(self, scope_name):
+        config = {"memory": {"scope": scope_name}}
+        scoped = MemoryScope.from_config("worker", config, tenant_id=1)
+        assert not scoped.user_scoped
+        assert scoped.long_term_index(7) == scoped.long_term_index(8)
+        assert scoped.long_term_index() == ""
+        assert MemoryScope.from_config("worker", config).long_term_index(7) == ""
+
+    @pytest.mark.parametrize("scope_name", [None, "employee", "shared", "misspelled"])
+    def test_unspecified_or_ambiguous_scope_remains_private(self, scope_name):
+        scoped = MemoryScope.from_config("worker", {"memory": {"scope": scope_name}}, tenant_id=1)
+        assert scoped.user_scoped
+        assert scoped.long_term_index(7) != scoped.long_term_index(8)
+
+    @pytest.mark.parametrize("missing", [None, "", 0, -1, True, "u9"])
+    def test_untrusted_identity_does_not_select_an_index(self, missing):
+        assert MemoryScope("worker", tenant_id=1).long_term_index(missing) == ""
+        assert MemoryScope("worker", tenant_id=missing).long_term_index(7) == ""
 
     def test_from_config_none_defaults_enabled(self):
         scope = MemoryScope.from_config("e", None)

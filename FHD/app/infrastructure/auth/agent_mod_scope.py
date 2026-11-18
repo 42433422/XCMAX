@@ -284,4 +284,5 @@ def agent_dataset_access_context(runtime_context: dict[str, Any]):
         tenant_id=str(runtime_context.get("tenant_id") or ""),
         permissions=frozenset(get_auth_service().get_user_permissions(user)),
         is_admin=user.role == "admin" and user.tier == "admin" and user.tenant_id is None,
+        mod_id=str(runtime_context.get("mod_id") or runtime_context.get("active_mod_id") or ""),
     )
