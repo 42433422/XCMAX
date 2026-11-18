@@ -13,15 +13,9 @@ def _prepare(tmp_path, rows: list[tuple]) -> str:
     path = tmp_path / "elt.db"
     conn = sqlite3.connect(path)
     conn.execute(
-        """
-        CREATE TABLE elt_runs (
-            id TEXT PRIMARY KEY, status TEXT, stage TEXT,
-            error_code TEXT, error_message TEXT,
-            operation_kind TEXT, operation_token TEXT,
-            operation_lease_until TIMESTAMP, updated_at TIMESTAMP,
-            target_type TEXT
-        )
-        """
+        "CREATE TABLE elt_runs (id TEXT PRIMARY KEY, status TEXT, stage TEXT, "
+        "error_code TEXT, error_message TEXT, operation_kind TEXT, operation_token TEXT, "
+        "operation_lease_until TIMESTAMP, updated_at TIMESTAMP, target_type TEXT)"
     )
     conn.executemany(
         "INSERT INTO elt_runs VALUES (?,?,?,?,?,?,?,?,?,?)",
