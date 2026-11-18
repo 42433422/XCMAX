@@ -6,13 +6,13 @@ import json
 from collections.abc import Callable
 from datetime import datetime
 
-from fastapi import HTTPException, Request
+from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.db.models.approval import ApprovalFlow, ApprovalFlowNode, ApprovalRequest, ApprovalStatus
 
-from .protocols import ApprovalAccess, AuditWriter, JsonObject, WorkspaceResponse
+from .protocols import AuditWriter, JsonObject, WorkspaceResponse
 from .repository import ApprovalRepository
 
 
@@ -20,22 +20,18 @@ class FlowCatalog:
     def __init__(
         self,
         repository: ApprovalRepository,
-        access: ApprovalAccess,
         audit: AuditWriter,
         flow_factory: type[ApprovalFlow],
         node_factory: type[ApprovalFlowNode],
         now: Callable[[], datetime],
     ) -> None:
         self.repository = repository
-        self.access = access
         self.audit = audit
         self.flow_factory = flow_factory
         self.node_factory = node_factory
         self.now = now
 
-    def create_flow(
-        self, request: Request, body: JsonObject, x_user_id: str | None
-    ) -> WorkspaceResponse:
+    def create_flow(self, body: JsonObject, actor: int) -> WorkspaceResponse:
         """创建审批流程；body 形如 ``{flow: {...}, nodes: [...]}``。"""
         flow_payload = body.get("flow") or {}
         nodes_payload = body.get("nodes") or []
@@ -48,7 +44,6 @@ class FlowCatalog:
             raise HTTPException(status_code=400, detail="flow_name / flow_key 为必填项")
         if not nodes_payload:
             raise HTTPException(status_code=400, detail="至少需要一个审批节点")
-        actor = self.access.actor(request, x_user_id, fallback=flow_payload.get("created_by"))
         with self.repository.session() as db:
             existed = (
                 db.query(ApprovalFlow)
@@ -116,11 +111,8 @@ class FlowCatalog:
             db.refresh(flow)
             return {"success": True, "data": flow.to_dict()}
 
-    def update_flow(
-        self, flow_id: int, request: Request, body: JsonObject, x_user_id: str | None
-    ) -> WorkspaceResponse:
+    def update_flow(self, flow_id: int, body: JsonObject, actor: int) -> WorkspaceResponse:
         """更新审批流程基础信息（不含节点，节点暂由 POST /flows 重建）。"""
-        actor = self.access.actor(request, x_user_id)
         with self.repository.session() as db:
             flow = self.repository.flow(db, flow_id, include_deleted=False)
             if not flow:
@@ -146,11 +138,8 @@ class FlowCatalog:
             )
             return {"success": True, "data": flow.to_dict()}
 
-    def toggle_flow_active(
-        self, flow_id: int, request: Request, body: JsonObject, x_user_id: str | None
-    ) -> WorkspaceResponse:
+    def toggle_flow_active(self, flow_id: int, body: JsonObject, actor: int) -> WorkspaceResponse:
         """启用 / 停用审批流程。body: {is_active: bool}"""
-        actor = self.access.actor(request, x_user_id)
         is_active = bool(body.get("is_active", True))
         with self.repository.session() as db:
             flow = self.repository.flow(db, flow_id, include_deleted=False)
@@ -172,11 +161,8 @@ class FlowCatalog:
                 "is_active": is_active,
             }
 
-    def delete_flow(
-        self, flow_id: int, request: Request, x_user_id: str | None
-    ) -> WorkspaceResponse:
+    def delete_flow(self, flow_id: int, actor: int) -> WorkspaceResponse:
         """软删除审批流程（is_deleted = True）。"""
-        actor = self.access.actor(request, x_user_id)
         with self.repository.session() as db:
             flow = self.repository.flow(db, flow_id, include_deleted=False)
             if not flow:
@@ -185,9 +171,14 @@ class FlowCatalog:
                 )
             pending_count = (
                 db.query(ApprovalRequest)
+                # Verified platform admins manage a global flow. Its live
+                # requests must be counted across tenants before deletion.
+                .execution_options(skip_tenant_filter=True)
                 .filter(
                     ApprovalRequest.flow_id == flow_id,
-                    ApprovalRequest.status == ApprovalStatus.PENDING,
+                    ApprovalRequest.status.in_(
+                        [ApprovalStatus.PENDING.value, ApprovalStatus.IN_PROGRESS.value]
+                    ),
                 )
                 .count()
             )

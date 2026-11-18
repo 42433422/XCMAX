@@ -23,8 +23,6 @@ class OutboundBlocked(RuntimeError):
 # --- from openapi_connector_runtime_part02.py ---
 """Implementation extracted from the public facade module."""
 
-from dataclasses import dataclass
-
 
 def _ip_is_blocked(ip: str) -> bool:
     try:
@@ -33,7 +31,9 @@ def _ip_is_blocked(ip: str) -> bool:
         return False
     if addr.is_loopback or addr.is_link_local or addr.is_multicast:
         return True
-    if addr.is_private or addr.is_reserved or addr.is_unspecified:
+    if isinstance(addr, _facade().ipaddress.IPv6Address) and addr.is_site_local:
+        return True
+    if not addr.is_global or addr.is_reserved or addr.is_unspecified:
         return True
     return False
 

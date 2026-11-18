@@ -167,6 +167,38 @@ def test_outbound_safety_blocks_loopback_and_schemes() -> None:
         assert_url_outbound_safe("https://user:password@example.com/path")
 
 
+@pytest.mark.parametrize(
+    "address",
+    [
+        "100.64.0.1",
+        "100.127.255.254",
+        "::ffff:100.64.0.1",
+        "fc00::1",
+        "fe80::1",
+        "fec0::1",
+        "ff02::1",
+    ],
+)
+def test_outbound_target_blocks_non_global_ip_and_dns(address: str) -> None:
+    from modstore_server.openapi_connector_runtime import OutboundBlocked, pin_url_outbound_safe
+
+    authority = f"[{address}]" if ":" in address else address
+    with pytest.raises(OutboundBlocked):
+        pin_url_outbound_safe(f"https://{authority}/hook")
+    with patch.object(socket, "getaddrinfo", return_value=[(0, 0, 0, "", (address, 443))]):
+        with pytest.raises(OutboundBlocked):
+            pin_url_outbound_safe("https://hooks.example/hook")
+
+
+@pytest.mark.parametrize("address", ["8.8.8.8", "2606:4700:4700::1111"])
+def test_outbound_target_accepts_public_ipv4_and_ipv6(address: str) -> None:
+    from modstore_server.openapi_connector_runtime import pin_url_outbound_safe
+
+    authority = f"[{address}]" if ":" in address else address
+    url = f"https://{authority}/hook"
+    assert pin_url_outbound_safe(url).request_url == url
+
+
 def test_outbound_target_pins_validated_ip_and_preserves_tls_authority() -> None:
     from modstore_server.openapi_connector_runtime import pin_url_outbound_safe
 

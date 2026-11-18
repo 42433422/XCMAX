@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Body, Header, Query, Request
+from fastapi import APIRouter, Body, Depends, Header, Query, Request
 
 from app.mod_sdk.host_services import approval_workspace_app_service as svc
 
@@ -14,7 +14,11 @@ HOST_PREFIXES = ["/api/approval"]
 
 
 def register_fastapi_routes(app, mod_id: str) -> None:
-    router = APIRouter(prefix=f"/api/mod/{mod_id}", tags=[f"approval-bridge-{mod_id}"])
+    router = APIRouter(
+        prefix=f"/api/mod/{mod_id}",
+        tags=[f"approval-bridge-{mod_id}"],
+        dependencies=[Depends(svc.get_logged_in_user)],
+    )
 
     @router.get("/status")
     def status():
@@ -145,8 +149,8 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         return svc.delete_flow(flow_id, request, x_user_id)
 
     @router.get("/users")
-    def mod_approval_users():
-        return svc.get_approval_users()
+    def mod_approval_users(request: Request):
+        return svc.get_approval_users(request)
 
     app.include_router(router)
     logger.info("xcagi-approval-bridge facade registered: %s", mod_id)

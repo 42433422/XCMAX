@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 from pathlib import Path
 
+import pytest
+
 SCRIPT = Path(__file__).parents[1] / "scripts" / "merge-nginx-xiu-ci-snippets.py"
-ADMIN_SNIPPET = (
-    Path(__file__).parents[1] / "nginx" / "snippets" / "admin-console-www.inc.conf"
-)
+ADMIN_SNIPPET = Path(__file__).parents[1] / "nginx" / "snippets" / "admin-console-www.inc.conf"
 SPEC = importlib.util.spec_from_file_location("merge_nginx_xiu_ci_snippets", SCRIPT)
 assert SPEC and SPEC.loader
 MODULE = importlib.util.module_from_spec(SPEC)
@@ -81,5 +82,42 @@ def test_www_admin_serves_dashboard_without_cross_origin_redirect() -> None:
     snippet = ADMIN_SNIPPET.read_text(encoding="utf-8")
 
     assert "location ^~ /xcmax-dashboard/" in snippet
-    assert "alias /root/XCMAX/;" in snippet
+    dashboard = snippet.split("location ^~ /xcmax-dashboard/ {", 1)[1].split(
+        "location = /admin", 1
+    )[0]
+    assert "if ($uri !~ " in dashboard and "return 404;" in dashboard
+    assert "disable_symlinks on from=/root/XCMAX;" in dashboard
     assert 'add_header X-Frame-Options "SAMEORIGIN" always;' in snippet
+
+
+@pytest.mark.parametrize(
+    "path,allowed",
+    [
+        ("XCAGI-Full-Pipeline.html", True),
+        ("XCAGI-Five-Line.html", True),
+        ("docs/xcagi-dashboard/app.js", True),
+        ("docs/xcagi-dashboard/dashboard.css", True),
+        ("docs/xcagi-dashboard/vendor/dagre.min.js", True),
+        (".cache/xcmax/xcmax-pytest-coverage.json", True),
+        ("FHD/config/six_line_employee_map.json", True),
+        ("FHD/docs/evidence/mod/01-listing.png", True),
+        (".env", False),
+        (".git/config", False),
+        ("FHD/data/accounts.sqlite", False),
+        ("FHD/app/config.py", False),
+        ("downloads/customer.xlsx", False),
+        ("docs/xcagi-dashboard/private.json", False),
+        ("docs/xcagi-dashboard/vendor/private.js", False),
+        ("FHD/docs/evidence/mod/private.png", False),
+        ("docs/xcagi-dashboard/../../.env", False),
+        ("XCAGI-Full-PipelineXhtml", False),
+        ("XCAGI-Full-Pipeline.html\n", False),
+    ],
+)
+def test_nginx_dashboard_uses_a_finite_asset_allowlist(path, allowed):
+    snippet = ADMIN_SNIPPET.read_text(encoding="utf-8")
+    pattern = re.search(r'if \(\$uri !~ "([^"]+)"\)', snippet)
+    assert pattern is not None
+    # PCRE's absolute-end \z is spelled \Z in Python's re (before Python 3.14).
+    regex = pattern.group(1).replace(r"\z", r"\Z")
+    assert bool(re.search(regex, "/xcmax-dashboard/" + path)) is allowed

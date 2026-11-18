@@ -62,6 +62,9 @@ def test_approval_bridge_runtime_delegates_list_and_approve(monkeypatch):
 
     app = FastAPI()
     module.register_fastapi_routes(app, "xcagi-approval-bridge")
+    # This test isolates delegation; authorization is exercised with persisted
+    # sessions in test_approval_http_authorization.py.
+    app.dependency_overrides[module.svc.get_logged_in_user] = lambda: object()
     client = TestClient(app)
 
     listed = client.get(

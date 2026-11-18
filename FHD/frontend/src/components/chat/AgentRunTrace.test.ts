@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import AgentRunTrace from './AgentRunTrace.vue'
 import type { AgentRunTraceData } from '@/utils/agentRunTraceModel'
+import { traceToMermaid } from '@/utils/agentRunTraceToMermaid'
 import { clearToolPermission, setToolPermission } from '@/utils/toolPermissionCache'
 
 const mermaidRender = vi.fn(async () => ({ svg: '<svg data-testid="rendered-plan"></svg>' }))
@@ -187,6 +188,30 @@ describe('AgentRunTrace', () => {
 
     expect(mermaidRender).toHaveBeenCalledOnce()
     expect(wrapper.get('.mermaid-host').html()).toContain('data-testid="rendered-plan"')
+  })
+
+  it('displays real Mermaid parse errors as text without creating attacker-controlled elements', async () => {
+    const trace = makeTrace('success')
+    trace.phases.push({
+      ...trace.phases[1], started_event_id: 'unsafe-tool',
+      node_id: 'unsafe', tool_id: '<svg/onload=void(0)>(',
+    } as AgentRunTraceData['phases'][number])
+    const mermaid = (await vi.importActual<typeof import('mermaid')>('mermaid')).default
+    let failure: unknown
+    try { await mermaid.parse(traceToMermaid(trace)) } catch (error) { failure = error }
+    expect(failure).toBeInstanceOf(Error)
+    const message = (failure as Error).message
+    expect(message).toContain('<svg/onload=void(0)>')
+    mermaidRender.mockRejectedValueOnce(failure)
+    const wrapper = mount(AgentRunTrace, { props: { trace } })
+    try {
+      const graph = wrapper.get('details.art-plan-graph')
+      ;(graph.element as HTMLDetailsElement).open = true
+      await graph.trigger('toggle')
+      await flushPromises()
+      expect(wrapper.get('.mermaid-fail').find('svg, script, img, [onload]').exists()).toBe(false)
+      expect(wrapper.get('.mermaid-fail').text()).toContain(message)
+    } finally { wrapper.unmount() }
   })
 })
 

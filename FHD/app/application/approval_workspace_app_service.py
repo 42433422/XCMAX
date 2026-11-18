@@ -79,6 +79,8 @@ from app.db.models.approval import ApprovalStatus as ApprovalStatus
 from app.db.models.user import User
 from app.db.session import get_db
 from app.domain.app_pure.approval_notifications import completed_workflow_notification
+from app.infrastructure.auth.dependencies import get_logged_in_user as get_logged_in_user
+from app.infrastructure.auth.dependencies import require_admin_user
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.time import utc_now_naive
 
@@ -271,9 +273,7 @@ def _requests() -> RequestLifecycle:
 
 
 def _flows() -> FlowCatalog:
-    return FlowCatalog(
-        _repository(), _access(), _audit, ApprovalFlow, ApprovalFlowNode, utc_now_naive
-    )
+    return FlowCatalog(_repository(), _audit, ApprovalFlow, ApprovalFlowNode, utc_now_naive)
 
 
 def _decisions() -> ApprovalDecisions:
@@ -304,7 +304,8 @@ def _approve_ai_workflow_request_without_node(
     )
 
 
-def process_approval_timeouts_endpoint():
+def process_approval_timeouts_endpoint(request: Request):
+    require_admin_user(request)
     from app.application.workflow.approval_service import process_approval_timeouts
 
     result = process_approval_timeouts()
@@ -329,11 +330,13 @@ def get_request_detail(request_id: int):
     return _queries().get_request_detail(request_id)
 
 
-def get_approval_users():
+def get_approval_users(request: Request):
+    require_admin_user(request)
     return _queries().get_approval_users()
 
 
-def check_approver_orphan(user_id: int):
+def check_approver_orphan(user_id: int, request: Request):
+    require_admin_user(request)
     return _queries().check_approver_orphan(user_id)
 
 
@@ -403,7 +406,7 @@ def create_flow(
     body: JsonObject = Body(default_factory=dict),
     x_user_id: str | None = Header(default=None, alias="X-User-ID"),
 ):
-    return _flows().create_flow(request, body, x_user_id)
+    return _flows().create_flow(body, int(require_admin_user(request).id))
 
 
 def update_flow(
@@ -412,7 +415,7 @@ def update_flow(
     body: JsonObject = Body(default_factory=dict),
     x_user_id: str | None = Header(default=None, alias="X-User-ID"),
 ):
-    return _flows().update_flow(flow_id, request, body, x_user_id)
+    return _flows().update_flow(flow_id, body, int(require_admin_user(request).id))
 
 
 def toggle_flow_active(
@@ -421,10 +424,10 @@ def toggle_flow_active(
     body: JsonObject = Body(default_factory=dict),
     x_user_id: str | None = Header(default=None, alias="X-User-ID"),
 ):
-    return _flows().toggle_flow_active(flow_id, request, body, x_user_id)
+    return _flows().toggle_flow_active(flow_id, body, int(require_admin_user(request).id))
 
 
 def delete_flow(
     flow_id: int, request: Request, x_user_id: str | None = Header(default=None, alias="X-User-ID")
 ):
-    return _flows().delete_flow(flow_id, request, x_user_id)
+    return _flows().delete_flow(flow_id, int(require_admin_user(request).id))

@@ -250,7 +250,7 @@ def test_approval_list_requests_empty(mock_get_db: MagicMock) -> None:
 
 
 @patch("app.application.approval_workspace_app_service.get_db")
-def test_approval_get_approval_users(mock_get_db: MagicMock) -> None:
+def test_approval_get_approval_users(mock_get_db: MagicMock, trusted_actor) -> None:
     mock_db = MagicMock()
     cm = MagicMock()
     cm.__enter__.return_value = mock_db
@@ -262,7 +262,8 @@ def test_approval_get_approval_users(mock_get_db: MagicMock) -> None:
         SimpleNamespace(id=1, username="u", name="U", email=None, department=None)
     ]
     mock_db.query.return_value = q
-    out = approval_ws.get_approval_users()
+    admin = trusted_actor(role="admin", tier="admin", tenant_id=None)
+    out = approval_ws.get_approval_users(admin.request)
     assert out["success"] is True
 
 

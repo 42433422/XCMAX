@@ -34,6 +34,7 @@ from modstore_server.eventing.contracts import (
     validate_payload,
 )
 from modstore_server.eventing.global_bus import neuro_bus
+from modstore_server.openapi_connector_runtime import OutboundBlocked, pin_url_outbound_safe
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -279,6 +280,15 @@ def dispatch_event(event: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def _event_user_id(event: dict[str, Any]) -> int | None:
+    data = event.get("data") if isinstance(event, dict) else None
+    value = data.get("user_id") if isinstance(data, dict) else None
+    if isinstance(value, str) and value.isascii() and value.isdecimal() and len(value) <= 19:
+        value = int(value)
+    # Reject bools/floats and values outside the signed database integer range.
+    return value if type(value) is int and 0 < value < 2**63 else None
+
+
 def _deliver_event_to_subscription(
     session,
     subscription,
@@ -286,10 +296,14 @@ def _deliver_event_to_subscription(
 ) -> None:
     """单条订阅投递（同步、重试、写 ``webhook_deliveries``）。
 
-    任一步异常都会被吞下并写入投递记录，**不会**影响其它订阅或调用方业务。
+    所属用户必须匹配；网络失败写入投递记录，不影响其它订阅或调用方业务。
     """
     from modstore_server.llm_crypto import decrypt_secret  # 局部 import 避免循环
     from modstore_server.models import WebhookDelivery
+
+    user_id = _event_user_id(event)
+    if user_id is None or user_id != subscription.user_id:
+        raise ValueError("webhook event owner does not match subscription owner")
 
     event_id = str(event.get("id") or "")
     event_type = str(event.get("type") or "")
@@ -336,14 +350,27 @@ def _deliver_event_to_subscription(
     for attempt in range(1, attempts + 1):
         delivery.attempts = attempt
         try:
-            with httpx.Client(timeout=_timeout_seconds()) as client:
-                response = client.post(subscription.target_url, content=body, headers=headers)
+            target = pin_url_outbound_safe(subscription.target_url)
+            with httpx.Client(
+                timeout=_timeout_seconds(), trust_env=False, follow_redirects=False
+            ) as client:
+                request = client.build_request(
+                    "POST",
+                    target.request_url,
+                    content=body,
+                    headers={**headers, "Host": target.host_header},
+                    extensions={"sni_hostname": target.server_hostname},
+                )
+                response = client.send(request)
             last_status_code = response.status_code
             last_response_body = (response.text or "")[:1000]
             if 200 <= response.status_code < 300:
                 success = True
                 break
             last_error = f"HTTP {response.status_code}"
+        except (OutboundBlocked, OSError, ValueError):
+            last_error = "webhook target is not a safe public HTTP(S) endpoint"
+            break
         except httpx.HTTPError as exc:
             last_error = str(exc)
             logger.warning(
@@ -373,12 +400,15 @@ def _deliver_event_to_subscription(
 
 
 def dispatch_event_to_subscriptions(event: dict[str, Any]) -> int:
-    """把事件分发给所有命中的开发者订阅，返回已投递订阅数。
+    """把事件分发给所属用户命中的开发者订阅，返回已投递订阅数。
 
     任意一条订阅出错都会被吞下，不影响其它订阅或调用方。
     """
     from modstore_server.models import WebhookSubscription, get_session_factory
 
+    user_id = _event_user_id(event)
+    if user_id is None:
+        return 0
     event_type = canonical_event_name(str(event.get("type") or ""))
     if not event_type:
         return 0
@@ -389,7 +419,10 @@ def dispatch_event_to_subscriptions(event: dict[str, Any]) -> int:
         try:
             subs = (
                 session.query(WebhookSubscription)
-                .filter(WebhookSubscription.is_active.is_(True))
+                .filter(
+                    WebhookSubscription.is_active.is_(True),
+                    WebhookSubscription.user_id == user_id,
+                )
                 .all()
             )
         except RECOVERABLE_ERRORS as exc:  # 表不存在/数据库未初始化时静默跳过

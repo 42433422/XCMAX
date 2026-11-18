@@ -295,14 +295,21 @@ def test_approval_delete_final_request(
             headers=_approval_headers(approval_db, applicant_id),
         )
         assert deleted.status_code == 200
-        missing = approval_client.get(f"/api/approval/requests/{req_id}")
+        missing = approval_client.get(
+            f"/api/approval/requests/{req_id}",
+            headers=_approval_headers(approval_db, applicant_id),
+        )
         assert missing.status_code == 404
     finally:
         session.close()
 
 
-def test_approval_flow_detail_not_found(approval_client: TestClient) -> None:
-    r = approval_client.get("/api/approval/flows/99999")
+def test_approval_flow_detail_not_found(approval_client: TestClient, approval_db) -> None:
+    with approval_db.begin() as db:
+        user_id = _ensure_user(db, "flow-detail-reader")
+    r = approval_client.get(
+        "/api/approval/flows/99999", headers=_approval_headers(approval_db, user_id)
+    )
     assert r.status_code == 404
 
 

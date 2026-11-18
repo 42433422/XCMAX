@@ -49,6 +49,14 @@ def get_current_user(
     FastAPI `Depends` 工厂：优先从登录会话解析用户；测试模式可回退 X-User-ID。
     """
     user = resolve_session_user(request)
+    if user is not None and not getattr(user, "is_active", True):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "success": False,
+                "message": {"code": "ACCOUNT_DISABLED", "message": "账户已被禁用"},
+            },
+        )
     if user is not None and getattr(user, "id", None) is not None:
         return CurrentUser(user_id=int(user.id), raw_header=x_user_id)
     if _allow_x_user_id_header():
