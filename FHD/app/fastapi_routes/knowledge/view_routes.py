@@ -13,7 +13,12 @@ from fastapi.responses import StreamingResponse
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .read_views import DatasetViews
-from .schemas import DatasetFeedbackRequest, DatasetQueryRequest, DatasetSynonymsRequest
+from .schemas import (
+    DatasetFeedbackRequest,
+    DatasetImportRequest,
+    DatasetQueryRequest,
+    DatasetSynonymsRequest,
+)
 
 
 def _sse(event: dict[str, Any]) -> bytes:
@@ -134,6 +139,20 @@ class DatasetViewRoutes:
             return views().clear_query_gaps(dataset_id, request)
 
         self.clear_dataset_query_gaps = clear_dataset_query_gaps
+
+        @router.get("/datasets/{dataset_id}/export")
+        def export_dataset(dataset_id: str, request: Request) -> dict[str, Any]:
+            return views().export_dataset(dataset_id, request)
+
+        self.export_dataset = export_dataset
+
+        @router.post("/datasets/{dataset_id}/import")
+        def import_dataset(
+            dataset_id: str, req: DatasetImportRequest, request: Request
+        ) -> dict[str, Any]:
+            return views().import_dataset(dataset_id, request, req)
+
+        self.import_dataset = import_dataset
 
         @router.get("/datasets/{dataset_id}/graph")
         def dataset_graph(

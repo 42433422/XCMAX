@@ -121,6 +121,7 @@ from app.application.dataset_rag.retrieval_policy import (
     resolve_min_relevance as resolve_min_relevance,
 )
 from app.application.dataset_rag.status import DatasetStatus
+from app.application.dataset_rag.synonyms import normalize_synonyms
 from app.application.dataset_rag.vector_index import VectorIndexService
 from app.application.dataset_rag.vector_index import _embedding_metadata as _embedding_metadata
 from app.application.dataset_rag.vector_index import (
@@ -1086,6 +1087,183 @@ class DatasetRagApplicationService:
         access_context: DatasetAccessContext | dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         return self._retrieval.set_synonyms(dataset_id, synonyms, access_context=access_context)
+
+    def export_dataset(
+        self,
+        dataset_id: str,
+        *,
+        tenant_id: str = "",
+        access_context: DatasetAccessContext | dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Export a portable dataset snapshot (documents, chunks, synonyms)."""
+        from app.application.dataset_rag.document_acl import document_visible_to
+
+        dataset_key = _clean_key(dataset_id, default="default")
+        context = _coerce_access_context(access_context)
+        tenant_key, denied = _resolve_tenant_for_access(
+            context,
+            tenant_id,
+            required_permission=DATASET_READ_PERMISSION,
+            default_without_context="",
+            dataset_id=dataset_key,
+        )
+        if denied is not None:
+            return denied
+        with self._repository.lock:
+            state = self._repository.datasets.get(dataset_key)
+            if state is None:
+                return {
+                    "success": False,
+                    "dataset_id": dataset_key,
+                    "message": "dataset not found",
+                    "error_code": "dataset_not_found",
+                }
+            documents = [
+                doc
+                for doc in state.documents.values()
+                if (not tenant_key or doc.tenant_id == tenant_key)
+                and document_visible_to(doc.metadata, context)
+            ]
+            visible_ids = {doc.document_id for doc in documents}
+            chunks = []
+            for chunk in state.chunks:
+                metadata = dict(chunk.metadata or {})
+                document_id = str(metadata.get("document_id") or "")
+                if document_id:
+                    if document_id not in visible_ids:
+                        continue
+                elif tenant_key and str(metadata.get("tenant_id") or "") != tenant_key:
+                    continue
+                chunks.append(
+                    {
+                        "text": chunk.text,
+                        "score": chunk.score,
+                        "source": chunk.source,
+                        "chunk_index": chunk.chunk_index,
+                        "char_start": chunk.char_start,
+                        "char_end": chunk.char_end,
+                        "metadata": {
+                            key: value for key, value in metadata.items() if not key.startswith("_")
+                        },
+                        "source_url": chunk.source_url,
+                        "page": chunk.page,
+                    }
+                )
+            synonyms = normalize_synonyms((state.index or {}).get("synonyms"))
+        return {
+            "success": True,
+            "version": 1,
+            "dataset_id": dataset_key,
+            "exported_at": _utc_now_iso(),
+            "tenant_id": tenant_key,
+            "documents": [doc.to_dict() for doc in documents],
+            "chunks": chunks,
+            "synonyms": synonyms,
+            "document_count": len(documents),
+            "chunk_count": len(chunks),
+        }
+
+    def import_dataset(
+        self,
+        dataset_id: str,
+        payload: Any,
+        *,
+        overwrite: bool = False,
+        access_context: DatasetAccessContext | dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Restore an exported snapshot into a dataset, forcing actor tenant."""
+        dataset_key = _clean_key(dataset_id, default="default")
+        context = _coerce_access_context(access_context)
+        denied = _ensure_dataset_permission(
+            context, DATASET_WRITE_PERMISSION, dataset_id=dataset_key
+        )
+        if denied is not None:
+            return denied
+        data = payload if isinstance(payload, dict) else {}
+        documents_payload = data.get("documents")
+        chunks_payload = data.get("chunks")
+        if not isinstance(documents_payload, list) or not isinstance(chunks_payload, list):
+            return {
+                "success": False,
+                "dataset_id": dataset_key,
+                "message": "payload must contain documents and chunks lists",
+            }
+        if len(documents_payload) > 5000 or len(chunks_payload) > 50000:
+            return {
+                "success": False,
+                "dataset_id": dataset_key,
+                "message": "export is too large (max 5000 documents / 50000 chunks)",
+            }
+        actor_tenant = _clean_key(str(getattr(context, "tenant_id", "") or ""), default="")
+        if not actor_tenant and context is not None and not context.is_admin:
+            return {
+                "success": False,
+                "dataset_id": dataset_key,
+                "message": "actor tenant context is required",
+                "error_code": "dataset_permission_denied",
+            }
+        try:
+            synonyms = normalize_synonyms(data.get("synonyms"))
+        except ValueError as exc:
+            return {"success": False, "dataset_id": dataset_key, "message": str(exc)}
+        documents: dict[str, DatasetDocument] = {}
+        for row in documents_payload:
+            if not isinstance(row, dict):
+                continue
+            document = _document_from_dict(row)
+            if not document.document_id:
+                continue
+            document.tenant_id = actor_tenant
+            document.metadata = {
+                key: value
+                for key, value in dict(document.metadata or {}).items()
+                if not key.startswith("_")
+            }
+            if actor_tenant:
+                document.metadata["tenant_id"] = actor_tenant
+            documents[document.document_id] = document
+        chunks = []
+        for row in chunks_payload:
+            if not isinstance(row, dict):
+                continue
+            document_id = str((row.get("metadata") or {}).get("document_id") or "")
+            if document_id and document_id not in documents:
+                continue
+            chunk = _dict_to_retrieved_chunk(row)
+            chunk.metadata = {
+                key: value
+                for key, value in dict(chunk.metadata or {}).items()
+                if not key.startswith("_")
+            }
+            if actor_tenant:
+                chunk.metadata["tenant_id"] = actor_tenant
+            chunks.append(chunk)
+        with self._repository.lock:
+            existing = self._repository.datasets.get(dataset_key)
+            if existing is not None and existing.documents and not overwrite:
+                return {
+                    "success": False,
+                    "dataset_id": dataset_key,
+                    "message": "dataset already has documents; pass overwrite=true",
+                    "error_code": "dataset_not_empty",
+                }
+            state = _DatasetState(
+                dataset_key,
+                documents=documents,
+                chunks=chunks,
+                index={"synonyms": synonyms} if synonyms else {},
+            )
+            self._prepare_loaded_state(state)
+            state.index.pop("_persist_after_load", None)
+            self._repository.datasets[dataset_key] = state
+            self._repository._persist_locked()
+        return {
+            "success": True,
+            "dataset_id": dataset_key,
+            "document_count": len(documents),
+            "chunk_count": len(chunks),
+            "synonym_count": len(synonyms),
+        }
 
     def _resolve_file_path(self, file_path: str) -> Path:
         return self._parser._resolve_file_path(file_path)

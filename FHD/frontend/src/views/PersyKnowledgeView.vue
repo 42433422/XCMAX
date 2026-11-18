@@ -38,6 +38,32 @@
           </select>
         </label>
         <button
+          type="button"
+          class="icon-button"
+          title="导出知识空间"
+          aria-label="导出知识空间"
+          @click="exportDatasetJson"
+        >
+          <i class="fa fa-download" aria-hidden="true"></i>
+        </button>
+        <button
+          type="button"
+          class="icon-button"
+          title="导入知识空间"
+          aria-label="导入知识空间"
+          @click="pickImportFile"
+        >
+          <i class="fa fa-upload" aria-hidden="true"></i>
+        </button>
+        <input
+          ref="importInput"
+          type="file"
+          accept=".json,application/json"
+          hidden
+          @change="importDatasetFile"
+        />
+        <span v-if="transferMessage" class="transfer-status" role="status">{{ transferMessage }}</span>
+        <button
           v-if="adminOmniscient"
           type="button"
           class="icon-button"
@@ -546,6 +572,55 @@ const gapsOpen = ref(false)
 const gapsLoading = ref(false)
 const gapMessage = ref('')
 const queryGapItems = ref<Array<{ query?: string; count?: number }>>([])
+const importInput = ref<HTMLInputElement | null>(null)
+const transferMessage = ref('')
+
+async function exportDatasetJson(): Promise<void> {
+  transferMessage.value = ''
+  try {
+    const data = await knowledgeBaseApi.exportDataset(activeDatasetId.value)
+    if (data.success === false) {
+      transferMessage.value = String(data.message || '导出失败')
+      return
+    }
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `${activeDatasetId.value}-knowledge.json`
+    anchor.click()
+    URL.revokeObjectURL(url)
+    transferMessage.value = `已导出 ${Number(data.document_count || 0)} 篇资料`
+  } catch {
+    transferMessage.value = '导出失败，请稍后重试'
+  }
+}
+
+function pickImportFile(): void {
+  importInput.value?.click()
+}
+
+async function importDatasetFile(event: Event): Promise<void> {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  transferMessage.value = ''
+  try {
+    const payload = JSON.parse(await file.text()) as Record<string, unknown>
+    const overwrite = window.confirm('导入将覆盖当前知识空间的资料与术语，确定继续？')
+    if (!overwrite) return
+    const result = await knowledgeBaseApi.importDataset(activeDatasetId.value, payload, true)
+    if (result.success === false) {
+      transferMessage.value = String(result.message || '导入失败')
+      return
+    }
+    transferMessage.value = `已导入 ${Number(result.document_count || 0)} 篇资料`
+    await refreshAll()
+  } catch {
+    transferMessage.value = '导入失败：文件不是有效的知识库导出'
+  }
+}
 
 async function toggleQueryGaps(): Promise<void> {
   gapsOpen.value = !gapsOpen.value

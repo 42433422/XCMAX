@@ -192,6 +192,20 @@ describe('knowledgeBaseApi', () => {
     )
   })
 
+  it('exports and imports a dataset snapshot', async () => {
+    await knowledgeBaseApi.exportDataset('office-docking')
+    await knowledgeBaseApi.importDataset('office-docking', { documents: [], chunks: [] }, true)
+
+    expect(mocks.api.get).toHaveBeenCalledWith(
+      '/api/knowledge/v1/datasets/office-docking/export',
+    )
+    expect(mocks.primeCsrfCookie).toHaveBeenCalledTimes(1)
+    expect(mocks.api.post).toHaveBeenCalledWith(
+      '/api/knowledge/v1/datasets/office-docking/import',
+      { payload: { documents: [], chunks: [] }, overwrite: true },
+    )
+  })
+
   it('lists and clears unanswered question gaps', async () => {
     await knowledgeBaseApi.queryGaps('office-docking', 999)
     await knowledgeBaseApi.clearQueryGaps('office-docking')

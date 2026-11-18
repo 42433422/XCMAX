@@ -386,6 +386,15 @@ class DatasetSynonymsRequest(BaseModel):
     )
 
 
+class DatasetImportRequest(BaseModel):
+    """Portable dataset snapshot produced by the export endpoint."""
+
+    payload: dict[str, object] = Field(
+        default_factory=dict, description="exported documents/chunks/synonyms"
+    )
+    overwrite: bool = Field(False, description="replace an existing non-empty dataset")
+
+
 class DatasetVersionDiffRequest(BaseModel):
     source: str = Field(..., min_length=1, max_length=300, description="document source label")
     tenant_id: str = Field("", max_length=160, description="tenant/user isolation key")

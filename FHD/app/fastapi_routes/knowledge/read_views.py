@@ -117,6 +117,28 @@ class DatasetViews:
             ),
         )
 
+    def export_dataset(self, dataset_id: str, request: Request) -> dict[str, Any]:
+        access = self._access(request)
+        return cast(
+            "dict[str, Any]",
+            self._service().export_dataset(
+                dataset_id,
+                tenant_id=self._tenant_scope(access),
+                access_context=access,
+            ),
+        )
+
+    def import_dataset(self, dataset_id: str, request: Request, payload: Any) -> dict[str, Any]:
+        return cast(
+            "dict[str, Any]",
+            self._service().import_dataset(
+                dataset_id,
+                dict(getattr(payload, "payload", {}) or {}),
+                overwrite=bool(getattr(payload, "overwrite", False)),
+                access_context=self._access(request),
+            ),
+        )
+
     def query_gaps(self, dataset_id: str, request: Request, *, limit: int = 20) -> dict[str, Any]:
         access = self._access(request)
         return cast(

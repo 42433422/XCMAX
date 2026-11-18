@@ -178,6 +178,12 @@
   gap: 8px;
 }
 
+.transfer-status {
+  color: #1d6259;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
 .retrieval-state {
   display: inline-flex;
   align-items: center;

@@ -593,6 +593,22 @@ export const knowledgeBaseApi = {
     return api.delete<KnowledgeQueryGapResponse>(datasetPath(datasetId, '/query-gaps'))
   },
 
+  exportDataset(datasetId = PERSY_KNOWLEDGE_DATASET_ID): Promise<Record<string, unknown>> {
+    return api.get<Record<string, unknown>>(datasetPath(datasetId, '/export'))
+  },
+
+  async importDataset(
+    datasetId: string,
+    payload: Record<string, unknown>,
+    overwrite = false,
+  ): Promise<Record<string, unknown>> {
+    await primeCsrfCookie()
+    return api.post<Record<string, unknown>>(datasetPath(datasetId, '/import'), {
+      payload,
+      overwrite,
+    })
+  },
+
   synonyms(datasetId = PERSY_KNOWLEDGE_DATASET_ID): Promise<KnowledgeSynonymsResponse> {
     return api.get<KnowledgeSynonymsResponse>(datasetPath(datasetId, '/synonyms'))
   },

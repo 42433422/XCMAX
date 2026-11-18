@@ -1,4 +1,5 @@
 ## Unreleased
+- 知识库支持导出/导入（备份迁移）：`GET /datasets/{dataset_id}/export` 返回可移植快照（文档、分块、术语表，剔除 `_embedding` 等内部字段，受租户与文档 ACL 过滤）；`POST /datasets/{dataset_id}/import` 恢复快照（需 `dataset.write`，非空数据集须 `overwrite=true`，导入强制使用操作者租户、单次上限 5000 篇/50000 块）。前端工具栏新增导出/导入按钮。
 - 知识库引用可回链原文：问答引用新增 `document_id`（与 `char_range`、`source_url`、`page` 一起返回），前端召回证据行新增「原文」按钮，直接打开该文档的分块列表，便于核对答案依据。
 - 知识库新增知识缺口（未命中问题）记录：查询/问答无可用证据时按数据集记录问题（相同问题合并计数、单库上限 500 条，租户隔离，独立 `dataset_query_gaps.json`）；`GET /datasets/{dataset_id}/query-gaps?limit=` 按频次查看，`DELETE` 清理（需 `dataset.write`）。前端空召回时可直接「查看知识缺口」并清空，便于补充缺失资料。
 - 知识库新增数据集术语表（同义词查询扩展）：`PUT /datasets/{dataset_id}/synonyms` 保存 `{口语词: [语料写法,…]}`（≤200 组、每组 ≤10 个、词长 ≤32），`GET` 读取；查询时若问题包含口语词，自动把语料写法追加到召回查询（仅影响召回，引用与证据覆盖率仍按原问题）。术语表随数据集快照持久化、可先配置后导入；前端问答「术语」按钮可直接编辑（每行 `退款=退货,退钱`）。
