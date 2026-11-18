@@ -4,11 +4,13 @@ import path from 'node:path'
 
 import { app } from 'electron'
 
+import { isDesktopPackaged } from './desktop-config'
+
 import { writeBackendLog } from './backend-process'
 
 /** 安装器只能登记默认数据目录；自定义 userData 要在启动后重登记。 */
 export function syncWindowsBackupTasks(dataDir: string): void {
-  if (process.platform !== 'win32' || process.env.XCAGI_DESKTOP_E2E === '1' || !app.isPackaged) return
+  if (process.platform !== 'win32' || process.env.XCAGI_DESKTOP_E2E === '1' || !isDesktopPackaged()) return
   const target = dataDir.trim()
   if (!target || target.includes('"') || target.includes('\n')) {
     writeBackendLog('[backup-task] skipped registration because the data directory is empty or unsafe\n')

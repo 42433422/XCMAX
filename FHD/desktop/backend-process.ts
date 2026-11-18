@@ -9,6 +9,7 @@ import {
   backendEditionEnv,
   backendExecutable,
   isPortAvailable,
+  isDesktopPackaged,
   packagedBackendCandidates,
   portOccupiedHint,
   readPackagedProductSku,
@@ -71,8 +72,8 @@ function ensureBackendLogStream(): fs.WriteStream | null {
         {
           platform: process.platform,
           arch: process.arch,
-          packaged: app.isPackaged,
-          resourcesPath: app.isPackaged ? process.resourcesPath : null,
+          packaged: isDesktopPackaged(),
+          resourcesPath: isDesktopPackaged() ? process.resourcesPath : null,
           userData: app.getPath('userData'),
           sku: readPackagedProductSku() || 'generic'
         },
@@ -103,7 +104,7 @@ export const checkForceUpgrade = createForceUpgradeHandler({
 })
 
 export function packagedBackendHealthTimeoutMs(): number {
-  if (!app.isPackaged) {
+  if (!isDesktopPackaged()) {
     return 60_000
   }
   // 首次启动：Alembic、Mod 种子、太阳鸟花名册等可能超过 60s
@@ -136,7 +137,7 @@ export async function waitForBackendPing(
     port === 5000
       ? ' 5000 是历史开发端口，正式桌面版默认端口为 17500；请清理 XCAGI_DESKTOP_PORT 后重启。'
       : ''
-  const firstBootHint = app.isPackaged
+  const firstBootHint = isDesktopPackaged()
     ? ' 若仍失败，请查看数据目录 logs/ 下后端日志，或从菜单导出诊断包。'
     : ''
   throw new Error(
@@ -398,7 +399,7 @@ export async function startBackend(): Promise<void> {
   }
 
   const executable = backendExecutable()
-  if (app.isPackaged && !fs.existsSync(executable.command)) {
+  if (isDesktopPackaged() && !fs.existsSync(executable.command)) {
     const candidates = packagedBackendCandidates().map(candidate => `- ${candidate}`).join('\n')
     const detail =
       `找不到后端程序：${executable.command}\n\n` +
@@ -439,18 +440,18 @@ export async function startBackend(): Promise<void> {
       // 避免前端先判定「连接中断、状态未确认」。
       XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC:
         process.env.XCAGI_CHAT_STREAM_FIRST_TOKEN_TIMEOUT_SEC || '35',
-      LOG_LEVEL: process.env.LOG_LEVEL || (app.isPackaged ? 'WARNING' : 'INFO'),
+      LOG_LEVEL: process.env.LOG_LEVEL || (isDesktopPackaged() ? 'WARNING' : 'INFO'),
       XCAGI_DESKTOP_FAST_START: '1',
       // 后端父进程看门狗：Electron 崩溃/被强杀时后端自行退出，避免残留进程占住端口。
       XCAGI_PARENT_PID: String(process.pid),
       ...backendEditionEnv(),
       PYTHONUTF8: '1'
-    }, app.isPackaged ? undefined : repoRoot(), app.isPackaged ? process.resourcesPath : undefined),
+    }, isDesktopPackaged() ? undefined : repoRoot(), isDesktopPackaged() ? process.resourcesPath : undefined),
     windowsHide: true
   })
   desktopRuntime.backendProcess = child
-  child.stdout.on('data', data => relayBackendOutput('stdout', data, app.isPackaged, writeBackendLog))
-  child.stderr.on('data', data => relayBackendOutput('stderr', data, app.isPackaged, writeBackendLog))
+  child.stdout.on('data', data => relayBackendOutput('stdout', data, isDesktopPackaged(), writeBackendLog))
+  child.stderr.on('data', data => relayBackendOutput('stderr', data, isDesktopPackaged(), writeBackendLog))
   child.on('error', error => {
     handleBackendSpawnError(error)
   })
@@ -556,7 +557,7 @@ async function rollbackStoppedBackend(reason: string): Promise<RollbackTriggerRe
       backendExecutable(), app.getPath('userData'), desktopBackendEnv({
         ...sanitizeBackendProxyEnv(process.env),
         XCAGI_DESKTOP_MODE: '1', XCAGI_DATA_DIR: app.getPath('userData'), PYTHONUTF8: '1',
-      }, app.isPackaged ? undefined : repoRoot(), app.isPackaged ? process.resourcesPath : undefined),
+      }, isDesktopPackaged() ? undefined : repoRoot(), isDesktopPackaged() ? process.resourcesPath : undefined),
     ))
     scheduled = result.scheduled
     writeBackendLog(`[rollback] 已触发回滚 mode=${result.mode} scheduled=${result.scheduled}：${reason}\n`)
@@ -583,7 +584,7 @@ function runBackendMigration(): Promise<string> {
         XCAGI_GLOBAL_RATE_LIMIT: '0',
         ...backendEditionEnv(),
         PYTHONUTF8: '1'
-      }, app.isPackaged ? undefined : repoRoot(), app.isPackaged ? process.resourcesPath : undefined),
+      }, isDesktopPackaged() ? undefined : repoRoot(), isDesktopPackaged() ? process.resourcesPath : undefined),
       windowsHide: true
     })
     let stderr = ''
@@ -592,11 +593,11 @@ function runBackendMigration(): Promise<string> {
     let backupAttachError: unknown
     child.stderr.on('data', data => {
       stderr += String(data)
-      relayBackendOutput('stderr', data, app.isPackaged, writeBackendLog, 'migrate')
+      relayBackendOutput('stderr', data, isDesktopPackaged(), writeBackendLog, 'migrate')
     })
     child.stdout.on('data', data => {
       stdout += String(data)
-      relayBackendOutput('stdout', data, app.isPackaged, writeBackendLog, 'migrate')
+      relayBackendOutput('stdout', data, isDesktopPackaged(), writeBackendLog, 'migrate')
       if (!databaseBackupPath) {
         const match = stdout.match(/^XCAGI_MIGRATION_BACKUP=(.+)$/m)
         const candidate = match?.[1]?.trim() || ''
