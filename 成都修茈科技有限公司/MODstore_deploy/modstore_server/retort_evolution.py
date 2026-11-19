@@ -175,16 +175,22 @@ class ComponentPorts:
 
         return verify_execution(self.request_id, state)
 
+    def delivery(self, state):
+        from modstore_server.retort_delivery import collect_delivery
+
+        return collect_delivery(state)
+
     def remember(self, state):
         knowledge = {
             "request_id": self.request_id,
             "protocol": state["protocol"],
             "verification": state["verification"],
+            "delivery": state["delivery"],
             "approval": state["approval"],
             "plan": state["plan"],
             "optimization": state["optimization"],
             "evidence_verified": True,
-            "scope": "accepted_improvement_task",
+            "scope": "accepted_shared_host_delivery",
         }
         with get_session_factory()() as db:
             row = db.get(RetortEvolutionRun, self.request_id)
@@ -219,7 +225,7 @@ def advance_run(request_id, *, approval=None, ports=None):
             ):
                 raise ValueError("审批内容已变化，请刷新证据后重新审阅")
             value = Command(resume=approval)
-        elif pauses and pauses[0].get("kind") == "execution":
+        elif pauses and pauses[0].get("kind") in {"execution", "delivery"}:
             value = Command(resume={"poll": True})
         elif pauses:
             snapshot = _snapshot(before)
@@ -304,6 +310,8 @@ def accepted_knowledge(limit=8):
             .order_by(RetortEvolutionRun.updated_at.desc())
             .limit(limit)
             if json_loads(r.knowledge_json, {}).get("evidence_verified") is True
+            and json_loads(r.knowledge_json, {}).get("delivery", {}).get("status")
+            == "deployment_verified"
         ]
     return [
         {
@@ -311,6 +319,7 @@ def accepted_knowledge(limit=8):
             "goal": r["protocol"]["goal"],
             "criteria": r["protocol"]["criterion_ids"],
             "verification": r["verification"],
+            "delivery": r["delivery"],
             "sources": r["protocol"]["references"],
             "scope": r["scope"],
         }

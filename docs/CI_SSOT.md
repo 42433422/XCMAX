@@ -629,22 +629,28 @@ curl -sf https://xiu-ci.com/fhd-api/api/health
 
 | Workflow | 触发 | 文件 |
 |---|---|---|
-| `fhd-ai-self-heal.yml` | `workflow_run` completed(failure) | `.github/workflows/fhd-ai-self-heal.yml` |
+| `fhd-ai-self-heal.yml` | 失败运行 + 每小时 17/47 分已有事故对账 + 手动只读盘点 | `.github/workflows/fhd-ai-self-heal.yml` |
 | `fhd-ai-review.yml` | `pull_request` opened/synchronize | `.github/workflows/fhd-ai-review.yml` |
+| `fhd-ai-self-heal-auto-merge.yml` | 原风险门禁合并 + 已合入 PR 的主干 CI 回执恢复 | `.github/workflows/fhd-ai-self-heal-auto-merge.yml` |
+| `fhd-para-github-worker.yml` | 原派工 → 独立执行/发布/续验/验收 job | `.github/workflows/fhd-para-github-worker.yml` |
 | `fhd-cvm-autonomy-watcher.yml` | `schedule(*/10 * * * *)` + workflow_dispatch | `.github/workflows/fhd-cvm-autonomy-watcher.yml` |
 
 ### 关键约束
 
 | 约束 | 说明 |
 |---|---|
-| 同指纹 24h 去重 | `ai-self-heal` 对相同错误指纹 24h 内不重复创建 PR（budget 限制） |
+| 稳定身份与恢复 | 工作流以 API 路径/ID 归一；源码事件只观察已有事故，由串行对账任务恢复，20/5 创建预算不阻止可信原任务续接。关闭事故不永久屏蔽同提交的新失败；查询不足不关单。 |
 | `autonomy/` 分支不递归 | ai-self-heal 不处理 `autonomy/*` 分支失败，避免自愈自愈递归 |
-| LLM fail-open | LLM 调用 30s 超时不阻断主流程，降级到纯规则匹配 |
+| 执行与发布隔离 | 模型 job 不接收发布凭据；独立 publisher 核对原派工、官方 artifact SHA-256、Git 祖先与精确分支，不 checkout/执行候选；原共享身份入口仍硬拒绝。 |
+| 合并与发布状态 | 同一 head 的独立审核和完整检查通过，merge API 仍校验 SHA；持久 PR 回执恢复部分派发。未知派发结果持续对账，72 小时未确认转人工；只有明确拒绝才有限重试，已观测 run 不重派。主干 CI 成功不代表部署成功。 |
+| 交付完成 | Retort 分支验收后沿原 LangGraph checkpoint 等待受保护合入、同 SHA CI/安全扫描、正式发布回执与线上制品身份，才写入已交付知识；历史仅分支验收记录不追认为上线成功。 |
 | `confirmed-high` 才阻断 | ai-review 仅 LLM 高置信度（confirmed-high）高危问题才阻断合并 |
 | 跨端门禁默认禁用 | env `XCAGI_CROSS_TIER_GATE=1` 启用，fail-open（查询失败不阻断） |
 | ImpactPredictor 拦截不阻断 | 误判仅写 audit，不抛错；deny 时不执行但记录原因 |
 | Policy 纯函数 | 禁止 `Date.now()`，时间窗口用 signals 自身 `ts`（取最新信号 ts 作为"现在"） |
 | 所有动作必审计 | AuditEntry 是唯一事后真相，三端共用语义；通过 `audit_query.py` CLI 查询 |
+
+从 `FHD/` 执行 `python scripts/ci/ai_self_heal.py --reconcile --dry-run` 仅生成 `test_reports/self_heal_reconciliation.json`；省略 `--dry-run` 才按证据续接或处理已替代事故。手动工作流设置 `reconcile=true` 默认只读，定时对账自动恢复。超过文件体量、授权缺失或不明写入结果仍明确等待处理，不通过提高阈值回避。GitHub 发布凭据按 VM 隔离；执行器仍使用现有 Para 设备及管理服务身份，不宣称模型与同一执行 VM 的管理进程相互隔离。现有 `run_attempt=1` 保护继续有效，失败 GitHub 工作空间需按原派工核对，不保证任意 workflow 重跑都能续接。
 
 ### 触发条件矩阵
 

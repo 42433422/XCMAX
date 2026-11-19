@@ -507,12 +507,17 @@ def test_private_prerequisite_only_publishes_reviewed_summary(client, ticket, mo
         row = db.get(CustomerServiceTicket, ticket)
         row.intent = intent
         row.evidence_json = bridge.json_dumps(
-            {"issue_domain": "custom", "shared_core_prerequisite": "PRIVATE prerequisite"}
+            {
+                "issue_domain": "custom",
+                "shared_core_prerequisite": "PRIVATE prerequisite",
+            }
         )
         db.commit()
     sent = []
     monkeypatch.setattr(
-        bridge, "github", lambda method, path, body=None: sent.append(body) or {"number": 124}
+        bridge,
+        "github",
+        lambda method, path, body=None: sent.append(body) or {"number": 124},
     )
     response = client.post(f"/api/customer-service/tickets/{ticket}/github", json=DRAFT)
     assert response.status_code == 200, response.text
@@ -527,7 +532,10 @@ def test_private_prerequisite_only_publishes_reviewed_summary(client, ticket, mo
     [
         {"shared_core_prerequisite": ""},
         {"shared_core_prerequisite": {"unsafe": "not text"}},
-        {"shared_core_prerequisite": "host fix", "shared_core_prerequisite_release": "released"},
+        {
+            "shared_core_prerequisite": "host fix",
+            "shared_core_prerequisite_release": "released",
+        },
     ],
 )
 def test_private_prerequisite_rejects_missing_or_released_scope(
@@ -548,7 +556,10 @@ def test_private_prerequisite_rejects_missing_or_released_scope(
     [
         {},
         {"continuation_pending": True},
-        {"failure_handled_attempts": ["a"], "follow_up_intents": {"a": {"state": "dispatching"}}},
+        {
+            "failure_handled_attempts": ["a"],
+            "follow_up_intents": {"a": {"state": "dispatching"}},
+        },
     ],
 )
 def test_failed_attempt_does_not_finish_before_recovery(extra):
@@ -618,17 +629,24 @@ def test_private_prerequisite_start_keeps_private_delivery_and_scopes_host(
         row = db.get(CustomerServiceTicket, ticket)
         row.intent = "custom_delivery"
         row.evidence_json = bridge.json_dumps(
-            {"issue_domain": "custom", "shared_core_prerequisite": "PRIVATE host requirement"}
+            {
+                "issue_domain": "custom",
+                "shared_core_prerequisite": "PRIVATE host requirement",
+            }
         )
         db.commit()
     monkeypatch.setattr(
-        bridge, "github", lambda method, path, body=None: {"number": 124, "state": "open"}
+        bridge,
+        "github",
+        lambda method, path, body=None: {"number": 124, "state": "open"},
     )
     path = f"/api/customer-service/tickets/{ticket}/github"
     assert client.post(path, json=DRAFT).status_code == 200
     captured = []
     monkeypatch.setattr(
-        db_outbox, "enqueue", lambda db, kind, key, payload, **kw: captured.append(payload)
+        db_outbox,
+        "enqueue",
+        lambda db, kind, key, payload, **kw: captured.append(payload),
     )
     response = client.post(path + "/start", json={"request_id": str(uuid.uuid4())})
     assert response.status_code == 200, response.text
@@ -642,11 +660,20 @@ def test_private_prerequisite_start_keeps_private_delivery_and_scopes_host(
         assert row.intent == "custom_delivery" and "PRIVATE" in row.summary
 
 
-def test_unisolated_publisher_blocks_start_and_reports_capability(client, ticket, monkeypatch):
+def test_unavailable_publisher_blocks_start_and_reports_capability(client, ticket, monkeypatch):
     from modstore_server import para_github_runner as runner
     from modstore_server.eventing import db_outbox
 
     monkeypatch.setenv("PARA_GITHUB_ISOLATED_PUBLISHER", "true")
+    monkeypatch.setattr(
+        runner,
+        "publisher_capability",
+        lambda: {
+            "available": False,
+            "status": "blocked",
+            "reason": "blocked_isolated_publisher_required",
+        },
+    )
     monkeypatch.setattr(bridge, "github", lambda *args: {"number": 123})
     path = f"/api/customer-service/tickets/{ticket}/github"
     assert client.post(path, json=DRAFT).status_code == 200
@@ -691,7 +718,18 @@ def test_existing_queued_dispatch_becomes_durable_block_without_external_calls(
         r for r in db_outbox.fetch_pending(limit=100) if r.payload.get("ticket_id") == ticket
     )
     monkeypatch.setattr(
-        bridge, "github", lambda *args: pytest.fail("Blocked runner must not call GitHub")
+        runner,
+        "publisher_capability",
+        lambda: {
+            "available": False,
+            "status": "blocked",
+            "reason": "blocked_isolated_publisher_required",
+        },
+    )
+    monkeypatch.setattr(
+        bridge,
+        "github",
+        lambda *args: pytest.fail("Blocked runner must not call GitHub"),
     )
     result = intake.dispatch_issue_event(record.to_envelope())
     assert result["status"] == "blocked"

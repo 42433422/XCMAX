@@ -19,12 +19,12 @@ WORKFLOW = "fhd-para-github-worker.yml"
 
 
 def publisher_capability():
-    # No configuration flag may enable a publisher sharing the agent's identity.
-    # Replace this guard only alongside a genuinely isolated publisher implementation.
+    # The installed workflow uses fresh hosted VMs and an immutable Git bundle handoff.
+    # No flag enables the old shared-identity worker, which remains unconditionally blocked.
     return {
-        "available": False,
-        "status": "blocked",
-        "reason": "blocked_isolated_publisher_required",
+        "available": True,
+        "status": "isolated_jobs",
+        "protocol": "para-github-candidate/v1",
     }
 
 
@@ -96,12 +96,23 @@ def device_matches(device, workspace):
         and caps.get("github_request_id") == workspace.get("request_id")
         and str(caps.get("github_run_id")) == str(workspace.get("run_id"))
         and str(caps.get("github_run_attempt")) == "1"
+        and (not workspace.get("stage") or caps.get("github_stage") == workspace["stage"])
         and not caps.get("server_bridge")
         and any(
             t.get("toolName") == "codex" and t.get("status") in {"idle", "running"}
             for t in device.get("tools", [])
         )
     )
+
+
+def resume_worker_ready(workspace):
+    with httpx.Client(timeout=10, trust_env=False, follow_redirects=False) as client:
+        response = client.get(api_base() + "/api/devices", headers=auth_headers())
+        response.raise_for_status()
+        return any(
+            device_matches(device, {**workspace, "stage": "resume"})
+            for device in response.json().get("devices", [])
+        )
 
 
 def _save(db, row, status, **result):
@@ -265,7 +276,9 @@ def _ensure_runner(db, payload):
 
 
 def run_status(db, request_id):
-    from modstore_server.customer_ticket_github import RUN_ACTION, _execution
+    from modstore_server.customer_ticket_github import RUN_ACTION, _execution, _inbox
+    from modstore_server.models import IncidentEvent
+    from modstore_server.para_github_publication import publication_candidate
 
     # The service sees only the opaque dispatch and execution state, never customer facts.
     rows = (
@@ -288,6 +301,8 @@ def run_status(db, request_id):
     execution, jobs = _execution(db, row)
     finished = execution.get("execution_status") == "completed"
     request = json_loads(row.request_json, {})
+    inbox = _inbox(db, row)
+    event = db.get(IncidentEvent, inbox.incident_event_id) if inbox else None
     return {
         "request_id": str(request_id),
         "repository": request["repository"],
@@ -299,19 +314,25 @@ def run_status(db, request_id):
         "conclusion": execution.get("conclusion") or "unknown",
         "jobs": jobs,
         "receipts": execution.get("receipts", []),
+        "publication_candidate": publication_candidate(db, event),
     }
 
 
-def verified_code_identity(snapshot):
+def verified_code_identity(snapshot, *, workspace=None, attempt_id=""):
     from modstore_server.customer_ticket_github import configuration, github
 
     branches = {s.get("branch") for s in snapshot.get("subtasks", [])}
+    staged = None
+    if workspace:
+        from modstore_server.para_github_publication import candidate_receipt
+
+        staged = candidate_receipt(snapshot, workspace, attempt_id)
     for log in reversed(snapshot.get("logs_tail", [])):
         value = json_loads(log.get("content", ""), {})
         if (
             not isinstance(value, dict)
             or value.get("source") != "executor_git_readback"
-            or value.get("pushed") is not True
+            or (value.get("pushed") is not True and not staged)
             or value.get("branch") not in branches
             or not re.fullmatch(r"[0-9a-f]{40}", str(value.get("commit_sha") or ""))
             or not re.fullmatch(r"[0-9a-f]{64}", str(value.get("archive_sha256") or ""))
@@ -324,5 +345,27 @@ def verified_code_identity(snapshot):
             raise ValueError("GitHub 提交回执暂未取得") from exc
         if ref.get("object", {}).get("sha") != value["commit_sha"]:
             raise ValueError("修复分支与 Para 提交回执不一致")
+        if staged:
+            if any(value.get(k) != staged.get(k) for k in value):
+                raise ValueError("隔离发布候选回执不一致")
+            run = github("GET", f"/repos/{repo}/actions/runs/{workspace['run_id']}")
+            if run.get("head_sha") != staged["base_sha"] or run.get("run_attempt") != 1:
+                raise ValueError("隔离发布基线不一致")
+            pulls = github("GET", f"/repos/{repo}/commits/{value['commit_sha']}/pulls")
+            matches = [
+                p
+                for p in pulls
+                if p.get("head", {}).get("sha") == value["commit_sha"]
+                and p.get("head", {}).get("ref") == value["branch"]
+                and p.get("base", {}).get("ref") == "main"
+                and p.get("base", {}).get("repo", {}).get("full_name") == repo
+                and re.search(rf"(?m)^Refs #{workspace['issue_number']}\s*$", p.get("body", ""))
+            ]
+            if len(matches) != 1:
+                raise ValueError("隔离发布 PR 回执尚未确认")
+            # The publisher VM has no Para device. Do not dispatch a verification
+            # attempt into that gap and strand its already persisted intent.
+            if not resume_worker_ready(workspace):
+                raise ValueError("awaiting_isolated_verification_worker")
         return {key: value[key] for key in ("branch", "commit_sha", "archive_sha256")}
     raise ValueError("缺少 Para 代码提交与推送回执")

@@ -119,9 +119,17 @@ def reconcile_pending_teams(*, event_id=None, limit=20, fetcher=None):
                             and output.get("executor") == "github_actions"
                             and row.get("role") == "fix"
                         ):
-                            from modstore_server.para_github_runner import verified_code_identity
+                            from modstore_server.para_github_runner import (
+                                verified_code_identity,
+                            )
 
-                            output.update(verified_code_identity(snapshot))
+                            output.update(
+                                verified_code_identity(
+                                    snapshot,
+                                    workspace=payload.get("github_workspace"),
+                                    attempt_id=row.get("attempt_id", ""),
+                                )
+                            )
                         output.update(
                             ok=ok,
                             completed=ok,
