@@ -13,10 +13,12 @@ export interface CustomerTicket extends UnknownRecord {
 
 export type UiMessage = {
   id: string
+  persistedId?: number
   role: 'user' | 'assistant'
   content: string
   cards?: UnknownRecord[]
   receiptLabel?: string
   customerDecision?: 'resolved' | 'reopen'
   imageDataUrl?: string | null
+  screenshotMessageId?: number
 }

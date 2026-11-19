@@ -10,6 +10,7 @@ import { shortTicketRef, ticketIsClosed } from '../../utils/csTicketLifecycle'
 import { composeTicketUserMessage, toUserFacingCards } from '../../utils/csTicketSummary'
 import { asUnknownRecord, errorMessage } from '../../utils/typeNarrowing'
 import type { CustomerTicket, UiMessage } from './customerServiceTypes'
+import { fetchTicketTranscript, receiptLabel, useCustomerServiceTranscript } from './useCustomerServiceTranscript'
 
 export interface CustomerServiceChatCtx {
   route: Pick<RouteLocationNormalizedLoaded, 'query'>
@@ -18,14 +19,6 @@ export interface CustomerServiceChatCtx {
   clearPendingImage: () => void
   loadTickets: () => Promise<void>
   expandedTicketIds: Ref<Set<number>>
-}
-
-function receiptLabel(origin: unknown) {
-  if (origin === 'admin_reply') return '管理员答复'
-  if (origin === 'admin_disposition') return '管理员处置回执'
-  if (origin === 'assistant_disposition') return 'AI 处置回执'
-  if (origin === 'corp_download_verification') return '官网复测回执'
-  return undefined
 }
 
 export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
@@ -46,6 +39,12 @@ export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
   let mounted = true
   const messages = ref<UiMessage[]>([])
   const messagesEl = ref<HTMLElement | null>(null)
+  const {
+    clearTranscript, applyLatestPage, nextBeforeId, loadingOlder, loadOlderMessages,
+    screenshotUrl, screenshotLoading, loadScreenshot,
+  } = useCustomerServiceTranscript({
+    ticket: openedTicket, sessionId: activeSessionId, messages, messagesEl, loading, error,
+  })
   const pendingConfirmation = ref<{
     message: UiMessage
     sessionId: number
@@ -75,6 +74,7 @@ export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
   onBeforeUnmount(() => {
     mounted = false
     conversationGeneration++
+    clearTranscript()
     pendingConfirmation.value = null
   })
 
@@ -251,6 +251,7 @@ export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
 
   function newSession() {
     conversationGeneration++
+    clearTranscript()
     activeSessionId.value = null
     openedTicket.value = null
     openedTicketCanReply.value = false
@@ -274,25 +275,6 @@ export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
     openedTicket.value = { ...ticket, customer_acceptance: undefined }
     ctx.expandedTicketIds.value = new Set([...ctx.expandedTicketIds.value, ticketId])
     await reloadTicket(ticket)
-  }
-
-  async function fetchTicketTranscript(ticket: CustomerTicket) {
-    const ticketId = Number(ticket.id)
-    const transcript = asUnknownRecord(await api.customerServiceTicketTranscript(ticketId))
-    const current = asUnknownRecord(transcript.ticket)
-    const sessionId = Number(transcript.session_id)
-    if (Number(current.id) !== ticketId || !Number.isSafeInteger(sessionId) || sessionId <= 0
-      || Number(current.session_id) !== sessionId
-      || (ticket.session_id != null && Number(ticket.session_id) !== sessionId)
-      || !Array.isArray(transcript.messages)) {
-      throw new Error('返回的会话与原工单不一致')
-    }
-    return {
-      ticket: { ...ticket, ...current, customer_acceptance: current.customer_acceptance },
-      sessionId,
-      canReply: transcript.can_reply === true,
-      messages: transcript.messages,
-    }
   }
 
   function applyTranscriptTicket(snapshot: Awaited<ReturnType<typeof fetchTicketTranscript>>) {
@@ -334,23 +316,7 @@ export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
       const snapshot = await fetchTicketTranscript(ticket)
       if (generation !== conversationGeneration) return null
       applyTranscriptTicket(snapshot)
-      messages.value = snapshot.messages.map(asUnknownRecord).flatMap((message): UiMessage[] => {
-        if ((message.ticket_id == null ? !openedTicketCanReply.value : Number(message.ticket_id) !== ticketId)
-          || (message.role !== 'user' && message.role !== 'assistant')
-          || typeof message.content !== 'string') return []
-        const payload = asUnknownRecord(message.payload)
-        const image = payload.image_data_url
-        return [{
-          id: `persisted-${message.id}`,
-          role: message.role,
-          content: message.content,
-          imageDataUrl: message.role === 'user' && typeof image === 'string'
-            && /^data:image\/(?:png|jpeg|webp|gif|bmp|avif);base64,/.test(image) ? image : null,
-          receiptLabel: message.role === 'assistant' ? receiptLabel(payload.origin) : undefined,
-          customerDecision: message.role === 'user' && (payload.customer_decision === 'resolved'
-            || payload.customer_decision === 'reopen') ? payload.customer_decision : undefined,
-        }]
-      })
+      applyLatestPage(snapshot)
       await scrollMessagesToEnd()
       return generation === conversationGeneration ? { ticket: snapshot.ticket, messages: messages.value } : null
     } catch (cause: unknown) {
@@ -366,6 +332,7 @@ export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
     hydrateFromQuery, queryContext, usePrompt, scrollMessagesToEnd, onBubbleClick,
     send, sendText, confirmIntake, intakeConfirmation, newSession, visibleCards, openTicket, reloadTicket,
     openedTicket, acceptanceNeedsRefresh, refreshAcceptance,
+    nextBeforeId, loadingOlder, loadOlderMessages, screenshotUrl, screenshotLoading, loadScreenshot,
   }
 }
 

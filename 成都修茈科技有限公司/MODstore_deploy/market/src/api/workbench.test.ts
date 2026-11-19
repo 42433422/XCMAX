@@ -285,6 +285,19 @@ describe('customerService API', () => {
     expect(mReq).toHaveBeenCalledWith('/api/customer-service/tickets/1?include_transcript=true', { timeoutMs: 15_000 })
   })
 
+  it('reads an older transcript page and a separately authenticated screenshot', async () => {
+    const { signal } = new AbortController()
+    await customerService.customerServiceTicketTranscript(1, 31, signal)
+    await customerService.customerServiceTicketTranscriptImage(1, 24, signal)
+    expect(mReq).toHaveBeenCalledWith(
+      '/api/customer-service/tickets/1?include_transcript=true&transcript_before_id=31',
+      { timeoutMs: 15_000, signal },
+    )
+    expect(mBlob).toHaveBeenCalledWith(
+      '/api/customer-service/tickets/1?transcript_image_message_id=24', { method: 'GET', signal },
+    )
+  })
+
   it('customerServiceActions', async () => {
     await customerService.customerServiceActions(1)
     expect(mReq).toHaveBeenCalledWith(expect.stringContaining('actions'), expect.objectContaining({ timeoutMs: 15_000 }))

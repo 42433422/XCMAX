@@ -21,7 +21,7 @@ INTERNAL_TEXT_RE = re.compile(
     r"bak_\w+|备份表",
     re.I,
 )
-SCREENSHOT_DATA_URL = re.compile(r"data:image/(?:png|jpeg|webp|gif|bmp|avif);base64,")
+SCREENSHOT_DATA_URL = re.compile(r"data:(image/(?:png|jpeg|webp|gif|bmp|avif));base64,")
 MAX_SCREENSHOT_DATA_LENGTH = 4_500_000
 SAFE_PROGRESS = "处理过程中遇到内部问题，值班人员正在继续跟进。"
 SAFE_FAILURE = "处理暂未成功，值班人员正在继续跟进。"
@@ -142,7 +142,7 @@ def customer_cards(cards: Any) -> list[dict[str, Any]]:
     return out
 
 
-def _screenshot_data_url(value: Any) -> str | None:
+def decode_screenshot(value: Any) -> tuple[str, bytes] | None:
     if not isinstance(value, str) or len(value) > MAX_SCREENSHOT_DATA_LENGTH:
         return None
     header = SCREENSHOT_DATA_URL.match(value)
@@ -152,7 +152,7 @@ def _screenshot_data_url(value: Any) -> str | None:
         decoded = base64.b64decode(value[header.end() :], validate=True)
     except (binascii.Error, ValueError):
         return None
-    return value if decoded else None
+    return (header[1], decoded) if decoded else None
 
 
 def customer_message_payload(payload: Any, role: str = "assistant") -> dict[str, Any]:
@@ -173,7 +173,8 @@ def customer_message_payload(payload: Any, role: str = "assistant") -> dict[str,
     if role == "user":
         if "context" in payload:
             out["context"] = payload["context"]
-        if (image := _screenshot_data_url(payload.get("image_data_url"))) is not None:
+        image = payload.get("image_data_url")
+        if decode_screenshot(image) is not None:
             out["image_data_url"] = image
     if isinstance(payload.get("ticket"), dict):
         out["ticket"] = customer_ticket(payload["ticket"])

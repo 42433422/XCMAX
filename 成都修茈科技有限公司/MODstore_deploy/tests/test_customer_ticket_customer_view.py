@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import re
 import uuid
@@ -13,6 +14,10 @@ from tests.test_customer_service_api import _make_user
 pytest.importorskip("fastapi")
 
 LEAK = "Cursor Agent 失败: Command failed: /Users/a4243342/x; git clone https://github.com/o/r.git"
+PNG = (
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0l"
+    "EQVR42mP8/x8AAwMCAO+jR1sAAAAASUVORK5CYII="
+)
 LEAK_RE = re.compile(r"/Users/|git clone|Cursor Agent|github\.com|bak_t39|Traceback")
 INTERNAL_KEYS = {
     "actor_type",
@@ -150,10 +155,7 @@ def test_ticket_transcript_binds_owner_ticket_and_session_and_restores_raster_at
     other = _make_user("transcript_outsider")
     tid, sid = _seed(owner.id)
     _, other_sid = _seed(owner.id)
-    png = (
-        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0l"
-        "EQVR42mP8/x8AAwMCAO+jR1sAAAAASUVORK5CYII="
-    )
+    message_ids = {}
     svg = "data:image/svg+xml;base64,PHN2Zy8+"
     with get_session_factory()() as db:
         sibling = cs.CustomerServiceTicket(
@@ -162,25 +164,26 @@ def test_ticket_transcript_binds_owner_ticket_and_session_and_restores_raster_at
         db.add(sibling)
         db.flush()
         for user_id, session_id, ticket_id, role, text, image in (
-            (owner.id, sid, tid, "user", "原单截图", png),
+            (owner.id, sid, tid, "user", "原单截图", PNG),
             (owner.id, sid, tid, "user", "不安全的图片类型", svg),
             (owner.id, sid, tid, "user", "损坏的图片编码", "data:image/png;base64,%%"),
-            (owner.id, sid, tid, "assistant", "助手不能提供用户截图", png),
-            (owner.id, sid, None, "user", "建单前的会话信息", png),
-            (owner.id, sid, sibling.id, "user", "同会话的其他工单", png),
-            (other.id, sid, tid, "user", "不一致的消息用户", png),
-            (owner.id, other_sid, tid, "user", "不一致的消息会话", png),
+            (owner.id, sid, tid, "assistant", "助手不能提供用户截图", PNG),
+            (owner.id, sid, None, "user", "建单前的会话信息", PNG),
+            (owner.id, sid, sibling.id, "user", "同会话的其他工单", PNG),
+            (other.id, sid, tid, "user", "不一致的消息用户", PNG),
+            (owner.id, other_sid, tid, "user", "不一致的消息会话", PNG),
         ):
-            db.add(
-                cs.CustomerServiceMessage(
-                    user_id=user_id,
-                    session_id=session_id,
-                    ticket_id=ticket_id,
-                    role=role,
-                    content=text,
-                    payload_json=json.dumps({"image_data_url": image}),
-                )
+            row = cs.CustomerServiceMessage(
+                user_id=user_id,
+                session_id=session_id,
+                ticket_id=ticket_id,
+                role=role,
+                content=text,
+                payload_json=json.dumps({"image_data_url": image}),
             )
+            db.add(row)
+            db.flush()
+            message_ids[text] = row.id
         db.commit()
     base = "/api/customer-service"
     detail_route = f"{base}/tickets/{tid}"
@@ -194,6 +197,9 @@ def test_ticket_transcript_binds_owner_ticket_and_session_and_restores_raster_at
     def by_content(body):
         return {row["content"]: row["payload"] for row in body["messages"]}
 
+    def image_path(text):
+        return f"{detail_route}?transcript_image_message_id={message_ids[text]}"
+
     try:
         ordinary = get_as(owner, detail_route)
         assert ordinary.status_code == 200
@@ -204,25 +210,41 @@ def test_ticket_transcript_binds_owner_ticket_and_session_and_restores_raster_at
         body = owner_reply.json()
         assert body["ticket"]["id"] == tid and body["session_id"] == sid
         assert body["can_reply"] is True
+        assert body["next_before_id"] is None
         rows = by_content(body)
-        assert rows["原单截图"]["image_data_url"] == png
-        assert rows["建单前的会话信息"]["image_data_url"] == png
+        assert rows["原单截图"]["has_screenshot"] is True
+        assert rows["建单前的会话信息"]["has_screenshot"] is True
+        assert all("image_data_url" not in payload for payload in rows.values())
         for text in ("不安全的图片类型", "损坏的图片编码", "助手不能提供用户截图"):
-            assert "image_data_url" not in rows[text]
+            assert "has_screenshot" not in rows[text]
+            assert get_as(owner, image_path(text)).status_code == 404
         assert not {"同会话的其他工单", "不一致的消息用户", "不一致的消息会话"} & rows.keys()
-        assert by_content(get_as(owner, generic).json())["原单截图"]["image_data_url"] == png
+        assert by_content(get_as(owner, generic).json())["原单截图"]["image_data_url"] == PNG
+        for text in ("同会话的其他工单", "不一致的消息用户", "不一致的消息会话"):
+            assert get_as(owner, image_path(text)).status_code == 404
+        original = get_as(owner, image_path("原单截图"))
+        assert original.status_code == 200
+        assert original.headers["content-type"] == "image/png"
+        assert original.headers["x-content-type-options"] == "nosniff"
+        assert original.headers["cache-control"] == "private, no-store"
+        assert original.content == base64.b64decode(PNG.split(",", 1)[1])
+        assert get_as(owner, image_path("建单前的会话信息")).content == original.content
 
         admin_reply = get_as(admin, route)
         assert admin_reply.status_code == 200, admin_reply.text
         body = admin_reply.json()
         assert body["can_reply"] is False and body["ticket"]["id"] == tid
-        assert by_content(body)["原单截图"]["image_data_url"] == png
+        assert by_content(body)["原单截图"]["has_screenshot"] is True
         assert "建单前的会话信息" not in by_content(body)
         assert all(message["ticket_id"] == tid for message in body["messages"])
+        assert get_as(admin, image_path("原单截图")).content == original.content
+        assert get_as(admin, image_path("建单前的会话信息")).status_code == 404
         assert get_as(admin, generic).status_code == 404
         assert get_as(other, route).status_code == 404
+        assert get_as(other, image_path("原单截图")).status_code == 404
         reader = TicketReader("grant", "company-reader", "company", "instance", (owner.id,))
         assert get_as(reader, route).status_code == 403
+        assert get_as(reader, image_path("原单截图")).status_code == 403
         with get_session_factory()() as db:
             db.get(cs.CustomerServiceSession, sid).user_id = other.id
             db.commit()
@@ -230,6 +252,77 @@ def test_ticket_transcript_binds_owner_ticket_and_session_and_restores_raster_at
         assert get_as(admin, route).status_code == 404
     finally:
         app.dependency_overrides.pop(customer_service_api._get_current_user, None)
+
+
+def test_ticket_transcript_pages_keep_original_text_and_attachment(client, monkeypatch):
+    from modstore_server import customer_service_api, customer_service_transcript
+    from modstore_server import models_cs as cs
+    from modstore_server.app import app
+    from modstore_server.models import get_session_factory
+
+    owner = _make_user("paged_transcript_owner")
+    tid, sid = _seed(owner.id)
+    monkeypatch.setitem(
+        app.dependency_overrides, customer_service_api._get_current_user, lambda: owner
+    )
+    monkeypatch.setattr(customer_service_transcript, "TRANSCRIPT_PAGE_SIZE", 3)
+    monkeypatch.setattr(customer_service_transcript, "MAX_MESSAGE_METADATA_LENGTH", 1200)
+    with get_session_factory()() as db:
+        rows = [
+            cs.CustomerServiceMessage(
+                ticket_id=tid,
+                session_id=sid,
+                user_id=owner.id,
+                role="user",
+                content=f"跟进 {idx}",
+                payload_json=json.dumps(
+                    {"image_data_url": PNG, "context": {"notes": "资料" * 800}}, ensure_ascii=False
+                ),
+            )
+            for idx in range(4)
+        ]
+        db.add_all(rows)
+        db.commit()
+        screenshot_id = rows[0].id
+
+    route = f"/api/customer-service/tickets/{tid}"
+    first = client.get(route, params={"include_transcript": True}).json()
+    assert [m["content"] for m in first["messages"]] == ["跟进 1", "跟进 2", "跟进 3"]
+    assert all(m["payload"] == {"has_screenshot": True} for m in first["messages"])
+    assert first["next_before_id"] == first["messages"][0]["id"]
+    older = client.get(
+        route, params={"include_transcript": True, "transcript_before_id": first["next_before_id"]}
+    ).json()
+    assert [m["content"] for m in older["messages"]][::2] == ["还是看不到 1.0.0.6", "跟进 0"]
+    assert older["messages"][-1]["id"] == screenshot_id and older["next_before_id"] is None
+    attachment = client.get(route, params={"transcript_image_message_id": screenshot_id})
+    assert attachment.content == base64.b64decode(PNG.split(",", 1)[1])
+
+
+def test_chat_screenshot_quota_allows_original_text_follow_up(client, monkeypatch):
+    from modstore_server import customer_service_api, customer_service_transcript
+    from modstore_server.app import app
+
+    owner = _make_user("screenshot_quota_owner")
+    tid, sid = _seed(owner.id)
+    monkeypatch.setitem(
+        app.dependency_overrides, customer_service_api._get_current_user, lambda: owner
+    )
+    monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
+    monkeypatch.setattr(customer_service_transcript, "MAX_TICKET_SCREENSHOT_STORAGE", len(PNG))
+    body = {"session_id": sid, "context": {"ticket_id": tid}, "message": "原单补充截图"}
+    route = "/api/customer-service/chat"
+    accepted = client.post(route, json={**body, "image_data_url": PNG})
+    assert accepted.status_code == 200, accepted.text
+    assert "image_data_url" not in accepted.json()["session"]["context"]
+    assert client.post(route, json={**body, "image_data_url": PNG}).status_code == 413
+    assert client.post(route, json={**body, "message": "截图已补，现补充文字"}).status_code == 200
+    messages = client.get(f"/api/customer-service/tickets/{tid}?include_transcript=true").json()[
+        "messages"
+    ]
+    assert sum(m["payload"].get("has_screenshot") is True for m in messages) == 1
+    assert [m["content"] for m in messages].count("原单补充截图") == 1
+    assert "截图已补，现补充文字" in [m["content"] for m in messages]
 
 
 def _dispatch(detail):

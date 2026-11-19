@@ -6,12 +6,13 @@ import type { CustomerServiceIssueDecision } from '../../api/workbench'
 import { ApiError } from '../../infrastructure/http/client'
 import CustomerServiceView from '../CustomerServiceView.vue'
 import { useCustomerServiceChat, type CustomerServiceChat } from './useCustomerServiceChat'
-const { chat, transcript, listTickets, decision } = vi.hoisted(() => ({
-  chat: vi.fn(), transcript: vi.fn(), listTickets: vi.fn(), decision: vi.fn(),
+const { chat, transcript, screenshot, listTickets, decision } = vi.hoisted(() => ({
+  chat: vi.fn(), transcript: vi.fn(), screenshot: vi.fn(), listTickets: vi.fn(), decision: vi.fn(),
 }))
 vi.mock('../../api', () => ({
   api: {
     customerServiceChat: chat, customerServiceTicketTranscript: transcript,
+    customerServiceTicketTranscriptImage: screenshot,
     customerServiceTickets: listTickets, customerServiceIssueDecision: decision,
   },
 }))
@@ -385,6 +386,116 @@ describe('customer ticket submission acknowledgement', () => {
 })
 
 describe('opening original customer-service conversations', () => {
+  it('loads older original messages once, rejects mismatched pages and keeps history on refresh', async () => {
+    const { state, wrapper } = mountChat()
+    const ticket = { id: 75, user_id: 5, session_id: 101, status: 'processing' }
+    const message = (id: number, content: string, ticket_id = 75) => ({ id, content, ticket_id, role: 'user' })
+    const latest = {
+      ticket, session_id: 101, can_reply: true, next_before_id: 20,
+      messages: [message(20, '最近一页'), message(21, '最近追问')],
+    }
+    transcript.mockResolvedValueOnce(latest).mockResolvedValueOnce({
+      ...latest, ticket: { ...ticket, user_id: 99 }, next_before_id: null, messages: [message(8, '另一账号')],
+    }).mockResolvedValueOnce({
+      ...latest, next_before_id: null,
+      messages: [message(9, '最早资料'), message(11, '其他工单', 76), message(20, '边界重复')],
+    }).mockResolvedValueOnce({
+      ...latest, next_before_id: 21, messages: [message(21, '最近追问'), message(22, '刷新后的答复')],
+    })
+
+    await state.openTicket(ticket)
+    expect(state.nextBeforeId.value).toBe(20)
+    await state.loadOlderMessages()
+    expect(state.error.value).toContain('与原工单不一致')
+    expect(state.nextBeforeId.value).toBe(20)
+    await state.loadOlderMessages()
+    expect(state.nextBeforeId.value).toBeNull()
+    expect(state.messages.value.map(row => row.content)).toEqual(['最早资料', '最近一页', '最近追问'])
+    expect(transcript).toHaveBeenLastCalledWith(75, 20, expect.any(AbortSignal))
+
+    await state.reloadTicket(ticket)
+    expect(state.nextBeforeId.value).toBeNull()
+    expect(state.messages.value.map(row => row.content)).toEqual(['最早资料', '最近一页', '最近追问', '刷新后的答复'])
+    wrapper.unmount()
+  })
+
+  it('discards a late page after a ticket switch and stops non-advancing pagination', async () => {
+    const { state, wrapper } = mountChat()
+    const first = { id: 75, session_id: 101, status: 'processing' }
+    const second = { id: 76, session_id: 102, status: 'processing' }
+    const latest = { ticket: first, session_id: 101, can_reply: true, next_before_id: 20, messages: [] }
+    let finishOldPage!: (data: unknown) => void
+    transcript.mockResolvedValueOnce(latest).mockResolvedValueOnce(latest)
+      .mockImplementationOnce(() => new Promise(resolve => { finishOldPage = resolve }))
+      .mockResolvedValueOnce({
+        ticket: second, session_id: 102, can_reply: true, next_before_id: null,
+        messages: [{ id: 30, ticket_id: 76, role: 'assistant', content: '另一工单当前消息' }],
+      })
+
+    await state.openTicket(first)
+    await state.loadOlderMessages()
+    expect(state.error.value).toContain('消息分页无效')
+    const loading = state.loadOlderMessages()
+    expect(state.loadingOlder.value).toBe(true)
+    const staleSignal = transcript.mock.calls[2]?.[2] as AbortSignal
+    await state.openTicket(second)
+    finishOldPage({
+      ...latest, next_before_id: null,
+      messages: [{ id: 10, ticket_id: 75, role: 'user', content: '旧工单消息' }],
+    })
+    await loading
+    expect(staleSignal.aborted).toBe(true)
+    expect(state.loadingOlder.value).toBe(false)
+    expect(state.messages.value.map(row => row.content)).toEqual(['另一工单当前消息'])
+    wrapper.unmount()
+  })
+
+  it('renders older text and loads a screenshot only when requested, clearing object URLs across views', async () => {
+    const ticket = { id: 75, user_id: 5, session_id: 101, ticket_no: 'CS-transcript', status: 'processing' }
+    const createObjectURL = vi.fn().mockReturnValue('blob:verified-original-screenshot')
+    const revokeObjectURL = vi.fn()
+    vi.stubGlobal('URL', class extends URL {
+      static createObjectURL = createObjectURL
+      static revokeObjectURL = revokeObjectURL
+    })
+    listTickets.mockResolvedValue({ items: [ticket] })
+    transcript.mockResolvedValueOnce({
+      ticket, session_id: 101, can_reply: true, next_before_id: 21,
+      messages: [{ id: 21, ticket_id: 75, role: 'assistant', content: '最新答复' }],
+    }).mockResolvedValueOnce({
+      ticket, session_id: 101, can_reply: true, next_before_id: null,
+      messages: [{ id: 9, ticket_id: null, role: 'user', content: '原来的文字说明', payload: { has_screenshot: true } }],
+    })
+    screenshot.mockResolvedValue(new Blob(['fixture bytes'], { type: 'image/png' }))
+    const wrapper = await mountView()
+    try {
+      await flushPromises()
+      await wrapper.get('.cs-ticket__main').trigger('click')
+      await flushPromises()
+      const older = wrapper.get('.cs-transcript-more')
+      expect(older.text()).toBe('加载更早消息')
+      await older.trigger('click')
+      await flushPromises()
+      expect(wrapper.find('.cs-transcript-more').exists()).toBe(false)
+      expect(wrapper.findAll('.cs-bubble__text').map(row => row.text())).toEqual(['原来的文字说明', '最新答复'])
+      expect(screenshot).not.toHaveBeenCalled()
+      const viewScreenshot = wrapper.get('.cs-message button')
+      expect(viewScreenshot.text()).toBe('查看截图')
+      await viewScreenshot.trigger('click')
+      await flushPromises()
+      expect(screenshot).toHaveBeenCalledOnce()
+      expect(screenshot).toHaveBeenCalledWith(75, 9, expect.any(AbortSignal))
+      expect(wrapper.get('.cs-message img').attributes('src')).toBe('blob:verified-original-screenshot')
+      expect(wrapper.get('.cs-message').text()).toContain('原来的文字说明')
+      await wrapper.get('.cs-toolbar button').trigger('click')
+      expect(revokeObjectURL).toHaveBeenCalledWith('blob:verified-original-screenshot')
+      expect(wrapper.find('.cs-message img').exists()).toBe(false)
+    } finally {
+      wrapper.unmount()
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('reads the persisted reply, keeps the selected original ticket, and omits other tickets’ messages', async () => {
     const { state, wrapper } = mountChat()
     const ticket = { id: 75, session_id: 101, ticket_no: 'CS-shared-8819a0', status: 'processing' }

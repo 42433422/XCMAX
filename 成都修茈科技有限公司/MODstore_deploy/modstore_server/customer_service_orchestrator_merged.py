@@ -37,6 +37,7 @@ from modstore_server.customer_ticket_disposition import (
     read_disposition,
 )
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
+from modstore_server.customer_service_transcript import read_session_context, user_message_payload
 from modstore_server.customer_service_chat_reply import read_chat_assessment, record_chat_only_reply
 from modstore_server.customer_service_ticket_view import serialize_ticket
 from modstore_server.customer_service_tools import json_loads
@@ -543,9 +544,7 @@ def ensure_session(
         )
         if row:
             try:
-                prev = _facade().json_loads(row.context_json) if row.context_json else {}
-                if not isinstance(prev, dict):
-                    prev = {}
+                prev = read_session_context(row.context_json)
                 merged = {
                     **prev,
                     **{k: v for (k, v) in enriched.items() if v is not None},
@@ -633,7 +632,7 @@ def handle_customer_message(
 ) -> _facade().Dict[str, _facade().Any]:
     context = _facade()._enrich_cs_context(user, context, db=db)
     text = (message or "").strip()
-    image_data_url = str((context or {}).get("image_data_url") or "").strip()
+    image_data_url = str(context.pop("image_data_url", "") or "").strip()
     if image_data_url and (not image_data_url.startswith("data:image/")):
         image_data_url = ""
     if len(image_data_url) > 4500000:
@@ -680,13 +679,9 @@ def handle_customer_message(
         confirmed_intake = (original, intake_confirmation, report_digest)
     session.last_message = text
     session.updated_at = _facade().datetime.now(_facade().timezone.utc)
-    ctx_for_store = {k: v for (k, v) in (context or {}).items() if k not in {"image_data_url"}}
-    if image_data_url:
-        ctx_for_store["has_image"] = True
-    user_payload: _facade().Dict[str, _facade().Any] = {"context": ctx_for_store}
-    if image_data_url:
-        user_payload["image_data_url"] = image_data_url
-        user_payload["has_image"] = True
+    user_payload = user_message_payload(
+        db, session.id, user.id, open_ticket, context, image_data_url
+    )
     user_msg = _facade().CustomerServiceMessage(
         session_id=session.id,
         user_id=user.id,
@@ -2187,7 +2182,7 @@ def session_payload(
         "status": row.status,
         "title": row.title,
         "intent": row.intent,
-        "context": _facade().json_loads(row.context_json, {}),
+        "context": read_session_context(row.context_json),
         "last_message": row.last_message,
         "created_at": row.created_at.isoformat() if row.created_at else "",
         "updated_at": row.updated_at.isoformat() if row.updated_at else "",

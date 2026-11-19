@@ -10,11 +10,11 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import logging
 import threading
 from datetime import datetime
-from typing import Any, Dict, Literal, Optional
+from typing import Annotated, Any, Dict, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import func, or_
+from sqlalchemy import case, func, or_
 from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import get_current_user, get_db, require_admin
@@ -41,7 +41,13 @@ from modstore_server.customer_service_api_helpers import (
     visible_ticket_or_404 as _visible_ticket_or_404,
 )
 from modstore_server import customer_service_customer_view as customer_view
-from modstore_server.customer_service_tools import json_dumps, json_loads
+from modstore_server.customer_service_transcript import (
+    MAX_MESSAGE_METADATA_LENGTH,
+    conversation_messages,
+    read_message_page,
+    read_message_screenshot,
+)
+from modstore_server.customer_service_tools import json_dumps
 from modstore_server.customer_service_orchestrator_merged import (
     InactiveTicketConversation,
     intake_report_for_message,
@@ -163,11 +169,14 @@ async def customer_service_chat(
         image = str((body.context or {}).get("image_data_url") or "").strip()
     if not message and not image:
         raise HTTPException(status_code=400, detail="请输入文字或上传图片")
-    if image and not image.startswith("data:image/"):
-        raise HTTPException(status_code=400, detail="图片格式无效，请上传 png/jpg/webp 等")
-    if len(image) > 4_500_000:
+    if len(image) > customer_view.MAX_SCREENSHOT_DATA_LENGTH:
         raise HTTPException(status_code=400, detail="图片过大，请压缩后再传")
+    if image and customer_view.decode_screenshot(image) is None:
+        raise HTTPException(status_code=400, detail="图片格式无效，请上传 png/jpg/webp 等")
     ctx = dict(body.context or {})
+    ctx.pop("image_data_url", None)
+    if len(json_dumps(ctx)) > MAX_MESSAGE_METADATA_LENGTH // 2:
+        raise HTTPException(413, "会话附加信息过大，请减少附加信息")
     if image:
         ctx["image_data_url"] = image
         ctx["has_image"] = True
@@ -233,7 +242,23 @@ async def list_sessions(
     user: User = Depends(_get_current_user),
 ):
     rows = (
-        db.query(CustomerServiceSession)
+        db.query(
+            CustomerServiceSession.id,
+            CustomerServiceSession.user_id,
+            CustomerServiceSession.channel,
+            CustomerServiceSession.status,
+            CustomerServiceSession.title,
+            CustomerServiceSession.intent,
+            case(
+                (
+                    func.length(CustomerServiceSession.context_json) <= MAX_MESSAGE_METADATA_LENGTH,
+                    CustomerServiceSession.context_json,
+                )
+            ).label("context_json"),
+            CustomerServiceSession.last_message,
+            CustomerServiceSession.created_at,
+            CustomerServiceSession.updated_at,
+        )
         .filter(CustomerServiceSession.user_id == user.id)
         .order_by(CustomerServiceSession.updated_at.desc(), CustomerServiceSession.id.desc())
         .limit(limit)
@@ -242,37 +267,28 @@ async def list_sessions(
     return {"items": [session_payload(r) for r in rows]}
 
 
-def _transcript_messages(messages: list[CustomerServiceMessage], *, customer_visible: bool):
-    rows = [
-        {
-            "id": m.id,
-            "ticket_id": m.ticket_id,
-            "role": m.role,
-            "content": m.content,
-            "payload": json_loads(m.payload_json, {}),
-            "created_at": m.created_at.isoformat() if m.created_at else "",
-        }
-        for m in messages
-    ]
-    return [customer_view.customer_message(row) for row in rows] if customer_visible else rows
-
-
 @router.get("/sessions/{session_id}")
 async def session_detail(
     session_id: int,
     db: Session = Depends(get_db),
     user: User = Depends(_get_current_user),
+    transcript_before_id: Annotated[int | None, Query(gt=0, le=2_147_483_647)] = None,
+    transcript_image_message_id: Annotated[int | None, Query(gt=0, le=2_147_483_647)] = None,
 ):
+    if isinstance(user, TicketReader):
+        raise HTTPException(403, "工单读取授权不包含会话内容")
     session = _own_session_or_404(db, user, session_id)
-    messages = (
-        db.query(CustomerServiceMessage)
-        .filter_by(session_id=session.id, user_id=session.user_id)
-        .order_by(CustomerServiceMessage.id.asc())
-        .all()
-    )
+    messages = conversation_messages(db, session.id, session.user_id)
+    if transcript_image_message_id is not None:
+        return read_message_screenshot(messages, transcript_image_message_id)
     return {
         "session": session_payload(session),
-        "messages": _transcript_messages(messages, customer_visible=not user.is_admin),
+        **read_message_page(
+            messages,
+            transcript_before_id,
+            customer_visible=not user.is_admin,
+            inline_small_images=True,
+        ),
     }
 
 
@@ -493,27 +509,33 @@ async def close_ticket_as_admin(
     return close_ticket_with_evidence(db, user, ticket_id, body.model_dump())
 
 
-def _ticket_transcript(db: Session, user: User, ticket: CustomerServiceTicket):
-    session = db.get(CustomerServiceSession, ticket.session_id)
-    if session is None or session.user_id != ticket.user_id:
+def _ticket_transcript(
+    db: Session,
+    user: User,
+    ticket: CustomerServiceTicket,
+    before_id: int | None,
+    image_message_id: int | None,
+):
+    session_id = (
+        db.query(CustomerServiceSession.id)
+        .filter_by(id=ticket.session_id, user_id=ticket.user_id)
+        .scalar()
+    )
+    if session_id is None:
         raise HTTPException(404, "原客服会话不存在")
     is_owner = user.id == ticket.user_id
     selected = CustomerServiceMessage.ticket_id == ticket.id
     # Only the session owner can see context that predates a ticket.
     if is_owner:
         selected = or_(selected, CustomerServiceMessage.ticket_id.is_(None))
-    messages = (
-        db.query(CustomerServiceMessage)
-        .filter_by(session_id=session.id, user_id=ticket.user_id)
-        .filter(selected)
-        .order_by(CustomerServiceMessage.id.asc())
-        .all()
-    )
+    messages = conversation_messages(db, session_id, ticket.user_id).filter(selected)
+    if image_message_id is not None:
+        return read_message_screenshot(messages, image_message_id)
     return {
         "ticket": customer_view.customer_ticket_row(ticket, include_acceptance=is_owner),
-        "session_id": session.id,
+        "session_id": session_id,
         "can_reply": is_owner,
-        "messages": _transcript_messages(messages, customer_visible=True),
+        **read_message_page(messages, before_id, customer_visible=True),
     }
 
 
@@ -523,12 +545,17 @@ async def ticket_detail(
     db: Session = Depends(get_db),
     user: User = Depends(_get_current_user),
     include_transcript: bool = False,
+    transcript_before_id: Annotated[int | None, Query(gt=0, le=2_147_483_647)] = None,
+    transcript_image_message_id: Annotated[int | None, Query(gt=0, le=2_147_483_647)] = None,
 ):
-    if include_transcript and isinstance(user, TicketReader):
+    transcript_requested = include_transcript or transcript_image_message_id is not None
+    if transcript_requested and isinstance(user, TicketReader):
         raise HTTPException(403, "工单读取授权不包含会话内容")
     ticket = _visible_ticket_or_404(db, user, ticket_id)
-    if include_transcript:
-        return _ticket_transcript(db, user, ticket)
+    if transcript_requested:
+        return _ticket_transcript(
+            db, user, ticket, transcript_before_id, transcript_image_message_id
+        )
     if isinstance(user, TicketReader):
         return reader_detail(db, ticket, user)
 

@@ -18,6 +18,13 @@
         </div>
 
         <div ref="messagesEl" class="cs-messages">
+          <button
+            v-if="nextBeforeId !== null"
+            type="button"
+            class="cs-btn cs-btn--ghost cs-transcript-more"
+            :disabled="loading || loadingOlder"
+            @click="loadOlderMessages"
+          >{{ loadingOlder ? '正在读取更早消息…' : '加载更早消息' }}</button>
           <article v-for="msg in messages" :key="msg.id" :class="['cs-message', `cs-message--${msg.role}`]">
             <div class="cs-bubble">
               <span v-if="msg.receiptLabel" class="cs-muted">{{ msg.receiptLabel }}</span>
@@ -28,8 +35,15 @@
                 @click="onBubbleClick($event, msg)"
               />
               <p v-else-if="msg.content && msg.content !== '[用户补充了图片资料]'" class="cs-bubble__text">{{ msg.content }}</p>
-              <p v-else-if="msg.imageDataUrl || msg.content === '[用户补充了图片资料]'" class="cs-bubble__text">已附上图片</p>
-              <img v-if="msg.imageDataUrl" :src="msg.imageDataUrl" alt="补充图片" class="cs-bubble__img" />
+              <p v-else-if="msg.imageDataUrl || msg.screenshotMessageId || msg.content === '[用户补充了图片资料]'" class="cs-bubble__text">已附上图片</p>
+              <img v-if="screenshotUrl(msg)" :src="screenshotUrl(msg)" alt="补充图片" class="cs-bubble__img" />
+              <button
+                v-else-if="msg.screenshotMessageId"
+                type="button"
+                class="cs-btn cs-btn--ghost cs-bubble__confirmation"
+                :disabled="screenshotLoading.has(msg.screenshotMessageId)"
+                @click="loadScreenshot(msg)"
+              >{{ screenshotLoading.has(msg.screenshotMessageId) ? '正在读取截图…' : '查看截图' }}</button>
               <button
                 v-if="intakeConfirmation?.message === msg"
                 type="button"
@@ -165,6 +179,7 @@ const {
   draft, loading, error, activeSessionId, openedTicketRef, readOnly, messages, messagesEl, quickPrompts,
   usePrompt, send, sendText, confirmIntake, intakeConfirmation, onBubbleClick, newSession, visibleCards, openTicket,
   acceptanceNeedsRefresh, refreshAcceptance,
+  nextBeforeId, loadingOlder, loadOlderMessages, screenshotUrl, screenshotLoading, loadScreenshot,
 } = chat
 const {
   note: decisionNote, notice: decisionNotice, pending: pendingDecision, busy: decisionBusy,
