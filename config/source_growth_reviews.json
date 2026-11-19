@@ -112,13 +112,13 @@
     "FHD/app/fastapi_routes/reviewed_excel_template.py": {
       "base_file": "FHD/app/fastapi_routes/reviewed_excel_template.py",
       "base_blob": "042a95d982171b9d43a59a5dff4561d88e016fdd",
-      "head_blob": "d014c7f5bb37b2a9b22bc767c819e36487f4132e",
+      "head_blob": "40df808894c751f358d31a92e164fb1c0b47dd7b",
       "before_lines": 3123,
-      "after_lines": 3134,
-      "reason": "登记本次增长评审：复用原件矩阵判断校验考勤工作区，并向客户端返回现有预演的准确版本。",
-      "boundary": "保持既有账户及租户授权，预演版本来自既有运行，未提交旧策略预演失效而已提交回执保留。",
-      "validation": "预演确认、旧策略恢复、竞争和租户隔离在后端组合通过；前端文档与记忆相关203项通过。",
-      "follow_up": "沿用专用考勤授权及现有模板流程；桌面真实原件的最终交互仍需安装候选验收。",
+      "after_lines": 3180,
+      "reason": "登记本次增长评审：复用既有目标分类模型，先判断用户选中片段的写入目标，再应用考勤工作区授权，避免归档中未选内容误阻断客户或产品预演。",
+      "boundary": "模型前继续检查身份、租户、所有者、审阅版本与已保存选择；目标采用既有置信阈值，缺模型回退仅检查所选片段，只有出货目标读取归档出货内容，保存和审批版本绑定保持不变。",
+      "validation": "真实混合原件在旧实现返回考勤409，新实现正常预演；完整入库确认77项通过，覆盖模型考勤拒绝、低置信与无模型回退、已回答拒绝释放claim、未回答超时保持unknown、旧策略预演与已提交回执。独立安全二审无新增阻断。",
+      "follow_up": "继续复用现有模型会话和审计机制，维护目标分类与数据提取边界；该记录仅为架构评审请求，不代表额外批准。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/ai_chat_app_service.py": {
@@ -624,6 +624,42 @@
       "head_blob": "4b221833ad7ab83b95555b37a93372f8f7ccfe6d",
       "before_lines": 585,
       "after_lines": 844
+    },
+    "FHD/mobile-flutter-poc/lib/src/features/workspace/local_workspace_screen.dart": {
+      "base_file": null,
+      "base_blob": null,
+      "head_blob": "a5af5a6e0b470d4da841e74caeef4ccf579bff68",
+      "before_lines": 0,
+      "after_lines": 1295,
+      "reason": "登记本次增长评审：本机客户、商品和订单草稿页面提供显式首次数据来源选择、同步冲突处理、解绑和全部历史归档的分页浏览。",
+      "boundary": "界面通过既有LocalWorkspaceController访问设备本地数据；仅展开时异步读取单份归档，错误可重试，不改变服务端企业权限、配对验证和同步协议。",
+      "validation": "最终组合Flutter3.44.7含Harmony插件依赖锁校验及静态分析通过，完整550通过、1项既有联网冒烟跳过；归档13项定向覆盖真实SQLite205份历史分页、按ID完整恢复、恢复前留存和详情错误重试。HAP原生编译、Android/iOS构建及设备验收分别保留验证状态，不以Dart测试代替。",
+      "follow_up": "继续复用现有SQLite事务和Material组件，扩展正式订单或库存前复核业务边界；本登记仅为架构评审请求，不代表额外批准。",
+      "review_owner": "@42433422"
+    },
+    "FHD/mobile-flutter-poc/lib/src/data/local_workspace.dart": {
+      "base_file": null,
+      "base_blob": null,
+      "head_blob": "0d5f67dce6b3a1b575f49a9ece0cf95233d3e4e3",
+      "before_lines": 0,
+      "after_lines": 814,
+      "reason": "登记本次增长评审：设备本地工作区复用Drift/SQLite及既有加密组件处理离线记录、事务回执与双向同步；归档改为有界元数据分页和按需读取快照。",
+      "boundary": "设备本地工作区数据层，100条限制仅用于归档元数据页；恢复在原事务中按ID读取完整历史，保留未绑定要求和恢复前留存当前全部数据。",
+      "validation": "最终组合Flutter3.44.7含Harmony插件依赖锁校验及静态分析通过，完整550通过、1项既有联网冒烟跳过；归档13项定向覆盖真实SQLite205份历史分页、按ID完整恢复、恢复前留存和详情错误重试。HAP原生编译、Android/iOS构建及设备验收分别保留验证状态，不以Dart测试代替。",
+      "follow_up": "继续复用现有SQLite事务和Material组件，扩展正式订单或库存前复核业务边界；本登记仅为架构评审请求，不代表额外批准。",
+      "review_owner": "@42433422"
+    },
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/api/market_routes_merged.py": {
+      "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/api/market_routes_merged.py",
+      "base_blob": "2f0887bc2ea080292ac318b1286ca69eea980fe0",
+      "head_blob": "45514d4c2fce6c99a807391b52b440ccc644b6a6",
+      "before_lines": 2309,
+      "after_lines": 2323,
+      "reason": "评审请求：在现有市场路由增加14行，统一个人免费档生命周期能力输出、禁止历史Mod授权与交付包绕过免费档边界，并将原邮箱验证绑定到当前账号，拒绝已用或过期验证码。",
+      "boundary": "复用现有生命周期、验证码和个人档常量；金额与赠额预算在原计费边界处理，路由不新增身份或钱包实现，已有邮箱不得借领取接口改绑。",
+      "validation": "个人档FHD后端253项、主应用前端191项、市场注册71项、赠额UI最终61项、赠额后端77项及3项迁移/历史流水补充回归通过；MODstore全量mypy通过。包含真实SQLite并发预算、验证码失效/重放、Java HTTP契约和丢ACK幂等；Java JDK17 Maven完整240项执行通过，22项Docker场景依赖最终PostgreSQL CI。最终远端CI仍待完成，本记录不是批准。",
+      "follow_up": "@42433422复核现有市场API中这9行边界收紧及最终CI；后续继续复用统一生命周期和权限服务，不以本登记代替安全或架构评审。",
+      "review_owner": "@42433422"
     }
   }
 }

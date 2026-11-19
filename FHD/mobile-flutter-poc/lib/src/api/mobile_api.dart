@@ -2,6 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:pub_semver/pub_semver.dart';
+
 import '../platform/credential_cipher.dart';
 import '../security/relay_e2ee.dart';
 import '../data/service_topology_ssot.dart';

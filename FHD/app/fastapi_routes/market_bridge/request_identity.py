@@ -52,8 +52,9 @@ class RequestIdentity:
         """Write market JWT from ``login_market_with_password`` (or register) onto the current FHD session."""
         token = str(market_result.get("token") or "").strip()
         refresh = str(market_result.get("refresh_token") or "").strip()
-        if token:
-            self.save(self.session_id(request), token, refresh or None)
+        sid = self.owned_session(request, self.current_owner(request))
+        if sid and token:
+            self.save(sid, token, refresh or None)
         return (token, refresh)
 
     async def refresh_entitlements(self, session_id: str) -> None:
@@ -108,9 +109,16 @@ class RequestIdentity:
     def current_owner(self, request: Request) -> int | None:
         try:
             user = self.current_user(request)
-            return getattr(user, "id", None) if user else None
+            if not user or not getattr(user, "is_active", True):
+                return None
+            user_id = getattr(user, "id", None)
+            return user_id if type(user_id) is int and user_id > 0 else None
         except RECOVERABLE_ERRORS:
             return None
+
+    def owned_session(self, request: Request, user_id: int | None) -> str:
+        sid = self.session_id(request)
+        return sid if sid and user_id is not None and self.user_id(sid) == user_id else ""
 
     def authorization(self, request: Request, body: dict[str, Any]) -> str:
         """Current desktop session token → newest persisted token → explicit browser token.
@@ -119,11 +127,11 @@ class RequestIdentity:
         a fresh token bound to the current FHD login session. Strong account state should follow the
         backend session, not stale client storage.
         """
-        sid = self.session_id(request)
-        session_auth = self.auth_header(self.access_token(sid))
+        user_id = self.current_owner(request)
+        sid = self.owned_session(request, user_id)
+        session_auth = self.auth_header(self.access_token(sid)) if sid else ""
         if session_auth:
             return session_auth
-        user_id = self.current_owner(request)
         if user_id is not None:
             latest_auth = self.auth_header(self.latest_token(user_id=user_id))
             if latest_auth:
@@ -140,20 +148,16 @@ class RequestIdentity:
 
     async def resolved_authorization(self, request: Request, body: dict[str, Any]) -> str:
         """Like ``_authorization_from_request`` but refreshes expired session-bound market JWTs."""
-        sid = self.session_id(request)
-        user_id = self.current_owner(request)
-        session_tok = self.normalize(self.access_token(sid))
-        if not session_tok and user_id is not None:
-            session_tok = self.normalize(self.latest_token(user_id=user_id))
-        if session_tok:
+        sid = self.owned_session(request, self.current_owner(request))
+        if sid:
             resolved = await self.resolve_token(sid)
             if resolved:
                 return self.auth_header(resolved)
         return self.fallback_auth(request, body)
 
     def market_auth(self, request: Request) -> str:
-        sid = self.session_id(request)
-        tok = self.access_token(sid)
+        sid = self.owned_session(request, self.current_owner(request))
+        tok = self.access_token(sid) if sid else ""
         if tok:
             return tok
         return str(request.headers.get("Authorization") or "").strip()
@@ -173,7 +177,9 @@ class RequestIdentity:
         payload = await self.proxy("GET", "/api/auth/me", authorization=authorization)
         if isinstance(payload, JSONResponse):
             return payload
-        self.save(self.session_id(request), self.normalize(authorization))
+        sid = self.owned_session(request, self.current_owner(request))
+        if sid:
+            self.save(sid, self.normalize(authorization))
         data = (
             payload.get("data")
             if isinstance(payload, dict) and isinstance(payload.get("data"), dict)

@@ -243,6 +243,7 @@ def account_profile_fields(user: User | None, session_meta: dict[str, Any]) -> J
     return {
         "tier": tier or None,
         "account_tier": resolve_account_tier_for_user(tier, getattr(user, "account_tier", None)),
+        "personal_plan": getattr(user, "account_tier", None) == "personal",
         "budget_range": getattr(user, "budget_range", None) if user is not None else None,
         "entitled_industries": list(getattr(user, "entitled_industries", None) or []),
         "market_membership_tier": session_meta.get("market_membership_tier"),

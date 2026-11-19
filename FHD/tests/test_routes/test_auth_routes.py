@@ -67,9 +67,9 @@ class TestOpenRegistrationAllowed:
         monkeypatch.delenv("FHD_ALLOW_OPEN_REGISTRATION", raising=False)
         assert auth_mod._open_registration_allowed("enterprise") is False
 
-    def test_personal_default_true(self, auth_mod, monkeypatch):
+    def test_legacy_personal_registration_is_off_by_default(self, auth_mod, monkeypatch):
         monkeypatch.delenv("FHD_ALLOW_OPEN_REGISTRATION", raising=False)
-        assert auth_mod._open_registration_allowed("personal") is True
+        assert auth_mod._open_registration_allowed("personal") is False
 
     def test_env_yes(self, auth_mod, monkeypatch):
         monkeypatch.setenv("FHD_ALLOW_OPEN_REGISTRATION", "yes")

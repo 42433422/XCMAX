@@ -45,14 +45,12 @@ def test_desktop_enterprise_installer_builds_full_frontend() -> None:
     sh_thin = (scripts / "build-windows-electron-only.sh").read_text(encoding="utf-8")
     spec = (scripts / "xcagi_backend.spec").read_text(encoding="utf-8")
 
-    assert "personal = 'full'" in ps_backend
-    assert "enterprise = 'full'" in ps_backend
-    assert "build:minimal" not in ps_backend
-    assert "build:generic" not in ps_backend
-    assert "personal   = 'full'" in ps_sync
-    assert "enterprise = 'full'" in ps_sync
-    assert "build:minimal" not in ps_sync
-    assert "build:generic" not in ps_sync
+    assert "[ValidateSet('enterprise', '')]" in ps_backend
+    for script in (ps_backend, ps_sync):
+        assert "$env:VITE_XCAGI_PRODUCT_SKU = 'enterprise'" in script
+        assert "npm run build:full" in script
+        assert "build:minimal" not in script
+        assert "build:generic" not in script
 
     assert "build-installer.ps1" in sh_windows and "-ProductSku" in sh_windows
     for script in (sh_thin,):

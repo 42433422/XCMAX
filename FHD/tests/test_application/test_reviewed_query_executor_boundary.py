@@ -49,6 +49,26 @@ def test_finance_exact_grant_restores_signed_scope_and_ambient_scope(trusted_act
 
 
 @pytest.mark.parametrize(
+    "tool,action,params,permission",
+    [
+        ("finance", "ledger_query", {}, "tool.finance.ledger_query"),
+        ("elt_import", "preview", {"file_path": "owned.xlsx"}, "elt.execute"),
+    ],
+)
+def test_personal_license_cannot_reuse_business_tool_grant(
+    trusted_actor, dispatch_calls, tool, action, params, permission
+):
+    from app.db.models.user import User
+
+    actor = trusted_actor(permissions=[permission])
+    with actor.factory.begin() as db:
+        db.get(User, actor.user_id).account_tier = "personal"
+    result = execute(actor, tool=tool, action=action, params=params)
+    assert result["error_code"] == "tool_permission_denied"
+    assert dispatch_calls == []
+
+
+@pytest.mark.parametrize(
     "kind", ["anonymous", "forged", "expired", "tenant", "mod", "grant", "tenant-role", "admin"]
 )
 def test_untrusted_or_ungranted_finance_never_queries(trusted_actor, dispatch_calls, kind):

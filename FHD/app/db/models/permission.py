@@ -9,6 +9,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.db_base import Base
 from app.utils.time import utc_now_naive
 
+# License ceiling for account_tier=personal, including pre-existing enterprise roles.
+PERSONAL_PLAN_PERMISSIONS = ("memory_v2.write",)
+
 role_permissions = Table(
     "role_permissions",
     Base.metadata,

@@ -17,7 +17,8 @@ def test_android_marked_contract_grade_in_version_md() -> None:
 def test_flutter_mobile_readme_declares_only_delivery_line() -> None:
     text = (ROOT / "mobile-flutter-poc" / "README.md").read_text(encoding="utf-8")
     assert "唯一移动端实现与交付主线" in text
-    assert "Android + iOS 单代码库" in text
+    assert "Android、iOS 和 HarmonyOS 候选构建共用 `lib/`" in text
+    assert "`android/`、`ios/` 和 `ohos/` 承载 Runner" in text
 
 
 def test_mobile_android_guide_exists() -> None:

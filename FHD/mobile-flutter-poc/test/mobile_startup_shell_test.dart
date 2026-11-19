@@ -71,6 +71,18 @@ void main() {
         session: const MobileSessionData(
           legalAcceptedVersion: 'legal-2',
           accessToken: 'access',
+          accountKind: 'enterprise',
+          personalPlan: true,
+        ),
+        appConfig: config,
+      ),
+      MobileStartupRoute.home,
+    );
+    expect(
+      resolveMobileStartupRoute(
+        session: const MobileSessionData(
+          legalAcceptedVersion: 'legal-2',
+          accessToken: 'access',
           setupComplete: true,
         ),
         appConfig: config,
@@ -313,6 +325,29 @@ void main() {
     }
   });
 
+  testWidgets('guest can open local workspace while cloud config is pending',
+      (tester) async {
+    final config = Completer<MobileAppConfigData>();
+    final api = _FakeStartupApi(
+      session: const MobileSessionData(),
+      config: _appConfig('legal-2'),
+      delayedConfig: config.future,
+    );
+    await tester.pumpWidget(
+      MobileStartupApp(
+        repository: _StartupRepository(api),
+        enableBiometricGate: false,
+      ),
+    );
+    await tester.pump();
+    expect(find.text('打开本地工作台'), findsOneWidget);
+    expect(find.text('密码登录'), findsNothing);
+
+    config.complete(_appConfig('legal-2'));
+    await tester.pumpAndSettle();
+    expect(find.text('请先同意协议'), findsOneWidget);
+  });
+
   testWidgets('legal version gates the Flutter root before auth', (
     tester,
   ) async {
@@ -471,6 +506,92 @@ void main() {
     },
   );
 
+  testWidgets('registration deep link waits for legal but not login', (
+    tester,
+  ) async {
+    final api = _FakeStartupApi(
+      session: const MobileSessionData(),
+      config: _appConfig('legal-2'),
+    );
+    final opened = <Uri>[];
+    await tester.pumpWidget(
+      MobileStartupApp(
+        repository: _StartupRepository(api),
+        deepLinkBridge: _FakeDeepLinkBridge(initialRouteValue: 'register'),
+        openExternalUrl: (uri) async {
+          opened.add(uri);
+          return true;
+        },
+        enableBiometricGate: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(opened, isEmpty);
+    expect(find.text('请先同意协议'), findsOneWidget);
+
+    await tester.tap(find.textContaining('我已阅读并同意'));
+    await tester.pump();
+    await tester.tap(find.text('进入 XCAGI'));
+    await tester.pumpAndSettle();
+
+    expect(opened.single.toString(),
+        'https://xiu-ci.com/market/register?source=xcagi-mobile');
+    expect(api.session.hasAuth, isFalse);
+    expect(find.text('密码登录'), findsOneWidget);
+    expect(find.text('打开本地工作台'), findsOneWidget);
+    expect(find.byType(HomeShell), findsNothing);
+  });
+
+  for (final throws in [false, true]) {
+    testWidgets('registration launch failure is visible and retryable: $throws',
+        (tester) async {
+      final opened = <Uri>[];
+      await tester.pumpWidget(
+        MobileStartupApp(
+          repository: _StartupRepository(_FakeStartupApi(
+            session: const MobileSessionData(legalAcceptedVersion: 'legal-2'),
+            config: _appConfig('legal-2'),
+          )),
+          deepLinkBridge: _FakeDeepLinkBridge(initialRouteValue: 'register'),
+          openExternalUrl: (uri) async {
+            opened.add(uri);
+            if (opened.length > 1) return true;
+            if (throws) throw StateError('browser unavailable');
+            return false;
+          },
+          enableBiometricGate: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(opened, hasLength(1));
+      expect(find.text('无法打开注册页面，请稍后重试'), findsOneWidget);
+      expect(find.text('密码登录'), findsOneWidget);
+
+      await tester.ensureVisible(find.text('账号注册'));
+      await tester.tap(find.text('账号注册'));
+      await tester.pumpAndSettle();
+      expect(opened, hasLength(2));
+      expect(opened.last, opened.first);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('business deep link still waits for login', (tester) async {
+    await tester.pumpWidget(
+      MobileStartupApp(
+        repository: _StartupRepository(_FakeStartupApi(
+          session: const MobileSessionData(legalAcceptedVersion: 'legal-2'),
+          config: _appConfig('legal-2'),
+        )),
+        deepLinkBridge: _FakeDeepLinkBridge(initialRouteValue: 'approval/12'),
+        enableBiometricGate: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('密码登录'), findsOneWidget);
+    expect(find.byType(ApprovalDetailScreen), findsNothing);
+  });
+
   testWidgets('pairing deep link waits for legal gate before exchange', (
     tester,
   ) async {
@@ -551,9 +672,14 @@ MobileAppConfigData _appConfig(String legalVersion) {
 }
 
 class _FakeStartupApi extends MobileApiClient {
-  _FakeStartupApi({required this.session, required this.config});
+  _FakeStartupApi({
+    required this.session,
+    required this.config,
+    this.delayedConfig,
+  });
 
   final MobileAppConfigData config;
+  final Future<MobileAppConfigData>? delayedConfig;
   final _changes = StreamController<MobileSessionData>.broadcast();
   MobileSessionData session;
 
@@ -569,7 +695,7 @@ class _FakeStartupApi extends MobileApiClient {
     int currentVersionCode = MobileBuildConfig.versionCode,
     String sku = MobileBuildConfig.productSku,
   }) async {
-    return config;
+    return await (delayedConfig ?? Future.value(config));
   }
 
   @override

@@ -50,6 +50,7 @@ class User(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     username = Column(String(64), unique=True, nullable=False, index=True)
     email = Column(String(128), unique=True, nullable=True)
+    verified_email_sha256 = Column(String(64), nullable=True)
     phone = Column(String(32), unique=True, nullable=True, index=True)
     password_hash = Column(String(256), nullable=False)
     is_admin = Column(Boolean, default=False)

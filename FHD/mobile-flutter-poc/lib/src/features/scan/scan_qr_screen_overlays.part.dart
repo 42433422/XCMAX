@@ -201,7 +201,7 @@ class _ScannerFailure extends StatelessWidget {
 
   final String message;
   final VoidCallback onRetry;
-  final VoidCallback onOpenManual;
+  final VoidCallback? onOpenManual;
 
   @override
   Widget build(BuildContext context) {
@@ -227,17 +227,19 @@ class _ScannerFailure extends StatelessWidget {
             onPressed: onRetry,
             child: Text('重试', style: TextStyle(color: colors.brand)),
           ),
-          const SizedBox(height: 12),
-          TextButton(
-            onPressed: onOpenManual,
-            child: Text(
-              '输入设备码',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.7),
-                fontSize: 14,
+          if (onOpenManual != null) ...[
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed: onOpenManual,
+              child: Text(
+                '输入设备码',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.7),
+                  fontSize: 14,
+                ),
               ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -252,7 +254,7 @@ class _ScannerUnavailable extends StatelessWidget {
   });
 
   final VoidCallback onRequestPermission;
-  final VoidCallback onOpenManual;
+  final VoidCallback? onOpenManual;
   final bool requesting;
 
   @override
@@ -289,20 +291,22 @@ class _ScannerUnavailable extends StatelessWidget {
                   )
                 : Text('授予相机权限', style: TextStyle(color: colors.brand)),
           ),
-          const SizedBox(height: 12),
-          TextButton(
-            onPressed: onOpenManual,
-            child: Text(
-              '输入设备码',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.7),
-                fontSize: 14,
-                height: 1.36,
-                fontWeight: FontWeight.w500,
-                letterSpacing: 0,
+          if (onOpenManual != null) ...[
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed: onOpenManual,
+              child: Text(
+                '输入设备码',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.7),
+                  fontSize: 14,
+                  height: 1.36,
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: 0,
+                ),
               ),
             ),
-          ),
+          ],
         ],
       ),
     );

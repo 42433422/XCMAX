@@ -241,7 +241,7 @@ def route_http(monkeypatch):
         monkeypatch.setattr(
             httpx,
             "AsyncClient",
-            lambda **kwargs: client_type(transport=httpx.MockTransport(respond), **kwargs),
+            lambda **kwargs: client_type(**(kwargs | {"transport": httpx.MockTransport(respond)})),
         )
         return seen
 
@@ -420,12 +420,10 @@ async def test_etl_recovery_uses_explicit_market_proxy(monkeypatch):
     def client(**kwargs):
         options.append(kwargs.copy())
         kwargs.pop("proxy")
-        return client_factory(
-            transport=httpx.MockTransport(
-                lambda _: httpx.Response(200, json={"state": "completed"})
-            ),
-            **kwargs,
+        kwargs["transport"] = httpx.MockTransport(
+            lambda _: httpx.Response(200, json={"state": "completed"})
         )
+        return client_factory(**kwargs)
 
     monkeypatch.setattr(httpx, "AsyncClient", client)
     result = await SessionMarketProvider(7, "synthetic-token", timeout_seconds=1).lookup_call(
@@ -455,7 +453,7 @@ async def test_transient_route_connection_failure_retries_only_route_get(monkeyp
     monkeypatch.setattr(
         httpx,
         "AsyncClient",
-        lambda **kwargs: real_client(transport=httpx.MockTransport(respond), **kwargs),
+        lambda **kwargs: real_client(**(kwargs | {"transport": httpx.MockTransport(respond)})),
     )
     adapter = SimpleNamespace(
         chat_completion=AsyncMock(return_value={"choices": []}), close=AsyncMock()

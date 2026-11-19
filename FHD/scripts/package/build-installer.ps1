@@ -3,9 +3,8 @@
   [switch]$SkipBackend,
   # 复用 build-frontend.sh 产出的共享 templates/vue-dist，不再重建前端（统一 Web/桌面构建源）
   [switch]$SkipFrontend,
-  [Parameter(Mandatory = $true)]
-  [ValidateSet('personal', 'enterprise')]
-  [string]$ProductSku,
+  [ValidateSet('enterprise')]
+  [string]$ProductSku = 'enterprise',
   [string]$SunbirdSeedZipPath = '',
   [string]$InstallerOutputSubdir = '',
   [string]$InstallerFileName = ''
@@ -24,19 +23,6 @@ if ($Version -notmatch '^\d+\.\d+\.\d+(\.\d+)?$') {
   throw "Invalid stable product version '$Version'; expected x.y.z or x.y.z.w"
 }
 $ToolchainVersion = (($Version -split '\.')[0..2] -join '.')
-
-$skuLabels = @{
-  personal   = 'Personal'
-  enterprise = 'Enterprise'
-}
-$skuAppIds = @{
-  personal   = 'com.xcagi.desktop.personal'
-  enterprise = 'com.xcagi.desktop.enterprise'
-}
-$skuUpdateUrls = @{
-  personal   = 'https://xiu-ci.com/releases/stable/personal/'
-  enterprise = 'https://xiu-ci.com/releases/stable/enterprise/'
-}
 
 function Assert-TextFileContains {
   param(
@@ -75,7 +61,7 @@ function Write-SkuJson {
   [System.IO.File]::WriteAllText($Path, "$json`n", $utf8NoBom)
 }
 
-$label = $skuLabels[$ProductSku]
+$label = 'Enterprise'
 $releaseRoot = Join-Path $Root "release\xcagi-v$Version"
 $outSubdir = if ($InstallerOutputSubdir) { $InstallerOutputSubdir } else { $ProductSku }
 $outDir = Join-Path $releaseRoot $outSubdir
@@ -172,8 +158,8 @@ try {
   Remove-Item $distBundlePath -Force -ErrorAction SilentlyContinue
 }
 npm version $ToolchainVersion --no-git-tag-version --allow-same-version
-$ebAppId = $skuAppIds[$ProductSku]
-$ebPublishUrl = $skuUpdateUrls[$ProductSku]
+$ebAppId = 'com.xcagi.desktop.enterprise'
+$ebPublishUrl = 'https://xiu-ci.com/releases/stable/enterprise/'
 $ebArtifact = "XCAGI-$label-Setup-$Version-`${arch}.`${ext}"
 $installerNsh = Join-Path $Root "desktop\build\installer.nsh"
 $nshText = [System.IO.File]::ReadAllText($installerNsh)

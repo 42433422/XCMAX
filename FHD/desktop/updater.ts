@@ -1,5 +1,4 @@
-import { BrowserWindow, app, net, session } from 'electron'
-import type { Session } from 'electron'
+import { BrowserWindow, app } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import type { UpdateInfo } from 'electron-updater'
 import { isDesktopPackaged } from './desktop-config'
@@ -8,71 +7,40 @@ import fs from 'node:fs'
 import path from 'node:path'
 import {
   normalizeReleaseMedia,
-  parseReleaseMediaFromYaml,
-  type ReleaseMediaSlide,
 } from './release-media.js'
 import { appendUpdaterEvent, discardPendingUpdateInstallReceipt } from './update-install-receipts.js'
 import { installResumableUpdaterDownload } from './resumable-download.js'
+import { SignedUpdateProvider } from './signed-update-provider.js'
 
 let updateDownloaded = false
 let downloadedVersion = ''
 let downloadedBuildSha = ''
-let remoteBuildSha = ''
-let remoteProductVersion = ''
-let remoteReleaseDate = ''
-let remoteReleaseNotes = ''
-let remoteReleaseMedia: ReleaseMediaSlide[] = []
-let remoteMinVersion = ''
-let remoteForceUpgrade = false
+type ProductUpdateInfo = UpdateInfo & {
+  productVersion?: string
+  buildSha?: string
+  releaseMedia?: unknown
+  minVersion?: string
+  forceUpgrade?: boolean
+}
+
+let availableUpdate: ProductUpdateInfo | null = null
 let rebuildHookInstalled = false
-let updaterNetSession: Session | null = null
-let updaterNetSessionReady: Promise<Session> | null = null
-let downloadInFlight = false
+let signedFeedConfigured = false
+let updaterNetSessionReady: Promise<typeof autoUpdater.netSession> | null = null
+let checkPromise: Promise<unknown> | null = null
 let downloadPromise: Promise<unknown> | null = null
 /** 最近一次可展示给渲染进程的更新事件（刷新页面后可重放）。 */
 let lastUpdateEvent: { type: string; data?: unknown } | null = null
 
-export async function ensureUpdaterNetSession(): Promise<Session> {
-  if (updaterNetSession) {
-    return updaterNetSession
-  }
+export function ensureUpdaterNetSession(): Promise<typeof autoUpdater.netSession> {
   if (!updaterNetSessionReady) {
-    updaterNetSessionReady = (async () => {
-      // electron-updater 6.x exposes the exact Session used by its HTTP executor
-      // through a read-only getter. Configure that Session in place; assigning to
-      // `autoUpdater.netSession` crashes packaged apps because the property has no setter.
-      const updaterSession = autoUpdater.netSession
-      await updaterSession.setProxy({ mode: 'direct' })
-      updaterNetSession = updaterSession
-      return updaterSession
-    })()
+    const updaterSession = autoUpdater.netSession
+    updaterNetSessionReady = updaterSession.setProxy({ mode: 'direct' }).then(() => updaterSession, error => {
+      updaterNetSessionReady = null
+      throw error
+    })
   }
   return updaterNetSessionReady
-}
-
-export function fetchTextViaSession(targetSession: Session, url: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const request = net.request({ method: 'GET', url, session: targetSession })
-    const chunks: Buffer[] = []
-    request.on('response', response => {
-      response.on('data', chunk => chunks.push(Buffer.from(chunk)))
-      response.on('end', () => {
-        const status = response.statusCode || 0
-        if (status < 200 || status >= 300) {
-          reject(new Error(`更新元数据下载失败: ${status} ${response.statusMessage || ''}`.trim()))
-          return
-        }
-        resolve(Buffer.concat(chunks).toString('utf8'))
-      })
-      response.on('error', reject)
-    })
-    request.on('error', reject)
-    request.end()
-  })
-}
-
-function updaterLogPath(): string {
-  return path.join(app.getPath('userData'), 'logs', 'updater-events.jsonl')
 }
 
 export function isUpdateDownloaded(): boolean {
@@ -109,12 +77,12 @@ function buildInfoCandidates(): string[] {
 
 /** 远程更新元数据中的最低兼容版本（低于此版本必须强制更新）。 */
 export function getRemoteMinVersion(): string {
-  return remoteMinVersion
+  return String(availableUpdate?.minVersion || '').trim()
 }
 
 /** 远程更新元数据标记了强制升级。 */
 export function isForceUpgradeEnabled(): boolean {
-  return remoteForceUpgrade
+  return availableUpdate?.forceUpgrade === true
 }
 
 /** Product version is four-part and comes from signed build metadata, not npm SemVer. */
@@ -136,9 +104,10 @@ export function readLocalProductVersion(): string {
 
 /** 当前版本是否低于最低兼容版本，需要强制升级。 */
 export function isCurrentBelowMinVersion(): boolean {
-  if (!remoteMinVersion) return false
+  const minVersion = getRemoteMinVersion()
+  if (!minVersion) return false
   try {
-    return compareVersions(readLocalProductVersion(), remoteMinVersion) < 0
+    return compareVersions(readLocalProductVersion(), minVersion) < 0
   } catch {
     return false
   }
@@ -169,7 +138,7 @@ export function compareVersions(a: string, b: string): number {
 
 /** 当前 Electron 版本是否低于最低兼容版本（需要强制升级）。 */
 export function isForceUpgradeRequired(): boolean {
-  return remoteForceUpgrade && isCurrentBelowMinVersion()
+  return isForceUpgradeEnabled() && isCurrentBelowMinVersion()
 }
 
 export function readLocalBuildSha(): string {
@@ -234,12 +203,6 @@ export function isSameVersionRebuildNewer(input: {
   return remoteMs > localMs
 }
 
-export function parseYamlField(content: string, field: string): string {
-  const prefix = `${field}:`
-  const line = content.split(/\r?\n/).find(entry => entry.startsWith(prefix))
-  return line ? line.slice(prefix.length).trim() : ''
-}
-
 function installSameVersionRebuildHook(): void {
   if (rebuildHookInstalled) {
     return
@@ -257,61 +220,40 @@ function installSameVersionRebuildHook(): void {
     if (process.platform === 'darwin' && !updateInfoHasMacZip(updateInfo)) {
       return false
     }
-    const remoteSha = String(
-      (updateInfo as UpdateInfo & { buildSha?: string }).buildSha || remoteBuildSha || ''
-    ).trim()
+    const remoteSha = String((updateInfo as ProductUpdateInfo).buildSha || '').trim()
     const localSha = readLocalBuildSha()
-    // 同一 Git 构建已装在本机：绝不再提示自更新。
     if (remoteSha && localSha && remoteSha === localSha) {
       return false
     }
     if (original && (await original(updateInfo))) {
       return true
     }
-    const releaseDate = String(
-      (updateInfo as UpdateInfo & { releaseDate?: string }).releaseDate || remoteReleaseDate || ''
-    ).trim()
+    // The upstream check short-circuits equal SemVer before evaluating OS support and rollout.
+    if (updateInfo.version !== autoUpdater.currentVersion.version
+        || !(await autoUpdater.isUpdateSupported(updateInfo))
+        || !(await autoUpdater.isUserWithinRollout(updateInfo))) {
+      return false
+    }
     return isSameVersionRebuildNewer({
       remoteSha,
       localSha,
-      remoteReleaseDate: releaseDate,
+      remoteReleaseDate: updateInfo.releaseDate,
       localBuildTimeMs: readLocalBuildTimeMs(),
     })
   }
 }
 
 function updateInfoHasMacZip(updateInfo: UpdateInfo): boolean {
-  const files = Array.isArray(updateInfo.files) ? updateInfo.files : []
-  if (files.some(file => String(file?.url || '').toLowerCase().endsWith('.zip'))) {
-    return true
-  }
-  const pathHint = String(updateInfo.path || '').toLowerCase()
-  return pathHint.endsWith('.zip')
+  const files = updateInfo.files?.length ? updateInfo.files : [{ url: updateInfo.path }]
+  return files.some(file => /\.zip(?:[?#]|$)/i.test(file.url))
 }
 
-function enrichUpdateInfo(
-  info: UpdateInfo,
-): UpdateInfo & {
-  productVersion?: string
-  buildSha?: string
-  releaseNotes?: string
-  releaseMedia?: ReleaseMediaSlide[]
-} {
-  const notes = String(
-    (info as UpdateInfo & { releaseNotes?: string }).releaseNotes || remoteReleaseNotes || ''
-  ).trim()
-  const fromInfo = normalizeReleaseMedia(
-    (info as UpdateInfo & { releaseMedia?: unknown }).releaseMedia,
-  )
-  const releaseMedia = fromInfo.length ? fromInfo : remoteReleaseMedia
+function enrichUpdateInfo(info: ProductUpdateInfo) {
   return {
     ...info,
-    productVersion: remoteProductVersion || String(info.version || '').trim(),
-    buildSha: String(
-      (info as UpdateInfo & { buildSha?: string }).buildSha || remoteBuildSha || ''
-    ).trim(),
-    releaseNotes: notes,
-    ...(releaseMedia.length ? { releaseMedia } : {}),
+    productVersion: String(info.productVersion || info.version).trim(),
+    buildSha: String(info.buildSha || '').trim(),
+    releaseMedia: normalizeReleaseMedia(info.releaseMedia),
   }
 }
 
@@ -325,24 +267,24 @@ export function configureUpdater(
 ): void {
   autoUpdater.autoDownload = false
   autoUpdater.autoInstallOnAppQuit = false
-  ;(autoUpdater as unknown as { allowDowngrade?: boolean }).allowDowngrade = false
+  autoUpdater.allowDowngrade = false
   installResumableUpdaterDownload()
-  if (process.env.XCAGI_DESKTOP_TEST !== '1') {
-    void ensureUpdaterNetSession()
-  }
 
-  const updateUrl = process.env.XCAGI_UPDATE_URL
-  if (updateUrl) {
-    // generic 提供方默认拉取 latest.yml；勿设 channel，否则会请求 stable.yml 导致 404。
-    const feed: { provider: 'generic'; url: string; channel?: string } = {
-      provider: 'generic',
-      url: updateUrl,
-    }
-    const channel = String(process.env.XCAGI_UPDATE_CHANNEL || '').trim()
-    if (channel) {
-      feed.channel = channel
-    }
-    autoUpdater.setFeedURL(feed)
+  const url = process.env.XCAGI_UPDATE_URL
+  const publicKey = process.env.XCAGI_UPDATE_ED25519_PUBLIC_KEY
+  const channel = process.env.XCAGI_UPDATE_CHANNEL?.trim() || undefined
+  if (url && publicKey) {
+    autoUpdater.setFeedURL({
+      provider: 'custom',
+      updateProvider: SignedUpdateProvider,
+      url,
+      channel,
+      publicKey,
+    })
+    signedFeedConfigured = true
+    installSameVersionRebuildHook()
+  } else if (url && !isDesktopPackaged()) {
+    autoUpdater.setFeedURL({ provider: 'generic', url, channel })
   }
 
   const send = (type: string, data?: unknown) => {
@@ -379,23 +321,21 @@ export function configureUpdater(
 
   autoUpdater.on('checking-for-update', () => send('checking-for-update'))
   autoUpdater.on('update-available', info => {
+    availableUpdate = info
     appendUpdaterEvent('update_available', { version: info.version })
     send('update-available', enrichUpdateInfo(info))
   })
   autoUpdater.on('update-not-available', info => send('update-not-available', info))
   autoUpdater.on('download-progress', progress => send('download-progress', progress))
   autoUpdater.on('update-downloaded', info => {
+    const update = enrichUpdateInfo(info)
     updateDownloaded = true
-    downloadedVersion = remoteProductVersion || String(info.version || '').trim()
-    downloadedBuildSha = String(
-      (info as UpdateInfo & { buildSha?: string }).buildSha || remoteBuildSha || '',
-    ).trim()
-    downloadInFlight = false
+    downloadedVersion = update.productVersion
+    downloadedBuildSha = update.buildSha
     appendUpdaterEvent('update_downloaded', { version: info.version })
-    send('update-downloaded', enrichUpdateInfo(info))
+    send('update-downloaded', update)
   })
   autoUpdater.on('error', error => {
-    downloadInFlight = false
     send('error', { message: error.message, stack: error.stack, phase: 'updater' })
     appendUpdaterEvent('error', { message: error.message, stack: error.stack })
   })
@@ -428,7 +368,9 @@ export async function downloadUpdate(): Promise<unknown> {
   if (downloadPromise) {
     return downloadPromise
   }
-  downloadInFlight = true
+  if (!availableUpdate || checkPromise) {
+    throw new Error('请先检查更新，确认有可下载的版本')
+  }
   appendUpdaterEvent('download_start', {})
   downloadPromise = (async () => {
     try {
@@ -441,114 +383,36 @@ export async function downloadUpdate(): Promise<unknown> {
         : raw
       appendUpdaterEvent('download_failed', { message: raw })
       throw new Error(message)
-    } finally {
-      downloadInFlight = false
-      downloadPromise = null
     }
-  })()
+  })().finally(() => {
+    downloadPromise = null
+  })
   return downloadPromise
 }
 
 export async function runUpdateCheckWithDirectNet(): Promise<unknown> {
-  const defaultSession = session.defaultSession
-  const previous = await defaultSession.resolveProxy('https://xiu-ci.com')
-  await defaultSession.setProxy({ mode: 'direct' })
-  try {
-    return await checkForUpdates()
-  } finally {
-    if (/^PROXY/i.test(previous) || /^SOCKS/i.test(previous)) {
-      await defaultSession.setProxy({ mode: 'system' })
-    } else {
-      await defaultSession.setProxy({ mode: 'direct' })
+  if (downloadPromise || updateDownloaded) {
+    return { skipped: true, reason: 'update-already-downloading-or-downloaded' }
+  }
+  if (!process.env.XCAGI_UPDATE_URL) {
+    if (!isDesktopPackaged()) {
+      return { skipped: true, reason: 'dev-mode-without-XCAGI_UPDATE_URL' }
     }
+    throw new Error('缺少桌面更新源配置')
   }
-}
-
-function parseYamlBlock(content: string, field: string): string {
-  const lines = content.split(/\r?\n/)
-  const start = lines.findIndex(line => line.startsWith(`${field}:`))
-  if (start < 0) return ''
-  const head = lines[start].slice(`${field}:`.length).trim()
-  if (head && head !== '|' && head !== '>') {
-    return head.replace(/^["']|["']$/g, '')
+  if (isDesktopPackaged() && !signedFeedConfigured) {
+    throw new Error('桌面更新源尚未配置验签公钥')
   }
-  const collected: string[] = []
-  for (let i = start + 1; i < lines.length; i += 1) {
-    const line = lines[i]
-    if (!line.startsWith(' ') && !line.startsWith('\t') && line.trim() !== '') break
-    if (line.startsWith('signature:')) break
-    collected.push(line.replace(/^\s{2}/, ''))
-  }
-  return collected.join('\n').trim()
-}
-
-export async function checkForUpdates(): Promise<unknown> {
-  if (!isDesktopPackaged() && !process.env.XCAGI_UPDATE_URL) {
-    return { skipped: true, reason: 'dev-mode-without-XCAGI_UPDATE_URL' }
-  }
-  remoteProductVersion = ''
-  if (process.env.XCAGI_DESKTOP_TEST !== '1') {
-    await ensureUpdaterNetSession()
-  }
-  const publicKeyPem = process.env.XCAGI_UPDATE_ED25519_PUBLIC_KEY
-  const updateUrl = process.env.XCAGI_UPDATE_URL
-  if (publicKeyPem && updateUrl) {
-    const metadataText = await fetchLatestMetadataText()
-    remoteProductVersion = parseYamlField(metadataText, 'productVersion').replace(/^['"]|['"]$/g, '')
-    remoteBuildSha = parseYamlField(metadataText, 'buildSha')
-    remoteReleaseDate = parseYamlField(metadataText, 'releaseDate').replace(/^['"]|['"]$/g, '')
-    remoteReleaseNotes = parseYamlBlock(metadataText, 'releaseNotes')
-    remoteReleaseMedia = parseReleaseMediaFromYaml(metadataText)
-    remoteMinVersion = parseYamlField(metadataText, 'minVersion').replace(/^['"]|['"]$/g, '')
-    remoteForceUpgrade = String(parseYamlField(metadataText, 'forceUpgrade') || '').trim().toLowerCase() === 'true'
-    installSameVersionRebuildHook()
-  }
-  return autoUpdater.checkForUpdates()
-}
-
-export async function fetchLatestMetadataText(): Promise<string> {
-  const publicKeyPem = process.env.XCAGI_UPDATE_ED25519_PUBLIC_KEY
-  const updateUrl = process.env.XCAGI_UPDATE_URL
-  if (!publicKeyPem || !updateUrl) {
-    return ''
-  }
-
-  const file = process.platform === 'darwin' ? 'latest-mac.yml' : 'latest.yml'
-  const url = `${updateUrl.replace(/\/+$/, '')}/${file}`
-  let content: string
-  if (process.env.XCAGI_DESKTOP_TEST === '1') {
-    const response = await fetch(url)
-    if (!response.ok) {
-      throw new Error(`更新元数据下载失败: ${response.status} ${response.statusText}`)
+  checkPromise ??= (async () => {
+    availableUpdate = null
+    if (process.env.XCAGI_DESKTOP_TEST !== '1') {
+      await ensureUpdaterNetSession()
     }
-    content = await response.text()
-  } else {
-    const updaterSession = await ensureUpdaterNetSession()
-    content = await fetchTextViaSession(updaterSession, url)
-  }
-  await verifyMetadataSignatureText(content, publicKeyPem)
-  return content
-}
-
-export async function verifyLatestMetadataSignature(): Promise<void> {
-  await fetchLatestMetadataText()
-}
-
-/** 纯函数：校验 update 元数据文本的 Ed25519 二次签名。便于单测。 */
-export async function verifyMetadataSignatureText(content: string, publicKeyPem: string): Promise<void> {
-  const lines = content.split(/\r?\n/)
-  const signatureLine = lines.find(line => line.startsWith('signature: ed25519:'))
-  if (!signatureLine) {
-    throw new Error('更新元数据缺少 Ed25519 二次签名')
-  }
-
-  const body = lines.filter(line => !line.startsWith('signature: ed25519:')).join('\n').trimEnd()
-  const signature = Buffer.from(signatureLine.replace('signature: ed25519:', '').trim(), 'base64')
-  const publicKey = crypto.createPublicKey(publicKeyPem.replace(/\\n/g, '\n'))
-  const ok = crypto.verify(null, Buffer.from(body, 'utf8'), publicKey, signature)
-  if (!ok) {
-    throw new Error('更新元数据 Ed25519 二次签名校验失败')
-  }
+    return autoUpdater.checkForUpdates()
+  })().finally(() => {
+    checkPromise = null
+  })
+  return checkPromise
 }
 
 /** 测试辅助：重置 updateDownloaded 状态。仅用于单测。 */
@@ -558,14 +422,9 @@ export function __resetUpdateDownloadedForTest(): void {
   downloadedVersion = ''
   downloadedBuildSha = ''
   lastUpdateEvent = null
-  downloadInFlight = false
+  availableUpdate = null
+  checkPromise = null
   downloadPromise = null
-  remoteReleaseMedia = []
-  remoteReleaseNotes = ''
-  remoteBuildSha = ''
-  remoteReleaseDate = ''
-  remoteMinVersion = ''
-  remoteForceUpgrade = false
 }
 
 export { normalizeReleaseMedia, parseReleaseMediaFromYaml } from './release-media.js'

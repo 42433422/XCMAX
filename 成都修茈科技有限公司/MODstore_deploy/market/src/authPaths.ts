@@ -1,17 +1,12 @@
 import type { RouteLocationNormalizedLoaded, RouteLocationRaw } from 'vue-router'
 
-export const XCAGI_DESKTOP_REGISTRATION_SOURCE = 'xcagi-desktop'
-
 function firstQueryValue(raw: unknown): unknown {
   return Array.isArray(raw) ? raw[0] : raw
 }
 
-/**
- * 桌面端和 Web 端共用同一注册页。只接受固定来源值，禁止把任意回跳 URL
- * 从公开查询参数带入桌面端流程。
- */
-export function isXcagiDesktopRegistration(route: Pick<RouteLocationNormalizedLoaded, 'query'>): boolean {
-  return firstQueryValue(route.query.source) === XCAGI_DESKTOP_REGISTRATION_SOURCE
+export function xcagiRegistrationSource({ query }: Pick<RouteLocationNormalizedLoaded, 'query'>) {
+  const source = firstQueryValue(query.source)
+  return source === 'xcagi-desktop' || source === 'xcagi-mobile' ? source : undefined
 }
 
 export function safeRedirectPath(raw: unknown): string {
@@ -45,24 +40,20 @@ export const DEFAULT_POST_AUTH: RouteLocationRaw = { name: 'workbench-home' }
  * 注册只完成账号开立，不代表已获得产品权益。
  * 新用户的唯一默认下一步是选择 XCAGI 账号授权；VIP/SVIP 额度会员不是账号权限。
  */
-export const DEFAULT_POST_REGISTER: RouteLocationRaw = {
+const DEFAULT_POST_REGISTER = {
   name: 'account-plans',
   query: { plan: 'saas-trial-30' },
 }
 
 export function pickRegistrationNextFromRoute(route: Pick<RouteLocationNormalizedLoaded, 'query'>): RouteLocationRaw {
-  const source = firstQueryValue(route.query.source)
-  return {
-    name: 'account-plans',
-    query: {
-      plan: 'saas-trial-30',
-      ...(source === XCAGI_DESKTOP_REGISTRATION_SOURCE ? { source: XCAGI_DESKTOP_REGISTRATION_SOURCE } : {}),
-    },
-  }
+  const source = xcagiRegistrationSource(route)
+  return source
+    ? { ...DEFAULT_POST_REGISTER, query: { ...DEFAULT_POST_REGISTER.query, source } }
+    : DEFAULT_POST_REGISTER
 }
 
 export function pickRedirectFromRoute(route: Pick<RouteLocationNormalizedLoaded, 'query'>): RouteLocationRaw {
   const raw = firstQueryValue(route.query.redirect)
   if (typeof raw === 'string' && raw.length > 0) return safeRedirectPath(raw)
-  return DEFAULT_POST_AUTH
+  return xcagiRegistrationSource(route) ? pickRegistrationNextFromRoute(route) : DEFAULT_POST_AUTH
 }

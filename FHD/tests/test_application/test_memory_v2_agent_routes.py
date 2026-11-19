@@ -18,7 +18,7 @@ def _client() -> TestClient:
 
     app = FastAPI()
     app.include_router(router)
-    return TestClient(app, raise_server_exceptions=False)
+    return TestClient(app)
 
 
 @pytest.fixture(autouse=True)
@@ -88,14 +88,19 @@ def _assert_memory_run(
     }
 
 
+@pytest.mark.parametrize("account_tier", ["normal", "personal"])
 def test_memory_v2_lifecycle_routes_execute_through_agent(
     tmp_path,
     monkeypatch,
     authenticated_memory_client,
+    account_tier,
 ) -> None:
     import app.domain.shared_services.user_memory_service as memory_mod
     from app.application.agent_task_context import scoped_personal_memory_id
+    from app.db.models.user import User
 
+    with authenticated_memory_client.factory.begin() as db:
+        db.get(User, authenticated_memory_client.user_id).account_tier = account_tier
     memory_owner = scoped_personal_memory_id(authenticated_memory_client.context)
 
     repo = InMemoryAgentRunRepository()

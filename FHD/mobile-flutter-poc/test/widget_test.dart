@@ -20,7 +20,6 @@ import 'package:xcagi_flutter_poc/src/models/conversation.dart';
 import 'package:xcagi_flutter_poc/src/features/about/about_screen.dart';
 import 'package:xcagi_flutter_poc/src/features/approval/approval_screens.dart';
 import 'package:xcagi_flutter_poc/src/features/auth/auth_screen.dart';
-import 'package:xcagi_flutter_poc/src/features/auth/register_screen.dart';
 import 'package:xcagi_flutter_poc/src/features/bridge/bridge_screen.dart';
 import 'package:xcagi_flutter_poc/src/features/business/business_screens.dart';
 import 'package:xcagi_flutter_poc/src/features/circle/ai_circle_screen.dart';
@@ -2677,11 +2676,16 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetPhysicalSize);
 
-    await tester.pumpWidget(
-      MaterialApp(theme: AppTheme.light(), home: const AuthScreen()),
-    );
+    final opened = <Uri>[];
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.light(),
+      home: AuthScreen(openExternalUrl: (uri) async {
+        opened.add(uri);
+        return true;
+      }),
+    ));
 
-    expect(find.text('XCAGI 修茈企业版'), findsOneWidget);
+    expect(find.text('XCAGI'), findsOneWidget);
     expect(
       find.image(const AssetImage(appLauncherForegroundAsset)),
       findsOneWidget,
@@ -2712,10 +2716,10 @@ void main() {
 
     await tester.tap(find.text('账号注册'));
     await tester.pumpAndSettle();
-    expect(find.byType(RegisterScreen), findsOneWidget);
-
-    Navigator.of(tester.element(find.byType(RegisterScreen))).pop();
-    await tester.pumpAndSettle();
+    expect(opened, [
+      Uri.parse('https://xiu-ci.com/market/register?source=xcagi-mobile'),
+    ]);
+    expect(find.byType(DesktopToolWebViewScreen), findsNothing);
 
     expect(find.text('请输入手机号'), findsNothing);
     expect(find.text('验证码'), findsNothing);
@@ -2738,7 +2742,7 @@ void main() {
 
     final colors = AppTheme.colors(tester.element(find.byType(AuthScreen)));
     final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
-    final title = tester.widget<Text>(find.text('XCAGI 修茈企业版'));
+    final title = tester.widget<Text>(find.text('XCAGI'));
     final selectedTab = tester.widget<Text>(find.text('密码登录'));
     await tester.drag(
       find.byType(SingleChildScrollView),
@@ -2861,67 +2865,6 @@ void main() {
       Uri.parse('https://xiu-ci.com/legal/privacy'),
     ]);
     expect(find.byType(DesktopToolWebViewScreen), findsNothing);
-  });
-
-  testWidgets('register page matches Flutter web form handoff shell', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(theme: AppTheme.light(), home: const RegisterScreen()),
-    );
-
-    expect(find.text('账号注册'), findsOneWidget);
-    expect(find.text('使用网页开户注册表单，和桌面端保持一致。'), findsNothing);
-    expect(find.text('网页登录表单'), findsOneWidget);
-    expect(find.textContaining('用户名、邮箱、行业、预算区间、密码和确认密码'), findsNothing);
-    expect(find.text('去网页填写注册表单'), findsOneWidget);
-    expect(find.text('返回登录'), findsOneWidget);
-  });
-
-  testWidgets('register page follows Flutter dark theme tokens', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.light(),
-        darkTheme: AppTheme.dark(),
-        themeMode: ThemeMode.dark,
-        home: const RegisterScreen(),
-      ),
-    );
-
-    final colors = AppTheme.colors(tester.element(find.byType(RegisterScreen)));
-    final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
-    final title = tester.widget<Text>(find.text('账号注册'));
-    final formTitle = tester.widget<Text>(find.text('网页登录表单'));
-    final icon = tester.widget<Icon>(find.byIcon(Icons.language));
-
-    expect(scaffold.backgroundColor, colors.page);
-    expect(title.style?.color, colors.textPrimary);
-    expect(formTitle.style?.color, colors.textPrimary);
-    expect(icon.color, colors.textPrimary);
-  });
-
-  test('register webview intercepts Flutter completion URL', () {
-    var completed = false;
-    final handled = handleMobileRegisterUrlOverride(
-      'https://xiu-ci.com/app/mobile-register-complete?ok=1',
-      () => completed = true,
-    );
-
-    expect(handled, isTrue);
-    expect(completed, isTrue);
-    expect(
-      handleMobileRegisterUrlOverride(
-        'https://xiu-ci.com/login/register',
-        () => completed = false,
-      ),
-      isFalse,
-    );
-    expect(
-      isMobileRegisterCompleteUrlForTest('/app/mobile-register-complete'),
-      isTrue,
-    );
   });
 
   testWidgets('onboarding page matches Flutter three step startup flow', (
@@ -6535,10 +6478,13 @@ class _FakeSettingsApi extends MobileApiClient {
 
   @override
   Future<MobileUpdateCheckResult> checkForUpdate({
-    int currentVersionCode = MobileBuildConfig.versionCode,
+    int? currentVersionCode,
     String sku = MobileBuildConfig.productSku,
   }) async {
-    updateChecks.add({'currentVersionCode': currentVersionCode, 'sku': sku});
+    updateChecks.add({
+      'currentVersionCode': currentVersionCode ?? MobileBuildConfig.versionCode,
+      'sku': sku,
+    });
     return updateResult;
   }
 }

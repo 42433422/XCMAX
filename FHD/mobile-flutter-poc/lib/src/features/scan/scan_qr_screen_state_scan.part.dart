@@ -3,10 +3,35 @@
 part of 'scan_qr_screen.dart';
 
 abstract class _ScanQrStateScan extends _ScanQrStateCamera {
+  Future<void> _scanWithHarmony() async {
+    if (_pairing || _pickingAlbum || _scanned) return;
+    setState(() => _pickingAlbum = true);
+    try {
+      const scanner = MethodChannel('xcagi/ohos_scanner');
+      final raw = await scanner.invokeMethod<String>('scanQrCode');
+      if (mounted && raw != null && raw.trim().isNotEmpty) {
+        _handleScanResult(raw);
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('无法打开系统扫码，可改用设备码。')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _pickingAlbum = false);
+    }
+  }
+
   @override
   void _handleScanResult(String raw) {
     if (_scanned || _pairing) return;
     HapticFeedback.mediumImpact();
+    if (widget.returnRawValue) {
+      _scanned = true;
+      Navigator.of(context).pop(raw);
+      return;
+    }
     final authPayload = parseAuthQrPayload(raw);
     if (authPayload != null) {
       setState(() => _scanned = true);

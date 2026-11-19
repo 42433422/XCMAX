@@ -14,7 +14,7 @@ class AboutScreen extends StatefulWidget {
     super.key,
     this.api,
     this.openExternalUrl,
-    this.updateInstaller = const MethodChannelPackageUpdateInstaller(),
+    this.updateInstaller = const PlatformPackageUpdateInstaller(),
   });
 
   final MobileApiClient? api;

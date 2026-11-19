@@ -69,6 +69,19 @@ def count(store):
         return conn.execute("SELECT count(*) FROM user_memory_vector_chunks").fetchone()[0]
 
 
+def confirm_personal_memory(ctx):
+    from app.domain.shared_services.user_memory_service import get_user_memory_service
+
+    owner = scoped_personal_memory_id(ctx)
+    authority = get_user_memory_service()
+    [candidate] = authority.list_memories(owner)
+    assert candidate["status"] == "pending"
+    assert candidate["requires_user_confirmation"] is True
+    confirmed = authority.confirm_memory_candidate(owner, candidate["memory_id"])
+    assert confirmed["success"] is True
+    assert confirmed["memory"]["status"] == "active"
+
+
 @pytest.mark.parametrize(
     "bad",
     [
@@ -122,6 +135,9 @@ def test_authenticated_existing_namespace_persists_and_recalls(memory):
     memory_namespace = scoped_personal_memory_id(ctx)
     assert authorized_memory_context(namespace, ctx) == (memory_namespace, None)
     capture(namespace, ctx)
+    assert count(store) == 0  # Offline extraction cannot verify the statement's context.
+    assert rag.query(memory_namespace, "简洁报告")["hits"] == []
+    confirm_personal_memory(ctx)
     assert count(store) == 1
     assert rag.query(memory_namespace, "简洁报告")["hits"]
     with store._get_conn() as conn:
@@ -133,6 +149,7 @@ def test_authenticated_existing_namespace_persists_and_recalls(memory):
 def test_authenticated_memory_is_available_in_a_new_session(memory):
     _, ctx, namespace, _store, rag = memory
     capture(namespace, ctx)
+    confirm_personal_memory(ctx)
     next_session = {**ctx, "session_id": "next-session", "conversation_id": "next-session"}
     next_namespace = scoped_conversation_user_id("7", next_session)
     memory_namespace = scoped_personal_memory_id(next_session)
@@ -156,6 +173,7 @@ def test_planner_cannot_recall_existing_namespace_anonymously(memory, monkeypatc
     _, ctx, namespace, _, rag = memory
     memory_namespace = scoped_personal_memory_id(ctx)
     capture(namespace, ctx)
+    confirm_personal_memory(ctx)
     from app.application.workflow.planner import LLMWorkflowPlanner
 
     calls = []
@@ -210,6 +228,7 @@ def test_dataset_permissions_rederived_not_body_claims(memory, monkeypatch):
     capture(namespace, {**ctx, "persy_memory_scope": "tenant"})
     assert count(store) == 0
     capture(namespace, ctx)
+    confirm_personal_memory(ctx)
     assert count(store) == 1
 
 

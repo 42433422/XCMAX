@@ -487,12 +487,12 @@ class TestSessionMarketToken:
         ma._MARKET_SESSION_REFRESH_TOKENS.clear()
 
     def test_save_and_get(self):
-        with patch("app.db.session.get_db", side_effect=ImportError("no db")):
+        with patch("app.db.session.get_host_db", side_effect=ImportError("no db")):
             ma.save_session_market_token("sid1", "tok1")
         assert ma.session_market_token("sid1") == "tok1"
 
     def test_save_with_refresh(self):
-        with patch("app.db.session.get_db", side_effect=ImportError("no db")):
+        with patch("app.db.session.get_host_db", side_effect=ImportError("no db")):
             ma.save_session_market_token("sid1", "tok1", "rt1")
         assert ma.session_market_refresh_token("sid1") == "rt1"
 
@@ -505,7 +505,7 @@ class TestSessionMarketToken:
         assert "sid" not in ma._MARKET_SESSION_TOKENS
 
     def test_clear_token(self):
-        with patch("app.db.session.get_db", side_effect=ImportError("no db")):
+        with patch("app.db.session.get_host_db", side_effect=ImportError("no db")):
             ma.save_session_market_token("sid1", "tok1", "rt1")
             ma.clear_session_market_token("sid1")
         assert ma.session_market_token("sid1") == ""
@@ -564,7 +564,7 @@ class TestXcagiChatTimeoutSeconds:
 
 
 class TestAuthorizationFromRequest:
-    def test_session_token(self):
+    def test_session_token(self, owned_market_session):
         request = MagicMock()
         request.cookies = {"session_id": "sid1"}
         request.headers = {}
@@ -839,21 +839,21 @@ class TestRefreshSessionMarketToken:
 
     @pytest.mark.asyncio
     async def test_refresh_success(self):
-        with patch("app.db.session.get_db", side_effect=ImportError("no db")):
+        with patch("app.db.session.get_host_db", side_effect=ImportError("no db")):
             ma.save_session_market_token("sid1", "old_tok", "old_rt")
         refresh_resp = {"data": {"access_token": "new_tok", "refresh_token": "new_rt"}}
         with patch.object(ma, "_proxy_json", return_value=refresh_resp):
-            with patch("app.db.session.get_db", side_effect=ImportError("no db")):
+            with patch("app.db.session.get_host_db", side_effect=ImportError("no db")):
                 result = await ma.refresh_session_market_token("sid1")
         assert result == "new_tok"
 
     @pytest.mark.asyncio
     async def test_refresh_proxy_error(self):
-        with patch("app.db.session.get_db", side_effect=ImportError("no db")):
+        with patch("app.db.session.get_host_db", side_effect=ImportError("no db")):
             ma.save_session_market_token("sid1", "old_tok", "old_rt")
         error_payload = {"__proxy_error__": True, "status_code": 401}
         with patch.object(ma, "_proxy_json", return_value=error_payload):
-            with patch("app.db.session.get_db", side_effect=ImportError("no db")):
+            with patch("app.db.session.get_host_db", side_effect=ImportError("no db")):
                 result = await ma.refresh_session_market_token("sid1")
         assert result == ""
 

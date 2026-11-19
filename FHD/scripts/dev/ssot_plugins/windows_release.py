@@ -23,8 +23,7 @@ REQUIRED_SECTIONS = (
 def check() -> int:
     status = _check_doc(DOC, REQUIRED_SECTIONS, "windows-release")
     build = (ROOT / "scripts/package/build-installer.ps1").read_text(encoding="utf-8")
-    all_skus = (ROOT / "scripts/package/build-all-skus.ps1").read_text(encoding="utf-8")
-    if "SkipUiInstaller" in build + all_skus or "XcagiInstaller.csproj" not in build:
+    if "SkipUiInstaller" in build or "XcagiInstaller.csproj" not in build:
         print("[windows-release] DRIFT: Windows delivery must use the WPF installer")
         return 1
     shim = (ROOT / "scripts/package/build-windows-installer.sh").read_text()

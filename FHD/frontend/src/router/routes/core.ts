@@ -13,6 +13,12 @@ export const CORE_ROUTES: RouteRecordRaw[] = [
     meta: { title: '登录', publicAccess: true, hideChrome: true },
   },
   {
+    path: '/local-workspace',
+    name: 'local-workspace',
+    component: () => import('../../views/LocalWorkspaceView.vue'),
+    meta: { title: '本地工作区', publicAccess: true, hideChrome: true },
+  },
+  {
     path: '/login/help',
     name: 'login-help',
     component: () => import('../../views/LoginHelpView.vue'),

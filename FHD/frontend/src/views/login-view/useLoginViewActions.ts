@@ -83,12 +83,6 @@ export function useLoginViewActions(
     return out
   }
 
-  function selectEnterpriseLogin() {
-    accountKind.value = 'enterprise'
-    altLoginHint.value = ''
-    errorMessage.value = ''
-  }
-
   function selectAdminLogin() {
     // 桌面端禁止进管理端（防御：入口已隐藏，仍拦截直调）
     if (isDesktopShell()) {
@@ -171,7 +165,6 @@ export function useLoginViewActions(
     tryAutoLogin,
     switchLoginMode,
     formatLoginFailurePayload,
-    selectEnterpriseLogin,
     selectAdminLogin,
     submitLogin,
     startOidcLogin,

@@ -259,4 +259,4 @@ def open_registration_allowed(sku: str, environ: Mapping[str, str]) -> bool:
         return False
     if raw in {"1", "true", "yes"}:
         return True
-    return sku != "enterprise"
+    return sku not in {"enterprise", "personal"}

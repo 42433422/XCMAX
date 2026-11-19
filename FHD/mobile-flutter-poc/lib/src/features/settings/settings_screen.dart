@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 
@@ -15,7 +16,7 @@ class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
     super.key,
     this.api,
-    this.updateInstaller = const MethodChannelPackageUpdateInstaller(),
+    this.updateInstaller = const PlatformPackageUpdateInstaller(),
   });
 
   final MobileApiClient? api;
@@ -69,25 +70,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: ListView(
                 padding: EdgeInsets.zero,
                 children: [
-                  const WeSectionCaption('安全'),
-                  WeCellGroup(
-                    children: [
-                      WeCell(
-                        title: '生物识别解锁',
-                        icon: Icons.fingerprint,
-                        iconColor: colors.brand,
-                        iconBg: colors.brandContainer,
-                        trailing: _WeSwitch(
-                          key: const ValueKey('settings_biometric_switch'),
-                          checked: _biometric,
-                          onChanged: _setBiometricEnabled,
+                  if (Platform.operatingSystem != 'ohos') ...[
+                    const WeSectionCaption('安全'),
+                    WeCellGroup(
+                      children: [
+                        WeCell(
+                          title: '生物识别解锁',
+                          icon: Icons.fingerprint,
+                          iconColor: colors.brand,
+                          iconBg: colors.brandContainer,
+                          trailing: _WeSwitch(
+                            key: const ValueKey('settings_biometric_switch'),
+                            checked: _biometric,
+                            onChanged: _setBiometricEnabled,
+                          ),
+                          showArrow: false,
+                          showDivider: false,
                         ),
-                        showArrow: false,
-                        showDivider: false,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                   const WeSectionCaption('连接'),
                   WeCellGroup(
                     children: [

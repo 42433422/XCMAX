@@ -31,7 +31,7 @@ from modstore_server.payment_cs_internal import (
     find_matching_paid_order,
 )
 
-router = APIRouter()
+router: APIRouter = APIRouter()
 _get_current_user = get_current_user
 _custom_delivery_evidence = custom_delivery_evidence
 

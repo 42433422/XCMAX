@@ -131,7 +131,14 @@ def decode_refresh_token(token: str) -> Optional[dict]:
     return payload
 
 
-def register_user(username: str, password: str, email: str = "") -> User:
+def verified_email_digest(email: str) -> str:
+    """Bind verification to the exact normalized mailbox, not a historical code."""
+    return hashlib.sha256(email.strip().lower().encode("utf-8")).hexdigest()
+
+
+def register_user(
+    username: str, password: str, email: str = "", *, email_verified: bool = False
+) -> User:
     email_clean = (email or "").strip().lower() or ""
     sf = get_session_factory()
     with sf() as session:
@@ -145,6 +152,9 @@ def register_user(username: str, password: str, email: str = "") -> User:
         user = User(
             username=username,
             email=email_clean if email_clean else None,
+            verified_email_sha256=(
+                verified_email_digest(email_clean) if email_clean and email_verified else None
+            ),
             password_hash=hash_password(password),
         )
         session.add(user)
@@ -256,9 +266,12 @@ def issue_market_tokens_for_sso_identity(
         raise ValueError("未找到对应的市场账号")
     user = record_successful_login(int(user.id)) or user
     is_admin = bool(getattr(user, "is_admin", False))
-    from modstore_server.account_lifecycle import lifecycle_for_user_id
+    from modstore_server.account_lifecycle import (
+        auth_lifecycle_fields,
+        lifecycle_for_user_id,
+    )
 
-    lifecycle = lifecycle_for_user_id(int(user.id)).to_dict()
+    lifecycle = auth_lifecycle_fields(lifecycle_for_user_id(int(user.id)))
     access = create_access_token(user.id, user.username, is_admin=is_admin)
     refresh = create_refresh_token(user.id, user.username)
     return {

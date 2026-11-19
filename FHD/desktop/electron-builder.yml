@@ -4,7 +4,7 @@ copyright: Copyright © 2026 XCAGI
 artifactName: ${productName}-${version}-${os}-${arch}.${ext}
 beforePack: build/before-pack.cjs
 afterPack: build/after-pack.cjs
-# 正式产物仅写入 release/xcagi-v{version}/{personal|enterprise}/（build-installer.ps1 -ProductSku 必填）
+# 正式产物写入 release/xcagi-v{version}/enterprise/
 directories:
   output: ../release/_electron-staging
 files:

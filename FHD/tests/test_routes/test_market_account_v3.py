@@ -28,12 +28,12 @@ class TestBindMarketAuthToSession:
         ma._MARKET_SESSION_TOKENS.clear()
         ma._MARKET_SESSION_REFRESH_TOKENS.clear()
 
-    def test_binds_token_to_session(self):
+    def test_binds_token_to_session(self, owned_market_session):
         request = MagicMock()
         request.cookies = {"session_id": "sid1"}
         request.headers = {}
         result = {"token": "tok1", "refresh_token": "rt1"}
-        with patch("app.db.session.get_db", side_effect=ImportError("no db")):
+        with patch("app.db.session.get_host_db", side_effect=ImportError("no db")):
             token, refresh = ma.bind_market_auth_to_session(request, result)
         assert token == "tok1"
         assert refresh == "rt1"
@@ -72,18 +72,18 @@ class TestSaveSessionMarketTokenWithDB:
 
     def test_save_in_memory_only(self):
         """When DB is unavailable, token is saved in-memory only."""
-        with patch("app.db.session.get_db", side_effect=ImportError("no db")):
+        with patch("app.db.session.get_host_db", side_effect=ImportError("no db")):
             ma.save_session_market_token("sid1", "tok1", "rt1")
         assert ma._MARKET_SESSION_TOKENS["sid1"] == "tok1"
         assert ma._MARKET_SESSION_REFRESH_TOKENS["sid1"] == "rt1"
 
     def test_save_with_db_recoverable_error(self):
-        with patch("app.db.session.get_db", side_effect=RuntimeError("db down")):
+        with patch("app.db.session.get_host_db", side_effect=RuntimeError("db down")):
             ma.save_session_market_token("sid1", "tok1")
         assert ma._MARKET_SESSION_TOKENS["sid1"] == "tok1"
 
     def test_save_without_refresh_token(self):
-        with patch("app.db.session.get_db", side_effect=ImportError("no db")):
+        with patch("app.db.session.get_host_db", side_effect=ImportError("no db")):
             ma.save_session_market_token("sid1", "tok1")
         assert "sid1" not in ma._MARKET_SESSION_REFRESH_TOKENS
 
@@ -110,7 +110,7 @@ class TestClearSessionMarketTokenWithDB:
 
     def test_clear_with_db_recoverable_error(self):
         ma._MARKET_SESSION_TOKENS["sid1"] = "tok1"
-        with patch("app.db.session.get_db", side_effect=RuntimeError("db error")):
+        with patch("app.db.session.get_host_db", side_effect=RuntimeError("db error")):
             ma.clear_session_market_token("sid1")
         assert "sid1" not in ma._MARKET_SESSION_TOKENS
 
@@ -141,7 +141,7 @@ class TestSessionMarketTokenWithDB:
         assert result == ""
 
     def test_db_fallback_recoverable_error(self):
-        with patch("app.db.session.get_db", side_effect=RuntimeError("db error")):
+        with patch("app.db.session.get_host_db", side_effect=RuntimeError("db error")):
             result = ma.session_market_token("sid1")
         assert result == ""
 
@@ -173,7 +173,7 @@ class TestSessionMarketRefreshTokenWithDB:
 
 class TestLatestSessionMarketToken:
     def test_returns_empty_on_db_error(self):
-        with patch("app.db.session.get_db", side_effect=RuntimeError("db error")):
+        with patch("app.db.session.get_host_db", side_effect=RuntimeError("db error")):
             result = ma.latest_session_market_token()
         assert result == ""
 
@@ -183,7 +183,7 @@ class TestLatestSessionMarketToken:
 
 class TestLatestSessionMarketRefreshToken:
     def test_returns_empty_on_db_error(self):
-        with patch("app.db.session.get_db", side_effect=RuntimeError("db error")):
+        with patch("app.db.session.get_host_db", side_effect=RuntimeError("db error")):
             result = ma.latest_session_market_refresh_token()
         assert result == ""
 
@@ -201,13 +201,13 @@ class TestAuthorizationFromRequestResolved:
         ma._MARKET_SESSION_REFRESH_TOKENS.clear()
 
     @pytest.mark.asyncio
-    async def test_with_session_token_resolved(self):
+    async def test_with_session_token_resolved(self, owned_market_session):
         ma._MARKET_SESSION_TOKENS["sid1"] = "sess_tok"
         request = MagicMock()
         request.cookies = {"session_id": "sid1"}
         request.headers = {}
         with (
-            patch("app.db.session.get_db", side_effect=ImportError("no db")),
+            patch("app.db.session.get_host_db", side_effect=ImportError("no db")),
             patch.object(ma, "resolve_valid_market_access_token", return_value="resolved_tok"),
         ):
             result = await ma._authorization_from_request_resolved(request, {})
@@ -404,7 +404,7 @@ class TestResolveValidMarketAccessToken:
     async def test_demo_token_returned_directly(self):
         ma._MARKET_SESSION_TOKENS["sid1"] = "demo_market_token"
         with (
-            patch("app.db.session.get_db", side_effect=ImportError("no db")),
+            patch("app.db.session.get_host_db", side_effect=ImportError("no db")),
             patch(
                 "app.application.surface_audit_demo_account.is_local_demo_market_token",
                 return_value=True,
@@ -417,7 +417,7 @@ class TestResolveValidMarketAccessToken:
     async def test_valid_token_returns_token(self):
         ma._MARKET_SESSION_TOKENS["sid1"] = "valid_tok"
         with (
-            patch("app.db.session.get_db", side_effect=ImportError("no db")),
+            patch("app.db.session.get_host_db", side_effect=ImportError("no db")),
             patch(
                 "app.application.surface_audit_demo_account.is_local_demo_market_token",
                 return_value=False,
@@ -431,7 +431,7 @@ class TestResolveValidMarketAccessToken:
     async def test_401_triggers_refresh(self):
         ma._MARKET_SESSION_TOKENS["sid1"] = "expired_tok"
         with (
-            patch("app.db.session.get_db", side_effect=ImportError("no db")),
+            patch("app.db.session.get_host_db", side_effect=ImportError("no db")),
             patch(
                 "app.application.surface_audit_demo_account.is_local_demo_market_token",
                 return_value=False,
@@ -455,7 +455,7 @@ class TestResolveValidMarketAccessToken:
     async def test_http_200_anonymous_me_triggers_refresh(self, anonymous_payload):
         ma._MARKET_SESSION_TOKENS["sid1"] = "expired_tok"
         with (
-            patch("app.db.session.get_db", side_effect=ImportError("no db")),
+            patch("app.db.session.get_host_db", side_effect=ImportError("no db")),
             patch(
                 "app.application.surface_audit_demo_account.is_local_demo_market_token",
                 return_value=False,
@@ -471,7 +471,7 @@ class TestResolveValidMarketAccessToken:
     async def test_market_unreachable_returns_local_token(self):
         ma._MARKET_SESSION_TOKENS["sid1"] = "local_tok"
         with (
-            patch("app.db.session.get_db", side_effect=ImportError("no db")),
+            patch("app.db.session.get_host_db", side_effect=ImportError("no db")),
             patch(
                 "app.application.surface_audit_demo_account.is_local_demo_market_token",
                 return_value=False,
@@ -489,7 +489,7 @@ class TestResolveValidMarketAccessToken:
     async def test_non_401_error_returns_local_token(self):
         ma._MARKET_SESSION_TOKENS["sid1"] = "local_tok"
         with (
-            patch("app.db.session.get_db", side_effect=ImportError("no db")),
+            patch("app.db.session.get_host_db", side_effect=ImportError("no db")),
             patch(
                 "app.application.surface_audit_demo_account.is_local_demo_market_token",
                 return_value=False,
@@ -589,6 +589,22 @@ class TestNormalizeMarketAuthPayload:
         assert result["is_enterprise"] is True
 
     @pytest.mark.asyncio
+    async def test_personal_plan_is_supported_without_the_legacy_desktop_flag(self):
+        payload = {"access_token": "tok1"}
+        profile = {
+            "id": 1,
+            "username": "personal",
+            "desktop_access": False,
+            "account_state": "active",
+            "active_plan_id": "saas-personal-free",
+        }
+        with patch.object(ma, "_proxy_json", return_value=profile):
+            result = await ma._normalize_market_auth_payload(payload)
+        assert result["desktop_access"] is True
+        assert result["is_enterprise"] is True
+        assert result["active_plan_id"] == "saas-personal-free"
+
+    @pytest.mark.asyncio
     async def test_empty_payload(self):
         with patch.object(ma, "_proxy_json", return_value={"user": {}}):
             result = await ma._normalize_market_auth_payload({})
@@ -624,12 +640,12 @@ class TestMarketAuthFromRequest:
         ma._MARKET_SESSION_TOKENS.clear()
         ma._MARKET_SESSION_REFRESH_TOKENS.clear()
 
-    def test_with_session_token(self):
+    def test_with_session_token(self, owned_market_session):
         ma._MARKET_SESSION_TOKENS["sid1"] = "sess_tok"
         request = MagicMock()
         request.cookies = {"session_id": "sid1"}
         request.headers = {}
-        with patch("app.db.session.get_db", side_effect=ImportError("no db")):
+        with patch("app.db.session.get_host_db", side_effect=ImportError("no db")):
             result = ma._market_auth_from_request(request)
         assert result == "sess_tok"
 

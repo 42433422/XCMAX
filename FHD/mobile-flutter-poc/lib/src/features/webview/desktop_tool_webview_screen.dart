@@ -11,7 +11,6 @@ import '../../platform/external_url_launcher.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/we_ui.dart';
 
-typedef MobileWebUrlOverride = bool Function(String nextUrl);
 typedef MobileWebFilePicker = Future<List<XFile>> Function({
   required List<XTypeGroup> acceptedTypeGroups,
   required bool multiple,
@@ -24,7 +23,6 @@ class DesktopToolWebViewScreen extends StatefulWidget {
     required this.path,
     this.config = const MobileApiConfig(),
     this.api,
-    this.onUrlOverride,
     this.externalUrlLauncher = launchExternalUrl,
     this.filePicker = _openWebFiles,
   });
@@ -33,7 +31,6 @@ class DesktopToolWebViewScreen extends StatefulWidget {
   final String path;
   final MobileApiConfig config;
   final MobileApiClient? api;
-  final MobileWebUrlOverride? onUrlOverride;
   final ExternalUrlLauncher externalUrlLauncher;
   final MobileWebFilePicker filePicker;
 
@@ -106,17 +103,13 @@ class _DesktopToolWebViewScreenState extends State<DesktopToolWebViewScreen> {
         throw StateError('连接已切换，请重新打开');
       }
       final fhd = _isFhdTarget(uri, config);
-      final publicRegistration = fhd &&
-          uri.path == _normalizedBaseUri(base).resolve('login/register').path;
       final token = fhd
           ? _firstNonBlank([session.accessToken, session.sessionId])
           : session.marketAccessToken.trim();
-      if (!publicRegistration && token.isEmpty) throw StateError('请先登录再打开业务页面');
-      bool allowed(Uri next) => publicRegistration
-          ? _sameOrigin(next, uri) && next.path == uri.path
-          : fhd
-              ? _isFhdTarget(next, config)
-              : _isMarketTarget(next, config) && !_isFhdTarget(next, config);
+      if (token.isEmpty) throw StateError('请先登录再打开业务页面');
+      bool allowed(Uri next) => fhd
+          ? _isFhdTarget(next, config)
+          : _isMarketTarget(next, config) && !_isFhdTarget(next, config);
       if (!allowed(uri)) throw StateError('该链接不属于当前连接，请返回后重新选择');
       final controller = WebViewController();
       var bootstrapping = true;
@@ -174,11 +167,6 @@ class _DesktopToolWebViewScreenState extends State<DesktopToolWebViewScreen> {
             return NavigationDecision.prevent;
           }
           if (next != null &&
-              _sameOrigin(next, uri) &&
-              (widget.onUrlOverride?.call(request.url) ?? false)) {
-            return NavigationDecision.prevent;
-          }
-          if (next != null &&
               allowed(next) &&
               generation == _api.authGeneration) {
             return NavigationDecision.navigate;
@@ -198,8 +186,7 @@ class _DesktopToolWebViewScreenState extends State<DesktopToolWebViewScreen> {
           if (bootstrapping) {
             try {
               final ready = await _injectMobileWebTokens(
-                  controller, uri, config, _api, generation,
-                  publicRegistration: publicRegistration);
+                  controller, uri, config, _api, generation);
               if (!mounted ||
                   loadId != _loadId ||
                   generation != _api.authGeneration) {
@@ -208,9 +195,7 @@ class _DesktopToolWebViewScreenState extends State<DesktopToolWebViewScreen> {
               if (!ready) throw StateError('登录同步失败');
               bootstrapping = false;
               await controller.loadRequest(uri,
-                  headers: publicRegistration
-                      ? const {}
-                      : _mobileWebHeaders(config, uri, session: session));
+                  headers: _mobileWebHeaders(config, uri, session: session));
             } catch (_) {
               if (mounted && loadId == _loadId) {
                 setState(() {
@@ -227,10 +212,8 @@ class _DesktopToolWebViewScreenState extends State<DesktopToolWebViewScreen> {
             return;
           }
           try {
-            if (!publicRegistration) {
-              await _injectMobileWebTokens(
-                  controller, current, config, _api, generation);
-            }
+            await _injectMobileWebTokens(
+                controller, current, config, _api, generation);
           } catch (_) {
             if (mounted && loadId == _loadId) {
               setState(() => _error = '登录状态同步失败，请重试');
@@ -252,7 +235,7 @@ class _DesktopToolWebViewScreenState extends State<DesktopToolWebViewScreen> {
       if (_isFhdTarget(uri, config)) {
         await WebViewCookieManager().setCookie(WebViewCookie(
           name: 'session_id',
-          value: publicRegistration ? '' : token,
+          value: token,
           domain: uri.host,
           path: _normalizedBaseUri(base).path,
         ));
@@ -425,9 +408,8 @@ Future<bool> _injectMobileWebTokens(
   Uri uri,
   MobileApiConfig config,
   MobileApiClient api,
-  int generation, {
-  bool publicRegistration = false,
-}) async {
+  int generation,
+) async {
   final session = await api.loadSession();
   if (generation != api.authGeneration ||
       await api.resolveSessionBaseUrl() != config.baseUrl ||
@@ -440,15 +422,14 @@ Future<bool> _injectMobileWebTokens(
         config.marketAccessToken,
         session.marketAccessToken,
       ]).isNotEmpty;
-  final injectFhd = !publicRegistration &&
-      _isFhdTarget(uri, config) &&
+  final injectFhd = _isFhdTarget(uri, config) &&
       _firstNonBlank([
         config.accessToken,
         config.sessionId,
         session.accessToken,
         session.sessionId,
       ]).isNotEmpty;
-  if (!publicRegistration && !injectMarket && !injectFhd) return false;
+  if (!injectMarket && !injectFhd) return false;
   final result = await controller.runJavaScriptReturningResult(
     _buildTokenInjectScript(
       origin: uri.origin,
@@ -571,12 +552,6 @@ bool _isMobileWebViewUrlAllowed(String rawUrl, {String? extraLanHost}) {
 bool _shouldInjectFhdSession(Uri uri) =>
     _isFhdTarget(uri, const MobileApiConfig());
 
-bool isMobileRegisterCompleteUrl(String rawUrl) {
-  final uri = Uri.tryParse(rawUrl);
-  if (uri == null) return false;
-  return uri.path == '/app/mobile-register-complete';
-}
-
 String _firstNonBlank(List<String> values) {
   for (final value in values) {
     final trimmed = value.trim();
@@ -638,9 +613,4 @@ bool shouldInjectMarketTokensForTest(String rawUrl) {
 bool shouldInjectFhdSessionForTest(String rawUrl) {
   final uri = Uri.tryParse(rawUrl);
   return uri != null && _shouldInjectFhdSession(uri);
-}
-
-@visibleForTesting
-bool isMobileRegisterCompleteUrlForTest(String rawUrl) {
-  return isMobileRegisterCompleteUrl(rawUrl);
 }

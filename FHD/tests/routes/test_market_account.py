@@ -414,7 +414,7 @@ class TestSaveSessionMarketToken:
         assert "sess1" not in ma._MARKET_SESSION_TOKENS
 
     def test_db_persist_error_handled(self) -> None:
-        with patch("app.db.session.get_db", side_effect=ImportError("no db")):
+        with patch("app.db.session.get_host_db", side_effect=ImportError("no db")):
             ma.save_session_market_token("sess1", "tok1")
         # Should still save to memory
         assert ma._MARKET_SESSION_TOKENS["sess1"] == "tok1"
@@ -434,7 +434,7 @@ class TestClearSessionMarketToken:
 
     def test_db_clear_error_handled(self) -> None:
         ma._MARKET_SESSION_TOKENS["sess1"] = "tok1"
-        with patch("app.db.session.get_db", side_effect=ImportError("no db")):
+        with patch("app.db.session.get_host_db", side_effect=ImportError("no db")):
             ma.clear_session_market_token("sess1")
         assert "sess1" not in ma._MARKET_SESSION_TOKENS
 
@@ -455,12 +455,12 @@ class TestSessionMarketToken:
         mock_ctx = MagicMock()
         mock_ctx.__enter__ = MagicMock(return_value=mock_db)
         mock_ctx.__exit__ = MagicMock(return_value=False)
-        with patch("app.db.session.get_db", return_value=mock_ctx):
+        with patch("app.db.session.get_host_db", return_value=mock_ctx):
             result = ma.session_market_token("sess2")
         assert result == "db_tok"
 
     def test_db_error_returns_empty(self) -> None:
-        with patch("app.db.session.get_db", side_effect=ImportError("no db")):
+        with patch("app.db.session.get_host_db", side_effect=ImportError("no db")):
             result = ma.session_market_token("sess2")
         assert result == ""
 

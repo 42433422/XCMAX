@@ -159,20 +159,14 @@ class TokenLifecycle:
         except RECOVERABLE_ERRORS:
             if not fast:
                 raise
-            self.logger.warning(
-                "market token fast-validate transport error (session_id=%s), fail-open to local token",
-                sid[:8],
-            )
+            self.logger.warning("market token fast-validate transport error, using local token")
             return token
         if isinstance(response, JSONResponse):
             if response.status_code == 401:
                 invalidate_fast_token_validation(sid)
                 return self.normalize(await self.refresh_session(sid))
             if not fast:
-                self.logger.warning(
-                    "market unreachable during token validation (session_id=%s), using local token",
-                    sid[:8],
-                )
+                self.logger.warning("market unreachable during token validation, using local token")
             return token
         if isinstance(response, dict) and response.get("__proxy_error__"):
             if self.proxy_status(response) == 401:

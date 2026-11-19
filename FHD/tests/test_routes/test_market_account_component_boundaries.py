@@ -208,7 +208,7 @@ def test_session_token_repository_keeps_access_refresh_and_owners_isolated(monke
         with sessions() as db:
             yield db
 
-    monkeypatch.setattr("app.db.session.get_db", database)
+    monkeypatch.setattr("app.db.session.get_host_db", database)
     try:
         market.save_session_market_token("synthetic-session-71", "access-71", "refresh-71")
         market.save_session_market_token("synthetic-session-72", "access-72", "refresh-72")

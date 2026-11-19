@@ -9,10 +9,10 @@ SKU="${2:-enterprise}"
 VERSION="${VERSION#[vV]}"
 TOOLCHAIN_VERSION="$(printf '%s' "${VERSION}" | cut -d. -f1-3)"
 
-case "${SKU}" in
-  personal | enterprise) ;;
-  *) echo "[err] SKU 须为 personal 或 enterprise" >&2; exit 1 ;;
-esac
+if [[ "${SKU}" != enterprise ]]; then
+  echo "[err] Windows payload supports only the enterprise SKU" >&2
+  exit 1
+fi
 
 if [[ "${XCAGI_ALLOW_WINDOWS_THIN_SHELL:-0}" != "1" ]]; then
   cat >&2 <<'EOF'
@@ -31,16 +31,7 @@ cd "${ROOT}"
 PYTHON="${PYTHON:-python3}"
 if [[ -x "${ROOT}/.venv/bin/python" ]]; then PYTHON="${ROOT}/.venv/bin/python"; fi
 
-sku_label() { case "$1" in personal) echo Personal ;; enterprise) echo Enterprise ;; esac; }
-sku_app_id() { case "$1" in personal) echo com.xcagi.desktop.personal ;; enterprise) echo com.xcagi.desktop.enterprise ;; esac; }
-sku_update_url() {
-  case "$1" in
-    personal) echo https://xiu-ci.com/releases/stable/personal/ ;;
-    enterprise) echo https://xiu-ci.com/releases/stable/enterprise/ ;;
-  esac
-}
-
-LABEL="$(sku_label "${SKU}")"
+LABEL=Enterprise
 OUT_DIR="${ROOT}/release/_windows-payload/${VERSION}/${SKU}-thin"
 mkdir -p "${OUT_DIR}"
 
@@ -61,16 +52,14 @@ rm -rf "${ROOT}/dist/xcagi-backend"
 (cd desktop && [ -d node_modules ] || npm install)
 npm version "${TOOLCHAIN_VERSION}" --no-git-tag-version --prefix desktop --allow-same-version
 
-APP_ID="$(sku_app_id "${SKU}")"
-PUBLISH_URL="$(sku_update_url "${SKU}")"
 ARTIFACT="XCAGI-${LABEL}-Setup-${VERSION}-\${arch}.\${ext}"
 
 (
   cd desktop
-  npx electron-builder --win nsis zip --x64 \
-    "--config.directories.output=../release/xcagi-v${VERSION}/${SKU}" \
-    "--config.appId=${APP_ID}" \
-    "--config.publish.url=${PUBLISH_URL}" \
+  npx electron-builder --win nsis zip --x64 --publish never \
+    "--config.directories.output=${OUT_DIR}" \
+    "--config.appId=com.xcagi.desktop.enterprise" \
+    "--config.publish.url=https://xiu-ci.com/releases/stable/enterprise/" \
     "--config.nsis.artifactName=${ARTIFACT}" \
     "--config.buildVersion=${VERSION}" \
     "--config.extraMetadata.shortVersionWindows=${VERSION}" \

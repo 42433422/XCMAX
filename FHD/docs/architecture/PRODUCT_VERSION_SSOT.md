@@ -33,7 +33,7 @@
 |---|---|
 | 官网历史 / 下载 | `product_lines_status.py::generated_views` 对目录复用公开脱敏策略；HTML 读 `/data/release-history.json`。下载仍核对既有指针与原包 manifest/hotfix，不以历史决定可用性。`generate-download-manifest.py::load_release_history` 已读取同目录。 |
 | 发布说明 | 官网 notes 同源；`generate-update-metadata.mjs` 仍读 `XCAGI_RELEASE_NOTES` 或通用 fallback，CHANGELOG 是独立贡献记录/历史证据，尚未自动投影到 OTA。 |
-| 客户端 OTA | `desktop-config.ts::SKU_UPDATE_URL` → `updater.ts` 读取 `latest[-mac].yml` 并验 Ed25519；metadata 生成器绑定 SHA/releaseId/包哈希，`release-desktop.yml` 校验跨平台与公开元数据。Mac OTA/fix-feed 晋级仍有独立入口。 |
+| 客户端更新 | 桌面 `SKU_UPDATE_URL` 交给 electron-updater。自定义 provider 验证同一份频道清单的 Ed25519 签名，上游按清单选择、校验和安装制品。Windows 未签名候选走临时手动下载。Android 官网 APK 由系统下载安装。iOS 通过已发布的 App Store 版本更新。 |
 | GitHub Release | `release-desktop.yml::github-release` 在 tag 与双平台/签名/下载中心门禁通过后上传同 manifest/pointer/assets；尚未配置同源 body，不能据此证明官网全部历史已登记 GitHub。 |
 
 旧 market 下载页已由 `ca8bd212e` 迁出；本次退役无生产消费者的 `xcagiDownloadLinks` 静态猜 URL 工具、专属测试及构建参数/v8上传脚本，现役入口只使用经校验的官网数据。

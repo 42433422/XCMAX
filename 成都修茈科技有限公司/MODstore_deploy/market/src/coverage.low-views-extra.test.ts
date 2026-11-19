@@ -266,7 +266,7 @@ describe('low coverage view business branches', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('你的 XCAGI 方案已生效')
-    expect(wrapper.text()).toContain('回到桌面端')
+    expect(wrapper.text()).toContain('回到 XCAGI 登录')
     expect(wrapper.text()).not.toContain('账号授权')
     expect((wrapper.vm as unknown as { planSelectionRoute: string }).planSelectionRoute).toBe('/account-plans')
     wrapper.unmount()

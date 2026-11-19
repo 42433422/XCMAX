@@ -33,6 +33,27 @@ FastAPI 网关切到 `PAYMENT_BACKEND=java` 后，`/api/payment/*` 与 `/api/wal
 - `/api/payment/usage-metrics` 提供空指标响应，避免代理切换后 404。
 - `/api/payment/refund` 当前只返回明确未启用提示；退款主流程仍建议走 Python `/api/refunds/*` 审核接口，或后续在 Java 侧补完整退款事务。
 
+### 免费个人方案赠额
+
+免费方案开通不要求领取现金额度。Python 服务的
+`MODSTORE_PERSONAL_ALLOWANCE_BUDGET_CENTS` 是本次活动的累计总预算（分），由运营明确设置；
+留空、无效或 0 时不发放平台现金额度。单次金额仍唯一取计划的 `quota_cents`。
+当前账号须完成邮箱验证码验证，同一规范化邮箱及账号在本次活动各只能领取一次。
+注册时未填邮箱的账号可先开通免费方案，再通过已有邮件发码接口及
+`POST /api/account/personal-plan` 的 `{email, verification_code}` 首次绑定；该接口不允许改绑已有邮箱。
+
+部署执行现有 `alembic upgrade head`（`20261119_personal_allowance`）；现有 `init_db()`
+也会幂等补齐验证字段及专用领取记录。预算检查由计划行写锁串行化，待确认记录也占用预算。
+领取记录冻结钱包后端、金额和一次生成的幂等键；`PAYMENT_BACKEND` 后续切换不重新领取。
+Java 模式通过已鉴权的内部 credit 接口入账，Python 不再写第二笔钱包收入；两端需同步更新。
+只有真实回执的用户、金额、幂等键及有效余额匹配时才确认领取。Java 超时、失败或回执无效
+保留 `pending` 记录，重试同一幂等键；不得删除待确认记录或把预算占用释放给其他账号。
+`allowance.status` 区分 `verification_required`、`available`、`unavailable`、`already_claimed`、
+`pending`、`granted`，仅 `granted` 表示已入账；其他状态不影响免费方案本身。
+内部 credit 的金额单位为元（500 分发送 `"5.00"`），须带 `X-Internal-Api-Key`。
+幂等键全局唯一且最长 128 字符；同键重放必须匹配已完成流水的用户、金额和类型，否则 409。
+回执中的 `balance` 是该次入账后的历史快照，不表示当前实时钱包余额。
+
 ## 验证
 
 ```bat

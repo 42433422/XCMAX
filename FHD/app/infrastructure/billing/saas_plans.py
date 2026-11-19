@@ -8,6 +8,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+PERSONAL_PLAN_ID = "saas-personal-free"
+
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
 

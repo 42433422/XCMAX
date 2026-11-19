@@ -9,9 +9,9 @@ cd "${ROOT}"
 
 PRODUCT_SKU="${XCAGI_PRODUCT_SKU:-}"
 case "${PRODUCT_SKU}" in
-  "" | personal | enterprise) ;;
+  "" | enterprise) ;;
   *)
-    echo "[err] XCAGI_PRODUCT_SKU must be personal or enterprise, current: ${PRODUCT_SKU}" >&2
+    echo "[err] XCAGI_PRODUCT_SKU must be empty or enterprise, current: ${PRODUCT_SKU}" >&2
     exit 1
     ;;
 esac

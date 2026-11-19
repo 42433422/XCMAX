@@ -33,7 +33,7 @@
       </form>
 
       <p class="auth-footer">
-        <router-link to="/login" class="link">← 返回密码登录</router-link>
+        <router-link :to="{ name: 'login', query: route.query }" class="link">← 返回密码登录</router-link>
       </p>
     </div>
   </div>

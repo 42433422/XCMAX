@@ -13,7 +13,7 @@ log() { printf '[surface-audit] %s\n' "$*"; }
 
 export SURFACE_AUDIT_BASE_URL="${SURFACE_AUDIT_BASE_URL:-http://127.0.0.1:${WEB_PORT}}"
 export XCAGI_MARKET_BASE_URL="${XCAGI_MARKET_BASE_URL:-http://127.0.0.1:5176}"
-export SURFACE_AUDIT_PRODUCT_SKU="${SURFACE_AUDIT_PRODUCT_SKU:-personal}"
+export SURFACE_AUDIT_PRODUCT_SKU="${SURFACE_AUDIT_PRODUCT_SKU:-enterprise}"
 # 有 adb 设备时自动合并原生屏真机截图（可显式 SURFACE_AUDIT_ANDROID=0 关闭）
 ADB_BIN="${FHD_ROOT}/mobile-flutter-poc/.toolchain/android-sdk/platform-tools/adb"
 [[ -x "${ADB_BIN}" ]] || ADB_BIN="adb"

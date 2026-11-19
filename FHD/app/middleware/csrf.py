@@ -157,6 +157,15 @@ def _csrf_exempt_desktop_install_receipt(scope: Scope) -> bool:
     return cast("bool", headers.get(b"x-xcagi-desktop-local", b"") == b"1")
 
 
+def _csrf_exempt_local_workspace(scope: Scope) -> bool:
+    """The workspace verifies the desktop runtime and direct loopback origin."""
+    path = scope.get("path") or ""
+    headers = dict(scope.get("headers") or [])
+    return (
+        path.startswith("/api/local-workspace/") and headers.get(b"x-xcagi-desktop-local") == b"1"
+    )
+
+
 def _csrf_exempt_desktop_crash_report(scope: Scope) -> bool:
     """Electron 主进程本机上报崩溃报告：无浏览器 Cookie，安全由路由层的
     桌面模式 + 回环来源校验承担。要求专用请求头，避免普通跨站表单请求绕过 CSRF。
@@ -256,6 +265,9 @@ class CSRFMiddleware:
                 await self.app(scope, receive, send)
                 return
             if _csrf_exempt_desktop_install_receipt(scope):
+                await self.app(scope, receive, send)
+                return
+            if _csrf_exempt_local_workspace(scope):
                 await self.app(scope, receive, send)
                 return
             if _csrf_exempt_desktop_crash_report(scope):
