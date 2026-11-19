@@ -27,6 +27,10 @@ def _facade():
 def _client_issue_reply(receipt: dict | None) -> str:
     if not receipt:
         return ""
+    from app.application.client_product_issue_intake import market_ticket_followup_reply
+
+    if followup := market_ticket_followup_reply(receipt):
+        return followup
     if "issue_description" in (receipt.get("missing_evidence") or []):
         return "你要登记哪个软件功能或使用反馈？请说说想改的内容或遇到的情况，我会据此受理，不用固定格式。"
     shots = receipt.get("screenshots") or {}
@@ -43,8 +47,6 @@ def _client_issue_reply(receipt: dict | None) -> str:
             "请用自己的话补充期望和实际表现，不用固定格式。"
             "（若只是使用咨询，请再发一次，我会直接回答。）"
         ),
-        "PENDING_REVIEW": f"已登记原始反馈，市场工单：{receipt.get('owner_ticket_no')}。处理范围待管理员核实。",
-        "TERMINAL": f"原市场工单 {receipt.get('owner_ticket_no')} 已有最终处理结果，请在原工单中查看。",
         "OWNER_ROUTE_UNAVAILABLE": "暂时无法确认受理结果。请先查看客服工单列表，避免重复提交；登录失效时请重新登录。",
         "not_confirmed": "目前无法以足够把握确认是产品缺陷，因此没有自动建单。",
     }

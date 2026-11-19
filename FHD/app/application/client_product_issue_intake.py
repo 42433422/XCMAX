@@ -16,7 +16,16 @@ from app.application.private_mod_delivery_artifacts import custom_delivery_remot
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
-_MARKET_RECEIPT_STATES = {"pending_review": "PENDING_REVIEW", "terminal": "TERMINAL"}
+_MARKET_RECEIPT_STATES = {
+    "pending_review": "PENDING_REVIEW",
+    "terminal": "TERMINAL",
+    "revoked": "DISPATCH_REVOKED",
+}
+_MARKET_TICKET_FOLLOWUP_MESSAGES = {
+    "PENDING_REVIEW": "已登记原始反馈，市场工单 {ticket_no}。处理范围待管理员核实。",
+    "TERMINAL": "原市场工单 {ticket_no} 已结束，请在原工单中查看处理记录。",
+    "DISPATCH_REVOKED": "原市场工单 {ticket_no} 已停止自动派发，仍可在原工单补充材料。",
+}
 
 _REPORT_RE = re.compile(
     r"(?i)(问题|故障|缺陷|报错|失败|不能用(?![^。！？\n]{0,40}(?:代替|替代))|没反应|异常|crash|bug)"
@@ -473,6 +482,12 @@ async def _receive_pending_report(
     return await receive_pending_report(
         token, message, missing, source_ref=f"client-pending:{digest}"
     )
+
+
+def market_ticket_followup_reply(receipt: dict[str, Any]) -> str:
+    ticket_no = str(receipt.get("owner_ticket_no") or "").strip()
+    reply = _MARKET_TICKET_FOLLOWUP_MESSAGES.get(str(receipt.get("state") or ""))
+    return reply.format(ticket_no=ticket_no) if reply and ticket_no else ""
 
 
 async def receive_pending_report(
