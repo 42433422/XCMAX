@@ -59,6 +59,8 @@ def resolve_wechat_chat_context(
             tenant_id = int(tenant_raw) if tenant_raw not in (None, "") else None
         except (TypeError, ValueError):
             tenant_id = None
+        if tenant_id is None:
+            return None  # never resolve a different tenant's contacts without an identity
 
         contact_key = str(ctx.get("wechat_contact_key") or "").strip()
         matched_by = "explicit"
