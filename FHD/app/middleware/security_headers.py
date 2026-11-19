@@ -18,21 +18,10 @@ class SecurityHeadersMiddleware:
             if message["type"] == "http.response.start":
                 headers = list(message.get("headers", []))
                 path = normalize_lan_guard_path(scope.get("path") or "/")
-                qs = dict(
-                    pair.split(b"=", 1)
-                    for pair in scope.get("query_string", b"").split(b"&")
-                    if b"=" in pair
-                )
-                is_sandbox = qs.get(b"sandbox") in (b"1", b"true")
                 is_dashboard_embed = path.startswith("/xcmax-dashboard/")
                 is_desktop_mode = os.environ.get("XCAGI_DESKTOP_MODE") == "1"
-                if is_sandbox:
-                    security_headers = {
-                        b"x-content-type-options": b"nosniff",
-                        b"referrer-policy": b"strict-origin-when-cross-origin",
-                        b"content-security-policy": b"default-src 'self' 'unsafe-inline' 'unsafe-eval'; img-src 'self' data: blob:; media-src 'self' data:; font-src 'self' data:; connect-src 'self' ws: wss: http: https:; frame-ancestors *;",
-                    }
-                elif is_dashboard_embed:
+                # Frame/CSP policy must never be weakened by a user-controlled query string.
+                if is_dashboard_embed:
                     security_headers = {
                         b"x-content-type-options": b"nosniff",
                         b"x-frame-options": b"SAMEORIGIN",
