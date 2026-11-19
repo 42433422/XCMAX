@@ -47,6 +47,7 @@ from modstore_server.customer_service_orchestrator_merged import (
     intake_report_for_message,
 )
 from modstore_server.customer_ticket_intake_review import (
+    NegativeIntakeConfirmation,
     intake_dispatch_block_reason,
     review_report_async,
 )
@@ -115,6 +116,7 @@ class CustomerServiceChatBody(BaseModel):
     message: str = Field(default="", max_length=8000)
     session_id: Optional[int] = None
     context: Dict[str, Any] = Field(default_factory=dict)
+    intake_confirmation: NegativeIntakeConfirmation | None = None
     # data:image/...;base64,... 压缩后截图，用于补充材料
     image_data_url: Optional[str] = Field(
         default=None, max_length=customer_view.MAX_SCREENSHOT_DATA_LENGTH
@@ -174,15 +176,17 @@ async def customer_service_chat(
         type(target_ticket_id) is not int or target_ticket_id <= 0 or not body.session_id
     ):
         raise HTTPException(status_code=422, detail="原工单和会话编号无效")
-    report, review = intake_report_for_message(
-        db,
-        user=user,
-        message=message,
-        session_id=body.session_id,
-        target_ticket_id=target_ticket_id,
-    )
-    if review is None and report is not None:
-        review = await review_report_async(report)
+    report = review = None
+    if body.intake_confirmation is None:
+        report, review = intake_report_for_message(
+            db,
+            user=user,
+            message=message,
+            session_id=body.session_id,
+            target_ticket_id=target_ticket_id,
+        )
+        if review is None and report is not None:
+            review = await review_report_async(report)
     try:
         result = handle_customer_message(
             db,
@@ -193,6 +197,7 @@ async def customer_service_chat(
             reviewed_report=report,
             intake_review=review,
             target_ticket_id=target_ticket_id,
+            intake_confirmation=body.intake_confirmation,
         )
     except InactiveTicketConversation as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc

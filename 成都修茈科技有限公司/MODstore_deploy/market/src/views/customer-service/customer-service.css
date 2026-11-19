@@ -307,6 +307,12 @@
   border: 1px solid var(--cs-border);
 }
 
+.cs-bubble__confirmation {
+  margin-top: 8px;
+  text-align: left;
+  white-space: normal;
+}
+
 .cs-link {
   border: 0;
   background: transparent;

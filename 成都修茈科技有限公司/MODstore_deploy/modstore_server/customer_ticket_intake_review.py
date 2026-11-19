@@ -9,7 +9,7 @@ import os
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Annotated, Any, Literal, cast
 
-from pydantic import BaseModel, ConfigDict, StringConstraints, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError
 
 from modstore_server.customer_issue_delivery_contract import issue_resolution
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
@@ -18,6 +18,14 @@ if TYPE_CHECKING:
     from modstore_server.models_cs import CustomerServiceTicket
 
 INTAKE_REVIEW_TIMEOUT_SECONDS = 6
+NegativeDisposition = Literal["invalid", "out_of_scope"]
+
+
+class NegativeIntakeConfirmation(BaseModel, extra="forbid", strict=True):
+    """The original reporter confirms the facts summarized in this assessment."""
+
+    source_message_id: int = Field(gt=0)
+    kind: NegativeDisposition
 
 
 class IntakeReview(BaseModel):

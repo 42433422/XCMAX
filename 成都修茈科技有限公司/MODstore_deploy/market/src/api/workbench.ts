@@ -254,12 +254,18 @@ export const openApiConnectors = {
     req(`/api/openapi-connectors/${encodeURIComponent(String(id))}/logs?limit=${limit}&offset=${offset}`),
 }
 
+export interface CustomerServiceIntakeConfirmation {
+  source_message_id: number
+  kind: 'invalid' | 'out_of_scope'
+}
+
 export const customerService = {
   customerServiceChat: (payload: {
     message: string
     session_id?: number | null
     context?: Record<string, unknown>
     image_data_url?: string
+    intake_confirmation?: CustomerServiceIntakeConfirmation
   }) =>
     req('/api/customer-service/chat', {
       method: 'POST',

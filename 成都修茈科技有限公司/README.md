@@ -44,6 +44,7 @@
 5. 客服工单复用 [Pydantic 2.13.4](https://github.com/pydantic/pydantic)（MIT，结构化受理判断）、
    [SQLAlchemy 2.0.51](https://github.com/sqlalchemy/sqlalchemy)（MIT，原单事务与并发校验）和
    [Vue 3.5.45](https://github.com/vuejs/core)（MIT，原会话回放）。版本取现有锁文件的验证基线。
+   小C的自动处置沿用这些组件。提交人确认是演练或仅涉及外部事项时，原单状态、回复和审计同事务保存。
    官网下载使用 [NGINX 1.27.5](https://github.com/nginx/nginx/tree/release-1.27.5)（BSD-2-Clause）
    的原生精确匹配与重定向，验证时保留原查询参数。
 

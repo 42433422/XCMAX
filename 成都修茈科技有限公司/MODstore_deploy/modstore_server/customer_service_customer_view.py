@@ -102,7 +102,7 @@ def customer_ticket(ticket: Any) -> dict[str, Any]:
     if isinstance(disposition, dict) and disposition.get("kind") in {"invalid", "out_of_scope"}:
         out["disposition"] = {
             **_pick(disposition, ("kind", "at")),
-            "note": customer_text(disposition.get("note"), "管理员已记录处置结论。"),
+            "note": customer_text(disposition.get("note"), "已记录处置结论。"),
         }
     out["progress"] = [
         {"at": r.get("at") or "", "text": customer_text(r.get("progress"))}
@@ -154,8 +154,13 @@ def _screenshot_data_url(value: Any) -> str | None:
 def customer_message_payload(payload: Any, role: str = "assistant") -> dict[str, Any]:
     payload = payload if isinstance(payload, dict) else {}
     out: dict[str, Any] = _pick(payload, ("customer_decision",))
-    if role == "assistant" and payload.get("origin") in ("admin_reply", "admin_disposition"):
-        out["origin"] = payload["origin"]
+    if role == "assistant":
+        if payload.get("origin") in ("admin_reply", "admin_disposition", "assistant_disposition"):
+            out["origin"] = payload["origin"]
+        if isinstance(payload.get("intake_confirmation"), dict):
+            out["intake_confirmation"] = _pick(
+                payload["intake_confirmation"], ("source_message_id", "kind")
+            )
     if role == "user":
         if "context" in payload:
             out["context"] = payload["context"]

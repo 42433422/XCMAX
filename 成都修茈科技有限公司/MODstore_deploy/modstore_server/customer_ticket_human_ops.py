@@ -184,6 +184,7 @@ def dispose_ticket(
     """Record a terminal triage outcome and notify the owner in one transaction."""
     from modstore_server.customer_service_api_helpers import record_original_session_message
     from modstore_server.customer_service_orchestrator import ticket_payload
+    from modstore_server.customer_ticket_disposition import prepare_disposition
     from modstore_server.customer_ticket_execution import ticket_dispatch_stop
 
     if not user.is_admin:
@@ -230,10 +231,7 @@ def dispose_ticket(
         "at": now.isoformat(),
         "execution_stop": ticket_dispatch_stop(db, ticket),
     }
-    evidence["admin_disposition"] = disposition
-    evidence.pop("fault_remains", None)
-    resolution.update(state="rejected", closed_at=now.isoformat(), **repair_verification(None))
-    evidence["resolution"] = resolution
+    note = prepare_disposition(ticket, evidence, disposition, source="admin_disposition")
     _cas(
         db,
         ticket,
@@ -246,10 +244,6 @@ def dispose_ticket(
         closed_at=now,
         commit=False,
     )
-    label = (
-        "所述问题核验无效" if request["disposition"] == "invalid" else "所述事项超出平台受理范围"
-    )
-    note = f"工单 {ticket.ticket_no} 已处置。{label}。{request['note']}"
     record_original_session_message(db, ticket, user, note, now=now, origin="admin_disposition")
     db.add(
         CustomerServiceAction(

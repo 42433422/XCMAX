@@ -10,6 +10,111 @@ WORKFLOW = ROOT / '.github/workflows/corp-site-deploy.yml'
 
 
 class CorpSiteSyncTest(unittest.TestCase):
+    def test_download_redirect_smoke_verifies_original_urls_and_deploy_sha(self):
+        workflow = WORKFLOW.read_text()
+        start = workflow.index('            # Verify the original slash URL')
+        end = workflow.index('            echo "[verify] capability center', start)
+        block = '\n'.join(line[12:] for line in workflow[start:end].splitlines())
+        # Stand in for the existing retrying curl helper without using the network.
+        fake_curl = r"""
+xc_curl() {
+  local output method=GET url host query target
+  while [ "$#" -gt 1 ]; do
+    case "$1" in
+      -w) shift 2 ;;
+      -o) output="$2"; shift 2 ;;
+      --head) method=HEAD; shift ;;
+      *) return 90 ;;
+    esac
+  done
+  url="$1"
+  printf '%s %s\n' "$method" "$url" >> "$CALLS"
+  case "$url" in
+    https://xiu-ci.com/download*|https://www.xiu-ci.com/download*) ;;
+    *) return 91 ;;
+  esac
+  host="${url#https://}"
+  host="${host%%/*}"
+  query="${url#*\?}"
+  [ "$query" = "xcmax_download_probe=${DEPLOY_SHA}" ] || return 92
+  target="https://${host}/download?${query}"
+  if [ "$SCENARIO" = canonical_host ]; then
+    target="https://xiu-ci.com/download?${query}"
+  fi
+  if [ "$SCENARIO" = retry ]; then printf '000 \n'; fi
+  case "$url" in
+    */download/\?*)
+      if [ "$host" = www.xiu-ci.com ]; then
+        case "$SCENARIO" in
+          canonical_slash_host|host_loop|dropped_query_second_hop|head_differs_second_hop)
+            target="https://xiu-ci.com/download/?${query}" ;;
+          self_loop) target="https://www.xiu-ci.com/download/?${query}" ;;
+          dropped_query_host_hop) target="https://xiu-ci.com/download/" ;;
+          dropped_query) target="${target%%\?*}" ;;
+          foreign_target) target="https://example.invalid/download?${query}" ;;
+          head_differs) if [ "$method" = HEAD ]; then target="${target%%\?*}"; fi ;;
+          temporary_redirect) printf '302 %s\n' "$target"; return ;;
+        esac
+      elif grep -Fq "GET https://www.xiu-ci.com/download/?${query}" "$CALLS"; then
+        case "$SCENARIO" in
+          host_loop) target="https://www.xiu-ci.com/download/?${query}" ;;
+          dropped_query_second_hop) target="${target%%\?*}" ;;
+          head_differs_second_hop) if [ "$method" = HEAD ]; then target="${target%%\?*}"; fi ;;
+        esac
+      fi
+      printf '301 %s\n' "$target"
+      ;;
+    *)
+      case "$SCENARIO" in
+        wrong_body) printf '<title>官网首页</title>' > "$output" ;;
+        *) printf '<title>XCAGI 产品下载</title>' > "$output" ;;
+      esac
+      if [ "$SCENARIO" = final_redirect ] || \
+         { [ "$SCENARIO" = final_head_differs ] && [ "$method" = HEAD ]; }; then
+        printf '302 https://example.invalid/download?%s\n' "$query"
+      else
+        printf '200 \n'
+      fi
+      ;;
+  esac
+}
+"""
+        sha = 'a' * 40
+        cases = {
+            'direct': True, 'canonical_host': True, 'canonical_slash_host': True, 'retry': True,
+            'dropped_query': False, 'foreign_target': False, 'head_differs': False,
+            'temporary_redirect': False, 'wrong_body': False, 'final_redirect': False,
+            'self_loop': False, 'host_loop': False,
+            'dropped_query_host_hop': False, 'dropped_query_second_hop': False,
+            'head_differs_second_hop': False, 'final_head_differs': False,
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            calls = Path(directory) / 'calls'
+            for scenario, passed in cases.items():
+                with self.subTest(scenario=scenario):
+                    calls.write_text('')
+                    result = subprocess.run(
+                        ['bash', '-c', f'set -euo pipefail\n{fake_curl}\n{block}'],
+                        env=dict(os.environ, CALLS=str(calls), DEPLOY_SHA=sha, SCENARIO=scenario),
+                        capture_output=True, text=True, timeout=5,
+                    )
+                    self.assertEqual(result.returncode == 0, passed, result.stderr)
+                    requests = calls.read_text().splitlines()
+                    self.assertFalse(any('example.invalid' in call for call in requests))
+                    if scenario in ('self_loop', 'host_loop'):
+                        self.assertEqual(
+                            requests.count(f'GET https://www.xiu-ci.com/download/?xcmax_download_probe={sha}'), 1,
+                        )
+                    if passed:
+                        self.assertEqual(len(requests), 10 if scenario == 'canonical_slash_host' else 8)
+                        for host in ('xiu-ci.com', 'www.xiu-ci.com'):
+                            hops = 2 if host == 'www.xiu-ci.com' and scenario == 'canonical_slash_host' else 1
+                            self.assertIn(
+                                f'sha={sha} host={host} get=301 head=301 hops={hops}', result.stdout,
+                            )
+                    else:
+                        self.assertIn(f'sha={sha}', result.stderr)
+
     def test_bootstrap_is_bounded_and_fail_closed(self):
         workflow = WORKFLOW.read_text()
         start = workflow.index('            # Bound each bootstrap command')

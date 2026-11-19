@@ -9,6 +9,8 @@ import hashlib
 import importlib
 from typing import Any
 from uuid import uuid4
+
+from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -22,10 +24,18 @@ from modstore_server.customer_issue_delivery_contract import (
 )
 from modstore_server.customer_ticket_intake_review import (
     IntakeReview,
+    NegativeIntakeConfirmation,
     apply_original_ticket_reassessment,
     cached_intake_review,
     intake_dispatch_block_reason,
     pending_intake_review,
+)
+from modstore_server.customer_ticket_disposition import (
+    NEGATIVE_NOTES,
+    close_confirmed_intake,
+    confirm_negative_intake,
+    has_linked_support_material,
+    read_disposition,
 )
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.customer_service_ticket_view import serialize_ticket
@@ -630,6 +640,7 @@ def handle_customer_message(
     reviewed_report: str | None = None,
     intake_review: IntakeReview | None = None,
     target_ticket_id: int | None = None,
+    intake_confirmation: NegativeIntakeConfirmation | None = None,
 ) -> _facade().Dict[str, _facade().Any]:
     context = _facade()._enrich_cs_context(user, context, db=db)
     text = (message or "").strip()
@@ -662,6 +673,22 @@ def handle_customer_message(
             .with_for_update()
             .first()
         )
+    confirmed_intake = None
+    if intake_confirmation is not None:
+        if (
+            not session_id
+            or session.id != session_id
+            or target_ticket_id is not None
+            or open_ticket is not None
+            or image_data_url
+            or text != "提交工单"
+        ):
+            raise HTTPException(409, "受理确认需与原会话及材料一致，请刷新后提交。")
+        original, intake_review, report_digest = confirm_negative_intake(
+            db, session, intake_confirmation
+        )
+        reviewed_report = str(original.content)
+        confirmed_intake = (original, intake_confirmation, report_digest)
     session.last_message = text
     session.updated_at = _facade().datetime.now(_facade().timezone.utc)
     ctx_for_store = {k: v for (k, v) in (context or {}).items() if k not in {"image_data_url"}}
@@ -947,11 +974,25 @@ def handle_customer_message(
             reply = _facade()._chat_only_reply(text, intent=intent, user=user, db=db)
         cards: list[_facade().Dict[str, _facade().Any]] = []
         intake_assessment = {}
+        confirmation_offer = None
         if intake_review is not None and reviewed_report:
             intake_assessment = {
                 "report_sha256": hashlib.sha256(reviewed_report.encode()).hexdigest(),
                 "review": intake_review.model_dump(),
             }
+            if (
+                intake_review.disposition in ("invalid", "out_of_scope")
+                and reviewed_report == text
+                and open_ticket is None
+                and not image_data_url
+                and not domain_clarify
+                and not has_linked_support_material(extracted)
+                and (intake_review.disposition == "invalid" or not _looks_like_product_issue(text))
+            ):
+                confirmation_offer = {
+                    "source_message_id": user_msg.id,
+                    "kind": intake_review.disposition,
+                }
         assistant_msg = _facade().CustomerServiceMessage(
             session_id=session.id,
             ticket_id=target_ticket_id,
@@ -966,6 +1007,7 @@ def handle_customer_message(
                     "cards": cards,
                     "intent": classified,
                     "intake_assessment": intake_assessment,
+                    **({"intake_confirmation": confirmation_offer} if confirmation_offer else {}),
                 }
             ),
         )
@@ -1091,7 +1133,21 @@ def handle_customer_message(
     reply, cards = _facade().build_reply(
         ticket=ticket, decision=decision, actions=actions, extracted=extracted
     )
-    if dispatch_revoked:
+    if confirmed_intake is not None:
+        original, confirmation, report_digest = confirmed_intake
+        reply = close_confirmed_intake(
+            db,
+            ticket,
+            original,
+            confirmation,
+            report_digest,
+            now=_facade().datetime.now(_facade().timezone.utc),
+        )
+        decision.decision = "rejected"
+        decision.rationale = NEGATIVE_NOTES[confirmation.kind]
+        session.last_message = reply
+        cards = []
+    elif dispatch_revoked:
         reply = "我是小C。此工单已停止自动派发，原工单仍保留。可继续补充材料供管理员处理。"
     elif supplement_only:
         reply = "我是小C。已收到原工单的补充说明，保留当前处理状态。"
@@ -1173,6 +1229,7 @@ def handle_customer_message(
                 "actions": [_facade().action_payload(a) for a in actions],
                 "cards": cards,
                 "intent": classified,
+                **({"origin": "assistant_disposition"} if confirmed_intake else {}),
             }
         ),
     )
@@ -2588,10 +2645,14 @@ def customer_issue_payload(row: _facade().CustomerServiceTicket) -> dict[str, An
         else None
     )
     human_text = str((human or {}).get("text") or "").strip()
-    disposition = evidence.get("admin_disposition")
+    disposition = read_disposition(evidence)
     if isinstance(disposition, dict):
         latest_result = {
-            "source": "admin_disposition",
+            "source": (
+                "assistant_disposition"
+                if disposition.get("actor") == "xiaoc"
+                else "admin_disposition"
+            ),
             "progress": disposition.get("note"),
             "at": disposition.get("at"),
         }
@@ -2624,6 +2685,6 @@ def customer_issue_payload(row: _facade().CustomerServiceTicket) -> dict[str, An
         "closed_at": row.closed_at.isoformat() if row.closed_at else "",
         "reopen_count": len(evidence.get("reopen_history") or []),
         "can_resolve": row.status == "awaiting_customer" and not closed,
-        "can_reopen": not evidence.get("admin_disposition")
+        "can_reopen": not read_disposition(evidence)
         and (closed or (not fault_open and state not in {"received", "reopened", "processing"})),
     }

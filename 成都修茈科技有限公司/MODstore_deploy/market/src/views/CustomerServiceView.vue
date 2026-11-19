@@ -20,7 +20,7 @@
         <div ref="messagesEl" class="cs-messages">
           <article v-for="msg in messages" :key="msg.id" :class="['cs-message', `cs-message--${msg.role}`]">
             <div class="cs-bubble">
-              <span v-if="msg.adminLabel" class="cs-muted">{{ msg.adminLabel }}</span>
+              <span v-if="msg.receiptLabel" class="cs-muted">{{ msg.receiptLabel }}</span>
               <p
                 v-if="!openedTicketRef && msg.role === 'assistant' && msg.content"
                 class="cs-bubble__text"
@@ -30,6 +30,16 @@
               <p v-else-if="msg.content && msg.content !== '[用户补充了图片资料]'" class="cs-bubble__text">{{ msg.content }}</p>
               <p v-else-if="msg.imageDataUrl || msg.content === '[用户补充了图片资料]'" class="cs-bubble__text">已附上图片</p>
               <img v-if="msg.imageDataUrl" :src="msg.imageDataUrl" alt="补充图片" class="cs-bubble__img" />
+              <button
+                v-if="intakeConfirmation?.message === msg"
+                type="button"
+                class="cs-btn cs-btn--ghost cs-bubble__confirmation"
+                @click="confirmIntake(msg)"
+              >
+                {{ intakeConfirmation.intake.kind === 'invalid'
+                  ? '确认仅为演练、未实际发生并提交工单'
+                  : '确认仅涉及与平台无关的事项并提交工单' }}
+              </button>
             </div>
           </article>
 
@@ -109,7 +119,7 @@ const { tickets, expandedTicketIds, allTicketsExpanded, toggleTicket, toggleAllT
 
 const {
   draft, loading, error, activeSessionId, openedTicketRef, readOnly, messages, messagesEl, quickPrompts,
-  usePrompt, send, sendText, onBubbleClick, newSession, visibleCards, openTicket,
+  usePrompt, send, sendText, confirmIntake, intakeConfirmation, onBubbleClick, newSession, visibleCards, openTicket,
 } = useCustomerServiceChat({
   route,
   pendingImageDataUrl,

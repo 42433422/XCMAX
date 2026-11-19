@@ -12,6 +12,7 @@ from typing import Any, cast
 
 from modstore_server.customer_service_tools import json_loads
 from modstore_server.customer_service_triage import ticket_taxonomy
+from modstore_server.customer_ticket_disposition import read_disposition
 from modstore_server.models_cs import CustomerServiceTicket
 
 
@@ -25,6 +26,7 @@ def serialize_ticket(
     evidence = json_loads(cast(str | None, row.evidence_json), {})
     if not isinstance(evidence, dict):
         evidence = {}
+    disposition = read_disposition(evidence)
     domain = str(evidence.get("issue_domain") or "").strip().lower()
     if domain not in issue_domains:
         domain = ""
@@ -60,11 +62,7 @@ def serialize_ticket(
             if evidence.get("dispatch_revocation")
             else {}
         ),
-        **(
-            {"disposition": evidence["admin_disposition"]}
-            if evidence.get("admin_disposition")
-            else {}
-        ),
+        **({"disposition": disposition} if disposition else {}),
         "summary": row.summary,
         "decision_status": row.decision_status,
         "automation_level": row.automation_level,

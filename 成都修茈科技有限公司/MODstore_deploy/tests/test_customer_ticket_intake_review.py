@@ -20,7 +20,12 @@ from modstore_server.customer_ticket_intake_review import (
 )
 from modstore_server.eventing import db_outbox
 from modstore_server.models import User, get_session_factory
-from modstore_server.models_cs import CustomerServiceMessage, CustomerServiceTicket
+from modstore_server.models_cs import (
+    CustomerServiceAction,
+    CustomerServiceAuditLog,
+    CustomerServiceMessage,
+    CustomerServiceTicket,
+)
 from modstore_server.services import llm
 
 BASE = "/api/customer-service"
@@ -31,29 +36,182 @@ def client(isolated_modstore):
     return TestClient(app, client=(f"intake-test-{uuid4().hex}", 50000))
 
 
-@pytest.fixture
-def authenticated_ticket_admin(monkeypatch):
+def _authenticated_ticket_user(monkeypatch, *, is_admin=False):
     user_name = f"intake-test-{uuid4().hex[:12]}"
     with get_session_factory()() as db:
-        admin = User(
+        user = User(
             username=user_name,
             email=f"{user_name}@example.test",
             password_hash="x",
-            is_admin=True,
+            is_admin=is_admin,
         )
-        db.add(admin)
+        db.add(user)
         db.commit()
-        db.refresh(admin)
+        db.refresh(user)
     monkeypatch.setitem(
-        app.dependency_overrides, customer_service_api._get_current_user, lambda: admin
+        app.dependency_overrides, customer_service_api._get_current_user, lambda: user
     )
-    monkeypatch.setitem(
-        app.dependency_overrides, customer_issue_api.get_current_user, lambda: admin
-    )
+    monkeypatch.setitem(app.dependency_overrides, customer_issue_api.get_current_user, lambda: user)
     monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "1")
     monkeypatch.setattr(llm, "resolve_platform_bench_llm", lambda: ("mock", "support"))
     monkeypatch.setattr(customer_service_orchestrator, "_llm_classify_intent", lambda _text: None)
-    return admin
+    return user
+
+
+@pytest.fixture
+def authenticated_ticket_admin(monkeypatch):
+    return _authenticated_ticket_user(monkeypatch, is_admin=True)
+
+
+@pytest.mark.parametrize(
+    ("report", "kind"),
+    [
+        ("蓝色封面按钮失灵，这段情景只用于演练，实际没有发生。", "invalid"),
+        ("我想给家里的薄荷浇水，这件事与平台支持的产品或服务无关。", "out_of_scope"),
+    ],
+)
+def test_customer_confirmed_disposition_closes_and_replies_once(client, monkeypatch, report, kind):
+    owner = _authenticated_ticket_user(monkeypatch)
+    reviews = []
+
+    async def classify(_provider, _model, messages, **_opts):
+        reviews.append(messages[-1]["content"])
+        return {
+            "ok": True,
+            "content": json.dumps(
+                {
+                    "disposition": kind,
+                    "reason": "核对提交范围",
+                    "evidence_excerpt": report,
+                }
+            ),
+        }
+
+    scheduled = []
+    monkeypatch.setattr(llm, "chat_dispatch_via_platform_only", classify)
+    monkeypatch.setattr(
+        customer_service_api, "_schedule_customer_ticket_incident", scheduled.append
+    )
+    entered = client.post(f"{BASE}/chat", json={"message": report}).json()
+    offered = entered["message"]["payload"]["intake_confirmation"]
+    assert offered["kind"] == kind
+    request = {
+        "message": "提交工单",
+        "session_id": entered["session"]["id"],
+        "intake_confirmation": offered,
+    }
+    wrong_kind = "out_of_scope" if kind == "invalid" else "invalid"
+    mismatched = client.post(
+        f"{BASE}/chat",
+        json={
+            **request,
+            "intake_confirmation": {**offered, "kind": wrong_kind},
+        },
+    )
+    assert mismatched.status_code == 409
+    with_order = client.post(f"{BASE}/chat", json={**request, "context": {"order_no": "NEW-ORDER"}})
+    assert with_order.status_code == 409
+    with_image = client.post(
+        f"{BASE}/chat", json={**request, "image_data_url": "data:image/png;base64,eA=="}
+    )
+    assert with_image.status_code == 409
+    response = client.post(f"{BASE}/chat", json=request)
+    assert response.status_code == 200, response.text
+    submitted = response.json()
+    ticket = submitted["ticket"]
+    assert ticket["status"] == "rejected" and ticket["closed_at"]
+    assert ticket["disposition"]["kind"] == kind
+    assert ticket["dispatch_status"] == "terminal"
+    assert submitted["message"]["payload"]["origin"] == "assistant_disposition"
+    assert client.post(f"{BASE}/chat", json=request).status_code == 409
+    assert reviews == [report] and scheduled == []
+    records = db_outbox.fetch_pending(100, aggregate_prefix=f"{ticket['ticket_no']}:")
+    assert all(event.event_name != INTAKE_EVENT for event in records)
+    readback = client.get(f"{BASE}/sessions/{request['session_id']}").json()
+    transcript = readback["messages"]
+    final_replies = [m for m in transcript if m["payload"].get("origin") == "assistant_disposition"]
+    assert len(final_replies) == 1
+    assert ticket["ticket_no"] in final_replies[0]["content"]
+    with get_session_factory()() as db:
+        original = db.get(CustomerServiceMessage, offered["source_message_id"])
+        assert original.ticket_id == ticket["id"] and original.content == report
+        stored = db.get(CustomerServiceTicket, ticket["id"])
+        assert stored.assigned_admin_id is None and stored.user_id == owner.id
+        action = db.query(CustomerServiceAction).filter_by(ticket_id=stored.id).one()
+        assert action.action_type == "ticket.disposition" and action.status == "completed"
+        audit = (
+            db.query(CustomerServiceAuditLog)
+            .filter_by(
+                ticket_id=stored.id,
+                event_type="assistant_ticket_disposed",
+            )
+            .one()
+        )
+        assert audit.actor_user_id is None and audit.actor_type == "ai"
+        assert json.loads(audit.detail_json)["actor"] == "xiaoc"
+
+
+def test_disposition_offer_cannot_close_another_or_changed_original(client, monkeypatch):
+    owner = _authenticated_ticket_user(monkeypatch)
+    report = "这是一个演练描述，实际没有发生。"
+
+    async def classify(_provider, _model, messages, **_opts):
+        return {
+            "ok": True,
+            "content": json.dumps(
+                {
+                    "disposition": "invalid",
+                    "reason": "演练",
+                    "evidence_excerpt": messages[-1]["content"],
+                }
+            ),
+        }
+
+    monkeypatch.setattr(llm, "chat_dispatch_via_platform_only", classify)
+    entered = client.post(f"{BASE}/chat", json={"message": report}).json()
+    session = entered["session"]["id"]
+    request = {
+        "message": "提交工单",
+        "session_id": session,
+        "intake_confirmation": entered["message"]["payload"]["intake_confirmation"],
+    }
+    _authenticated_ticket_user(monkeypatch)
+    assert client.post(f"{BASE}/chat", json=request).status_code == 409
+    monkeypatch.setitem(
+        app.dependency_overrides, customer_service_api._get_current_user, lambda: owner
+    )
+    assert (
+        client.post(
+            f"{BASE}/chat", json={"message": "这是另外一段反馈。", "session_id": session}
+        ).status_code
+        == 200
+    )
+    assert client.post(f"{BASE}/chat", json=request).status_code == 409
+    with get_session_factory()() as db:
+        assert db.query(CustomerServiceTicket).filter_by(session_id=session).count() == 0
+
+
+def test_out_of_scope_model_quote_alone_does_not_offer_close_for_download_failure(
+    client, monkeypatch
+):
+    _authenticated_ticket_user(monkeypatch)
+    report = "我问过薄荷浇水。实际故障是 XCAGI 官网下载 /download/ 返回 404。"
+
+    async def classify(*_args, **_opts):
+        return {
+            "ok": True,
+            "content": json.dumps(
+                {
+                    "disposition": "out_of_scope",
+                    "reason": "盆栽",
+                    "evidence_excerpt": "薄荷浇水",
+                }
+            ),
+        }
+
+    monkeypatch.setattr(llm, "chat_dispatch_via_platform_only", classify)
+    checked = client.post(f"{BASE}/chat", json={"message": report}).json()
+    assert "intake_confirmation" not in checked["message"]["payload"]
 
 
 @pytest.mark.parametrize(

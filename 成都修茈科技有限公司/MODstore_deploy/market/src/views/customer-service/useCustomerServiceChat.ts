@@ -1,10 +1,11 @@
 /**
  * 对话主流程：草稿、发送管线、气泡点击、会话管理与工单展开联动（原单文件机械迁出）。
  */
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { Ref } from 'vue'
 import type { RouteLocationNormalizedLoaded } from 'vue-router'
 import { api } from '../../api'
+import type { CustomerServiceIntakeConfirmation } from '../../api/workbench'
 import { shortTicketRef, ticketIsClosed } from '../../utils/csTicketLifecycle'
 import { composeTicketUserMessage, toUserFacingCards } from '../../utils/csTicketSummary'
 import { asUnknownRecord, errorMessage } from '../../utils/typeNarrowing'
@@ -17,6 +18,13 @@ export interface CustomerServiceChatCtx {
   clearPendingImage: () => void
   loadTickets: () => Promise<void>
   expandedTicketIds: Ref<Set<number>>
+}
+
+function receiptLabel(origin: unknown) {
+  if (origin === 'admin_reply') return '管理员答复'
+  if (origin === 'admin_disposition') return '管理员处置回执'
+  if (origin === 'assistant_disposition') return 'AI 处置回执'
+  return undefined
 }
 
 export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
@@ -36,6 +44,24 @@ export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
   let mounted = true
   const messages = ref<UiMessage[]>([])
   const messagesEl = ref<HTMLElement | null>(null)
+  const pendingConfirmation = ref<{
+    message: UiMessage
+    sessionId: number
+    intake: CustomerServiceIntakeConfirmation
+  } | null>(null)
+  const intakeConfirmation = computed(() => {
+    const offer = pendingConfirmation.value
+    if (!offer || loading.value || readOnly.value || openedTicket.value
+      || !activeSessionId.value || activeSessionId.value !== offer.sessionId
+      || messages.value.at(-1) !== offer.message
+      || draft.value || ctx.pendingImageDataUrl.value || ctx.imagePicking.value) return null
+    return offer
+  })
+  let materialRevision = 0
+  watch([draft, ctx.pendingImageDataUrl, ctx.imagePicking, () => route.query], () => {
+    materialRevision++
+    pendingConfirmation.value = null
+  }, { flush: 'sync' })
 
   const quickPrompts = ['你好，想了解一下会员怎么买', '退款一般需要提供哪些信息？', '商品有问题想先了解怎么投诉', '账号权益没到账是怎么回事']
 
@@ -44,7 +70,11 @@ export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
     void ctx.loadTickets()
   })
 
-  onBeforeUnmount(() => { mounted = false; conversationGeneration++ })
+  onBeforeUnmount(() => {
+    mounted = false
+    conversationGeneration++
+    pendingConfirmation.value = null
+  })
 
   function hydrateFromQuery() {
     const q = route.query || {}
@@ -103,7 +133,16 @@ export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
     await sendText(draft.value.trim())
   }
 
-  async function sendText(raw: string, extras?: { reason?: string }) {
+  async function confirmIntake(message: UiMessage) {
+    const offer = intakeConfirmation.value
+    if (!offer || offer.message !== message) return
+    await sendText('提交工单', { intakeConfirmation: offer.intake })
+  }
+
+  async function sendText(raw: string, extras?: {
+    reason?: string
+    intakeConfirmation?: CustomerServiceIntakeConfirmation
+  }) {
     const text = String(raw || '').trim()
     const imageDataUrl = ctx.pendingImageDataUrl.value
     if ((!text && !imageDataUrl) || loading.value || readOnly.value || ctx.imagePicking.value) return
@@ -112,6 +151,7 @@ export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
     const ticketId = openedTicket.value?.id
     error.value = ''
     loading.value = true
+    pendingConfirmation.value = null
     const userMsg: UiMessage = {
       id: `u-${Date.now()}`,
       role: 'user',
@@ -121,6 +161,7 @@ export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
     messages.value.push(userMsg)
     draft.value = ''
     ctx.clearPendingImage()
+    const reportRevision = materialRevision
     void scrollMessagesToEnd()
     try {
       const chatCtx = {
@@ -133,6 +174,7 @@ export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
           session_id: sessionId,
           context: chatCtx,
           image_data_url: imageDataUrl || undefined,
+          ...(extras?.intakeConfirmation ? { intake_confirmation: extras.intakeConfirmation } : {}),
         }),
       )
       const ticket = Object.keys(asUnknownRecord(res.ticket)).length ? (asUnknownRecord(res.ticket) as CustomerTicket) : null
@@ -144,6 +186,7 @@ export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
       const session = asUnknownRecord(res.session)
       if (sessionId && session.id && Number(session.id) !== sessionId) throw new Error('返回的客服会话不一致')
       const responseMessage = asUnknownRecord(res.message)
+      const messagePayload = asUnknownRecord(responseMessage.payload)
       activeSessionId.value = Number(session.id || sessionId || 0) || null
       if (ticket) {
         openedTicket.value = ticket
@@ -160,14 +203,28 @@ export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
           decision: decisionCard || asUnknownRecord(res.decision),
           actions: Array.isArray(actionsCard?.items) ? actionsCard.items : Array.isArray(res.actions) ? res.actions : [],
         })
-        if (ticketIsClosed(ticket) || content === '已处理。') content = composed
+        if ((ticketIsClosed(ticket) && messagePayload.origin !== 'assistant_disposition') || content === '已处理。') {
+          content = composed
+        }
       }
-      messages.value.push({
+      const assistantMessage: UiMessage = {
         id: `a-${Date.now()}`,
         role: 'assistant',
         content,
         cards: [],
-      })
+        receiptLabel: receiptLabel(messagePayload.origin),
+      }
+      messages.value.push(assistantMessage)
+      const { source_message_id, kind } = asUnknownRecord(messagePayload.intake_confirmation)
+      if (reportRevision === materialRevision && !openedTicket.value && activeSessionId.value
+        && typeof source_message_id === 'number' && Number.isSafeInteger(source_message_id)
+        && source_message_id > 0 && (kind === 'invalid' || kind === 'out_of_scope')) {
+        pendingConfirmation.value = {
+          message: assistantMessage,
+          sessionId: activeSessionId.value,
+          intake: { source_message_id, kind },
+        }
+      }
       await scrollMessagesToEnd()
     } catch (e: unknown) {
       const detail = errorMessage(e, 'AI 客服处理失败')
@@ -187,6 +244,7 @@ export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
     activeSessionId.value = null
     openedTicket.value = null
     openedTicketCanReply.value = false
+    pendingConfirmation.value = null
     messages.value = []
     draft.value = ''
     ctx.clearPendingImage()
@@ -232,8 +290,7 @@ export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
           content: message.content,
           imageDataUrl: message.role === 'user' && typeof image === 'string'
             && /^data:image\/(?:png|jpeg|webp|gif|bmp|avif);base64,/.test(image) ? image : null,
-          adminLabel: payload.origin === 'admin_reply' ? '管理员答复'
-            : payload.origin === 'admin_disposition' ? '管理员处置回执' : undefined,
+          receiptLabel: message.role === 'assistant' ? receiptLabel(payload.origin) : undefined,
         }]
       })
       await scrollMessagesToEnd()
@@ -247,7 +304,7 @@ export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
   return {
     draft, loading, error, activeSessionId, openedTicketRef, readOnly, messages, messagesEl, quickPrompts,
     hydrateFromQuery, queryContext, usePrompt, scrollMessagesToEnd, onBubbleClick,
-    send, sendText, newSession, visibleCards, openTicket,
+    send, sendText, confirmIntake, intakeConfirmation, newSession, visibleCards, openTicket,
   }
 }
 
