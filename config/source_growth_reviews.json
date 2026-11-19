@@ -588,6 +588,42 @@
       "reason": "评审请求（不代表批准）：guarded启动准入在接收业务前验证离线准备的原生checkpoint表，避免首次请求才发现缺表或偷偷初始化。",
       "boundary": "仅在既有owned repository schema校验末尾调用无DDL的原生schema验证器；不增加授权、修复、建表或数据写入。",
       "follow_up": "升级LangGraph saver版本时同步审查离线迁移与精确schema验证，缺失或异常结构继续明确拒绝准入。"
+    },
+    "FHD/mobile-flutter-poc/lib/src/features/approval/native_approval_workspace.dart": {
+      "base_file": "FHD/mobile-flutter-poc/lib/src/features/approval/native_approval_workspace.dart",
+      "base_blob": "65ba70c97b4572d5cc2a34f8e8f73356062f91b6",
+      "head_blob": "85d8e1f72208d67e807f9eacd14d2e6446389ff0",
+      "before_lines": 751,
+      "after_lines": 1219,
+      "reason": "审批列表和详情新增本页搜索、业务金额摘要、固定动作与失效状态反馈。",
+      "boundary": "同一页面继续管理审批分页、详情和权限复核。原始数据仍在详情内按需展开。",
+      "validation": "Flutter 3.44.0 定向审批组件 9 项通过，覆盖 320px 金额详情、运行态过期和提交复核。仓库 3.44.7 CI 与真机验收待完成。",
+      "follow_up": "审批维护人后续评估是否按独立业务场景复用金额摘要，避免仅按行数拆分页面。",
+      "review_owner": "@42433422"
+    },
+    "FHD/mobile-flutter-poc/lib/src/features/business/native_inventory_screen.dart": {
+      "base_file": null,
+      "base_blob": null,
+      "head_blob": "277621b69c91c5a14ff3769ab2aecf4ed58ddde1",
+      "before_lines": 0,
+      "after_lines": 889,
+      "reason": "原生替换库存 WebView，提供分仓批次结存、可用量、预警、出入库和流水核对。",
+      "boundary": "限定在库存台账与关联流水界面，使用既有会话校验、记录表单和导出接口。",
+      "validation": "Flutter 3.44.0 的 375px 定向库存组件测试通过，覆盖作用域、结存、可用量和未知回执。仓库 3.44.7 CI 与真机验收待完成。",
+      "follow_up": "库存维护人先做设备联调，库存选品若出现第二个相同调用方，再评估独立复用。",
+      "review_owner": "@42433422"
+    },
+    "FHD/mobile-flutter-poc/lib/src/features/business/native_order_form.part.dart": {
+      "base_file": "FHD/mobile-flutter-poc/lib/src/features/business/native_order_form.part.dart",
+      "base_blob": "7d3be6d89fabf2f7fba9962e33c7172500ad131f",
+      "head_blob": "afeef3896c51fe7ea66046f12bd7200afd46ab1a",
+      "before_lines": 585,
+      "after_lines": 844,
+      "reason": "移动开单新增原生日期选择、多商品选择、固定合计与提交、回执反馈和继续开单。",
+      "boundary": "保留同一个出货单草稿、选品与提交生命周期。继续使用既有订单号及 Mod 接口。",
+      "validation": "Flutter 3.44.0 定向订单组件 6 项通过，覆盖 390px 多商品开单、计算和继续开单。仓库 3.44.7 CI 与真机验收待完成。",
+      "follow_up": "开单维护人核对 Android 与 iOS 分享和键盘表现。保留现有业务拆分，避免多份草稿状态。",
+      "review_owner": "@42433422"
     }
   }
 }
