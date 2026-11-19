@@ -588,6 +588,18 @@
       "reason": "评审请求（不代表批准）：guarded启动准入在接收业务前验证离线准备的原生checkpoint表，避免首次请求才发现缺表或偷偷初始化。",
       "boundary": "仅在既有owned repository schema校验末尾调用无DDL的原生schema验证器；不增加授权、修复、建表或数据写入。",
       "follow_up": "升级LangGraph saver版本时同步审查离线迁移与精确schema验证，缺失或异常结构继续明确拒绝准入。"
+    },
+    "FHD/mobile-flutter-poc/lib/src/features/workspace/local_workspace_screen.dart": {
+      "base_file": null,
+      "base_blob": null,
+      "head_blob": "fbce92d98748ba75b3c8336f53ee86b12be748a4",
+      "before_lines": 0,
+      "after_lines": 1110,
+      "reason": "Flutter 本地工作台承载客户、商品、订单草稿和设备绑定完整交互，提供首次数据来源、冲突选择、归档和小屏编辑。",
+      "boundary": "限定在设备本地工作台页面与同页表单。SQLite 写入、变更队列及加密传输分别由数据层管理。其他业务入口继续委托既有实现。",
+      "validation": "Python 局域网监听端到端及归档存储 7 项已通过。Flutter 小屏、扫码复用、断网启动和同步组件测试按同一提交验证；Android 与 iOS 真机仍需验收。",
+      "follow_up": "后续扩展正式订单或库存前，评审可复用的表单边界和冲突交互。维持设备本地数据存储约束。",
+      "review_owner": "@42433422"
     }
   }
 }
