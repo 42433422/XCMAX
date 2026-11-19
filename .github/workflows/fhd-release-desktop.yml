@@ -28,6 +28,10 @@ on:
         required: false
         default: true
         type: boolean
+      windows_unsigned:
+        description: "Require an unsigned Windows manual installer even when signing credentials are configured"
+        default: false
+        type: boolean
       candidate_only:
         description: "Keep the Windows installer as a private acceptance candidate; do not publish the download pointer"
         required: false
@@ -99,11 +103,16 @@ jobs:
           NOTICE_PUBLICATION_ORIGIN: ${{ inputs.notice_publication_origin }}
           NOTICE_PUBLICATION_BASE_PATH: ${{ inputs.notice_publication_base_path }}
           WINDOWS_ONLY: ${{ inputs.windows_installer_only }}
+          WINDOWS_UNSIGNED: ${{ inputs.windows_unsigned }}
           VERIFY_ONLY: ${{ inputs.verify_only }}
           CANDIDATE_RUN: ${{ inputs.candidate_run_id }}
         run: |
           if [ "$VERIFY_ONLY" = true ] && [ -n "$CANDIDATE_RUN" ]; then
             echo '::error::verify_only validates the public release and cannot also select an immutable candidate.'
+            exit 1
+          fi
+          if [ "$WINDOWS_UNSIGNED" = true ] && { [ "$WINDOWS_ONLY" != true ] || [ "$VERIFY_ONLY" = true ]; }; then
+            echo '::error::windows_unsigned applies only to Windows manual installer delivery.'
             exit 1
           fi
           if [ "$WINDOWS_ONLY" = true ] && [ "$VERIFY_ONLY" != true ] && [ -z "$CANDIDATE_RUN" ] && { [ -z "$FHD_NOTICE_PUBLICATION_JSON" ] || [ -z "$NOTICE_PUBLICATION_ORIGIN" ]; }; then
@@ -131,11 +140,12 @@ jobs:
     env:
       PYTHONUTF8: "1"
       PYTHONIOENCODING: utf-8
-      ES_USERNAME: ${{ secrets.ES_USERNAME }}
-      ES_PASSWORD: ${{ secrets.ES_PASSWORD }}
-      CREDENTIAL_ID: ${{ secrets.CREDENTIAL_ID }}
-      ES_TOTP_SECRET: ${{ secrets.ES_TOTP_SECRET }}
-      XCAGI_WINDOWS_PUBLISHER_NAME: ${{ vars.XCAGI_WINDOWS_PUBLISHER_NAME }}
+      WINDOWS_UNSIGNED: ${{ inputs.windows_unsigned }}
+      ES_USERNAME: ${{ !inputs.windows_unsigned && secrets.ES_USERNAME || '' }}
+      ES_PASSWORD: ${{ !inputs.windows_unsigned && secrets.ES_PASSWORD || '' }}
+      CREDENTIAL_ID: ${{ !inputs.windows_unsigned && secrets.CREDENTIAL_ID || '' }}
+      ES_TOTP_SECRET: ${{ !inputs.windows_unsigned && secrets.ES_TOTP_SECRET || '' }}
+      XCAGI_WINDOWS_PUBLISHER_NAME: ${{ !inputs.windows_unsigned && vars.XCAGI_WINDOWS_PUBLISHER_NAME || '' }}
       XCAGI_WINDOWS_SIGNING_PROVIDER: sslcom
     steps:
       - uses: actions/checkout@v4
@@ -228,6 +238,7 @@ jobs:
           $installer = "release/xcagi-v$env:DELIVERY_VERSION/enterprise/XCAGI-Enterprise-Setup-$env:DELIVERY_VERSION-x64.exe"
           $signature = Get-AuthenticodeSignature -LiteralPath $installer
           $state = if ($signature.Status -eq 'Valid') { 'signed' } elseif ($signature.Status -eq 'NotSigned') { 'unsigned' } else { throw "Invalid signature: $($signature.Status)" }
+          if ($env:WINDOWS_UNSIGNED -eq 'true' -and $state -ne 'unsigned') { throw 'The selected delivery requires an unsigned installer.' }
           New-Item -ItemType Directory -Path delivery -Force | Out-Null
           $filename = "XCAGI-Enterprise-Setup-$env:DELIVERY_VERSION-x64-$state.exe"
           Copy-Item $installer "delivery/$filename"
@@ -285,6 +296,7 @@ jobs:
     env:
       DESKTOP_SSH_KEY: ${{ secrets.SERVER_SSH_KEY || secrets.FHD_PUSH_SSH_KEY }}
       DELIVERY_VERSION: ${{ inputs.version }}
+      WINDOWS_UNSIGNED: ${{ inputs.windows_unsigned }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -338,12 +350,13 @@ jobs:
           set -euo pipefail
           receipt="${RUNNER_TEMP}/delivery/delivery-receipt.json"
           test -f "$receipt"
-          jq -e --arg v "$DELIVERY_VERSION" --arg sha "${{ inputs.release_sha }}" '
+          jq -e --arg v "$DELIVERY_VERSION" --arg sha "${{ inputs.release_sha }}" --arg unsigned "$WINDOWS_UNSIGNED" '
             .version == $v
             and ((.git_sha | ascii_downcase) == ($sha | ascii_downcase))
             and .delivery_mode == "manual_installer"
             and .runner_install_smoke == "passed"
             and .stable_auto_update == false
+            and ($unsigned != "true" or .signature_status == "unsigned")
             and ((.signature_status == "signed" and .authenticode_status == "Valid")
               or (.signature_status == "unsigned" and .authenticode_status == "NotSigned"))
           ' "$receipt" >/dev/null

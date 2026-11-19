@@ -48,6 +48,9 @@ def test_profile_stage_lists_only_existing_modules():
 
 def test_manual_installer_is_part_of_official_workflow_without_stable_publication():
     workflow = yaml.safe_load((ROOT / ".github/workflows/release-desktop.yml").read_text())
+    unsigned = workflow[True]["workflow_dispatch"]["inputs"]["windows_unsigned"]
+    assert unsigned["type"] == "boolean"
+    assert unsigned["default"] is False
     job = workflow["jobs"]["windows-installer-delivery"]
     assert job["runs-on"] == "windows-latest"
     assert "inputs.windows_installer_only == true" in job["if"]
@@ -57,6 +60,11 @@ def test_manual_installer_is_part_of_official_workflow_without_stable_publicatio
     assert "Candidate must bind to the selected main SHA" in runs
     text = yaml.safe_dump(job)
     assert "Partial signing configuration" in text
+    assert all(
+        "!inputs.windows_unsigned" in job["env"][name]
+        for name in ("ES_USERNAME", "ES_PASSWORD", "CREDENTIAL_ID", "ES_TOTP_SECRET", "XCAGI_WINDOWS_PUBLISHER_NAME")
+    )
+    assert "The selected delivery requires an unsigned installer." in runs
     assert "test-windows-signature-policy.ps1" in text
     assert "pre-release-security.ps1" in text
     assert "verify-windows-installed-runtime.ps1" in text
@@ -82,6 +90,7 @@ def test_manual_installer_is_part_of_official_workflow_without_stable_publicatio
     assert "needs.windows-installer-delivery.result == 'skipped'" in publish["if"]
     assert "needs.notice-publication-policy.result == 'success'" in publish["if"]
     runs = "\n".join(step.get("run", "") for step in publish["steps"])
+    assert '($unsigned != "true" or .signature_status == "unsigned")' in runs
     assert "for mode in Clean Upgrade Gui Recovery Rollback; do" in runs
     acceptance = (ROOT / ".github/workflows/windows-candidate-acceptance.yml").read_text()
     assert "windows-acceptance-accounts.mjs" in acceptance

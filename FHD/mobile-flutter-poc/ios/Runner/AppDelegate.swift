@@ -137,26 +137,6 @@ import UIKit
     }
 
     FlutterMethodChannel(
-      name: "xcagi/update_installer",
-      binaryMessenger: messenger
-    ).setMethodCallHandler { call, result in
-      guard call.method == "startPackageUpdate" else {
-        result(FlutterMethodNotImplemented)
-        return
-      }
-      let args = call.arguments as? [String: Any] ?? [:]
-      let urlString = (args["downloadUrl"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-      if !urlString.isEmpty, let url = URL(string: urlString) {
-        DispatchQueue.main.async {
-          UIApplication.shared.open(url)
-        }
-        result("已跳转 App Store")
-      } else {
-        result("请通过 App Store 搜索 XCAGI 更新")
-      }
-    }
-
-    FlutterMethodChannel(
       name: "xcagi/content_uri",
       binaryMessenger: messenger
     ).setMethodCallHandler { call, result in

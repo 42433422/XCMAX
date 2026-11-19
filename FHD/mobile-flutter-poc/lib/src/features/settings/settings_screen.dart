@@ -15,7 +15,7 @@ class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
     super.key,
     this.api,
-    this.updateInstaller = const MethodChannelPackageUpdateInstaller(),
+    this.updateInstaller = const PlatformPackageUpdateInstaller(),
   });
 
   final MobileApiClient? api;

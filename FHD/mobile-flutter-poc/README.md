@@ -21,6 +21,8 @@ flutter run
 - 固定联系人 / 员工头像 / 超级员工路由：见 [`FLUTTER_UNIFICATION.md`](FLUTTER_UNIFICATION.md)
 - 设计 token：`FHD/config/mobile_design_tokens.json`
 - 错误文案：`lib/src/policy/mobile_error_policy.dart`（`mobileProductErrorMessage`）
+- Android 官网 APK 复用 [AOSP DownloadManager](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-8.0.0_r1/core/java/android/app/DownloadManager.java)（API 26 起，Apache-2.0）与系统安装器。按已装版本号检查更新，核对下载 APK 的包名和目标版本后交由系统安装器验证签名并确认安装。
+- iOS 通过 App Store 更新。MODstore 仅在对应版本公开后配置 `XCAGI_IOS_APP_STORE_ID` 和 `XCAGI_IOS_LATEST_VERSION_NAME`。客户端使用 [package_info_plus 8.3.1](https://pub.dev/packages/package_info_plus/versions/8.3.1)、[pub_semver 2.2.1](https://github.com/dart-lang/tools/tree/main/pkgs/pub_semver) 和 [url_launcher 6.3.2](https://github.com/flutter/packages/tree/main/packages/url_launcher)（均为 BSD-3-Clause）。
 
 ## 已覆盖流程（节选）
 

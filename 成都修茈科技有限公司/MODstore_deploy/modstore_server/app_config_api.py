@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any, Dict
 
@@ -121,6 +122,21 @@ def _apk_delta(sku: str, current_version_code: int) -> Dict[str, Any]:
     return _empty_delta()
 
 
+def _ios_update(sku: str) -> Dict[str, str]:
+    app_id = os.environ.get("XCAGI_IOS_APP_STORE_ID", "").strip()
+    version = os.environ.get("XCAGI_IOS_LATEST_VERSION_NAME", "").strip()
+    if (
+        sku != "enterprise"
+        or not re.fullmatch(r"[1-9][0-9]*", app_id)
+        or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version)
+    ):
+        return {"app_store_url": "", "latest_ios_version_name": ""}
+    return {
+        "app_store_url": f"https://apps.apple.com/app/id{app_id}",
+        "latest_ios_version_name": version,
+    }
+
+
 _PROFILE_PAGE_DEFAULTS: Dict[str, Any] = {
     "enabled": True,
     "revision": os.environ.get("XCAGI_PROFILE_PAGE_REVISION", "2026-06-26.profile-hot-v1").strip()
@@ -184,6 +200,18 @@ def api_app_config(
 ) -> Dict[str, Any]:
     base = (os.environ.get("XCAGI_PUBLIC_BASE_URL") or _DEFAULT_BASE).rstrip("/")
     sku_norm = sku if sku in ("personal", "enterprise") else "personal"
+    update = (
+        _ios_update(sku_norm)
+        if platform == "ios"
+        else {
+            "min_android_version": _ANDROID_MIN_VERSION,
+            "latest_android_version": _ANDROID_LATEST_VERSION,
+            "latest_android_version_name": _ANDROID_LATEST_NAME,
+            "force_update": _ANDROID_FORCE_UPDATE,
+            "apk_download_url": _apk_url(sku_norm),
+            "apk_delta": _apk_delta(sku_norm, current_version_code),
+        }
+    )
     return {
         "ok": True,
         "platform": platform,
@@ -195,12 +223,7 @@ def api_app_config(
         "app_filing_approved": _APP_FILING_APPROVED,
         "app_filing_beian_url": "https://beian.miit.gov.cn/",
         "app_filing_number": _APP_FILING_NUMBER,
-        "min_android_version": _ANDROID_MIN_VERSION,
-        "latest_android_version": _ANDROID_LATEST_VERSION,
-        "latest_android_version_name": _ANDROID_LATEST_NAME,
-        "force_update": _ANDROID_FORCE_UPDATE,
-        "apk_download_url": _apk_url(sku_norm),
-        "apk_delta": _apk_delta(sku_norm, current_version_code),
+        **update,
         "profile_page": _profile_page_config(sku_norm),
         "feedback_email": os.environ.get("XCAGI_FEEDBACK_EMAIL", "support@xiu-ci.com").strip(),
     }

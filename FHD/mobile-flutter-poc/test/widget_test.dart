@@ -6535,10 +6535,13 @@ class _FakeSettingsApi extends MobileApiClient {
 
   @override
   Future<MobileUpdateCheckResult> checkForUpdate({
-    int currentVersionCode = MobileBuildConfig.versionCode,
+    int? currentVersionCode,
     String sku = MobileBuildConfig.productSku,
   }) async {
-    updateChecks.add({'currentVersionCode': currentVersionCode, 'sku': sku});
+    updateChecks.add({
+      'currentVersionCode': currentVersionCode ?? MobileBuildConfig.versionCode,
+      'sku': sku,
+    });
     return updateResult;
   }
 }

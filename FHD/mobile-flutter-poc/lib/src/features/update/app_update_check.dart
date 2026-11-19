@@ -10,11 +10,15 @@ Future<void> runAppUpdateCheck(
   BuildContext context,
   MobileApiClient api, {
   PackageUpdateInstaller installer =
-      const MethodChannelPackageUpdateInstaller(),
+      const PlatformPackageUpdateInstaller(),
 }) async {
   try {
     final result = await api.checkForUpdate();
     if (!context.mounted) return;
+    if (!result.channelAvailable) {
+      _showSnack(context, '当前平台暂未配置应用更新渠道');
+      return;
+    }
     if (!result.available) {
       _showSnack(context, '已是最新版本');
       return;
@@ -62,17 +66,19 @@ void _showUpdatePrompt(
               if (downloading) return;
               if (result.downloadUrl.trim().isEmpty) {
                 setDialogState(() {
-                  statusMessage = '安装包下载地址为空';
+                  statusMessage = '更新地址为空';
                 });
                 if (context.mounted) {
-                  _showSnack(context, '安装包下载地址为空');
+                  _showSnack(context, '更新地址为空');
                 }
                 return;
               }
 
               setDialogState(() {
                 downloading = true;
-                statusMessage = '正在连接下载服务器…';
+                statusMessage = result.isAppStore
+                    ? '正在打开 App Store…'
+                    : '正在连接下载服务器…';
               });
               try {
                 final message = await installer.startPackageUpdate(result);
@@ -86,7 +92,8 @@ void _showUpdatePrompt(
                       snack.contains('系统安装器已打开') ? '系统安装器已打开' : snack;
                 });
                 _showSnack(context, snack);
-                if (!result.force && snack.contains('系统安装器已打开')) {
+                if (!result.force &&
+                    (result.isAppStore || snack.contains('系统安装器已打开'))) {
                   Navigator.of(dialogContext).pop();
                 }
               } catch (error) {

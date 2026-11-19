@@ -58,18 +58,42 @@ abstract class _ApiNavBase extends _ApiSessionPersistBase {
   }
 
   Future<MobileUpdateCheckResult> checkForUpdate({
-    int currentVersionCode = MobileBuildConfig.versionCode,
+    int? currentVersionCode,
     String sku = MobileBuildConfig.productSku,
   }) async {
+    final isIos = defaultTargetPlatform == TargetPlatform.iOS;
+    final package = isIos || currentVersionCode == null
+        ? await PackageInfo.fromPlatform()
+        : null;
+    final installedCode =
+        currentVersionCode ?? int.tryParse(package!.buildNumber) ?? 0;
     final json = await getModstoreJson(
       XcagiMobileEndpoints.appConfig,
       query: {
-        'platform': 'android',
+        'platform': isIos ? 'ios' : 'android',
         'sku': sku,
-        'current_version_code': currentVersionCode.toString(),
+        'current_version_code': installedCode.toString(),
       },
     );
     MobileProductSkuConfig.setRemoteSku(_readString(json, const ['sku']));
+    if (isIos) {
+      final storeUrl = _readString(json, const ['app_store_url']);
+      final latestVersion = _readString(json, const ['latest_ios_version_name']);
+      final configured = storeUrl.isNotEmpty && latestVersion.isNotEmpty;
+      return MobileUpdateCheckResult(
+        available: configured &&
+            Version.parse(latestVersion) > Version.parse(package!.version),
+        force: false,
+        versionName: latestVersion,
+        downloadUrl: storeUrl,
+        raw: json,
+        channelAvailable: configured,
+        isAppStore: true,
+      );
+    }
+    if (installedCode <= 0) {
+      throw StateError('无法读取当前 Android 版本号');
+    }
     final latestVersionCode = _readInt(
         json,
         const [
@@ -78,9 +102,9 @@ abstract class _ApiNavBase extends _ApiSessionPersistBase {
         0);
     final minVersionCode = _readInt(json, const ['min_android_version'], 0);
     final forceUpdate = _readBool(json, const ['force_update']);
-    final forceRequired = currentVersionCode < minVersionCode ||
-        (forceUpdate && currentVersionCode < latestVersionCode);
-    final available = forceRequired || currentVersionCode < latestVersionCode;
+    final forceRequired = installedCode < minVersionCode ||
+        (forceUpdate && installedCode < latestVersionCode);
+    final available = forceRequired || installedCode < latestVersionCode;
     final latestVersionName = _readString(json, const [
       'latest_android_version_name',
     ]).ifEmpty(latestVersionCode.toString());
@@ -91,6 +115,7 @@ abstract class _ApiNavBase extends _ApiSessionPersistBase {
       versionName: latestVersionName,
       downloadUrl: _readString(json, const ['apk_download_url']),
       raw: json,
+      targetVersionCode: latestVersionCode,
     );
   }
 

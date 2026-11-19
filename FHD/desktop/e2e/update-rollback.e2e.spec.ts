@@ -14,7 +14,7 @@ import path from 'node:path'
  *
  *   1. 更新元数据 Ed25519 二次签名校验：
  *      渲染进程 IPC `xcagi:check-for-updates` → 主进程 runUpdateCheckWithDirectNet
- *      → checkForUpdates → fetchLatestMetadataText（真实 net.request 拉取本地更新源）
+ *      → electron-updater → SignedUpdateProvider（真实 net.request 拉取本地更新源）
  *      → verifyMetadataSignatureText（真实 crypto.verify）。
  *      有效签名 → 检查通过；篡改/错误密钥签名 → 拒绝并抛出 Ed25519 错误。
  *
@@ -58,10 +58,10 @@ const METADATA_BODY = [
   'version: 9.9.9',
   'files:',
   '  - url: XCAGI-9.9.9-mac.zip',
-  '    sha512: fake-sha512',
+  `    sha512: ${Buffer.alloc(64).toString('base64')}`,
   '    size: 12345',
   'path: XCAGI-9.9.9-mac.zip',
-  'sha512: fake-sha512',
+  `sha512: ${Buffer.alloc(64).toString('base64')}`,
   `releaseDate: '2026-08-23T00:00:00.000Z'`,
   `buildSha: ${'a'.repeat(40)}`,
   'minVersion: 1.0.0.0',
