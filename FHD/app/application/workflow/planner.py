@@ -70,6 +70,11 @@ class LLMWorkflowPlanner:
         from app.application.workflow.sql_execution_policy import rejected_sql_plan
 
         context = dict(context or {})
+        for key in (
+            "planning_failure_reason", "planning_failure_kind", "plan_repair_trace",
+            "goal_coverage_rejected",
+        ):
+            context.pop(key, None)
         session_key = str(context.get("session_id") or context.get("conversation_id") or "").strip()
         plan_id = (
             f"wp-{session_key}-{uuid.uuid4().hex[:8]}" if session_key else f"wp-{uuid.uuid4().hex}"
