@@ -138,6 +138,13 @@ function prefetchStaticRouteChunks(): void {
  */
 async function bootstrap() {
   installStabilityClient()
+  if (window.location.pathname === '/desktop-assistant' && window.xcagiDesktopAssistant) {
+    document.documentElement.classList.add('desktop-assistant-window')
+    const { default: DesktopAssistantView } = await import('./views/DesktopAssistantView.vue')
+    createApp(DesktopAssistantView).use(createPinia()).mount('#app')
+    document.getElementById('app')?.setAttribute('data-startup-mounted', 'true')
+    return
+  }
   installBackendHealthBridge()
   bootstrapEditionDefaults()
   void bootstrapHostConfig()

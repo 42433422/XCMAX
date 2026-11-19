@@ -36,7 +36,7 @@ vi.mock('electron', () => ({
   shell: { openPath: vi.fn(), openExternal: vi.fn(() => Promise.resolve()) },
 }))
 vi.mock('node:child_process', () => ({ execFile: vi.fn() }))
-vi.mock('./desktop-config', () => ({ APP_NAME: 'XCAGI', DEFAULT_PORT: 17500, shellIconPath: vi.fn(() => '/tmp/icon.png') }))
+vi.mock('./desktop-config', () => ({ APP_NAME: 'XCAGI', DEFAULT_PORT: 17500, readPackagedProductSku: () => 'enterprise', shellIconPath: vi.fn(() => '/tmp/icon.png') }))
 vi.mock('./window-manager', () => ({ broadcastToRenderer: vi.fn(), toggleMainWindow: vi.fn(), showMainWindow: vi.fn() }))
 vi.mock('./backend-process', () => ({ writeBackendLog: vi.fn() }))
 vi.mock('./updater', () => ({ readLocalProductVersion: vi.fn(() => '1.0.0.1'), runUpdateCheckWithDirectNet: vi.fn() }))

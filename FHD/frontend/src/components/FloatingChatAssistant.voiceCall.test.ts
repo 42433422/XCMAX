@@ -15,6 +15,7 @@ vi.mock('@/composables/useChatView', () => ({
     isStreamingReply: ref(false),
     loadingProgressText: ref(''),
     sendMessage: sendMessageMock,
+    syncSessionMessages: async () => undefined,
   }),
 }))
 
@@ -114,8 +115,8 @@ function mockStream(): MediaStream {
   } as unknown as MediaStream
 }
 
-function mountAssistant() {
-  return mount(FloatingChatAssistant, { props: { visible: true }, attachTo: document.body })
+function mountAssistant(desktopWindow = false) {
+  return mount(FloatingChatAssistant, { props: { visible: true, desktopWindow }, attachTo: document.body })
 }
 
 async function openAssistant() {
@@ -156,6 +157,59 @@ describe('FloatingChatAssistant 语音通话', () => {
     expect(voiceCallActive.value).toBe(true)
     expect(wrapper.get('.floating-chat-call-stage').text()).toBe('正在接通…')
     expect(wrapper.get('.floating-chat-ball-action--hangup').attributes('aria-label')).toBe('挂断')
+  })
+
+  it('桌面悬浮球和面板均可通话，挂断后回到文字对话', async () => {
+    installMicrophone(async () => mockStream())
+    const setExpanded = vi.fn(async () => undefined)
+    const openMain = vi.fn(async () => undefined)
+    vi.stubGlobal('xcagiDesktopAssistant', { setExpanded, openMain, onHide: () => vi.fn() })
+    const wrapper = mountAssistant(true)
+    await wrapper.get('.floating-chat-desktop-phone').trigger('click')
+    expect(setExpanded).toHaveBeenLastCalledWith(true)
+    expect(wrapper.get('.floating-chat-call-stage').text()).toBe('正在接通…')
+
+    const action = (name: string) => wrapper.findAll('button').find(button => button.text() === name)!
+    await action('静音').trigger('click')
+    expect(wrapper.get('.floating-chat-call-stage').text()).toBe('已静音')
+    await action('关闭免提').trigger('click')
+    expect(action('开启免提')).toBeDefined()
+    await action('挂断').trigger('click')
+    expect(wrapper.find('.floating-chat-call').exists()).toBe(false)
+    expect(wrapper.find('.floating-chat-messages').exists()).toBe(true)
+
+    await wrapper.get('button[aria-label="语音通话"]').trigger('click')
+    await wrapper.get('button[aria-label="结束通话并打开 XCAGI 主窗口"]').trigger('click')
+    expect(voiceCallActive.value).toBe(false)
+    expect(openMain).toHaveBeenCalledOnce()
+  })
+
+  it('桌面悬浮窗隐藏后释放尚在申请的麦克风', async () => {
+    vi.useFakeTimers()
+    let resolveCapture!: (stream: MediaStream) => void
+    const stream = mockStream()
+    installMicrophone(() => new Promise(resolve => { resolveCapture = resolve }))
+    let hide!: () => void
+    const unsubscribe = vi.fn()
+    const setExpanded = vi.fn(async () => undefined)
+    vi.stubGlobal('xcagiDesktopAssistant', {
+      setExpanded,
+      onHide: (callback: () => void) => { hide = callback; return unsubscribe },
+    })
+    const wrapper = mountAssistant(true)
+    await wrapper.get('.floating-chat-desktop-phone').trigger('click')
+    await vi.advanceTimersByTimeAsync(400)
+    expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalled()
+    hide()
+    await nextTick()
+    expect(voiceCallActive.value).toBe(false)
+    expect(setExpanded).toHaveBeenLastCalledWith(false)
+    expect(wrapper.find('.floating-chat-call').exists()).toBe(false)
+    resolveCapture(stream)
+    await flushPromises()
+    expect(stream.getTracks()[0].stop).toHaveBeenCalledOnce()
+    wrapper.unmount()
+    expect(unsubscribe).toHaveBeenCalledOnce()
   })
 
   it('朗读可按句暂停并继续', async () => {

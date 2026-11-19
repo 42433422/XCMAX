@@ -31,7 +31,7 @@ import fs from 'node:fs'
 import { waitForBackendPing, waitForBackendApplicationReady, waitForBackendStatus } from './backend-process'
 vi.mock('electron', () => ({
   BrowserWindow: vi.fn(),
-  app: { getPath: vi.fn(() => '/tmp/xcagi-test'), isQuitting: false, focus: vi.fn() },
+  app: { getPath: vi.fn(() => '/tmp/xcagi-test'), isQuitting: false, focus: vi.fn(), isHidden: vi.fn(() => false) },
   dialog: { showErrorBox: vi.fn() },
   screen: { getPrimaryDisplay: vi.fn(() => ({ workArea: { x: 0, y: 0, width: 1280, height: 800 } })), getDisplayMatching: vi.fn(() => ({ workArea: { x: 0, y: 0, width: 1280, height: 800 } })) },
   shell: {},
@@ -77,6 +77,7 @@ import { clampWindowBounds } from './window-state'
 import { isTrustedDesktopOrigin } from './desktop-navigation'
 import { createWindow, desktopWindowCount, MAX_DESKTOP_WINDOWS, openAuxiliaryWindow, resetAuxiliaryPartitionSerialForTests, showMainWindow, toggleMainWindow } from './window-manager'
 import { desktopRuntime } from './runtime-state'
+import { moveDesktopAssistant, resizeDesktopAssistant, syncDesktopAssistant } from './desktop-assistant'
 import { checkPendingRollback } from './rollback'
 import { reportRendererError } from './desktop-resilience'
 import { writeBackendLog } from './backend-process'
@@ -97,16 +98,64 @@ function makeWindow(overrides: Partial<{
     moveTop: vi.fn(),
     getBounds: vi.fn(() => ({ x: 0, y: 0, width: 1280, height: 800 })),
     setBounds: vi.fn(),
+    setPosition: vi.fn(),
   }
   return win as unknown as NonNullable<typeof desktopRuntime.mainWindow>
 }
 beforeEach(() => {
   desktopRuntime.splashUrl = ''
   desktopRuntime.mainWindow = null
+  desktopRuntime.assistantWindow = null
+  desktopRuntime.assistantReady = false
+  desktopRuntime.assistantEnabled = true
   desktopRuntime.mainApplicationReady = null
   desktopRuntime.auxiliaryWindows.clear()
   vi.mocked(BrowserWindow).mockReset()
   vi.mocked(isTrustedDesktopOrigin).mockReset()
+})
+
+it('shows a single independent assistant only while the main window is hidden and enabled', async () => {
+  let mainVisible = false
+  let assistantVisible = false
+  const main = makeWindow()
+  main.isVisible = () => mainVisible
+  desktopRuntime.mainWindow = main
+  desktopRuntime.mainApplicationReady = Promise.resolve()
+  const win = Object.assign(makeWindow(), {
+    isVisible: () => assistantVisible,
+    showInactive: vi.fn(() => { assistantVisible = true }),
+    hide: vi.fn(() => { assistantVisible = false }),
+    on: vi.fn(),
+    loadURL: vi.fn(async () => undefined),
+    webContents: { setWindowOpenHandler: vi.fn(), on: vi.fn(), send: vi.fn() },
+  })
+  vi.mocked(BrowserWindow).mockImplementationOnce(function () { return win })
+  syncDesktopAssistant()
+  syncDesktopAssistant()
+  await vi.waitFor(() => expect(win.showInactive).toHaveBeenCalledOnce())
+  expect(BrowserWindow).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+    frame: false, transparent: true, alwaysOnTop: true, show: false,
+    webPreferences: expect.objectContaining({ sandbox: true, contextIsolation: true, nodeIntegration: false }),
+  }))
+  expect(win.loadURL).toHaveBeenCalledWith('http://127.0.0.1:17500/desktop-assistant')
+  expect(desktopRuntime.auxiliaryWindows.has(win)).toBe(false)
+  resizeDesktopAssistant(win, true)
+  expect(win.setBounds).toHaveBeenLastCalledWith({ x: 840, y: 160, width: 440, height: 640 })
+  win.getBounds = () => ({ x: 1198, y: 680, width: 104, height: 80 })
+  moveDesktopAssistant(win, 990.6, 850)
+  expect(win.setPosition).toHaveBeenLastCalledWith(991, 720)
+  mainVisible = true
+  syncDesktopAssistant()
+  expect(win.webContents.send).toHaveBeenLastCalledWith('xcagi:assistant-hide')
+  expect(win.hide).toHaveBeenCalledOnce()
+  mainVisible = false
+  desktopRuntime.assistantEnabled = false
+  syncDesktopAssistant()
+  expect(win.showInactive).toHaveBeenCalledOnce()
+  desktopRuntime.assistantEnabled = true
+  syncDesktopAssistant()
+  expect(win.showInactive).toHaveBeenCalledTimes(2)
+  expect(BrowserWindow).toHaveBeenCalledOnce()
 })
 
 describe('showMainWindow（语音唤起专用：只显示聚焦，绝不隐藏）', () => {

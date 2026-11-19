@@ -345,7 +345,7 @@ import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { useChatViewHost } from '@/composables/useChatViewHost'
 import { workflowTaskDotStatusClassForTask, workflowTaskDotTitleForTask } from '@/workflow/coreWorkflowTaskUi'
 import { formatTaskTime, formatTaskSourceLabel } from '@/utils/chatTaskLabels'
-import { readAiSessionIdFromStorage, resolveChatStorageScope, writeAiSessionIdToStorage } from '@/utils/chatStorageKeys'
+import { buildChatMessagesKey, buildChatScopedKey, readAiSessionIdFromStorage, resolveChatStorageScope, writeAiSessionIdToStorage } from '@/utils/chatStorageKeys'
 import { captureAuthSession } from '@/utils/authSessionCache'
 import { plainTextFromChatHtml } from '@/utils/sanitizeHtml'
 import chatApi from '@/api/chat'
@@ -702,7 +702,26 @@ async function restoreOwnedConversation() {
   }
 }
 
+let assistantRefreshPending = false
+function refreshAfterDesktopAssistant() {
+  if (!assistantRefreshPending || !document.hasFocus() || !restoreActive || isLoading.value) return
+  assistantRefreshPending = false
+  void restoreOwnedConversation()
+}
+function onDesktopAssistantStorage(event: StorageEvent) {
+  if (event.storageArea !== localStorage || !event.url || new URL(event.url).pathname !== '/desktop-assistant') return
+  const scope = chatScope.value
+  const mod = modsStore.activeModId
+  if (event.key !== buildChatMessagesKey(currentSessionId.value, mod, scope)
+    && event.key !== buildChatScopedKey('ai_session_id_', 'current', mod, scope)) return
+  assistantRefreshPending = true
+  refreshAfterDesktopAssistant()
+}
 onMounted(() => {
+  if (window.xcagiDesktop) {
+    window.addEventListener('storage', onDesktopAssistantStorage)
+    window.addEventListener('focus', refreshAfterDesktopAssistant)
+  }
   voiceWarmTimer = window.setTimeout(() => {
     void warmVoiceModel()
   }, 2500)
@@ -715,13 +734,20 @@ watch(() => [chatScope.value, modsStore.activeModId, productReadAccountEpoch.val
   }
   void restoreOwnedConversation()
 }, { immediate: true, flush: 'post' })
-watch(isLoading, (loading) => { if (loading) restoreGeneration += 1 }, { flush: 'sync' })
+watch(isLoading, (loading) => {
+  if (loading) restoreGeneration += 1
+  else refreshAfterDesktopAssistant()
+}, { flush: 'sync' })
 function retireRestore() {
   restoreActive = false
   restoreGeneration += 1
   window.clearTimeout(voiceWarmTimer)
 }
-onBeforeUnmount(retireRestore)
+onBeforeUnmount(() => {
+  retireRestore()
+  window.removeEventListener('storage', onDesktopAssistantStorage)
+  window.removeEventListener('focus', refreshAfterDesktopAssistant)
+})
 onDeactivated(retireRestore)
 onActivated(() => {
   if (!restoreActive) { restoreActive = true; void restoreOwnedConversation() }

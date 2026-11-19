@@ -6,6 +6,9 @@ const mocks = vi.hoisted(() => ({
   secret: vi.fn(() => 'synthetic-value'),
   query: vi.fn(),
   notification: { on: vi.fn(), show: vi.fn() },
+  showMain: vi.fn(),
+  resizeAssistant: vi.fn(),
+  moveAssistant: vi.fn(),
 }))
 vi.mock('electron', () => ({
   ipcMain: { handle: (name: string, handler: (...args: any[]) => any) => mocks.handlers.set(name, handler) },
@@ -13,7 +16,12 @@ vi.mock('electron', () => ({
   Notification: Object.assign(vi.fn(function () { return mocks.notification }), { isSupported: () => true }),
 }))
 vi.mock('./desktop-config', () => ({ APP_NAME: 'test', DEFAULT_PORT: 18500, isDesktopPackaged: () => false, readPackagedAppVersion: vi.fn() }))
-vi.mock('./window-manager', () => ({ broadcastToRenderer: vi.fn() }))
+vi.mock('./window-manager', () => ({ broadcastToRenderer: vi.fn(), showMainWindow: mocks.showMain }))
+vi.mock('./desktop-assistant', () => ({
+  desktopAssistantUrl: () => assistantUrl,
+  moveDesktopAssistant: mocks.moveAssistant,
+  resizeDesktopAssistant: mocks.resizeAssistant,
+}))
 vi.mock('./backend-process', () => ({ writeBackendLog: vi.fn(), stopBackend: vi.fn(), runBackendMigrationWithRollback: vi.fn() }))
 vi.mock('./app-shell', () => ({}))
 vi.mock('./updater', () => ({}))
@@ -26,6 +34,8 @@ vi.mock('./desktop-resilience', () => ({}))
 
 import { registerDesktopIpcHandlers } from './ipc-handlers'
 import { desktopRuntime } from './runtime-state'
+
+const assistantUrl = 'http://127.0.0.1:18500/desktop-assistant'
 
 function sender(url: string): IpcMainInvokeEvent {
   const frame = { url }
@@ -40,9 +50,44 @@ beforeEach(() => {
   mocks.handlers.clear()
   mocks.secret.mockClear()
   mocks.query.mockReset()
+  mocks.showMain.mockClear()
+  mocks.resizeAssistant.mockClear()
+  mocks.moveAssistant.mockClear()
+  desktopRuntime.assistantWindow = null
   desktopRuntime.auxiliaryWindows.clear()
   desktopRuntime.splashUrl = 'file:///trusted/splash.html'
   registerDesktopIpcHandlers()
+})
+
+it('allows only the assistant main frame to control its window and denies native secrets', async () => {
+  const frame = { url: assistantUrl }
+  const win = { isDestroyed: () => false, isVisible: vi.fn(() => true), webContents: { id: 27, mainFrame: frame } }
+  desktopRuntime.assistantWindow = win as unknown as NonNullable<typeof desktopRuntime.assistantWindow>
+  const assistant = { sender: { id: 27 }, senderFrame: frame } as unknown as IpcMainInvokeEvent
+  const expand = mocks.handlers.get('xcagi:assistant-expand')!
+  const move = mocks.handlers.get('xcagi:assistant-move')!
+  const openMain = mocks.handlers.get('xcagi:assistant-open-main')!
+  const denied = { ok: false, reason: 'untrusted_sender' }
+  expect(await expand(sender(assistantUrl), true)).toEqual(denied)
+  expect(await expand({ ...assistant, senderFrame: { url: assistantUrl } }, true)).toEqual(denied)
+  expect(await expand(assistant, 'true')).toEqual(denied)
+  expect(await move(sender(assistantUrl), 12, 34)).toEqual(denied)
+  expect(await move(assistant, Infinity, 34)).toEqual(denied)
+  expect(await move(assistant, 12, 50000)).toEqual(denied)
+  expect(await mocks.handlers.get('xcagi:secure-get')!(assistant, 'test')).toEqual(denied)
+  expect(mocks.resizeAssistant).not.toHaveBeenCalled()
+  expect(mocks.moveAssistant).not.toHaveBeenCalled()
+  expect(mocks.secret).not.toHaveBeenCalled()
+  await expand(assistant, true)
+  expect(mocks.resizeAssistant).toHaveBeenCalledWith(win, true)
+  await move(assistant, -12, 34)
+  expect(mocks.moveAssistant).toHaveBeenCalledWith(win, -12, 34)
+  win.isVisible.mockReturnValueOnce(false)
+  expect(await move(assistant, 12, 34)).toEqual(denied)
+  await openMain(assistant)
+  expect(mocks.showMain).toHaveBeenCalledOnce()
+  frame.url = 'http://127.0.0.1:18500/'
+  expect(await openMain(assistant)).toEqual(denied)
 })
 
 it.each(['http://127.0.0.1:17500/', 'file:///untrusted/splash.html'])(
