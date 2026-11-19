@@ -161,6 +161,18 @@ def dispatch_issue_event(event: dict[str, Any]) -> dict[str, Any]:
             return {"ok": True, "skipped": True, "reason": "shared_repair_reused"}
         block_reason = intake_dispatch_block_reason(ticket)
         if block_reason:
+            if payload.get("github_workspace") and block_reason in {
+                "ticket_dispatch_revoked",
+                "ticket_terminal",
+            }:
+                from modstore_server.para_github_runner import reconcile_stopped_ticket_runner
+
+                if not reconcile_stopped_ticket_runner(db, payload):
+                    return {
+                        "ok": False,
+                        "skipped": True,
+                        "message": "已停止新派发，等待原 GitHub 执行回执",
+                    }
             return {"ok": True, "skipped": True, "reason": block_reason}
         if payload.get("github_workspace"):
             from modstore_server.para_github_runner import ensure_runner

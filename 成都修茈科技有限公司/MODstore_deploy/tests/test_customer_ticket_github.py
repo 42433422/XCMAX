@@ -496,6 +496,140 @@ def test_revocation_fences_github_runner_at_slot_claim(
         assert not slot.owner
 
 
+@pytest.mark.parametrize("already_acknowledged", [False, True])
+def test_revoked_issued_runner_settles_without_another_github_post(
+    client, ticket, monkeypatch, isolated_publisher_stub, already_acknowledged
+):
+    from modstore_server import customer_issue_intake as intake
+    from modstore_server import para_github_runner as runner
+    from modstore_server.db.mac_control import MacControlSyncLease
+    from modstore_server.eventing import db_outbox
+    from modstore_server.models import IncidentEvent, OutboxEvent
+
+    request_id = str(uuid.uuid4())
+    marker = f"para-workspace-{request_id}"
+    workflow_runs = [
+        {"id": 456, "head_branch": "main", "display_title": marker},
+        {"id": 789, "head_branch": "main", "display_title": marker},
+    ]
+    run = {"id": 456, "run_attempt": 1, "status": "in_progress"}
+    posts = []
+
+    def github(method, path, body=None):
+        if method == "POST":
+            posts.append(path)
+            return {"number": 123}
+        if "/runs?" in path:
+            return {"workflow_runs": workflow_runs}
+        if path.endswith("/runs/456"):
+            return run
+        assert path.endswith("/issues/123")
+        return {"state": "open"}
+
+    monkeypatch.setattr(bridge, "github", github)
+    path = f"/api/customer-service/tickets/{ticket}"
+    admin = app.dependency_overrides[require_admin]()
+    assert (
+        client.post(
+            f"{path}/assign", json={"assignee_id": admin.id, "reason": "接手原工单"}
+        ).status_code
+        == 200
+    )
+    assert client.post(f"{path}/github", json=DRAFT).status_code == 200
+    assert client.post(f"{path}/github/start", json={"request_id": request_id}).status_code == 200
+    record = next(
+        row for row in db_outbox.fetch_pending(limit=100) if row.payload.get("ticket_id") == ticket
+    )
+    envelope = record.to_envelope()
+    assert intake.dispatch_issue_event(envelope)["ok"] is False
+    revoked = client.post(
+        f"{path}/dispatch-revoke",
+        json={"request_id": str(uuid.uuid4()), "note": "保留原单并等待此前已派发执行器的回执。"},
+    )
+    assert revoked.status_code == 200
+    assert (
+        revoked.json()["ticket"]["dispatch_revocation"]["execution_stop"]["state"]
+        == "stop_unconfirmed"
+    )
+    if already_acknowledged:
+        assert db_outbox.mark_dispatched(record.id)
+
+    with get_session_factory()() as db:
+        previous = db.get(CustomerServiceAction, record.payload["github_workspace"]["action_id"])
+        other_owner = User(username=uuid.uuid4().hex, password_hash="x")
+        db.add(other_owner)
+        db.flush()
+        session = CustomerServiceSession(user_id=other_owner.id)
+        db.add(session)
+        db.flush()
+        other_ticket = CustomerServiceTicket(
+            user_id=other_owner.id,
+            session_id=session.id,
+            ticket_no=uuid.uuid4().hex,
+            title="独立客户的下一张工单",
+        )
+        db.add(other_ticket)
+        db.flush()
+        next_action = bridge.build_action(
+            db,
+            ticket_id=other_ticket.id,
+            user_id=other_owner.id,
+            action_type=bridge.RUN_ACTION,
+            target_type="github",
+            target_id="next",
+            request={"repository": "42433422/XCMAX"},
+        )
+        db.commit()
+
+        def check_again():
+            if already_acknowledged:
+                return runner._claim_worker_slot(db, next_action)
+            return intake.dispatch_issue_event(envelope)["ok"]
+
+        assert not check_again()  # An ambiguous GitHub marker must not release the slot.
+        db.refresh(previous)
+        assert "run_id" not in bridge.json_loads(previous.result_json, {})
+        workflow_runs.pop()
+        assert not check_again()  # Unique identity, but still in progress.
+        db.refresh(previous)
+        assert bridge.json_loads(previous.result_json, {})["run_id"] == 456
+        assert db.get(MacControlSyncLease, "github-worker").owner == str(previous.id)
+        assert db.get(OutboxEvent, record.id).status == (
+            "dispatched" if already_acknowledged else "pending"
+        )
+
+        row = {"role": "fix", "status": "dispatching", "attempt_id": "old-para-attempt"}
+        payload = {**record.payload, "_team_claim": {"team": [row]}}
+        event_id, _ = intake._persist_incident(
+            intake.INTAKE_EVENT,
+            payload,
+            "customer-issue-intake",
+            uuid.uuid4().hex,
+            60,
+            envelope["id"],
+        )
+        run.update(status="completed", conclusion="cancelled")
+        assert not check_again()  # The VM ended; the prior durable attempt still lacks a receipt.
+        row.update(status="cancelled")
+        db.get(IncidentEvent, event_id).payload_json = bridge.json_dumps(payload)
+        db.commit()
+        assert check_again()
+        if not already_acknowledged:
+            assert db_outbox.mark_dispatched(record.id)
+            assert runner._claim_worker_slot(db, next_action)
+        runner._record_runner_submission(db, previous, "requested")
+        db.refresh(previous)
+        assert previous.status == "runner_stopped"
+        assert bridge.json_loads(previous.result_json, {})["run_id"] == 456
+        assert db.get(OutboxEvent, record.id).status == "dispatched"
+        assert db.get(MacControlSyncLease, "github-worker").owner == str(next_action.id)
+        assert db.get(CustomerServiceTicket, ticket).status == "open"
+    assert posts == [
+        "/repos/42433422/XCMAX/issues",
+        f"/repos/42433422/XCMAX/actions/workflows/{runner.WORKFLOW}/dispatches",
+    ]
+
+
 def test_github_fix_receipt_is_bound_to_pushed_branch_and_commit(ticket, monkeypatch):
     from modstore_server.para_github_runner import verified_code_identity
 
