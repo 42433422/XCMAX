@@ -1,0 +1,10 @@
+{
+  "modelVersion": "5.1.0",
+  "name": "xcagi_flutter_poc",
+  "version": "1.0.0",
+  "description": "XCAGI HarmonyOS Flutter application",
+  "main": "",
+  "author": "xiuci",
+  "license": "",
+  "dependencies": {}
+}

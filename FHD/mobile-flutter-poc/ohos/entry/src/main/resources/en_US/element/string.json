@@ -1,0 +1,24 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "XCAGI workspace"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "XCAGI workspace"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "XCAGI"
+    },
+    {
+      "name": "camera_permission_reason",
+      "value": "Scan a pairing code or attach a photo."
+    },
+    {
+      "name": "microphone_permission_reason",
+      "value": "Record audio when you use voice input or make a call."
+    }
+  ]
+}

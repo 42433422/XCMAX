@@ -11,19 +11,26 @@ dependencies:
   skeletonizer: ^3.0.0
   wolt_modal_sheet: ^0.11.0
   file_selector: ^1.1.0
+  file_selector_ohos: 0.5.0+2
   camera: ^0.12.0+1
   flutter:
     sdk: flutter
   google_mlkit_barcode_scanning: ^0.14.2
   image_picker: ^1.2.2
+  image_picker_harmonyos: 1.2.4
   speech_to_text: ^7.4.0
   package_info_plus: ^8.3.0
+  package_info_plus_harmonyos: 0.0.1
   path_provider: ^2.1.5
+  path_provider_ohos: 2.2.1
   shared_preferences: ^2.5.1
+  shared_preferences_ohos: 2.2.0
   url_launcher: ^6.3.2
+  url_launcher_ohos: 6.3.0
   web_socket_channel: ^3.0.2
   webview_flutter: ^4.14.0
   webview_flutter_android: 4.13.0
+  webview_flutter_harmonyos: 4.14.1
   drift: ^2.35.4
   path: ^1.9.1
   drift_flutter: ^0.3.1
@@ -33,6 +40,7 @@ dependencies:
   lpinyin: ^2.0.3
   cryptography: ^2.9.0
   flutter_tts: ^4.2.5
+  flutter_tts_ohos: 4.2.5
 
 dev_dependencies:
   webview_flutter_platform_interface: ^2.15.0

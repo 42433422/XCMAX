@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -12,6 +14,10 @@ Future<void> runAppUpdateCheck(
   PackageUpdateInstaller installer =
       const MethodChannelPackageUpdateInstaller(),
 }) async {
+  if (Platform.operatingSystem == 'ohos') {
+    _showSnack(context, '请通过应用市场或企业分发渠道检查鸿蒙版本');
+    return;
+  }
   try {
     final result = await api.checkForUpdate();
     if (!context.mounted) return;

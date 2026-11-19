@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
@@ -75,14 +76,15 @@ class _ScanQrScreenState extends _ScanQrStateScan {
                           ),
                           tooltip: _flashOn ? '关闭闪光灯' : '打开闪光灯',
                         ),
-                      IconButton(
-                        onPressed: _pickingAlbum ? null : _pickAlbum,
-                        icon: const Icon(
-                          Icons.photo_library,
-                          color: Colors.white,
+                      if (!_usesHarmonyScanner)
+                        IconButton(
+                          onPressed: _pickingAlbum ? null : _pickAlbum,
+                          icon: const Icon(
+                            Icons.photo_library,
+                            color: Colors.white,
+                          ),
+                          tooltip: '从相册选择',
                         ),
-                        tooltip: '从相册选择',
-                      ),
                     ],
                   ),
                 ),
@@ -90,7 +92,24 @@ class _ScanQrScreenState extends _ScanQrStateScan {
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
-                      if (cameraEnabled &&
+                      if (_usesHarmonyScanner && cameraEnabled)
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            FilledButton.icon(
+                              onPressed: _pickingAlbum || _pairing
+                                  ? null
+                                  : _scanWithHarmony,
+                              icon: const Icon(Icons.qr_code_scanner),
+                              label: const Text('打开系统扫码'),
+                            ),
+                            TextButton(
+                              onPressed: _pairing ? null : _showManualInput,
+                              child: const Text('输入设备码'),
+                            ),
+                          ],
+                        )
+                      else if (cameraEnabled &&
                           scannerReady &&
                           _cameraController != null)
                         Positioned.fill(

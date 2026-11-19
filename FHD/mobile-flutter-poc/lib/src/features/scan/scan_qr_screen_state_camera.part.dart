@@ -22,6 +22,7 @@ abstract class _ScanQrStateCamera extends State<ScanQrScreen>
   var _cameraReady = false;
   var _processingFrame = false;
   String? _cameraError;
+  bool get _usesHarmonyScanner => Platform.operatingSystem == 'ohos';
 
   @override
   void initState() {
@@ -35,7 +36,10 @@ abstract class _ScanQrStateCamera extends State<ScanQrScreen>
     _barcodeScanner = mlkit.BarcodeScanner(
       formats: [mlkit.BarcodeFormat.qrCode],
     );
-    if (widget.enableCamera) {
+    if (_usesHarmonyScanner) {
+      _checkingCameraPermission = false;
+      _permissionGranted = true;
+    } else if (widget.enableCamera) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         unawaited(_bootstrapScanner(requestPermission: false));
       });
@@ -46,7 +50,7 @@ abstract class _ScanQrStateCamera extends State<ScanQrScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (!widget.enableCamera) return;
+    if (!widget.enableCamera || _usesHarmonyScanner) return;
     if (state == AppLifecycleState.inactive ||
         state == AppLifecycleState.paused) {
       unawaited(_stopCameraStream());
@@ -61,7 +65,7 @@ abstract class _ScanQrStateCamera extends State<ScanQrScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     unawaited(_disposeCameraController());
-    _barcodeScanner.close();
+    if (!_usesHarmonyScanner) _barcodeScanner.close();
     super.dispose();
   }
 
