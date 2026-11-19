@@ -592,9 +592,9 @@
     "FHD/mobile-flutter-poc/lib/src/features/workspace/local_workspace_screen.dart": {
       "base_file": null,
       "base_blob": null,
-      "head_blob": "e0e1ad0b6f0cd58cbf4427043541af01c5136180",
+      "head_blob": "b7f6a332e9f88ba83add8b05e3f3fd193964c113",
       "before_lines": 0,
-      "after_lines": 1115,
+      "after_lines": 1158,
       "reason": "Flutter 本地工作台承载客户、商品、订单草稿和设备绑定完整交互，提供首次数据来源、冲突选择、归档和小屏编辑。",
       "boundary": "限定在设备本地工作台页面与同页表单。SQLite 写入、变更队列及加密传输分别由数据层管理。其他业务入口继续委托既有实现。",
       "validation": "运行 Flutter analyze 和 local_workspace、local_workspace_screen、mobile_startup_shell、workbench_screen 测试套件，并以 Flutter 客户端直连实际 Python 监听器验证绑定、双向同步、冲突和解绑。Android 与 iOS 真机仍需验收。",
