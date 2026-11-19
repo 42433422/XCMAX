@@ -317,8 +317,12 @@ def test_actual_deployer_rebuilds_before_publishing_and_stops_on_corruption(repo
     script = (
         ROOT / ASSETS["SITE"] / "MODstore_deploy/scripts/xcmax-site-auto-update.sh"
     ).read_text()
-    function = re.search(r"^publish_site_static_to_live\(\) \{.*?^\}", script, re.M | re.S)
-    assert function is not None
+    functions = re.findall(
+        r"^(?:guard_corp_download_marker|publish_site_static_to_live)\(\) \{.*?^\}",
+        script,
+        re.M | re.S,
+    )
+    assert len(functions) == 2
     env = {
         **os.environ,
         "XCMAX_ROOT": str(root),
@@ -329,7 +333,7 @@ def test_actual_deployer_rebuilds_before_publishing_and_stops_on_corruption(repo
         [
             "bash",
             "-c",
-            "set -eu\nlog() { :; }\n" + function.group() + "\npublish_site_static_to_live",
+            "\n".join(["set -eu", "log() { :; }", *functions, "publish_site_static_to_live"]),
         ],
         env=env,
         capture_output=True,
