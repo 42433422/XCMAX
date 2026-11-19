@@ -506,6 +506,32 @@ def test_private_intake_requires_preview_and_unscoped_attendance_is_refused(inta
     assert_no_writes(store)
 
 
+def test_archived_attendance_matrix_is_routed_to_the_attendance_workspace(
+    intake_store, monkeypatch
+):
+    store = intake_store
+    data = review(store)
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Sheet1"
+    sheet.append(["2026年2月考勤表"])
+    sheet.append(["姓名", *range(1, 29)])
+    sheet.append(["张三", "√"])
+    source = BytesIO()
+    workbook.save(source)
+    workbook.close()
+    monkeypatch.setattr(routes, "_archived_original", lambda *_args: source.getvalue())
+    with store.factory() as db:
+        before = (db.query(EltRun).count(), db.query(EltUpload).count())
+
+    response = store.client.post(f"{BASE}/intake-preview", data=data)
+    assert response.status_code == 409, response.text
+    assert "请使用考勤工作区授权导入" in response.json()["detail"]
+    assert_no_writes(store)
+    with store.factory() as db:
+        assert (db.query(EltRun).count(), db.query(EltUpload).count()) == before
+
+
 def test_unknown_template_commit_receipt_cannot_replay_intake(intake_store, monkeypatch):
     from app.legacy.routes import document_templates_compat
 
@@ -1135,6 +1161,44 @@ def test_template_save_does_not_wait_for_intake_and_saved_selection_can_preview(
     )
 
     assert stale.status_code == 409
+
+
+@pytest.mark.parametrize("submitted", [False, True])
+def test_obsolete_unsubmitted_preview_regenerates_but_preserves_submitted_receipt(
+    intake_store, submitted
+):
+    from app.application.elt.service_support import dump_json, load_json
+    from app.application.reviewed_excel_review_store import _run
+
+    store = intake_store
+    data, plan, _ = prepare(store)
+    with tenant_scope(1), store.factory() as db:
+        run = _run(db, data["review_id"], 1, 7)
+        state = load_json(run.draft_json, {})
+        state["intake_preview"].pop("business_source_policy")
+        state["intake_preview"]["selection_key"] = "legacy-key-before-policy-binding"
+        run.draft_json = dump_json(state)
+        if submitted:
+            run.receipt_json = dump_json(
+                {
+                    "intake_request_key": "submitted-original",
+                    "auto_ingest": {"success": False, "error": "outcome_unknown"},
+                }
+            )
+        db.commit()
+    status = store.client.get(f"{BASE}/reviews/{data['review_id']}/intake-status")
+    assert status.status_code == 200, status.text
+    if submitted:
+        assert status.json()["status"] == "created"
+        assert status.json()["intake"]["run_id"] == plan["run_id"]
+        assert status.json()["auto_ingest"]["error"] == "outcome_unknown"
+    else:
+        assert status.json() == {"status": "not_started", "reason": "preview_policy_changed"}
+        fresh = store.client.post(f"{BASE}/intake-preview", data=data)
+        assert fresh.status_code == 200, fresh.text
+        assert fresh.json()["intake"]["run_id"] != plan["run_id"]
+        assert fresh.json()["intake"]["business_source_policy"] == "visible_non_finance_v2"
+    assert_no_writes(store)
 
 
 def test_intake_releases_upload_writer_before_reading_archived_workbook(intake_store, monkeypatch):

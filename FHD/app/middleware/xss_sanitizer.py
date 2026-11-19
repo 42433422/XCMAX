@@ -28,6 +28,13 @@ class XSSSanitizerMiddleware:
             await self.app(scope, receive, send)
             return
 
+        # Diagnostic JSON is written as NDJSON, never rendered as HTML. Let its
+        # authenticated route bound the original bytes before any buffering or
+        # JSON reserialization can expand Unicode or remove whitespace.
+        if scope.get("path", "").rstrip("/") == "/api/debug/client-log":
+            await self.app(scope, receive, send)
+            return
+
         headers_dict = {}
         for key, value in scope.get("headers", []):
             headers_dict[key.decode("latin-1").lower()] = value.decode("latin-1")

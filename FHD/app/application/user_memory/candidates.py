@@ -5,14 +5,12 @@ from __future__ import annotations
 from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass
-from threading import RLock
 from typing import Any
 
 from app.application.user_memory.preferences import sync_preference_projection
 from app.application.user_memory.projections import project_after_commit
 from app.application.user_memory.protocols import (
     CandidateGovernance,
-    CandidateProposal,
     JsonObject,
     MemoryAccess,
     MemoryStatusUpdate,
@@ -37,9 +35,7 @@ class CandidatePorts:
     fingerprint: Callable[[str, str, Any], str]
     govern: CandidateGovernance
     find_record: Callable[[UserMemory, str], tuple[int, JsonObject | None]]
-    propose_unlocked: CandidateProposal
     set_status: MemoryStatusUpdate
-    proposal_lock: Callable[[], RLock]
     max_records: Callable[[], int]
     new_id: Callable[[], str]
 
@@ -49,6 +45,7 @@ class CandidateMemory:
         self.access = access
         self.ports = ports
 
+    @project_after_commit
     @memory_transaction
     def propose(
         self,
@@ -60,31 +57,9 @@ class CandidateMemory:
         source: str = "agent_observation",
         confidence: float = 0.5,
         evidence: list[dict[str, Any]] | None = None,
+        activate_personal_capture: bool = False,
     ) -> dict[str, Any]:
-        """Atomically deduplicate and persist a governed memory candidate."""
-        with self.ports.proposal_lock():
-            return self.ports.propose_unlocked(
-                user_id,
-                memory_type,
-                key,
-                value,
-                source=source,
-                confidence=confidence,
-                evidence=evidence,
-            )
-
-    def propose_unlocked(
-        self,
-        user_id: str,
-        memory_type: str,
-        key: str,
-        value: Any,
-        *,
-        source: str = "agent_observation",
-        confidence: float = 0.5,
-        evidence: list[dict[str, Any]] | None = None,
-    ) -> dict[str, Any]:
-        """写入待确认记忆候选，不直接污染 planner 可用记忆。"""
+        """Persist a candidate or activate an authorized personal capture in one commit."""
         normalized_type = self.ports.normalize_type(memory_type)
         normalized_key = str(key or "").strip()
         if not user_id:
@@ -92,6 +67,13 @@ class CandidateMemory:
         if not normalized_key:
             return {"success": False, "message": "缺少 memory key"}
         governance = self.ports.govern(source=source, confidence=confidence, evidence=evidence)
+        personal_capture = (
+            user_id.startswith("personal-memory:v1:")
+            and governance["source"] == "chat_trace"
+            and governance["source_policy"] == "observed_pending"
+            and bool(governance["evidence"])
+        )
+        activate = activate_personal_capture and personal_capture
         memory = self.access.get_memory(user_id) or self.access.new_memory(user_id)
         fingerprint = self.ports.fingerprint(normalized_type, normalized_key, value)
         for record in memory.memory_v2_records:
@@ -101,6 +83,15 @@ class CandidateMemory:
                 "rejected",
             }:
                 return {"success": True, "created": False, "candidate": dict(record)}
+            if personal_capture and (
+                (record.get("fingerprint") == fingerprint and record.get("status") == "deleted")
+                or any(
+                    (revision.get("previous") or {}).get("fingerprint") == fingerprint
+                    for revision in record.get("history") or []
+                    if revision.get("action") == "correct"
+                )
+            ):
+                return {"success": True, "created": False}
         now = self.access.now()
         if (
             sum(row.get("status") in {"pending", "active"} for row in memory.memory_v2_records)
@@ -112,21 +103,12 @@ class CandidateMemory:
                 "error_code": "memory_capacity_reached",
             }
         candidate = {
+            **governance,
             "memory_id": f"mem_{self.ports.new_id()}",
             "memory_type": normalized_type,
             "key": normalized_key,
             "value": value,
             "status": "rejected" if governance["source_policy"] == "blocked" else "pending",
-            "confidence": governance["confidence"],
-            "source": governance["source"],
-            "source_policy": governance["source_policy"],
-            "source_trust": governance["source_trust"],
-            "source_evidence_required": governance["source_evidence_required"],
-            "requires_user_confirmation": governance["requires_user_confirmation"],
-            "auto_confirm_allowed": governance["auto_confirm_allowed"],
-            "eligible_for_planner": governance["eligible_for_planner"],
-            "governance_flags": governance["governance_flags"],
-            "evidence": governance["evidence"],
             "fingerprint": fingerprint,
             "created_at": now,
             "updated_at": now,
@@ -136,9 +118,22 @@ class CandidateMemory:
         if candidate["status"] == "rejected":
             candidate["rejected_at"] = now
             candidate["rejected_reason"] = "source_policy_blocked"
+        if activate:
+            candidate.update(
+                status="active",
+                source_policy="personal_auto_saved",
+                auto_confirm_allowed=True,
+                requires_user_confirmation=False,
+                eligible_for_planner=True,
+                auto_saved_at=now,
+            )
+            sync_preference_projection(memory, {}, candidate, now)
         memory.memory_v2_records.insert(0, candidate)
         self.access.save_memory(user_id, memory)
-        return {"success": True, "created": True, "candidate": dict(candidate)}
+        result = {"success": True, "created": True, "candidate": dict(candidate)}
+        if activate:
+            result["memory"] = candidate
+        return result
 
     @project_after_commit
     @memory_transaction

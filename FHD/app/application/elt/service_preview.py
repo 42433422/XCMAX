@@ -198,17 +198,10 @@ class PreviewServiceMixin(SourceServiceMixin, PreviewWorkerMixin):
         companion_run: EltRun | None = None
         # A multi-sheet delivery workbook normally contains both a printable
         # delivery-note layout and customer/product facts in supporting tabs.
-        # Auto detection therefore creates a second, *preview-only* snapshot
-        # of those facts.  It is not an execution, does not touch master data,
-        # and keeps the primary shipment run as the task the user sees first.
-        # This lets the later authenticated chat confirmation resolve exactly
-        # the same uploaded evidence without making the user discover a hidden
-        # second "预演客户及产品" step.
+        # Auto detection previews those facts separately from the shipment
+        # mapping, even when the primary run uses a saved import template.
         is_auto_shipment_preview = bool(
-            source_dataset is None
-            and target_detection
-            and adapter.type == "shipment_records"
-            and not template_id
+            source_dataset is None and target_detection and adapter.type == "shipment_records"
         )
         if is_auto_shipment_preview and upload.suffix.lower() in {".xlsx", ".xlsm"}:
             companion_adapter = get_adapter("customer_products")

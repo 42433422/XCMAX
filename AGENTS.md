@@ -18,6 +18,12 @@ Read-only reviews, design proposals, and requests explicitly limited to a draft 
 
 Excel/table ingestion and file-type or field-semantics judgement are AI-first: the model infers structure, column meaning and destination, and the data lands in a schema-flexible store. Do not propose a new hardcoded target table, keyword whitelist or per-file adapter as the primary path; that answer was explicitly rejected. Deterministic code is limited to guardrails (tenant isolation, dedupe fingerprints, transactions/rollback, value parsing) and to fallback when no model is available. Existing rule lanes stay as fallback only. A template-library record that holds no business data is not a completed import.
 
+## 故障排查先定位并修复根因
+
+故障排查先复现原场景，核对实际运行版本、日志和请求链路，找到第一个失败环节。区分已证实的根因、后续症状和待验证的推断。用户只要求排查或询问解决方法时，先报告证据和修复点。
+
+修复针对现有链路中已证实的原因，并用原场景验证该环节恢复。禁止为了让界面看起来正常而更换组件、绕开原流程、增加兜底或吞掉错误。已有兜底生效只说明业务还能继续，不能作为原链路修复的证据。成熟组件复用规则不改变这个顺序。
+
 ## Mature component reuse (2026-11-17 user rule)
 
 For any component, capability or interaction that needs to be built, migrate a mature and maintained open-source implementation instead of writing it from scratch: identify the reference repository first, pin the version, record the selection and license in the project README, and keep only thin product-side glue (tenant isolation, permissions, styling, control plane) in our own code. Self-development is acceptable only when no mature implementation covers the need, and that reason must be stated in the PR. This covers chat UI/streaming, document preview, settings and panel layouts, ingestion/parsing, workflow orchestration and similar building blocks. Every such change is then delivered closed-loop: commit, CI green, merge to `main`, deploy, and verify the running product against that commit.

@@ -63,6 +63,7 @@ export const CORE_ROUTES: RouteRecordRaw[] = [
     path: '/persy/knowledge',
     name: 'persy-knowledge',
     component: () => import('../../views/PersyKnowledgeView.vue'),
+    props: (route) => ({ space: route.query.space === 'user-memory' ? 'user-memory' : undefined }),
     meta: { title: 'Persy 知识库' },
   },
   {

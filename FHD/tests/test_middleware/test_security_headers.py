@@ -53,8 +53,13 @@ async def test_https_adds_hsts():
     assert b"strict-transport-security" in hdrs
 
 
+@pytest.mark.parametrize(
+    ("path", "frame_policy"),
+    [("/", b"DENY"), ("/api/auth/login", b"DENY"), ("/xcmax-dashboard/foo", b"SAMEORIGIN")],
+)
+@pytest.mark.parametrize("query", [b"sandbox=1", b"sandbox=true", b"x=1&sandbox=1"])
 @pytest.mark.asyncio
-async def test_sandbox_relaxed_csp():
+async def test_sandbox_query_cannot_disable_frame_protection(path, frame_policy, query):
     captured: list[dict] = []
 
     async def inner_app(scope, receive, send):
@@ -69,12 +74,13 @@ async def test_sandbox_relaxed_csp():
     scope = {
         "type": "http",
         "scheme": "http",
-        "path": "/",
-        "query_string": b"sandbox=1",
+        "path": path,
+        "query_string": query,
     }
     await mw(scope, lambda: None, send)
     hdrs = dict(captured[0]["headers"])
-    assert b"frame-ancestors *" in hdrs[b"content-security-policy"]
+    assert hdrs[b"x-frame-options"] == frame_policy
+    assert b"frame-ancestors *" not in hdrs[b"content-security-policy"]
 
 
 @pytest.mark.asyncio

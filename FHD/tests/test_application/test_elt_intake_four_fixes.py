@@ -226,6 +226,60 @@ def test_business_import_covers_every_unit_and_merges_by_coordinate(monkeypatch)
     )
 
 
+def test_shipment_model_classifies_mixed_and_finance_worksheets(monkeypatch):
+    from openpyxl import Workbook
+
+    from app.application.elt import llm_assist
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
+
+    book = Workbook()
+    mixed = book.active
+    mixed.title = "出货与回款"
+    mixed.append(["日期", "客户", "货物", "桶", "规格", "公斤", "单价", "金额"])
+    mixed.append(["2026-01-01", "示例客户", "样品", 2, "A", 12, 3, 36])
+    finance = book.create_sheet("回款")
+    finance.append(["日期", "客户", "收款金额"])
+    finance.append(["2026-01-02", "示例客户", 36])
+
+    def archive_text(sheet):
+        return "\n".join(
+            [f"# sheet:{sheet.title}"]
+            + [f"R{i} | " + " | ".join(map(str, row)) for i, row in enumerate(sheet.values, 1)]
+        )
+
+    mixed_text, finance_text = archive_text(mixed), archive_text(finance)
+    seen = []
+
+    def complete(messages, **_kwargs):
+        source = messages[1]["content"]
+        seen.append(source)
+        rows = (
+            [{"source_sheet": mixed.title, "source_row": "2", "product_name": "样品"}]
+            if mixed_text in source
+            else []
+        )
+        return LlmAssistResult(used_llm=True, data={"rows": rows})
+
+    monkeypatch.setattr(llm_assist, "_complete", complete)
+    result = llm_assist.advise_business_import(mixed_text)
+    assert seen == [mixed_text]
+    assert result.used_llm and not result.degraded
+    assert [(row["source_sheet"], row["source_row"]) for row in result.data["rows"]] == [
+        (mixed.title, "2"),
+    ]
+
+    seen.clear()
+    result = llm_assist.advise_business_import(finance_text)
+    assert seen and set(seen) == {finance_text}
+    assert result.used_llm and not result.degraded and result.data["rows"] == []
+
+    seen.clear()
+    combined = f"{finance_text}\n{mixed_text}"
+    result = llm_assist.advise_business_import(combined)
+    assert seen and set(seen) == {combined}
+    assert [row["source_sheet"] for row in result.data["rows"]] == [mixed.title]
+
+
 def test_business_import_refuses_more_units_than_the_limit_without_calling(monkeypatch):
     from app.application.elt import llm_assist
 
@@ -274,6 +328,37 @@ def test_degraded_routing_is_not_complete_coverage():
     covered = ais._batch_coverage({"action": "new"}, {}, {"degraded": True})
     assert covered["complete"] is False and covered["routing_degraded"] is True
     assert ais._batch_coverage({"action": "new"}, {}, {"degraded": False})["complete"] is True
+
+
+def test_hidden_delivery_sheet_does_not_choose_or_feed_a_business_target(tmp_path, monkeypatch):
+    from openpyxl import Workbook
+
+    from app.application.elt.parsers import parse_file
+    from app.application.elt.target_detection import detect_elt_target
+
+    book = Workbook()
+    book.active.title = "回款台账"
+    book.active.append(["日期", "金额", "备注"])
+    book.active.append(["2026-10-02", 50, "来款"])
+    hidden = book.create_sheet("旧送货单")
+    hidden.sheet_state = "hidden"
+    hidden.append(["送货单"])
+    hidden.append(["购货单位：某客户"])
+    hidden.append(["产品型号", "产品名称", "数量", "单价", "金额"])
+    hidden.append(["a1", "隐藏商品", 1, 10, 10])
+    path = tmp_path / "workbook.xlsx"
+    book.save(path)
+
+    monkeypatch.setattr("app.utils.path_io.path_utils.get_data_dir", lambda: str(tmp_path))
+    assert detect_elt_target(path)["document_type"] == "finance_ledger"
+    parsed = parse_file(path, target_type="customer_products")
+    try:
+        assert {row.sheet for row in parsed.rows} <= {"回款台账"}
+        assert {"name": "旧送货单", "reason": "hidden_sheet"} in parsed.source_features[
+            "skipped_sheets"
+        ]
+    finally:
+        parsed.close()
 
 
 def test_customer_name_fallback_is_checked_against_the_cited_sheet():

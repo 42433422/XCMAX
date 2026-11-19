@@ -22,7 +22,7 @@ _SENTENCE_SPLIT = re.compile(r"[。！？!?；;\n]+")
 
 
 def extract_explicit_memories(message: str) -> list[dict[str, Any]]:
-    """Extract only explicit, bounded facts; every result still requires confirmation."""
+    """Extract explicit, bounded facts for the conversation memory policy."""
 
     if re.search(
         r"[?？]|(?:是否|假如|假设|如果|例如|比如|据说|听说|可能|也许|是谁|是什么)",
@@ -312,13 +312,18 @@ def _memory_owner_id(access: DatasetAccessContext, scope: str = "user") -> str:
     return "personal-memory:v1:" + hashlib.sha256(payload.encode()).hexdigest()
 
 
-def _personal_preference(record: dict[str, Any]) -> bool:
+def _personal_subject(record: dict[str, Any]) -> bool:
     value = record.get("value")
-    return (
-        record.get("memory_type") == "preference"
-        and isinstance(value, dict)
-        and str(value.get("subject") or "").casefold() in {"用户", "本人", "user", "self"}
-    )
+    return isinstance(value, dict) and str(value.get("subject") or "").strip().casefold() in {
+        "用户",
+        "本人",
+        "user",
+        "self",
+    }
+
+
+def _personal_preference(record: dict[str, Any]) -> bool:
+    return record.get("memory_type") == "preference" and _personal_subject(record)
 
 
 def _scope_denied() -> dict[str, Any]:

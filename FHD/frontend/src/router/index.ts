@@ -471,6 +471,7 @@ router.beforeEach(async (to, _from, finish) => {
 if (typeof window !== 'undefined') {
   let checkingAdminSession = false
   window.addEventListener('xcagi:enterprise-session-invalid', async () => {
+    if (window.xcagiDesktopAssistant) return
     const current = router.currentRoute.value
     if (current.meta?.publicAccess || current.name === 'login') return
     // Market credentials can expire independently of the admin console session.

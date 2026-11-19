@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
 import TopAssistantFloat from './TopAssistantFloat.vue'
@@ -35,7 +35,10 @@ describe('TopAssistantFloat.vue', () => {
     setActivePinia(createPinia())
   })
 
-  it('renders float toggle button', async () => {
+  it('renders the product editor for a desktop query and removes its bridge on unmount', async () => {
+    let openProducts!: (query: string) => Promise<void>
+    const stop = vi.fn()
+    vi.stubGlobal('xcagiDesktop', { onAssistantProductSearch: (callback: typeof openProducts) => { openProducts = callback; return stop } })
     const router = createRouter({
       history: createMemoryHistory(),
       routes: [{ path: '/', component: { template: '<div />' } }],
@@ -55,5 +58,12 @@ describe('TopAssistantFloat.vue', () => {
 
     expect(wrapper.find('.assistant-float-toggle').exists()).toBe(true)
     expect(wrapper.text()).toContain('副窗')
+    await openProducts('part-42')
+    await flushPromises()
+    expect(wrapper.find('#xcagi-assistant-float-panel').exists()).toBe(true)
+    expect(wrapper.get('.product-search-row input').element.value).toBe('part-42')
+    wrapper.unmount()
+    expect(stop).toHaveBeenCalledOnce()
+    vi.unstubAllGlobals()
   })
 })

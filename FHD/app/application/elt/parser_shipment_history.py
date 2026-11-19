@@ -60,7 +60,7 @@ def _looks_like_model(value: Any) -> bool:
     return bool(re.search(r"[\u4e00-\u9fffA-Za-z0-9]", text))
 
 
-def _nearby_model_number(values: tuple[Any, ...], product_index: int) -> str:
+def _nearby_model_number(values: tuple[Any, ...], product_index: int) -> tuple[str, int]:
     """Return a defensible model immediately before a headerless product row.
 
     A plain number normally remains unsafe: historical ledgers often put a
@@ -73,20 +73,20 @@ def _nearby_model_number(values: tuple[Any, ...], product_index: int) -> str:
     """
 
     nearby = [
-        clean_cell_text(candidate)
-        for candidate in reversed(values[max(1, product_index - 4) : product_index])
-        if clean_cell_text(candidate)
+        (index + 1, text)
+        for index in range(product_index - 1, max(0, product_index - 5), -1)
+        if (text := clean_cell_text(values[index]))
     ]
-    for offset, text in enumerate(nearby):
+    for offset, (column, text) in enumerate(nearby):
         if _looks_like_model(text):
-            return text
+            return text, column
         if (
             offset == 0
             and re.fullmatch(r"\d{3,12}", text)
-            and any(re.fullmatch(r"\d{1,4}号", earlier) for earlier in nearby[1:])
+            and any(re.fullmatch(r"\d{1,4}号", earlier) for _, earlier in nearby[1:])
         ):
-            return text
-    return ""
+            return text, column
+    return "", 0
 
 
 def _line_candidate(values: tuple[Any, ...]) -> dict[str, Any] | None:
@@ -118,11 +118,12 @@ def _line_candidate(values: tuple[Any, ...]) -> dict[str, Any] | None:
             continue
         if amount_error > max(5.0, abs(amount) * 0.03):
             continue
-        model_number = _nearby_model_number(values, index)
+        model_number, model_column = _nearby_model_number(values, index)
         score = 10 + (2 if model_number else 0)
         candidate = {
             "product_name": product_name,
             "model_number": model_number,
+            "model_column": model_column,
             "quantity_tins": quantity_tins,
             "specification": specification,
             "quantity_kg": quantity_kg,
@@ -140,6 +141,134 @@ def _line_candidate(values: tuple[Any, ...]) -> dict[str, Any] | None:
 def _canonical_customer(raw_name: str, canonical_by_alias: dict[str, str]) -> str:
     alias = customer_alias_key(raw_name)
     return canonical_by_alias.get(alias, raw_name)
+
+
+def is_ledger_customer_name(value: str) -> bool:
+    return bool(
+        value
+        and _number(value) is None
+        and not _source_date(value)
+        and not re.fullmatch(r"\d{1,2}月\d{1,2}日?", value)
+    )
+
+
+def resolve_shipment_history_customers(
+    worksheet: Any,
+    rows: list[ParsedRow],
+    canonical_by_alias: dict[str, str],
+    *,
+    workbook_customer: str = "",
+    unresolved_start: int = 0,
+) -> dict[str, Any]:
+    from app.application.elt.llm_assist import advise_ledger_customer_scope, elt_llm_enabled
+
+    use_model = elt_llm_enabled()
+    visible = getattr(worksheet, "sheet_state", "visible") == "visible"
+    names = {
+        row.row_number: canonical_by_alias[alias]
+        for row in rows
+        if is_ledger_customer_name(raw := row.provenance.get("customer_cell", ""))
+        and (alias := customer_alias_key(raw)) in canonical_by_alias
+    }
+    pending = [row for row in rows if row.row_number not in names]
+    result = None
+    possible: dict[int, list[dict[str, Any]]] = {}
+    if use_model and visible and pending:
+        # Samples span the full appendix, including ledgers far beyond the
+        # whole-workbook model input limit. Keep original row and column indices.
+        step = max(1, (len(pending) + 11) // 12)
+        sample_rows = {row.row_number for row in pending[::step]} | {pending[-1].row_number}
+        sample_rows.update(range(1, 5))
+        samples = {
+            number: {
+                column: text
+                for column, value in enumerate(cells, 1)
+                if 0 < len(text := clean_cell_text(value)) <= 40
+            }
+            for number, cells in enumerate(
+                worksheet.iter_rows(max_col=min(worksheet.max_column or 24, 24), values_only=True),
+                1,
+            )
+            if number in sample_rows
+        }
+        result = advise_ledger_customer_scope(worksheet.title, samples, workbook_customer)
+        if result.used_llm and not result.degraded:
+            confirmed: dict[int, set[str]] = {}
+            for item in result.data.get("candidates", []):
+                name, nr, col = item["name"], item["row"], item["column"]
+                source = samples.get(nr, {}).get(col, "")
+                local = is_ledger_customer_name(name) and name in source
+                workbook_match = bool(name and name == workbook_customer and nr == col == 0)
+                if local or workbook_match:
+                    possible.setdefault(nr, []).append(
+                        {"name": name, "source_sheet": worksheet.title, "source_row": nr}
+                    )
+                if item["confirmed"] and (workbook_match or (local and source == name)):
+                    confirmed.setdefault(col, set()).add(name)
+            if len(confirmed) == 1:
+                col, confirmed_names = next(iter(confirmed.items()))
+                if col:
+                    pending_by_number = {row.row_number: row for row in pending}
+                    for number, (value,) in enumerate(
+                        worksheet.iter_rows(min_col=col, max_col=col, values_only=True), 1
+                    ):
+                        row = pending_by_number.get(number)
+                        if row and (name := clean_cell_text(value)) in confirmed_names:
+                            position = row.provenance.get("table_position", {})
+                            if (
+                                position.get("first_column", 0)
+                                <= col
+                                <= position.get("last_column", 0)
+                            ):
+                                continue
+                            names[number] = name
+                            if row.provenance.get("inferred_model_column") == col:
+                                row.values.pop("model_number", None)
+                elif set(names.values()) <= {workbook_customer}:
+                    names.update(
+                        {
+                            row.row_number: workbook_customer
+                            for row in pending
+                            if row.provenance.get("source_date")
+                            and row.provenance.get("has_text_before_product") is False
+                        }
+                    )
+    unresolved = unresolved_start
+    for row in rows:
+        fallback = str(row.values.get("customer_name") or "").strip()
+        name = names.get(row.row_number) or (
+            fallback if not use_model and is_ledger_customer_name(fallback) else ""
+        )
+        canonical = _canonical_customer(name, canonical_by_alias) if name else ""
+        row.values["customer_name"] = canonical if is_ledger_customer_name(canonical) else name
+        row.provenance["customer_unresolved"] = not name
+        if not name:
+            unresolved += 1
+            label = f"未识别客户{unresolved}"
+            row.provenance["customer_display_name"] = label
+            evidence = possible.get(row.row_number, []) + possible.get(0, [])
+            options = list({item["name"]: item for item in evidence}.values())[:3]
+            if options:
+                row.provenance["customer_candidates"] = options
+            detail = (
+                "可能的客户：" + "、".join(item["name"] for item in options)
+                if options
+                else "原件证据不足，无法确认该行客户。"
+            )
+            row.provenance.setdefault("validation_issues", []).append(
+                {
+                    "code": "ELT_LEDGER_CUSTOMER_UNRESOLVED",
+                    "field": "customer_name",
+                    "severity": "error",
+                    "message": f"{label}：{detail}",
+                }
+            )
+    return {
+        **(result.public_metadata() if result else {}),
+        "mode": "ai" if use_model else "fallback",
+        "resolved_rows": len(rows) - (unresolved - unresolved_start),
+        "unresolved_rows": unresolved - unresolved_start,
+    }
 
 
 def parse_shipment_history_rows(
@@ -169,8 +298,6 @@ def parse_shipment_history_rows(
         if explicit_customer:
             last_customer_raw = explicit_customer
         customer_raw = explicit_customer or last_customer_raw or default_customer
-        if not customer_raw and not dated:
-            continue
         source_date, source_date_column = _source_date_from_values(values)
         customer_name = (
             _canonical_customer(customer_raw, canonical_by_alias) if customer_raw else ""
@@ -208,6 +335,13 @@ def parse_shipment_history_rows(
                         "last_column": candidate["last_column"],
                     },
                     "customer_alias_source": customer_raw,
+                    "customer_cell": explicit_customer if candidate["first_column"] > 1 else "",
+                    "inferred_model_column": candidate["model_column"],
+                    "has_text_before_product": any(
+                        is_ledger_customer_name(text) and _looks_like_model(text)
+                        for value in values[: candidate["first_column"] - 1]
+                        if (text := clean_cell_text(value))
+                    ),
                     "customer_unresolved": not customer_raw,
                     "source_date": source_date,
                     "source_date_column": source_date_column or None,
@@ -241,7 +375,8 @@ def ledger_row_verification(
             {
                 "sheet": row.sheet,
                 "row": row.row_number,
-                "customer_name": row.values.get("customer_name") or "",
+                "customer_name": row.values.get("customer_name")
+                or row.provenance.get("customer_display_name", ""),
                 "product": row.values.get("name") or "",
                 "quantity_kg": kg,
                 "price": price,
@@ -253,6 +388,11 @@ def ledger_row_verification(
                 ),
                 "source_date": row.provenance.get("source_date") or "",
                 "customer_unresolved": bool(row.provenance.get("customer_unresolved")),
+                **(
+                    {"customer_candidates": row.provenance["customer_candidates"]}
+                    if row.provenance.get("customer_candidates")
+                    else {}
+                ),
                 "status": state.get(id(row), "superseded_by_newer_record"),
             }
         )
@@ -405,6 +545,7 @@ def parse_structured_shipment_history_rows(
                     "source_kind": "structured_shipment_history",
                     "header_rows": {"start": header_row, "end": header_row},
                     "customer_alias_source": customer_raw,
+                    "customer_cell": customer_raw,
                     "customer_unresolved": not customer_raw,
                     "source_date": source_date,
                     "source_date_column": date_column,

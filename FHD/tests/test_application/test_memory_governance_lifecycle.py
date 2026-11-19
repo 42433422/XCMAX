@@ -439,3 +439,23 @@ def test_private_capture_does_not_need_dataset_write_but_cannot_write_tenant(
     persist_recallable_chat_turn(context=context, **kwargs)
     rows = memory.memory_service.list_memories(namespace())
     assert len(rows) == 1 and rows[0]["status"] == "pending"
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "请翻译下面这段话：\n我叫王敏\n我喜欢咖啡",
+        "小说台词：\n我住在杭州",
+        "我喜欢简洁报告",
+    ],
+)
+def test_fallback_does_not_promote_unverified_assertion_context(memory, monkeypatch, message):
+    backend = MagicMock()
+    backend.extract_candidates.return_value = None
+    monkeypatch.setattr(
+        "app.infrastructure.memory.mem0_backend.get_long_term_memory", lambda: backend
+    )
+    result = memory.capture_conversation_turn(access_context=access(), user_message=message)
+    assert result["candidates"]
+    assert all(row["status"] == "pending" for row in result["candidates"])
+    assert memory.query(access_context=access(), query="王敏 咖啡 杭州 简洁报告")["memories"] == []

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.application.elt.parser_structure import header_match_score
 from app.application.elt.parsers import ParsedDataset
+from app.application.elt.preview_confirmation import preview_revision
 from app.application.elt.service_support import dump_json, load_json
 from app.application.elt.targets import TargetAdapter
 from app.db.models.elt import EltRun, EltUpload
@@ -41,6 +42,7 @@ def update_linked_companion_summary(db: Session, run: EltRun, *, status: str) ->
     parent_details["linked_customer_products_preview"] = {
         **link,
         "status": status,
+        "preview_revision": preview_revision(run),
         "progress": int(run.progress or 0),
         "total_rows": int(run.total_rows or 0),
         "summary": {

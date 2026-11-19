@@ -138,10 +138,6 @@ describe('SandboxView coverage extras', () => {
     })
     routeMocks.sandboxApi.pushAndTest.mockResolvedValue({ ok: true })
     Object.defineProperty(window, 'open', { configurable: true, value: vi.fn() })
-    Object.defineProperty(HTMLIFrameElement.prototype, 'requestFullscreen', {
-      configurable: true,
-      value: vi.fn(),
-    })
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => new Response(null, { status: 200 })),
@@ -157,14 +153,11 @@ describe('SandboxView coverage extras', () => {
     expect(vm.connected).toBe(true)
     expect(vm.statusText).toBe('已匹配')
     expect(vm.statusClass).toBe('status-ok')
-    expect(vm.iframeSrc).toContain('sandbox=1')
+    expect(vm.hostPageUrl).toBe('https://sandbox.example.test/')
+    expect(wrapper.find('iframe').exists()).toBe(false)
     expect(vm.shouldAutoPush()).toBe(true)
 
     vm.manualModId = 'mod-1'
-    vm.iframeRef = {
-      contentWindow: { postMessage: vi.fn() },
-      requestFullscreen: vi.fn(),
-    }
     await vm.pushAndTest()
     expect(routeMocks.sandboxApi.pushAndTest).toHaveBeenCalled()
     expect(vm.pushMessage).toContain('已推送')
@@ -178,9 +171,19 @@ describe('SandboxView coverage extras', () => {
     expect(vm.pushMessage).toContain('push failed')
 
     vm.openHostInNewTab()
-    expect(window.open).toHaveBeenCalled()
-    vm.openFullscreen()
-    expect(HTMLIFrameElement.prototype.requestFullscreen).toHaveBeenCalled()
+    expect(window.open).toHaveBeenCalledWith(
+      'https://sandbox.example.test/mod/mod-1', '_blank', 'noopener,noreferrer',
+    )
+    vm.hostUrl = 'https://sandbox.example.test/host?old=1#old'
+    vm.manualModId = 'mod /中文'
+    vm.openHostInNewTab()
+    expect(window.open).toHaveBeenLastCalledWith(
+      'https://sandbox.example.test/host/mod/mod%20%2F%E4%B8%AD%E6%96%87', '_blank', 'noopener,noreferrer',
+    )
+    const opened = vi.mocked(window.open).mock.calls.length
+    vm.hostUrl = 'javascript:alert(1)'
+    vm.openHostInNewTab()
+    expect(vi.mocked(window.open).mock.calls.length).toBe(opened)
 
     routeMocks.route.query.autoPush = '0'
     expect(vm.shouldAutoPush()).toBe(false)

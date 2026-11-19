@@ -49,6 +49,7 @@
             <span class="nc-time">{{ formatTime(n.created_at) }}</span>
           </div>
           <p class="nc-desc" :class="{ 'nc-desc--clip': !expandedItems.has(n.id) }" @click.stop="toggleItem(n.id)">{{ n.content }}</p>
+          <button v-if="deliveryTicketId(n)" type="button" class="nc-btn-text" @click.stop="onItemClick(n)">打开交付跟进</button>
         </div>
 
         <button v-if="!n.is_read" type="button" class="nc-read" @click.stop="markOne(n.id)" title="标为已读">标为已读
@@ -149,11 +150,23 @@ async function load() {
   }
 }
 
+function deliveryTicketId(n: NotificationItem): number | undefined {
+  const data = n.data
+  const id = data?.ticket_id
+  if (data?.kind !== 'xiaoc_delivery_followup' || typeof id !== 'number' || !Number.isSafeInteger(id) || id <= 0) return
+  return id
+}
+
 async function onItemClick(n: NotificationItem) {
   try {
     if (!n.is_read) await notificationStore.markRead(n.id)
   } catch {
     /* ignore */
+  }
+  const ticketId = deliveryTicketId(n)
+  if (ticketId !== undefined) {
+    void router.push({ name: 'admin-customer-service', query: { xiaocDelivery: String(ticketId) } })
+    return
   }
   const data = asUnknownRecord(n.data)
   switch (n.type) {

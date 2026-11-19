@@ -226,11 +226,10 @@ async def test_fast_validation_performs_one_probe_and_refreshes_only_rejection(
             json={"access_token": "synthetic-new-access", "refresh_token": "synthetic-new-refresh"},
         )
 
-    client_class = httpx.AsyncClient
     monkeypatch.setattr(
         market.httpx,
-        "AsyncClient",
-        lambda **kwargs: client_class(transport=httpx.MockTransport(transport), **kwargs),
+        "AsyncHTTPTransport",
+        lambda **kwargs: httpx.MockTransport(transport),
     )
     result = await market.resolve_valid_market_access_token_fast("verified-session")
 

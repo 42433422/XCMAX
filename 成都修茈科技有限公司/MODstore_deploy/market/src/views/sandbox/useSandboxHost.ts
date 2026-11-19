@@ -1,7 +1,7 @@
 /**
  * 沙箱宿主发现/连接/推送视图逻辑（由 SandboxView.vue 原单文件机械迁出，行为不变）。
  */
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { sandboxApi } from '../../application/sandboxApi'
 import { ApiError } from '../../infrastructure/http/client'
@@ -21,7 +21,6 @@ export function useSandboxHost() {
   const probeProgress = ref('')
   const pushing = ref(false)
   const hostInfo = ref<Record<string, unknown> | null>(null)
-  const iframeRef = ref<HTMLIFrameElement | null>(null)
   const manualModId = ref('')
   const pushMessage = ref('')
 
@@ -42,19 +41,17 @@ export function useSandboxHost() {
     return connected.value ? 'status-ok' : 'status-pending'
   })
 
-  const iframeSrc = computed(() => {
+  const hostPageUrl = computed(() => {
     if (!connected.value || !hostUrl.value) return ''
-    const base = hostUrl.value.replace(/\/+$/, '')
-    return `${base}/?sandbox=1`
-  })
-
-  const isMixedContentBlocked = computed(() => {
-    if (!connected.value || !hostUrl.value) return false
     try {
-      const url = new URL(hostUrl.value)
-      return window.location.protocol === 'https:' && url.protocol === 'http:' && !isLoopbackHost(url.hostname)
+      const target = new URL(hostUrl.value)
+      if (target.protocol !== 'http:' && target.protocol !== 'https:') return ''
+      target.search = ''
+      target.hash = ''
+      target.pathname = `${target.pathname.replace(/\/+$/, '')}/${effectiveModId.value ? `mod/${encodeURIComponent(effectiveModId.value)}` : ''}`
+      return target.href
     } catch {
-      return window.location.protocol === 'https:' && hostUrl.value.startsWith('http://') && !isLoopbackOrigin(hostUrl.value)
+      return ''
     }
   })
 
@@ -264,10 +261,7 @@ export function useSandboxHost() {
     try {
       const result = await sandboxApi.pushAndTest(hostUrl.value, String(modId))
       if (result.ok) {
-        if (iframeRef.value) {
-          iframeRef.value.contentWindow?.postMessage({ type: 'sandbox:navigate', path: `/mod/${modId}` }, '*')
-        }
-        pushMessage.value = `已推送 ${modId}，正在宿主中打开测试页`
+        pushMessage.value = `已推送 ${modId}，点击「打开宿主测试页」继续测试`
       } else {
         pushMessage.value = String(result.error || '推送失败，请检查 Mod ID 或宿主状态')
       }
@@ -280,15 +274,8 @@ export function useSandboxHost() {
   }
 
   function openHostInNewTab() {
-    const target = normalizeHostOrigin(iframeSrc.value)
+    const target = hostPageUrl.value
     if (target) window.open(target, '_blank', 'noopener,noreferrer') // lgtm[js/client-side-unvalidated-url-redirection] validated HTTP(S), noopener
-  }
-
-  function openFullscreen() {
-    if (!iframeRef.value) return
-    const el = iframeRef.value as HTMLIFrameElement & { webkitRequestFullscreen?: () => void }
-    if (el.requestFullscreen) el.requestFullscreen()
-    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen()
   }
 
   function shouldAutoPush() {
@@ -298,26 +285,12 @@ export function useSandboxHost() {
     return raw === '1' || raw === 'true' || raw === 'yes'
   }
 
-  let messageHandler: ((event: MessageEvent) => void) | null = null
-
   onMounted(() => {
-    messageHandler = (e: MessageEvent) => {
-      if (e.data?.type === 'sandbox:ready') return
-    }
-    window.addEventListener('message', messageHandler)
-
     void discoverAndConnect().then(() => {
       if (connected.value && effectiveModId.value && shouldAutoPush()) {
         void pushAndTest()
       }
     })
-  })
-
-  onBeforeUnmount(() => {
-    if (messageHandler) {
-      window.removeEventListener('message', messageHandler)
-      messageHandler = null
-    }
   })
 
   return {
@@ -328,14 +301,12 @@ export function useSandboxHost() {
     probeProgress,
     pushing,
     hostInfo,
-    iframeRef,
     manualModId,
     pushMessage,
     effectiveModId,
     statusText,
     statusClass,
-    iframeSrc,
-    isMixedContentBlocked,
+    hostPageUrl,
     normalizeHostOrigin,
     isLoopbackHost,
     isLoopbackOrigin,
@@ -344,7 +315,6 @@ export function useSandboxHost() {
     discoverAndConnect,
     pushAndTest,
     openHostInNewTab,
-    openFullscreen,
     shouldAutoPush,
   }
 }

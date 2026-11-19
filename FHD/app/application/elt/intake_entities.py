@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
+from app.application.elt.parser_shipment_history import product_match_key
 from app.application.elt.targets.helpers import is_column_header_label
 
 _CUSTOMER = ("customer_name", "客户名称", "客户")
 _UNIT = ("purchase_unit", "unit", "购买单位", "购货单位", "单位")
 _PRODUCT = ("product_name", "name", "产品名称", "品名", "产品")
+_MODEL = ("model_number", "model", "产品型号", "型号")
 _WRITTEN = {"new", "update"}
 
 
@@ -29,7 +31,7 @@ def count_import_entities(rows: Iterable[tuple[str, dict[str, Any]]]) -> dict[st
     """Distinct values a preview will write. A column title is never an entity."""
     customers: set[str] = set()
     units: set[str] = set()
-    products: set[str] = set()
+    products: set[tuple[str, str, str]] = set()
     records = 0
     for action, data in rows:
         if action not in _WRITTEN or not isinstance(data, dict):
@@ -44,7 +46,15 @@ def count_import_entities(rows: Iterable[tuple[str, dict[str, Any]]]) -> dict[st
         elif customer:
             units.add(customer)
         if product:
-            products.add(product)
+            products.add(
+                product_match_key(
+                    {
+                        "customer_name": unit or customer,
+                        "model_number": _text(data, _MODEL),
+                        "name": product,
+                    }
+                )
+            )
         if customer or unit or product:
             records += 1
     return {

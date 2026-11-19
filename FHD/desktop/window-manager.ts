@@ -149,7 +149,7 @@ function attachAuxiliaryGuards(win: Electron.BrowserWindow): void {
   })
 }
 
-function openTrustedAuxiliaryFromHandler(
+export function openTrustedAuxiliaryFromHandler(
   url: string,
   owner: Electron.BrowserWindow,
 ): { action: 'deny' } {

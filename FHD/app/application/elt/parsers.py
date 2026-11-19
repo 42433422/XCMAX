@@ -188,6 +188,9 @@ def _parse_workbook(path: Path, max_rows: int, target_type: str) -> ParsedDatase
     try:
         candidates: list[tuple[Any, Any]] = []
         for worksheet in workbook.worksheets:
+            if worksheet.sheet_state != "visible":
+                skipped_sheets.append({"name": worksheet.title, "reason": "hidden_sheet"})
+                continue
             # 表前的带格式空行会把真实表头挤出采样窗口，探针先跳过它们，
             # 再把行号换算回工作表绝对行号（后续取数依赖绝对行号）。
             probe, first_row = probe_sheet_rows(worksheet, limit=60)
@@ -544,6 +547,7 @@ def parse_file(
     target_type: str,
     max_rows: int = MAX_ROWS,
     compatibility_preset_id: str | None = None,
+    source_file_name: str = "",
 ) -> ParsedDataset:
     source = Path(path).expanduser().resolve()
     suffix = source.suffix.lower()
@@ -601,6 +605,7 @@ def parse_file(
                     source,
                     max_rows=max_rows,
                     target_type=target_type,
+                    source_file_name=source_file_name,
                 )
             except EltError:
                 raise

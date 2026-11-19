@@ -1998,7 +1998,7 @@
       }
     },
     "elt_import": {
-      "description": "通过数据对接中心（ELT）导入 Excel：先自动识别目标并预演，再按预演编号确认入库，保留源快照、回执与回滚记录。",
+      "description": "通过数据对接中心（ELT）导入 Excel；preview 传 run_id 时只读查看已有预演/回执，execute 按用户核对的预演编号和版本确认入库。",
       "availability": "shared",
       "actions": {
         "preview": {
@@ -2008,7 +2008,8 @@
           "required_any": [
             [
               "file_path",
-              "file_paths"
+              "file_paths",
+              "run_id"
             ]
           ],
           "availability": "shared",

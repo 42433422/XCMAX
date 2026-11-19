@@ -149,7 +149,11 @@ def test_manual_link_and_contacts_list(client_and_session_factory, monkeypatch) 
     assert listing["success"] is True
     assert any(item["contact_key"] == "sunbird" for item in listing["items"])
 
-    context = client.get("/api/ops/wechat/context", params={"contact_key": "sunbird"}).json()
+    without_tenant = client.get("/api/ops/wechat/context", params={"contact_key": "sunbird"})
+    assert without_tenant.json()["known"] is False
+    context = client.get(
+        "/api/ops/wechat/context", params={"contact_key": "sunbird", "tenant_id": 1}
+    ).json()
     assert context["known"] is True
     assert context["customer"]["name"] == "太阳鸟实业"
 

@@ -488,7 +488,8 @@ async def test_security_headers_sandbox_query_flag_1() -> None:
     mw = SecurityHeadersMiddleware(_app)
     await mw(_http_scope(query_string=b"sandbox=1"), lambda: None, capture_send)
     csp = captured["headers"].get(b"content-security-policy", b"").decode()
-    assert "unsafe-eval" in csp
+    assert "unsafe-eval" not in csp
+    assert captured["headers"][b"x-frame-options"] == b"DENY"
 
 
 @pytest.mark.asyncio

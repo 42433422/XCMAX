@@ -3,6 +3,7 @@ import type { IpcMainInvokeEvent } from 'electron'
 
 const mocks = vi.hoisted(() => ({
   handlers: new Map<string, (...args: any[]) => any>(),
+  listeners: new Map<string, (...args: any[]) => any>(),
   secret: vi.fn(() => 'synthetic-value'),
   query: vi.fn(),
   notification: { on: vi.fn(), show: vi.fn() },
@@ -11,7 +12,11 @@ const mocks = vi.hoisted(() => ({
   moveAssistant: vi.fn(),
 }))
 vi.mock('electron', () => ({
-  ipcMain: { handle: (name: string, handler: (...args: any[]) => any) => mocks.handlers.set(name, handler) },
+  ipcMain: {
+    handle: (name: string, handler: (...args: any[]) => any) => mocks.handlers.set(name, handler),
+    on: (name: string, handler: (...args: any[]) => any) => mocks.listeners.set(name, handler),
+    removeListener: (name: string) => mocks.listeners.delete(name),
+  },
   app: { getPath: () => '/synthetic/home' }, clipboard: {}, shell: {}, dialog: {},
   Notification: Object.assign(vi.fn(function () { return mocks.notification }), { isSupported: () => true }),
 }))
@@ -48,6 +53,7 @@ function sender(url: string): IpcMainInvokeEvent {
 
 beforeEach(() => {
   mocks.handlers.clear()
+  mocks.listeners.clear()
   mocks.secret.mockClear()
   mocks.query.mockReset()
   mocks.showMain.mockClear()
@@ -149,4 +155,37 @@ it('trusted runtime can still show a native notification', async () => {
   )
   expect(result).toEqual({ ok: true })
   expect(mocks.notification.show).toHaveBeenCalledOnce()
+})
+
+it('forwards only a bounded product query and waits for the main editor receipt', async () => {
+  vi.useFakeTimers()
+  try {
+    const mainEvent = sender('http://127.0.0.1:18500/chat')
+    const send = vi.fn()
+    Object.assign(desktopRuntime.mainWindow!.webContents, { send, isLoading: () => false })
+    const frame = { url: assistantUrl }
+    desktopRuntime.assistantWindow = { isDestroyed: () => false, webContents: { id: 27, mainFrame: frame } } as any
+    const event = { sender: { id: 27 }, senderFrame: frame }
+    const open = mocks.handlers.get('xcagi:assistant-open-products')!
+    expect(await open(mainEvent, 'part')).toMatchObject({ ok: false })
+    expect(await open(event, 'x'.repeat(501))).toMatchObject({ ok: false })
+    expect(send).not.toHaveBeenCalled()
+    const response = open(event, ' part ')
+    expect(send).toHaveBeenCalledWith('xcagi:assistant-open-products', { requestId: expect.any(String), query: 'part' })
+    const { requestId } = send.mock.calls[0][1]
+    const receipt = mocks.listeners.get('xcagi:assistant-products-opened')!
+    receipt(event, requestId)
+    receipt({ ...mainEvent, senderFrame: { url: mainEvent.senderFrame?.url } }, requestId)
+    expect(mocks.listeners.size).toBe(1)
+    receipt(mainEvent, requestId)
+    expect(await response).toEqual({ ok: true })
+    expect(mocks.listeners.size).toBe(0)
+    expect(mocks.showMain).toHaveBeenCalledOnce()
+    // A signed-out main renderer has no mounted editor and produces no receipt.
+    ;(mainEvent.senderFrame as { url: string }).url = 'http://127.0.0.1:18500/login'
+    const unavailable = open(event, 'part')
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(await unavailable).toEqual({ ok: false })
+    expect(mocks.listeners.size).toBe(0)
+  } finally { vi.useRealTimers() }
 })

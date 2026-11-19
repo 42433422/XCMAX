@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hmac
 import json
 import os
 import re
@@ -19,6 +20,8 @@ from flask import (
     stream_with_context,
     url_for,
 )
+from itsdangerous import BadSignature, URLSafeTimedSerializer
+from werkzeug.security import check_password_hash
 from werkzeug.utils import secure_filename
 
 BOUNDARY_ERRORS = (Exception,)
@@ -44,6 +47,62 @@ ALLOWED_PAGES = {
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10MB
+
+_ALLOWED_ACTIVITY_IMAGES = frozenset({".png", ".jpg", ".jpeg", ".gif", ".webp"})
+
+
+def _site_admin_guard() -> Response | None:
+    """Fail closed unless a configured administrator authenticates and proves form origin."""
+    username = (os.environ.get("XC_SITE_ADMIN_USERNAME") or "").strip()
+    password_hash = (os.environ.get("XC_SITE_ADMIN_PASSWORD_HASH") or "").strip()
+    if not username or not password_hash:
+        return Response("Site administration is not configured", status=503)
+
+    credentials = request.authorization
+    if not (
+        credentials
+        and credentials.type.lower() == "basic"
+        and hmac.compare_digest(
+            (credentials.username or "").encode("utf-8"), username.encode("utf-8")
+        )
+        and check_password_hash(password_hash, credentials.password or "")
+    ):
+        return Response(
+            "Authentication required",
+            status=401,
+            headers={"WWW-Authenticate": 'Basic realm="XCMAX site admin", charset="UTF-8"'},
+        )
+
+    if request.method == "POST":
+        token = request.form.get("_csrf_token", "")
+        try:
+            target = URLSafeTimedSerializer(password_hash, salt="xcmax-site-admin-csrf").loads(
+                token, max_age=3600
+            )
+        except BadSignature:
+            target = None
+        if target != request.path:
+            return Response("Invalid form token", status=403)
+    return None
+
+
+def _site_admin_csrf_token() -> str:
+    password_hash = os.environ["XC_SITE_ADMIN_PASSWORD_HASH"].strip()
+    return URLSafeTimedSerializer(password_hash, salt="xcmax-site-admin-csrf").dumps(
+        request.path
+    )
+
+
+@app.after_request
+def _site_security_headers(response: Response) -> Response:
+    if request.path in {"/admin", "/admin/news"}:
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Vary"] = "Authorization"
+    elif request.path.startswith("/uploads/"):
+        # Old SVG/HTML uploads must not execute even when directly opened in a browser.
+        response.headers["Content-Security-Policy"] = "sandbox"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 def ensure_upload_dir() -> None:
@@ -481,6 +540,7 @@ ADMIN_TEMPLATE = (
         1200 × 260 像素）。
       </p>
       <form method="post" enctype="multipart/form-data">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token }}" />
         <div class="field">
           <label for="title">活动标题（必填）</label>
           <input type="text" id="title" name="title" required />
@@ -494,8 +554,8 @@ ADMIN_TEMPLATE = (
           <textarea id="description" name="description" rows="3" required></textarea>
         </div>
         <div class="field">
-          <label for="image">活动图片（必填，支持 jpg / png / svg 等）</label>
-          <input type="file" id="image" name="image" accept="image/*" required />
+          <label for="image">活动图片（必填，支持 JPG / PNG / GIF / WebP）</label>
+          <input type="file" id="image" name="image" accept="image/jpeg,image/png,image/gif,image/webp" required />
         </div>
         <button type="submit">上传活动</button>
       </form>
@@ -629,6 +689,7 @@ NEWS_ADMIN_TEMPLATE = """
         通过本页面发布公司新闻和通知公告，前台“新闻中心”页面会自动展示最新内容。
       </p>
       <form method="post">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token }}" />
         <div class="field">
           <label for="title">新闻标题（必填）</label>
           <input type="text" id="title" name="title" required />
@@ -670,6 +731,9 @@ NEWS_ADMIN_TEMPLATE = """
 
 @app.route("/admin", methods=["GET", "POST"])
 def admin():
+    denied = _site_admin_guard()
+    if denied is not None:
+        return denied
     ensure_upload_dir()
     if request.method == "POST":
         title = request.form.get("title", "").strip()
@@ -684,7 +748,19 @@ def admin():
         if not secure_name:
             return redirect(url_for("admin"))
 
-        ext = Path(secure_name).suffix or ".png"
+        ext = Path(secure_name).suffix.lower()
+        if ext not in _ALLOWED_ACTIVITY_IMAGES:
+            return Response("Unsupported image format", status=415)
+        signature = file.stream.read(16)
+        file.stream.seek(0)
+        is_image = (
+            (ext == ".png" and signature.startswith(b"\x89PNG\r\n\x1a\n"))
+            or (ext in {".jpg", ".jpeg"} and signature.startswith(b"\xff\xd8\xff"))
+            or (ext == ".gif" and signature.startswith((b"GIF87a", b"GIF89a")))
+            or (ext == ".webp" and signature[:4] == b"RIFF" and signature[8:12] == b"WEBP")
+        )
+        if not is_image:
+            return Response("Invalid image content", status=415)
         filename = f"activity_{int(time.time())}_{uuid4().hex[:8]}{ext}"
         save_path = UPLOAD_DIR / filename
         file.save(save_path)
@@ -711,11 +787,16 @@ def admin():
     activities_sorted = sorted(
         activities, key=lambda x: x.get("date", ""), reverse=True
     )
-    return render_template_string(ADMIN_TEMPLATE, activities=activities_sorted)
+    return render_template_string(
+        ADMIN_TEMPLATE, activities=activities_sorted, csrf_token=_site_admin_csrf_token()
+    )
 
 
 @app.route("/admin/news", methods=["GET", "POST"])
 def admin_news():
+    denied = _site_admin_guard()
+    if denied is not None:
+        return denied
     if request.method == "POST":
         title = request.form.get("title", "").strip()
         summary = request.form.get("summary", "").strip()
@@ -743,7 +824,9 @@ def admin_news():
 
     news_items = load_news()
     news_sorted = sorted(news_items, key=lambda x: x.get("date", ""), reverse=True)
-    return render_template_string(NEWS_ADMIN_TEMPLATE, news=news_sorted)
+    return render_template_string(
+        NEWS_ADMIN_TEMPLATE, news=news_sorted, csrf_token=_site_admin_csrf_token()
+    )
 
 
 if __name__ == "__main__":

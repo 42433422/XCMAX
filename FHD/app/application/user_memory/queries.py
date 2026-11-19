@@ -84,7 +84,7 @@ class MemoryQueries:
             ),
             reverse=False,
         )
-        lines = ["【MemoryV2】已确认记忆（仅供 planner 补全偏好/实体/任务上下文，不得编造）:"]
+        lines = ["【MemoryV2】已生效记忆（仅供 planner 补全偏好/实体/任务上下文，不得编造）:"]
         for idx, record in enumerate(active[: max(1, int(max_items))], start=1):
             memory_kind = str(record.get("memory_type") or "unknown")
             key = str(record.get("key") or "-")

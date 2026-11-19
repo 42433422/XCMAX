@@ -27,13 +27,18 @@ def client(monkeypatch):
     return TestClient(app, raise_server_exceptions=False)
 
 
-def test_platform_only_does_not_fall_back_to_edge(client, monkeypatch):
+def test_platform_only_does_not_replay_after_read_timeout_or_fall_back(client, monkeypatch):
     monkeypatch.setenv("XCAGI_TTS_PLATFORM_ONLY", "1")
-    monkeypatch.setattr(ai_assistant_tts, "_platform_mimo_payload", lambda *args: None)
+    monkeypatch.setattr(ai_assistant_tts, "_session_market_token", lambda request: "market-token")
+    upstream = MagicMock()
+    upstream.__enter__.return_value = upstream
+    upstream.post.side_effect = httpx.ReadTimeout("response lost after request")
     fallback = MagicMock()
     monkeypatch.setattr(tts_facade, "synthesize_to_data_uri", fallback)
-    response = client.post("/api/tts", json={"text": "你好"})
+    with patch("httpx.Client", return_value=upstream):
+        response = client.get("/api/tts/audio", params={"text": "你好"})
     assert response.status_code == 503
+    upstream.post.assert_called_once()
     fallback.assert_not_called()
 
 
@@ -168,13 +173,22 @@ def test_logged_in_software_uses_platform_mimo_instead_of_edge(client, monkeypat
     client_cm.__exit__.return_value = False
     client_cm.post.return_value = response
     edge = MagicMock(return_value=b"edge-audio")
+    monkeypatch.setenv("XCAGI_MARKET_LOCAL_ADDRESS", "192.0.2.25")
+    monkeypatch.setenv("HTTPS_PROXY", "http://environment-proxy.invalid")
+    monkeypatch.delenv("XCAGI_MARKET_PROXY", raising=False)
     monkeypatch.setattr(ai_assistant_tts, "_session_market_token", lambda request: "market-token")
     monkeypatch.setattr(tts_service, "_run_edge_sync", edge)
-    with patch("httpx.Client", return_value=client_cm):
+    with (
+        patch("httpx.Client", return_value=client_cm) as create_client,
+        patch("httpx.HTTPTransport") as create_transport,
+    ):
         result = client.post(
             "/api/tts", json={"text": "你好", "voice": "zh-CN-XiaoxiaoNeural", "rate": "+15%"}
         )
     assert result.status_code == 200
+    assert create_transport.call_args.kwargs["local_address"] == "192.0.2.25"
+    assert create_transport.call_args.kwargs["trust_env"] is False
+    assert create_client.call_args.kwargs["trust_env"] is False
     body = result.json()["data"]
     assert body["provider"] == "mimo"
     assert body["voice"] == "Chloe"

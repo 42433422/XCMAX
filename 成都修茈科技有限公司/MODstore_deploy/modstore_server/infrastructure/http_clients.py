@@ -9,6 +9,7 @@ Async clients (for ``async def`` handlers):
   - :func:`get_java_client`     — Python → Java payment service
   - :func:`get_external_client` — external API calls (LLM providers, research,
                                   embeddings, etc.)
+  - :func:`get_internal_client` — private service calls, bypassing ambient proxies
 
 Sync client (for ``def`` handlers / sync utilities):
   - :func:`get_java_sync_client` — used by java_me_profile.fetch_java_user_overlay
@@ -27,6 +28,7 @@ import httpx
 
 _java_async_client: httpx.AsyncClient | None = None
 _external_async_client: httpx.AsyncClient | None = None
+_internal_async_client: httpx.AsyncClient | None = None
 
 _POOL_LIMITS = httpx.Limits(max_connections=1000, max_keepalive_connections=200)
 
@@ -45,6 +47,16 @@ def get_external_client() -> httpx.AsyncClient:
     if _external_async_client is None:
         _external_async_client = httpx.AsyncClient(limits=_POOL_LIMITS)
     return _external_async_client
+
+
+def get_internal_client() -> httpx.AsyncClient:
+    """Keep private service credentials and payloads off external proxy routes."""
+    global _internal_async_client
+    if _internal_async_client is None:
+        _internal_async_client = httpx.AsyncClient(
+            limits=_POOL_LIMITS, trust_env=False, follow_redirects=False
+        )
+    return _internal_async_client
 
 
 # ---------------------------------------------------------------------------
@@ -91,20 +103,24 @@ async def _close_async_client(client: httpx.AsyncClient) -> None:
 
 async def close_all() -> None:
     """Close all shared clients.  Call from the FastAPI shutdown lifespan."""
-    global _java_async_client, _external_async_client, _java_sync_client
+    global _java_async_client, _external_async_client, _internal_async_client, _java_sync_client
 
     # Detach first.  A client created on an old event loop cannot be reused,
     # even when its best-effort close encounters that loop already closing.
     java_async_client = _java_async_client
     external_async_client = _external_async_client
+    internal_async_client = _internal_async_client
     java_sync_client = _java_sync_client
     _java_async_client = None
     _external_async_client = None
+    _internal_async_client = None
     _java_sync_client = None
 
     if java_async_client is not None:
         await _close_async_client(java_async_client)
     if external_async_client is not None:
         await _close_async_client(external_async_client)
+    if internal_async_client is not None:
+        await _close_async_client(internal_async_client)
     if java_sync_client is not None:
         java_sync_client.close()

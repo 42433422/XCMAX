@@ -19,6 +19,7 @@ class ApprovalApi extends MobileApiClient {
     Map<String, Object?>? body
   })>[];
   String status = 'pending';
+  final detailFields = <String, Object?>{};
   Completer<Map<String, Object?>>? decision;
   Map<String, Object?> get row => {
         'id': 5,
@@ -28,7 +29,8 @@ class ApprovalApi extends MobileApiClient {
         'current_approvers': [12],
         'request_no': 'A005',
         'business_type': 'purchase',
-        'records': <Object>[]
+        'records': <Object>[],
+        ...detailFields,
       };
   @override
   Future<Map<String, Object?>> workspaceRequest(String path,
@@ -122,16 +124,7 @@ Future<void> editFlow(WidgetTester tester, FlowApi api) async {
 }
 
 Future<void> saveFlow(WidgetTester tester) async {
-  await tester.scrollUntilVisible(
-    find.text('保存流程'),
-    200,
-    scrollable: find
-        .descendant(
-          of: find.byType(ListView).last,
-          matching: find.byType(Scrollable),
-        )
-        .first,
-  );
+  expect(find.text('保存流程').hitTestable(), findsOneWidget);
   await tester.tap(find.text('保存流程'));
   await tester.pump();
 }
@@ -157,9 +150,13 @@ void main() {
       final key = tester.widget<TextFormField>(
         find.byKey(const ValueKey('flow_key')),
       );
-      expect(tester.widget<TextField>(find.descendant(
-          of: find.byKey(const ValueKey('flow_key')),
-          matching: find.byType(TextField))).readOnly, isTrue);
+      expect(
+          tester
+              .widget<TextField>(find.descendant(
+                  of: find.byKey(const ValueKey('flow_key')),
+                  matching: find.byType(TextField)))
+              .readOnly,
+          isTrue);
       expect(key.controller!.text, 'existing_flow');
       final active = tester.widget<SwitchListTile>(find.byType(SwitchListTile));
       expect(active.onChanged, isNull);
@@ -253,7 +250,6 @@ void main() {
     },
   );
 
-
   testWidgets(
       'approval uses local validated identity, scoped native pages and pagination',
       (tester) async {
@@ -314,6 +310,74 @@ void main() {
     expect(find.text('采购审批'), findsNothing);
     expect(find.textContaining('账号或连接已切换'), findsOneWidget);
   });
+  testWidgets('sales approval summarizes precise amounts on a phone',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(320, 640));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final api = ApprovalApi()
+      ..detailFields.addAll({
+        'business_type': 'workflow_tool',
+        'description': '原始销售参数',
+        'business_data': {
+          'tool_id': 'sales',
+          'action': 'create_order',
+          'params': {
+            'payload': {
+              'order': {
+                'customer_name': '蜀川商贸',
+                'items': [
+                  {
+                    'product_name': '防水接头',
+                    'model_number': 'R-22',
+                    'quantity': '3',
+                    'unit_price': '2.15',
+                  },
+                  {'product_name': '胶带', 'quantity': '1.5', 'unit_price': '3'},
+                ],
+              },
+            },
+          },
+        },
+      });
+    await show(tester, api);
+    await tester.tap(find.text('查看详情'));
+    await tester.pumpAndSettle();
+    expect(find.text('创建销售订单'), findsOneWidget);
+    expect(find.text('蜀川商贸'), findsOneWidget);
+    expect(find.text('通过').hitTestable(), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('10.95 CNY'),
+      200,
+      scrollable: find
+          .descendant(
+            of: find.byType(ListView).last,
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    expect(find.text('10.95 CNY'), findsOneWidget);
+    expect(find.text('通过').hitTestable(), findsOneWidget);
+  });
+
+  testWidgets('expired workflow cannot approve and can still reject',
+      (tester) async {
+    final api = ApprovalApi()..detailFields['business_type'] = 'workflow_tool';
+    await show(tester, api);
+    await tester.tap(find.text('查看详情'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('通过'));
+    await tester.pumpAndSettle();
+    api.detailFields['runtime_available'] = false;
+    await tester.tap(find.text('确认通过'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    expect(api.calls.where((c) => c.method != 'GET'), isEmpty);
+    expect(find.text('通过'), findsNothing);
+    expect(find.text('拒绝').hitTestable(), findsOneWidget);
+    expect(find.textContaining('请拒绝这条申请'), findsOneWidget);
+  });
+
   testWidgets('flow creation validates nodes and sends native form fields',
       (tester) async {
     final api = ApprovalApi();
@@ -342,13 +406,7 @@ void main() {
             .first);
     await tester.enterText(
         find.widgetWithText(TextFormField, '审批人 ID'), '12,13');
-    await tester.scrollUntilVisible(find.text('保存流程'), 200,
-        scrollable: find
-            .descendant(
-                of: find.byType(ListView).last,
-                matching: find.byType(Scrollable))
-            .first);
-    await tester.tap(find.text('保存流程'));
+    await saveFlow(tester);
     await tester.pumpAndSettle();
     final body = api.calls.firstWhere((c) => c.method == 'POST').body!;
     expect((body['flow'] as Map)['flow_key'], 'purchase_flow');

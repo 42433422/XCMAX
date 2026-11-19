@@ -32,6 +32,7 @@ _ELT_IMPORT_DATA = {
     "type": "object",
     "properties": {
         "run_id": {"type": "string"},
+        "preview_revision": {"type": ["string", "null"]},
         "target_type": {"type": "string"},
         "status": {"type": "string"},
         "total_rows": {"type": "integer"},

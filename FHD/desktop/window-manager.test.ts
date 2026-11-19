@@ -74,7 +74,7 @@ vi.mock('./desktop-navigation', () => ({
 }))
 
 import { clampWindowBounds } from './window-state'
-import { isTrustedDesktopOrigin } from './desktop-navigation'
+import { handleDesktopWindowOpen, isTrustedDesktopOrigin } from './desktop-navigation'
 import { createWindow, desktopWindowCount, MAX_DESKTOP_WINDOWS, openAuxiliaryWindow, resetAuxiliaryPartitionSerialForTests, showMainWindow, toggleMainWindow } from './window-manager'
 import { desktopRuntime } from './runtime-state'
 import { moveDesktopAssistant, resizeDesktopAssistant, syncDesktopAssistant } from './desktop-assistant'
@@ -127,7 +127,7 @@ it('shows a single independent assistant only while the main window is hidden an
     hide: vi.fn(() => { assistantVisible = false }),
     on: vi.fn(),
     loadURL: vi.fn(async () => undefined),
-    webContents: { setWindowOpenHandler: vi.fn(), on: vi.fn(), send: vi.fn() },
+    webContents: { setWindowOpenHandler: vi.fn(), on: vi.fn(), send: vi.fn(), downloadURL: vi.fn() },
   })
   vi.mocked(BrowserWindow).mockImplementationOnce(function () { return win })
   syncDesktopAssistant()
@@ -139,6 +139,20 @@ it('shows a single independent assistant only while the main window is hidden an
   }))
   expect(win.loadURL).toHaveBeenCalledWith('http://127.0.0.1:17500/desktop-assistant')
   expect(desktopRuntime.auxiliaryWindows.has(win)).toBe(false)
+  const actualNavigation = await vi.importActual<typeof import('./desktop-navigation')>('./desktop-navigation')
+  vi.mocked(handleDesktopWindowOpen).mockImplementation(actualNavigation.handleDesktopWindowOpen)
+  const openLink = win.webContents.setWindowOpenHandler.mock.calls[0][0]
+  const navigate = win.webContents.on.mock.calls.find(([event]) => event === 'will-navigate')![1]
+  const download = 'http://127.0.0.1:17500/api/ai/analyze/export/report.html'
+  expect(openLink({ url: download })).toEqual({ action: 'deny' })
+  expect(win.webContents.downloadURL).toHaveBeenCalledWith(download)
+  const preventDefault = vi.fn()
+  navigate({ preventDefault }, download)
+  expect(preventDefault).toHaveBeenCalledOnce()
+  expect(win.webContents.downloadURL).toHaveBeenCalledTimes(2)
+  expect(openLink({ url: 'https://untrusted.example/file' })).toEqual({ action: 'deny' })
+  expect(win.webContents.downloadURL).toHaveBeenCalledTimes(2)
+
   resizeDesktopAssistant(win, true)
   expect(win.setBounds).toHaveBeenLastCalledWith({ x: 840, y: 160, width: 440, height: 640 })
   win.getBounds = () => ({ x: 1198, y: 680, width: 104, height: 80 })

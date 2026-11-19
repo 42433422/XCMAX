@@ -299,6 +299,16 @@ describe('router/index enhanced', () => {
     } finally { replace.mockRestore() }
   })
 
+  it('keeps the standalone assistant URL intact after session expiry', async () => {
+    const replace = vi.spyOn(router, 'replace').mockResolvedValue(undefined)
+    vi.stubGlobal('xcagiDesktopAssistant', {})
+    try {
+      window.dispatchEvent(new CustomEvent('xcagi:enterprise-session-invalid'))
+      await Promise.resolve()
+      expect(replace).not.toHaveBeenCalled()
+    } finally { vi.unstubAllGlobals(); replace.mockRestore() }
+  })
+
   it('exports router with core routes', () => {
     const names = router.getRoutes().map((r) => r.name)
     expect(names).toContain('login')

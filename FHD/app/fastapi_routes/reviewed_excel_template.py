@@ -59,6 +59,7 @@ from app.application.reviewed_excel_evidence import (
 from app.application.reviewed_excel_review_projection import build_candidate_previews
 from app.application.reviewed_excel_review_store import (
     _CLASS_SAVING,
+    _INTAKE_SOURCE_POLICY,
     _MODEL_PENDING,
     _READY,
     _SAVED,
@@ -2347,12 +2348,17 @@ def reviewed_excel_intake_status(review_id: str, request: Request, user=Depends(
             return {"status": "not_started"}
         if plan.get("mod_id") != mod_id:
             raise HTTPException(status_code=409, detail="业务空间已变化，请重新核对")
+        receipt = load_json(review.receipt_json, {})
+        if plan.get("business_source_policy") != _INTAKE_SOURCE_POLICY and not receipt.get(
+            "intake_request_key"
+        ):
+            return {"status": "not_started", "reason": "preview_policy_changed"}
         _authorize_intake(request, (tenant, owner), plan.get("target_type"))
         business = get_elt_service().get_run(db, run_id=plan["run_id"], owner_user_id=owner)
         return {
             "status": "created",
             "intake": {**plan, "business": business},
-            "auto_ingest": load_json(review.receipt_json, {}).get("auto_ingest"),
+            "auto_ingest": receipt.get("auto_ingest"),
         }
 
 
@@ -2461,6 +2467,10 @@ def reviewed_excel_intake_preview(
             # read the classification's archived original, which still has item rows.
             template_source = _source(db, review, tenant, owner)
             archived = _archived_original(db, review, tenant, owner)
+            from app.application.elt.attendance_pipeline import has_attendance_matrix
+
+            if has_attendance_matrix(archived):
+                _authorize_intake(request, (tenant, owner), "attendance")
             chosen = clean_workbook(template_source, review.file_sha256, selected)
             service = get_elt_service()
             upload = service.save_upload(
@@ -2616,6 +2626,7 @@ def reviewed_excel_intake_preview(
                 "upload_id": upload["upload_id"],
                 "selection_key": key,
                 "source_sha256": review.file_sha256,
+                "business_source_policy": _INTAKE_SOURCE_POLICY,
                 "candidate_sha256": upload["sha256"],
                 "target_type": target_type,
                 "mod_id": mod_id,

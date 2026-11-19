@@ -3,6 +3,7 @@ import '../../policy/mobile_error_policy.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/we_ui.dart';
 import 'native_workspace_session.dart';
+import 'workspace_ui.dart';
 
 class NativeFormField {
   const NativeFormField(this.key, this.label,
@@ -10,12 +11,13 @@ class NativeFormField {
       this.number = false,
       this.integer = false,
       this.minimum,
+      this.exclusiveMinimum,
       this.options = const {},
       this.defaultValue = '',
       this.nullable = false});
   final String key, label;
   final bool required, number, integer, nullable;
-  final num? minimum;
+  final num? minimum, exclusiveMinimum;
   final Map<String, String> options;
   final Object? defaultValue;
   String? validate(String? raw) {
@@ -28,6 +30,9 @@ class NativeFormField {
         return integer ? '请输入整数' : '请输入有效数字';
       }
       if (minimum != null && n < minimum!) return '$label不能小于 $minimum';
+      if (exclusiveMinimum != null && n <= exclusiveMinimum!) {
+        return '$label必须大于 $exclusiveMinimum';
+      }
     }
     return null;
   }
@@ -131,7 +136,7 @@ class _NativeRecordEditorState extends State<NativeRecordEditor> {
   @override
   Widget build(BuildContext context) => PopScope(
       canPop: !_busy,
-      child: Scaffold(
+      child: WorkspaceScaffold(
       backgroundColor: AppTheme.colors(context).page,
       body: SafeArea(
           child: Column(children: [
