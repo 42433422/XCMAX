@@ -76,8 +76,14 @@ const pendingMemory = {
 }
 
 const wrappers: ReturnType<typeof mount>[] = []
-async function mountKnowledge() {
-  const wrapper = mount(PersyKnowledgeView, { global: { plugins: [createPinia()] } })
+async function mountKnowledge(space?: 'user-memory') {
+  const wrapper = mount(PersyKnowledgeView, {
+    props: { space },
+    global: {
+      plugins: [createPinia()],
+      stubs: { PersyUserMemory: { template: '<section aria-label="用户记忆"></section>' } },
+    },
+  })
   wrappers.push(wrapper)
   await flushPromises()
   return wrapper
@@ -635,6 +641,40 @@ describe('PersyKnowledgeView', () => {
     await flushPromises()
     expect(mocks.rebuildIndex).toHaveBeenCalledWith('team')
     expect(wrapper.get('button[aria-label="重建索引"]').attributes('disabled')).toBeUndefined()
+  })
+
+  it('appends personal memory after the document spaces and keeps document operations scoped', async () => {
+    mocks.listDatasets.mockResolvedValue({
+      success: true,
+      datasets: {
+        'persy-knowledge': { document_count: 3 },
+        'office-docking': { document_count: 2 },
+        team: { document_count: 1 },
+      },
+    })
+    const wrapper = await mountKnowledge()
+    const selector = wrapper.get<HTMLSelectElement>('.dataset-switch select')
+    expect(Array.from(selector.element.options, (option) => option.value)).toEqual([
+      'persy-knowledge', 'office-docking', 'team', 'user-memory',
+    ])
+
+    await selector.setValue('user-memory')
+    expect(wrapper.find('[aria-label="用户记忆"]').exists()).toBe(true)
+    expect(wrapper.find('[aria-label="导入知识"]').exists()).toBe(false)
+    expect(wrapper.find('.ask-dock').exists()).toBe(false)
+    expect(mocks.status).toHaveBeenCalledTimes(1)
+    expect(mocks.graph).toHaveBeenCalledTimes(1)
+
+    await selector.setValue('office-docking')
+    await flushPromises()
+    expect(wrapper.find('[aria-label="用户记忆"]').exists()).toBe(false)
+    expect(mocks.status).toHaveBeenLastCalledWith('office-docking', { includeDocuments: false })
+  })
+
+  it('opens the personal memory space from a settings link', async () => {
+    const wrapper = await mountKnowledge('user-memory')
+    expect(wrapper.get<HTMLSelectElement>('.dataset-switch select').element.value).toBe('user-memory')
+    expect(wrapper.find('[aria-label="用户记忆"]').exists()).toBe(true)
   })
 
   it('refetches knowledge when reactivated from keep-alive', async () => {

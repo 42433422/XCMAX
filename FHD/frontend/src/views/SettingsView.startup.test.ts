@@ -9,7 +9,7 @@ const boundary = await vi.hoisted(async () => {
     account: { avatarInputRef: ref(null), localUser: ref({ username: 'synthetic-user' }), isLoggedIn: ref(true), loadLocalUser: vi.fn(), loadAuditLogs: vi.fn() },
     mods: { currentIndustry: ref('default'), loadIndustries: vi.fn(), loadCurrentIndustryDetail: vi.fn(), loadIntentPackages: vi.fn() },
     basics: { sidebarThemePreset: ref('dark'), loadPreferences: vi.fn(), loadAutoLaunch: vi.fn(), loadDesktopDatabaseStatus: vi.fn(), loadDistillationVersions: vi.fn() },
-    memory: { memoryV2Loading: ref(false), persyLoading: ref(false), loadMemoryV2: vi.fn(), loadPersyProfile: vi.fn() },
+    memory: { persyLoading: ref(false), loadPersyProfile: vi.fn() },
   }
 })
 vi.mock('vue-router', () => ({ useRoute: () => ({ query: {}, fullPath: '/settings' }) }))
@@ -51,7 +51,7 @@ beforeEach(() => {
   boundary.mods.loadCurrentIndustryDetail.mockReset().mockResolvedValue(undefined)
   for (const background of [boundary.account.loadAuditLogs, boundary.mods.loadIntentPackages,
     boundary.basics.loadPreferences, boundary.basics.loadAutoLaunch, boundary.basics.loadDesktopDatabaseStatus,
-    boundary.basics.loadDistillationVersions, boundary.memory.loadMemoryV2, boundary.memory.loadPersyProfile]) {
+    boundary.basics.loadDistillationVersions, boundary.memory.loadPersyProfile]) {
     background.mockReset().mockReturnValue(new Promise(() => {}))
   }
 })

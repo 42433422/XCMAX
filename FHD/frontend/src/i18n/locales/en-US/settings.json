@@ -74,6 +74,9 @@
         "description": "Recognize department names, reporting lines, and office locations"
       }
     },
+    "userMemory": "User memory",
+    "memoryConfidenceInput": "Memory confidence",
+    "userMemorySignIn": "Sign in to view and manage your memories.",
     "persySystem": "Persy persona system",
     "persyLoading": "Loading persona…",
     "persyInteractions": "{count} interactions",

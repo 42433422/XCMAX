@@ -74,6 +74,9 @@
         "description": "部门名称、上下级关系与办公地点等信息的识别"
       }
     },
+    "userMemory": "用户记忆",
+    "memoryConfidenceInput": "记忆置信度",
+    "userMemorySignIn": "登录后可查看和管理你的记忆。",
     "persySystem": "拟人 Persy 系统",
     "persyLoading": "人设加载中…",
     "persyInteractions": "互动 {count} 轮",
