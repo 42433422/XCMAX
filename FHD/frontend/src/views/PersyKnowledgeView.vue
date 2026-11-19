@@ -591,7 +591,7 @@ import { knowledgeBaseApi } from '@/api/knowledgeBase'
 import { usePersyKnowledgeData, type PersyKnowledgeViewMode } from '@/composables/usePersyKnowledgeData'
 import { usePersyRecallQuery } from '@/composables/usePersyRecallQuery'
 import { usePersyMemoryGovernance } from '@/composables/usePersyMemoryGovernance'
-import { evidenceKey, formatScore, isMemoryChunk, nodeIcon, nodeTypeLabel, normalizeChunkSource } from '@/composables/persyKnowledgeFormatters'
+import { evidenceKey, evidenceSegments, formatScore, formatSynonyms, isMemoryChunk, nodeIcon, nodeTypeLabel, normalizeChunkSource, parseSynonyms } from '@/composables/persyKnowledgeFormatters'
 import { usePersyKnowledgeUiState } from './persy-knowledge/usePersyKnowledgeUiState'
 import { usePersyKnowledgeInspector } from './persy-knowledge/usePersyKnowledgeInspector'
 import { usePersyKnowledgeInteractions } from './persy-knowledge/usePersyKnowledgeInteractions'
@@ -787,28 +787,6 @@ async function clearQueryGaps(): Promise<void> {
   }
 }
 
-function formatSynonyms(groups: Record<string, string[]>): string {
-  return Object.entries(groups)
-    .map(([term, values]) => `${term}=${(values || []).join(',')}`)
-    .join('\n')
-}
-
-function parseSynonyms(text: string): Record<string, string[]> {
-  const groups: Record<string, string[]> = {}
-  for (const line of text.split('\n')) {
-    const [termRaw, valuesRaw] = line.split(/[=:：]/)
-    const term = (termRaw || '').trim().slice(0, 32)
-    if (!term) continue
-    const values = (valuesRaw || '')
-      .split(/[,，;；\s]+/)
-      .map((value) => value.trim().slice(0, 32))
-      .filter(Boolean)
-      .slice(0, 10)
-    if (values.length) groups[term] = values
-  }
-  return Object.fromEntries(Object.entries(groups).slice(0, 200))
-}
-
 async function toggleSynonymEditor(): Promise<void> {
   synonymEditorOpen.value = !synonymEditorOpen.value
   synonymMessage.value = ''
@@ -931,24 +909,6 @@ function openRecallChunk(chunk: { source?: string; metadata?: Record<string, unk
   inspectorTab.value = 'chunks'
   mobileInspectorOpen.value = true
   void openSourceChunks({ document_id: documentId, source: chunk.source || documentId })
-}
-
-function evidenceSegments(chunk: { text?: string; metadata?: Record<string, unknown> }) {
-  const text = String(chunk.text || '')
-  const raw = chunk.metadata?.highlights
-  const spans = Array.isArray(raw) ? (raw as Array<{ start?: number; end?: number }>) : []
-  if (!spans.length) return [{ text, match: false }]
-  const segments: Array<{ text: string; match: boolean }> = []
-  let cursor = 0
-  for (const span of spans) {
-    const start = Math.max(cursor, Math.min(Number(span.start ?? 0), text.length))
-    const end = Math.max(start, Math.min(Number(span.end ?? start), text.length))
-    if (start > cursor) segments.push({ text: text.slice(cursor, start), match: false })
-    if (end > start) segments.push({ text: text.slice(start, end), match: true })
-    cursor = end
-  }
-  if (cursor < text.length) segments.push({ text: text.slice(cursor), match: false })
-  return segments
 }
 
 // selectNode / selectMemory 与 usePersyMemoryGovernance 互为初始化依赖，保留在此（与拆分前同为提升函数声明）
