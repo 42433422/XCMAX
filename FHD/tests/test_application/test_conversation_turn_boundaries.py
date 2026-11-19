@@ -225,10 +225,14 @@ async def test_credential_identity_survives_sql_restore_and_rejects_changed_secr
         message.replace("fixture-alpha", "fixture-beta"), body.context
     )
     assert mismatch["success"] is False and mismatch["data"]["replay"]
-    with pytest.raises(ValueError, match="turn_id"):
-        memory.settle_chat_turn(
-            message.replace("fixture-alpha", "fixture-beta"), body.context, payload, "completed"
-        )
+    before = memory._read(key, body.context)
+    memory.settle_chat_turn(
+        message.replace("fixture-alpha", "fixture-beta"),
+        body.context,
+        {"response": "must not overwrite the original receipt"},
+        "failed",
+    )
+    assert memory._read(key, body.context) == before
     assert _rows(runtime)[0][1] == message.replace("fixture-alpha", "[已隐藏]")
     runtime.service._try_handle_dynamic_workflow = Mock(
         side_effect=AssertionError("duplicate execution")

@@ -5,14 +5,24 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import json
+import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 
-from modstore_server.employee_pack_proposal import _call_llm, propose_employee_pack
+from modstore_server.employee_pack_proposal import (
+    PROPOSAL_SOURCES,
+    ProposalValidationError,
+    _call_llm,
+    propose_employee_pack,
+)
 from modstore_server.employee_pack_proposal_scaffold import (
     ProposalScaffoldError,
     build_source_files,
+    main,
     materialize_proposal,
+    unsupported_proposal_reason,
 )
 
 
@@ -159,6 +169,92 @@ def test_direct_caller_cannot_materialize_unreviewed_package_identity():
         build_source_files(proposal)
 
 
+def test_scaffold_classification_does_not_turn_invalid_schema_into_manual_deferral():
+    proposal = propose_employee_pack(_signals(), llm_call=lambda _prompt: {})
+    proposal["triggered_by"] = "slo_metrics"
+    proposal["employee_pack"]["skills"] = "invalid"
+    with pytest.raises(ProposalValidationError, match="skills must be list"):
+        unsupported_proposal_reason(proposal)
+
+
+@pytest.mark.parametrize("destination", ["missing-temp", "outside", "nested", "relative"])
+def test_scaffold_receipt_requires_trusted_runner_temp(tmp_path, monkeypatch, destination):
+    runner_temp = tmp_path / "runner-temp"
+    runner_temp.mkdir()
+    monkeypatch.setenv("RUNNER_TEMP", str(runner_temp))
+    receipt = runner_temp / "receipt.json"
+    if destination == "missing-temp":
+        monkeypatch.delenv("RUNNER_TEMP")
+    elif destination == "outside":
+        receipt = tmp_path / "receipt.json"
+    elif destination == "nested":
+        receipt = runner_temp / "nested" / "receipt.json"
+    else:
+        receipt = Path("receipt.json")
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "scaffold",
+            "--proposal-file",
+            str(tmp_path / "never-read.json"),
+            "--repo-root",
+            str(tmp_path),
+            "--result-file",
+            str(receipt),
+        ],
+    )
+    with pytest.raises(SystemExit) as stopped:
+        main()
+    assert stopped.value.code == 2
+    assert not receipt.exists()
+    assert list(tmp_path.iterdir()) == [runner_temp]
+
+
+@pytest.mark.parametrize("failure", ["stale", "symlink", "invalid-version"])
+def test_scaffold_cli_receipt_failure_leaves_source_untouched(tmp_path, monkeypatch, failure):
+    monkeypatch.setenv("RUNNER_TEMP", str(tmp_path))
+    receipt = tmp_path / "receipt.json"
+    proposal = propose_employee_pack(_signals(), llm_call=lambda _prompt: {})
+    if failure == "invalid-version":
+        proposal["target_version"] = "../../escape"
+    elif failure == "stale":
+        receipt.write_text("original")
+    else:
+        target = tmp_path / "original"
+        target.write_text("original")
+        receipt.symlink_to(target)
+    proposal_file = tmp_path / "proposal.json"
+    proposal_file.write_text(json.dumps(proposal))
+    source_root = tmp_path / "checkout"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-B",
+            "-m",
+            "modstore_server.employee_pack_proposal_scaffold",
+            "--proposal-file",
+            str(proposal_file),
+            "--repo-root",
+            str(source_root),
+            "--result-file",
+            str(receipt),
+        ],
+        cwd=Path(__file__).resolve().parents[1],
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert completed.returncode != 0
+    assert not source_root.exists()
+    if failure == "invalid-version":
+        assert "unsafe package version" in completed.stderr
+        assert not receipt.exists()
+    else:
+        assert "FileExistsError" in completed.stderr
+        assert receipt.read_text() == "original"
+        assert receipt.is_symlink() is (failure == "symlink")
+
+
 def test_malformed_llm_catalog_proposal_uses_safe_fallback():
     proposal = propose_employee_pack(
         _signals(),
@@ -200,3 +296,47 @@ def test_llm_private_text_never_materializes_as_source(tmp_path):
         for path in source_dir.rglob("*")
         if path.is_file()
     )
+
+
+@pytest.mark.parametrize("source", PROPOSAL_SOURCES)
+def test_proposal_provenance_is_bound_to_the_selected_signal(source):
+    raw = propose_employee_pack(_signals(), llm_call=lambda _prompt: {})
+    raw.update(
+        triggered_by=(
+            "slo_metrics" if source == "catalog_capability_gap" else "catalog_capability_gap"
+        ),
+        signal_score=-100,
+    )
+    signals = _signals()
+    signals["catalog_capability_gap"]["signal_score"] = 0
+    signals[source]["signal_score"] = 0.9
+
+    proposal = propose_employee_pack(signals, llm_call=lambda _prompt: raw)
+
+    assert proposal["triggered_by"] == source
+    assert proposal["signal_score"] == 0.9
+    if source != "catalog_capability_gap":
+        with pytest.raises(ProposalScaffoldError, match="only allowlisted catalog"):
+            build_source_files(proposal)
+
+
+def test_materialized_version_matches_validated_manifest_and_directory(tmp_path):
+    proposal = propose_employee_pack(_signals(), llm_call=lambda _prompt: {})
+    proposal["target_version"] = " 1.2.3 "
+
+    result = materialize_proposal(proposal, repo_root=tmp_path)
+
+    source = tmp_path / result["source_dir"]
+    manifest = json.loads((source / "manifest.json").read_text())
+    assert result["version"] == manifest["version"] == "1.2.3"
+    assert source.name == "autonomy-gap-analyst@1.2.3"
+
+
+def test_version_suffix_cannot_hide_beyond_the_validation_limit(tmp_path):
+    proposal = propose_employee_pack(_signals(), llm_call=lambda _prompt: {})
+    proposal["target_version"] = "1.2." + "3" * 28 + "/unexpected"
+
+    with pytest.raises(ProposalScaffoldError, match="unsafe package version"):
+        materialize_proposal(proposal, repo_root=tmp_path)
+
+    assert not list(tmp_path.iterdir())

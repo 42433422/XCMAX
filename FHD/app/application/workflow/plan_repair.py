@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import logging
 import os
@@ -22,11 +23,16 @@ from typing import Any
 
 from app.application.workflow.llm_plan_generation import (
     _decode_completion,
+    _has_native_tool_calls,
     _model_context_value,
+    _model_payload,
     _tool_specs,
     build_plan_from_payload,
+    model_plan_schema_error,
 )
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, plan_to_dict
+from app.infrastructure.modstore_transport import MarketModelError
+from app.security.log_redaction import redact_log_text
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +51,7 @@ _RULES = (
     "保持 node_id 稳定：只修改报错节点，其他节点的 tool_id/action/params/depends_on/next/branches/risk 必须逐字段不变。",
     "params 中每个 {{节点ID.结果路径}} 引用的节点都必须列入当前节点的 depends_on。",
     "修正后仍要满足 tool_registry 的 input_schema 与 required_params。",
-    "无法在不破坏其他节点的前提下修复时，把该节点改为 clarify.ask 并给出具体问题。",
+    "仅当确实缺少用户可补充的业务事实时才允许澄清；未知动作、权限或协议错误不得降级为 clarify.ask。",
 )
 
 _ERROR_CODES: tuple[tuple[str, tuple[str, ...]], ...] = (
@@ -72,6 +78,11 @@ def classify_plan_error(message: str) -> str:
         if any(marker in text for marker in markers):
             return code
     return "graph_invalid"
+
+
+def _diagnostic_text(value: str, max_chars: int = 240) -> str:
+    """Redact before truncating so exported repair traces cannot split credentials."""
+    return redact_log_text(value)[:max_chars]
 
 
 def _repair_max_attempts() -> int:
@@ -170,6 +181,29 @@ def build_repair_messages(
     ]
 
 
+def _repair_decode_diagnostic(response: Any) -> dict[str, Any]:
+    """Diagnose a rejected repair without persisting raw model text or secrets."""
+    if not isinstance(response, dict):
+        return {"reason": "response_not_object", "response_length": 0}
+    parsed, raw = _model_payload(response)
+    if _has_native_tool_calls(response):
+        reason = "unexpected_tool_call"
+    elif not raw:
+        reason = "empty_content"
+    elif not isinstance(parsed, dict):
+        reason = "invalid_json"
+    else:
+        candidate = dict(parsed)
+        candidate.setdefault("mode", "workflow")
+        reason = "schema_invalid" if model_plan_schema_error(candidate) else "decoder_rejected"
+    diagnostic: dict[str, Any] = {"reason": reason, "response_length": len(raw)}
+    if raw:
+        diagnostic["response_sha256"] = hashlib.sha256(
+            raw.encode("utf-8", errors="backslashreplace")
+        ).hexdigest()
+    return diagnostic
+
+
 def repair_plan(
     *,
     planned: PlanGraph | None,
@@ -198,6 +232,17 @@ def repair_plan(
         trace["fixed"] = True
         return planned, trace
 
+    trace["initial_error"] = _diagnostic_text(error)
+    mentioned = _mentioned_nodes(error)
+    trace["invalid_node_actions"] = [
+        {
+            "node_id": _diagnostic_text(node.node_id, 80),
+            "tool_id": _diagnostic_text(node.tool_id, 120),
+            "action": _diagnostic_text(node.action, 120),
+        }
+        for node in (planned.nodes or [])
+        if node.node_id in mentioned
+    ][:5]
     attempts = (
         _repair_max_attempts()
         if max_attempts is None
@@ -206,7 +251,7 @@ def repair_plan(
     current = planned
     for _ in range(attempts):
         code = classify_plan_error(error)
-        trace["errors"].append({"code": code, "message": str(error)[:240]})
+        trace["errors"].append({"code": code, "message": _diagnostic_text(error)})
         if code in _NON_REPAIRABLE:
             break
         messages = build_repair_messages(
@@ -216,6 +261,8 @@ def repair_plan(
             user_message=message,
             error_code=code,
         )
+        # Count issued requests, including malformed responses and failures.
+        trace["attempts"] += 1
         try:
             response = complete(
                 messages=messages,
@@ -223,12 +270,34 @@ def repair_plan(
                 temperature=0.0,
             )
         except (ValueError, TypeError, RuntimeError) as exc:
-            logger.warning("计划修复请求失败: %s", exc)
-            trace["errors"].append({"code": "repair_request_failed", "message": str(exc)[:240]})
+            raw_error = str(exc)
+            reason = (
+                str(MarketModelError({"status": 402}))
+                if isinstance(exc, MarketModelError) and exc.status_code == 402
+                else "计划修复请求失败，请稍后重试。"
+            )
+            logger.warning("计划修复请求失败: %s", type(exc).__name__)
+            trace["errors"].append(
+                {
+                    "code": "repair_request_failed",
+                    "message": reason,
+                    "error_type": type(exc).__name__[:80],
+                    "error_length": len(raw_error),
+                    "error_sha256": hashlib.sha256(
+                        raw_error.encode("utf-8", errors="backslashreplace")
+                    ).hexdigest(),
+                }
+            )
             break
         decoded = _decode_completion(response) if isinstance(response, dict) else None
         if decoded is None:
-            trace["errors"].append({"code": "unparsable_repair", "message": "修复输出无法解析"})
+            trace["errors"].append(
+                {
+                    "code": "unparsable_repair",
+                    "message": "修复输出无法解析",
+                    **_repair_decode_diagnostic(response),
+                }
+            )
             break
         parsed, nodes = decoded
         candidate = build_plan_from_payload(
@@ -240,9 +309,10 @@ def repair_plan(
         )
         scope_error = enforce_repair_scope(raw_current, candidate, error)
         if scope_error:
-            trace["errors"].append({"code": "scope_violation", "message": scope_error})
+            trace["errors"].append(
+                {"code": "scope_violation", "message": _diagnostic_text(scope_error)}
+            )
             break
-        trace["attempts"] += 1
         next_error = validate(candidate)
         raw_current = copy.deepcopy(candidate)
         current = candidate
