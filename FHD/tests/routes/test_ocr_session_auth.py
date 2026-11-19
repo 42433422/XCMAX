@@ -47,7 +47,13 @@ def test_ocr_processing_rejects_anonymous_identity(
     save.assert_not_called()
 
 
-@pytest.mark.parametrize("user,status", [(SimpleNamespace(id=7, is_active=False), 403), (SimpleNamespace(id=None, is_active=True), 401)])
+@pytest.mark.parametrize(
+    ("user", "status"),
+    [
+        (SimpleNamespace(id=7, is_active=False), 403),
+        (SimpleNamespace(id=None, is_active=True), 401),
+    ],
+)
 def test_ocr_processing_rejects_invalid_session_user(
     client: TestClient, user: SimpleNamespace, status: int
 ) -> None:
