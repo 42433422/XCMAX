@@ -260,6 +260,8 @@ def _build_proposal_prompt(source: str, signals: Dict[str, Any]) -> str:
 
 Gap signal source: {source}
 Signal score: {source_data.get("signal_score", 0)}
+The score is a review routing priority, not measured reliability or an error rate.
+Evidence summary: {json.dumps(source_data.get("evidence", {}), ensure_ascii=False)}
 Source report: {json.dumps(source_data.get("report", {}), ensure_ascii=False)}
 
 Output JSON only:
