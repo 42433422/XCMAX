@@ -232,6 +232,12 @@
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--cs-accent) 16%, transparent);
 }
 
+.cs-decision-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .cs-composer__footer {
   margin-top: 8px;
 }

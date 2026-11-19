@@ -88,12 +88,12 @@
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_service_orchestrator_merged.py": {
       "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_service_orchestrator_merged.py",
       "base_blob": "8fa03bc14397d1bd4bef4b3ff67057aac9351905",
-      "head_blob": "32d3b9bb9ae29a440658c7263c2c9392c79f584e",
+      "head_blob": "497cb7c068049067831baf88db6cfbdc7ab34e55",
       "before_lines": 2387,
-      "after_lines": 2638,
-      "reason": "原会话需在锁定状态下核对补充材料和提交人的受理确认，并将工单状态、原会话回执和审计同事务保存。",
-      "boundary": "Pydantic 校验请求，SQLAlchemy 复用会话锁和原单事务。聊天受理回执的查找与落库、正式处置各有独立模块，编排器接入既有生命周期并保留在 100 KB 门禁以内。",
-      "validation": "168 项工单后端回归通过，涵盖无效和无关、附件或业务信息阻断、原文同账号绑定、重复请求及原会话回读。正式环境验收待执行。",
+      "after_lines": 2635,
+      "reason": "原会话需核对补充材料和受理确认。官网原路由故障按产品缺陷受理，市场商品下载投诉沿用现有分类。",
+      "boundary": "Pydantic 校验请求，SQLAlchemy 复用会话锁和原单事务。聊天回执、工单处置、官网原路由绑定各有独立模块，编排器接入既有生命周期并在 100 KB 门禁以内。",
+      "validation": "204 项工单后端回归通过，包含原会话派发、官网原始故障识别、部署证据绑定、撤销或重开后的失效、原提交人确认及原单读回。正式环境验收待执行。",
       "follow_up": "由评审人确认事务边界和来源核验；集成后用新工单验收无管理员介入的自动处置。",
       "review_owner": "@42433422"
     },

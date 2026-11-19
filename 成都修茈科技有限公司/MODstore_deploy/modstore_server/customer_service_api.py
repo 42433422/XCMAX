@@ -205,10 +205,14 @@ async def customer_service_chat(
     skip_dispatch = result.pop("_skip_issue_dispatch", False)
     dispatch_event = ""
     if t and not skip_dispatch:
+        from modstore_server.customer_corp_download_case import bind_submitted_corp_download_report
         from modstore_server.customer_issue_intake import enqueue_issue
 
         ticket = db.get(CustomerServiceTicket, int(t.get("id") or 0))
         if ticket is not None and not intake_dispatch_block_reason(ticket):
+            bind_submitted_corp_download_report(
+                db, ticket, owner_id=int(user.id), submitted_text=message, reviewed_report=report
+            )
             import hashlib
 
             revision = hashlib.sha256(
@@ -506,7 +510,7 @@ def _ticket_transcript(db: Session, user: User, ticket: CustomerServiceTicket):
         .all()
     )
     return {
-        "ticket": customer_view.customer_ticket_row(ticket),
+        "ticket": customer_view.customer_ticket_row(ticket, include_acceptance=is_owner),
         "session_id": session.id,
         "can_reply": is_owner,
         "messages": _transcript_messages(messages, customer_visible=True),

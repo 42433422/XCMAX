@@ -17,5 +17,6 @@ export type UiMessage = {
   content: string
   cards?: UnknownRecord[]
   receiptLabel?: string
+  customerDecision?: 'resolved' | 'reopen'
   imageDataUrl?: string | null
 }

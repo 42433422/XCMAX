@@ -252,6 +252,14 @@ describe('customerService API', () => {
     expect(mReq).toHaveBeenCalledWith('/api/customer-service/chat', expect.objectContaining({ method: 'POST' }))
   })
 
+  it('posts a customer decision to the original issue with the complete request', async () => {
+    const body = { decision: 'resolved', note: '已复测原链接。', idempotency_key: 'decision-77' } as const
+    await customerService.customerServiceIssueDecision(77, body)
+    expect(mReq).toHaveBeenCalledWith('/api/customer-service/issues/77/decision', expect.objectContaining({
+      method: 'POST', body: JSON.stringify(body),
+    }))
+  })
+
   it('customerServiceSessions', async () => {
     await customerService.customerServiceSessions()
     expect(mReq).toHaveBeenCalledWith('/api/customer-service/sessions', expect.objectContaining({ timeoutMs: 15_000 }))

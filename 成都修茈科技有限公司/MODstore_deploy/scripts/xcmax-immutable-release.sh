@@ -43,6 +43,15 @@ acquire_publication_lock() {
   flock -w 60 8 || fail "another public-site publication is active"
 }
 
+clear_corp_download_marker() {
+  local site="$1/$SITE_SUBDIR" parent
+  [[ -d "$site" && "$(readlink -f "$site")" == "$site" ]] || return 1
+  for parent in "$site/site" "$site/site/data"; do
+    [[ ! -L "$parent" && ( ! -e "$parent" || -d "$parent" ) ]] || return 1
+  done
+  rm -f -- "$site/site/data/corp-download-deployment.json"
+}
+
 log() { printf '[xcmax-release] %s\n' "$*"; }
 fail() { log "ERROR: $*" >&2; exit 1; }
 
@@ -905,6 +914,10 @@ rollback() {
     log "ERROR: rollback blocked by changed public desktop pointers; operator reconciliation required"
     return 1
   fi
+  if ! clear_corp_download_marker "$PREVIOUS_ROOT"; then
+    log "ERROR: rollback blocked by an unsafe deployment marker path"
+    return 1
+  fi
   log "promotion failed; rolling current back to $PREVIOUS_ROOT"
   ln -s "$PREVIOUS_ROOT" "${CURRENT_LINK}.rollback"
   mv -Tf "${CURRENT_LINK}.rollback" "$CURRENT_LINK"
@@ -1052,6 +1065,7 @@ migrate_delivery_state false
 # and rollback; those paths must not reacquire it through a child publisher.
 acquire_publication_lock
 verify_public_pointers "$FINAL_ROOT" || fail "public desktop pointers changed before activation"
+clear_corp_download_marker "$FINAL_ROOT" || fail "unsafe deployment marker path before activation"
 ln -s "$FINAL_ROOT" "${CURRENT_LINK}.next"
 mv -Tf "${CURRENT_LINK}.next" "$CURRENT_LINK"
 RELEASE_SWITCHED=1

@@ -259,6 +259,12 @@ export interface CustomerServiceIntakeConfirmation {
   kind: 'invalid' | 'out_of_scope'
 }
 
+export interface CustomerServiceIssueDecision {
+  decision: 'resolved' | 'reopen'
+  note: string
+  idempotency_key: string
+}
+
 export const customerService = {
   customerServiceChat: (payload: {
     message: string
@@ -284,6 +290,12 @@ export const customerService = {
     req(`/api/customer-service/tickets/${encodeURIComponent(String(id))}`, { timeoutMs: 15_000 }),
   customerServiceTicketTranscript: (id: number | string) =>
     req(`/api/customer-service/tickets/${encodeURIComponent(String(id))}?include_transcript=true`, { timeoutMs: 15_000 }),
+  customerServiceIssueDecision: (id: number, payload: CustomerServiceIssueDecision) =>
+    req(`/api/customer-service/issues/${encodeURIComponent(String(id))}/decision`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      timeoutMs: 15_000,
+    }),
   customerServiceActions: (ticketId?: number | string) =>
     req(`/api/customer-service/actions${ticketId ? `?ticket_id=${encodeURIComponent(String(ticketId))}` : ''}`, {
       timeoutMs: 15_000,

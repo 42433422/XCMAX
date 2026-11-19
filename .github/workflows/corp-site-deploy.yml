@@ -129,8 +129,30 @@ jobs:
             flock -w 60 8
             # Publish git-tree site chrome into nginx live root. Production serves
             # /root/成都修茈科技有限公司 (immutable-release symlink), not /root/XCMAX/...
-            LIVE_SITE="$(readlink -f /root/成都修茈科技有限公司 2>/dev/null || true)"
-            if [ -z "${LIVE_SITE}" ]; then LIVE_SITE="/root/成都修茈科技有限公司"; fi
+            LIVE_SITE="$(readlink -f /root/成都修茈科技有限公司)"
+            if [[ ! "$LIVE_SITE" =~ ^/opt/xcmax/releases/[0-9a-f]{40}/成都修茈科技有限公司$ &&
+                  "$LIVE_SITE" != /root/成都修茈科技有限公司 ]] || [ ! -d "$LIVE_SITE" ]; then
+              echo "[err] unexpected live site root" >&2
+              exit 1
+            fi
+            deployment_marker_path() {
+              local parent
+              for parent in "$LIVE_SITE/site" "$LIVE_SITE/site/data"; do
+                if [ -L "$parent" ] || { [ -e "$parent" ] && [ ! -d "$parent" ]; }; then
+                  echo "[err] unsafe deployment marker directory" >&2
+                  return 1
+                fi
+              done
+              printf '%s\n' "$LIVE_SITE/site/data/corp-download-deployment.json"
+            }
+            # The marker is generated here only. Invalidate it before changing the site.
+            DEPLOYMENT_MARKER="$(deployment_marker_path)"
+            rm -f -- "$DEPLOYMENT_MARKER"
+            if [ -e "$GIT_SITE/site/data/corp-download-deployment.json" ] ||
+               [ -L "$GIT_SITE/site/data/corp-download-deployment.json" ]; then
+              echo "[err] deployment marker must not be included in Git site data" >&2
+              exit 1
+            fi
             if [ -d "${GIT_SITE}" ] && [ -d "${LIVE_SITE}" ] && [ "$(readlink -f "${GIT_SITE}")" != "${LIVE_SITE}" ]; then
               echo "[info] publishing site chrome ${GIT_SITE} -> ${LIVE_SITE}"
               chmod u+w "${LIVE_SITE}" 2>/dev/null || true
@@ -189,9 +211,9 @@ jobs:
               chmod a+rx "${LIVE_SITE}" 2>/dev/null || true
               echo "[ok] live site chrome published"
             else
-              echo "[info] live site root coincides with git tree or missing; skip publish copy"
+              echo "[err] live site root coincides with git tree or source is missing" >&2
+              exit 1
             fi
-            exec 8>&-
             SYNC_STAGE=nginx
             NGINX_SRC="${SITE_ROOT}/nginx-xiu-ci-root.conf"
             if [ -f /etc/nginx/conf.d/xiu-ci.com.conf ]; then
@@ -364,3 +386,46 @@ jobs:
             ! grep -E -q '<!DOCTYPE html>' /tmp/xc-partial-loader.js
             echo "[verify] logo bytes:"
             wc -c "${SITE_ROOT}/assets/xiu-ci-logo.png" 2>/dev/null || true
+            SYNC_STAGE=deployment-marker
+            if [ "$BRANCH" = main ] && [ "${{ github.ref }}" = refs/heads/main ] &&
+               [ "$DEPLOY_SHA" = "${{ github.sha }}" ]; then
+              # Keep the shared lock until publication, so other site writers cannot
+              # swap the live root or overwrite the verified pages during the smoke test.
+              test "$(readlink -f /root/成都修茈科技有限公司)" = "$LIVE_SITE"
+              test "$(git -C "$REMOTE_ROOT" rev-parse HEAD)" = "$DEPLOY_SHA"
+              git -C "$REMOTE_ROOT" show "$DEPLOY_SHA:成都修茈科技有限公司/download.html" |
+                cmp -s - "$LIVE_SITE/download.html"
+              test "$(deployment_marker_path)" = "$DEPLOYMENT_MARKER"
+              python3 - "$DEPLOYMENT_MARKER" "$DEPLOY_SHA" "${{ github.run_id }}" "${{ github.run_attempt }}" <<'PY'
+            import json
+            import os
+            import sys
+            import tempfile
+            from datetime import datetime, timezone
+            from pathlib import Path
+
+            marker, sha, run_id, attempt = sys.argv[1:]
+            marker = Path(marker)
+            payload = {
+                "deployed_sha": sha,
+                "workflow_run_id": int(run_id),
+                "run_attempt": int(attempt),
+                "verified_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            }
+            tmp = None
+            try:
+                with tempfile.NamedTemporaryFile(mode="w", dir=marker.parent, delete=False) as stream:
+                    tmp = Path(stream.name)
+                    json.dump(payload, stream)
+                    stream.write("\n")
+                    os.fchmod(stream.fileno(), 0o644)
+                os.replace(tmp, marker)
+            finally:
+                if tmp is not None:
+                    tmp.unlink(missing_ok=True)
+            PY
+              echo "[verify] published corp download deployment marker sha=$DEPLOY_SHA"
+            else
+              echo "[info] deployment is not the controller main SHA; leaving deployment marker absent"
+            fi
+            exec 8>&-

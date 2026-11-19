@@ -24,6 +24,7 @@ function receiptLabel(origin: unknown) {
   if (origin === 'admin_reply') return '管理员答复'
   if (origin === 'admin_disposition') return '管理员处置回执'
   if (origin === 'assistant_disposition') return 'AI 处置回执'
+  if (origin === 'corp_download_verification') return '官网复测回执'
   return undefined
 }
 
@@ -260,13 +261,20 @@ export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
     const ticketId = Number(ticket.id)
     if (!Number.isSafeInteger(ticketId) || ticketId <= 0) return
     newSession()
-    openedTicket.value = ticket
-    loading.value = true
-    const generation = conversationGeneration
+    openedTicket.value = { ...ticket, customer_acceptance: undefined }
     ctx.expandedTicketIds.value = new Set([...ctx.expandedTicketIds.value, ticketId])
+    await reloadTicket(ticket)
+  }
+
+  async function reloadTicket(ticket: CustomerTicket) {
+    const ticketId = Number(ticket.id)
+    if (loading.value || Number(openedTicket.value?.id) !== ticketId) return null
+    const generation = conversationGeneration
+    loading.value = true
+    error.value = ''
     try {
       const transcript = asUnknownRecord(await api.customerServiceTicketTranscript(ticketId))
-      if (generation !== conversationGeneration) return
+      if (generation !== conversationGeneration) return null
       const current = asUnknownRecord(transcript.ticket)
       const sessionId = Number(transcript.session_id)
       if (Number(current.id) !== ticketId || !Number.isSafeInteger(sessionId) || sessionId <= 0
@@ -275,7 +283,8 @@ export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
         || !Array.isArray(transcript.messages)) {
         throw new Error('返回的会话与原工单不一致')
       }
-      openedTicket.value = { ...ticket, ...current }
+      const reloadedTicket: CustomerTicket = { ...ticket, ...current, customer_acceptance: current.customer_acceptance }
+      openedTicket.value = reloadedTicket
       activeSessionId.value = sessionId
       openedTicketCanReply.value = transcript.can_reply === true
       messages.value = transcript.messages.map(asUnknownRecord).flatMap((message): UiMessage[] => {
@@ -291,11 +300,15 @@ export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
           imageDataUrl: message.role === 'user' && typeof image === 'string'
             && /^data:image\/(?:png|jpeg|webp|gif|bmp|avif);base64,/.test(image) ? image : null,
           receiptLabel: message.role === 'assistant' ? receiptLabel(payload.origin) : undefined,
+          customerDecision: message.role === 'user' && (payload.customer_decision === 'resolved'
+            || payload.customer_decision === 'reopen') ? payload.customer_decision : undefined,
         }]
       })
       await scrollMessagesToEnd()
+      return generation === conversationGeneration ? { ticket: reloadedTicket, messages: messages.value } : null
     } catch (cause: unknown) {
       if (generation === conversationGeneration) error.value = errorMessage(cause, '打开原客服会话失败')
+      return null
     } finally {
       if (generation === conversationGeneration) loading.value = false
     }
@@ -304,7 +317,8 @@ export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
   return {
     draft, loading, error, activeSessionId, openedTicketRef, readOnly, messages, messagesEl, quickPrompts,
     hydrateFromQuery, queryContext, usePrompt, scrollMessagesToEnd, onBubbleClick,
-    send, sendText, confirmIntake, intakeConfirmation, newSession, visibleCards, openTicket,
+    send, sendText, confirmIntake, intakeConfirmation, newSession, visibleCards, openTicket, reloadTicket,
+    openedTicket,
   }
 }
 

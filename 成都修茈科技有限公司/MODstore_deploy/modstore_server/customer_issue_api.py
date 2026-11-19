@@ -19,6 +19,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import get_current_user, get_db
+from modstore_server.customer_issue_acceptance import customer_issue_decision_permissions
 from modstore_server.customer_issue_delivery_contract import (
     issue_resolution,
     repair_verification,
@@ -459,24 +460,11 @@ def decide_product_issue(
                 _wake_owner_intake(ticket.id, "customer_reopen")
         return {"success": True, "replayed": True, "issue": _issue_row(ticket)}
     resolution = issue_resolution(ticket, evidence)
-    closed = ticket.status in _CLOSED
+    permissions = customer_issue_decision_permissions(ticket)
     now = datetime.now(UTC)
     event_id = ""
     if body.decision == "resolved":
-        if evidence.get("fault_remains") is True or ticket.status != "awaiting_customer":
-            raise HTTPException(409, "问题尚未核验完成，不能关闭工单")
-        if closed:
-            raise HTTPException(409, "工单已关闭；如问题仍存在，请重新打开")
-        ready = (
-            str(resolution.get("state") or "")
-            in {
-                "awaiting_customer_verification",
-                "awaiting_delivery",
-                "repair_verified",
-            }
-            or resolution.get("repair_verified") is True
-        )
-        if not ready:
+        if not permissions["can_resolve"]:
             raise HTTPException(409, "问题尚未核验完成，不能关闭工单")
         ticket.status, ticket.decision_status, ticket.closed_at = (
             "resolved",
@@ -498,10 +486,7 @@ def decide_product_issue(
             ),
         )
     else:
-        if not closed and (
-            resolution.get("state") in {"received", "reopened", "processing"}
-            or evidence.get("fault_remains") is True
-        ):
+        if not permissions["can_reopen"]:
             raise HTTPException(409, "工单仍在处理中，请等处理结果出来后再决定")
         history = [r for r in evidence.get("reopen_history") or [] if isinstance(r, dict)]
         evidence["reopen_history"] = [

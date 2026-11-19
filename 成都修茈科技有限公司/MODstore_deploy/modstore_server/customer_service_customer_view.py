@@ -10,6 +10,10 @@ import binascii
 import re
 from typing import Any
 
+from modstore_server.customer_issue_acceptance import (
+    customer_issue_decision_permissions,
+)
+
 # 命中即整段替换成客户话术：本机路径、仓库地址、执行器/堆栈报错、备份表名。
 INTERNAL_TEXT_RE = re.compile(
     r"/Users/|/home/\w|/root/|/opt/|[A-Za-z]:\\|git clone|git@|github\.com|\.git\b|"
@@ -155,7 +159,12 @@ def customer_message_payload(payload: Any, role: str = "assistant") -> dict[str,
     payload = payload if isinstance(payload, dict) else {}
     out: dict[str, Any] = _pick(payload, ("customer_decision",))
     if role == "assistant":
-        if payload.get("origin") in ("admin_reply", "admin_disposition", "assistant_disposition"):
+        if payload.get("origin") in (
+            "admin_reply",
+            "admin_disposition",
+            "assistant_disposition",
+            "corp_download_verification",
+        ):
             out["origin"] = payload["origin"]
         if isinstance(payload.get("intake_confirmation"), dict):
             out["intake_confirmation"] = _pick(
@@ -216,13 +225,30 @@ def customer_issue(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def customer_ticket_row(row: Any) -> dict[str, Any]:
+def customer_ticket_row(row: Any, *, include_acceptance: bool = False) -> dict[str, Any]:
     from modstore_server.customer_service_orchestrator import ticket_payload
 
-    return customer_ticket(ticket_payload(row))
+    ticket = ticket_payload(row)
+    result = customer_ticket(ticket)
+    if include_acceptance and row.intent == "product_issue":
+        evidence = ticket.get("evidence") or {}
+        decisions = evidence.get("customer_decisions") or []
+        latest = decisions[-1] if decisions else None
+        result["customer_acceptance"] = {
+            **customer_issue_decision_permissions(row),
+            "last_decision": (
+                _pick(latest, ("decision", "idempotency_key"))
+                if isinstance(latest, dict) and latest.get("user_id") == row.user_id
+                else None
+            ),
+        }
+    return result
 
 
 def customer_issue_row(row: Any) -> dict[str, Any]:
     from modstore_server.customer_service_orchestrator import customer_issue_payload
 
-    return customer_issue(customer_issue_payload(row))
+    result = customer_issue(customer_issue_payload(row))
+    if row.intent == "product_issue":
+        result.update(customer_issue_decision_permissions(row))
+    return result

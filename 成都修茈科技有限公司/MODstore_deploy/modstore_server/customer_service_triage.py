@@ -4,6 +4,17 @@ from __future__ import annotations
 
 import re
 
+INTAKE_SCENE_INTENTS = {
+    "refund": "refund",
+    "complaint": "catalog_complaint",
+    "catalog_complaint": "catalog_complaint",
+    "review": "catalog_review",
+    "catalog_review": "catalog_review",
+    "account": "account_support",
+    "account_support": "account_support",
+    "llm_extension": "llm_extension",
+}
+
 
 def _parse_domain_clarify_reply(text: str) -> str:
     """用户短句确认归属：是平台 / 是软件 / 是定制。返回 domain 或空串。"""

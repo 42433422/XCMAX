@@ -42,6 +42,20 @@ class TicketReplyBody(BaseModel, extra="forbid"):
 def record_original_session_message(
     db: Session, ticket: CustomerServiceTicket, user: User, note: str, *, now: datetime, origin: str
 ) -> None:
+    append_original_assistant_message(
+        db, ticket, note, now=now, origin=origin, actor={"operator_user_id": user.id}
+    )
+
+
+def append_original_assistant_message(
+    db: Session,
+    ticket: CustomerServiceTicket,
+    note: str,
+    *,
+    now: datetime,
+    origin: str,
+    actor: dict[str, Any],
+) -> None:
     session = db.get(CustomerServiceSession, ticket.session_id)
     if session is None or session.user_id != ticket.user_id:
         raise HTTPException(409, "原客服会话归属不可核验")
@@ -53,7 +67,7 @@ def record_original_session_message(
             role="assistant",
             content=note,
             created_at=now,
-            payload_json=json_dumps({"origin": origin, "operator_user_id": user.id}),
+            payload_json=json_dumps({"origin": origin, **actor}),
         )
     )
     setattr(session, "last_message", note)

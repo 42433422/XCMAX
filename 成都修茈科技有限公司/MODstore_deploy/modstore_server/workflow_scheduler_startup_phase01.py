@@ -12,12 +12,23 @@ def _facade():
 
 
 def _register_scheduler_phase_01():
+    from modstore_server.customer_corp_download_reconciliation import (
+        reconcile_corp_download_tickets,
+    )
     from modstore_server.mac_control_worker import poll_period, run_mac_control_sync
 
     _facade()._scheduler.add_job(
         run_mac_control_sync,
         _facade().IntervalTrigger(seconds=poll_period()),
         id="mac_control_sync",
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+    )
+    _facade()._scheduler.add_job(
+        reconcile_corp_download_tickets,
+        _facade().IntervalTrigger(minutes=5),
+        id="customer_corp_download_reconciliation",
         replace_existing=True,
         coalesce=True,
         max_instances=1,

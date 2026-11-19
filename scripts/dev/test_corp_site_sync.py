@@ -1,4 +1,5 @@
 """No-network regression for the actual workflow's bootstrap shell."""
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -10,6 +11,144 @@ WORKFLOW = ROOT / '.github/workflows/corp-site-deploy.yml'
 
 
 class CorpSiteSyncTest(unittest.TestCase):
+    def test_alternate_static_publisher_only_preserves_current_unchanged_marker(self):
+        updater = (ROOT / '成都修茈科技有限公司/MODstore_deploy/scripts/xcmax-site-auto-update.sh').read_text()
+        start = updater.index('guard_corp_download_marker()')
+        end = updater.index('\n# Git checkout updates', start)
+        guard = updater[start:end]
+        self.assertIn('guard_corp_download_marker "$live_site" "$git_site" || return 1\n  log "发布官网静态', updater)
+        self.assertIn('guard_corp_download_marker "$(readlink -f "$SITE_ROOT")" || return 1\n  install', updater)
+        sha = 'a' * 40
+        cases = ('same', 'new_source', 'live_html_changed', 'untracked_html_changed', 'head_unclear',
+                 'marker_symlink', 'directory_symlink', 'source_marker', 'nginx_reload')
+        for case in cases:
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                live = root / 'live'
+                data = live / 'site/data'
+                source = root / 'git/public'
+                (source / 'site/data').mkdir(parents=True)
+                data.mkdir(parents=True)
+                outside = root / 'external.json'
+                outside.write_text('must stay untouched')
+                pointer = live / 'download-release.json'
+                pointer.write_text('release publisher owns this')
+                marker = data / 'corp-download-deployment.json'
+                (source / 'download.html').write_text('Git download page')
+                (live / 'download.html').write_text('other page' if case == 'live_html_changed' else 'Git download page')
+                if case == 'marker_symlink':
+                    marker.symlink_to(outside)
+                else:
+                    marker.write_text(json.dumps({'deployed_sha': 'b' * 40 if case == 'new_source' else sha}))
+                if case == 'directory_symlink':
+                    data.rename(root / 'escaped')
+                    data.symlink_to(root / 'escaped', target_is_directory=True)
+                if case == 'source_marker':
+                    (source / 'site/data' / marker.name).write_text('unsafe bootstrap')
+                git = r'''
+git() {
+  case "$3" in
+    rev-parse) printf '%s\n' "$CURRENT_HEAD" ;;
+    show) printf '%s' "$COMMITTED_HTML" ;;
+    *) exit 44 ;;
+  esac
+}
+'''
+                result = subprocess.run(
+                    ['bash', '-c', f'set -euo pipefail\nlog() {{ :; }}\n{git}\n{guard}\nguard_corp_download_marker "$SITE_ROOT" "$SOURCE"'],
+                    env=dict(
+                        os.environ, SITE_ROOT=str(live.resolve()), SITE_SUBDIR='public',
+                        SOURCE='' if case == 'nginx_reload' else str(source), XCMAX_ROOT=str(source.parent),
+                        NEW_XCMAX_SHA=sha, CURRENT_HEAD='' if case == 'head_unclear' else sha,
+                        COMMITTED_HTML='different Git version' if case == 'untracked_html_changed' else 'Git download page',
+                    ),
+                    capture_output=True, text=True, timeout=5,
+                )
+                rejected_path = case in ('directory_symlink', 'source_marker')
+                self.assertEqual(result.returncode == 0, not rejected_path, result.stderr)
+                self.assertEqual(marker.exists(), case == 'same' or rejected_path)
+                self.assertFalse(marker.is_symlink())
+                self.assertEqual(pointer.read_text(), 'release publisher owns this')
+                self.assertEqual(outside.read_text(), 'must stay untouched')
+
+    def test_deployment_marker_is_invalidated_before_copy_and_issued_only_after_smoke(self):
+        workflow = WORKFLOW.read_text()
+        begin = workflow.index('            deployment_marker_path()')
+        copy = workflow.index('            if [ -d "${GIT_SITE}" ]', begin)
+        publish = workflow.index('            SYNC_STAGE=deployment-marker', copy)
+        release = workflow.index('            exec 8>&-', publish)
+        self.assertLess(workflow.index('flock -w 60 8'), begin)
+        self.assertLess(workflow.index('wc -c "${SITE_ROOT}/assets/xiu-ci-logo.png"'), publish)
+        self.assertEqual(workflow.count('exec 8>&-'), 1)
+        invalidate = '\n'.join(line[12:] for line in workflow[begin:copy].splitlines())
+        issue = '\n'.join(line[12:] for line in workflow[publish:release].splitlines())
+        for expression, value in {
+            'github.ref': '$FIXTURE_REF', 'github.sha': '$CONTROLLER_SHA',
+            'github.run_id': '1234', 'github.run_attempt': '2',
+        }.items():
+            issue = issue.replace('${{ ' + expression + ' }}', value)
+        sha = 'a' * 40
+        for case in ('main', 'non_main', 'non_main_ref', 'different_sha', 'failed_smoke', 'root_changed',
+                     'head_changed', 'html_drift', 'unsafe_marker_directory', 'tracked_marker'):
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                live = root / 'live'
+                data = live / 'site/data'
+                source_data = root / 'git/site/data'
+                source_data.mkdir(parents=True)
+                data.mkdir(parents=True)
+                marker = data / 'corp-download-deployment.json'
+                marker.write_text('old marker')
+                (live / 'download.html').write_text('wrong page' if case == 'html_drift' else 'official page')
+                release_pointer = live / 'download-release.json'
+                release_pointer.write_text('release publisher owns this')
+                outside = root / 'outside'
+                if case == 'unsafe_marker_directory':
+                    data.rename(outside)
+                    data.symlink_to(outside, target_is_directory=True)
+                if case == 'tracked_marker':
+                    (source_data / marker.name).write_text('source must not publish a marker')
+                fixture = r'''
+readlink() { printf '%s\n' "$CURRENT_ROOT"; }
+git() {
+  case "$3" in
+    rev-parse) printf '%s\n' "$CURRENT_HEAD" ;;
+    show) printf 'official page' ;;
+    *) exit 44 ;;
+  esac
+}
+'''
+                smoke = 'test ! -e "$DEPLOYMENT_MARKER"\nprintf "SMOKE\\n"\n[ "$SMOKE_OK" = 1 ]'
+                result = subprocess.run(
+                    ['bash', '-c', f'set -euo pipefail\n{fixture}\n{invalidate}\n{smoke}\n{issue}'],
+                    env=dict(
+                        os.environ, LIVE_SITE=str(live), GIT_SITE=str(root / 'git'), REMOTE_ROOT=str(root / 'git'),
+                        DEPLOY_SHA=sha, CONTROLLER_SHA='b' * 40 if case == 'different_sha' else sha,
+                        CURRENT_HEAD='b' * 40 if case == 'head_changed' else sha,
+                        CURRENT_ROOT=str(root / 'replaced' if case == 'root_changed' else live),
+                        BRANCH='test' if case == 'non_main' else 'main',
+                        FIXTURE_REF='refs/heads/test' if case == 'non_main_ref' else 'refs/heads/main',
+                        SMOKE_OK='0' if case == 'failed_smoke' else '1',
+                    ),
+                    capture_output=True, text=True, timeout=5,
+                )
+                self.assertEqual(result.returncode == 0, case in ('main', 'non_main', 'non_main_ref', 'different_sha'),
+                                 result.stderr)
+                self.assertEqual(release_pointer.read_text(), 'release publisher owns this')
+                if case == 'main':
+                    payload = json.loads(marker.read_text())
+                    self.assertEqual(payload.pop('verified_at')[-6:], '+00:00')
+                    self.assertEqual(payload, {'deployed_sha': sha, 'workflow_run_id': 1234, 'run_attempt': 2})
+                    self.assertEqual(marker.stat().st_mode & 0o777, 0o644)
+                    self.assertEqual(list(data.iterdir()), [marker])
+                elif case == 'unsafe_marker_directory':
+                    self.assertEqual((outside / marker.name).read_text(), 'old marker')
+                    self.assertNotIn('SMOKE', result.stdout)
+                else:
+                    self.assertFalse(marker.exists())
+                    if case == 'tracked_marker':
+                        self.assertNotIn('SMOKE', result.stdout)
+
     def test_download_redirect_smoke_verifies_original_urls_and_deploy_sha(self):
         workflow = WORKFLOW.read_text()
         start = workflow.index('            # Verify the original slash URL')

@@ -2,15 +2,17 @@ import { defineComponent, h, ref } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
+import type { CustomerServiceIssueDecision } from '../../api/workbench'
+import { ApiError } from '../../infrastructure/http/client'
 import CustomerServiceView from '../CustomerServiceView.vue'
 import { useCustomerServiceChat, type CustomerServiceChat } from './useCustomerServiceChat'
-const { chat, transcript } = vi.hoisted(() => ({
-  chat: vi.fn(), transcript: vi.fn(),
+const { chat, transcript, listTickets, decision } = vi.hoisted(() => ({
+  chat: vi.fn(), transcript: vi.fn(), listTickets: vi.fn(), decision: vi.fn(),
 }))
 vi.mock('../../api', () => ({
   api: {
     customerServiceChat: chat, customerServiceTicketTranscript: transcript,
-    customerServiceTickets: async () => ({ items: [] }),
+    customerServiceTickets: listTickets, customerServiceIssueDecision: decision,
   },
 }))
 
@@ -30,19 +32,22 @@ function mountChat() {
   return { state, wrapper, loadTickets, pendingImageDataUrl }
 }
 
-beforeEach(() => vi.resetAllMocks())
+beforeEach(() => {
+  vi.resetAllMocks()
+  sessionStorage.clear()
+})
+
+async function mountView() {
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [{ path: '/', component: CustomerServiceView }],
+  })
+  await router.push('/')
+  return mount(CustomerServiceView, { global: { plugins: [router] } })
+}
 
 describe('explicit confirmation of the original intake', () => {
   const confirmationButton = 'button.cs-bubble__confirmation'
-
-  async function mountView() {
-    const router = createRouter({
-      history: createMemoryHistory(),
-      routes: [{ path: '/', component: CustomerServiceView }],
-    })
-    await router.push('/')
-    return mount(CustomerServiceView, { global: { plugins: [router] } })
-  }
 
   it('sends only the explicit confirmation button choice, and displays the actual AI receipt', async () => {
     const intake = { source_message_id: 17, kind: 'invalid' }
@@ -143,6 +148,139 @@ describe('explicit confirmation of the original intake', () => {
     wrapper.unmount()
     await state.confirmIntake(unmountedMessage)
     expect(chat).toHaveBeenCalledTimes(3)
+  })
+})
+
+describe('accepting or reopening the original product issue', () => {
+  const ticket = {
+    id: 77, user_id: 12, session_id: 21, intent: 'product_issue', status: 'awaiting_customer',
+    ticket_no: 'CS-website-77', title: '官网入口打不开',
+  }
+  const panel = '[aria-label="原工单验收"]'
+  const note = '#cs-decision-note'
+  const key = 'market:customer-decision:12:77'
+
+  function history(attempt?: CustomerServiceIssueDecision) {
+    const resolved = attempt?.decision === 'resolved'
+    return {
+      session_id: 21,
+      can_reply: !resolved,
+      ticket: {
+        ...ticket,
+        status: !attempt ? ticket.status : resolved ? 'resolved' : 'processing',
+        closed_at: resolved ? '2026-11-20T00:00:00Z' : null,
+        customer_acceptance: {
+          can_resolve: !attempt,
+          can_reopen: !attempt || resolved,
+          last_decision: attempt ? { decision: attempt.decision, idempotency_key: attempt.idempotency_key } : null,
+        },
+      },
+      messages: [
+        {
+          id: 31, ticket_id: 77, role: 'assistant', content: '官网已完成核验，请复测原链接。',
+          payload: { origin: 'corp_download_verification' },
+        },
+        ...(attempt ? [{
+          id: 32, ticket_id: 77, role: 'user', content: attempt.note,
+          payload: { customer_decision: attempt.decision },
+        }] : []),
+      ],
+    }
+  }
+
+  async function openOriginal() {
+    listTickets.mockResolvedValue({ items: [ticket] })
+    const wrapper = await mountView()
+    await flushPromises()
+    await wrapper.get('.cs-ticket__main').trigger('click')
+    await flushPromises()
+    return wrapper
+  }
+
+  it('accepts a customer note only after reading the original status and conversation, then allows owner reopen', async () => {
+    let firstAttempt: CustomerServiceIssueDecision | undefined
+    let completeReadback!: (value: unknown) => void
+    transcript.mockResolvedValueOnce(history()).mockImplementationOnce(() => new Promise(resolve => {
+      completeReadback = resolve
+    })).mockImplementationOnce(() => Promise.resolve(history(decision.mock.calls.at(-1)?.[1])))
+    decision.mockImplementationOnce((_id, body) => {
+      firstAttempt = body
+      return Promise.resolve({ success: true, issue: { status: 'resolved' } })
+    }).mockResolvedValueOnce({ success: true })
+    const wrapper = await openOriginal()
+    expect(wrapper.get('.cs-messages').text()).toContain('官网复测回执')
+    expect(wrapper.get(panel).text()).toContain('原问题现在的使用结果')
+    expect(wrapper.get(`${panel} button`).attributes('disabled')).toBeDefined()
+    await wrapper.get(note).setValue('链接现在可以正常打开。')
+    await wrapper.get(`${panel} button`).trigger('click')
+    await vi.waitFor(() => expect(transcript).toHaveBeenCalledTimes(2))
+    expect(decision).toHaveBeenCalledWith(77, expect.objectContaining({
+      decision: 'resolved', note: '链接现在可以正常打开。', idempotency_key: expect.any(String),
+    }))
+    expect(wrapper.get(panel).text()).not.toContain('已核对原工单')
+
+    completeReadback(history(firstAttempt))
+    await vi.waitFor(() => expect(wrapper.get(panel).text()).toContain('状态为已解决'))
+    expect(wrapper.get('.cs-messages').text()).toContain('链接现在可以正常打开。')
+    expect(wrapper.get(`${panel} button`).text()).toContain('问题仍存在')
+    await wrapper.get(note).setValue('原链接故障再次出现。')
+    await wrapper.get(`${panel} button`).trigger('click')
+    await vi.waitFor(() => expect(wrapper.get(panel).text()).toContain('已重新进入处理'))
+    expect(decision.mock.calls[1]?.[1]).toMatchObject({ decision: 'reopen', note: '原链接故障再次出现。' })
+    expect(decision.mock.calls[1]?.[1].idempotency_key).not.toBe(firstAttempt?.idempotency_key)
+    expect(chat).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('preserves the exact request after an uncertain response and reload without resending a changed note', async () => {
+    transcript.mockResolvedValue(history())
+    decision.mockRejectedValueOnce(new ApiError('timeout', 408)).mockImplementationOnce((_id, body) => {
+      transcript.mockResolvedValue(history(body))
+      return Promise.reject(new ApiError('work order synchronization conflict', 409))
+    })
+    let wrapper = await openOriginal()
+    const originalNote = '对原来的官网链接已实测。'
+    await wrapper.get(note).setValue(originalNote)
+    await wrapper.get(`${panel} button`).trigger('click')
+    await vi.waitFor(() => expect(wrapper.get(panel).text()).toContain('暂未核对到回执'))
+    const originalRequest = decision.mock.calls[0]?.[1]
+    expect(sessionStorage.getItem(key)).toContain(originalRequest.idempotency_key)
+    expect(sessionStorage.getItem(key)).not.toContain(originalNote)
+    wrapper.unmount()
+
+    wrapper = await openOriginal()
+    expect(wrapper.get(`${panel} button`).text()).toBe('核对原工单')
+    await wrapper.get(`${panel} button`).trigger('click')
+    await vi.waitFor(() => expect(wrapper.get(panel).text()).toContain('暂未在原工单查到'))
+    expect(decision).toHaveBeenCalledTimes(1)
+    await wrapper.get(note).setValue('这次改了确认说明。')
+    await wrapper.findAll(`${panel} button`).at(-1)!.trigger('click')
+    await vi.waitFor(() => expect(wrapper.get(panel).text()).toContain('上次提交的原说明'))
+    expect(decision).toHaveBeenCalledTimes(1)
+
+    await wrapper.get(note).setValue(originalNote)
+    await wrapper.findAll(`${panel} button`).at(-1)!.trigger('click')
+    await vi.waitFor(() => expect(wrapper.get(panel).text()).toContain('状态为已解决'))
+    expect(decision).toHaveBeenCalledTimes(2)
+    expect(decision).toHaveBeenLastCalledWith(77, originalRequest)
+    expect(sessionStorage.getItem(key)).toBeNull()
+    wrapper.unmount()
+  })
+
+  it('does not offer decisions to an administrative viewer or before customer acceptance is permitted', async () => {
+    const view = history()
+    transcript.mockResolvedValueOnce({ ...view, can_reply: false, ticket })
+      .mockResolvedValueOnce({ ...view, ticket: {
+        ...view.ticket, status: 'processing',
+        customer_acceptance: { can_resolve: false, can_reopen: false, last_decision: null },
+      } })
+    const wrapper = await openOriginal()
+    expect(wrapper.find(panel).exists()).toBe(false)
+    await wrapper.get('.cs-ticket__main').trigger('click')
+    await flushPromises()
+    expect(wrapper.find(panel).exists()).toBe(false)
+    expect(decision).not.toHaveBeenCalled()
+    wrapper.unmount()
   })
 })
 

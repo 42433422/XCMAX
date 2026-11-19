@@ -14,6 +14,7 @@ from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from modstore_server.customer_corp_download_case import is_corp_download_report
 
 from modstore_server.customer_issue_delivery_contract import (
     projected_dispatch_status,
@@ -40,6 +41,7 @@ from modstore_server.customer_service_chat_reply import read_chat_assessment, re
 from modstore_server.customer_service_ticket_view import serialize_ticket
 from modstore_server.customer_service_tools import json_loads
 from modstore_server.customer_service_triage import (
+    INTAKE_SCENE_INTENTS,
     _parse_domain_clarify_reply as _parse_domain_clarify_reply,
     resolve_triage_lane as resolve_triage_lane,
     ticket_taxonomy as ticket_taxonomy,
@@ -237,23 +239,18 @@ def infer_intent(
     # 内容优先于入口默认分类。混合技术故障与权益诉求保持 general，交给待核实。
     if _classification_conflict(text):
         return "general"
+    if (
+        is_corp_download_report(text)
+        and not {"catalog_id", "order_no", "account_custom"} & extracted.keys()
+    ):
+        return "product_issue"
     if _has_technical_defect(text) and not any(
         word in text.lower() for word in _COMMERCE_BLOCK_MARKS
     ):
         return "product_issue"
     scene = str(ctx.get("scene") or "").strip().lower()
-    scene_map = {
-        "refund": "refund",
-        "complaint": "catalog_complaint",
-        "catalog_complaint": "catalog_complaint",
-        "review": "catalog_review",
-        "catalog_review": "catalog_review",
-        "account": "account_support",
-        "account_support": "account_support",
-        "llm_extension": "llm_extension",
-    }
-    if scene in scene_map:
-        return scene_map[scene]
+    if scene in INTAKE_SCENE_INTENTS:
+        return INTAKE_SCENE_INTENTS[scene]
     complaint_type = str(extracted.get("complaint_type") or ctx.get("complaint_type") or "").lower()
     if complaint_type in {"plagiarism", "license", "download", "侵权", "抄袭"}:
         return "catalog_complaint"

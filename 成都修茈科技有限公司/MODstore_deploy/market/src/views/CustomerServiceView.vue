@@ -54,6 +54,37 @@
           </div>
         </div>
 
+        <section v-if="showDecision" class="cs-composer" aria-label="原工单验收">
+          <label v-if="canResolve || canReopen" for="cs-decision-note">原问题现在的使用结果（至少 4 个字）</label>
+          <textarea
+            v-if="canResolve || canReopen"
+            id="cs-decision-note"
+            v-model="decisionNote"
+            rows="2"
+            maxlength="2000"
+            :disabled="decisionBusy"
+          />
+          <p v-if="decisionNotice" class="cs-muted" role="status">{{ decisionNotice }}</p>
+          <div class="cs-decision-actions">
+            <template v-if="pendingDecision">
+              <button type="button" class="cs-btn cs-btn--ghost" :disabled="decisionBusy" @click="checkDecision">核对原工单</button>
+              <button
+                v-if="pendingDecision.decision === 'resolved' ? canResolve : canReopen"
+                type="button" class="cs-btn" :disabled="decisionBusy || !validDecisionNote"
+                @click="submitDecision(pendingDecision.decision)"
+              >按原请求重试</button>
+            </template>
+            <template v-else>
+              <button v-if="canResolve" type="button" class="cs-btn" :disabled="decisionBusy || !validDecisionNote" @click="submitDecision('resolved')">
+                确认问题已解决
+              </button>
+              <button v-if="canReopen" type="button" class="cs-btn cs-btn--ghost" :disabled="decisionBusy || !validDecisionNote" @click="submitDecision('reopen')">
+                问题仍存在，重新处理
+              </button>
+            </template>
+          </div>
+        </section>
+
         <form class="cs-composer" @submit.prevent="send">
           <input ref="imageInputRef" type="file" accept="image/*" class="cs-image-input" @change="onImagePicked" />
           <div v-if="pendingImageDataUrl" class="cs-attach">
@@ -64,19 +95,19 @@
           <textarea
             v-model="draft"
             rows="2"
-            :disabled="readOnly || loading"
+            :disabled="readOnly || decisionBusy"
             placeholder="尽量带上订单号、说明；也可点「图片」上传截图补充材料…"
             @keydown.meta.enter.prevent="send"
             @keydown.ctrl.enter.prevent="send"
           />
           <div class="cs-composer__footer">
             <div class="cs-composer__left">
-              <button type="button" class="cs-btn cs-btn--ghost" :disabled="readOnly || loading || imagePicking" @click="openImagePicker">
+              <button type="button" class="cs-btn cs-btn--ghost" :disabled="readOnly || decisionBusy || imagePicking" @click="openImagePicker">
                 {{ imagePicking ? '处理中…' : '图片' }}
               </button>
               <span :class="{ 'cs-error': !!error }">{{ error || (readOnly ? '仅查看原会话' : 'Enter 换行 · ⌘/Ctrl+Enter 发送') }}</span>
             </div>
-            <button type="submit" class="cs-btn" :disabled="readOnly || loading || imagePicking || (!draft.trim() && !pendingImageDataUrl)">
+            <button type="submit" class="cs-btn" :disabled="readOnly || decisionBusy || imagePicking || (!draft.trim() && !pendingImageDataUrl)">
               {{ loading ? '处理中…' : '发送' }}
             </button>
           </div>
@@ -103,6 +134,7 @@ import { renderCsBubbleHtml } from '../utils/csBubbleText'
 import CsTicketPanel from './customer-service/CsTicketPanel.vue'
 import * as csHelpers from './customer-service/customerServiceHelpers'
 import { useCustomerServiceChat } from './customer-service/useCustomerServiceChat'
+import { useCustomerServiceDecision } from './customer-service/useCustomerServiceDecision'
 import { useCustomerServiceImage } from './customer-service/useCustomerServiceImage'
 import { useCustomerServiceTickets } from './customer-service/useCustomerServiceTickets'
 
@@ -117,10 +149,7 @@ const {
 const ticketStore = useCustomerServiceTickets()
 const { tickets, expandedTicketIds, allTicketsExpanded, toggleTicket, toggleAllTickets, loadTickets } = ticketStore
 
-const {
-  draft, loading, error, activeSessionId, openedTicketRef, readOnly, messages, messagesEl, quickPrompts,
-  usePrompt, send, sendText, confirmIntake, intakeConfirmation, onBubbleClick, newSession, visibleCards, openTicket,
-} = useCustomerServiceChat({
+const chat = useCustomerServiceChat({
   route,
   pendingImageDataUrl,
   imagePicking,
@@ -128,6 +157,14 @@ const {
   loadTickets,
   expandedTicketIds,
 })
+const {
+  draft, loading, error, activeSessionId, openedTicketRef, readOnly, messages, messagesEl, quickPrompts,
+  usePrompt, send, sendText, confirmIntake, intakeConfirmation, onBubbleClick, newSession, visibleCards, openTicket,
+} = chat
+const {
+  note: decisionNote, notice: decisionNotice, pending: pendingDecision, busy: decisionBusy,
+  visible: showDecision, validNote: validDecisionNote, canResolve, canReopen, checkDecision, submitDecision,
+} = useCustomerServiceDecision(chat, loadTickets)
 
 // 测试兼容面：既有测试经 setupState 访问原单文件顶层绑定
 /* eslint-disable @typescript-eslint/no-unused-vars -- 测试兼容面：既有测试经 setupState 访问 */
