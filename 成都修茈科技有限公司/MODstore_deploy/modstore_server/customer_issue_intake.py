@@ -155,13 +155,13 @@ def dispatch_issue_event(event: dict[str, Any]) -> dict[str, Any]:
             return {"ok": False, "message": "customer issue ownership mismatch"}
         if ticket.status == "expired":
             return {"ok": True, "skipped": True, "reason": "ticket_expired"}
-        block_reason = intake_dispatch_block_reason(ticket)
-        if block_reason:
-            return {"ok": True, "skipped": True, "reason": block_reason}
         from modstore_server.customer_issue_shared_repairs import active_shared_repair
 
         if active_shared_repair(db, ticket):
             return {"ok": True, "skipped": True, "reason": "shared_repair_reused"}
+        block_reason = intake_dispatch_block_reason(ticket)
+        if block_reason:
+            return {"ok": True, "skipped": True, "reason": block_reason}
         if payload.get("github_workspace"):
             from modstore_server.para_github_runner import ensure_runner
 
