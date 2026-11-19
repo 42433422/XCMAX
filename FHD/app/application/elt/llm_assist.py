@@ -695,27 +695,6 @@ def _sheet_line_index(text: str) -> dict[tuple[str, str], set[str]]:
     return found
 
 
-def _finance_only_sheets(source: str) -> set[str]:
-    """Recognize finance appendices without excluding mixed shipment sheets."""
-    from app.application.elt.parser_regions import (
-        _FINANCE_CONTENT_RE,
-        _FINANCE_RE,
-        _field_for_header,
-    )
-
-    finance: set[str] = set()
-    shipment_headers: set[str] = set()
-    for (sheet, number), cells in _sheet_line_index(source).items():
-        if _FINANCE_RE.search(sheet) or (
-            int(number) <= 20 and any(_FINANCE_CONTENT_RE.search(cell) for cell in cells)
-        ):
-            finance.add(sheet)
-        fields = {_field_for_header(cell) for cell in cells}
-        if fields & {"name", "model_number"} and fields & {"quantity_tins", "quantity_kg"}:
-            shipment_headers.add(sheet)
-    return finance - shipment_headers
-
-
 def _business_rows(data: dict, cited: set[tuple[str, str]]) -> list[dict]:
     sheets = {sheet for sheet, _number in cited}
     rows = []
@@ -1101,18 +1080,6 @@ def advise_business_import(sheet_text: str) -> LlmAssistResult:
     source = str(sheet_text or "").strip()
     if not source:
         return LlmAssistResult()
-    excluded = _finance_only_sheets(source)
-    if excluded:
-        sheet = ""
-        eligible = []
-        for line in source.splitlines():
-            if line.startswith("# sheet:"):
-                sheet = line.removeprefix("# sheet:")
-            if sheet not in excluded:
-                eligible.append(line)
-        source = "\n".join(eligible).strip()
-        if not _sheet_line_index(source):
-            return LlmAssistResult()
     units = business_units(source)
     if len(units) > MAX_BUSINESS_UNITS:
         return LlmAssistResult(degraded=True, degradation_code="ELT_DATABASE_INPUT_EXCEEDS_UNITS")
@@ -1160,6 +1127,7 @@ def _advise_business_unit(source: str) -> LlmAssistResult:
                 "每一张表都要扫，这一本有几张就扫几张，每一行货品单独成一条，不要在第一张送货单结束后停止。"
                 "行内没有购买单位时，用这一张表表头上的客户；表头也没有就留空。"
                 "合计、表头、协议文字不要放入。"
+                "按行区分货品与收付款：混合工作表保留货品明细，纯回款、对账和财务附表不产生货品行。"
                 "借还台账和测算表不要导入，除非明确要求。"
                 "source_sheet 必须等于某一行 # sheet: 后面的名称，source_row 必须等于该行 R 标签的整数。"
                 "source_range 只在你能指出该行矩形时填写，不能就留空。对不上标签就让坐标为空，不要猜。"
@@ -1203,7 +1171,7 @@ def _advise_business_unit(source: str) -> LlmAssistResult:
             names = "、".join(skipped[:12])
             notes.append(
                 f"这些工作表在正文里，但 rows 没有引用：{names}。"
-                "是货品明细就按该表的 R 标签补上，是借还台账或测算就不要补，不要编造正文里没有的行。"
+                "是货品明细就按该表的 R 标签补上，纯回款、对账、借还台账或测算不要补，不要编造正文里没有的行。"
             )
         follow = [
             *messages,

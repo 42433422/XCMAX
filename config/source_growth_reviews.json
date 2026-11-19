@@ -304,12 +304,12 @@
     "FHD/app/application/elt/llm_assist.py": {
       "base_file": "FHD/app/application/elt/llm_assist.py",
       "base_blob": "d0455c9a7667cf9d5ce8636d235863a37b02a160",
-      "head_blob": "e00a3d9cecf93ddb227dfd3e860b3ba996e22378",
+      "head_blob": "cf03691597af0993136865af1b3d3d055dbe536d",
       "before_lines": 1211,
-      "after_lines": 1304,
-      "reason": "登记评审：识别历史台账客户归属，并在现有出货模型入口排除纯回款工作表。",
-      "boundary": "客户候选限于有坐标的原件证据。按工作表筛选出货，保留同表有出货表头的明细及完整归档。",
-      "validation": "回归覆盖带来源坐标的客户提取、纯回款工作表排除和混合表出货明细保留。",
+      "after_lines": 1272,
+      "reason": "登记评审：识别历史台账客户归属，并由出货模型按原表逐行识别货品与回款，不按表名预删数据。",
+      "boundary": "客户候选限于有坐标的原件证据。模型按有界批次读取归档；混合表保留货品，纯回款不产生货品行，不改变来源坐标校验和无模型规则路径。",
+      "validation": "历史回归覆盖源坐标客户提取；本次定向 pytest 七项通过，合成表验证混合及纯回款输入、分批和坐标校验；旧实现负控漏掉整表。真实模型与完整 CI 待验收。",
       "follow_up": "复核分区证据和客户候选范围，继续统一工作表角色判断。",
       "review_owner": "@42433422"
     },

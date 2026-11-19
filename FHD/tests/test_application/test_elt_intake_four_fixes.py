@@ -226,29 +226,58 @@ def test_business_import_covers_every_unit_and_merges_by_coordinate(monkeypatch)
     )
 
 
-def test_shipment_model_skips_pure_finance_but_keeps_a_mixed_worksheet(monkeypatch):
+def test_shipment_model_classifies_mixed_and_finance_worksheets(monkeypatch):
+    from openpyxl import Workbook
+
     from app.application.elt import llm_assist
     from app.application.elt.llm_assist_runtime import LlmAssistResult
 
-    finance = "# sheet:回款\nR1 | 日期 | 客户 | 收款金额\nR2 | 2026-01-01 | 示例客户 | 12"
-    mixed = "# sheet:出货与回款\nR1 | 品名 | 数量 | 收款金额\nR2 | 样品 | 2 | 12"
+    book = Workbook()
+    mixed = book.active
+    mixed.title = "出货与回款"
+    mixed.append(["日期", "客户", "货物", "桶", "规格", "公斤", "单价", "金额"])
+    mixed.append(["2026-01-01", "示例客户", "样品", 2, "A", 12, 3, 36])
+    finance = book.create_sheet("回款")
+    finance.append(["日期", "客户", "收款金额"])
+    finance.append(["2026-01-02", "示例客户", 36])
 
-    def complete(messages, **_kwargs):
-        assert messages[-1]["content"] == mixed
-        return LlmAssistResult(
-            used_llm=True,
-            data={
-                "rows": [
-                    {"source_sheet": "回款", "source_row": "2", "product_name": "示例客户"},
-                    {"source_sheet": "出货与回款", "source_row": "2", "product_name": "样品"},
-                ]
-            },
+    def archive_text(sheet):
+        return "\n".join(
+            [f"# sheet:{sheet.title}"]
+            + [f"R{i} | " + " | ".join(map(str, row)) for i, row in enumerate(sheet.values, 1)]
         )
 
+    mixed_text, finance_text = archive_text(mixed), archive_text(finance)
+    seen = []
+
+    def complete(messages, **_kwargs):
+        source = messages[1]["content"]
+        seen.append(source)
+        rows = (
+            [{"source_sheet": mixed.title, "source_row": "2", "product_name": "样品"}]
+            if mixed_text in source
+            else []
+        )
+        return LlmAssistResult(used_llm=True, data={"rows": rows})
+
     monkeypatch.setattr(llm_assist, "_complete", complete)
-    assert not llm_assist.advise_business_import(finance).used_llm
-    result = llm_assist.advise_business_import(f"{finance}\n{mixed}")
-    assert [row["source_sheet"] for row in result.data["rows"]] == ["出货与回款"]
+    result = llm_assist.advise_business_import(mixed_text)
+    assert seen == [mixed_text]
+    assert result.used_llm and not result.degraded
+    assert [(row["source_sheet"], row["source_row"]) for row in result.data["rows"]] == [
+        (mixed.title, "2"),
+    ]
+
+    seen.clear()
+    result = llm_assist.advise_business_import(finance_text)
+    assert seen and set(seen) == {finance_text}
+    assert result.used_llm and not result.degraded and result.data["rows"] == []
+
+    seen.clear()
+    combined = f"{finance_text}\n{mixed_text}"
+    result = llm_assist.advise_business_import(combined)
+    assert seen and set(seen) == {combined}
+    assert [row["source_sheet"] for row in result.data["rows"]] == [mixed.title]
 
 
 def test_business_import_refuses_more_units_than_the_limit_without_calling(monkeypatch):
