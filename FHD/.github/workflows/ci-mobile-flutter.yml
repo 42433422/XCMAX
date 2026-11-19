@@ -15,6 +15,10 @@ on:
 concurrency:
   group: ci-mobile-flutter-${{ github.ref }}
   cancel-in-progress: true
+# Candidate tests never inherit repository-wide write permissions.
+permissions:
+  contents: read
+
 jobs:
   test-and-apk:
     runs-on: ubuntu-latest

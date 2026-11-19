@@ -16,8 +16,17 @@ import httpx
 
 from modstore_server.customer_service_tools import json_dumps, json_loads
 from modstore_server.customer_ticket_github import github
-from modstore_server.models import IncidentEvent, RetortEvolutionRun, get_session_factory
-from modstore_server.para_github_runner import WORKFLOW, api_base, auth_headers, device_matches
+from modstore_server.models import (
+    IncidentEvent,
+    RetortEvolutionRun,
+    get_session_factory,
+)
+from modstore_server.para_github_runner import (
+    WORKFLOW,
+    api_base,
+    auth_headers,
+    device_matches,
+)
 
 
 def _load(request_id):
@@ -82,7 +91,10 @@ def _ensure_issue(request_id, protocol, effects):
     issue = github(
         "POST",
         f"/repos/{repo}/issues",
-        {"title": plan["public_title"], "body": public_task_body(effects) + "\n\n" + marker},
+        {
+            "title": plan["public_title"],
+            "body": public_task_body(effects) + "\n\n" + marker,
+        },
     )
     return _save(request_id, issue_number=issue["number"])
 
@@ -142,12 +154,17 @@ def collect_execution(request_id):
         return {"status": "waiting", "reason": "runner_response_unconfirmed"}
     if run.get("status") == "completed":
         if run.get("conclusion") != "success":
-            return {"status": "failed", "reason": "github_run_failed", "run_id": run["id"]}
+            return {
+                "status": "failed",
+                "reason": "github_run_failed",
+                "run_id": run["id"],
+            }
         state = worker_status(request_id)
         if not state["finished"] or state["conclusion"] != "success" or not state.get("target_sha"):
             return {"status": "failed", "reason": "employee_receipt_incomplete"}
         pulls = github(
-            "GET", f"/repos/{protocol['repository']}/commits/{state['target_sha']}/pulls"
+            "GET",
+            f"/repos/{protocol['repository']}/commits/{state['target_sha']}/pulls",
         )
         issue_number = effects["issue_number"]
         issue_url = f"https://github.com/{protocol['repository']}/issues/{issue_number}"
@@ -231,7 +248,10 @@ def authorized_incident(db, payload, event_id):
     row = db.get(RetortEvolutionRun, request_id) if request_id else None
     if row is None or row.event_id != event_id or row.status != "waiting_execution":
         return False
-    protocol, effects = json_loads(row.protocol_json, {}), json_loads(row.effects_json, {})
+    protocol, effects = (
+        json_loads(row.protocol_json, {}),
+        json_loads(row.effects_json, {}),
+    )
     return bool(
         effects.get("authorization", {}).get("approved") is True
         and payload.get("retort_run_id") == row.id
@@ -245,12 +265,15 @@ def authorized_incident(db, payload, event_id):
 
 
 def worker_status(request_id):
+    from modstore_server.para_github_publication import publication_candidate
+
     protocol, effects = _load(request_id)
     with get_session_factory()() as db:
         row = db.get(RetortEvolutionRun, request_id)
         event = db.get(IncidentEvent, row.event_id) if row.event_id else None
         claim = json_loads(event.payload_json, {}).get("_team_claim", {}) if event else {}
         cancelled = row.status == "cancelled"
+        candidate = publication_candidate(db, event)
     team = claim.get("team", [])
     failed = any(
         r.get("status") in {"failed", "cancelled", "manual_review", "rejected"} for r in team
@@ -278,6 +301,7 @@ def worker_status(request_id):
         ),
         "target_sha": target,
         "benchmark_protocol": protocol,
+        "publication_candidate": candidate,
     }
 
 
@@ -319,7 +343,11 @@ def verify_execution(request_id, state):
         bundle = json.loads((root / "verification.json").read_text())
         try:
             result = contract.verify_bundle(
-                protocol, bundle, root, run_id=str(run_id), target_sha=execution["target_sha"]
+                protocol,
+                bundle,
+                root,
+                run_id=str(run_id),
+                target_sha=execution["target_sha"],
             )
         except ValueError as exc:
             return {
@@ -342,7 +370,9 @@ def verify_execution(request_id, state):
 def _retain_artifact(request_id, artifact_digest, root):
     from uuid import UUID
 
-    from modstore_server.infrastructure.private_asset_storage import require_private_directory
+    from modstore_server.infrastructure.private_asset_storage import (
+        require_private_directory,
+    )
     from modstore_server.integrations.repository_packages import load_repository_module
 
     runtime = os.environ.get("MODSTORE_RUNTIME_DIR", "")

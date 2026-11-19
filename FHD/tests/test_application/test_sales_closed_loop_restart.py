@@ -266,6 +266,10 @@ def confirm_phase(db_path: Path, marker: Path) -> None:
             source="pro",
         )
     assert second["data"]["action"] == "approval_pending", second
+    from app.application.agent_orchestrator.run_repository import get_agent_run_repository
+
+    waiting_run = get_agent_run_repository().get(second["data"]["data"]["agent_run_id"])
+    assert waiting_run.metadata["runtime_context"]["_conversation_revision"] == 0
     request_no = second["data"]["data"]["approval_request_ids"][0]
     run_id = second["data"]["data"]["agent_run_id"]
     from app.application.agent_orchestrator.run_repository import get_agent_run_repository

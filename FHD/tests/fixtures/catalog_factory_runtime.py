@@ -72,6 +72,10 @@ def _seed(root):
     from types import SimpleNamespace
     from uuid import uuid4
 
+    from alembic.config import Config
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+    from alembic.script import ScriptDirectory
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
     from starlette.requests import Request
@@ -101,6 +105,13 @@ def _seed(root):
     with engine.connect() as db:
         assert db.exec_driver_sql("PRAGMA journal_mode=WAL").scalar() == "wal"
     factory = sessionmaker(bind=engine)
+    # Use the production offline migration before guarded serving is enabled.
+    migration = ScriptDirectory.from_config(Config(str(ROOT / "alembic.ini"))).get_revision(
+        "2026_11_19_native_checkpoints"
+    )
+    assert migration is not None
+    with engine.connect() as db, Operations.context(MigrationContext.configure(db)):
+        migration.module.upgrade()
     session_id = uuid4().hex
     with factory.begin() as db:
         role = Role(name="admin")

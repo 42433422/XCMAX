@@ -21,7 +21,7 @@
       "after_lines": 1651,
       "reason": "评审请求（不代表批准）：将真实 StateGraph 编译入口接入既有 LangGraph SQLite/Postgres saver，消除仅有未调用桥接的恢复缺口。",
       "boundary": "仅原生 checkpoint 注入和原任务续跑；权限、审批及未知写结果继续拒绝自动执行。",
-      "validation": "整合复验：规划123、前端492、会话历史83、记忆134、MODstore检索73、恢复及路由234+61、摘要与checkpoint53项组均通过（各组可重叠）；实际PostgreSQL验证及最新head远端CI仍须通过。全量mypy已通过。",
+      "validation": "整合复验：后端组合2008通过/2项环境跳过、规划预算与无损目录203通过、原生检查点迁移及guarded场景283通过/1项既有PostgreSQL环境跳过、真实审批跨进程恢复50通过；各测试组可重叠，不相加。前端流式67通过，FHD全量mypy已通过。最终提交远端完整CI及真实PostgreSQL仍须通过；本登记不是架构批准。",
       "follow_up": "原生 saver 生命周期继续由现有编排器管理，不增加第二套恢复状态机。",
       "review_owner": "@42433422"
     },
@@ -33,7 +33,7 @@
       "after_lines": 1126,
       "reason": "评审请求（不代表批准）：把当前授权会话的精确原文分页读取注册到现有工具 schema。",
       "boundary": "模型只能提供消息/游标/片段参数，主体和会话来自服务端绑定，不开放任意账号历史。",
-      "validation": "整合复验：规划123、前端492、会话历史83、记忆134、MODstore检索73、恢复及路由234+61、摘要与checkpoint53项组均通过（各组可重叠）；实际PostgreSQL验证及最新head远端CI仍须通过。全量mypy已通过。",
+      "validation": "整合复验：后端组合2008通过/2项环境跳过、规划预算与无损目录203通过、原生检查点迁移及guarded场景283通过/1项既有PostgreSQL环境跳过、真实审批跨进程恢复50通过；各测试组可重叠，不相加。前端流式67通过，FHD全量mypy已通过。最终提交远端完整CI及真实PostgreSQL仍须通过；本登记不是架构批准。",
       "follow_up": "继续使用统一工具注册表，不创建单独的历史检索工作流框架。",
       "review_owner": "@42433422"
     },
@@ -141,7 +141,7 @@
       "after_lines": 1269,
       "reason": "评审请求（不代表批准）：冻结续跑的会话归属和原版本，受控复用现有工具回执及执行租约协议。",
       "boundary": "客户端不能改写原会话 revision 或 owner；没有安全契约的历史调用保持人工对账。",
-      "validation": "整合复验：规划123、前端492、会话历史83、记忆134、MODstore检索73、恢复及路由234+61、摘要与checkpoint53项组均通过（各组可重叠）；实际PostgreSQL验证及最新head远端CI仍须通过。全量mypy已通过。",
+      "validation": "整合复验：后端组合2008通过/2项环境跳过、规划预算与无损目录203通过、原生检查点迁移及guarded场景283通过/1项既有PostgreSQL环境跳过、真实审批跨进程恢复50通过；各测试组可重叠，不相加。前端流式67通过，FHD全量mypy已通过。最终提交远端完整CI及真实PostgreSQL仍须通过；本登记不是架构批准。",
       "follow_up": "只允许已有原子 claim/lease 扩展，不另建 PID 或超时推断的接管协议。",
       "review_owner": "@42433422"
     },
@@ -208,13 +208,13 @@
     "FHD/app/application/agent_orchestrator/run_sql_repository.py": {
       "base_file": "FHD/app/application/agent_orchestrator/run_sql_repository.py",
       "base_blob": "e46cd0b45af77a24e7f75226c3730d6e69f70b36",
-      "head_blob": "9631eb1fa2f6c6706753959ce19bcf8d09c0e2db",
+      "head_blob": "0a0719e4483b85807c0c76cbeb489641752a9908",
       "before_lines": 862,
-      "after_lines": 876,
-      "reason": "评审请求（不代表批准）：复用现有 SQLAlchemy transaction 为安全原任务重试提供原子状态迁移。",
-      "boundary": "只更改原 run 的排队/完成状态，保留计划、已完成回执和执行代数 fencing。",
-      "validation": "整合复验：规划123、前端492、会话历史83、记忆134、MODstore检索73、恢复及路由234+61、摘要与checkpoint53项组均通过（各组可重叠）；实际PostgreSQL验证及最新head远端CI仍须通过。全量mypy已通过。",
-      "follow_up": "后续恢复能力继续通过现有 repository CAS 扩展，避免业务层直接覆盖执行状态。",
+      "after_lines": 881,
+      "reason": "评审请求（不代表批准）：复用已有事务和执行租约完成原生恢复回执，并将仓库既有auto_create策略显式传给原生检查点适配器，阻止受保护请求隐式建表。",
+      "boundary": "仅原子保存/claim边界和只读schema初始化能力属性；默认及旧适配器兼容原初始化，auto_create=False保持既有schema和授权，不放宽未知写结果重放。",
+      "validation": "整合复验：后端组合2008通过/2项环境跳过、规划预算与无损目录203通过、原生检查点迁移及guarded场景283通过/1项既有PostgreSQL环境跳过、真实审批跨进程恢复50通过；各测试组可重叠，不相加。前端流式67通过，FHD全量mypy已通过。最终提交远端完整CI及真实PostgreSQL仍须通过；本登记不是架构批准。",
+      "follow_up": "原生schema继续由已固定版本的LangGraph saver和显式离线迁移管理；恢复、租约和未知副作用核对沿用既有仓库协议。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/elt/auto_ingest_service.py": {
@@ -405,7 +405,7 @@
       "after_lines": 939,
       "reason": "评审请求（不代表批准）：把已有列表窗口接到服务器历史游标，支持按需加载早期消息。",
       "boundary": "只新增加载入口和状态显示，沿用现有列表渲染及窗口大小。",
-      "validation": "整合复验：规划123、前端492、会话历史83、记忆134、MODstore检索73、恢复及路由234+61、摘要与checkpoint53项组均通过（各组可重叠）；实际PostgreSQL验证及最新head远端CI仍须通过。全量mypy已通过。",
+      "validation": "整合复验：后端组合2008通过/2项环境跳过、规划预算与无损目录203通过、原生检查点迁移及guarded场景283通过/1项既有PostgreSQL环境跳过、真实审批跨进程恢复50通过；各测试组可重叠，不相加。前端流式67通过，FHD全量mypy已通过。最终提交远端完整CI及真实PostgreSQL仍须通过；本登记不是架构批准。",
       "follow_up": "后续列表优化沿用既有虚拟窗口及UI组件，不创建新的消息状态引擎。",
       "review_owner": "@42433422"
     },
@@ -417,7 +417,7 @@
       "after_lines": 946,
       "reason": "评审请求（不代表批准）：复用正常 done 应用逻辑恢复断线流，保留审批、失败和业务附件，并读取按 turn 定位的历史。",
       "boundary": "不再把回放强制标记完成；保留既有 SSE 解析器、owner 与请求代数校验。",
-      "validation": "整合复验：规划123、前端492、会话历史83、记忆134、MODstore检索73、恢复及路由234+61、摘要与checkpoint53项组均通过（各组可重叠）；实际PostgreSQL验证及最新head远端CI仍须通过。全量mypy已通过。",
+      "validation": "整合复验：后端组合2008通过/2项环境跳过、规划预算与无损目录203通过、原生检查点迁移及guarded场景283通过/1项既有PostgreSQL环境跳过、真实审批跨进程恢复50通过；各测试组可重叠，不相加。前端流式67通过，FHD全量mypy已通过。最终提交远端完整CI及真实PostgreSQL仍须通过；本登记不是架构批准。",
       "follow_up": "维持一个终态应用入口，后续流式功能优先复用现有 SDK/解析器。",
       "review_owner": "@42433422"
     },
@@ -429,7 +429,7 @@
       "after_lines": 874,
       "reason": "评审请求（不代表批准）：将撤回后的会话版本刷新与整轮保存回执接入既有聊天编排。",
       "boundary": "撤回请求成功后重新读取权威 revision，保存重试只发送原 receipt 并保留账号范围。",
-      "validation": "整合复验：规划123、前端492、会话历史83、记忆134、MODstore检索73、恢复及路由234+61、摘要与checkpoint53项组均通过（各组可重叠）；实际PostgreSQL验证及最新head远端CI仍须通过。全量mypy已通过。",
+      "validation": "整合复验：后端组合2008通过/2项环境跳过、规划预算与无损目录203通过、原生检查点迁移及guarded场景283通过/1项既有PostgreSQL环境跳过、真实审批跨进程恢复50通过；各测试组可重叠，不相加。前端流式67通过，FHD全量mypy已通过。最终提交远端完整CI及真实PostgreSQL仍须通过；本登记不是架构批准。",
       "follow_up": "复用现有编排组合函数，避免额外本地任务或消息状态机。",
       "review_owner": "@42433422"
     },
@@ -465,7 +465,7 @@
       "after_lines": 984,
       "reason": "评审请求（不代表批准）：将早期历史加载和当前会话 revision 传入已有消息列表及保存流程。",
       "boundary": "限于视图属性和事件接线，服务端鉴权与持久化仍是权威。",
-      "validation": "整合复验：规划123、前端492、会话历史83、记忆134、MODstore检索73、恢复及路由234+61、摘要与checkpoint53项组均通过（各组可重叠）；实际PostgreSQL验证及最新head远端CI仍须通过。全量mypy已通过。",
+      "validation": "整合复验：后端组合2008通过/2项环境跳过、规划预算与无损目录203通过、原生检查点迁移及guarded场景283通过/1项既有PostgreSQL环境跳过、真实审批跨进程恢复50通过；各测试组可重叠，不相加。前端流式67通过，FHD全量mypy已通过。最终提交远端完整CI及真实PostgreSQL仍须通过；本登记不是架构批准。",
       "follow_up": "继续通过现有聊天组合函数维护状态，视图不承接数据库或恢复逻辑。",
       "review_owner": "@42433422"
     },
@@ -501,7 +501,7 @@
       "after_lines": 866,
       "reason": "评审请求（不代表批准）：使短消息的附件和历史证据进入完整规划，并共享 LangChain 的最终模型预算入口。",
       "boundary": "沿用 #3303 的授权工具及拒绝处理；当前附件完整保留并脱敏，超限由统一预算拒绝。",
-      "validation": "整合复验：规划123、前端492、会话历史83、记忆134、MODstore检索73、恢复及路由234+61、摘要与checkpoint53项组均通过（各组可重叠）；实际PostgreSQL验证及最新head远端CI仍须通过。全量mypy已通过。",
+      "validation": "整合复验：后端组合2008通过/2项环境跳过、规划预算与无损目录203通过、原生检查点迁移及guarded场景283通过/1项既有PostgreSQL环境跳过、真实审批跨进程恢复50通过；各测试组可重叠，不相加。前端流式67通过，FHD全量mypy已通过。最终提交远端完整CI及真实PostgreSQL仍须通过；本登记不是架构批准。",
       "follow_up": "继续统一模型出口，禁止新增绕过上下文预算的直连调用。",
       "review_owner": "@42433422"
     },
@@ -513,7 +513,7 @@
       "after_lines": 2143,
       "reason": "审阅申请：为同维度模型变化补齐指纹失效和已有重建任务启动保护；在现有服务增加2行参数调用，不增加新协调器。本记录不是评审批准。",
       "boundary": "只改变加载数据集时的向量回填参数；queued/running阶段禁止模型IO，任务认领与持久化完成后由原worker重建。",
-      "validation": "整合复验：规划123、前端492、会话历史83、记忆134、MODstore检索73、恢复及路由234+61、摘要与checkpoint53项组均通过（各组可重叠）；实际PostgreSQL验证及最新head远端CI仍须通过。全量mypy已通过。",
+      "validation": "整合复验：后端组合2008通过/2项环境跳过、规划预算与无损目录203通过、原生检查点迁移及guarded场景283通过/1项既有PostgreSQL环境跳过、真实审批跨进程恢复50通过；各测试组可重叠，不相加。前端流式67通过，FHD全量mypy已通过。最终提交远端完整CI及真实PostgreSQL仍须通过；本登记不是架构批准。",
       "follow_up": "后续模型迁移继续使用现有重建协调器和来源指纹；保持初始化不加载模型的契约，新增语料规模时独立验证延迟。",
       "review_owner": "@42433422"
     },
@@ -573,9 +573,21 @@
       "after_lines": 934,
       "reason": "评审请求（不代表批准）：移除自制片段摘要，接入 LangChain 真正覆盖游标，并用 filelock 和 SQL revision 保持投影及回执一致。",
       "boundary": "只保留认证会话投影、事务 fencing、完整脱敏回执及原消息 HMAC；没有新增模型执行循环。",
-      "validation": "整合复验：规划123、前端492、会话历史83、记忆134、MODstore检索73、恢复及路由234+61、摘要与checkpoint53项组均通过（各组可重叠）；实际PostgreSQL验证及最新head远端CI仍须通过。全量mypy已通过。",
+      "validation": "整合复验：后端组合2008通过/2项环境跳过、规划预算与无损目录203通过、原生检查点迁移及guarded场景283通过/1项既有PostgreSQL环境跳过、真实审批跨进程恢复50通过；各测试组可重叠，不相加。前端流式67通过，FHD全量mypy已通过。最终提交远端完整CI及真实PostgreSQL仍须通过；本登记不是架构批准。",
       "follow_up": "后续缩减投影适配时保持 SQL 权威与待保存回执恢复，不再引入自研压缩策略。",
       "review_owner": "@42433422"
+    },
+    "FHD/app/desktop_runtime/database_generation_registry.py": {
+      "base_file": "FHD/app/desktop_runtime/database_generation_registry.py",
+      "base_blob": "659dccfca8495d185532519b2852ebf980d0c83a",
+      "head_blob": "96dbd595f2764ba115d49b121d78decdf00be6db",
+      "before_lines": 1046,
+      "after_lines": 1048,
+      "validation": "整合复验：后端组合2008通过/2项环境跳过、规划预算与无损目录203通过、原生检查点迁移及guarded场景283通过/1项既有PostgreSQL环境跳过、真实审批跨进程恢复50通过；各测试组可重叠，不相加。前端流式67通过，FHD全量mypy已通过。最终提交远端完整CI及真实PostgreSQL仍须通过；本登记不是架构批准。",
+      "review_owner": "@42433422",
+      "reason": "评审请求（不代表批准）：guarded启动准入在接收业务前验证离线准备的原生checkpoint表，避免首次请求才发现缺表或偷偷初始化。",
+      "boundary": "仅在既有owned repository schema校验末尾调用无DDL的原生schema验证器；不增加授权、修复、建表或数据写入。",
+      "follow_up": "升级LangGraph saver版本时同步审查离线迁移与精确schema验证，缺失或异常结构继续明确拒绝准入。"
     }
   }
 }

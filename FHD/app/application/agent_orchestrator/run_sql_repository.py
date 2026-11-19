@@ -297,6 +297,11 @@ class SQLAlchemyAgentRunRepository:
         self._schema_bind: object | None = None
         self._schema_lock = threading.RLock()
 
+    @property
+    def allows_schema_setup(self) -> bool:
+        """Native checkpoints share the repository's explicit provisioning policy."""
+        return self._auto_create
+
     def save(self, run: AgentRun) -> AgentRun:
         self._ensure_schema()
         with self._session_scope() as db:

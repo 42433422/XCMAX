@@ -14,6 +14,10 @@ on:
     # 每天凌晨 2 点运行
     - cron: '0 2 * * *'
 
+# Candidate tests never inherit repository-wide write permissions.
+permissions:
+  contents: read
+
 
 defaults:
   run:

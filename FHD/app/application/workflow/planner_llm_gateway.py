@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from collections import Counter
 from types import SimpleNamespace
 from typing import Any
 
@@ -14,6 +15,55 @@ _ENV_MAX_TOKENS = "XCAGI_PLANNER_MAX_TOKENS"
 # 推理模型（如 MiMo / MiniMax M3）会先消耗 reasoning token，1200 的旧默认
 # 会让正文为空（finish_reason=length）。默认放宽到 4096，仍可用环境变量收紧。
 _DEFAULT_MAX_TOKENS = 4096
+
+
+def _compact_tool_registry(prompt: dict[str, Any]) -> None:
+    """Pool identical whole schemas without changing their local reference scope."""
+    registry = prompt.get("tool_registry")
+    if not isinstance(registry, list) or "tool_schemas" in prompt:
+        return
+    actions = [
+        (tool, action)
+        for tool in registry
+        if isinstance(tool, dict) and isinstance(tool.get("actions"), list)
+        for action in tool["actions"]
+        if isinstance(action, dict)
+    ]
+    schemas = [
+        (
+            action,
+            key,
+            json.dumps(action[key], ensure_ascii=False, sort_keys=True, separators=(",", ":")),
+        )
+        for _, action in actions
+        for key in ("input_schema", "output_schema")
+        if isinstance(action.get(key), dict)
+    ]
+    references: dict[str, str] = {}
+    definitions: dict[str, dict[str, Any]] = {}
+    for encoded, count in Counter(schema for _, _, schema in schemas).items():
+        name = f"s{len(definitions)}"
+        name_size = len(json.dumps(name))
+        # Include the new _ref suffix and definition entry when deciding whether
+        # pooling saves space; small or unique schemas keep their original form.
+        if count * (len(encoded) - name_size - 4) > len(encoded) + name_size + 2:
+            references[encoded] = name
+            definitions[name] = json.loads(encoded)
+    for action, key, encoded in schemas:
+        if encoded in references:
+            del action[key]
+            action[f"{key}_ref"] = references[encoded]
+    inherited = False
+    for tool, action in actions:
+        if "description" in action and action["description"] == tool.get("description"):
+            del action["description"]
+            inherited = True
+    if definitions or inherited:
+        prompt["tool_schemas"] = definitions
+        prompt["tool_registry_format"] = (
+            "action 未写 description 时继承 tool.description；input_schema_ref/output_schema_ref "
+            "指向 tool_schemas 中的完整独立 Schema，其内部 $ref 仍相对于该 Schema。"
+        )
 
 
 def planner_max_tokens() -> int:
@@ -77,6 +127,8 @@ async def _prepare_model_messages(provider, context, messages, max_tokens, extra
             prompt = json.loads(outbound[-1]["content"])
         except (TypeError, ValueError):
             prompt = None
+        if isinstance(prompt, dict):
+            _compact_tool_registry(prompt)
         if isinstance(prompt, dict) and isinstance(prompt.get("conversation_history"), list):
             history = prompt.pop("conversation_history")
             prompt.pop("recent_messages", None)
@@ -84,11 +136,7 @@ async def _prepare_model_messages(provider, context, messages, max_tokens, extra
             if isinstance(prompt_context, dict):
                 for key in ("recent_messages", "chat_owned_history", "chat_history_summary"):
                     prompt_context.pop(key, None)
-            outbound = [
-                *outbound[:-1],
-                *history,
-                {**outbound[-1], "content": json.dumps(prompt, ensure_ascii=False)},
-            ]
+            outbound = [*outbound[:-1], *history, outbound[-1]]
             if context is not None:
                 saved = conversation_summary(context)
                 state = context.get("_planner_compression_context")
@@ -107,6 +155,11 @@ async def _prepare_model_messages(provider, context, messages, max_tokens, extra
                             state.summary, state.summary_covered_until = saved["text"], count - 1
                             state.summary_fingerprint = summary_fingerprint(history[:count])
                     context["_planner_compression_context"] = state
+        if isinstance(prompt, dict):
+            outbound[-1] = {
+                **outbound[-1],
+                "content": json.dumps(prompt, ensure_ascii=False, separators=(",", ":")),
+            }
     schemas = {key: extra[key] for key in ("tools", "functions", "response_format") if key in extra}
     schema_tokens = (
         estimate_messages_tokens(

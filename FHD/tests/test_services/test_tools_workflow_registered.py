@@ -459,6 +459,7 @@ class TestExecuteRegisteredWorkflowTool:
     def test_registered_routers_dict_completeness(self):
         expected_keys = {
             "client_product_issue",
+            "conversation_history",
             "desktop_automation",
             "customers",
             "products",

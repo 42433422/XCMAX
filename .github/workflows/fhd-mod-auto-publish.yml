@@ -34,7 +34,9 @@ env:
 
 jobs:
   prepare:
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
     runs-on: ubuntu-latest
     timeout-minutes: 40
     outputs:
@@ -45,6 +47,13 @@ jobs:
         with:
           ref: ${{ env.SOURCE_SHA }}
           fetch-depth: 0
+          persist-credentials: false
+      - name: Require exact main source before loading publication code
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'Invalid source SHA'; exit 1; }
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          git merge-base --is-ancestor "$SOURCE_SHA" origin/main
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
@@ -55,7 +64,6 @@ jobs:
           REQUESTED_MOD_ID: ${{ inputs.mod_id }}
         run: |
           set -euo pipefail
-          git fetch origin main:refs/remotes/origin/main
           matrix=$(python FHD/scripts/dev/mod_publish_plan.py \
             --source-sha "$SOURCE_SHA" --repository "$GITHUB_REPOSITORY" \
             --mod-id "$REQUESTED_MOD_ID" --wait-seconds 1800 \
@@ -71,7 +79,7 @@ jobs:
 
   package-and-publish:
     needs: prepare
-    if: github.event_name == 'workflow_dispatch' && inputs.publish_release && needs.prepare.outputs.count != '0'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish_release && needs.prepare.outputs.count != '0'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:

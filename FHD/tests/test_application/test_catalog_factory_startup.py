@@ -3,8 +3,10 @@
 import hashlib
 import json
 import os
+import sqlite3
 import subprocess
 import sys
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -80,7 +82,9 @@ def test_real_reader_contention_waits_before_fresh_ledger_claim(tmp_path):
     _run(tmp_path, "restart", env)
 
 
-@pytest.mark.parametrize("damage", ["missing_host", "missing_marker", "invalid_profile"])
+@pytest.mark.parametrize(
+    "damage", ["missing_host", "missing_marker", "invalid_profile", "missing_checkpoints"]
+)
 def test_invalid_guarded_factory_does_not_create_repair_or_seed_storage(tmp_path, damage):
     env = _env(tmp_path)
     if damage != "missing_host":
@@ -89,15 +93,30 @@ def test_invalid_guarded_factory_does_not_create_repair_or_seed_storage(tmp_path
         (tmp_path / "control/config/owned-source-protocol.json").unlink()
     elif damage == "invalid_profile":
         env["XCAGI_OWNED_SOURCE_PROFILE"] = "untrusted-profile"
+    elif damage == "missing_checkpoints":
+        with closing(sqlite3.connect(tmp_path / "host.sqlite")) as db:
+            db.execute("DROP TABLE checkpoints")
+            db.commit()
+    # SQLite may open these transient coordination files during a physically
+    # read-only WAL admission. Every database and authority file remains covered.
+    sidecars = (
+        {tmp_path / name for name in ("host.sqlite-wal", "host.sqlite-shm")}
+        if damage == "missing_checkpoints"
+        else set()
+    )
+    wal = tmp_path / "host.sqlite-wal"
+    wal_before = wal.read_bytes() if wal.exists() else b""
     before = {
         str(p.relative_to(tmp_path)): hashlib.sha256(p.read_bytes()).hexdigest()
         for p in tmp_path.rglob("*")
-        if p.is_file() and p.suffix != ".log"
+        if p.is_file() and p.suffix != ".log" and p not in sidecars
     }
     _run(tmp_path, "reject", env)
     after = {
         str(p.relative_to(tmp_path)): hashlib.sha256(p.read_bytes()).hexdigest()
         for p in tmp_path.rglob("*")
-        if p.is_file() and p.suffix != ".log"
+        if p.is_file() and p.suffix != ".log" and p not in sidecars
     }
     assert after == before, "rejected startup changed pre-existing synthetic authority/storage"
+    if wal.exists():
+        assert wal.read_bytes() == wal_before, "rejected startup wrote uncheckpointed WAL content"

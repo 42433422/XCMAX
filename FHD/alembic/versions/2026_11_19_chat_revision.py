@@ -1,6 +1,7 @@
 """Fence late conversation writes after deletion or withdrawal."""
 
 import sqlalchemy as sa
+from alembic.script import ScriptDirectory
 
 from alembic import op
 
@@ -34,4 +35,10 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     # Tombstones must survive downgrade: old in-flight writers must not reclaim IDs.
-    pass
+    # The parent is also forward-only; its downgrade only checks delivery safety.
+    # Reuse that guard before Alembic can move this revision's version stamp.
+    context = op.get_context()
+    parent = ScriptDirectory.from_config(context.config).get_revision(down_revision)
+    if parent is None:
+        raise RuntimeError("Conversation revision is missing its delivery-safety parent")
+    parent.module.downgrade()

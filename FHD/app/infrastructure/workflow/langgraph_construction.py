@@ -423,9 +423,12 @@ class LangGraphConstructionMixin:
         state.setdefault("executed", [])
         state.setdefault("blocked", [])
         state.setdefault("results", [])
-        state.setdefault("failure", {})
-        state.setdefault("message", "")
-        state.setdefault("next_node", "")
+        if self._native_checkpointer is not None:
+            # A new input on an existing native thread must clear old failure
+            # channels; stateless runs retain their existing context shape.
+            state.setdefault("failure", {})
+            state.setdefault("message", "")
+            state.setdefault("next_node", "")
         return state
 
     @staticmethod

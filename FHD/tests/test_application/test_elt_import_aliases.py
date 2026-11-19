@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
+from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, inspect, text
 
 from alembic import command
@@ -41,7 +42,8 @@ def test_legacy_etl_env_is_rejected(monkeypatch):
 
 def test_empty_upgrade_has_only_elt_run_tables(_db_url, monkeypatch):
     monkeypatch.setenv("DATABASE_URL", _db_url)
-    command.upgrade(_alembic_config(), "head")
+    config = _alembic_config()
+    command.upgrade(config, "head")
     engine = create_engine(_db_url)
     try:
         names = set(inspect(engine).get_table_names())
@@ -53,7 +55,7 @@ def test_empty_upgrade_has_only_elt_run_tables(_db_url, monkeypatch):
         heads = list(
             engine.connect().execute(text("SELECT version_num FROM alembic_version")).scalars()
         )
-        assert heads == ["2026_11_16_elt_value_cutover"]
+        assert heads == [ScriptDirectory.from_config(config).get_current_head()]
     finally:
         engine.dispose()
 

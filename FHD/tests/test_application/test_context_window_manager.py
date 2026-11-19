@@ -410,21 +410,23 @@ class TestCompressConcurrency:
         from app.application.agent_orchestrator.context_window_manager import (
             ContextWindowManager,
         )
+        from app.infrastructure.llm.providers import registry
 
         m = ContextWindowManager(token_budget=800, recent_keep=2, summarize_threshold=3)
         provider = _make_provider()
+        original_provider_resolver = registry.get_active_provider
 
         async def run_one(user_id: str) -> str:
             msgs = _make_messages(6)
-            with patch(
-                "app.infrastructure.llm.providers.registry.get_active_provider",
-                return_value=provider,
-            ):
-                r = await m.compress(msgs, user_id=user_id, provider=provider)
+            r = await m.compress(msgs, user_id=user_id, provider=provider)
             return r.strategy
 
         tasks = [run_one(f"u{i}") for i in range(10)]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        # One patch owns the whole concurrent interval; overlapping task-local
+        # patches can restore another task's mock after the real resolver.
+        with patch.object(registry, "get_active_provider", return_value=provider):
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+        assert registry.get_active_provider is original_provider_resolver
         for r in results:
             assert not isinstance(r, Exception), f"concurrent compress failed: {r}"
             assert r == "summarize"

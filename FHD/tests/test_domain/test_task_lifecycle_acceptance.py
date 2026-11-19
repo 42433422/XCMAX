@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.application.agent_orchestrator.run_models import AgentRun
+from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
 from app.application.agent_orchestrator.task_execution_repository import (
     InMemoryTaskExecutionRepository,
     SQLAlchemyTaskExecutionRepository,
@@ -184,10 +185,10 @@ def test_workflow_cancel_uses_the_shared_machine() -> None:
 
 def test_sql_queue_retries_open_effect_and_idempotency(tmp_path) -> None:
     engine = create_engine(f"sqlite:///{tmp_path / 'retry.db'}")
-    repo = SQLAlchemyTaskExecutionRepository(
-        session_factory=sessionmaker(bind=engine), jitter_ratio=0.0
-    )
+    factory = sessionmaker(bind=engine)
+    repo = SQLAlchemyTaskExecutionRepository(session_factory=factory, jitter_ratio=0.0)
     run = _run("sql-retry")
+    SQLAlchemyAgentRunRepository(session_factory=factory).save(run)
     stored = repo.enqueue(run, idempotency_key="sql-1", fingerprint="body")
     assert (
         repo.enqueue(_run("copy"), idempotency_key="sql-1", fingerprint="body").run_id

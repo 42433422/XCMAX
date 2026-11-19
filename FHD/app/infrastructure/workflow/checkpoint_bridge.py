@@ -23,8 +23,11 @@ never imports ``sqlalchemy`` or ``fastapi``.
 
 from __future__ import annotations
 
-from contextlib import contextmanager
+import re
+import sqlite3
+from contextlib import closing, contextmanager
 from datetime import UTC, datetime
+from pathlib import Path
 from time import sleep
 from typing import Any, Iterator
 
@@ -35,6 +38,55 @@ _SNAPSHOT_CHANNEL = "__workflow__"
 
 _Saver = Any
 
+# Comparison-only declarations for the pinned vendored SqliteSaver. Its setup()
+# remains the only DDL owner; guarded serving must use an offline-provisioned DB.
+_SQLITE_CHECKPOINT_SCHEMA = {
+    "checkpoints": """CREATE TABLE checkpoints (
+        thread_id TEXT NOT NULL,
+        checkpoint_ns TEXT NOT NULL DEFAULT '',
+        checkpoint_id TEXT NOT NULL,
+        parent_checkpoint_id TEXT,
+        type TEXT,
+        checkpoint BLOB,
+        metadata BLOB,
+        PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id)
+    )""",
+    "writes": """CREATE TABLE writes (
+        thread_id TEXT NOT NULL,
+        checkpoint_ns TEXT NOT NULL DEFAULT '',
+        checkpoint_id TEXT NOT NULL,
+        task_id TEXT NOT NULL,
+        idx INTEGER NOT NULL,
+        channel TEXT NOT NULL,
+        type TEXT,
+        value BLOB,
+        PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id, task_id, idx)
+    )""",
+}
+
+
+def validate_sqlite_checkpoint_schema(
+    connection: sqlite3.Connection, *, allow_missing: bool = False
+) -> None:
+    """Inspect existing native storage without DDL, repair, or shadow-table access."""
+    compact = lambda sql: re.sub(r"\s+", "", str(sql or "")).lower()
+    for table, ddl in _SQLITE_CHECKPOINT_SCHEMA.items():
+        actual = {
+            (kind, name): compact(sql)
+            for kind, name, sql in connection.execute(
+                "SELECT type,name,sql FROM main.sqlite_master WHERE tbl_name=?", (table,)
+            )
+        }
+        expected = {
+            ("table", table): compact(ddl),
+            ("index", f"sqlite_autoindex_{table}_1"): "",
+        }
+        if (actual != expected and not (allow_missing and not actual)) or connection.execute(
+            "SELECT 1 FROM temp.sqlite_master WHERE name=? OR tbl_name=? LIMIT 1",
+            (table, table),
+        ).fetchone():
+            raise ValueError(f"native checkpoint schema requires offline provisioning: {table}")
+
 
 @contextmanager
 def open_run_checkpointer(repository: Any) -> Iterator[Any]:
@@ -42,7 +94,9 @@ def open_run_checkpointer(repository: Any) -> Iterator[Any]:
 
     In-memory repositories are explicit development/test adapters. SQL-backed
     runs must open their real saver successfully before any graph node executes.
-    ``ClaimedRunRepository`` delegates ``transaction`` to its fenced host store.
+    ``ClaimedRunRepository`` delegates ``transaction`` and schema setup policy to
+    its fenced host store. Existing repository adapters without an explicit policy
+    retain automatic setup, including PostgreSQL startup initialization.
     """
     transaction = getattr(repository, "transaction", None)
     if transaction is None:
@@ -51,13 +105,24 @@ def open_run_checkpointer(repository: Any) -> Iterator[Any]:
     with transaction(read_only=True) as db:
         bind = db.get_bind()
         url = bind.url
+    allow_setup = getattr(repository, "allows_schema_setup", True) is not False
     if url.get_backend_name() == "sqlite":
         if not url.database or url.database == ":memory:":
             raise ValueError("持久任务检查点需要文件 SQLite 或 PostgreSQL")
         from langgraph.checkpoint.sqlite import SqliteSaver
 
-        with SqliteSaver.from_conn_string(str(url.database)) as saver:
-            saver.setup()
+        target = (
+            str(url.database) if allow_setup else Path(url.database).resolve().as_uri() + "?mode=rw"
+        )
+        with closing(
+            sqlite3.connect(target, uri=not allow_setup, check_same_thread=False)
+        ) as sqlite_connection:
+            saver = SqliteSaver(sqlite_connection)
+            if allow_setup:
+                saver.setup()
+            else:
+                validate_sqlite_checkpoint_schema(sqlite_connection)
+                saver.is_setup = True
             yield saver
     elif url.get_backend_name() == "postgresql":
         from langgraph.checkpoint.postgres import PostgresSaver
@@ -74,6 +139,11 @@ def open_run_checkpointer(repository: Any) -> Iterator[Any]:
         try:
             connection.autocommit = True
             postgres_saver = PostgresSaver(connection)
+            if not allow_setup:
+                # Explicitly pre-provisioned repositories never migrate at request
+                # time. Normal repositories and old adapters keep setup below.
+                yield postgres_saver
+                return
             # Upstream schema migrations are not concurrent. Serialize only
             # setup across processes, including CREATE INDEX CONCURRENTLY.
             with connection.cursor() as cursor:

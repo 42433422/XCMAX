@@ -145,12 +145,6 @@ def test_seeded_first_order_from_chat_runs_real_tools_and_persists_after_confirm
     chat.workflow_planner = LLMWorkflowPlanner(ai_service=conversation, completion=completion)
     for method in ("_persist_chat_turn", "_persist_recallable_chat_turn", "_persist_plan_state"):
         monkeypatch.setattr(chat, method, Mock())
-    monkeypatch.setattr(
-        "app.application.ai_chat.dialogue_memory.prepare_chat_turn", lambda *a, **kw: None
-    )
-    monkeypatch.setattr(
-        "app.application.ai_chat.dialogue_memory.settle_chat_turn", lambda *a, **kw: None
-    )
     context = {**actor.context, "tool_execution_profile": profile, "memory_capture_enabled": False}
     with tenant_scope(1):
         waiting_payload = chat.process_chat(
@@ -175,6 +169,7 @@ def test_seeded_first_order_from_chat_runs_real_tools_and_persists_after_confirm
         run_id = inner["agent_run_id"]
         waiting = repository.get(run_id)
         assert waiting.status == "waiting_user"
+        assert waiting.metadata["runtime_context"]["_conversation_revision"] == 0
         assert [call.status for call in waiting.tool_calls] == ["completed", "completed"]
         assert waiting.steps[-1].params["products"][0]["tin_spec"] == 1
         with actor.factory() as db:

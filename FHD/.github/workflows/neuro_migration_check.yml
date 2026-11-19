@@ -12,6 +12,10 @@ on:
     # 每天凌晨 2 点运行
     - cron: '0 2 * * *'
 
+# Candidate tests never inherit repository-wide write permissions.
+permissions:
+  contents: read
+
 jobs:
   # 统一 changed-path 分类（SSOT: scripts/dev/change_classifier.py）——docs/前端改动不跑迁移检查。
   classify:

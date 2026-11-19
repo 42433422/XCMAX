@@ -130,6 +130,20 @@ def test_management_to_verified_knowledge_preserves_two_approvals(setup, monkeyp
     assert read(client, request_id)["status"] == "awaiting_acceptance"
     assert service.accepted_knowledge() == []
     assert decision(client, request_id).status_code == 200
+    assert read(client, request_id)["status"] == "waiting_delivery"
+    assert service.accepted_knowledge() == []
+    monkeypatch.setattr(
+        "modstore_server.retort_delivery.collect_delivery",
+        lambda _: {"status": "waiting_delivery", "reason": "awaiting_protected_merge"},
+    )
+    service.tick()
+    assert read(client, request_id)["status"] == "waiting_delivery"
+    assert service.accepted_knowledge() == []
+    monkeypatch.setattr(
+        "modstore_server.retort_delivery.collect_delivery",
+        lambda _: {"status": "deployment_verified", "merge_sha": "e" * 40},
+    )
+    service.tick()
     assert read(client, request_id)["status"] == "completed"
     records = service.accepted_knowledge()
     assert len(records) == 1 and records[0]["verification"]["score"] is None
@@ -163,6 +177,18 @@ def test_uncertain_issue_response_never_republishes(setup, monkeypatch):
     for _ in range(3):
         service.advance_run(request_id)
     assert len(posts) == 1 and read(setup["client"], request_id)["status"] == "waiting_execution"
+    assert service.accepted_knowledge() == []
+
+
+def test_historical_branch_acceptance_is_not_promoted_to_production(setup):
+    request_id = create(setup)
+    with get_session_factory()() as db:
+        row = db.get(RetortEvolutionRun, request_id)
+        row.status = "completed"
+        row.snapshot_json = json_dumps({"status": "completed", "knowledge": {"recorded": True}})
+        row.knowledge_json = json_dumps({"evidence_verified": True})
+        db.commit()
+    assert read(setup["client"], request_id)["status"] == "branch_accepted"
     assert service.accepted_knowledge() == []
 
 

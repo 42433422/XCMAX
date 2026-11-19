@@ -17,6 +17,7 @@ class EvolutionState(TypedDict, total=False):
     dispatch: dict[str, Any]
     execution: dict[str, Any]
     verification: dict[str, Any]
+    delivery: dict[str, Any]
     approval: dict[str, Any]
     knowledge: dict[str, Any]
     status: str
@@ -32,6 +33,7 @@ class EvolutionPorts(Protocol):
     def dispatch(self, state: EvolutionState) -> dict[str, Any]: ...
     def collect(self, state: EvolutionState) -> dict[str, Any]: ...
     def verify(self, state: EvolutionState) -> dict[str, Any]: ...
+    def delivery(self, state: EvolutionState) -> dict[str, Any]: ...
     def remember(self, state: EvolutionState) -> dict[str, Any]: ...
 
 
@@ -98,11 +100,29 @@ def build_evolution_graph(ports: EvolutionPorts, checkpointer: Any):
             }
         )
         approved = _approved(reply, binding)
-        return {"approval": reply, "status": "accepted" if approved else "rejected"}
+        return {
+            "approval": reply,
+            "status": "waiting_delivery" if approved else "rejected",
+        }
 
     def remember(state: EvolutionState):
         knowledge = ports.remember(state)
         return {"knowledge": knowledge, "status": "completed"}
+
+    def delivery(state: EvolutionState):
+        # A user's acceptance of branch evidence does not attest a production
+        # deployment. Resume from durable checkpoints and re-read trusted ports.
+        interrupt({"kind": "delivery", "request_id": state["protocol"]["request_id"]})
+        result = ports.delivery(state)
+        status = result.get("status")
+        return {
+            "delivery": result,
+            "status": "delivered"
+            if status == "deployment_verified"
+            else "failed"
+            if status == "failed"
+            else "waiting_delivery",
+        }
 
     graph = StateGraph(EvolutionState)
     for name, fn in (
@@ -113,6 +133,7 @@ def build_evolution_graph(ports: EvolutionPorts, checkpointer: Any):
         ("collect", collect),
         ("verify", verify),
         ("accept", accept),
+        ("delivery", delivery),
         ("remember", remember),
     ):
         graph.add_node(name, fn)
@@ -133,7 +154,13 @@ def build_evolution_graph(ports: EvolutionPorts, checkpointer: Any):
         "verify", lambda s: "accept" if s["status"] == "awaiting_acceptance" else END
     )
     graph.add_conditional_edges(
-        "accept", lambda s: "remember" if s["status"] == "accepted" else END
+        "accept", lambda s: "delivery" if s["status"] == "waiting_delivery" else END
+    )
+    graph.add_conditional_edges(
+        "delivery",
+        lambda s: {"delivered": "remember", "waiting_delivery": "delivery"}.get(
+            s["status"], END
+        ),
     )
     graph.add_edge("remember", END)
     return graph.compile(checkpointer=checkpointer)

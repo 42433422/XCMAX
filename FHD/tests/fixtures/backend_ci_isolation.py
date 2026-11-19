@@ -136,6 +136,33 @@ def trusted_actor(tmp_path, monkeypatch):
         engine.dispose()
 
 
+@pytest.fixture
+def conversation_storage(tmp_path, monkeypatch):
+    """Use the production transaction scope with a test-owned conversation database."""
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.db import session as db_session
+    from app.db.models import AIConversation, AIConversationSession, User
+    from app.domain.shared_services import conversation_service
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'conversations.sqlite'}")
+    for model in (User, AIConversationSession, AIConversation):
+        model.__table__.create(engine)
+    factory = sessionmaker(bind=engine)
+    with factory.begin() as db:
+        db.add_all(
+            User(id=owner, username=f"conversation-owner-{owner}", password="unused")
+            for owner in (1, 7, 123)
+        )
+    monkeypatch.setattr(db_session, "SessionLocal", factory)
+    monkeypatch.setattr(conversation_service, "notify_user", lambda **kwargs: None)
+    try:
+        yield factory
+    finally:
+        engine.dispose()
+
+
 def retry_throttled_fetch(fetch, *, sleep=time.sleep):
     """Retry only 429, honor Retry-After, and still fail when retries exhaust."""
 

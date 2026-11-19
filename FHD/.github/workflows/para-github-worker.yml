@@ -21,93 +21,154 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.run_attempt == 1
     runs-on: ubuntu-24.04
     timeout-minutes: 120
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      # The agent program comes from trusted main, never the candidate artifact.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
+          ref: ${{ github.sha }}
           persist-credentials: false
-      # Disabled until publication runs outside the model's identity/filesystem.
-      # This step executes before any model, management or publisher secret is supplied.
-      - name: Block unsafe shared-identity publisher
-        env:
-          PARA_GITHUB_REQUEST_ID: ${{ inputs.request_id }}
-          PARA_GITHUB_EVIDENCE_DIR: ${{ runner.temp }}/para-evidence
-        run: |
-          node scripts/autonomy/runtime_tools/github_para_worker.mjs
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "22"
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
-      - name: Prepare the existing Para executor
+      - name: Prepare existing Para executor
         env:
           PARA_CODEX_VERSION: ${{ vars.PARA_CODEX_VERSION }}
           PARA_CODEX_AUTH_JSON: ${{ secrets.PARA_CODEX_AUTH_JSON }}
           PARA_CODEX_CONFIG_TOML: ${{ secrets.PARA_CODEX_CONFIG_TOML }}
           PARA_CODEX_API_KEY: ${{ secrets.PARA_CODEX_API_KEY }}
-        run: |
-          [[ "$PARA_CODEX_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Pin the Para Codex CLI version first'; exit 1; }
-          mkdir -p "$RUNNER_TEMP/para-worker"
-          cp scripts/autonomy/runtime_tools/*.mjs "$RUNNER_TEMP/para-worker/"
-          npm install --prefix "$RUNNER_TEMP/para-worker" --package-lock=false "ws@8.18.0" "@openai/codex@$PARA_CODEX_VERSION"
-          python - <<'PY'
-          import json, os
-          from pathlib import Path
-          auth = os.environ.get('PARA_CODEX_AUTH_JSON', '')
-          if not auth and not os.environ.get('PARA_CODEX_API_KEY'):
-              raise SystemExit('Para Codex authorization is not configured')
-          root = Path.home() / '.codex'
-          root.mkdir(mode=0o700, exist_ok=True)
-          if auth:
-              json.loads(auth)
-              target = root / 'auth.json'
-              target.write_text(auth)
-              target.chmod(0o600)
-          config = os.environ.get('PARA_CODEX_CONFIG_TOML', '')
-          if config:
-              target = root / 'config.toml'
-              target.write_text(config)
-              target.chmod(0o600)
-          PY
-      - name: Run the existing employees through Para
+        run: bash scripts/autonomy/runtime_tools/prepare_github_executor.sh
+      - name: Run original Para tasks without publication credentials
         env:
+          PARA_GITHUB_STAGE: execute
           PARA_GITHUB_REQUEST_ID: ${{ inputs.request_id }}
+          PARA_GITHUB_CANDIDATE_DIR: ${{ runner.temp }}/para-candidate
           PARA_GITHUB_EVIDENCE_DIR: ${{ runner.temp }}/para-evidence
           DEVFLEET_API_URL: ${{ vars.PARA_GITHUB_API_URL }}
           DEVFLEET_DEVICE_TOKEN: ${{ secrets.PARA_GITHUB_DEVICE_TOKEN }}
           DEVFLEET_CODEX_AGENT: ${{ runner.temp }}/para-worker/node_modules/.bin/codex
           DEVFLEET_WORKSPACE_ROOT: ${{ runner.temp }}/para-workspaces
-          DEVFLEET_BARE_REPO: ${{ runner.temp }}/xcmax-bare.git
-          DEVFLEET_REPO_URL: https://github.com/${{ github.repository }}.git
           XCMAX_CONTROL_REPORTS_ENABLED: "1"
           DEVFLEET_CODEX_MODEL_CANDIDATES: ${{ vars.PARA_CODEX_MODEL_CANDIDATES }}
           CODEX_API_KEY: ${{ secrets.PARA_CODEX_API_KEY }}
-          MODSTORE_DISPATCH_BASE: https://xiu-ci.com
           MODSTORE_PARA_DISPATCH_TOKEN: ${{ secrets.MODSTORE_PARA_DISPATCH_TOKEN }}
-          GH_TOKEN: ${{ secrets.CI_COMMIT_TOKEN }}
-        run: |
-          test -n "$DEVFLEET_API_URL" && test -n "$DEVFLEET_DEVICE_TOKEN" && test -n "$GH_TOKEN"
-          gh auth setup-git
-          git clone --bare "$DEVFLEET_REPO_URL" "$DEVFLEET_BARE_REPO"
-          node "$RUNNER_TEMP/para-worker/github_para_worker.mjs"
+          GITHUB_TOKEN: ${{ github.token }} # job permissions are contents:read only
+        run: node "$RUNNER_TEMP/para-worker/github_para_executor.mjs"
+      - name: Hand off immutable candidate data
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: para-candidate-${{ inputs.request_id }}
+          path: |
+            ${{ runner.temp }}/para-candidate/manifest.json
+            ${{ runner.temp }}/para-candidate/candidate.bundle
+          if-no-files-found: error
+          retention-days: 7
       - name: Retain execution evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: para-execution-${{ inputs.request_id }}
           path: ${{ runner.temp }}/para-evidence/execution.json
           if-no-files-found: warn
 
-  independent-verification:
+  publish-candidate:
     needs: employee-workspace
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      # A fresh VM contains no model process, candidate checkout, config or hooks.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Validate original dispatch and publish inert Git objects
+        env:
+          PARA_GITHUB_REQUEST_ID: ${{ inputs.request_id }}
+          MODSTORE_PARA_DISPATCH_TOKEN: ${{ secrets.MODSTORE_PARA_DISPATCH_TOKEN }}
+          # This existing credential allows ordinary PR CI to start automatically.
+          GH_TOKEN: ${{ secrets.CI_COMMIT_TOKEN }}
+        run: python scripts/autonomy/publish_para_candidate.py
+      - name: Retain publication receipt
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: para-publication-${{ inputs.request_id }}
+          path: ${{ runner.temp }}/para-publication.json
+          if-no-files-found: warn
+
+  resume-verification:
+    needs: publish-candidate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    steps:
+      # The agent program comes from trusted main, never the candidate artifact.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Prepare existing Para executor
+        env:
+          PARA_CODEX_VERSION: ${{ vars.PARA_CODEX_VERSION }}
+          PARA_CODEX_AUTH_JSON: ${{ secrets.PARA_CODEX_AUTH_JSON }}
+          PARA_CODEX_CONFIG_TOML: ${{ secrets.PARA_CODEX_CONFIG_TOML }}
+          PARA_CODEX_API_KEY: ${{ secrets.PARA_CODEX_API_KEY }}
+        run: bash scripts/autonomy/runtime_tools/prepare_github_executor.sh
+      - name: Run original Para tasks without publication credentials
+        env:
+          PARA_GITHUB_STAGE: resume
+          PARA_GITHUB_REQUEST_ID: ${{ inputs.request_id }}
+          PARA_GITHUB_CANDIDATE_DIR: ${{ runner.temp }}/para-candidate
+          PARA_GITHUB_EVIDENCE_DIR: ${{ runner.temp }}/para-evidence
+          DEVFLEET_API_URL: ${{ vars.PARA_GITHUB_API_URL }}
+          DEVFLEET_DEVICE_TOKEN: ${{ secrets.PARA_GITHUB_DEVICE_TOKEN }}
+          DEVFLEET_CODEX_AGENT: ${{ runner.temp }}/para-worker/node_modules/.bin/codex
+          DEVFLEET_WORKSPACE_ROOT: ${{ runner.temp }}/para-workspaces
+          XCMAX_CONTROL_REPORTS_ENABLED: "1"
+          DEVFLEET_CODEX_MODEL_CANDIDATES: ${{ vars.PARA_CODEX_MODEL_CANDIDATES }}
+          CODEX_API_KEY: ${{ secrets.PARA_CODEX_API_KEY }}
+          MODSTORE_PARA_DISPATCH_TOKEN: ${{ secrets.MODSTORE_PARA_DISPATCH_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }} # job permissions are contents:read only
+        run: node "$RUNNER_TEMP/para-worker/github_para_executor.mjs"
+      - name: Retain original team receipt
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: para-verification-${{ inputs.request_id }}
+          path: ${{ runner.temp }}/para-evidence/execution.json
+          if-no-files-found: warn
+
+  independent-verification:
+    needs: resume-verification
     runs-on: ubuntu-24.04
     timeout-minutes: 130
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
+          ref: ${{ github.sha }}
           path: verifier
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
       - name: Read approved verification protocol
@@ -119,13 +180,13 @@ jobs:
         run: |
           python -m pip install ./packages/retort_engine 'jsonschema>=4.23,<5'
           python FHD/scripts/autonomy/prepare_retort_verification.py
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         if: steps.protocol.outputs.retort == 'true'
         with:
           ref: ${{ github.sha }}
           path: before
           persist-credentials: false
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         if: steps.protocol.outputs.retort == 'true'
         with:
           ref: ${{ steps.protocol.outputs.target_sha }}
@@ -144,7 +205,7 @@ jobs:
             --before "$GITHUB_WORKSPACE/before" --after "$GITHUB_WORKSPACE/after" \
             --output "$RUNNER_TEMP/retort-verification" \
             --run-id "$GITHUB_RUN_ID" --target-sha "$RETORT_TARGET_SHA"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always() && steps.protocol.outputs.retort == 'true'
         with:
           name: retort-verification-${{ inputs.request_id }}

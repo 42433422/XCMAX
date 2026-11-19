@@ -12,6 +12,7 @@ import {
   parseCredentialGrant,
   redactSecrets,
 } from './credential_vault.mjs';
+import { githubReadEnv } from './github_para_candidate.mjs';
 
 const fresh = (prefix) => `${prefix}-${randomBytes(12).toString('hex')}`;
 const temporaryDirectories = [];
@@ -94,8 +95,9 @@ test('model environments default deny non-model credentials; prompt and legacy f
   const auditPath = path.join(tmp(), 'audit.jsonl');
   const env = { PATH: '/bin', HOME: '/synthetic-home', OPENAI_API_KEY: fresh('model'),
     CODEX_API_KEY: fresh('codex'), ANTHROPIC_AUTH_TOKEN: fresh('claude'),
-    GH_TOKEN: fresh('publish'), CI_COMMIT_TOKEN: fresh('admin'), AWS_ACCESS_KEY_ID: fresh('aws'),
-    SSH_AUTH_SOCK: '/synthetic-agent', GIT_CONFIG_COUNT: '1', NODE_OPTIONS: '--inspect',
+    GH_TOKEN: fresh('publish'), CI_COMMIT_TOKEN: fresh('admin'), GITHUB_TOKEN: fresh('read'), AWS_ACCESS_KEY_ID: fresh('aws'),
+    SSH_AUTH_SOCK: '/synthetic-agent', GIT_CONFIG_COUNT: '1',
+    GIT_CONFIG_KEY_0: 'http.extraheader', GIT_CONFIG_VALUE_0: fresh('header'), NODE_OPTIONS: '--inspect',
     DEVFLEET_DEVICE_TOKEN: fresh('device'), MODSTORE_PARA_DISPATCH_TOKEN: fresh('dispatch'),
     UNKNOWN_AUTH: fresh('unknown'), XCMAX_CREDENTIAL_SCOPED_CHILD_ENV: '0' };
   const before = { ...env };
@@ -147,6 +149,36 @@ test('redaction hides env secrets, loaded values and token shapes in reports', (
   assert.equal(redactSecrets('plain text', { env: {} }), 'plain text');
 });
 
+test('isolated Git authentication applies only to the dispatched repository and never reaches model children', () => {
+  const directory = tmp();
+  execFileSync('git', ['init', '-b', 'main', directory], { stdio: 'pipe' });
+  const token = fresh('read');
+  const expected = `AUTHORIZATION: basic ${Buffer.from(`x-access-token:${token}`).toString('base64')}`;
+  const original = { PATH: process.env.PATH, HOME: directory, XDG_CONFIG_HOME: directory,
+    GITHUB_ACTIONS: 'true', GITHUB_REPOSITORY: 'owner/private', GITHUB_TOKEN: token,
+    GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'http.extraheader', GIT_CONFIG_VALUE_0: fresh('injected') };
+  const vault = createCredentialVault({ env: original, auditPath: path.join(directory, 'audit.jsonl') });
+  for (const stage of ['execute', 'resume']) {
+    const input = { ...original, PARA_GITHUB_STAGE: stage };
+    const env = { ...githubReadEnv(input), GIT_TERMINAL_PROMPT: '0' };
+    const gitConfig = (url) => execFileSync('git', ['config', '--get-urlmatch', 'http.extraheader', url],
+      { cwd: directory, env, encoding: 'utf8' }).trim();
+    assert.equal(gitConfig('https://github.com/owner/private.git'), expected);
+    assert.throws(() => gitConfig('https://github.com/owner/another.git'), { status: 1 });
+    assert.throws(() => gitConfig('https://example.test/owner/private.git'), { status: 1 });
+    assert.equal(input.GIT_CONFIG_VALUE_0, original.GIT_CONFIG_VALUE_0);
+    const child = vault.childEnv(env, null, { tool: 'codex' });
+    assert.equal(child.GITHUB_TOKEN, undefined);
+    assert.ok(Object.keys(child).every((key) => !key.startsWith('GIT_CONFIG_')));
+    assert.ok(!JSON.stringify(child).includes(token));
+    assert.ok(!JSON.stringify(child).includes(expected));
+  }
+  const savedConfig = readFileSync(path.join(directory, '.git', 'config'), 'utf8');
+  assert.ok(!savedConfig.includes('extraheader') && !savedConfig.includes(token) && !savedConfig.includes(expected));
+  const normalParent = { ...original, GITHUB_ACTIONS: 'false' };
+  assert.equal(githubReadEnv(normalParent), normalParent);
+});
+
 test('formatter and CLI probes do not inherit the trusted publisher environment', async () => {
   const { probeTools } = await import('./tool_preflight.mjs');
   let options;
@@ -158,5 +190,6 @@ test('formatter and CLI probes do not inherit the trusted publisher environment'
   const agent = readFileSync(new URL('./para_e2e_agent.mjs', import.meta.url), 'utf8');
   const formatter = agent.slice(agent.indexOf('async function autoFormatPythonFiles'), agent.indexOf('async function openPullRequestAfterPush'));
   assert.match(formatter, /env: toolEnv\('', 'formatter'\)/);
-  assert.match(agent, /env: \{\s*\.\.\.process\.env,\s*GIT_TERMINAL_PROMPT: '0',?\s*\}/);
+  const git = agent.slice(agent.indexOf('const git = async'), agent.indexOf('async function gitMaybe'));
+  assert.match(git, /env: \{\s*\.\.\.githubReadEnv\(process\.env\),\s*GIT_TERMINAL_PROMPT: '0',?\s*\}/);
 });

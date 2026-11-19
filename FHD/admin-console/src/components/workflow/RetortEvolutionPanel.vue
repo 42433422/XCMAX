@@ -46,6 +46,7 @@
         reason?: string;
       };
       execution?: { reason?: string };
+      delivery?: { reason?: string; merge_sha?: string; url?: string };
       knowledge?: { recorded?: boolean };
     };
     effects: { issue_number?: number; run_id?: number; pull_request_number?: number };
@@ -76,7 +77,10 @@
     verifying: '独立验证中',
     awaiting_acceptance: '待验收',
     accepted: '已验收',
-    completed: '已验收并归档',
+    branch_accepted: '分支已验收，交付待核对',
+    waiting_delivery: '等待上线验收',
+    delivered: '上线已核验',
+    completed: '已上线并归档',
     rejected: '已拒绝',
     failed: '未通过',
     cancelled: '已取消',
@@ -89,6 +93,7 @@
     '云端执行',
     '独立验证',
     '管理端验收',
+    '上线验收',
     '知识回流',
   ];
   const reasons: Record<string, string> = {
@@ -99,6 +104,14 @@
     runner_response_unconfirmed: '云端执行回执待核对',
     github_run_failed: '云端执行或独立验证未通过',
     employee_receipt_incomplete: '员工执行证据不完整',
+    awaiting_protected_merge: '等待代码审核与主干合入',
+    awaiting_authorized_production_release: '等待正式发布审批与部署',
+    production_release_not_successful: '发布尚未成功，继续核对原发布任务',
+    production_receipt_unavailable: '发布证据待核对',
+    health_sha_mismatch: '线上运行版本尚未与本次交付对齐',
+    health_artifact_digest_mismatch: '线上程序与发布制品尚未匹配',
+    accepted_pull_request_identity_changed: '验收后的代码已变化，需要重新验证',
+    pull_request_closed_without_merge: '代码提案已关闭，尚未合入',
   };
   const stages: Record<string, number> = {
     created: 0,
@@ -109,7 +122,10 @@
     verifying: 5,
     awaiting_acceptance: 6,
     accepted: 7,
-    completed: 8,
+    branch_accepted: 7,
+    waiting_delivery: 7,
+    delivered: 8,
+    completed: 9,
   };
   const active = computed(() => stages[detail.value?.status || ''] ?? 0);
   const pending = computed(() =>
@@ -333,6 +349,9 @@
           <el-descriptions-item v-if="detail.snapshot.execution?.reason" label="待处理">{{
             reasons[detail.snapshot.execution.reason] || '执行结果待核对'
           }}</el-descriptions-item>
+          <el-descriptions-item v-if="detail.snapshot.delivery?.reason" label="交付状态">{{
+            reasons[detail.snapshot.delivery.reason] || '交付证据待核对'
+          }}</el-descriptions-item>
           <el-descriptions-item label="目标">{{ detail.protocol.goal }}</el-descriptions-item>
           <el-descriptions-item label="RSI 辅助">{{
             detail.snapshot.optimization?.status === 'proposed'
@@ -348,6 +367,13 @@
             detail.snapshot.verification?.target_sha || detail.protocol.source_sha
           }}</el-descriptions-item>
           <el-descriptions-item label="执行证据">
+            <a
+              v-if="detail.snapshot.delivery?.url"
+              :href="detail.snapshot.delivery.url"
+              target="_blank"
+              rel="noopener noreferrer"
+              >正式发布记录</a
+            >
             <a
               v-if="detail.effects.pull_request_number"
               :href="`https://github.com/${detail.protocol.repository}/pull/${detail.effects.pull_request_number}`"
