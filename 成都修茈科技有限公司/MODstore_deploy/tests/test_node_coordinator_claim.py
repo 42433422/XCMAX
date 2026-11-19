@@ -199,7 +199,7 @@ def test_merge_upgrades_either_existing_head_without_losing_data(
     command.upgrade(cfg, "head")
     with engine.connect() as conn:
         assert conn.exec_driver_sql("SELECT version_num FROM alembic_version").scalars().all() == [
-            "20261108_llm_client_requests"
+            "20261119_personal_allowance"
         ]
         expected_eta = (
             "2026-10-21 03:30:00"
@@ -214,6 +214,9 @@ def test_merge_upgrades_either_existing_head_without_losing_data(
             "SELECT id, claim_token, claim_until FROM event_outbox"
         ).one() == (7, "", None)
         assert {"incident_inbox", "incident_claims"} <= set(sa.inspect(conn).get_table_names())
+        assert not {"users", "plan_templates", "personal_plan_allowance_claims"} & set(
+            sa.inspect(conn).get_table_names()
+        )
         if starting_head.endswith("incident_ownership") or starting_head == "both":
             assert conn.exec_driver_sql(
                 "SELECT inbox_key, incident_event_id FROM incident_inbox"

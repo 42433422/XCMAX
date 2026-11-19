@@ -57,8 +57,8 @@ describe('LoginView.vue', () => {
     wrapper.unmount()
   })
 
-  it('keeps enterprise account actions without the removed entitlement-sync guidance or its spacer', async () => {
-    fetchProductSku.mockResolvedValue('enterprise')
+  it.each(['enterprise', 'personal', 'generic'])('shows one registration link with the %s SKU', async (sku) => {
+    fetchProductSku.mockResolvedValue(sku)
     const router = makeRouter()
     await router.push('/login')
     await router.isReady()
@@ -72,11 +72,9 @@ describe('LoginView.vue', () => {
     await flushPromises()
 
     const actions = wrapper.findAll('.login-account-action')
-    expect(actions).toHaveLength(2)
+    expect(actions).toHaveLength(1)
     expect(actions[0].text()).toContain('注册账号')
     expect(actions[0].attributes('href')).toBe('https://xiu-ci.com/market/register?source=xcagi-desktop')
-    expect(actions[1].text()).toContain('购买与授权')
-    expect(actions[1].attributes('href')).toBe('https://xiu-ci.com/market/account-plans?plan=saas-trial-30&source=xcagi-desktop')
     expect(wrapper.text()).not.toContain('完成账号注册与企业授权后')
     expect(wrapper.find('.login-subheading').exists()).toBe(false)
     wrapper.unmount()

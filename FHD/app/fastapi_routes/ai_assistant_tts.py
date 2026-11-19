@@ -22,6 +22,7 @@ from app.domain.shared_services.tts_service import (
     TtsUpstreamResponseError,
     edge_cooldown_remaining_seconds,
 )
+from app.infrastructure.modstore_transport import httpx_sync_client
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -128,7 +129,7 @@ def _platform_mimo_audio(
     if not _EDGE_VOICE_RE.match(edge_voice):
         edge_voice = "zh-CN-XiaoxiaoNeural"
     try:
-        with httpx.Client(timeout=20.0) as client:
+        with httpx_sync_client(timeout=20.0) as client:
             resp = client.post(
                 f"{_market_api_base_url()}/api/workbench/tts",
                 headers={

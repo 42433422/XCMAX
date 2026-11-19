@@ -190,6 +190,42 @@ void main() {
     expect(saved.serverMode, 'cloud');
   });
 
+  test('personal plan survives restart and clears when the account changes',
+      () async {
+    final directory = await Directory.systemTemp.createTemp('xcagi_personal_');
+    addTearDown(() => directory.delete(recursive: true));
+    final path = '${directory.path}/session.json';
+    final client = MobileApiClient(
+      sessionStore: FileMobileSessionStore(filePath: path),
+    );
+    await client.persistLoginSession(
+      const {
+        'access_token': 'personal-access',
+        'personal_plan': true,
+        'user': {'id': 1, 'username': 'personal-user'},
+      },
+      fallbackUsername: 'personal-user',
+      fallbackAccountKind: 'enterprise',
+    );
+
+    final restarted = MobileApiClient(
+      sessionStore: FileMobileSessionStore(filePath: path),
+    );
+    expect((await restarted.loadSession()).personalPlan, isTrue);
+    await restarted.persistLoginSession(
+      const {
+        'access_token': 'enterprise-access',
+        'user': {'id': 2, 'username': 'enterprise-user'},
+      },
+      fallbackUsername: 'enterprise-user',
+      fallbackAccountKind: 'enterprise',
+    );
+    final switched = await FileMobileSessionStore(filePath: path).load();
+    expect(switched.personalPlan, isFalse);
+    expect(switched.setupComplete, isFalse);
+    expect(switched.userId, 2);
+  });
+
   test(
     'MobileApiClient login server mode follows Flutter AuthRoutingPolicy',
     () async {
@@ -362,6 +398,7 @@ void main() {
           username: 'admin',
           accountKind: 'admin',
           userId: 7,
+          personalPlan: true,
           marketAccessToken: 'market',
           marketRefreshToken: 'market-refresh',
           fhdHost: '192.168.31.8:5112',
@@ -407,6 +444,7 @@ void main() {
       expect(saved.username, '');
       expect(saved.accountKind, '');
       expect(saved.userId, 0);
+      expect(saved.personalPlan, isFalse);
       expect(saved.marketAccessToken, '');
       expect(saved.marketRefreshToken, '');
       expect(saved.fhdHost, '192.168.31.8:5112');

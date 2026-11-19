@@ -28,3 +28,19 @@ def test_empty_preview_states_zero():
         "products": 0,
         "records": 0,
     }
+
+
+def test_products_use_unit_and_model_or_name_as_identity():
+    counts = count_import_entities(
+        [
+            ("new", {"customer_name": "甲公司", "product_name": "螺母", "model": "M1"}),
+            ("update", {"purchase_unit": "甲公司", "品名": "紧固螺母", "产品型号": "M1"}),
+            ("new", {"purchase_unit": "乙公司", "product_name": "螺母", "model": "M1"}),
+            ("new", {"unit": "甲公司", "name": "螺母", "model_number": "M2"}),
+            ("new", {"unit": "甲公司", "name": "垫圈"}),
+            ("update", {"购买单位": "甲公司", "品名": "垫圈"}),
+            ("new", {"unit": "乙公司", "name": "垫圈"}),
+            ("skip", {"unit": "乙公司", "name": "螺母", "model_number": "M2"}),
+        ]
+    )
+    assert counts == {"customers": 1, "purchase_units": 2, "products": 5, "records": 7}

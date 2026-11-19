@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import FastAPI, HTTPException
@@ -565,28 +565,23 @@ class TestTranscribeAudioRoute:
         import httpx
 
         monkeypatch.setenv("XCAGI_CHAT_ASR_PROVIDER", "mimo")
+        monkeypatch.setenv("XCAGI_MARKET_LOCAL_ADDRESS", "192.0.2.10")
+        monkeypatch.delenv("XCAGI_MARKET_PROXY", raising=False)
         monkeypatch.setattr(
             "app.fastapi_routes.ai_assistant_tts._session_market_token", lambda request: "token"
         )
         seen = []
 
-        class FakeClient:
-            def __init__(self, **kwargs):
-                pass
+        def respond(request):
+            seen.append(request)
+            return httpx.Response(200, json={"text": "你好", "language": "zh", "provider": "mimo"})
 
-            async def __aenter__(self):
-                return self
+        def transport(**kwargs):
+            assert kwargs["local_address"] == "192.0.2.10"
+            assert kwargs["trust_env"] is False
+            return httpx.MockTransport(respond)
 
-            async def __aexit__(self, *args):
-                pass
-
-            async def post(self, url, **kwargs):
-                seen.append((url, kwargs))
-                return httpx.Response(
-                    200, json={"text": "你好", "language": "zh", "provider": "mimo"}
-                )
-
-        monkeypatch.setattr(httpx, "AsyncClient", FakeClient)
+        monkeypatch.setattr(httpx, "AsyncHTTPTransport", transport)
         stream = io.BytesIO()
         with wave.open(stream, "wb") as wav:
             wav.setnchannels(1)
@@ -600,9 +595,42 @@ class TestTranscribeAudioRoute:
         )
         assert response.status_code == 200
         assert response.json()["data"]["text"] == "你好"
-        assert seen[0][0].endswith("/api/workbench/asr")
-        assert seen[0][1]["headers"]["Authorization"] == "Bearer token"
-        assert seen[0][1]["files"]["file"][1].startswith(b"RIFF")
+        [upstream] = seen
+        assert upstream.url.path == "/api/workbench/asr"
+        assert upstream.headers["Authorization"] == "Bearer token"
+        assert upstream.headers["Content-Type"].startswith("multipart/form-data; boundary=")
+        assert b'filename="speech.wav"' in upstream.content and b"RIFF" in upstream.content
+
+    @pytest.mark.parametrize("stream", [False, True])
+    async def test_funasr_connector_uses_xcagi_direct_address(self, monkeypatch, stream):
+        import websockets
+
+        from app.fastapi_routes import voice_routes
+
+        monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "https://xiu-ci.com")
+        monkeypatch.setenv("XCAGI_MARKET_LOCAL_ADDRESS", "192.0.2.10")
+        monkeypatch.setenv("HTTPS_PROXY", "http://environment-proxy.invalid")
+        connect = MagicMock()
+        monkeypatch.setattr(websockets, "connect", connect)
+        if stream:
+            socket = MagicMock(accept=AsyncMock(), send_json=AsyncMock(), close=AsyncMock())
+            monkeypatch.setattr(voice_routes, "_ws_market_token", lambda ws: "test-token")
+            connect.side_effect = AsyncMock(side_effect=OSError("offline"))
+            await voice_routes.voice_stream(socket)
+            socket.send_json.assert_awaited_once_with({"type": "unavailable", "reason": "platform"})
+        else:
+            monkeypatch.setattr(voice_routes, "_wav_pcm16k", lambda wav: b"pcm")
+            connect.return_value.__aenter__.side_effect = OSError("offline")
+            with pytest.raises(HTTPException) as exc:
+                await voice_routes._platform_funasr_transcribe("test-token", b"wav")
+            assert exc.value.status_code == 503
+        connect.assert_called_once_with(
+            "wss://xiu-ci.com/api/asr/funasr?token=test-token",
+            open_timeout=6 if stream else 10,
+            close_timeout=2,
+            proxy=None,
+            local_addr=("192.0.2.10", 0),
+        )
 
     def test_empty_file_returns_400(self, client: TestClient):
         response = client.post(

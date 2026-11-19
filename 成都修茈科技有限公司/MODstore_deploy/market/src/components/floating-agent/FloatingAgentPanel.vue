@@ -24,6 +24,9 @@
         :corp-mode="corpMode"
         :brand-logo-url="brandLogoUrl"
         :proactive-intro-on="proactiveIntroOn"
+        :activity-available="!corpMode && activityOwner !== undefined"
+        :activity-open="activityOpen"
+        @toggle-activity="showActivity = !showActivity"
         @toggle-proactive-intro="toggleProactiveIntro"
         @toggle-log="showLog = !showLog"
         @clear-messages="agentStore.clearMessages()"
@@ -32,12 +35,12 @@
     </header>
 
     <!-- 状态条 -->
-    <AgentStatusBar v-if="!corpMode" :mode="mode" @stop="agentStore.setMode('idle')" />
+    <AgentStatusBar v-if="!corpMode && !activityOpen" :mode="mode" @stop="agentStore.setMode('idle')" />
 
-    <ButlerFilesDrawer v-if="!corpMode && showFilesDrawer" ref="filesDrawerRef" />
+    <ButlerFilesDrawer v-if="!corpMode && !activityOpen && showFilesDrawer" ref="filesDrawerRef" />
 
     <!-- 操作日志抽屉 -->
-    <div v-if="!corpMode && showLog" class="panel-log">
+    <div v-if="!corpMode && !activityOpen && showLog" class="panel-log">
       <div class="panel-log__title">操作日志</div>
       <div v-if="!actionLog.length" class="panel-log__empty">暂无操作记录</div>
       <div v-for="(entry, i) in actionLog" :key="i" class="panel-log__entry">
@@ -49,15 +52,24 @@
       </div>
     </div>
 
+    <component
+      v-if="activityOpen"
+      :is="activityComponent"
+      :key="`${activityOwner}:${activityTicket ?? ''}`"
+      :light="isLightTheme"
+      :ticket-id="activityTicket"
+    />
+
     <!-- 对话区 -->
     <AgentChatHistory
+      v-show="!activityOpen"
       :corp-mode="corpMode"
       @quick="handleQuick"
       @task="handleIntakeTask"
     />
 
     <!-- 输入区：官网模式单行（麦+输入+发送），避免输入条挤在标题下 -->
-    <footer class="panel-foot" :class="{ 'panel-foot--corp': corpMode }">
+    <footer v-show="!activityOpen" class="panel-foot" :class="{ 'panel-foot--corp': corpMode }">
       <input
         ref="imageInputRef"
         type="file"
@@ -96,7 +108,7 @@
 
 <script setup lang="ts">
 // 拆分后本文件为组装入口（façade）：顶栏/输入区子组件与图片、语音 composables 在 ./floating-agent-panel/，样式在 ./floating-agent-panel/floatingAgentPanel.css。
-import { ref, computed, nextTick, watch } from 'vue'
+import { ref, computed, nextTick, watch, type Component } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useAgentStore } from '../../stores/agent'
 import { useWorkbenchTheme } from '../../composables/useWorkbenchTheme'
@@ -123,10 +135,19 @@ import { useAgentPanelVoice } from './floating-agent-panel/useAgentPanelVoice'
 const props = withDefaults(
   defineProps<{
     corpMode?: boolean
+    activityOwner?: number
+    activityTicket?: number
+    activityComponent?: Component
     handleInput: AgentHandleInputFn
     runIntakeTask?: (action: QuickAction) => Promise<void>
   }>(),
-  { corpMode: false, runIntakeTask: undefined },
+  {
+    corpMode: false,
+    activityOwner: undefined,
+    activityTicket: undefined,
+    activityComponent: undefined,
+    runIntakeTask: undefined,
+  },
 )
 
 const emit = defineEmits<{
@@ -171,6 +192,12 @@ const handleInput = props.handleInput
 
 const draft = ref('')
 const showLog = ref(false)
+const showActivity = ref(props.activityTicket !== undefined)
+const activityOpen = computed(() => !props.corpMode && props.activityOwner !== undefined && showActivity.value)
+watch(
+  [() => props.activityOwner, () => props.activityTicket],
+  ([, ticket]) => { showActivity.value = ticket !== undefined },
+)
 const panelRef = ref<HTMLDivElement | null>(null)
 const composerRef = ref<InstanceType<typeof PanelComposer> | null>(null)
 

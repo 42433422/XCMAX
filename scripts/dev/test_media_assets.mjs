@@ -25,7 +25,27 @@ function fixture(t) {
 }
 
 test('the real product registry pins every canonical asset', () => {
-  assert.equal(verifyMediaAssets().length, 19)
+  assert.equal(verifyMediaAssets().length, 20)
+})
+
+test('a clean Harmony build restores its icon from the canonical Android bytes', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'harmony-media-test-'))
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }))
+  const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
+  const registry = JSON.parse(fs.readFileSync(path.join(repo, 'config/media-aliases.json'), 'utf8'))
+  const [target, entry] = Object.entries(registry.aliases).find(([, entry]) => entry.scope === 'harmony')
+  const tool = 'scripts/dev/materialize_media_assets.mjs'
+  for (const file of ['config/media-aliases.json', tool, entry.source]) {
+    fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true })
+    fs.copyFileSync(path.join(repo, file), path.join(root, file))
+  }
+  assert.equal(fs.existsSync(path.join(root, target)), false)
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const result = spawnSync(process.execPath, [path.join(root, tool), 'harmony'], { encoding: 'utf8' })
+    assert.equal(result.status, 0, result.stderr)
+    assert.deepEqual(fs.readFileSync(path.join(root, target)), fs.readFileSync(path.join(root, entry.source)))
+    assert.equal(fs.lstatSync(path.join(root, target)).isSymbolicLink(), false)
+  }
 })
 
 test('a clean release restores every public marketing URL from canonical media', (t) => {

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -17,13 +18,11 @@ from app.application.mobile_extensions.protocols import (
     MobileCheckoutSignBodyCall,
     MobileMarketAuthorizationCall,
     MobilePrincipal,
+    MobileSessionIdFromRequestCall,
     MobileUnauthorizedResponseCall,
     NormalizeMobilePaymentChannelCall,
-    RequestSessionIdCall,
     ResolveMarketTokenCall,
-    SessionMarketTokenCall,
     UserDependency,
-    VerifyJwtCall,
 )
 from app.utils.device_system.mobile_api import format_mobile_response
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -60,9 +59,8 @@ class PaymentRoutesPorts:
     auth_header: AuthHeaderCall
     latest_market_token: LatestMarketTokenCall
     resolve_market_token: ResolveMarketTokenCall
-    session_market_token: SessionMarketTokenCall
-    verify_jwt: VerifyJwtCall
-    request_session_id: RequestSessionIdCall
+    mobile_session_id_from_request: MobileSessionIdFromRequestCall
+    session_owner: Callable[[str], int | None]
 
 
 class PaymentRoutes:
@@ -222,11 +220,14 @@ class PaymentRoutes:
             """查询移动端支付订单状态。"""
             if user is None:
                 return ports.mobile_unauthorized_response()
+            authorization = ports.mobile_market_authorization(request, user)
+            if not authorization:
+                return ports.mobile_unauthorized_response()
             try:
                 payload = await ports.market_proxy(
                     "GET",
                     f"/api/payment/query/{out_trade_no}",
-                    authorization=ports.mobile_market_authorization(request, user),
+                    authorization=authorization,
                     return_error_payload=True,
                 )
                 if isinstance(payload, dict) and payload.get("__proxy_error__"):
@@ -261,24 +262,14 @@ class PaymentRoutes:
                     format_mobile_response(None, "未授权", success=False, code=401), status_code=401
                 )
 
-            # 1) 解析移动端 session_id，优先用 session 绑定的 market token
-            sid = ""
-            auth_hdr = request.headers.get("Authorization") or ""
-            if auth_hdr.startswith("Bearer "):
-                payload = ports.verify_jwt(auth_hdr[7:].strip())
-                if payload:
-                    sid = str(payload.get("session_id") or "")
-            if not sid:
-                sid = ports.request_session_id(request)
+            user_id = getattr(user, "id", None)
+            sid = ports.mobile_session_id_from_request(request)
             market_token = ""
-            if sid:
-                market_token = ports.session_market_token(sid)
-            if not market_token:
-                # 多用户环境按 user_id 过滤，防止串号（fallback 仅用于单用户桌面模式）
-                market_token = ports.latest_market_token(user_id=getattr(user, "id", None))
-            if sid and market_token:
-                # 余额属于长会话高频读路径；访问令牌过期时用持久化 refresh_token 自动续期。
-                market_token = await ports.resolve_market_token(sid)
+            if type(user_id) is int and user_id > 0:
+                if sid and ports.session_owner(sid) == user_id:
+                    market_token = await ports.resolve_market_token(sid)
+                elif not sid:
+                    market_token = ports.latest_market_token(user_id=user_id)
             if not market_token:
                 return format_mobile_response(
                     data={
@@ -313,10 +304,7 @@ class PaymentRoutes:
                 raw_wallet = wallet_payload.get("wallet")
                 wallet_obj = raw_wallet if isinstance(raw_wallet, dict) else wallet_payload
             elif isinstance(wallet_payload, dict) and wallet_payload.get("__proxy_error__"):
-                logger.warning(
-                    "mobile_wallet_balance: wallet overview unavailable: %s",
-                    wallet_payload.get("payload"),
-                )
+                logger.warning("mobile_wallet_balance: wallet overview unavailable")
 
             # 3) 拉取套餐/会员信息
             plan_payload = await ports.market_proxy(
@@ -329,10 +317,7 @@ class PaymentRoutes:
             if isinstance(plan_payload, dict) and not plan_payload.get("__proxy_error__"):
                 plan_obj = plan_payload if isinstance(plan_payload, dict) else {}
             elif isinstance(plan_payload, dict) and plan_payload.get("__proxy_error__"):
-                logger.warning(
-                    "mobile_wallet_balance: my-plan unavailable: %s",
-                    plan_payload.get("payload"),
-                )
+                logger.warning("mobile_wallet_balance: my-plan unavailable")
 
             # 4) 拉取 BYOK 状态
             llm_payload = await ports.market_proxy(

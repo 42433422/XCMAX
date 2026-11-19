@@ -41,7 +41,7 @@ def test_recording_reaches_mimo_with_current_account_without_retry(monkeypatch):
 
     class Client:
         def __init__(self, **kwargs):
-            pass
+            self.headers = httpx.Headers(kwargs.get("headers"))
 
         async def __aenter__(self):
             return self
@@ -53,6 +53,7 @@ def test_recording_reaches_mimo_with_current_account_without_retry(monkeypatch):
             calls.append(url)
             if url.endswith("/api/workbench/asr"):
                 assert kwargs["headers"]["Authorization"] == "Bearer session-token"
+                assert "Content-Type" not in self.headers
                 payload = await speech_api.mimo_asr(kwargs["files"]["file"][1], "zh", 42)
                 return httpx.Response(200, json=payload)
             assert url == "https://provider.invalid/v1/chat/completions"

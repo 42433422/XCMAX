@@ -10,7 +10,6 @@ import '../data/mobile_repository_scope.dart';
 import '../features/about/about_screen.dart';
 import '../features/approval/approval_screens.dart';
 import '../features/auth/auth_screen.dart';
-import '../features/auth/register_screen.dart';
 import '../features/bridge/bridge_screen.dart';
 import '../features/business/business_screens.dart';
 import '../features/chat/chat_screen.dart';
@@ -35,8 +34,10 @@ import '../features/settings/settings_screen.dart';
 import '../features/shell/home_shell.dart';
 import '../features/tools/ocr_screen.dart';
 import '../features/webview/desktop_tool_webview_screen.dart';
+import '../features/workspace/local_workspace_screen.dart';
 import '../models/conversation.dart';
 import '../platform/background_work_scheduler.dart';
+import '../platform/external_url_launcher.dart';
 import '../policy/mobile_error_policy.dart';
 import '../platform/deep_link_bridge.dart';
 import '../platform/biometric_gate.dart';
@@ -71,8 +72,10 @@ MobileStartupRoute resolveMobileStartupRoute({
   final adminMode = MobileConversationRuntimePolicy.isAdminAccountKind(
     session.accountKind,
   );
-  final setupComplete =
-      adminMode || session.setupComplete || session.fhdHost.trim().isNotEmpty;
+  final setupComplete = adminMode ||
+      session.personalPlan ||
+      session.setupComplete ||
+      session.fhdHost.trim().isNotEmpty;
   return setupComplete
       ? MobileStartupRoute.home
       : MobileStartupRoute.onboarding;
@@ -97,6 +100,7 @@ class MobileStartupApp extends StatefulWidget {
     this.biometricGate = const PlatformBiometricGate(),
     this.deepLinkBridge = const MobileDeepLinkBridge(),
     this.backgroundWorkScheduler = const PlatformBackgroundWorkScheduler(),
+    this.openExternalUrl = launchExternalUrl,
     this.enableBiometricGate = true,
   });
 
@@ -104,6 +108,7 @@ class MobileStartupApp extends StatefulWidget {
   final PlatformBiometricGate biometricGate;
   final MobileDeepLinkBridge deepLinkBridge;
   final PlatformBackgroundWorkScheduler backgroundWorkScheduler;
+  final ExternalUrlLauncher openExternalUrl;
   final bool enableBiometricGate;
 
   @override
@@ -111,6 +116,8 @@ class MobileStartupApp extends StatefulWidget {
 }
 
 class _MobileStartupAppState extends _MobileStartupStateBase {
+  bool _canOpenLocalWorkspaceWhileLoading = false;
+
   @override
   void initState() {
     super.initState();
@@ -146,7 +153,17 @@ class _MobileStartupAppState extends _MobileStartupStateBase {
   }
 
   Widget _buildHome() {
-    if (_route == null) return const _StartupLoadingScreen();
+    if (_route == null) {
+      return _StartupLoadingScreen(
+        openLocalWorkspace: _canOpenLocalWorkspaceWhileLoading
+            ? () => _navigatorKey.currentState?.push<void>(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const LocalWorkspaceScreen(),
+                  ),
+                )
+            : null,
+      );
+    }
     if (_checkingBiometric) return const _BiometricLockScreen();
 
     switch (_route!) {
@@ -161,6 +178,7 @@ class _MobileStartupAppState extends _MobileStartupStateBase {
         return AuthScreen(
           repository: widget.repository,
           onDone: _refreshRouteFromSession,
+          openExternalUrl: widget.openExternalUrl,
         );
       case MobileStartupRoute.onboarding:
         return MobileOnboardingScreen(
@@ -177,6 +195,10 @@ class _MobileStartupAppState extends _MobileStartupStateBase {
 
   Future<void> _bootstrap() async {
     final session = await _client.loadSession();
+    if (!mounted) return;
+    if (!session.hasAuth && !session.canAutoLogin) {
+      setState(() => _canOpenLocalWorkspaceWhileLoading = true);
+    }
     MobileAppConfigData? config;
     try {
       config = await _client.appConfig();
@@ -350,7 +372,12 @@ class _MobileStartupAppState extends _MobileStartupStateBase {
       });
       return;
     }
-    if (!_session.hasAuth || _route != MobileStartupRoute.home) {
+    final canRegister = resolveMobileDeepLinkDestination(route).target ==
+            MobileDeepLinkTarget.register &&
+        _route != null &&
+        _route != MobileStartupRoute.legal;
+    if (!canRegister &&
+        (!_session.hasAuth || _route != MobileStartupRoute.home)) {
       return;
     }
     _pendingDeepLinkRoute = null;

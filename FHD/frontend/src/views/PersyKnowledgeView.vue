@@ -1,6 +1,6 @@
 <template>
   <div class="persy-brain page-view active">
-    <header class="brain-toolbar">
+    <header class="brain-toolbar" :class="{ 'brain-toolbar--user-memory': personalMemoryOpen }">
       <div class="brain-identity">
         <span class="brain-identity__mark" aria-hidden="true">
           <span></span>
@@ -13,7 +13,7 @@
         </div>
       </div>
 
-      <div class="view-switch" role="tablist" aria-label="知识视图">
+      <div v-if="!personalMemoryOpen" class="view-switch" role="tablist" aria-label="知识视图">
         <button
           v-for="item in viewModes"
           :key="item.value"
@@ -29,87 +29,90 @@
       </div>
 
       <div class="toolbar-actions">
-        <label v-if="datasetOptions.length > 1" class="dataset-switch" title="知识空间">
+        <label class="dataset-switch" title="知识空间">
           <span>空间</span>
-          <select v-model="datasetIdInput" @change="applyDataset">
+          <select v-model="selectedSpace">
             <option v-for="item in datasetOptions" :key="item.id" :value="item.id">
               {{ item.label }}
             </option>
+            <option :value="userMemorySpaceId">用户记忆</option>
           </select>
         </label>
-        <button
-          type="button"
-          class="icon-button"
-          title="导出知识空间"
-          aria-label="导出知识空间"
-          @click="exportDatasetJson"
-        >
-          <i class="fa fa-download" aria-hidden="true"></i>
-        </button>
-        <button
-          type="button"
-          class="icon-button"
-          title="导入知识空间"
-          aria-label="导入知识空间"
-          @click="pickImportFile"
-        >
-          <i class="fa fa-upload" aria-hidden="true"></i>
-        </button>
-        <input
-          ref="importInput"
-          type="file"
-          accept=".json,application/json"
-          hidden
-          @change="importDatasetFile"
-        />
-        <span v-if="transferMessage" class="transfer-status" role="status">{{ transferMessage }}</span>
-        <button
-          v-if="adminOmniscient"
-          type="button"
-          class="icon-button"
-          title="重建索引"
-          aria-label="重建索引"
-          :disabled="rebuildingIndex"
-          @click="rebuildActiveIndex"
-        >
-          <i class="fa fa-database" :class="{ spinning: rebuildingIndex }" aria-hidden="true"></i>
-        </button>
-        <span class="retrieval-state" :class="{ semantic: semanticAvailable }">
-          <span class="retrieval-state__dot" aria-hidden="true"></span>
-          {{ retrievalModeText }}
-        </span>
-        <button
-          v-if="viewMode === 'graph'"
-          type="button"
-          class="icon-button"
-          title="复位图谱"
-          aria-label="复位图谱"
-          @click="resetGraphView"
-        >
-          <i class="fa fa-crosshairs" aria-hidden="true"></i>
-        </button>
-        <button
-          type="button"
-          class="icon-button"
-          title="刷新知识网络"
-          aria-label="刷新知识网络"
-          :disabled="loadingStatus || loadingGraph"
-          @click="refreshAll"
-        >
-          <i class="fa fa-refresh" :class="{ spinning: loadingStatus || loadingGraph }" aria-hidden="true"></i>
-        </button>
-        <button v-if="pendingMemoryCount" type="button" class="memory-review-button" title="审核待确认记忆" @click="openPendingMemories">
-          <i class="fa fa-check-square-o" aria-hidden="true"></i>
-          <span>{{ pendingMemoryCount }} 待确认</span>
-        </button>
-        <button type="button" class="import-button" aria-label="导入知识" title="导入知识" @click="openImport('file')">
-          <i class="fa fa-plus" aria-hidden="true"></i>
-          <span>导入</span>
-        </button>
+        <template v-if="!personalMemoryOpen">
+          <button
+            type="button"
+            class="icon-button"
+            title="导出知识空间"
+            aria-label="导出知识空间"
+            @click="exportDatasetJson"
+          >
+            <i class="fa fa-download" aria-hidden="true"></i>
+          </button>
+          <button
+            type="button"
+            class="icon-button"
+            title="导入知识空间"
+            aria-label="导入知识空间"
+            @click="pickImportFile"
+          >
+            <i class="fa fa-upload" aria-hidden="true"></i>
+          </button>
+          <input
+            ref="importInput"
+            type="file"
+            accept=".json,application/json"
+            hidden
+            @change="importDatasetFile"
+          />
+          <span v-if="transferMessage" class="transfer-status" role="status">{{ transferMessage }}</span>
+          <button
+            v-if="adminOmniscient"
+            type="button"
+            class="icon-button"
+            title="重建索引"
+            aria-label="重建索引"
+            :disabled="rebuildingIndex"
+            @click="rebuildActiveIndex"
+          >
+            <i class="fa fa-database" :class="{ spinning: rebuildingIndex }" aria-hidden="true"></i>
+          </button>
+          <span class="retrieval-state" :class="{ semantic: semanticAvailable }">
+            <span class="retrieval-state__dot" aria-hidden="true"></span>
+            {{ retrievalModeText }}
+          </span>
+          <button
+            v-if="viewMode === 'graph'"
+            type="button"
+            class="icon-button"
+            title="复位图谱"
+            aria-label="复位图谱"
+            @click="resetGraphView"
+          >
+            <i class="fa fa-crosshairs" aria-hidden="true"></i>
+          </button>
+          <button
+            type="button"
+            class="icon-button"
+            title="刷新知识网络"
+            aria-label="刷新知识网络"
+            :disabled="loadingStatus || loadingGraph"
+            @click="refreshAll"
+          >
+            <i class="fa fa-refresh" :class="{ spinning: loadingStatus || loadingGraph }" aria-hidden="true"></i>
+          </button>
+          <button v-if="pendingMemoryCount" type="button" class="memory-review-button" title="审核待确认记忆" @click="openPendingMemories">
+            <i class="fa fa-check-square-o" aria-hidden="true"></i>
+            <span>{{ pendingMemoryCount }} 待确认</span>
+          </button>
+          <button type="button" class="import-button" aria-label="导入知识" title="导入知识" @click="openImport('file')">
+            <i class="fa fa-plus" aria-hidden="true"></i>
+            <span>导入</span>
+          </button>
+        </template>
       </div>
     </header>
 
-    <section v-if="adminOmniscient && omniscient" class="omniscient-strip" aria-label="全知总览">
+    <section v-if="!personalMemoryOpen && adminOmniscient && omniscient" class="omniscient-strip" aria-label="全知总览">
       <div>
         <strong>{{ omniscient.document_count || 0 }}</strong>
         <span>全库文档</span>
@@ -129,7 +132,10 @@
       <p v-if="omniscientHint" class="omniscient-strip__hint">{{ omniscientHint }}</p>
     </section>
 
-    <div class="brain-workspace">
+    <main v-if="personalMemoryOpen" class="brain-stage brain-stage--user-memory">
+      <PersyUserMemory />
+    </main>
+    <div v-else class="brain-workspace">
       <main class="brain-stage" @dragover.prevent @drop.prevent="dropKnowledgeFile">
         <div class="brain-stage__body">
         <template v-if="viewMode === 'graph'">
@@ -555,10 +561,11 @@
       </aside>
     </div>
 
-    <p v-if="pageError" class="page-alert" role="alert">{{ pageError }}</p>
-    <p v-if="ingestMessage" class="page-toast" role="status">{{ ingestMessage }}</p>
+    <p v-if="!personalMemoryOpen && pageError" class="page-alert" role="alert">{{ pageError }}</p>
+    <p v-if="!personalMemoryOpen && ingestMessage" class="page-toast" role="status">{{ ingestMessage }}</p>
 
     <PersyImportDrawer
+      v-if="!personalMemoryOpen"
       ref="importDrawer"
       v-model:dataset-id-input="datasetIdInput"
       :dataset-id="activeDatasetId"
@@ -578,18 +585,20 @@ import PersyImportDrawer from '@/components/persy/PersyImportDrawer.vue'
 import PersyMemoryList from '@/components/persy/PersyMemoryList.vue'
 import PersyNodeCards from '@/components/persy/PersyNodeCards.vue'
 import PersySourceList from '@/components/persy/PersySourceList.vue'
+import PersyUserMemory from '@/components/persy/PersyUserMemory.vue'
 import type { KnowledgeBaseDocument, KnowledgeGraphNode, PersyMemoryRecord } from '@/api/knowledgeBase'
 import { knowledgeBaseApi } from '@/api/knowledgeBase'
 import { usePersyKnowledgeData, type PersyKnowledgeViewMode } from '@/composables/usePersyKnowledgeData'
 import { usePersyRecallQuery } from '@/composables/usePersyRecallQuery'
 import { usePersyMemoryGovernance } from '@/composables/usePersyMemoryGovernance'
-import { evidenceKey, formatScore, isMemoryChunk, nodeIcon, nodeTypeLabel, normalizeChunkSource } from '@/composables/persyKnowledgeFormatters'
+import { evidenceKey, evidenceSegments, formatScore, formatSynonyms, isMemoryChunk, nodeIcon, nodeTypeLabel, normalizeChunkSource, parseSynonyms } from '@/composables/persyKnowledgeFormatters'
 import { usePersyKnowledgeUiState } from './persy-knowledge/usePersyKnowledgeUiState'
 import { usePersyKnowledgeInspector } from './persy-knowledge/usePersyKnowledgeInspector'
 import { usePersyKnowledgeInteractions } from './persy-knowledge/usePersyKnowledgeInteractions'
 import { usePersySourceChunks } from './persy-knowledge/usePersySourceChunks'
 
-// 逻辑按领域拆分到 persy-knowledge/ 下的 composables，此处仅组装（模板与拆分前逐字一致）
+const props = defineProps<{ space?: 'user-memory' }>()
+const userMemorySpaceId = 'user-memory'
 const ui = usePersyKnowledgeUiState()
 const {
   viewMode, inspectorTab, mobileInspectorOpen, nodeFilter, ingestMessage, deletingDocumentId,
@@ -606,6 +615,19 @@ const {
   semanticAvailable, retrievalModeText, knowledgeNodes, omniscientHint,
   refreshStatus, refreshGraph, refreshMemories, refreshAll, applyDataset: switchDataset, rebuildActiveIndex,
 } = data
+const personalMemoryOpen = ref(false)
+watch(() => props.space, (space) => {
+  personalMemoryOpen.value = space === userMemorySpaceId
+}, { immediate: true })
+const selectedSpace = computed({
+  get: () => personalMemoryOpen.value ? userMemorySpaceId : datasetIdInput.value,
+  set(space: string) {
+    personalMemoryOpen.value = space === userMemorySpaceId
+    if (personalMemoryOpen.value || space === datasetIdInput.value) return
+    datasetIdInput.value = space
+    void applyDataset()
+  },
+})
 const knowledgeEmpty = computed(() => {
   const scope = adminOmniscient.value && omniscientQueryEnabled.value ? omniscient.value : status.value
   return scope?.success === true && scope.document_count === 0 && scope.chunk_count === 0 && memories.value.length === 0
@@ -765,28 +787,6 @@ async function clearQueryGaps(): Promise<void> {
   }
 }
 
-function formatSynonyms(groups: Record<string, string[]>): string {
-  return Object.entries(groups)
-    .map(([term, values]) => `${term}=${(values || []).join(',')}`)
-    .join('\n')
-}
-
-function parseSynonyms(text: string): Record<string, string[]> {
-  const groups: Record<string, string[]> = {}
-  for (const line of text.split('\n')) {
-    const [termRaw, valuesRaw] = line.split(/[=:：]/)
-    const term = (termRaw || '').trim().slice(0, 32)
-    if (!term) continue
-    const values = (valuesRaw || '')
-      .split(/[,，;；\s]+/)
-      .map((value) => value.trim().slice(0, 32))
-      .filter(Boolean)
-      .slice(0, 10)
-    if (values.length) groups[term] = values
-  }
-  return Object.fromEntries(Object.entries(groups).slice(0, 200))
-}
-
 async function toggleSynonymEditor(): Promise<void> {
   synonymEditorOpen.value = !synonymEditorOpen.value
   synonymMessage.value = ''
@@ -911,24 +911,6 @@ function openRecallChunk(chunk: { source?: string; metadata?: Record<string, unk
   void openSourceChunks({ document_id: documentId, source: chunk.source || documentId })
 }
 
-function evidenceSegments(chunk: { text?: string; metadata?: Record<string, unknown> }) {
-  const text = String(chunk.text || '')
-  const raw = chunk.metadata?.highlights
-  const spans = Array.isArray(raw) ? (raw as Array<{ start?: number; end?: number }>) : []
-  if (!spans.length) return [{ text, match: false }]
-  const segments: Array<{ text: string; match: boolean }> = []
-  let cursor = 0
-  for (const span of spans) {
-    const start = Math.max(cursor, Math.min(Number(span.start ?? 0), text.length))
-    const end = Math.max(start, Math.min(Number(span.end ?? start), text.length))
-    if (start > cursor) segments.push({ text: text.slice(cursor, start), match: false })
-    if (end > start) segments.push({ text: text.slice(start, end), match: true })
-    cursor = end
-  }
-  if (cursor < text.length) segments.push({ text: text.slice(cursor), match: false })
-  return segments
-}
-
 // selectNode / selectMemory 与 usePersyMemoryGovernance 互为初始化依赖，保留在此（与拆分前同为提升函数声明）
 function dropKnowledgeFile(event: DragEvent): void {
   const file = event.dataTransfer?.files?.[0]
@@ -999,6 +981,7 @@ onMounted(() => {
 // 否则会继续展示清空前的内容。
 let _activatedBefore = false
 onActivated(() => {
+  personalMemoryOpen.value = props.space === userMemorySpaceId
   if (!_activatedBefore) {
     _activatedBefore = true
     return

@@ -3,6 +3,7 @@ import path from 'node:path'
 import { desktopInitialUrl } from './desktop-config'
 import { desktopRuntime } from './runtime-state'
 import { writeBackendLog } from './backend-process'
+import { openTrustedAuxiliaryFromHandler } from './window-manager'
 
 const compact = { width: 104, height: 80 }
 const panel = { width: 440, height: 640 }
@@ -83,8 +84,11 @@ export function syncDesktopAssistant(): void {
     })
     desktopRuntime.assistantWindow = win
     const url = desktopAssistantUrl()
-    win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
-    win.webContents.on('will-navigate', event => event.preventDefault())
+    win.webContents.setWindowOpenHandler(({ url: target }) => openTrustedAuxiliaryFromHandler(target, win))
+    win.webContents.on('will-navigate', (event, target) => {
+      event.preventDefault()
+      if (target !== url) openTrustedAuxiliaryFromHandler(target, win)
+    })
     win.webContents.on('will-redirect', (event, target) => {
       if (target !== url) event.preventDefault()
     })

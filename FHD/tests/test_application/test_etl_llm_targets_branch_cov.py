@@ -392,6 +392,31 @@ def test_business_import_asks_again_when_purchase_unit_is_off_sheet(monkeypatch)
     assert "unit_in_source" not in result.data["rows"][0]
 
 
+def test_ledger_model_response_uses_native_coordinates_and_strict_confirmation(monkeypatch):
+    from app.application.elt import llm_assist
+
+    calls = []
+
+    def complete(messages, **kwargs):
+        calls.append(messages)
+        return llm_assist.LlmAssistResult(
+            used_llm=True,
+            data={
+                "candidates": [
+                    {"name": "甲公司", "row": "1", "column": 2, "confirmed": "true"},
+                    {"name": "错误坐标", "row": "Sheet1!A1", "column": 2, "confirmed": True},
+                ]
+            },
+        )
+
+    monkeypatch.setattr(llm_assist, "_complete", complete)
+    result = llm_assist.advise_ledger_customer_scope("出货", {1: {2: "甲公司"}}, "")
+    assert len(calls) == 1
+    assert result.data["candidates"] == [
+        {"name": "甲公司", "row": 1, "column": 2, "confirmed": False}
+    ]
+
+
 def test_failed_business_repair_does_not_return_unverified_rows(monkeypatch):
     from app.application.elt import llm_assist
 

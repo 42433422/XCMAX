@@ -105,6 +105,7 @@ def download_model(
     asset: ModelAsset,
     *,
     data_dir: str | os.PathLike[str] | None = None,
+    destination_dir: Path | None = None,
     progress: ProgressCallback | None = None,
     connect_timeout: float = 10.0,
     read_timeout: float = 60.0,
@@ -112,7 +113,7 @@ def download_model(
     safe_name = _safe_path_component(asset.name, label="name")
     safe_version = _safe_path_component(asset.version, label="version")
     asset_filename = _safe_path_component(Path(urlsplit(asset.url).path).name, label="filename")
-    target_dir = models_dir(data_dir) / safe_name / safe_version
+    target_dir = destination_dir or models_dir(data_dir) / safe_name / safe_version
     target_dir.mkdir(parents=True, exist_ok=True)
     target = target_dir / asset_filename
     partial = target.with_suffix(target.suffix + ".part")

@@ -51,30 +51,11 @@ class MobileProductSkuConfig {
         'enterprise';
   }
 
-  static bool isPersonal({required String buildSku, String? remoteSku}) {
-    return effectiveSku(buildSku: buildSku, remoteSku: remoteSku) == 'personal';
-  }
-
   static bool showsEnterpriseNav({
     required String buildSku,
     String? remoteSku,
   }) {
     return isEnterprise(buildSku: buildSku, remoteSku: remoteSku);
-  }
-
-  static String accountKind({required String buildSku, String? remoteSku}) {
-    return isEnterprise(buildSku: buildSku, remoteSku: remoteSku)
-        ? 'enterprise'
-        : 'personal';
-  }
-
-  static String displayEditionLabel({
-    required String buildSku,
-    String? remoteSku,
-  }) {
-    return isEnterprise(buildSku: buildSku, remoteSku: remoteSku)
-        ? '标准版'
-        : '个人版';
   }
 }
 

@@ -13,12 +13,49 @@ abstract class _ApiPairingBase extends _ApiCsAuthBase {
     String code = '',
     String baseUrl = '',
   }) async {
-    final json = await postJson(
-      XcagiMobileEndpoints.pairingExchange,
-      {'nonce': nonce.trim(), 'code': code.trim()},
-      baseUrl: baseUrl.trim().isEmpty ? null : baseUrl.trim(),
+    final trustedBase = _trustedPairingBase(baseUrl);
+    final json = await _sendJsonRequest(
+      method: 'POST',
+      path: XcagiMobileEndpoints.pairingExchange,
+      body: {'nonce': nonce.trim(), 'code': code.trim()},
+      baseUrl: trustedBase,
+      followRedirects: false,
     );
-    return MobileEnvelope.fromJson(json, _asObjectMap);
+    final response = MobileEnvelope.fromJson(json, _asObjectMap);
+    for (final key in ['api_base_url', 'base_url']) {
+      final advertised = '${response.data?[key] ?? ''}'.trim();
+      if (advertised.isNotEmpty) _trustedPairingBase(advertised);
+    }
+    return response;
+  }
+
+  String _trustedPairingBase(String candidate) {
+    Uri? normalize(String value) {
+      final uri = Uri.tryParse(value.trim());
+      if (uri == null ||
+          !['http', 'https'].contains(uri.scheme) ||
+          uri.host.isEmpty ||
+          uri.userInfo.isNotEmpty ||
+          uri.hasQuery ||
+          uri.hasFragment) {
+        return null;
+      }
+      return uri.replace(path: '${uri.path.replaceFirst(RegExp(r'/+$'), '')}/');
+    }
+
+    // A scanned QR cannot select where the current account's credentials go.
+    // New computers use the account-bound relay/device-code pairing flow.
+    final trusted = normalize(_config.baseUrl);
+    final requested =
+        normalize(candidate.trim().isEmpty ? _config.baseUrl : candidate);
+    if (trusted == null || requested != trusted) {
+      throw const MobileApiException(
+        statusCode: 400,
+        message: '设备二维码的服务器与当前登录服务器不一致，请使用电脑端最新设备码重新绑定',
+        body: {},
+      );
+    }
+    return trusted.toString();
   }
 
   Future<MobileEnvelope<Map<String, Object?>>> confirmAuthQr({

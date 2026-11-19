@@ -92,7 +92,7 @@ class EmployeePolicy:
         return f"你是 XCMAX 软件内的{self._p.employee_name}。请直接回答用户的问题。这是普通对话通道：不要执行命令，不要修改文件，不要调用工具。如果用户询问额度、账户余额、订阅或实时账户状态，而你无法从当前会话读取真实账户数据，请明确说明不能查看，不要编造数字。\n\n用户问题：{text.strip()}"
 
     def cli_work_prompt(self, text: str, cwd: str) -> str:
-        """开发任务 prompt：授权 Claude 真正读写/修改工作区文件（配合 --permission-mode acceptEdits）。"""
+        """开发任务 prompt：授权 Claude 真正读写/修改工作区文件（配合可信执行域的权限模式）。"""
         return f"你是 XCMAX 软件内的{self._p.employee_name}，运行在项目工作区，拥有完整的文件读写与代码修改能力。请直接动手完成下面的开发任务：按需读取、创建、修改工作区内的文件来实现需求；不要只给建议或只解释，要真正改代码。完成后用一两句话总结你改了哪些文件、做了什么。\n\n工作区根目录：{cwd}\n\n开发任务：\n{text.strip()}"
 
     def cli_fix_prompt(self, verify_msg: str, cwd: str) -> str:

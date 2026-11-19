@@ -5,10 +5,11 @@
  * hydrateUserFromSessionValidate、downloadAuditCsv、errorMessage 等未覆盖函数
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
+import { mount, flushPromises, RouterLinkStub } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
-import { ref, type Ref, nextTick } from 'vue'
+import { defineComponent, h, KeepAlive, reactive, ref, type Ref, nextTick } from 'vue'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 
 /* ── mock functions ── */
 const mockApiGet = vi.fn().mockResolvedValue({ data: {}, success: false })
@@ -29,11 +30,6 @@ const mockAdminAuditApiList = vi.fn().mockResolvedValue({ ok: true, data: { item
 const mockMemoryV2List = vi.fn().mockResolvedValue({
   success: true,
   memories: [],
-  summary: { total: 0, by_status: {}, by_type: {} },
-  planner_context: '',
-})
-const mockMemoryV2Summary = vi.fn().mockResolvedValue({
-  success: true,
   summary: { total: 0, by_status: {}, by_type: {} },
   planner_context: '',
 })
@@ -132,7 +128,6 @@ vi.mock('@/api/adminAudit', () => ({
 vi.mock('@/api/memoryV2', () => ({
   memoryV2Api: {
     list: (...args: unknown[]) => mockMemoryV2List(...args),
-    summary: (...args: unknown[]) => mockMemoryV2Summary(...args),
     createCandidate: (...args: unknown[]) => mockMemoryV2CreateCandidate(...args),
     confirm: (...args: unknown[]) => mockMemoryV2Confirm(...args),
     reject: (...args: unknown[]) => mockMemoryV2Reject(...args),
@@ -234,7 +229,10 @@ vi.mock('@/stores/mods', () => ({
   useModsStore: () => mockModsStore,
 }))
 
+const mockMemoryAccount = reactive({ workspaceReady: true, localUserId: 42 })
 const mockAccountProfileStore = {
+  get workspaceReady() { return mockMemoryAccount.workspaceReady },
+  get localUserId() { return mockMemoryAccount.localUserId },
   profile: null as unknown,
   isLoggedIn: false,
   loading: false,
@@ -317,7 +315,7 @@ vi.mock('../../package.json', () => ({
 
 /* ── global stubs ── */
 const globalStubs = {
-  RouterLink: { template: '<a><slot /></a>' },
+  RouterLink: RouterLinkStub,
   HostModBridgeView: { template: '<div class="host-mod-bridge-stub" />' },
   MobilePairingQrCard: { template: '<div class="mobile-pairing-stub" />' },
 }
@@ -350,15 +348,19 @@ async function mountSettings(routeQuery: Record<string, string> = {}) {
   return wrapper
 }
 
-async function mountMemory(record: Record<string, unknown> = {}) {
-  mockMemoryV2List.mockResolvedValue({ success: true, memories: [{ memory_id: 'm1', memory_type: 'preference', key: 'k', value: 'v', status: 'pending', ...record }] })
-  const wrapper = await mountSettings()
+async function mountUserMemoryPanel() {
+  const { default: PersyUserMemory } = await import('@/components/persy/PersyUserMemory.vue')
+  const wrapper = mount(PersyUserMemory, { global: { plugins: [i18nMock] } })
   await flushPromises()
-  await (wrapper.vm as any).loadMemoryV2()
   return wrapper
 }
 
-async function clickMemoryAction(wrapper: Awaited<ReturnType<typeof mountSettings>>, label: string) {
+async function mountMemory(record: Record<string, unknown> = {}) {
+  mockMemoryV2List.mockResolvedValue({ success: true, memories: [{ memory_id: 'm1', memory_type: 'preference', key: 'k', value: 'v', status: 'pending', ...record }] })
+  return mountUserMemoryPanel()
+}
+
+async function clickMemoryAction(wrapper: Awaited<ReturnType<typeof mountUserMemoryPanel>>, label: string) {
   const button = wrapper.findAll('.memory-v2-actions button').find((item) => item.text() === label)
   expect(button, label).toBeTruthy()
   await button!.trigger('click')
@@ -366,6 +368,8 @@ async function clickMemoryAction(wrapper: Awaited<ReturnType<typeof mountSetting
 }
 
 function resetStores() {
+  Object.assign(mockMemoryAccount, { workspaceReady: true, localUserId: 42 })
+  mockAppConfirm.mockResolvedValue(true)
   mockIndustryStore.industries = []
   mockIndustryStore.currentIndustry = null
   mockIndustryStore.currentConfig = null
@@ -415,11 +419,6 @@ function resetApiMocks() {
     summary: { total: 0, by_status: {}, by_type: {} },
     planner_context: '',
   })
-  mockMemoryV2Summary.mockResolvedValue({
-    success: true,
-    summary: { total: 0, by_status: {}, by_type: {} },
-    planner_context: '',
-  })
   mockMemoryV2CreateCandidate.mockResolvedValue({ success: true })
   mockMemoryV2Confirm.mockResolvedValue({ success: true })
   mockMemoryV2Reject.mockResolvedValue({ success: true })
@@ -444,7 +443,7 @@ function resetSettingsTest() {
   resetStores()
 }
 
-describe('SettingsView memory value helpers', () => {
+describe('PersyUserMemory memory value helpers', () => {
   beforeEach(resetSettingsTest)
   it.each([
     ['memoryV2TypeLabel', [
@@ -452,22 +451,12 @@ describe('SettingsView memory value helpers', () => {
       ['', '未知'], [null, '未知'], [undefined, '未知'],
     ]],
     ['memoryV2StatusLabel', [
-      ['pending', '待确认'], ['active', '已确认'], ['rejected', '已拒绝'], ['deleted', '已删除'],
+      ['pending', '待确认'], ['active', '已生效'], ['rejected', '已拒绝'], ['deleted', '已删除'],
       ['all', '全部'], ['unknown', 'unknown'], ['', '未知'], [null, '未知'],
-    ]],
-    ['memoryV2EditableValue', [
-      ['hello', 'hello'], [null, 'null'], [undefined, undefined], [42, '42'],
-      [{ a: 1, b: 'x' }, JSON.stringify({ a: 1, b: 'x' }, null, 2)],
-      [[1, 2, 3], JSON.stringify([1, 2, 3], null, 2)],
     ]],
     ['memoryV2DisplayValue', [
       ['short text', 'short text'], ['x'.repeat(200), 'x'.repeat(160) + '…'],
       ['x'.repeat(160), 'x'.repeat(160)], [null, 'null'],
-    ]],
-    ['parseMemoryV2InputValue', [
-      ['', ''], ['   ', ''], ['{"a":1}', { a: 1 }], ['[1,2,3]', [1, 2, 3]],
-      ['"hello"', 'hello'], ['42', 42], ['-3.14', -3.14], ['true', true], ['false', false],
-      ['null', null], ['{"invalid"', '{"invalid"'], ['hello world', 'hello world'],
     ]],
     ['memoryV2Time', [['', ''], [null, ''], [undefined, ''], ['not-a-date', 'not-a-date']]],
     ['canEditMemoryV2', [
@@ -475,52 +464,17 @@ describe('SettingsView memory value helpers', () => {
       [{ status: 'rejected' }, false], [{ status: 'deleted' }, false],
     ]],
   ] as Array<[string, Array<[unknown, unknown]>]>)('%s retains its value and boundary cases', async (method, cases) => {
-    const wrapper = await mountSettings()
+    const wrapper = await mountUserMemoryPanel()
     const vm = wrapper.vm as any
     for (const [input, expected] of cases) expect(vm[method](input)).toEqual(expected)
     wrapper.unmount()
   })
 
   it('formats a valid memory timestamp as nonempty text', async () => {
-    const wrapper = await mountSettings()
+    const wrapper = await mountUserMemoryPanel()
     const result = (wrapper.vm as any).memoryV2Time('2026-06-25T10:30:00Z')
     expect(result).toBeTruthy()
     expect(typeof result).toBe('string')
-    wrapper.unmount()
-  })
-})
-
-describe('SettingsView functions – memoryV2FoldMeta computed', () => {
-  beforeEach(resetSettingsTest)
-
-  it('初始状态返回 0 计数', async () => {
-    const wrapper = await mountSettings()
-    const vm = wrapper.vm as any
-    expect(vm.memoryV2FoldMeta).toContain('待确认 0')
-    expect(vm.memoryV2FoldMeta).toContain('已确认 0')
-    wrapper.unmount()
-  })
-
-  it('summary 变化后更新计数', async () => {
-    mockMemoryV2List.mockResolvedValue({
-      success: true,
-      memories: [],
-      summary: { total: 5, by_status: { pending: 2, active: 3 }, by_type: {} },
-      planner_context: '',
-    })
-    mockMemoryV2Summary.mockResolvedValue({
-      success: true,
-      summary: { total: 5, by_status: { pending: 2, active: 3 }, by_type: {} },
-      planner_context: '',
-    })
-    const wrapper = await mountSettings()
-    await (wrapper.vm as any).loadMemoryV2()
-    await nextTick()
-    await nextTick()
-    await new Promise((r) => setTimeout(r, 50))
-    const vm = wrapper.vm as any
-    expect(vm.memoryV2FoldMeta).toContain('待确认 2')
-    expect(vm.memoryV2FoldMeta).toContain('已确认 3')
     wrapper.unmount()
   })
 })
@@ -529,7 +483,7 @@ describe('SettingsView functions – memoryV2FoldMeta computed', () => {
  * memoryV2 CRUD 操作
  * ══════════════════════════════════════════════════════════════════ */
 
-describe('SettingsView functions – loadMemoryV2', () => {
+describe('PersyUserMemory functions – loadMemoryV2', () => {
   beforeEach(resetSettingsTest)
 
   it('成功加载记忆列表', async () => {
@@ -540,12 +494,7 @@ describe('SettingsView functions – loadMemoryV2', () => {
       summary: { total: 1, by_status: { active: 1 }, by_type: {} },
       planner_context: 'ctx',
     })
-    mockMemoryV2Summary.mockResolvedValue({
-      success: true,
-      summary: { total: 1, by_status: { active: 1 }, by_type: {} },
-      planner_context: 'ctx',
-    })
-    const wrapper = await mountSettings()
+    const wrapper = await mountUserMemoryPanel()
     await nextTick()
     await nextTick()
     const vm = wrapper.vm as any
@@ -553,14 +502,13 @@ describe('SettingsView functions – loadMemoryV2', () => {
     await wrapper.get('.memory-v2-toolbar button').trigger('click')
     await flushPromises()
     expect(vm.memoryV2Records.length).toBe(1)
-    expect(vm.memoryV2PlannerContext).toBe('ctx')
     expect(vm.memoryV2Loading).toBe(false)
     wrapper.unmount()
   })
 
   it('list 返回 success:false 时设置错误', async () => {
     mockMemoryV2List.mockResolvedValue({ success: false, message: '加载失败' })
-    const wrapper = await mountSettings()
+    const wrapper = await mountUserMemoryPanel()
     const vm = wrapper.vm as any
     await vm.loadMemoryV2()
     expect(vm.memoryV2Error).toContain('加载失败')
@@ -568,28 +516,13 @@ describe('SettingsView functions – loadMemoryV2', () => {
     wrapper.unmount()
   })
 
-  it('summary 返回 success:false 时设置错误', async () => {
-    mockMemoryV2List.mockResolvedValue({
-      success: true,
-      memories: [],
-      summary: { total: 0, by_status: {}, by_type: {} },
-    })
-    mockMemoryV2Summary.mockResolvedValue({ success: false, message: '摘要失败' })
-    const wrapper = await mountSettings()
-    const vm = wrapper.vm as any
-    await vm.loadMemoryV2()
-    expect(vm.memoryV2Error).toContain('摘要失败')
-    wrapper.unmount()
-  })
-
   it('API 抛异常时设置错误并清空列表', async () => {
     mockMemoryV2List.mockRejectedValue(new Error('网络错误'))
-    const wrapper = await mountSettings()
+    const wrapper = await mountUserMemoryPanel()
     const vm = wrapper.vm as any
     await vm.loadMemoryV2()
     expect(vm.memoryV2Error).toContain('网络错误')
     expect(vm.memoryV2Records).toEqual([])
-    expect(vm.memoryV2PlannerContext).toBe('')
     expect(vm.memoryV2Loading).toBe(false)
     wrapper.unmount()
   })
@@ -600,7 +533,7 @@ describe('SettingsView functions – loadMemoryV2', () => {
       memories: 'not-array' as any,
       summary: { total: 0, by_status: {}, by_type: {} },
     })
-    const wrapper = await mountSettings()
+    const wrapper = await mountUserMemoryPanel()
     const vm = wrapper.vm as any
     await vm.loadMemoryV2()
     expect(vm.memoryV2Records).toEqual([])
@@ -608,62 +541,140 @@ describe('SettingsView functions – loadMemoryV2', () => {
   })
 })
 
-describe('SettingsView functions – createMemoryV2Candidate', () => {
+describe('PersyUserMemory functions – saveMemoryV2', () => {
   beforeEach(resetSettingsTest)
 
   it('键或值为空时提示', async () => {
-    const wrapper = await mountSettings()
+    const wrapper = await mountUserMemoryPanel()
     const vm = wrapper.vm as any
     vm.memoryV2Draft.key = ''
     vm.memoryV2Draft.value = 'val'
-    await vm.createMemoryV2Candidate()
+    await vm.saveMemoryV2()
     expect(mockAppAlert).toHaveBeenCalledWith('请填写记忆键和值')
     expect(mockMemoryV2CreateCandidate).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 
-  it('成功创建候选记忆', async () => {
-    mockMemoryV2CreateCandidate.mockResolvedValue({ success: true })
-    const wrapper = await mountSettings()
+  const pendingMemory = { memory_id: 'mem_1', status: 'pending' }
+  const activeMemory = { ...pendingMemory, status: 'active', eligible_for_planner: true }
+
+  it('用一次保存完成候选登记和确认', async () => {
+    mockMemoryV2CreateCandidate.mockResolvedValue({ success: true, candidate: pendingMemory })
+    mockMemoryV2Confirm.mockResolvedValue({ success: true, memory: activeMemory })
+    const wrapper = await mountUserMemoryPanel()
     const vm = wrapper.vm as any
     await wrapper.get('.memory-v2-form__type').setValue('entity')
     const fields = wrapper.findAll('.memory-v2-form__input')
     await fields[0].setValue('testKey')
     await fields[1].setValue('testValue')
-    await wrapper.get('.memory-v2-form__confidence').setValue('0.85')
+    expect(wrapper.get('.memory-v2-form button').text()).toBe('保存记忆')
     await wrapper.get('.memory-v2-form').trigger('submit')
     await flushPromises()
-    expect(mockMemoryV2CreateCandidate).toHaveBeenCalledWith(expect.objectContaining({ key: 'testKey', value: 'testValue', memoryType: 'entity', confidence: 0.85 }))
+    expect(mockMemoryV2CreateCandidate).toHaveBeenCalledWith(expect.objectContaining({ userId: '42', key: 'testKey', value: 'testValue', memoryType: 'entity', confidence: 1 }))
+    expect(mockMemoryV2Confirm).toHaveBeenCalledExactlyOnceWith('mem_1', '42')
+    expect(wrapper.get('.memory-v2-form [role="status"]').text()).toBe('记忆已保存')
     expect(vm.memoryV2Draft.key).toBe('')
     expect(vm.memoryV2Draft.value).toBe('')
     wrapper.unmount()
   })
 
+  it('已有可用记忆时按原记录保存且不重复确认', async () => {
+    mockMemoryV2CreateCandidate.mockResolvedValue({ success: true, created: false, candidate: activeMemory })
+    const wrapper = await mountUserMemoryPanel()
+    const vm = wrapper.vm as any
+    Object.assign(vm.memoryV2Draft, { key: '主题', value: '内容' })
+    await vm.saveMemoryV2()
+    expect(mockMemoryV2Confirm).not.toHaveBeenCalled()
+    expect(vm.memoryV2Draft.value).toBe('')
+    wrapper.unmount()
+  })
+
+  it.each([
+    [undefined, '未能核实'],
+    [{ status: 'pending', memory_id: ' ' }, '未能核实'],
+    [{ ...activeMemory, eligible_for_planner: false }, '未能核实'],
+    [{ ...pendingMemory, status: 'rejected' }, '已被拒绝'],
+  ])('候选状态不允许确认时保留草稿 %#', async (candidate, message) => {
+    mockMemoryV2CreateCandidate.mockResolvedValue({ success: true, candidate })
+    const wrapper = await mountUserMemoryPanel()
+    const vm = wrapper.vm as any
+    Object.assign(vm.memoryV2Draft, { key: '主题', value: '内容' })
+    await vm.saveMemoryV2()
+    await nextTick()
+    expect(mockMemoryV2Confirm).not.toHaveBeenCalled()
+    expect(wrapper.get('[role="alert"]').text()).toContain(message)
+    expect(wrapper.find('.memory-v2-form [role="status"]').exists()).toBe(false)
+    expect(vm.memoryV2Draft.value).toBe('内容')
+    wrapper.unmount()
+  })
+
+  it('确认结果未知时等待用户重试，并沿用同一条候选', async () => {
+    mockMemoryV2CreateCandidate
+      .mockResolvedValueOnce({ success: true, created: true, candidate: pendingMemory })
+      .mockResolvedValueOnce({ success: true, created: false, candidate: pendingMemory })
+    mockMemoryV2Confirm
+      .mockRejectedValueOnce(new Error('timeout'))
+      .mockResolvedValueOnce({ success: true, memory: activeMemory })
+    const wrapper = await mountUserMemoryPanel()
+    const vm = wrapper.vm as any
+    Object.assign(vm.memoryV2Draft, { key: '主题', value: '内容' })
+    await vm.saveMemoryV2()
+    await nextTick()
+    expect(mockMemoryV2Confirm).toHaveBeenCalledTimes(1)
+    expect(wrapper.get('[role="alert"]').text()).toContain('确认结果尚未核实')
+    expect(wrapper.find('.memory-v2-form [role="status"]').exists()).toBe(false)
+    expect(vm.memoryV2Draft.value).toBe('内容')
+    await vm.saveMemoryV2()
+    await nextTick()
+    expect(mockMemoryV2Confirm).toHaveBeenNthCalledWith(2, 'mem_1', '42')
+    expect(wrapper.get('.memory-v2-form [role="status"]').text()).toBe('记忆已保存')
+    wrapper.unmount()
+  })
+
+  it('候选返回前切换账号时不再发送确认请求', async () => {
+    let resolveCandidate!: (response: unknown) => void
+    mockMemoryV2CreateCandidate.mockReturnValueOnce(new Promise(done => { resolveCandidate = done }))
+    const wrapper = await mountUserMemoryPanel()
+    const vm = wrapper.vm as any
+    Object.assign(vm.memoryV2Draft, { key: '旧账号', value: '旧账号内容' })
+    const saving = vm.saveMemoryV2()
+    ++productReadAccountEpoch.value
+    mockMemoryAccount.localUserId = 45
+    Object.assign(vm.memoryV2Draft, { key: '新账号', value: '新账号草稿' })
+    resolveCandidate({ success: true, candidate: pendingMemory })
+    await saving
+    await flushPromises()
+    expect(mockMemoryV2Confirm).not.toHaveBeenCalled()
+    expect(wrapper.find('.memory-v2-form [role="status"]').exists()).toBe(false)
+    expect(vm.memoryV2Draft.value).toBe('新账号草稿')
+    wrapper.unmount()
+  })
+
   it('创建返回 success:false 时设置错误', async () => {
     mockMemoryV2CreateCandidate.mockResolvedValue({ success: false, message: '创建失败' })
-    const wrapper = await mountSettings()
+    const wrapper = await mountUserMemoryPanel()
     const vm = wrapper.vm as any
     vm.memoryV2Draft.key = 'testKey'
     vm.memoryV2Draft.value = 'testValue'
-    await vm.createMemoryV2Candidate()
+    await vm.saveMemoryV2()
     expect(vm.memoryV2Error).toContain('创建失败')
     wrapper.unmount()
   })
 
   it('创建抛异常时设置错误', async () => {
     mockMemoryV2CreateCandidate.mockRejectedValue(new Error('网络错误'))
-    const wrapper = await mountSettings()
+    const wrapper = await mountUserMemoryPanel()
     const vm = wrapper.vm as any
     vm.memoryV2Draft.key = 'testKey'
     vm.memoryV2Draft.value = 'testValue'
-    await vm.createMemoryV2Candidate()
+    await vm.saveMemoryV2()
     expect(vm.memoryV2Error).toContain('网络错误')
     expect(vm.memoryV2Creating).toBe(false)
     wrapper.unmount()
   })
 })
 
-describe('SettingsView functions – confirmMemoryV2', () => {
+describe('PersyUserMemory functions – confirmMemoryV2', () => {
   beforeEach(resetSettingsTest)
 
   it('成功确认记忆', async () => {
@@ -672,37 +683,37 @@ describe('SettingsView functions – confirmMemoryV2', () => {
     const vm = wrapper.vm as any
     await clickMemoryAction(wrapper, settingsI18nT('settings.confirm'))
     expect(mockMemoryV2Confirm).toHaveBeenCalledWith('m1', expect.any(String))
-    expect(vm.memoryV2BusyId).toBe('')
+    expect(vm.mutatingMemory).toBe(false)
     wrapper.unmount()
   })
 
   it('确认返回 success:false 时设置错误', async () => {
     mockMemoryV2Confirm.mockResolvedValue({ success: false, message: '确认失败' })
-    const wrapper = await mountSettings()
+    const wrapper = await mountUserMemoryPanel()
     const vm = wrapper.vm as any
     await vm.confirmMemoryV2({ memory_id: 'm1', key: 'k', value: 'v', status: 'pending' })
     expect(vm.memoryV2Error).toContain('确认失败')
-    expect(vm.memoryV2BusyId).toBe('')
+    expect(vm.mutatingMemory).toBe(false)
     wrapper.unmount()
   })
 
   it('确认抛异常时设置错误', async () => {
     mockMemoryV2Confirm.mockRejectedValue(new Error('网络错误'))
-    const wrapper = await mountSettings()
+    const wrapper = await mountUserMemoryPanel()
     const vm = wrapper.vm as any
     await vm.confirmMemoryV2({ memory_id: 'm1', key: 'k', value: 'v', status: 'pending' })
     expect(vm.memoryV2Error).toContain('网络错误')
-    expect(vm.memoryV2BusyId).toBe('')
+    expect(vm.mutatingMemory).toBe(false)
     wrapper.unmount()
   })
 })
 
-describe('SettingsView functions – rejectMemoryV2', () => {
+describe('PersyUserMemory functions – rejectMemoryV2', () => {
   beforeEach(resetSettingsTest)
 
   it('用户取消确认时不执行拒绝', async () => {
     mockAppConfirm.mockResolvedValue(false)
-    const wrapper = await mountSettings()
+    const wrapper = await mountUserMemoryPanel()
     const vm = wrapper.vm as any
     await vm.rejectMemoryV2({ memory_id: 'm1', key: 'k', value: 'v', status: 'pending' })
     expect(mockMemoryV2Reject).not.toHaveBeenCalled()
@@ -716,14 +727,14 @@ describe('SettingsView functions – rejectMemoryV2', () => {
     const vm = wrapper.vm as any
     await clickMemoryAction(wrapper, settingsI18nT('settings.reject'))
     expect(mockMemoryV2Reject).toHaveBeenCalled()
-    expect(vm.memoryV2BusyId).toBe('')
+    expect(vm.mutatingMemory).toBe(false)
     wrapper.unmount()
   })
 
   it('拒绝返回 success:false 时设置错误', async () => {
     mockAppConfirm.mockResolvedValue(true)
     mockMemoryV2Reject.mockResolvedValue({ success: false, message: '拒绝失败' })
-    const wrapper = await mountSettings()
+    const wrapper = await mountUserMemoryPanel()
     const vm = wrapper.vm as any
     await vm.rejectMemoryV2({ memory_id: 'm1', key: 'k', value: 'v', status: 'pending' })
     expect(vm.memoryV2Error).toContain('拒绝失败')
@@ -733,16 +744,16 @@ describe('SettingsView functions – rejectMemoryV2', () => {
   it('拒绝抛异常时设置错误', async () => {
     mockAppConfirm.mockResolvedValue(true)
     mockMemoryV2Reject.mockRejectedValue(new Error('网络错误'))
-    const wrapper = await mountSettings()
+    const wrapper = await mountUserMemoryPanel()
     const vm = wrapper.vm as any
     await vm.rejectMemoryV2({ memory_id: 'm1', key: 'k', value: 'v', status: 'pending' })
     expect(vm.memoryV2Error).toContain('网络错误')
-    expect(vm.memoryV2BusyId).toBe('')
+    expect(vm.mutatingMemory).toBe(false)
     wrapper.unmount()
   })
 })
 
-describe('SettingsView functions – startMemoryV2Edit / cancelMemoryV2Edit', () => {
+describe('PersyUserMemory functions – startMemoryV2Edit / cancelMemoryV2Edit', () => {
   beforeEach(resetSettingsTest)
 
   it('startMemoryV2Edit 设置编辑状态', async () => {
@@ -756,7 +767,7 @@ describe('SettingsView functions – startMemoryV2Edit / cancelMemoryV2Edit', ()
   })
 
   it('startMemoryV2Edit 处理空 key', async () => {
-    const wrapper = await mountSettings()
+    const wrapper = await mountUserMemoryPanel()
     const vm = wrapper.vm as any
     vm.startMemoryV2Edit({ memory_id: 'm1', key: null, value: 'v', status: 'active' })
     expect(vm.memoryV2Edit.key).toBe('')
@@ -776,11 +787,11 @@ describe('SettingsView functions – startMemoryV2Edit / cancelMemoryV2Edit', ()
   })
 })
 
-describe('SettingsView functions – saveMemoryV2Edit', () => {
+describe('PersyUserMemory functions – saveMemoryV2Edit', () => {
   beforeEach(resetSettingsTest)
 
   it('key 为空时提示', async () => {
-    const wrapper = await mountSettings()
+    const wrapper = await mountUserMemoryPanel()
     const vm = wrapper.vm as any
     vm.memoryV2Edit.key = '   '
     await vm.saveMemoryV2Edit({ memory_id: 'm1', key: 'k', value: 'v', status: 'active' })
@@ -799,13 +810,13 @@ describe('SettingsView functions – saveMemoryV2Edit', () => {
     await clickMemoryAction(wrapper, settingsI18nT('settings.save'))
     expect(mockMemoryV2Correct).toHaveBeenCalled()
     expect(vm.memoryV2Edit.memoryId).toBe('')
-    expect(vm.memoryV2BusyId).toBe('')
+    expect(vm.mutatingMemory).toBe(false)
     wrapper.unmount()
   })
 
   it('修正返回 success:false 时设置错误', async () => {
     mockMemoryV2Correct.mockResolvedValue({ success: false, message: '修正失败' })
-    const wrapper = await mountSettings()
+    const wrapper = await mountUserMemoryPanel()
     const vm = wrapper.vm as any
     vm.memoryV2Edit.key = 'newKey'
     vm.memoryV2Edit.value = 'newValue'
@@ -816,23 +827,23 @@ describe('SettingsView functions – saveMemoryV2Edit', () => {
 
   it('修正抛异常时设置错误', async () => {
     mockMemoryV2Correct.mockRejectedValue(new Error('网络错误'))
-    const wrapper = await mountSettings()
+    const wrapper = await mountUserMemoryPanel()
     const vm = wrapper.vm as any
     vm.memoryV2Edit.key = 'newKey'
     vm.memoryV2Edit.value = 'newValue'
     await vm.saveMemoryV2Edit({ memory_id: 'm1', key: 'k', value: 'v', status: 'active' })
     expect(vm.memoryV2Error).toContain('网络错误')
-    expect(vm.memoryV2BusyId).toBe('')
+    expect(vm.mutatingMemory).toBe(false)
     wrapper.unmount()
   })
 })
 
-describe('SettingsView functions – deleteMemoryV2', () => {
+describe('PersyUserMemory functions – deleteMemoryV2', () => {
   beforeEach(resetSettingsTest)
 
   it('用户取消确认时不执行删除', async () => {
     mockAppConfirm.mockResolvedValue(false)
-    const wrapper = await mountSettings()
+    const wrapper = await mountUserMemoryPanel()
     const vm = wrapper.vm as any
     await vm.deleteMemoryV2({ memory_id: 'm1', key: 'k', value: 'v', status: 'active' })
     expect(mockMemoryV2Remove).not.toHaveBeenCalled()
@@ -846,14 +857,14 @@ describe('SettingsView functions – deleteMemoryV2', () => {
     const vm = wrapper.vm as any
     await clickMemoryAction(wrapper, settingsI18nT('settings.delete'))
     expect(mockMemoryV2Remove).toHaveBeenCalled()
-    expect(vm.memoryV2BusyId).toBe('')
+    expect(vm.mutatingMemory).toBe(false)
     wrapper.unmount()
   })
 
   it('删除返回 success:false 时设置错误', async () => {
     mockAppConfirm.mockResolvedValue(true)
     mockMemoryV2Remove.mockResolvedValue({ success: false, message: '删除失败' })
-    const wrapper = await mountSettings()
+    const wrapper = await mountUserMemoryPanel()
     const vm = wrapper.vm as any
     await vm.deleteMemoryV2({ memory_id: 'm1', key: 'k', value: 'v', status: 'active' })
     expect(vm.memoryV2Error).toContain('删除失败')
@@ -863,18 +874,18 @@ describe('SettingsView functions – deleteMemoryV2', () => {
   it('删除抛异常时设置错误', async () => {
     mockAppConfirm.mockResolvedValue(true)
     mockMemoryV2Remove.mockRejectedValue(new Error('网络错误'))
-    const wrapper = await mountSettings()
+    const wrapper = await mountUserMemoryPanel()
     const vm = wrapper.vm as any
     await vm.deleteMemoryV2({ memory_id: 'm1', key: 'k', value: 'v', status: 'active' })
     expect(vm.memoryV2Error).toContain('网络错误')
-    expect(vm.memoryV2BusyId).toBe('')
+    expect(vm.mutatingMemory).toBe(false)
     wrapper.unmount()
   })
 
   it('删除当前编辑中的记忆时取消编辑', async () => {
     mockAppConfirm.mockResolvedValue(true)
     mockMemoryV2Remove.mockResolvedValue({ success: true })
-    const wrapper = await mountSettings()
+    const wrapper = await mountUserMemoryPanel()
     const vm = wrapper.vm as any
     vm.memoryV2Edit.memoryId = 'm1'
     vm.memoryV2Edit.key = 'k'
@@ -889,14 +900,26 @@ describe('SettingsView functions – deleteMemoryV2', () => {
  * persy (拟人 Persy) 系列
  * ══════════════════════════════════════════════════════════════════ */
 
+describe('SettingsView user memory navigation', () => {
+  beforeEach(resetSettingsTest)
+
+  it('links to the user memory knowledge space without loading the list in Settings', async () => {
+    const wrapper = await mountSettings()
+    await flushPromises()
+    const link = wrapper.findAllComponents(RouterLinkStub).find(item => item.text() === '用户记忆')
+    expect(link?.props('to')).toEqual({ name: 'persy-knowledge', query: { space: 'user-memory' } })
+    expect(mockMemoryV2List).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+})
+
 describe('SettingsView functions – persyFoldMeta computed', () => {
   beforeEach(resetSettingsTest)
 
-  it('无 profile 时返回待确认 0', async () => {
+  it('无 profile 时显示未初始化', async () => {
     const wrapper = await mountSettings()
     const vm = wrapper.vm as any
-    expect(vm.persyFoldMeta).toContain('待确认 0')
-    expect(vm.persyFoldMeta).toContain('已确认 0')
+    expect(vm.persyFoldMeta).toBe('未初始化')
     wrapper.unmount()
   })
 
@@ -1912,102 +1935,79 @@ describe('SettingsView functions – isLocalAdmin computed', () => {
   })
 })
 
-describe('SettingsView functions – memoryV2UserId computed', () => {
+describe('PersyUserMemory account scope', () => {
   beforeEach(resetSettingsTest)
 
-  it('无 user 时返回 default', async () => {
-    const wrapper = await mountSettings()
-    const vm = wrapper.vm as any
-    expect(vm.memoryV2UserId).toBe('default')
+  it('requires a verified account before querying any memories', async () => {
+    mockMemoryAccount.workspaceReady = false
+    const wrapper = await mountUserMemoryPanel()
+    expect(mockMemoryV2List).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('登录后可查看和管理你的记忆')
+    mockMemoryAccount.workspaceReady = true
+    await flushPromises()
+    expect(mockMemoryV2List).toHaveBeenCalledWith(expect.objectContaining({ userId: '42' }))
     wrapper.unmount()
   })
 
-  it.each([['testuser', 'testuser'], ['13800138000', '1']])(
-    '为用户名 %s 选择记忆所属账号', async (username, expected) => {
-      mockAuthApiGetCurrentUser.mockResolvedValue({
-        success: true,
-        data: {
-          user: {
-            id: 1,
-            username,
-            display_name: 'Test',
-            email: '',
-            role: 'user',
-            is_active: true,
-          },
-          permissions: [],
-        },
-      })
-      const wrapper = await mountSettings()
-      await nextTick()
-      await nextTick()
-      const vm = wrapper.vm as any
-      expect(vm.memoryV2UserId).toBe(expected)
-      wrapper.unmount()
-    },
-  )
-
-  it('username 为空时 unwrapUserFromMe 返回 null，memoryV2UserId 回退到 default', async () => {
-    // unwrapUserFromMe 要求 username 非空，否则返回 null
-    mockAuthApiGetCurrentUser.mockResolvedValue({
-      success: true,
-      data: {
-        user: {
-          id: 42,
-          username: '',
-          display_name: 'Test',
-          email: '',
-          role: 'user',
-          is_active: true,
-        },
-        permissions: [],
-      },
-    })
-    const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
-    const vm = wrapper.vm as any
-    // localUser.value 为 null（因 username 为空被 unwrapUserFromMe 拒绝）
-    expect(vm.memoryV2UserId).toBe('default')
-    wrapper.unmount()
-  })
-
-  it('username 为空白时回退到 default', async () => {
-    mockAuthApiGetCurrentUser.mockResolvedValue({
-      success: true,
-      data: {
-        user: {
-          id: 0,
-          username: '   ',
-          display_name: 'Test',
-          email: '',
-          role: 'user',
-          is_active: true,
-        },
-        permissions: [],
-      },
-    })
-    const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
-    const vm = wrapper.vm as any
-    expect(vm.memoryV2UserId).toBe('default')
+  it('discards late reads and pending confirmations after an account switch', async () => {
+    const wrapper = await mountMemory({ key: '原账号记忆' })
+    let resolveRead!: (result: unknown) => void
+    mockMemoryV2List.mockReturnValueOnce(new Promise(done => { resolveRead = done }))
+    let resolveConfirm!: (result: boolean) => void
+    mockAppConfirm.mockReturnValueOnce(new Promise(done => { resolveConfirm = done }))
+    const oldRead = (wrapper.vm as any).loadMemoryV2()
+    const deletion = (wrapper.vm as any).deleteMemoryV2({ memory_id: 'm1', key: '原账号记忆' })
+    mockMemoryV2List.mockResolvedValue({ success: true, memories: [{ memory_id: 'new', key: '新账号记忆' }] })
+    ++productReadAccountEpoch.value
+    mockMemoryAccount.localUserId = 45
+    await flushPromises()
+    resolveConfirm(true)
+    resolveRead({ success: true, memories: [{ memory_id: 'old', key: '原账号记忆' }] })
+    await Promise.all([oldRead, deletion])
+    await flushPromises()
+    expect(mockMemoryV2List).toHaveBeenLastCalledWith(expect.objectContaining({ userId: '45' }))
+    expect(wrapper.text()).toContain('新账号记忆')
+    expect(wrapper.text()).not.toContain('原账号记忆')
+    expect(mockMemoryV2Remove).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 })
 
-
-describe('SettingsView memory filters', () => {
+describe('PersyUserMemory filters', () => {
   beforeEach(resetSettingsTest)
+  it('refreshes active memories when the cached knowledge page reopens', async () => {
+    const { default: PersyUserMemory } = await import('@/components/persy/PersyUserMemory.vue')
+    const visible = ref(true)
+    const knowledgePage = defineComponent({ setup: () => () => h(PersyUserMemory) })
+    const wrapper = mount(defineComponent({
+      setup: () => () => h(KeepAlive, null, { default: () => visible.value ? h(knowledgePage) : null }),
+    }), { global: { plugins: [i18nMock] } })
+    await flushPromises()
+    expect(mockMemoryV2List).toHaveBeenCalledTimes(1)
+
+    visible.value = false
+    await nextTick()
+    mockMemoryV2List.mockResolvedValue({
+      success: true,
+      memories: [{ memory_id: 'new', memory_type: 'preference', key: '对话偏好', value: '先给结论', status: 'active' }],
+    })
+    visible.value = true
+    await flushPromises()
+    expect(mockMemoryV2List).toHaveBeenCalledTimes(2)
+    expect(wrapper.get('.memory-v2-item__value').text()).toBe('先给结论')
+    expect(wrapper.get('.memory-v2-chip--active').text()).toBe('已生效')
+    wrapper.unmount()
+  })
+
   it('loads the selected status and type through the card controls', async () => {
     const wrapper = await mountMemory()
     const filters = wrapper.findAll('.memory-v2-toolbar select')
     await filters[0].setValue('active')
     await flushPromises()
-    expect(mockMemoryV2List).toHaveBeenLastCalledWith({ userId: 'default', status: 'active', memoryType: undefined })
+    expect(mockMemoryV2List).toHaveBeenLastCalledWith({ userId: '42', status: 'active', memoryType: undefined })
     await filters[1].setValue('entity')
     await flushPromises()
-    expect(mockMemoryV2List).toHaveBeenLastCalledWith({ userId: 'default', status: 'active', memoryType: 'entity' })
+    expect(mockMemoryV2List).toHaveBeenLastCalledWith({ userId: '42', status: 'active', memoryType: 'entity' })
     wrapper.unmount()
   })
 })

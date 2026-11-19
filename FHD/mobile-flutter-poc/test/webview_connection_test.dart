@@ -120,7 +120,7 @@ void main() {
     expect(platform.loads, 0);
     expect(find.text('登录状态同步失败，请重试'), findsOneWidget);
   });
-  testWidgets('public registration clears only scoped auth before opening',
+  testWidgets('retired registration cannot bypass WebView authentication',
       (tester) async {
     final platform = _Platform();
     WebViewPlatform.instance = platform;
@@ -130,17 +130,10 @@ void main() {
             path: '/login/register',
             api: MobileApiClient(sessionStore: MemoryMobileSessionStore()))));
     await tester.pump();
-    expect(platform.loads, 1);
-    expect(platform.controller!.request!.headers, isEmpty);
-    expect(platform.cookie!.value, isEmpty);
-    expect(platform.controller!.scripts.single,
-        contains("localStorage.removeItem('xcagi_stability_refresh')"));
-    expect(platform.controller!.scripts.single,
-        isNot(contains('localStorage.clear')));
-    expect(
-        await platform.delegate!.navigate!(const NavigationRequest(
-            url: 'https://xiu-ci.com/fhd-api/customers', isMainFrame: true)),
-        NavigationDecision.prevent);
+    expect(platform.loads, 0);
+    expect(platform.controller, isNull);
+    expect(platform.cookie, isNull);
+    expect(find.text('无法打开页面，请检查登录与当前连接后重试'), findsOneWidget);
   });
   testWidgets('logged out cannot open protected page or reuse web cookies',
       (tester) async {

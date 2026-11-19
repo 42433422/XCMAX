@@ -1,11 +1,14 @@
 package com.xiuci.xcagi.mobile
 
 import android.Manifest
+import android.app.DownloadManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.ParcelFileDescriptor
+import android.os.SystemClock
 import android.provider.Settings
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
@@ -15,6 +18,7 @@ import androidx.biometric.BiometricPrompt
 import androidx.core.app.ActivityCompat
 import androidx.core.content.FileProvider
 import androidx.core.content.ContextCompat
+import androidx.core.content.pm.PackageInfoCompat
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
@@ -25,15 +29,9 @@ import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.BufferedInputStream
-import java.io.DataInputStream
 import java.io.File
-import java.io.FileOutputStream
-import java.io.OutputStream
-import java.io.RandomAccessFile
-import java.net.HttpURLConnection
-import java.net.URL
 import java.security.KeyStore
-import java.security.MessageDigest
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -43,30 +41,12 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 
-private const val DeltaFormatCopyDataV1 = "xcagi-copy-data-v1"
 private const val SessionFileName = "xcagi_session.json"
 private const val LegacySessionDataStorePath = "datastore/xcagi_session_enterprise.preferences_pb"
 private const val LegacySessionMigrationMarkerName = "xcagi_session_legacy_migrated"
 private const val RecordAudioPermissionRequestCode = 4242
 private const val CameraPermissionRequestCode = 4243
-
-private data class PackageDeltaSpec(
-    val available: Boolean,
-    val format: String,
-    val patchUrl: String,
-    val baseVersionCode: Int,
-    val targetVersionCode: Int,
-    val patchSha256: String,
-    val baseApkSha256: String,
-    val targetApkSha256: String,
-) {
-    fun canUseFor(currentVersionCode: Int): Boolean =
-        available &&
-            format == DeltaFormatCopyDataV1 &&
-            patchUrl.isNotBlank() &&
-            baseVersionCode == currentVersionCode &&
-            targetVersionCode > currentVersionCode
-}
+private val UpdateInProgress = AtomicBoolean()
 
 class MainActivity : FlutterFragmentActivity() {
     private var deepLinkChannel: MethodChannel? = null
@@ -170,11 +150,8 @@ class MainActivity : FlutterFragmentActivity() {
                 return@setMethodCallHandler
             }
             val downloadUrl = call.argument<String>("downloadUrl").orEmpty()
-            val versionName = call.argument<String>("versionName").orEmpty()
-            val currentVersionCode = call.argument<Int>("currentVersionCode") ?: 0
-            @Suppress("UNCHECKED_CAST")
-            val delta = call.argument<Map<String, Any?>>("delta").orEmpty()
-            startPackageUpdate(downloadUrl, versionName, currentVersionCode, delta, result)
+            val targetVersionCode = call.argument<Number>("targetVersionCode")?.toLong() ?: 0L
+            startPackageUpdate(downloadUrl, targetVersionCode, result)
         }
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
@@ -496,304 +473,133 @@ class MainActivity : FlutterFragmentActivity() {
 
     private fun startPackageUpdate(
         downloadUrl: String,
-        versionName: String,
-        currentVersionCode: Int,
-        delta: Map<String, Any?>,
+        targetVersionCode: Long,
         result: MethodChannel.Result,
     ) {
-        val safeUri =
-            runCatching { validateApkUrl(downloadUrl) }
-                .getOrElse {
-                    result.error("invalid_url", it.message ?: "安装包下载地址无效", null)
-                    return
-                }
+        val uri = Uri.parse(downloadUrl.trim())
+        val installed = packageManager.getPackageInfo(packageName, 0)
+        if (uri.scheme != "https" || uri.host.isNullOrBlank() ||
+            !uri.userInfo.isNullOrEmpty() ||
+            !uri.path.orEmpty().endsWith(".apk", ignoreCase = true) ||
+            targetVersionCode <= PackageInfoCompat.getLongVersionCode(installed)
+        ) {
+            result.error("invalid_update", "安装包地址或目标版本无效", null)
+            return
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
             !packageManager.canRequestPackageInstalls()
         ) {
-            val settingsIntent =
-                Intent(
-                    Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                    Uri.parse("package:$packageName"),
-                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            startActivity(settingsIntent)
+            startActivity(
+                Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")),
+            )
             result.success("请授权安装未知应用后再点击去更新")
             return
         }
 
-        val deltaSpec = parseDeltaSpec(delta)
+        if (!UpdateInProgress.compareAndSet(false, true)) {
+            result.error("update_in_progress", "正在下载安装包", null)
+            return
+        }
         thread(name = "xcagi-apk-update") {
-            runCatching {
-                val apk = downloadUpdateApk(safeUri, versionName, deltaSpec, currentVersionCode)
-                runOnUiThread {
-                    openInstaller(apk)
-                    result.success("系统安装器已打开，请确认安装")
-                }
-            }.onFailure {
-                runOnUiThread {
-                    result.error("update_failed", it.message ?: "安装包更新失败", null)
-                }
+            val downloaded = runCatching { downloadUpdateApk(uri, targetVersionCode) }
+            runOnUiThread {
+                UpdateInProgress.set(false)
+                downloaded.mapCatching { apk ->
+                    try {
+                        check(!isFinishing && !isDestroyed) { "更新界面已关闭，请重试" }
+                        openInstaller(apk)
+                    } catch (error: Exception) {
+                        apk.delete()
+                        throw error
+                    }
+                }.fold(
+                    onSuccess = { result.success("系统安装器已打开，请确认安装") },
+                    onFailure = { result.error("update_failed", it.message ?: "安装包更新失败", null) },
+                )
             }
         }
     }
 
-    private fun validateApkUrl(raw: String): Uri {
-        require(raw.isNotBlank()) { "安装包下载地址为空" }
-        val uri = Uri.parse(raw.trim())
-        val scheme = uri.scheme?.lowercase().orEmpty()
-        require(scheme == "https" || scheme == "http") { "安装包下载地址必须是 http(s)" }
-        require(!uri.host.isNullOrBlank()) { "安装包下载地址缺少域名" }
-        require(uri.path.orEmpty().lowercase().endsWith(".apk")) { "更新地址不是 APK 安装包" }
-        return uri
-    }
-
-    private fun validatePatchUrl(raw: String): Uri {
-        require(raw.isNotBlank()) { "增量包下载地址为空" }
-        val uri = Uri.parse(raw.trim())
-        val scheme = uri.scheme?.lowercase().orEmpty()
-        require(scheme == "https" || scheme == "http") { "增量包下载地址必须是 http(s)" }
-        require(!uri.host.isNullOrBlank()) { "增量包下载地址缺少域名" }
-        return uri
-    }
-
-    private fun parseDeltaSpec(raw: Map<String, Any?>): PackageDeltaSpec? {
-        if (!raw.readBool("available")) return null
-        return PackageDeltaSpec(
-            available = true,
-            format = raw.readString("format"),
-            patchUrl = raw.readString("patch_url"),
-            baseVersionCode = raw.readInt("base_version_code"),
-            targetVersionCode = raw.readInt("target_version_code"),
-            patchSha256 = raw.readString("patch_sha256"),
-            baseApkSha256 = raw.readString("base_apk_sha256"),
-            targetApkSha256 = raw.readString("target_apk_sha256"),
-        )
-    }
-
-    private fun downloadUpdateApk(
-        uri: Uri,
-        versionName: String,
-        deltaSpec: PackageDeltaSpec?,
-        currentVersionCode: Int,
-    ): File {
-        if (deltaSpec != null && deltaSpec.canUseFor(currentVersionCode)) {
-            return runCatching { downloadAndApplyDelta(deltaSpec, versionName) }
-                .getOrElse { downloadApk(uri, versionName) }
+    private fun downloadUpdateApk(uri: Uri, targetVersionCode: Long): File {
+        val manager = requireNotNull(getSystemService(DownloadManager::class.java)) {
+            "系统下载服务不可用"
         }
-        return downloadApk(uri, versionName)
-    }
-
-    private fun downloadAndApplyDelta(deltaSpec: PackageDeltaSpec, versionName: String): File {
-        val patchUri = validatePatchUrl(deltaSpec.patchUrl)
-        val dir = File(cacheDir, "updates").also { it.mkdirs() }
-        val patchFile = File(dir, deltaFileName(versionName))
-        val sourceApk = File(applicationInfo.sourceDir)
-        val target = File(dir, apkFileName(versionName))
-        val targetTmp = File(dir, "${target.name}.delta.tmp")
-
-        verifyExpectedSha(sourceApk, deltaSpec.baseApkSha256, "当前安装包与增量包不匹配")
-        downloadToFile(patchUri, patchFile)
-        verifyExpectedSha(patchFile, deltaSpec.patchSha256, "增量包校验失败")
-
-        if (targetTmp.exists()) targetTmp.delete()
-        applyDelta(sourceApk, patchFile, targetTmp)
-        verifyExpectedSha(targetTmp, deltaSpec.targetApkSha256, "合成安装包校验失败")
-
-        if (target.exists()) target.delete()
-        if (!targetTmp.renameTo(target)) {
-            targetTmp.copyTo(target, overwrite = true)
-            targetTmp.delete()
-        }
-        cleanOldUpdateFiles(dir, target)
-        return target
-    }
-
-    private fun downloadApk(uri: Uri, versionName: String): File {
-        val dir = File(cacheDir, "updates").also { it.mkdirs() }
-        val target = File(dir, apkFileName(versionName))
-        val tmp = File(dir, "${target.name}.tmp")
-        if (target.exists()) target.delete()
-        if (tmp.exists()) tmp.delete()
-
-        downloadToFile(uri, tmp)
-        if (tmp.length() <= 0L) {
-            tmp.delete()
-            throw IllegalStateException("下载安装包失败：文件为空")
-        }
-        if (!tmp.renameTo(target)) {
-            tmp.copyTo(target, overwrite = true)
-            tmp.delete()
-        }
-        cleanOldUpdateFiles(dir, target)
-        return target
-    }
-
-    private fun downloadToFile(uri: Uri, target: File) {
-        val parent = target.parentFile ?: throw IllegalStateException("保存目录无效")
-        val tmp = File(parent, "${target.name}.download")
-        if (target.exists()) target.delete()
-        if (tmp.exists()) tmp.delete()
-        val connection = (URL(uri.toString()).openConnection() as HttpURLConnection).apply {
-            connectTimeout = 15_000
-            readTimeout = 5 * 60_000
-            instanceFollowRedirects = true
-        }
+        val pending = getSharedPreferences("xcagi_package_update", MODE_PRIVATE)
+        val pendingId = pending.getLong("id", -1L)
+        val id =
+            if (pendingId >= 0 && pending.getString("url", null) == uri.toString() &&
+                pending.getLong("version", 0L) == targetVersionCode
+            ) {
+                pendingId
+            } else {
+                if (pendingId >= 0) manager.remove(pendingId)
+                manager.enqueue(
+                    DownloadManager.Request(uri)
+                        .setTitle("XCAGI")
+                        .setMimeType("application/vnd.android.package-archive")
+                        .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE),
+                )
+            }
         try {
-            val code = connection.responseCode
-            if (code !in 200..299) {
-                throw IllegalStateException("下载更新文件失败：HTTP $code")
-            }
-            connection.inputStream.use { input ->
-                FileOutputStream(tmp).use { output ->
-                    input.copyTo(output)
+            check(pending.edit().putLong("id", id).putString("url", uri.toString())
+                .putLong("version", targetVersionCode).commit()
+            ) { "无法保存更新任务" }
+            awaitDownload(manager, id)
+            val dir = File(cacheDir, "updates").also { it.mkdirs() }
+            val cutoff = System.currentTimeMillis() - 24L * 60 * 60 * 1000
+            dir.listFiles()?.filter { it.lastModified() < cutoff }?.forEach { it.delete() }
+            val apk = File.createTempFile("XCAGI-", ".apk", dir)
+            try {
+                val descriptor = manager.openDownloadedFile(id)
+                ParcelFileDescriptor.AutoCloseInputStream(descriptor).use { input ->
+                    apk.outputStream().use { output -> input.copyTo(output) }
                 }
-            }
-            if (tmp.length() <= 0L) {
-                throw IllegalStateException("下载更新文件失败：文件为空")
-            }
-            if (!tmp.renameTo(target)) {
-                tmp.copyTo(target, overwrite = true)
-                tmp.delete()
+                val archive = requireNotNull(packageManager.getPackageArchiveInfo(apk.path, 0)) {
+                    "下载文件不是有效的 Android 安装包"
+                }
+                require(archive.packageName == packageName &&
+                    PackageInfoCompat.getLongVersionCode(archive) == targetVersionCode
+                ) { "安装包与当前应用或目标版本不一致" }
+                return apk
+            } catch (error: Exception) {
+                apk.delete()
+                throw error
             }
         } finally {
-            connection.disconnect()
-            if (tmp.exists()) tmp.delete()
-        }
-    }
-
-    private fun openInstaller(apk: File) {
-        val uri =
-            FileProvider.getUriForFile(
-                this,
-                "$packageName.update.fileprovider",
-                apk,
-            )
-        val intent =
-            Intent(Intent.ACTION_VIEW)
-                .setDataAndType(uri, "application/vnd.android.package-archive")
-                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        startActivity(intent)
-    }
-
-    private fun apkFileName(versionName: String): String {
-        val clean =
-            versionName
-                .trim()
-                .replace(Regex("[^A-Za-z0-9._-]"), "_")
-                .take(80)
-                .ifBlank { "latest" }
-        return "XCAGI-Android-$clean.apk"
-    }
-
-    private fun deltaFileName(versionName: String): String =
-        apkFileName(versionName).removeSuffix(".apk") + ".xcapkdiff"
-
-    private fun cleanOldUpdateFiles(dir: File, keep: File) {
-        dir.listFiles()
-            ?.filter { it != keep && (it.extension == "apk" || it.extension == "xcapkdiff") }
-            ?.forEach { it.delete() }
-    }
-
-    private fun verifyExpectedSha(file: File, expected: String, error: String) {
-        val cleanExpected = expected.trim()
-        if (cleanExpected.isEmpty()) return
-        require(sha256(file).equals(cleanExpected, ignoreCase = true)) { error }
-    }
-
-    private fun sha256(file: File): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-        file.inputStream().use { input ->
-            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-            while (true) {
-                val read = input.read(buffer)
-                if (read <= 0) break
-                digest.update(buffer, 0, read)
+            try {
+                manager.remove(id)
+            } finally {
+                pending.edit().clear().commit()
             }
         }
-        return digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }
     }
 
-    private fun applyDelta(oldApk: File, patchFile: File, outputApk: File) {
-        val magicBytes = "XCAGIDLT1".toByteArray(Charsets.US_ASCII)
-        DataInputStream(BufferedInputStream(patchFile.inputStream())).use { patch ->
-            val magic = ByteArray(magicBytes.size)
-            patch.readFully(magic)
-            require(magic.contentEquals(magicBytes)) { "增量包格式不匹配" }
-
-            RandomAccessFile(oldApk, "r").use { old ->
-                outputApk.outputStream().use { output ->
-                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                    loop@ while (true) {
-                        when (val command = patch.readByte()) {
-                            0.toByte() -> {
-                                val offset = patch.readLong()
-                                val length = patch.readInt()
-                                require(offset >= 0L && length >= 0) { "增量包 COPY 段无效" }
-                                copyOldRange(old, offset, length, output, buffer)
-                            }
-                            1.toByte() -> {
-                                val length = patch.readInt()
-                                require(length >= 0) { "增量包 DATA 段无效" }
-                                copyPatchData(patch, length, output, buffer)
-                            }
-                            2.toByte() -> break@loop
-                            else -> throw IllegalStateException("增量包命令无效：$command")
-                        }
+    private fun awaitDownload(manager: DownloadManager, id: Long) {
+        val query = DownloadManager.Query().setFilterById(id)
+        val deadline = SystemClock.elapsedRealtime() + 10 * 60_000
+        while (SystemClock.elapsedRealtime() < deadline) {
+            manager.query(query).use { cursor ->
+                check(cursor != null && cursor.moveToFirst()) { "下载任务已取消" }
+                when (cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))) {
+                    DownloadManager.STATUS_SUCCESSFUL -> return
+                    DownloadManager.STATUS_FAILED -> {
+                        val reason = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
+                        error("下载安装包失败（$reason）")
                     }
                 }
             }
+            Thread.sleep(500)
         }
+        error("下载安装包超时")
     }
 
-    private fun copyOldRange(
-        old: RandomAccessFile,
-        offset: Long,
-        length: Int,
-        output: OutputStream,
-        buffer: ByteArray,
-    ) {
-        old.seek(offset)
-        var remaining = length
-        while (remaining > 0) {
-            val read = old.read(buffer, 0, minOf(buffer.size, remaining))
-            if (read <= 0) throw IllegalStateException("读取旧安装包失败")
-            output.write(buffer, 0, read)
-            remaining -= read
-        }
+    private fun openInstaller(apk: File) {
+        val uri = FileProvider.getUriForFile(this, "$packageName.update.fileprovider", apk)
+        val intent = Intent(Intent.ACTION_VIEW)
+            .setDataAndType(uri, "application/vnd.android.package-archive")
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        startActivity(intent)
     }
-
-    private fun copyPatchData(
-        patch: DataInputStream,
-        length: Int,
-        output: OutputStream,
-        buffer: ByteArray,
-    ) {
-        var remaining = length
-        while (remaining > 0) {
-            val read = minOf(buffer.size, remaining)
-            patch.readFully(buffer, 0, read)
-            output.write(buffer, 0, read)
-            remaining -= read
-        }
-    }
-
-    private fun Map<String, Any?>.readString(key: String): String =
-        this[key]?.toString().orEmpty()
-
-    private fun Map<String, Any?>.readInt(key: String): Int =
-        when (val value = this[key]) {
-            is Number -> value.toInt()
-            is String -> value.toIntOrNull() ?: 0
-            else -> 0
-        }
-
-private fun Map<String, Any?>.readBool(key: String): Boolean =
-        when (val value = this[key]) {
-            is Boolean -> value
-            is Number -> value.toInt() != 0
-            is String -> value.equals("true", ignoreCase = true) || value == "1"
-            else -> false
-        }
 }
 
 private object CredentialCipher {

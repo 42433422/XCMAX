@@ -539,6 +539,7 @@ def test_fhd_meta_db_tokens_status(fhd_meta_client, monkeypatch: pytest.MonkeyPa
 def debug_client():
     app = FastAPI()
     app.include_router(debug_routes.router)
+    app.dependency_overrides[debug_routes.get_logged_in_user] = lambda: object()
     return TestClient(app)
 
 

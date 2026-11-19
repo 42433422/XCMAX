@@ -5,6 +5,7 @@ import uuid
 from typing import Any, cast
 
 from app.db.models import Permission, Role, User
+from app.db.models.permission import PERSONAL_PLAN_PERMISSIONS
 from app.db.session import get_host_db as get_db
 from app.di.registry import get_service_registry
 from app.domain.shared_services.session_service import get_session_service
@@ -100,6 +101,8 @@ class AuthService(NeuroEventPublisherMixin):
     def get_user_permissions(self, user: User) -> list:
         from app.db.bootstrap.guarded import enabled, existing_permissions
 
+        if getattr(user, "account_tier", None) == "personal":
+            return list(PERSONAL_PLAN_PERMISSIONS)
         if enabled():
             return existing_permissions(user)
         from app.application.tenant_rbac_policy import (
@@ -130,7 +133,7 @@ class AuthService(NeuroEventPublisherMixin):
         from app.db.bootstrap.guarded import enabled
 
         needed = str(permission_code or "")
-        if enabled():
+        if getattr(user, "account_tier", None) == "personal" or enabled():
             return needed in self.get_user_permissions(user)
         if user.role == "admin" and user.tier == "admin" and user.tenant_id is None:
             return True

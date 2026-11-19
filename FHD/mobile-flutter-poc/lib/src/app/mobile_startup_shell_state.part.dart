@@ -290,10 +290,7 @@ abstract class _MobileStartupStateBase extends State<MobileStartupApp> {
         );
         return true;
       case MobileDeepLinkTarget.register:
-        _pushMobileDeepLinkPage(
-          navigator,
-          RegisterScreen(onLogin: () => navigator.maybePop()),
-        );
+        unawaited(_openRegistration());
         return true;
       case MobileDeepLinkTarget.smartAnalysis:
         _pushMobileDeepLinkPage(
@@ -398,6 +395,11 @@ abstract class _MobileStartupStateBase extends State<MobileStartupApp> {
       default:
         return BusinessListKind.customers;
     }
+  }
+
+  Future<void> _openRegistration() async {
+    final opened = await openMarketRegistration(widget.openExternalUrl);
+    if (!opened && mounted) _showMobileSnack('无法打开注册页面，请稍后重试');
   }
 
   void _showMobileSnack(String message) {

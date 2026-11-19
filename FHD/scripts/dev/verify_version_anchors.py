@@ -31,6 +31,11 @@ ANCHORS: list[tuple[str, str, str]] = [
     ),
     ("mobile-flutter-poc/pubspec.yaml", r"(?m)^version:\s*([\d.]+)\+\d+", TOOLCHAIN_VERSION),
     (
+        "mobile-flutter-poc/ohos/AppScope/app.json5",
+        r'"versionName"\s*:\s*"([\d.]+)"',
+        PRODUCT_VERSION,
+    ),
+    (
         "mobile-flutter-poc/ios/Flutter/Version.xcconfig",
         r"(?m)^FLUTTER_BUILD_NAME=([\d.]+)",
         TOOLCHAIN_VERSION,

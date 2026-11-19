@@ -20,7 +20,11 @@ public final class AccountLicensePlans {
             String description,
             List<String> features) {}
 
+    public static final String PERSONAL_PLAN_ID = "saas-personal-free";
     public static final List<Metadata> PLANS = List.of(
+            new Metadata(PERSONAL_PLAN_ID, "个人使用版", BigDecimal.ZERO, "free", null,
+                    "normal", "免费", 500, "免费使用 XCAGI 桌面端基础功能，不含任何 Mod。",
+                    List.of("桌面端基础功能", "赠送 5 元 AI 使用额度", "无 Mod 权益")),
             new Metadata("saas-trial-30", "30 天全功能体验", new BigDecimal("99.00"), "trial", 30,
                     "normal", "体验", 10000,
                     "用 30 天完整体验 XCAGI，包含 100 元 AI 使用额度。",

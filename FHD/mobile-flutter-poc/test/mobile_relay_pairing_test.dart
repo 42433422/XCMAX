@@ -81,8 +81,16 @@ void main() {
     });
   }
 
-  for (final input in <String>[qr, '345678']) {
-    test('signed-in phone binds ${input == qr ? 'QR' : 'device code'}',
+  for (final input in <String>[
+    qr,
+    '345678',
+    qr.replaceFirst(
+        '}',
+        ',"api_base_url":"https://attacker.example/",'
+            '"relay_base_url":"https://attacker.example/"}'),
+  ]) {
+    test(
+        'signed-in phone binds ${input == '345678' ? 'device code' : input == qr ? 'QR' : 'QR without trusting its origins'}',
         () async {
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       final httpClient = HttpClient();
@@ -94,7 +102,7 @@ void main() {
             'Bearer signed-in-token');
         final body = jsonDecode(await utf8.decoder.bind(request).join());
         expect(body, {
-          'relay_id': input == qr ? 'relay-12345678' : '',
+          'relay_id': input == '345678' ? '' : 'relay-12345678',
           'pairing_code': '345678',
         });
         request.response.headers.contentType = ContentType.json;
@@ -146,44 +154,44 @@ void main() {
     );
   });
 
-  test('legacy LAN exchange restores session when cloud bind rejects',
+  test('trusted legacy exchange restores session when account bind rejects',
       () async {
-    final desktop = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    final cloud = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     final httpClient = HttpClient();
     addTearDown(() => httpClient.close(force: true));
-    addTearDown(() => desktop.close(force: true));
-    addTearDown(() => cloud.close(force: true));
-    final desktopBase = 'http://${desktop.address.address}:${desktop.port}/';
-    final cloudBase = 'http://${cloud.address.address}:${cloud.port}/';
-    final desktopDone = desktop.first.then((request) async {
-      expect(request.uri.path, '/api/mobile/v1/pairing/exchange');
+    addTearDown(() => server.close(force: true));
+    final base = 'http://${server.address.address}:${server.port}/';
+    var exchanges = 0;
+    var bindings = 0;
+    final listening = server.listen((request) async {
       request.response.headers.contentType = ContentType.json;
-      request.response.write(jsonEncode({
-        'success': true,
-        'data': {
-          'api_base_url': desktopBase,
+      if (request.uri.path == '/api/mobile/v1/pairing/exchange') {
+        exchanges++;
+        request.response.write(jsonEncode({
+          'success': true,
+          'data': {
+            'api_base_url': base,
+            'relay_id': 'relay-legacy-1',
+            'relay': {'relay_id': 'relay-legacy-1', 'pairing_code': '345678'},
+          },
+        }));
+      } else {
+        bindings++;
+        expect(request.uri.path, '/api/mobile/v1/relay/mobile/bind-account');
+        expect(request.headers.value(HttpHeaders.authorizationHeader),
+            'Bearer signed-in-token');
+        expect(jsonDecode(await utf8.decoder.bind(request).join()), {
           'relay_id': 'relay-legacy-1',
-          'relay': {'relay_id': 'relay-legacy-1', 'pairing_code': '345678'},
-        },
-      }));
+          'pairing_code': '345678',
+        });
+        request.response.write(jsonEncode({
+          'success': false,
+          'message': 'expired code',
+        }));
+      }
       await request.response.close();
     });
-    final cloudDone = cloud.first.then((request) async {
-      expect(request.uri.path, '/api/mobile/v1/relay/mobile/bind-account');
-      expect(request.headers.value(HttpHeaders.authorizationHeader),
-          'Bearer signed-in-token');
-      expect(jsonDecode(await utf8.decoder.bind(request).join()), {
-        'relay_id': 'relay-legacy-1',
-        'pairing_code': '345678',
-      });
-      request.response.headers.contentType = ContentType.json;
-      request.response.write(jsonEncode({
-        'success': false,
-        'message': 'expired code',
-      }));
-      await request.response.close();
-    });
+    addTearDown(listening.cancel);
     const previous = MobileSessionData(
       accessToken: 'signed-in-token',
       username: 'test-user',
@@ -195,7 +203,7 @@ void main() {
     final store = MemoryMobileSessionStore(previous);
     final repository = MobileRepository(
       client: MobileApiClient(
-        config: MobileApiConfig(baseUrl: cloudBase),
+        config: MobileApiConfig(baseUrl: base),
         sessionStore: store,
         httpClient: httpClient,
       ),
@@ -203,15 +211,15 @@ void main() {
     final qr = jsonEncode({
       'v': 2,
       'nonce': 'legacy-nonce-123',
-      'api_base_url': desktopBase,
+      'api_base_url': base,
     });
 
     await expectLater(
       repository.exchangePairingCode(qr),
       throwsA(isA<MobileRepositoryException>()),
     );
-    await desktopDone;
-    await cloudDone;
+    expect(exchanges, 1);
+    expect(bindings, 1);
     final restored = await store.load();
     expect(restored.accessToken, previous.accessToken);
     expect(restored.fhdHost, previous.fhdHost);

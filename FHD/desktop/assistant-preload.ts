@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('xcagiDesktopAssistant', {
   setExpanded: (expanded: boolean) => ipcRenderer.invoke('xcagi:assistant-expand', expanded),
   moveWindow: (x: number, y: number) => ipcRenderer.invoke('xcagi:assistant-move', x, y),
   openMain: () => ipcRenderer.invoke('xcagi:assistant-open-main'),
+  openProducts: (query: string) => ipcRenderer.invoke('xcagi:assistant-open-products', query),
   onShow: (callback: () => void) => {
     const listener = () => callback()
     ipcRenderer.on('xcagi:assistant-show', listener)

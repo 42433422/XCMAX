@@ -72,6 +72,8 @@ def preview_store(tmp_path, monkeypatch):
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine)
     monkeypatch.setattr(db_session, "SessionLocal", factory)
+    # Account sessions are read from the host authority, never the active Mod DB.
+    monkeypatch.setattr("app.db.HostSessionLocal", factory)
     monkeypatch.setattr(service_uploads, "get_app_data_dir", lambda: str(tmp_path))
     monkeypatch.setenv("FHD_ELT_LLM", "on")
     monkeypatch.setenv("FHD_ELT_LLM_TIMEOUT", "2")

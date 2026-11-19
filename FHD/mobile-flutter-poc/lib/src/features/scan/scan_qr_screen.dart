@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
@@ -20,17 +21,22 @@ part 'scan_qr_screen_state_scan.part.dart';
 part 'scan_qr_screen_overlays.part.dart';
 
 class ScanQrScreen extends StatefulWidget {
-  const ScanQrScreen({super.key, this.repository, this.enableCamera = true});
+  const ScanQrScreen({
+    super.key,
+    this.repository,
+    this.enableCamera = true,
+    this.returnRawValue = false,
+  });
 
   final MobileRepository? repository;
   final bool enableCamera;
+  final bool returnRawValue;
 
   @override
   State<ScanQrScreen> createState() => _ScanQrScreenState();
 }
 
 class _ScanQrScreenState extends _ScanQrStateScan {
-
   @override
   Widget build(BuildContext context) {
     final colors = AppTheme.colors(context);
@@ -75,14 +81,15 @@ class _ScanQrScreenState extends _ScanQrStateScan {
                           ),
                           tooltip: _flashOn ? '关闭闪光灯' : '打开闪光灯',
                         ),
-                      IconButton(
-                        onPressed: _pickingAlbum ? null : _pickAlbum,
-                        icon: const Icon(
-                          Icons.photo_library,
-                          color: Colors.white,
+                      if (!_usesHarmonyScanner)
+                        IconButton(
+                          onPressed: _pickingAlbum ? null : _pickAlbum,
+                          icon: const Icon(
+                            Icons.photo_library,
+                            color: Colors.white,
+                          ),
+                          tooltip: '从相册选择',
                         ),
-                        tooltip: '从相册选择',
-                      ),
                     ],
                   ),
                 ),
@@ -90,7 +97,24 @@ class _ScanQrScreenState extends _ScanQrStateScan {
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
-                      if (cameraEnabled &&
+                      if (_usesHarmonyScanner && cameraEnabled)
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            FilledButton.icon(
+                              onPressed: _pickingAlbum || _pairing
+                                  ? null
+                                  : _scanWithHarmony,
+                              icon: const Icon(Icons.qr_code_scanner),
+                              label: const Text('打开系统扫码'),
+                            ),
+                            TextButton(
+                              onPressed: _pairing ? null : _showManualInput,
+                              child: const Text('输入设备码'),
+                            ),
+                          ],
+                        )
+                      else if (cameraEnabled &&
                           scannerReady &&
                           _cameraController != null)
                         Positioned.fill(
@@ -118,12 +142,14 @@ class _ScanQrScreenState extends _ScanQrStateScan {
                         _ScannerFailure(
                           message: _cameraError!,
                           onRetry: _restartScanner,
-                          onOpenManual: _showManualInput,
+                          onOpenManual:
+                              widget.returnRawValue ? null : _showManualInput,
                         )
                       else if (!cameraEnabled)
                         _ScannerUnavailable(
                           onRequestPermission: _requestCameraPermission,
-                          onOpenManual: _showManualInput,
+                          onOpenManual:
+                              widget.returnRawValue ? null : _showManualInput,
                           requesting: _requestingCameraPermission,
                         ),
                       if (scannerReady)
@@ -133,7 +159,8 @@ class _ScanQrScreenState extends _ScanQrStateScan {
                           !_checkingCameraPermission)
                         _ScannerUnavailable(
                           onRequestPermission: _requestCameraPermission,
-                          onOpenManual: _showManualInput,
+                          onOpenManual:
+                              widget.returnRawValue ? null : _showManualInput,
                           requesting: _requestingCameraPermission,
                         ),
                       if (cameraEnabled && _pairing)
@@ -158,7 +185,7 @@ class _ScanQrScreenState extends _ScanQrStateScan {
                             ),
                           ),
                         ),
-                      if (scannerReady && !_scanned)
+                      if (scannerReady && !_scanned && !widget.returnRawValue)
                         Positioned(
                           bottom: 42,
                           left: 32,

@@ -17,6 +17,7 @@ real temporary xlsx/csv files.
 from __future__ import annotations
 
 import csv
+import json
 from pathlib import Path
 from unittest import mock
 from unittest.mock import patch
@@ -863,6 +864,130 @@ def test_parse_regions_customer_products(tmp_path, _fake_llm_advice):
     assert len(ds.rows) >= 1
     assert ds.rows[0].values.get("customer_name") == "混合客户"
     assert any(w["code"] == "ELT_MULTI_REGION_WORKBOOK_PLANNED" for w in ds.warnings)
+
+
+@pytest.mark.parametrize("mode", ["ai", "degraded", "fallback"])
+def test_ledger_customer_resolution_precedes_preview(tmp_path, monkeypatch, _fake_llm_advice, mode):
+    from openpyxl import Workbook
+
+    from app.application.elt import llm_assist
+    from app.application.elt.parser_regions import parse_customer_product_regions
+
+    path = tmp_path / "ledger.xlsx"
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "26出货"
+    sheet.append(["44", "客户甲公司", "样例产品甲", 2, 25, 50, 10, 500])
+    sheet.append(["11月20", "样例产品乙", 2, 25, 50, 10, 500, "可能属于客户甲公司"])
+    sheet.append(["客户甲公司", "样例产品丙", 2, 25, 50, 10, 500])
+    workbook.save(path)
+    monkeypatch.setattr(llm_assist, "elt_llm_enabled", lambda: mode != "fallback")
+
+    def advise(title, samples, workbook_customer):
+        assert title == sheet.title and samples[1][1] == "44" and not workbook_customer
+        return llm_assist.LlmAssistResult(
+            used_llm=True,
+            degraded=mode == "degraded",
+            data={
+                "candidates": [
+                    {"name": "客户甲公司", "row": 1, "column": 2, "confirmed": True},
+                    {"name": "11月20", "row": 2, "column": 1, "confirmed": True},
+                    {"name": "客户甲公司", "row": 2, "column": 8, "confirmed": False},
+                    {"name": "原件中没有的名称", "row": 3, "column": 1, "confirmed": True},
+                ]
+            },
+        )
+
+    monkeypatch.setattr(llm_assist, "advise_ledger_customer_scope", advise)
+    dataset = parse_customer_product_regions(path, max_rows=100)
+    assert dataset is not None
+    rows = {row.row_number: row for row in dataset.rows}
+    assert rows[1].values["customer_name"] == ("客户甲公司" if mode == "ai" else "")
+    assert rows[2].values["customer_name"] == ""
+    assert rows[2].provenance["validation_issues"][0]["code"] == "ELT_LEDGER_CUSTOMER_UNRESOLVED"
+    assert rows[2].provenance["customer_display_name"] == (
+        "未识别客户1" if mode == "ai" else "未识别客户2"
+    )
+    verification = dataset.source_features["ledger_row_verification"]["rows"]
+    assert (
+        next(row for row in verification if row["row"] == 2)["customer_name"]
+        == (rows[2].provenance["customer_display_name"])
+    )
+    assert rows[3].values["customer_name"] == ("客户甲公司" if mode == "fallback" else "")
+    if mode == "ai":
+        assert rows[2].provenance["customer_candidates"][0]["name"] == "客户甲公司"
+        assert "可能的客户：客户甲公司" in rows[2].provenance["validation_issues"][0]["message"]
+
+
+def test_long_ledger_uses_bounded_customer_evidence_and_keeps_uncertain_rows(monkeypatch):
+    from openpyxl import Workbook
+
+    from app.application.elt import llm_assist
+    from app.application.elt.parser_shipment_history import (
+        parse_shipment_history_rows,
+        product_match_key,
+        resolve_shipment_history_customers,
+    )
+
+    sheet = Workbook().active
+    sheet.append(["日期", "客户", "货品", "桶", "规格", "重量", "单价", "金额"])
+    for index in range(1, 1500):
+        buyer = "邻近的另一家" if index == 998 else "客户甲公司"
+        sheet.append(["2026-10-01", buyer, f"样例产品{index}", 2, 25, 50, 10, 500])
+    rows = parse_shipment_history_rows(sheet, canonical_by_alias={}, max_rows=1500)
+    monkeypatch.setattr(llm_assist, "elt_llm_enabled", lambda: True)
+
+    def complete(messages, **kwargs):
+        model_input = json.loads(messages[1]["content"])
+        assert len(model_input["rows"]) <= 17
+        assert model_input["rows"]["1500"]["2"] == "客户甲公司"
+        return llm_assist.LlmAssistResult(
+            used_llm=True,
+            data={"candidates": [{"name": "客户甲公司", "row": 2, "column": 2, "confirmed": True}]},
+        )
+
+    monkeypatch.setattr(llm_assist, "_complete", complete)
+    outcome = resolve_shipment_history_customers(sheet, rows, {})
+    assert outcome["resolved_rows"] == 1498
+    assert len({product_match_key(row.values) for row in rows}) == 1499
+    assert rows[997].values["customer_name"] == ""
+    assert rows[997].provenance["customer_display_name"] == "未识别客户1"
+
+
+@pytest.mark.parametrize("upload_name,expected", [("混合客户.xlsx", True), ("综合.xlsx", False)])
+def test_ledger_uses_single_workbook_buyer_only_with_original_file_evidence(
+    tmp_path, monkeypatch, _fake_llm_advice, upload_name, expected
+):
+    from openpyxl import load_workbook
+
+    from app.application.elt import llm_assist
+    from app.application.elt.parser_regions import parse_customer_product_regions
+
+    path = _delivery_workbook(tmp_path / "stored-upload.xlsx")
+    workbook = load_workbook(path)
+    ledger = workbook.create_sheet("历史出货")
+    for index in range(30):
+        buyer = "另一家明确客户" if index == 11 else None
+        ledger.append(["2026-03-01", buyer, f"新产品{index}", 2, 25, 50, 10, 500])
+    workbook.save(path)
+    workbook.close()
+    monkeypatch.setattr(llm_assist, "elt_llm_enabled", lambda: True)
+
+    def advise(title, samples, workbook_customer):
+        assert title == "历史出货"
+        assert workbook_customer == ("混合客户" if expected else "")
+        return llm_assist.LlmAssistResult(
+            used_llm=True,
+            data={"candidates": [{"name": "混合客户", "row": 0, "column": 0, "confirmed": True}]},
+        )
+
+    monkeypatch.setattr(llm_assist, "advise_ledger_customer_scope", advise)
+    dataset = parse_customer_product_regions(path, max_rows=100, source_file_name=upload_name)
+    assert dataset is not None
+    ledger_rows = {row.row_number: row for row in dataset.rows if row.sheet == "历史出货"}
+    row = ledger_rows[1]
+    assert row.values["customer_name"] == ("混合客户" if expected else "")
+    assert ledger_rows[12].values["customer_name"] == ""
 
 
 def test_parse_regions_shipment_records(tmp_path, _fake_llm_advice):

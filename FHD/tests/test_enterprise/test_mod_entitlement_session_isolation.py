@@ -12,6 +12,7 @@ from app.db.models.user import Session as UserSession
 from app.db.models.user import User
 from app.enterprise import mod_entitlements as entitlements
 from app.utils.time import utc_now_naive
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 @pytest.mark.asyncio
@@ -267,3 +268,179 @@ async def test_session_expiry_applies_even_with_fresh_entitlement_ttl(
             assert db.query(UserSession).filter_by(session_id="expiry-session").count() == 1
     finally:
         engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("credential", ["cookie", "x-session-id", "authorization"])
+async def test_personal_plan_cannot_use_bundled_or_customer_mods(monkeypatch, credential):
+    from app.infrastructure.mods.mod_auth import ModContextMiddleware
+
+    monkeypatch.setenv("SESSION_COOKIE_NAME", "session_id")
+    monkeypatch.setattr(entitlements, "session_has_personal_plan", lambda sid: sid == "free")
+    visible = []
+
+    async def application(scope, receive, send):
+        visible.append(entitlements.is_mod_visible_for_enterprise("some-host-mod"))
+
+    async def unused(*args):
+        return {"type": "http.disconnect"}
+
+    middleware = ModContextMiddleware(application)
+    for sid in ("free", "enterprise"):
+        value = (
+            f"session_id={sid}"
+            if credential == "cookie"
+            else (f"Bearer {sid}" if credential == "authorization" else sid)
+        )
+        await middleware(
+            {"type": "http", "path": "/list", "headers": [(credential.encode(), value.encode())]},
+            unused,
+            unused,
+        )
+    assert visible == [False, True]
+
+
+@pytest.mark.parametrize(
+    "credential", ["Cookie", "X-Session-ID", "Authorization", "web-jwt", "mixed"]
+)
+@pytest.mark.parametrize("sku", ["enterprise", "personal", ""])
+def test_personal_plan_http_boundaries_preserve_paid_session(
+    monkeypatch, trusted_actor, credential, sku
+):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.fastapi_routes import elt, shipment_orders
+    from app.fastapi_routes.domains.auth import auth_routes
+    from app.infrastructure.mods.mod_auth import ModContextMiddleware
+    from app.security.web_jwt import issue_web_tokens
+
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", sku)
+    monkeypatch.setattr(entitlements, "enterprise_mod_filter_active", lambda: sku == "enterprise")
+    monkeypatch.setenv("FHD_ELT_CENTER_ENABLED", "1")
+    monkeypatch.setenv("XCAGI_WEB_JWT_AUTH", "1")
+    monkeypatch.setenv("SECRET_KEY", "personal-plan-test-key-at-least-32-chars")
+    free, paid = trusted_actor(), trusted_actor()
+    with free.factory.begin() as db:
+        db.get(User, free.user_id).account_tier = "personal"
+    monkeypatch.setattr(
+        entitlements, "sync_entitlements_for_session", AsyncMock(return_value=set())
+    )
+    monkeypatch.setattr(
+        "app.infrastructure.mods.mod_manager.ensure_mod_api_ready", lambda *a, **kw: True
+    )
+    writes = []
+    monkeypatch.setattr(
+        shipment_orders,
+        "_run_shipment_records_agent",
+        lambda **kw: writes.append(kw) or {"success": True},
+    )
+    application = FastAPI()
+    application.add_middleware(ModContextMiddleware)
+    application.include_router(shipment_orders.router)
+    application.include_router(elt.router)
+    application.include_router(auth_routes.router)
+
+    @application.get("/api/mod/xcagi-approval-bridge/requests")
+    def read_mod():
+        return {"ok": True}
+
+    with TestClient(application) as client:
+        for actor, expected in ((free, 403), (paid, 200)):
+            value = (
+                f"session_id={actor.session_id}"
+                if credential == "Cookie"
+                else (
+                    f"Bearer {actor.session_id}"
+                    if credential == "Authorization"
+                    else actor.session_id
+                )
+            )
+            headers = {credential: value}
+            if credential == "mixed":
+                other = paid if actor is free else free
+                headers = {
+                    "Cookie": f"session_id={other.session_id}",
+                    "X-Session-ID": actor.session_id,
+                }
+            if credential == "web-jwt":
+                token = issue_web_tokens(user_id=actor.user_id, session_id=actor.session_id)[
+                    "access_token"
+                ]
+                headers = {"Authorization": f"Bearer {token}"}
+            response = client.get("/api/mod/xcagi-approval-bridge/requests", headers=headers)
+            assert response.status_code == expected, response.text
+            response = client.post(
+                "/api/shipment/shipment-records/record",
+                headers=headers,
+                json={"unit_name": "owned-customer"},
+            )
+            assert response.status_code == expected, response.text
+            response = client.get("/api/elt/capabilities", headers=headers)
+            assert response.status_code == (expected if sku == "enterprise" else 403), response.text
+            profile = client.get("/api/auth/me", headers=headers).json()["data"]
+            assert profile["personal_plan"] is (actor is free)
+            if actor is free:
+                assert profile["permissions"] == ["memory_v2.write"]
+            else:
+                assert "shipment.create" in profile["permissions"]
+    assert len(writes) == 1
+
+
+@pytest.mark.parametrize("kind", ["live", "expired-session", "relay", "legacy-relay"])
+def test_mobile_personal_mod_veto_uses_current_host_user(monkeypatch, trusted_actor, kind):
+    import jwt
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from starlette.requests import Request
+
+    from app.fastapi_routes.mobile_api import get_mobile_user
+    from app.infrastructure.mods.mod_auth import ModContextMiddleware
+    from app.security import mobile_jwt
+
+    monkeypatch.setenv("SECRET_KEY", "personal-mobile-plan-test-key-at-least-32-chars")
+    free, paid = trusted_actor(), trusted_actor()
+    with free.factory.begin() as db:
+        db.get(User, free.user_id).account_tier = "personal"
+        if kind == "expired-session":
+            db.get(UserSession, free.session_row_id).expires_at = utc_now_naive() - timedelta(
+                seconds=1
+            )
+    monkeypatch.setattr(
+        entitlements, "sync_entitlements_for_session", AsyncMock(return_value=set())
+    )
+    monkeypatch.setattr(
+        "app.infrastructure.mods.mod_manager.ensure_mod_api_ready", lambda *a, **kw: True
+    )
+    application = FastAPI()
+    application.add_middleware(ModContextMiddleware)
+
+    @application.get("/api/mod/xcagi-approval-bridge/requests")
+    def read_mod():
+        return {"ok": True}
+
+    with TestClient(application) as client:
+        for actor, expected in ((free, 403), (paid, 200)):
+            sid = "mobile-relay-existing" if "relay" in kind else actor.session_id
+            tokens = mobile_jwt.issue_mobile_tokens(user_id=actor.user_id, session_id=sid)
+            token = tokens["access_token"]
+            if kind == "legacy-relay":
+                payload = mobile_jwt.verify_mobile_jwt(token)
+                payload.pop("typ")
+                token = jwt.encode(payload, mobile_jwt._secret_key(), algorithm="HS256")
+            headers = {"Authorization": f"Bearer {token}"}
+            if actor is free:
+                headers["X-Session-ID"] = paid.session_id
+            request = Request(
+                {
+                    "type": "http",
+                    "headers": [(k.lower().encode(), v.encode()) for k, v in headers.items()],
+                }
+            )
+            identified = asyncio.run(
+                get_mobile_user(request, authorization=headers["Authorization"])
+            )
+            assert identified.id == actor.user_id
+            response = client.get("/api/mod/xcagi-approval-bridge/requests", headers=headers)
+            assert response.status_code == expected, response.text
+            assert entitlements.mobile_token_has_personal_plan(tokens["refresh_token"]) is False

@@ -59,6 +59,13 @@ export function useChatOrchestrationAutoActions(deps: ChatOrchestrationAutoActio
 
     // 产品副窗打开（工作流会下发 show_products_float）
     if (type === 'show_products' || type === 'show_products_float') {
+      if (window.xcagiDesktopAssistant) {
+        void window.xcagiDesktopAssistant.openProducts(actionQuery).then(({ ok }) => {
+          emitAssistantPush({ title: '产品查询', feature: 'products', query: actionQuery,
+            description: ok ? '已在主窗口打开产品卡片编辑窗口。' : '主窗口未能打开产品编辑器，请登录主窗口后重试。' })
+        }).catch(() => showAppToast('主窗口未能打开产品编辑器，请重试'))
+        return
+      }
       emitAssistantPush({
         title: '产品查询',
         description: '已在副窗打开产品卡片编辑窗口，可直接查询并修改。',

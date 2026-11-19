@@ -246,6 +246,7 @@ abstract class _ApiSessionCoreBase extends _ApiRootBase {
         sessionId: '',
         username: '',
         accountKind: '',
+        personalPlan: false,
         userId: 0,
         localAvatarSource: '',
         marketAccessToken: '',

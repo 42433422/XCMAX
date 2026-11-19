@@ -7,7 +7,7 @@ import type {
   PaymentSignResponse,
   RefundApplyResponse,
 } from '../types/api'
-import type { AccountLicensePlan } from '../domain/payment/types'
+import type { AccountLicensePlan, PersonalPlanActivationResponse, PersonalPlanVerification } from '../domain/payment/types'
 
 export interface WalletBalanceResponse extends Record<string, unknown> {
   balance?: number | string
@@ -96,6 +96,10 @@ export const wallet = {
 
 export const payment = {
   paymentPlans: () => req<PaymentPlansResponse>('/api/payment/plans'),
+  activatePersonalPlan: (verification?: PersonalPlanVerification) => req<PersonalPlanActivationResponse>('/api/account/personal-plan', {
+    method: 'POST',
+    ...(verification ? { body: JSON.stringify(verification) } : {}),
+  }),
   paymentAccountPlans: () => req<AccountLicensePlansResponse>('/api/payment/account-plans'),
   paymentMyPlan: () => req<PaymentMyPlanResponse>('/api/payment/my-plan', walletReadOptions),
   paymentQuery: (orderId: string, options?: { reconcile?: boolean }) => {

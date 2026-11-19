@@ -5,6 +5,7 @@ import uuid
 from typing import Any, cast
 
 from app.db.models import Permission, Role, User
+from app.db.models.permission import PERSONAL_PLAN_PERMISSIONS
 from app.db.session import get_host_db as get_db
 from app.infrastructure.session import get_session_manager
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -297,6 +298,8 @@ class AuthApplicationService:
     def get_user_permissions(self, user: User) -> list:
         from app.db.bootstrap.guarded import enabled, existing_permissions
 
+        if getattr(user, "account_tier", None) == "personal":
+            return list(PERSONAL_PLAN_PERMISSIONS)
         if enabled():
             return existing_permissions(user)
         from app.application.tenant_rbac_policy import (
@@ -340,7 +343,7 @@ class AuthApplicationService:
     def has_permission(self, user: User, permission_code: str) -> bool:
         from app.db.bootstrap.guarded import enabled
 
-        if enabled():
+        if getattr(user, "account_tier", None) == "personal" or enabled():
             return permission_code in self.get_user_permissions(user)
         if user.role == "admin" and user.tier == "admin" and user.tenant_id is None:
             return True

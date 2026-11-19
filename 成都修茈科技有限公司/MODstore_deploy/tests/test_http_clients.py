@@ -30,18 +30,22 @@ async def test_close_all_ignores_closed_event_loop_and_detaches_all_clients(
 ):
     java_client = _AsyncClient(RuntimeError("Event loop is closed"))
     external_client = _AsyncClient()
+    internal_client = _AsyncClient()
     sync_client = _SyncClient()
     monkeypatch.setattr(http_clients, "_java_async_client", java_client)
     monkeypatch.setattr(http_clients, "_external_async_client", external_client)
+    monkeypatch.setattr(http_clients, "_internal_async_client", internal_client)
     monkeypatch.setattr(http_clients, "_java_sync_client", sync_client)
 
     await http_clients.close_all()
 
     assert java_client.close_calls == 1
     assert external_client.close_calls == 1
+    assert internal_client.close_calls == 1
     assert sync_client.close_calls == 1
     assert http_clients._java_async_client is None
     assert http_clients._external_async_client is None
+    assert http_clients._internal_async_client is None
     assert http_clients._java_sync_client is None
 
 

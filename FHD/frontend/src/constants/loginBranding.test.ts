@@ -13,6 +13,6 @@ describe('loginBranding', () => {
 
   it('loginEyebrow for skus', () => {
     expect(loginEyebrow('enterprise')).toContain('企业版')
-    expect(loginEyebrow('personal')).toContain('个人版')
+    expect(loginEyebrow('personal')).toBe(loginEyebrow('enterprise'))
   })
 })

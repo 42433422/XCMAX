@@ -1,5 +1,6 @@
 import { Notification, app, clipboard, dialog, ipcMain, shell } from 'electron'
-import type { IpcMainInvokeEvent } from 'electron'
+import type { IpcMainEvent, IpcMainInvokeEvent } from 'electron'
+import { randomUUID } from 'node:crypto'
 import fs from 'node:fs'
 import { networkInterfaces } from 'node:os'
 import { APP_NAME, DEFAULT_PORT, isDesktopPackaged, readPackagedAppVersion } from './desktop-config'
@@ -86,6 +87,31 @@ export function registerDesktopIpcHandlers(): void {
   ipcMain.handle('xcagi:assistant-open-main', event => {
     if (!fromAssistant(event)) return { ok: false, reason: 'untrusted_sender' }
     showMainWindow()
+  })
+  ipcMain.handle('xcagi:assistant-open-products', (event, query: unknown) => {
+    if (!fromAssistant(event) || typeof query !== 'string' || query.length > 500) {
+      return { ok: false, reason: 'untrusted_sender' }
+    }
+    const main = desktopRuntime.mainWindow
+    if (!main || main.isDestroyed() || main.webContents.isLoading()) {
+      return { ok: false, reason: 'main_renderer_unavailable' }
+    }
+    // Only the mounted product editor acknowledges delivery; a login/loading page cannot.
+    return new Promise(resolve => {
+      const requestId = randomUUID()
+      const done = (ok: boolean) => {
+        clearTimeout(timer)
+        ipcMain.removeListener('xcagi:assistant-products-opened', onOpened)
+        resolve({ ok })
+      }
+      const onOpened = (reply: IpcMainEvent, id: unknown) => {
+        if (id === requestId && isTrustedIpcSender(reply, main, { port: DEFAULT_PORT, splashUrl: '' })) done(true)
+      }
+      const timer = setTimeout(() => done(false), 3000)
+      ipcMain.on('xcagi:assistant-products-opened', onOpened)
+      showMainWindow()
+      main.webContents.send('xcagi:assistant-open-products', { requestId, query: query.trim() })
+    })
   })
   ipcMain.handle('xcagi:assistant-move', (event, x: unknown, y: unknown) => {
     const win = fromAssistant(event)

@@ -829,6 +829,10 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
     ("elt_import", "preview"): _object_schema(
         [],
         {
+            "run_id": {
+                "type": "string",
+                "description": "只读查看已有预演或回执；不会新建或执行导入",
+            },
             "file_path": {
                 "type": "string",
                 "description": "已上传的单个文件名或上传记录 ID（不是本地目录路径）",
@@ -850,6 +854,15 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
         [],
         {
             "run_id": {"type": "string", "description": "单个预演编号"},
+            "preview_revision": {
+                "type": "string",
+                "description": "用户核对并确认的预演版本；关联客户产品预演必须提供",
+            },
+            "preview_revisions": {
+                "type": "object",
+                "additionalProperties": {"type": "string"},
+                "description": "批量确认时逐个预演编号对应的版本",
+            },
             "run_ids": {
                 "type": "array",
                 "items": {"type": "string"},

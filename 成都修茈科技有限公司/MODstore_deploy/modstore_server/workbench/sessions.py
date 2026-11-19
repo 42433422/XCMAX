@@ -75,8 +75,8 @@ class SessionStore:
             return
         try:
             self._write(path, session)
-        except OSError:
-            _LOG.debug("workbench snapshot write failed sid=%s", sid, exc_info=True)
+        except OSError as exc:
+            _LOG.debug("workbench snapshot write failed (%s)", type(exc).__name__)
 
     def load(self, sid: str) -> Payload | None:
         try:
@@ -99,8 +99,8 @@ class SessionStore:
                 return None
             try:
                 self._write(path, raw)
-            except OSError:
-                _LOG.debug("workbench snapshot migration failed sid=%s", sid, exc_info=True)
+            except OSError as exc:
+                _LOG.debug("workbench snapshot migration failed (%s)", type(exc).__name__)
         return raw
 
     def hydrate(self, sid: str) -> None:
@@ -127,7 +127,7 @@ class SessionStore:
                 return
             if error is None:
                 return
-            _LOG.exception("workbench task failed session=%s: %s", sid, error, exc_info=error)
+            _LOG.error("workbench task failed (%s)", type(error).__name__)
             session = self.data.get(sid)
             if not session:
                 return
@@ -210,8 +210,8 @@ class SessionProgress:
                     error=message,
                     user_id=int(signal_session.get("user_id") or 0),
                 )
-            except RECOVERABLE_ERRORS:
-                _LOG.debug("workflow_sandbox fail signal emit skipped", exc_info=True)
+            except RECOVERABLE_ERRORS as exc:
+                _LOG.debug("workflow_sandbox fail signal emit skipped (%s)", type(exc).__name__)
         async with self.store.lock:
             self.store.hydrate(sid)
             session = self.store.data.get(sid)
@@ -240,11 +240,7 @@ class SessionProgress:
                 return
             for step in session.get("steps") or []:
                 if step.get("status") not in ("done", "error", "skipped"):
-                    _LOG.warning(
-                        "workbench session=%s step=%s incomplete; marking skipped",
-                        sid,
-                        step.get("id"),
-                    )
+                    _LOG.warning("workbench step incomplete; marking skipped")
                     step["status"] = "skipped"
                     if not step.get("message"):
                         step["message"] = "管线收尾时标记跳过"

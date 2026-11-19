@@ -315,7 +315,7 @@ def test_memory_v2_prompt_uses_only_active_records(fresh_service, tmp_memory_dir
 
     prompt = svc.format_memory_v2_for_prompt("u1")
 
-    assert "【MemoryV2】已确认记忆" in prompt
+    assert "【MemoryV2】已生效记忆" in prompt
     assert "favorite_customer" in prompt
     assert "ACME" in prompt
     assert pending["memory_id"] not in prompt

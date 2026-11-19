@@ -56,19 +56,6 @@ describe('authApi phase1', () => {
     expect(call).toBeTruthy()
   })
 
-  it('register posts registration payload', async () => {
-    await authApi.register({
-      username: 'newuser',
-      password: 'secret',
-      email: 'a@b.com',
-    })
-    const call = findCall('POST', '/api/auth/register')
-    expect(call).toBeTruthy()
-    const body = JSON.parse(String((call![1] as RequestInit).body))
-    expect(body.username).toBe('newuser')
-    expect(body.email).toBe('a@b.com')
-  })
-
   it('getCurrentUser calls GET /api/auth/me', async () => {
     await authApi.getCurrentUser()
     const call = findCall('GET', '/api/auth/me')

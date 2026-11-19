@@ -109,7 +109,7 @@ try {
   const pricePage = await desktop.locator('body').textContent()
   const allPlans = ssot.pricing.all_plans.map((p) => p.amount_display)
   const missing = allPlans.filter((a) => !pricePage.includes(a))
-  record('desktop: 价格页含全部 5 档 SSOT 价格', missing.length === 0, `missing=${missing.join(',') || 'none'}`)
+  record(`desktop: 价格页含全部 ${allPlans.length} 档 SSOT 价格`, missing.length === 0, `missing=${missing.join(',') || 'none'}`)
   await desktop.screenshot({ path: join(EVID, 'desktop-pricing.png') })
 
   /* ---------- 视频运行时 ---------- */

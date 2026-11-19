@@ -22,7 +22,11 @@ from app.application.persy_memory_utils import (
 from app.application.persy_memory_utils import (
     _lexical_score as _lexical_score,
 )
-from app.application.persy_memory_utils import _memory_owner_id, _personal_preference
+from app.application.persy_memory_utils import (
+    _memory_owner_id,
+    _personal_preference,
+    _personal_subject,
+)
 from app.application.persy_memory_utils import (
     _memory_owners as _memory_owners,
 )
@@ -52,6 +56,7 @@ from app.domain.shared_services.user_memory_service import (
     UserMemoryService,
     get_user_memory_service,
 )
+from app.security.secrets_redactor import redact_text
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _SENSITIVE_PATTERN = re.compile(
@@ -121,7 +126,7 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
         assistant_message: str = "",
         source: str = "chat",
     ) -> dict[str, Any]:
-        """Capture private candidates for a live actor without granting dataset access."""
+        """Capture private memory for a live actor without granting dataset access."""
         from app.application.ai_chat.conversation_history import authorized_memory_context
 
         authorized = authorized_memory_context(user_id, context, write=True)
@@ -162,7 +167,7 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
         source: str,
     ) -> dict[str, Any]:
         message = str(user_message or "").strip()
-        if not message or _SENSITIVE_PATTERN.search(message):
+        if not message or _SENSITIVE_PATTERN.search(message) or redact_text(message) != message:
             return {"success": True, "created_count": 0, "candidates": []}
         candidates = None
         from app.infrastructure.memory.mem0_backend import get_long_term_memory
@@ -184,6 +189,7 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
         except RECOVERABLE_ERRORS:
             # Model unavailability permits only the bounded offline candidate parser.
             candidates = None
+        assertion_context_verified = candidates is not None
         if candidates is None:
             candidates = extract_explicit_memories(message)
         if normalized_scope == "global_preference":
@@ -195,37 +201,39 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
         failures: list[str] = []
         created_count = 0
         now = _utc_now_iso()
-        with self._lock:
-            for candidate in candidates[:8]:
-                evidence = {
-                    "kind": "conversation_turn",
-                    "source": str(source or "chat")[:80],
-                    "session_id": str(session_id or "")[:160],
-                    "user_excerpt": message[:500],
-                    "assistant_excerpt": str(assistant_message or "").strip()[:500],
-                    "captured_at": now,
-                    "scope": normalized_scope,
-                    "tenant_id": access.tenant_id,
-                    "mod_id": access.mod_id,
-                }
-                result = self.memory_service.propose_memory_candidate(
-                    owner_id,
-                    candidate["memory_type"],
-                    candidate["key"],
-                    candidate["value"],
-                    source="chat_trace",
-                    confidence=float(candidate["confidence"]),
-                    evidence=[evidence],
-                )
-                record = result.get("candidate") if isinstance(result, dict) else None
-                if not result.get("success"):
-                    failures.append(
-                        str(result.get("error_code") or "memory_candidate_write_failed")
-                    )
-                if isinstance(record, dict):
-                    captured.append(_public_memory_record(record, normalized_scope))
-                if result.get("created") is True:
-                    created_count += 1
+        for candidate in candidates[:8]:
+            evidence = {
+                "kind": "conversation_turn",
+                "source": str(source or "chat")[:80],
+                "session_id": str(session_id or "")[:160],
+                "user_excerpt": message[:500],
+                "assistant_excerpt": redact_text(str(assistant_message or "").strip())[:500],
+                "captured_at": now,
+                "scope": normalized_scope,
+                "tenant_id": access.tenant_id,
+                "mod_id": access.mod_id,
+            }
+            result = self.memory_service.propose_memory_candidate(
+                owner_id,
+                candidate["memory_type"],
+                candidate["key"],
+                candidate["value"],
+                source="chat_trace",
+                confidence=float(candidate["confidence"]),
+                evidence=[evidence],
+                activate_personal_capture=(
+                    assertion_context_verified
+                    and normalized_scope == "user"
+                    and _personal_subject(candidate)
+                ),
+            )
+            record = result.get("candidate") if isinstance(result, dict) else None
+            if not result.get("success"):
+                failures.append(str(result.get("error_code") or "memory_candidate_write_failed"))
+            if isinstance(record, dict):
+                captured.append(_public_memory_record(record, normalized_scope))
+            if result.get("created") is True:
+                created_count += 1
         return {
             "success": not failures,
             "created_count": created_count,

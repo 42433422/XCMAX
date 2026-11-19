@@ -475,11 +475,17 @@ def _unique_source_headers(source_by_col: dict[int, str]) -> dict[int, str]:
 
 
 def parse_customer_product_regions(
-    path: Path, *, max_rows: int, target_type: str = "customer_products"
+    path: Path,
+    *,
+    max_rows: int,
+    target_type: str = "customer_products",
+    source_file_name: str = "",
 ) -> ParsedDataset | None:
     return cast(
         ParsedDataset | None,
-        _parse_customer_product_regions(path, max_rows=max_rows, target_type=target_type),
+        _parse_customer_product_regions(
+            path, max_rows=max_rows, target_type=target_type, source_file_name=source_file_name
+        ),
     )
 
 

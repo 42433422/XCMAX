@@ -1,4 +1,10 @@
 import { req, authRequest, requestBlob, setTokensFromAuthResponse, type AuthResponse } from './shared'
+import type { PersonalPlanAllowance } from '../domain/payment/types'
+
+export interface AccountBootstrapResponse extends Record<string, unknown> {
+  user?: { email?: string }
+  account?: { active_plan_id?: string; allowance?: PersonalPlanAllowance }
+}
 
 export interface MeResponse extends Record<string, unknown> {
   ok?: boolean
@@ -39,7 +45,7 @@ export const auth = {
     return res
   },
   me: () => req<MeResponse>('/api/auth/me'),
-  accountBootstrap: () => req('/api/account/bootstrap'),
+  accountBootstrap: () => req<AccountBootstrapResponse>('/api/account/bootstrap'),
   sendVerificationCode: (email: string) => req('/api/auth/send-code', { method: 'POST', body: JSON.stringify({ email }) }),
   sendRegisterVerificationCode: (email: string) => req('/api/auth/send-register-code', { method: 'POST', body: JSON.stringify({ email }) }),
   sendResetPasswordCode: (email: string) =>

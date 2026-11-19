@@ -6,11 +6,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Release version (manual dispatch only)
+        description: Product version from the selected source commit's release catalog
         required: true
-        type: choice
-        default: "1.0.0.3"
-        options: ["1.0.0.3", "1.0.0.2", "1.0.0.1"]
+        type: string
       release_sha:
         description: Immutable 40-character source SHA
         required: true
@@ -36,10 +34,12 @@ jobs:
         with:
           ref: ${{ inputs.release_sha }}
       - name: Lock Android checkout to the immutable release SHA
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
         run: |
           set -euo pipefail
-          printf '%s' "${{ inputs.release_sha }}" | grep -Eq '^[0-9a-f]{40}$'
-          test "$(git rev-parse HEAD)" = "${{ inputs.release_sha }}"
+          printf '%s' "$RELEASE_SHA" | grep -Eq '^[0-9a-f]{40}$'
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -50,19 +50,17 @@ jobs:
           cache: true
       - name: Resolve release version
         id: release_version
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
         run: |
-          raw="${{ github.event.inputs.version || github.ref_name }}"
-          if [[ "${raw}" == "main" || "${raw}" == "master" || "${raw}" == "feature"* || -z "${raw}" ]]; then
-            raw="1.0.0.3"
+          set -euo pipefail
+          catalog_version=$(python3 -c 'import json; print(json.load(open("../config/download_release.json"))["version_lock"])')
+          if [[ ! "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ || "$RELEASE_VERSION" != "$catalog_version" ]]; then
+            echo '::error::Android release version must match the selected source catalog.'
+            exit 1
           fi
-          raw="${raw#FHD/}"
-          raw="${raw#v}"
-          raw="${raw#V}"
-          if [[ -z "${raw}" ]]; then
-            raw="1.0.0.3"
-          fi
-          echo "version=${raw}" >> "${GITHUB_OUTPUT}"
-          echo "toolchain_version=$(printf '%s' "${raw}" | cut -d. -f1-3)" >> "${GITHUB_OUTPUT}"
+          echo "version=$RELEASE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "toolchain_version=${RELEASE_VERSION%.*}" >> "$GITHUB_OUTPUT"
       - name: Flutter pub get + test
         run: |
           flutter pub get
@@ -101,6 +99,7 @@ jobs:
           XCAGI_REQUIRE_RELEASE_SIGNING: "1"
         run: |
           VCODE=$(date +%s)
+          export XCAGI_ANDROID_VERSION_CODE="$VCODE"
           echo "android_version_code=$VCODE" >> "$GITHUB_OUTPUT"
           flutter build apk --release \
             --build-number="$VCODE" \
@@ -118,6 +117,7 @@ jobs:
       - name: Verify Android release signature and version
         env:
           EXPECTED_VERSION: ${{ steps.release_version.outputs.version }}
+          EXPECTED_VERSION_CODE: ${{ steps.assemble.outputs.android_version_code }}
         run: |
           set -euo pipefail
           apk="build/app/outputs/flutter-apk/app-release.apk"
@@ -134,6 +134,7 @@ jobs:
           printf '%s\n' "${badging}"
           grep -Fq "package: name='com.xiuci.xcagi.mobile.enterprise'" <<< "${badging}"
           grep -Fq "versionName='${EXPECTED_VERSION}'" <<< "${badging}"
+          grep -Fq "versionCode='${EXPECTED_VERSION_CODE}'" <<< "${badging}"
       - name: Stage mobile package distribution
         working-directory: ${{ github.workspace }}
         run: |

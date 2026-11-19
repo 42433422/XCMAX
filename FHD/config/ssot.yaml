@@ -346,7 +346,6 @@ domains:
     ssot: FHD/docs/WINDOWS_RELEASE_SSOT.md
     derived:
       - FHD/scripts/package/build-installer.ps1
-      - FHD/scripts/package/build-all-skus.ps1
     mode: lint
     check: python scripts/dev/ssot_plugins/windows_release.py check
     sync: null

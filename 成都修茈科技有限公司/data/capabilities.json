@@ -68,7 +68,8 @@
     "Windows 桌面": "签约级",
     "macOS 桌面": "签约级",
     "Web / 后端": "签约级",
-    "Android": "实验骨架·非签约级"
+    "Android": "实验骨架·非签约级",
+    "HarmonyOS": "候选·非签约级"
   },
   "deployment_modes": [
     {

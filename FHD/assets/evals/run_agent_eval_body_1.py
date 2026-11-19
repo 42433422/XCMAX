@@ -2315,6 +2315,7 @@ def _run_ocr_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
 
     from app.application.agent_orchestrator import InMemoryAgentRunRepository
     from app.fastapi_routes.ocr import router
+    from app.infrastructure.auth.dependencies import get_logged_in_user
 
     expected = dict(task.get("expected") or {})
     action = str(task.get("route_action") or "recognize").strip().lower()
@@ -2337,6 +2338,9 @@ def _run_ocr_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     )
     app = FastAPI()
     app.include_router(router)
+    app.dependency_overrides[get_logged_in_user] = lambda: Mock(
+        id=str(task.get("user_id") or "eval-user"), is_active=True
+    )
     client = TestClient(app, raise_server_exceptions=False)
 
     with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp_dir:

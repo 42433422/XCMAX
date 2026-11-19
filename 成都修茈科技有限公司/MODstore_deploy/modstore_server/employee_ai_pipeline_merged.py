@@ -6,6 +6,8 @@
 from __future__ import annotations
 
 import importlib
+import logging
+import uuid
 
 "Implementation extracted from the public facade module."
 
@@ -627,6 +629,18 @@ class GeneratedCode:
     warnings: _facade().List[str] = _facade().field(default_factory=list)
 
 
+def _code_generation_warning(handler: str, exception_type: str) -> str:
+    event_id = uuid.uuid4().hex
+    logging.getLogger(__name__).warning(
+        "employee_codegen_failed event_id=%s handler=%s exception_type=%s",
+        event_id,
+        handler,
+        exception_type,
+    )
+    fallback = "已降级到内置模板" if handler == "direct_python" else "已使用兜底实现"
+    return f"代码生成遇到内部问题，{fallback}（诊断编号：{event_id}）"
+
+
 "Implementation extracted from the public facade module."
 
 
@@ -891,15 +905,12 @@ async def stage_generate_code(
                         result.warnings.append("LLM 生成的 convert.py 编译失败，降级到内置模板")
                 else:
                     result.warnings.append(
-                        f"LLM 调用失败: {res.get('error', '')[:100]}，降级到内置模板"
+                        _code_generation_warning("direct_python", "ProviderError")
                     )
             else:
                 result.warnings.append("无可用 LLM API Key，降级到内置模板")
         except _facade().RECOVERABLE_ERRORS as e:
-            import traceback
-
-            result.warnings.append(f"LLM 代码生成异常: {type(e).__name__}: {e}，降级到内置模板")
-            result.warnings.append(traceback.format_exc()[-500:])
+            result.warnings.append(_code_generation_warning("direct_python", type(e).__name__))
         if result.code_source != "vibe_coding_validated":
             runtime_modules = render_runtime_modules(rule_spec)
             result.vendor_modules = runtime_modules
@@ -973,7 +984,7 @@ async def stage_generate_code(
                     else:
                         result.warnings.append("LLM 生成的 agent 实现编译失败，使用兜底实现")
         except _facade().RECOVERABLE_ERRORS as e:
-            result.warnings.append(f"Agent 代码生成降级: {e}")
+            result.warnings.append(_code_generation_warning("agent", type(e).__name__))
         if not result.employee_py:
             from modstore_server.mod_employee_impl_scaffold import _fallback_employee_py
 

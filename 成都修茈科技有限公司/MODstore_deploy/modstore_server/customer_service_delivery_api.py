@@ -17,13 +17,16 @@ from modstore_server.api.deps import get_current_user, get_db
 from modstore_server.customer_delivery_workbench_start import (
     _start_custom_delivery_run as _start_custom_delivery_run,
 )
-from modstore_server.customer_service_api import _visible_ticket_or_404
+from modstore_server.customer_service_api_helpers import (
+    visible_ticket_or_404 as _visible_ticket_or_404,
+)
 from modstore_server.customer_service_delivery_completion import (
     complete_delivery_if_ready,
 )
 from modstore_server.customer_service_delivery_models import (
     CustomDeliveryDecisionBody,
     CustomDeliveryInstallReceiptBody,
+    current_delivery_run,
     custom_delivery_commerce_blockers,
     custom_delivery_crm,
 )
@@ -32,6 +35,7 @@ from modstore_server.customer_service_delivery_models import (
 )
 from modstore_server.customer_service_delivery_models import (
     custom_delivery_pricing_mode,
+    delivery_snapshot_matches,
 )
 from modstore_server.customer_service_delivery_quality import custom_delivery_gate
 from modstore_server.customer_service_orchestrator import audit, ticket_payload
@@ -43,11 +47,16 @@ router: APIRouter = APIRouter()
 _get_current_user = get_current_user
 
 
-async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, Any]:
+async def _custom_delivery_payload(
+    ticket: CustomerServiceTicket, *, include_run_history: bool = True
+) -> dict[str, Any]:
     from modstore_server.workbench_api import get_workbench_session_snapshot
 
     evidence = _custom_delivery_evidence(ticket)
     run_rows = [r for r in evidence.get("runs", []) if isinstance(r, dict)]
+    if not include_run_history:
+        current = current_delivery_run(evidence)
+        run_rows = [current] if current else []
     runs: list[dict[str, Any]] = []
     latest_snapshot: dict[str, Any] = {}
     latest_generation = ""
@@ -57,6 +66,8 @@ async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, A
         snapshot = (
             await get_workbench_session_snapshot(sid, int(ticket.user_id or 0)) if sid else None
         )
+        if not include_run_history and not delivery_snapshot_matches(snapshot, ticket, sid):
+            snapshot = None
         latest_snapshot = snapshot or {}
         item = dict(row)
         if snapshot:

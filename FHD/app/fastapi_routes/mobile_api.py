@@ -54,7 +54,7 @@ async def get_mobile_user(
 ) -> Any:
     """Bearer 移动端 JWT 或会话 Cookie / X-Session-ID。"""
     from app.db.models import User
-    from app.db.session import get_db
+    from app.db.session import get_host_db
 
     authorization_value = authorization or ""
     jwt_payload: dict[str, Any] = {}
@@ -71,15 +71,19 @@ async def get_mobile_user(
     uid = user_id_from_mobile_bearer(authorization_value)
     if uid is None and authorization_value.startswith("Bearer "):
         fallback_user = _mobile_user_from_jwt_payload(jwt_payload)
-        if fallback_user is not None:
+        if fallback_user is None:
+            return None
+        uid = fallback_user.id
+        if uid <= 0:
             _bind_mobile_user_tenant_to_request(request, fallback_user)
             return fallback_user
-        return None
     if uid is not None:
         try:
-            with get_db() as db:
+            with get_host_db() as db:
                 user = db.query(User).filter(User.id == uid).first()
-                if user and user.is_active:
+                if user is not None:
+                    if not user.is_active:
+                        return None
                     _ = (
                         user.id,
                         user.username,
@@ -95,11 +99,7 @@ async def get_mobile_user(
                     _bind_mobile_user_tenant_to_request(request, user)
                     return user
         except RECOVERABLE_ERRORS as exc:
-            logger.warning("mobile user db lookup failed, falling back to JWT: %s", exc)
-            fallback_user = _mobile_user_from_jwt_payload(jwt_payload)
-            if fallback_user is not None:
-                _bind_mobile_user_tenant_to_request(request, fallback_user)
-                return fallback_user
+            logger.warning("mobile user state unavailable: %s", type(exc).__name__)
             # 数据库瞬时不可用不能被误报为「未授权」：否则客户端会误判登录失效，
             # 反复触发 refresh（refresh 本身能通过验签），形成 401 循环。
             raise HTTPException(
@@ -200,7 +200,7 @@ async def mobile_auth_register(body: MobileRegisterRequest):
                 "desktop_access": False,
                 "purchase_url": payload.get("purchase_url"),
             },
-            message="注册成功，请选择套餐并完成支付",
+            message="注册成功，请选择 XCAGI 方案",
         )
     data = _mobile_auth_success_payload(
         payload,

@@ -287,12 +287,10 @@ logger = logging.getLogger(__name__)
 _access = MobileAccess(
     MobileAccessPorts(
         verify_jwt=backends.verify_jwt,
-        mobile_session_id_from_request=contracts.late_callback(
-            lambda: _mobile_session_id_from_request
-        ),
         auth_header=backends.auth_header,
         latest_market_token=backends.latest_market_token,
         session_market_token=backends.session_market_token,
+        session_owner=backends.session_owner,
     )
 )
 _mobile_session_id_from_request: contracts.MobileSessionIdFromRequestCall = (
@@ -800,9 +798,8 @@ _payment = PaymentRoutes(
         auth_header=backends.auth_header,
         latest_market_token=backends.latest_market_token,
         resolve_market_token=backends.resolve_market_token,
-        session_market_token=backends.session_market_token,
-        verify_jwt=backends.verify_jwt,
-        request_session_id=backends.request_session_id,
+        mobile_session_id_from_request=_mobile_session_id_from_request,
+        session_owner=backends.session_owner,
     ),
     get_mobile_user,
 )

@@ -16,6 +16,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
+from sqlalchemy.orm import Mapped, mapped_column
 
 from modstore_server.db.db_base import Base
 
@@ -46,6 +47,29 @@ class PlanTemplate(Base):
         default=lambda: datetime.now(UTC),
         onupdate=lambda: datetime.now(UTC),
     )
+
+
+class PersonalPlanAllowanceClaim(Base):
+    """A reserved promotion, separate from either wallet's financial ledger."""
+
+    __tablename__ = "personal_plan_allowance_claims"
+    __table_args__ = (
+        UniqueConstraint("plan_id", "identity_sha256", name="uq_personal_allowance_identity"),
+    )
+
+    plan_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("plan_templates.id"), primary_key=True
+    )
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), primary_key=True)
+    identity_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    backend: Mapped[str] = mapped_column(String(8), nullable=False)
+    amount_cents: Mapped[int] = mapped_column(Integer, nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(UTC)
+    )
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class UserPlan(Base):

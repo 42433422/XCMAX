@@ -111,6 +111,37 @@ def _withdraw_anchor():
     )
 
 
+def test_personal_plan_basic_chat_uses_authenticated_actor(runtime, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.db.models.user import User
+    from app.infrastructure.mods.mod_auth import ModContextMiddleware
+    from app.legacy.routes.conversation.compat_routes import router
+
+    with runtime.actor.factory.begin() as db:
+        db.get(User, runtime.actor.user_id).account_tier = "personal"
+    answer = AsyncMock(return_value={"success": True, "response": "你好，有什么可以帮你？"})
+    monkeypatch.setattr(compat, "_execute_ai_chat_mainline", answer)
+    application = FastAPI()
+    application.add_middleware(ModContextMiddleware)
+    application.include_router(router, prefix="/api")
+    with TestClient(application) as client:
+        response = client.post(
+            "/api/ai/chat",
+            headers=runtime.actor.headers,
+            json={
+                "message": "你好",
+                "mode": "online",
+                "context": {"conversation_id": "personal-chat"},
+            },
+        )
+    assert response.status_code == 200, response.text
+    assert response.json()["response"] == "你好，有什么可以帮你？"
+    assert answer.await_count == 1
+    assert answer.call_args.args[1]["local_user_id"] == runtime.actor.user_id
+
+
 def test_ingress_replaces_client_epoch_but_prepare_never_advances_it(runtime, trusted_actor):
     body = compat._prepare_compat_chat_body(runtime.actor.request, _body())
     assert body.context["_conversation_revision"] == 0

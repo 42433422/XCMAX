@@ -2,7 +2,7 @@
 
 覆盖：
 - 普通路径：x-content-type-options / x-frame-options / csp 默认值
-- ?sandbox=1 或 /xcmax-dashboard 路径：更宽松的 CSP
+- ?sandbox=1 不可放宽防嵌入/CSP 策略；/xcmax-dashboard 保持同源嵌入
 - https scheme → HSTS
 - 非 http scope 透传
 """
@@ -102,7 +102,7 @@ def test_generated_label_preview_has_a_desktop_only_frame_source(monkeypatch, de
     assert response.headers["x-content-type-options"] == "nosniff"
 
 
-def test_sandbox_query_param_relaxes_csp():
+def test_untrusted_sandbox_query_keeps_default_frame_and_script_policy():
     app = FastAPI()
     app.add_middleware(SecurityHeadersMiddleware)
 
@@ -113,14 +113,13 @@ def test_sandbox_query_param_relaxes_csp():
     client = TestClient(app)
     r = client.get("/api/health?sandbox=1")
     csp = r.headers["content-security-policy"]
-    # sandbox CSP 没有 frame-ancestors 'self' 限制（但其实仍然保留），关键是 'unsafe-inline' / 'unsafe-eval'
-    assert "unsafe-inline" in csp
-    assert "unsafe-eval" in csp
-    assert "media-src 'self' data:" in csp
-    assert r.headers.get("x-frame-options") is None  # sandbox 不加 DENY
+    assert r.headers["x-frame-options"] == "DENY"
+    assert "'unsafe-eval'" not in csp
+    assert "frame-ancestors *" not in csp
 
 
-def test_xcmax_dashboard_path_relaxes_csp():
+@pytest.mark.parametrize("query", ["", "?sandbox=1"])
+def test_xcmax_dashboard_path_relaxes_csp(query):
     app = FastAPI()
     app.add_middleware(SecurityHeadersMiddleware)
 
@@ -129,7 +128,7 @@ def test_xcmax_dashboard_path_relaxes_csp():
         return {"success": True}
 
     client = TestClient(app)
-    r = client.get("/xcmax-dashboard/page")
+    r = client.get(f"/xcmax-dashboard/page{query}")
     csp = r.headers["content-security-policy"]
     assert "unsafe-inline" in csp
     # dashboard embed CSP 允许 Google Fonts（不再依赖 cdn.jsdelivr.net）

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from fastapi import FastAPI
@@ -10,10 +11,14 @@ from app.application.agent_orchestrator import InMemoryAgentRunRepository
 
 def _client() -> TestClient:
     from app.fastapi_routes.ocr import router
+    from app.infrastructure.auth.dependencies import get_logged_in_user
 
     app = FastAPI()
     app.include_router(router)
-    return TestClient(app, raise_server_exceptions=False)
+    app.dependency_overrides[get_logged_in_user] = lambda: SimpleNamespace(
+        id="tenant-a", is_active=True
+    )
+    return TestClient(app)
 
 
 def test_ocr_recognize_route_executes_through_agent_orchestrator(

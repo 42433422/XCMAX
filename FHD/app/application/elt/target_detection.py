@@ -409,7 +409,8 @@ def detect_elt_target(
             workbook_lines: list[str] = []
             row_sets: list[list[list[Any]]] = []
             try:
-                for worksheet in workbook.worksheets[:30]:
+                visible = [sheet for sheet in workbook.worksheets if sheet.sheet_state == "visible"]
+                for worksheet in visible[:30]:
                     sheet_rows, _first_row = probe_sheet_rows(worksheet, limit=60)
                     sheet_lines = [worksheet.title, *(_joined(row) for row in sheet_rows)]
                     row_sets.append(sheet_rows)

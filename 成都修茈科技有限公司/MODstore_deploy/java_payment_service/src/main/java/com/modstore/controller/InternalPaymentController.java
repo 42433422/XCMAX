@@ -352,13 +352,18 @@ public class InternalPaymentController {
             );
         } catch (IllegalArgumentException exception) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, exception.getMessage());
+        } catch (IllegalStateException exception) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, exception.getMessage());
         }
         String balance = txn.getBalanceAfter().setScale(2, RoundingMode.HALF_UP).toPlainString();
         Map<String, Object> result = new HashMap<>();
         result.put("ok", true);
         result.put("source", "java_postgresql");
-        result.put("user_id", userId);
-        result.put("amount", amount.toPlainString());
+        result.put("user_id", txn.getUser().getId());
+        result.put("amount", txn.getAmount().setScale(2, RoundingMode.HALF_UP).toPlainString());
+        result.put("idempotency_key", txn.getIdempotencyKey());
+        result.put("transaction_id", txn.getId());
+        result.put("status", txn.getStatus());
         result.put("balance", balance);
         result.put("new_balance", balance);
         return result;

@@ -120,6 +120,41 @@ def _clear_market_token_caches():
 
 
 @pytest.fixture
+def market_host_session(tmp_path, monkeypatch):
+    """Exercise request ownership against a real, active host account session."""
+    from datetime import timedelta
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.db.db_base import Base
+    from app.db.models.user import Session as UserSession
+    from app.db.models.user import User
+    from app.utils.time import utc_now_naive
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'market-host.db'}")
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine)
+    monkeypatch.setattr("app.db.HostSessionLocal", factory)
+    with factory() as db:
+        db.add(User(id=17, username="market-owner", password="unused", tenant_id=1))
+        db.add(
+            UserSession(
+                session_id="sid1",
+                user_id=17,
+                tenant_id=1,
+                created_at=utc_now_naive(),
+                expires_at=utc_now_naive() + timedelta(days=1),
+            )
+        )
+        db.commit()
+    try:
+        yield factory
+    finally:
+        engine.dispose()
+
+
+@pytest.fixture
 def market_client() -> TestClient:
     app = FastAPI()
     app.include_router(market_router)
@@ -290,7 +325,7 @@ class TestMarketSaveSessionToken:
         assert ma._MARKET_SESSION_TOKENS == {}
 
     def test_db_persist_swallows_recoverable_error(self) -> None:
-        with patch("app.db.session.get_db", side_effect=RuntimeError("db down")):
+        with patch("app.db.session.get_host_db", side_effect=RuntimeError("db down")):
             ma.save_session_market_token("sid1", "tok1")
         assert ma._MARKET_SESSION_TOKENS["sid1"] == "tok1"
 
@@ -299,7 +334,7 @@ class TestMarketSaveSessionToken:
         mock_query = MagicMock()
         mock_query.filter.return_value.first.return_value = None
         mock_db.query.return_value = mock_query
-        with patch("app.db.session.get_db") as get_db:
+        with patch("app.db.session.get_host_db") as get_db:
             get_db.return_value.__enter__.return_value = mock_db
             ma.save_session_market_token("sid1", "tok1")
         assert ma._MARKET_SESSION_TOKENS["sid1"] == "tok1"
@@ -326,7 +361,7 @@ class TestMarketClearSessionToken:
 
     def test_db_clear_swallows_recoverable_error(self) -> None:
         ma._MARKET_SESSION_TOKENS["sid1"] = "tok1"
-        with patch("app.db.session.get_db", side_effect=RuntimeError("db down")):
+        with patch("app.db.session.get_host_db", side_effect=RuntimeError("db down")):
             ma.clear_session_market_token("sid1")
         assert "sid1" not in ma._MARKET_SESSION_TOKENS
 
@@ -351,7 +386,7 @@ class TestMarketSessionToken:
         mock_query = MagicMock()
         mock_query.filter.return_value.first.return_value = mock_row
         mock_db.query.return_value = mock_query
-        with patch("app.db.session.get_db") as get_db:
+        with patch("app.db.session.get_host_db") as get_db:
             get_db.return_value.__enter__.return_value = mock_db
             result = ma.session_market_token("sid1")
         assert result == "db-tok"
@@ -362,13 +397,13 @@ class TestMarketSessionToken:
         mock_query = MagicMock()
         mock_query.filter.return_value.first.return_value = None
         mock_db.query.return_value = mock_query
-        with patch("app.db.session.get_db") as get_db:
+        with patch("app.db.session.get_host_db") as get_db:
             get_db.return_value.__enter__.return_value = mock_db
             result = ma.session_market_token("sid1")
         assert result == ""
 
     def test_session_token_db_recoverable_error(self) -> None:
-        with patch("app.db.session.get_db", side_effect=RuntimeError("db down")):
+        with patch("app.db.session.get_host_db", side_effect=RuntimeError("db down")):
             result = ma.session_market_token("sid1")
         assert result == ""
 
@@ -386,7 +421,7 @@ class TestMarketSessionToken:
         mock_query = MagicMock()
         mock_query.filter.return_value.first.return_value = mock_row
         mock_db.query.return_value = mock_query
-        with patch("app.db.session.get_db") as get_db:
+        with patch("app.db.session.get_host_db") as get_db:
             get_db.return_value.__enter__.return_value = mock_db
             result = ma.session_market_refresh_token("sid1")
         assert result == "db-rtok"
@@ -396,11 +431,11 @@ class TestMarketLatestSessionToken:
     """Cover ``latest_session_market_token`` / ``latest_session_market_refresh_token``."""
 
     def test_latest_token_returns_empty_on_db_error(self) -> None:
-        with patch("app.db.session.get_db", side_effect=RuntimeError("db down")):
+        with patch("app.db.session.get_host_db", side_effect=RuntimeError("db down")):
             assert ma.latest_session_market_token() == ""
 
     def test_latest_refresh_token_returns_empty_on_db_error(self) -> None:
-        with patch("app.db.session.get_db", side_effect=RuntimeError("db down")):
+        with patch("app.db.session.get_host_db", side_effect=RuntimeError("db down")):
             assert ma.latest_session_market_refresh_token() == ""
 
     def test_latest_token_returns_first_non_empty(self) -> None:
@@ -415,7 +450,7 @@ class TestMarketLatestSessionToken:
             row2,
         ]
         mock_db.query.return_value = mock_query
-        with patch("app.db.session.get_db") as get_db:
+        with patch("app.db.session.get_host_db") as get_db:
             get_db.return_value.__enter__.return_value = mock_db
             result = ma.latest_session_market_token()
         assert result == "tok2"
@@ -425,7 +460,7 @@ class TestMarketLatestSessionToken:
         mock_query = MagicMock()
         mock_query.filter.return_value.order_by.return_value.limit.return_value.all.return_value = []
         mock_db.query.return_value = mock_query
-        with patch("app.db.session.get_db") as get_db:
+        with patch("app.db.session.get_host_db") as get_db:
             get_db.return_value.__enter__.return_value = mock_db
             result = ma.latest_session_market_token()
         assert result == ""
@@ -728,13 +763,15 @@ class TestMarketLooksLikeVerificationRequired:
 class TestMarketAuthorizationFromRequest:
     """Cover ``_authorization_from_request``."""
 
-    def test_from_session_token(self) -> None:
-        ma._MARKET_SESSION_TOKENS["sid1"] = "tok1"
+    @pytest.mark.parametrize("session_id", ["sid1", "unknown-session"])
+    def test_from_session_token(self, market_host_session, session_id) -> None:
+        ma._MARKET_SESSION_TOKENS[session_id] = "tok1"
         req = MagicMock()
-        req.cookies = {"session_id": "sid1"}
+        req.cookies = {"session_id": session_id}
         req.headers = {}
         body: dict[str, Any] = {}
-        assert ma._authorization_from_request(req, body) == "Bearer tok1"
+        expected = "Bearer tok1" if session_id == "sid1" else ""
+        assert ma._authorization_from_request(req, body) == expected
 
     def test_no_session_does_not_use_latest_token(self) -> None:
         with patch.object(ma, "latest_session_market_token", return_value="latest-tok"):
@@ -1655,16 +1692,18 @@ class TestMarketLegacyAccountOverview:
 class TestMarketBindMarketAuthToSession:
     """Cover ``bind_market_auth_to_session``."""
 
-    def test_saves_token_to_session(self) -> None:
+    @pytest.mark.parametrize("session_id", ["sid1", "unknown-session"])
+    def test_saves_token_to_session(self, market_host_session, session_id) -> None:
         req = MagicMock()
-        req.cookies = {"session_id": "sid1"}
+        req.cookies = {"session_id": session_id}
         req.headers = {}
         token, refresh = ma.bind_market_auth_to_session(
             req, {"token": "tok1", "refresh_token": "rtok1"}
         )
         assert token == "tok1"
         assert refresh == "rtok1"
-        assert ma._MARKET_SESSION_TOKENS["sid1"] == "tok1"
+        expected = "tok1" if session_id == "sid1" else None
+        assert ma._MARKET_SESSION_TOKENS.get(session_id) == expected
 
     def test_no_token_no_save(self) -> None:
         req = MagicMock()

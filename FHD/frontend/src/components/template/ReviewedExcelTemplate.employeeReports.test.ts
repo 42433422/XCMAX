@@ -3,6 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { updateProductReadAccountScope } from '@/utils/productReadAccountScope'
 import ReviewedExcelTemplate from './ReviewedExcelTemplate.vue'
 
+const autoApproval = vi.hoisted(() => vi.fn())
+vi.mock('@/composables/useAutomaticDockingApproval', () => ({ approveDockingIfAutomatic: autoApproval }))
+
 const api = vi.hoisted(() => ({
   archiveClassifyExcel: vi.fn(), reviewedExcelIdentity: vi.fn(), analyzeClassification: vi.fn(),
   autoSlices: vi.fn(), reviewExcel: vi.fn(), refineReviewedExcel: vi.fn(), previewReviewedIntake: vi.fn(), saveReviewedExcel: vi.fn(),
@@ -48,13 +51,44 @@ async function openAndChoose() {
   await wrapper.get('.reviewed-template__select-candidate').trigger('click')
   await flushPromises()
   expect(api.previewReviewedIntake).not.toHaveBeenCalled()
-  await button('保存模板').trigger('click')
-  await flushPromises()
 }
 
 describe('template capsule with database and knowledge reports', () => {
+  it('previews the selected candidate before saving or requesting automatic approval', async () => {
+    await openAndChoose()
+    await button('预演入库范围').trigger('click')
+    await flushPromises()
+    expect(api.previewReviewedIntake).toHaveBeenCalledOnce()
+    expect(api.previewReviewedIntake.mock.calls[0][0].get('candidate_id')).toBe('送货单-0')
+    expect(wrapper.text()).toContain('新增 2')
+    expect(api.saveReviewedExcel).not.toHaveBeenCalled()
+    expect(autoApproval).not.toHaveBeenCalled()
+
+    await button('保存模板').trigger('click')
+    await flushPromises()
+    expect(api.previewReviewedIntake).toHaveBeenCalledOnce()
+    expect(api.saveReviewedExcel.mock.calls.map(([form]) => form.get('template_only'))).toEqual(['true', null])
+    expect(api.saveReviewedExcel.mock.calls[1][0].get('intake_run_id')).toBe('run-1')
+  })
+
+  it('discards an in-flight preview when the account changes', async () => {
+    let finish!: (value: ReturnType<typeof intake>) => void
+    api.previewReviewedIntake.mockReturnValue(new Promise(resolve => { finish = resolve }))
+    await openAndChoose()
+    await button('预演入库范围').trigger('click')
+    expect(button('保存模板').attributes('disabled')).toBeDefined()
+    updateProductReadAccountScope({ tenantId: 2, localUserId: 'report-B', accountKind: 'local' })
+    finish(intake({ action: 'new', documents: 1 }, {}))
+    await flushPromises()
+    expect(wrapper.find('[data-employee=database]').exists()).toBe(false)
+    expect(api.saveReviewedExcel).not.toHaveBeenCalled()
+    expect(autoApproval).not.toHaveBeenCalled()
+  })
+
   it('keeps the template capsule and shows imported counts plus organized knowledge', async () => {
     await openAndChoose()
+    await button('保存模板').trigger('click')
+    await flushPromises()
     const capsule = wrapper.get('.reviewed-template__candidate-capsule')
     expect(capsule.element.tagName).toBe('BUTTON')
     expect(capsule.classes()).toContain('reviewed-template__candidate-capsule')
@@ -91,6 +125,8 @@ describe('template capsule with database and knowledge reports', () => {
       { degraded: true },
     ))
     await openAndChoose()
+    await button('保存模板').trigger('click')
+    await flushPromises()
     const database = wrapper.get('[data-employee=database]')
     const knowledge = wrapper.get('[data-employee=knowledge]')
     expect(database.get('.work-utterance__outcome').text()).toBe('数据库导入员没有做完。')

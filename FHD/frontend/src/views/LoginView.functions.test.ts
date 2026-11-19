@@ -1,6 +1,6 @@
 /**
  * LoginView.vue 函数补全测试
- * 覆盖剩余未测函数：selectEnterpriseLogin、selectAdminLogin、startOidcLogin、
+ * 覆盖剩余未测函数：selectAdminLogin、startOidcLogin、
  * pollQrStatus（expired/confirmed 分支）、tryAutoLogin、applySavedLoginPreferences、
  * stopQrPoll、switchLoginMode('qr')、peelNestedLoginRedirect 边界
  */
@@ -51,7 +51,6 @@ vi.mock('@/constants/loginBranding', () => ({
   loginPageTitle: () => 'XCAGI 登录',
   loginPasswordInputPlaceholder: () => '请输入密码',
   marketRegisterUrl: () => 'https://xiu-ci.com/market/register?source=xcagi-desktop',
-  purchaseAuthorizationUrl: () => 'https://xiu-ci.com/#pricing',
 }))
 
 const mockFetchProductSku = vi.fn(async () => 'generic')
@@ -199,23 +198,9 @@ async function mountLoginView(query: Record<string, string> = {}) {
 
 // ── test suites ────────────────────────────────────────────
 
-describe('LoginView functions – selectEnterpriseLogin / selectAdminLogin', () => {
+describe('LoginView functions – selectAdminLogin', () => {
   beforeEach(() => {
     resetLoginMocks()
-  })
-
-  it('selectEnterpriseLogin sets accountKind to enterprise and clears errors', async () => {
-    const { wrapper } = await mountLoginView()
-    const vm = wrapper.vm as any
-    // Set some error state first
-    vm.errorMessage = 'some error'
-    vm.altLoginHint = 'some hint'
-    // Trigger selectEnterpriseLogin via exposed method
-    vm.selectEnterpriseLogin()
-    await wrapper.vm.$nextTick()
-    expect(vm.accountKind).toBe('enterprise')
-    expect(vm.errorMessage).toBe('')
-    expect(vm.altLoginHint).toBe('')
   })
 
   it('passes the visible one-use invitation code with a market password login', async () => {

@@ -149,20 +149,22 @@ def intake_store(review_store, rag_service, monkeypatch, account_session_client)
         yield store
 
 
-def review(store):
-    workbook = Workbook()
-    sheet = workbook.active
-    sheet.title = "客户"
-    sheet.append(["客户名称", "电话"])
-    sheet.append(["确认客户甲", "13000000001"])
-    sheet.append(["确认客户乙", "13000000002"])
-    stream = BytesIO()
-    workbook.save(stream)
-    workbook.close()
+def review(store, body=None):
+    if body is None:
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "客户"
+        sheet.append(["客户名称", "电话"])
+        sheet.append(["确认客户甲", "13000000001"])
+        sheet.append(["确认客户乙", "13000000002"])
+        stream = BytesIO()
+        workbook.save(stream)
+        workbook.close()
+        body = stream.getvalue()
     response = store.client.post(
         f"{BASE}/preview",
-        files={"file": ("客户.xlsx", stream.getvalue())},
-        data=candidate_form(store.client, stream.getvalue()),
+        files={"file": ("客户.xlsx", body)},
+        data=candidate_form(store.client, body),
     )
     assert response.status_code == 200, response.text
     data = response.json()
@@ -506,6 +508,147 @@ def test_private_intake_requires_preview_and_unscoped_attendance_is_refused(inta
     assert_no_writes(store)
 
 
+def _mixed_intake_workbook(target):
+    workbook = Workbook()
+    sheet = workbook.active
+    if target != "attendance":
+        sheet.title = "所选数据"
+        if target == "products":
+            sheet.append(["购买单位", "产品名称", "型号", "单价"])
+            sheet.append(["确认客户甲", "所选产品", "M1", 1.5])
+        else:
+            sheet.append(["客户名称", "电话"])
+            sheet.append(["确认客户甲", "13000000001"])
+        sheet = workbook.create_sheet("未选考勤")
+    sheet.append(["2026年2月考勤表"])
+    sheet.append(["姓名", *range(1, 29)])
+    sheet.append(["未选张三", "√"])
+    delivery = workbook.create_sheet("未选送货单")
+    delivery.append(["送货单"])
+    delivery.append(["客户名称", "未选客户乙"])
+    delivery.append(["产品名称", "数量"])
+    delivery.append(["未选产品", 2])
+    source = BytesIO()
+    workbook.save(source)
+    workbook.close()
+    return source.getvalue()
+
+
+def _intake_target_model(monkeypatch, target, mode):
+    from app.application.elt import llm_assist
+    from app.application.elt.llm_assist_runtime import LlmAssistResult
+
+    seen = []
+
+    def classify(source):
+        assert mode != "off"
+        seen.append(source)
+        return LlmAssistResult(
+            used_llm=True,
+            degraded=mode == "degraded",
+            data={"target_type": target, "confidence": 0.5 if mode == "low" else 0.95},
+        )
+
+    def no_shipment(*_args):
+        raise AssertionError("未选中的归档出货页不得覆盖目标")
+
+    monkeypatch.setenv("FHD_ELT_LLM", "off" if mode == "off" else "on")
+    monkeypatch.setattr(llm_assist, "advise_target_classification", classify)
+    monkeypatch.setattr(llm_assist, "advise_business_import", no_shipment)
+    monkeypatch.setattr(llm_assist, "advise_knowledge_import", lambda *_: LlmAssistResult())
+    monkeypatch.setattr(llm_assist, "advise_table_schema", lambda **_: LlmAssistResult())
+    return seen
+
+
+@pytest.mark.parametrize(
+    "target,mode",
+    [
+        ("customers", "accepted"),
+        ("products", "accepted"),
+        ("knowledge", "accepted"),
+        ("customers", "off"),
+        ("customers", "degraded"),
+        ("customers", "low"),
+    ],
+)
+def test_mixed_archive_previews_only_the_selected_target(intake_store, monkeypatch, target, mode):
+    store = intake_store
+    data = review(store, _mixed_intake_workbook(target))
+    seen = _intake_target_model(monkeypatch, target, mode)
+    response = store.client.post(f"{BASE}/intake-preview", data=data)
+    assert response.status_code == 200, response.text
+    plan = response.json()["intake"]
+    assert plan["target_type"] == target
+    if mode != "off":
+        assert len(seen) == 1 and "确认客户甲" in seen[0]
+        assert "未选张三" not in seen[0] and "未选产品" not in seen[0]
+    store.executor.futures[-1].result(timeout=10)
+    with tenant_scope(1), store.factory() as db:
+        business = store.service.get_run(db, run_id=plan["run_id"], owner_user_id=7)
+    assert business["status"] == "preview_ready", business
+    assert business["summary"]["new"] == 1
+    assert_no_writes(store)
+
+
+@pytest.mark.parametrize("mode", ["accepted", "off", "degraded", "low"])
+def test_selected_attendance_requires_workspace_authorization(intake_store, monkeypatch, mode):
+    from app.application.elt.service_support import load_json
+
+    store = intake_store
+    data = review(store, _mixed_intake_workbook("attendance"))
+    seen = _intake_target_model(
+        monkeypatch, "attendance" if mode == "accepted" else "customers", mode
+    )
+    with store.factory() as db:
+        before = db.query(EltRun).count()
+
+    response = store.client.post(f"{BASE}/intake-preview", data=data)
+    assert response.status_code == 409, response.text
+    assert "请使用考勤工作区授权导入" in response.json()["detail"]
+    assert bool(seen) == (mode != "off")
+    assert_no_writes(store)
+    status = store.client.get(f"{BASE}/reviews/{data['review_id']}/intake-status")
+    assert status.json() == {"status": "not_started"}
+    with store.factory() as db:
+        assert db.query(EltRun).count() == before
+        state = load_json(db.get(EltRun, data["review_id"]).draft_json, {})
+        assert state["intake_attempt_history"][-1]["status"] == "rejected"
+
+
+@pytest.mark.parametrize("unanswered", [False, True])
+def test_attendance_refusal_retains_model_audit_and_unknown_calls(
+    intake_store, monkeypatch, unanswered
+):
+    from app.application.elt import llm_assist
+    from app.application.elt.service_support import load_json
+    from app.infrastructure.llm import structured_output
+
+    store = intake_store
+    data = review(store, _mixed_intake_workbook("attendance"))
+    monkeypatch.setenv("FHD_ELT_LLM", "on")
+    monkeypatch.setattr(llm_assist, "_active_software_llm", lambda *_: (True, None, object()))
+    monkeypatch.setattr(llm_assist._runtime, "_CIRCUIT_OPEN_UNTIL", {})
+
+    def complete(*_args, **_kwargs):
+        if unanswered:
+            raise TimeoutError("synthetic unresolved provider request")
+        return SimpleNamespace(
+            model="synthetic", billing={}, data={"target_type": "attendance", "confidence": 0.95}
+        )
+
+    monkeypatch.setattr(structured_output, "complete_structured_sync", complete)
+    response = store.client.post(f"{BASE}/intake-preview", data=data)
+    assert response.status_code == 409 and "请使用考勤工作区授权导入" in response.text
+    status = store.client.get(f"{BASE}/reviews/{data['review_id']}/intake-status").json()
+    assert status["status"] == ("outcome_unknown" if unanswered else "not_started")
+    with store.factory() as db:
+        state = load_json(db.get(EltRun, data["review_id"]).draft_json, {})
+    attempt = state["intake_attempt"] if unanswered else state["intake_attempt_history"][-1]
+    assert attempt["model_calls"][0]["lane"] == "target_classify"
+    assert attempt["model_calls"][0]["status"] == ("sent" if unanswered else "answered")
+    assert_no_writes(store)
+
+
 def test_unknown_template_commit_receipt_cannot_replay_intake(intake_store, monkeypatch):
     from app.legacy.routes import document_templates_compat
 
@@ -710,6 +853,12 @@ def test_delivery_note_writes_item_rows_not_the_header(intake_store, monkeypatch
         ),
     )
     monkeypatch.setenv("FHD_ELT_LLM", "on")
+    monkeypatch.setattr(
+        "app.application.elt.llm_assist.advise_target_classification",
+        lambda source: LlmAssistResult(
+            used_llm=True, data={"target_type": "shipment_records", "confidence": 0.95}
+        ),
+    )
     monkeypatch.setattr("app.application.elt.llm_assist.advise_business_import", business)
     monkeypatch.setattr("app.application.elt.llm_assist.advise_knowledge_import", knowledge)
     monkeypatch.setattr(candidate_table, "read_delivery_note_business", delivery)
@@ -1135,6 +1284,48 @@ def test_template_save_does_not_wait_for_intake_and_saved_selection_can_preview(
     )
 
     assert stale.status_code == 409
+
+
+@pytest.mark.parametrize("submitted", [False, True])
+@pytest.mark.parametrize("old_policy", [None, "visible_non_finance_v3"])
+def test_obsolete_unsubmitted_preview_regenerates_but_preserves_submitted_receipt(
+    intake_store, submitted, old_policy
+):
+    from app.application.elt.service_support import dump_json, load_json
+    from app.application.reviewed_excel_review_store import _run
+
+    store = intake_store
+    data, plan, _ = prepare(store)
+    with tenant_scope(1), store.factory() as db:
+        run = _run(db, data["review_id"], 1, 7)
+        state = load_json(run.draft_json, {})
+        if old_policy is None:
+            state["intake_preview"].pop("business_source_policy")
+        else:
+            state["intake_preview"]["business_source_policy"] = old_policy
+        state["intake_preview"]["selection_key"] = "legacy-key-before-policy-binding"
+        run.draft_json = dump_json(state)
+        if submitted:
+            run.receipt_json = dump_json(
+                {
+                    "intake_request_key": "submitted-original",
+                    "auto_ingest": {"success": False, "error": "outcome_unknown"},
+                }
+            )
+        db.commit()
+    status = store.client.get(f"{BASE}/reviews/{data['review_id']}/intake-status")
+    assert status.status_code == 200, status.text
+    if submitted:
+        assert status.json()["status"] == "created"
+        assert status.json()["intake"]["run_id"] == plan["run_id"]
+        assert status.json()["auto_ingest"]["error"] == "outcome_unknown"
+    else:
+        assert status.json() == {"status": "not_started", "reason": "preview_policy_changed"}
+        fresh = store.client.post(f"{BASE}/intake-preview", data=data)
+        assert fresh.status_code == 200, fresh.text
+        assert fresh.json()["intake"]["run_id"] != plan["run_id"]
+        assert fresh.json()["intake"]["business_source_policy"] == "visible_non_finance_v4"
+    assert_no_writes(store)
 
 
 def test_intake_releases_upload_writer_before_reading_archived_workbook(intake_store, monkeypatch):

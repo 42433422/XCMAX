@@ -6,6 +6,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.*;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -148,18 +150,83 @@ class WalletServiceTest {
 
     @Nested
     class Idempotency {
-        @Test
-        void duplicateIdempotencyKeyReturnsExistingTransaction() {
+        private Transaction completedTransaction() {
             Transaction existing = new Transaction();
             existing.setId(42L);
+            existing.setUser(user);
+            existing.setAmount(new BigDecimal("10.00"));
+            existing.setBalanceAfter(new BigDecimal("10.00"));
+            existing.setTransactionType("test");
+            existing.setStatus("completed");
             existing.setIdempotencyKey("idem-dup");
+            return existing;
+        }
+
+        @Test
+        void duplicateIdempotencyKeyReturnsExistingTransaction() {
+            Transaction existing = completedTransaction();
             when(transactionRepository.findByIdempotencyKey("idem-dup")).thenReturn(Optional.of(existing));
+
+            Transaction result = walletService.credit(user, new BigDecimal("10.0"), "test", "test",
+                    null, null, null, "idem-dup");
+
+            assertThat(result).isSameAs(existing);
+            verifyNoInteractions(walletRepository);
+            verify(transactionRepository, never()).save(any());
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"owner", "missing-owner", "amount", "missing-amount", "type", "pending", "missing-status"})
+        void conflictingIdempotencyKeyNeverChangesWallet(String mismatch) {
+            Transaction existing = completedTransaction();
+            switch (mismatch) {
+                case "owner" -> {
+                    User other = new User();
+                    other.setId(2L);
+                    existing.setUser(other);
+                }
+                case "missing-owner" -> existing.setUser(null);
+                case "amount" -> existing.setAmount(new BigDecimal("11.00"));
+                case "missing-amount" -> existing.setAmount(null);
+                case "type" -> existing.setTransactionType("other_credit");
+                case "pending" -> existing.setStatus("pending");
+                case "missing-status" -> existing.setStatus(null);
+                default -> throw new AssertionError(mismatch);
+            }
+            when(transactionRepository.findByIdempotencyKey("idem-dup")).thenReturn(Optional.of(existing));
+
+            assertThatThrownBy(() -> walletService.credit(user, new BigDecimal("10.00"), "test", "test",
+                    null, null, null, "idem-dup"))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("幂等");
+            verifyNoInteractions(walletRepository);
+            verify(transactionRepository, never()).save(any());
+        }
+
+        @Test
+        void debitCannotReplayACreditWithTheSameAbsoluteAmount() {
+            when(transactionRepository.findByIdempotencyKey("idem-dup"))
+                    .thenReturn(Optional.of(completedTransaction()));
+
+            assertThatThrownBy(() -> walletService.debit(user, new BigDecimal("10.00"), "test", "test",
+                    null, null, null, "idem-dup"))
+                    .isInstanceOf(IllegalStateException.class);
+            verifyNoInteractions(walletRepository);
+        }
+
+        @Test
+        void duplicateCommittedWhileWaitingForWalletLockReturnsExistingTransaction() {
+            Transaction existing = completedTransaction();
+            when(transactionRepository.findByIdempotencyKey("idem-dup"))
+                    .thenReturn(Optional.empty(), Optional.of(existing));
+            stubWalletFindByUserIdForUpdate();
 
             Transaction result = walletService.credit(user, new BigDecimal("10.00"), "test", "test",
                     null, null, null, "idem-dup");
 
             assertThat(result).isSameAs(existing);
             verify(walletRepository, never()).save(any());
+            verify(transactionRepository, never()).save(any());
         }
 
         @Test

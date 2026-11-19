@@ -13,9 +13,9 @@ if TYPE_CHECKING:
 
 
 def database() -> AbstractContextManager[Session]:
-    from app.db.session import get_db
+    from app.db.session import get_host_db
 
-    return get_db()
+    return get_host_db()
 
 
 def session_model() -> type["UserSession"]:

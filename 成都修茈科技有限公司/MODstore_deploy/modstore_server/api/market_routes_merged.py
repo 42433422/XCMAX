@@ -241,7 +241,9 @@ def api_register(body: RegisterDTO):
     elif vcode:
         raise _facade().HTTPException(400, "填写验证码前请先填写邮箱")
     try:
-        user = _facade().register_user(body.username, body.password, email_norm)
+        user = _facade().register_user(
+            body.username, body.password, email_norm, email_verified=bool(email_norm)
+        )
     except ValueError as e:
         raise _facade().HTTPException(409, str(e))
     access_token = _facade().create_access_token(
@@ -271,6 +273,7 @@ def api_me(
         return {"ok": False, "success": False, "error": "请先登录"}
     exp = int(getattr(user, "experience", 0) or 0)
     level_profile = _facade().account_level_service.build_level_profile(exp).to_dict()
+    from modstore_server.account_lifecycle import auth_lifecycle_fields
     from modstore_server.user_avatar_service import public_avatar_url_for_user
 
     return {
@@ -284,7 +287,7 @@ def api_me(
         "experience": exp,
         "level_profile": level_profile,
         "avatar_url": public_avatar_url_for_user(user),
-        **_facade().lifecycle_for_user_id(int(user.id)).to_dict(),
+        **auth_lifecycle_fields(_facade().lifecycle_for_user_id(int(user.id))),
     }
 
 
@@ -2079,6 +2082,11 @@ def api_enterprise_entitled_mod_ids(
     from modstore_server.models_db import get_user_mod_ids
 
     mod_ids = sorted(get_user_mod_ids(user.id))
+    from modstore_server.account_license_plans import PERSONAL_PLAN_ID
+    from modstore_server.account_lifecycle import lifecycle_for_user_id
+
+    if mod_ids and lifecycle_for_user_id(user.id).active_plan_id == PERSONAL_PLAN_ID:
+        mod_ids = []
     return {
         "ok": True,
         "user_id": user.id,
@@ -2113,7 +2121,13 @@ def api_enterprise_customer_delivery_seed_download(
     if requested_mod_id != account_mod_id:
         raise _facade().HTTPException(403, "交付种子包与请求 Mod 不匹配")
     entitled = set(get_user_mod_ids(int(user.id)))
-    if account_mod_id not in entitled:
+    from modstore_server.account_license_plans import PERSONAL_PLAN_ID
+    from modstore_server.account_lifecycle import lifecycle_for_user_id
+
+    if (
+        account_mod_id not in entitled
+        or lifecycle_for_user_id(user.id).active_plan_id == PERSONAL_PLAN_ID
+    ):
         raise _facade().HTTPException(403, "当前账号未授权该客户交付包")
     name = str(pkg.get("stored_filename") or "").strip()
     if not name:

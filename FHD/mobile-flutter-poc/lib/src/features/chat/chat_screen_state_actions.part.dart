@@ -85,24 +85,7 @@ abstract class _ChatStateActions extends _ChatAttachmentActions {
 
   Future<void> _startVoiceInput() async {
     setState(() => _showToolPanel = false);
-    final granted = await const AndroidRecordAudioPermission().ensureGranted();
-    if (!mounted) return;
-    if (!granted) {
-      _showMessage('需要麦克风权限才能使用语音输入');
-      return;
-    }
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppTheme.colors(context).surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(VoiceInputDesign.sheetTopCornerRadius),
-        ),
-      ),
-      clipBehavior: Clip.antiAlias,
-      builder: (context) => VoiceInputSheet(onResult: _insertVoiceText),
-    );
+    await showVoiceInputSheet(context, onResult: _insertVoiceText);
   }
 
   void _openProfileOrTools() {

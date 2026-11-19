@@ -25,6 +25,7 @@ import {
 import { useModsStore } from '@/stores/mods'
 import { DESKTOP_ADMIN_FORBIDDEN_MESSAGE, isAdminConsoleSpa, resolveAdminConsoleHomeUrl } from '@/utils/adminConsoleUrl'
 import { isDesktopShell } from '@/utils/desktopShell'
+import { hasLocalWorkspace } from '@/api/localWorkspace'
 import { committedRouteTitle } from '@/utils/routeTitle'
 import { ADMIN_HOST_ROUTE_RECORDS } from '@admin-console-inject/adminHostRoutes'
 import { ADMIN_OPERATOR_BLOCKED_ROUTE_NAMES, ADMIN_OPERATOR_HOME_ROUTE } from '@/constants/adminOperatorNav'
@@ -82,6 +83,11 @@ router.beforeEach(async (to, _from, finish) => {
   const refreshSignedInProfile = (profile: { refreshFromServer: () => Promise<unknown> }) => {
     // Background refresh must not race a valid session into the login page.
     void profile.refreshFromServer().catch(() => undefined)
+  }
+  if (to.name === 'local-workspace') {
+    if (hasLocalWorkspace()) next()
+    else next({ name: 'login', replace: true })
+    return
   }
   let provisionalDesktopEntry = false
   if (to.name === 'duty-roster-graph') {
@@ -165,6 +171,12 @@ router.beforeEach(async (to, _from, finish) => {
           return
         }
       }
+    }
+    if (profile.personalPlan && (
+      to.path.startsWith('/mod/') || to.matched.some((record) => Boolean(record.meta.mod))
+    )) {
+      next({ name: 'settings', replace: true })
+      return
     }
     if (to.name && UNSCOPED_HOST_BUSINESS_KEYS.has(String(to.name)) && profile.loaded && profile.tenantId != null) {
       const modPage = tenantScopedBusinessPath(String(to.name))
@@ -471,6 +483,7 @@ router.beforeEach(async (to, _from, finish) => {
 if (typeof window !== 'undefined') {
   let checkingAdminSession = false
   window.addEventListener('xcagi:enterprise-session-invalid', async () => {
+    if (window.xcagiDesktopAssistant) return
     const current = router.currentRoute.value
     if (current.meta?.publicAccess || current.name === 'login') return
     // Market credentials can expire independently of the admin console session.

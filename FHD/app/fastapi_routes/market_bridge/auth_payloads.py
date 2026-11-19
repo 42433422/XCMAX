@@ -11,6 +11,7 @@ from typing import Any
 from fastapi.responses import JSONResponse
 
 from app.application.market_bridge.protocols import JsonObject, ProxyJSON
+from app.infrastructure.billing.saas_plans import PERSONAL_PLAN_ID
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
@@ -120,6 +121,12 @@ class AuthPayloads:
         )
         is_enterprise, is_market_admin, user_blob = self.identity(payload, me)
         lifecycle = self.lifecycle(payload, me)
+        if (
+            lifecycle.get("active_plan_id") == PERSONAL_PLAN_ID
+            and lifecycle.get("account_state") == "active"
+        ):
+            lifecycle["desktop_access"] = True
+            is_enterprise = True
         self.logger.info(
             "market auth normalized base=%s success=True is_enterprise=%s is_market_admin=%s username=%s raw_keys=%s me_keys=%s",
             market_base or self.base_url(),

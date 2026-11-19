@@ -11,6 +11,7 @@ interface Window {
     setExpanded: (expanded: boolean) => Promise<void>
     moveWindow: (x: number, y: number) => Promise<void>
     openMain: () => Promise<void>
+    openProducts: (query: string) => Promise<{ ok: boolean }>
     onShow: (callback: () => void) => () => void
     onHide: (callback: () => void) => () => void
   }
@@ -56,6 +57,7 @@ interface Window {
     consumeDeepLink?: () => Promise<string | null>
     onDeepLink?: (callback: (url: string) => void) => () => void
     onVoiceInvoke?: (callback: () => void) => () => void
+    onAssistantProductSearch?: (callback: (query: string) => void | Promise<void>) => () => void
   }
   handleAutoAction?: (action: unknown, userMessage?: string) => void
 }

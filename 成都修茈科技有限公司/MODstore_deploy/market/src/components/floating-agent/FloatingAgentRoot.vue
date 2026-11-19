@@ -11,7 +11,13 @@
 
     <!-- 对话面板 -->
     <Transition name="panel-pop">
-      <FloatingAgentPanel v-if="isOpen" :handle-input="handleInput" />
+      <FloatingAgentPanel
+        v-if="isOpen"
+        :handle-input="handleInput"
+        :activity-owner="props.activityOwner"
+        :activity-ticket="props.activityTicket"
+        :activity-component="XiaoCWorkActivity"
+      />
     </Transition>
 
     <!-- vibe-coding 改写进度全屏遮罩 -->
@@ -25,7 +31,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { defineAsyncComponent, ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import { useAgentStore } from '../../stores/agent'
@@ -41,12 +47,16 @@ import FloatingAgentBall from './FloatingAgentBall.vue'
 import FloatingAgentPanel from './FloatingAgentPanel.vue'
 import ButlerProgressOverlay from './ButlerProgressOverlay.vue'
 
-const props = defineProps<{ maleAvatar?: boolean }>()
+const XiaoCWorkActivity = defineAsyncComponent(() => import('./XiaoCWorkActivity.vue'))
+const props = defineProps<{ maleAvatar?: boolean; activityOwner?: number; activityTicket?: number }>()
 
 const agentStore = useAgentStore()
 const { isOpen, showPermissionDialog, orchestrationSession } = storeToRefs(agentStore)
 const isSpeaking = ref(false)
 const { handleInput } = useAgentEngine()
+watch(() => props.activityTicket, (ticket) => {
+  if (ticket !== undefined) agentStore.openPanel()
+}, { immediate: true })
 
 const router = useRouter()
 const orchestrator = useButlerOrchestrator()

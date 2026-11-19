@@ -32,6 +32,7 @@ import {
 } from './desktop-navigation'
 import { reportRendererError } from './desktop-resilience'
 import { syncDesktopAssistant } from './desktop-assistant'
+import { installDesktopWorkspaceCapability } from './session-security'
 
 /** 闪屏进度 0–100；供启动阶段与单测共用。 */
 export function clampSplashProgress(percent: number): number {
@@ -149,7 +150,7 @@ function attachAuxiliaryGuards(win: Electron.BrowserWindow): void {
   })
 }
 
-function openTrustedAuxiliaryFromHandler(
+export function openTrustedAuxiliaryFromHandler(
   url: string,
   owner: Electron.BrowserWindow,
 ): { action: 'deny' } {
@@ -185,6 +186,7 @@ export function openAuxiliaryWindow(rawUrl: string): Electron.BrowserWindow | nu
   const icon = shellIconPath()
   const partition = nextAuxiliaryPartition()
   const isolated = session.fromPartition(partition)
+  installDesktopWorkspaceCapability(isolated)
   const win = new BrowserWindow({
     ...(fs.existsSync(icon) ? { icon } : {}),
     x: origin.x + 28 * index,

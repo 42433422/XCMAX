@@ -38,12 +38,17 @@ def test_normalize_auth_email() -> None:
 
 def test_open_registration_allowed(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("FHD_ALLOW_OPEN_REGISTRATION", raising=False)
-    assert auth_routes._open_registration_allowed("personal") is True
+    # Both packaged SKUs hand off to market registration unless explicitly enabled.
+    assert auth_routes._open_registration_allowed("personal") is False
     assert auth_routes._open_registration_allowed("enterprise") is False
+    assert auth_routes._open_registration_allowed("generic") is True
     monkeypatch.setenv("FHD_ALLOW_OPEN_REGISTRATION", "1")
+    assert auth_routes._open_registration_allowed("personal") is True
     assert auth_routes._open_registration_allowed("enterprise") is True
     monkeypatch.setenv("FHD_ALLOW_OPEN_REGISTRATION", "0")
     assert auth_routes._open_registration_allowed("personal") is False
+    assert auth_routes._open_registration_allowed("enterprise") is False
+    assert auth_routes._open_registration_allowed("generic") is False
 
 
 def test_user_public_dict() -> None:

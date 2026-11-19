@@ -84,7 +84,12 @@
     </main>
     <Teleport to="body">
       <CorpButlerRoot v-if="shouldShowGuestCorpButler" />
-      <FloatingAgentRoot v-if="shouldShowButler" :male-avatar="shouldUseMaleButlerAvatar" />
+      <FloatingAgentRoot
+        v-if="shouldShowButler"
+        :male-avatar="shouldUseMaleButlerAvatar"
+        :activity-owner="xiaocActivityOwner"
+        :activity-ticket="xiaocActivityTicket"
+      />
       <div
         v-if="selfCreditOpen"
         class="nav-self-credit-overlay"
@@ -274,6 +279,16 @@ const shouldShowButler = computed(() => {
 })
 /** 管理员账号统一男版小 C；普通用户统一女版（含桌面客户端）。 */
 const shouldUseMaleButlerAvatar = computed(() => isAdmin.value)
+const xiaocActivityOwner = computed(() =>
+  isAdmin.value && (currentMode.value === 'admin' || route.meta.admin) ? authUser.value?.id : undefined,
+)
+const xiaocActivityTicket = computed(() => {
+  if (xiaocActivityOwner.value === undefined || route.name !== 'admin-customer-service') return
+  const raw = route.query.xiaocDelivery
+  if (typeof raw !== 'string' || !/^[1-9][0-9]*$/.test(raw)) return
+  const ticketId = Number(raw)
+  return Number.isSafeInteger(ticketId) ? ticketId : undefined
+})
 /** 未登录访客在公开落地页使用官网咨询引擎（不调用需登录的 Butler API） */
 const shouldShowGuestCorpButler = computed(() => {
   if (isLoggedIn.value) return false

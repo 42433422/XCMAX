@@ -312,8 +312,7 @@ class _NativeInventoryScreenState extends State<NativeInventoryScreen> {
               const NativeFormField('quantity', '数量',
                   required: true,
                   number: true,
-                  integer: true,
-                  minimum: 1,
+                  exclusiveMinimum: 0,
                   defaultValue: 1),
               if (incoming) ...[
                 const NativeFormField('batch_no', '批次'),

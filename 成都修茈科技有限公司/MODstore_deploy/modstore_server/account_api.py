@@ -11,10 +11,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from modstore_server import account_level_service
+from modstore_server.account_license_plans import PERSONAL_PLAN_ID
 from modstore_server.account_lifecycle import (
+    ACCOUNT_SUSPENDED,
     active_membership_plan,
     lifecycle_for_user,
     lifecycle_for_user_id,
+    mark_active_after_plan,
 )
 from modstore_server.api.deps import _get_current_user
 from modstore_server.auth_service import (
@@ -25,7 +28,13 @@ from modstore_server.auth_service import (
 from modstore_server.llm_api import _membership_meta, _provider_labels
 from modstore_server.llm_crypto import fernet_configured
 from modstore_server.llm_key_resolver import KNOWN_PROVIDERS, credential_status
-from modstore_server.models import Transaction, User, Wallet, get_session_factory
+from modstore_server.models import Transaction, User, UserPlan, Wallet, get_session_factory
+from modstore_server.personal_plan_allowance import (
+    allowance_status,
+    confirm_java_allowance,
+    reserve_allowance,
+    verify_allowance_email,
+)
 
 router = APIRouter(prefix="/api/account", tags=["auth"])
 open_router = APIRouter(prefix="/api/market/open", tags=["auth"])
@@ -35,6 +44,11 @@ class OpenRegisterDTO(BaseModel):
     username: str = Field(..., min_length=2, max_length=64)
     password: str = Field(..., min_length=6, max_length=128)
     email: str = Field(default="", max_length=128)
+
+
+class PersonalPlanDTO(BaseModel):
+    email: str = Field(..., max_length=128)
+    verification_code: str = Field(..., min_length=4, max_length=16)
 
 
 def _load_default_llm(raw: str | None) -> Dict[str, str]:
@@ -84,6 +98,34 @@ def api_market_open_register(body: OpenRegisterDTO):
     }
 
 
+@router.post("/personal-plan")
+def activate_personal_plan(
+    body: PersonalPlanDTO | None = None, user: User = Depends(_get_current_user)
+):
+    """Enable the free desktop license without creating a payment order."""
+    with get_session_factory()() as session:
+        account = session.query(User).filter(User.id == user.id)
+        # Acquire the account write lock before reading grants, including on SQLite.
+        account.update({User.account_state: User.account_state}, synchronize_session=False)
+        db_user = account.one()
+        if db_user.account_state == ACCOUNT_SUSPENDED or db_user.deleted_at is not None:
+            raise HTTPException(403, "当前账号已暂停")
+        current = lifecycle_for_user(session, db_user)
+        if current.active_plan_id != PERSONAL_PLAN_ID:
+            if current.desktop_access:
+                raise HTTPException(409, "当前账号已有桌面端方案")
+            session.add(UserPlan(user_id=db_user.id, plan_id=PERSONAL_PLAN_ID, auto_renew=False))
+            mark_active_after_plan(db_user, plan_id=PERSONAL_PLAN_ID, session=session)
+        if body is not None:
+            verify_allowance_email(session, db_user, body.email, body.verification_code)
+        allowance = reserve_allowance(session, db_user)
+        session.commit()
+        lifecycle = lifecycle_for_user(session, db_user).to_dict()
+    if allowance["status"] == "pending":
+        allowance = confirm_java_allowance(int(user.id))
+    return {"ok": True, **lifecycle, "allowance": allowance}
+
+
 @router.get("/bootstrap")
 def api_account_bootstrap(user: User = Depends(_get_current_user)):
     """Return the high-frequency account state needed by the wallet/account UI."""
@@ -106,6 +148,7 @@ def api_account_bootstrap(user: User = Depends(_get_current_user)):
             provider_status.append(row)
         default_llm = _load_default_llm(getattr(db_user, "default_llm_json", ""))
         lifecycle = lifecycle_for_user(session, db_user).to_dict()
+        lifecycle["allowance"] = allowance_status(session, db_user)
         membership_row = active_membership_plan(session, int(user.id))
         membership = _membership_meta(membership_row.plan_id if membership_row else None)
         level_profile: Dict[str, Any] = account_level_service.build_level_profile(

@@ -8,6 +8,7 @@ import RouteErrorBoundary from '@/components/shell/RouteErrorBoundary.vue'
 import RouteLoadingFeedback from '@/components/shell/RouteLoadingFeedback.vue'
 import { clearRouteChunkError, isUnmatchedRoute, routeChunkErrorPath } from '@/utils/routeLoadState'
 import { isDesktopShell } from '@/utils/desktopShell'
+import { hasLocalWorkspace } from '@/api/localWorkspace'
 import { probeEnterpriseSession } from '@/utils/authSessionCache'
 import { repairBlankMarketAccessToken } from '@/api/marketAccount'
 import { useAppBoot } from '@/composables/useAppBoot'
@@ -128,6 +129,7 @@ const routeReadinessHandlers = computed(() => {
         <button v-if="startupError" type="button" class="btn btn-primary" @click="retryStartup">重试</button>
         <button v-if="startupError" type="button" class="btn btn-secondary" @click="reloadStartup">重新加载</button>
         <button type="button" class="btn btn-secondary" @click="cancelStartup">{{ startupError ? '返回登录' : '取消' }}</button>
+        <router-link v-if="hasLocalWorkspace()" :to="{ name: 'local-workspace' }" class="btn btn-secondary">打开本地工作区</router-link>
       </div>
     </div>
   </section>

@@ -92,6 +92,42 @@ Future<void> _open(WidgetTester tester, _InventoryApi api) async {
 }
 
 void main() {
+  for (final incoming in [true, false]) {
+    for (final quantity in [0.5, 1.5]) {
+      testWidgets(
+          '${incoming ? 'incoming' : 'outgoing'} stock accepts $quantity and rejects invalid quantities',
+          (tester) async {
+        final api = _InventoryApi();
+        await _open(tester, api);
+        final action = incoming ? '入库' : '出库';
+        final rowAction = find.widgetWithText(TextButton, action);
+        await tester.ensureVisible(rowAction);
+        await tester.tap(rowAction);
+        await tester.pumpAndSettle();
+        final input = find.byKey(const ValueKey('quantity'));
+        for (final invalid in ['0', '-0.5', 'NaN', 'Infinity']) {
+          await tester.enterText(input, invalid);
+          await tester.ensureVisible(find.text('保存'));
+          await tester.tap(find.text('保存'));
+          await tester.pumpAndSettle();
+          expect(api.writes, isEmpty, reason: invalid);
+        }
+        await tester.enterText(input, '$quantity');
+        await tester.ensureVisible(find.text('保存'));
+        await tester.tap(find.text('保存'));
+        await tester.pumpAndSettle();
+        expect(api.writes, hasLength(1));
+        expect(api.writes.single.path,
+            'api/inventory/${incoming ? 'in' : 'out'}');
+        expect(api.writes.single.body, containsPair('quantity', quantity));
+        expect(api.writes.single.body, containsPair('product_id', 17));
+        expect(api.writes.single.body, containsPair('warehouse_id', 9));
+        expect(find.text('已$action'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
+
   testWidgets('inventory shows balances separately and scopes list filters',
       (tester) async {
     final api = _InventoryApi();

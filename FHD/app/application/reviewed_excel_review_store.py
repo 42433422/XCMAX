@@ -34,6 +34,7 @@ _SAVING = "template_review_saving"
 _SAVED = "template_review_saved"
 _CLASS_SAVING = "classification_template_saving"
 _MODEL_PENDING = "template_review_model_pending"
+_INTAKE_SOURCE_POLICY = "visible_non_finance_v4"
 
 
 _OUTCOME_HTTP = {
@@ -452,6 +453,7 @@ def _intake_selection_key(run, proposal_version, candidate_id, selected, name, n
             {
                 "review_id": run.id,
                 "source_sha256": run.file_sha256,
+                "business_source_policy": _INTAKE_SOURCE_POLICY,
                 "version": proposal_version,
                 "candidate": candidate_id,
                 "selections": selected,

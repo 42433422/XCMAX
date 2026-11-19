@@ -1,36 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import crypto from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-
-/**
- * updater.ts 打包模式 / 元数据解析 / 强制升级 / 网络会话等未覆盖路径的补充单测。
- * 与 updater.test.ts（签名校验/同版本排序）和 updater-install.test.ts（安装回滚契约）互补。
- */
-
-const keyPair = crypto.generateKeyPairSync('ed25519')
-const TEST_PUBLIC_KEY_PEM = keyPair.publicKey.export({ type: 'spki', format: 'pem' }).toString()
-const TEST_PRIVATE_KEY_PEM = keyPair.privateKey.export({ type: 'pkcs8', format: 'pem' }).toString()
-
-function signBody(body: string): string {
-  const privateKey = crypto.createPrivateKey(TEST_PRIVATE_KEY_PEM)
-  const sig = crypto.sign(null, Buffer.from(body, 'utf8'), privateKey)
-  return `signature: ed25519:${sig.toString('base64')}`
-}
-
-function buildMetadata(version: string, extra = ''): string {
-  const body = `version: ${version}
-files:
-  - url: XCAGI-${version}-mac.zip
-    sha512: fake-sha512
-    size: 12345
-path: XCAGI-${version}-mac.zip
-sha512: fake-sha512
-releaseDate: '2026-08-23T00:00:00.000Z'
-buildSha: ${'a'.repeat(40)}${extra}`
-  return `${body}\n${signBody(body)}`
-}
 
 const mocks = vi.hoisted(() => {
   const handlers = new Map<string, (...args: unknown[]) => void>()
@@ -45,10 +16,13 @@ const mocks = vi.hoisted(() => {
     checkForUpdates: vi.fn(() => Promise.resolve({})),
     downloadUpdate: vi.fn(() => Promise.resolve()),
     quitAndInstall: vi.fn(),
-    isUpdateAvailable: vi.fn(async () => true),
+    isUpdateAvailable: vi.fn(async (_info: { version: string }) => false),
+    currentVersion: { version: '1.0.0' },
+    isUpdateSupported: vi.fn(async () => true),
+    isUserWithinRollout: vi.fn(async () => true),
     netSession: { setProxy: vi.fn(() => Promise.resolve()) },
   }
-  return { autoUpdater, handlers }
+  return { autoUpdater, handlers, isPackaged: false }
 })
 
 vi.mock('electron-updater', () => ({ autoUpdater: mocks.autoUpdater }))
@@ -58,7 +32,7 @@ fs.mkdirSync(tmpDir, { recursive: true })
 
 vi.mock('electron', () => ({
   app: {
-    isPackaged: false,
+    get isPackaged() { return mocks.isPackaged },
     getVersion: () => '1.0.0',
     getPath: () => tmpDir,
   },
@@ -72,56 +46,22 @@ vi.mock('electron', () => ({
   },
 }))
 
-/** 构造一个可控的 net.request 伪对象（EventEmitter 语义）。 */
-function makeNetRequest(response: {
-  statusCode: number
-  statusMessage?: string
-  body?: string
-  emitError?: Error
-  requestError?: Error
-}) {
-  return () => {
-    const events = require('node:events') as typeof import('node:events')
-    const req = new events.EventEmitter() as import('node:events').EventEmitter & { end: () => void }
-    const res = new events.EventEmitter() as import('node:events').EventEmitter & {
-      statusCode?: number
-      statusMessage?: string
-    }
-    req.end = () => {
-      process.nextTick(() => {
-        if (response.requestError) {
-          req.emit('error', response.requestError)
-          return
-        }
-        res.statusCode = response.statusCode
-        res.statusMessage = response.statusMessage
-        req.emit('response', res)
-        if (response.emitError) {
-          res.emit('error', response.emitError)
-          return
-        }
-        if (response.body !== undefined) {
-          res.emit('data', Buffer.from(response.body))
-        }
-        res.emit('end')
-      })
-    }
-    return req
-  }
-}
-
 const savedEnv: Record<string, string | undefined> = {}
 
 beforeEach(() => {
   vi.resetModules()
   mocks.handlers.clear()
+  mocks.isPackaged = false
   mocks.autoUpdater.on.mockClear()
   mocks.autoUpdater.checkForUpdates.mockClear()
   mocks.autoUpdater.downloadUpdate.mockReset()
   mocks.autoUpdater.downloadUpdate.mockResolvedValue(undefined)
   // installSameVersionRebuildHook 会用普通 async 函数替换 isUpdateAvailable，
   // 每个用例前恢复为全新 vi.fn，避免跨用例污染。
-  mocks.autoUpdater.isUpdateAvailable = vi.fn(async () => true)
+  mocks.autoUpdater.isUpdateAvailable = vi.fn(async (_info: { version: string }) => false)
+  mocks.autoUpdater.isUserWithinRollout.mockResolvedValue(true)
+  mocks.autoUpdater.checkForUpdates.mockResolvedValue({})
+  vi.unstubAllEnvs()
   savedEnv.XCAGI_UPDATE_URL = process.env.XCAGI_UPDATE_URL
   savedEnv.XCAGI_UPDATE_ED25519_PUBLIC_KEY = process.env.XCAGI_UPDATE_ED25519_PUBLIC_KEY
   savedEnv.XCAGI_UPDATE_CHANNEL = process.env.XCAGI_UPDATE_CHANNEL
@@ -137,122 +77,74 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  vi.unstubAllEnvs()
   for (const [key, value] of Object.entries(savedEnv)) {
     if (value === undefined) delete process.env[key]
     else process.env[key] = value
   }
 })
 
-describe('updater — checkForUpdates with metadata parsing', () => {
-  it('fetches and parses metadata when env configured (dev mode with URL)', async () => {
-    process.env.XCAGI_UPDATE_URL = 'http://127.0.0.1:19999/releases/'
-    process.env.XCAGI_UPDATE_ED25519_PUBLIC_KEY = TEST_PUBLIC_KEY_PEM
-    const metadata = buildMetadata('2.0.0', '\nminVersion: 1.0.0.0\nforceUpgrade: true')
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      text: async () => metadata,
-    } as Response)
+describe('updater — update checks', () => {
+  it('skips development checks without a URL', async () => {
+    const { runUpdateCheckWithDirectNet } = await import('./updater.js')
+    await expect(runUpdateCheckWithDirectNet()).resolves.toMatchObject({ skipped: true })
+    expect(mocks.autoUpdater.checkForUpdates).not.toHaveBeenCalled()
+  })
 
-    const { checkForUpdates, getRemoteMinVersion, isForceUpgradeEnabled } = await import('./updater.js')
-    await checkForUpdates()
+  it('refuses packaged update checks before a signed provider is installed', async () => {
+    mocks.isPackaged = true
+    vi.stubEnv('XCAGI_UPDATE_URL', 'https://updates.example.com/')
+    const { configureUpdater, runUpdateCheckWithDirectNet } = await import('./updater.js')
+    configureUpdater({ isDestroyed: () => true } as never)
+    await expect(runUpdateCheckWithDirectNet()).rejects.toThrow('尚未配置验签公钥')
+    expect(mocks.autoUpdater.checkForUpdates).not.toHaveBeenCalled()
+  })
 
-    expect(getRemoteMinVersion()).toBe('1.0.0.0')
-    expect(isForceUpgradeEnabled()).toBe(true)
+  it('shares one update check and configures only the updater network session', async () => {
+    vi.stubEnv('XCAGI_DESKTOP_TEST', '0')
+    vi.stubEnv('XCAGI_UPDATE_URL', 'https://updates.example.com/')
+    const { runUpdateCheckWithDirectNet } = await import('./updater.js')
+    await Promise.all([runUpdateCheckWithDirectNet(), runUpdateCheckWithDirectNet()])
+    expect(mocks.autoUpdater.netSession.setProxy).toHaveBeenCalledWith({ mode: 'direct' })
     expect(mocks.autoUpdater.checkForUpdates).toHaveBeenCalledOnce()
-    fetchSpy.mockRestore()
   })
 
-  it('skips metadata fetch when env not configured', async () => {
-    const { checkForUpdates } = await import('./updater.js')
-    const result = await checkForUpdates()
-    expect(result).toEqual({ skipped: true, reason: 'dev-mode-without-XCAGI_UPDATE_URL' })
+  it('clears a previously available download if the next check fails', async () => {
+    vi.stubEnv('XCAGI_UPDATE_URL', 'https://updates.example.com/')
+    const { configureUpdater, downloadUpdate, runUpdateCheckWithDirectNet } = await import('./updater.js')
+    configureUpdater({ isDestroyed: () => true } as never)
+    mocks.handlers.get('update-available')?.({ version: '2.0.0', files: [] })
+    mocks.autoUpdater.checkForUpdates.mockRejectedValueOnce(new Error('manifest signature failed'))
+    await expect(runUpdateCheckWithDirectNet()).rejects.toThrow('manifest signature failed')
+    await expect(downloadUpdate()).rejects.toThrow('请先检查更新')
+    expect(mocks.autoUpdater.downloadUpdate).not.toHaveBeenCalled()
   })
 
-  it('parses releaseNotes block scalar and enriches update-available payload', async () => {
-    process.env.XCAGI_UPDATE_URL = 'http://127.0.0.1:19999/releases/'
-    process.env.XCAGI_UPDATE_ED25519_PUBLIC_KEY = TEST_PUBLIC_KEY_PEM
-    const body = `version: 3.0.0
-productVersion: 3.0.0.7
-releaseNotes: |
-  - 修复了若干问题
-  - 新增功能
-path: XCAGI-3.0.0-mac.zip
-sha512: fake
-releaseDate: '2026-08-23T00:00:00.000Z'`
-    const metadata = `${body}\n${signBody(body)}`
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      text: async () => metadata,
-    } as Response)
-
+  it('reads product identity and release notes from the updater events', async () => {
     const send = vi.fn()
-    const { configureUpdater, checkForUpdates } = await import('./updater.js')
+    const { configureUpdater, getDownloadedUpdateState } = await import('./updater.js')
     configureUpdater({ isDestroyed: () => false, webContents: { send } } as never)
-    await checkForUpdates()
+    const info = { version: '3.0.0', productVersion: '3.0.0.7', buildSha: 'abc123', releaseNotes: '修复了若干问题' }
+    mocks.handlers.get('update-available')?.(info)
+    expect(send).toHaveBeenCalledWith('xcagi:update-event', { type: 'update-available', data: { ...info, releaseMedia: [] } })
+    mocks.handlers.get('update-downloaded')?.(info)
+    expect(getDownloadedUpdateState()).toEqual({ downloaded: true, version: '3.0.0.7', buildSha: 'abc123' })
+  })
 
-    const handler = mocks.handlers.get('update-available')
-    handler?.({ version: '3.0.0', files: [] })
-    const payload = send.mock.calls.find(c => c[0] === 'xcagi:update-event')?.[1] as {
-      data?: { productVersion?: string; releaseNotes?: string }
+  it('honors the upstream rollout for same-version rebuilds and refuses older versions', async () => {
+    vi.stubEnv('XCAGI_UPDATE_URL', 'https://updates.example.com/')
+    vi.stubEnv('XCAGI_UPDATE_ED25519_PUBLIC_KEY', 'test-key')
+    vi.stubEnv('XCAGI_BUILD_SHA', 'old')
+    vi.stubEnv('XCAGI_BUILD_TIME', '2026-11-01T00:00:00Z')
+    const { configureUpdater } = await import('./updater.js')
+    configureUpdater({ isDestroyed: () => true } as never)
+    const info = {
+      version: '1.0.0', path: 'update.zip', buildSha: 'new', releaseDate: '2026-11-18T00:00:00Z',
     }
-    expect(payload?.data?.productVersion).toBe('3.0.0.7')
-    expect(payload?.data?.releaseNotes).toContain('修复了若干问题')
-    mocks.handlers.get('update-downloaded')?.({ version: '3.0.0', files: [] })
-    const { getDownloadedUpdateState } = await import('./updater.js')
-    expect(getDownloadedUpdateState().version).toBe('3.0.0.7')
-    fetchSpy.mockRestore()
-  })
-})
-
-/** vi.mock 替换后的 defaultSession（真实类型为 electron.Session，须经 unknown 中转）。 */
-type MockedDefaultSession = {
-  resolveProxy: ReturnType<typeof vi.fn>
-  setProxy: ReturnType<typeof vi.fn>
-}
-
-async function mockedDefaultSession(): Promise<MockedDefaultSession> {
-  const { session } = await import('electron')
-  return session.defaultSession as unknown as MockedDefaultSession
-}
-
-describe('updater — runUpdateCheckWithDirectNet proxy handling', () => {
-  it('restores system proxy when previous was PROXY', async () => {
-    const defaultSession = await mockedDefaultSession()
-    defaultSession.resolveProxy.mockResolvedValue('PROXY 127.0.0.1:8080')
-
-    const { runUpdateCheckWithDirectNet } = await import('./updater.js')
-    await runUpdateCheckWithDirectNet()
-
-    // 先设 direct，检查完后恢复 system
-    const calls = defaultSession.setProxy.mock.calls.map(c => c[0])
-    expect(calls).toContainEqual({ mode: 'direct' })
-    expect(calls[calls.length - 1]).toEqual({ mode: 'system' })
-  })
-
-  it('keeps direct when previous was DIRECT', async () => {
-    const defaultSession = await mockedDefaultSession()
-    defaultSession.resolveProxy.mockResolvedValue('DIRECT')
-
-    const { runUpdateCheckWithDirectNet } = await import('./updater.js')
-    await runUpdateCheckWithDirectNet()
-
-    const calls = defaultSession.setProxy.mock.calls.map(c => c[0])
-    expect(calls[calls.length - 1]).toEqual({ mode: 'direct' })
-  })
-
-  it('restores system proxy when previous was SOCKS', async () => {
-    const defaultSession = await mockedDefaultSession()
-    defaultSession.resolveProxy.mockResolvedValue('SOCKS5 127.0.0.1:1080')
-
-    const { runUpdateCheckWithDirectNet } = await import('./updater.js')
-    await runUpdateCheckWithDirectNet()
-
-    const calls = defaultSession.setProxy.mock.calls.map(c => c[0])
-    expect(calls[calls.length - 1]).toEqual({ mode: 'system' })
+    mocks.autoUpdater.isUserWithinRollout.mockResolvedValueOnce(false)
+    await expect(mocks.autoUpdater.isUpdateAvailable(info)).resolves.toBe(false)
+    await expect(mocks.autoUpdater.isUpdateAvailable(info)).resolves.toBe(true)
+    await expect(mocks.autoUpdater.isUpdateAvailable({ ...info, version: '0.9.0' })).resolves.toBe(false)
   })
 })
 
@@ -262,6 +154,7 @@ describe('updater — downloadUpdate error mapping', () => {
     __resetUpdateDownloadedForTest()
     configureUpdater({ isDestroyed: () => false, webContents: { send: vi.fn() } } as never)
 
+    mocks.handlers.get('update-available')?.({ version: '2.0.0', files: [] })
     mocks.autoUpdater.downloadUpdate.mockRejectedValueOnce(new Error('ZIP file not provided for auto update'))
     await expect(downloadUpdate()).rejects.toThrow(/无法在应用内自动更新/)
   })
@@ -280,45 +173,16 @@ describe('updater — downloadUpdate error mapping', () => {
 })
 
 describe('updater — force upgrade version comparison', () => {
-  it('isCurrentBelowMinVersion returns true when local < min', async () => {
-    process.env.XCAGI_PRODUCT_VERSION = '1.0.0.0'
-    const { checkForUpdates, isCurrentBelowMinVersion } = await import('./updater.js')
-    process.env.XCAGI_UPDATE_URL = 'http://127.0.0.1:19999/releases/'
-    process.env.XCAGI_UPDATE_ED25519_PUBLIC_KEY = TEST_PUBLIC_KEY_PEM
-    const metadata = buildMetadata('2.0.0', '\nminVersion: 1.0.0.1\nforceUpgrade: true')
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      text: async () => metadata,
-    } as Response)
-
-    await checkForUpdates()
-    expect(isCurrentBelowMinVersion()).toBe(true)
-    fetchSpy.mockRestore()
-  })
-
-  it('isForceUpgradeRequired is false when forceUpgrade is false', async () => {
-    process.env.XCAGI_PRODUCT_VERSION = '1.0.0.0'
-    const { checkForUpdates, isForceUpgradeRequired } = await import('./updater.js')
-    process.env.XCAGI_UPDATE_URL = 'http://127.0.0.1:19999/releases/'
-    process.env.XCAGI_UPDATE_ED25519_PUBLIC_KEY = TEST_PUBLIC_KEY_PEM
-    const metadata = buildMetadata('2.0.0', '\nminVersion: 2.0.0.0\nforceUpgrade: false')
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      text: async () => metadata,
-    } as Response)
-
-    await checkForUpdates()
+  it('requires a forced update only after an eligible update is available', async () => {
+    vi.stubEnv('XCAGI_PRODUCT_VERSION', '1.0.0.0')
+    const { configureUpdater, isForceUpgradeRequired } = await import('./updater.js')
+    configureUpdater({ isDestroyed: () => true } as never)
     expect(isForceUpgradeRequired()).toBe(false)
-    fetchSpy.mockRestore()
-  })
-
-  it('isCurrentBelowMinVersion returns false when no minVersion set', async () => {
-    const { isCurrentBelowMinVersion } = await import('./updater.js')
-    expect(isCurrentBelowMinVersion()).toBe(false)
+    const info = { version: '2.0.0', minVersion: '1.0.0.1' }
+    mocks.handlers.get('update-available')?.({ ...info, forceUpgrade: false })
+    expect(isForceUpgradeRequired()).toBe(false)
+    mocks.handlers.get('update-available')?.({ ...info, forceUpgrade: true })
+    expect(isForceUpgradeRequired()).toBe(true)
   })
 })
 
@@ -366,70 +230,12 @@ describe('updater — configureUpdater event wiring', () => {
   it('sets feed URL with channel when XCAGI_UPDATE_CHANNEL is set', async () => {
     process.env.XCAGI_UPDATE_URL = 'http://127.0.0.1:19999/releases/'
     process.env.XCAGI_UPDATE_CHANNEL = 'beta'
+    process.env.XCAGI_UPDATE_ED25519_PUBLIC_KEY = 'test-key'
     const { configureUpdater } = await import('./updater.js')
     configureUpdater({ isDestroyed: () => false, webContents: { send: vi.fn() } } as never)
     expect(mocks.autoUpdater.setFeedURL).toHaveBeenCalledWith(
-      expect.objectContaining({ provider: 'generic', url: 'http://127.0.0.1:19999/releases/', channel: 'beta' }),
+      expect.objectContaining({ provider: 'custom', url: 'http://127.0.0.1:19999/releases/', channel: 'beta', updateProvider: expect.any(Function) }),
     )
-  })
-})
-
-describe('updater — fetchTextViaSession network paths', () => {
-  it('resolves with body on 2xx', async () => {
-    const { net } = await import('electron')
-    ;(net.request as ReturnType<typeof vi.fn>).mockImplementation(
-      makeNetRequest({ statusCode: 200, body: 'version: 1.0.0' }),
-    )
-    const { fetchTextViaSession } = await import('./updater.js')
-    const fakeSession = {} as never
-    await expect(fetchTextViaSession(fakeSession, 'http://127.0.0.1/latest.yml')).resolves.toBe(
-      'version: 1.0.0',
-    )
-  })
-
-  it('rejects on non-2xx status', async () => {
-    const { net } = await import('electron')
-    ;(net.request as ReturnType<typeof vi.fn>).mockImplementation(
-      makeNetRequest({ statusCode: 404, statusMessage: 'Not Found', body: '' }),
-    )
-    const { fetchTextViaSession } = await import('./updater.js')
-    await expect(fetchTextViaSession({} as never, 'http://127.0.0.1/latest.yml')).rejects.toThrow(
-      /更新元数据下载失败: 404/,
-    )
-  })
-
-  it('rejects when the response stream errors', async () => {
-    const { net } = await import('electron')
-    ;(net.request as ReturnType<typeof vi.fn>).mockImplementation(
-      makeNetRequest({ statusCode: 200, emitError: new Error('stream broken') }),
-    )
-    const { fetchTextViaSession } = await import('./updater.js')
-    await expect(fetchTextViaSession({} as never, 'http://127.0.0.1/latest.yml')).rejects.toThrow(
-      'stream broken',
-    )
-  })
-
-  it('rejects when the request itself errors', async () => {
-    const { net } = await import('electron')
-    ;(net.request as ReturnType<typeof vi.fn>).mockImplementation(
-      makeNetRequest({ statusCode: 200, requestError: new Error('net down') }),
-    )
-    const { fetchTextViaSession } = await import('./updater.js')
-    await expect(fetchTextViaSession({} as never, 'http://127.0.0.1/latest.yml')).rejects.toThrow(
-      'net down',
-    )
-  })
-})
-
-describe('updater — parseYamlBlock', () => {
-  it('extracts inline value', async () => {
-    const { parseYamlField } = await import('./updater.js')
-    expect(parseYamlField('version: 1.0.0\npath: test.zip', 'path')).toBe('test.zip')
-  })
-
-  it('returns empty for missing field', async () => {
-    const { parseYamlField } = await import('./updater.js')
-    expect(parseYamlField('version: 1.0.0', 'missing')).toBe('')
   })
 })
 

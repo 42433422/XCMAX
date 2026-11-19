@@ -14,8 +14,8 @@ import path from 'node:path'
  *
  *   1. 更新元数据 Ed25519 二次签名校验：
  *      渲染进程 IPC `xcagi:check-for-updates` → 主进程 runUpdateCheckWithDirectNet
- *      → checkForUpdates → fetchLatestMetadataText（真实 net.request 拉取本地更新源）
- *      → verifyMetadataSignatureText（真实 crypto.verify）。
+ *      → electron-updater → SignedUpdateProvider（真实 net.request 拉取本地更新源）
+ *      → crypto.verify。
  *      有效签名 → 检查通过；篡改/错误密钥签名 → 拒绝并抛出 Ed25519 错误。
  *
  *   2. 更新后回滚观察期「提交」链路：
@@ -23,8 +23,8 @@ import path from 'node:path'
  *      bootstrap 进入观察期 → stub 后端就绪 + 主界面加载 + 5s 稳定性窗口全部通过 →
  *      commitRollback() 删除 marker。通过轮询真实文件系统验证 marker 被删除。
  *
- * 说明：dev（未打包）模式下 autoUpdater.checkForUpdates 直接返回 null（不触发下载），
- * 因此这里断言的是「签名校验是否放行/拦截」这一安全边界，而非真实下载安装。
+ * 未打包测试显式启用 electron-updater 的 dev 检查并初始化生产 provider；
+ * 每次检查必须实际请求清单，但不下载或安装制品。
  * 打包后的备份/还原（prepareRollback/triggerRollback）已由 rollback.test.ts 单测覆盖。
  */
 
@@ -37,6 +37,7 @@ let updateServer: http.Server
 
 /** 由更新源服务器动态返回的元数据内容，各用例在调用前置位。 */
 let currentMetadata = ''
+let metadataRequests = 0
 
 const ROLLBACK_MARKER = 'rollback-marker.json'
 
@@ -58,10 +59,10 @@ const METADATA_BODY = [
   'version: 9.9.9',
   'files:',
   '  - url: XCAGI-9.9.9-mac.zip',
-  '    sha512: fake-sha512',
+  `    sha512: ${Buffer.alloc(64).toString('base64')}`,
   '    size: 12345',
   'path: XCAGI-9.9.9-mac.zip',
-  'sha512: fake-sha512',
+  `sha512: ${Buffer.alloc(64).toString('base64')}`,
   `releaseDate: '2026-08-23T00:00:00.000Z'`,
   `buildSha: ${'a'.repeat(40)}`,
   'minVersion: 1.0.0.0',
@@ -97,7 +98,8 @@ function startUpdateServer(port: number): Promise<http.Server> {
   return new Promise((resolve, reject) => {
     const server = http.createServer((req, res) => {
       const url = new URL(req.url || '/', `http://127.0.0.1:${port}`)
-      if (url.pathname === '/latest-mac.yml' || url.pathname === '/latest.yml') {
+      if (['/latest-mac.yml', '/latest.yml', '/latest-linux.yml'].includes(url.pathname)) {
+        metadataRequests += 1
         res.writeHead(200, { 'Content-Type': 'text/yaml; charset=utf-8' })
         res.end(currentMetadata)
         return
@@ -152,6 +154,15 @@ test.beforeAll(async () => {
     },
   })
   page = await electronApp.firstWindow()
+  await electronApp.evaluate(({ app, BrowserWindow }) => {
+    const requireFromApp = process.getBuiltinModule('module').createRequire(
+      process.getBuiltinModule('path').join(app.getAppPath(), 'package.json'),
+    )
+    const { autoUpdater } = requireFromApp('electron-updater')
+    autoUpdater.forceDevUpdateConfig = true
+    const { configureUpdater } = requireFromApp('./dist/updater.js')
+    configureUpdater(BrowserWindow.getAllWindows()[0])
+  })
   page.on('console', msg => {
     if (msg.type() === 'error') {
       console.info(`[renderer console.error] ${msg.text()}`)
@@ -178,22 +189,25 @@ test('真实启动链路：观察期启动仍能加载主界面', async () => {
 
 test('更新链路：有效 Ed25519 签名的元数据通过校验（检查放行）', async () => {
   currentMetadata = VALID_METADATA
+  const before = metadataRequests
   const result = await page.evaluate(async () => {
     try {
       const value = await (
         window as unknown as { xcagiDesktop: { checkForUpdates: () => Promise<unknown> } }
       ).xcagiDesktop.checkForUpdates()
-      return { ok: true, isNull: value === null }
+      return { ok: true, version: (value as { updateInfo?: { version?: string } })?.updateInfo?.version }
     } catch (error) {
       return { ok: false, message: error instanceof Error ? error.message : String(error) }
     }
   })
-  // dev 模式 autoUpdater 返回 null；关键是未因签名被拒绝（未抛 Ed25519 错误）。
   expect(result.ok, `有效签名应放行，但检查失败：${'message' in result ? result.message : ''}`).toBe(true)
+  expect('version' in result ? result.version : '').toBe('9.9.9')
+  expect(metadataRequests).toBe(before + 1)
 })
 
 test('更新链路：篡改主体的元数据被 Ed25519 校验拒绝', async () => {
   currentMetadata = TAMPERED_METADATA
+  const before = metadataRequests
   const result = await page.evaluate(async () => {
     try {
       await (
@@ -206,10 +220,12 @@ test('更新链路：篡改主体的元数据被 Ed25519 校验拒绝', async ()
   })
   expect(result.ok).toBe(false)
   expect('message' in result ? result.message : '').toMatch(/Ed25519/)
+  expect(metadataRequests).toBe(before + 1)
 })
 
 test('更新链路：错误密钥签名的元数据被 Ed25519 校验拒绝', async () => {
   currentMetadata = WRONG_KEY_METADATA
+  const before = metadataRequests
   const result = await page.evaluate(async () => {
     try {
       await (
@@ -222,6 +238,7 @@ test('更新链路：错误密钥签名的元数据被 Ed25519 校验拒绝', as
   })
   expect(result.ok).toBe(false)
   expect('message' in result ? result.message : '').toMatch(/Ed25519/)
+  expect(metadataRequests).toBe(before + 1)
 })
 
 test('回滚链路：更新后观察期稳定启动 → commitRollback 删除 marker', async () => {

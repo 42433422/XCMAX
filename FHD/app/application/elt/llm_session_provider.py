@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import asyncio
-import os
 from contextvars import ContextVar, Token
 from typing import Any, cast
+
+from app.infrastructure.modstore_transport import httpx_async_client
 
 _OWNER_USER_ID: ContextVar[int | None] = ContextVar("elt_llm_owner_user_id", default=None)
 
@@ -39,11 +40,8 @@ class SessionMarketProvider:
         if not re.fullmatch(r"[A-Za-z0-9_.:-]{8,128}", call_id or ""):
             return None
         try:
-            async with httpx.AsyncClient(
-                timeout=httpx.Timeout(15.0, connect=10.0),
-                headers={"Authorization": f"Bearer {self._token}"},
-                trust_env=not bool((os.environ.get("XCAGI_MARKET_PROXY") or "").strip()),
-                proxy=(os.environ.get("XCAGI_MARKET_PROXY") or "").strip() or None,
+            async with httpx_async_client(
+                timeout=15.0, headers={"Authorization": f"Bearer {self._token}"}
             ) as client:
                 response = await client.get(f"{_platform_url()}/api/llm/chat/requests/{call_id}")
         except httpx.HTTPError:
@@ -83,11 +81,8 @@ class SessionMarketProvider:
         headers = {"Authorization": f"Bearer {self._token}"}
         for attempt in range(3):
             try:
-                async with httpx.AsyncClient(
-                    timeout=httpx.Timeout(timeout, connect=min(10.0, timeout)),
-                    headers=headers,
-                    trust_env=not bool((os.environ.get("XCAGI_MARKET_PROXY") or "").strip()),
-                    proxy=(os.environ.get("XCAGI_MARKET_PROXY") or "").strip() or None,
+                async with httpx_async_client(
+                    timeout=httpx.Timeout(timeout, connect=min(10.0, timeout)), headers=headers
                 ) as client:
                     response = await client.get(f"{platform_url}/api/llm/resolve-chat-default")
                     response.raise_for_status()

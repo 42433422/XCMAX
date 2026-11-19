@@ -200,20 +200,7 @@
             <SettingsMemoryV2Card
               :persy-fold-meta="persyFoldMeta" :persy-loading="persyLoading" :persy-profile="persyProfile"
               :persy-inferring="persyInferring" :persy-last-reason="persyLastReason"
-              :persy-error="persyError" :reload-persy-profile="loadPersyProfile"
-              :memory-v2-status-filters="memoryV2StatusFilters" :memory-v2-type-options="memoryV2TypeOptions"
-              :memory-v2-loading="memoryV2Loading" :memory-v2-error="memoryV2Error"
-              :memory-v2-draft="memoryV2Draft" :memory-v2-creating="memoryV2Creating"
-              :memory-v2-planner-context="memoryV2PlannerContext" :memory-v2-records="memoryV2Records"
-              :memory-v2-edit="memoryV2Edit" :memory-v2-busy-id="memoryV2BusyId"
-              :run-persy-infer="runPersyInfer" :load-memory-v2="loadMemoryV2"
-              :create-memory-v2-candidate="createMemoryV2Candidate" :memory-v2-type-label="memoryV2TypeLabel"
-              :memory-v2-status-label="memoryV2StatusLabel" :memory-v2-time="memoryV2Time"
-              :memory-v2-display-value="memoryV2DisplayValue" :can-edit-memory-v2="canEditMemoryV2"
-              :save-memory-v2-edit="saveMemoryV2Edit" :cancel-memory-v2-edit="cancelMemoryV2Edit"
-              :confirm-memory-v2="confirmMemoryV2" :reject-memory-v2="rejectMemoryV2"
-              :start-memory-v2-edit="startMemoryV2Edit" :delete-memory-v2="deleteMemoryV2"
-              v-model:memory-v2-status-filter="memoryV2StatusFilter" v-model:memory-v2-type-filter="memoryV2TypeFilter"
+              :persy-error="persyError" :reload-persy-profile="loadPersyProfile" :run-persy-infer="runPersyInfer"
             />
             </section>
 
@@ -394,19 +381,6 @@ const {
 } = useSettingsMods()
 
 const {
-  memoryV2TypeOptions,
-  memoryV2StatusFilters,
-  memoryV2Records,
-  memoryV2Summary,
-  memoryV2PlannerContext,
-  memoryV2Loading,
-  memoryV2Creating,
-  memoryV2BusyId,
-  memoryV2Error,
-  memoryV2StatusFilter,
-  memoryV2TypeFilter,
-  memoryV2Draft,
-  memoryV2Edit,
   persyProfile,
   persyLoading,
   persyError,
@@ -414,25 +388,8 @@ const {
   persyLastReason,
   persyUserId,
   persyFoldMeta,
-  memoryV2UserId,
-  memoryV2FoldMeta,
   loadPersyProfile,
   runPersyInfer,
-  memoryV2TypeLabel,
-  memoryV2StatusLabel,
-  memoryV2EditableValue,
-  memoryV2DisplayValue,
-  parseMemoryV2InputValue,
-  memoryV2Time,
-  canEditMemoryV2,
-  loadMemoryV2,
-  createMemoryV2Candidate,
-  confirmMemoryV2,
-  rejectMemoryV2,
-  startMemoryV2Edit,
-  cancelMemoryV2Edit,
-  saveMemoryV2Edit,
-  deleteMemoryV2,
 } = useSettingsMemory(localUser)
 
 const {
@@ -514,12 +471,10 @@ function scrollToSettingsSection() {
 watch(() => route.query.section, scrollToSettingsSection)
 
 const preparePage = useStartupPageReady(async current => {
-  memoryV2Loading.value = true
   persyLoading.value = true
   await loadLocalUser({ required: true, current })
   if (!current()) return
   void loadAuditLogs()
-  void loadMemoryV2()
   void loadPersyProfile()
   void loadIntentPackages()
   // List and detail are independent aggregates; run them as one round trip window
@@ -532,7 +487,6 @@ const preparePage = useStartupPageReady(async current => {
 
 function prepareSettingsPage() {
   void preparePage().catch(() => {
-    memoryV2Loading.value = false
     persyLoading.value = false
   })
 }

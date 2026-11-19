@@ -9,11 +9,14 @@ defineProps<{
   corpMode: boolean
   brandLogoUrl: string
   proactiveIntroOn: boolean
+  activityAvailable?: boolean
+  activityOpen?: boolean
 }>()
 
 defineEmits<{
   (e: 'toggle-proactive-intro'): void
   (e: 'toggle-log'): void
+  (e: 'toggle-activity'): void
   (e: 'clear-messages'): void
   (e: 'close'): void
 }>()
@@ -67,7 +70,19 @@ defineEmits<{
       </svg>
     </button>
     <button
-      v-if="!corpMode"
+      v-if="activityAvailable"
+      type="button"
+      class="panel-icon-btn"
+      :class="{ 'panel-icon-btn--active': activityOpen }"
+      :aria-pressed="activityOpen"
+      aria-label="工作动态"
+      title="工作动态"
+      @click.stop="$emit('toggle-activity')"
+    >
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 5v14m5-13h11M9 12h8m-8 6h11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+    </button>
+    <button
+      v-if="!corpMode && !activityOpen"
       type="button"
       class="panel-icon-btn"
       aria-label="查看操作日志"
@@ -77,6 +92,7 @@ defineEmits<{
       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 12h6M9 8h6M9 16h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><rect x="3" y="4" width="18" height="16" rx="3" stroke="currentColor" stroke-width="1.6"/></svg>
     </button>
     <button
+      v-if="!activityOpen"
       type="button"
       class="panel-icon-btn"
       aria-label="清空对话"

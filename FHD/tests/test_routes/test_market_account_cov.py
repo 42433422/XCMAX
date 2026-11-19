@@ -81,13 +81,13 @@ class TestSaveSessionMarketToken:
         assert "sid" not in ma._MARKET_SESSION_TOKENS
 
     def test_saves_refresh_token(self):
-        with patch("app.db.session.get_db", side_effect=RuntimeError("no db")):
+        with patch("app.db.session.get_host_db", side_effect=RuntimeError("no db")):
             ma.save_session_market_token("s1", "t1", "r1")
         assert ma._MARKET_SESSION_TOKENS["s1"] == "t1"
         assert ma._MARKET_SESSION_REFRESH_TOKENS["s1"] == "r1"
 
     def test_saves_without_refresh_token(self):
-        with patch("app.db.session.get_db", side_effect=RuntimeError("no db")):
+        with patch("app.db.session.get_host_db", side_effect=RuntimeError("no db")):
             ma.save_session_market_token("s2", "t2")
         assert "s2" not in ma._MARKET_SESSION_REFRESH_TOKENS
 
@@ -100,7 +100,7 @@ class TestSaveSessionMarketToken:
         mock_ctx = MagicMock()
         mock_ctx.__enter__ = MagicMock(return_value=mock_db)
         mock_ctx.__exit__ = MagicMock(return_value=False)
-        with patch("app.db.session.get_db", return_value=mock_ctx):
+        with patch("app.db.session.get_host_db", return_value=mock_ctx):
             ma.save_session_market_token("s3", "t3", "r3")
         mock_db.commit.assert_called_once()
 
@@ -110,7 +110,7 @@ class TestSaveSessionMarketToken:
         mock_ctx = MagicMock()
         mock_ctx.__enter__ = MagicMock(return_value=mock_db)
         mock_ctx.__exit__ = MagicMock(return_value=False)
-        with patch("app.db.session.get_db", return_value=mock_ctx):
+        with patch("app.db.session.get_host_db", return_value=mock_ctx):
             ma.save_session_market_token("s4", "t4", "r4")
         mock_db.commit.assert_not_called()
 
@@ -123,12 +123,12 @@ class TestSaveSessionMarketToken:
 class TestClearSessionMarketToken:
     def test_clears_in_memory(self):
         ma._MARKET_SESSION_TOKENS["sid5"] = "tok5"
-        with patch("app.db.session.get_db", side_effect=RuntimeError("no db")):
+        with patch("app.db.session.get_host_db", side_effect=RuntimeError("no db")):
             ma.clear_session_market_token("sid5")
         assert "sid5" not in ma._MARKET_SESSION_TOKENS
 
     def test_skips_empty_sid(self):
-        with patch("app.db.session.get_db", side_effect=RuntimeError("no db")):
+        with patch("app.db.session.get_host_db", side_effect=RuntimeError("no db")):
             ma.clear_session_market_token("")
         # No crash
 
@@ -141,7 +141,7 @@ class TestClearSessionMarketToken:
         mock_ctx = MagicMock()
         mock_ctx.__enter__ = MagicMock(return_value=mock_db)
         mock_ctx.__exit__ = MagicMock(return_value=False)
-        with patch("app.db.session.get_db", return_value=mock_ctx):
+        with patch("app.db.session.get_host_db", return_value=mock_ctx):
             ma.clear_session_market_token("sid6")
         mock_db.commit.assert_called_once()
 
@@ -154,7 +154,7 @@ class TestClearSessionMarketToken:
         mock_ctx = MagicMock()
         mock_ctx.__enter__ = MagicMock(return_value=mock_db)
         mock_ctx.__exit__ = MagicMock(return_value=False)
-        with patch("app.db.session.get_db", return_value=mock_ctx):
+        with patch("app.db.session.get_host_db", return_value=mock_ctx):
             ma.clear_session_market_token("sid7")
         # commit not needed but doesn't error
 
@@ -1167,7 +1167,7 @@ class TestSessionMarketToken:
         mock_ctx = MagicMock()
         mock_ctx.__enter__ = MagicMock(return_value=mock_db)
         mock_ctx.__exit__ = MagicMock(return_value=False)
-        with patch("app.db.session.get_db", return_value=mock_ctx):
+        with patch("app.db.session.get_host_db", return_value=mock_ctx):
             result = ma.session_market_token("newdb_sid")
         assert result == "db_tok"
         assert ma._MARKET_SESSION_TOKENS["newdb_sid"] == "db_tok"
@@ -1178,7 +1178,7 @@ class TestSessionMarketToken:
         mock_ctx = MagicMock()
         mock_ctx.__enter__ = MagicMock(return_value=mock_db)
         mock_ctx.__exit__ = MagicMock(return_value=False)
-        with patch("app.db.session.get_db", return_value=mock_ctx):
+        with patch("app.db.session.get_host_db", return_value=mock_ctx):
             result = ma.session_market_token("nosuchsid")
         assert result == ""
 
@@ -1190,12 +1190,12 @@ class TestSessionMarketToken:
         mock_ctx = MagicMock()
         mock_ctx.__enter__ = MagicMock(return_value=mock_db)
         mock_ctx.__exit__ = MagicMock(return_value=False)
-        with patch("app.db.session.get_db", return_value=mock_ctx):
+        with patch("app.db.session.get_host_db", return_value=mock_ctx):
             result = ma.session_market_token("emptytok_sid")
         assert result == ""
 
     def test_db_error_returns_empty(self):
-        with patch("app.db.session.get_db", side_effect=RuntimeError("db error")):
+        with patch("app.db.session.get_host_db", side_effect=RuntimeError("db error")):
             result = ma.session_market_token("err_sid")
         assert result == ""
 
@@ -1222,7 +1222,7 @@ class TestSessionMarketRefreshToken:
         mock_ctx = MagicMock()
         mock_ctx.__enter__ = MagicMock(return_value=mock_db)
         mock_ctx.__exit__ = MagicMock(return_value=False)
-        with patch("app.db.session.get_db", return_value=mock_ctx):
+        with patch("app.db.session.get_host_db", return_value=mock_ctx):
             result = ma.session_market_refresh_token("rf_db_sid")
         assert result == "db_refresh"
 
@@ -1232,12 +1232,12 @@ class TestSessionMarketRefreshToken:
         mock_ctx = MagicMock()
         mock_ctx.__enter__ = MagicMock(return_value=mock_db)
         mock_ctx.__exit__ = MagicMock(return_value=False)
-        with patch("app.db.session.get_db", return_value=mock_ctx):
+        with patch("app.db.session.get_host_db", return_value=mock_ctx):
             result = ma.session_market_refresh_token("rf_none_sid")
         assert result == ""
 
     def test_db_error_returns_empty(self):
-        with patch("app.db.session.get_db", side_effect=RuntimeError("fail")):
+        with patch("app.db.session.get_host_db", side_effect=RuntimeError("fail")):
             result = ma.session_market_refresh_token("rf_err_sid")
         assert result == ""
 
@@ -1249,7 +1249,7 @@ class TestSessionMarketRefreshToken:
         mock_ctx = MagicMock()
         mock_ctx.__enter__ = MagicMock(return_value=mock_db)
         mock_ctx.__exit__ = MagicMock(return_value=False)
-        with patch("app.db.session.get_db", return_value=mock_ctx):
+        with patch("app.db.session.get_host_db", return_value=mock_ctx):
             result = ma.session_market_refresh_token("rf_null_sid")
         assert result == ""
 
@@ -1270,7 +1270,7 @@ class TestLatestSessionMarketRefreshToken:
         mock_ctx = MagicMock()
         mock_ctx.__enter__ = MagicMock(return_value=mock_db)
         mock_ctx.__exit__ = MagicMock(return_value=False)
-        with patch("app.db.session.get_db", return_value=mock_ctx):
+        with patch("app.db.session.get_host_db", return_value=mock_ctx):
             result = ma.latest_session_market_refresh_token()
         assert result == "latest_rf"
 
@@ -1287,7 +1287,7 @@ class TestLatestSessionMarketRefreshToken:
         mock_ctx = MagicMock()
         mock_ctx.__enter__ = MagicMock(return_value=mock_db)
         mock_ctx.__exit__ = MagicMock(return_value=False)
-        with patch("app.db.session.get_db", return_value=mock_ctx):
+        with patch("app.db.session.get_host_db", return_value=mock_ctx):
             result = ma.latest_session_market_refresh_token()
         assert result == "second_rf"
 
@@ -1297,12 +1297,12 @@ class TestLatestSessionMarketRefreshToken:
         mock_ctx = MagicMock()
         mock_ctx.__enter__ = MagicMock(return_value=mock_db)
         mock_ctx.__exit__ = MagicMock(return_value=False)
-        with patch("app.db.session.get_db", return_value=mock_ctx):
+        with patch("app.db.session.get_host_db", return_value=mock_ctx):
             result = ma.latest_session_market_refresh_token()
         assert result == ""
 
     def test_db_error_returns_empty(self):
-        with patch("app.db.session.get_db", side_effect=RuntimeError("db fail")):
+        with patch("app.db.session.get_host_db", side_effect=RuntimeError("db fail")):
             result = ma.latest_session_market_refresh_token()
         assert result == ""
 
@@ -1323,7 +1323,7 @@ class TestLatestSessionMarketToken:
         mock_ctx = MagicMock()
         mock_ctx.__enter__ = MagicMock(return_value=mock_db)
         mock_ctx.__exit__ = MagicMock(return_value=False)
-        with patch("app.db.session.get_db", return_value=mock_ctx):
+        with patch("app.db.session.get_host_db", return_value=mock_ctx):
             result = ma.latest_session_market_token()
         assert result == "latest_tok"
 
@@ -1333,7 +1333,7 @@ class TestLatestSessionMarketToken:
         mock_ctx = MagicMock()
         mock_ctx.__enter__ = MagicMock(return_value=mock_db)
         mock_ctx.__exit__ = MagicMock(return_value=False)
-        with patch("app.db.session.get_db", return_value=mock_ctx):
+        with patch("app.db.session.get_host_db", return_value=mock_ctx):
             result = ma.latest_session_market_token()
         assert result == ""
 
@@ -1350,12 +1350,12 @@ class TestLatestSessionMarketToken:
         mock_ctx = MagicMock()
         mock_ctx.__enter__ = MagicMock(return_value=mock_db)
         mock_ctx.__exit__ = MagicMock(return_value=False)
-        with patch("app.db.session.get_db", return_value=mock_ctx):
+        with patch("app.db.session.get_host_db", return_value=mock_ctx):
             result = ma.latest_session_market_token()
         assert result == "second_tok"
 
     def test_db_error_returns_empty(self):
-        with patch("app.db.session.get_db", side_effect=RuntimeError("fail")):
+        with patch("app.db.session.get_host_db", side_effect=RuntimeError("fail")):
             result = ma.latest_session_market_token()
         assert result == ""
 
@@ -1446,7 +1446,7 @@ class TestMarketSessionHandoff:
 
 
 class TestAuthorizationFromRequest:
-    def test_session_token_wins(self):
+    def test_session_token_wins(self, owned_market_session):
         from fastapi import Request as FR
 
         scope = {"type": "http", "method": "POST", "path": "/", "headers": []}
@@ -1520,7 +1520,7 @@ class TestAuthorizationFromRequest:
 
 class TestAuthorizationFromRequestResolved:
     @pytest.mark.asyncio
-    async def test_resolved_returns_auth_header(self):
+    async def test_resolved_returns_auth_header(self, owned_market_session):
         from fastapi import Request as FR
 
         scope = {"type": "http", "method": "POST", "path": "/", "headers": []}
@@ -2481,7 +2481,7 @@ class TestMarketWalletOverview:
 
 
 class TestMarketAuthFromRequest:
-    def test_session_token_returned(self):
+    def test_session_token_returned(self, owned_market_session):
         from fastapi import Request as FR
 
         scope = {"type": "http", "method": "GET", "path": "/", "headers": []}
@@ -2786,7 +2786,7 @@ class TestMarketIdentityFromPayloads:
 
 
 class TestBindMarketAuthToSession:
-    def test_token_saves_to_session(self):
+    def test_token_saves_to_session(self, owned_market_session):
         from fastapi import Request as FR
 
         scope = {"type": "http", "method": "GET", "path": "/", "headers": []}

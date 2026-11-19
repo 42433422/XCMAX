@@ -11,12 +11,13 @@ class NativeFormField {
       this.number = false,
       this.integer = false,
       this.minimum,
+      this.exclusiveMinimum,
       this.options = const {},
       this.defaultValue = '',
       this.nullable = false});
   final String key, label;
   final bool required, number, integer, nullable;
-  final num? minimum;
+  final num? minimum, exclusiveMinimum;
   final Map<String, String> options;
   final Object? defaultValue;
   String? validate(String? raw) {
@@ -29,6 +30,9 @@ class NativeFormField {
         return integer ? '请输入整数' : '请输入有效数字';
       }
       if (minimum != null && n < minimum!) return '$label不能小于 $minimum';
+      if (exclusiveMinimum != null && n <= exclusiveMinimum!) {
+        return '$label必须大于 $exclusiveMinimum';
+      }
     }
     return null;
   }

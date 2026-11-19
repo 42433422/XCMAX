@@ -2,12 +2,9 @@ import { describe, it, expect } from 'vitest'
 import {
   normalizeLoginSku,
   loginEyebrow,
-  loginSubtitle,
-  loginUsernamePlaceholder,
   loginAccountInputPlaceholder,
   loginPasswordInputPlaceholder,
   marketRegisterUrl,
-  purchaseAuthorizationUrl,
   marketForgotPasswordUrl,
   loginHelpDocUrl,
   loginPageTitle,
@@ -22,8 +19,8 @@ describe('loginBranding', () => {
       expect(normalizeLoginSku('enterprise')).toBe('enterprise')
     })
 
-    it('returns personal for personal', () => {
-      expect(normalizeLoginSku('personal')).toBe('personal')
+    it('accepts the legacy personal SKU as an enterprise alias', () => {
+      expect(normalizeLoginSku('personal')).toBe('enterprise')
     })
 
     it('returns generic for unknown', () => {
@@ -57,8 +54,8 @@ describe('loginBranding', () => {
       expect(loginEyebrow('enterprise')).toContain(XCAGI_VERSION_LABEL)
     })
 
-    it('returns personal eyebrow', () => {
-      expect(loginEyebrow('personal')).toContain('个人版')
+    it('uses the enterprise eyebrow for the legacy personal SKU', () => {
+      expect(loginEyebrow('personal')).toBe(loginEyebrow('enterprise'))
     })
 
     it('returns generic eyebrow', () => {
@@ -68,38 +65,13 @@ describe('loginBranding', () => {
     })
   })
 
-  describe('loginSubtitle', () => {
-    it('returns enterprise subtitle', () => {
-      expect(loginSubtitle('enterprise')).toBe('使用 XCAGI 账号登录')
-    })
-
-    it('returns personal subtitle', () => {
-      expect(loginSubtitle('personal')).toBe('本地账号登录')
-    })
-
-    it('returns generic subtitle', () => {
-      expect(loginSubtitle('generic')).toBe('登录进入工作台')
-    })
-  })
-
-  describe('loginUsernamePlaceholder', () => {
-    it('returns XCAGI 账号 for enterprise', () => {
-      expect(loginUsernamePlaceholder('enterprise')).toBe('XCAGI 账号')
-    })
-
-    it('returns 账号 for non-enterprise', () => {
-      expect(loginUsernamePlaceholder('personal')).toBe('账号')
-      expect(loginUsernamePlaceholder('generic')).toBe('账号')
-    })
-  })
-
   describe('loginAccountInputPlaceholder', () => {
     it('returns enterprise placeholder', () => {
       expect(loginAccountInputPlaceholder('enterprise')).toBe('XCAGI 账号或邮箱')
     })
 
-    it('returns personal placeholder', () => {
-      expect(loginAccountInputPlaceholder('personal')).toBe('本地账号')
+    it('shares the account placeholder with the legacy personal SKU', () => {
+      expect(loginAccountInputPlaceholder('personal')).toBe(loginAccountInputPlaceholder('enterprise'))
     })
 
     it('returns generic placeholder', () => {
@@ -116,12 +88,7 @@ describe('loginBranding', () => {
   describe('marketRegisterUrl', () => {
     it('opens the shared market registration page with the desktop source contract', () => {
       expect(marketRegisterUrl()).toBe('https://xiu-ci.com/market/register?source=xcagi-desktop')
-    })
-  })
-
-  describe('purchaseAuthorizationUrl', () => {
-    it('returns the canonical authenticated plan entry', () => {
-      expect(purchaseAuthorizationUrl()).toBe('https://xiu-ci.com/market/account-plans?plan=saas-trial-30&source=xcagi-desktop')
+      expect(marketRegisterUrl('xcagi-mobile')).toBe('https://xiu-ci.com/market/register?source=xcagi-mobile')
     })
   })
 

@@ -224,12 +224,12 @@ class TestModuleHelpers:
     def test_claude_cli_command_default_perm(self, tmp_path, monkeypatch):
         monkeypatch.delenv("DEVFLEET_CLAUDE_PERMISSION_MODE", raising=False)
         cmd = _claude_cli_command("/path/claude", "prompt", tmp_path / "out.txt", "/cwd")
-        assert "acceptEdits" in cmd
+        assert cmd[cmd.index("--permission-mode") + 1] == "acceptEdits"
 
     def test_claude_cli_command_empty_perm(self, tmp_path, monkeypatch):
         monkeypatch.setenv("DEVFLEET_CLAUDE_PERMISSION_MODE", "")
         cmd = _claude_cli_command("/path/claude", "prompt", tmp_path / "out.txt", "/cwd")
-        assert "acceptEdits" in cmd
+        assert cmd[cmd.index("--permission-mode") + 1] == "acceptEdits"
 
 
 # ─────────────── _should_reply_with_cli 边界 ─────────────────────

@@ -128,6 +128,9 @@ def test_old_candidate_promotion_always_checks_material_even_without_new_input()
             False,
         ),
         ({"FHD_NOTICE_PUBLICATION_JSON": "", "NOTICE_PUBLICATION_ORIGIN": ""}, False),
+        ({"WINDOWS_UNSIGNED": "true"}, True),
+        ({"WINDOWS_UNSIGNED": "true", "WINDOWS_ONLY": "false"}, False),
+        ({"WINDOWS_UNSIGNED": "true", "VERIFY_ONLY": "true"}, False),
         (
             {
                 "FHD_NOTICE_PUBLICATION_JSON": "",
@@ -161,6 +164,7 @@ def test_input_lane_policy_executes_exact_dispatch_guard(change, accepted):
     env = {
         **os.environ,
         "WINDOWS_ONLY": "true",
+        "WINDOWS_UNSIGNED": "false",
         "VERIFY_ONLY": "false",
         "CANDIDATE_RUN": "",
         "FHD_NOTICE_PUBLICATION_JSON": "{}",

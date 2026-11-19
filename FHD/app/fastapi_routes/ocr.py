@@ -6,11 +6,12 @@ import logging
 from functools import lru_cache
 from typing import Any
 
-from fastapi import APIRouter, Body, File, Form, Request, UploadFile
+from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 
 from app.domain.task_lifecycle.results import agent_node_output as _agent_node_output
+from app.infrastructure.auth.dependencies import get_logged_in_user
 from app.schemas.ocr_schema import (
     OcrAnalyzeResponse,
     OcrExtractResponse,
@@ -39,20 +40,18 @@ def _allowed_file(filename: str) -> bool:
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
-def _ocr_user_id(request: Request | None) -> str:
-    if request is None:
-        return "ocr-route"
-    return str(
-        request.headers.get("X-User-Id")
-        or request.headers.get("X-User-ID")
-        or request.headers.get("X-Workspace-Id")
-        or "ocr-route"
-    ).strip()
+def _ocr_user_id(user=Depends(get_logged_in_user)) -> str:
+    """Bind OCR execution to the verified session, never identity headers."""
+    user_id = getattr(user, "id", None)
+    if user_id is None:
+        raise HTTPException(status_code=401, detail="请先登录后使用 OCR")
+    return str(user_id)
 
 
 def _run_ocr_agent(
     *,
     request: Request | None,
+    user_id: str,
     action: str,
     node_id: str,
     message: str,
@@ -80,7 +79,7 @@ def _run_ocr_agent(
         metadata={"source": "ocr_route", "route": "/api/ocr"},
     )
     return AgentOrchestrator().start_run_from_plan(
-        user_id=_ocr_user_id(request),
+        user_id=user_id,
         message=message,
         plan=plan,
         runtime_context={
@@ -113,6 +112,7 @@ async def ocr_recognize(
     request: Request,
     file_path: str | None = Form(default=None),
     image: UploadFile | None = File(default=None),
+    user_id: str = Depends(_ocr_user_id),
 ):
     try:
         resolved_path = await _resolve_ocr_path(file_path, image)
@@ -124,6 +124,7 @@ async def ocr_recognize(
         run = await run_in_threadpool(
             _run_ocr_agent,
             request=request,
+            user_id=user_id,
             action="recognize",
             node_id="ocr_recognize",
             message=f"OCR recognize: {resolved_path}",
@@ -138,13 +139,18 @@ async def ocr_recognize(
 
 
 @router.post("/extract", response_model=OcrExtractResponse)
-def ocr_extract(request: Request, data: dict = Body(default_factory=dict)):
+def ocr_extract(
+    request: Request,
+    data: dict = Body(default_factory=dict),
+    user_id: str = Depends(_ocr_user_id),
+):
     try:
         text = data.get("text", "")
         if not text:
             return JSONResponse({"success": False, "message": "文本不能为空"}, status_code=400)
         run = _run_ocr_agent(
             request=request,
+            user_id=user_id,
             action="extract",
             node_id="ocr_extract",
             message="OCR extract structured data",
@@ -160,13 +166,18 @@ def ocr_extract(request: Request, data: dict = Body(default_factory=dict)):
 
 
 @router.post("/analyze", response_model=OcrAnalyzeResponse)
-def ocr_analyze(request: Request, data: dict = Body(default_factory=dict)):
+def ocr_analyze(
+    request: Request,
+    data: dict = Body(default_factory=dict),
+    user_id: str = Depends(_ocr_user_id),
+):
     try:
         text = data.get("text", "")
         if not text:
             return JSONResponse({"success": False, "message": "文本不能为空"}, status_code=400)
         run = _run_ocr_agent(
             request=request,
+            user_id=user_id,
             action="analyze",
             node_id="ocr_analyze",
             message="OCR analyze text",
@@ -186,6 +197,7 @@ async def ocr_recognize_and_extract(
     request: Request,
     file_path: str | None = Form(default=None),
     image: UploadFile | None = File(default=None),
+    user_id: str = Depends(_ocr_user_id),
 ):
     try:
         resolved_path = await _resolve_ocr_path(file_path, image)
@@ -197,6 +209,7 @@ async def ocr_recognize_and_extract(
         run = await run_in_threadpool(
             _run_ocr_agent,
             request=request,
+            user_id=user_id,
             action="recognize_and_extract",
             node_id="ocr_recognize_and_extract",
             message=f"OCR recognize and extract: {resolved_path}",

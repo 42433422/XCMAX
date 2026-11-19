@@ -65,6 +65,7 @@ _REQUIRED_CORE_JOB_IDS = frozenset(
         "storage_pressure_self_heal",
         "telemetry_backlog_scan",
         "time_rail_observability_sync",
+        "xiaoc_delivery_followups",
     }
 )
 _CRITICAL_RUNTIME_JOB_TO_SCHEDULER_ID = {
@@ -128,6 +129,16 @@ def start_scheduler() -> None:
     _scheduler = BackgroundScheduler()
     _scheduler.start()
     _register_scheduler_phase_01()
+    from modstore_server.xiaoc_delivery_followup import run_delivery_followups
+
+    _scheduler.add_job(
+        lambda: _run_tracked_scheduler_job("xiaoc_delivery_followups", run_delivery_followups),
+        IntervalTrigger(minutes=5),
+        id="xiaoc_delivery_followups",
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+    )
     _register_scheduler_phase_02()
     _register_scheduler_phase_03()
     _register_scheduler_phase_04()

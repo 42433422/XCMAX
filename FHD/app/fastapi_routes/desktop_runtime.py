@@ -164,8 +164,15 @@ def desktop_status(request: Request):
     }
 
 
+def _require_desktop_deployment_actor(user=Depends(get_logged_in_user)):
+    """Only the active desktop user's session may access local deployment secrets."""
+    if not is_desktop_mode():
+        raise HTTPException(status_code=403, detail="部署配置仅在桌面运行时可用")
+    return user
+
+
 @router.get("/deployment", response_model=dict[str, object])
-def desktop_deployment_status():
+def desktop_deployment_status(_user=Depends(_require_desktop_deployment_actor)):
     """Return the active desktop deployment, database, and migration plan."""
     dirs = ensure_desktop_dirs(os.environ.get("XCAGI_DATA_DIR"))
     catalog = load_deployment_catalog()
@@ -184,7 +191,7 @@ def desktop_deployment_status():
     sync_plan = build_sqlite_to_postgres_sync_plan(
         database_storage_catalog,
         sqlite_path=sqlite_path,
-        postgres_url=postgres_url or "<postgres-url>",
+        postgres_url="<postgres-url>",
         data_root=str(dirs["root"]),
     )
     return {
@@ -219,7 +226,10 @@ def desktop_deployment_status():
 
 
 @router.put("/deployment", response_model=dict[str, object])
-def update_desktop_deployment_settings(request: DeploymentSettingsUpdate):
+def update_desktop_deployment_settings(
+    request: DeploymentSettingsUpdate,
+    _user=Depends(_require_desktop_deployment_actor),
+):
     """Persist a desktop deployment mode and report any required restart or sync."""
     dirs = ensure_desktop_dirs(os.environ.get("XCAGI_DATA_DIR"))
     catalog = load_deployment_catalog()
@@ -267,7 +277,7 @@ def update_desktop_deployment_settings(request: DeploymentSettingsUpdate):
     sync_plan = build_sqlite_to_postgres_sync_plan(
         database_storage_catalog,
         sqlite_path=sqlite_path,
-        postgres_url=postgres_url or "<postgres-url>",
+        postgres_url="<postgres-url>",
         data_root=str(dirs["root"]),
     )
     restart_required = requires_postgresql or os.environ.get("DATABASE_URL", "").startswith(

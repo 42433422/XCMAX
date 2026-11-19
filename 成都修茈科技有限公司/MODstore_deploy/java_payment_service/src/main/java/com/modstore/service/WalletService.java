@@ -21,6 +21,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -387,14 +388,13 @@ public class WalletService {
 
     private Transaction changeBalance(User user, BigDecimal signedAmount, String transactionType, String description,
                                       String referenceNo, String orderNo, String refundNo, String idempotencyKey) {
-        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
-            Optional<Transaction> existing = transactionRepository.findByIdempotencyKey(idempotencyKey);
-            if (existing.isPresent()) {
-                return existing.get();
-            }
-        }
+        Optional<Transaction> existing = matchingTransaction(user, signedAmount, transactionType, idempotencyKey);
+        if (existing.isPresent()) return existing.get();
 
         Wallet wallet = walletRepository.findByUserIdForUpdate(user.getId()).orElseGet(() -> getOrCreateWallet(user));
+        // Another request may have committed this key while we waited for the account lock.
+        existing = matchingTransaction(user, signedAmount, transactionType, idempotencyKey);
+        if (existing.isPresent()) return existing.get();
         BigDecimal before = wallet.getBalance() == null ? BigDecimal.ZERO : wallet.getBalance();
         BigDecimal after = before.add(signedAmount);
         if (after.compareTo(BigDecimal.ZERO) < 0) {
@@ -409,6 +409,20 @@ public class WalletService {
         log.info("钱包余额变更: userId={}, amount={}, before={}, after={}, type={}, ref={}",
                 user.getId(), signedAmount, before, after, transactionType, referenceNo);
         return transaction;
+    }
+
+    private Optional<Transaction> matchingTransaction(User user, BigDecimal signedAmount,
+                                                       String transactionType, String idempotencyKey) {
+        if (idempotencyKey == null || idempotencyKey.isBlank()) return Optional.empty();
+        return transactionRepository.findByIdempotencyKey(idempotencyKey).map(existing -> {
+            if (existing.getUser() == null || !Objects.equals(existing.getUser().getId(), user.getId())
+                    || existing.getAmount() == null || existing.getAmount().compareTo(signedAmount) != 0
+                    || !Objects.equals(existing.getTransactionType(), transactionType)
+                    || !"completed".equals(existing.getStatus())) {
+                throw new IllegalStateException("幂等请求与已有交易不匹配");
+            }
+            return existing;
+        });
     }
 
     private Transaction recordTransaction(User user, BigDecimal amount, String transactionType, String description,

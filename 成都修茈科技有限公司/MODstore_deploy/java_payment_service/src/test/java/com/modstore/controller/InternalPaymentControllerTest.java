@@ -292,6 +292,11 @@ class InternalPaymentControllerTest {
         user.setId(33L);
         when(userRepository.findById(33L)).thenReturn(java.util.Optional.of(user));
         Transaction txn = new Transaction();
+        txn.setId(77L);
+        txn.setUser(user);
+        txn.setAmount(new BigDecimal("100.00"));
+        txn.setStatus("completed");
+        txn.setIdempotencyKey("admin_credit:33:abc");
         txn.setBalanceAfter(new BigDecimal("100.83"));
         when(walletService.credit(
                 eq(user), eq(new BigDecimal("100.00")), eq("admin_credit"), eq("端到端测试加款"),
@@ -313,10 +318,28 @@ class InternalPaymentControllerTest {
         assertEquals(33L, result.get("user_id"));
         assertEquals("100.00", result.get("amount"));
         assertEquals("100.83", result.get("balance"));
+        assertEquals("admin_credit:33:abc", result.get("idempotency_key"));
+        assertEquals(77L, result.get("transaction_id"));
+        assertEquals("completed", result.get("status"));
         verify(walletService).credit(
                 eq(user), eq(new BigDecimal("100.00")), eq("admin_credit"), eq("端到端测试加款"),
                 eq(null), eq(null), eq(null), eq("admin_credit:33:abc")
         );
+    }
+
+    @Test
+    void creditWalletReportsIdempotencyConflictsInsteadOfSuccess() {
+        User user = new User();
+        user.setId(33L);
+        when(userRepository.findById(33L)).thenReturn(java.util.Optional.of(user));
+        when(walletService.credit(eq(user), any(), eq("admin_credit"), any(),
+                eq(null), eq(null), eq(null), eq("claimed-key")))
+                .thenThrow(new IllegalStateException("幂等请求与已有交易不匹配"));
+
+        ResponseStatusException conflict = assertThrows(ResponseStatusException.class,
+                () -> controller.creditWallet("test-internal-key", Map.of(
+                        "user_id", 33, "amount", "5.00", "idempotency_key", "claimed-key")));
+        assertEquals(409, conflict.getStatusCode().value());
     }
 
     @Test

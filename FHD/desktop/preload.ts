@@ -47,6 +47,15 @@ contextBridge.exposeInMainWorld('xcagiDesktop', {
     ipcRenderer.on('xcagi:screenshot-captured', listener)
     return () => ipcRenderer.removeListener('xcagi:screenshot-captured', listener)
   },
+  onAssistantProductSearch: (callback: (query: string) => void | Promise<void>) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: { requestId: string; query: string }) => {
+      void Promise.resolve().then(() => callback(payload.query)).then(() => {
+        ipcRenderer.send('xcagi:assistant-products-opened', payload.requestId)
+      }).catch(() => undefined)
+    }
+    ipcRenderer.on('xcagi:assistant-open-products', listener)
+    return () => ipcRenderer.removeListener('xcagi:assistant-open-products', listener)
+  },
   onVoiceInvoke: (callback: () => void) => {
     const listener = () => callback()
     ipcRenderer.on('xcagi:voice-invoke', listener)

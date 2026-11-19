@@ -1,0 +1,24 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "XCAGI 工作台"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "XCAGI 工作台"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "XCAGI"
+    },
+    {
+      "name": "camera_permission_reason",
+      "value": "用于扫描配对二维码或拍照上传附件。"
+    },
+    {
+      "name": "microphone_permission_reason",
+      "value": "用于语音输入或通话时录制音频。"
+    }
+  ]
+}

@@ -276,6 +276,17 @@
   overflow: hidden;
 }
 
+.brain-toolbar.brain-toolbar--user-memory {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.brain-stage.brain-stage--user-memory {
+  flex: 1;
+  height: auto;
+  overflow: auto;
+  padding: 16px;
+}
+
 /* 图谱/卡片/列表占据剩余高度，提问坞作为独立一行，不再叠在内容上。 */
 .brain-stage__body {
   position: relative;
