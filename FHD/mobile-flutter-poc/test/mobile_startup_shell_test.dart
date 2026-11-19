@@ -313,6 +313,29 @@ void main() {
     }
   });
 
+  testWidgets('guest can open local workspace while cloud config is pending',
+      (tester) async {
+    final config = Completer<MobileAppConfigData>();
+    final api = _FakeStartupApi(
+      session: const MobileSessionData(),
+      config: _appConfig('legal-2'),
+      delayedConfig: config.future,
+    );
+    await tester.pumpWidget(
+      MobileStartupApp(
+        repository: _StartupRepository(api),
+        enableBiometricGate: false,
+      ),
+    );
+    await tester.pump();
+    expect(find.text('打开本地工作台'), findsOneWidget);
+    expect(find.text('密码登录'), findsNothing);
+
+    config.complete(_appConfig('legal-2'));
+    await tester.pumpAndSettle();
+    expect(find.text('请先同意协议'), findsOneWidget);
+  });
+
   testWidgets('legal version gates the Flutter root before auth', (
     tester,
   ) async {
@@ -551,9 +574,14 @@ MobileAppConfigData _appConfig(String legalVersion) {
 }
 
 class _FakeStartupApi extends MobileApiClient {
-  _FakeStartupApi({required this.session, required this.config});
+  _FakeStartupApi({
+    required this.session,
+    required this.config,
+    this.delayedConfig,
+  });
 
   final MobileAppConfigData config;
+  final Future<MobileAppConfigData>? delayedConfig;
   final _changes = StreamController<MobileSessionData>.broadcast();
   MobileSessionData session;
 
@@ -569,7 +597,7 @@ class _FakeStartupApi extends MobileApiClient {
     int currentVersionCode = MobileBuildConfig.versionCode,
     String sku = MobileBuildConfig.productSku,
   }) async {
-    return config;
+    return await (delayedConfig ?? Future.value(config));
   }
 
   @override
