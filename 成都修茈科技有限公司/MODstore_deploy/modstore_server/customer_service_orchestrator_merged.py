@@ -10,10 +10,10 @@ import importlib
 from typing import Any
 from uuid import uuid4
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 
 from modstore_server.customer_issue_delivery_contract import (
-    issue_resolution,
     projected_dispatch_status,
     record_team_progress,
     role_progress_state,
@@ -22,16 +22,24 @@ from modstore_server.customer_issue_delivery_contract import (
 )
 from modstore_server.customer_ticket_intake_review import (
     IntakeReview,
+    apply_original_ticket_reassessment,
+    cached_intake_review,
     intake_dispatch_block_reason,
-    parse_intake_review,
     pending_intake_review,
 )
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.customer_service_ticket_view import serialize_ticket
+from modstore_server.customer_service_tools import json_loads
 from modstore_server.customer_service_triage import (
     _parse_domain_clarify_reply as _parse_domain_clarify_reply,
     resolve_triage_lane as resolve_triage_lane,
     ticket_taxonomy as ticket_taxonomy,
+)
+from modstore_server.models import User
+from modstore_server.models_cs import (
+    CustomerServiceMessage,
+    CustomerServiceSession,
+    CustomerServiceTicket,
 )
 
 
@@ -563,68 +571,53 @@ def ensure_session(
 """Implementation extracted from the public facade module."""
 
 
-def _anchored_intake_report(ticket, message: str) -> str:
+def _anchored_intake_report(ticket: CustomerServiceTicket, message: str) -> str:
     original = str(ticket.summary or "").strip()
     supplement = message.strip()
-    if not supplement or _facade()._is_escalate_only(supplement):
+    if not supplement or _is_escalate_only(supplement):
         return original
     return f"{original}\n原工单补充：{supplement}" if original else supplement
 
 
 def intake_report_for_message(
-    db: _facade().Session,
+    db: Session,
     *,
-    user: _facade().User,
+    user: User,
     message: str,
     session_id: int | None,
     target_ticket_id: int | None = None,
 ) -> tuple[str | None, IntakeReview | None]:
     """Select original text and a matching server-authored assessment before writes."""
-    facade = _facade()
     if target_ticket_id is not None:
         ticket = (
-            db.query(facade.CustomerServiceTicket)
+            db.query(CustomerServiceTicket)
             .filter_by(id=target_ticket_id, session_id=session_id, user_id=user.id, closed_at=None)
-            .filter(facade.CustomerServiceTicket.status.in_(_ACTIVE_TICKET_STATUSES))
+            .filter(CustomerServiceTicket.status.in_(_ACTIVE_TICKET_STATUSES))
             .first()
         )
-        if ticket is None or not message or facade._looks_like_forbidden_privilege_request(message):
+        if ticket is None or not message or _looks_like_forbidden_privilege_request(message):
             return None, None
         return _anchored_intake_report(ticket, message), None
-    if (
-        not message
-        or facade.is_greeting(message)
-        or facade._looks_like_forbidden_privilege_request(message)
-    ):
+    if not message or is_greeting(message) or _looks_like_forbidden_privilege_request(message):
         return None, None
-    if not facade._is_escalate_only(message):
+    if not _is_escalate_only(message):
         return message, None
     if not session_id:
         return "", None
-    session = (
-        db.query(facade.CustomerServiceSession).filter_by(id=session_id, user_id=user.id).first()
-    )
+    session = db.query(CustomerServiceSession).filter_by(id=session_id, user_id=user.id).first()
     if session is None:
         return "", None
-    report = facade._peek_prior_user_issue(db, session=session, exclude_text=message)
+    report = _peek_prior_user_issue(db, session=session, exclude_text=message)
     if not report:
         return "", None
-    digest = hashlib.sha256(report.encode()).hexdigest()
     replies = (
-        db.query(facade.CustomerServiceMessage)
+        db.query(CustomerServiceMessage)
         .filter_by(session_id=session.id, user_id=user.id, role="assistant")
-        .order_by(facade.CustomerServiceMessage.id.desc())
+        .order_by(CustomerServiceMessage.id.desc())
         .limit(8)
         .all()
     )
-    for reply in replies:
-        payload = facade.json_loads(reply.payload_json, {})
-        cache = payload.get("intake_assessment") if isinstance(payload, dict) else None
-        if isinstance(cache, dict) and cache.get("report_sha256") == digest:
-            review = parse_intake_review(facade.json_dumps(cache.get("review")), report=report)
-            if review.disposition != "needs_review":
-                return report, review
-    return report, None
+    return report, cached_intake_review(report, (reply.payload_json for reply in replies))
 
 
 def handle_customer_message(
@@ -747,7 +740,7 @@ def handle_customer_message(
         and reviewed_report
         and reviewed_report == str(open_ticket.summary or "").strip()
     )
-    prior = _facade().json_loads(open_ticket.evidence_json, {}) if open_ticket else {}
+    prior = json_loads(open_ticket.evidence_json, {}) if open_ticket else {}
     prior = prior if isinstance(prior, dict) else {}
     material = ("order_no", "catalog_id", "complaint_type", "provider", "model")
     extracted = _facade().extract_fields(text, {} if anchored or same_source_report else context)
@@ -910,66 +903,21 @@ def handle_customer_message(
         intent = str(open_ticket.intent or "general")
         need_ticket = True
         session.intent = intent
-        standard = _facade().choose_standard(db, intent)
-        report_matches = (
-            reviewed_report == _anchored_intake_report(open_ticket, text)
-            if anchored
-            else same_source_report
+        standard = choose_standard(db, intent)
+        supplement_only = apply_original_ticket_reassessment(
+            open_ticket,
+            prior,
+            extracted,
+            intake_review,
+            reviewed_report=reviewed_report,
+            current_report=(
+                _anchored_intake_report(open_ticket, text)
+                if anchored
+                else str(open_ticket.summary or "").strip()
+            ),
+            missing_fields=missing_fields(intent, prior),
+            domain_clarified=bool(domain_clarify),
         )
-        previous_review = prior.get("intake_review")
-        previous_review = previous_review if isinstance(previous_review, dict) else {}
-        new_material = any(
-            extracted.get(name) not in (None, "")
-            for name in _facade().missing_fields(intent, prior)
-            if name != "reason"
-        )
-        actionable = (
-            report_matches
-            and intake_review is not None
-            and intake_review.disposition == "actionable"
-            and intake_review.intent == intent
-            and bool(intake_review.evidence_excerpt)
-            and intake_review.evidence_excerpt in (reviewed_report or "")
-            and classified.get("classification_status") != "pending_verification"
-        )
-        status_preserved = (
-            open_ticket.status == "awaiting_customer"
-            or prior.get("dispatch_revocation")
-            or issue_resolution(open_ticket, prior).get("repair_verified") is True
-        )
-        extracted.pop("classification_status", None)
-        report_digest = hashlib.sha256((reviewed_report or "").encode()).hexdigest()
-        if (
-            actionable
-            and intake_review is not None
-            and not status_preserved
-            and previous_review.get("disposition") == "needs_review"
-        ):
-            extracted["intake_review"] = intake_review.model_dump()
-            extracted["intake_reassessment_sha256"] = report_digest
-            if prior.get("classification_status") == "pending_verification":
-                extracted["classification_status"] = "verified"
-        elif (
-            status_preserved
-            or negative_review
-            or (reviewed_report is not None and not report_matches)
-            or prior.get("intake_reassessment_sha256") == report_digest
-            or (
-                previous_review.get("disposition") == "actionable"
-                and not actionable
-                and not new_material
-            )
-            or (
-                intake_review is not None
-                and intake_review.disposition == "actionable"
-                and not actionable
-            )
-        ):
-            supplement_only = True
-        if not domain_clarify or supplement_only:
-            for name in ("issue_domain", "issue_domain_label", "issue_domain_source"):
-                if prior.get(name):
-                    extracted[name] = prior[name]
         classified.update(
             intent=intent,
             triage_lane=resolve_triage_lane(intent),

@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
-from typing import TYPE_CHECKING, Annotated, Literal, cast
+from collections.abc import Iterable
+from typing import TYPE_CHECKING, Annotated, Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, StringConstraints, ValidationError
 
+from modstore_server.customer_issue_delivery_contract import issue_resolution
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 if TYPE_CHECKING:
@@ -77,6 +80,88 @@ def parse_intake_review(content: str, *, report: str) -> IntakeReview:
     if result.disposition != "needs_review" and not result.evidence_excerpt:
         return pending_intake_review()
     return result
+
+
+def cached_intake_review(report: str, replies: Iterable[str | None]) -> IntakeReview | None:
+    """Reuse a settled assessment from this customer's exact original report."""
+    digest = hashlib.sha256(report.encode()).hexdigest()
+    for raw in replies:
+        try:
+            payload = json.loads(raw or "")
+        except (TypeError, ValueError):
+            continue
+        cache = payload.get("intake_assessment") if isinstance(payload, dict) else None
+        if isinstance(cache, dict) and cache.get("report_sha256") == digest:
+            review = parse_intake_review(json.dumps(cache.get("review")), report=report)
+            if review.disposition != "needs_review":
+                return review
+    return None
+
+
+def apply_original_ticket_reassessment(
+    ticket: CustomerServiceTicket,
+    prior: dict[str, Any],
+    extracted: dict[str, Any],
+    review: IntakeReview | None,
+    *,
+    reviewed_report: str | None,
+    current_report: str | None,
+    missing_fields: Iterable[str],
+    domain_clarified: bool,
+) -> bool:
+    """Merge a verified reassessment into the proposed evidence for the locked original.
+
+    Return True when the message can be recorded as a supplement only.
+    """
+    report_matches = reviewed_report == current_report
+    previous_review = prior.get("intake_review")
+    previous_disposition = (
+        previous_review.get("disposition") if isinstance(previous_review, dict) else None
+    )
+    new_material = any(
+        extracted.get(name) not in (None, "") for name in missing_fields if name != "reason"
+    )
+    classification_status = extracted.pop("classification_status", None)
+    actionable = (
+        report_matches
+        and review is not None
+        and review.disposition == "actionable"
+        and review.intent == (ticket.intent or "general")
+        and bool(review.evidence_excerpt)
+        and review.evidence_excerpt in (reviewed_report or "")
+        and classification_status != "pending_verification"
+    )
+    status_preserved = bool(
+        ticket.status == "awaiting_customer"
+        or prior.get("dispatch_revocation")
+        or issue_resolution(ticket, prior).get("repair_verified") is True
+    )
+    report_digest = hashlib.sha256((reviewed_report or "").encode()).hexdigest()
+    supplement_only = False
+    if (
+        actionable
+        and review is not None
+        and not status_preserved
+        and previous_disposition == "needs_review"
+    ):
+        extracted["intake_review"] = review.model_dump()
+        extracted["intake_reassessment_sha256"] = report_digest
+        if prior.get("classification_status") == "pending_verification":
+            extracted["classification_status"] = "verified"
+    else:
+        supplement_only = (
+            status_preserved
+            or (review is not None and review.disposition in {"invalid", "out_of_scope"})
+            or (reviewed_report is not None and not report_matches)
+            or prior.get("intake_reassessment_sha256") == report_digest
+            or (previous_disposition == "actionable" and not actionable and not new_material)
+            or (review is not None and review.disposition == "actionable" and not actionable)
+        )
+    if not domain_clarified or supplement_only:
+        for name in ("issue_domain", "issue_domain_label", "issue_domain_source"):
+            if prior.get(name):
+                extracted[name] = prior[name]
+    return supplement_only
 
 
 async def review_report_async(report: str) -> IntakeReview:
