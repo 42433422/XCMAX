@@ -183,7 +183,8 @@ def test_ticket_transcript_binds_owner_ticket_and_session_and_restores_raster_at
             )
         db.commit()
     base = "/api/customer-service"
-    route = f"{base}/tickets/{tid}/transcript"
+    detail_route = f"{base}/tickets/{tid}"
+    route = f"{detail_route}?include_transcript=true"
     generic = f"{base}/sessions/{sid}"
 
     def get_as(user, path):
@@ -194,6 +195,10 @@ def test_ticket_transcript_binds_owner_ticket_and_session_and_restores_raster_at
         return {row["content"]: row["payload"] for row in body["messages"]}
 
     try:
+        ordinary = get_as(owner, detail_route)
+        assert ordinary.status_code == 200
+        assert ordinary.json() == get_as(owner, f"{detail_route}?include_transcript=false").json()
+        assert set(ordinary.json()) == {"ticket", "decisions", "actions", "audit_logs"}
         owner_reply = get_as(owner, route)
         assert owner_reply.status_code == 200, owner_reply.text
         body = owner_reply.json()

@@ -274,7 +274,7 @@ describe('customerService API', () => {
 
   it('customerServiceTicketTranscript', async () => {
     await customerService.customerServiceTicketTranscript(1)
-    expect(mReq).toHaveBeenCalledWith('/api/customer-service/tickets/1/transcript', { timeoutMs: 15_000 })
+    expect(mReq).toHaveBeenCalledWith('/api/customer-service/tickets/1?include_transcript=true', { timeoutMs: 15_000 })
   })
 
   it('customerServiceActions', async () => {

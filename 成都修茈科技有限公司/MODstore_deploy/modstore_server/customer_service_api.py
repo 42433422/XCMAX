@@ -484,15 +484,7 @@ async def close_ticket_as_admin(
     return close_ticket_with_evidence(db, user, ticket_id, body.model_dump())
 
 
-@router.get("/tickets/{ticket_id}/transcript")
-async def ticket_transcript(
-    ticket_id: int,
-    db: Session = Depends(get_db),
-    user: User = Depends(_get_current_user),
-):
-    if isinstance(user, TicketReader):
-        raise HTTPException(403, "工单读取授权不包含会话内容")
-    ticket = _visible_ticket_or_404(db, user, ticket_id)
+def _ticket_transcript(db: Session, user: User, ticket: CustomerServiceTicket):
     session = db.get(CustomerServiceSession, ticket.session_id)
     if session is None or session.user_id != ticket.user_id:
         raise HTTPException(404, "原客服会话不存在")
@@ -521,8 +513,13 @@ async def ticket_detail(
     ticket_id: int,
     db: Session = Depends(get_db),
     user: User = Depends(_get_current_user),
+    include_transcript: bool = False,
 ):
+    if include_transcript and isinstance(user, TicketReader):
+        raise HTTPException(403, "工单读取授权不包含会话内容")
     ticket = _visible_ticket_or_404(db, user, ticket_id)
+    if include_transcript:
+        return _ticket_transcript(db, user, ticket)
     if isinstance(user, TicketReader):
         return reader_detail(db, ticket, user)
 
