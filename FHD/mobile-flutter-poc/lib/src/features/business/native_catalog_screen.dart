@@ -10,6 +10,7 @@ import '../../policy/mobile_error_policy.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/we_ui.dart';
 import '../workspace/native_workspace_session.dart';
+import '../workspace/workspace_ui.dart';
 
 part 'native_catalog_transfer.part.dart';
 part 'native_catalog_editor.part.dart';
@@ -50,11 +51,12 @@ class _NativeCatalogScreenState extends State<NativeCatalogScreen> {
   final Set<Object> _selected = {};
   List<_Field> _fields = [];
   List<String> _units = [];
-  String _unit = '', _status = 'all';
+  String _unit = '', _keyword = '', _status = 'all';
   String? _error, _schemaError, _unitsError;
   int _page = 1, _ticket = 0;
   int? _total;
   bool _loading = true, _busy = false, _more = false, _schemaLoading = true;
+  bool _selecting = false;
   bool get _products => widget.resource == 'products';
   bool get _shipments => widget.resource == 'shipment-records';
   String get _endpoint =>
@@ -67,8 +69,8 @@ class _NativeCatalogScreenState extends State<NativeCatalogScreen> {
   List<Map<String, Object?>> get _visibleRows => !_shipments
       ? _rows
       : _rows.where((row) {
-          final status = '${row['status'] ?? ''}'.toLowerCase();
-          final keyword = _search.text.trim().toLowerCase();
+          final status = '${row['status'] ?? ''}'.trim().toLowerCase();
+          final keyword = _keyword.toLowerCase();
           return (_status == 'all' ||
                   (_status == 'printed'
                       ? status == 'printed'
@@ -103,6 +105,7 @@ class _NativeCatalogScreenState extends State<NativeCatalogScreen> {
         _rows = [];
         _selected.clear();
         _search.clear();
+        _keyword = '';
       });
     }
   }
@@ -192,6 +195,22 @@ class _NativeCatalogScreenState extends State<NativeCatalogScreen> {
     }
   }
 
+  void _submitSearch(String input) {
+    if (_busy) return;
+    final keyword = input.trim();
+    if (_keyword != keyword) {
+      _keyword = keyword;
+      _resetResults();
+    }
+    unawaited(_load());
+  }
+
+  void _resetResults() {
+    _rows = [];
+    _total = null;
+    _more = false;
+  }
+
   Future<void> _load({bool append = false}) async {
     if (!_session.active) return;
     final ticket = ++_ticket;
@@ -199,22 +218,18 @@ class _NativeCatalogScreenState extends State<NativeCatalogScreen> {
     setState(() {
       _loading = true;
       _error = null;
-      _selected.clear();
+      if (!append) _selected.clear();
     });
     try {
       if (_shipments && _unit.isEmpty) {
-        setState(() {
-          _rows = [];
-          _total = null;
-          _more = false;
-        });
+        setState(_resetResults);
         return;
       }
       final response = await _session
           .request('$_endpoint/${_shipments ? 'records' : 'list'}', query: {
         'page': '$page',
         'per_page': '30',
-        if (_search.text.trim().isNotEmpty) 'keyword': _search.text.trim(),
+        if (_keyword.isNotEmpty) 'keyword': _keyword,
         if (_unit.isNotEmpty)
           (_products
               ? 'unit'
@@ -275,6 +290,7 @@ class _NativeCatalogScreenState extends State<NativeCatalogScreen> {
       if (changed is String) {
         setState(() {
           _unit = changed;
+          _resetResults();
         });
         await _loadUnits();
       }
@@ -338,215 +354,414 @@ class _NativeCatalogScreenState extends State<NativeCatalogScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = AppTheme.colors(context);
+    final rows = _visibleRows;
     return Scaffold(
-        backgroundColor: colors.page,
-        body: SafeArea(
-            child: Column(children: [
+      backgroundColor: AppTheme.colors(context).page,
+      body: SafeArea(
+        child: Column(children: [
           WeTopBar(
-              title: widget.title,
-              showBack: true,
-              onBack: () => Navigator.of(context).maybePop(),
-              actions: [
-                _transferMenu(),
-                IconButton(
-                    onPressed: _session.active && !_busy ? _initialize : null,
-                    tooltip: '刷新',
-                    icon: const Icon(Icons.refresh))
-              ]),
-          if (!_session.active)
-            const Expanded(child: Center(child: Text('账号或连接已切换，请返回后重新打开')))
-          else
+            title: widget.title,
+            showBack: true,
+            actions: [
+              _transferMenu(),
+              IconButton(
+                onPressed: _session.active && !_busy ? _initialize : null,
+                tooltip: '刷新',
+                icon: const Icon(Icons.refresh),
+              ),
+            ],
+          ),
+          if (_session.active)
             Expanded(
-                child: RefreshIndicator(
-                    onRefresh: _initialize,
-                    child: ListView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.all(16),
-                        children: [
-                          TextField(
-                              controller: _search,
-                              textInputAction: TextInputAction.search,
-                              onSubmitted: (_) => _load(),
-                              decoration: InputDecoration(
-                                  hintText: _products
-                                      ? '搜索型号或名称'
-                                      : _shipments
-                                          ? '搜索当前单位记录'
-                                          : '搜索名称、联系人或电话',
-                                  prefixIcon: const Icon(Icons.search),
-                                  suffixIcon: IconButton(
-                                      tooltip: '搜索',
-                                      onPressed: _loading ? null : _load,
-                                      icon: const Icon(Icons.arrow_forward)))),
-                          if (_units.isNotEmpty)
-                            Padding(
-                                padding: const EdgeInsets.only(top: 12),
-                                child: DropdownButtonFormField<String>(
-                                    key: ValueKey('unit-$_unit'),
-                                    initialValue: _unit,
-                                    isExpanded: true,
-                                    decoration: const InputDecoration(
-                                        labelText: '所属客户'),
-                                    items: [
-                                      const DropdownMenuItem(
-                                          value: '', child: Text('全部客户')),
-                                      for (final unit in {
-                                        if (_unit.isNotEmpty) _unit,
-                                        ..._units
-                                      })
-                                        DropdownMenuItem(
-                                            value: unit,
-                                            child: Text(unit,
-                                                overflow:
-                                                    TextOverflow.ellipsis))
-                                    ],
-                                    onChanged: _busy
-                                        ? null
-                                        : (value) {
-                                            setState(() {
-                                              _unit = value ?? '';
-                                            });
-                                            unawaited(_load());
-                                          })),
-                          if (_shipments)
-                            Padding(
-                                padding: const EdgeInsets.only(top: 12),
-                                child: Wrap(spacing: 8, children: [
-                                  for (final entry in const {
-                                    'all': '全部状态',
-                                    'pending': '未打印',
-                                    'printed': '已打印'
-                                  }.entries)
-                                    ChoiceChip(
-                                        label: Text(entry.value),
-                                        selected: _status == entry.key,
-                                        onSelected: (_) => setState(() {
-                                              _status = entry.key;
-                                            }))
-                                ])),
-                          const SizedBox(height: 16),
-                          Row(children: [
-                            Expanded(
-                                child: Text(
-                                    _total == null
-                                        ? '已读取 ${_rows.length} 条'
-                                        : '共 $_total 条',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleMedium)),
-                            if (_selected.isNotEmpty)
-                              IconButton(
-                                  tooltip: '删除所选记录',
-                                  onPressed: _editable
-                                      ? () => _delete(_selected.toList())
-                                      : null,
-                                  icon: const Icon(Icons.delete_outline)),
-                            FilledButton.icon(
-                                onPressed: _editable ? () => _edit() : null,
-                                icon: const Icon(Icons.add),
-                                label: const Text('新建'))
-                          ]),
-                          if (_unitsError != null)
-                            _errorPanel('购买单位读取失败：$_unitsError', _loadUnits),
-                          if (_schemaError != null)
-                            _errorPanel('字段配置读取失败：$_schemaError', _loadSchema),
-                          if (_error != null)
-                            _errorPanel('读取失败：$_error', _load),
-                          if (_loading || _busy)
-                            const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 12),
-                                child: LinearProgressIndicator()),
-                          if (!_loading && _error == null && _rows.isEmpty)
-                            Padding(
-                                padding: const EdgeInsets.all(40),
-                                child: Center(
-                                    child: Text(_shipments && _unit.isEmpty
-                                        ? '请先选择购买单位'
-                                        : '暂无记录'))),
-                          for (final row in _visibleRows)
-                            Card(
-                                margin: const EdgeInsets.only(top: 12),
-                                child: Padding(
-                                    padding: const EdgeInsets.all(12),
-                                    child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Row(children: [
-                                            if (row['id'] != null &&
-                                                !_shipments)
-                                              Checkbox(
-                                                  value: _selected
-                                                      .contains(row['id']),
-                                                  onChanged: !_editable
-                                                      ? null
-                                                      : (checked) {
-                                                          setState(() {
-                                                            if (checked ==
-                                                                true) {
-                                                              _selected.add(
-                                                                  row['id']!);
-                                                            } else {
-                                                              _selected.remove(
-                                                                  row['id']);
-                                                            }
-                                                          });
-                                                        }),
-                                            Expanded(
-                                                child: Text(_name(row),
-                                                    style: Theme.of(context)
-                                                        .textTheme
-                                                        .titleMedium)),
-                                            IconButton(
-                                                tooltip: '编辑 ${_name(row)}',
-                                                onPressed: _editable &&
-                                                        row['id'] != null
-                                                    ? () => _edit(row)
-                                                    : null,
-                                                icon: const Icon(
-                                                    Icons.edit_outlined))
-                                          ]),
-                                          for (final field in (_shipments
-                                              ? _shipmentEditFields
-                                              : _fields.isEmpty
-                                                  ? _defaultFields
-                                                  : _fields))
-                                            if (field.key != 'name' &&
-                                                '${row[field.key] ?? ''}'
-                                                    .isNotEmpty)
-                                              Padding(
-                                                  padding: const EdgeInsets
-                                                      .symmetric(vertical: 3),
-                                                  child: Text(
-                                                      '${field.label}：${row[field.key]}')),
-                                          if (row['id'] != null)
-                                            Align(
-                                                alignment:
-                                                    Alignment.centerRight,
-                                                child: TextButton(
-                                                    onPressed: _editable
-                                                        ? () => _delete(
-                                                            [row['id']!])
-                                                        : null,
-                                                    child: const Text('删除'))),
-                                        ]))),
-                          if (_more)
-                            Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: OutlinedButton(
-                                    onPressed: !_loading && !_busy
-                                        ? () => _load(append: true)
-                                        : null,
-                                    child: const Text('加载更多'))),
-                        ]))),
-        ])));
+              child: RefreshIndicator(
+                onRefresh: _initialize,
+                child: ListView.builder(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                  itemCount: rows.length + 2,
+                  itemBuilder: (context, index) {
+                    if (index == 0) return _listHeader(rows.length);
+                    if (index <= rows.length) {
+                      final row = rows[index - 1];
+                      return Padding(
+                        key: ValueKey((widget.resource, row['id'] ?? index)),
+                        padding: const EdgeInsets.only(top: 8),
+                        child: _recordTile(row),
+                      );
+                    }
+                    return _more
+                        ? Padding(
+                            padding: const EdgeInsets.only(top: 16),
+                            child: OutlinedButton(
+                              onPressed: !_loading && !_busy
+                                  ? () => _load(append: true)
+                                  : null,
+                              child: const Text('加载更多'),
+                            ),
+                          )
+                        : const SizedBox.shrink();
+                  },
+                ),
+              ),
+            )
+          else
+            const Expanded(
+              child: Center(child: Text('账号或连接已切换，请返回后重新打开')),
+            ),
+          if (_session.active && _selecting) _selectionBar(),
+        ]),
+      ),
+    );
   }
 
+  Widget _listHeader(int visibleCount) {
+    final colors = AppTheme.colors(context);
+    final theme = Theme.of(context).textTheme;
+    final filtered = _shipments && (_status != 'all' || _keyword.isNotEmpty);
+    final count =
+        _shipments || _total == null ? '显示 $visibleCount 条' : '共 $_total 条';
+    final noMatch = _keyword.isNotEmpty || (_shipments && _status != 'all');
+    final empty = _shipments && _unit.isEmpty
+        ? '请先选择购买单位'
+        : noMatch
+            ? '没有符合筛选条件的记录'
+            : '暂无记录';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        WorkspacePanel(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (_shipments || _units.isNotEmpty) ...[
+                _unitFilter(),
+                const SizedBox(height: 12),
+              ],
+              ValueListenableBuilder(
+                valueListenable: _search,
+                builder: (context, value, _) => TextField(
+                  controller: _search,
+                  enabled: !_busy && (!_shipments || _unit.isNotEmpty),
+                  textInputAction: TextInputAction.search,
+                  onSubmitted: _submitSearch,
+                  decoration: InputDecoration(
+                    border: const OutlineInputBorder(),
+                    hintText: _products
+                        ? '搜索型号或名称'
+                        : _shipments
+                            ? '搜索已读取的出货记录'
+                            : '搜索名称、联系人或电话',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: value.text.isNotEmpty || _keyword.isNotEmpty
+                        ? IconButton(
+                            tooltip:
+                                value.text.trim() != _keyword ? '搜索' : '清除搜索',
+                            onPressed: _loading || _busy
+                                ? null
+                                : () {
+                                    if (value.text.trim() == _keyword) {
+                                      _search.clear();
+                                    }
+                                    _submitSearch(_search.text);
+                                  },
+                            icon: Icon(value.text.trim() != _keyword
+                                ? Icons.arrow_forward
+                                : Icons.close),
+                          )
+                        : null,
+                  ),
+                ),
+              ),
+              if (_shipments && _unit.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    for (final option in const {
+                      'all': '全部状态',
+                      'pending': '未打印',
+                      'printed': '已打印',
+                    }.entries)
+                      ChoiceChip(
+                        label: Text(option.value),
+                        selected: _status == option.key,
+                        onSelected: _busy
+                            ? null
+                            : (_) => setState(() => _status = option.key),
+                      ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 12,
+          runSpacing: 8,
+          children: [
+            if (!_shipments || _unit.isNotEmpty)
+              Semantics(
+                liveRegion: true,
+                child: Text(
+                  filtered ? '$count · 已读取 ${_rows.length} 条' : count,
+                  style:
+                      theme.bodyMedium?.copyWith(color: colors.textSecondary),
+                ),
+              ),
+            if (!_selecting)
+              Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 4,
+                runSpacing: 6,
+                children: [
+                  if (!_shipments && _rows.isNotEmpty)
+                    TextButton(
+                      onPressed: _editable
+                          ? () => setState(() => _selecting = true)
+                          : null,
+                      child: const Text('选择'),
+                    ),
+                  FilledButton.icon(
+                    onPressed: _editable ? () => _edit() : null,
+                    icon: const Icon(Icons.add),
+                    label: const Text('新建'),
+                  ),
+                ],
+              ),
+          ],
+        ),
+        if (_loading || _busy || _schemaLoading) ...[
+          const SizedBox(height: 8),
+          const LinearProgressIndicator(),
+        ],
+        if (_unitsError != null) _errorPanel('单位读取失败：$_unitsError', _loadUnits),
+        if (_schemaError != null)
+          _errorPanel('字段配置读取失败：$_schemaError', _loadSchema),
+        if (_error != null) _errorPanel('读取失败：$_error', _load),
+        if (!_loading && _error == null && visibleCount == 0)
+          WorkspaceTransition(
+            child: Padding(
+              key: ValueKey(empty),
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: WorkspacePanel(
+                child: Column(children: [
+                  Icon(
+                    noMatch ? Icons.search_off : Icons.inbox_outlined,
+                    color: colors.textSecondary,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(empty, textAlign: TextAlign.center),
+                ]),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _selectionBar() {
+    final colors = AppTheme.colors(context);
+    return ColoredBox(
+      color: colors.surface,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        child: Row(
+          children: [
+            Expanded(
+              child: Semantics(
+                liveRegion: true,
+                child: Text('已选择 ${_selected.length} 条'),
+              ),
+            ),
+            IconButton(
+              tooltip: '删除所选记录',
+              onPressed: _editable && _selected.isNotEmpty
+                  ? () => _delete(_selected.toList())
+                  : null,
+              icon: const Icon(Icons.delete_outline),
+              color: colors.danger,
+            ),
+            TextButton(
+              onPressed: _busy
+                  ? null
+                  : () => setState(() {
+                        _selecting = false;
+                        _selected.clear();
+                      }),
+              child: const Text('完成'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _unitFilter() => DropdownButtonFormField<String>(
+        key: ValueKey('unit-$_unit'),
+        initialValue: _unit,
+        isExpanded: true,
+        decoration: InputDecoration(
+          border: const OutlineInputBorder(),
+          labelText: _products ? '产品单位' : '购买单位',
+        ),
+        items: [
+          DropdownMenuItem(
+            value: '',
+            child: Text(_shipments ? '选择单位' : '全部单位'),
+          ),
+          for (final unit in {if (_unit.isNotEmpty) _unit, ..._units})
+            DropdownMenuItem(
+              value: unit,
+              child: Text(unit, overflow: TextOverflow.ellipsis),
+            ),
+        ],
+        onChanged: _busy || _units.isEmpty
+            ? null
+            : (value) {
+                final unit = value ?? '';
+                if (unit == _unit) return;
+                setState(() {
+                  _unit = unit;
+                  _resetResults();
+                });
+                unawaited(_load());
+              },
+      );
+
+  Widget _recordTile(Map<String, Object?> row) {
+    final colors = AppTheme.colors(context);
+    final text = Theme.of(context).textTheme;
+    final id = row['id'];
+    final title = Text(_name(row), style: text.titleSmall);
+    final fields = _shipments
+        ? _shipmentEditFields
+        : _fields.isEmpty
+            ? _defaultFields
+            : _fields;
+    final summaryKeys = _products
+        ? const ['model_number', 'specification', 'price']
+        : _shipments
+            ? const ['model_number', 'quantity_tins', 'amount']
+            : const ['contact_person', 'contact_phone'];
+    final shipmentStatus = _shipments ? _shipmentStatus(row['status']) : null;
+    final summary = Wrap(
+      spacing: 10,
+      runSpacing: 4,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        for (final key in summaryKeys)
+          for (final field in fields)
+            if (field.key == key && '${row[key] ?? ''}'.isNotEmpty)
+              Text(
+                '${field.label}：${row[key]}',
+                style: text.bodySmall?.copyWith(color: colors.textSecondary),
+              ),
+        if (shipmentStatus != null)
+          WorkspaceBadge(
+            label: shipmentStatus,
+            color: shipmentStatus == '已打印' ? colors.success : null,
+          ),
+      ],
+    );
+    void toggleSelection() => setState(() {
+          if (id == null) return;
+          if (!_selected.add(id)) _selected.remove(id);
+        });
+    return WorkspacePanel(
+      padding: EdgeInsets.zero,
+      child: _selecting
+          ? ListTile(
+              title: title,
+              subtitle: summary,
+              selected: _selected.contains(id),
+              leading: Checkbox(
+                semanticLabel: '选择 ${_name(row)}',
+                value: _selected.contains(id),
+                onChanged:
+                    _editable && id != null ? (_) => toggleSelection() : null,
+              ),
+              onTap: _editable && id != null ? toggleSelection : null,
+            )
+          : ExpansionTile(
+              key: PageStorageKey((widget.resource, id ?? row)),
+              title: title,
+              subtitle: summary,
+              expansionAnimationStyle: AnimationStyle(
+                duration: AppTheme.motionDuration(context),
+                reverseDuration: AppTheme.motionDuration(context),
+              ),
+              shape: const Border(),
+              collapsedShape: const Border(),
+              expandedCrossAxisAlignment: CrossAxisAlignment.start,
+              childrenPadding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+              children: [
+                for (final field in fields)
+                  if (field.key != 'name' &&
+                      field.key != 'status' &&
+                      !summaryKeys.contains(field.key) &&
+                      '${row[field.key] ?? ''}'.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Text('${field.label}：${row[field.key]}'),
+                    ),
+                if (id != null)
+                  Align(
+                    alignment: AlignmentDirectional.centerEnd,
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      children: [
+                        TextButton(
+                          style: TextButton.styleFrom(
+                            foregroundColor: colors.danger,
+                          ),
+                          onPressed: _editable ? () => _delete([id]) : null,
+                          child: const Text('删除'),
+                        ),
+                        FilledButton.tonalIcon(
+                          onPressed: _editable ? () => _edit(row) : null,
+                          icon: const Icon(Icons.edit_outlined),
+                          label: Text('编辑', semanticsLabel: '编辑 ${_name(row)}'),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+    );
+  }
+
+  String _shipmentStatus(Object? status) =>
+      switch (status?.toString().trim().toLowerCase()) {
+        'printed' => '已打印',
+        null || '' || 'pending' => '未打印',
+        _ => status.toString(),
+      };
+
   Widget _errorPanel(String message, VoidCallback retry) => Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(message),
-        TextButton(onPressed: retry, child: const Text('重试'))
-      ]));
+        padding: const EdgeInsets.only(top: 8),
+        child: WorkspacePanel(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.error_outline,
+                      color: Theme.of(context).colorScheme.error),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(message)),
+                ],
+              ),
+              TextButton(
+                  onPressed: _busy ? null : retry, child: const Text('重试')),
+            ],
+          ),
+        ),
+      );
 }

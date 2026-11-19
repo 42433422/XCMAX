@@ -19,7 +19,7 @@ flutter run
 ## 策略摘要
 
 - 固定联系人 / 员工头像 / 超级员工路由：见 [`FLUTTER_UNIFICATION.md`](FLUTTER_UNIFICATION.md)
-- 设计 token：`FHD/config/mobile_design_tokens.json`
+- 设计 token：`FHD/config/mobile_design_tokens.json`。业务工作台复用 [Flutter Material 3.44.7](https://github.com/flutter/flutter/tree/3.44.7/packages/flutter/lib/src/material)（BSD-3-Clause）的列表、表单与动效组件。
 - 错误文案：`lib/src/policy/mobile_error_policy.dart`（`mobileProductErrorMessage`）
 
 ## 已覆盖流程（节选）

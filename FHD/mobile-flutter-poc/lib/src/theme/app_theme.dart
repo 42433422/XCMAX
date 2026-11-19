@@ -40,7 +40,7 @@ class AppTheme {
       seedColor: brand,
       brightness: Brightness.light,
     ).copyWith(
-      primary: brand,
+      primary: const Color(0xFF5659D9),
       onPrimary: surface,
       primaryContainer: brandContainer,
       onPrimaryContainer: const Color(0xFF312E81),
@@ -140,7 +140,7 @@ class AppTheme {
       brightness: Brightness.dark,
     ).copyWith(
       primary: darkBrand,
-      onPrimary: Colors.white,
+      onPrimary: const Color(0xFF101333),
       primaryContainer: const Color(0xFF1A3A80),
       onPrimaryContainer: const Color(0xFFB8CCFF),
       secondary: success,

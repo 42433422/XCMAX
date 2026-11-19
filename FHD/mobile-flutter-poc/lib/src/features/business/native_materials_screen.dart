@@ -7,6 +7,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/we_ui.dart';
 import '../workspace/native_record_editor.dart';
 import '../workspace/native_workspace_session.dart';
+import '../workspace/workspace_ui.dart';
 
 class NativeMaterialsScreen extends StatefulWidget {
   const NativeMaterialsScreen(
@@ -28,6 +29,7 @@ class _NativeMaterialsScreenState extends State<NativeMaterialsScreen> {
   List<Map<String, Object?>> _rows = [];
   Map<String, Object?>? _warehouse;
   bool _loading = true, _busy = false, _movementOutcomeUnknown = false;
+  bool _loadedIndustry = false;
   int _ticket = 0, _page = 1;
   bool _hasNextPage = false;
   String? _error;
@@ -45,8 +47,8 @@ class _NativeMaterialsScreenState extends State<NativeMaterialsScreen> {
             : _industry == '涂料'
                 ? '原材料'
                 : _industry == '电商'
-                    ? '商品'
-                    : '库存',
+                    ? '商品档案'
+                    : '物料档案',
         'warehouses': _industry == '考勤' ? '场所库位' : '仓库库位',
         'transactions': _industry == '考勤' ? '调拨' : '出入库',
         'suppliers': _industry == '考勤' ? '协作方' : '供应商'
@@ -88,7 +90,9 @@ class _NativeMaterialsScreenState extends State<NativeMaterialsScreen> {
       _error = null;
     });
     try {
-      final industry = await _session.request('api/system/industry');
+      final industry = _loadedIndustry
+          ? null
+          : await _session.request('api/system/industry');
       final result = await _session.request(_paths[tab]!, query: {
         if (tab == 'materials' && _search.text.trim().isNotEmpty)
           'search': _search.text.trim(),
@@ -101,7 +105,10 @@ class _NativeMaterialsScreenState extends State<NativeMaterialsScreen> {
       });
       if (mounted && _session.active && ticket == _ticket) {
         setState(() {
-          _industry = '${_map(industry['data'])['id'] ?? ''}';
+          if (industry != null) {
+            _industry = '${_map(industry['data'])['id'] ?? ''}';
+            _loadedIndustry = true;
+          }
           _rows = _maps(result['data']);
           _page = page;
           final total = int.tryParse('${result['total']}');
@@ -207,11 +214,12 @@ class _NativeMaterialsScreenState extends State<NativeMaterialsScreen> {
     // before offering a selection; fail closed if the catalog cannot be loaded.
     for (var page = 1; page <= 100; page++) {
       final result = await _session.request('api/products/list', query: {
-        'page': '$page', 'per_page': '100',
+        'page': '$page',
+        'per_page': '100',
       });
       final batch = _maps(result['data']);
-      if (batch.length > 100 || batch.any((row) =>
-          row['id'] == null || !seen.add('${row['id']}'))) {
+      if (batch.length > 100 ||
+          batch.any((row) => row['id'] == null || !seen.add('${row['id']}'))) {
         throw StateError('产品目录分页异常，请稍后重试');
       }
       rows.addAll(batch);
@@ -230,15 +238,12 @@ class _NativeMaterialsScreenState extends State<NativeMaterialsScreen> {
       _busy = true;
     });
     try {
-      final values = await Future.wait([
-        _inventoryProducts(),
-        _session.request('api/inventory/warehouses')
-      ]);
+      final values = await Future.wait(
+          [_inventoryProducts(), _session.request('api/inventory/warehouses')]);
       if (!mounted || !_session.active) return;
       final products = {
             for (final r in _maps(values[0]['data']))
-              if (r['id'] != null)
-                '${r['id']}': '${r['name'] ?? r['model_number'] ?? r['code'] ?? r['id']}'
+              if (r['id'] != null) '${r['id']}': _productChoiceLabel(r)
           },
           warehouses = {
             for (final r in _maps(values[1]['data']))
@@ -329,27 +334,34 @@ class _NativeMaterialsScreenState extends State<NativeMaterialsScreen> {
         if (!_session.active)
           const Expanded(child: Center(child: Text('账号或连接已切换，请重新打开')))
         else ...[
-          SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(children: [
-                for (final tab in _tabs.entries)
-                  Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: ChoiceChip(
-                          label: Text(tab.value),
-                          selected: _tab == tab.key ||
-                              _tab == 'locations' && tab.key == 'warehouses',
-                          onSelected: _busy
-                              ? null
-                              : (_) {
-                                  setState(() {
-                                    _tab = tab.key;
-                                    _rows = [];
-                                  });
-                                  unawaited(_load());
-                                }))
-              ])),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  for (final tab in _tabs.entries)
+                    ChoiceChip(
+                      label: Text(tab.value),
+                      selected: _tab == tab.key ||
+                          _tab == 'locations' && tab.key == 'warehouses',
+                      materialTapTargetSize: MaterialTapTargetSize.padded,
+                      onSelected: _busy
+                          ? null
+                          : (_) {
+                              setState(() {
+                                _tab = tab.key;
+                                _rows = [];
+                              });
+                              unawaited(_load());
+                            },
+                    ),
+                ],
+              ),
+            ),
+          ),
           if (_loading || _busy) const LinearProgressIndicator(),
           Expanded(
               child: RefreshIndicator(
@@ -358,87 +370,11 @@ class _NativeMaterialsScreenState extends State<NativeMaterialsScreen> {
                       physics: const AlwaysScrollableScrollPhysics(),
                       padding: const EdgeInsets.all(16),
                       children: [
-                        if (_tab == 'materials') ...[
-                          TextField(
-                              controller: _search,
-                              decoration: const InputDecoration(
-                                  hintText: '搜索资源',
-                                  prefixIcon: Icon(Icons.search)),
-                              textInputAction: TextInputAction.search,
-                              onSubmitted: (_) => _load()),
-                          const SizedBox(height: 12),
-                          DropdownButtonFormField<String>(
-                              key: ValueKey(_category),
-                              initialValue: _category,
-                              isExpanded: true,
-                              decoration:
-                                  const InputDecoration(labelText: '分类'),
-                              items: [
-                                const DropdownMenuItem(
-                                    value: '', child: Text('全部分类')),
-                                for (final c in {
-                                  if (_category.isNotEmpty) _category,
-                                  ..._categories
-                                })
-                                  DropdownMenuItem(value: c, child: Text(c))
-                              ],
-                              onChanged: _busy
-                                  ? null
-                                  : (v) {
-                                      setState(() {
-                                        _category = v ?? '';
-                                      });
-                                      unawaited(_load());
-                                    }),
-                        ],
-                        if (_tab == 'locations')
-                          TextButton(
-                              onPressed: _busy
-                                  ? null
-                                  : () {
-                                      setState(() {
-                                        _tab = 'warehouses';
-                                        _rows = [];
-                                      });
-                                      unawaited(_load());
-                                    },
-                              child: const Text('返回仓库列表')),
-                        Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            child: Wrap(
-                                spacing: 12,
-                                crossAxisAlignment: WrapCrossAlignment.center,
-                                children: [
-                                  Text(_title,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .titleMedium),
-                                  if (_tab != 'transactions')
-                                    FilledButton.icon(
-                                        onPressed:
-                                            _enabled ? () => _edit() : null,
-                                        icon: const Icon(Icons.add),
-                                        label: const Text('添加')),
-                                  if (_tab == 'materials')
-                                    TextButton(
-                                        onPressed: _enabled ? _export : null,
-                                        child: const Text('导出 Excel')),
-                                  if (_tab == 'transactions') ...[
-                                    FilledButton(
-                                        onPressed:
-                                            _enabled && !_movementOutcomeUnknown
-                                                ? () => _move(true) : null,
-                                        child: const Text('入库')),
-                                    OutlinedButton(
-                                        onPressed: _enabled && !_movementOutcomeUnknown
-                                            ? () => _move(false)
-                                            : null,
-                                        child: const Text('出库'))
-                                  ],
-                                ])),
+                        _tools(),
                         if (_movementOutcomeUnknown)
                           const ListTile(
-                              title: Text('上次库存操作结果未知。请先核对出入库流水，确认未入账后再重新打开页面操作；刷新不会重新提交。')),
+                              title: Text(
+                                  '上次库存操作结果未知。请先核对出入库流水，确认未入账后再重新打开页面操作；刷新不会重新提交。')),
                         if (_error != null)
                           ListTile(
                               title: Text(_error!),
@@ -449,82 +385,204 @@ class _NativeMaterialsScreenState extends State<NativeMaterialsScreen> {
                           const Padding(
                               padding: EdgeInsets.all(32),
                               child: Center(child: Text('暂无记录'))),
-                        for (final row in _rows)
-                          Card(
-                              child: Padding(
-                                  padding: const EdgeInsets.all(16),
-                                  child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                            '${row['name'] ?? row['product_name'] ?? row['code'] ?? '记录'}',
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .titleMedium),
-                                        for (final e in _labels.entries)
-                                          if (row[e.key] != null)
-                                            Padding(
-                                                padding: const EdgeInsets.only(
-                                                    top: 6),
-                                                child: Text(
-                                                    '${e.value}：${_display(e.key, row[e.key])}')),
-                                        if (_tab == 'materials' &&
-                                            (num.tryParse(
-                                                        '${row['quantity']}') ??
-                                                    0) <
-                                                (num.tryParse(
-                                                        '${row['min_stock']}') ??
-                                                    0))
-                                          Text('低于库存预警值',
-                                              style: TextStyle(
-                                                  color: Theme.of(context)
-                                                      .colorScheme
-                                                      .error)),
-                                        if (row['id'] != null)
-                                          Wrap(spacing: 12, children: [
-                                            if (_tab != 'transactions')
-                                              TextButton(
-                                                  onPressed: _enabled
-                                                      ? () => _edit(row)
-                                                      : null,
-                                                  child: const Text('编辑')),
-                                            if (_tab == 'materials')
-                                              TextButton(
-                                                  onPressed: _enabled
-                                                      ? () => _delete(row)
-                                                      : null,
-                                                  child: const Text('删除')),
-                                            if (_tab == 'warehouses')
-                                              TextButton(
-                                                  onPressed: _enabled
-                                                      ? () {
-                                                          setState(() {
-                                                            _warehouse = row;
-                                                            _tab = 'locations';
-                                                            _rows = [];
-                                                          });
-                                                          unawaited(_load());
-                                                        }
-                                                      : null,
-                                                  child: const Text('管理库位')),
-                                          ]),
-                                      ]))),
+                        for (final row in _rows) _resourceCard(row),
                         if (_tab == 'materials' || _tab == 'transactions')
-                          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                            TextButton(
-                                onPressed: _enabled && _page > 1
-                                    ? () => _load(page: _page - 1) : null,
-                                child: const Text('上一页')),
-                            Text('第 $_page 页'),
-                            TextButton(
-                                onPressed: _enabled && _hasNextPage
-                                    ? () => _load(page: _page + 1) : null,
-                                child: const Text('下一页')),
-                          ]),
+                          Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                TextButton(
+                                    onPressed: _enabled && _page > 1
+                                        ? () => _load(page: _page - 1)
+                                        : null,
+                                    child: const Text('上一页')),
+                                Text('第 $_page 页'),
+                                TextButton(
+                                    onPressed: _enabled && _hasNextPage
+                                        ? () => _load(page: _page + 1)
+                                        : null,
+                                    child: const Text('下一页')),
+                              ]),
                       ]))),
         ],
       ])));
+
+  Widget _tools() => WorkspacePanel(
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        if (_tab == 'materials') ...[
+          TextField(
+              controller: _search,
+              enabled: !_busy,
+              decoration: InputDecoration(
+                  hintText: '搜索资源',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: IconButton(
+                    tooltip: '搜索',
+                    onPressed: _busy
+                        ? null
+                        : () {
+                            FocusScope.of(context).unfocus();
+                            _load();
+                          },
+                    icon: const Icon(Icons.arrow_forward),
+                  )),
+              textInputAction: TextInputAction.search,
+              onSubmitted: (_) => _load()),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+              key: ValueKey(_category),
+              initialValue: _category,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                  border: OutlineInputBorder(), labelText: '分类'),
+              items: [
+                const DropdownMenuItem(value: '', child: Text('全部分类')),
+                for (final c in {
+                  if (_category.isNotEmpty) _category,
+                  ..._categories,
+                })
+                  DropdownMenuItem(
+                      value: c,
+                      child: Text(c, overflow: TextOverflow.ellipsis)),
+              ],
+              onChanged: _busy
+                  ? null
+                  : (value) {
+                      setState(() => _category = value ?? '');
+                      unawaited(_load());
+                    }),
+          const SizedBox(height: 12),
+        ],
+        if (_tab == 'locations')
+          TextButton.icon(
+              onPressed: _busy
+                  ? null
+                  : () {
+                      setState(() {
+                        _tab = 'warehouses';
+                        _rows = [];
+                      });
+                      unawaited(_load());
+                    },
+              icon: const Icon(Icons.arrow_back),
+              label: const Text('返回仓库列表')),
+        if (_tab == 'locations')
+          Text(_title, style: Theme.of(context).textTheme.titleMedium),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            if (_tab != 'transactions')
+              FilledButton.icon(
+                  onPressed: _enabled ? () => _edit() : null,
+                  icon: const Icon(Icons.add),
+                  label: const Text('添加')),
+            if (_tab == 'materials')
+              TextButton.icon(
+                  onPressed: _enabled ? _export : null,
+                  icon: const Icon(Icons.file_download_outlined),
+                  label: const Text('导出 Excel')),
+            if (_tab == 'transactions') ...[
+              FilledButton(
+                  onPressed: _enabled && !_movementOutcomeUnknown
+                      ? () => _move(true)
+                      : null,
+                  child: const Text('入库')),
+              OutlinedButton(
+                  onPressed: _enabled && !_movementOutcomeUnknown
+                      ? () => _move(false)
+                      : null,
+                  child: const Text('出库')),
+            ],
+          ],
+        ),
+      ]));
+
+  Widget _resourceCard(Map<String, Object?> row) {
+    final colors = AppTheme.colors(context);
+    final code = row['material_code'] ?? row['code'];
+    final title = row['name'] ?? row['product_name'] ?? code ?? '记录';
+    final quantity = num.tryParse('${row['quantity']}');
+    final lowStock = _tab == 'materials' &&
+        quantity != null &&
+        quantity < (num.tryParse('${row['min_stock']}') ?? 0);
+    final entries = _labels[_tab]!;
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: WorkspacePanel(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('$title', style: Theme.of(context).textTheme.titleMedium),
+            if (code != null && code != title)
+              Text('$code', style: TextStyle(color: colors.textSecondary)),
+            const SizedBox(height: 8),
+            if (_tab == 'materials' || _tab == 'transactions')
+              Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  if (quantity != null)
+                    Text(
+                      '${_tab == 'materials' ? '档案数量' : '数量'} $quantity ${row['unit'] ?? ''}'
+                          .trimRight(),
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                  if (lowStock)
+                    WorkspaceBadge(label: '低于库存预警值', color: colors.danger),
+                  if (row['category'] != null && row['category'] != '')
+                    WorkspaceBadge(
+                        label: '${row['category']}', color: colors.brand),
+                  if (row['transaction_type'] != null)
+                    WorkspaceBadge(
+                      label:
+                          _display('transaction_type', row['transaction_type']),
+                      color: row['transaction_type'] == 'out'
+                          ? colors.warning
+                          : colors.success,
+                    ),
+                ],
+              ),
+            for (final entry in entries.entries)
+              if (row[entry.key] != null && row[entry.key] != '')
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                      '${entry.value}：${_display(entry.key, row[entry.key])}'),
+                ),
+            if (row['id'] != null && _tab != 'transactions')
+              Wrap(
+                spacing: 8,
+                children: [
+                  TextButton(
+                      onPressed: _enabled ? () => _edit(row) : null,
+                      child: const Text('编辑')),
+                  if (_tab == 'materials')
+                    TextButton(
+                        onPressed: _enabled ? () => _delete(row) : null,
+                        child: const Text('删除')),
+                  if (_tab == 'warehouses')
+                    TextButton(
+                      onPressed: _enabled
+                          ? () {
+                              setState(() {
+                                _warehouse = row;
+                                _tab = 'locations';
+                                _rows = [];
+                              });
+                              unawaited(_load());
+                            }
+                          : null,
+                      child: const Text('管理库位'),
+                    ),
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 Map<String, Object?> _map(Object? value) =>
@@ -545,29 +603,32 @@ String _display(String key, Object? value) => key == 'status'
                 ? '出库'
                 : '$value'
         : '$value';
+String _productChoiceLabel(Map<String, Object?> row) {
+  final name = '${row['name'] ?? row['code'] ?? row['id']}';
+  final model = '${row['model_number'] ?? ''}'.trim();
+  return model.isEmpty || model == name ? name : '$name · $model';
+}
+
 const _labels = {
-  'code': '编码',
-  'category': '分类',
-  'specification': '规格',
-  'material_code': '编码',
-  'quantity': '数量',
-  'unit': '单位',
-  'unit_price': '单价',
-  'supplier': '供应商',
-  'type': '类型',
-  'address': '地址',
-  'manager': '负责人',
-  'status': '状态',
-  'max_capacity': '最大容量',
-  'current_capacity': '当前用量',
-  'transaction_date': '时间',
-  'transaction_type': '操作',
-  'warehouse_name': '仓库',
-  'operator': '操作人',
-  'remark': '备注',
-  'contact_person': '联系人',
-  'contact_phone': '电话',
-  'rating': '评级'
+  'materials': {'specification': '规格', 'unit_price': '单价', 'supplier': '供应商'},
+  'warehouses': {
+    'type': '类型',
+    'address': '地址',
+    'manager': '负责人',
+    'status': '状态'
+  },
+  'locations': {
+    'max_capacity': '最大容量',
+    'current_capacity': '当前用量',
+    'status': '状态'
+  },
+  'transactions': {
+    'warehouse_name': '仓库',
+    'transaction_date': '时间',
+    'operator': '操作人',
+    'remark': '备注'
+  },
+  'suppliers': {'contact_person': '联系人', 'contact_phone': '电话', 'rating': '评级'},
 };
 const _fields = <String, List<NativeFormField>>{
   'materials': [
@@ -576,9 +637,10 @@ const _fields = <String, List<NativeFormField>>{
     NativeFormField('category', '分类'),
     NativeFormField('specification', '规格'),
     NativeFormField('unit', '单位', defaultValue: '个'),
-    NativeFormField('quantity', '库存',
+    NativeFormField('quantity', '档案数量',
         number: true, minimum: 0, defaultValue: 0),
-    NativeFormField('unit_price', '单价', number: true, minimum: 0, defaultValue: 0),
+    NativeFormField('unit_price', '单价',
+        number: true, minimum: 0, defaultValue: 0),
     NativeFormField('supplier', '供应商')
   ],
   'warehouses': [

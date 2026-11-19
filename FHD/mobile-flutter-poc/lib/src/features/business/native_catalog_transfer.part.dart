@@ -3,13 +3,18 @@ part of 'native_catalog_screen.dart';
 extension _CatalogTransfer on _NativeCatalogScreenState {
   Widget _transferMenu() => PopupMenuButton<String>(
         tooltip: '导入与导出',
+        icon: const Icon(Icons.more_horiz),
         enabled: _editable,
         onSelected: (action) =>
             action == 'import' ? _importFile() : _exportFile(action),
         itemBuilder: (_) => [
           if (!_shipments)
             const PopupMenuItem(value: 'import', child: Text('导入 Excel')),
-          const PopupMenuItem(value: 'xlsx', child: Text('导出 Excel')),
+          PopupMenuItem(
+              value: 'xlsx',
+              child: Text(_shipments && _keyword.isNotEmpty
+                  ? '按单位和状态导出 Excel'
+                  : '导出 Excel')),
           if (_products)
             const PopupMenuItem(value: 'docx', child: Text('导出 Word 价格表')),
         ],
@@ -89,8 +94,7 @@ extension _CatalogTransfer on _NativeCatalogScreenState {
             if (template.isNotEmpty) 'template_id': template,
             if ((_products || _shipments) && _unit.isNotEmpty) 'unit': _unit,
             if (_shipments) 'status': _status == 'all' ? '' : _status,
-            if (_products && _search.text.trim().isNotEmpty)
-              'keyword': _search.text.trim(),
+            if (_products && _keyword.isNotEmpty) 'keyword': _keyword,
           });
       if (!mounted || !_session.active) return;
       await shareWorkspaceFile('${widget.title}.$format', bytes,

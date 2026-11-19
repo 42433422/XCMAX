@@ -13,6 +13,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/we_ui.dart';
 import '../approval/native_approval_workspace.dart';
 import '../business/native_catalog_screen.dart';
+import '../business/native_inventory_screen.dart';
 import '../business/native_orders_screen.dart';
 import '../business/native_materials_screen.dart';
 import '../chat/chat_screen.dart';
@@ -22,13 +23,25 @@ import '../tasks/task_list_screen.dart';
 import '../webview/desktop_tool_webview_screen.dart';
 import '../workspace/employee_workspace_screen.dart';
 
-// Materials are not the stock ledger. Keep inventory on its authorized web
-// route until the native page implements balances, not just movement history.
 String? nativeMaterialsModForPath(String path) {
   final uri = Uri.tryParse(path);
   if (uri == null || uri.hasScheme || uri.hasAuthority) return null;
   final match =
       RegExp(r'^/(?:mod/([a-zA-Z0-9_-]+)/)?materials/?$').firstMatch(uri.path);
+  return match == null ? null : match[1] ?? '';
+}
+
+String? nativeInventoryModForPath(String path) {
+  final route = Uri.tryParse(path);
+  if (route == null ||
+      route.hasScheme ||
+      route.hasAuthority ||
+      route.hasQuery ||
+      route.hasFragment) {
+    return null;
+  }
+  final match = RegExp(r'^/(?:mod/(xcagi-erp-domain-bridge)/)?inventory/?$')
+      .firstMatch(route.path);
   return match == null ? null : match[1] ?? '';
 }
 
@@ -464,6 +477,17 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   }
 
   void _open(_WorkbenchItem item) {
+    final inventory = nativeInventoryModForPath(item.path);
+    if (inventory != null) {
+      Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => NativeInventoryScreen(
+          repository: _repository,
+          title: item.title,
+          activeModId: inventory,
+        ),
+      ));
+      return;
+    }
     final material = nativeMaterialsModForPath(item.path);
     if (material != null) {
       Navigator.of(context).push(MaterialPageRoute(

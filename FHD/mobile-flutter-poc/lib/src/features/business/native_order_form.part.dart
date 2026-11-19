@@ -123,17 +123,46 @@ class _OrderFormState extends State<_OrderForm> {
   }
 
   Future<void> _pickProduct() async {
-    final product = await Navigator.of(context).push<Map<String, Object?>>(
-        MaterialPageRoute(
-            builder: (_) => _ProductPicker(
-                session: widget.session,
-                apiBase: widget.apiBase,
-                unit: _unit)));
-    if (product != null && mounted && widget.session.active) {
-      setState(() {
-        _lines.add(_OrderLine(product));
-      });
+    final products =
+        await Navigator.of(context).push<List<Map<String, Object?>>>(
+      MaterialPageRoute(
+        builder: (_) => _ProductPicker(
+          session: widget.session,
+          apiBase: widget.apiBase,
+          unit: _unit,
+        ),
+      ),
+    );
+    if (products != null && mounted && widget.session.active) {
+      setState(() => _lines.addAll(products.map(_OrderLine.new)));
     }
+  }
+
+  Future<void> _pickDate() async {
+    final date = await showDatePicker(
+      context: context,
+      initialDate: DateTime.tryParse(_date.text) ?? DateTime.now(),
+      firstDate: DateTime(1900),
+      lastDate: DateTime(2100),
+    );
+    if (date != null && mounted && widget.session.active && _result == null) {
+      _date.text = date.toIso8601String().split('T').first;
+    }
+  }
+
+  void _startNext() {
+    if (_busy || !widget.session.active || _result == null) return;
+    final previous = _lines.toList();
+    setState(() {
+      _result = null;
+      _number = '';
+      _lines.clear();
+      _date.text = DateTime.now().toIso8601String().split('T').first;
+    });
+    for (final line in previous) {
+      line.dispose();
+    }
+    unawaited(_loadOptions());
   }
 
   Future<void> _manageCatalog(String resource) async {
@@ -147,27 +176,29 @@ class _OrderFormState extends State<_OrderForm> {
   }
 
   Future<void> _generate() async {
-    if (_busy ||
-        _loading ||
-        !_optionsReady ||
-        !widget.session.active ||
-        !_form.currentState!.validate()) {
+    if (_busy || _loading || !_optionsReady || !widget.session.active) {
+      return;
+    }
+    final invalid = _form.currentState?.validateGranularly();
+    if (invalid == null) return;
+    if (invalid.isNotEmpty) {
+      await Scrollable.ensureVisible(
+        invalid.first.context,
+        alignment: 0.25,
+        duration: AppTheme.motionDuration(context),
+      );
       return;
     }
     if (_lines.isEmpty ||
         _template.isEmpty ||
         _unit.isEmpty ||
         _number.isEmpty) {
-      setState(() {
-        _error = '请选择模板、购买单位，并至少添加一个产品';
-      });
+      _showIssue('请至少添加一个产品');
       return;
     }
     if (_lines
         .any((line) => line.name.trim().isEmpty || line.model.trim().isEmpty)) {
-      setState(() {
-        _error = '产品名称和型号不能为空，请先完善产品资料';
-      });
+      _showIssue('产品名称和型号不能为空，请先完善产品资料');
       return;
     }
     setState(() {
@@ -192,9 +223,7 @@ class _OrderFormState extends State<_OrderForm> {
       }
     } catch (error) {
       if (mounted && widget.session.active) {
-        setState(() {
-          _error = '${mobileErrorText(error)}。再次提交会沿用当前单号，请先核对出货记录。';
-        });
+        _showIssue('${mobileErrorText(error)}。再次提交会沿用当前单号，请先核对出货记录。');
       }
     } finally {
       if (mounted) {
@@ -203,6 +232,13 @@ class _OrderFormState extends State<_OrderForm> {
         });
       }
     }
+  }
+
+  void _showIssue(String message) {
+    setState(() => _error = message);
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _download() async {
@@ -231,202 +267,351 @@ class _OrderFormState extends State<_OrderForm> {
     }
   }
 
+  Widget _details() => WorkspacePanel(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const WeSectionCaption('客户与单据'),
+            Text('订单编号：${_number.isEmpty ? '正在读取' : _number}'),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              key: ValueKey('order-template-$_template'),
+              initialValue: _template.isEmpty ? null : _template,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                  border: OutlineInputBorder(), labelText: '发货单模板 *'),
+              items: [
+                for (final template in _templates)
+                  DropdownMenuItem(
+                    value: '${template['id']}',
+                    child: Text(
+                      '${template['name'] ?? template['id']}',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
+              onChanged: _busy || _loading
+                  ? null
+                  : (value) {
+                      setState(() => _template = value ?? '');
+                    },
+              validator: (value) =>
+                  value == null || value.isEmpty ? '请选择模板' : null,
+            ),
+            if (!_loading && _optionsReady && _templates.isEmpty)
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Text('请在桌面端配置发货单模板，再刷新此页。'),
+              ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              key: ValueKey('order-unit-$_unit'),
+              initialValue: _unit.isEmpty ? null : _unit,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                  border: OutlineInputBorder(), labelText: '购买单位 *'),
+              items: [
+                for (final name in _units
+                    .map((unit) => '${unit['unit_name'] ?? unit['name'] ?? ''}')
+                    .where((name) => name.isNotEmpty)
+                    .toSet())
+                  DropdownMenuItem(
+                    value: name,
+                    child: Text(name, overflow: TextOverflow.ellipsis),
+                  ),
+              ],
+              onChanged: _busy || _loading
+                  ? null
+                  : (value) {
+                      setState(() {
+                        _unit = value ?? '';
+                        final row = _units
+                            .where(
+                              (unit) =>
+                                  '${unit['unit_name'] ?? unit['name']}' ==
+                                  _unit,
+                            )
+                            .firstOrNull;
+                        _contact.text = '${row?['contact_person'] ?? ''}';
+                      });
+                    },
+              validator: (value) =>
+                  value == null || value.isEmpty ? '请选择购买单位' : null,
+            ),
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: TextButton(
+                onPressed: _busy ? null : () => _manageCatalog('customers'),
+                child: const Text('管理客户'),
+              ),
+            ),
+            if (_contact.text.isNotEmpty) ...[
+              Text('联系人 · ${_contact.text}'),
+              const SizedBox(height: 12),
+            ],
+            TextFormField(
+              controller: _date,
+              enabled: !_busy,
+              readOnly: true,
+              onTap: _pickDate,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                labelText: '发货日期',
+                suffixIcon: Icon(Icons.calendar_today_outlined),
+              ),
+              validator: (value) =>
+                  DateTime.tryParse(value ?? '') == null ? '请选择有效日期' : null,
+            ),
+          ],
+        ),
+      );
+
+  Widget _lineCard(_OrderLine line) => WorkspacePanel(
+        key: ObjectKey(line),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(line.name),
+              subtitle: Text('型号 · ${line.model}'),
+              trailing: IconButton(
+                tooltip: '移除产品',
+                onPressed: _busy
+                    ? null
+                    : () {
+                        setState(() => _lines.remove(line));
+                        line.dispose();
+                      },
+                icon: const Icon(Icons.remove_circle_outline),
+              ),
+            ),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final scale = MediaQuery.textScalerOf(context).scale(16);
+                final width = constraints.maxWidth;
+                return Wrap(
+                  spacing: 10,
+                  runSpacing: 12,
+                  children: [
+                    for (final entry in line.fields.entries)
+                      SizedBox(
+                        width: width >= 250 && scale <= 22
+                            ? (width - 10) / 2
+                            : width,
+                        child: TextFormField(
+                          controller: entry.value,
+                          enabled: !_busy,
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
+                          decoration: InputDecoration(
+                              border: const OutlineInputBorder(),
+                              labelText: _lineLabels[entry.key]),
+                          validator: (value) {
+                            final number = num.tryParse(value ?? '');
+                            if (number == null ||
+                                !number.isFinite ||
+                                number < 0) {
+                              return '请输入非负数字';
+                            }
+                            return entry.key == 'quantity_tins' &&
+                                    number != number.round()
+                                ? '件数须为整数'
+                                : null;
+                          },
+                          onChanged: (_) =>
+                              setState(() => line.recalculate(entry.key)),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
+            const SizedBox(height: 12),
+            WorkspaceBadge(label: '金额：¥${line.amount.toStringAsFixed(2)}'),
+          ],
+        ),
+      );
+
   @override
-  Widget build(BuildContext context) => Scaffold(
-      backgroundColor: AppTheme.colors(context).page,
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = AppTheme.colors(context);
+    final canEdit = widget.session.active && _result == null;
+    final amount = _lines.fold<num>(0, (total, line) => total + line.amount);
+    return Scaffold(
+      backgroundColor: colors.page,
       body: SafeArea(
-          child: Column(children: [
-        WeTopBar(
-            title: '新建发货单',
-            showBack: true,
-            onBack: () => Navigator.maybePop(context),
-            actions: [
-              IconButton(
+        bottom: !canEdit,
+        child: Column(
+          children: [
+            WeTopBar(
+              title: '新建发货单',
+              showBack: true,
+              onBack: () => Navigator.maybePop(context),
+              actions: [
+                IconButton(
                   tooltip: '刷新选项',
-                  onPressed:
-                      _busy || !widget.session.active ? null : _loadOptions,
-                  icon: const Icon(Icons.refresh))
-            ]),
-        if (!widget.session.active)
-          const Expanded(child: Center(child: Text('账号或连接已切换，请返回后重新打开')))
-        else
-          Expanded(
-              child: Form(
-                  key: _form,
-                  child: ListView(padding: const EdgeInsets.all(20), children: [
-                    if (_loading || _busy) const LinearProgressIndicator(),
-                    if (_error != null)
-                      Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          child: Text(_error!)),
-                    if (_result != null)
-                      Card(
-                          child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Column(children: [
-                                Text(_result!['duplicate'] == true
-                                    ? '该单号已生成，未重复创建'
-                                    : '发货单已生成'),
-                                Text('${_result!['doc_name'] ?? ''}'),
-                                FilledButton.icon(
-                                    onPressed: _busy ||
-                                            '${_result!['doc_name'] ?? ''}'
-                                                .isEmpty
-                                        ? null
-                                        : _download,
-                                    icon: const Icon(Icons.download),
-                                    label: const Text('保存或分享发货单')),
-                              ]))),
-                    const WeSectionCaption('基础信息'),
-                    DropdownButtonFormField<String>(
-                        key: ValueKey('order-template-$_template'),
-                        initialValue: _template.isEmpty ? null : _template,
-                        isExpanded: true,
-                        decoration: const InputDecoration(labelText: '发货单模板 *'),
-                        items: [
-                          for (final t in _templates)
-                            DropdownMenuItem(
-                                value: '${t['id']}',
-                                child: Text('${t['name'] ?? t['id']}',
-                                    overflow: TextOverflow.ellipsis))
-                        ],
-                        onChanged: _busy || _loading || _result != null
-                            ? null
-                            : (v) => setState(() {
-                                  _template = v ?? '';
-                                }),
-                        validator: (v) =>
-                            v == null || v.isEmpty ? '请选择模板' : null),
-                    if (!_loading && _optionsReady && _templates.isEmpty)
-                      const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 8),
-                          child: Text('暂无可用发货单模板，请先配置当前工作区的模板后刷新。')),
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<String>(
-                        key: ValueKey('order-unit-$_unit'),
-                        initialValue: _unit.isEmpty ? null : _unit,
-                        isExpanded: true,
-                        decoration: const InputDecoration(labelText: '购买单位 *'),
-                        items: [
-                          for (final name in _units
-                              .map(
-                                  (u) => '${u['unit_name'] ?? u['name'] ?? ''}')
-                              .where((n) => n.isNotEmpty)
-                              .toSet())
-                            DropdownMenuItem(
-                                value: name,
-                                child:
-                                    Text(name, overflow: TextOverflow.ellipsis))
-                        ],
-                        onChanged: _busy || _loading || _result != null
-                            ? null
-                            : (v) => setState(() {
-                                  _unit = v ?? '';
-                                  final row = _units
-                                      .where((u) =>
-                                          '${u['unit_name'] ?? u['name']}' ==
-                                          _unit)
-                                      .firstOrNull;
-                                  _contact.text =
-                                      '${row?['contact_person'] ?? ''}';
-                                }),
-                        validator: (v) =>
-                            v == null || v.isEmpty ? '请选择购买单位' : null),
-                    TextButton(
-                        onPressed:
-                            _busy ? null : () => _manageCatalog('customers'),
-                        child: const Text('管理客户')),
-                    TextFormField(
-                        controller: _contact,
-                        readOnly: true,
-                        decoration: const InputDecoration(labelText: '联系人')),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                        controller: _date,
-                        enabled: !_busy && _result == null,
-                        decoration:
-                            const InputDecoration(labelText: '日期（YYYY-MM-DD）'),
-                        validator: (v) => DateTime.tryParse(v ?? '') == null
-                            ? '请输入有效日期'
-                            : null),
-                    const SizedBox(height: 16),
-                    Text(
-                        '订单编号：${_number.isEmpty ? (_loading ? '正在获取…' : '未取得，请刷新') : _number}'),
-                    const WeSectionCaption('产品明细'),
-                    Wrap(spacing: 8, children: [
-                      OutlinedButton.icon(
-                          onPressed:
-                              _busy || _result != null ? null : _pickProduct,
-                          icon: const Icon(Icons.add),
-                          label: const Text('选择产品')),
-                      TextButton(
-                          onPressed:
-                              _busy ? null : () => _manageCatalog('products'),
-                          child: const Text('管理产品库'))
-                    ]),
-                    for (final line in _lines)
-                      Card(
-                          child: Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: Column(children: [
-                                Row(children: [
-                                  Expanded(
-                                      child: Text(line.name,
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .titleMedium)),
-                                  IconButton(
-                                      tooltip: '移除产品',
-                                      onPressed: _busy || _result != null
-                                          ? null
-                                          : () => setState(() {
-                                                _lines.remove(line);
-                                                line.dispose();
-                                              }),
-                                      icon: const Icon(Icons.close))
-                                ]),
-                                Text('型号：${line.model}'),
-                                for (final entry in line.fields.entries)
+                  onPressed: _busy || !canEdit ? null : _loadOptions,
+                  icon: const Icon(Icons.refresh),
+                ),
+              ],
+            ),
+            if (_loading || _busy) const LinearProgressIndicator(minHeight: 2),
+            if (!widget.session.active)
+              const Expanded(
+                child: Center(child: Text('账号或连接已切换，请返回后重新打开')),
+              )
+            else
+              Expanded(
+                child: WorkspaceTransition(
+                  child: _result == null
+                      ? SingleChildScrollView(
+                          key: const ValueKey('order-form'),
+                          padding: const EdgeInsets.all(16),
+                          child: Form(
+                            key: _form,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                if (_error != null)
                                   Padding(
-                                      padding: const EdgeInsets.only(top: 12),
-                                      child: TextFormField(
-                                          controller: entry.value,
-                                          enabled: !_busy && _result == null,
-                                          keyboardType: const TextInputType
-                                              .numberWithOptions(decimal: true),
-                                          decoration: InputDecoration(
-                                              labelText:
-                                                  _lineLabels[entry.key]),
-                                          validator: (v) {
-                                            final n = num.tryParse(v ?? '');
-                                            return n == null ||
-                                                    !n.isFinite ||
-                                                    n < 0
-                                                ? '请输入非负数字'
-                                                : entry.key ==
-                                                            'quantity_tins' &&
-                                                        n != n.round()
-                                                    ? '件数须为整数'
-                                                    : null;
-                                          },
-                                          onChanged: (_) => setState(() {
-                                                line.recalculate(entry.key);
-                                              }))),
-                                const SizedBox(height: 12),
-                                Text('金额：¥${line.amount.toStringAsFixed(2)}'),
-                              ]))),
-                    const SizedBox(height: 20),
-                    FilledButton(
+                                    padding: const EdgeInsets.only(bottom: 12),
+                                    child: Text(_error!,
+                                        style: TextStyle(
+                                          color: theme.colorScheme.error,
+                                        )),
+                                  ),
+                                _details(),
+                                const SizedBox(height: 14),
+                                WorkspacePanel(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text('产品明细',
+                                          style: theme.textTheme.titleMedium),
+                                      const SizedBox(height: 8),
+                                      Wrap(
+                                        spacing: 8,
+                                        runSpacing: 8,
+                                        children: [
+                                          FilledButton.tonalIcon(
+                                            onPressed:
+                                                _busy ? null : _pickProduct,
+                                            icon: const Icon(Icons.add),
+                                            label: const Text('选择产品'),
+                                          ),
+                                          TextButton(
+                                            onPressed: _busy
+                                                ? null
+                                                : () =>
+                                                    _manageCatalog('products'),
+                                            child: const Text('管理产品库'),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                for (final line in _lines)
+                                  Padding(
+                                    key: ObjectKey(line),
+                                    padding: const EdgeInsets.only(top: 10),
+                                    child: _lineCard(line),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : ListView(
+                          key: const ValueKey('order-result'),
+                          padding: const EdgeInsets.all(16),
+                          children: [
+                            WorkspacePanel(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  WorkspaceBadge(
+                                    label: _result!['duplicate'] == true
+                                        ? '该单号已生成，未重复创建'
+                                        : '发货单已生成',
+                                    color: colors.success,
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text('${_result!['doc_name'] ?? _number}',
+                                      style: theme.textTheme.titleLarge),
+                                  if (_error != null) Text(_error!),
+                                  const SizedBox(height: 16),
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    children: [
+                                      FilledButton.icon(
+                                        onPressed: _busy ||
+                                                '${_result!['doc_name'] ?? ''}'
+                                                    .isEmpty
+                                            ? null
+                                            : _download,
+                                        icon: const Icon(Icons.ios_share),
+                                        label: const Text('保存或分享发货单'),
+                                      ),
+                                      OutlinedButton(
+                                        onPressed: _busy ? null : _startNext,
+                                        child: const Text('继续开单'),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                ),
+              ),
+            if (canEdit)
+              Material(
+                color: colors.surface,
+                elevation: 2,
+                child: SafeArea(
+                  top: false,
+                  minimum: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Wrap(
+                        spacing: 8,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text('${_lines.length} 项商品 · 合计'),
+                          WorkspaceTransition(
+                            child: Text(
+                              '¥${amount.toStringAsFixed(2)}',
+                              key: ValueKey(amount.toStringAsFixed(2)),
+                              style: theme.textTheme.titleMedium,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      FilledButton(
                         onPressed: _busy ||
                                 _loading ||
                                 !_optionsReady ||
-                                _result != null ||
                                 _number.isEmpty
                             ? null
                             : _generate,
-                        child: Text(_busy ? '正在处理…' : '生成发货单')),
-                  ]))),
-      ])));
+                        child: Text(_busy ? '正在处理…' : '生成发货单'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 const _lineLabels = {
@@ -485,6 +670,7 @@ class _ProductPicker extends StatefulWidget {
 class _ProductPickerState extends State<_ProductPicker> {
   final _search = TextEditingController();
   List<Map<String, Object?>> _products = [];
+  final _selected = <Object, Map<String, Object?>>{};
   bool _loading = true, _more = false;
   int _page = 0, _ticket = 0;
   String? _error;
@@ -499,6 +685,7 @@ class _ProductPickerState extends State<_ProductPicker> {
     if (mounted) {
       setState(() {
         _products = [];
+        _selected.clear();
         ++_ticket;
       });
     }
@@ -552,34 +739,87 @@ class _ProductPickerState extends State<_ProductPicker> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-      appBar: AppBar(title: const Text('选择产品')),
-      body: !widget.session.active
-          ? const Center(child: Text('账号或连接已切换'))
-          : Column(children: [
-              Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: TextField(
+        appBar: AppBar(title: const Text('选择产品')),
+        backgroundColor: AppTheme.colors(context).page,
+        bottomNavigationBar: !widget.session.active
+            ? null
+            : SafeArea(
+                minimum: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                child: FilledButton(
+                  onPressed: _selected.isEmpty
+                      ? null
+                      : () => Navigator.pop(context, _selected.values.toList()),
+                  child: Text('添加所选产品（${_selected.length}）'),
+                ),
+              ),
+        body: !widget.session.active
+            ? const Center(child: Text('账号或连接已切换'))
+            : Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: TextField(
                       controller: _search,
-                      decoration: const InputDecoration(
-                          hintText: '搜索名称或型号', prefixIcon: Icon(Icons.search)),
-                      onSubmitted: (_) => _load())),
-              if (_loading) const LinearProgressIndicator(),
-              if (_error != null)
-                TextButton(onPressed: _load, child: Text('$_error · 重试')),
-              Expanded(
-                  child: ListView(children: [
-                for (final product in _products)
-                  ListTile(
-                      title: Text('${product['name']}'),
-                      subtitle: Text(
-                          '${product['model_number'] ?? ''} · ¥${product['price'] ?? '—'}'),
-                      onTap: _loading || _error != null
-                          ? null
-                          : () => Navigator.pop(context, product)),
-                if (_more)
-                  TextButton(
-                      onPressed: _loading ? null : () => _load(more: true),
-                      child: const Text('加载更多'))
-              ])),
-            ]));
+                      textInputAction: TextInputAction.search,
+                      decoration: InputDecoration(
+                        border: const OutlineInputBorder(),
+                        hintText: '搜索名称或型号',
+                        prefixIcon: const Icon(Icons.search),
+                        suffixIcon: IconButton(
+                          tooltip: '搜索产品',
+                          icon: const Icon(Icons.arrow_forward),
+                          onPressed: _loading ? null : _load,
+                        ),
+                      ),
+                      onSubmitted: (_) => _load(),
+                    ),
+                  ),
+                  if (_loading) const LinearProgressIndicator(minHeight: 2),
+                  if (_error != null)
+                    TextButton(onPressed: _load, child: Text('$_error · 重试')),
+                  if (!_loading && _error == null && _products.isEmpty)
+                    const Text('没有匹配的产品'),
+                  Expanded(
+                    child: ListView.separated(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: _products.length + (_more ? 1 : 0),
+                      separatorBuilder: (_, _) => const SizedBox(height: 8),
+                      itemBuilder: (context, index) {
+                        if (index == _products.length) {
+                          return TextButton(
+                            onPressed:
+                                _loading ? null : () => _load(more: true),
+                            child: const Text('加载更多'),
+                          );
+                        }
+                        final product = _products[index];
+                        final key = product['id'] ??
+                            (product['name'], product['model_number']);
+                        return WorkspacePanel(
+                          key: ValueKey(key),
+                          padding: EdgeInsets.zero,
+                          child: CheckboxListTile(
+                            title: Text('${product['name'] ?? ''}'),
+                            subtitle: Text(
+                                '${product['model_number'] ?? ''} · ¥${product['price'] ?? '—'}'),
+                            value: _selected.containsKey(key),
+                            onChanged: _loading || _error != null
+                                ? null
+                                : (checked) {
+                                    setState(() {
+                                      if (checked == true) {
+                                        _selected[key] = product;
+                                      } else {
+                                        _selected.remove(key);
+                                      }
+                                    });
+                                  },
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+      );
 }

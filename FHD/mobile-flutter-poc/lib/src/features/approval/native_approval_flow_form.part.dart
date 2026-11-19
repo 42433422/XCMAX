@@ -147,167 +147,221 @@ class _ApprovalFlowFormState extends State<_ApprovalFlowForm> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return Scaffold(
       backgroundColor: AppTheme.colors(context).page,
       body: SafeArea(
-          child: Column(children: [
-        WeTopBar(
-            title: _editing ? '编辑审批流程' : '新建审批流程',
-            showBack: true,
-            onBack: () => Navigator.maybePop(context)),
-        if (_loading) const LinearProgressIndicator(),
-        Expanded(
-            child: !widget.session.active
-                ? const Center(child: Text('账号或连接已切换，请重新打开'))
-                : Form(
-                    key: _form,
-                    child:
-                        ListView(padding: const EdgeInsets.all(20), children: [
-                      for (final e in const {
-                        'flow_name': '流程名称',
-                        'flow_key': '流程标识',
-                        'description': '流程描述'
-                      }.entries)
-                        Padding(
-                            padding: const EdgeInsets.only(bottom: 16),
-                            child: TextFormField(
-                                key: ValueKey(e.key),
-                                controller: _fields[e.key],
-                                enabled: !_busy,
-                                readOnly: _editing && e.key == 'flow_key',
-                                maxLines: e.key == 'description' ? 3 : 1,
-                                decoration: InputDecoration(
-                                    labelText: e.value,
-                                    helperText: _editing && e.key == 'flow_key'
-                                        ? '流程标识创建后不可修改'
-                                        : null),
-                                validator: (v) => e.key != 'description' &&
-                                        (v == null || v.trim().isEmpty)
-                                    ? '请填写${e.value}'
-                                    : null)),
-                      DropdownButtonFormField<String>(
-                          initialValue: _business,
-                          decoration: const InputDecoration(labelText: '业务类型'),
-                          items: [
-                            for (final e in {
-                              ..._businessTypes,
-                              if (!_businessTypes.containsKey(_business))
-                                _business: _business
-                            }.entries)
-                              DropdownMenuItem(
-                                  value: e.key, child: Text(e.value)),
-                          ],
-                          onChanged: _busy
-                              ? null
-                              : (v) => setState(() {
-                                    _business = v!;
-                                  })),
-                      SwitchListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('启用流程'),
-                          subtitle: _editing
-                              ? const Text('仅显示状态；请返回流程管理单独启用或停用')
-                              : null,
-                          value: _active,
-                          onChanged: _busy || _editing
-                              ? null
-                              : (v) => setState(() {
-                                    _active = v;
-                                  })),
-                      const SizedBox(height: 12),
-                      if (_editing)
-                        const Text('审批节点',
-                            style: TextStyle(fontWeight: FontWeight.w600)),
-                      for (var i = 0; i < _nodes.length; i++)
-                        _node(_nodes[i], i),
-                      if (!_editing)
-                        TextButton.icon(
-                            onPressed: _busy
-                                ? null
-                                : () => setState(() {
-                                      _nodes.add(_FlowNodeDraft());
-                                    }),
-                            icon: const Icon(Icons.add),
-                            label: const Text('添加审批节点')),
-                      if (_error != null)
-                        Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            child: Text(_error!)),
-                      FilledButton(
-                          onPressed: _busy || _loading ? null : _save,
-                          child: Text(_busy ? '正在保存…' : '保存流程')),
-                    ]))),
-      ])));
-  Widget _node(_FlowNodeDraft node, int index) => Card(
-      key: ObjectKey(node),
-      child: Padding(
-          padding: const EdgeInsets.all(16),
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              Expanded(child: Text('第 ${index + 1} 级审批')),
-              if (!_editing)
-                IconButton(
-                    tooltip: '删除节点',
-                    onPressed: _busy
-                        ? null
-                        : () {
-                            setState(() {
-                              _nodes.remove(node);
-                            });
-                            // Release after this frame has detached the text fields.
-                            WidgetsBinding.instance
-                                .addPostFrameCallback((_) => node.dispose());
-                          },
-                    icon: const Icon(Icons.delete_outline))
-            ]),
-            if (_editing) ...[
-              Text(node.name.text),
-              Text(
-                  '${node.type == 'parallel' ? '并行审批' : '串行审批'} · ${node.approvers.text}'),
-            ] else ...[
-              TextFormField(
-                  controller: node.name,
+        child: Column(
+          children: [
+            WeTopBar(
+              title: _editing ? '编辑审批流程' : '新建审批流程',
+              showBack: true,
+              onBack: () => Navigator.maybePop(context),
+            ),
+            if (_loading || _busy) const LinearProgressIndicator(),
+            Expanded(
+              child: !widget.session.active
+                  ? const Center(child: Text('账号或连接已切换，请重新打开'))
+                  : Form(
+                      key: _form,
+                      child: ListView(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                        keyboardDismissBehavior:
+                            ScrollViewKeyboardDismissBehavior.onDrag,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _basicFields(text),
+                              const SizedBox(height: 20),
+                              Text('审批节点', style: text.titleMedium),
+                              if (_editing && !_loading && _nodes.isEmpty)
+                                const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 8),
+                                  child: Text('暂无审批节点'),
+                                ),
+                              for (var i = 0; i < _nodes.length; i++)
+                                Padding(
+                                  key: ObjectKey(_nodes[i]),
+                                  padding: const EdgeInsets.only(top: 10),
+                                  child: _node(_nodes[i], i),
+                                ),
+                              if (!_editing)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 10),
+                                  child: OutlinedButton.icon(
+                                    onPressed: _busy
+                                        ? null
+                                        : () => setState(() {
+                                              _nodes.add(_FlowNodeDraft());
+                                            }),
+                                    icon: const Icon(Icons.add),
+                                    label: const Text('添加审批节点'),
+                                  ),
+                                ),
+                              const SizedBox(height: 16),
+                              if (_error != null) ...[
+                                Semantics(
+                                  liveRegion: true,
+                                  child: WorkspacePanel(child: Text(_error!)),
+                                ),
+                                const SizedBox(height: 12),
+                              ],
+                              FilledButton(
+                                style: FilledButton.styleFrom(
+                                  minimumSize: const Size(0, 48),
+                                ),
+                                onPressed: _busy || _loading ? null : _save,
+                                child: Text(_busy ? '正在保存…' : '保存流程'),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _basicFields(TextTheme text) => WorkspacePanel(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('基本信息', style: text.titleMedium),
+            const SizedBox(height: 14),
+            for (final e in const {
+              'flow_name': '流程名称',
+              'flow_key': '流程标识',
+              'description': '流程描述'
+            }.entries)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: TextFormField(
+                  key: ValueKey(e.key),
+                  controller: _fields[e.key],
                   enabled: !_busy,
-                  decoration: const InputDecoration(labelText: '节点名称'),
+                  readOnly: _editing && e.key == 'flow_key',
+                  maxLines: e.key == 'description' ? 3 : 1,
+                  decoration: InputDecoration(
+                    labelText: e.value,
+                    helperText:
+                        _editing && e.key == 'flow_key' ? '流程标识创建后不可修改' : null,
+                    helperMaxLines: 3,
+                  ),
                   validator: (v) =>
-                      v == null || v.trim().isEmpty ? '请输入节点名称' : null),
-              DropdownButtonFormField<String>(
-                  initialValue: node.type,
-                  decoration: const InputDecoration(labelText: '节点类型'),
-                  items: const [
-                    DropdownMenuItem(value: 'serial', child: Text('串行审批')),
-                    DropdownMenuItem(value: 'parallel', child: Text('并行审批'))
-                  ],
-                  onChanged: _busy ? null : (v) => node.type = v!),
-              DropdownButtonFormField<String>(
-                  initialValue: node.approverType,
-                  decoration: const InputDecoration(labelText: '审批人类型'),
-                  items: [
-                    for (final e in const {
-                      'user': '指定用户',
-                      'role': '指定角色',
-                      'position': '指定职位',
-                      'dynamic': '动态审批人'
-                    }.entries)
-                      DropdownMenuItem(value: e.key, child: Text(e.value))
-                  ],
-                  onChanged: _busy ? null : (v) => node.approverType = v!),
-              TextFormField(
-                  controller: node.approvers,
-                  enabled: !_busy,
-                  decoration: const InputDecoration(
-                      labelText: '审批人 ID', helperText: '多个用户、角色或职位 ID 用逗号分隔'),
-                  validator: (v) {
-                    if ((v ?? '').trim().isEmpty) return null;
-                    return v!
-                            .split(RegExp('[,，]'))
-                            .any((s) => (int.tryParse(s.trim()) ?? 0) <= 0)
-                        ? '请填写有效的正整数 ID'
-                        : null;
-                  }),
-            ],
-          ])));
+                      e.key != 'description' && (v == null || v.trim().isEmpty)
+                          ? '请填写${e.value}'
+                          : null,
+                ),
+              ),
+            DropdownButtonFormField<String>(
+              initialValue: _business,
+              decoration: const InputDecoration(labelText: '业务类型'),
+              isExpanded: true,
+              items: [
+                for (final e in {
+                  ..._businessTypes,
+                  if (!_businessTypes.containsKey(_business))
+                    _business: _business,
+                }.entries)
+                  DropdownMenuItem(value: e.key, child: Text(e.value)),
+              ],
+              onChanged: _busy ? null : (v) => setState(() => _business = v!),
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('启用流程'),
+              subtitle: _editing ? const Text('在流程管理中启用或停用') : null,
+              value: _active,
+              onChanged:
+                  _busy || _editing ? null : (v) => setState(() => _active = v),
+            ),
+          ],
+        ),
+      );
+
+  Widget _node(_FlowNodeDraft node, int index) => WorkspacePanel(
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          Expanded(
+              child: Text('第 ${index + 1} 级审批',
+                  style: Theme.of(context).textTheme.titleSmall)),
+          if (!_editing)
+            IconButton(
+                tooltip: '删除节点',
+                onPressed: _busy
+                    ? null
+                    : () {
+                        setState(() {
+                          _nodes.remove(node);
+                        });
+                        // Release after this frame has detached the text fields.
+                        WidgetsBinding.instance
+                            .addPostFrameCallback((_) => node.dispose());
+                      },
+                icon: const Icon(Icons.delete_outline))
+        ]),
+        const SizedBox(height: 10),
+        if (_editing) ...[
+          Text(node.name.text),
+          _detailFact('节点类型', node.type == 'parallel' ? '并行审批' : '串行审批'),
+          if (node.approvers.text.isNotEmpty)
+            _detailFact('审批人 ID', node.approvers.text),
+        ] else ...[
+          TextFormField(
+              controller: node.name,
+              enabled: !_busy,
+              decoration: const InputDecoration(labelText: '节点名称'),
+              validator: (v) =>
+                  v == null || v.trim().isEmpty ? '请输入节点名称' : null),
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String>(
+              isExpanded: true,
+              initialValue: node.type,
+              decoration: const InputDecoration(labelText: '节点类型'),
+              items: const [
+                DropdownMenuItem(value: 'serial', child: Text('串行审批')),
+                DropdownMenuItem(value: 'parallel', child: Text('并行审批'))
+              ],
+              onChanged: _busy ? null : (v) => node.type = v!),
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String>(
+              isExpanded: true,
+              initialValue: node.approverType,
+              decoration: const InputDecoration(labelText: '审批人类型'),
+              items: [
+                for (final e in const {
+                  'user': '指定用户',
+                  'role': '指定角色',
+                  'position': '指定职位',
+                  'dynamic': '动态审批人'
+                }.entries)
+                  DropdownMenuItem(value: e.key, child: Text(e.value))
+              ],
+              onChanged: _busy ? null : (v) => node.approverType = v!),
+          const SizedBox(height: 10),
+          TextFormField(
+              controller: node.approvers,
+              enabled: !_busy,
+              decoration: const InputDecoration(
+                  labelText: '审批人 ID',
+                  helperText: '多个 ID 用逗号分隔',
+                  helperMaxLines: 3),
+              validator: (v) {
+                if ((v ?? '').trim().isEmpty) return null;
+                return v!
+                        .split(RegExp('[,，]'))
+                        .any((s) => (int.tryParse(s.trim()) ?? 0) <= 0)
+                    ? '请填写有效的正整数 ID'
+                    : null;
+              }),
+        ],
+      ]));
 }
 
 class _FlowNodeDraft {
