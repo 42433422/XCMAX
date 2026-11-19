@@ -134,7 +134,7 @@ class _NativeOrdersScreenState extends State<NativeOrdersScreen> {
 
   Future<void> _create() async {
     await Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => _OrderForm(
+        builder: (_) => NativeOrderFormScreen(
             repository: widget.repository,
             apiBase: widget.apiBase,
             session: _session)));

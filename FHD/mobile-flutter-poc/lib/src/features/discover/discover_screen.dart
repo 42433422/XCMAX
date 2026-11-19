@@ -466,8 +466,13 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   }
 
   String _nativeBusinessPath(String path, List<MobileNavMenuItem> menu) {
-    if (!const ['/products', '/customers', '/orders', '/shipment-records']
-        .contains(path)) {
+    if (!const [
+      '/products',
+      '/customers',
+      '/orders',
+      '/orders/create',
+      '/shipment-records'
+    ].contains(path)) {
       return path;
     }
     // Desktop core ERP pages use the installed domain facade. Only select it
@@ -512,13 +517,16 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       return;
     }
     final orderRoute =
-        RegExp(r'^/(?:mod/([a-zA-Z0-9_-]+)/)?orders/?$').firstMatch(item.path);
+        RegExp(r'^/(?:mod/([a-zA-Z0-9_-]+)/)?orders(/create)?/?$')
+            .firstMatch(item.path);
     if (orderRoute != null) {
+      final apiBase =
+          orderRoute[1] == null ? 'api' : 'api/mod/${orderRoute[1]}';
       Navigator.of(context).push(MaterialPageRoute(
-          builder: (_) => NativeOrdersScreen(
-              repository: _repository,
-              apiBase:
-                  orderRoute[1] == null ? 'api' : 'api/mod/${orderRoute[1]}')));
+        builder: (_) => orderRoute[2] == null
+            ? NativeOrdersScreen(repository: _repository, apiBase: apiBase)
+            : NativeOrderFormScreen(repository: _repository, apiBase: apiBase),
+      ));
       return;
     }
     final catalog = nativeCatalogRoute(item.path);

@@ -1,16 +1,20 @@
 part of 'native_orders_screen.dart';
 
-class _OrderForm extends StatefulWidget {
-  const _OrderForm(
-      {required this.repository, required this.apiBase, required this.session});
+class NativeOrderFormScreen extends StatefulWidget {
+  const NativeOrderFormScreen(
+      {super.key,
+      required this.repository,
+      required this.apiBase,
+      this.session});
   final MobileRepository repository;
   final String apiBase;
-  final NativeWorkspaceSession session;
+  final NativeWorkspaceSession? session;
   @override
-  State<_OrderForm> createState() => _OrderFormState();
+  State<NativeOrderFormScreen> createState() => _OrderFormState();
 }
 
-class _OrderFormState extends State<_OrderForm> {
+class _OrderFormState extends State<NativeOrderFormScreen> {
+  late final NativeWorkspaceSession _session;
   final _form = GlobalKey<FormState>();
   final _contact = TextEditingController();
   final _date = TextEditingController(
@@ -25,7 +29,14 @@ class _OrderFormState extends State<_OrderForm> {
   @override
   void initState() {
     super.initState();
-    widget.session.addListener(_invalidate);
+    _session = widget.session ??
+        NativeWorkspaceSession(
+          widget.repository.client,
+          activeModId: widget.apiBase.startsWith('api/mod/')
+              ? widget.apiBase.split('/').last
+              : '',
+        );
+    _session.addListener(_invalidate);
     unawaited(_loadOptions());
   }
 
@@ -50,7 +61,8 @@ class _OrderFormState extends State<_OrderForm> {
 
   @override
   void dispose() {
-    widget.session.removeListener(_invalidate);
+    _session.removeListener(_invalidate);
+    if (widget.session == null) _session.dispose();
     _date.dispose();
     _contact.dispose();
     for (final line in _lines) {
@@ -60,7 +72,7 @@ class _OrderFormState extends State<_OrderForm> {
   }
 
   Future<void> _loadOptions() async {
-    if (!widget.session.active) return;
+    if (!_session.active) return;
     final ticket = ++_optionsTicket;
     setState(() {
       _loading = true;
@@ -69,13 +81,13 @@ class _OrderFormState extends State<_OrderForm> {
     });
     try {
       final values = await Future.wait([
-        widget.session.request('api/mobile/v1/workspace/templates'),
-        widget.session.request('${widget.apiBase}/purchase_units'),
+        _session.request('api/mobile/v1/workspace/templates'),
+        _session.request('${widget.apiBase}/purchase_units'),
         if (_number.isEmpty)
-          widget.session.request('${widget.apiBase}/orders/next_number',
+          _session.request('${widget.apiBase}/orders/next_number',
               query: {'suffix': 'A'})
       ]);
-      if (!mounted || !widget.session.active || ticket != _optionsTicket) {
+      if (!mounted || !_session.active || ticket != _optionsTicket) {
         return;
       }
       final templates = (values[0]['templates'] as List? ?? [])
@@ -108,7 +120,7 @@ class _OrderFormState extends State<_OrderForm> {
         _optionsReady = true;
       });
     } catch (error) {
-      if (mounted && widget.session.active && ticket == _optionsTicket) {
+      if (mounted && _session.active && ticket == _optionsTicket) {
         setState(() {
           _error = mobileErrorText(error);
         });
@@ -127,13 +139,13 @@ class _OrderFormState extends State<_OrderForm> {
         await Navigator.of(context).push<List<Map<String, Object?>>>(
       MaterialPageRoute(
         builder: (_) => _ProductPicker(
-          session: widget.session,
+          session: _session,
           apiBase: widget.apiBase,
           unit: _unit,
         ),
       ),
     );
-    if (products != null && mounted && widget.session.active) {
+    if (products != null && mounted && _session.active) {
       setState(() => _lines.addAll(products.map(_OrderLine.new)));
     }
   }
@@ -145,13 +157,13 @@ class _OrderFormState extends State<_OrderForm> {
       firstDate: DateTime(1900),
       lastDate: DateTime(2100),
     );
-    if (date != null && mounted && widget.session.active && _result == null) {
+    if (date != null && mounted && _session.active && _result == null) {
       _date.text = date.toIso8601String().split('T').first;
     }
   }
 
   void _startNext() {
-    if (_busy || !widget.session.active || _result == null) return;
+    if (_busy || !_session.active || _result == null) return;
     final previous = _lines.toList();
     setState(() {
       _result = null;
@@ -172,11 +184,11 @@ class _OrderFormState extends State<_OrderForm> {
             resource: resource,
             apiBase: widget.apiBase,
             title: resource == 'customers' ? '客户' : '产品')));
-    if (mounted && widget.session.active) await _loadOptions();
+    if (mounted && _session.active) await _loadOptions();
   }
 
   Future<void> _generate() async {
-    if (_busy || _loading || !_optionsReady || !widget.session.active) {
+    if (_busy || _loading || !_optionsReady || !_session.active) {
       return;
     }
     final invalid = _form.currentState?.validateGranularly();
@@ -206,7 +218,7 @@ class _OrderFormState extends State<_OrderForm> {
       _error = null;
     });
     try {
-      final result = await widget.session.request(
+      final result = await _session.request(
           '${widget.apiBase}/shipment/generate',
           method: 'POST',
           body: {
@@ -216,13 +228,13 @@ class _OrderFormState extends State<_OrderForm> {
             'template_id': _template,
             'products': _lines.map((line) => line.payload).toList(),
           });
-      if (mounted && widget.session.active) {
+      if (mounted && _session.active) {
         setState(() {
           _result = result;
         });
       }
     } catch (error) {
-      if (mounted && widget.session.active) {
+      if (mounted && _session.active) {
         _showIssue('${mobileErrorText(error)}。再次提交会沿用当前单号，请先核对出货记录。');
       }
     } finally {
@@ -248,12 +260,12 @@ class _OrderFormState extends State<_OrderForm> {
       _busy = true;
     });
     try {
-      final bytes = await widget.session.download(
+      final bytes = await _session.download(
           '${widget.apiBase}/shipment/download/${Uri.encodeComponent(name)}');
       await shareWorkspaceFile(name, bytes,
-          isCurrent: () => mounted && widget.session.active);
+          isCurrent: () => mounted && _session.active);
     } catch (error) {
-      if (mounted && widget.session.active) {
+      if (mounted && _session.active) {
         setState(() {
           _error = mobileErrorText(error);
         });
@@ -437,7 +449,7 @@ class _OrderFormState extends State<_OrderForm> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = AppTheme.colors(context);
-    final canEdit = widget.session.active && _result == null;
+    final canEdit = _session.active && _result == null;
     final amount = _lines.fold<num>(0, (total, line) => total + line.amount);
     return Scaffold(
       backgroundColor: colors.page,
@@ -458,7 +470,7 @@ class _OrderFormState extends State<_OrderForm> {
               ],
             ),
             if (_loading || _busy) const LinearProgressIndicator(minHeight: 2),
-            if (!widget.session.active)
+            if (!_session.active)
               const Expanded(
                 child: Center(child: Text('账号或连接已切换，请返回后重新打开')),
               )

@@ -95,15 +95,17 @@ class Api extends MobileApiClient {
   }
 }
 
-Future<void> show(WidgetTester tester, Api api) async {
+Future<void> show(WidgetTester tester, Api api, {bool direct = false}) async {
   final repo = MobileRepository(client: api);
   addTearDown(() async {
     await repo.dispose();
     api.dispose();
   });
   await tester.pumpWidget(MaterialApp(
-      home:
-          NativeOrdersScreen(repository: repo, apiBase: 'api/mod/tenant-erp')));
+    home: direct
+        ? NativeOrderFormScreen(repository: repo, apiBase: 'api/mod/tenant-erp')
+        : NativeOrdersScreen(repository: repo, apiBase: 'api/mod/tenant-erp'),
+  ));
   await tester.pumpAndSettle();
 }
 
@@ -186,6 +188,16 @@ void main() {
             .onPressed,
         isNull);
   });
+  testWidgets('direct opening loads the order form in its Mod workspace',
+      (tester) async {
+    final api = Api();
+    await show(tester, api, direct: true);
+    expect(find.text('新建发货单'), findsOneWidget);
+    expect(find.text('订单编号：20261117A001'), findsOneWidget);
+    expect(api.paths, contains('api/mod/tenant-erp/purchase_units'));
+    expect(api.paths, isNot(contains('api/mod/tenant-erp/orders')));
+  });
+
   testWidgets('deletes by the record id while confirming the displayed number',
       (tester) async {
     final api = Api();
