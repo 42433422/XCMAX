@@ -698,8 +698,10 @@ container_command(container_create_args('sha256:' + 'a' * 64, None) + ['--versio
     def test_real_docker_declared_volume_is_masked_without_starting_container(self):
         self.assertIsNotNone(shutil.which('docker'), 'CI must provide Docker; this contract cannot be skipped')
         subprocess.run(['docker', 'info'], check=True, stdout=subprocess.DEVNULL, timeout=30)
-        helpers = {'re': __import__('re'), 'json': json, 'subprocess': subprocess, 'time': time}
-        exec(CONTAINER_HELPERS, helpers)
+        with tempfile.TemporaryDirectory() as module_directory:
+            module = Path(module_directory) / 'container_helpers.py'
+            module.write_text('import re, json, subprocess, time\n' + CONTAINER_HELPERS)
+            helpers = runpy.run_path(str(module))
         for target in ('/var/lib/postgresql/data', '/var/lib/postgresql'):
             with self.subTest(target=target), tempfile.TemporaryDirectory() as directory:
                 token = uuid.uuid4().hex
