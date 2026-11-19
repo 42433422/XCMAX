@@ -200,9 +200,12 @@ def test_repair_failure_message_is_not_model_connection_error(monkeypatch):
     monkeypatch.setattr(
         "app.application.facades.tools_facade.get_workflow_tool_registry", lambda: {}
     )
+    notes = []
+    monkeypatch.setattr("app.infrastructure.chat_stream_lifetime.publish_stream_note", notes.append)
     result = PlannedWorkflowDispatch({}, callbacks, planner, risk_gate, Mock()).handle(
         "owner", "请查询", "pro", {}, "请查询"
     )
+    assert not any(note.startswith("已生成") for note in notes)
     assert result["data"]["action"] == "workflow_planning_failed"
     assert result["data"]["error_code"] == "workflow_plan_rejected"
     assert result["data"]["planning_failure_kind"] == "plan_repair_failed"
