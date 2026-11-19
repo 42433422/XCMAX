@@ -695,12 +695,36 @@ def _sheet_line_index(text: str) -> dict[tuple[str, str], set[str]]:
     return found
 
 
+def _finance_only_sheets(source: str) -> set[str]:
+    """Recognize finance appendices without excluding mixed shipment sheets."""
+    from app.application.elt.parser_regions import (
+        _FINANCE_CONTENT_RE,
+        _FINANCE_RE,
+        _field_for_header,
+    )
+
+    finance: set[str] = set()
+    shipment_headers: set[str] = set()
+    for (sheet, number), cells in _sheet_line_index(source).items():
+        if _FINANCE_RE.search(sheet) or (
+            int(number) <= 20 and any(_FINANCE_CONTENT_RE.search(cell) for cell in cells)
+        ):
+            finance.add(sheet)
+        fields = {_field_for_header(cell) for cell in cells}
+        if fields & {"name", "model_number"} and fields & {"quantity_tins", "quantity_kg"}:
+            shipment_headers.add(sheet)
+    return finance - shipment_headers
+
+
 def _business_rows(data: dict, cited: set[tuple[str, str]]) -> list[dict]:
+    sheets = {sheet for sheet, _number in cited}
     rows = []
     for item in list(data.get("rows") or [])[:100]:
         if not isinstance(item, dict):
             continue
         row = {key: _cell(item.get(key)) for key in _BUSINESS_ROW_KEYS}
+        if row["source_sheet"] and row["source_sheet"] not in sheets:
+            continue
         if (row["source_sheet"], row["source_row"]) not in cited:
             row["source_sheet"] = ""
             row["source_row"] = ""
@@ -1077,6 +1101,18 @@ def advise_business_import(sheet_text: str) -> LlmAssistResult:
     source = str(sheet_text or "").strip()
     if not source:
         return LlmAssistResult()
+    excluded = _finance_only_sheets(source)
+    if excluded:
+        sheet = ""
+        eligible = []
+        for line in source.splitlines():
+            if line.startswith("# sheet:"):
+                sheet = line.removeprefix("# sheet:")
+            if sheet not in excluded:
+                eligible.append(line)
+        source = "\n".join(eligible).strip()
+        if not _sheet_line_index(source):
+            return LlmAssistResult()
     units = business_units(source)
     if len(units) > MAX_BUSINESS_UNITS:
         return LlmAssistResult(degraded=True, degradation_code="ELT_DATABASE_INPUT_EXCEEDS_UNITS")

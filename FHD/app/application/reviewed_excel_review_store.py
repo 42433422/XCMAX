@@ -452,6 +452,7 @@ def _intake_selection_key(run, proposal_version, candidate_id, selected, name, n
             {
                 "review_id": run.id,
                 "source_sha256": run.file_sha256,
+                "business_source_policy": "visible_non_finance_v2",
                 "version": proposal_version,
                 "candidate": candidate_id,
                 "selections": selected,

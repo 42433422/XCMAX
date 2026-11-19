@@ -2461,6 +2461,10 @@ def reviewed_excel_intake_preview(
             # read the classification's archived original, which still has item rows.
             template_source = _source(db, review, tenant, owner)
             archived = _archived_original(db, review, tenant, owner)
+            from app.application.elt.attendance_pipeline import has_attendance_matrix
+
+            if has_attendance_matrix(archived):
+                _authorize_intake(request, (tenant, owner), "attendance")
             chosen = clean_workbook(template_source, review.file_sha256, selected)
             service = get_elt_service()
             upload = service.save_upload(

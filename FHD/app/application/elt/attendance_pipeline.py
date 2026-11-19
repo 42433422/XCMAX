@@ -14,6 +14,7 @@ import os
 import re
 import sqlite3
 from datetime import date, datetime, time
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 
@@ -57,6 +58,17 @@ _HEADER_ALIASES = {
     "position": ("职位", "岗位"),
     "shift_name": ("班次",),
 }
+
+
+def has_attendance_matrix(source: bytes) -> bool:
+    """Recognize a visible attendance matrix using the dedicated parser's source proof."""
+    workbook = load_workbook(BytesIO(source), read_only=False, data_only=False)
+    try:
+        return any(
+            _matrix_blocks(sheet) for sheet in workbook.worksheets if sheet.sheet_state == "visible"
+        )
+    finally:
+        workbook.close()
 
 
 def parse_attendance_dataset(path: Path, *, max_rows: int) -> ParsedDataset:

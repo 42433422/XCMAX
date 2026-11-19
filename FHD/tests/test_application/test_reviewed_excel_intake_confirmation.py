@@ -506,6 +506,30 @@ def test_private_intake_requires_preview_and_unscoped_attendance_is_refused(inta
     assert_no_writes(store)
 
 
+def test_archived_attendance_matrix_is_routed_to_the_attendance_workspace(intake_store, monkeypatch):
+    store = intake_store
+    data = review(store)
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Sheet1"
+    sheet.append(["2026年2月考勤表"])
+    sheet.append(["姓名", *range(1, 29)])
+    sheet.append(["张三", "√"])
+    source = BytesIO()
+    workbook.save(source)
+    workbook.close()
+    monkeypatch.setattr(routes, "_archived_original", lambda *_args: source.getvalue())
+    with store.factory() as db:
+        before = (db.query(EltRun).count(), db.query(EltUpload).count())
+
+    response = store.client.post(f"{BASE}/intake-preview", data=data)
+    assert response.status_code == 409, response.text
+    assert "请使用考勤工作区授权导入" in response.json()["detail"]
+    assert_no_writes(store)
+    with store.factory() as db:
+        assert (db.query(EltRun).count(), db.query(EltUpload).count()) == before
+
+
 def test_unknown_template_commit_receipt_cannot_replay_intake(intake_store, monkeypatch):
     from app.legacy.routes import document_templates_compat
 

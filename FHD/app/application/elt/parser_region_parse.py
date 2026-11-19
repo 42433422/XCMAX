@@ -53,7 +53,13 @@ def parse_customer_product_regions(
     model_identity_ambiguity_count = 0
     sheet_domain_hints: dict[str, str] = {}
     try:
-        for worksheet in workbook.worksheets:
+        worksheets = [sheet for sheet in workbook.worksheets if sheet.sheet_state == "visible"]
+        skipped_sheets.extend(
+            {"name": sheet.title, "reason": "hidden_sheet"}
+            for sheet in workbook.worksheets
+            if sheet.sheet_state != "visible"
+        )
+        for worksheet in worksheets:
             recent: deque[tuple[int, tuple[Any, ...]]] = _facade().deque(maxlen=5)
             active: dict[str, Any] | None = None
             sheet_candidates = 0
@@ -264,14 +270,11 @@ def parse_customer_product_regions(
             _facade()._attach_delivery_fingerprints(parsed_rows)
         sheet_domain_hints = {
             worksheet.title: _facade()._sheet_domain_hint(worksheet)
-            for worksheet in workbook.worksheets
+            for worksheet in worksheets
         }
         canonical_candidates: dict[str, set[str]] = {}
         for region in regions:
-            if (
-                region.get("status") != "selected"
-                or workbook[region["sheet"]].sheet_state != "visible"
-            ):
+            if region.get("status") != "selected":
                 continue
             customer_name = str(region.get("customer_name") or "").strip()
             alias = _facade().customer_alias_key(customer_name)
@@ -315,7 +318,7 @@ def parse_customer_product_regions(
             for region in regions
             if region.get("status") == "selected"
         }
-        for worksheet in workbook.worksheets:
+        for worksheet in worksheets:
             if worksheet.title in delivery_sheets:
                 continue
             if sheet_domain_hints.get(worksheet.title) == "finance_or_reconciliation":
