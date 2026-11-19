@@ -74,7 +74,14 @@ def _loopback(host: str | None) -> bool:
 def _desktop_request(request: Request) -> None:
     if not is_desktop_mode() or request.client is None or not _loopback(request.client.host):
         raise HTTPException(404)
-    if request.headers.get("x-xcagi-desktop-local") != "1":
+    expected = os.environ.get("XCAGI_DESKTOP_WORKSPACE_TOKEN", "")
+    presented = request.headers.get("x-xcagi-workspace-capability", "")
+    if (
+        request.headers.get("x-xcagi-desktop-local") != "1"
+        or not re.fullmatch(r"[0-9a-f]{64}", expected)
+        or not re.fullmatch(r"[0-9a-f]{64}", presented)
+        or not secrets.compare_digest(expected, presented)
+    ):
         raise HTTPException(403, "请在本机桌面应用中打开工作台")
     try:
         host = urlsplit(f"http://{request.headers.get('host', '')}")

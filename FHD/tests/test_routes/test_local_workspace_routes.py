@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import itertools
 import json
+import socket
 import sqlite3
+import threading
 import time
+from contextlib import contextmanager
 from urllib.parse import urlsplit
 
 import httpx
 import pytest
+import uvicorn
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -19,6 +23,11 @@ from app.middleware.csrf import CSRFMiddleware
 
 DESK = "1" * 32
 PHONE = "2" * 32
+CAPABILITY = "a" * 64
+LOCAL_HEADERS = {
+    "X-XCAGI-Desktop-Local": "1",
+    "X-XCAGI-Workspace-Capability": CAPABILITY,
+}
 
 
 def change(op_id, record_id, name, base=None):
@@ -36,6 +45,7 @@ def change(op_id, record_id, name, base=None):
 def local_desktop(tmp_path, monkeypatch):
     monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("XCAGI_DESKTOP_WORKSPACE_TOKEN", CAPABILITY)
     monkeypatch.setattr(routes, "_lan_address", lambda: "127.0.0.1")
     app = FastAPI()
     app.add_middleware(CSRFMiddleware)
@@ -44,10 +54,40 @@ def local_desktop(tmp_path, monkeypatch):
         app,
         base_url="http://127.0.0.1",
         client=("127.0.0.1", 1234),
-        headers={"X-XCAGI-Desktop-Local": "1"},
+        headers=LOCAL_HEADERS.copy(),
     ) as client:
         yield client
     stop_peer()
+
+
+@contextmanager
+def loopback_http(app):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(8)
+        server = uvicorn.Server(
+            uvicorn.Config(
+                app, access_log=False, proxy_headers=False, lifespan="off", log_level="error"
+            )
+        )
+        thread = threading.Thread(target=server.run, kwargs={"sockets": [listener]}, daemon=True)
+        thread.start()
+        try:
+            deadline = time.monotonic() + 3
+            while not server.started:
+                assert thread.is_alive() and time.monotonic() < deadline
+                time.sleep(0.01)
+            with httpx.Client(
+                base_url=f"http://127.0.0.1:{listener.getsockname()[1]}",
+                headers={"X-XCAGI-Desktop-Local": "1"},
+                trust_env=False,
+                timeout=3,
+            ) as client:
+                yield client
+        finally:
+            server.should_exit = True
+            thread.join(5)
+            assert not thread.is_alive()
 
 
 def stop_peer():
@@ -299,6 +339,95 @@ def test_management_requests_require_loopback_and_desktop_mode(local_desktop, mo
     ) as remote:
         for resource in ("status", "records", "archives"):
             assert remote.get(f"/api/local-workspace/{resource}").status_code == 404
+
+
+@pytest.mark.parametrize(
+    "capability",
+    [
+        pytest.param(None, id="missing"),
+        pytest.param("b" * 64, id="wrong"),
+        pytest.param("a" * 63, id="short"),
+        pytest.param("g" * 64, id="nonhex"),
+        pytest.param(b"\xe9" * 64, id="nonascii"),
+    ],
+)
+def test_other_loopback_clients_cannot_read_write_or_issue_pairing(local_desktop, capability):
+    workspace_id = local_desktop.get("/api/local-workspace/status").json()["workspace_id"]
+    local_desktop.post(
+        "/api/local-workspace/records",
+        json={"workspace_id": workspace_id, "operations": [change("a", DESK, "Private customer")]},
+    ).raise_for_status()
+    headers = {} if capability is None else {"X-XCAGI-Workspace-Capability": capability}
+    with loopback_http(local_desktop.app) as outsider:
+        responses = [
+            outsider.get("/api/local-workspace/records", headers=headers),
+            outsider.post(
+                "/api/local-workspace/records",
+                headers=headers,
+                json={"workspace_id": workspace_id, "operations": [change("b", PHONE, "Intruder")]},
+            ),
+            outsider.post("/api/local-workspace/pairing", headers=headers),
+        ]
+    assert [response.status_code for response in responses] == [403, 403, 403]
+    assert all("Private customer" not in response.text for response in responses)
+    peer = routes._current_peer()
+    assert peer.store.status()["record_count"] == 1
+    assert peer.invitation is None and peer.server is None
+
+
+@pytest.mark.parametrize(
+    "configured",
+    [
+        pytest.param(None, id="missing"),
+        pytest.param("", id="empty"),
+        pytest.param("a" * 63, id="short"),
+        pytest.param("g" * 64, id="nonhex"),
+        pytest.param("\xe9" * 64, id="nonascii"),
+    ],
+)
+def test_workspace_fails_closed_without_a_valid_main_capability(
+    local_desktop, monkeypatch, configured
+):
+    if configured is None:
+        monkeypatch.delenv("XCAGI_DESKTOP_WORKSPACE_TOKEN")
+    else:
+        monkeypatch.setenv("XCAGI_DESKTOP_WORKSPACE_TOKEN", configured)
+    with loopback_http(local_desktop.app) as client:
+        assert client.get("/api/local-workspace/status", headers=LOCAL_HEADERS).status_code == 403
+        assert client.post("/api/local-workspace/pairing", headers=LOCAL_HEADERS).status_code == 403
+
+
+def test_main_capability_keeps_offline_workspace_and_paired_restart(local_desktop, monkeypatch):
+    with loopback_http(local_desktop.app) as client:
+        client.headers.update(LOCAL_HEADERS)
+        workspace_id = client.get("/api/local-workspace/status").json()["workspace_id"]
+        assert "authorization" not in client.headers and set(client.cookies) <= {"csrf_token"}
+        client.post(
+            "/api/local-workspace/records",
+            json={"workspace_id": workspace_id, "operations": [change("a", DESK, "Offline desk")]},
+        ).raise_for_status()
+        response = client.post("/api/local-workspace/pairing")
+        response.raise_for_status()
+        assert CAPABILITY not in response.text
+        phone, call = phone_connection(response.json()["qr"])
+        with phone:
+            assert call("bind", origin="desktop")["records"][0]["id"] == DESK
+    stop_peer()
+    routes.resume_local_workspace()
+    with loopback_http(local_desktop.app) as restarted:
+        snapshot = restarted.get("/api/local-workspace/records", headers=LOCAL_HEADERS)
+        assert snapshot.json()["records"][0]["id"] == DESK
+        monkeypatch.setenv("XCAGI_DESKTOP_WORKSPACE_TOKEN", "b" * 64)
+        assert (
+            restarted.get("/api/local-workspace/status", headers=LOCAL_HEADERS).status_code == 403
+        )
+        assert (
+            restarted.get(
+                "/api/local-workspace/status", headers={"X-XCAGI-Workspace-Capability": "b" * 64}
+            ).status_code
+            == 200
+        )
+    assert CAPABILITY.encode() not in routes._current_peer().store.path.read_bytes()
 
 
 def test_startup_only_opens_an_existing_desktop_workspace(tmp_path, monkeypatch):

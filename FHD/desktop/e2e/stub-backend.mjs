@@ -28,6 +28,22 @@ const INDEX_HTML = `<!doctype html>
 const server = http.createServer((req, res) => {
   const url = new URL(req.url || '/', `http://127.0.0.1:${port}`)
   res.setHeader('Server', 'uvicorn')
+  if (url.pathname.startsWith('/api/local-workspace/')) {
+    const token = process.env.XCAGI_DESKTOP_WORKSPACE_TOKEN
+    if (!token || req.headers['x-xcagi-workspace-capability'] !== token) {
+      res.writeHead(403)
+      res.end('workspace capability required')
+      return
+    }
+    if (url.pathname.endsWith('/redirect')) {
+      res.writeHead(302, { Location: process.env.XCAGI_DESKTOP_E2E_REDIRECT_URL })
+      res.end()
+      return
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ authenticated: true }))
+    return
+  }
   if (url.pathname === '/api/ping') {
     res.writeHead(200, { 'Content-Type': 'text/plain' })
     res.end('pong')

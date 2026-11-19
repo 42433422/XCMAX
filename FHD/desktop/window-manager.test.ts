@@ -6,6 +6,7 @@ const sessionMocks = vi.hoisted(() => {
     on: ReturnType<typeof vi.fn>
     clearStorageData: ReturnType<typeof vi.fn>
     clearCache: ReturnType<typeof vi.fn>
+    webRequest: { onBeforeSendHeaders: ReturnType<typeof vi.fn> }
   }>()
   return {
     partitions,
@@ -18,6 +19,7 @@ const sessionMocks = vi.hoisted(() => {
           on: vi.fn(),
           clearStorageData: vi.fn(async () => undefined),
           clearCache: vi.fn(async () => undefined),
+          webRequest: { onBeforeSendHeaders: vi.fn() },
         }
         partitions.set(name, store)
       }
@@ -536,6 +538,8 @@ describe('同一进程附加窗口', () => {
     expect(firstStore).toBeDefined()
     expect(secondStore).toBeDefined()
     expect(firstStore).not.toBe(secondStore)
+    expect(firstStore!.webRequest.onBeforeSendHeaders).toHaveBeenCalledOnce()
+    expect(secondStore!.webRequest.onBeforeSendHeaders).toHaveBeenCalledOnce()
     await vi.waitFor(() => expect(firstStore!.cookies.set).toHaveBeenCalled())
     expect(firstStore!.cookies.set).toHaveBeenCalledWith(expect.objectContaining({ name: 'session_id', value: 'live-session' }))
     expect(secondStore!.cookies.set).toHaveBeenCalledWith(expect.objectContaining({ name: 'csrf_token', value: 'csrf-live' }))
