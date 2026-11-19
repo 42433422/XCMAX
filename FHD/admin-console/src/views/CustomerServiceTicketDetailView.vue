@@ -95,11 +95,13 @@
         <p v-if="handleError" role="alert" class="cs-error-text">{{ handleError }}</p>
         <form class="cs-eta-editor" @submit.prevent="assignHandler()">
           <label>指派给技术管理员 <input v-model="assigneeId" inputmode="numeric" required /></label>
-          <label>原因 <input v-model="handleReason" required minlength="4" placeholder="填写操作原因或核对结果" /></label>
+          <label>原因 <input v-model="handleReason" required minlength="4" maxlength="2000" placeholder="填写操作原因或核对结果" /></label>
           <button class="cs-btn cs-btn-primary" type="submit" :disabled="saving">指派</button>
           <button class="cs-btn" type="button" :disabled="saving" @click="assignHandler(true)">指派给我</button>
           <button class="cs-btn" type="button" :disabled="saving" @click="acceptHandler">受理</button>
           <button class="cs-btn" type="button" :disabled="saving" @click="diagnoseHandler">记录诊断</button>
+          <button v-if="canRevokeDispatch" class="cs-btn" type="button" :disabled="saving || savingEta" @click="revokeDispatch">撤销派发</button>
+          <p v-if="canRevokeDispatch" class="cs-hint">撤销派发后，原单继续由人工处理。已派发任务的状态以执行回执为准。</p>
         </form>
         <form class="cs-eta-editor" @submit.prevent="requestSensitive">
           <label>敏感操作 <input v-model="sensitiveChange" placeholder="例如 调整客户可见配置" required /></label>
@@ -115,8 +117,31 @@
 
       <section v-show="section === 'progress'" class="cs-card" aria-label="执行总览">
         <h3 class="cs-card-title">执行总览</h3>
-        <p v-if="!overview" class="cs-state">暂无记录</p>
-        <template v-else>
+        <div v-if="dispatchRevocation" aria-label="撤销派发回执">
+          <dl class="cs-facts">
+            <div><dt>撤销派发</dt><dd>{{ executionStopLabel(revocationStop.state) }}</dd></div>
+            <div><dt>撤销原因</dt><dd>{{ dispatchRevocation.note }}</dd></div>
+            <div><dt>记录时间</dt><dd>{{ formatBeijingTime(dispatchRevocation.at) }}</dd></div>
+          </dl>
+          <ul v-if="revocationTasks.length" class="cs-chips" aria-label="执行端撤销回执">
+            <li v-for="task in revocationTasks" :key="String(task.id)">
+              <code>{{ task.para_task_id || task.id }}</code> · {{ executionStopLabel(task.state) }}
+              <template v-if="task.liveState && task.liveState !== task.state">
+                · 最新回执 {{ executionStopLabel(task.liveState) }}
+              </template>
+            </li>
+          </ul>
+          <ul v-if="unsettledDispatches.length" class="cs-chips" aria-label="待核实的外部派发">
+            <li v-for="incident in unsettledDispatches" :key="String(incident.incident_event_id)">
+              事件 #{{ incident.incident_event_id }} · {{ Array.isArray(incident.task_ids) ? incident.task_ids.join('、') : '' }} · 停止状态待核实
+            </li>
+          </ul>
+          <ul v-if="unsettledActions.length" class="cs-chips" aria-label="待核实的原单动作">
+            <li v-for="actionId in unsettledActions" :key="String(actionId)">动作 #{{ actionId }} · 停止状态待核实</li>
+          </ul>
+        </div>
+        <p v-if="!overview && !dispatchRevocation" class="cs-state">暂无记录</p>
+        <template v-if="overview">
           <dl class="cs-facts">
             <div><dt>当前卡点</dt><dd>{{ overview.blocker }}</dd></div>
             <div><dt>当前责任方</dt><dd>{{ overview.responsible }}</dd></div>
@@ -266,10 +291,12 @@ type CloseDisposition = 'resolved' | 'expired' | 'invalid' | 'out_of_scope'
 const closeNote = ref(''), closeVerification = ref(''), closeRequestId = ref(''), closeDisposition = ref<CloseDisposition>('resolved')
 const replyNote = ref(''), replyRequestId = ref('')
 const assigneeId = ref(''), handleReason = ref(''), handleError = ref('')
+const revokeRequestId = ref('')
 const sensitiveChange = ref('调整客户可见配置'), sensitiveActionId = ref(0)
 const reworkNote = ref(''), deliveryError = ref(''), mainRework = ref(false)
 const canUseMainRework = computed(() => detail.value?.custom_delivery?.kind === 'module' && detail.value?.custom_delivery?.suggested_id === 'sunbird-attendance-custom')
 watch(replyNote, () => { replyRequestId.value = '' })
+watch(handleReason, () => { revokeRequestId.value = '' })
 let generation = 0
 
 const ticketId = computed(() => Number(String(route.params.ticketId ?? '')))
@@ -316,6 +343,23 @@ const resolution = computed(() => {
   const value = evidence.value.resolution
   return value && typeof value === 'object' ? value as Row : null
 })
+const dispatchRevocation = computed(() => ticket.value.dispatch_revocation && typeof ticket.value.dispatch_revocation === 'object'
+  ? ticket.value.dispatch_revocation as Row : null)
+const revocationStop = computed(() => (dispatchRevocation.value?.execution_stop || {}) as Row)
+const revocationTasks = computed(() => {
+  const snapshot = revocationStop.value.mac_control_tasks
+  if (!Array.isArray(snapshot)) return []
+  const current = detail.value?.execution_overview?.revocation_task_receipts
+  const byId = new Map(Array.isArray(current) ? (current as Row[]).map(row => [row.id, row.state]) : [])
+  return (snapshot as Row[]).map(task => ({ ...task, liveState: byId.get(task.id) }) as Row)
+})
+const unsettledDispatches = computed(() => Array.isArray(revocationStop.value.unsettled_incidents)
+  ? revocationStop.value.unsettled_incidents as Row[] : [])
+const unsettledActions = computed(() => Array.isArray(revocationStop.value.unsettled_action_ids)
+  ? revocationStop.value.unsettled_action_ids as number[] : [])
+const canRevokeDispatch = computed(() => ['open', 'processing'].includes(String(ticket.value.status))
+  && Number(ticket.value.assigned_admin_id) > 0 && !ticket.value.closed_at && !dispatchRevocation.value
+  && !customDelivery.value && ticket.value.intent !== 'custom_delivery' && resolution.value?.repair_verified !== true)
 const status = computed(() => ticketStatusBadge(ticket.value))
 const overview = computed(() => executionOverview(detail.value?.execution_overview))
 const steps = computed(() => (Array.isArray(ticket.value.lifecycle_steps) ? ticket.value.lifecycle_steps : []) as Row[])
@@ -404,24 +448,39 @@ async function requestDeliveryRework() {
 async function postHandle(command: string, body: Row, assignToMe = false) {
   const id = ticketId.value, started = generation
   if (!validId.value || saving.value || savingEta.value || ticket.value.closed_at) return
+  const revoking = command === 'dispatch-revoke'
+  const minimum = revoking ? 8 : 4
+  const reason = handleReason.value.trim()
   handleError.value = ''
-  if (handleReason.value.trim().length < 4) {
-    handleError.value = '请填写至少 4 字的操作原因'
+  if (reason.length < minimum) {
+    handleError.value = `请填写至少 ${minimum} 字的操作原因`
     return
   }
   saving.value = true
   try {
-    if (assignToMe) {
+    if (assignToMe || revoking) {
       const staff = await api.get<Row>('/api/xcmax/admin/customer-service/staff')
       const viewerId = Number(staff?.viewer_id)
       if (id !== ticketId.value || started !== generation) return
       if (!Number.isSafeInteger(viewerId) || viewerId <= 0) throw new Error('当前管理员身份不可核验')
-      body.assignee_id = viewerId
+      if (assignToMe) body.assignee_id = viewerId
+      else if (Number(ticket.value.assigned_admin_id) !== viewerId) throw new Error('仅当前工单处理人可以撤销派发')
+    }
+    if (revoking) {
+      if (!canRevokeDispatch.value || !await appConfirm(
+        `撤销工单 ${ticket.value.ticket_no || id} 的自动派发？工单继续由人工处理，已派发任务的状态以执行回执为准。`,
+        { title: '撤销派发', confirmText: '确认撤销派发', cancelText: '返回检查', danger: true },
+      ) || id !== ticketId.value || started !== generation || reason !== handleReason.value.trim()) return
+      revokeRequestId.value ||= crypto.randomUUID()
+      body.request_id = revokeRequestId.value
     }
     await api.post(`/api/xcmax/admin/customer-service/tickets/${id}/${command}`, body)
     if (id === ticketId.value && started === generation) await load()
   } catch (err) {
-    if (id === ticketId.value && started === generation) handleError.value = apiError(err)
+    if (id === ticketId.value && started === generation) {
+      if (revoking && body.request_id) error.value = apiError(err)
+      else handleError.value = apiError(err)
+    }
   } finally {
     saving.value = false
   }
@@ -432,6 +491,9 @@ function assignHandler(assignToMe = false) {
 }
 function acceptHandler() { return postHandle('accept', { reason: handleReason.value }) }
 function diagnoseHandler() { return postHandle('diagnose', { reason: handleReason.value }) }
+function revokeDispatch() {
+  if (canRevokeDispatch.value) return postHandle('dispatch-revoke', { note: handleReason.value.trim() })
+}
 function requestSensitive() {
   return postHandle('sensitive-action', { change: sensitiveChange.value, reason: handleReason.value })
 }
@@ -562,7 +624,7 @@ async function load() {
 }
 watch(ticketId, () => {
   reworkNote.value = ''; mainRework.value = false; deliveryError.value = ''
-  assigneeId.value = ''; handleReason.value = ''; handleError.value = ''
+  assigneeId.value = ''; handleReason.value = ''; handleError.value = ''; revokeRequestId.value = ''
   replyNote.value = ''; replyRequestId.value = ''
   closeDisposition.value = 'resolved'; closeNote.value = ''; closeVerification.value = ''; closeRequestId.value = ''
   etaMessage.value = ''; etaError.value = ''; void load()

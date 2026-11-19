@@ -167,17 +167,24 @@ def test_customer_ticket_proxy_preserves_search_and_market_identity(
 
 @pytest.mark.parametrize(
     ("operation", "disposition", "status"),
-    [("close", "resolved", "resolved"), ("disposition", "out_of_scope", "rejected")],
+    [
+        ("close", "resolved", "resolved"),
+        ("disposition", "out_of_scope", "rejected"),
+        ("dispatch-revoke", None, "processing"),
+    ],
 )
-def test_customer_ticket_disposition_uses_only_current_admin_market_identity(
+def test_customer_ticket_processing_uses_only_current_admin_market_identity(
     client, customer_ticket_identity, operation, disposition, status
 ):
     body = {
         "request_id": "123e4567-e89b-12d3-a456-426614174000",
         "note": "保留原单的人工处理结论",
-        "verification": "按客户在原客服会话中的问题文字、场景和支持范围逐项核对。",
-        "disposition": disposition,
     }
+    if disposition:
+        body.update(
+            verification="按客户在原客服会话中的问题文字、场景和支持范围逐项核对。",
+            disposition=disposition,
+        )
     with patch(
         "app.fastapi_routes.market_account._proxy_json",
         new_callable=AsyncMock,

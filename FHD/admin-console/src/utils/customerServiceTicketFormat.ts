@@ -154,11 +154,18 @@ export const dispositionLabel = plain({
 export const executionStopLabel = plain({
   dispatch_blocked: '已阻止后续派发',
   stop_unconfirmed: '已阻止后续派发，已派发任务停止状态待核实',
+  cancelled: '已取消',
+  cancel_requested: '已申请取消，等待执行端确认',
+  stop_pending_lease: '执行端仍持有任务，停止状态待核实',
+  queued: '排队中',
+  execution_completed: '任务已执行完成',
+  failed: '执行失败',
 })
-export const actionTypeLabel = plain({ 'employee.dispatch': '派单给处理小组', 'ticket.reply': '回复客户', 'ticket.close': '关闭工单', 'ticket.disposition': '驳回原工单' })
+export const actionTypeLabel = plain({ 'employee.dispatch': '派单给处理小组', 'ticket.reply': '回复客户', 'ticket.close': '关闭工单', 'ticket.disposition': '驳回原工单', 'ticket.dispatch_revoke': '撤销派发' })
 export const eventLabel = plain({
   admin_ticket_expired: '管理员记录过期（未修复）',
   admin_ticket_disposed: '管理员驳回原工单', admin_ticket_replied: '管理员回复原客户',
+  admin_ticket_dispatch_revoked: '管理员撤销派发',
   ticket_title_corrected: '更正工单标题', ticket_classification_corrected: '纠正工单分类',
   ticket_created: '创建工单', decision_made: 'AI 受理决策', employee_progress: '员工处理进展',
   action_executed: '执行动作', action_forbidden: '动作被拒绝', session_created: '创建会话',
@@ -178,7 +185,8 @@ export const workOrderLabel = plain({ candidate: '待分流', routed: '已分流
   released: '已发布', verifying: '验收中', closed: '已关闭', reopened: '已重开', dropped: '已停止' })
 const blockerLabel = plain({ none: '无待办', task_receipt: '任务结果待对账', review_in_progress: '复核任务处理中',
   customer_confirmation: '等待原客户验收', release_binding: '等待正式版本绑定', execution_failed: '执行失败待恢复',
-  execution_pending: '当前环节执行中或待执行', assignment_unconfirmed: '尚未确认实际接单' })
+  execution_pending: '当前环节执行中或待执行', assignment_unconfirmed: '尚未确认实际接单',
+  dispatch_revoked: '已撤销自动派发' })
 
 export function executionOverview(value: unknown) {
   if (!value || typeof value !== 'object') return null
