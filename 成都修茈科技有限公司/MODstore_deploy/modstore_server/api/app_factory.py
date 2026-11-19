@@ -70,6 +70,7 @@ _FULL_OPTIONAL_MODULES = (
     "modstore_server.llm_api",
     "modstore_server.openai_llm_gateway_api",
     "modstore_server.agent_butler_api",
+    "modstore_server.xiaoc_delivery_followup_api",
     "modstore_server.account_api",
     "modstore_server.notification_api",
     "modstore_server.knowledge_vector_api",

@@ -63,6 +63,18 @@ def _register_scheduler_phase_01():
     _facade().autonomy_scheduler.register_autonomy_jobs(
         _facade()._scheduler, _facade()._scheduler_startup_recovery_deadlines
     )
+    from modstore_server.xiaoc_delivery_followup import run_delivery_followups
+
+    _facade()._scheduler.add_job(
+        lambda: _facade()._run_tracked_scheduler_job(
+            "xiaoc_delivery_followups", run_delivery_followups
+        ),
+        _facade().IntervalTrigger(minutes=5),
+        id="xiaoc_delivery_followups",
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+    )
 
     def _dead_letter_reconcile_job() -> None:
         try:

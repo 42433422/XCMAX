@@ -24,6 +24,7 @@ describe('NotificationCenter', () => {
         { path: '/wallet', name: 'wallet', component: { template: '<div />' } },
         { path: '/orders/:orderId', name: 'order-detail', component: { template: '<div />' } },
         { path: '/workbench', name: 'workbench', component: { template: '<div />' } },
+        { path: '/admin/customer-service', name: 'admin-customer-service', component: { template: '<div />' } },
       ],
     })
   })
@@ -76,6 +77,34 @@ describe('NotificationCenter', () => {
     expect(wrapper.text()).toContain('支付成功')
     expect(wrapper.text()).toContain('配额警告')
     expect(wrapper.text()).toContain('标为已读')
+  })
+
+  it('links a delivery follow-up notification to the corresponding admin ticket', async () => {
+    vi.mocked(api.notificationsList).mockResolvedValue({
+      notifications: [
+        {
+          id: 1,
+          title: '交付需要关注',
+          content: '验收材料待补齐',
+          is_read: true,
+          created_at: '2026-11-19T00:00:00Z',
+          type: 'system',
+          data: { kind: 'xiaoc_delivery_followup', ticket_id: 18 },
+        },
+      ],
+    })
+    await router.push('/')
+    const wrapper = mount(NotificationCenter, { global: { plugins: [router] } })
+    await flushPromises()
+    const open = wrapper.findAll('button').find((button) => button.text() === '打开交付跟进')
+    expect(open).toBeDefined()
+    await open?.trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value).toMatchObject({
+      name: 'admin-customer-service',
+      query: { xiaocDelivery: '18' },
+    })
+    wrapper.unmount()
   })
 
   it('renders filter chips', async () => {

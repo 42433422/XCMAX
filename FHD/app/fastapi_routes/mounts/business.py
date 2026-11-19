@@ -149,6 +149,12 @@ def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
     )
     _mount(
         registry,
+        "xiaoc_admin_context",
+        lambda: __import__("app.fastapi_routes.xiaoc_admin_context", fromlist=["router"]).router,
+        priority=10,
+    )
+    _mount(
+        registry,
         "order_bridge_webhook",
         lambda: __import__("app.fastapi_routes.order_event_webhook", fromlist=["router"]).router,
         priority=10,
