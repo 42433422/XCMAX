@@ -19,7 +19,7 @@ from modstore_server.customer_ticket_intake_review import (
     review_report_async,
 )
 from modstore_server.eventing import db_outbox
-from modstore_server.models import User, get_session_factory
+from modstore_server.models import RefundRequest, User, get_session_factory
 from modstore_server.models_cs import (
     CustomerServiceAction,
     CustomerServiceAuditLog,
@@ -459,6 +459,59 @@ def test_short_anchored_material_reaches_existing_ticket_workflow(
     assert ticket["id"] == ticket_id and ticket["summary"] == original
     assert ticket["evidence"]["order_no"] == "REFUND-123456"
     assert executions == [(ticket_id, "refund.apply", "REFUND-123456")]
+
+
+def test_verified_original_refund_uses_the_corrected_order(client, monkeypatch):
+    customer = _authenticated_ticket_user(monkeypatch)
+    old_order = f"OLD-{uuid4().hex[:10]}"
+    correct_order = f"NEW-{uuid4().hex[:10]}"
+    original = f"重复购买的商品希望退款，订单号：{old_order}，请提交工单。"
+    correction = f"更正订单号：{correct_order}"
+    looked_up = []
+
+    async def review(_provider, _model, messages, **_opts):
+        report = messages[-1]["content"]
+        accepted = correction in report
+        return {
+            "ok": True,
+            "content": json.dumps(
+                {
+                    "disposition": "actionable" if accepted else "needs_review",
+                    "intent": "refund",
+                    "reason": "核对原单与更正材料",
+                    "evidence_excerpt": correction if accepted else "",
+                }
+            ),
+        }
+
+    def paid_order(number):
+        looked_up.append(number)
+        return {"user_id": customer.id, "status": "paid", "total_amount": 10}
+
+    monkeypatch.setattr(llm, "chat_dispatch_via_platform_only", review)
+    monkeypatch.setattr("modstore_server.customer_service_tools.payment_orders.find", paid_order)
+    monkeypatch.setattr(customer_service_api, "_schedule_customer_ticket_incident", lambda _: None)
+    first = client.post(f"{BASE}/chat", json={"message": original}).json()
+    ticket_id = first["ticket"]["id"]
+    assert not looked_up and not first["actions"]
+    amended = client.post(
+        f"{BASE}/chat",
+        json={
+            "message": correction,
+            "session_id": first["session"]["id"],
+            "context": {"ticket_id": ticket_id, "order_no": "CONTEXT-SPOOFED-ORDER"},
+        },
+    )
+    assert amended.status_code == 200, amended.text
+    assert amended.json()["ticket"]["id"] == ticket_id
+    assert looked_up == [correct_order]
+    with get_session_factory()() as db:
+        ticket = db.get(CustomerServiceTicket, ticket_id)
+        assert ticket.subject_id == correct_order and ticket.summary == original
+        assert json.loads(ticket.evidence_json)["order_no"] == correct_order
+        assert [r.order_no for r in db.query(RefundRequest).filter_by(user_id=customer.id)] == [
+            correct_order
+        ]
 
 
 @pytest.mark.parametrize(

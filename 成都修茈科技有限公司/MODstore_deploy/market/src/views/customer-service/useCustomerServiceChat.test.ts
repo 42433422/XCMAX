@@ -188,14 +188,97 @@ describe('accepting or reopening the original product issue', () => {
     }
   }
 
-  async function openOriginal() {
-    listTickets.mockResolvedValue({ items: [ticket] })
+  async function openOriginal(items: Array<{ id: number }> = [ticket]) {
+    listTickets.mockResolvedValue({ items })
     const wrapper = await mountView()
     await flushPromises()
     await wrapper.get('.cs-ticket__main').trigger('click')
     await flushPromises()
     return wrapper
   }
+
+  async function sendSupplement(wrapper: Awaited<ReturnType<typeof mountView>>) {
+    chat.mockResolvedValueOnce({
+      session: { id: 21 },
+      ticket,
+      message: { content: '已收到你补充的原链接。' },
+    })
+    await wrapper.get('form textarea').setValue('补充原链接的验证细节。')
+    await wrapper.get('form').trigger('submit')
+  }
+
+  it.each([true, false])('uses the fresh permissions after a supplement (ready=%s)', async (ready) => {
+    const initial = history()
+    transcript.mockResolvedValueOnce(initial).mockResolvedValueOnce({
+      ...initial,
+      ticket: {
+        ...initial.ticket,
+        status: ready ? 'awaiting_customer' : 'processing',
+        customer_acceptance: { can_resolve: ready, can_reopen: ready, last_decision: null },
+      },
+    })
+    const wrapper = await openOriginal()
+    await wrapper.get(note).setValue('保留尚未提交的验收说明。')
+    await sendSupplement(wrapper)
+    await flushPromises()
+
+    expect(transcript.mock.calls).toEqual([[77], [77]])
+    expect(wrapper.find(panel).exists()).toBe(ready)
+    if (ready) {
+      expect(wrapper.get(`${panel} button`).text()).toBe('确认问题已解决')
+      expect((wrapper.get(note).element as HTMLTextAreaElement).value).toBe('保留尚未提交的验收说明。')
+    }
+    expect(wrapper.get('.cs-messages').text()).toContain('已收到你补充的原链接。')
+    expect(decision).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('requires a read-only recheck when the supplemental permission read fails', async () => {
+    transcript.mockResolvedValueOnce(history()).mockRejectedValueOnce(new ApiError('timeout', 408))
+      .mockResolvedValueOnce(history())
+    const wrapper = await openOriginal()
+    await wrapper.get(note).setValue('保留原先的验收说明。')
+    await sendSupplement(wrapper)
+    await flushPromises()
+
+    expect(wrapper.get(panel).text()).toContain('暂未刷新验收状态')
+    expect(wrapper.findAll(`${panel} button`).map(button => button.text())).toEqual(['核对验收状态'])
+    expect((wrapper.get(note).element as HTMLTextAreaElement).value).toBe('保留原先的验收说明。')
+    expect(wrapper.get('.cs-messages').text()).toContain('已收到你补充的原链接。')
+    await wrapper.get(`${panel} button`).trigger('click')
+    await flushPromises()
+    expect(transcript.mock.calls).toEqual([[77], [77], [77]])
+    expect(wrapper.get(`${panel} button`).text()).toBe('确认问题已解决')
+    expect((wrapper.get(note).element as HTMLTextAreaElement).value).toBe('保留原先的验收说明。')
+    expect(chat).toHaveBeenCalledTimes(1)
+    expect(decision).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('does not apply a supplemental permission refresh to a subsequent conversation', async () => {
+    const second = { id: 78, user_id: 12, session_id: 22, intent: 'general', status: 'open', title: '另一张原工单' }
+    let completeOldRefresh!: (value: unknown) => void
+    transcript.mockResolvedValueOnce(history()).mockImplementationOnce(() => new Promise(resolve => {
+      completeOldRefresh = resolve
+    })).mockResolvedValueOnce({
+      ticket: second, session_id: 22, can_reply: true,
+      messages: [{ id: 50, ticket_id: 78, role: 'assistant', content: '另一张原工单的会话。' }],
+    })
+    const wrapper = await openOriginal([ticket, second])
+    await sendSupplement(wrapper)
+    await vi.waitFor(() => expect(transcript.mock.calls).toEqual([[77], [77]]))
+    expect(wrapper.get(`${panel} button`).attributes('disabled')).toBeDefined()
+    await wrapper.findAll('.cs-ticket__main').at(-1)!.trigger('click')
+    await flushPromises()
+    completeOldRefresh(history())
+    await flushPromises()
+
+    expect(wrapper.find(panel).exists()).toBe(false)
+    expect(wrapper.get('.cs-messages').text()).toContain('另一张原工单的会话。')
+    expect(wrapper.get('.cs-messages').text()).not.toContain('已收到你补充的原链接。')
+    expect(decision).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
 
   it('accepts a customer note only after reading the original status and conversation, then allows owner reopen', async () => {
     let firstAttempt: CustomerServiceIssueDecision | undefined

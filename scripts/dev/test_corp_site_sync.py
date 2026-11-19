@@ -157,7 +157,7 @@ git() {
         # Stand in for the existing retrying curl helper without using the network.
         fake_curl = r"""
 xc_curl() {
-  local output method=GET url host query target
+  local output method=GET url host suffix target
   while [ "$#" -gt 1 ]; do
     case "$1" in
       -w) shift 2 ;;
@@ -174,29 +174,36 @@ xc_curl() {
   esac
   host="${url#https://}"
   host="${host%%/*}"
-  query="${url#*\?}"
-  [ "$query" = "xcmax_download_probe=${DEPLOY_SHA}" ] || return 92
-  target="https://${host}/download?${query}"
+  suffix=""
+  if [[ "$url" == *\?* ]]; then
+    suffix="?${url#*\?}"
+    [ "$suffix" = "?xcmax_download_probe=${DEPLOY_SHA}" ] || return 92
+  fi
+  target="https://${host}/download${suffix}"
   if [ "$SCENARIO" = canonical_host ]; then
-    target="https://xiu-ci.com/download?${query}"
+    target="https://xiu-ci.com/download${suffix}"
   fi
   if [ "$SCENARIO" = retry ]; then printf '000 \n'; fi
-  case "$url" in
-    */download/\?*)
+  case "${url%%\?*}" in
+    */download/)
+      if [ -z "$suffix" ] && [ "$SCENARIO" = bare_www_404 ] && [ "$host" = www.xiu-ci.com ]; then
+        printf '404 \n'
+        return
+      fi
       if [ "$host" = www.xiu-ci.com ]; then
         case "$SCENARIO" in
           canonical_slash_host|host_loop|dropped_query_second_hop|head_differs_second_hop)
-            target="https://xiu-ci.com/download/?${query}" ;;
-          self_loop) target="https://www.xiu-ci.com/download/?${query}" ;;
+            target="https://xiu-ci.com/download/${suffix}" ;;
+          self_loop) target="https://www.xiu-ci.com/download/${suffix}" ;;
           dropped_query_host_hop) target="https://xiu-ci.com/download/" ;;
           dropped_query) target="${target%%\?*}" ;;
-          foreign_target) target="https://example.invalid/download?${query}" ;;
+          foreign_target) target="https://example.invalid/download${suffix}" ;;
           head_differs) if [ "$method" = HEAD ]; then target="${target%%\?*}"; fi ;;
           temporary_redirect) printf '302 %s\n' "$target"; return ;;
         esac
-      elif grep -Fq "GET https://www.xiu-ci.com/download/?${query}" "$CALLS"; then
+      elif grep -Fxq "GET https://www.xiu-ci.com/download/${suffix}" "$CALLS"; then
         case "$SCENARIO" in
-          host_loop) target="https://www.xiu-ci.com/download/?${query}" ;;
+          host_loop) target="https://www.xiu-ci.com/download/${suffix}" ;;
           dropped_query_second_hop) target="${target%%\?*}" ;;
           head_differs_second_hop) if [ "$method" = HEAD ]; then target="${target%%\?*}"; fi ;;
         esac
@@ -204,13 +211,14 @@ xc_curl() {
       printf '301 %s\n' "$target"
       ;;
     *)
-      case "$SCENARIO" in
-        wrong_body) printf '<title>官网首页</title>' > "$output" ;;
-        *) printf '<title>XCAGI 产品下载</title>' > "$output" ;;
-      esac
+      if [ "$SCENARIO" = wrong_body ] || { [ "$SCENARIO" = bare_wrong_body ] && [ -z "$suffix" ]; }; then
+        printf '<title>官网首页</title>' > "$output"
+      else
+        printf '<title>XCAGI 产品下载</title>' > "$output"
+      fi
       if [ "$SCENARIO" = final_redirect ] || \
          { [ "$SCENARIO" = final_head_differs ] && [ "$method" = HEAD ]; }; then
-        printf '302 https://example.invalid/download?%s\n' "$query"
+        printf '302 https://example.invalid/download%s\n' "$suffix"
       else
         printf '200 \n'
       fi
@@ -226,6 +234,7 @@ xc_curl() {
             'self_loop': False, 'host_loop': False,
             'dropped_query_host_hop': False, 'dropped_query_second_hop': False,
             'head_differs_second_hop': False, 'final_head_differs': False,
+            'bare_www_404': False, 'bare_wrong_body': False,
         }
         with tempfile.TemporaryDirectory() as directory:
             calls = Path(directory) / 'calls'
@@ -245,14 +254,21 @@ xc_curl() {
                             requests.count(f'GET https://www.xiu-ci.com/download/?xcmax_download_probe={sha}'), 1,
                         )
                     if passed:
-                        self.assertEqual(len(requests), 10 if scenario == 'canonical_slash_host' else 8)
+                        self.assertEqual(len(requests), 20 if scenario == 'canonical_slash_host' else 16)
                         for host in ('xiu-ci.com', 'www.xiu-ci.com'):
                             hops = 2 if host == 'www.xiu-ci.com' and scenario == 'canonical_slash_host' else 1
-                            self.assertIn(
-                                f'sha={sha} host={host} get=301 head=301 hops={hops}', result.stdout,
+                            self.assertEqual(
+                                result.stdout.count(f'sha={sha} host={host} get=301 head=301 hops={hops}'), 2,
                             )
+                            self.assertIn(f'GET https://{host}/download/', requests)
+                            self.assertIn(f'HEAD https://{host}/download/', requests)
                     else:
                         self.assertIn(f'sha={sha}', result.stderr)
+                    if scenario in ('bare_www_404', 'bare_wrong_body'):
+                        self.assertTrue(all(f'?xcmax_download_probe={sha}' in call for call in requests[:8]))
+                        self.assertEqual(result.stdout.count('status=200'), 3 if scenario == 'bare_www_404' else 2)
+                        failed_url = 'https://www.xiu-ci.com/download/' if scenario == 'bare_www_404' else 'https://xiu-ci.com/download/'
+                        self.assertIn(failed_url, result.stderr)
 
     def test_bootstrap_is_bounded_and_fail_closed(self):
         workflow = WORKFLOW.read_text()

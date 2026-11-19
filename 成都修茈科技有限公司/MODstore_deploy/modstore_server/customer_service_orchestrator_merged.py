@@ -763,7 +763,7 @@ def handle_customer_message(
     if anchored or same_source_report:
         for name in material:
             if prior.get(name) not in (None, ""):
-                extracted[name] = prior[name]
+                extracted.setdefault(name, prior[name])
     if image_data_url:
         extracted["has_image"] = True
     classify_text = text

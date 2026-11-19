@@ -44,6 +44,8 @@ class _RepairCase:
     ticket_id: int
     owner_id: int
     session_id: int
+    ticket_status: str
+    ticket_lock_version: int
     source_message_id: int
     report_sha256: str
     latest_owner_message_id: int
@@ -63,6 +65,32 @@ class _RepairCase:
 
 def _aware(value: datetime) -> datetime:
     return value if value.tzinfo else value.replace(tzinfo=UTC)
+
+
+def _latest_signed_fault_at(evidence: dict[str, Any]) -> datetime | None:
+    diagnoses = evidence.get("diagnoses", [])
+    result = evidence.get("handling_result")
+    if not isinstance(diagnoses, list) or (result is not None and not isinstance(result, dict)):
+        return None
+    records = diagnoses[-1:]
+    if result and result.get("fault_remains") is True:
+        records.append(result)
+    times = []
+    for record in records:
+        if (
+            not isinstance(record, dict)
+            or type(record.get("operator_id")) is not int
+            or record["operator_id"] <= 0
+        ):
+            return None
+        try:
+            recorded_at = datetime.fromisoformat(record["at"])
+        except (KeyError, TypeError, ValueError):
+            return None
+        if recorded_at.utcoffset() is None:
+            return None
+        times.append(recorded_at)
+    return max(times, default=None)
 
 
 def _repair_case(db: Session, ticket: CustomerServiceTicket) -> _RepairCase | None:
@@ -145,6 +173,8 @@ def _repair_case(db: Session, ticket: CustomerServiceTicket) -> _RepairCase | No
         ticket_id=int(ticket.id),
         owner_id=int(ticket.user_id),
         session_id=int(ticket.session_id),
+        ticket_status=str(ticket.status),
+        ticket_lock_version=int(ticket.lock_version),
         source_message_id=case["source_message_id"],
         report_sha256=case["report_sha256"],
         latest_owner_message_id=int(latest_owner_message_id or 0),
@@ -172,6 +202,11 @@ def _write_verified_repair(
         return False
     if deployment.verified_at < case.scope_started_at:
         return False
+    evidence = json_loads(ticket.evidence_json, {})
+    if evidence.get("fault_remains") is True:
+        fault_at = _latest_signed_fault_at(evidence)
+        if fault_at is None or deployment.verified_at <= fault_at:
+            return False
     key = f"corp-download:{case.ticket_id}:{case.action_id}:{deployment.workflow_run_id}:{deployment.run_attempt}"
     if db.query(CustomerServiceAction.id).filter_by(idempotency_key=key).first():
         return False
@@ -192,7 +227,6 @@ def _write_verified_repair(
         "original_path": "/download/",
         "recorded_at": now.isoformat(),
     }
-    evidence = json_loads(ticket.evidence_json, {})
     resolution = issue_resolution(ticket, evidence)
     resolution.update(
         state="awaiting_customer_verification",

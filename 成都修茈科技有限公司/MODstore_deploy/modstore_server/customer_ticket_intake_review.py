@@ -189,6 +189,13 @@ def apply_original_ticket_reassessment(
         for name in ("issue_domain", "issue_domain_label", "issue_domain_source"):
             if prior.get(name):
                 extracted[name] = prior[name]
+    if actionable and not supplement_only:
+        target_field = {"order": "order_no", "catalog_item": "catalog_id"}.get(
+            str(ticket.subject_type)
+        )
+        target = extracted.get(target_field) if target_field else None
+        if target not in (None, ""):
+            setattr(ticket, "subject_id", str(target))
     return supplement_only
 
 

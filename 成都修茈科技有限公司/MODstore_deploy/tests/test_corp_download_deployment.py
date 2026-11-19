@@ -134,34 +134,47 @@ def _configure_http(monkeypatch, scenario: str):
             return httpx.Response(
                 200, json={"jobs": [job], "total_count": 2 if scenario == "incomplete_jobs" else 1}
             )
-        if url == APEX_SLASH:
-            target = f"/download?{QUERY}" if scenario == "relative" else APEX_FINAL
-            if scenario == "canonical_loop" and ("GET", WWW_SLASH) in calls:
-                target = WWW_SLASH
+        bare = not request.url.query
+        suffix = "" if bare else f"?{QUERY}"
+        apex_slash, www_slash, apex_final, www_final = (
+            original.partition("?")[0] + suffix
+            for original in (APEX_SLASH, WWW_SLASH, APEX_FINAL, WWW_FINAL)
+        )
+        if url == apex_slash:
+            if bare and scenario == "bare_apex_404":
+                return httpx.Response(404)
+            target = f"/download{suffix}" if scenario == "relative" else apex_final
+            if scenario == "canonical_loop" and ("GET", www_slash) in calls:
+                target = www_slash
             return httpx.Response(301, headers={"Location": target})
-        if url == WWW_SLASH:
+        if url == www_slash:
+            if bare and scenario == "bare_www_404":
+                return httpx.Response(404)
             target = {
-                "canonical_slash_host": APEX_SLASH,
-                "canonical_loop": APEX_SLASH,
-                "dropped_query": WWW_FINAL.partition("?")[0],
-                "foreign_redirect": f"https://outside.invalid/download?{QUERY}",
-                "self_redirect": WWW_SLASH,
-            }.get(scenario, WWW_FINAL)
+                "canonical_slash_host": apex_slash,
+                "canonical_loop": apex_slash,
+                "dropped_query": www_final.partition("?")[0],
+                "foreign_redirect": f"https://outside.invalid/download{suffix}",
+                "self_redirect": www_slash,
+            }.get(scenario, www_final)
+            if bare and scenario == "bare_added_query":
+                target = WWW_FINAL
             if scenario == "head_mismatch" and request.method == "HEAD":
-                target = APEX_FINAL
+                target = apex_final
             if scenario == "duplicate_location":
                 return httpx.Response(301, headers=[("Location", target), ("Location", target)])
             return httpx.Response(
                 302 if scenario == "temporary_redirect" else 301, headers={"Location": target}
             )
-        if url in (APEX_FINAL, WWW_FINAL):
+        if url in (apex_final, www_final):
             if scenario == "final_redirect":
                 return httpx.Response(302, headers={"Location": "https://outside.invalid/"})
-            if scenario == "final_head_fails" and request.method == "HEAD":
+            if request.method == "HEAD" and (
+                scenario == "final_head_fails" or (bare and scenario == "bare_final_head_fails")
+            ):
                 return httpx.Response(404)
-            return httpx.Response(
-                200, text=TITLE if scenario != "wrong_title" else "<title>官网首页</title>"
-            )
+            wrong_title = scenario == "wrong_title" or (bare and scenario == "bare_wrong_title")
+            return httpx.Response(200, text="<title>官网首页</title>" if wrong_title else TITLE)
         pytest.fail(f"unexpected request {request.method} {url}")
 
     real_client = httpx.Client
@@ -186,7 +199,33 @@ def test_download_deployment_requires_exact_run_and_observes_both_original_urls(
     expected_urls = [APEX_SLASH, APEX_FINAL, WWW_SLASH, WWW_FINAL]
     if scenario == "canonical_slash_host":
         expected_urls = [APEX_SLASH, APEX_FINAL, WWW_SLASH, APEX_SLASH, APEX_FINAL]
+    expected_urls += [url.partition("?")[0] for url in expected_urls]
     assert calls[3:-1] == [(method, url) for url in expected_urls for method in ("GET", "HEAD")]
+
+
+@pytest.mark.parametrize(
+    "scenario, failed_url",
+    [
+        ("bare_apex_404", APEX_SLASH),
+        ("bare_www_404", WWW_SLASH),
+        ("bare_added_query", WWW_SLASH),
+        ("bare_final_head_fails", APEX_FINAL),
+        ("bare_wrong_title", APEX_FINAL),
+    ],
+)
+def test_download_deployment_rejects_bare_regressions_after_salted_probe_passes(
+    monkeypatch, scenario, failed_url
+):
+    calls, _ = _configure_http(monkeypatch, scenario)
+
+    assert read_corp_download_deployment() is None
+    assert calls[3:11] == [
+        (method, url)
+        for url in (APEX_SLASH, APEX_FINAL, WWW_SLASH, WWW_FINAL)
+        for method in ("GET", "HEAD")
+    ]
+    assert ("GET", failed_url.partition("?")[0]) in calls[11:]
+    assert calls.count(("GET", MARKER)) == 1
 
 
 @pytest.mark.parametrize("scenario", ["newer_skipped_run", "newer_skipped_job"])

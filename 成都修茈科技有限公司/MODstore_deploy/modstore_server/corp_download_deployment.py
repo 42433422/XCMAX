@@ -159,10 +159,9 @@ def _response_target(response: httpx.Response) -> tuple[int, str]:
     return response.status_code, urljoin(str(response.url), locations[0])
 
 
-def _check_original_urls(client: httpx.Client, sha: str) -> bool:
-    query = f"xcmax_download_probe={sha}"
-    slash = tuple(f"https://{host}/download/?{query}" for host in _HOSTS)
-    destinations = {f"https://{host}/download?{query}" for host in _HOSTS}
+def _check_download_urls(client: httpx.Client, suffix: str) -> bool:
+    slash = tuple(f"https://{host}/download/{suffix}" for host in _HOSTS)
+    destinations = {f"https://{host}/download{suffix}" for host in _HOSTS}
 
     def agreed_redirect(url: str) -> str:
         get = _response_target(client.get(url))
@@ -199,7 +198,11 @@ def read_corp_download_deployment() -> CorpDownloadDeployment | None:
             marker = _read_marker(client)
             if marker.verified_at > datetime.now(UTC) or not _github_matches(marker):
                 return None
-            if _check_original_urls(client, marker.deployed_sha) and marker == _read_marker(client):
+            if (
+                _check_download_urls(client, f"?xcmax_download_probe={marker.deployed_sha}")
+                and _check_download_urls(client, "")
+                and marker == _read_marker(client)
+            ):
                 return marker
     except (httpx.HTTPError, ValueError):
         return None

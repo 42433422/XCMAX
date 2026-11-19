@@ -13,6 +13,7 @@ from modstore_server.api.deps import get_current_user
 from modstore_server.app import app
 from modstore_server.corp_download_deployment import CorpDownloadDeployment
 from modstore_server.customer_service_tools import json_dumps, json_loads
+from modstore_server.customer_ticket_human_ops import accept_ticket, assign_ticket, record_diagnosis
 from modstore_server.models import get_session_factory
 from modstore_server.models_cs import (
     CustomerServiceAction,
@@ -148,7 +149,8 @@ def test_released_route_writes_original_ticket_once_then_customer_confirms_or_re
 
 
 @pytest.mark.parametrize(
-    "fault", ["stale_deploy", "ci", "ancestry", "revocation_race", "new_owner_message"]
+    "fault",
+    ["stale_deploy", "ci", "ancestry", "revocation_race", "new_owner_message", "status_race"],
 )
 def test_corp_download_writes_require_current_approved_and_unrevoked_scope(
     ticket_case, monkeypatch, fault
@@ -177,6 +179,12 @@ def test_corp_download_writes_require_current_approved_and_unrevoked_scope(
                     )
                 )
                 db.commit()
+        if fault == "status_race":
+            with get_session_factory()() as db:
+                ticket = db.get(CustomerServiceTicket, ticket_id)
+                assert ticket.status == "open"
+                ticket.status = "processing"
+                db.commit()
         return _deployment(offset=-timedelta(days=1) if fault == "stale_deploy" else timedelta())
 
     monkeypatch.setattr(site, "read_corp_download_deployment", deploy)
@@ -188,3 +196,64 @@ def test_corp_download_writes_require_current_approved_and_unrevoked_scope(
             .count()
             == 0
         )
+
+
+def test_signed_fault_diagnosis_fences_inflight_and_older_deployment_receipts(
+    ticket_case, monkeypatch
+):
+    _, ticket_id = ticket_case
+    admin = _make_user(f"website-handler-{uuid4().hex[:8]}", admin=True)
+    with get_session_factory()() as db:
+        ticket = db.get(CustomerServiceTicket, ticket_id)
+        assign_ticket(db, ticket, admin, admin.id, "受理官网原路由核查")
+        accept_ticket(db, ticket, admin, "开始核查官网原始下载路径")
+        prior_version = ticket.lock_version
+
+    old_deployment = _deployment()
+    newer_deployment = None
+    diagnosis_note = "管理员复测原官网路径，现场仍返回 404。"
+
+    def deploy_during_diagnosis():
+        nonlocal newer_deployment
+        with get_session_factory()() as db:
+            ticket = db.get(CustomerServiceTicket, ticket_id)
+            record_diagnosis(db, ticket, admin, diagnosis_note)
+        newer_deployment = CorpDownloadDeployment("d" * 40, 4124, 1, datetime.now(UTC))
+        return newer_deployment
+
+    github_fixture(monkeypatch)
+    monkeypatch.setattr(site, "read_corp_download_deployment", deploy_during_diagnosis)
+    assert site.reconcile_corp_download_tickets() == 0
+
+    monkeypatch.setattr(site, "read_corp_download_deployment", lambda: old_deployment)
+    assert site.reconcile_corp_download_tickets() == 0
+    with get_session_factory()() as db:
+        ticket = db.get(CustomerServiceTicket, ticket_id)
+        assert ticket.status == "processing" and ticket.lock_version == prior_version + 1
+        evidence = json_loads(ticket.evidence_json, {})
+        assert evidence["fault_remains"] is True
+        diagnosis = evidence["diagnoses"][-1]
+        assert diagnosis["operator_id"] == admin.id and diagnosis["text"] == diagnosis_note
+        assert (
+            db.query(CustomerServiceAction)
+            .filter_by(ticket_id=ticket_id, action_type=site._RECEIPT_ACTION)
+            .count()
+            == 0
+        )
+
+    assert newer_deployment is not None
+    assert newer_deployment.verified_at > datetime.fromisoformat(diagnosis["at"])
+    monkeypatch.setattr(site, "read_corp_download_deployment", lambda: newer_deployment)
+    assert site.reconcile_corp_download_tickets() == 1
+    assert site.reconcile_corp_download_tickets() == 0
+    with get_session_factory()() as db:
+        ticket = db.get(CustomerServiceTicket, ticket_id)
+        assert ticket.status == "awaiting_customer" and ticket.closed_at is None
+        evidence = json_loads(ticket.evidence_json, {})
+        assert "fault_remains" not in evidence and evidence["diagnoses"][-1] == diagnosis
+        receipt = (
+            db.query(CustomerServiceAction)
+            .filter_by(ticket_id=ticket_id, action_type=site._RECEIPT_ACTION)
+            .one()
+        )
+        assert json_loads(receipt.result_json, {})["deployed_sha"] == "d" * 40

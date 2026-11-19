@@ -36,6 +36,7 @@ export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
   const activeSessionId = ref<number | null>(null)
   const openedTicket = ref<CustomerTicket | null>(null)
   const openedTicketCanReply = ref(false)
+  const acceptanceNeedsRefresh = ref(false)
   const openedTicketRef = computed(() => openedTicket.value
     ? shortTicketRef({ ticket_no: openedTicket.value.ticket_no || openedTicket.value.id })
     : '')
@@ -149,7 +150,9 @@ export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
     if ((!text && !imageDataUrl) || loading.value || readOnly.value || ctx.imagePicking.value) return
     const generation = conversationGeneration
     const sessionId = activeSessionId.value
-    const ticketId = openedTicket.value?.id
+    const originalTicket = openedTicket.value
+    const ticketId = originalTicket?.id
+    const productSupplement = originalTicket?.intent === 'product_issue'
     error.value = ''
     loading.value = true
     pendingConfirmation.value = null
@@ -190,7 +193,9 @@ export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
       const messagePayload = asUnknownRecord(responseMessage.payload)
       activeSessionId.value = Number(session.id || sessionId || 0) || null
       if (ticket) {
-        openedTicket.value = ticket
+        openedTicket.value = productSupplement
+          ? { ...originalTicket, ...ticket, customer_acceptance: originalTicket.customer_acceptance }
+          : ticket
         openedTicketCanReply.value = true
       }
       // 对话里只用白话正文；不再堆「进度/下一步/已办理」多卡
@@ -227,11 +232,15 @@ export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
         }
       }
       await scrollMessagesToEnd()
+      if (productSupplement && generation === conversationGeneration) {
+        await refreshAcceptanceSnapshot(originalTicket, generation)
+      }
     } catch (e: unknown) {
       const detail = errorMessage(e, 'AI 客服处理失败')
       const uncertain = /internal server error|\b5\d\d\b|timeout|timed out|failed to fetch|networkerror/i.test(detail)
       if (uncertain && mounted) void ctx.loadTickets()
       if (generation !== conversationGeneration) return
+      if (productSupplement && uncertain) acceptanceNeedsRefresh.value = true
       error.value = uncertain
         ? '暂无法确认工单是否受理。请先查看右侧工单列表，勿重复提交；没有回执不代表未落单。'
         : detail
@@ -245,6 +254,7 @@ export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
     activeSessionId.value = null
     openedTicket.value = null
     openedTicketCanReply.value = false
+    acceptanceNeedsRefresh.value = false
     pendingConfirmation.value = null
     messages.value = []
     draft.value = ''
@@ -266,6 +276,54 @@ export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
     await reloadTicket(ticket)
   }
 
+  async function fetchTicketTranscript(ticket: CustomerTicket) {
+    const ticketId = Number(ticket.id)
+    const transcript = asUnknownRecord(await api.customerServiceTicketTranscript(ticketId))
+    const current = asUnknownRecord(transcript.ticket)
+    const sessionId = Number(transcript.session_id)
+    if (Number(current.id) !== ticketId || !Number.isSafeInteger(sessionId) || sessionId <= 0
+      || Number(current.session_id) !== sessionId
+      || (ticket.session_id != null && Number(ticket.session_id) !== sessionId)
+      || !Array.isArray(transcript.messages)) {
+      throw new Error('返回的会话与原工单不一致')
+    }
+    return {
+      ticket: { ...ticket, ...current, customer_acceptance: current.customer_acceptance },
+      sessionId,
+      canReply: transcript.can_reply === true,
+      messages: transcript.messages,
+    }
+  }
+
+  function applyTranscriptTicket(snapshot: Awaited<ReturnType<typeof fetchTicketTranscript>>) {
+    openedTicket.value = snapshot.ticket
+    activeSessionId.value = snapshot.sessionId
+    openedTicketCanReply.value = snapshot.canReply
+    acceptanceNeedsRefresh.value = false
+  }
+
+  async function refreshAcceptanceSnapshot(ticket: CustomerTicket, generation: number) {
+    acceptanceNeedsRefresh.value = true
+    try {
+      const snapshot = await fetchTicketTranscript(ticket)
+      if (generation === conversationGeneration) applyTranscriptTicket(snapshot)
+    } catch {
+      // The supplement succeeded. Keep the conversation and require a fresh read before acceptance.
+    }
+  }
+
+  async function refreshAcceptance() {
+    const ticket = openedTicket.value
+    if (!ticket || loading.value) return
+    const generation = conversationGeneration
+    loading.value = true
+    try {
+      await refreshAcceptanceSnapshot(ticket, generation)
+    } finally {
+      if (generation === conversationGeneration) loading.value = false
+    }
+  }
+
   async function reloadTicket(ticket: CustomerTicket) {
     const ticketId = Number(ticket.id)
     if (loading.value || Number(openedTicket.value?.id) !== ticketId) return null
@@ -273,21 +331,10 @@ export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
     loading.value = true
     error.value = ''
     try {
-      const transcript = asUnknownRecord(await api.customerServiceTicketTranscript(ticketId))
+      const snapshot = await fetchTicketTranscript(ticket)
       if (generation !== conversationGeneration) return null
-      const current = asUnknownRecord(transcript.ticket)
-      const sessionId = Number(transcript.session_id)
-      if (Number(current.id) !== ticketId || !Number.isSafeInteger(sessionId) || sessionId <= 0
-        || Number(current.session_id) !== sessionId
-        || (ticket.session_id != null && Number(ticket.session_id) !== sessionId)
-        || !Array.isArray(transcript.messages)) {
-        throw new Error('返回的会话与原工单不一致')
-      }
-      const reloadedTicket: CustomerTicket = { ...ticket, ...current, customer_acceptance: current.customer_acceptance }
-      openedTicket.value = reloadedTicket
-      activeSessionId.value = sessionId
-      openedTicketCanReply.value = transcript.can_reply === true
-      messages.value = transcript.messages.map(asUnknownRecord).flatMap((message): UiMessage[] => {
+      applyTranscriptTicket(snapshot)
+      messages.value = snapshot.messages.map(asUnknownRecord).flatMap((message): UiMessage[] => {
         if ((message.ticket_id == null ? !openedTicketCanReply.value : Number(message.ticket_id) !== ticketId)
           || (message.role !== 'user' && message.role !== 'assistant')
           || typeof message.content !== 'string') return []
@@ -305,7 +352,7 @@ export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
         }]
       })
       await scrollMessagesToEnd()
-      return generation === conversationGeneration ? { ticket: reloadedTicket, messages: messages.value } : null
+      return generation === conversationGeneration ? { ticket: snapshot.ticket, messages: messages.value } : null
     } catch (cause: unknown) {
       if (generation === conversationGeneration) error.value = errorMessage(cause, '打开原客服会话失败')
       return null
@@ -318,7 +365,7 @@ export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
     draft, loading, error, activeSessionId, openedTicketRef, readOnly, messages, messagesEl, quickPrompts,
     hydrateFromQuery, queryContext, usePrompt, scrollMessagesToEnd, onBubbleClick,
     send, sendText, confirmIntake, intakeConfirmation, newSession, visibleCards, openTicket, reloadTicket,
-    openedTicket,
+    openedTicket, acceptanceNeedsRefresh, refreshAcceptance,
   }
 }
 

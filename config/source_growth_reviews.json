@@ -88,12 +88,12 @@
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_service_orchestrator_merged.py": {
       "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_service_orchestrator_merged.py",
       "base_blob": "8fa03bc14397d1bd4bef4b3ff67057aac9351905",
-      "head_blob": "497cb7c068049067831baf88db6cfbdc7ab34e55",
+      "head_blob": "d6239073753dd7a425be1aeaae53af618d1797de",
       "before_lines": 2387,
       "after_lines": 2635,
-      "reason": "原会话需核对补充材料和受理确认。官网原路由故障按产品缺陷受理，市场商品下载投诉沿用现有分类。",
+      "reason": "原会话核对补充材料和受理确认，优先采用提交人在原文更正的业务标识。官网原路由故障按产品缺陷受理。",
       "boundary": "Pydantic 校验请求，SQLAlchemy 复用会话锁和原单事务。聊天回执、工单处置、官网原路由绑定各有独立模块，编排器接入既有生命周期并在 100 KB 门禁以内。",
-      "validation": "215 项工单与调度后端回归通过，包含原会话派发、官网故障及部署证据绑定、撤销或重开后的失效、调度扩展入口、原提交人确认及原单读回。正式环境验收待执行。",
+      "validation": "直接运行原单聊天与退款申请回归，确认只读取并申请更正后的测试订单。工单与调度回归覆盖官网部署证据、撤销或重开、原提交人验收及原单回读。正式环境验收待执行。",
       "follow_up": "由评审人确认事务边界和来源核验；集成后用新工单验收无管理员介入的自动处置。",
       "review_owner": "@42433422"
     },

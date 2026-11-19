@@ -55,9 +55,9 @@
         </div>
 
         <section v-if="showDecision" class="cs-composer" aria-label="原工单验收">
-          <label v-if="canResolve || canReopen" for="cs-decision-note">原问题现在的使用结果（至少 4 个字）</label>
+          <label v-if="showDecisionNote" for="cs-decision-note">原问题现在的使用结果（至少 4 个字）</label>
           <textarea
-            v-if="canResolve || canReopen"
+            v-if="showDecisionNote"
             id="cs-decision-note"
             v-model="decisionNote"
             rows="2"
@@ -65,8 +65,12 @@
             :disabled="decisionBusy"
           />
           <p v-if="decisionNotice" class="cs-muted" role="status">{{ decisionNotice }}</p>
+          <p v-if="acceptanceNeedsRefresh && !decisionBusy" class="cs-muted" role="status">暂未刷新验收状态，请先核对原工单。</p>
           <div class="cs-decision-actions">
-            <template v-if="pendingDecision">
+            <button v-if="acceptanceNeedsRefresh" type="button" class="cs-btn cs-btn--ghost" :disabled="decisionBusy" @click="refreshAcceptance">
+              核对验收状态
+            </button>
+            <template v-else-if="pendingDecision">
               <button type="button" class="cs-btn cs-btn--ghost" :disabled="decisionBusy" @click="checkDecision">核对原工单</button>
               <button
                 v-if="pendingDecision.decision === 'resolved' ? canResolve : canReopen"
@@ -160,10 +164,12 @@ const chat = useCustomerServiceChat({
 const {
   draft, loading, error, activeSessionId, openedTicketRef, readOnly, messages, messagesEl, quickPrompts,
   usePrompt, send, sendText, confirmIntake, intakeConfirmation, onBubbleClick, newSession, visibleCards, openTicket,
+  acceptanceNeedsRefresh, refreshAcceptance,
 } = chat
 const {
   note: decisionNote, notice: decisionNotice, pending: pendingDecision, busy: decisionBusy,
   visible: showDecision, validNote: validDecisionNote, canResolve, canReopen, checkDecision, submitDecision,
+  showNote: showDecisionNote,
 } = useCustomerServiceDecision(chat, loadTickets)
 
 // 测试兼容面：既有测试经 setupState 访问原单文件顶层绑定

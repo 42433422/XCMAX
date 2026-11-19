@@ -31,7 +31,7 @@ async function noteDigest(note: string) {
 }
 
 export function useCustomerServiceDecision(
-  chat: Pick<CustomerServiceChat, 'openedTicket' | 'messages' | 'loading' | 'reloadTicket'>,
+  chat: Pick<CustomerServiceChat, 'openedTicket' | 'messages' | 'loading' | 'reloadTicket' | 'acceptanceNeedsRefresh'>,
   loadTickets: () => Promise<void>,
 ) {
   const note = ref('')
@@ -51,10 +51,12 @@ export function useCustomerServiceDecision(
   const scope = computed(() => current.value?.scope || '')
   const acceptance = computed(() => asUnknownRecord(current.value?.ticket.customer_acceptance))
   const pending = computed(() => attempts.get(scope.value))
-  const canResolve = computed(() => acceptance.value.can_resolve === true)
-  const canReopen = computed(() => acceptance.value.can_reopen === true)
+  const canResolve = computed(() => !chat.acceptanceNeedsRefresh.value && acceptance.value.can_resolve === true)
+  const canReopen = computed(() => !chat.acceptanceNeedsRefresh.value && acceptance.value.can_reopen === true)
+  const showNote = computed(() => acceptance.value.can_resolve === true || acceptance.value.can_reopen === true)
   const busy = computed(() => inFlight.value || chat.loading.value)
-  const visible = computed(() => !!scope.value && (canResolve.value || canReopen.value || !!pending.value || !!notice.value))
+  const visible = computed(() => chat.acceptanceNeedsRefresh.value
+    || (!!scope.value && (showNote.value || !!pending.value || !!notice.value)))
   const validNote = computed(() => {
     const length = [...note.value.trim()].length
     return length >= 4 && length <= 2000
@@ -166,5 +168,5 @@ export function useCustomerServiceDecision(
     }
   }
 
-  return { note, notice, pending, canResolve, canReopen, busy, visible, validNote, checkDecision, submitDecision }
+  return { note, notice, pending, canResolve, canReopen, showNote, busy, visible, validNote, checkDecision, submitDecision }
 }
