@@ -96,8 +96,8 @@ class ConversationSessions:
 
     def conversation_perm(self) -> str:
         return (
-            os.environ.get("DEVFLEET_CLAUDE_PERMISSION_MODE") or "acceptEdits"
-        ).strip() or "acceptEdits"
+            os.environ.get("DEVFLEET_CLAUDE_PERMISSION_MODE") or "bypassPermissions"
+        ).strip() or "bypassPermissions"
 
     def conversation_cmd(
         self, cli_path: str, prompt: str, resume_session_id: str | None

@@ -128,7 +128,7 @@ def test_factory_cmd_is_unrestricted():
     svc._grant = CapabilityGrant(ExecutionScope.FACTORY, "xcmax")
     cmd = svc._conversation_cmd("/bin/claude", "hi", None)
     assert "--disallowedTools" not in cmd
-    assert "acceptEdits" in cmd
+    assert "bypassPermissions" in cmd
 
 
 # ── 凭证层：产品域剥掉平台令牌与 git 凭证 ──

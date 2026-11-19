@@ -179,17 +179,17 @@ class TestClaudeCliCommand:
     def test_default_permission_mode(self, tmp_path, monkeypatch) -> None:
         monkeypatch.delenv("DEVFLEET_CLAUDE_PERMISSION_MODE", raising=False)
         cmd = _claude_cli_command("/usr/bin/claude", "prompt", tmp_path / "out.txt", str(tmp_path))
-        assert "acceptEdits" in cmd
+        assert "bypassPermissions" in cmd
 
     def test_custom_permission_mode(self, tmp_path, monkeypatch) -> None:
-        monkeypatch.setenv("DEVFLEET_CLAUDE_PERMISSION_MODE", "bypassPermissions")
+        monkeypatch.setenv("DEVFLEET_CLAUDE_PERMISSION_MODE", "acceptEdits")
         cmd = _claude_cli_command("/usr/bin/claude", "prompt", tmp_path / "out.txt", str(tmp_path))
-        assert "bypassPermissions" in cmd
+        assert "acceptEdits" in cmd
 
     def test_empty_permission_mode_falls_back(self, tmp_path, monkeypatch) -> None:
         monkeypatch.setenv("DEVFLEET_CLAUDE_PERMISSION_MODE", "  ")
         cmd = _claude_cli_command("/usr/bin/claude", "prompt", tmp_path / "out.txt", str(tmp_path))
-        assert "acceptEdits" in cmd
+        assert "bypassPermissions" in cmd
 
 
 # ───────────────────── _dispatch mode branches ─────────────────────
@@ -1610,20 +1610,20 @@ class TestConversationPrompt:
 
 
 class TestConversationPerm:
-    def test_default_acceptEdits(self, tmp_path, monkeypatch) -> None:
+    def test_default_bypass_permissions(self, tmp_path, monkeypatch) -> None:
         monkeypatch.delenv("DEVFLEET_CLAUDE_PERMISSION_MODE", raising=False)
         svc = _make_svc(tmp_path, cli_runner=_null_runner)
-        assert svc._conversation_perm() == "acceptEdits"
+        assert svc._conversation_perm() == "bypassPermissions"
 
     def test_custom_perm(self, tmp_path, monkeypatch) -> None:
-        monkeypatch.setenv("DEVFLEET_CLAUDE_PERMISSION_MODE", "bypassPermissions")
+        monkeypatch.setenv("DEVFLEET_CLAUDE_PERMISSION_MODE", "acceptEdits")
         svc = _make_svc(tmp_path, cli_runner=_null_runner)
-        assert svc._conversation_perm() == "bypassPermissions"
+        assert svc._conversation_perm() == "acceptEdits"
 
     def test_empty_perm_falls_back(self, tmp_path, monkeypatch) -> None:
         monkeypatch.setenv("DEVFLEET_CLAUDE_PERMISSION_MODE", "")
         svc = _make_svc(tmp_path, cli_runner=_null_runner)
-        assert svc._conversation_perm() == "acceptEdits"
+        assert svc._conversation_perm() == "bypassPermissions"
 
 
 # ───────────────────── _conversation_cmd ─────────────────────
