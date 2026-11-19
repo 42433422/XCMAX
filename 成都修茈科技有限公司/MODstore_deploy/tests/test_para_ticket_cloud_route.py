@@ -59,6 +59,13 @@ def test_only_same_github_job_can_become_the_worker(monkeypatch):
         },
     }
     assert device_matches(device, workspace)
+    assert not device_matches(device, {**workspace, "stage": "resume"})
+    resumed = {
+        **device,
+        "capabilities": {**device["capabilities"], "github_stage": "resume"},
+    }
+    assert device_matches(resumed, {**workspace, "stage": "resume"})
+    assert not device_matches(resumed, {**workspace, "stage": "execute"})
     for key, value in {
         "github_request_id": "other-request",
         "github_run_id": "999",

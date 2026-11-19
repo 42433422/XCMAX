@@ -8,6 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from app.application.user_memory.policy import is_recallable_memory
 from app.application.user_memory.protocols import (
     MemoryAccess,
     MemoryListing,
@@ -71,8 +72,7 @@ class MemoryQueries:
             for record in self.ports.list_memories(
                 user_id, status="active", memory_type=memory_type
             )
-            if record.get("source_policy") != "blocked"
-            and record.get("eligible_for_planner", True) is not False
+            if is_recallable_memory(record)
         ]
         if not active:
             return "【MemoryV2】无已确认记忆。"

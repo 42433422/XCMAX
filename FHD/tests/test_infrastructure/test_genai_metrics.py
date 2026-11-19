@@ -1,9 +1,10 @@
-"""统一指标出口：计数、直方图、停用开关与合并动作埋点。"""
+"""统一指标出口：计数、直方图、停用开关与受治理记忆召回。"""
 
 from __future__ import annotations
 
-from app.infrastructure.memory.consolidation import consolidate
 from app.infrastructure.observability import metrics
+from tests.fixtures.governed_memory_runtime import governed_memory as governed_memory
+from tests.fixtures.governed_memory_runtime import owner_id
 
 
 def _delta(before: dict[str, float], after: dict[str, float], key: str) -> float:
@@ -49,49 +50,19 @@ def test_labels_are_bounded(monkeypatch) -> None:
     )
 
 
-def test_consolidation_emits_action_metrics(monkeypatch) -> None:
+def test_governed_native_recall_emits_hit_and_empty_metrics(governed_memory, monkeypatch) -> None:
     monkeypatch.delenv("XCAGI_METRICS", raising=False)
-
-    class Store:
-        def __init__(self) -> None:
-            self.items: list[dict] = []
-
-        def search_facts(self, user_id, fact, limit=5):
-            return [
-                item
-                for item in self.items
-                if item["metadata"]["fact_key"] == fact["key"]
-                and not item["metadata"]["superseded_by"]
-            ]
-
-        def add_fact(self, user_id, fact, *, supersedes=""):
-            self.items.append(
-                {
-                    "chunk_id": f"m{len(self.items) + 1}",
-                    "content": fact["text"],
-                    "metadata": {
-                        "fact_key": fact["key"],
-                        "fact_value": fact["value"],
-                        "superseded_by": "",
-                        "valid_to": "",
-                    },
-                }
-            )
-            return f"m{len(self.items)}"
-
-        def supersede_fact(self, user_id, memory_id, *, content, new_id, today):
-            return True
-
-    store = Store()
-    fact = {"key": "finance.budget", "value": "80万元", "text": "预算：80万元"}
+    runtime = governed_memory
+    runtime.confirm(runtime.propose("采购预算：80万元"))
     before = metrics.snapshot()
 
-    consolidate(store, user_id="u", facts=[fact])
-    consolidate(store, user_id="u", facts=[fact])
+    assert runtime.backend.recall(user_id=owner_id(), query="采购预算")
+    assert runtime.backend.recall(user_id=owner_id(8), query="采购预算") == []
 
     after = metrics.snapshot()
-    assert _delta(before, after, "xcagi_memory_consolidation_total{action=ADD}") == 1
-    assert _delta(before, after, "xcagi_memory_consolidation_total{action=NOOP}") == 1
+    assert _delta(before, after, "xcagi_memory_recall_total{outcome=hit}") == 1
+    assert _delta(before, after, "xcagi_memory_recall_total{outcome=empty}") == 1
+    assert _delta(before, after, "xcagi_memory_recall_duration_ms_count") == 2
 
 
 def test_render_is_prometheus_text(monkeypatch) -> None:

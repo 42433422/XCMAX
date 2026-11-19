@@ -5,13 +5,13 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from app.application.user_memory.models import UserMemory
 from app.application.user_memory.protocols import (
     JsonObject,
     MemoryAccess,
     PreferenceLookup,
     memory_transaction,
 )
+from app.domain.user_memory.records import UserMemory
 
 
 def sync_preference_projection(

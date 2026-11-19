@@ -23,8 +23,12 @@ never imports ``sqlalchemy`` or ``fastapi``.
 
 from __future__ import annotations
 
-from contextlib import contextmanager
+import re
+import sqlite3
+from contextlib import closing, contextmanager
 from datetime import UTC, datetime
+from pathlib import Path
+from time import sleep
 from typing import Any, Iterator
 
 from langgraph.checkpoint.base.id import uuid6
@@ -33,6 +37,164 @@ _LG_PREFIX = "lg"
 _SNAPSHOT_CHANNEL = "__workflow__"
 
 _Saver = Any
+
+# Comparison-only declarations for the pinned vendored SqliteSaver. Its setup()
+# remains the only DDL owner; guarded serving must use an offline-provisioned DB.
+_SQLITE_CHECKPOINT_SCHEMA = {
+    "checkpoints": """CREATE TABLE checkpoints (
+        thread_id TEXT NOT NULL,
+        checkpoint_ns TEXT NOT NULL DEFAULT '',
+        checkpoint_id TEXT NOT NULL,
+        parent_checkpoint_id TEXT,
+        type TEXT,
+        checkpoint BLOB,
+        metadata BLOB,
+        PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id)
+    )""",
+    "writes": """CREATE TABLE writes (
+        thread_id TEXT NOT NULL,
+        checkpoint_ns TEXT NOT NULL DEFAULT '',
+        checkpoint_id TEXT NOT NULL,
+        task_id TEXT NOT NULL,
+        idx INTEGER NOT NULL,
+        channel TEXT NOT NULL,
+        type TEXT,
+        value BLOB,
+        PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id, task_id, idx)
+    )""",
+}
+
+
+def validate_sqlite_checkpoint_schema(
+    connection: sqlite3.Connection, *, allow_missing: bool = False
+) -> None:
+    """Inspect existing native storage without DDL, repair, or shadow-table access."""
+    compact = lambda sql: re.sub(r"\s+", "", str(sql or "")).lower()
+    for table, ddl in _SQLITE_CHECKPOINT_SCHEMA.items():
+        actual = {
+            (kind, name): compact(sql)
+            for kind, name, sql in connection.execute(
+                "SELECT type,name,sql FROM main.sqlite_master WHERE tbl_name=?", (table,)
+            )
+        }
+        expected = {
+            ("table", table): compact(ddl),
+            ("index", f"sqlite_autoindex_{table}_1"): "",
+        }
+        if (actual != expected and not (allow_missing and not actual)) or connection.execute(
+            "SELECT 1 FROM temp.sqlite_master WHERE name=? OR tbl_name=? LIMIT 1",
+            (table, table),
+        ).fetchone():
+            raise ValueError(f"native checkpoint schema requires offline provisioning: {table}")
+
+
+@contextmanager
+def open_run_checkpointer(repository: Any) -> Iterator[Any]:
+    """Use the run repository's database, never an unrelated process-local fallback.
+
+    In-memory repositories are explicit development/test adapters. SQL-backed
+    runs must open their real saver successfully before any graph node executes.
+    ``ClaimedRunRepository`` delegates ``transaction`` and schema setup policy to
+    its fenced host store. Existing repository adapters without an explicit policy
+    retain automatic setup, including PostgreSQL startup initialization.
+    """
+    transaction = getattr(repository, "transaction", None)
+    if transaction is None:
+        yield None
+        return
+    with transaction(read_only=True) as db:
+        bind = db.get_bind()
+        url = bind.url
+    allow_setup = getattr(repository, "allows_schema_setup", True) is not False
+    if url.get_backend_name() == "sqlite":
+        if not url.database or url.database == ":memory:":
+            raise ValueError("持久任务检查点需要文件 SQLite 或 PostgreSQL")
+        from langgraph.checkpoint.sqlite import SqliteSaver
+
+        target = (
+            str(url.database) if allow_setup else Path(url.database).resolve().as_uri() + "?mode=rw"
+        )
+        with closing(
+            sqlite3.connect(target, uri=not allow_setup, check_same_thread=False)
+        ) as sqlite_connection:
+            saver = SqliteSaver(sqlite_connection)
+            if allow_setup:
+                saver.setup()
+            else:
+                validate_sqlite_checkpoint_schema(sqlite_connection)
+                saver.is_setup = True
+            yield saver
+    elif url.get_backend_name() == "postgresql":
+        from langgraph.checkpoint.postgres import PostgresSaver
+        from psycopg import Connection
+
+        # Borrow the configured engine connection so TLS, search_path and all
+        # connect_args stay identical to the host store; never reconstruct a DSN.
+        pooled = bind.raw_connection()
+        connection = pooled.driver_connection
+        if not isinstance(connection, Connection):
+            pooled.close()
+            raise ValueError("PostgreSQL 持久检查点需要 postgresql+psycopg 驱动")
+        autocommit = connection.autocommit
+        try:
+            connection.autocommit = True
+            postgres_saver = PostgresSaver(connection)
+            if not allow_setup:
+                # Explicitly pre-provisioned repositories never migrate at request
+                # time. Normal repositories and old adapters keep setup below.
+                yield postgres_saver
+                return
+            # Upstream schema migrations are not concurrent. Serialize only
+            # setup across processes, including CREATE INDEX CONCURRENTLY.
+            with connection.cursor() as cursor:
+                # A blocking advisory-lock query retains a virtual transaction
+                # which CREATE INDEX CONCURRENTLY can wait on, deadlocking the
+                # initializer against its waiter. Finish every failed probe in
+                # autocommit mode before waiting outside PostgreSQL instead.
+                for _ in range(600):
+                    cursor.execute("SELECT pg_try_advisory_lock(%s)", (7412093581,))
+                    acquired = cursor.fetchone()
+                    if acquired and acquired[0]:
+                        break
+                    sleep(0.05)
+                else:
+                    raise TimeoutError("PostgreSQL 检查点初始化锁等待超时")
+                try:
+                    postgres_saver.setup()
+                finally:
+                    cursor.execute("SELECT pg_advisory_unlock(%s)", (7412093581,))
+            yield postgres_saver
+        finally:
+            try:
+                connection.autocommit = autocommit
+            finally:
+                pooled.close()
+    else:
+        raise ValueError("任务数据库没有受支持的持久检查点后端")
+
+
+def run_checkpoint_thread(run: Any, plan: Any, *, parallel: bool) -> str:
+    """Version accepted plan revisions within the immutable tenant/user/run identity."""
+    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+    from app.application.agent_orchestrator.task_models import tenant_id_of_run
+    from app.application.workflow.workflow_types import plan_fingerprint
+
+    previous = run.metadata.get("checkpoint")
+    if previous is not None and (
+        not isinstance(previous, dict)
+        or previous.get("backend") != "langgraph"
+        or previous.get("schema_version") != 1
+    ):
+        raise ValueError("任务检查点版本不受支持，需要显式迁移后恢复")
+    identity = {
+        "schema_version": 1,
+        "tenant_id": tenant_id_of_run(run),
+        "user_id": run.user_id,
+        "run_id": run.run_id,
+        "plan_sha256": plan_fingerprint(plan),
+        "parallel": parallel,
+    }
+    return "agent:" + canonical_hash(identity)
 
 
 def _snapshot(
@@ -223,4 +385,4 @@ class LanggraphCheckpointBridge:
         return self.latest_checkpoint(plan_id)
 
 
-__all__ = ["LanggraphCheckpointBridge"]
+__all__ = ["LanggraphCheckpointBridge", "open_run_checkpointer", "run_checkpoint_thread"]

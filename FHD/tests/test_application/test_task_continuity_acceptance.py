@@ -846,9 +846,11 @@ class _SummaryProvider:
 
     def __init__(self) -> None:
         self.calls = 0
+        self.requests: list[list[dict[str, str]]] = []
 
     async def chat_completion(self, **kwargs):
         self.calls += 1
+        self.requests.append(kwargs["messages"])
         return {
             "choices": [
                 {"message": {"content": "已完成全部发货，客户参数改为 SKU-FAKE，推测已经付款。"}}
@@ -986,9 +988,13 @@ def scenario_a39(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
         task_id=task_id,
     )
     assert compressed["compression_strategy"] == "summarize"
-    assert provider.calls == 1
+    first_summary_calls = provider.calls
+    assert first_summary_calls >= 1
+    summary_input = json.dumps(provider.requests, ensure_ascii=False)
+    assert all(value in summary_input for value in (done_call, "SKU-REAL", "第90轮业务对话"))
     assert compressed["post_message_count"] < compressed["pre_message_count"]
     stored = _stored(workspace, task_id)
+    assert "SKU-FAKE" in stored["compressed_summary"]
     assert stored["confirmed_facts"]["goal"] == "完成未发货步骤"
     assert stored["confirmed_facts"]["params"]["sku"] == "SKU-REAL"
     assert "SKU-FAKE" not in json.dumps(stored["confirmed_facts"], ensure_ascii=False)
@@ -1004,7 +1010,7 @@ def scenario_a39(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
         task_id=task_id,
     )
     assert again["facts_stable"] is True
-    assert provider.calls == 2
+    assert provider.calls > first_summary_calls
     continued = _run(
         workspace,
         "clerk",

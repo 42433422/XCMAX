@@ -1,4 +1,4 @@
-"""记忆单元：事实抽取、有效期判断与召回重排。
+"""记忆单元：有效期判断与召回重排。
 
 成熟长期记忆的共性是「记忆是带时间与来源的结构化单元」，而不是整段对话。
 本模块只做纯函数，方便离线单测；mem0 适配留在 ``mem0_backend``。
@@ -6,75 +6,18 @@
 事实元数据约定：
 
 - ``memory_type``：``fact`` / ``utterance``
-- ``fact_key``：稳定键，如 ``finance.budget``，用于去重与冲突判定
-- ``fact_value``：归一化后的值，用于判断是否 NOOP
+- ``source_memory_id`` / ``source_revision``：已确认 MemoryV2 记录及版本
 - ``valid_from`` / ``valid_to``：有效区间，空字符串表示未失效
 - ``superseded_by``：替代它的新记忆 id
-- ``confidence``：规则抽取置信度
+- 模型抽取由 Mem0 提示与 LangChain 解析器生成待确认候选，不在本模块写事实。
 """
 
 from __future__ import annotations
 
-import hashlib
 import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-MAX_FACTS_PER_TURN = 5
-
-_FACT_LABELS = {
-    "company.name": "公司名称",
-    "finance.budget": "预算",
-    "logistics.default_warehouse": "默认仓库",
-    "sales.contact": "联系人",
-    "purchase.lead_time": "交期/账期",
-    "preference": "偏好",
-    "explicit.note": "明确要求记住",
-}
-
-_FACT_RULES: tuple[tuple[str, re.Pattern[str], float], ...] = (
-    (
-        "company.name",
-        re.compile(
-            r"(?:我们公司|本公司|公司名称|单位名称)(?:叫|是|为|改为|改成)\s*([^\s，。；,;！？?]{1,40})"
-        ),
-        0.85,
-    ),
-    (
-        "finance.budget",
-        re.compile(
-            r"(?:预算|采购预算|年度预算)(?:调整|改|变)?(?:为|成|是)\s*"
-            r"([0-9]+(?:\.[0-9]+)?\s*(?:万元|元|万|块)?)"
-        ),
-        0.85,
-    ),
-    (
-        "logistics.default_warehouse",
-        re.compile(
-            r"(?:默认仓库|发货仓库|常用仓库)(?:是|为|改为|改成)\s*([^\s，。；,;！？?]{1,30})"
-        ),
-        0.8,
-    ),
-    (
-        "sales.contact",
-        re.compile(r"(?:联系人|对接人|负责人)(?:是|为|改为|改成)\s*([^\s，。；,;！？?]{1,20})"),
-        0.8,
-    ),
-    (
-        "purchase.lead_time",
-        re.compile(r"(?:交期|交付周期|账期)(?:是|为|改为|改成)\s*([^\s，。；,;！？?]{1,20})"),
-        0.75,
-    ),
-    (
-        "preference",
-        re.compile(
-            r"(?:以后|今后|后续|默认)(?:都|请|统一)?(?:用|使用|走|按)\s*([^\s，。；,;！？?]{1,30})"
-        ),
-        0.7,
-    ),
-)
-
-_EXPLICIT_MEMORY = re.compile(r"(?:^|[。；;\n])记(?:住|一下)[:：]?\s*(.{4,120})")
 _WORD = re.compile(r"[A-Za-z0-9_]+")
 _CJK = re.compile(r"[\u4e00-\u9fff]")
 
@@ -101,52 +44,6 @@ def normalize_value(value: Any) -> str:
     text = str(value or "").strip().lower()
     text = re.sub(r"[\s，。；、,;:：\"'“”‘’]", "", text)
     return text
-
-
-def _explicit_key(text: str) -> str:
-    digest = hashlib.sha1(normalize_value(text).encode("utf-8")).hexdigest()[:12]
-    return f"explicit.{digest}"
-
-
-def extract_facts(message: str, *, limit: int = MAX_FACTS_PER_TURN) -> list[dict[str, Any]]:
-    """从用户原话抽取稳定事实；只认明确陈述，不做猜测。"""
-    text = str(message or "").strip()
-    if not text:
-        return []
-    facts: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for key, pattern, confidence in _FACT_RULES:
-        match = pattern.search(text)
-        if not match:
-            continue
-        value = re.sub(r"\s+", "", match.group(1)).strip()
-        if not value or key in seen:
-            continue
-        seen.add(key)
-        label = _FACT_LABELS.get(key, key)
-        facts.append(
-            {
-                "key": key,
-                "value": value,
-                "text": f"{label}：{value}",
-                "confidence": confidence,
-            }
-        )
-        if len(facts) >= limit:
-            return facts
-    explicit = _EXPLICIT_MEMORY.search(text)
-    if explicit:
-        note = explicit.group(1).strip()
-        if note:
-            facts.append(
-                {
-                    "key": _explicit_key(note),
-                    "value": note,
-                    "text": f"{_FACT_LABELS['explicit.note']}：{note}",
-                    "confidence": 0.9,
-                }
-            )
-    return facts[:limit]
 
 
 def is_active(metadata: dict[str, Any] | None, *, now: datetime | None = None) -> bool:
@@ -245,9 +142,7 @@ def rank_hits(
 
 
 __all__ = [
-    "MAX_FACTS_PER_TURN",
     "expiration_iso",
-    "extract_facts",
     "is_active",
     "iso_at",
     "lexical_overlap",

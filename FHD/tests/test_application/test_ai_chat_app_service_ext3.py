@@ -1031,8 +1031,8 @@ class TestPersistChatTurnDeep:
                     "data": {"text": "world", "action": "reply", "data": {}},
                 },
             )
-        assert mock_conv.save_message.call_count == 2
-        assert all(call.kwargs["user_id"] == "17" for call in mock_conv.save_message.call_args_list)
+        assert mock_conv.save_turn.call_count == 1
+        assert all(call.kwargs["user_id"] == "17" for call in mock_conv.save_turn.call_args_list)
 
     def test_with_conversation_id_persists(self):
         service = _make_service()
@@ -1044,8 +1044,8 @@ class TestPersistChatTurnDeep:
                 {"conversation_id": "conv1", "local_user_id": 17, "actor_id": 17},
                 {"success": True, "response": "world", "data": {}},
             )
-        assert mock_conv.save_message.call_count == 2
-        assert all(call.kwargs["user_id"] == "17" for call in mock_conv.save_message.call_args_list)
+        assert mock_conv.save_turn.call_count == 1
+        assert all(call.kwargs["user_id"] == "17" for call in mock_conv.save_turn.call_args_list)
 
     def test_with_tool_call_data(self):
         service = _make_service()
@@ -1066,8 +1066,8 @@ class TestPersistChatTurnDeep:
                     "toolCall": {"tool_id": "products"},
                 },
             )
-        assert mock_conv.save_message.call_count == 2
-        assert all(call.kwargs["user_id"] == "17" for call in mock_conv.save_message.call_args_list)
+        assert mock_conv.save_turn.call_count == 1
+        assert all(call.kwargs["user_id"] == "17" for call in mock_conv.save_turn.call_args_list)
 
 
 # ========================= _inject_excel_vector_context - deep ============

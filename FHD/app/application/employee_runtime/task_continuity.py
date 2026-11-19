@@ -721,10 +721,15 @@ class TaskContinuityRuntime:
         if not _is_task(task):
             return task
         before = _clone(task["confirmed_facts"])
-        messages = [
-            {"role": str(item.get("role") or "user"), "content": str(item.get("content") or "")}
-            for item in task["messages"]
-        ]
+        messages = []
+        for item in task["messages"]:
+            role = str(item.get("role") or "user")
+            content = str(item.get("content") or "")
+            if role not in {"user", "assistant"}:
+                # Ledger entries are historical data, not native model tool
+                # frames or privileged instructions. Preserve their provenance.
+                role, content = "user", json.dumps(item, ensure_ascii=False, default=str)
+            messages.append({"role": role, "content": content})
         estimated = estimate_messages_tokens(messages)
         # Sit just under the framed history so the real summarizer runs, while the
         # summary request (a single prompt) still fits. Facts are not taken from it.
@@ -743,12 +748,7 @@ class TaskContinuityRuntime:
                 context=_SummaryCache(),
             )
         )
-        summary = ""
-        for item in compressed.messages:
-            content = str(item.get("content") or "")
-            if item.get("role") == "system" and content.startswith("对话历史摘要："):
-                summary = content
-        task["compressed_summary"] = summary
+        task["compressed_summary"] = compressed.summary_text
         task["compression_strategy"] = compressed.strategy
         task["compression_count"] = int(task["compression_count"]) + 1
         task["confirmed_facts"] = before

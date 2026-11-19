@@ -50,7 +50,9 @@ def same_run_generation(run: AgentRun, previous: AgentRun) -> bool:
     )
 
 
-def preserve_run_evidence(run: AgentRun, previous: AgentRun | None) -> None:
+def preserve_run_evidence(
+    run: AgentRun, previous: AgentRun | None, *, allow_safe_retry: bool = False
+) -> None:
     """Same-generation saves cannot erase an unknown outcome or returned receipt."""
     if previous is None or not same_run_generation(run, previous):
         return
@@ -150,13 +152,17 @@ def preserve_run_evidence(run: AgentRun, previous: AgentRun | None) -> None:
     for event in run.events:
         events.setdefault(event.event_id, event)
     run.events = list(events.values())
-    if previous.status in {"completed", "failed", "cancelled", "paused", "blocked"} and (
-        run.status in {"queued", "planning", "running", "retrying"}
+    if (
+        not allow_safe_retry
+        and previous.status in {"completed", "failed", "cancelled", "paused", "blocked"}
         and (
-            previous.status in {"completed", "failed"}
-            or old.get("stream_interruption")
-            or old.get("non_retryable")
-            or (old.get("recovery") or {}).get("state") == "manual_reconciliation_required"
+            run.status in {"queued", "planning", "running", "retrying"}
+            and (
+                previous.status in {"completed", "failed"}
+                or old.get("stream_interruption")
+                or old.get("non_retryable")
+                or (old.get("recovery") or {}).get("state") == "manual_reconciliation_required"
+            )
         )
     ):
         run.status, run.error = previous.status, previous.error
@@ -291,6 +297,11 @@ class SQLAlchemyAgentRunRepository:
         self._schema_bind: object | None = None
         self._schema_lock = threading.RLock()
 
+    @property
+    def allows_schema_setup(self) -> bool:
+        """Native checkpoints share the repository's explicit provisioning policy."""
+        return self._auto_create
+
     def save(self, run: AgentRun) -> AgentRun:
         self._ensure_schema()
         with self._session_scope() as db:
@@ -365,7 +376,9 @@ class SQLAlchemyAgentRunRepository:
             self.save_in_session(db, run)
         return copy.deepcopy(run)
 
-    def save_in_session(self, db: Session, run: AgentRun) -> None:
+    def save_in_session(
+        self, db: Session, run: AgentRun, *, allow_safe_retry: bool = False
+    ) -> None:
         """Lock then persist in the caller's transaction, preserving concurrent receipts."""
         from app.application.agent_orchestrator.business_harness import (
             ensure_terminal_business_result,
@@ -377,12 +390,18 @@ class SQLAlchemyAgentRunRepository:
         )
         record = db.get(AgentRunRecord, run.run_id, populate_existing=True)
         previous = self._record_to_run(record) if record is not None else None
+        if allow_safe_retry:
+            from app.application.agent_orchestrator.run_lifecycle import validate_safe_retry_update
+
+            if previous is None:
+                raise ValueError("原任务不存在，不能续跑")
+            validate_safe_retry_update(run, previous)
         from app.application.agent_orchestrator.catalog_authority_retention import (
             preserve_catalog_run_authority,
         )
 
         preserve_catalog_run_authority(db, run, previous)
-        preserve_run_evidence(run, previous)
+        preserve_run_evidence(run, previous, allow_safe_retry=allow_safe_retry)
         ensure_terminal_business_result(run)
         run_terminal_metrics.record_terminal_transition(run, previous, db)
         run.touch()

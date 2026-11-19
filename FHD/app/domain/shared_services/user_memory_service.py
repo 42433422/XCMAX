@@ -27,15 +27,15 @@ from typing import Any, Concatenate, ParamSpec, Protocol, Self, TypeVar, cast
 
 from app.application.user_memory.candidates import CandidateMemory, CandidatePorts
 from app.application.user_memory.feedback import FeedbackMemory, FeedbackPorts
-from app.application.user_memory.models import ActionPattern as ActionPattern
-from app.application.user_memory.models import ContextSummary as ContextSummary
-from app.application.user_memory.models import FeedbackRecord as FeedbackRecord
-from app.application.user_memory.models import UserMemory as UserMemory
 from app.application.user_memory.patterns import ActionMemory, PatternPorts
 from app.application.user_memory.policy import MemoryPolicy, PolicyPorts
 from app.application.user_memory.preferences import PreferenceMemory
 from app.application.user_memory.protocols import MemoryAccess, MemoryStore, late_callback
 from app.application.user_memory.queries import MemoryQueries, QueryPorts
+from app.domain.user_memory.records import ActionPattern as ActionPattern
+from app.domain.user_memory.records import ContextSummary as ContextSummary
+from app.domain.user_memory.records import FeedbackRecord as FeedbackRecord
+from app.domain.user_memory.records import UserMemory as UserMemory
 from app.infrastructure.user_memory.json_storage import JsonMemoryStorage
 from app.infrastructure.user_memory.persistence import MemoryRepository
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
@@ -358,6 +358,18 @@ class UserMemoryService(NeuroEventPublisherMixin):
 
     def record_memory_recall(self, user_id: str, memory_id: str) -> dict[str, Any]:
         return self._candidates.record_recall(user_id, memory_id)
+
+    def filter_recalled_memories(
+        self, user_id: str, hits: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        from app.application.user_memory.retrieve import filter_recalled_memories
+
+        return filter_recalled_memories(user_id, hits, memory_service=self)
+
+    def rebuild_memory_projections(self, user_id: str) -> dict[str, int]:
+        from app.application.user_memory.projections import rebuild_memory_projections
+
+        return rebuild_memory_projections(user_id, memory_service=self)
 
     def get_memory_v2_summary(self, user_id: str) -> dict[str, Any]:
         return self._queries.get_memory_v2_summary(user_id)

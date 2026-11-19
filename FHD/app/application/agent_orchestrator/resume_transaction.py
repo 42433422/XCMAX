@@ -19,6 +19,99 @@ from app.application.agent_orchestrator.task_models import TaskControlCommand
 from app.db.models.agent import AgentRunRecord, AgentTaskCommandRecord, AgentTaskExecutionRecord
 
 
+def unresolved_effects(db: Any, run: AgentRun, *, clear_confirmed: bool = False) -> list[str]:
+    """Only a durable successful step receipt can settle an old open effect."""
+    from app.application.agent_orchestrator.task_models import tenant_id_of_run
+    from app.domain.task_lifecycle.control import SessionBook
+
+    book = SessionBook(db)
+    tenant = tenant_id_of_run(run)
+    body = book.get("agent", tenant, run.run_id)
+    completed = {
+        s.step_id for s in run.steps if s.status == "completed" and s.output.get("success") is True
+    }
+    remaining = sorted(set(body.get("effects") or []) - completed)
+    if clear_confirmed and not remaining and body.get("effects"):
+        body["effects"] = []
+        book.put("agent", tenant, run.run_id, body)
+    return remaining
+
+
+def retry_and_enqueue(
+    runs: SQLAlchemyAgentRunRepository,
+    *,
+    run_id: str,
+    principal_id: str,
+    runtime_context: dict[str, Any],
+    authenticated_binding: dict[str, Any] | None = None,
+) -> AgentRun | None:
+    """CAS a safe continuation and its queue without changing run/step identities."""
+    from app.application.agent_orchestrator.run_lifecycle import (
+        prepare_safe_continuation,
+        safe_continuation_error,
+    )
+    from app.domain.task_lifecycle.adapters import execution_requeue_allowed
+
+    queue = SQLAlchemyTaskExecutionRepository(session_factory=runs._session_factory)
+    queue._ensure_schema()
+    with runs.transaction() as db:
+        execution = (
+            db.query(AgentTaskExecutionRecord)
+            .filter_by(run_id=run_id)
+            .with_for_update()
+            .one_or_none()
+        )
+        if execution is not None:
+            if not execution_requeue_allowed(str(execution.state), retryable=True):
+                raise ApprovalGrantError("执行器仍在运行或任务已经结束，不能重入队列")
+            if (
+                db.query(AgentTaskExecutionRecord)
+                .filter(
+                    AgentTaskExecutionRecord.run_id == run_id,
+                    AgentTaskExecutionRecord.state == execution.state,
+                    AgentTaskExecutionRecord.execution_count == execution.execution_count,
+                )
+                .update(
+                    {AgentTaskExecutionRecord.updated_at: execution.updated_at},
+                    synchronize_session=False,
+                )
+                != 1
+            ):
+                raise ApprovalGrantError("任务执行权已变化，请刷新后重试")
+        record = db.query(AgentRunRecord).filter_by(run_id=run_id).with_for_update().one_or_none()
+        if record is None:
+            return None
+        old_payload = record.payload_json
+        run = agent_run_from_dict(json.loads(old_payload))
+        if run.status not in {"failed", "blocked"}:
+            return run
+        if error := safe_continuation_error(run):
+            raise ApprovalGrantError(error)
+        if unresolved_effects(db, run, clear_confirmed=True):
+            raise ApprovalGrantError("任务仍有未确认的业务写入，需要人工核对")
+        renew_approval_session(
+            run,
+            principal_id=principal_id,
+            authenticated_binding=authenticated_binding,
+            operation="retry",
+        )
+        run.metadata["runtime_context"] = merge_runtime_context(run, runtime_context)
+        if (
+            db.query(AgentRunRecord)
+            .filter(
+                AgentRunRecord.run_id == run_id,
+                AgentRunRecord.payload_json == old_payload,
+            )
+            .update({AgentRunRecord.status: record.status}, synchronize_session=False)
+            != 1
+        ):
+            raise ApprovalGrantError("任务状态已变化，请刷新后重试")
+        prepare_safe_continuation(run, requested_by=principal_id, reason="explicit_retry")
+        runs.save_in_session(db, run, allow_safe_retry=True)
+        queue.enqueue_in_session(db, run, requested_by=principal_id, retryable=True)
+    return run
+
+
 def resume_and_enqueue(
     runs: SQLAlchemyAgentRunRepository,
     queue: SQLAlchemyTaskExecutionRepository,

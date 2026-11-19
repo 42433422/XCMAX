@@ -30,13 +30,23 @@ def _lock_claim(db, execution, owner_id):
     )
 
 
+@contextmanager
+def worker_claim_guard():
+    """Hold the current server-owned queue generation through a receipt CAS."""
+    claim = _claim.get()
+    if claim is None:
+        yield None
+        return
+    repository, execution, owner_id = claim
+    with repository.transaction() as db:
+        _lock_claim(db, execution, owner_id)
+        yield (execution.run_id, owner_id, execution.execution_count)
+
+
 def recheck_worker_claim():
     """Fence live ownership again after a server-side lock wait, without holding HOST."""
-    claim = _claim.get()
-    if claim is not None:
-        repository, execution, owner_id = claim
-        with repository.transaction() as db:
-            _lock_claim(db, execution, owner_id)
+    with worker_claim_guard():
+        pass
 
 
 def capture_worker_claim():

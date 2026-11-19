@@ -11,6 +11,12 @@ from app.infrastructure.rag.dataset_vector_index import DatasetVectorIndexBacken
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
+def _embedding_fingerprint(embedder: Callable[[str], list[float]] | None) -> str:
+    owner = getattr(embedder, "__self__", embedder)
+    identity = getattr(owner, "embedding_fingerprint", "")
+    return identity if isinstance(identity, str) else ""
+
+
 def _embedding_metadata(embedder: Callable[[str], list[float]] | None, text: str) -> dict[str, Any]:
     if embedder is None:
         return {}
@@ -21,36 +27,52 @@ def _embedding_metadata(embedder: Callable[[str], list[float]] | None, text: str
     if not isinstance(embedding, list) or not embedding:
         return {}
     try:
-        return {"_embedding": [float(value) for value in embedding]}
+        metadata: dict[str, Any] = {"_embedding": [float(value) for value in embedding]}
     except (TypeError, ValueError):
         return {}
+    fingerprint = _embedding_fingerprint(embedder)
+    if fingerprint:
+        metadata["_embedding_fingerprint"] = fingerprint
+    return metadata
 
 
 def backfill_missing_embeddings(
-    embedder: Callable[[str], list[float]] | None, state: _DatasetState
+    embedder: Callable[[str], list[float]] | None,
+    state: _DatasetState,
+    *,
+    allow_model_io: bool = True,
 ) -> bool:
     """Fill chunks that were stored before an embedder existed.
 
-    Also recomputes vectors whose dimension no longer matches the current embedder
-    (e.g. switching hash 64 → 192 or hash ↔ fastembed), otherwise stale vectors
-    silently score zero.
+    Model identity and dimension both define compatibility. Legacy unlabelled
+    vectors are rebuilt once when the embedder exposes an identity. If the new
+    model is unavailable, remove incompatible vectors instead of mixing spaces.
     """
     if embedder is None:
         return False
-    probe = _embedding_metadata(embedder, "_dim_probe_").get("_embedding")
+    probe = (
+        _embedding_metadata(embedder, "_dim_probe_").get("_embedding") if allow_model_io else None
+    )
     expected_dim = len(probe) if isinstance(probe, list) else 0
+    fingerprint = _embedding_fingerprint(embedder)
     changed = False
     for chunk in state.chunks:
         meta = chunk.metadata if isinstance(chunk.metadata, dict) else {}
         existing = meta.get("_embedding")
         if isinstance(existing, list) and existing:
-            if not expected_dim or len(existing) == expected_dim:
+            same_model = not fingerprint or meta.get("_embedding_fingerprint") == fingerprint
+            if same_model and (not expected_dim or len(existing) == expected_dim):
                 continue
-        extra = _embedding_metadata(embedder, chunk.text)
-        if not extra:
-            continue
-        chunk.metadata = {**meta, **extra}
-        changed = True
+        extra = _embedding_metadata(embedder, chunk.text) if allow_model_io else {}
+        updated = {
+            key: value
+            for key, value in meta.items()
+            if key not in {"_embedding", "_embedding_fingerprint"}
+        }
+        updated.update(extra)
+        if updated != meta:
+            chunk.metadata = updated
+            changed = True
     return changed
 
 
@@ -167,6 +189,7 @@ class VectorIndexService:
             "chunk_count": len(state.chunks),
             "embedding_count": embedding_count,
             "embedding_persisted": embedding_count > 0,
+            "embedding_fingerprint": _embedding_fingerprint(self.embedder),
             "vector_backend": vector_status,
             "vector_backend_name": vector_status.get("backend", self._vector_index_backend_name()),
             "vector_backend_chunk_count": int(vector_status.get("chunk_count") or 0),

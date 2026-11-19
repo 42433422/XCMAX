@@ -179,8 +179,8 @@ export const chatApi = {
     return api.post<ApiResponse<{ deleted: number }>>('/api/conversations/sessions/clear', data)
   },
 
-  getConversation(sessionId: string): Promise<ApiResponse<ChatSession>> {
-    return api.get<ApiResponse<ChatSession>>(`/api/conversations/${sessionId}`, {}, { timeoutMs: 20_000 })
+  getConversation(sessionId: string, params: { limit?: number; before_id?: number; turn_id?: string } = {}): Promise<ApiResponse<ChatSession>> {
+    return api.get<ApiResponse<ChatSession>>(`/api/conversations/${sessionId}`, params, { timeoutMs: 20_000, cache: 'no-store' })
   },
 
   renameConversation(sessionId: string, title: string): Promise<ApiResponse<{ success: boolean }>> {
@@ -203,6 +203,11 @@ export const chatApi = {
     return api.get<ApiResponse<{ success: boolean; execution?: { idempotency_key?: string; intent?: string; effect?: string; committed?: boolean; message?: string } }>>(
       `/api/conversations/turns/${encodeURIComponent(turnId)}/reconcile`,
     )
+  },
+
+  retryTurnPersistence(sessionId: string, turnId: string, expectedRevision: number): Promise<ApiResponse<unknown>> {
+    return api.post(`/api/conversations/${encodeURIComponent(sessionId)}/turns/${encodeURIComponent(turnId)}/persist`,
+      { expected_revision: expectedRevision }, { timeoutMs: 20_000 })
   },
 
   saveMessage(payload: unknown): Promise<ApiResponse<unknown>> {

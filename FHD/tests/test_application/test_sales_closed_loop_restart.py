@@ -13,7 +13,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 from app.db.db_base import Base
@@ -50,6 +50,9 @@ def _prepare(db_path: Path):
     database.HostSessionLocal = factory
     database.SessionLocal = factory
     session_module.SessionLocal = factory
+    from app.domain.shared_services.ai_action_audit_service import ensure_ai_action_audit_table
+
+    ensure_ai_action_audit_table()
     from app.application.agent_orchestrator.run_repository import (
         set_agent_run_repository_for_tests,
     )
@@ -263,9 +266,18 @@ def confirm_phase(db_path: Path, marker: Path) -> None:
             source="pro",
         )
     assert second["data"]["action"] == "approval_pending", second
+    from app.application.agent_orchestrator.run_repository import get_agent_run_repository
+
+    waiting_run = get_agent_run_repository().get(second["data"]["data"]["agent_run_id"])
+    assert waiting_run.metadata["runtime_context"]["_conversation_revision"] == 0
     request_no = second["data"]["data"]["approval_request_ids"][0]
+    run_id = second["data"]["data"]["agent_run_id"]
+    from app.application.agent_orchestrator.run_repository import get_agent_run_repository
     from app.db.models.approval import ApprovalRequest
 
+    runtime = get_agent_run_repository().get(run_id).metadata["runtime_context"]
+    assert type(runtime["_conversation_revision"]) is int
+    assert runtime["_conversation_revision"] == 0
     with tenant_scope(1):
         db = factory()
         row = db.query(ApprovalRequest).filter_by(request_no=request_no).one()
@@ -279,12 +291,38 @@ def confirm_phase(db_path: Path, marker: Path) -> None:
                 "request_id": request_id,
                 "user_id": user_id,
                 "orders": orders,
+                "run_id": run_id,
+                "conversation_id": runtime["conversation_id"],
+                "conversation_revision": runtime["_conversation_revision"],
             }
         ),
         encoding="utf-8",
     )
     if os.environ.get("WAIT") == "1":
         time.sleep(30)
+
+
+def invalidate_phase(db_path: Path, marker: Path, action: str) -> None:
+    from app.application.task_conversation_store import task_conversation_store
+    from app.db.models import AIConversation, AIConversationSession
+
+    factory = _prepare(db_path)
+    payload = json.loads(marker.read_text(encoding="utf-8"))
+    identity = {"session_id": payload["conversation_id"], "user_id": payload["user_id"]}
+    with tenant_scope(1):
+        if action == "delete":
+            assert task_conversation_store.delete_session(**identity)
+        else:
+            with factory() as db:
+                message = db.query(AIConversation).filter_by(role="user").first()
+                message_id = int(message.id)
+            assert task_conversation_store.delete_messages_from(**identity, message_id=message_id)
+        with factory() as db:
+            session = (
+                db.query(AIConversationSession).filter_by(session_id=identity["session_id"]).one()
+            )
+            assert session.revision == payload["conversation_revision"] + 1
+            assert (session.deleted_at is not None) == (action == "delete")
 
 
 def approve_phase(db_path: Path, marker: Path, result_path: Path) -> None:
@@ -330,7 +368,14 @@ def approve_phase(db_path: Path, marker: Path, result_path: Path) -> None:
             "journal_balanced": journal.is_balanced(),
             "journal_count": db.query(JournalEntry).count(),
             "order_count": db.query(SalesOrder).count(),
+            "audit_actions": list(db.execute(text("SELECT action FROM ai_action_audit")).scalars()),
         }
+        for action in (
+            "approval.submit_ai_workflow",
+            "approval.approve_ai_workflow",
+            "approval.execute_ai_workflow",
+        ):
+            assert evidence["audit_actions"].count(action) == 1
         db.close()
     from app.application.agent_orchestrator.artifact_files import read_verified_spreadsheet
     from app.application.agent_orchestrator.run_repository import get_agent_run_repository
@@ -361,6 +406,10 @@ def _spawn(
     env["SALES_MARKER"] = str(marker)
     env["SALES_RESULT"] = str(result_path)
     env["WAIT"] = "1" if wait else "0"
+    env["XCAGI_DIALOGUE_MEMORY_DIR"] = str(db_path.parent / "dialogue-memory")
+    env["XCAGI_USER_MEMORY_DIR"] = str(db_path.parent / "user-memory")
+    env["XCAGI_USER_MEMORY_JSON_PATH"] = str(db_path.parent / "user-memory" / "memory_store.json")
+    env["XCAGI_TOOL_IDEMPOTENCY_PATH"] = str(db_path.parent / "tool-idempotency.sqlite")
     env["PYTHONPATH"] = os.pathsep.join(
         [str(Path(__file__).resolve().parents[2]), os.environ.get("PYTHONPATH", "")]
     )
@@ -390,8 +439,10 @@ def _wait_for(path: Path, proc: subprocess.Popen, timeout: float = 60) -> None:
     raise AssertionError(f"timed out waiting for {path.name}")
 
 
-@pytest.mark.parametrize("kill", [False, True])
-def test_process_chat_survives_restart_and_exports_once(tmp_path: Path, kill: bool):
+@pytest.mark.parametrize(
+    "kill,invalidate", [(False, None), (True, None), (False, "delete"), (False, "withdraw")]
+)
+def test_process_chat_survives_restart_and_exports_once(tmp_path: Path, kill: bool, invalidate):
     db_path = tmp_path / "sales.db"
     marker = tmp_path / "marker.json"
     result_path = tmp_path / "result.json"
@@ -402,6 +453,11 @@ def test_process_chat_survives_restart_and_exports_once(tmp_path: Path, kill: bo
             os.kill(confirm.pid, signal.SIGKILL)
             confirm.wait(timeout=10)
             assert confirm.returncode != 0
+        else:
+            confirm.wait(timeout=60)
+            assert confirm.returncode == 0, Path(confirm.log_handle.name).read_text(
+                encoding="utf-8"
+            )
     finally:
         if confirm.poll() is None:
             confirm.kill()
@@ -409,9 +465,61 @@ def test_process_chat_survives_restart_and_exports_once(tmp_path: Path, kill: bo
         confirm.log_handle.close()
     before = json.loads(marker.read_text(encoding="utf-8"))
     assert before["orders"] == 0
+    if invalidate:
+        changed = _spawn(invalidate, db_path, marker, result_path, wait=False)
+        try:
+            changed.wait(timeout=60)
+            assert changed.returncode == 0, Path(changed.log_handle.name).read_text(
+                encoding="utf-8"
+            )
+        finally:
+            if changed.poll() is None:
+                changed.kill()
+                changed.wait(timeout=10)
+            changed.log_handle.close()
     approve = _spawn("approve", db_path, marker, result_path, wait=False)
     approve.wait(timeout=90)
     approve.log_handle.close()
+    if invalidate:
+        assert approve.returncode != 0
+        engine = create_engine(f"sqlite:///{db_path}")
+        try:
+            with engine.connect() as db:
+                stored = json.loads(
+                    db.exec_driver_sql(
+                        "SELECT payload_json FROM agent_runs WHERE run_id = ?", (before["run_id"],)
+                    ).scalar_one()
+                )
+                assert stored["status"] == "blocked"
+                assert stored["error"] == "原会话已变更、删除或授权失效，拒绝恢复旧上下文"
+                assert stored["metadata"]["runtime_context"]["_conversation_revision"] == 0
+                assert all(step["status"] != "completed" for step in stored["steps"])
+                audit_actions = set(
+                    db.exec_driver_sql("SELECT action FROM ai_action_audit").scalars()
+                )
+                assert {
+                    "approval.submit_ai_workflow",
+                    "approval.execute_ai_workflow_failed",
+                } <= audit_actions
+                assert "approval.approve_ai_workflow" not in audit_actions
+                for model in (SalesOrder, SalesOrderItem, InventoryTransaction, JournalEntry):
+                    assert (
+                        db.exec_driver_sql(
+                            f"SELECT count(*) FROM {model.__tablename__}"
+                        ).scalar_one()
+                        == 0
+                    )
+                assert Decimal(
+                    str(
+                        db.exec_driver_sql(
+                            "SELECT available_quantity FROM inventory_ledger"
+                        ).scalar_one()
+                    )
+                ) == Decimal("20")
+        finally:
+            engine.dispose()
+        assert not result_path.exists()
+        return
     assert approve.returncode == 0, (db_path.with_name("approve.log")).read_text(encoding="utf-8")[
         -2000:
     ]
@@ -425,10 +533,13 @@ def test_process_chat_survives_restart_and_exports_once(tmp_path: Path, kill: bo
         "export_sales",
     ]
     assert len(evidence["export_sha256"]) == 64
-    replay = _spawn("approve", db_path, marker, result_path, wait=False)
+    replay = _spawn("replay", db_path, marker, result_path, wait=False)
     replay.wait(timeout=60)
     replay.log_handle.close()
     assert replay.returncode != 0
+    assert "当前状态不可审批：approved" in db_path.with_name("replay.log").read_text(
+        encoding="utf-8"
+    )
 
 
 if __name__ == "__main__":
@@ -438,7 +549,9 @@ if __name__ == "__main__":
     output = Path(os.environ["SALES_RESULT"])
     if phase == "confirm":
         confirm_phase(database, marker_path)
-    elif phase == "approve":
+    elif phase in {"delete", "withdraw"}:
+        invalidate_phase(database, marker_path, phase)
+    elif phase in {"approve", "replay"}:
         approve_phase(database, marker_path, output)
     else:
         raise SystemExit(f"unknown phase {phase}")

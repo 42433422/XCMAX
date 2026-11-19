@@ -25,7 +25,7 @@
 
 普通 PR 三重门禁（--scan-regular-prs，2026-07-20 新增）：
 1. ai-review: passed — "AI Review" workflow 在 PR head SHA 上 conclusion=success
-   （兼容：若 PR 标 `ai-review: passed` label 则直接视为通过）
+   （标签仅作展示，不能替代当前 head 的成功证据）
 2. ci: passed — PR head SHA 所有 check runs 全绿（success/neutral/skipped）
 3. author: trusted-author-allowlist — PR author ∈ config/auto-implement-allowlist.yaml:trusted_authors
 
@@ -46,9 +46,11 @@ Veto（任一PR类型）：PR 标 `hold-merge` label 时不自动合并。
 合并后主干验证：
 - `GITHUB_TOKEN` 合并不会触发普通 `push` workflow；合并成功后必须用
   独立 `WORKFLOW_DISPATCH_TOKEN` 显式 workflow_dispatch FHD CI/CD 与
-  MODstore 主干 CI；FHD 绑定实际合并 SHA，不代替携带安全证据的正式发布编排
-- 任一派发失败都记为 `post_merge_dispatch_failed`、标记 `needs-human`，
-  并让本次 SLA workflow 失败，禁止把“已合并”冒充“已发布”
+  MODstore 主干 CI；两者均绑定实际合并 SHA，不代替正式发布编排
+- 合并前将派发意图保存到机器人 PR 评论；pending 标签允许关闭后继续恢复。
+  原生 run ID 与精确 SHA 的 run-name 用于对账；未知响应持续观测至期限，
+  只有明确未被接受的请求才有界重试，不能用暂未查到 run 证明派发不存在。
+  CI 成功只记 ci_passed，不能把“已派发 / CI 通过”冒充“已发布”。
 
 全部动作写 metrics/ai-self-heal-stale.jsonl。
 
@@ -91,6 +93,8 @@ except ImportError:
 
 
 GITHUB_API = "https://api.github.com"
+GITHUB_API_VERSION = "2022-11-28"
+API_MAX_PAGES = 10
 METRICS_DIR = ROOT / "metrics"
 STALE_JSONL = METRICS_DIR / "ai-self-heal-stale.jsonl"
 
@@ -100,6 +104,7 @@ DEFAULT_ALLOWLIST_PATH = REPO_ROOT / "config" / "auto-implement-allowlist.yaml"
 
 # ai-review workflow 名称（与 FHD/.github/workflows/ai-review.yml `name:` 字段对齐）
 AI_REVIEW_WORKFLOW_NAME = "AI Review"
+AI_REVIEW_WORKFLOW_PATH = ".github/workflows/fhd-ai-review.yml"
 AI_REVIEW_PASSED_LABEL = "ai-review: passed"
 HOLD_MERGE_LABEL = "hold-merge"
 NEEDS_HUMAN_LABEL = "needs-human"
@@ -108,6 +113,22 @@ MERGE_FAIL_COMMENT_MARKER = "❌ 自动合并失败"
 POST_MERGE_DISPATCH_FAIL_MARKER = "❌ 自动合并后发布派发失败"
 
 POST_MERGE_WORKFLOWS = ("fhd-ci-cd.yml", "modstore-ci-backend-python.yml")
+POST_MERGE_RUN_TITLES = ("CI/CD", "CI - Backend Python")
+DELIVERY_LABEL = "post-merge:pending"
+DELIVERY_MARKER = "<!-- xcmax-post-merge:v1 -->"
+DELIVERY_MAX_ATTEMPTS = 3
+DELIVERY_MAX_AGE_SECONDS = 72 * 3600
+DELIVERY_VISIBILITY_SECONDS = 10 * 60
+DISPATCH_REJECTED_REASONS = frozenset(
+    {
+        "workflow_dispatch_token_missing",
+        "http_400",
+        "http_401",
+        "http_403",
+        "http_404",
+        "http_422",
+    }
+)
 
 # ai-self-heal / ai-generated 标签（用于区分普通 PR）
 AI_PR_LABELS = ("ai-self-heal", "ai-generated")
@@ -147,6 +168,8 @@ class PRInfo:
     kind: str = "self_heal"  # "self_heal" | "ai_generated" | "regular"
     author: str = ""
     head_sha: str = ""
+    draft: bool = False
+    base_branch: str = "main"
 
 
 # =====================================================================
@@ -165,6 +188,7 @@ class GitHubClient:
             headers={
                 "Authorization": f"Bearer {token}",
                 "Accept": "application/vnd.github+json",
+                "X-GitHub-Api-Version": GITHUB_API_VERSION,
             },
         )
         branch_update_token = (os.environ.get("BRANCH_UPDATE_TOKEN") or "").strip()
@@ -174,6 +198,7 @@ class GitHubClient:
                 headers={
                     "Authorization": f"Bearer {branch_update_token}",
                     "Accept": "application/vnd.github+json",
+                    "X-GitHub-Api-Version": GITHUB_API_VERSION,
                 },
             )
             if branch_update_token
@@ -189,104 +214,88 @@ class GitHubClient:
                 headers={
                     "Authorization": f"Bearer {workflow_dispatch_token}",
                     "Accept": "application/vnd.github+json",
+                    "X-GitHub-Api-Version": GITHUB_API_VERSION,
                 },
             )
             if workflow_dispatch_token
             else None
         )
 
-    def list_self_heal_prs(self) -> list[PRInfo]:
-        """列出所有 open PR + label:ai-self-heal 或 label:ai-generated。
+    def _pages(
+        self,
+        path: str,
+        *,
+        key: str = "",
+        params: dict[str, Any] | None = None,
+        expected_sha: str = "",
+    ) -> list[dict[str, Any]]:
+        """Read the complete REST collection, or fail closed at the API bound."""
+        items: list[dict[str, Any]] = []
+        for page in range(1, API_MAX_PAGES + 1):
+            response = self.client.get(
+                f"{GITHUB_API}/repos/{self.repo}/{path}",
+                params={**(params or {}), "per_page": 100, "page": page},
+            )
+            if response.status_code != 200:
+                raise ValueError(f"api_error_{response.status_code}:{path}")
+            payload = response.json()
+            if expected_sha and payload.get("sha") != expected_sha:
+                raise ValueError("response_sha_mismatch")
+            batch = payload.get(key) if key else payload
+            if not isinstance(batch, list) or any(not isinstance(x, dict) for x in batch):
+                raise ValueError(f"invalid_collection:{path}")
+            items.extend(batch)
+            total = payload.get("total_count") if isinstance(payload, dict) else None
+            has_next = "next" in response.links
+            if not has_next and (total is not None and len(items) >= total or len(batch) < 100):
+                if total is not None and len(items) < total:
+                    raise ValueError(f"incomplete_collection:{path}")
+                return items
+        raise ValueError(f"pagination_limit:{path}")
 
-        GitHub Issues API 的 labels 参数是 AND 关系，因此分两次查询再合并去重。
-        返回的 PRInfo.kind 标记来源（self_heal / ai_generated）。
-        """
-        seen: set[int] = set()
-        prs: list[PRInfo] = []
-        for label, kind in (("ai-self-heal", "self_heal"), ("ai-generated", "ai_generated")):
-            url = f"{GITHUB_API}/repos/{self.repo}/issues"
-            resp = self.client.get(url, params={"labels": label, "state": "open", "per_page": 100})
-            resp.raise_for_status()
-            for item in resp.json():
-                if "pull_request" not in item:
-                    continue
-                pr_number = item.get("number")
-                if pr_number in seen:
-                    continue
-                pr_url = item["pull_request"]["url"]
-                pr_resp = self.client.get(pr_url)
-                pr_resp.raise_for_status()
-                pr_data = pr_resp.json()
-                prs.append(
-                    PRInfo(
-                        number=pr_data["number"],
-                        title=pr_data["title"],
-                        url=pr_data["html_url"],
-                        head_branch=pr_data["head"]["ref"],
-                        created_at=_parse_iso(pr_data["created_at"]),
-                        labels=[lab["name"] for lab in pr_data.get("labels", [])],
-                        changed_files=pr_data.get("changed_files", 0),
-                        additions=pr_data.get("additions", 0),
-                        deletions=pr_data.get("deletions", 0),
-                        kind=kind,
-                        author=_extract_login(pr_data.get("user")),
-                        head_sha=pr_data.get("head", {}).get("sha", "") or "",
-                    )
-                )
-                seen.add(pr_number)
-        return prs
+    def get_pr(self, pr_number: int) -> dict[str, Any]:
+        response = self.client.get(f"{GITHUB_API}/repos/{self.repo}/pulls/{pr_number}")
+        response.raise_for_status()
+        return response.json()
+
+    @staticmethod
+    def _pr_info(data: dict[str, Any], kind: str) -> PRInfo:
+        return PRInfo(
+            number=data["number"],
+            title=data["title"],
+            url=data["html_url"],
+            head_branch=data["head"]["ref"],
+            created_at=_parse_iso(data["created_at"]),
+            labels=[label["name"] for label in data.get("labels", [])],
+            changed_files=data.get("changed_files", 0),
+            additions=data.get("additions", 0),
+            deletions=data.get("deletions", 0),
+            kind=kind,
+            author=_extract_login(data.get("user")),
+            head_sha=data["head"].get("sha", ""),
+            draft=data.get("draft", True),
+            base_branch=data.get("base", {}).get("ref", ""),
+        )
+
+    def list_self_heal_prs(self) -> list[PRInfo]:
+        """Issues labels are AND filters, so combine the two complete collections."""
+        prs: dict[int, PRInfo] = {}
+        for label, kind in (
+            ("ai-self-heal", "self_heal"),
+            ("ai-generated", "ai_generated"),
+        ):
+            for item in self._pages("issues", params={"labels": label, "state": "open"}):
+                number = item["number"]
+                if "pull_request" in item and number not in prs:
+                    prs[number] = self._pr_info(self.get_pr(number), kind)
+        return list(prs.values())
 
     def list_regular_prs(self) -> list[PRInfo]:
-        """列出所有 open PR，排除带 ai-self-heal / ai-generated label 的 PR。
-
-        普通 PR 由本函数专门处理，不走 risk 分级；走三重门禁。
-        """
-        url = f"{GITHUB_API}/repos/{self.repo}/pulls"
-        prs: list[PRInfo] = []
-        page = 1
-        while True:
-            resp = self.client.get(
-                url,
-                params={
-                    "state": "open",
-                    "per_page": 100,
-                    "page": page,
-                    "sort": "created",
-                    "direction": "desc",
-                },
-            )
-            resp.raise_for_status()
-            items = resp.json()
-            if not items:
-                break
-            for pr_data in items:
-                labels = [lab["name"] for lab in pr_data.get("labels", [])]
-                # 排除 ai-self-heal / ai-generated PR（由 list_self_heal_prs 处理）
-                if any(lab in AI_PR_LABELS for lab in labels):
-                    continue
-                prs.append(
-                    PRInfo(
-                        number=pr_data["number"],
-                        title=pr_data["title"],
-                        url=pr_data["html_url"],
-                        head_branch=pr_data["head"]["ref"],
-                        created_at=_parse_iso(pr_data["created_at"]),
-                        labels=labels,
-                        changed_files=pr_data.get("changed_files", 0),
-                        additions=pr_data.get("additions", 0),
-                        deletions=pr_data.get("deletions", 0),
-                        kind="regular",
-                        author=_extract_login(pr_data.get("user")),
-                        head_sha=pr_data.get("head", {}).get("sha", "") or "",
-                    )
-                )
-            if len(items) < 100:
-                break
-            page += 1
-            # 安全上限：避免极端情况下无限翻页
-            if page > 10:
-                break
-        return prs
+        return [
+            self._pr_info(data, "regular")
+            for data in self._pages("pulls", params={"state": "open", "sort": "created"})
+            if not any(label["name"] in AI_PR_LABELS for label in data.get("labels", []))
+        ]
 
     def get_workflow_run_conclusion(self, head_sha: str, workflow_name: str) -> tuple[bool, str]:
         """检查指定 head SHA 上某 workflow 的最近一次 run 是否 conclusion=success。
@@ -296,16 +305,30 @@ class GitHubClient:
         """
         if not head_sha:
             return False, "no_head_sha"
-        url = f"{GITHUB_API}/repos/{self.repo}/actions/runs"
-        resp = self.client.get(url, params={"head_sha": head_sha, "per_page": 100})
-        if resp.status_code != 200:
-            return False, f"workflow_runs_api_error_{resp.status_code}"
-        runs = resp.json().get("workflow_runs", []) or []
-        matched = [r for r in runs if r.get("name") == workflow_name]
+        try:
+            runs = self._pages("actions/runs", key="workflow_runs", params={"head_sha": head_sha})
+        except RECOVERABLE_ERRORS as exc:
+            return False, f"workflow_runs_{exc}"
+        matched = [
+            r
+            for r in runs
+            if r.get("name") == workflow_name
+            and r.get("head_sha") == head_sha
+            and r.get("event") == "pull_request"
+            and str(r.get("path", "")).split("@", 1)[0] == AI_REVIEW_WORKFLOW_PATH
+            and (not r.get("repository") or r["repository"].get("full_name") == self.repo)
+        ]
         if not matched:
             return False, f"no_workflow_run:{workflow_name}"
         # 取最新一条（GitHub 默认按 created_at desc 返回，但显式排序更稳）
-        latest = max(matched, key=lambda r: r.get("created_at", ""))
+        latest = max(
+            matched,
+            key=lambda r: (
+                r.get("created_at", ""),
+                r.get("id", 0),
+                r.get("run_attempt", 1),
+            ),
+        )
         status = latest.get("status", "")
         conclusion = latest.get("conclusion")
         if status != "completed":
@@ -315,30 +338,56 @@ class GitHubClient:
         return True, "ok"
 
     def get_pr_files(self, pr_number: int) -> list[str]:
-        url = f"{GITHUB_API}/repos/{self.repo}/pulls/{pr_number}/files"
-        resp = self.client.get(url)
-        resp.raise_for_status()
-        return [f["filename"] for f in resp.json()]
+        return [item["filename"] for item in self._pages(f"pulls/{pr_number}/files")]
 
     def get_pr_check_runs(self, pr_number: int, head_sha: str) -> tuple[bool, str]:
-        """检查 PR head commit 的所有 check runs 是否全绿。"""
-        url = f"{GITHUB_API}/repos/{self.repo}/commits/{head_sha}/check-runs"
-        resp = self.client.get(url)
-        if resp.status_code != 200:
-            return False, f"check_runs_api_error_{resp.status_code}"
-        runs = resp.json().get("check_runs", [])
-        if not runs:
-            return False, "no_check_runs"
-        for run in runs:
-            if run.get("conclusion") not in ("success", "neutral", "skipped"):
-                return False, f"ci_not_green:{run.get('name')}"
+        """Require complete, current-head checks and legacy commit statuses."""
+        if not head_sha:
+            return False, "no_head_sha"
+        try:
+            runs = self._pages(
+                f"commits/{head_sha}/check-runs",
+                key="check_runs",
+                params={"filter": "latest"},
+            )
+            if not runs:
+                return False, "no_check_runs"
+            for run in runs:
+                if run.get("head_sha") != head_sha:
+                    return False, "check_head_mismatch"
+                if run.get("status") != "completed" or run.get("conclusion") not in (
+                    "success",
+                    "neutral",
+                    "skipped",
+                ):
+                    return False, f"ci_not_green:{run.get('name')}"
+            statuses = self._pages(
+                f"commits/{head_sha}/status", key="statuses", expected_sha=head_sha
+            )
+            if any(status.get("state") != "success" for status in statuses):
+                return False, "commit_status_not_green"
+        except RECOVERABLE_ERRORS as exc:
+            return False, f"checks:{exc}"
         return True, "ok"
 
     def get_pr_head_sha(self, pr_number: int) -> str:
-        url = f"{GITHUB_API}/repos/{self.repo}/pulls/{pr_number}"
-        resp = self.client.get(url)
-        resp.raise_for_status()
-        return resp.json()["head"]["sha"]
+        return self.get_pr(pr_number)["head"]["sha"]
+
+    def check_merge_snapshot(self, pr: PRInfo) -> tuple[bool, str]:
+        """Re-read vetoes immediately before mutation; REST merge also guards SHA."""
+        data = self.get_pr(pr.number)
+        fresh = self._pr_info(data, pr.kind)
+        if data.get("state") != "open" or fresh.head_sha != pr.head_sha:
+            return False, "pr_closed_or_head_changed"
+        if fresh.author != pr.author or any(
+            (label in fresh.labels) != (label in pr.labels) for label in AI_PR_LABELS
+        ):
+            return False, "pr_author_or_kind_changed"
+        if sorted(x for x in fresh.labels if x.startswith("risk:")) != sorted(
+            x for x in pr.labels if x.startswith("risk:")
+        ):
+            return False, "risk_changed"
+        return _merge_veto(fresh)
 
     def get_pr_mergeability(self, pr_number: int) -> tuple[bool | None, str]:
         """查询 PR 是否可合并。
@@ -361,8 +410,11 @@ class GitHubClient:
             data = resp.json()
             mergeable = data.get("mergeable")
             if mergeable is True:
-                if str(data.get("mergeable_state") or "").lower() == "behind":
+                branch_state = str(data.get("mergeable_state") or "").lower()
+                if branch_state == "behind":
                     return True, "behind"
+                if branch_state in ("blocked", "dirty", "draft", "unknown"):
+                    return None, f"branch_gate:{branch_state}"
                 return True, "ok"
             if mergeable is False:
                 return False, "conflict"
@@ -402,19 +454,25 @@ class GitHubClient:
         detail = message.replace("\n", " ").strip() or "no_message"
         return False, f"http_{resp.status_code}:{detail[:160]}"
 
-    def merge_pr(self, pr_number: int, method: str = "squash") -> tuple[bool, str, str]:
+    def merge_pr(
+        self, pr_number: int, *, expected_head_sha: str, method: str = "squash"
+    ) -> tuple[bool, str, str]:
         """尝试 squash/merge。返回 (ok, reason, merge_sha)。
 
         reason 取值：ok / conflict / permission / http_<code>:<message>
         """
         url = f"{GITHUB_API}/repos/{self.repo}/pulls/{pr_number}/merge"
-        resp = self.client.put(url, json={"merge_method": method})
+        if not _valid_sha(expected_head_sha):
+            return False, "invalid_head_sha", ""
+        resp = self.client.put(url, json={"merge_method": method, "sha": expected_head_sha})
         if resp.status_code == 200:
             try:
+                if resp.json().get("merged") is not True:
+                    return False, "merge_not_confirmed", ""
                 merge_sha = str((resp.json() or {}).get("sha") or "").strip()
             except RECOVERABLE_ERRORS:
                 merge_sha = ""
-            if len(merge_sha) != 40 or any(ch not in "0123456789abcdef" for ch in merge_sha):
+            if not _valid_sha(merge_sha):
                 return True, "ok_missing_merge_sha", ""
             return True, "ok", merge_sha
         message = ""
@@ -440,11 +498,11 @@ class GitHubClient:
         *,
         ref: str = "main",
         inputs: dict[str, str] | None = None,
-    ) -> tuple[bool, str]:
-        """用独立 token 派发，保留下游 ``workflow_run`` 自动 CD 事件。"""
+    ) -> tuple[bool, str, int]:
+        """Request native run details; a legacy 204 still requires reconciliation."""
 
         url = f"{GITHUB_API}/repos/{self.repo}/actions/workflows/{workflow_file}/dispatches"
-        payload: dict[str, Any] = {"ref": ref}
+        payload: dict[str, Any] = {"ref": ref, "return_run_details": True}
         if inputs:
             payload["inputs"] = inputs
         dispatch_client = getattr(self, "workflow_dispatch_client", None)
@@ -454,17 +512,300 @@ class GitHubClient:
                 "require_independent_workflow_dispatch",
                 False,
             ):
-                return False, "workflow_dispatch_token_missing"
+                return False, "workflow_dispatch_token_missing", 0
             dispatch_client = self.client
         resp = dispatch_client.post(url, json=payload)
-        if resp.status_code == 204:
-            return True, "ok"
+        if resp.status_code in (200, 204):
+            run_id = resp.json().get("workflow_run_id", 0) if resp.status_code == 200 else 0
+            return (
+                True,
+                "accepted",
+                run_id if isinstance(run_id, int) and run_id > 0 else 0,
+            )
         try:
             message = str((resp.json() or {}).get("message") or "")
         except RECOVERABLE_ERRORS:
             message = (resp.text or "")[:200]
         detail = message.replace("\n", " ").strip() or "no_message"
-        return False, f"http_{resp.status_code}:{detail[:160]}"
+        return False, f"http_{resp.status_code}:{detail[:160]}", 0
+
+    def load_delivery(self, pr_number: int) -> dict[str, Any] | None:
+        """Only our GitHub Actions bot may supply a durable receipt."""
+        comments = self._pages(f"issues/{pr_number}/comments")
+        for comment in reversed(comments):
+            body = str(comment.get("body") or "")
+            if _extract_login(comment.get("user")) != "github-actions[bot]" or not body.startswith(
+                DELIVERY_MARKER
+            ):
+                continue
+            state = json.loads(body.split("```json\n", 1)[1].split("\n```", 1)[0])
+            if (
+                state.get("version") != 1
+                or state.get("pr") != pr_number
+                or not _valid_sha(state.get("head_sha", ""))
+                or set(state.get("workflows", {})) != set(POST_MERGE_WORKFLOWS)
+            ):
+                raise ValueError("invalid_delivery_receipt")
+            state["comment_id"] = comment["id"]
+            return state
+        return None
+
+    @staticmethod
+    def _delivery_body(state: dict[str, Any]) -> str:
+        return (
+            DELIVERY_MARKER
+            + "\n```json\n"
+            + json.dumps(state, ensure_ascii=False, indent=2)
+            + "\n```\n主干 CI 回执；ci_passed 仅表示对应 SHA 的 CI 通过，生产发布与运行验收仍需独立证据。"
+        )
+
+    def save_delivery(self, state: dict[str, Any]) -> None:
+        state["updated_at"] = time.time()
+        state["deployment_verified"] = False
+        response = self.client.patch(
+            f"{GITHUB_API}/repos/{self.repo}/issues/comments/{state['comment_id']}",
+            json={"body": self._delivery_body(state)},
+        )
+        response.raise_for_status()
+
+    def prepare_delivery(self, pr: PRInfo) -> None:
+        """Persist discovery label and intent before the irreversible merge."""
+        if not _valid_sha(pr.head_sha):
+            raise ValueError("invalid_delivery_head_sha")
+        state = self.load_delivery(pr.number)
+        if state and state["head_sha"] == pr.head_sha:
+            if state.get("status") != "pending":
+                raise ValueError("delivery_receipt_requires_manual_reset")
+        else:
+            state = {
+                "version": 1,
+                "pr": pr.number,
+                "head_sha": pr.head_sha,
+                "merge_sha": "",
+                "created_at": time.time(),
+                "status": "pending",
+                "deployment_verified": False,
+                "workflows": {
+                    name: {"status": "pending", "attempts": 0} for name in POST_MERGE_WORKFLOWS
+                },
+            }
+        # GitHub labels are repository resources; create only if absent.
+        url = f"{GITHUB_API}/repos/{self.repo}/labels"
+        response = self.client.get(f"{url}/{DELIVERY_LABEL}")
+        if response.status_code == 404:
+            response = self.client.post(url, json={"name": DELIVERY_LABEL, "color": "fbca04"})
+        response.raise_for_status()
+        if not self.add_labels(pr.number, [DELIVERY_LABEL]):
+            raise ValueError("delivery_label_not_persisted")
+        if "comment_id" not in state:
+            response = self.client.post(
+                f"{GITHUB_API}/repos/{self.repo}/issues/{pr.number}/comments",
+                json={"body": self._delivery_body(state)},
+            )
+            response.raise_for_status()
+            if not isinstance(response.json().get("id"), int):
+                raise ValueError("delivery_comment_not_persisted")
+
+    def list_pending_deliveries(self) -> list[int]:
+        items = self._pages(
+            "issues",
+            params={
+                "labels": DELIVERY_LABEL,
+                "state": "all",
+                "sort": "updated",
+                "direction": "asc",
+            },
+        )
+        # Interrupted pre-merge preparations must not starve already merged PRs.
+        return [
+            item["number"]
+            for item in sorted(items, key=lambda item: item.get("state") != "closed")
+            if "pull_request" in item
+        ]
+
+    @staticmethod
+    def _delivery_run_matches(run: dict[str, Any], workflow: str, sha: str) -> bool:
+        prefix = POST_MERGE_RUN_TITLES[POST_MERGE_WORKFLOWS.index(workflow)]
+        return (
+            run.get("event") == "workflow_dispatch"
+            and run.get("head_branch") == "main"
+            and str(run.get("path", "")).split("@", 1)[0] == f".github/workflows/{workflow}"
+            and str(run.get("display_title", "")).strip() == f"{prefix} {sha}"
+        )
+
+    def find_delivery_run(
+        self, workflow: str, sha: str, receipt: dict[str, Any], since: float
+    ) -> dict[str, Any] | None:
+        if receipt.get("run_id"):
+            response = self.client.get(
+                f"{GITHUB_API}/repos/{self.repo}/actions/runs/{int(receipt['run_id'])}"
+            )
+            if response.status_code != 404:
+                response.raise_for_status()
+                run = response.json()
+                if not self._delivery_run_matches(run, workflow, sha):
+                    raise ValueError("delivery_run_identity_mismatch")
+                return run
+        runs = self._pages(
+            f"actions/workflows/{workflow}/runs",
+            key="workflow_runs",
+            params={
+                "event": "workflow_dispatch",
+                "branch": "main",
+                "created": ">=" + datetime.fromtimestamp(since, UTC).isoformat(),
+            },
+        )
+        matched = [run for run in runs if self._delivery_run_matches(run, workflow, sha)]
+        # Never dispatch over an already observed active or successful run.
+        return (
+            max(
+                matched,
+                key=lambda run: (
+                    run.get("conclusion") == "success",
+                    run.get("status") != "completed",
+                    run.get("id", 0),
+                ),
+            )
+            if matched
+            else None
+        )
+
+    def reconcile_delivery(self, pr_number: int, *, expected_merge_sha: str = "") -> str:
+        """Recover after merge/POST/crash; serialized by the existing workflow concurrency."""
+        state = self.load_delivery(pr_number)
+        pr = self.get_pr(pr_number)
+        if pr.get("state") == "open":
+            return "pending"
+        if state is None:
+            # A runner can stop between creating the index label and the receipt.
+            # Recently merged comments may also be briefly absent from list APIs.
+            if pr.get("merged"):
+                if time.time() - _parse_iso(pr["merged_at"]) < DELIVERY_VISIBILITY_SECONDS:
+                    return "pending"
+                if not self.add_labels(pr_number, [NEEDS_HUMAN_LABEL]):
+                    raise ValueError("delivery_escalation_not_persisted")
+            if not self.remove_label(pr_number, DELIVERY_LABEL):
+                raise ValueError("delivery_label_not_cleared")
+            return "blocked" if pr.get("merged") else "not_merged"
+        if not pr.get("merged"):
+            state["status"] = "not_merged"
+        else:
+            actual_sha = pr.get("merge_commit_sha", "")
+            if (
+                not _valid_sha(actual_sha)
+                or pr.get("head", {}).get("sha") != state["head_sha"]
+                or pr.get("base", {}).get("ref") != "main"
+                or state.get("merge_sha") not in ("", actual_sha)
+                or expected_merge_sha not in ("", actual_sha)
+            ):
+                state.update(status="blocked", error="merged_pr_identity_mismatch")
+            elif state["status"] == "pending":
+                state["merge_sha"] = actual_sha
+                self.save_delivery(state)
+                try:
+                    self._reconcile_delivery_workflows(state, _parse_iso(pr["merged_at"]))
+                except ValueError as exc:
+                    if str(exc) != "delivery_run_identity_mismatch":
+                        raise
+                    state.update(status="blocked", error=str(exc))
+        self.save_delivery(state)
+        if state["status"] != "pending":
+            if state["status"] == "blocked" and not self.add_labels(pr_number, [NEEDS_HUMAN_LABEL]):
+                raise ValueError("delivery_escalation_not_persisted")
+            if not self.remove_label(pr_number, DELIVERY_LABEL):
+                raise ValueError("delivery_label_not_cleared")
+        if state["status"] == "pending" and any(
+            receipt.get("error") and receipt["status"] in ("pending", "dispatching")
+            for receipt in state["workflows"].values()
+        ):
+            return "dispatch_failed"
+        return state["status"]
+
+    def _reconcile_delivery_workflows(self, state: dict[str, Any], merged_at: float) -> None:
+        now = time.time()
+        for workflow, receipt in state["workflows"].items():
+            if receipt["status"] == "blocked":
+                continue
+            if now - merged_at >= DELIVERY_MAX_AGE_SECONDS:
+                receipt.update(status="blocked", error="delivery_deadline_exceeded")
+                continue
+            run = self.find_delivery_run(workflow, state["merge_sha"], receipt, merged_at)
+            if run:
+                receipt.update(
+                    run_id=run["id"],
+                    run_url=run.get("html_url", ""),
+                    dispatch_head_sha=run.get("head_sha", ""),
+                )
+                receipt["status"] = (
+                    ("succeeded" if run.get("conclusion") == "success" else "failed")
+                    if run.get("status") == "completed"
+                    else "running"
+                )
+                receipt["conclusion"] = run.get("conclusion")
+                receipt["error"] = (
+                    f"ci_failed:{workflow}:{run.get('conclusion')}"
+                    if receipt["status"] == "failed"
+                    else ""
+                )
+                self.save_delivery(state)
+                continue
+            if (
+                receipt.get("run_id")
+                or receipt.get("observed_run")
+                or receipt["status"] in ("running", "succeeded", "failed")
+            ):
+                # An accepted/observed run that temporarily disappears is not a
+                # license to start it again. Retain its identity until the deadline.
+                receipt.update(
+                    status="unavailable",
+                    observed_run=True,
+                    error="observed_run_unavailable",
+                )
+                continue
+            if receipt["attempts"] and (
+                receipt["status"] != "pending"
+                or str(receipt.get("error", "")).split(":", 1)[0] not in DISPATCH_REJECTED_REASONS
+            ):
+                # No idempotency key exists for workflow_dispatch. An unknown
+                # response or absent run is never evidence that POST was rejected.
+                continue
+            if now - receipt.get("requested_at", 0) < DELIVERY_VISIBILITY_SECONDS:
+                continue
+            if receipt["attempts"] >= DELIVERY_MAX_ATTEMPTS:
+                receipt.update(status="blocked", error="dispatch_attempts_exhausted")
+                continue
+            receipt.update(status="dispatching", requested_at=now, attempts=receipt["attempts"] + 1)
+            # Durable intent precedes POST. A crash after POST is reconciled by run title.
+            self.save_delivery(state)
+            try:
+                ok, reason, run_id = self.dispatch_workflow(
+                    workflow, inputs={"release_sha": state["merge_sha"]}
+                )
+                receipt.update(
+                    status=(
+                        "accepted"
+                        if ok
+                        else (
+                            "pending"
+                            if reason.split(":", 1)[0] in DISPATCH_REJECTED_REASONS
+                            else "dispatching"
+                        )
+                    ),
+                    error=reason,
+                )
+                if run_id:
+                    receipt["run_id"] = run_id
+            except RECOVERABLE_ERRORS as exc:
+                receipt.update(status="dispatching", error=f"response_unknown:{exc}")
+            self.save_delivery(state)
+        statuses = [receipt["status"] for receipt in state["workflows"].values()]
+        if all(status == "succeeded" for status in statuses):
+            state["status"] = "ci_passed"
+        elif all(status in ("succeeded", "failed", "blocked") for status in statuses):
+            state["status"] = "blocked"
+            state["error"] = "; ".join(
+                receipt["error"] for receipt in state["workflows"].values() if receipt.get("error")
+            )
 
     def has_issue_comment_containing(self, pr_number: int, needle: str) -> bool:
         """是否已有包含 needle 的 issue/PR 评论（用于合并失败评论去重）。"""
@@ -506,7 +847,32 @@ class GitHubClient:
     def remove_label(self, pr_number: int, label: str) -> bool:
         url = f"{GITHUB_API}/repos/{self.repo}/issues/{pr_number}/labels/{label}"
         resp = self.client.delete(url)
-        return resp.status_code in (200, 204)
+        return resp.status_code in (200, 204, 404)
+
+
+def _valid_sha(value: Any) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 40
+        and all(ch in "0123456789abcdef" for ch in value)
+    )
+
+
+def _merge_veto(pr: PRInfo) -> tuple[bool, str]:
+    if pr.draft:
+        return False, "veto:draft"
+    if pr.base_branch != "main":
+        return False, "veto:base_branch"
+    if HOLD_MERGE_LABEL in pr.labels:
+        return False, f"veto:{HOLD_MERGE_LABEL}"
+    risks = {label.removeprefix("risk:") for label in pr.labels if label.startswith("risk:")}
+    if len(risks) > 1 or risks - AUTO_MERGE_RISK_LEVELS:
+        return False, "veto:manual_or_ambiguous_risk"
+    if pr.head_branch.startswith("autonomy/") and not pr.head_branch.startswith(
+        "autonomy/self-heal-"
+    ):
+        return False, "veto:autonomy_branch"
+    return True, "ok"
 
 
 def _parse_iso(s: str) -> float:
@@ -607,6 +973,11 @@ def _try_auto_merge(
         )
         return "merge_failed"
 
+    snapshot_ok, snapshot_reason = client.check_merge_snapshot(pr)
+    if not snapshot_ok:
+        print(f"  skip: merge snapshot changed ({snapshot_reason})")
+        return "skipped"
+
     if mreason == "behind":
         expected_head_sha = pr.head_sha or client.get_pr_head_sha(pr.number)
         if not expected_head_sha:
@@ -655,56 +1026,35 @@ def _try_auto_merge(
         # 不把 behind 误报为代码冲突，也不自动添加 hold-merge。
         return "skipped"
 
-    ok, reason, merge_sha = client.merge_pr(pr.number, method="squash")
+    client.prepare_delivery(pr)
+    snapshot_ok, snapshot_reason = client.check_merge_snapshot(pr)
+    if not snapshot_ok:
+        print(f"  skip: merge snapshot changed ({snapshot_reason})")
+        return "skipped"
+    ok, reason, merge_sha = client.merge_pr(
+        pr.number, expected_head_sha=pr.head_sha, method="squash"
+    )
     if ok:
-        dispatch_failures: list[str] = []
-        if not merge_sha:
-            dispatch_failures.append(f"merge_sha:{reason}")
-        else:
-            for workflow_file in POST_MERGE_WORKFLOWS:
-                dispatched, dispatch_reason = client.dispatch_workflow(
-                    workflow_file,
-                    ref="main",
-                    inputs={"release_sha": merge_sha} if workflow_file == "fhd-ci-cd.yml" else {},
-                )
-                if not dispatched:
-                    dispatch_failures.append(f"{workflow_file}:{dispatch_reason}")
-
-        if dispatch_failures:
-            failure_summary = "; ".join(dispatch_failures)
-            client.comment(
-                pr.number,
-                f"{POST_MERGE_DISPATCH_FAIL_MARKER}\n\n"
-                f"合并已完成，但主干 CI/CD 未全部派发：`{failure_summary}`。"
-                "已标记 `needs-human`；不得把本次动作计为生产闭环。",
-            )
-            client.add_labels(pr.number, [NEEDS_HUMAN_LABEL])
-            _append_stale(
-                {
-                    "pr": pr.number,
-                    "kind": pr.kind,
-                    "author": pr.author,
-                    "action": "post_merge_dispatch_failed",
-                    "merge_sha": merge_sha,
-                    "reason": failure_summary,
-                    **(metric_extra or {}),
-                }
-            )
-            return "post_merge_dispatch_failed"
-
-        client.comment(pr.number, success_comment)
+        delivery = client.reconcile_delivery(pr.number, expected_merge_sha=merge_sha)
+        failed = delivery in ("blocked", "dispatch_failed")
+        action = "post_merge_dispatch_failed" if failed else success_action
+        client.comment(
+            pr.number,
+            success_comment + f" 主干 CI 回执：`{delivery}`；尚未证明生产发布与运行验收。",
+        )
         _append_stale(
             {
                 "pr": pr.number,
                 "kind": pr.kind,
                 "author": pr.author,
-                "action": success_action,
+                "action": action,
                 "merge_sha": merge_sha,
-                "dispatched_workflows": list(POST_MERGE_WORKFLOWS),
+                "ci_delivery": delivery,
+                "deployment_verified": False,
                 **(metric_extra or {}),
             }
         )
-        return "auto_merged"
+        return "post_merge_dispatch_failed" if failed else "auto_merged"
 
     print(f"  merge failed: {reason}")
     _notify_merge_failure_once(client, pr, reason)
@@ -811,7 +1161,16 @@ GUARD_CONFIG = {
     "ai_generated": {
         "max_changed_files": 5,  # allowlist 域已预过滤低风险，放宽
         "max_diff_lines": 100,
-        "allowed_suffixes": (".py", ".md", ".ts", ".vue", ".js", ".json", ".yaml", ".yml"),
+        "allowed_suffixes": (
+            ".py",
+            ".md",
+            ".ts",
+            ".vue",
+            ".js",
+            ".json",
+            ".yaml",
+            ".yml",
+        ),
     },
 }
 
@@ -820,8 +1179,16 @@ def check_second_guard(client: GitHubClient, pr: PRInfo) -> tuple[bool, str]:
     """二次守卫：返回 (passed, reason)。任一不通过即拦截 auto-merge。"""
     config = GUARD_CONFIG.get(pr.kind, GUARD_CONFIG["self_heal"])
 
-    # 1. CI 全绿（优先用 PRInfo.head_sha，避免再发请求）
-    head_sha = pr.head_sha or client.get_pr_head_sha(pr.number)
+    allowed, reason = _merge_veto(pr)
+    if not allowed:
+        return False, reason
+    pr.head_sha = pr.head_sha or client.get_pr_head_sha(pr.number)
+    head_sha = pr.head_sha
+    reviewed, reason = client.get_workflow_run_conclusion(head_sha, AI_REVIEW_WORKFLOW_NAME)
+    if not reviewed:
+        return False, f"ai_review:{reason}"
+
+    # Complete CI evidence belongs to the same immutable PR head.
     ci_ok, ci_reason = client.get_pr_check_runs(pr.number, head_sha)
     if not ci_ok:
         return False, f"ci:{ci_reason}"
@@ -830,7 +1197,10 @@ def check_second_guard(client: GitHubClient, pr: PRInfo) -> tuple[bool, str]:
     if pr.changed_files > config["max_changed_files"]:
         return False, f"too_many_files:{pr.changed_files}>{config['max_changed_files']}"
     if pr.additions + pr.deletions > config["max_diff_lines"]:
-        return False, f"diff_too_large:{pr.additions + pr.deletions}>{config['max_diff_lines']}"
+        return (
+            False,
+            f"diff_too_large:{pr.additions + pr.deletions}>{config['max_diff_lines']}",
+        )
 
     # 3. 文件类型
     files = client.get_pr_files(pr.number)
@@ -869,20 +1239,14 @@ def check_regular_pr_gates(
     顺序：hold-merge veto → ai-review → ci → author
     任一不通过即拦截。返回 (passed, reason)。
     """
-    # 0. hold-merge veto（最高优先级，强制人工 hold）
-    if HOLD_MERGE_LABEL in pr.labels:
-        return False, f"veto:{HOLD_MERGE_LABEL}"
-
-    # 1. ai-review: passed
-    #    优先认 label（人工或自动化打的），其次查 workflow run conclusion
-    if AI_REVIEW_PASSED_LABEL in pr.labels:
-        ai_review_ok = True
-        ai_review_reason = "label:ai-review:passed"
-    else:
-        head_sha = pr.head_sha or client.get_pr_head_sha(pr.number)
-        ai_review_ok, ai_review_reason = client.get_workflow_run_conclusion(
-            head_sha, AI_REVIEW_WORKFLOW_NAME
-        )
+    allowed, reason = _merge_veto(pr)
+    if not allowed:
+        return False, reason
+    pr.head_sha = pr.head_sha or client.get_pr_head_sha(pr.number)
+    head_sha = pr.head_sha
+    ai_review_ok, ai_review_reason = client.get_workflow_run_conclusion(
+        head_sha, AI_REVIEW_WORKFLOW_NAME
+    )
     if not ai_review_ok:
         return False, f"ai_review:{ai_review_reason}"
 
@@ -922,15 +1286,16 @@ def process_regular_pr(
     passed, reason = check_regular_pr_gates(client, pr, trusted_authors)
     if not passed:
         print(f"  skip: 三重门禁未通过 ({reason})")
-        _append_stale(
-            {
-                "pr": pr.number,
-                "kind": "regular",
-                "author": pr.author,
-                "action": "regular_skipped",
-                "reason": reason,
-            }
-        )
+        if not dry_run:
+            _append_stale(
+                {
+                    "pr": pr.number,
+                    "kind": "regular",
+                    "author": pr.author,
+                    "action": "regular_skipped",
+                    "reason": reason,
+                }
+            )
         return "skipped"
 
     print(f"  三重门禁通过 ({reason})，auto-merge (squash)")
@@ -993,16 +1358,17 @@ def process_pr(
     )
 
     # ===== hold-merge veto（人工强制 hold，普适）=====
-    if HOLD_MERGE_LABEL in pr.labels:
-        print(f"  skip: 标 {HOLD_MERGE_LABEL} label，不自动合并/关闭")
-        _append_stale(
-            {
-                "pr": pr.number,
-                "kind": pr.kind,
-                "risk": risk,
-                "action": "hold_merge_vetoed",
-            }
-        )
+    if pr.draft or HOLD_MERGE_LABEL in pr.labels:
+        print(f"  skip: draft 或 {HOLD_MERGE_LABEL}，不自动合并/关闭")
+        if not dry_run:
+            _append_stale(
+                {
+                    "pr": pr.number,
+                    "kind": pr.kind,
+                    "risk": risk,
+                    "action": "hold_merge_vetoed",
+                }
+            )
         return "skipped"
 
     # ===== R0 / R1: auto-merge 候选 =====
@@ -1134,6 +1500,26 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     client = GitHubClient(args.repo, token)
+    errors = 0
+    # Closed PRs remain discoverable. Recovery runs even when ordinary PR scanning
+    # is disabled, and never depends on a runner-local metrics commit surviving.
+    try:
+        pending_deliveries = client.list_pending_deliveries()
+        for number in pending_deliveries[:50]:
+            if args.dry_run:
+                print(f"[delivery] PR #{number}: dry run, recovery deferred")
+                continue
+            try:
+                result = client.reconcile_delivery(number)
+                print(f"[delivery] PR #{number}: {result}; production not verified")
+                errors += result in ("blocked", "dispatch_failed")
+            except BOUNDARY_ERRORS as exc:
+                errors += 1
+                print(f"[error] PR #{number} delivery recovery: {exc}", file=sys.stderr)
+    except BOUNDARY_ERRORS as exc:
+        print(f"[error] delivery discovery: {exc}", file=sys.stderr)
+        # Do not merge more PRs while the durable recovery index is unreadable.
+        return 1
 
     # ===== ai-self-heal / ai-generated PR: risk 分级 SLA =====
     prs = client.list_self_heal_prs()
@@ -1169,6 +1555,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             stats[action] = stats.get(action, 0) + 1
         except BOUNDARY_ERRORS as e:
+            errors += 1
             print(f"[error] PR #{pr.number} 处理失败: {e}", file=sys.stderr)
 
     print(f"[sla] AI PR 处理完成: {stats}")
@@ -1207,15 +1594,16 @@ def main(argv: list[str] | None = None) -> int:
                     )
                     regular_stats[action] = regular_stats.get(action, 0) + 1
                 except BOUNDARY_ERRORS as e:
+                    errors += 1
                     print(f"[error] 普通 PR #{pr.number} 处理失败: {e}", file=sys.stderr)
             print(f"[sla] 普通 PR 处理完成: {regular_stats}")
 
     dispatch_failures = stats.get("post_merge_dispatch_failed", 0) + regular_stats.get(
         "post_merge_dispatch_failed", 0
     )
-    if dispatch_failures:
+    if dispatch_failures or errors:
         print(
-            f"[error] {dispatch_failures} 个已合并 PR 未完成主干发布派发",
+            f"[error] {dispatch_failures} 个新合并 PR 派发失败；{errors} 个处理/恢复错误",
             file=sys.stderr,
         )
         return 1

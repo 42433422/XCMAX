@@ -8,6 +8,10 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from alembic.config import Config
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
+from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine
 
 from app.db.models import Permission, Role, Tenant, User, UserSession, role_permissions
@@ -49,6 +53,12 @@ def prepared(tmp_path, monkeypatch):
     ):
         model.__table__.create(engine)
     role_permissions.create(engine)
+    migration = ScriptDirectory.from_config(
+        Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
+    ).get_revision("2026_11_19_native_checkpoints")
+    assert migration is not None
+    with engine.connect() as db, Operations.context(MigrationContext.configure(db)):
+        migration.module.upgrade()
     with engine.begin() as db:
         db.exec_driver_sql("CREATE TABLE admission_grants (permission TEXT NOT NULL)")
         db.exec_driver_sql("INSERT INTO admission_grants VALUES ('unchanged')")

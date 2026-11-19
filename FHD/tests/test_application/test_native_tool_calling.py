@@ -1,7 +1,9 @@
 """Native and JSON planning share one typed, dependency-preserving envelope."""
 
+import copy
 import json
-from unittest.mock import Mock
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -305,3 +307,115 @@ def test_semantic_replan_expands_catalog_without_reviving_retired_tools():
     )
     prompt = json.loads(completion.call_args.kwargs["messages"][1]["content"])
     assert {spec["tool_id"] for spec in prompt["tool_registry"]} == {"customers", "excel_toolkit"}
+
+
+def _expanded_tool_specs(prompt):
+    registry = copy.deepcopy(prompt["tool_registry"])
+    for tool in registry:
+        for action in tool["actions"]:
+            action.setdefault("description", tool["description"])
+            for field in ("input_schema", "output_schema"):
+                reference = action.pop(f"{field}_ref", None)
+                if reference is not None:
+                    action[field] = prompt["tool_schemas"][reference]
+    return registry
+
+
+def test_catalog_compaction_preserves_independent_local_schema_references():
+    from app.application.workflow.planner_llm_gateway import _compact_tool_registry
+
+    schema = {
+        "$defs": {"name": {"type": "string", "minLength": 2}},
+        "type": "object",
+        "properties": {"name": {"$ref": "#/$defs/name"}},
+        "required": ["name"],
+        "additionalProperties": False,
+    }
+    prompt = {
+        "tool_registry": [
+            {
+                "tool_id": "customers",
+                "description": "Customer records",
+                "actions": [
+                    {
+                        "action": action,
+                        "description": description,
+                        "input_schema": schema,
+                        "output_schema": {"type": "object"},
+                        "risk": "high",
+                        "idempotent": False,
+                        "required_params": ["name"],
+                    }
+                    for action, description in (
+                        ("create", "Customer records"),
+                        ("update", "Update only"),
+                    )
+                ],
+            }
+        ]
+    }
+    original = copy.deepcopy(prompt["tool_registry"])
+    _compact_tool_registry(prompt)
+    assert prompt["tool_schemas"]
+    assert _expanded_tool_specs(prompt) == original
+    compacted = copy.deepcopy(prompt)
+    _compact_tool_registry(prompt)
+    assert prompt == compacted
+
+
+@pytest.mark.parametrize("profile", ["normal", "pro_default"])
+@pytest.mark.parametrize("native", [False, True])
+@pytest.mark.parametrize("replanning", [False, True])
+def test_full_catalog_reaches_real_budget_gateway_without_losing_contracts(
+    monkeypatch, profile, native, replanning
+):
+    from app.application.agent_orchestrator.context_window_manager import estimate_messages_tokens
+    from app.application.facades.tools_facade import get_workflow_tool_registry
+    from app.application.workflow.llm_plan_generation import _tool_specs
+    from app.application.workflow.planner_llm_gateway import request_planner_completion
+    from app.application.workflow.planning_graph_policy import filter_registry_for_profile
+    from app.infrastructure.llm.model_context_windows import resolve_token_budget
+
+    monkeypatch.setenv("XCAGI_PLAN_TOOL_CALLS", "1" if native else "0")
+    payload = {"mode": "reply", "reply": "已读取"}
+    response = (
+        _native(payload) if native else {"choices": [{"message": {"content": json.dumps(payload)}}]}
+    )
+    provider = SimpleNamespace(
+        _adapter=SimpleNamespace(model_name="gpt-4o"),
+        chat_completion=AsyncMock(return_value=response),
+    )
+    monkeypatch.setattr(
+        "app.infrastructure.llm.providers.registry.get_active_provider", lambda **kwargs: provider
+    )
+    registry = filter_registry_for_profile(get_workflow_tool_registry(), profile)
+    plan = _generator(request_planner_completion).generate(
+        "p1",
+        "u1",
+        "说明工作方式",
+        registry,
+        {},
+        coverage_feedback={"error": "核对全部可用工具"} if replanning else None,
+    )
+    assert plan is not None
+    provider.chat_completion.assert_awaited_once()
+    sent = provider.chat_completion.call_args.kwargs
+    prompt = json.loads(sent["messages"][-1]["content"])
+    assert _expanded_tool_specs(prompt) == _tool_specs(registry)
+    assert prompt["user_message"] == "说明工作方式"
+    schema_tokens = 0
+    if native:
+        assert sent["tools"] == plan_function_tools()
+        schema_tokens = estimate_messages_tokens(
+            [
+                {
+                    "role": "system",
+                    "content": json.dumps({"tools": sent["tools"]}, ensure_ascii=False),
+                }
+            ]
+        )
+    else:
+        assert "tools" not in sent
+    assert estimate_messages_tokens(sent["messages"]) + sent[
+        "max_tokens"
+    ] + schema_tokens <= resolve_token_budget("gpt-4o")

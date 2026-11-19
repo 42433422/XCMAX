@@ -334,13 +334,26 @@ class DatasetVectorPgIndex:
             params[param] = str(expected)
         with self._engine.begin() as conn:
             where_clause = " AND ".join(clauses)
+            prefix = ""
+            table = "dataset_vector_chunks"
+            if version_text.lower() == "latest":
+                # Resolve the current source version before nearest-neighbour
+                # ranking; a closer historical chunk must not consume top-k.
+                prefix = (
+                    "WITH versioned AS (SELECT *, MAX(document_version) OVER "
+                    "(PARTITION BY tenant_id, source) AS latest_version "
+                    "FROM dataset_vector_chunks WHERE " + where_clause + ") "
+                )
+                table = "versioned"
+                where_clause = "document_version = latest_version"
             rows = (
                 conn.execute(
                     text(
-                        "SELECT content, source, source_url, chunk_index, char_start, char_end, "
+                        prefix
+                        + "SELECT content, source, source_url, chunk_index, char_start, char_end, "
                         "page, metadata, "
                         "1 - (embedding <=> CAST(:query_vector AS vector)) AS score "
-                        "FROM dataset_vector_chunks "
+                        "FROM " + table + " "
                         "WHERE " + where_clause + " "
                         "ORDER BY embedding <=> CAST(:query_vector AS vector) "
                         "LIMIT :top_k"
@@ -351,7 +364,7 @@ class DatasetVectorPgIndex:
                 .all()
             )
         chunks = [_pg_row_to_chunk(row) for row in rows]
-        if version_text.lower() == "latest" or post_filter:
+        if post_filter:
             chunks = _filter_chunks(
                 chunks,
                 tenant_id=tenant_id,

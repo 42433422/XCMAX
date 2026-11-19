@@ -11,6 +11,10 @@ on:
       - "market/**"
       - ".github/workflows/market-e2e.yml"
 
+# Candidate tests never inherit repository-wide write permissions.
+permissions:
+  contents: read
+
 jobs:
   e2e:
     runs-on: ubuntu-latest

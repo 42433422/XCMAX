@@ -6,6 +6,7 @@ import asyncio
 import json
 import math
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -616,8 +617,12 @@ def test_model_transport_error_is_fail_closed_without_old_chat_fallback(
     monkeypatch.setattr("app.application.workflow.retry_policy.time.sleep", lambda delay: None)
     from app.application.workflow.planner_llm_gateway import request_planner_completion
 
-    provider = MagicMock()
-    provider.chat_completion = AsyncMock(side_effect=error)
+    # A configured model lets the real planner prompt reach the transport boundary.
+    provider = SimpleNamespace(
+        provider_id="openai_compatible",
+        _adapter=SimpleNamespace(model_name="gpt-4o"),
+        chat_completion=AsyncMock(side_effect=error),
+    )
     svc = _active_model_service(request_planner_completion)
     with patch(
         "app.infrastructure.llm.providers.registry.get_active_provider", return_value=provider

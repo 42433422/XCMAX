@@ -33,6 +33,7 @@ on:
         default: 'false'
         type: string
   pull_request:
+    branches: [main]
     types: [closed]
     paths:
       - '成都修茈科技有限公司/MODstore_deploy/modstore_server/catalog_data/files/**'
@@ -50,12 +51,15 @@ jobs:
   scan-and-propose:
     if: >-
       github.event_name == 'schedule' ||
-      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
       github.event_name == 'push' ||
       (
         github.event_name == 'workflow_run' &&
         github.event.workflow_run.conclusion == 'success' &&
-        github.event.workflow_run.head_branch == 'main'
+        github.event.workflow_run.head_branch == 'main' &&
+        github.event.workflow_run.head_repository.full_name == github.repository &&
+        github.event.workflow_run.path == '.github/workflows/fhd-ci-cd.yml' &&
+        (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch')
       )
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -88,10 +92,19 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           WORKFLOW_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          WORKFLOW_RUN_TITLE: ${{ github.event.workflow_run.display_title }}
         run: |
           set -euo pipefail
           if [[ "$EVENT_NAME" != "workflow_run" ]]; then
             echo "should_scan=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # A delayed CI dispatch can run trusted controllers from a newer main
+          # while checking out release_sha. That does not validate the controller SHA.
+          if [[ "$WORKFLOW_RUN_TITLE" != "CI/CD $WORKFLOW_HEAD_SHA" ]]; then
+            echo "::notice::CI target differs from controller; waiting for its own main CI"
+            echo "should_scan=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -229,7 +242,7 @@ jobs:
           if-no-files-found: ignore
 
   build-on-merge:
-    if: github.event_name == 'pull_request' && github.event.pull_request.merged == true
+    if: github.event_name == 'pull_request' && github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:

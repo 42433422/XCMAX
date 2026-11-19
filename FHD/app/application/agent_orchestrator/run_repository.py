@@ -102,6 +102,20 @@ class InMemoryAgentRunRepository:
         self._lock = threading.RLock()
 
     def save(self, run: AgentRun) -> AgentRun:
+        return self._save(run)
+
+    def save_retry_if_unchanged(self, run: AgentRun, previous: AgentRun) -> bool:
+        from app.application.agent_orchestrator.run_lifecycle import validate_safe_retry_update
+
+        with self._lock:
+            current = self._runs.get(previous.run_id)
+            if current is None or current.to_dict() != previous.to_dict():
+                return False
+            validate_safe_retry_update(run, current)
+            self._save(run, allow_safe_retry=True)
+            return True
+
+    def _save(self, run: AgentRun, *, allow_safe_retry: bool = False) -> AgentRun:
         from app.application.agent_orchestrator.business_harness import (
             ensure_terminal_business_result,
         )
@@ -109,7 +123,7 @@ class InMemoryAgentRunRepository:
 
         with self._lock:
             previous = self._runs.get(run.run_id)
-            preserve_run_evidence(run, previous)
+            preserve_run_evidence(run, previous, allow_safe_retry=allow_safe_retry)
             ensure_terminal_business_result(run)
             run.touch()
             self._runs[run.run_id] = copy.deepcopy(run)

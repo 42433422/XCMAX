@@ -61,6 +61,33 @@ _ELT_IMPORT_DATA = {
 
 
 _SPECIAL_OUTPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
+    ("conversation_history", "read"): _result(
+        data={
+            "type": "object",
+            "properties": {
+                "conversation_id": {"type": "string"},
+                "revision": {"type": "integer"},
+                "messages": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {"type": "integer"},
+                            "role": {"type": "string"},
+                            "content": {"type": "string"},
+                            "offset": {"type": "integer"},
+                            "total_chars": {"type": "integer"},
+                            "next_offset": {},
+                            "content_complete": {"type": "boolean"},
+                        },
+                    },
+                },
+                "has_more": {"type": "boolean"},
+                "next_before_id": {},
+                "next_after_id": {},
+            },
+        }
+    ),
     ("elt_import", "preview"): _result(data=_ELT_IMPORT_DATA),
     ("elt_import", "execute"): _result(data=_ELT_IMPORT_DATA),
     ("sales", "query"): {

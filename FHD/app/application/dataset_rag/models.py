@@ -17,6 +17,7 @@ class DatasetAccessContext:
     tenant_id: str = ""
     permissions: frozenset[str] = field(default_factory=frozenset)
     is_admin: bool = False
+    mod_id: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -24,6 +25,7 @@ class DatasetAccessContext:
             "tenant_id": self.tenant_id,
             "permissions": sorted(self.permissions),
             "is_admin": self.is_admin,
+            "mod_id": self.mod_id,
         }
 
 

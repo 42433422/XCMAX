@@ -7,6 +7,10 @@ name: FHD Alembic SSOT
   push:
     branches: [main, develop]
 
+# Candidate tests never inherit repository-wide write permissions.
+permissions:
+  contents: read
+
 jobs:
   # 统一 changed-path 分类（SSOT: scripts/dev/change_classifier.py）——docs/前端改动不跑迁移重活。
   classify:

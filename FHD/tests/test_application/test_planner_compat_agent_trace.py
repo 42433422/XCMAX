@@ -74,6 +74,8 @@ def durable_compat_history(tmp_path, monkeypatch, trusted_actor):
     monkeypatch.setattr("app.application.get_ai_chat_app_service", lambda: service)
     monkeypatch.setattr("app.services.get_conversation_service", lambda: conversation)
     monkeypatch.setattr("app.domain.shared_services.conversation_service.get_db", db)
+    monkeypatch.setattr("app.application.task_conversation_store.get_db", db)
+    monkeypatch.setenv("XCAGI_DIALOGUE_MEMORY_DIR", str(tmp_path / "memory"))
     monkeypatch.setattr(
         "app.domain.shared_services.conversation_service.notify_user", lambda **kwargs: None
     )

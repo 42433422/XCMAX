@@ -383,6 +383,7 @@ class RebuildCoordinator:
                         continue
                     metadata = dict(chunk.metadata or {})
                     metadata.pop("_embedding", None)
+                    metadata.pop("_embedding_fingerprint", None)
                     metadata.update(vectors[key])
                     chunk.metadata = metadata
                     rebuilt_chunks += 1

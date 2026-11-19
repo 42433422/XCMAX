@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
+from app.application.agent_orchestrator import InMemoryAgentRunRepository
 from app.application.agent_orchestrator.run_models import (
     AgentRun,
     AgentStep,
@@ -60,7 +61,7 @@ def _make_plan(nodes: list[WorkflowNode] | None = None, plan_id: str = "p1") -> 
 def _make_orchestrator(repo: MagicMock | None = None, executor: MagicMock | None = None):
     from app.application.agent_orchestrator.orchestrator import AgentOrchestrator
 
-    repo = repo or MagicMock()
+    repo = repo or MagicMock(spec=InMemoryAgentRunRepository)
     executor = executor or MagicMock()
     repo.save.side_effect = lambda run: run  # return the run unchanged
     return AgentOrchestrator(repository=repo, tool_executor=executor), repo, executor

@@ -382,14 +382,24 @@ def _registered_router_dataset_rag(
 def _registered_router_memory_v2(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
+    from app.application.agent_task_context import authorized_personal_memory_id
     from app.domain.shared_services.user_memory_service import get_user_memory_service
 
     service = get_user_memory_service()
-    user_id = str(
-        params.get("user_id") or params.get("userId") or runtime_context.get("user_id") or "default"
-    ).strip()
+    user_id = authorized_personal_memory_id(runtime_context)
     if not user_id:
-        return {"success": False, "message": f"memory_v2.{action} 缺少 user_id 参数"}
+        return {
+            "success": False,
+            "error_code": "memory_scope_denied",
+            "message": "需要有效的用户记忆作用域",
+        }
+    owner = str(runtime_context.get("local_user_id") or runtime_context.get("actor_id") or "")
+    if any(str(params.get(key) or owner) != owner for key in ("user_id", "userId")):
+        return {
+            "success": False,
+            "error_code": "memory_scope_denied",
+            "message": "只能访问当前账户的记忆",
+        }
 
     def as_float(value: Any, default: float) -> tuple[float, str]:
         if value in (None, ""):

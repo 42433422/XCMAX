@@ -53,6 +53,7 @@ class Ports:
         self.effects = []
         self.outcome = outcome
         self.execution_status = "waiting"
+        self.delivery_status = "waiting_delivery"
 
     def plan(self, protocol):
         return {"public_body": protocol["goal"]}
@@ -73,6 +74,9 @@ class Ports:
     def remember(self, state):
         self.effects.append("knowledge")
         return {"recorded": True}
+
+    def delivery(self, state):
+        return {"status": self.delivery_status}
 
 
 def invoke(path, ports, request_id, value):
@@ -110,6 +114,14 @@ def test_actual_checkpoint_restart_preserves_approval_and_external_effects(
     state, pending = invoke(path, ports, request_id, Command(resume=True))
     assert state["status"] == "awaiting_acceptance" and ports.effects == ["dispatch"]
     state, pending = invoke(path, ports, request_id, approved(pending))
+    assert state["status"] == "waiting_delivery" and pending[0]["kind"] == "delivery"
+    for _ in range(2):
+        state, pending = invoke(
+            path, ports, request_id, Command(resume={"status": "deployment_verified"})
+        )
+        assert state["status"] == "waiting_delivery" and ports.effects == ["dispatch"]
+    ports.delivery_status = "deployment_verified"
+    state, pending = invoke(path, ports, request_id, Command(resume=True))
     assert state["status"] == "completed" and ports.effects == ["dispatch", "knowledge"]
     state, pending = invoke(path, ports, request_id, None)
     assert not pending and ports.effects == ["dispatch", "knowledge"]

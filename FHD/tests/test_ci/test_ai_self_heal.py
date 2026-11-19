@@ -7,7 +7,7 @@
 - record_fingerprint 写 jsonl
 - match_rules ruff F401 → 删 import / bandit B101 → needs-human
 - call_llm fail-open（mock httpx 超时返回 None）
-- create_pr mock github API
+- GitHub incident/dispatch receipts and bounded recovery
 - autonomy/ 分支不递归
 - 空日志会创建 remediation incident 并保持失败
 - LLM API key 缺失 fail-open
@@ -220,7 +220,8 @@ class TestComputeFingerprint:
         ]
 
         assert heal.canonical_fingerprint_evidence(
-            errors, "ERROR: coverage below threshold\n##[error]Process completed with exit code 1."
+            errors,
+            "ERROR: coverage below threshold\n##[error]Process completed with exit code 1.",
         ) != heal.canonical_fingerprint_evidence(
             errors,
             "[big-files-ratchet] 1 VIOLATION(S)\n##[error]Process completed with exit code 1.",
@@ -310,21 +311,19 @@ class TestFingerprintStore:
 
         assert existing == "https://github.com/a/b/issues/9"
         assert client.get.call_args.kwargs["params"]["labels"] == "auto-incident"
-        assert client.get.call_args.kwargs["params"]["state"] == "all"
+        assert client.get.call_args.kwargs["params"]["state"] == "open"
 
-    def test_github_incident_lookup_fail_open(self) -> None:
+    def test_github_incident_lookup_failure_does_not_prove_absence(self) -> None:
         client = MagicMock()
         client.get.side_effect = RuntimeError("github unavailable")
 
-        assert (
+        with pytest.raises(heal.freshness.LookupFailed):
             heal.find_existing_remediation_issue(
                 "fingerprint",
                 token="tok",
                 repo="a/b",
                 client=client,
             )
-            == ""
-        )
 
 
 class TestIncidentBudget:
@@ -409,7 +408,48 @@ class TestIncidentBudget:
         )
 
         assert decision.allowed is False
-        assert decision.reason == "budget_lookup_error:RuntimeError"
+        assert decision.reason == "budget_lookup_error:LookupFailed"
+
+    def test_dynamic_titles_share_api_verified_workflow_budget(self) -> None:
+        client = MagicMock()
+        path = ".github/workflows/fhd-ci-cd.yml"
+        incidents = [
+            {"number": n, "body": f"- Workflow: `CI/CD {n:040x}`\n- Run ID: `{n}`\n"}
+            for n in range(1, 6)
+        ]
+
+        def get(url, **kw):
+            if url.endswith("/issues"):
+                return self._response(incidents)
+            run = int(url.rsplit("/", 1)[1])
+            return self._response({"id": run, "workflow_id": 99, "path": path})
+
+        client.get.side_effect = get
+        result = heal.check_incident_budget(
+            "CI/CD Pipeline",
+            token="tok",
+            repo="a/b",
+            client=client,
+            workflow_path=path,
+            workflow_id=99,
+        )
+        assert result.reason == "workflow_open_incidents:5>=5" and result.open_for_workflow == 5
+
+    def test_unavailable_legacy_run_does_not_guess_workflow_bucket(self) -> None:
+        client = MagicMock()
+        client.get.side_effect = [
+            self._response([{"body": "- Run ID: `9`\n"}]),
+            self._response({}, status_code=404),
+        ]
+        result = heal.check_incident_budget(
+            "CI/CD Pipeline",
+            token="tok",
+            repo="a/b",
+            client=client,
+            workflow_path=".github/workflows/fhd-ci-cd.yml",
+            workflow_id=99,
+        )
+        assert not result.allowed and result.reason == "budget_lookup_error:LookupFailed"
 
 
 # =====================================================================
@@ -562,16 +602,8 @@ class TestCallLlm:
 
 
 # =====================================================================
-# create_pr 测试
+# incident / dispatch 测试
 # =====================================================================
-
-
-class TestCreatePr:
-    def test_no_token_returns_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv("GITHUB_TOKEN", raising=False)
-        monkeypatch.setenv("GITHUB_REPOSITORY", "a/b")
-        url = heal.create_pr("autonomy/x", "patch")
-        assert url == ""
 
 
 class TestCreateRemediationIssue:
@@ -604,8 +636,12 @@ class TestCreateRemediationIssue:
     def test_dispatches_issue_implementation_explicitly(self) -> None:
         client = MagicMock()
         response = MagicMock()
-        response.status_code = 204
-        client.post.return_value = response
+        response.status_code = 200
+        response.json.return_value = {"workflow_run_id": 404}
+        intent = MagicMock(status_code=201)
+        intent.json.return_value = {"id": 303}
+        client.post.side_effect = [intent, response]
+        client.patch.return_value.status_code = 200
 
         ok = heal.dispatch_issue_implementation(
             "https://github.com/owner/repo/issues/505",
@@ -618,145 +654,39 @@ class TestCreateRemediationIssue:
         assert ok is True
         assert client.post.call_args.kwargs["json"] == {
             "ref": "main",
+            "return_run_details": True,
             "inputs": {
                 "issue_number": "505",
                 "target_branch": "feature/failing-ci",
             },
         }
+        assert '"dispatch_run_id": 404' in client.patch.call_args.kwargs["json"]["body"]
+        assert client.post.call_args.kwargs["headers"]["X-GitHub-Api-Version"] == "2022-11-28"
 
-    def test_no_repo_returns_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("GITHUB_TOKEN", "tok")
-        monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
-        url = heal.create_pr("autonomy/x", "patch")
-        assert url == ""
-
-    def test_success_returns_pr_url(self) -> None:
+    def test_dispatch_timeout_keeps_durable_unknown_intent_without_retry(self) -> None:
         client = MagicMock()
-        resp = MagicMock()
-        resp.status_code = 201
-        resp.json.return_value = {"html_url": "https://github.com/owner/repo/pull/1", "number": 1}
-        client.post.return_value = resp
-        url = heal.create_pr(
-            "autonomy/x",
-            "patch",
-            token="tok",
-            repo="owner/repo",
-            client=client,
+        intent = MagicMock(status_code=201)
+        intent.json.return_value = {"id": 303}
+        client.post.side_effect = [intent, heal.httpx.ReadTimeout("unknown result")]
+        client.patch.return_value.status_code = 200
+        assert not heal.dispatch_issue_implementation(
+            "https://github.com/a/b/issues/1", token="tok", repo="a/b", client=client
         )
-        assert url == "https://github.com/owner/repo/pull/1"
-        # 应该被调用 2 次：创建 PR + 添加标签
         assert client.post.call_count == 2
+        assert '"status": "unknown"' in client.patch.call_args.kwargs["json"]["body"]
 
-    def test_http_error_returns_empty(self) -> None:
+    def test_intent_failure_prevents_untracked_dispatch(self) -> None:
         client = MagicMock()
-        resp = MagicMock()
-        resp.status_code = 422
-        client.post.return_value = resp
-        url = heal.create_pr(
-            "autonomy/x",
-            "patch",
-            token="tok",
-            repo="owner/repo",
-            client=client,
+        client.post.return_value.status_code = 403
+        assert not heal.dispatch_issue_implementation(
+            "https://github.com/a/b/issues/1", token="tok", repo="a/b", client=client
         )
-        assert url == ""
+        assert client.post.call_count == 1 and client.post.call_args.args[0].endswith("/comments")
 
 
 # =====================================================================
 # approval ledger 旁路调用测试
 # =====================================================================
-
-
-class TestApprovalLedger:
-    """create_pr 成功后旁路调用 approval ledger（fire-and-forget，fail-open）。"""
-
-    def test_ledger_called_with_correct_args(self) -> None:
-        """create_pr 成功 → 调用 post_to_approval_ledger，action=self_maintenance_merge，source=ci_self_heal。"""
-        client = MagicMock()
-        resp = MagicMock()
-        resp.status_code = 201
-        resp.json.return_value = {
-            "html_url": "https://github.com/owner/repo/pull/42",
-            "number": 42,
-        }
-        client.post.return_value = resp
-        with patch.object(heal, "post_to_approval_ledger") as mock_ledger:
-            url = heal.create_pr(
-                "autonomy/fix-abc",
-                "patch",
-                token="tok",
-                repo="owner/repo",
-                client=client,
-                fixes=[],
-            )
-        assert url == "https://github.com/owner/repo/pull/42"
-        mock_ledger.assert_called_once_with(
-            action="self_maintenance_merge",
-            payload={
-                "pr_number": 42,
-                "pr_url": "https://github.com/owner/repo/pull/42",
-                "branch": "autonomy/fix-abc",
-                "base": "main",
-                "risk_level": "r3",
-                "fixes_summary": [],
-            },
-            source="ci_self_heal",
-        )
-
-    def test_ledger_not_called_when_pr_creation_fails(self) -> None:
-        """PR 创建失败（422）→ 不调用 ledger。"""
-        client = MagicMock()
-        resp = MagicMock()
-        resp.status_code = 422
-        client.post.return_value = resp
-        with patch.object(heal, "post_to_approval_ledger") as mock_ledger:
-            url = heal.create_pr(
-                "autonomy/x",
-                "patch",
-                token="tok",
-                repo="owner/repo",
-                client=client,
-            )
-        assert url == ""
-        mock_ledger.assert_not_called()
-
-    def test_ledger_failure_does_not_break_pr_creation(self) -> None:
-        """ledger 抛异常 → 不影响 PR 创建，仍返回 pr_url。"""
-        client = MagicMock()
-        resp = MagicMock()
-        resp.status_code = 201
-        resp.json.return_value = {
-            "html_url": "https://github.com/owner/repo/pull/1",
-            "number": 1,
-        }
-        client.post.return_value = resp
-        with patch.object(heal, "post_to_approval_ledger", side_effect=RuntimeError("net down")):
-            url = heal.create_pr(
-                "autonomy/x",
-                "patch",
-                token="tok",
-                repo="owner/repo",
-                client=client,
-            )
-        assert url == "https://github.com/owner/repo/pull/1"
-
-    def test_ledger_risk_level_r0_when_no_needs_human_label(self) -> None:
-        """labels 不含 needs-human → risk_level=r0。"""
-        client = MagicMock()
-        resp = MagicMock()
-        resp.status_code = 201
-        resp.json.return_value = {"html_url": "u", "number": 7}
-        client.post.return_value = resp
-        with patch.object(heal, "post_to_approval_ledger") as mock_ledger:
-            heal.create_pr(
-                "autonomy/x",
-                "patch",
-                token="tok",
-                repo="owner/repo",
-                client=client,
-                labels=["auto-merge"],
-            )
-        assert mock_ledger.call_args.kwargs["payload"]["risk_level"] == "r0"
 
 
 # =====================================================================
@@ -817,6 +747,10 @@ class TestAutonomyRecursion:
 class TestMainFlow:
     @pytest.fixture(autouse=True)
     def _allow_incident_budget(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(heal, "find_existing_remediation_issue", lambda *a, **k: "")
+        monkeypatch.setattr(
+            heal, "recover_existing_incident", lambda *a, **k: {"state": "unresolved"}
+        )
         monkeypatch.setattr(
             heal,
             "check_incident_budget",
@@ -923,7 +857,7 @@ class TestMainFlow:
         assert rc == 2
         assert dispatched == ["https://github.com/a/b/issues/1"]
 
-    def test_durable_fingerprint_skips_duplicate_incident(
+    def test_durable_fingerprint_keeps_unresolved_incident_visible(
         self,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
@@ -957,9 +891,9 @@ class TestMainFlow:
             ]
         )
 
-        assert rc == 0
+        assert rc == 2
         assert created == []
-        assert heal.is_already_processed(
+        assert not heal.is_already_processed(
             heal.compute_fingerprint(
                 "a/b",
                 "ci",
@@ -978,13 +912,13 @@ class TestMainFlow:
         monkeypatch.setenv("GITHUB_REPOSITORY", "a/b")
         log = "app/foo.py:10:1: F401 'os' imported but unused\n"
         monkeypatch.setattr(heal, "fetch_workflow_logs", lambda *a, **k: log)
-        called = {"create_pr": False}
+        called = {"create_remediation_issue": False}
 
-        def fake_create_pr(*args: object, **kwargs: object) -> str:
-            called["create_pr"] = True
+        def fake_create_remediation_issue(*args: object, **kwargs: object) -> str:
+            called["create_remediation_issue"] = True
             return ""
 
-        monkeypatch.setattr(heal, "create_pr", fake_create_pr)
+        monkeypatch.setattr(heal, "create_remediation_issue", fake_create_remediation_issue)
         rc = heal.main(
             [
                 "--run-id",
@@ -999,9 +933,9 @@ class TestMainFlow:
             ]
         )
         assert rc == 0
-        assert called["create_pr"] is False
+        assert called["create_remediation_issue"] is False
 
-    def test_fingerprint_dedup_skips_pr(
+    def test_local_fingerprint_does_not_bypass_durable_recovery(
         self,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
@@ -1016,14 +950,25 @@ class TestMainFlow:
         err_lines = ["app/foo.py:10:1: F401 'os' imported but unused"]
         fp = heal.compute_fingerprint("a/b", "ci", "main", "\n".join(err_lines))
         heal.record_fingerprint(fp, "https://existing/pr", store_path=store)
+        monkeypatch.setattr(
+            heal,
+            "find_existing_remediation_issue",
+            lambda *a, **k: "https://github.com/a/b/issues/2",
+        )
+        resumed = []
+        monkeypatch.setattr(
+            heal,
+            "recover_existing_incident",
+            lambda *a, **k: resumed.append(a) or {"state": "resumed"},
+        )
 
-        called = {"create_pr": False}
+        called = {"create_remediation_issue": False}
 
-        def fake_create_pr(*args: object, **kwargs: object) -> str:
-            called["create_pr"] = True
+        def fake_create_remediation_issue(*args: object, **kwargs: object) -> str:
+            called["create_remediation_issue"] = True
             return ""
 
-        monkeypatch.setattr(heal, "create_pr", fake_create_pr)
+        monkeypatch.setattr(heal, "create_remediation_issue", fake_create_remediation_issue)
         rc = heal.main(
             [
                 "--run-id",
@@ -1036,48 +981,11 @@ class TestMainFlow:
                 str(store),
             ]
         )
-        assert rc == 0
-        assert called["create_pr"] is False  # 去重命中，不创建 PR
+        assert rc == 2
+        assert len(resumed) == 1
+        assert called["create_remediation_issue"] is False  # 去重命中，不创建 PR
 
 
 # =====================================================================
 # apply_fixes 测试
 # =====================================================================
-
-
-class TestApplyFixes:
-    def test_empty_fixes_returns_empty(self) -> None:
-        assert heal.apply_fixes([]) == ""
-
-    def test_concatenates_patches(self) -> None:
-        fix1 = heal.Fix(
-            error=heal.ErrorEntry("ruff", "F401", "msg", "f", 1, "raw"),
-            patch="patch1",
-            needs_human=False,
-            description="d1",
-        )
-        fix2 = heal.Fix(
-            error=heal.ErrorEntry("ruff", "F401", "msg", "f", 2, "raw"),
-            patch="patch2",
-            needs_human=False,
-            description="d2",
-        )
-        result = heal.apply_fixes([fix1, fix2])
-        assert "patch1" in result
-        assert "patch2" in result
-
-    def test_skips_empty_patch(self) -> None:
-        fix1 = heal.Fix(
-            error=heal.ErrorEntry("mypy", "", "err", "f", 1, "raw"),
-            patch="",
-            needs_human=True,
-            description="d1",
-        )
-        fix2 = heal.Fix(
-            error=heal.ErrorEntry("ruff", "F401", "msg", "f", 2, "raw"),
-            patch="patch2",
-            needs_human=False,
-            description="d2",
-        )
-        result = heal.apply_fixes([fix1, fix2])
-        assert result == "patch2"

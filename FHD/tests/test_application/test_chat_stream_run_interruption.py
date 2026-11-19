@@ -312,7 +312,7 @@ def test_actual_retry_resume_and_background_recovery_refuse_unverified_interrupt
     assert repo.get(expected.run_id).final_output["receipt"] == expected.final_output["receipt"]
 
 
-def test_normal_failed_read_only_run_still_retries_and_recovers(repositories):
+def test_legacy_failed_run_without_original_plan_cannot_silently_start_a_new_task(repositories):
     from app.application.agent_orchestrator.run_lifecycle import (
         RunLifecycleMixin,
         requires_retry_reconciliation,
@@ -333,10 +333,10 @@ def test_normal_failed_read_only_run_still_retries_and_recovers(repositories):
     runner = Runner()
     runner._repo = repo
     assert requires_retry_reconciliation(previous) is False
-    retried = runner.retry_run(previous.run_id, requested_by=previous.user_id)
-    assert retried.run_id != previous.run_id
-    assert len(started) == 1 and started[0]["auto_execute"] is True
-    assert runner._prepare_expired_execution_recovery(retried) is True
+    with pytest.raises(ValueError, match="持久化计划"):
+        runner.retry_run(previous.run_id, requested_by=previous.user_id)
+    assert started == []
+    assert repo.get(previous.run_id).status == "failed"
 
 
 def test_transactional_resume_cannot_enqueue_interrupted_unknown_run(repositories, tmp_path):

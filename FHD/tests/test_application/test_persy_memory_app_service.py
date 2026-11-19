@@ -131,7 +131,7 @@ def test_confirm_query_reinforces_and_projects_entity_graph() -> None:
     assert any(edge["label"] == "主体" for edge in graph["edges"])
 
 
-def test_query_recalls_pending_memories_shown_in_knowledge_base() -> None:
+def test_query_excludes_pending_memories_shown_for_review() -> None:
     service = _service()
     service.capture_conversation_turn(
         access_context=_access(),
@@ -142,7 +142,8 @@ def test_query_recalls_pending_memories_shown_in_knowledge_base() -> None:
     queried = service.query(access_context=_access(), query="北辰科技负责人", top_k=3)
 
     assert queried["success"] is True
-    assert queried["chunks"][0]["metadata"]["status"] == "pending"
+    assert queried["chunks"] == []
+    assert service.list_memories(access_context=_access())["memories"][0]["status"] == "pending"
 
 
 def test_clear_memories_removes_all_visible_records() -> None:
@@ -281,12 +282,11 @@ def test_missing_trusted_scope_fails_closed() -> None:
     assert result["error_code"] == "persy_memory_scope_missing"
 
 
-def test_completed_chat_turn_is_sent_to_vector_and_structured_memory(trusted_actor) -> None:
+def test_completed_chat_turn_only_proposes_governed_candidates(trusted_actor) -> None:
     from app.application.agent_task_context import scoped_conversation_user_id
 
     actor = trusted_actor(user_id=7, tenant_id=2, permissions=["dataset.read", "dataset.write"])
     vector_service = MagicMock()
-    vector_service.build_chat_turn_chunk.return_value = object()
     persy_service = MagicMock()
     context = {
         **actor.context,
@@ -320,9 +320,9 @@ def test_completed_chat_turn_is_sent_to_vector_and_structured_memory(trusted_act
             response_data={"success": True, "response": "已记录。", "action": "answer"},
         )
 
-    vector_service.ingest_chunks.assert_called_once()
+    vector_service.ingest_chunks.assert_not_called()
     persy_service.capture_conversation_turn.assert_called_once_with(
-        access_context=context["_dataset_access_context"],
+        access_context={**context["_dataset_access_context"], "mod_id": ""},
         user_message="客户北辰科技的负责人是李明",
         assistant_message="已记录。",
         session_id="chat-9",

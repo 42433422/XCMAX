@@ -2,16 +2,15 @@
 
 后端进程退出（正常退出、崩溃、被强杀）时不会为在途任务补写终态，于是
 ``agent_runs`` / ``agent_tasks`` 会永久停留在 running，界面显示「进行中」而存储
-侧再无任何状态写入（M15）。本模块在启动阶段把超过心跳窗口仍未更新的在途状态收敛为
+侧再无任何状态写入（M15）。启动时恢复可证明安全的完整计划，其余在途状态收敛为
 failed，并同步 ``agent_tasks``，使界面口径与存储口径一致。
 
 边界（不得越权）：
 - 只收敛 planning/running/retrying 等在途状态。``queued`` 属于可恢复的持久队列，
   由 ``task_dispatcher`` 的 claim()/重认领负责，启动对账失败它会破坏队列。
 - 服务端仍持有**未过期租约**的 run 交给既有租约+重认领机制，启动对账不改写。
-- 桌面单进程（``XCAGI_DESKTOP_MODE``）没有第二个 worker。进程已经退出，租约
-  即使未过期也属于死租约；启动时把在途 run 标为失败并关闭执行行，避免重启后
-  把未完成任务自动重放。
+- 桌面单进程（``XCAGI_DESKTOP_MODE``）没有第二个 worker，旧租约可回收；
+  只有完成回执完整、剩余步骤仍为低风险幂等的原计划可继续。
 - 不推断业务成功、不解除权益或审批门禁；未确认的非幂等调用需人工核对后才能重试。
 """
 
@@ -84,15 +83,26 @@ def reconcile_stale_running_runs(
     stale_after_seconds: float = DEFAULT_STALE_AFTER_SECONDS,
     now: str | None = None,
 ) -> int:
-    """把启动时仍停留在在途状态的 AgentRun 收敛为 failed，返回收敛条数。"""
+    """恢复可证明安全的原计划余步，其余中断任务保护停机；返回收敛条数。"""
+    from app.application.agent_orchestrator.resume_transaction import unresolved_effects
+    from app.application.agent_orchestrator.run_lifecycle import (
+        prepare_safe_continuation,
+        safe_continuation_error,
+    )
     from app.application.agent_orchestrator.run_repository import get_agent_run_repository
     from app.application.agent_orchestrator.run_sql_repository import (
         SQLAlchemyAgentRunRepository,
     )
+    from app.application.agent_orchestrator.task_execution_sql_repository import (
+        SQLAlchemyTaskExecutionRepository,
+    )
+    from app.domain.task_lifecycle.machine import DEFAULT_MAX_ATTEMPTS
 
     repository = get_agent_run_repository()
     if not isinstance(repository, SQLAlchemyAgentRunRepository):
         return 0
+    queue = SQLAlchemyTaskExecutionRepository(session_factory=repository._session_factory)
+    queue._ensure_schema()
 
     current = str(now or utc_now_iso())
     desktop = _desktop_single_process()
@@ -118,7 +128,61 @@ def reconcile_stale_running_runs(
             ):
                 # 服务端租约仍有效：交由既有重认领机制处理，启动对账不越权改写。
                 continue
+            if execution is not None and execution.state in {"queued", "running", "claimed"}:
+                # Fence the observed owner/count before touching either projection.
+                # A replacement worker may have claimed it after our initial read.
+                fence = db.query(AgentTaskExecutionRecord).filter(
+                    AgentTaskExecutionRecord.run_id == record.run_id,
+                    AgentTaskExecutionRecord.state == execution.state,
+                    AgentTaskExecutionRecord.execution_count == execution.execution_count,
+                    AgentTaskExecutionRecord.lease_owner == execution.lease_owner,
+                )
+                if not desktop and execution.state in {"running", "claimed"}:
+                    fence = fence.filter(AgentTaskExecutionRecord.lease_expires_at <= current)
+                if (
+                    fence.update(
+                        {AgentTaskExecutionRecord.updated_at: execution.updated_at},
+                        synchronize_session=False,
+                    )
+                    != 1
+                ):
+                    continue
+            if (
+                db.query(AgentRunRecord)
+                .filter(
+                    AgentRunRecord.run_id == record.run_id,
+                    AgentRunRecord.payload_json == record.payload_json,
+                )
+                .update({AgentRunRecord.status: record.status}, synchronize_session=False)
+                != 1
+            ):
+                continue
             payload = _load_payload(record.payload_json)
+            interrupted = agent_run_from_dict(payload)
+            unknown_effects = unresolved_effects(db, interrupted)
+            if (
+                not unknown_effects
+                and not safe_continuation_error(interrupted)
+                and (execution is None or execution.state in {"queued", "claimed", "running"})
+                and (
+                    execution is None or int(execution.execution_count or 0) < DEFAULT_MAX_ATTEMPTS
+                )
+            ):
+                unresolved_effects(db, interrupted, clear_confirmed=True)
+                prepare_safe_continuation(
+                    interrupted, requested_by="startup", reason="process_restart"
+                )
+                if execution is not None:
+                    execution.recovery_count = int(execution.recovery_count or 0) + 1
+                    execution.state = "queued"
+                    execution.lease_owner = execution.lease_expires_at = execution.heartbeat_at = (
+                        None
+                    )
+                    execution.finished_at = None
+                repository.save_in_session(db, interrupted)
+                queue.enqueue_in_session(db, interrupted, requested_by="startup")
+                reconciled += 1
+                continue
             payload["status"] = "failed"
             payload["error"] = str(payload.get("error") or "") or INTERRUPTED_MESSAGE
             payload["updated_at"] = current
@@ -137,17 +201,22 @@ def reconcile_stale_running_runs(
                 spec = get_tool_action_spec(step.tool_id, step.action)
                 if not (step.idempotent and spec is not None and spec.idempotent):
                     uncertain_steps.append(step.step_id)
-            if uncertain_steps or metadata.get("trace_mode") in {
-                "legacy_planner_run",
-                "legacy_planner_run_with_tools",
-            }:
+            if (
+                unknown_effects
+                or uncertain_steps
+                or metadata.get("trace_mode")
+                in {
+                    "legacy_planner_run",
+                    "legacy_planner_run_with_tools",
+                }
+            ):
                 metadata["non_retryable"] = True
                 recovery = metadata.get("recovery")
                 metadata["recovery"] = {
                     **(recovery if isinstance(recovery, dict) else {}),
                     "state": "manual_reconciliation_required",
                     "error_code": INTERRUPTED_ERROR_CODE,
-                    "step_ids": uncertain_steps,
+                    "step_ids": sorted(set(uncertain_steps) | set(unknown_effects)),
                 }
             payload["metadata"] = metadata
             record.status = "failed"
@@ -182,7 +251,7 @@ def reconcile_stale_running_runs(
             reconciled += 1
     if reconciled:
         logger.warning(
-            "agent run startup reconciliation: %s interrupted run(s) marked failed (error_code=%s desktop=%s)",
+            "agent run startup reconciliation: %s interrupted run(s) reconciled (error_code=%s desktop=%s)",
             reconciled,
             INTERRUPTED_ERROR_CODE,
             desktop,

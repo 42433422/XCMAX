@@ -4,6 +4,10 @@ on:
     paths: ["packages/retort_engine/**", ".github/workflows/retort-engine.yml"]
   push:
     paths: ["packages/retort_engine/**", ".github/workflows/retort-engine.yml"]
+# Candidate tests never inherit repository-wide write permissions.
+permissions:
+  contents: read
+
 jobs:
   retort_engine:
     runs-on: ubuntu-latest

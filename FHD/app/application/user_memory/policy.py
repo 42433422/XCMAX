@@ -8,7 +8,7 @@ from collections.abc import Callable, Collection
 from dataclasses import dataclass
 from typing import Any
 
-from app.application.user_memory.models import UserMemory
+from app.domain.user_memory.records import UserMemory
 
 
 @dataclass(frozen=True)
@@ -108,3 +108,28 @@ class MemoryPolicy:
             if str(record.get("memory_id") or "") == str(memory_id or ""):
                 return (idx, record)
         return (-1, None)
+
+
+def is_scoped_memory_owner(user_id: str) -> bool:
+    return str(user_id or "").startswith(
+        ("personal-memory:v1:", "enterprise-memory:v1:", "global-preference:v1:")
+    )
+
+
+def is_recallable_memory(record: Any) -> bool:
+    return (
+        isinstance(record, dict)
+        and record.get("status") == "active"
+        and record.get("eligible_for_planner") is True
+        and record.get("source_policy") != "blocked"
+    )
+
+
+def memory_statement(record: dict[str, Any]) -> str:
+    value = record.get("value")
+    if isinstance(value, dict) and value.get("statement"):
+        return str(value["statement"])
+    rendered = (
+        value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, default=str)
+    )
+    return f"{record.get('key') or '记忆'}：{rendered}"

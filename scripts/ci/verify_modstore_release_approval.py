@@ -34,6 +34,18 @@ def verify(approval, sha, version, runs):
             raise ValueError(
                 f"{key}: complete successful same-SHA main evidence required"
             )
+        # Dispatch head_sha is the controller; CI's existing run-name identifies
+        # inputs.release_sha, which can select a different checkout on main.
+        if key == "ci_run_id" and (
+            run.get("event") not in {"push", "schedule", "workflow_dispatch"}
+            or (
+                run.get("event") == "workflow_dispatch"
+                and run.get("display_title") != f"CI/CD {sha}"
+            )
+        ):
+            raise ValueError(
+                "ci_run_id: actual tested source must match the release SHA"
+            )
 
 
 def main():

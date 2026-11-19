@@ -1,7 +1,7 @@
 """Real-persistence tests for ``app.application.workflow.approval_persistence``.
 
 These tests prove the durable workflow snapshot guards against a **real** SQLite
-database (in-memory, bound to the actual ORM ``Base``). They do **not** mock
+database (file-backed, bound to the actual ORM ``Base``). They do **not** mock
 ``load_durable_workflow_snapshot`` / ``mark_durable_request_approved_and_load``;
 they exercise the real loader against genuinely persisted ``approval_requests``
 rows, so the tenant / plan_id / params / terminal / replay guards are verified
@@ -26,7 +26,6 @@ from unittest.mock import patch
 import pytest
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from app.application.workflow.approval_persistence import (
     SNAPSHOT_KEY,
@@ -387,19 +386,18 @@ def _valid_business_data(tenant_id=1, plan_id="plan-1", params=None):
 
 
 @pytest.fixture
-def db():
-    """Real in-memory SQLAlchemy session isolated through ``SessionLocal``.
+def db(tmp_path):
+    """Real persistent SQLAlchemy session isolated through ``SessionLocal``.
 
     Patching the context-manager symbol itself can be captured by another module's
     ``from app.db.session import get_db`` while this fixture is active and leak the
-    disposed in-memory database into later tests.  ``get_db`` resolves
+    disposed test database into later tests.  ``get_db`` resolves
     ``SessionLocal`` at call time, so replacing only that factory preserves the
     production session boundary without leaving an imported stale alias behind.
     """
     engine = create_engine(
-        "sqlite://",
+        f"sqlite:///{tmp_path / 'approvals.sqlite'}",
         connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
     )
 
     @event.listens_for(engine, "connect")
@@ -411,8 +409,11 @@ def db():
     Base.metadata.create_all(engine)
     TestingSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
-    with patch("app.db.session.SessionLocal", TestingSession):
-        yield TestingSession
+    try:
+        with patch("app.db.session.SessionLocal", TestingSession):
+            yield TestingSession
+    finally:
+        engine.dispose()
 
 
 def _insert_request(

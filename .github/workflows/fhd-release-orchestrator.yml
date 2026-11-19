@@ -14,6 +14,10 @@ on:
         description: "Full 40-character commit to freeze after required CI/security gates pass"
         required: true
         type: string
+      ci_run_id:
+        description: "Successful complete CI run bound to the exact release approval"
+        required: true
+        type: string
       security_scan_run_id:
         description: "Most recent completed all-source zero-finding scan run ID"
         required: true
@@ -207,6 +211,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_SHA: ${{ inputs.release_sha }}
           PRODUCT_VERSION: ${{ inputs.product_version }}
+          CI_RUN_ID: ${{ inputs.ci_run_id }}
           SECURITY_SCAN_RUN_ID: ${{ inputs.security_scan_run_id }}
           PREVIOUS_SECURITY_SCAN_RUN_ID: ${{ inputs.previous_security_scan_run_id }}
         run: |
@@ -215,11 +220,12 @@ jobs:
           test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
           # security-preflight already verified these reports for this SHA.
           # Keep their exact run IDs; never infer evidence from a latest run.
-          if [[ ! "$SECURITY_SCAN_RUN_ID" =~ ^[1-9][0-9]*$ ]] \
-            || [[ ! "$PREVIOUS_SECURITY_SCAN_RUN_ID" =~ ^[1-9][0-9]*$ ]]; then
-            echo "::error::Both security scan run ID inputs must be numeric; the same run ID is valid for the single-scan policy."
-            exit 1
-          fi
+          for name in CI_RUN_ID SECURITY_SCAN_RUN_ID PREVIOUS_SECURITY_SCAN_RUN_ID; do
+            if [[ ! "${!name}" =~ ^[1-9][0-9]*$ ]]; then
+              echo "::error::${name} must be a positive numeric GitHub Actions run id."
+              exit 1
+            fi
+          done
 
           # 1. Full staging deployment and its own health/readback gates.
           "$helper" fhd-ci-cd.yml "CI/CD ${RELEASE_SHA}" \
@@ -232,6 +238,7 @@ jobs:
           "$helper" modstore-prod-deploy.yml "Deploy MODstore ${RELEASE_SHA}" \
             -f "git_sha=${RELEASE_SHA}" \
             -f "product_version=${PRODUCT_VERSION}" \
+            -f "ci_run_id=${CI_RUN_ID}" \
             -f "security_scan_run_id=${SECURITY_SCAN_RUN_ID}" \
             -f "previous_security_scan_run_id=${PREVIOUS_SECURITY_SCAN_RUN_ID}" \
             -f require_platform_key=true

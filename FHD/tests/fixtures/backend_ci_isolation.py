@@ -10,6 +10,22 @@ from urllib.error import HTTPError
 import pytest
 
 
+def provision_native_checkpoint_schema(engine):
+    """Run the real offline migration before a test reopens guarded task storage."""
+    from pathlib import Path
+
+    from alembic.config import Config
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+    from alembic.script import ScriptDirectory
+
+    config = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
+    migration = ScriptDirectory.from_config(config).get_revision("2026_11_19_native_checkpoints")
+    assert migration is not None
+    with engine.connect() as db, Operations.context(MigrationContext.configure(db)):
+        migration.module.upgrade()
+
+
 @pytest.fixture
 def isolated_login_host_db(tmp_path, monkeypatch):
     from sqlalchemy import create_engine
@@ -132,6 +148,33 @@ def trusted_actor(tmp_path, monkeypatch):
 
     try:
         yield create
+    finally:
+        engine.dispose()
+
+
+@pytest.fixture
+def conversation_storage(tmp_path, monkeypatch):
+    """Use the production transaction scope with a test-owned conversation database."""
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.db import session as db_session
+    from app.db.models import AIConversation, AIConversationSession, User
+    from app.domain.shared_services import conversation_service
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'conversations.sqlite'}")
+    for model in (User, AIConversationSession, AIConversation):
+        model.__table__.create(engine)
+    factory = sessionmaker(bind=engine)
+    with factory.begin() as db:
+        db.add_all(
+            User(id=owner, username=f"conversation-owner-{owner}", password="unused")
+            for owner in (1, 7, 123)
+        )
+    monkeypatch.setattr(db_session, "SessionLocal", factory)
+    monkeypatch.setattr(conversation_service, "notify_user", lambda **kwargs: None)
+    try:
+        yield factory
     finally:
         engine.dispose()
 

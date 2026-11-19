@@ -55,6 +55,7 @@ class CompatStream:
         self, request: Request, body: XcagiCompatChatBody, *, ai_tier: str | None = None
     ) -> AsyncGenerator[bytes, None]:
         context = self.admission.context(request, body.context, body.message)
+        body.context = context
         from app.infrastructure.llm.model_admission import model_rate_limit_scope
 
         if is_offline(body.mode):

@@ -7,10 +7,15 @@ from datetime import datetime
 from html.parser import HTMLParser
 from typing import Any
 
-from sqlalchemy.exc import IntegrityError
-
 from app.db.models import AIConversation, AIConversationSession
 from app.db.session import get_db
+from app.domain.shared_services.conversation_service import (
+    ConversationRevisionError as ConversationRevisionError,
+)
+from app.domain.shared_services.conversation_service import (
+    begin_conversation_write,
+    lock_conversation_session,
+)
 
 
 def durable_user_id(value: Any) -> int | None:
@@ -40,6 +45,7 @@ def _plain_text(value: Any) -> str:
 def _session_row(session: AIConversationSession) -> dict[str, Any]:
     return {
         "session_id": session.session_id,
+        "revision": int(session.revision or 0),
         "title": session.title,
         "summary": session.summary or "",
         "message_count": int(session.message_count or 0),
@@ -75,39 +81,18 @@ class TaskConversationStore:
         intent: str = "",
         metadata: str = "",
         client_message_id: str = "",
+        expected_revision: int | None = None,
     ) -> int:
         now = datetime.now()
         with get_db() as db:
-            if db.get_bind().dialect.name == "sqlite":
-                db.connection().exec_driver_sql("BEGIN IMMEDIATE")
-            session_query = db.query(AIConversationSession).filter(
-                AIConversationSession.session_id == session_id
+            begin_conversation_write(db)
+            session = lock_conversation_session(
+                db,
+                session_id=session_id,
+                user_id=user_id,
+                expected_revision=expected_revision,
+                create=True,
             )
-            session = (
-                db.query(AIConversationSession)
-                .filter(AIConversationSession.session_id == session_id)
-                .with_for_update()
-                .first()
-            )
-            if session is not None and int(session.user_id or 0) != user_id:
-                raise PermissionError("conversation session belongs to another user")
-            if session is None:
-                try:
-                    with db.begin_nested():
-                        session = AIConversationSession(
-                            session_id=session_id,
-                            user_id=user_id,
-                            message_count=0,
-                            created_at=now,
-                        )
-                        db.add(session)
-                        db.flush()
-                except IntegrityError:
-                    session = session_query.with_for_update().one()
-                    if int(session.user_id or 0) != user_id:
-                        raise PermissionError(
-                            "conversation session belongs to another user"
-                        ) from None
 
             if client_message_id:
                 marker = json.dumps({"client_message_id": client_message_id})[1:-1]
@@ -161,40 +146,129 @@ class TaskConversationStore:
             db.refresh(message)
             return int(message.id)
 
-    def get_conversation(self, *, session_id: str, user_id: int) -> dict[str, Any]:
+    def get_conversation(
+        self,
+        *,
+        session_id: str,
+        user_id: int,
+        limit: int = 50,
+        before_id: int | None = None,
+        after_id: int | None = None,
+        turn_id: str | None = None,
+        through_id: int | None = None,
+    ) -> dict[str, Any]:
+        """Owner-scoped keyset page; the initial page contains the newest messages."""
+        from sqlalchemy import or_
+
+        if before_id is not None and after_id is not None:
+            raise ValueError("before_id and after_id are mutually exclusive")
+        limit = max(1, min(int(limit), 200))
         with get_db() as db:
             session = (
                 db.query(AIConversationSession)
                 .filter(
                     AIConversationSession.session_id == session_id,
                     AIConversationSession.user_id == user_id,
+                    AIConversationSession.deleted_at.is_(None),
                 )
                 .first()
             )
             if session is None:
-                return {"session": None, "messages": []}
-            messages = (
-                db.query(AIConversation)
-                .filter(
-                    AIConversation.session_id == session_id, AIConversation.user_id == str(user_id)
+                return {
+                    "session": None,
+                    "messages": [],
+                    "has_more": False,
+                    "next_before_id": None,
+                    "next_after_id": None,
+                }
+            query = db.query(AIConversation).filter(
+                AIConversation.session_id == session_id,
+                AIConversation.user_id == str(user_id),
+            )
+            newest = (
+                query.with_entities(AIConversation.id).order_by(AIConversation.id.desc()).first()
+            )
+            snapshot_latest_id = int(newest.id) if newest else 0
+            if before_id is not None:
+                query = query.filter(AIConversation.id < before_id)
+            if after_id is not None:
+                query = query.filter(AIConversation.id > after_id)
+            if through_id is not None:
+                query = query.filter(AIConversation.id <= through_id)
+            if turn_id:
+                markers = [
+                    json.dumps({key: turn_id}, ensure_ascii=False, separators=sep)[1:-1]
+                    for key in ("turn_id", "turnId")
+                    for sep in ((",", ":"), (", ", ": "))
+                ]
+                query = query.filter(
+                    or_(
+                        *(
+                            AIConversation.conversation_metadata.contains(marker, autoescape=True)
+                            for marker in markers
+                        )
+                    )
                 )
-                .order_by(AIConversation.created_at.asc(), AIConversation.id.asc())
+            ascending = after_id is not None
+            rows = (
+                query.order_by(AIConversation.id.asc() if ascending else AIConversation.id.desc())
+                .limit(limit + 1)
                 .all()
             )
+            more = len(rows) > limit
+            rows = rows[:limit]
+            if not ascending:
+                rows.reverse()
             return {
                 "session": _session_row(session),
-                "messages": [_message_row(message) for message in messages],
+                "messages": [_message_row(row) for row in rows],
+                "has_more": more,
+                "next_before_id": int(rows[0].id) if more and rows and not ascending else None,
+                "next_after_id": int(rows[-1].id) if more and rows and ascending else None,
+                "snapshot_latest_id": snapshot_latest_id,
             }
 
-    def get_history(self, *, session_id: str, user_id: int, mod_id: str = "") -> dict[str, Any]:
-        durable = self.get_conversation(session_id=session_id, user_id=user_id)
-        session = durable.get("session")
+    def iter_conversation_messages(self, *, session_id: str, user_id: int, batch_size: int = 200):
+        """Read an authorized, bounded snapshot without an unbounded SQL .all()."""
+        from app.domain.shared_services.conversation_service import ConversationRevisionError
+
+        cursor, revision, through = 0, None, None
+        while True:
+            page = self.get_conversation(
+                session_id=session_id,
+                user_id=user_id,
+                limit=batch_size,
+                after_id=cursor,
+                through_id=through,
+            )
+            session = page["session"]
+            if session is None:
+                if revision is not None:
+                    raise ConversationRevisionError("conversation changed during history read")
+                return
+            current = int(session.get("revision") or 0)
+            if revision is not None and current != revision:
+                raise ConversationRevisionError("conversation changed during history read")
+            revision = current
+            if through is None:
+                through = page["snapshot_latest_id"]
+            yield from page["messages"]
+            if not page["has_more"]:
+                return
+            cursor = page["next_after_id"]
+
+    def get_history(
+        self, *, session_id: str, user_id: int, mod_id: str = "", **pagination
+    ) -> dict[str, Any]:
+        page = self.get_conversation(session_id=session_id, user_id=user_id, **pagination)
+        session = page.pop("session")
         return {
             "success": True,
             "id": session_id,
             "title": session.get("title") if isinstance(session, dict) else None,
+            "revision": session.get("revision") if isinstance(session, dict) else None,
             "mod_id": mod_id,
-            "messages": durable.get("messages") or [],
+            **page,
             "metadata": {},
             "durable": True,
         }
@@ -203,7 +277,10 @@ class TaskConversationStore:
         with get_db() as db:
             sessions = (
                 db.query(AIConversationSession)
-                .filter(AIConversationSession.user_id == user_id)
+                .filter(
+                    AIConversationSession.user_id == user_id,
+                    AIConversationSession.deleted_at.is_(None),
+                )
                 .order_by(
                     AIConversationSession.last_message_at.desc(),
                     AIConversationSession.id.desc(),
@@ -234,30 +311,94 @@ class TaskConversationStore:
                 db.commit()
             return rows
 
-    def delete_session(self, *, session_id: str, user_id: int) -> bool:
-        """Delete one owner-scoped session and its messages; missing/foreign sessions are no-ops."""
+    def prepare_revision(
+        self, *, session_id: str, user_id: int, expected_revision: int | None = None
+    ) -> int:
+        """Register first turns before execution so clear/delete can fence them."""
+        with get_db() as db:
+            begin_conversation_write(db)
+            session = lock_conversation_session(
+                db,
+                session_id=session_id,
+                user_id=user_id,
+                expected_revision=expected_revision,
+                create=True,
+            )
+            revision = int(session.revision)
+            db.commit()
+            return revision
+
+    def memory_snapshot(
+        self,
+        *,
+        session_id: str,
+        user_id: int,
+        include_messages: bool = False,
+    ) -> dict[str, Any] | None:
+        """The SQL lifecycle and surviving transcript are the projection authority."""
         with get_db() as db:
             session = (
                 db.query(AIConversationSession)
                 .filter(
                     AIConversationSession.session_id == session_id,
                     AIConversationSession.user_id == user_id,
+                    AIConversationSession.deleted_at.is_(None),
                 )
                 .first()
             )
             if session is None:
+                return None
+            messages = (
+                (
+                    db.query(AIConversation)
+                    .filter(AIConversation.session_id == session_id)
+                    .order_by(AIConversation.id.desc())
+                    .limit(400)
+                    .all()
+                )
+                if include_messages
+                else []
+            )
+            return {
+                "revision": int(session.revision),
+                "messages": [_message_row(message) for message in reversed(messages)],
+            }
+
+    def delete_session(self, *, session_id: str, user_id: int) -> bool:
+        """Retain an owner-scoped tombstone, including IDs whose first turn is pending."""
+        with get_db() as db:
+            begin_conversation_write(db)
+            previous = (
+                db.query(AIConversationSession)
+                .filter(AIConversationSession.session_id == session_id)
+                .with_for_update()
+                .first()
+            )
+            if previous is not None and (
+                previous.user_id != user_id or previous.deleted_at is not None
+            ):
                 return False
-            # 会话已按 owner 校验，消息表按 session_id 清理以覆盖历史 user_id 为空的数据。
+            session = lock_conversation_session(
+                db,
+                session_id=session_id,
+                user_id=user_id,
+                create=True,
+            )
             db.query(AIConversation).filter(
                 AIConversation.session_id == session_id,
             ).delete(synchronize_session=False)
-            db.delete(session)
+            session.revision += 1
+            session.deleted_at = datetime.now()
+            session.message_count = 0
+            session.title = session.summary = None
             db.commit()
-            return True
+            return previous is not None
 
     def delete_messages_from(self, *, session_id: str, user_id: int, message_id: int) -> int:
-        """撤回一条用户消息及其之后的所有回复；非本会话消息直接拒绝。"""
+        """Withdraw a user turn and fence every completion based on the old transcript."""
         with get_db() as db:
+            begin_conversation_write(db)
+            session = lock_conversation_session(db, session_id=session_id, user_id=user_id)
             target = (
                 db.query(AIConversation)
                 .filter(
@@ -279,40 +420,42 @@ class TaskConversationStore:
                 )
                 .delete(synchronize_session=False)
             )
-            session = (
-                db.query(AIConversationSession)
-                .filter(AIConversationSession.session_id == session_id)
+            session.revision += 1
+            session.message_count = (
+                db.query(AIConversation).filter(AIConversation.session_id == session_id).count()
+            )
+            last = (
+                db.query(AIConversation)
+                .filter(AIConversation.session_id == session_id)
+                .order_by(AIConversation.id.desc())
                 .first()
             )
-            if session is not None:
-                remaining = (
-                    db.query(AIConversation).filter(AIConversation.session_id == session_id).count()
-                )
-                session.message_count = remaining
-                last = (
-                    db.query(AIConversation)
-                    .filter(AIConversation.session_id == session_id)
-                    .order_by(AIConversation.id.desc())
-                    .first()
-                )
-                if last is not None:
-                    session.last_message_at = last.created_at
-                    plain = _plain_text(last.content).replace("\n", " ")
-                    session.summary = f"{plain[:120]}…" if len(plain) > 120 else plain
-                else:
-                    session.summary = ""
+            session.last_message_at = last.created_at if last else None
+            plain = _plain_text(last.content if last else "").replace("\n", " ")
+            session.summary = f"{plain[:120]}…" if len(plain) > 120 else plain
             db.commit()
             return int(deleted or 0)
 
     def clear_sessions(self, *, user_id: int) -> int:
         with get_db() as db:
+            begin_conversation_write(db)
             sessions = (
                 db.query(AIConversationSession)
-                .filter(AIConversationSession.user_id == user_id)
+                .filter(
+                    AIConversationSession.user_id == user_id,
+                    AIConversationSession.deleted_at.is_(None),
+                )
+                .with_for_update()
                 .all()
             )
             for session in sessions:
-                db.delete(session)
+                db.query(AIConversation).filter(
+                    AIConversation.session_id == session.session_id,
+                ).delete(synchronize_session=False)
+                session.revision += 1
+                session.deleted_at = datetime.now()
+                session.message_count = 0
+                session.title = session.summary = None
             db.commit()
             return len(sessions)
 

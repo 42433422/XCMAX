@@ -33,12 +33,10 @@ class TestBM25:
         bm.fit([])
         assert bm.score("anything") == []
 
-    def test_idf_computed(self) -> None:
+    def test_rare_terms_have_more_weight(self) -> None:
         bm = BM25()
         bm.fit(["a b c", "a b", "a"])
-        assert "a" in bm._idf
-        assert "b" in bm._idf
-        assert "c" in bm._idf
+        assert bm.score("c")[0] > bm.score("b")[0] > bm.score("a")[0] > 0
 
     def test_tokenizer_drops_cjk_function_chars(self) -> None:
         assert BM25._tokenize("退款的政策是什么？") == ["退", "款", "政", "策"]

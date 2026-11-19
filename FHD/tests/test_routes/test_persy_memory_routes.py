@@ -159,7 +159,7 @@ def test_persy_memory_routes_fail_closed_across_users_and_datasets() -> None:
     assert unsupported.json()["error_code"] == "persy_dataset_required"
 
 
-def test_admin_header_defaults_to_its_tenant_for_status_and_query(tmp_path) -> None:
+def test_admin_header_defaults_to_its_tenant_for_query(tmp_path) -> None:
     app = FastAPI()
     app.include_router(knowledge_router)
     client = TestClient(app, raise_server_exceptions=False)
@@ -195,9 +195,11 @@ def test_admin_header_defaults_to_its_tenant_for_status_and_query(tmp_path) -> N
         "X-Dataset-Admin": "true",
     }
 
-    with patch(
-        "app.application.dataset_rag_app_service.get_dataset_rag_app_service",
-        return_value=datasets,
+    # The real spawned query worker must reopen the same persisted data as GET.
+    # An in-process getter mock is not inherited across a spawn boundary.
+    with (
+        patch.dict("os.environ", DATASET_RAG_STORE_PATH=str(tmp_path / "datasets.json")),
+        patch.object(dataset_rag_module, "_dataset_rag_app_service", None),
     ):
         status = client.get(
             "/api/knowledge/v1/datasets/secure-admin/status",
@@ -208,9 +210,16 @@ def test_admin_header_defaults_to_its_tenant_for_status_and_query(tmp_path) -> N
             headers=headers,
             json={"query": "Tenant", "top_k": 5},
         )
+        scoped_query = client.post(
+            "/api/knowledge/v1/datasets/secure-admin/query",
+            headers=headers,
+            json={"query": "Tenant", "top_k": 5, "tenant_id": "tenant-b"},
+        )
 
+    assert status.status_code == query.status_code == scoped_query.status_code == 200
     assert status.json()["document_count"] == 2
     assert status.json()["tenant_ids"] == ["tenant-a", "tenant-b"]
-    # admin 默认看所有 tenant（_dataset_read_tenant_scope 对 admin 返回 ""）；
-    # 若需限定到自身 tenant，应在 query body 显式传 tenant_id。
-    assert len(query.json()["chunks"]) >= 1
+    # Catalog status spans the admin's tenants; the actual agent query defaults
+    # to its bound tenant. An explicit admin target may select another tenant.
+    assert {row["metadata"]["tenant_id"] for row in query.json()["chunks"]} == {"tenant-a"}
+    assert {row["metadata"]["tenant_id"] for row in scoped_query.json()["chunks"]} == {"tenant-b"}

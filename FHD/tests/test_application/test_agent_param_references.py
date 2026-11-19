@@ -113,10 +113,10 @@ def test_ambiguous_missing_or_unknown_reference_is_reported(outputs):
 
 
 def _orchestrator():
+    from app.application.agent_orchestrator import InMemoryAgentRunRepository
     from app.application.agent_orchestrator.orchestrator import AgentOrchestrator
 
-    repo, executor = MagicMock(), MagicMock()
-    repo.save.side_effect = lambda run: run
+    repo, executor = InMemoryAgentRunRepository(), MagicMock()
     return AgentOrchestrator(repository=repo, tool_executor=executor), executor
 
 
@@ -369,7 +369,7 @@ def test_downstream_reference_refusal_blocks_replay_of_completed_stock_out(db, s
     else:
         assert "本步骤未执行" in run.error and "未做任何修改" not in run.error
     executor.execute.assert_not_called()
-    orchestrator._repo.get.return_value = run
+    orchestrator._repo.save(run)
     with pytest.raises(ValueError, match="任务执行结果尚需人工核对"):
         orchestrator.retry_run(run.run_id)
     db.expire_all()

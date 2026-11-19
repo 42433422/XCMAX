@@ -44,6 +44,7 @@ class DatasetStateLock:
         self.thread_lock = threading.Lock()
         self.connection: sqlite3.Connection | None = None
         self.revision: tuple[int, int] | None = None
+        self._reload_required = False
 
     def revision_now(self) -> tuple[int, int] | None:
         path = self.repository.storage_path
@@ -57,13 +58,19 @@ class DatasetStateLock:
             path.parent.mkdir(parents=True, exist_ok=True)
             self.connection = sqlite3.connect(str(path) + ".lock.sqlite3", timeout=1)
             self.connection.execute("BEGIN IMMEDIATE")
-            if self.revision != self.revision_now():
+            if self._reload_required or self.revision != self.revision_now():
                 self.repository._load_persisted_state()
                 self.revision = self.revision_now()
+                self._reload_required = False
             cleanup.pop_all()
             return self
 
     def __exit__(self, *args: object) -> None:
+        if args and args[0] is not None:
+            # Mutated cache state is not authority when publication failed,
+            # including the first write when no snapshot exists yet.
+            self._reload_required = True
+            self.revision = None
         if self.connection is not None:
             self.connection.close()
             self.connection = None

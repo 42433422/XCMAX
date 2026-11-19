@@ -34,6 +34,7 @@ def authenticated_memory_client(monkeypatch, trusted_actor):
         return result
 
     monkeypatch.setattr(__import__(__name__, fromlist=["_client"]), "_client", client)
+    return actor
 
 
 def _patch_agent_repo(repo: InMemoryAgentRunRepository):
@@ -90,8 +91,12 @@ def _assert_memory_run(
 def test_memory_v2_lifecycle_routes_execute_through_agent(
     tmp_path,
     monkeypatch,
+    authenticated_memory_client,
 ) -> None:
     import app.domain.shared_services.user_memory_service as memory_mod
+    from app.application.agent_task_context import scoped_personal_memory_id
+
+    memory_owner = scoped_personal_memory_id(authenticated_memory_client.context)
 
     repo = InMemoryAgentRunRepository()
     _configure_runtime(monkeypatch, tmp_path)
@@ -134,7 +139,7 @@ def test_memory_v2_lifecycle_routes_execute_through_agent(
             _assert_memory_run(repo, confirmed_body["run_id"], action="confirm", risk="high")
 
             svc = memory_mod.get_user_memory_service()
-            assert svc.get_preference("7", "default_customer") == "七彩乐园"
+            assert svc.get_preference(memory_owner, "default_customer") == "七彩乐园"
 
             corrected = client.patch(
                 f"/memory/v2/{memory_id}",
@@ -150,8 +155,8 @@ def test_memory_v2_lifecycle_routes_execute_through_agent(
             corrected_body = corrected.json()
             assert corrected_body["memory"]["key"] == "favorite_customer"
             _assert_memory_run(repo, corrected_body["run_id"], action="correct", risk="high")
-            assert svc.get_preference("7", "default_customer") is None
-            assert svc.get_preference("7", "favorite_customer") == "彩虹乐园"
+            assert svc.get_preference(memory_owner, "default_customer") is None
+            assert svc.get_preference(memory_owner, "favorite_customer") == "彩虹乐园"
 
             deleted = client.delete(
                 f"/memory/v2/{memory_id}",
@@ -162,7 +167,7 @@ def test_memory_v2_lifecycle_routes_execute_through_agent(
             deleted_body = deleted.json()
             assert deleted_body["memory"]["status"] == "deleted"
             _assert_memory_run(repo, deleted_body["run_id"], action="delete", risk="high")
-            assert svc.get_preference("7", "favorite_customer") is None
+            assert svc.get_preference(memory_owner, "favorite_customer") is None
     finally:
         memory_mod.reset_user_memory_service()
 

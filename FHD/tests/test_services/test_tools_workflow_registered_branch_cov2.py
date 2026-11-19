@@ -1170,17 +1170,29 @@ class TestDatasetRagRouter:
 
 
 class TestMemoryV2Router:
+    @pytest.fixture(autouse=True)
+    def authenticated_memory_owner(self, trusted_actor):
+        actor = trusted_actor()
+        self.context = actor.context
+        self.user_id = str(actor.user_id)
+
     def test_missing_user_id(self):
-        # user_id defaults to "default" via `or "default"` fallback, so we
-        # must pass whitespace-only to make str(...).strip() produce "".
-        result = _registered_router_memory_v2("confirm", {"user_id": "  "}, {}, "admin", "")
+        with patch(
+            "app.domain.shared_services.user_memory_service.get_user_memory_service"
+        ) as service:
+            result = _registered_router_memory_v2("confirm", {"user_id": "  "}, {}, "admin", "")
         assert result["success"] is False
-        assert "user_id" in result["message"]
+        assert result["error_code"] == "memory_scope_denied"
+        service.return_value.confirm_memory_candidate.assert_not_called()
 
     def test_propose_candidate_missing_key(self):
         with patch("app.domain.shared_services.user_memory_service.get_user_memory_service"):
             result = _registered_router_memory_v2(
-                "propose_candidate", {"user_id": "u1", "value": "v"}, {}, "admin", ""
+                "propose_candidate",
+                {"user_id": self.user_id, "value": "v"},
+                self.context,
+                "admin",
+                "",
             )
         assert result["success"] is False
         assert "key" in result["message"]
@@ -1188,7 +1200,11 @@ class TestMemoryV2Router:
     def test_propose_candidate_missing_value(self):
         with patch("app.domain.shared_services.user_memory_service.get_user_memory_service"):
             result = _registered_router_memory_v2(
-                "propose_candidate", {"user_id": "u1", "key": "k"}, {}, "admin", ""
+                "propose_candidate",
+                {"user_id": self.user_id, "key": "k"},
+                self.context,
+                "admin",
+                "",
             )
         assert result["success"] is False
         assert "value" in result["message"]
@@ -1197,8 +1213,8 @@ class TestMemoryV2Router:
         with patch("app.domain.shared_services.user_memory_service.get_user_memory_service"):
             result = _registered_router_memory_v2(
                 "propose_candidate",
-                {"user_id": "u1", "key": "k", "value": "v", "confidence": "abc"},
-                {},
+                {"user_id": self.user_id, "key": "k", "value": "v", "confidence": "abc"},
+                self.context,
                 "admin",
                 "",
             )
@@ -1214,8 +1230,8 @@ class TestMemoryV2Router:
         ):
             result = _registered_router_memory_v2(
                 "propose_candidate",
-                {"user_id": "u1", "key": "k", "value": "v"},
-                {},
+                {"user_id": self.user_id, "key": "k", "value": "v"},
+                self.context,
                 "admin",
                 "",
             )
@@ -1231,8 +1247,8 @@ class TestMemoryV2Router:
         ):
             result = _registered_router_memory_v2(
                 "propose_candidate",
-                {"user_id": "u1", "key": "k", "value": "v", "evidence": ["e1"]},
-                {},
+                {"user_id": self.user_id, "key": "k", "value": "v", "evidence": ["e1"]},
+                self.context,
                 "admin",
                 "",
             )
@@ -1240,7 +1256,9 @@ class TestMemoryV2Router:
 
     def test_missing_memory_id(self):
         with patch("app.domain.shared_services.user_memory_service.get_user_memory_service"):
-            result = _registered_router_memory_v2("confirm", {"user_id": "u1"}, {}, "admin", "")
+            result = _registered_router_memory_v2(
+                "confirm", {"user_id": self.user_id}, self.context, "admin", ""
+            )
         assert result["success"] is False
         assert "memory_id" in result["message"]
 
@@ -1253,8 +1271,8 @@ class TestMemoryV2Router:
         ):
             result = _registered_router_memory_v2(
                 "confirm",
-                {"user_id": "u1", "memory_id": "m1", "correction": {"k": "v"}},
-                {},
+                {"user_id": self.user_id, "memory_id": "m1", "correction": {"k": "v"}},
+                self.context,
                 "admin",
                 "",
             )
@@ -1269,8 +1287,8 @@ class TestMemoryV2Router:
         ):
             result = _registered_router_memory_v2(
                 "reject",
-                {"user_id": "u1", "memory_id": "m1", "reason": "bad"},
-                {},
+                {"user_id": self.user_id, "memory_id": "m1", "reason": "bad"},
+                self.context,
                 "admin",
                 "",
             )
@@ -1285,8 +1303,8 @@ class TestMemoryV2Router:
         ):
             result = _registered_router_memory_v2(
                 "correct",
-                {"user_id": "u1", "memory_id": "m1", "value": "new", "key": "k"},
-                {},
+                {"user_id": self.user_id, "memory_id": "m1", "value": "new", "key": "k"},
+                self.context,
                 "admin",
                 "",
             )
@@ -1301,8 +1319,8 @@ class TestMemoryV2Router:
         ):
             result = _registered_router_memory_v2(
                 "delete",
-                {"user_id": "u1", "memory_id": "m1"},
-                {},
+                {"user_id": self.user_id, "memory_id": "m1"},
+                self.context,
                 "admin",
                 "",
             )
@@ -1311,7 +1329,7 @@ class TestMemoryV2Router:
     def test_unknown_action(self):
         with patch("app.domain.shared_services.user_memory_service.get_user_memory_service"):
             result = _registered_router_memory_v2(
-                "fly", {"user_id": "u1", "memory_id": "m1"}, {}, "admin", ""
+                "fly", {"user_id": self.user_id, "memory_id": "m1"}, self.context, "admin", ""
             )
         assert result["success"] is False
 

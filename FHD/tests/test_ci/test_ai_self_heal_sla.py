@@ -32,12 +32,18 @@ def _shared_setup_case_0(case_value_1, case_value_2):
         "workflow_runs": [
             {
                 "name": case_value_1,
+                "head_sha": "d" * 40,
+                "event": "pull_request",
+                "path": sla.AI_REVIEW_WORKFLOW_PATH,
                 "status": "completed",
                 "conclusion": "success",
                 "created_at": "2026-07-20T09:00:00Z",
             },
             {
                 "name": "AI Review",
+                "head_sha": "d" * 40,
+                "event": "pull_request",
+                "path": sla.AI_REVIEW_WORKFLOW_PATH,
                 "status": "completed",
                 "conclusion": case_value_2,
                 "created_at": "2026-07-20T10:00:00Z",
@@ -47,7 +53,7 @@ def _shared_setup_case_0(case_value_1, case_value_2):
     mock_http.get.return_value = resp
     client.client = mock_http
 
-    passed, reason = client.get_workflow_run_conclusion("abc123", "AI Review")
+    passed, reason = client.get_workflow_run_conclusion("d" * 40, "AI Review")
     return client, mock_http, resp, passed, reason
 
 
@@ -196,7 +202,7 @@ def _make_pr(
     number: int = 100,
     labels: list[str] | None = None,
     author: str = "octocat",
-    head_sha: str = "abc123",
+    head_sha: str = "d" * 40,
 ) -> sla.PRInfo:
     return sla.PRInfo(
         number=number,
@@ -225,8 +231,10 @@ def _mock_client(
     client = MagicMock(spec=sla.GitHubClient)
     client.get_workflow_run_conclusion.return_value = (ai_review_ok, ai_review_reason)
     client.get_pr_check_runs.return_value = (ci_ok, ci_reason)
-    client.get_pr_head_sha.return_value = "abc123"
+    client.get_pr_head_sha.return_value = "d" * 40
     client.get_pr_mergeability.return_value = (True, "ok")
+    client.check_merge_snapshot.return_value = (True, "ok")
+    client.reconcile_delivery.return_value = "pending"
     client.has_issue_comment_containing.return_value = False
     client.merge_pr.return_value = (True, "ok", "a" * 40)
     client.dispatch_workflow.return_value = (True, "ok")
@@ -250,10 +258,18 @@ class TestCheckRegularPrGates:
         passed, reason = sla.check_regular_pr_gates(client, pr, ["octocat"])
         assert passed is True
         assert reason == "ok"
-        # 有 label 时不查 workflow run
-        client.get_workflow_run_conclusion.assert_not_called()
+        # 展示标签仍须由当前 head 的真实审核结果证明。
+        client.get_workflow_run_conclusion.assert_called_once_with(
+            "d" * 40, sla.AI_REVIEW_WORKFLOW_NAME
+        )
         # ci 仍要查
         client.get_pr_check_runs.assert_called_once()
+
+    def test_old_passed_label_cannot_bypass_current_head_review(self) -> None:
+        pr = _make_pr(labels=["ai-review: passed"])
+        client = _mock_client(ai_review_ok=False, ai_review_reason="no_workflow_run:AI Review")
+        assert sla.check_regular_pr_gates(client, pr, ["octocat"])[0] is False
+        client.get_pr_check_runs.assert_not_called()
 
     def test_all_gates_pass_with_workflow_run(self) -> None:
         pr = _make_pr(author="octocat")
@@ -262,7 +278,7 @@ class TestCheckRegularPrGates:
         assert passed is True
         assert reason == "ok"
         client.get_workflow_run_conclusion.assert_called_once_with(
-            "abc123", sla.AI_REVIEW_WORKFLOW_NAME
+            "d" * 40, sla.AI_REVIEW_WORKFLOW_NAME
         )
 
     def test_ai_review_workflow_fails(self) -> None:
@@ -311,6 +327,37 @@ class TestCheckRegularPrGates:
 
 
 class TestProcessRegularPr:
+    def test_dry_run_veto_does_not_write_metrics(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.setattr(sla, "METRICS_DIR", tmp_path)
+        monkeypatch.setattr(sla, "STALE_JSONL", tmp_path / "stale.jsonl")
+        client = _mock_client()
+        assert (
+            sla.process_regular_pr(
+                client, _make_pr(labels=["hold-merge"]), ["octocat"], dry_run=True
+            )
+            == "skipped"
+        )
+        assert not (tmp_path / "stale.jsonl").exists()
+        client.comment.assert_not_called()
+        client.merge_pr.assert_not_called()
+
+    def test_new_veto_after_delivery_prepare_blocks_merge(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.setattr(sla, "METRICS_DIR", tmp_path)
+        monkeypatch.setattr(sla, "STALE_JSONL", tmp_path / "stale.jsonl")
+        pr = _make_pr()
+        client = _mock_client()
+        client.check_merge_snapshot.side_effect = [(True, "ok"), (False, "veto:draft")]
+        assert sla.process_regular_pr(client, pr, ["octocat"]) == "skipped"
+        client.prepare_delivery.assert_called_once_with(pr)
+        client.merge_pr.assert_not_called()
+
+    def test_delivery_intent_write_failure_prevents_merge(self) -> None:
+        client = _mock_client()
+        client.prepare_delivery.side_effect = ValueError("delivery_comment_not_persisted")
+        with pytest.raises(ValueError, match="not_persisted"):
+            sla.process_regular_pr(client, _make_pr(), ["octocat"])
+        client.merge_pr.assert_not_called()
+
     def test_gates_pass_triggers_squash_merge(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -326,18 +373,9 @@ class TestProcessRegularPr:
 
         action = sla.process_regular_pr(client, pr, ["octocat"], dry_run=False)
         assert action == "auto_merged"
-        client.merge_pr.assert_called_once_with(100, method="squash")
-        assert client.dispatch_workflow.call_count == 2
-        client.dispatch_workflow.assert_any_call(
-            "fhd-ci-cd.yml",
-            ref="main",
-            inputs={"release_sha": "a" * 40},
-        )
-        client.dispatch_workflow.assert_any_call(
-            "modstore-ci-backend-python.yml",
-            ref="main",
-            inputs={},
-        )
+        client.merge_pr.assert_called_once_with(100, expected_head_sha="d" * 40, method="squash")
+        client.prepare_delivery.assert_called_once_with(pr)
+        client.reconcile_delivery.assert_called_once_with(100, expected_merge_sha="a" * 40)
         client.comment.assert_called()
 
     def test_gates_fail_skips_merge(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -381,7 +419,7 @@ class TestProcessRegularPr:
 
         action = sla.process_regular_pr(client, pr, ["octocat"], dry_run=False)
         assert action == "merge_failed"
-        client.merge_pr.assert_called_once_with(100, method="squash")
+        client.merge_pr.assert_called_once_with(100, expected_head_sha="d" * 40, method="squash")
         # 失败也要发评论告知（且文案应区分权限）
         client.comment.assert_called()
         body = client.comment.call_args.args[1]
@@ -425,7 +463,10 @@ class TestProcessRegularPr:
         pr = _make_pr(labels=["ai-review: passed"], author="octocat")
         client = _mock_client()
         client.get_pr_mergeability.return_value = (True, "behind")
-        client.update_pr_branch.return_value = (False, "http_422:Head branch was modified")
+        client.update_pr_branch.return_value = (
+            False,
+            "http_422:Head branch was modified",
+        )
 
         action = sla.process_regular_pr(client, pr, ["octocat"], dry_run=False)
 
@@ -447,20 +488,17 @@ class TestProcessRegularPr:
         pr = _make_pr(labels=["ai-review: passed"], author="octocat")
         client = _mock_client()
         client.merge_pr.return_value = (True, "ok", "b" * 40)
-        client.dispatch_workflow.side_effect = [
-            (True, "ok"),
-            (False, "http_403:Resource not accessible by integration"),
-        ]
+        client.reconcile_delivery.return_value = "dispatch_failed"
 
         action = sla.process_regular_pr(client, pr, ["octocat"], dry_run=False)
 
         assert action == "post_merge_dispatch_failed"
-        client.add_labels.assert_called_once_with(100, ["needs-human"])
-        assert sla.POST_MERGE_DISPATCH_FAIL_MARKER in client.comment.call_args.args[1]
+        assert "尚未证明生产发布与运行验收" in client.comment.call_args.args[1]
         record = __import__("json").loads(stale.read_text(encoding="utf-8"))
         assert record["action"] == "post_merge_dispatch_failed"
         assert record["merge_sha"] == "b" * 40
-        assert "modstore-ci-backend-python.yml" in record["reason"]
+        assert record["ci_delivery"] == "dispatch_failed"
+        assert record["deployment_verified"] is False
 
     def test_conflict_blocks_before_merge_and_dedupes_comment(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -595,9 +633,11 @@ class TestListRegularPrs:
 
         mock_http = MagicMock()
         resp1 = MagicMock()
+        resp1.status_code = 200
         resp1.raise_for_status.return_value = None
         resp1.json.return_value = page1
         resp2 = MagicMock()
+        resp2.status_code = 200
         resp2.raise_for_status.return_value = None
         resp2.json.return_value = page2
         mock_http.get.side_effect = [resp1, resp2]
@@ -618,6 +658,7 @@ class TestListRegularPrs:
 
         mock_http = MagicMock()
         resp = MagicMock()
+        resp.status_code = 200
         resp.raise_for_status.return_value = None
         resp.json.return_value = []
         mock_http.get.return_value = resp
@@ -662,7 +703,7 @@ class TestGetWorkflowRunConclusion:
         mock_http.get.return_value = resp
         client.client = mock_http
 
-        passed, reason = client.get_workflow_run_conclusion("abc123", "AI Review")
+        passed, reason = client.get_workflow_run_conclusion("d" * 40, "AI Review")
         assert passed is False
         assert "no_workflow_run" in reason
 
@@ -675,6 +716,9 @@ class TestGetWorkflowRunConclusion:
             "workflow_runs": [
                 {
                     "name": "AI Review",
+                    "head_sha": "d" * 40,
+                    "event": "pull_request",
+                    "path": sla.AI_REVIEW_WORKFLOW_PATH,
                     "status": "in_progress",
                     "conclusion": None,
                     "created_at": "2026-07-20T10:00:00Z",
@@ -684,7 +728,7 @@ class TestGetWorkflowRunConclusion:
         mock_http.get.return_value = resp
         client.client = mock_http
 
-        passed, reason = client.get_workflow_run_conclusion("abc123", "AI Review")
+        passed, reason = client.get_workflow_run_conclusion("d" * 40, "AI Review")
         assert passed is False
         assert "workflow_not_completed" in reason
 
@@ -697,6 +741,9 @@ class TestGetWorkflowRunConclusion:
             "workflow_runs": [
                 {
                     "name": "AI Review",
+                    "head_sha": "d" * 40,
+                    "event": "pull_request",
+                    "path": sla.AI_REVIEW_WORKFLOW_PATH,
                     "status": "completed",
                     "conclusion": "failure",
                     "created_at": "2026-07-20T10:00:00Z",
@@ -706,7 +753,7 @@ class TestGetWorkflowRunConclusion:
         mock_http.get.return_value = resp
         client.client = mock_http
 
-        passed, reason = client.get_workflow_run_conclusion("abc123", "AI Review")
+        passed, reason = client.get_workflow_run_conclusion("d" * 40, "AI Review")
         assert passed is False
         assert "workflow_failed" in reason
         assert "failure" in reason
@@ -726,7 +773,7 @@ class TestGetWorkflowRunConclusion:
         mock_http.get.return_value = resp
         client.client = mock_http
 
-        passed, reason = client.get_workflow_run_conclusion("abc123", "AI Review")
+        passed, reason = client.get_workflow_run_conclusion("d" * 40, "AI Review")
         assert passed is False
         assert "workflow_runs_api_error_500" in reason
 
@@ -854,10 +901,14 @@ class TestMergeAndDispatchApi:
         mock_http.put.return_value = response
         client.client = mock_http
 
-        assert client.merge_pr(42, method="squash") == (True, "ok", "c" * 40)
+        assert client.merge_pr(42, expected_head_sha="d" * 40, method="squash") == (
+            True,
+            "ok",
+            "c" * 40,
+        )
         mock_http.put.assert_called_once_with(
             "https://api.github.com/repos/test/repo/pulls/42/merge",
-            json={"merge_method": "squash"},
+            json={"merge_method": "squash", "sha": "d" * 40},
         )
 
     def test_dispatch_posts_ref_and_inputs(self) -> None:
@@ -874,10 +925,14 @@ class TestMergeAndDispatchApi:
             inputs={"push_to_cvm": "true"},
         )
 
-        assert result == (True, "ok")
+        assert result == (True, "accepted", 0)
         mock_http.post.assert_called_once_with(
             "https://api.github.com/repos/test/repo/actions/workflows/fhd-ci-cd.yml/dispatches",
-            json={"ref": "main", "inputs": {"push_to_cvm": "true"}},
+            json={
+                "ref": "main",
+                "return_run_details": True,
+                "inputs": {"push_to_cvm": "true"},
+            },
         )
 
     def test_dispatch_uses_independent_token_client_for_downstream_cd(self) -> None:
@@ -893,11 +948,11 @@ class TestMergeAndDispatchApi:
 
         result = client.dispatch_workflow("modstore-ci-backend-python.yml")
 
-        assert result == (True, "ok")
+        assert result == (True, "accepted", 0)
         dispatch.post.assert_called_once_with(
             "https://api.github.com/repos/test/repo/actions/workflows/"
             "modstore-ci-backend-python.yml/dispatches",
-            json={"ref": "main"},
+            json={"ref": "main", "return_run_details": True},
         )
         primary.post.assert_not_called()
 
@@ -909,6 +964,7 @@ class TestMergeAndDispatchApi:
         assert client.dispatch_workflow("modstore-ci-backend-python.yml") == (
             False,
             "workflow_dispatch_token_missing",
+            0,
         )
         client.client.post.assert_not_called()
 
@@ -921,7 +977,7 @@ class TestMergeAndDispatchApi:
         mock_http.post.return_value = response
         client.client = mock_http
 
-        ok, reason = client.dispatch_workflow("fhd-ci-cd.yml")
+        ok, reason, run_id = client.dispatch_workflow("fhd-ci-cd.yml")
 
         assert ok is False
         assert reason == "http_403:Resource not accessible by integration"
@@ -994,7 +1050,7 @@ class TestMainScanRegularPrs:
             deletions=2,
             kind="regular",
             author="octocat",
-            head_sha="sha-42",
+            head_sha="e" * 40,
         )
 
         created_client = MagicMock(spec=sla.GitHubClient)
@@ -1002,9 +1058,11 @@ class TestMainScanRegularPrs:
         created_client.list_regular_prs.return_value = [pr]
         created_client.get_pr_check_runs.return_value = (True, "ok")
         created_client.get_workflow_run_conclusion.return_value = (True, "ok")
-        created_client.get_pr_head_sha.return_value = "sha-42"
+        created_client.get_pr_head_sha.return_value = "e" * 40
         created_client.merge_pr.return_value = (True, "ok", "a" * 40)
         created_client.get_pr_mergeability.return_value = (True, "ok")
+        created_client.check_merge_snapshot.return_value = (True, "ok")
+        created_client.reconcile_delivery.return_value = "pending"
         created_client.dispatch_workflow.return_value = (True, "ok")
         created_client.comment.return_value = True
         monkeypatch.setattr(sla, "GitHubClient", lambda repo, token: created_client)
@@ -1012,7 +1070,9 @@ class TestMainScanRegularPrs:
         rc = sla.main(["--scan-regular-prs", "--allowlist-path", str(allowlist)])
         assert rc == 0
         created_client.list_regular_prs.assert_called_once()
-        created_client.merge_pr.assert_called_once_with(42, method="squash")
+        created_client.merge_pr.assert_called_once_with(
+            42, expected_head_sha="e" * 40, method="squash"
+        )
 
     def test_post_merge_dispatch_failure_makes_workflow_fail(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -1031,10 +1091,7 @@ class TestMainScanRegularPrs:
         created_client = _mock_client()
         created_client.list_self_heal_prs.return_value = []
         created_client.list_regular_prs.return_value = [pr]
-        created_client.dispatch_workflow.side_effect = [
-            (True, "ok"),
-            (False, "http_403:denied"),
-        ]
+        created_client.reconcile_delivery.return_value = "dispatch_failed"
         monkeypatch.setattr(sla, "GitHubClient", lambda repo, token: created_client)
 
         rc = sla.main(["--scan-regular-prs", "--allowlist-path", str(allowlist)])

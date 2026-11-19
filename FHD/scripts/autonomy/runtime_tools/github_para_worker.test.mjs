@@ -29,11 +29,25 @@ test('GitHub shared identity fails closed before network/model launch and emits 
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test('workflow guard precedes credential preparation and evidence upload always runs', () => {
+test('workflow isolates the publisher in a fresh hosted job and uses trusted entry points', () => {
   const source = readFileSync(new URL('../../../.github/workflows/para-github-worker.yml', import.meta.url), 'utf8');
-  const guard = source.indexOf('- name: Block unsafe shared-identity publisher');
-  assert.ok(guard > 0 && guard < source.indexOf('secrets.'));
-  assert.match(source.slice(guard, source.indexOf('- uses: actions/setup-node')), /node scripts\/autonomy\/runtime_tools\/github_para_worker.mjs/);
+  const execute = source.split('  employee-workspace:')[1].split('  publish-candidate:')[0];
+  const publisher = source.split('  publish-candidate:')[1].split('  resume-verification:')[0];
+  const resume = source.split('  resume-verification:')[1].split('  independent-verification:')[0];
+  for (const stage of [execute, resume]) {
+    assert.match(stage, /runs-on: ubuntu-24.04/);
+    assert.doesNotMatch(stage, /CI_COMMIT_TOKEN|GH_TOKEN|contents: write/);
+    assert.match(stage, /ref: \$\{\{ github.sha \}\}/);
+    assert.match(stage, /persist-credentials: false/);
+    assert.match(stage, /github_para_executor.mjs/);
+  }
+  assert.match(publisher, /needs: employee-workspace/);
+  assert.match(publisher, /runs-on: ubuntu-24.04/);
+  assert.match(publisher, /ref: \$\{\{ github.sha \}\}/);
+  assert.match(publisher, /publish_para_candidate.py/);
+  assert.doesNotMatch(publisher, /CODEX_API_KEY|PARA_CODEX_AUTH|DEVFLEET_DEVICE_TOKEN|node_modules|checkout.*candidate/);
+  assert.match(resume, /needs: publish-candidate/);
+  for (const use of source.matchAll(/uses: actions\/[a-z-]+@([^\s]+)/g)) assert.match(use[1], /^[0-9a-f]{40}$/);
   assert.doesNotMatch(source, /continue-on-error/);
   assert.match(source, /Retain execution evidence\n        if: always\(\)/);
 });

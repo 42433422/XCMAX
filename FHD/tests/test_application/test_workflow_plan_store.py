@@ -18,6 +18,7 @@ from app.application.workflow.workflow_types import (
 )
 from app.db.db_base import Base
 from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime as WorkflowEngine
+from tests.fixtures.backend_ci_isolation import provision_native_checkpoint_schema
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
@@ -405,21 +406,24 @@ def test_restarted_confirmation_without_execution_record_stays_fail_closed(
 
 @pytest.mark.parametrize("scoped", [False, True])
 def test_restarted_confirmation_resumes_signed_durable_agent_run(
-    session_factory, monkeypatch, tmp_path, trusted_actor, scoped
+    monkeypatch, tmp_path, trusted_actor, scoped
 ):
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.agent_orchestrator.run_models import AgentRun
     from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
     from app.application.agent_task_context import scoped_conversation_user_id
+    from app.application.ai_chat.dialogue_memory import prepare_chat_turn
     from app.application.ai_chat_app_service import AIChatApplicationService
     from app.application.employee_runtime.task_continuity import ledger_path
 
     actor = trusted_actor(user_id=17, role="admin")
+    session_factory = actor.factory
     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "idempotency.sqlite"))
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
     context = {**actor.context, "user_id": "17", "session_id": "sess"}
+    prepare_chat_turn("resume", context)
     chat_user = scoped_conversation_user_id("17", context) if scoped else "17"
     plan = PlanGraph(
         plan_id="restart-confirm-plan",
@@ -465,6 +469,7 @@ def test_restarted_confirmation_resumes_signed_durable_agent_run(
             session_id="sess",
         )
     # New service and repository objects, not the old in-memory run instance.
+    provision_native_checkpoint_schema(session_factory.kw["bind"])
     fresh = SQLAlchemyAgentRunRepository(session_factory=session_factory, auto_create=False)
     monkeypatch.setattr(
         "app.application.agent_orchestrator.AgentOrchestrator",

@@ -120,7 +120,10 @@ export function chatMessageExtrasFromServerRow(raw: unknown): ChatMessageExtras 
       ...(typeof persisted.localSaved === 'boolean' ? { localSaved: persisted.localSaved } : {}),
       ...(persisted.error ? { error: asString(persisted.error) } : {}),
       ...(['user', 'ai', 'task'].includes(asString(request.role)) && typeof request.content === 'string' ? {
-        request: { role: request.role as ChatMessage['role'], content: request.content, ...(typeof request.metadata === 'string' ? { metadata: request.metadata } : {}) },
+        request: { role: request.role as ChatMessage['role'], content: request.content,
+          ...(typeof request.expected_revision === 'number' ? { expected_revision: request.expected_revision } : {}),
+          ...(typeof request.turn_id === 'string' ? { turn_id: request.turn_id } : {}),
+          ...(typeof request.metadata === 'string' ? { metadata: request.metadata } : {}) },
       } : {}),
     }
   }
@@ -198,6 +201,66 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
   const { activeModId } = storeToRefs(modsStore)
   const storageKey = computed(() => buildChatMessagesKey(String(sessionId.value || 'default'), String(activeModId.value || '')))
   const sessionMetaKey = computed(() => buildChatSessionMetaKey(String(sessionId.value || 'default'), String(activeModId.value || '')))
+
+  const messagesHaveEarlier = ref(false)
+  const earlierMessagesLoading = ref(false)
+  const earlierMessagesError = ref('')
+  let beforeMessageId: number | undefined
+  let historyRevision: number | null = null
+  let historyEpoch = 0
+  const resetHistoryPage = () => {
+    historyEpoch++
+    beforeMessageId = undefined
+    historyRevision = null
+    messagesHaveEarlier.value = earlierMessagesLoading.value = false
+    earlierMessagesError.value = ''
+  }
+  function setHistoryPage(page: Record<string, unknown>) {
+    const revision = typeof page.revision === 'number' ? page.revision : null
+    if (historyRevision !== null && revision !== historyRevision) {
+      historyEpoch++
+      earlierMessagesLoading.value = false
+      earlierMessagesError.value = ''
+    }
+    beforeMessageId = Number(page.next_before_id) || undefined
+    messagesHaveEarlier.value = page.has_more === true && beforeMessageId !== undefined
+    historyRevision = revision
+  }
+  function fromServerRows(rows: unknown[]): ChatMessage[] {
+    return rows.map(raw => {
+      const row = asRecord(raw)
+      const role = row.role === 'user' || row.role === 'task' ? row.role : 'ai'
+      return { role, content: normalizeServerContentToHtml(role === 'ai' ? stripModelToolProtocol(row.content) : row.content),
+        time: formatChatMessageTime(row.time ?? row.timestamp ?? row.created_at ?? row.createdAt ?? row.updated_at),
+        ...chatMessageExtrasFromServerRow(row) }
+    })
+  }
+  async function loadEarlierMessages(): Promise<void> {
+    if (earlierMessagesLoading.value || !messagesHaveEarlier.value || beforeMessageId === undefined) return
+    const scope = storageKey.value, sid = sessionId.value, epoch = historyEpoch
+    const currentOwner = captureAuthSession(), expectedRevision = historyRevision
+    earlierMessagesLoading.value = true
+    earlierMessagesError.value = ''
+    try {
+      const page = asRecord(await chatApi.getConversation(sid, { before_id: beforeMessageId, limit: 80 }))
+      if (!currentOwner() || scope !== storageKey.value || epoch !== historyEpoch) return
+      if (page.success !== true) throw new Error('更早消息未读取成功，请重试')
+      if (expectedRevision !== null && page.revision !== expectedRevision) {
+        resetHistoryPage()
+        await syncFromServer({ required: true })
+        return
+      }
+      const older = fromServerRows(asArray(page.messages)).filter(row =>
+        !messages.value.some(existing => samePersistedMessage(existing, row, toPlainText)))
+      setHistoryPage(page)
+      loadMessages([...older, ...messages.value])
+    } catch (error) {
+      if (currentOwner() && scope === storageKey.value && epoch === historyEpoch)
+        earlierMessagesError.value = error instanceof Error ? error.message : '加载更早消息失败'
+    } finally {
+      if (scope === storageKey.value && epoch === historyEpoch) earlierMessagesLoading.value = false
+    }
+  }
 
   function getDefaultWelcome(): ChatMessage[] {
     const industryId = String(industryStore.currentIndustryId || '').trim() || '通用'
@@ -498,6 +561,7 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
 
   const { saveMessage, retryMessageSave } = useChatMessagePersistence({
     messages, sessionId,
+    revision: sid => sid === sessionId.value ? historyRevision ?? 0 : 0,
     scope: () => `${buildChatMessagesKey('scope', String(activeModId.value || ''))}:${productReadAccountEpoch.value}`,
     read: (sid) => {
       if (sid === sessionId.value) return messages.value
@@ -550,11 +614,13 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
   }
 
   function clearMessages() {
+    resetHistoryPage()
     messages.value = []
     persistMessagesCache()
   }
 
-  function loadMessages(newMessages: ChatMessage[]) {
+  function loadMessages(newMessages: ChatMessage[], page?: Record<string, unknown>) {
+    if (page) setHistoryPage(page)
     const sanitized = sanitizeMessagesList(newMessages)
     reconcileApprovalCards(sanitized)
     messages.value = sanitized
@@ -581,20 +647,15 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
         || dataRow.id !== sid)) {
         throw new Error('当前会话内容未确认，请重试')
       }
+      const sameRevision = historyRevision !== null && historyRevision === dataRow.revision
+      setHistoryPage(dataRow)
       const serverMessages = asArray(dataRow.messages)
-      if (!serverMessages.length) return options.required === true
+      if (!serverMessages.length) {
+        if (dataRow.durable === true && dataRow.revision === null) loadMessages([])
+        return options.required === true
+      }
 
-      const mapped: ChatMessage[] = serverMessages.map((msg: unknown) => {
-        const row = asRecord(msg)
-        const roleRaw = asString(row.role)
-        const role = roleRaw === 'user' || roleRaw === 'task' ? roleRaw : 'ai'
-        return {
-          role,
-          content: normalizeServerContentToHtml(role === 'ai' ? stripModelToolProtocol(row.content) : row.content),
-          time: formatChatMessageTime(row.time ?? row.timestamp ?? row.created_at ?? row.createdAt ?? row.updated_at),
-          ...chatMessageExtrasFromServerRow(row),
-        }
-      })
+      const mapped = fromServerRows(serverMessages)
       const sanitized = sanitizeMessagesList(mapped)
       if (!sanitized.length) { if (options.required) throw new Error('当前会话内容无法读取，请重试'); return false }
       const localList = messages.value
@@ -610,6 +671,8 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
       })
       const unsaved = localList.filter((local, index) => {
         if (matched.has(index)) return false
+        if (typeof dataRow.revision === 'number' && local.persistence?.request
+          && (local.persistence.request.expected_revision ?? 0) !== dataRow.revision) return false
         if (local.persistence?.status === 'saved') return false
         // 服务端已有同一轮次：本地这条只是同一问题的副本（附件证据会改写服务端正文，
         // 按文本匹配不到）。保留它会在每次同步时追加到末尾并再次落库，形成重复提问。
@@ -625,7 +688,12 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
         }
         return true
       })
-      const next = withoutRepeatedWelcomes([...mergedServer, ...unsaved.filter(message => !isWelcomeMessage(message))])
+      const firstServerId = Number(asRecord(serverMessages[0]).id)
+      const older = sameRevision && dataRow.has_more === true ? localList.filter(message => {
+        const id = Number(message.persistence?.id?.replace(/^server:/, ''))
+        return message.persistence?.status === 'saved' && id > 0 && id < firstServerId
+      }) : []
+      const next = withoutRepeatedWelcomes([...older, ...mergedServer, ...unsaved.filter(message => !isWelcomeMessage(message))])
       const unchanged = next.length === localList.length && next.every((message, index) => message === localList[index])
       if (!unchanged) loadMessages(next)
       else persistMessagesCache()
@@ -640,6 +708,7 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
     () => sessionId.value,
     () => {
       switchActiveStore()
+      resetHistoryPage()
       cacheError.value = ''
       restoreModelRoute()
     },
@@ -654,6 +723,7 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
       // 每个缓存键都是独立单例：身份从临时作用域切到已登录作用域时，
       // 直接切到新键自己的缓存，不把临时欢迎语复制过去。
       switchActiveStore()
+      resetHistoryPage()
       cacheError.value = ''
       restoreModelRoute()
     },
@@ -687,6 +757,7 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
 
   return {
     messages,
+    messagesHaveEarlier, earlierMessagesLoading, earlierMessagesError, loadEarlierMessages,
     cacheError,
     retryMessagesCache: () => persistMessagesCache(),
     retryMessageSave,

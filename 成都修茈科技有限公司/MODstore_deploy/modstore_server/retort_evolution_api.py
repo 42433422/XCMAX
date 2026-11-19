@@ -29,11 +29,18 @@ def _templates():
 
 
 def _view(row):
+    snapshot = json_loads(row.snapshot_json, {})
+    status = row.status
+    if (
+        status == "completed"
+        and snapshot.get("delivery", {}).get("status") != "deployment_verified"
+    ):
+        status = "branch_accepted"
     return {
         "id": row.id,
-        "status": row.status,
+        "status": status,
         "protocol": json_loads(row.protocol_json, {}),
-        "snapshot": json_loads(row.snapshot_json, {}),
+        "snapshot": snapshot,
         "effects": json_loads(row.effects_json, {}),
         "error": row.error,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,

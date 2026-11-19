@@ -3,22 +3,27 @@ import contextlib
 import io
 import hashlib
 import json
+import os
 import runpy
 from pathlib import Path
 import subprocess
 import sys
+import shutil
 import selectors
 import time
 import tempfile
 import unittest
+import uuid
 from unittest.mock import patch
 WORKFLOW = Path(__file__).resolve().parents[2] / '.github/workflows/corp-host-maintenance-preflight.yml'
 TEXT = WORKFLOW.read_text()
 SHELL = '\n'.join(line[12:] for line in TEXT.split('          script: |\n', 1)[1].splitlines()) + '\n'
 PROBE = SHELL.split("python3 - <<'PY'\n", 1)[1].rsplit('\nPY', 1)[0]
+CONTAINER_HELPERS = 'def container_create_args' + PROBE.split('def container_create_args', 1)[1].split('def container_restore_candidates', 1)[0]
 
 class PreflightTest(unittest.TestCase):
     def run_probe(self, setup=None, fail=None, tool_missing=False, command_hook=None):
+        self.created_containers = {}
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             def mapped(value):
@@ -32,7 +37,8 @@ class PreflightTest(unittest.TestCase):
                     override = command_hook(args)
                     if override is not None:
                         return override
-                self.assertEqual(kwargs['timeout'], 15)
+                self.assertGreater(kwargs['timeout'], 0)
+                self.assertLessEqual(kwargs['timeout'], 15)
                 self.assertNotIn('shell', kwargs)
                 if fail == 'timeout':
                     raise subprocess.TimeoutExpired(args, 15, output='SECRET_TIMEOUT')
@@ -300,8 +306,57 @@ class PreflightTest(unittest.TestCase):
             if args[4] == '{{json .Config.Volumes}}':
                 return subprocess.CompletedProcess(args, 0, 'null', '')
             return subprocess.CompletedProcess(args, 0, 'sha256:' + 'a' * 64, '')
-        if args[:2] == ['docker', 'run']:
-            return subprocess.CompletedProcess(args, 0, 'pg_restore (PostgreSQL) 16.4\n' if args[-1] == '--version' else 'SECRET_TABLES', '')
+        if args[:2] == ['docker', 'create']:
+            name = next(a.split('=', 1)[1] for a in args if a.startswith('--name='))
+            self.created_containers[name] = args
+            return subprocess.CompletedProcess(args, 0, 'c' * 64, '')
+        if args[:2] == ['docker', 'inspect']:
+            args_created = self.created_containers[args[-1]]
+            tmpfs = dict(a[len('--tmpfs='):].split(':', 1) for a in args_created if a.startswith('--tmpfs='))
+            info = {'Image': args_created[-2], 'Name': '/' + args[-1], 'State': {'Status': 'created', 'Running': False},
+                    'Config': {'Image': args_created[-2], 'Entrypoint': ['pg_restore'], 'Cmd': [args_created[-1]],
+                               'User': '65534:65534', 'OpenStdin': True, 'Tty': False,
+                               'Healthcheck': {'Test': ['NONE']}, 'Volumes': {p: {} for p in tmpfs}},
+                    'HostConfig': {'NetworkMode': 'none', 'ReadonlyRootfs': True, 'Privileged': False,
+                                   'CapDrop': ['ALL'], 'SecurityOpt': ['no-new-privileges'], 'PidsLimit': 32,
+                                   'Memory': 134217728, 'Tmpfs': tmpfs, 'LogConfig': {'Type': 'none', 'Config': {}}}, 'Mounts': []}
+            return subprocess.CompletedProcess(args, 0, json.dumps(info), '')
+        if args[:2] == ['docker', 'start']:
+            option = self.created_containers[args[-1]][-1]
+            return subprocess.CompletedProcess(args, 0, 'pg_restore (PostgreSQL) 16.4\n' if option == '--version' else 'SECRET_TABLES', '')
+
+    def test_pgdata_volume_is_read_only_tmpfs(self):
+        for target in ('/var/lib/postgresql/data', '/var/lib/postgresql'):
+            def hook(args):
+                if args[:3] == ['docker', 'image', 'inspect'] and args[4] == '{{json .Config.Volumes}}':
+                    return subprocess.CompletedProcess(args, 0, json.dumps({target: {}}), '')
+                return self.container_hook(args)
+            code, records, calls = self.run_probe(self.container_setup, command_hook=hook)
+            self.assertEqual(code, 0)
+            creates = [c for c in calls if c[:2] == ['docker', 'create']]
+            self.assertTrue(creates)
+            self.assertTrue(all('--tmpfs=' + target + ':ro,nosuid,nodev,noexec,size=65536,mode=0555' in c for c in creates))
+            self.assertNotIn('SECRET', str(records))
+
+    def test_payment_unconfigured_reader_can_use_compatible_offline_client(self):
+        code, records, calls = self.run_probe(lambda p: self.container_setup(p, payment=False), command_hook=self.container_hook)
+        self.assertEqual(code, 0)
+        readers = [r['value'] for r in records if r['check'] == 'container_archive_validator']
+        self.assertEqual([r['file'] for r in readers], ['fhd_pg.dump', 'modstore_pg.dump', 'payment_pg.dump'])
+        self.assertTrue(all(r['category'] == 'ok' for r in readers))
+        self.assertIn('unconfigured_payment_reader_archive_1_15', str(records))
+
+    def test_container_is_inspected_before_execution(self):
+        code, _, calls = self.run_probe(self.container_setup, command_hook=self.container_hook)
+        self.assertEqual(code, 0)
+        creates = [i for i, c in enumerate(calls) if c[:2] == ['docker', 'create']]
+        starts = [i for i, c in enumerate(calls) if c[:2] == ['docker', 'start']]
+        self.assertEqual(len(creates), 5)
+        self.assertEqual(len(starts), 5)
+        for created, started in zip(creates, starts):
+            name = next(a.split('=', 1)[1] for a in calls[created] if a.startswith('--name='))
+            self.assertLess(created, started)
+            self.assertIn(['docker', 'inspect', '--format', '{{json .}}', name], calls[created:started])
 
     def test_installed_container_readability_does_not_hide_host_failure(self):
         code, records, calls = self.run_probe(self.container_setup, command_hook=self.container_hook)
@@ -310,10 +365,10 @@ class PreflightTest(unittest.TestCase):
         self.assertEqual([r['category'] for r in host[:3]], ['unsupported_version'] * 3)
         fallback = [r['value'] for r in records if r['check'] == 'container_archive_validator']
         self.assertEqual([r['category'] for r in fallback], ['ok'] * 3)
-        runs = [c for c in calls if c[:2] == ['docker', 'run']]
+        runs = [c for c in calls if c[:2] == ['docker', 'create']]
         self.assertEqual(len(runs), 5)
         for args in runs:
-            for flag in ('--pull=never', '--network=none', '--read-only', '--cap-drop=ALL', '--security-opt=no-new-privileges', '--no-healthcheck'):
+            for flag in ('--pull=never', '--network=none', '--read-only', '--cap-drop=ALL', '--security-opt=no-new-privileges', '--no-healthcheck', '--log-driver=none'):
                 self.assertIn(flag, args)
             self.assertIn('sha256:' + 'a' * 64, args)
             self.assertNotIn('postgres:16', args)
@@ -336,16 +391,12 @@ class PreflightTest(unittest.TestCase):
             return self.container_hook(args)
         code, records, calls = self.run_probe(self.container_setup, command_hook=missing)
         self.assertEqual(code, 1)
-        self.assertFalse(any(c[:2] == ['docker', 'run'] for c in calls))
+        self.assertFalse(any(c[:2] == ['docker', 'create'] for c in calls))
         self.assertNotIn('SECRET', str(records))
 
-    def test_payment_never_falls_back_to_general_image_and_timeout_is_cleaned(self):
-        code, records, calls = self.run_probe(lambda p: self.container_setup(p, payment=False), command_hook=self.container_hook)
-        self.assertEqual(code, 1)
-        fallback = [r['value']['file'] for r in records if r['check'] == 'container_archive_validator']
-        self.assertEqual(fallback, ['fhd_pg.dump', 'modstore_pg.dump'])
+    def test_container_timeout_is_cleaned(self):
         def timeout(args):
-            if args[:2] == ['docker', 'run']:
+            if args[:2] == ['docker', 'start']:
                 raise subprocess.TimeoutExpired(args, 15, output='SECRET')
             return self.container_hook(args)
         code, records, calls = self.run_probe(self.container_setup, command_hook=timeout)
@@ -353,17 +404,212 @@ class PreflightTest(unittest.TestCase):
         self.assertTrue(any(c[:2] == ['docker', 'rm'] for c in calls))
         self.assertNotIn('SECRET', str(records))
 
+    def test_configured_payment_reader_failure_never_uses_general_reader(self):
+        key = 'OPS_PAYMENT_PG_DUMP_CONTAINER_IMAGE'
+        cases = ('empty', 'duplicate', 'malformed', 'export', 'missing_image', 'image_error', 'version', 'start_error')
+        for failure in cases:
+            with self.subTest(failure=failure):
+                def setup(path):
+                    self.container_setup(path, payment=False)
+                    setting = {'empty': key + '=', 'duplicate': (key + '=dedicated:16\n') * 2,
+                               'malformed': key + ' =dedicated:16', 'export': 'export ' + key + '=dedicated:16'}
+                    with path('/etc/xcmax-ops.env').open('a') as stream:
+                        stream.write(setting.get(failure, key + '=dedicated:16') + '\n')
+                def hook(args):
+                    if args[:3] == ['docker', 'image', 'inspect'] and args[-1] == 'dedicated:16':
+                        if failure == 'image_error':
+                            raise PermissionError('SECRET')
+                        return subprocess.CompletedProcess(args, 1 if failure == 'missing_image' else 0, 'sha256:' + 'b' * 64, '')
+                    if args[:2] == ['docker', 'start'] and self.created_containers[args[-1]][-2] == 'sha256:' + 'b' * 64:
+                        if failure == 'start_error':
+                            raise OSError('SECRET')
+                        return subprocess.CompletedProcess(args, 1, 'SECRET_INVALID_VERSION', 'SECRET')
+                    return self.container_hook(args)
+                code, records, _ = self.run_probe(setup, command_hook=hook)
+                self.assertEqual(code, 1)
+                self.assertNotIn('container_reader_selection', str(records))
+                self.assertEqual([r['value']['file'] for r in records if r['check'] == 'container_archive_validator'],
+                                 ['fhd_pg.dump', 'modstore_pg.dump'])
+                self.assertNotIn('SECRET', str(records))
+
+    def test_incomplete_or_changing_config_never_establishes_missing_payment_reader(self):
+        for failure in ('oversize', 'growing', 'truncated', 'changed_after_read'):
+            with self.subTest(failure=failure):
+                def setup(path):
+                    self.container_setup(path, payment=False)
+                    if failure == 'oversize':
+                        with path('/etc/xcmax-ops.env').open('a') as stream:
+                            stream.write('#' + 'x' * 65536)
+                original_fstat = os.fstat
+                config_stats = 0
+                def fstat(fd):
+                    nonlocal config_stats
+                    info = original_fstat(fd)
+                    target = Path(os.readlink('/proc/self/fd/' + str(fd)))
+                    if str(target).endswith('/etc/xcmax-ops.env'):
+                        config_stats += 1
+                        if config_stats == 1 and failure in ('growing', 'truncated'):
+                            target.write_text('SECRET' * 12000 if failure == 'growing' else '')
+                        if config_stats == 2 and failure == 'changed_after_read':
+                            os.utime(target, ns=(info.st_atime_ns, info.st_mtime_ns + 1000000000))
+                            return original_fstat(fd)
+                    return info
+                with patch('os.fstat', fstat):
+                    code, records, calls = self.run_probe(setup, command_hook=self.container_hook)
+                self.assertEqual(code, 1)
+                self.assertIn('unreadable_invalid_or_timed_out', str(records))
+                self.assertFalse(any(c[0] == 'docker' for c in calls))
+                self.assertNotIn('not_configured', str(records))
+                self.assertNotIn('container_reader_selection', str(records))
+                self.assertNotIn('SECRET', str(records))
+
+    def test_configured_payment_reader_is_preserved_even_when_archive_read_fails(self):
+        for failed_archive in (False, True):
+            with self.subTest(failed_archive=failed_archive):
+                def setup(path):
+                    self.container_setup(path, payment=False)
+                    with path('/etc/xcmax-ops.env').open('a') as stream:
+                        stream.write('OPS_PAYMENT_PG_DUMP_CONTAINER_IMAGE=dedicated:16\n')
+                def hook(args):
+                    if args[:3] == ['docker', 'image', 'inspect'] and args[-1] == 'dedicated:16':
+                        return subprocess.CompletedProcess(args, 0, 'sha256:' + 'b' * 64, '')
+                    if args[:2] == ['docker', 'start']:
+                        created = self.created_containers[args[-1]]
+                        if created[-2] == 'sha256:' + 'b' * 64 and created[-1] == '--list' and failed_archive:
+                            return subprocess.CompletedProcess(args, 1, 'SECRET', 'SECRET_BROKEN_ARCHIVE')
+                    return self.container_hook(args)
+                code, records, calls = self.run_probe(setup, command_hook=hook)
+                self.assertEqual(code, int(failed_archive))
+                readers = [c[-2] for c in calls if c[:2] == ['docker', 'create'] and c[-1] == '--list']
+                self.assertEqual(readers, ['sha256:' + 'a' * 64] * 2 + ['sha256:' + 'b' * 64])
+                self.assertNotIn('container_reader_selection', str(records))
+                self.assertNotIn('SECRET', str(records))
+
+    def test_payment_fallback_requires_known_compatible_version_and_host_failure(self):
+        cases = ('old_reader', 'unknown_reader', 'bad_magic', 'permission', 'unknown_header', 'failed_read')
+        for failure in cases:
+            with self.subTest(failure=failure):
+                def setup(path):
+                    self.container_setup(path, payment=False)
+                    if failure == 'unknown_header':
+                        directory = path('/var/backups/xcmax/daily/20261016')
+                        target = directory / 'payment_pg.dump'
+                        target.write_bytes(b'PGDMP\x01\x10\x00SECRET')
+                        manifest = directory / 'MANIFEST.txt'
+                        manifest.write_text('\n'.join(hashlib.sha256((directory / line.split('./')[1]).read_bytes()).hexdigest()
+                                                      + '  ./' + line.split('./')[1] for line in manifest.read_text().splitlines()) + '\n')
+                def hook(args):
+                    if Path(args[0]).name == 'pg_restore' and args[-1].endswith('payment_pg.dump') and failure in ('bad_magic', 'permission'):
+                        return subprocess.CompletedProcess(args, 1, b'SECRET', b'magic string' if failure == 'bad_magic' else b'permission denied')
+                    if args[:2] == ['docker', 'start']:
+                        option = self.created_containers[args[-1]][-1]
+                        if option == '--version' and failure in ('old_reader', 'unknown_reader'):
+                            return subprocess.CompletedProcess(args, 0, 'pg_restore (PostgreSQL) 15.12\n' if failure == 'old_reader' else 'SECRET_UNKNOWN_VERSION', '')
+                        if option == '--list' and failure == 'failed_read':
+                            return subprocess.CompletedProcess(args, 1, 'SECRET', 'SECRET_BROKEN_ARCHIVE')
+                    return self.container_hook(args)
+                code, records, _ = self.run_probe(setup, command_hook=hook)
+                self.assertEqual(code, 1)
+                selected = [r for r in records if r['check'] == 'container_reader_selection']
+                self.assertEqual(bool(selected), failure == 'failed_read')
+                integrity = next(r['value'] for r in records if r['check'] == 'backup_integrity')
+                self.assertEqual(integrity['status'], 'unknown')
+                self.assertNotIn('SECRET', str(records))
+
+    def test_failed_or_unsafe_inspection_never_starts_container(self):
+        cases = [('Image', None, 'sha256:' + 'b' * 64), ('Name', None, '/other'),
+                 ('State', 'Running', True), ('State', 'Status', 'running'),
+                 ('Config', 'Image', 'other:16'), ('Config', 'User', '0'), ('Config', 'Entrypoint', ['sh']),
+                 ('Config', 'Cmd', ['--dbname=SECRET']), ('Config', 'Healthcheck', {'Test': ['CMD', 'sh']}),
+                 ('HostConfig', 'NetworkMode', 'host'), ('HostConfig', 'ReadonlyRootfs', False),
+                 ('HostConfig', 'Privileged', True), ('HostConfig', 'CapDrop', []),
+                 ('HostConfig', 'SecurityOpt', []), ('HostConfig', 'Memory', 0), ('HostConfig', 'PidsLimit', 0),
+                 ('HostConfig', 'LogConfig', {'Type': 'json-file', 'Config': {}}),
+                 ('HostConfig', 'LogConfig', {'Type': 'syslog', 'Config': {}}),
+                 ('HostConfig', 'LogConfig', {'Type': 'none', 'Config': {'SECRET': 'value'}}),
+                 ('HostConfig', 'Binds', ['/SECRET:/data']), ('HostConfig', 'VolumesFrom', ['other']),
+                 ('HostConfig', 'Tmpfs', {'/var/lib/postgresql/data': 'rw,size=65536'}),
+                 ('Mounts', None, [{'Type': 'volume', 'Destination': '/var/lib/postgresql/data'}]),
+                 ('Mounts', None, [{'Type': 'bind', 'Source': '/SECRET', 'Destination': '/data', 'RW': False}]),
+                 ('Mounts', None, [{'Type': 'unknown'}]), ('Mounts', None, [{'Type': 'tmpfs', 'Destination': '/unexpected', 'RW': False}]),
+                 ('Mounts', None, None), ('Config', None, None)]
+        for section, field, value in cases:
+            with self.subTest(section=section, field=field):
+                def hook(args):
+                    result = self.container_hook(args)
+                    if args[:2] == ['docker', 'inspect']:
+                        info = json.loads(result.stdout)
+                        if field:
+                            info[section][field] = value
+                        else:
+                            info[section] = value
+                        return subprocess.CompletedProcess(args, 0, json.dumps(info), '')
+                    return result
+                code, records, calls = self.run_probe(self.container_setup, command_hook=hook)
+                self.assertEqual(code, 1)
+                self.assertFalse(any(c[:2] == ['docker', 'start'] for c in calls))
+                self.assertEqual(len([c for c in calls if c[:2] == ['docker', 'create']]),
+                                 len([c for c in calls if c[:2] == ['docker', 'rm']]))
+                self.assertNotIn('SECRET', str(records))
+        for operation in ('create', 'inspect'):
+            for failure in (('exit', 'timeout', 'invalid_json') if operation == 'inspect' else ('exit', 'timeout')):
+                with self.subTest(operation=operation, failure=failure):
+                    def hook(args):
+                        if args[:2] == ['docker', operation]:
+                            if failure == 'timeout':
+                                raise subprocess.TimeoutExpired(args, 15)
+                            return subprocess.CompletedProcess(args, 1 if failure == 'exit' else 0, 'SECRET_INVALID_JSON', 'SECRET')
+                        return self.container_hook(args)
+                    code, records, calls = self.run_probe(self.container_setup, command_hook=hook)
+                    self.assertEqual(code, 1)
+                    self.assertFalse(any(c[:2] == ['docker', 'start'] for c in calls))
+                    self.assertTrue(any(c[:2] == ['docker', 'rm'] for c in calls))
+                    self.assertNotIn('SECRET', str(records))
+
+    def test_pgdata_tmpfs_options_and_mount_metadata_are_exact(self):
+        target = '/var/lib/postgresql/data'
+        cases = ('readonly_mount', 'missing', 'wrong_path', 'writable', 'unbounded', 'writable_mount', 'volume_mount')
+        for failure in cases:
+            with self.subTest(failure=failure):
+                def hook(args):
+                    if args[:3] == ['docker', 'image', 'inspect'] and args[4] == '{{json .Config.Volumes}}':
+                        return subprocess.CompletedProcess(args, 0, json.dumps({target: {}}), '')
+                    result = self.container_hook(args)
+                    if args[:2] == ['docker', 'inspect']:
+                        info = json.loads(result.stdout)
+                        tmpfs = info['HostConfig']['Tmpfs']
+                        if failure == 'missing':
+                            tmpfs.clear()
+                        elif failure == 'wrong_path':
+                            tmpfs['/var/lib/postgresql'] = tmpfs.pop(target)
+                        elif failure == 'writable':
+                            tmpfs[target] = tmpfs[target].replace('ro,', 'rw,')
+                        elif failure == 'unbounded':
+                            tmpfs[target] = tmpfs[target].replace('size=65536,', '')
+                        else:
+                            info['Mounts'] = [{'Type': 'volume' if failure == 'volume_mount' else 'tmpfs',
+                                               'Destination': target, 'Source': '', 'RW': failure == 'writable_mount'}]
+                        return subprocess.CompletedProcess(args, 0, json.dumps(info), '')
+                    return result
+                code, records, calls = self.run_probe(self.container_setup, command_hook=hook)
+                allowed = failure == 'readonly_mount'
+                self.assertEqual(code, 0 if allowed else 1)
+                self.assertEqual(any(c[:2] == ['docker', 'start'] for c in calls), allowed)
+                self.assertNotIn('SECRET', str(records))
+
     def test_no_container_started_without_cleanup_time_budget(self):
         import itertools
         clock = itertools.chain([0], itertools.repeat(130))
         with patch('time.monotonic', side_effect=lambda: next(clock)):
             code, _, calls = self.run_probe(self.container_setup, command_hook=self.container_hook)
         self.assertEqual(code, 1)
-        self.assertFalse(any(c[:2] == ['docker', 'run'] for c in calls))
+        self.assertFalse(any(c[:2] == ['docker', 'create'] for c in calls))
 
     def test_cleanup_failure_is_not_success(self):
-        for failure in ('exit', 'timeout'):
+        for failure in ('exit', 'timeout', 'host_success'):
             def hook(args):
+                if failure == 'host_success' and Path(args[0]).name == 'pg_restore' and args[-1] != '--version':
+                    return subprocess.CompletedProcess(args, 0, '', '')
                 if args[:2] == ['docker', 'rm']:
                     if failure == 'timeout':
                         raise subprocess.TimeoutExpired(args, 15, output='SECRET')
@@ -372,13 +618,13 @@ class PreflightTest(unittest.TestCase):
             code, records, _ = self.run_probe(self.container_setup, command_hook=hook)
             self.assertEqual(code, 1)
             self.assertIn('container_cleanup_unverified', str(records[-1]))
+            self.assertEqual(next(r['value']['status'] for r in records if r['check'] == 'backup_integrity'), 'unknown')
             self.assertNotIn('SECRET', str(records))
 
     def test_real_sigterm_unwinds_container_cleanup(self):
         import signal
         prefix = PROBE.split('class ProbeInterrupted', 1)[1].split('def command', 1)[0]
-        function = 'def container_command' + PROBE.split('def container_command', 1)[1].split('def container_restore_candidates', 1)[0]
-        source = 'import signal, time, uuid, subprocess, sys\nclass ProbeInterrupted' + prefix + function + """
+        source = 'import signal, time, uuid, subprocess, sys, json, re\nclass ProbeInterrupted' + prefix + CONTAINER_HELPERS + """
 def fake_run(args, **kwargs):
     if args[1] == 'rm':
         print('cleaned', flush=True)
@@ -386,7 +632,7 @@ def fake_run(args, **kwargs):
     print('started', flush=True)
     signal.pause()
 subprocess.run = fake_run
-container_command(['docker', 'run'], version=True)
+container_command(container_create_args('sha256:' + 'a' * 64, None) + ['--version'], version=True)
 """
         with tempfile.TemporaryDirectory() as directory:
             script = Path(directory) / 'signal_probe.py'
@@ -405,7 +651,10 @@ container_command(['docker', 'run'], version=True)
                 process.wait()
 
     def test_declared_volumes_fail_closed_without_container_creation(self):
-        for raw, allowed in (('null', True), ('{}', True), ('{"/var/lib/postgresql/data": {}}', False),
+        for raw, allowed in (('null', True), ('{}', True), ('{"/var/lib/postgresql/data": {}}', True),
+                             ('{"/var/lib/postgresql": {}}', True), ('{"/unknown": {}}', False),
+                             ('{"/var/lib/postgresql/data/": {}}', False), ('{"/var/lib/postgresql/data": null}', False),
+                             ('{"/var/lib/postgresql/data": {}, "/var/lib/postgresql": {}}', False),
                              ('SECRET_INVALID', False), ('[]', False), ('false', False)):
             with self.subTest(raw=raw):
                 def hook(args):
@@ -415,7 +664,7 @@ container_command(['docker', 'run'], version=True)
                     return self.container_hook(args)
                 code, records, calls = self.run_probe(self.container_setup, command_hook=hook)
                 self.assertEqual(code, 0 if allowed else 1)
-                self.assertEqual(any(c[:2] == ['docker', 'run'] for c in calls), allowed)
+                self.assertEqual(any(c[:2] == ['docker', 'create'] for c in calls), allowed)
                 if not allowed:
                     self.assertIn('candidate_rejected_declared_volumes', str(records))
                 self.assertNotIn('SECRET', str(records))
@@ -428,7 +677,7 @@ container_command(['docker', 'run'], version=True)
                 return self.container_hook(args)
             code, records, calls = self.run_probe(self.container_setup, command_hook=hook)
             self.assertEqual(code, 1)
-            self.assertFalse(any(c[:2] == ['docker', 'run'] for c in calls))
+            self.assertFalse(any(c[:2] == ['docker', 'create'] for c in calls))
             self.assertIn('candidate_rejected_declared_volumes', str(records))
 
     def test_real_df_inode_arguments(self):
@@ -444,6 +693,44 @@ container_command(['docker', 'run'], version=True)
         self.assertNotIn('inputs.', TEXT)
         self.assertNotIn('StrictHostKeyChecking', TEXT)
         self.assertNotIn('source ', SHELL)
+
+    @unittest.skipUnless(os.environ.get('XCMAX_TEST_DOCKER_MOUNTS') == '1', 'real Docker mount contract runs in DR resilience CI')
+    def test_real_docker_declared_volume_is_masked_without_starting_container(self):
+        self.assertIsNotNone(shutil.which('docker'), 'CI must provide Docker; this contract cannot be skipped')
+        subprocess.run(['docker', 'info'], check=True, stdout=subprocess.DEVNULL, timeout=30)
+        with tempfile.TemporaryDirectory() as module_directory:
+            module = Path(module_directory) / 'container_helpers.py'
+            module.write_text('import re, json, subprocess, time\n' + CONTAINER_HELPERS)
+            helpers = runpy.run_path(str(module))
+        for target in ('/var/lib/postgresql/data', '/var/lib/postgresql'):
+            with self.subTest(target=target), tempfile.TemporaryDirectory() as directory:
+                token = uuid.uuid4().hex
+                tag, name = 'xcmax-probe-mount-test:' + token, 'xcmax-probe-mount-test-' + token
+                Path(directory, 'Dockerfile').write_text('FROM scratch\nLABEL io.xcmax.probe.test="' + token
+                                                       + '"\nVOLUME ' + json.dumps([target]) + '\nCMD ["/not-executed"]\n')
+                built = attempted_create = False
+                try:
+                    # FROM scratch needs no pull, package download, database, or production data.
+                    subprocess.run(['docker', 'build', '--pull=false', '--network=none', '--tag', tag, directory],
+                                   check=True, stdout=subprocess.DEVNULL, timeout=60)
+                    built = True
+                    image_id = subprocess.run(['docker', 'image', 'inspect', '--format', '{{.Id}}', tag],
+                                              check=True, capture_output=True, text=True, timeout=15).stdout.strip()
+                    args = helpers['container_create_args'](image_id, {target: {}}) + ['--version']
+                    attempted_create = True
+                    info = helpers['create_probe_container'](args, name, time.monotonic() + 30)
+                    self.assertEqual(info['Config']['Volumes'], {target: {}})
+                    self.assertEqual(info['HostConfig']['Tmpfs'], {target: 'ro,nosuid,nodev,noexec,size=65536,mode=0555'})
+                    self.assertFalse(any(m['Type'] in ('bind', 'volume') for m in info['Mounts']))
+                    self.assertEqual(info['State']['Status'], 'created')
+                finally:
+                    try:
+                        if attempted_create:
+                            subprocess.run(['docker', 'rm', '--force', '--volumes', name], check=True,
+                                           stdout=subprocess.DEVNULL, timeout=15)
+                    finally:
+                        if built:
+                            subprocess.run(['docker', 'image', 'rm', tag], check=True, stdout=subprocess.DEVNULL, timeout=15)
 
 if __name__ == '__main__':
     unittest.main()

@@ -48,6 +48,12 @@ NON_ORM_TABLES = {
     "training_stats",
     "excel_vector_chunks",
     "excel_vector_indexes",
+    # Native savers own these recovery receipts; ORM autogenerate must retain them.
+    "checkpoints",
+    "writes",
+    "checkpoint_migrations",
+    "checkpoint_blobs",
+    "checkpoint_writes",
 }
 
 

@@ -110,7 +110,11 @@ def test_history_uses_trusted_owner_and_stable_per_role_idempotency():
     for _ in range(2):
         persist_chat_turn("web_normal_untrusted", "查询产品", context, response, store=store)
 
-    calls = [call.kwargs for call in store.save_message.call_args_list]
+    calls = [
+        {**call.kwargs, **message}
+        for call in store.save_turn.call_args_list
+        for message in call.kwargs["messages"]
+    ]
     assert [call["role"] for call in calls] == ["user", "assistant", "user", "assistant"]
     assert {call["user_id"] for call in calls} == {"42"}
     assert calls[0]["idempotency_key"] == calls[2]["idempotency_key"]
@@ -307,7 +311,11 @@ def test_history_saves_only_public_route_receipt_for_the_authenticated_owner(sta
         },
         store=store,
     )
-    calls = [call.kwargs for call in store.save_message.call_args_list]
+    calls = [
+        {**call.kwargs, **message}
+        for call in store.save_turn.call_args_list
+        for message in call.kwargs["messages"]
+    ]
     assert {call["user_id"] for call in calls} == {"42"}
     assert "route_metadata" not in json.loads(calls[0]["metadata"])
     saved = json.loads(calls[1]["metadata"])["route_metadata"]
@@ -328,7 +336,7 @@ def test_history_route_receipt_does_not_authorize_a_foreign_session_owner():
         },
         store=store,
     )
-    store.save_message.assert_not_called()
+    store.save_turn.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -489,7 +497,7 @@ def test_history_persists_visible_business_result_on_assistant_ui() -> None:
         },
         store=store,
     )
-    metadata = json.loads(store.save_message.call_args_list[1].kwargs["metadata"])
+    metadata = json.loads(store.save_turn.call_args.kwargs["messages"][1]["metadata"])
     assert metadata["ui"]["businessResult"]["facts"]["customer_id"] == 23
 
 
@@ -511,7 +519,7 @@ def test_history_does_not_persist_casual_completed_business_result() -> None:
         },
         store=store,
     )
-    metadata = json.loads(store.save_message.call_args_list[1].kwargs["metadata"])
+    metadata = json.loads(store.save_turn.call_args.kwargs["messages"][1]["metadata"])
     assert "businessResult" not in metadata["ui"]
 
 
@@ -534,7 +542,7 @@ def test_history_persists_summary_only_tool_business_result() -> None:
         },
         store=store,
     )
-    metadata = json.loads(store.save_message.call_args_list[1].kwargs["metadata"])
+    metadata = json.loads(store.save_turn.call_args.kwargs["messages"][1]["metadata"])
     assert metadata["ui"]["businessResult"]["summary"] == "已删除"
 
 

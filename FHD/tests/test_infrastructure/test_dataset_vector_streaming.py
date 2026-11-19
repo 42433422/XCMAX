@@ -9,9 +9,7 @@ from app.infrastructure.rag.dataset_vector_index import (
     DatasetVectorSQLiteIndex,
     _cosine,
     _filter_chunks,
-    _lexical_score,
     _row_to_chunk,
-    _tokenize_for_lexical,
 )
 from app.infrastructure.rag.hybrid_retriever import RetrievedChunk
 
@@ -51,9 +49,8 @@ def test_ranking_matches_full_exact_reference(tmp_path, tenant, version):
         version=version,
         metadata_filter=metadata_filter,
     )
-    terms = set(_tokenize_for_lexical(" ".join(str(value) for value in vector)))
     for item in reference:
-        item.score = _cosine(vector, item.metadata["_embedding"]) + _lexical_score(item.text, terms)
+        item.score = _cosine(vector, item.metadata["_embedding"])
         item.source = index.backend_name
     reference.sort(key=lambda item: item.score, reverse=True)
     actual = index.query(

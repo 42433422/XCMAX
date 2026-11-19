@@ -13,6 +13,10 @@ on:
       - "成都修茈科技有限公司/MODstore_deploy/market/**"
       - ".github/workflows/modstore-market-e2e.yml"
 
+# Candidate tests never inherit repository-wide write permissions.
+permissions:
+  contents: read
+
 
 defaults:
   run:

@@ -179,11 +179,17 @@ class XCAGILangGraphRuntime(LangGraphConstructionMixin, LangGraphExecutionMixin,
         tool_dispatcher: Any | None = None,
         state_event_publisher: StateEventPublisher | None = None,
         state_schema: StateSchema | None = None,
+        native_checkpointer: Any | None = None,
+        thread_id: str = "",
     ) -> None:
+        if (native_checkpointer is None) != (not thread_id):
+            raise ValueError("原生检查点必须绑定持久线程标识")
         self._dispatch: Any = tool_dispatcher or _default_dispatcher
         self._publisher: StateEventPublisher | None = state_event_publisher
         self._state_schema: StateSchema | None = state_schema
         self._callback: Any = None
+        self._native_checkpointer = native_checkpointer
+        self._thread_id = thread_id
 
     # -- StateGraph construction -----------------------------------------------
 

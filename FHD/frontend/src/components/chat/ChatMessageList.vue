@@ -1,13 +1,14 @@
 <template>
   <div class="chat-messages-shell">
     <Teleport to="#chat-history-nav-slot" :disabled="!historyNavTarget">
-      <nav v-if="messages.length > CHAT_HISTORY_WINDOW" :class="['chat-history-navigation', { 'is-header': historyNavTarget }]" aria-label="聊天历史分页">
-        <button type="button" :disabled="windowStart === 0" @click="moveWindow(-1)">更早消息</button>
-        <span role="status">第 {{ windowStart + 1 }}–{{ windowEnd }} 条，共 {{ messages.length }} 条</span>
+      <nav v-if="hasEarlier || messages.length > CHAT_HISTORY_WINDOW" :class="['chat-history-navigation', { 'is-header': historyNavTarget }]" aria-label="聊天历史分页">
+        <button type="button" :disabled="loadingEarlier || (windowStart === 0 && !hasEarlier)" @click="showEarlier">{{ loadingEarlier ? '正在加载…' : '更早消息' }}</button>
+        <span role="status">第 {{ windowStart + 1 }}–{{ windowEnd }} 条，已载入 {{ messages.length }} 条</span>
         <button type="button" :disabled="windowEnd === messages.length" @click="moveWindow(1)">较新消息</button>
         <button type="button" @click="showLatest">最新消息</button>
       </nav>
     </Teleport>
+    <p v-if="earlierError" role="alert">{{ earlierError }}</p>
     <div class="chat-messages" id="chatMessages" ref="messagesHostRef" role="list" aria-label="聊天消息"
       @scroll.passive="onScroll" @xcagi-reveal-chat-message="revealMessage">
       <div
@@ -258,6 +259,10 @@ const saveLabels = { local: '本机副本 · 服务端未核实', saving: '正�
 const props = defineProps<{
   messages: ChatMessage[]
   sessionKey?: string
+  hasEarlier?: boolean
+  loadingEarlier?: boolean
+  earlierError?: string
+  loadEarlier?: () => Promise<void>
   proactiveSuggestions?: ReadonlyMap<string, readonly ProactiveReplySuggestion[]>
   isLoading: boolean
   isStreamingReply: boolean
@@ -407,6 +412,13 @@ onMounted(() => {
 const copyLabels = ref(new Map<ChatMessage, string>())
 const { start: windowStart, end: windowEnd, visibleMessages, moveWindow, showLatest, onScroll, revealMessage, scrollToLatestIfFollowing } =
   useChatHistoryWindow(() => props.messages, messagesHostRef, () => props.sessionKey)
+async function showEarlier() {
+  if (windowStart.value > 0 || !props.loadEarlier) { await moveWindow(-1); return }
+  const count = props.messages.length
+  await props.loadEarlier()
+  await moveWindow(-1, Math.max(0, props.messages.length - count - 60))
+}
+
 watch(() => props.proactiveSuggestions?.size, scrollToLatestIfFollowing, { flush: 'post' })
 type Presentation = { key: string; content: string; role: ChatMessage['role']; html?: string; canSpeak?: boolean; foldable?: boolean }
 let presentations = new WeakMap<ChatMessage, Presentation>()

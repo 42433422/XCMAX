@@ -89,17 +89,17 @@ jobs:
                 emit(tool + "_host_candidate", result)
                 return binary
 
-            def run_validator(args, stdin=None):
+            def run_validator(args, stdin=None, timeout=15):
                 detail = bytearray()
                 with subprocess.Popen(args, stdin=stdin, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
                                       env={"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C"}) as process:
                     try:
-                        deadline = time.monotonic() + 15
+                        deadline = time.monotonic() + timeout
                         with selectors.DefaultSelector() as selector:
                             selector.register(process.stderr, selectors.EVENT_READ)
                             while True:
                                 if time.monotonic() >= deadline:
-                                    raise subprocess.TimeoutExpired(args, 15)
+                                    raise subprocess.TimeoutExpired(args, timeout)
                                 if selector.select(timeout=0.1):
                                     chunk = os.read(process.stderr.fileno(), 4096)
                                     if not chunk:
@@ -134,17 +134,83 @@ jobs:
                     result["category"] = "execution_error"
                 return result
 
+            def container_create_args(image_id, declared):
+                # Docker's exact-path tmpfs replaces the image VOLUME without an anonymous volume.
+                if not re.fullmatch(r"sha256:[0-9a-f]{64}", image_id):
+                    raise ValueError("invalid_image_id")
+                mounts = []
+                if declared is not None and declared != {}:
+                    if (not isinstance(declared, dict) or len(declared) != 1
+                            or next(iter(declared)) not in ("/var/lib/postgresql/data", "/var/lib/postgresql")
+                            or next(iter(declared.values())) != {}):
+                        raise ValueError("candidate_rejected_declared_volumes")
+                    mounts = ["--tmpfs=" + next(iter(declared)) + ":ro,nosuid,nodev,noexec,size=65536,mode=0555"]
+                return ["docker", "create", "--pull=never", "--network=none", "--read-only", "--no-healthcheck", "--log-driver=none",
+                        "--cap-drop=ALL", "--security-opt=no-new-privileges", "--pids-limit=32",
+                        "--memory=128m", "--user=65534:65534", "-i", "--entrypoint=pg_restore"] + mounts + [image_id]
+
+            def create_probe_container(args, name, deadline):
+                def run(command):
+                    timeout = min(15, deadline - time.monotonic())
+                    if timeout <= 0:
+                        raise subprocess.TimeoutExpired(command, 15)
+                    return subprocess.run(command, capture_output=True, text=True, timeout=timeout,
+                                          env={"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C"})
+                if args[-1] not in ("--version", "--list"):
+                    raise ValueError("invalid_reader_option")
+                created = run(args[:2] + ["--name=" + name] + args[2:])
+                if created.returncode:
+                    raise ValueError("container_create_failed")
+                inspected = run(["docker", "inspect", "--format", "{{json .}}", name])
+                if inspected.returncode:
+                    raise ValueError("container_inspection_unverified")
+                info = json.loads(inspected.stdout)
+                if not isinstance(info, dict):
+                    raise ValueError("container_inspection_unverified")
+                config, host, state = info.get("Config"), info.get("HostConfig"), info.get("State")
+                if (not all(isinstance(item, dict) for item in (config, host, state))
+                        or not isinstance(config.get("Healthcheck"), dict) or not isinstance(host.get("LogConfig"), dict)):
+                    raise ValueError("container_inspection_unverified")
+                tmpfs = dict(arg[len("--tmpfs="):].split(":", 1) for arg in args if arg.startswith("--tmpfs="))
+                mounts = info.get("Mounts")
+                if (info.get("Image") != args[-2] or config.get("Image") != args[-2]
+                        or info.get("Name") != "/" + name or state.get("Status") != "created" or state.get("Running") is not False
+                        or config.get("Entrypoint") != ["pg_restore"] or config.get("Cmd") != [args[-1]]
+                        or config.get("User") != "65534:65534" or config.get("OpenStdin") is not True
+                        or config.get("Tty") is not False or config["Healthcheck"].get("Test") != ["NONE"]
+                        or config.get("Volumes") is not None and not isinstance(config["Volumes"], dict)
+                        or (config.get("Volumes") or {}) != {path: {} for path in tmpfs}
+                        or host.get("NetworkMode") != "none" or host.get("ReadonlyRootfs") is not True
+                        or host.get("Privileged") is not False or host.get("CapDrop") != ["ALL"]
+                        or host.get("SecurityOpt") != ["no-new-privileges"] or host.get("CapAdd")
+                        or host.get("PidsLimit") != 32 or host.get("Memory") != 134217728
+                        or host["LogConfig"].get("Type") != "none" or host["LogConfig"].get("Config") not in (None, {})
+                        or host.get("Binds") or host.get("VolumesFrom") or host.get("Mounts")
+                        or host.get("Devices") or host.get("DeviceRequests") or host.get("PortBindings")
+                        or host.get("Tmpfs") is not None and not isinstance(host["Tmpfs"], dict)
+                        or (host.get("Tmpfs") or {}) != tmpfs or not isinstance(mounts, list)
+                        or any(not isinstance(m, dict) or m.get("Type") != "tmpfs"
+                               or m.get("Destination") not in tmpfs or m.get("Source") or m.get("RW") is not False
+                               for m in mounts)):
+                    raise ValueError("container_isolation_unverified")
+                return info
+
             def container_command(args, *, stdin=None, version=False):
-                # Reap only this probe's uniquely named transient container after timeout.
-                if time.monotonic() + 35 > probe_deadline:
+                # Bound create/inspect/start together and reserve 15 seconds for unique-container cleanup.
+                if time.monotonic() + 60 > probe_deadline:
                     raise subprocess.TimeoutExpired(args, 15)
                 name = "xcmax-backup-probe-" + uuid.uuid4().hex
-                args = args[:2] + ["--name=" + name] + args[2:]
+                deadline = min(probe_deadline - 15, time.monotonic() + 45)
                 try:
+                    create_probe_container(args, name, deadline)
+                    timeout = min(15, deadline - time.monotonic())
+                    if timeout <= 0:
+                        raise subprocess.TimeoutExpired(args, 15)
+                    start = ["docker", "start", "--attach", "--interactive", name]
                     if version:
-                        return subprocess.run(args, capture_output=True, text=True, timeout=15,
+                        return subprocess.run(start, capture_output=True, text=True, timeout=timeout,
                                               env={"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL": "C"})
-                    return run_validator(args, stdin=stdin)
+                    return run_validator(start, stdin=stdin, timeout=timeout)
                 finally:
                     was_interrupted = isinstance(sys.exc_info()[1], ProbeInterrupted)
                     previous = {sig: signal.signal(sig, signal.SIG_IGN) for sig in (signal.SIGTERM, signal.SIGINT)}
@@ -172,16 +238,26 @@ jobs:
                         info = os.fstat(stream.fileno())
                         if not stat.S_ISREG(info.st_mode) or info.st_size > 65536:
                             raise ValueError("unsafe_config")
-                        content = stream.read(65537).decode("utf-8")
+                        raw = stream.read(65537)
+                        after = os.fstat(stream.fileno())
+                        if (len(raw) > 65536 or len(raw) != info.st_size
+                                or (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns)
+                                != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns)):
+                            raise ValueError("config_changed_during_read")
+                        content = raw.decode("utf-8")
                     for key in keys:
-                        values = re.findall(r"^" + re.escape(key) + r"=(.*?)\s*$", content, re.MULTILINE)
+                        # A malformed or empty dedicated setting must never mean "not configured".
+                        lines = [line for line in content.splitlines() if not line.lstrip().startswith("#")
+                                 and re.search(r"\b" + re.escape(key) + r"\b", line)]
+                        values = [line[len(key) + 1:] for line in lines if line.startswith(key + "=")]
                         result = {"key": key, "status": "not_configured", "version": "unknown"}
-                        if values:
-                            value = values[0].strip()
+                        candidates[key] = result
+                        if lines:
+                            value = values[0].strip() if values else ""
                             if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
                                 value = value[1:-1]
                             # No options, whitespace, shell expansion or registry credentials.
-                            if len(values) != 1 or not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9._/:@-]{0,255}", value):
+                            if len(lines) != 1 or len(values) != 1 or not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9._/:@-]{0,255}", value):
                                 result["status"] = "invalid_config"
                             else:
                                 result["status"] = "installed_image_unknown"
@@ -198,19 +274,21 @@ jobs:
                                         declared = json.loads(volumes.stdout) if volumes.returncode == 0 else "unknown"
                                     except (OSError, ValueError, subprocess.TimeoutExpired):
                                         declared = "unknown"
-                                    if declared is not None and not (isinstance(declared, dict) and not declared):
+                                    try:
+                                        args = container_create_args(image_id, declared)
+                                    except ValueError:
                                         result["status"] = "candidate_rejected_declared_volumes"
                                         emit("pg_restore_container_candidate", result)
                                         continue
-                                    args = ["docker", "run", "--pull=never", "--network=none", "--read-only", "--no-healthcheck",
-                                            "--cap-drop=ALL", "--security-opt=no-new-privileges", "--pids-limit=32",
-                                            "--memory=128m", "--user=65534:65534", "-i", "--entrypoint=pg_restore", image_id]
-                                    completed = container_command(args + ["--version"], version=True)
-                                    match = re.fullmatch(r"pg_restore \(PostgreSQL\) ([0-9]+(?:\.[0-9]+){0,2})(?: [^\r\n]*)?\s*", completed.stdout)
-                                    if completed.returncode == 0 and match:
-                                        result.update(status="candidate_available", version=match[1], image_id=image_id)
-                                        candidates[key] = args
-                        emit("pg_restore_container_candidate", result)
+                                    result["status"] = "candidate_execution_unverified"
+                                    try:
+                                        completed = container_command(args + ["--version"], version=True)
+                                        match = re.fullmatch(r"pg_restore \(PostgreSQL\) ([0-9]+(?:\.[0-9]+){0,2})(?: [^\r\n]*)?\s*", completed.stdout)
+                                        if completed.returncode == 0 and match:
+                                            result.update(status="candidate_available", version=match[1], image_id=image_id, args=args)
+                                    except (OSError, ValueError, subprocess.TimeoutExpired):
+                                        pass
+                        emit("pg_restore_container_candidate", {k: v for k, v in result.items() if k != "args"})
                 except FileNotFoundError:
                     emit("container_config", "missing_config_or_docker")
                 except (OSError, UnicodeError, ValueError, subprocess.TimeoutExpired):
@@ -231,7 +309,7 @@ jobs:
                 except OSError:
                     result["category"] = "execution_error"
                 except ValueError:
-                    result["category"] = "cleanup_unverified"
+                    result["category"] = "container_verification_failed"
                 return result
 
             def verify_latest_backup():
@@ -301,11 +379,13 @@ jobs:
                         restore = validator_version("pg_restore", "/usr/pgsql-16/bin:/usr/sbin:/usr/bin:/sbin:/bin")
                         emit("writer_version_limit", "Installed configured candidates are not proof of the historical dump producer; readability is not a restore test.")
                         containers = container_restore_candidates()
+                        archive_versions = {}
                         for name in names[:3]:
                             with open(directory / name, "rb", opener=lambda p, f: os.open(p, f | os.O_NOFOLLOW)) as stream:
                                 header = stream.read(8)
                             valid = len(header) == 8 and header[:5] == b"PGDMP"
                             version = [header[5], header[6], 0 if header[5:7] == b"\x01\x00" else header[7]] if valid else None
+                            archive_versions[name] = version
                             emit("archive_format", {"file": name, "magic": "PGDMP" if valid else "unknown", "version": version})
                         commands = [("pg_restore", "--list", name) for name in names[:3]]
                         commands += [("gzip", "-t", names[3]), ("tar", "-tzf", names[4])]
@@ -317,8 +397,17 @@ jobs:
                             emit("archive_validator", result)
                             if tool == "pg_restore" and result["category"] != "ok":
                                 key = "OPS_PAYMENT_PG_DUMP_CONTAINER_IMAGE" if name == "payment_pg.dump" else "OPS_PG_DUMP_CONTAINER_IMAGE"
-                                if key in containers:
-                                    candidate = validate_container_archive(containers[key], directory / name)
+                                reader = containers.get(key, {})
+                                general = containers.get("OPS_PG_DUMP_CONTAINER_IMAGE", {})
+                                if (name == "payment_pg.dump" and reader.get("status") == "not_configured"
+                                        and result["category"] == "unsupported_version" and archive_versions[name] == [1, 15, 0]
+                                        and general.get("status") == "candidate_available" and int(general["version"].split(".")[0]) >= 16):
+                                    reader = general
+                                    emit("container_reader_selection", {"file": name, "key": reader["key"],
+                                         "version": reader["version"], "image_id": reader["image_id"],
+                                         "reason": "unconfigured_payment_reader_archive_1_15"})
+                                if reader.get("status") == "candidate_available":
+                                    candidate = validate_container_archive(reader["args"], directory / name)
                                     emit("container_archive_validator", candidate)
                                     if candidate["category"] == "ok":
                                         result = candidate
@@ -328,6 +417,8 @@ jobs:
                             after = (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns)
                             if not stat.S_ISREG(info.st_mode) or after != before[path.name]:
                                 raise ValueError("snapshot_changed_during_check")
+                        if "container_cleanup_unverified" in errors:
+                            raise ValueError("container_cleanup_unverified")
                         failed = [r for r in results if r["category"] != "ok"]
                         if failed:
                             raise ValueError("archive_validator_failed_or_unknown")

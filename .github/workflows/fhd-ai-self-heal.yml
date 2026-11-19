@@ -5,12 +5,22 @@
 name: AI Self-Heal
 
 on:
+  schedule:
+    - cron: '17,47 * * * *'
   workflow_run:
     # Match display names in one inline list; the publisher path-prefixes sequence items.
     workflows: ["CI/CD Pipeline", "CI - Backend Python", "Source Governance", "Smoke Tests", "Employee Smoke Gate", "MODstore tests", "cvm-autonomy-watcher", "Deploy MODstore Production", "fhd-deploy", "Release gate CI", "Capacity staging monthly", "desktop-macos-smoke", "ci-mobile-flutter", "ci-mobile-ios", "Deploy corp site (xiu-ci.com)"]
     types: [completed]
   workflow_dispatch:
     inputs:
+      reconcile:
+        description: "核对并恢复已有故障，不创建新的事故"
+        type: boolean
+        default: false
+      dry_run:
+        description: "仅盘点已有事故，不续接或关单"
+        type: boolean
+        default: true
       run_id:
         description: "失败 workflow run id（手动触发用）"
         required: false
@@ -31,7 +41,7 @@ on:
 # Keep the latest failed source run; isolate manual, deploy and monitoring runs.
 concurrency:
   group: >-
-    ai-self-heal-${{ (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'failure' && !contains(fromJSON('["cvm-autonomy-watcher", "Deploy MODstore Production", "fhd-deploy", "Capacity staging monthly", "Deploy corp site (xiu-ci.com)"]'), github.event.workflow_run.name)) && format('src-{0}-{1}', github.event.workflow_run.name, github.event.workflow_run.head_branch) || format('run-{0}', github.run_id) }}
+    ai-self-heal-${{ (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'failure' && !contains(fromJSON('["cvm-autonomy-watcher", "Deploy MODstore Production", "fhd-deploy", "Capacity staging monthly", "Deploy corp site (xiu-ci.com)"]'), github.event.workflow_run.name)) && format('src-{0}-{1}', github.event.workflow_run.workflow_id, github.event.workflow_run.head_branch) || format('run-{0}', github.run_id) }}
   cancel-in-progress: true
 
 permissions:
@@ -48,15 +58,12 @@ defaults:
 jobs:
   self-heal:
     # 仅当 workflow_run 失败时触发；workflow_dispatch 手动触发不受此条件限制
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'failure' }}
+    if: ${{ (github.event_name == 'workflow_dispatch' && !inputs.reconcile) || (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'failure') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GITHUB_REPOSITORY: ${{ github.repository }}
-      XCAGI_LLM_API_KEY: ${{ secrets.XCAGI_LLM_API_KEY }}
-      XCAGI_LLM_BASE_URL: ${{ secrets.XCAGI_LLM_BASE_URL }}
-      XCAGI_LLM_MODEL: ${{ secrets.XCAGI_LLM_MODEL }}
       # Durable GitHub-side circuit breaker. Repository variables may tighten
       # these bounds without changing code; missing/invalid values fail to defaults.
       AI_SELF_HEAL_MAX_OPEN_INCIDENTS: ${{ vars.AI_SELF_HEAL_MAX_OPEN_INCIDENTS || '20' }}
@@ -69,10 +76,10 @@ jobs:
       MODSTORE_OPS_INGEST_TOKEN: ${{ secrets.MODSTORE_OPS_INGEST_TOKEN }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Set up Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.11"
           cache: pip
@@ -89,18 +96,65 @@ jobs:
         working-directory: FHD
         env:
           GITHUB_EVENT_PATH: ${{ github.event_path }}
+          SOURCE_WORKFLOW: ${{ github.event.workflow_run.name }}
+          SOURCE_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          SOURCE_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
         run: |
           python scripts/ci/ai_self_heal.py \
-            --workflow "${{ github.event.workflow_run.name }}" \
-            --branch "${{ github.event.workflow_run.head_branch }}" \
-            --head-repo "${{ github.event.workflow_run.head_repository.full_name }}"
+            --workflow "$SOURCE_WORKFLOW" \
+            --branch "$SOURCE_BRANCH" \
+            --head-repo "$SOURCE_REPO"
 
       - name: Run ai-self-heal (manual dispatch)
         if: ${{ github.event_name == 'workflow_dispatch' }}
         working-directory: FHD
+        env:
+          SOURCE_RUN_ID: ${{ inputs.run_id }}
+          SOURCE_WORKFLOW: ${{ inputs.workflow_name }}
+          SOURCE_BRANCH: ${{ inputs.branch }}
+          SOURCE_REPO: ${{ inputs.head_repo }}
         run: |
           python scripts/ci/ai_self_heal.py \
-            --run-id ${{ inputs.run_id }} \
-            --workflow "${{ inputs.workflow_name }}" \
-            --branch "${{ inputs.branch }}" \
-            --head-repo "${{ inputs.head_repo }}"
+            --run-id "$SOURCE_RUN_ID" \
+            --workflow "$SOURCE_WORKFLOW" \
+            --branch "$SOURCE_BRANCH" \
+            --head-repo "$SOURCE_REPO"
+
+  reconcile:
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.reconcile)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: ai-self-heal-incident-reconciliation
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      issues: write
+      actions: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.11"
+      - name: Install pinned GitHub adapter dependencies
+        working-directory: FHD
+        run: pip install -r scripts/ci/requirements-self-heal.txt
+      - name: Reconcile durable incident receipts
+        working-directory: FHD
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        run: |
+          args=(--reconcile)
+          if [ "$DRY_RUN" = "true" ]; then args+=(--dry-run); fi
+          python scripts/ci/ai_self_heal.py "${args[@]}"
+      - name: Retain incident reconciliation evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: self-heal-reconciliation-${{ github.run_id }}
+          path: FHD/test_reports/self_heal_reconciliation.json
+          if-no-files-found: error

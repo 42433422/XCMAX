@@ -35,7 +35,6 @@ on:
 
 permissions:
   contents: read
-  security-events: write  # 上传 SARIF 到 Code Scanning
 
 concurrency:
   group: desktop-security-scan-${{ github.ref }}
@@ -51,6 +50,8 @@ jobs:
         working-directory: FHD/desktop
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Node
         uses: actions/setup-node@v7
@@ -67,13 +68,6 @@ jobs:
         run: |
           bash scripts/security-scan.sh --gate-severity "${GATE_SEVERITY}"
 
-      - name: Upload SARIF to GitHub Code Scanning
-        if: always()
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: /tmp/en-report/electronegativity.sarif
-          category: electronegativity
-
       - name: Upload report artifact
         if: always()
         uses: actions/upload-artifact@v4
@@ -81,3 +75,25 @@ jobs:
           name: electronegativity-report
           path: /tmp/en-report/
           retention-days: 30
+
+  upload-security-report:
+    # A fresh runner only parses SARIF data; npm and candidate scripts never
+    # share an identity or filesystem with a security-events write token.
+    needs: electronegativity-scan
+    if: >-
+      always() && needs.electronegativity-scan.result != 'cancelled' &&
+      (github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: electronegativity-report
+          path: reports
+      - uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: reports/electronegativity.sarif
+          category: electronegativity

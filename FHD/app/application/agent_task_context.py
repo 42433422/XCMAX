@@ -64,3 +64,10 @@ def scoped_personal_memory_id(context: dict[str, Any] | None) -> str:
         "personal-memory:v1:"
         + hashlib.sha256(json.dumps(scope, ensure_ascii=False).encode()).hexdigest()
     )
+
+
+def authorized_personal_memory_id(context: dict[str, Any]) -> str:
+    """Resolve a namespace only after validating the server-bound live actor."""
+    from app.infrastructure.auth.agent_mod_scope import validate_actor_context
+
+    return "" if validate_actor_context(context) is not None else scoped_personal_memory_id(context)

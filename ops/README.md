@@ -60,28 +60,17 @@ cd /root/XCMAX && git pull && bash ops/install.sh
 
 ## 3. 部署正道（替代 scp 热补）
 
-链路（已存在，本工具包把最后一公里接通）：
+服务端交付按 [CI SSOT](../docs/CI_SSOT.md) 使用正式工作流；合入 `main` 只确认源码整合。产品 SHA 与发布控制器 SHA 分别记录，发布前取得同产品 SHA 的完整主线 CI 和有效全量安全扫描。
 
-```
-git push main → CI (fhd-ci-cd.yml: 全部质量门 → cvm-push-release)
-  → scp tarball + fhd-manifest.json(sha256) 到 /var/www/update/releases/stable/server/
-  → 服务器 cron fhd-auto-update.sh（每 5 分钟）
-  → sha256 校验 → 备份到 /opt/fhd-full-backups/pre-<ts> → rsync 同步
-  → systemctl restart fhd-full → /api/health 健康门(90 次×3s)
-  → 失败自动回滚到备份
-```
-
-- **发一版 = 合并进 main，10 分钟内自动上线。** 不要再 scp。
-- 急修也走 main（可 admin 合并），链路端到端 ≈ CI 时长 + ≤5 分钟。
-- 真急到等不了 CI：热补后 **24h 内回灌 PR**——漂移检测每天会点名未回灌文件。
-- 验证某版是否上线：`cat /opt/fhd-full/.deploy-sha256` 对比 manifest 的 `sha256`，
-  或 `tail /var/log/fhd-auto-update.log`。
-- 手动强制应用一次：`bash /root/XCMAX/FHD/scripts/deploy/fhd-auto-update.sh`。
-- MODstore 部署：GitHub Actions 手动跑 `Deploy MODstore Production`（已有，含健康门与诊断）。
+1. MODstore：通过正常 PR 将真实批准引用、预期生产 SHA 和 CI/扫描 run ID 固定到 `ops/releases/<产品 SHA>.json`，再从 `main` 调度 `modstore-prod-deploy.yml`。保留备份、迁移、原子切换、失败回退、异地同步和运行身份校验。
+2. FHD：显式调度 `fhd-ci-cd.yml`，传入产品 SHA、扫描证据及 `push_to_cvm=true`。stable 上传使用 `FHD_PUSH_APPLY_NOW=0`；之后通过 `fhd-deploy.yml` 的 production environment 与原批准账本执行 `apply-latest`，并绑定 `action_id=release:<产品 SHA>`。
+3. 上线后核对制品 manifest、API、调度器和管理台身份，完成实际业务读路径及至少 15 分钟观察。服务器发布与桌面渠道保留各自的正式验收和版本身份。
 
 ## 4. 备份与恢复演练
 
 产物：`/var/backups/xcmax/daily/<YYYYMMDD>/`（另有 weekly×4、monthly×6）。
+
+发布前只读检查使用 `corp-host-maintenance-preflight.yml`，归档解析复用 [PostgreSQL pg_restore](https://www.postgresql.org/docs/current/app-pgrestore.html)（[PostgreSQL License](https://www.postgresql.org/about/licence/)）。沿用已配置且已安装的客户端，容器执行锁定 immutable image ID，并记录实际版本；标准 PGDATA 声明卷仅可由精确的只读有界 tmpfs 覆盖，保留无网络、无宿主挂载、无数据库连接和资源限制。payment 专用 reader 未配置、宿主明确不支持且归档格式为 `1.15` 时，可由已核验为 PostgreSQL 16 或更新版本的通用 reader 离线执行固定 `--list`；专用配置无效不能被回退覆盖，导出端镜像与 server-major 政策不变。五项清单、哈希、归档读取和清理均成功，才确认归档完整且可读；这不等于实际数据库恢复演练或 RPO/RTO 测量。
 
 **恢复 FHD PostgreSQL**（先停写入方）：
 ```bash

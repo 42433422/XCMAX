@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+from app.application.agent_orchestrator import InMemoryAgentRunRepository
 from app.application.agent_orchestrator.orchestrator import AgentOrchestrator
 from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, plan_to_dict
@@ -59,7 +60,7 @@ def _executor(output: dict) -> MagicMock:
 
 
 def test_preview_blocker_pauses_run_instead_of_failing():
-    repo = MagicMock()
+    repo = MagicMock(spec=InMemoryAgentRunRepository)
     repo.save.side_effect = lambda run: run
     executor = _executor(
         {
@@ -91,7 +92,7 @@ def test_preview_blocker_pauses_run_instead_of_failing():
 
 
 def test_approved_pause_reruns_step_with_resume_params():
-    repo = MagicMock()
+    repo = MagicMock(spec=InMemoryAgentRunRepository)
     repo.save.side_effect = lambda run: run
     pause_output = {
         "success": True,

@@ -159,8 +159,15 @@ def _prepare(tmp: Path):
             engine.dispose()
 
 
-def test_two_processes_one_version_conflict():
-    ctx = multiprocessing.get_context("spawn")
+@pytest.fixture
+def spawn_context(monkeypatch):
+    # Spawn reimports this module; other suites may prepend a different tests package.
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[2]))
+    return multiprocessing.get_context("spawn")
+
+
+def test_two_processes_one_version_conflict(spawn_context):
+    ctx = spawn_context
     with tempfile.TemporaryDirectory(prefix="e22-race-") as raw, _prepare(Path(raw)) as engine:
         tmp = Path(raw)
         unit_id = _seed(engine, "并发客户甲", "13800000000", 11)
@@ -207,8 +214,8 @@ def test_two_processes_one_version_conflict():
         assert _version(engine, unit_id) == latest + 1
 
 
-def test_different_customers_both_succeed():
-    ctx = multiprocessing.get_context("spawn")
+def test_different_customers_both_succeed(spawn_context):
+    ctx = spawn_context
     with tempfile.TemporaryDirectory(prefix="e22-pair-") as raw, _prepare(Path(raw)) as engine:
         tmp = Path(raw)
         left_id = _seed(engine, "并发客户乙", "13800000001", 11)

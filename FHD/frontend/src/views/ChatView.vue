@@ -17,6 +17,10 @@
         @reconcile-turn="reconcileTurn"
         @confirm-destructive="confirmDestructiveScope"
         :session-key="messageSessionKey"
+        :has-earlier="messagesHaveEarlier"
+        :loading-earlier="earlierMessagesLoading"
+        :earlier-error="earlierMessagesError"
+        :load-earlier="loadEarlierMessages"
         :proactive-suggestions="proactiveSuggestionsByMessage"
         @pick-proactive-suggestion="pickProactiveSuggestion"
         :messages="messages"
@@ -390,6 +394,7 @@ const chatRefBag = {
 
 const {
   messages,
+  messagesHaveEarlier, earlierMessagesLoading, earlierMessagesError, loadEarlierMessages,
   cacheError,
   retryMessagesCache,
   retryMessageSave,

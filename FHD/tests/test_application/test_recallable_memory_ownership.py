@@ -23,6 +23,20 @@ from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 @pytest.fixture
 def memory(tmp_path, monkeypatch, trusted_actor):
+    from app.application.persy_memory_app_service import PersyMemoryApplicationService
+    from app.domain.shared_services.user_memory_service import UserMemoryService, UserMemoryStore
+
+    monkeypatch.setenv("XCAGI_LONG_TERM_MEMORY_BACKEND", "legacy")
+    UserMemoryStore._instance = None
+    UserMemoryService._instance = None
+    authority = UserMemoryService(storage_type="memory")
+    monkeypatch.setattr(
+        "app.domain.shared_services.user_memory_service.get_user_memory_service", lambda: authority
+    )
+    monkeypatch.setattr(
+        "app.application.persy_memory_app_service.get_persy_memory_app_service",
+        lambda: PersyMemoryApplicationService(authority),
+    )
     actor = trusted_actor(user_id=7, tenant_id=2, permissions=["dataset.read", "dataset.write"])
     ctx = {**actor.context, "session_id": "memory-session", "local_user_id": 7}
     namespace = scoped_conversation_user_id("7", ctx)
@@ -42,12 +56,22 @@ def capture(namespace, ctx):
     before = deepcopy(reply)
     persist_recallable_chat_turn(
         user_id=namespace,
-        message="A synthetic question",
+        message="我喜欢简洁报告",
         source="chat",
         context=ctx,
         response_data=reply,
     )
     assert reply == before
+
+
+def confirm(ctx):
+    from app.domain.shared_services.user_memory_service import get_user_memory_service
+
+    authority = get_user_memory_service()
+    owner = scoped_personal_memory_id(ctx)
+    rows = authority.list_memories(owner)
+    assert rows and rows[0]["status"] == "pending"
+    authority.confirm_memory_candidate(owner, rows[0]["memory_id"])
 
 
 def count(store):
@@ -108,8 +132,11 @@ def test_authenticated_existing_namespace_persists_and_recalls(memory):
     memory_namespace = scoped_personal_memory_id(ctx)
     assert authorized_memory_context(namespace, ctx) == (memory_namespace, None)
     capture(namespace, ctx)
+    assert count(store) == 0
+    assert rag.query(memory_namespace, "简洁报告")["hits"] == []
+    confirm(ctx)
     assert count(store) == 1
-    assert rag.query(memory_namespace, "synthetic question")["hits"]
+    assert rag.query(memory_namespace, "简洁报告")["hits"]
     with store._get_conn() as conn:
         assert conn.execute(
             "SELECT index_id,user_id FROM user_memory_vector_indexes"
@@ -119,12 +146,13 @@ def test_authenticated_existing_namespace_persists_and_recalls(memory):
 def test_authenticated_memory_is_available_in_a_new_session(memory):
     _, ctx, namespace, _store, rag = memory
     capture(namespace, ctx)
+    confirm(ctx)
     next_session = {**ctx, "session_id": "next-session", "conversation_id": "next-session"}
     next_namespace = scoped_conversation_user_id("7", next_session)
     memory_namespace = scoped_personal_memory_id(next_session)
     assert next_namespace != namespace
     assert authorized_memory_context(next_namespace, next_session) == (memory_namespace, None)
-    assert rag.query(memory_namespace, "synthetic question")["hits"]
+    assert rag.query(memory_namespace, "简洁报告")["hits"]
 
 
 def test_live_session_revocation_blocks_memory(memory):
@@ -142,6 +170,7 @@ def test_planner_cannot_recall_existing_namespace_anonymously(memory, monkeypatc
     _, ctx, namespace, _, rag = memory
     memory_namespace = scoped_personal_memory_id(ctx)
     capture(namespace, ctx)
+    confirm(ctx)
     from app.application.workflow.planner import LLMWorkflowPlanner
 
     calls = []
@@ -153,11 +182,11 @@ def test_planner_cannot_recall_existing_namespace_anonymously(memory, monkeypatc
         return result
 
     monkeypatch.setattr(rag, "query", query)
-    v2 = MagicMock()
-    v2.format_memory_v2_for_prompt.return_value = "无已确认记忆"
-    monkeypatch.setattr(
-        "app.domain.shared_services.user_memory_service.get_user_memory_service", lambda: v2
-    )
+    from app.domain.shared_services.user_memory_service import get_user_memory_service
+
+    v2 = get_user_memory_service()
+    formatter = MagicMock(wraps=v2.format_memory_v2_for_prompt)
+    monkeypatch.setattr(v2, "format_memory_v2_for_prompt", formatter)
 
     class AfterMemory(Exception):
         pass
@@ -168,16 +197,13 @@ def test_planner_cannot_recall_existing_namespace_anonymously(memory, monkeypatc
     planner = LLMWorkflowPlanner(ai_service=MagicMock())
     monkeypatch.setattr(planner, "_plan_with_llm", stop)
     with pytest.raises(AfterMemory):
-        planner.plan(
-            namespace, "hello synthetic question", {}, context=ctx if authenticated else {}
-        )
-    assert len(calls) == int(authenticated) * 2
+        planner.plan(namespace, "简洁报告", {}, context=ctx if authenticated else {})
+    assert len(calls) == int(authenticated)
     assert v2.format_memory_v2_for_prompt.call_count == int(authenticated)
     if authenticated:
         assert calls[0][0]["user_id"] == memory_namespace
-        assert calls[1][0]["user_id"] == namespace
         assert calls[0][1]["hits"]
-        assert v2.format_memory_v2_for_prompt.call_args.kwargs["user_id"] == "7"
+        assert v2.format_memory_v2_for_prompt.call_args.kwargs["user_id"] == memory_namespace
 
 
 def test_dataset_permissions_rederived_not_body_claims(memory, monkeypatch):
@@ -211,7 +237,7 @@ def test_authenticated_dataset_writer_keeps_namespace_and_derived_access(memory,
         "app.application.persy_memory_app_service.get_persy_memory_app_service", lambda: persy
     )
     capture(namespace, ctx)
-    assert count(store) == 1
+    assert count(store) == 0
     kwargs = persy.capture_conversation_turn.call_args.kwargs
     assert kwargs["access_context"]["actor_id"] == "7"
     assert kwargs["access_context"]["tenant_id"] == "2"

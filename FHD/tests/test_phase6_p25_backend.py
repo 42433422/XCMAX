@@ -38,8 +38,10 @@ from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from sqlalchemy import event
 
 from app.application import ai_chat_rag_integration as rag_integration
+from app.db.models import AIConversation, AIConversationSession
 from app.domain.shared_services.report_service import ReportService
 from app.fastapi_routes.rbac import router as rbac_router
 from app.infrastructure.persistence.compat_db import queries as compat_queries
@@ -54,6 +56,7 @@ from app.neuro_bus.bus import (
 )
 from app.neuro_bus.events.events_base import EventPriority, NeuroEvent
 from app.services import xcmax_sync_service as sync_svc
+from tests.fixtures.backend_ci_isolation import conversation_storage as conversation_storage
 
 # -----------------------------------------------------------------------------
 # Helpers
@@ -78,89 +81,64 @@ def _mock_db_ctx(mock_db):
 class TestConversationServiceUncoveredBranches:
     """补充 ``ConversationService`` 的异常/边界分支（p1 已覆盖 happy path）。"""
 
-    def test_save_message_existing_session_with_intent_and_metadata(self):
+    def test_save_message_existing_session_with_intent_and_metadata(self, conversation_storage):
         from app.domain.shared_services.conversation_service import ConversationService
 
         svc = ConversationService()
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        existing_session = MagicMock()
-        existing_session.message_count = 0
-        existing_session.user_id = 7
-        mock_query.filter.return_value.first.return_value = existing_session
-        mock_db.query.return_value = mock_query
-        conversation = MagicMock()
-        conversation.id = 11
-        conversation.intent = "confirm"
-        conversation.conversation_metadata = "{}"
+        session_id = svc.create_session(user_id="7", title="existing")
+        msg_id = svc.save_message(
+            session_id, "7", "assistant", "ok", intent="confirm", metadata='{"trace":"receipt"}'
+        )
 
-        with (
-            patch(
-                "app.domain.shared_services.conversation_service.get_db",
-                return_value=_mock_db_ctx(mock_db),
-            ),
-            patch.object(svc, "_normalize_user_id", return_value=7),
-            patch(
-                "app.domain.shared_services.conversation_service.AIConversation",
-                return_value=conversation,
-            ),
-        ):
-            msg_id = svc.save_message(
-                "sess-1", "7", "assistant", "ok", intent="confirm", metadata="{}"
-            )
+        with conversation_storage() as db:
+            conversation = db.get(AIConversation, msg_id)
+            assert conversation.intent == "confirm"
+            assert json.loads(conversation.conversation_metadata) == {"trace": "receipt"}
+            session = db.query(AIConversationSession).one()
+            assert session.user_id == 7 and session.message_count == 1
+            assert session.title == "existing"
 
-        assert msg_id == 11
-        assert existing_session.message_count == 1
-        assert conversation.intent == "confirm"
-        assert conversation.conversation_metadata == "{}"
-        mock_db.commit.assert_called_once()
-
-    def test_save_message_user_id_none_stores_none(self):
+    def test_save_message_user_id_none_stores_none(self, conversation_storage):
         from app.domain.shared_services.conversation_service import ConversationService
 
         svc = ConversationService()
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_query.filter.return_value.first.return_value = None
-        mock_db.query.return_value = mock_query
-        conversation = MagicMock()
-        conversation.id = 12
-        conversation.user_id = None
+        msg_id = svc.save_message("s", None, "user", "hi")
 
-        with (
-            patch(
-                "app.domain.shared_services.conversation_service.get_db",
-                return_value=_mock_db_ctx(mock_db),
-            ),
-            patch.object(svc, "_normalize_user_id", return_value=None),
-            patch(
-                "app.domain.shared_services.conversation_service.AIConversation",
-                return_value=conversation,
-            ),
-        ):
-            svc.save_message("s", None, "user", "hi")
+        with conversation_storage() as db:
+            assert db.get(AIConversation, msg_id).user_id is None
+            session = db.query(AIConversationSession).one()
+            assert session.user_id is None and session.message_count == 1
+        with pytest.raises(PermissionError, match="another user"):
+            svc.save_message("s", "1", "user", "cannot claim unowned history")
 
-        assert conversation.user_id is None
-
-    def test_save_message_db_rollback_on_flush_error(self):
+    def test_save_message_db_rollback_on_flush_error(self, conversation_storage):
         from app.domain.shared_services.conversation_service import ConversationService
 
         svc = ConversationService()
-        mock_db = MagicMock()
-        mock_db.flush.side_effect = RuntimeError("flush failed")
-        mock_db.query.return_value.filter.return_value.first.return_value.user_id = 1
+        session_id = svc.create_session(user_id="1", title="unchanged")
 
-        with (
-            patch(
-                "app.domain.shared_services.conversation_service.get_db",
-                return_value=_mock_db_ctx(mock_db),
-            ),
-            patch.object(svc, "_normalize_user_id", return_value=1),
-            patch("app.domain.shared_services.conversation_service.AIConversation"),
-        ):
-            with pytest.raises(RuntimeError, match="flush failed"):
-                svc.save_message("s", "1", "user", "hi")
-        mock_db.rollback.assert_called_once()
+        def fail_insert(_mapper, _connection, _target):
+            raise RuntimeError("flush failed")
+
+        event.listen(AIConversation, "before_insert", fail_insert)
+        try:
+            with patch.object(
+                conversation_storage.class_,
+                "rollback",
+                autospec=True,
+                side_effect=conversation_storage.class_.rollback,
+            ) as rollback:
+                with pytest.raises(RuntimeError, match="flush failed"):
+                    svc.save_message(session_id, "1", "user", "hi")
+                rollback.assert_called_once()
+        finally:
+            event.remove(AIConversation, "before_insert", fail_insert)
+
+        with conversation_storage() as db:
+            assert db.query(AIConversation).count() == 0
+            session = db.query(AIConversationSession).one()
+            assert session.message_count == 0 and session.title == "unchanged"
+            assert session.revision == 0 and session.deleted_at is None
 
     def test_get_session_messages_limit_zero(self):
         from app.domain.shared_services.conversation_service import ConversationService
@@ -179,23 +157,25 @@ class TestConversationServiceUncoveredBranches:
 
         assert result == []
 
-    def test_get_sessions_user_id_empty_string_no_filter(self):
+    def test_get_sessions_empty_user_id_excludes_deleted_sessions(self, conversation_storage):
         from app.domain.shared_services.conversation_service import ConversationService
 
         svc = ConversationService()
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        mock_query.order_by.return_value.limit.return_value.all.return_value = []
-        mock_db.query.return_value = mock_query
+        with conversation_storage.begin() as db:
+            db.add_all(
+                [
+                    AIConversationSession(session_id="first", user_id=1),
+                    AIConversationSession(session_id="second", user_id=7),
+                    AIConversationSession(session_id="unowned", user_id=None),
+                    AIConversationSession(
+                        session_id="deleted", user_id=1, deleted_at=datetime.now(), revision=1
+                    ),
+                ]
+            )
 
-        with patch(
-            "app.domain.shared_services.conversation_service.get_db",
-            return_value=_mock_db_ctx(mock_db),
-        ):
-            result = svc.get_sessions(user_id="", limit=10)
+        result = svc.get_sessions(user_id="", limit=10)
 
-        assert result == []
-        mock_query.filter.assert_not_called()
+        assert {row[1] for row in result} == {"first", "second", "unowned"}
 
     def test_get_sessions_query_error_rollback_not_called(self):
         from app.domain.shared_services.conversation_service import ConversationService
@@ -228,24 +208,21 @@ class TestConversationServiceUncoveredBranches:
         assert result is True
         assert session.title == ""
 
-    def test_delete_session_no_messages_still_deletes_session(self):
+    def test_delete_session_no_messages_still_retains_tombstone(self, conversation_storage):
         from app.domain.shared_services.conversation_service import ConversationService
 
         svc = ConversationService()
-        mock_db = MagicMock()
-        mock_query = MagicMock()
-        session = mock_query.filter.return_value.first.return_value
-        mock_db.query.return_value = mock_query
+        session_id = svc.create_session(user_id="7", title="empty")
+        assert svc.delete_session(session_id, user_id="1") is False
+        assert svc.delete_session(session_id, user_id="7") is True
 
-        with patch(
-            "app.domain.shared_services.conversation_service.get_db",
-            return_value=_mock_db_ctx(mock_db),
-        ):
-            result = svc.delete_session("s1")
-
-        assert result is True
-        mock_db.delete.assert_called_once_with(session)
-        mock_db.commit.assert_called_once()
+        with conversation_storage() as db:
+            session = db.query(AIConversationSession).one()
+            assert session.session_id == session_id and session.user_id == 7
+            assert session.deleted_at is not None and session.revision == 1
+            assert session.title == session.summary == ""
+            assert session.message_count == 0
+            assert db.query(AIConversation).count() == 0
 
     def test_create_session_title_none(self):
         from app.domain.shared_services.conversation_service import ConversationService

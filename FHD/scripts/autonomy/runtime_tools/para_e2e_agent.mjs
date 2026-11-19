@@ -29,6 +29,7 @@ import {
 import { createCredentialVault, parseCredentialGrant } from './credential_vault.mjs';
 import { createReceiptOutbox, createParaReportOutbox, requestManagedParaSession } from './control_receipt_outbox.mjs';
 import { sourceIdentity } from './control_git_handoff.mjs';
+import { candidateMode, exportCandidate, githubReadEnv } from './github_para_candidate.mjs';
 import {
   describeCodexFailure,
   describeTraeFailure,
@@ -590,7 +591,7 @@ const git = async (cwd, args, options = {}) => {
     maxBuffer: 10 * 1024 * 1024,
     timeout: options.timeout ?? gitCommandTimeoutMs,
     env: {
-      ...process.env,
+      ...githubReadEnv(process.env),
       GIT_TERMINAL_PROMPT: '0',
     },
   });
@@ -945,6 +946,8 @@ const defaultCapabilities = () => ({
 });
 
 async function prepareWorkspace(task) {
+  // The isolated execution job starts from its trusted workflow commit, never moving main.
+  if (candidateMode()) task = { ...task, base_branch: process.env.GITHUB_SHA };
   const repoUrl = (task.repo_url || '').trim();
   const root = paraReports.handles(task) ? join(homedir(), 'XCMAX-runtime', 'control-workspaces') : workspaceRoot;
   const taskDir = join(root, safeTaskDirName(task));
@@ -1134,6 +1137,7 @@ async function finalizeTask(ws, task, taskDir, baseHead = '') {
   if (!status || !status.trim()) {
     // 工作区干净但 HEAD 已移动：工具(如 trae)已自行 commit → 跳过空 commit，直接 push。
     if (await headMovedFromBase(taskDir, baseHead)) {
+      if (candidateMode()) return settleCandidate(ws, task, taskDir, baseHead);
       const pushedCommitted = await pushBranch(taskDir, task.work_branch);
       return settleAfterPush(ws, task, taskDir, baseHead, pushedCommitted,
         pushedCommitted
@@ -1153,11 +1157,20 @@ async function finalizeTask(ws, task, taskDir, baseHead = '') {
   await git(taskDir, ['config', 'user.email', 'e2e@devfleet.local']);
   await git(taskDir, ['add', '-A', '--', '.']);
   await git(taskDir, ['commit', '-m', `devfleet: ${task.title}`]);
+  if (candidateMode()) return settleCandidate(ws, task, taskDir, baseHead);
   const pushed = await pushBranch(taskDir, task.work_branch);
   return settleAfterPush(ws, task, taskDir, baseHead, pushed,
     pushed
       ? 'E2E agent 已完成 commit 与 push'
       : 'E2E agent 已完成 commit（无可用远端，结果见日志/本地分支）');
+}
+
+async function settleCandidate(ws, task, taskDir, baseHead) {
+  const receipt = await exportCandidate(task, taskDir, baseHead);
+  await postTaskReport(task, { status: 'completed', progress: 100, content: JSON.stringify(receipt) });
+  send(ws, { type: 'task_progress', task_id: task.task_id, subtask_id: task.subtask_id,
+    progress: 100, status: 'completed' });
+  return true; // Only the Para code task ended. Management still requires publication and verification.
 }
 
 // 交付管道硬门：push 后由设备代理（系统侧）开 hold-merge PR，不依赖 Codex/Cursor 自觉。
@@ -1584,7 +1597,7 @@ async function handleTask(ws, task) {
           progress: 80,
           status: 'running',
         });
-        const finalized = await finalizeTask(ws, task, taskDir);
+        const finalized = await finalizeTask(ws, task, taskDir, baseHead);
         if (finalized) {
           return;
         }
@@ -1693,6 +1706,10 @@ function enqueueTask(ws, task) {
     const marker = request && `[xcmax:${createHash('sha256').update(request).digest('hex').slice(0, 32)}:`;
     if (!marker || !String(task?.title || '').startsWith(marker)) {
       console.error('[e2e-agent] rejected task outside this GitHub dispatch');
+      return false;
+    }
+    if (process.env.PARA_GITHUB_STAGE === 'resume' && !isReportOnlyTask(task)) {
+      void failTask(ws, task, 'isolated_resume_requires_read_only_verification');
       return false;
     }
   }
@@ -1831,6 +1848,7 @@ function publishToolStatus(ws) {
         github_request_id: process.env.PARA_GITHUB_REQUEST_ID,
         github_run_id: process.env.GITHUB_RUN_ID,
         github_run_attempt: process.env.GITHUB_RUN_ATTEMPT,
+        github_stage: process.env.PARA_GITHUB_STAGE,
       } : {}),
       platform: process.platform === 'darwin' ? 'macos' : process.platform === 'win32' ? 'windows' : process.platform,
       tool_preflight: preflight,

@@ -1125,66 +1125,40 @@ def test_pause_resume_and_cancel_agent_run(local_tools, trusted_actor, monkeypat
         assert cancelled["final_output"]["cancelled"] is True
 
 
-def test_retry_agent_run_preserves_task_identity_and_creates_new_attempt() -> None:
+def test_retry_agent_run_preserves_original_plan_and_task_identity() -> None:
     repository = get_agent_run_repository()
-    repository.clear()
-    clear_run_controls_for_tests()
     client = _client("owner")
-    patches = _planner_fallback_patches()
-    with (
-        patches[0],
-        patches[1],
-        patches[2],
-        patches[3],
-        patches[4],
-        patch(
-            "app.application.facades.tools_facade.execute_registered_workflow_tool",
-            return_value={"success": True, "data": []},
-        ),
-    ):
-        created = client.post(
-            "/api/agent/runs",
-            json={
-                "message": "核对库存",
-                "auto_execute": False,
-                "runtime_context": {
-                    "conversation_id": "conversation-42",
-                    "task_id": "conversation-42",
-                    "task_title": "库存核对任务",
-                },
-            },
-        ).json()["data"]
-        cancelled = client.post(f"/api/agent/runs/{created['run_id']}/cancel").json()["data"]
-        assert cancelled["status"] == "cancelled"
-
+    created = client.post(
+        "/api/agent/tasks",
+        json={
+            "task_id": "conversation-42",
+            "title": "库存核对任务",
+            "tool_id": "products",
+            "action": "query",
+            "params": {"keyword": "库存"},
+        },
+    ).json()["data"]
+    original = repository.get(created["run_id"])
+    original.status, original.steps[0].status = "failed", "failed"
+    repository.save(original)
+    get_task_execution_repository().transition(original.run_id, "failed", error_code="tool_failed")
+    with patch("app.application.facades.tools_facade.execute_registered_workflow_tool") as execute:
         response = client.post(
-            f"/api/agent/runs/{created['run_id']}/retry",
-            json={"runtime_context": {"task_id": "other-task", "conversation_id": "other-chat"}},
+            f"/api/agent/runs/{original.run_id}/retry",
+            json={
+                "runtime_context": {"task_id": "other-task", "conversation_id": "other-chat"},
+            },
         )
-        replay = client.post(f"/api/agent/runs/{created['run_id']}/retry", json={})
-
-    assert response.status_code == 200
-    retried_reference = response.json()["data"]
-    assert replay.status_code == 200
-    assert replay.json()["data"]["run_id"] == retried_reference["run_id"]
-    assert retried_reference["run_id"] != created["run_id"]
-    retried_stored = repository.get(retried_reference["run_id"])
-    assert retried_stored is not None
-    retried = retried_stored.to_dict()
-    assert retried["metadata"]["task_context"] == {
-        "task_id": "conversation-42",
-        "title": "库存核对任务",
-        "conversation_id": "conversation-42",
-        "root_run_id": created["run_id"],
-        "parent_run_id": created["run_id"],
-        "attempt": 2,
-        "workspace_id": "",
-        "workspace_path": "",
-        "isolation": "business_workspace",
-    }
-    previous = repository.get(created["run_id"])
-    assert previous is not None
-    assert previous.events[-1].event_type == "run.retry_created"
+        replay = client.post(f"/api/agent/runs/{original.run_id}/retry", json={})
+    assert response.status_code == replay.status_code == 200
+    assert response.json()["data"]["run_id"] == replay.json()["data"]["run_id"] == original.run_id
+    retried = repository.get(original.run_id)
+    assert retried.metadata["task_context"] == original.metadata["task_context"]
+    assert retried.metadata["plan"] == original.metadata["plan"]
+    assert retried.steps[0].step_id == original.steps[0].step_id
+    assert retried.status == get_task_execution_repository().get(original.run_id).state == "queued"
+    assert len(repository.list_recent(user_id="owner")) == 1
+    execute.assert_not_called()
 
 
 def test_retry_agent_run_rejects_non_terminal_task() -> None:
@@ -1196,7 +1170,29 @@ def test_retry_agent_run_rejects_non_terminal_task() -> None:
     response = _client("owner").post(f"/api/agent/runs/{run.run_id}/retry", json={})
 
     assert response.status_code == 409
-    assert "可以重试" in response.json()["message"]
+    assert "可续跑" in response.json()["message"]
+
+
+def test_retry_does_not_expose_internal_validation_exception() -> None:
+    repository = get_agent_run_repository()
+    run = repository.save(AgentRun(user_id="owner", message="retry", status="failed"))
+    with patch.object(
+        AgentOrchestrator, "retry_run", side_effect=ValueError("sqlite secret-path internal-table")
+    ):
+        response = _client("owner").post(f"/api/agent/runs/{run.run_id}/retry", json={})
+    assert response.status_code == 409
+    assert "核对原任务" in response.json()["message"]
+    assert "sqlite" not in response.text and "secret-path" not in response.text
+
+
+def test_retry_does_not_restart_cancelled_original_task() -> None:
+    repository = get_agent_run_repository()
+    run = repository.save(AgentRun(user_id="owner", message="cancelled", status="cancelled"))
+    with patch.object(AgentOrchestrator, "retry_run") as retry:
+        response = _client("owner").post(f"/api/agent/runs/{run.run_id}/retry", json={})
+    assert response.status_code == 409
+    retry.assert_not_called()
+    assert repository.get(run.run_id).status == "cancelled"
 
 
 def test_get_agent_run_returns_404_for_missing_run() -> None:
@@ -1292,13 +1288,12 @@ def test_unified_task_requires_approval_and_deduplicates_execution(
     assert mismatched.status_code == 409
 
 
-def test_unified_low_risk_task_cancel_and_retry_preserve_exact_approval() -> None:
+def test_cancelled_task_requires_an_explicit_new_business_request() -> None:
     repository = get_agent_run_repository()
-    repository.clear()
     client = _client("task-owner")
     body = {
-        "task_id": "chat-shipment-retry",
-        "title": "可恢复客户查询任务",
+        "task_id": "cancelled-customer-query",
+        "title": "客户查询任务",
         "tool_id": "customers",
         "action": "query",
         "params": {"keyword": "客户乙"},
@@ -1306,22 +1301,13 @@ def test_unified_low_risk_task_cancel_and_retry_preserve_exact_approval() -> Non
     created = client.post("/api/agent/tasks", json=body).json()["data"]
     cancelled = client.post(f"/api/agent/runs/{created['run_id']}/cancel").json()["data"]
     assert cancelled["status"] == "cancelled"
-
+    before = repository.get(created["run_id"]).to_dict()
     with patch("app.application.facades.tools_facade.execute_registered_workflow_tool") as execute:
         retried = client.post(f"/api/agent/runs/{created['run_id']}/retry", json={})
-
-    assert retried.status_code == 200
-    replay = client.post(f"/api/agent/runs/{created['run_id']}/retry", json={})
-    assert replay.json()["data"]["run_id"] == retried.json()["data"]["run_id"]
-    assert retried.json()["data"]["run_id"] != created["run_id"]
-    retried_run = repository.get(retried.json()["data"]["run_id"])
-    assert retried_run is not None
-    assert retried_run.status == "waiting_user"
-    assert retried_run.steps[0].tool_id == "customers"
-    assert retried_run.steps[0].action == "query"
-    assert retried_run.steps[0].params == body["params"]
-    assert retried_run.metadata["task_context"]["task_id"] == body["task_id"]
-    assert retried_run.metadata["task_context"]["attempt"] == 2
+    assert retried.status_code == 409
+    assert "新任务" in retried.json()["message"]
+    assert repository.get(created["run_id"]).to_dict() == before
+    assert len(repository.list_recent(user_id="task-owner")) == 1
     execute.assert_not_called()
 
 

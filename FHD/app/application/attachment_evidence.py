@@ -242,12 +242,20 @@ def _render_result(tool: str, result: dict[str, Any]) -> str:
     return _compact(result, SECTION_LIMIT)
 
 
-def _memory_block(message: str, user_id: str) -> str:
+def _memory_block(message: str, user_id: str, context: dict[str, Any] | None = None) -> str:
     try:
+        from app.application.agent_task_context import scoped_conversation_user_id
+        from app.application.ai_chat.conversation_history import authorized_memory_context
         from app.application.user_memory.retrieve import build_memory_context
 
+        trusted = context or {}
+        authorized = authorized_memory_context(
+            scoped_conversation_user_id(user_id, trusted), trusted
+        )
+        if authorized is None:
+            return ""
         text = str(
-            build_memory_context(message, scope="global", owner_id=user_id or "default") or ""
+            build_memory_context(message, scope="user", owner_id=authorized[0]) or ""
         ).strip()
     except BOUNDARY_ERRORS:
         logger.debug("attachment evidence memory recall skipped", exc_info=True)
@@ -262,6 +270,7 @@ async def collect_evidence(
     *,
     store: ArtifactStore | None = None,
     user_id: str = "",
+    memory_context: dict[str, Any] | None = None,
     limit_calls: int = MAX_CALLS,
     max_chars: int = 4000,
 ) -> dict[str, Any]:
@@ -325,7 +334,7 @@ async def collect_evidence(
         sections.append(f"【工件 {name} / {sheet}】\n{_render_result(tool, output)}")
 
     blocks: list[str] = []
-    memory = _memory_block(message, user_id)
+    memory = _memory_block(message, user_id, memory_context)
     if memory:
         blocks.append(memory)
     blocks.extend(sections)

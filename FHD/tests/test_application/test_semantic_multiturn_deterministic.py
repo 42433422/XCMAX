@@ -13,6 +13,7 @@ import json
 from unittest.mock import Mock
 
 from app.application.agent_orchestrator import AgentOrchestrator, InMemoryAgentRunRepository
+from app.application.ai_chat.dialogue_memory import bind_chat_turn_context
 from app.application.ai_chat.workflow_session import WorkflowSession
 from app.application.workflow.clarification_node import build_clarify_node
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
@@ -64,11 +65,12 @@ def _plan_with_candidates(
 
 
 def test_s2_candidate_reply_resolves_second_target_and_reaches_approval(
-    trusted_actor, monkeypatch
+    trusted_actor, monkeypatch, tmp_path
 ) -> None:
     from app.db.models.product import Product
     from app.infrastructure.tenant_scope import tenant_scope
 
+    monkeypatch.setenv("XCAGI_DIALOGUE_MEMORY_DIR", str(tmp_path / "dialogue-memory"))
     actor = trusted_actor(role="admin")
     with tenant_scope(actor.tenant_id), actor.factory.begin() as db:
         first = Product(tenant_id=actor.tenant_id, name="甲型涂料", model_number="A1", price=10)
@@ -92,6 +94,7 @@ def test_s2_candidate_reply_resolves_second_target_and_reaches_approval(
         "message": "把产品 A1 的价格改成 99 元",
     }
     with tenant_scope(actor.tenant_id):
+        bind_chat_turn_context(runtime_context["message"], runtime_context)
         run = orchestrator.start_run_from_plan(
             user_id=str(actor.user_id),
             message="把产品 A1 的价格改成 99 元",
@@ -178,10 +181,13 @@ def test_s3_missing_required_answer_resumes_beyond_clarification() -> None:
     assert continued.final_output.get("clarification", {}).get("step_id") != clarify_step.step_id
 
 
-def test_s4_approved_step_writes_database_and_verifies_readback(trusted_actor) -> None:
+def test_s4_approved_step_writes_database_and_verifies_readback(
+    trusted_actor, monkeypatch, tmp_path
+) -> None:
     from app.db.models.product import Product
     from app.infrastructure.tenant_scope import tenant_scope
 
+    monkeypatch.setenv("XCAGI_DIALOGUE_MEMORY_DIR", str(tmp_path / "dialogue-memory"))
     actor = trusted_actor(role="admin")
     with tenant_scope(actor.tenant_id), actor.factory.begin() as db:
         first = Product(tenant_id=actor.tenant_id, name="甲型涂料", model_number="A1", price=10)
@@ -206,6 +212,7 @@ def test_s4_approved_step_writes_database_and_verifies_readback(trusted_actor) -
         "message": "把产品 A1 的价格改成 99 元",
     }
     with tenant_scope(actor.tenant_id):
+        bind_chat_turn_context(runtime_context["message"], runtime_context)
         run = orchestrator.start_run_from_plan(
             user_id=str(actor.user_id),
             message="把产品 A1 的价格改成 99 元",
@@ -247,7 +254,7 @@ def test_s4_approved_step_writes_database_and_verifies_readback(trusted_actor) -
             assert int(other.price) == 10, "未选中的候选不应被修改"
 
 
-def test_s1_recent_turns_reach_planner_prompt(monkeypatch, tmp_path) -> None:
+def test_s1_recent_turns_reach_planner_prompt(monkeypatch, tmp_path, dialogue_db) -> None:
     from app.application.ai_chat.dialogue_memory import (
         prepare_chat_turn,
         recent_conversation_messages,

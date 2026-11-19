@@ -11,9 +11,6 @@ from app.application.dataset_rag_app_service import (
 )
 from app.application.persy_memory_graph import PersyMemoryGraphMixin
 from app.application.persy_memory_utils import (
-    _VISIBLE_MEMORY_STATUSES as _VISIBLE_MEMORY_STATUSES,
-)
-from app.application.persy_memory_utils import (
     PERSY_MEMORY_ACTIVE as PERSY_MEMORY_ACTIVE,
 )
 from app.application.persy_memory_utils import (
@@ -25,6 +22,7 @@ from app.application.persy_memory_utils import (
 from app.application.persy_memory_utils import (
     _lexical_score as _lexical_score,
 )
+from app.application.persy_memory_utils import _memory_owner_id, _personal_preference
 from app.application.persy_memory_utils import (
     _memory_owners as _memory_owners,
 )
@@ -41,9 +39,6 @@ from app.application.persy_memory_utils import (
     _search_tokens as _search_tokens,
 )
 from app.application.persy_memory_utils import (
-    _tenant_owner_id as _tenant_owner_id,
-)
-from app.application.persy_memory_utils import (
     _utc_now_iso as _utc_now_iso,
 )
 from app.application.persy_memory_utils import (
@@ -52,10 +47,12 @@ from app.application.persy_memory_utils import (
 from app.application.persy_memory_utils import (
     merge_memory_graph as merge_memory_graph,
 )
+from app.application.user_memory.policy import is_recallable_memory
 from app.domain.shared_services.user_memory_service import (
     UserMemoryService,
     get_user_memory_service,
 )
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _SENSITIVE_PATTERN = re.compile(
     r"(?:password|passcode|api[_ -]?key|access[_ -]?token|secret|验证码|密码|密钥)",
@@ -97,19 +94,105 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
         denied = _permission_denied(access, DATASET_WRITE_PERMISSION)
         if denied is not None:
             return {**denied, "created_count": 0, "candidates": []}
+        normalized_scope = str(scope or "user").strip().lower()
+        if normalized_scope not in {"user", "tenant", "global_preference"}:
+            return {
+                "success": False,
+                "created_count": 0,
+                "error_code": "persy_memory_invalid_scope",
+            }
+        owner_id = _memory_owner_id(access, normalized_scope)
+        return self._capture_for_owner(
+            owner_id=owner_id,
+            access=access,
+            normalized_scope=normalized_scope,
+            user_message=user_message,
+            assistant_message=assistant_message,
+            session_id=session_id,
+            source=source,
+        )
+
+    def capture_personal_turn(
+        self,
+        *,
+        user_id: str,
+        context: dict[str, Any],
+        user_message: str,
+        assistant_message: str = "",
+        source: str = "chat",
+    ) -> dict[str, Any]:
+        """Capture private candidates for a live actor without granting dataset access."""
+        from app.application.ai_chat.conversation_history import authorized_memory_context
+
+        authorized = authorized_memory_context(user_id, context, write=True)
+        if authorized is None:
+            return {**_scope_denied(), "created_count": 0}
+        owner_id, _ = authorized
+        access = DatasetAccessContext(
+            actor_id=str(context.get("local_user_id") or context.get("actor_id") or ""),
+            tenant_id=str(context.get("tenant_id") or ""),
+            mod_id=str(context.get("mod_id") or context.get("active_mod_id") or ""),
+        )
+        scope = (
+            "global_preference"
+            if context.get("persy_memory_scope") == "global_preference"
+            else "user"
+        )
+        if scope == "global_preference":
+            owner_id = _memory_owner_id(access, scope)
+        return self._capture_for_owner(
+            owner_id=owner_id,
+            access=access,
+            normalized_scope=scope,
+            user_message=user_message,
+            assistant_message=assistant_message,
+            session_id=str(context.get("session_id") or context.get("conversation_id") or ""),
+            source=source,
+        )
+
+    def _capture_for_owner(
+        self,
+        *,
+        owner_id: str,
+        access: DatasetAccessContext,
+        normalized_scope: str,
+        user_message: str,
+        assistant_message: str,
+        session_id: str,
+        source: str,
+    ) -> dict[str, Any]:
         message = str(user_message or "").strip()
         if not message or _SENSITIVE_PATTERN.search(message):
             return {"success": True, "created_count": 0, "candidates": []}
+        candidates = None
+        from app.infrastructure.memory.mem0_backend import get_long_term_memory
 
-        candidates = extract_explicit_memories(message)
+        try:
+            backend = get_long_term_memory()
+            extractor = getattr(backend, "extract_candidates", None)
+            if callable(extractor):
+                candidates = extractor(
+                    user_id=owner_id,
+                    user_message=message,
+                    assistant_message=assistant_message,
+                    metadata={
+                        "session_id": session_id,
+                        "source": source,
+                        "scope": normalized_scope,
+                    },
+                )
+        except RECOVERABLE_ERRORS:
+            # Model unavailability permits only the bounded offline candidate parser.
+            candidates = None
+        if candidates is None:
+            candidates = extract_explicit_memories(message)
+        if normalized_scope == "global_preference":
+            candidates = [candidate for candidate in candidates if _personal_preference(candidate)]
         if not candidates:
             return {"success": True, "created_count": 0, "candidates": []}
 
-        normalized_scope = "tenant" if str(scope).strip().lower() == "tenant" else "user"
-        owner_id = (
-            _tenant_owner_id(access.tenant_id) if normalized_scope == "tenant" else access.actor_id
-        )
         captured: list[dict[str, Any]] = []
+        failures: list[str] = []
         created_count = 0
         now = _utc_now_iso()
         with self._lock:
@@ -122,6 +205,8 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
                     "assistant_excerpt": str(assistant_message or "").strip()[:500],
                     "captured_at": now,
                     "scope": normalized_scope,
+                    "tenant_id": access.tenant_id,
+                    "mod_id": access.mod_id,
                 }
                 result = self.memory_service.propose_memory_candidate(
                     owner_id,
@@ -133,15 +218,20 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
                     evidence=[evidence],
                 )
                 record = result.get("candidate") if isinstance(result, dict) else None
+                if not result.get("success"):
+                    failures.append(
+                        str(result.get("error_code") or "memory_candidate_write_failed")
+                    )
                 if isinstance(record, dict):
                     captured.append(_public_memory_record(record, normalized_scope))
                 if result.get("created") is True:
                     created_count += 1
         return {
-            "success": True,
+            "success": not failures,
             "created_count": created_count,
             "candidate_count": len(captured),
             "candidates": captured,
+            "errors": failures,
         }
 
     def list_memories(
@@ -186,7 +276,11 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
                         "message": str(exc),
                         "error_code": "persy_memory_invalid_filter",
                     }
-                rows.extend(_public_memory_record(record, scope_name) for record in records)
+                rows.extend(
+                    _public_memory_record(record, scope_name)
+                    for record in records
+                    if scope_name != "global_preference" or _personal_preference(record)
+                )
 
         rows.sort(
             key=lambda item: (
@@ -229,17 +323,20 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
                 tenant_id=access.tenant_id,
                 permissions=frozenset(set(access.permissions) | {DATASET_READ_PERMISSION}),
                 is_admin=access.is_admin,
+                mod_id=access.mod_id,
             )
         )
-        listed = self.list_memories(access_context=list_access, limit=1000)
-        if not listed.get("success"):
-            return {**listed, "deleted_memories": 0}
-        listed_memories = listed.get("memories")
-        rows = [
-            row
-            for row in (listed_memories if isinstance(listed_memories, list) else [])
-            if isinstance(row, dict) and row.get("status") in _VISIBLE_MEMORY_STATUSES
-        ]
+        rows: list[dict[str, Any]] = []
+        for status in (PERSY_MEMORY_PENDING, PERSY_MEMORY_ACTIVE):
+            listed = self.list_memories(access_context=list_access, status=status, limit=1000)
+            if not listed.get("success"):
+                return {**listed, "deleted_memories": 0}
+            listed_memories = listed.get("memories")
+            rows.extend(
+                row
+                for row in (listed_memories if isinstance(listed_memories, list) else [])
+                if isinstance(row, dict) and row.get("status") == status
+            )
         deleted = 0
         for row in rows:
             memory_id = str(row.get("memory_id") or "").strip()
@@ -283,14 +380,13 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
                 "memories": [],
                 "chunks": [],
             }
-        # 知识库页面展示的是 pending + active 记忆，对话检索同一份内容，
-        # 否则页面上能看到的记忆在对话里永远检索不到。
+        # Pending remains reviewable in list/graph, but can never supply model facts.
         listed = self.list_memories(access_context=access, limit=1000)
         listed_memories = listed.get("memories")
         rows = [
             row
             for row in (listed_memories if isinstance(listed_memories, list) else [])
-            if isinstance(row, dict) and row.get("status") in _VISIBLE_MEMORY_STATUSES
+            if is_recallable_memory(row)
         ]
         scored: list[tuple[float, dict[str, Any]]] = []
         query_tokens = _search_tokens(query_text)
@@ -301,20 +397,15 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
             lexical = _lexical_score(query_text, query_tokens, statement)
             if lexical <= 0:
                 continue
-            status_factor = 1.0 if row.get("status") == PERSY_MEMORY_ACTIVE else 0.85
             score = min(1.0, lexical * 0.72 + float(row.get("strength") or 0.0) * 0.28)
-            scored.append((score * status_factor, row))
+            scored.append((score, row))
         scored.sort(key=lambda item: item[0], reverse=True)
         selected = scored[: max(1, min(int(top_k or 5), 20))]
 
         if reinforce and selected:
             with self._lock:
                 for _score, row in selected:
-                    owner_id = (
-                        _tenant_owner_id(access.tenant_id)
-                        if row.get("scope") == "tenant"
-                        else access.actor_id
-                    )
+                    owner_id = _memory_owner_id(access, str(row.get("scope") or "user"))
                     self.memory_service.record_memory_recall(
                         owner_id,
                         str(row.get("memory_id") or ""),
@@ -336,6 +427,13 @@ class PersyMemoryApplicationService(PersyMemoryGraphMixin):
                         "memory_type": public.get("memory_type"),
                         "scope": public.get("scope"),
                         "status": public.get("status"),
+                        "eligible_for_planner": public.get("eligible_for_planner"),
+                        "source_policy": public.get("source_policy"),
+                        "source_memory_id": public.get("memory_id"),
+                        "source_revision": public.get("revision"),
+                        "source_owner_id": _memory_owner_id(
+                            access, str(public.get("scope") or "user")
+                        ),
                         "source": "对话记忆",
                         "updated_at": public.get("updated_at"),
                     },

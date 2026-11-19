@@ -2,6 +2,48 @@ import pytest
 
 from app.application.agent_orchestrator import AgentOrchestrator, InMemoryAgentRunRepository
 from app.application.agent_orchestrator.run_models import AgentRun
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+
+
+@pytest.mark.parametrize("revision", [0, 7])
+def test_tool_runtime_preserves_authenticated_conversation_revision(trusted_actor, revision):
+    from app.application.ai_chat_app_service import AIChatApplicationService
+
+    actor = trusted_actor()
+    context = {
+        **actor.context,
+        "conversation_id": "original-chat",
+        "_conversation_revision": revision,
+    }
+    runtime = AIChatApplicationService._merge_tool_runtime_context(
+        str(actor.user_id), "continue", context
+    )
+    assert type(runtime["_conversation_revision"]) is int
+    assert runtime["_conversation_revision"] == revision
+    assert runtime["_actor_authorization"] == context["_actor_authorization"]
+    assert runtime["_actor_authorization"] is not context["_actor_authorization"]
+
+
+def test_unbound_tool_context_cannot_supply_conversation_revision():
+    from app.application.ai_chat_app_service import AIChatApplicationService
+
+    runtime = AIChatApplicationService._merge_tool_runtime_context(
+        "1", "continue", {"conversation_id": "claimed-chat", "_conversation_revision": 7}
+    )
+    assert "_conversation_revision" not in runtime
+
+
+def test_revoked_actor_cannot_forward_conversation_revision(trusted_actor):
+    from app.application.ai_chat_app_service import AIChatApplicationService
+    from app.db.models.user import User
+
+    actor = trusted_actor()
+    with actor.factory.begin() as db:
+        db.get(User, actor.user_id).is_active = False
+    with pytest.raises(ValueError, match="原登录身份已失效"):
+        AIChatApplicationService._merge_tool_runtime_context(
+            str(actor.user_id), "continue", {**actor.context, "_conversation_revision": 0}
+        )
 
 
 @pytest.mark.parametrize(
@@ -20,6 +62,59 @@ def test_continuation_rejects_tenant_change_before_state_or_command_writes(metho
     assert repository.get(run.run_id).to_dict() == before
     assert repository.latest_task_control(run.run_id) is None
     assert len(repository.list_recent()) == 1
+
+
+@pytest.mark.parametrize(
+    "method,status",
+    [
+        ("resume_run", "paused"),
+        ("stage_resume_run", "paused"),
+        ("retry_run", "failed"),
+    ],
+)
+@pytest.mark.parametrize(
+    "key,original,replacement",
+    [
+        ("conversation_id", "old-chat", "other-chat"),
+        ("session_id", "old-chat", "other-chat"),
+        ("_conversation_revision", 7, 8),
+        ("local_user_id", 17, 18),
+        ("workspace_id", "original-task", "other-workspace"),
+    ],
+)
+@pytest.mark.parametrize("previously_bound", [False, True])
+def test_continuation_cannot_replace_or_invent_history_identity(
+    method,
+    status,
+    key,
+    original,
+    replacement,
+    previously_bound,
+):
+    repository = InMemoryAgentRunRepository()
+    run = AgentRun(user_id="owner", message="stored history", status=status)
+    run.metadata["runtime_context"] = {key: original} if previously_bound else {}
+    repository.save(run)
+    before = repository.get(run.run_id).to_dict()
+    with pytest.raises(ValueError, match="会话"):
+        getattr(AgentOrchestrator(repository=repository), method)(
+            run.run_id,
+            runtime_context={key: replacement},
+        )
+    assert repository.get(run.run_id).to_dict() == before
+    assert repository.latest_task_control(run.run_id) is None
+
+
+@pytest.mark.parametrize("original", [{}, {"_conversation_revision": 7}])
+def test_approval_and_clarification_cannot_adopt_a_new_revision_after_clear(original):
+    from app.application.agent_orchestrator.tool_permission import overlay_resume_context
+
+    with pytest.raises(ValueError, match="历史版本"):
+        overlay_resume_context(original, {"_conversation_revision": 8})
+    assert overlay_resume_context(original, {"user_note": "continue"}) == {
+        **original,
+        "user_note": "continue",
+    }
 
 
 @pytest.mark.parametrize(

@@ -470,6 +470,7 @@ def _validate_owned_repository_schema(connection):
     from sqlalchemy.schema import CreateIndex, CreateTable
 
     from app.db.models.agent import AgentTaskCommandRecord, AgentTaskRecord
+    from app.infrastructure.workflow.checkpoint_bridge import validate_sqlite_checkpoint_schema
 
     compact = lambda sql: re.sub(r"\s+", "", str(sql or "")).lower()
     for model in (AgentTaskRecord, AgentTaskCommandRecord):
@@ -500,6 +501,7 @@ def _validate_owned_repository_schema(connection):
             ).first()
         ):
             raise GenerationObservationError(f"owned repository schema differs: {table.name}")
+    validate_sqlite_checkpoint_schema(connection.connection.driver_connection)
 
 
 def _existing_profile_file(path, *, limit=None):

@@ -468,9 +468,12 @@ class AgentToolExecutor:
                     begin_idempotent_replay(
                         params["_runtime_context"], validation.tool_id, action, params
                     )
-                    if client_key
-                    or context_key
-                    or (validation.spec is not None and validation.spec.idempotent)
+                    if (validation.tool_id, action) != ("conversation_history", "read")
+                    and (
+                        client_key
+                        or context_key
+                        or (validation.spec is not None and validation.spec.idempotent)
+                    )
                     else ("", None)
                 )
                 if replay is not None:

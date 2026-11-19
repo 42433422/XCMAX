@@ -18,6 +18,7 @@ concurrency:
 
 jobs:
   analyze:
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -29,18 +30,30 @@ jobs:
       matrix:
         language: [python, javascript-typescript]
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Checkout trusted scan controller
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          path: controller
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Checkout source as scan data
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.sha }}
+          path: candidate
+          persist-credentials: false
           fetch-depth: 0
 
       - name: Classify ${{ matrix.language }} changed paths (unified classifier)
         id: paths
         if: github.event_name == 'pull_request'
+        working-directory: controller
         run: |
           # 统一分类器（scripts/dev/change_classifier.py）——禁止此处再写死路径正则。
           category="${{ matrix.language == 'python' && 'codeql_python' || 'codeql_javascript' }}"
-          python scripts/dev/change_classifier.py --category "$category" \
+          python -I scripts/dev/change_classifier.py --category "$category" \
             --base "${{ github.event.pull_request.base.sha }}" \
             --head "${{ github.event.pull_request.head.sha }}"
 
@@ -49,7 +62,9 @@ jobs:
         uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
-          config-file: ./.github/codeql/codeql-config.yml
+          source-root: candidate
+          build-mode: none
+          config-file: ./controller/.github/codeql/codeql-config.yml
           # No packs: input — Actions resolves scope/name via GHCR only; in-repo
           # +./ packs are rejected. ETL dir_fd path-injection FPs are stripped
           # from the Python SARIF after analyze (see strip script below).
@@ -60,6 +75,7 @@ jobs:
         uses: github/codeql-action/analyze@v3
         with:
           category: "/language:${{ matrix.language }}"
+          checkout_path: candidate
           upload: ${{ matrix.language != 'python' }}
           output: codeql-sarif-out
 
@@ -67,21 +83,32 @@ jobs:
         if: (github.event_name != 'pull_request' || steps.paths.outputs.run == 'true') && matrix.language == 'python'
         run: |
           set -euo pipefail
-          shopt -s globstar nullglob
-          files=(codeql-sarif-out/**/*.sarif)
-          if [ ${#files[@]} -eq 0 ]; then
-            echo "No SARIF produced" >&2
-            exit 1
-          fi
-          for f in "${files[@]}"; do
-            python3 .github/codeql/strip_elt_dir_fd_path_injection_fps.py "$f"
-          done
+          python3 -I - <<'PY'
+          import json
+          import runpy
+          from pathlib import Path
+          # Use the existing trusted function API, including on the first PR
+          # before any new controller CLI could exist on protected main.
+          keep_result = runpy.run_path(
+              "controller/.github/codeql/strip_elt_dir_fd_path_injection_fps.py"
+          )["keep_result"]
+          files = list(Path("codeql-sarif-out").rglob("*.sarif"))
+          if not files:
+              raise SystemExit("No SARIF produced")
+          for path in files:
+              data = json.loads(path.read_text())
+              for run in data.get("runs") or []:
+                  run["results"] = [result for result in run.get("results") or []
+                                    if keep_result(result, source_root=Path("candidate"))]
+              path.write_text(json.dumps(data))
+          PY
 
       - name: Upload CodeQL SARIF (python, filtered)
         if: (github.event_name != 'pull_request' || steps.paths.outputs.run == 'true') && matrix.language == 'python'
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: codeql-sarif-out
+          checkout_path: candidate
           category: "/language:python"
 
       - name: Retain source locations and data flows for review

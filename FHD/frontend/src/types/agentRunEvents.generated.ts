@@ -56,6 +56,7 @@ export type AgentRunEventType =
   | 'tool.receipt_observed'
   | 'tool.started'
   | 'workflow.concrete_params_rejected'
+  | 'workflow.conversation_rejected'
   | 'workflow.graph_rejected'
   | 'workflow.plan_audit_rejected'
   | 'workflow.plan_audited'

@@ -32,6 +32,8 @@ from app.infrastructure.workflow.langgraph_runtime import (
 class LangGraphConstructionMixin:
     _state_schema: StateSchema | None
     _callback: Any
+    _native_checkpointer: Any
+    _thread_id: str
 
     if TYPE_CHECKING:
 
@@ -53,6 +55,7 @@ class LangGraphConstructionMixin:
             initial: dict[str, Any],
             checkpointer: CheckpointStore | None,
             parallel: bool = True,
+            receipts_authoritative: bool = False,
         ) -> dict[str, Any]: ...
         @staticmethod
         def _save_checkpoint(
@@ -128,7 +131,7 @@ class LangGraphConstructionMixin:
             state_schema=state_schema,
             max_retries=max_retries,
             parallel=parallel,
-        ).compile()
+        ).compile(checkpointer=self._native_checkpointer)
 
     def invoke_graph(
         self,
@@ -151,7 +154,10 @@ class LangGraphConstructionMixin:
             "dict[str, Any]",
             graph.invoke(
                 self._initial_state(runtime_context),
-                config={"recursion_limit": self._recursion_limit(plan)},
+                config={
+                    "recursion_limit": self._recursion_limit(plan),
+                    "configurable": {"thread_id": self._thread_id},
+                },
                 **kwargs,
             ),
         )
@@ -205,7 +211,14 @@ class LangGraphConstructionMixin:
                 max_retries=max_retries,
                 parallel=parallel,
             )
-            final = self._stream_run(graph, plan, dict(initial), checkpointer, parallel=parallel)
+            final = self._stream_run(
+                graph,
+                plan,
+                dict(initial),
+                checkpointer,
+                parallel=parallel,
+                receipts_authoritative="executed" in (runtime_context or {}),
+            )
             result = self._to_run_result(plan, final)
             # Persist terminal completion and interaction pauses. Failed-node
             # supersteps remain excluded so recovery cannot mistake a failed call
@@ -410,6 +423,12 @@ class LangGraphConstructionMixin:
         state.setdefault("executed", [])
         state.setdefault("blocked", [])
         state.setdefault("results", [])
+        if self._native_checkpointer is not None:
+            # A new input on an existing native thread must clear old failure
+            # channels; stateless runs retain their existing context shape.
+            state.setdefault("failure", {})
+            state.setdefault("message", "")
+            state.setdefault("next_node", "")
         return state
 
     @staticmethod

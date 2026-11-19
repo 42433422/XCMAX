@@ -47,7 +47,7 @@ export interface UiChatMessage {
     status: 'local' | 'saving' | 'saved' | 'failed'
     localSaved?: boolean
     error?: string
-    request?: { role: 'user' | 'ai' | 'task'; content: string; metadata?: string }
+    request?: { role: 'user' | 'ai' | 'task'; content: string; metadata?: string; expected_revision?: number; turn_id?: string }
   }
   thinkingSteps?: string
   todoSteps?: string[]

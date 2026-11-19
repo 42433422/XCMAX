@@ -16,6 +16,7 @@ from fastapi import APIRouter, Body, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
 from app.application.task_conversation_store import (
+    ConversationRevisionError,
     durable_user_id,
     task_conversation_store,
 )
@@ -39,6 +40,11 @@ def _xcagi_resolve_session_scope(
 ) -> tuple[str, str]:
     uid = str(user_id or "default").strip() or "default"
     mod = normalize_active_mod_id(explicit_mod_id) if explicit_mod_id else ""
+    if durable_user_id(uid) is not None:
+        selected = get_request_active_mod_id() or ""
+        if mod and mod != selected:
+            raise HTTPException(status_code=403, detail="会话 Mod 与授权范围不一致")
+        return (uid, selected)
     if not mod:
         try:
             mod = get_request_active_mod_id() or ""
@@ -49,6 +55,14 @@ def _xcagi_resolve_session_scope(
 
 def _xcagi_request_user_id(request: Request, explicit_user_id: Any) -> str:
     """Prefer the authenticated local actor over a caller-controlled body value."""
+    from app.request_active_mod_ctx import parse_active_mod_header
+
+    if parse_active_mod_header(request.headers) or get_request_active_mod_id():
+        from app.fastapi_routes.domains.conversation.conversation_routes import _history_actor
+
+        # Durable Mod history must use the same live entitlement as native
+        # read/delete/save routes. Never fall back to a caller's legacy bucket.
+        return _history_actor(request)
     try:
         from app.infrastructure.auth.dependencies import resolve_session_user
 
@@ -145,6 +159,9 @@ def conversations_save_message(
 
     numeric_user_id = durable_user_id(user_id)
     if numeric_user_id is not None:
+        expected_revision = body.get("expected_revision", 0)
+        if type(expected_revision) is not int or expected_revision < 0:
+            raise HTTPException(status_code=422, detail="invalid expected_revision")
         try:
             message_id = task_conversation_store.save_message(
                 session_id=session_id,
@@ -154,9 +171,12 @@ def conversations_save_message(
                 intent=str(body.get("intent") or ""),
                 metadata=str(body.get("metadata") or ""),
                 client_message_id=client_message_id,
+                expected_revision=expected_revision,
             )
         except PermissionError as exc:
             raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except ConversationRevisionError as exc:
+            raise HTTPException(status_code=409, detail="会话已变更，请重新读取历史记录") from exc
         except ValueError as exc:
             raise HTTPException(
                 status_code=409, detail="消息标识与原消息不匹配，请核对原记录"
@@ -178,6 +198,7 @@ def conversations_save_message(
             "saved": True,
             "message_id": message_id,
             "client_message_id": client_message_id,
+            "revision": expected_revision,
             "mod_id": mod_id,
             "durable": True,
         }
@@ -350,6 +371,9 @@ def conversations_get(
     conversation_id: str,
     user_id: str = Query(default="default"),
     mod_id: str = Query(default=""),
+    limit: int = Query(default=50, ge=1, le=200),
+    before_id: int | None = Query(default=None, ge=1),
+    turn_id: str | None = Query(default=None, max_length=256),
 ) -> dict:
     cid = (conversation_id or "").strip()
     resolved_user_id = _xcagi_request_user_id(request, user_id)
@@ -363,6 +387,9 @@ def conversations_get(
                 session_id=cid,
                 user_id=numeric_user_id,
                 mod_id=scope[1],
+                limit=limit,
+                before_id=before_id,
+                turn_id=turn_id,
             )
         )
     with _conversation_lock:
@@ -443,7 +470,8 @@ def conversations_delete_message(
 ) -> dict | JSONResponse:
     """撤回一条用户消息及其之后的所有回复（撤回编辑）。"""
     cid = str(conversation_id or "").strip()
-    numeric_user_id = durable_user_id(_xcagi_request_user_id(request, user_id))
+    scope = _xcagi_resolve_session_scope(_xcagi_request_user_id(request, user_id), mod_id)
+    numeric_user_id = durable_user_id(scope[0])
     if numeric_user_id is None:
         return JSONResponse(
             {"success": False, "message": "请先登录后再访问会话。"}, status_code=401

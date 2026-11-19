@@ -17,7 +17,6 @@ HOST_BASE_DB_API_PREFIXES: tuple[str, ...] = (
     "/api/mods",
     "/api/system/",
     "/api/xcmax/",
-    "/api/conversations/",
     "/api/enterprise/",
 )
 

@@ -22,6 +22,10 @@ concurrency:
   group: e2e-${{ github.ref }}
   cancel-in-progress: true
 
+# Candidate tests never inherit repository-wide write permissions.
+permissions:
+  contents: read
+
 jobs:
   # Every run gates a real FastAPI + browser path; main CI owns mock contracts.
   playwright-p0-paths:
