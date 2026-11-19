@@ -29,13 +29,13 @@
       </div>
 
       <div class="toolbar-actions">
-        <label v-if="!adminOmniscient || datasetOptions.length > 1" class="dataset-switch" title="知识空间">
+        <label class="dataset-switch" title="知识空间">
           <span>空间</span>
           <select v-model="selectedSpace">
             <option v-for="item in datasetOptions" :key="item.id" :value="item.id">
               {{ item.label }}
             </option>
-            <option v-if="!adminOmniscient" :value="userMemorySpaceId">用户记忆</option>
+            <option :value="userMemorySpaceId">用户记忆</option>
           </select>
         </label>
         <template v-if="!personalMemoryOpen">
@@ -112,7 +112,7 @@
       </div>
     </header>
 
-    <section v-if="adminOmniscient && omniscient" class="omniscient-strip" aria-label="全知总览">
+    <section v-if="!personalMemoryOpen && adminOmniscient && omniscient" class="omniscient-strip" aria-label="全知总览">
       <div>
         <strong>{{ omniscient.document_count || 0 }}</strong>
         <span>全库文档</span>
@@ -617,12 +617,12 @@ const {
 } = data
 const personalMemoryOpen = ref(false)
 watch(() => props.space, (space) => {
-  personalMemoryOpen.value = !adminOmniscient.value && space === userMemorySpaceId
+  personalMemoryOpen.value = space === userMemorySpaceId
 }, { immediate: true })
 const selectedSpace = computed({
   get: () => personalMemoryOpen.value ? userMemorySpaceId : datasetIdInput.value,
   set(space: string) {
-    personalMemoryOpen.value = space === userMemorySpaceId && !adminOmniscient.value
+    personalMemoryOpen.value = space === userMemorySpaceId
     if (personalMemoryOpen.value || space === datasetIdInput.value) return
     datasetIdInput.value = space
     void applyDataset()

@@ -672,9 +672,12 @@ describe('PersyKnowledgeView', () => {
   })
 
   it('opens the personal memory space from a settings link', async () => {
+    const { isAdminConsoleSpa } = await import('@/utils/adminConsoleUrl')
+    vi.mocked(isAdminConsoleSpa).mockReturnValue(true)
     const wrapper = await mountKnowledge('user-memory')
     expect(wrapper.get<HTMLSelectElement>('.dataset-switch select').element.value).toBe('user-memory')
     expect(wrapper.find('[aria-label="用户记忆"]').exists()).toBe(true)
+    expect(wrapper.find('.omniscient-strip').exists()).toBe(false)
   })
 
   it('refetches knowledge when reactivated from keep-alive', async () => {
