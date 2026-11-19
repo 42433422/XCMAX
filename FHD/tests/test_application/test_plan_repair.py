@@ -396,6 +396,8 @@ def test_explicit_repair_attempts_remain_bounded(requested, expected):
     )
     assert fixed is None
     assert len(calls) == trace["attempts"] == expected
+
+
 @pytest.mark.parametrize(
     ("tool_id", "action", "expected"),
     [
@@ -471,8 +473,12 @@ def test_repair_uses_same_exact_clarify_alias_normalization():
             {
                 "mode": "workflow",
                 "nodes": [
-                    {"node_id": "n1", "tool_id": "clarify.ask", "action": "ask",
-                     "params": {"question": "请确认业务对象"}}
+                    {
+                        "node_id": "n1",
+                        "tool_id": "clarify.ask",
+                        "action": "ask",
+                        "params": {"question": "请确认业务对象"},
+                    }
                 ],
             }
         ),
