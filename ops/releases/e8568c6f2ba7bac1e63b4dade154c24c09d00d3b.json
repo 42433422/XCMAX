@@ -1,0 +1,9 @@
+{
+  "git_sha": "e8568c6f2ba7bac1e63b4dade154c24c09d00d3b",
+  "product_version": "1.0.0.7",
+  "expected_production_sha": "460f31973b4692867f80cb4db34b73a2864536a4",
+  "ci_run_id": 44524527581,
+  "security_scan_run_id": 44528098708,
+  "approval_reference": "Owner-authorized production server update on 2026-11-19 Asia/Shanghai: deploy exact main e8568c6f (latest main, includes #3319 evolution SLO evidence fix) to MODstore production, advancing from 460f3197.",
+  "approval_scope": "Deploy the specified immutable MODstore release using the existing official workflow and its unchanged approval, CI, security and runtime-verification gates. Preserve release history and require_platform_key=true. Do not redeploy FHD or expand credential permissions."
+}
