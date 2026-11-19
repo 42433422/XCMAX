@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from modstore_server import customer_ticket_github as bridge
 from modstore_server.api.deps import require_admin
 from modstore_server.app import app
+from modstore_server.eventing import db_outbox
 from modstore_server.models import User, get_session_factory
 from modstore_server.models_cs import (
     CustomerServiceAction,
@@ -55,6 +56,12 @@ def ticket(client, monkeypatch):
     yield ident
     app.dependency_overrides.clear()
     app.dependency_overrides.update(previous)
+
+
+def _pending_for_ticket(ticket_id):
+    with get_session_factory()() as db:
+        ticket_no = db.get(CustomerServiceTicket, ticket_id).ticket_no
+    return db_outbox.fetch_pending(aggregate_prefix=f"{ticket_no}:")
 
 
 @pytest.fixture
@@ -187,8 +194,6 @@ def test_issue_links_original_owner_work_order_without_changing_status(client, t
 def test_start_uses_existing_employee_outbox_once_without_model_or_workflow_dispatch(
     client, ticket, monkeypatch
 ):
-    from modstore_server.eventing import db_outbox
-
     calls = []
 
     def github(method, path, body=None):
@@ -206,8 +211,9 @@ def test_start_uses_existing_employee_outbox_once_without_model_or_workflow_disp
     assert (
         client.post(path + "/start", json={"request_id": str(uuid.uuid4())}).json() == first.json()
     )
-    rows = [r for r in db_outbox.fetch_pending(limit=100) if r.payload.get("ticket_id") == ticket]
+    rows = _pending_for_ticket(ticket)
     assert len(rows) == 1
+    assert rows[0].payload["ticket_id"] == ticket
     assert rows[0].payload["github_workspace"]["issue_number"] == 123
     with get_session_factory()() as db:
         action = (
@@ -254,7 +260,6 @@ def test_github_runner_acknowledgement_then_original_outbox_incident(client, tic
     from modstore_server import customer_issue_intake as intake
     from modstore_server import incident_bus
     from modstore_server import para_github_runner as runner
-    from modstore_server.eventing import db_outbox
     from modstore_server.models import IncidentEvent
 
     request_id = str(uuid.uuid4())
@@ -282,9 +287,7 @@ def test_github_runner_acknowledgement_then_original_outbox_incident(client, tic
     path = f"/api/customer-service/tickets/{ticket}/github"
     client.post(path, json=DRAFT)
     client.post(path + "/start", json={"request_id": request_id})
-    record = next(
-        r for r in db_outbox.fetch_pending(limit=100) if r.payload.get("ticket_id") == ticket
-    )
+    (record,) = _pending_for_ticket(ticket)
     real_client = httpx.Client
     device = {
         "id": "github-worker-test",
@@ -406,15 +409,12 @@ def test_github_runner_acknowledgement_then_original_outbox_incident(client, tic
 @pytest.mark.usefixtures("isolated_publisher_stub")
 def test_uncertain_workflow_dispatch_is_not_replayed(client, ticket, monkeypatch):
     from modstore_server import para_github_runner as runner
-    from modstore_server.eventing import db_outbox
 
     path = f"/api/customer-service/tickets/{ticket}/github"
     monkeypatch.setattr(bridge, "github", lambda *a: {"number": 123, "state": "open"})
     client.post(path, json=DRAFT)
     client.post(path + "/start", json={"request_id": str(uuid.uuid4())})
-    record = next(
-        r for r in db_outbox.fetch_pending(limit=100) if r.payload.get("ticket_id") == ticket
-    )
+    (record,) = _pending_for_ticket(ticket)
     posts = []
 
     def github(method, path, body=None):
@@ -444,7 +444,6 @@ def test_revocation_fences_github_runner_at_slot_claim(
     from modstore_server import customer_issue_intake as intake
     from modstore_server import para_github_runner as runner
     from modstore_server.db.mac_control import MacControlSyncLease
-    from modstore_server.eventing import db_outbox
 
     posts = []
 
@@ -467,9 +466,7 @@ def test_revocation_fences_github_runner_at_slot_claim(
         client.post(f"{path}/github/start", json={"request_id": str(uuid.uuid4())}).status_code
         == 200
     )
-    record = next(
-        row for row in db_outbox.fetch_pending(limit=100) if row.payload.get("ticket_id") == ticket
-    )
+    (record,) = _pending_for_ticket(ticket)
     original_claim = runner._claim_worker_slot
 
     def claim_and_revoke(db, row):
@@ -503,7 +500,6 @@ def test_revoked_issued_runner_settles_without_another_github_post(
     from modstore_server import customer_issue_intake as intake
     from modstore_server import para_github_runner as runner
     from modstore_server.db.mac_control import MacControlSyncLease
-    from modstore_server.eventing import db_outbox
     from modstore_server.models import IncidentEvent, OutboxEvent
 
     request_id = str(uuid.uuid4())
@@ -537,9 +533,7 @@ def test_revoked_issued_runner_settles_without_another_github_post(
     )
     assert client.post(f"{path}/github", json=DRAFT).status_code == 200
     assert client.post(f"{path}/github/start", json={"request_id": request_id}).status_code == 200
-    record = next(
-        row for row in db_outbox.fetch_pending(limit=100) if row.payload.get("ticket_id") == ticket
-    )
+    (record,) = _pending_for_ticket(ticket)
     envelope = record.to_envelope()
     assert intake.dispatch_issue_event(envelope)["ok"] is False
     revoked = client.post(
@@ -854,7 +848,6 @@ def test_retry_prompt_keeps_public_boundary(monkeypatch):
 def test_private_prerequisite_start_keeps_private_delivery_and_scopes_host(
     client, ticket, monkeypatch
 ):
-    from modstore_server.eventing import db_outbox
 
     with get_session_factory()() as db:
         row = db.get(CustomerServiceTicket, ticket)
@@ -893,7 +886,6 @@ def test_private_prerequisite_start_keeps_private_delivery_and_scopes_host(
 
 def test_unavailable_publisher_blocks_start_and_reports_capability(client, ticket, monkeypatch):
     from modstore_server import para_github_runner as runner
-    from modstore_server.eventing import db_outbox
 
     monkeypatch.setenv("PARA_GITHUB_ISOLATED_PUBLISHER", "true")
     monkeypatch.setattr(
@@ -919,9 +911,7 @@ def test_unavailable_publisher_blocks_start_and_reports_capability(client, ticke
         client.get("/api/customer-service/github/workspace").json()["publisher_capability"]
         == capability
     )
-    assert not [
-        r for r in db_outbox.fetch_pending(limit=100) if r.payload.get("ticket_id") == ticket
-    ]
+    assert not _pending_for_ticket(ticket)
     with get_session_factory()() as db:
         assert (
             db.query(CustomerServiceAction)
@@ -936,7 +926,6 @@ def test_existing_queued_dispatch_becomes_durable_block_without_external_calls(
 ):
     from modstore_server import customer_issue_intake as intake
     from modstore_server import para_github_runner as runner
-    from modstore_server.eventing import db_outbox
 
     request_id = str(uuid.uuid4())
     monkeypatch.setattr(bridge, "github", lambda *args: {"number": 123, "state": "open"})
@@ -945,9 +934,7 @@ def test_existing_queued_dispatch_becomes_durable_block_without_external_calls(
     with monkeypatch.context() as permitted:
         permitted.setattr(runner, "publisher_capability", lambda: {"available": True})
         assert client.post(path + "/start", json={"request_id": request_id}).status_code == 200
-    record = next(
-        r for r in db_outbox.fetch_pending(limit=100) if r.payload.get("ticket_id") == ticket
-    )
+    (record,) = _pending_for_ticket(ticket)
     monkeypatch.setattr(
         runner,
         "publisher_capability",

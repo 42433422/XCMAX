@@ -14,7 +14,7 @@ from modstore_server.app import app
 from modstore_server.corp_download_deployment import CorpDownloadDeployment
 from modstore_server.customer_service_tools import json_dumps, json_loads
 from modstore_server.customer_ticket_human_ops import accept_ticket, assign_ticket, record_diagnosis
-from modstore_server.models import get_session_factory
+from modstore_server.models import EmployeeChangeRequest, get_session_factory
 from modstore_server.models_cs import (
     CustomerServiceAction,
     CustomerServiceAuditLog,
@@ -64,19 +64,27 @@ def ticket_case(client, monkeypatch, approved_support_assessment):
     intake = client.post(f"{BASE}/chat", json={"message": "提交工单", "session_id": session_id})
     assert intake.status_code == 200, intake.text
     ticket_id = intake.json()["ticket"]["id"]
-    with get_session_factory()() as db:
-        ticket = db.get(CustomerServiceTicket, ticket_id)
-        seed_repair(db, ticket)
-        evidence = json_loads(ticket.evidence_json, {})
-        case = evidence["corp_download_case"]
-        original = db.get(CustomerServiceMessage, case["source_message_id"])
-        assert original.content == REPORT and original.ticket_id == ticket_id
-        assert ticket.user_id == owner.id and ticket.assigned_admin_id is None
-    yield owner, ticket_id
-    with get_session_factory()() as db:
-        ticket = db.get(CustomerServiceTicket, ticket_id)
-        ticket.status = "expired"
-        db.commit()
+    change_request_id = None
+    try:
+        with get_session_factory()() as db:
+            ticket = db.get(CustomerServiceTicket, ticket_id)
+            change_request_id = int(seed_repair(db, ticket).id)
+            evidence = json_loads(ticket.evidence_json, {})
+            case = evidence["corp_download_case"]
+            original = db.get(CustomerServiceMessage, case["source_message_id"])
+            assert original.content == REPORT and original.ticket_id == ticket_id
+            assert ticket.user_id == owner.id and ticket.assigned_admin_id is None
+        yield owner, ticket_id
+    finally:
+        with get_session_factory()() as db:
+            ticket = db.get(CustomerServiceTicket, ticket_id)
+            ticket.status = "expired"
+            if change_request_id is not None:
+                # The suite shares a database with the production-line budget tests.
+                repair = db.get(EmployeeChangeRequest, change_request_id)
+                if repair is not None:
+                    db.delete(repair)
+            db.commit()
 
 
 def _deployment(*, offset=timedelta()):
