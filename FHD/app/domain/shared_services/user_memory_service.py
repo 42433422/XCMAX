@@ -11,7 +11,6 @@ import hashlib as hashlib
 import json as json
 import logging
 import os
-import threading
 import uuid
 from collections import defaultdict as defaultdict
 from collections.abc import Callable
@@ -181,7 +180,6 @@ class UserMemoryService(NeuroEventPublisherMixin):
         if getattr(self, "_initialized", False):
             return
         self._store = UserMemoryStore(storage_type=storage_type)
-        self._memory_v2_lock = threading.RLock()
         access = MemoryAccess(
             transaction=late_callback(lambda: self._store.transaction),
             get_memory=late_callback(lambda: self._store.get_memory),
@@ -209,9 +207,7 @@ class UserMemoryService(NeuroEventPublisherMixin):
                 fingerprint=late_callback(lambda: self._memory_v2_fingerprint),
                 govern=late_callback(lambda: self._govern_memory_v2_candidate),
                 find_record=late_callback(lambda: self._find_memory_v2_record),
-                propose_unlocked=late_callback(lambda: self._propose_memory_candidate_unlocked),
                 set_status=late_callback(lambda: self._set_memory_v2_status),
-                proposal_lock=lambda: self._memory_v2_lock,
                 max_records=lambda: MAX_MEMORY_V2_RECORDS,
                 new_id=lambda: uuid.uuid4().hex[:12],
             ),
@@ -290,6 +286,7 @@ class UserMemoryService(NeuroEventPublisherMixin):
         source: str = "agent_observation",
         confidence: float = 0.5,
         evidence: list[dict[str, Any]] | None = None,
+        activate_personal_capture: bool = False,
     ) -> dict[str, Any]:
         return self._candidates.propose(
             user_id,
@@ -299,27 +296,7 @@ class UserMemoryService(NeuroEventPublisherMixin):
             source=source,
             confidence=confidence,
             evidence=evidence,
-        )
-
-    def _propose_memory_candidate_unlocked(
-        self,
-        user_id: str,
-        memory_type: str,
-        key: str,
-        value: Any,
-        *,
-        source: str = "agent_observation",
-        confidence: float = 0.5,
-        evidence: list[dict[str, Any]] | None = None,
-    ) -> dict[str, Any]:
-        return self._candidates.propose_unlocked(
-            user_id,
-            memory_type,
-            key,
-            value,
-            source=source,
-            confidence=confidence,
-            evidence=evidence,
+            activate_personal_capture=activate_personal_capture,
         )
 
     def confirm_memory_candidate(

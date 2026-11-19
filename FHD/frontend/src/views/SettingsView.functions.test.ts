@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises, RouterLinkStub } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
-import { reactive, ref, type Ref, nextTick } from 'vue'
+import { defineComponent, h, KeepAlive, reactive, ref, type Ref, nextTick } from 'vue'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 
 /* ── mock functions ── */
@@ -451,7 +451,7 @@ describe('PersyUserMemory memory value helpers', () => {
       ['', '未知'], [null, '未知'], [undefined, '未知'],
     ]],
     ['memoryV2StatusLabel', [
-      ['pending', '待确认'], ['active', '已确认'], ['rejected', '已拒绝'], ['deleted', '已删除'],
+      ['pending', '待确认'], ['active', '已生效'], ['rejected', '已拒绝'], ['deleted', '已删除'],
       ['all', '全部'], ['unknown', 'unknown'], ['', '未知'], [null, '未知'],
     ]],
     ['memoryV2DisplayValue', [
@@ -1975,6 +1975,30 @@ describe('PersyUserMemory account scope', () => {
 
 describe('PersyUserMemory filters', () => {
   beforeEach(resetSettingsTest)
+  it('refreshes active memories when the cached knowledge page reopens', async () => {
+    const { default: PersyUserMemory } = await import('@/components/persy/PersyUserMemory.vue')
+    const visible = ref(true)
+    const knowledgePage = defineComponent({ setup: () => () => h(PersyUserMemory) })
+    const wrapper = mount(defineComponent({
+      setup: () => () => h(KeepAlive, null, { default: () => visible.value ? h(knowledgePage) : null }),
+    }), { global: { plugins: [i18nMock] } })
+    await flushPromises()
+    expect(mockMemoryV2List).toHaveBeenCalledTimes(1)
+
+    visible.value = false
+    await nextTick()
+    mockMemoryV2List.mockResolvedValue({
+      success: true,
+      memories: [{ memory_id: 'new', memory_type: 'preference', key: '对话偏好', value: '先给结论', status: 'active' }],
+    })
+    visible.value = true
+    await flushPromises()
+    expect(mockMemoryV2List).toHaveBeenCalledTimes(2)
+    expect(wrapper.get('.memory-v2-item__value').text()).toBe('先给结论')
+    expect(wrapper.get('.memory-v2-chip--active').text()).toBe('已生效')
+    wrapper.unmount()
+  })
+
   it('loads the selected status and type through the card controls', async () => {
     const wrapper = await mountMemory()
     const filters = wrapper.findAll('.memory-v2-toolbar select')

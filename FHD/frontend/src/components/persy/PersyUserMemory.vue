@@ -176,6 +176,7 @@
 </template>
 
 <script setup lang="ts">
+import { onActivated, onDeactivated } from 'vue'
 import { useUserMemory } from '@/composables/useUserMemory'
 
 const {
@@ -186,6 +187,14 @@ const {
   cancelMemoryV2Edit, saveMemoryV2Edit, deleteMemoryV2, memoryV2TypeLabel, memoryV2StatusLabel,
   memoryV2Time, memoryV2DisplayValue, canEditMemoryV2,
 } = useUserMemory()
+
+let needsRefresh = false
+onDeactivated(() => { needsRefresh = true })
+onActivated(() => {
+  if (!needsRefresh) return
+  needsRefresh = false
+  void loadMemoryV2()
+})
 </script>
 
 <style scoped src="./persy-user-memory.css"></style>

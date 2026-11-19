@@ -72,12 +72,19 @@ def test_capture_is_deduplicated_governed_and_carries_provenance() -> None:
 
     assert first["created_count"] == 1
     assert second["created_count"] == 0
-    assert listed["summary"] == {"total": 1, "active": 0, "pending": 1, "returned": 1}
+    assert listed["summary"] == {"total": 1, "active": 1, "pending": 0, "returned": 1}
     memory = listed["memories"][0]
-    assert memory["status"] == "pending"
-    assert memory["requires_user_confirmation"] is True
+    assert memory["status"] == "active"
+    assert memory["requires_user_confirmation"] is False
     assert memory["evidence"][0]["session_id"] == "chat-1"
     assert memory["statement"] == "用户的偏好是每周二下午沟通"
+
+    service.mutate(access_context=_access(), memory_id=memory["memory_id"], action="delete")
+    repeated = service.capture_conversation_turn(
+        access_context=_access(), user_message="我偏好每周二下午沟通"
+    )
+    assert repeated["created_count"] == 0
+    assert service.list_memories(access_context=_access(), status="active")["memories"] == []
 
 
 def test_memory_candidate_deduplication_is_thread_safe() -> None:
@@ -187,7 +194,10 @@ def test_user_memory_is_private_while_tenant_memory_is_shared() -> None:
     bob_rows = service.list_memories(access_context=bob)["memories"]
     other_rows = service.list_memories(access_context=other_tenant)["memories"]
 
-    assert {row["scope"] for row in alice_rows} == {"user", "tenant"}
+    assert {(row["scope"], row["status"]) for row in alice_rows} == {
+        ("user", "active"),
+        ("tenant", "pending"),
+    }
     assert [row["scope"] for row in bob_rows] == ["tenant"]
     assert other_rows == []
 
@@ -228,9 +238,16 @@ def test_mutation_is_limited_to_current_user_and_tenant_owners() -> None:
         reason="不再保留",
     )
 
+    assert captured["candidates"][0]["status"] == "active"
     assert denied["error_code"] == "persy_memory_not_found"
     assert corrected["memory"]["statement"] == "用户的所在地是上海"
     assert deleted["memory"]["status"] == "deleted"
+    assert (
+        service.capture_conversation_turn(
+            access_context=_access(actor="alice"), user_message="我住在杭州"
+        )["created_count"]
+        == 0
+    )
 
 
 def test_merge_memory_graph_preserves_bounds_and_updates_stats() -> None:

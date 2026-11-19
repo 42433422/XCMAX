@@ -64,16 +64,6 @@ def capture(namespace, ctx):
     assert reply == before
 
 
-def confirm(ctx):
-    from app.domain.shared_services.user_memory_service import get_user_memory_service
-
-    authority = get_user_memory_service()
-    owner = scoped_personal_memory_id(ctx)
-    rows = authority.list_memories(owner)
-    assert rows and rows[0]["status"] == "pending"
-    authority.confirm_memory_candidate(owner, rows[0]["memory_id"])
-
-
 def count(store):
     with store._get_conn() as conn:
         return conn.execute("SELECT count(*) FROM user_memory_vector_chunks").fetchone()[0]
@@ -132,9 +122,6 @@ def test_authenticated_existing_namespace_persists_and_recalls(memory):
     memory_namespace = scoped_personal_memory_id(ctx)
     assert authorized_memory_context(namespace, ctx) == (memory_namespace, None)
     capture(namespace, ctx)
-    assert count(store) == 0
-    assert rag.query(memory_namespace, "简洁报告")["hits"] == []
-    confirm(ctx)
     assert count(store) == 1
     assert rag.query(memory_namespace, "简洁报告")["hits"]
     with store._get_conn() as conn:
@@ -146,7 +133,6 @@ def test_authenticated_existing_namespace_persists_and_recalls(memory):
 def test_authenticated_memory_is_available_in_a_new_session(memory):
     _, ctx, namespace, _store, rag = memory
     capture(namespace, ctx)
-    confirm(ctx)
     next_session = {**ctx, "session_id": "next-session", "conversation_id": "next-session"}
     next_namespace = scoped_conversation_user_id("7", next_session)
     memory_namespace = scoped_personal_memory_id(next_session)
@@ -170,7 +156,6 @@ def test_planner_cannot_recall_existing_namespace_anonymously(memory, monkeypatc
     _, ctx, namespace, _, rag = memory
     memory_namespace = scoped_personal_memory_id(ctx)
     capture(namespace, ctx)
-    confirm(ctx)
     from app.application.workflow.planner import LLMWorkflowPlanner
 
     calls = []
@@ -222,8 +207,10 @@ def test_dataset_permissions_rederived_not_body_claims(memory, monkeypatch):
             "is_admin": True,
         },
     )
-    capture(namespace, ctx)
+    capture(namespace, {**ctx, "persy_memory_scope": "tenant"})
     assert count(store) == 0
+    capture(namespace, ctx)
+    assert count(store) == 1
 
 
 def test_authenticated_dataset_writer_keeps_namespace_and_derived_access(memory, monkeypatch):

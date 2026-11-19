@@ -438,4 +438,4 @@ def test_private_capture_does_not_need_dataset_write_but_cannot_write_tenant(
     assert memory.memory_service.list_memories(namespace()) == []
     persist_recallable_chat_turn(context=context, **kwargs)
     rows = memory.memory_service.list_memories(namespace())
-    assert len(rows) == 1 and rows[0]["status"] == "pending"
+    assert len(rows) == 1 and rows[0]["status"] == "active"

@@ -431,8 +431,8 @@ def persist_recallable_chat_turn(
         assistant_text = str(inner.get("text") or inner.get("message") or "").strip()
     if not assistant_text or sensitive.search(f"{message}\n{assistant_text}"):
         return
-    # Raw dialogue remains in the conversation store. Long-term model evidence
-    # comes only from candidates explicitly confirmed in MemoryV2.
+    # Raw dialogue remains in the conversation store. Only active, scoped
+    # MemoryV2 records supply long-term evidence.
     from app.application.persy_memory_app_service import get_persy_memory_app_service
 
     service = get_persy_memory_app_service()
