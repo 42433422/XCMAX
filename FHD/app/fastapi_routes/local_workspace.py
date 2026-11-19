@@ -13,6 +13,7 @@ import os
 import re
 import secrets
 import socket
+import sqlite3
 import threading
 import time
 from functools import lru_cache
@@ -35,8 +36,9 @@ _PEER_PATH = "/api/local-workspace/peer"
 _REQUEST_AAD = b"xcagi-local-workspace-request-v1"
 _RESPONSE_AAD = b"xcagi-local-workspace-response-v1"
 _PACKET_LIMIT = 2 * 1024 * 1024
-_BATCH_LIMIT = 100
+_BATCH_LIMIT = 20
 _PAYLOAD_LIMIT = _PACKET_LIMIT * 3 // 4 - 2048
+_DATABASE = Path("data/local-workspace.sqlite3")
 _LAN_RANGES = tuple(
     ipaddress.ip_network(cidr)
     for cidr in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16")
@@ -149,36 +151,13 @@ def _push(store: LocalWorkspace, payload: dict) -> dict:
 
 class LocalPeer:
     def __init__(self, root: Path) -> None:
-        self.store = LocalWorkspace(root / "data" / "local-workspace.sqlite3")
-        self.binding_path = root / "config" / "local-workspace-peer.json"
+        self.store = LocalWorkspace(root / _DATABASE)
         self.lock = threading.RLock()
         self.invitation: tuple[bytes, float, str] | None = None
-        self.binding = self._load_binding()
+        self.binding = self.store.peer_binding()
         self.server: uvicorn.Server | None = None
         self.thread: threading.Thread | None = None
         self.port = int(self.binding.get("port", 0))
-
-    def _load_binding(self) -> dict:
-        if not self.binding_path.is_file():
-            return {}
-        result = json.loads(self.binding_path.read_text(encoding="utf-8"))
-        if not isinstance(result, dict) or len(_decode(result.get("key"))) != 32:
-            raise ValueError("Invalid stored workspace binding")
-        return result
-
-    def _save_binding(self, value: dict) -> None:
-        if not value:
-            self.binding_path.unlink(missing_ok=True)
-        else:
-            self.binding_path.parent.mkdir(parents=True, exist_ok=True)
-            temporary = self.binding_path.with_suffix(".tmp")
-            fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-            with os.fdopen(fd, "w", encoding="utf-8") as stream:
-                json.dump(value, stream)
-                stream.flush()
-                os.fsync(stream.fileno())
-            temporary.replace(self.binding_path)
-        self.binding = value
 
     def start(self) -> None:
         if self.thread is not None and self.thread.is_alive():
@@ -224,7 +203,8 @@ class LocalPeer:
 
     def revoke(self) -> None:
         with self.lock:
-            self._save_binding({})
+            self.store.unbind_peer()
+            self.binding = {}
             self.invitation = None
             # Keep the listener until process shutdown so an immediate re-pair
             # reuses its port. Requests cannot decrypt after key revocation.
@@ -236,12 +216,6 @@ class LocalPeer:
                 "paired": bool(self.binding),
                 "archives": self.store.archives(),
             }
-
-    def _snapshot(self, workspace_id: str) -> dict:
-        snapshot = self.store.snapshot(workspace_id=workspace_id)
-        if len(self._serialize(snapshot)) > _PAYLOAD_LIMIT:
-            raise ValueError("首次同步的数据过大，请缩小起始工作区后再配对")
-        return snapshot
 
     def _pull(self, payload: dict) -> dict:
         limit = payload.get("limit", _BATCH_LIMIT)
@@ -261,35 +235,37 @@ class LocalPeer:
         action = payload.get("action")
         if action == "bind":
             request_id = payload["request_id"]
+            digest = hashlib.sha256(self._serialize(payload)).hexdigest()
             if self.binding:
-                if request_id == self.binding.get("bind_request") and hashlib.sha256(
-                    self._serialize(payload)
-                ).hexdigest() == self.binding.get("bind_digest"):
-                    return self._snapshot(self.binding["workspace_id"])
+                if (
+                    request_id == self.binding["bind_request"]
+                    and digest == self.binding["bind_digest"]
+                ):
+                    return self.store.pairing_snapshot()
                 raise ValueError("该配对码已经使用")
             if not invitation_id:
                 raise ValueError("配对码已失效")
             origin = payload.get("origin")
+            records = None
             if origin == "mobile":
                 records = payload.get("records")
                 if not isinstance(records, list):
                     raise ValueError("缺少手机工作区数据")
-                if len(self._serialize({"records": records})) > _PAYLOAD_LIMIT - 4096:
-                    raise ValueError("首次同步的数据过大，请缩小起始工作区后再配对")
-                snapshot = self.store.replace_from_mobile(records, workspace_id=invitation_id)
-            elif origin == "desktop":
-                snapshot = self._snapshot(invitation_id)
-            else:
+            elif origin != "desktop":
                 raise ValueError("请选择起始设备")
-            self._save_binding(
-                {
-                    "key": _encode(key),
-                    "port": self.port,
-                    "workspace_id": snapshot["workspace_id"],
-                    "bind_request": request_id,
-                    "bind_digest": hashlib.sha256(self._serialize(payload)).hexdigest(),
-                }
+            binding = {
+                "key": _encode(key),
+                "port": self.port,
+                "bind_request": request_id,
+                "bind_digest": digest,
+            }
+            snapshot = self.store.bind_peer(
+                binding,
+                workspace_id=invitation_id,
+                records=records,
+                max_snapshot_bytes=_PAYLOAD_LIMIT - 1024,
             )
+            self.binding = {**binding, "workspace_id": snapshot["workspace_id"]}
             self.invitation = None
             return snapshot
         if not self.binding or _workspace_id(payload) != self.binding["workspace_id"]:
@@ -369,13 +345,15 @@ def _current_peer() -> LocalPeer:
 
 
 def resume_local_workspace() -> None:
-    if (
-        is_desktop_mode()
-        and (get_desktop_data_dir() / "config" / "local-workspace-peer.json").is_file()
-    ):
-        peer = _current_peer()
+    if is_desktop_mode() and (get_desktop_data_dir() / _DATABASE).is_file():
+        try:
+            peer = _current_peer()
+        except sqlite3.Error:
+            logger.warning("Desktop local workspace database could not open", exc_info=True)
+            return
         with peer.lock:
-            peer.start()
+            if peer.binding:
+                peer.start()
 
 
 @router.get("/status", dependencies=[Depends(_desktop_request)])

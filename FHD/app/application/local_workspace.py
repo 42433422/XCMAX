@@ -13,6 +13,7 @@ from typing import Any
 from uuid import uuid4
 
 _KINDS = {"customer", "product", "order"}
+_RECORD_LIMIT = 64 * 1024
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS workspace (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
@@ -42,6 +43,11 @@ CREATE TABLE IF NOT EXISTS archives (
     created_at TEXT NOT NULL,
     record_count INTEGER NOT NULL,
     records TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS peer_binding (
+    singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+    binding TEXT NOT NULL,
+    snapshot TEXT NOT NULL
 );
 """
 
@@ -77,12 +83,15 @@ def _normalize_record(value: Mapping[str, Any]) -> dict[str, Any]:
     deleted = value.get("deleted", False)
     if not isinstance(deleted, bool):
         raise ValueError("无效的删除状态")
-    return {
+    record = {
         "id": _identifier(value.get("id"), "id"),
         "kind": kind,
         "data": data,
         "deleted": deleted,
     }
+    if len(_json(record).encode()) > _RECORD_LIMIT:
+        raise ValueError("单条工作区记录不得超过 64 KiB")
+    return record
 
 
 def _normalize_snapshot(values: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
@@ -159,6 +168,50 @@ class LocalWorkspace:
     def snapshot(self, *, workspace_id: str | None = None) -> dict[str, Any]:
         with self._transaction() as db:
             return {**self._status(db, workspace_id), "records": self._records(db)}
+
+    def peer_binding(self) -> dict[str, Any]:
+        with self._transaction() as db:
+            row = db.execute("SELECT binding FROM peer_binding").fetchone()
+            return json.loads(row[0]) if row is not None else {}
+
+    def pairing_snapshot(self) -> dict[str, Any]:
+        with self._transaction() as db:
+            row = db.execute("SELECT snapshot FROM peer_binding").fetchone()
+            if row is None:
+                raise WorkspaceChanged("工作区已解除绑定，请重新配对")
+            return json.loads(row[0])
+
+    def bind_peer(
+        self,
+        binding: dict[str, Any],
+        *,
+        workspace_id: str,
+        max_snapshot_bytes: int,
+        records: Iterable[Mapping[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        normalized = None if records is None else _normalize_snapshot(records)
+        with self._transaction(write=True) as db:
+            if db.execute("SELECT 1 FROM peer_binding").fetchone() is not None:
+                raise ValueError("请先解除当前设备绑定")
+            if normalized is None:
+                snapshot = {
+                    **self._status(db, workspace_id),
+                    "records": self._records(db),
+                }
+            else:
+                snapshot = self._replace(db, normalized, workspace_id)
+            encoded = _json(snapshot)
+            if len(encoded.encode()) > max_snapshot_bytes:
+                raise ValueError("首次同步的数据过大，请缩小起始工作区后再配对")
+            db.execute(
+                "INSERT INTO peer_binding (singleton, binding, snapshot) VALUES (1, ?, ?)",
+                (_json({**binding, "workspace_id": snapshot["workspace_id"]}), encoded),
+            )
+            return snapshot
+
+    def unbind_peer(self) -> None:
+        with self._transaction(write=True) as db:
+            db.execute("DELETE FROM peer_binding")
 
     @staticmethod
     def _save_record(db: sqlite3.Connection, record: dict[str, Any], encoded: str) -> None:
@@ -267,13 +320,6 @@ class LocalWorkspace:
         )
         return {**self._status(db), "archive_id": archive_id, "records": records}
 
-    def replace_from_mobile(
-        self, records: Iterable[Mapping[str, Any]], *, workspace_id: str | None = None
-    ) -> dict[str, Any]:
-        normalized = _normalize_snapshot(records)
-        with self._transaction(write=True) as db:
-            return self._replace(db, normalized, workspace_id)
-
     def archives(self) -> list[dict[str, Any]]:
         with self._transaction() as db:
             db.row_factory = sqlite3.Row
@@ -287,6 +333,8 @@ class LocalWorkspace:
         self, archive_id: str, *, workspace_id: str | None = None
     ) -> dict[str, Any]:
         with self._transaction(write=True) as db:
+            if db.execute("SELECT 1 FROM peer_binding").fetchone() is not None:
+                raise ValueError("请先解除当前设备绑定")
             saved = db.execute(
                 "SELECT records FROM archives WHERE archive_id = ?", (archive_id,)
             ).fetchone()

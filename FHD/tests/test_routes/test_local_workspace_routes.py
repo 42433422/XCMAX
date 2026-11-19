@@ -45,6 +45,10 @@ def local_desktop(tmp_path, monkeypatch):
         headers={"X-XCAGI-Desktop-Local": "1"},
     ) as client:
         yield client
+    stop_peer()
+
+
+def stop_peer():
     peer = routes._current_peer()
     if peer.server:
         peer.server.should_exit = True
@@ -113,6 +117,9 @@ def test_desktop_seed_bidirectional_exchange_replay_conflict_and_unbind(local_de
             "/api/local-workspace/records",
             json={"workspace_id": workspace_id, "operations": [change("c", DESK, "New", "a" * 32)]},
         ).json()["accepted"] == ["c" * 32]
+        stop_peer()
+        routes.resume_local_workspace()
+        assert call("bind", origin="desktop", request_id="same-binding-attempt") == seed
         assert call(
             "push", workspace_id=workspace_id, operations=[change("d", DESK, "Conflict", "a" * 32)]
         )["conflicts"][0]["current"]["data"] == {"name": "New"}
@@ -136,10 +143,10 @@ def test_mobile_seed_archives_original_desktop_and_restore_after_unbind(local_de
     qr = desktop.post("/api/local-workspace/pairing").json()["qr"]
     client, call = phone_connection(qr)
     with client:
-        bound = call(
-            "bind",
-            origin="mobile",
-            records=[
+        request = {
+            "origin": "mobile",
+            "request_id": "same-binding-attempt",
+            "records": [
                 {
                     "id": PHONE,
                     "kind": "customer",
@@ -148,10 +155,27 @@ def test_mobile_seed_archives_original_desktop_and_restore_after_unbind(local_de
                     "data": {"name": "Phone seed"},
                 }
             ],
-        )
+        }
+        bound = call("bind", **request)
         assert bound["workspace_id"] != before
         assert bound["records"][0]["id"] == PHONE
+        assert desktop.post(
+            "/api/local-workspace/records",
+            json={
+                "workspace_id": bound["workspace_id"],
+                "operations": [change("c", DESK, "After seed")],
+            },
+        ).json()["accepted"] == ["c" * 32]
+        stop_peer()
+        routes.resume_local_workspace()
+        assert call("bind", **request) == bound
+        assert len(desktop.get("/api/local-workspace/status").json()["archives"]) == 1
+        followup = call("pull", workspace_id=bound["workspace_id"], after=bound["cursor"])
+        assert followup["changes"][0]["record"]["data"] == {"name": "After seed"}
         assert call("unbind", workspace_id=bound["workspace_id"])["unbound"]
+    stop_peer()
+    routes.resume_local_workspace()
+    assert routes._current_peer().server is None
     result = desktop.post(
         f"/api/local-workspace/archives/{bound['archive_id']}/restore",
         json={"workspace_id": bound["workspace_id"]},
@@ -182,3 +206,23 @@ def test_management_requests_require_loopback_and_desktop_mode(local_desktop, mo
     monkeypatch.setenv("XCAGI_DESKTOP_MODE", "0")
     assert local_desktop.get("/api/local-workspace/status").status_code == 404
     monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")
+
+
+def test_startup_only_opens_an_existing_desktop_workspace(tmp_path, monkeypatch):
+    monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
+    routes.resume_local_workspace()
+    assert not (tmp_path / routes._DATABASE).exists()
+
+
+def test_workspace_database_failure_does_not_block_desktop_startup(tmp_path, monkeypatch, caplog):
+    monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
+    db = tmp_path / routes._DATABASE
+    db.parent.mkdir()
+    db.write_bytes(b"damaged database")
+
+    routes.resume_local_workspace()
+
+    assert "Desktop local workspace database could not open" in caplog.text
+    assert db.read_bytes() == b"damaged database"

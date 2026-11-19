@@ -1,3 +1,4 @@
+import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -92,12 +93,13 @@ def test_mobile_snapshot_archives_old_workspace_and_restores_in_new_epoch(tmp_pa
         "deleted": False,
         "version": "mobile-create",
     }
+    options = {"workspace_id": old["workspace_id"], "max_snapshot_bytes": 65536}
     with pytest.raises(ValueError, match="重复记录"):
-        store.replace_from_mobile([mobile, mobile], workspace_id=old["workspace_id"])
+        store.bind_peer({}, records=[mobile, mobile], **options)
     assert store.archives() == []
     assert store.snapshot() == old
 
-    new = store.replace_from_mobile([mobile], workspace_id=old["workspace_id"])
+    new = store.bind_peer({}, records=[mobile], **options)
     assert new["workspace_id"] != old["workspace_id"]
     assert new["cursor"] == 0
     assert new["records"] == [mobile]
@@ -111,6 +113,9 @@ def test_mobile_snapshot_archives_old_workspace_and_restores_in_new_epoch(tmp_pa
         store.apply([_operation("mobile-create", "mobile", base="mobile-create", name="冲突")])
     assert store.snapshot()["records"] == [mobile]
 
+    with pytest.raises(ValueError, match="解除当前设备绑定"):
+        store.restore_archive(new["archive_id"], workspace_id=new["workspace_id"])
+    store.unbind_peer()
     restored = store.restore_archive(new["archive_id"], workspace_id=new["workspace_id"])
     assert restored["records"] == old["records"]
     assert restored["workspace_id"] not in {old["workspace_id"], new["workspace_id"]}
@@ -141,3 +146,48 @@ def test_concurrent_updates_share_cas_and_separate_paths_stay_isolated(tmp_path:
     assert other.status()["workspace_id"] != workspace_id
     with pytest.raises(WorkspaceChanged):
         other.apply([operations[0]], workspace_id=workspace_id)
+
+
+def test_binding_write_failure_rolls_back_mobile_snapshot_and_archive(tmp_path: Path):
+    path = tmp_path / "workspace.sqlite3"
+    store = LocalWorkspace(path)
+    store.apply([_operation("old-version", "old", name="Desktop")])
+    old = store.snapshot()
+    mobile = {
+        "id": "mobile",
+        "kind": "customer",
+        "data": {"name": "Mobile"},
+        "deleted": False,
+        "version": "mobile-version",
+    }
+    with sqlite3.connect(path) as db:
+        db.execute(
+            """CREATE TRIGGER fail_binding BEFORE INSERT ON peer_binding
+               BEGIN SELECT RAISE(ABORT, 'failed to write binding'); END"""
+        )
+    with pytest.raises(sqlite3.IntegrityError, match="failed to write binding"):
+        store.bind_peer(
+            {"bind_request": "first"},
+            workspace_id=old["workspace_id"],
+            max_snapshot_bytes=65536,
+            records=[mobile],
+        )
+
+    reopened = LocalWorkspace(path)
+    assert reopened.snapshot() == old
+    assert reopened.archives() == []
+    assert reopened.peer_binding() == {}
+
+
+def test_oversized_record_does_not_block_synchronizing_valid_records(tmp_path: Path):
+    store = LocalWorkspace(tmp_path / "workspace.sqlite3")
+    with pytest.raises(ValueError, match="64 KiB"):
+        store.apply(
+            [
+                _operation("good", "good", name="Good"),
+                _operation("large", "large", note="汉" * 22000),
+            ]
+        )
+    assert store.pull(0)["changes"] == []
+    store.apply([_operation("good", "good", name="Good")])
+    assert store.pull(0)["cursor"] == 1
