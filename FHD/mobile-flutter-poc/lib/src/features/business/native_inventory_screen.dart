@@ -815,8 +815,9 @@ class _InventoryProductPickerState extends State<_InventoryProductPicker> {
                           title: Text(_productLabel(product)),
                           trailing: const Icon(Icons.chevron_right),
                           onTap: () {
-                            if (widget.session.active)
+                            if (widget.session.active) {
                               Navigator.of(context).pop(product);
+                            }
                           },
                         ),
                       if (_total > _pageSize)

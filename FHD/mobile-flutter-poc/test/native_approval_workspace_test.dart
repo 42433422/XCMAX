@@ -124,16 +124,7 @@ Future<void> editFlow(WidgetTester tester, FlowApi api) async {
 }
 
 Future<void> saveFlow(WidgetTester tester) async {
-  await tester.scrollUntilVisible(
-    find.text('保存流程'),
-    200,
-    scrollable: find
-        .descendant(
-          of: find.byType(ListView).last,
-          matching: find.byType(Scrollable),
-        )
-        .first,
-  );
+  expect(find.text('保存流程').hitTestable(), findsOneWidget);
   await tester.tap(find.text('保存流程'));
   await tester.pump();
 }
@@ -415,13 +406,7 @@ void main() {
             .first);
     await tester.enterText(
         find.widgetWithText(TextFormField, '审批人 ID'), '12,13');
-    await tester.scrollUntilVisible(find.text('保存流程'), 200,
-        scrollable: find
-            .descendant(
-                of: find.byType(ListView).last,
-                matching: find.byType(Scrollable))
-            .first);
-    await tester.tap(find.text('保存流程'));
+    await saveFlow(tester);
     await tester.pumpAndSettle();
     final body = api.calls.firstWhere((c) => c.method == 'POST').body!;
     expect((body['flow'] as Map)['flow_key'], 'purchase_flow');

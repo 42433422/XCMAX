@@ -114,7 +114,7 @@ class _NativeOrdersScreenState extends State<NativeOrdersScreen> {
       await _session.request(
           id == null
               ? '${widget.apiBase}/orders/clear-all'
-              : '${widget.apiBase}/shipment/orders/${id}',
+              : '${widget.apiBase}/shipment/orders/$id',
           method: 'DELETE');
       if (mounted && _session.active) await _load();
     } catch (error) {
@@ -263,7 +263,8 @@ class _NativeOrdersScreenState extends State<NativeOrdersScreen> {
                         padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
                         sliver: SliverList.separated(
                           itemCount: _rows.length,
-                          separatorBuilder: (_, _) => const SizedBox(height: 8),
+                          separatorBuilder: (_, index) =>
+                              const SizedBox(height: 8),
                           itemBuilder: (context, index) =>
                               _record(_rows[index]),
                         ),

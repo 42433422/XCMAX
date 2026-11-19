@@ -95,12 +95,22 @@ class _ApprovalFlowFormState extends State<_ApprovalFlowForm> {
   }
 
   Future<void> _save() async {
-    if (_busy ||
-        _loading ||
-        !widget.session.active ||
-        !_form.currentState!.validate()) {
+    final form = _form.currentState;
+    if (_busy || _loading || !widget.session.active || form == null) return;
+    final invalid = form.validateGranularly();
+    if (invalid.isNotEmpty) {
+      final first = invalid.first;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!first.mounted) return;
+        unawaited(Scrollable.ensureVisible(
+          first.context,
+          alignment: 0.2,
+          duration: AppTheme.motionDuration(first.context, milliseconds: 180),
+        ));
+      });
       return;
     }
+    FocusScope.of(context).unfocus();
     if (!_editing && _nodes.isEmpty) {
       setState(() {
         _error = '请至少添加一个审批节点';
@@ -149,8 +159,9 @@ class _ApprovalFlowFormState extends State<_ApprovalFlowForm> {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
+    final colors = AppTheme.colors(context);
     return Scaffold(
-      backgroundColor: AppTheme.colors(context).page,
+      backgroundColor: colors.page,
       body: SafeArea(
         child: Column(
           children: [
@@ -200,27 +211,39 @@ class _ApprovalFlowFormState extends State<_ApprovalFlowForm> {
                                     label: const Text('添加审批节点'),
                                   ),
                                 ),
-                              const SizedBox(height: 16),
-                              if (_error != null) ...[
-                                Semantics(
-                                  liveRegion: true,
-                                  child: WorkspacePanel(child: Text(_error!)),
-                                ),
-                                const SizedBox(height: 12),
-                              ],
-                              FilledButton(
-                                style: FilledButton.styleFrom(
-                                  minimumSize: const Size(0, 48),
-                                ),
-                                onPressed: _busy || _loading ? null : _save,
-                                child: Text(_busy ? '正在保存…' : '保存流程'),
-                              ),
                             ],
                           ),
                         ],
                       ),
                     ),
             ),
+            if (widget.session.active)
+              Material(
+                color: colors.surface,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (_error != null)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Semantics(
+                            liveRegion: true,
+                            child: Text(_error!, style: text.bodySmall),
+                          ),
+                        ),
+                      FilledButton(
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size(0, 48),
+                        ),
+                        onPressed: _busy || _loading ? null : _save,
+                        child: Text(_busy ? '正在保存…' : '保存流程'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
           ],
         ),
       ),

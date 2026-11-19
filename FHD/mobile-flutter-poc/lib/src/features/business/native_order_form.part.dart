@@ -284,7 +284,8 @@ class _OrderFormState extends State<NativeOrderFormScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const WeSectionCaption('客户与单据'),
-            Text('订单编号：${_number.isEmpty ? '正在读取' : _number}'),
+            Text(
+                '订单编号：${_number.isNotEmpty ? _number : _loading ? '正在读取…' : '未取得，请刷新'}'),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               key: ValueKey('order-template-$_template'),
@@ -688,6 +689,7 @@ class _ProductPickerState extends State<_ProductPicker> {
   final _selected = <Object, Map<String, Object?>>{};
   bool _loading = true, _more = false;
   int _page = 0, _ticket = 0;
+  String _keyword = '';
   String? _error;
   @override
   void initState() {
@@ -715,6 +717,7 @@ class _ProductPickerState extends State<_ProductPicker> {
 
   Future<void> _load({bool more = false}) async {
     final ticket = ++_ticket, page = more ? _page + 1 : 1;
+    final keyword = more ? _keyword : _search.text.trim();
     setState(() {
       _loading = true;
       _error = null;
@@ -724,7 +727,7 @@ class _ProductPickerState extends State<_ProductPicker> {
           .request('${widget.apiBase}/products/list', query: {
         'page': '$page',
         'per_page': '30',
-        if (_search.text.trim().isNotEmpty) 'keyword': _search.text.trim(),
+        if (keyword.isNotEmpty) 'keyword': keyword,
         if (widget.unit.isNotEmpty) 'unit': widget.unit
       });
       final rows = _records(result);
@@ -732,6 +735,7 @@ class _ProductPickerState extends State<_ProductPicker> {
         setState(() {
           _products = [if (more) ..._products, ...rows];
           _page = page;
+          _keyword = keyword;
           _more = result['total'] is num
               ? _products.length < (result['total'] as num)
               : rows.length == 30;
@@ -798,7 +802,7 @@ class _ProductPickerState extends State<_ProductPicker> {
                     child: ListView.separated(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       itemCount: _products.length + (_more ? 1 : 0),
-                      separatorBuilder: (_, _) => const SizedBox(height: 8),
+                      separatorBuilder: (_, index) => const SizedBox(height: 8),
                       itemBuilder: (context, index) {
                         if (index == _products.length) {
                           return TextButton(
