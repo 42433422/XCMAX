@@ -64,29 +64,15 @@ class WorkspaceTransition extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final duration = AppTheme.motionDuration(context, milliseconds: 200);
-    return AnimatedSwitcher(
+    if (duration == Duration.zero) return child;
+    return TweenAnimationBuilder<double>(
+      key: child.key,
+      tween: Tween(begin: 0, end: 1),
       duration: duration,
-      switchInCurve: Curves.easeOutCubic,
-      switchOutCurve: Curves.easeIn,
-      layoutBuilder: (current, previous) => Stack(
-        alignment: Alignment.topCenter,
-        children: [
-          for (final widget in previous)
-            Positioned.fill(
-              child: IgnorePointer(
-                child: ExcludeFocus(child: ExcludeSemantics(child: widget)),
-              ),
-            ),
-          if (current != null) current,
-        ],
-      ),
-      transitionBuilder: (child, animation) => FadeTransition(
-        opacity: animation,
-        child: SlideTransition(
-          position: Tween(begin: const Offset(0, 0.035), end: Offset.zero)
-              .animate(animation),
-          child: child,
-        ),
+      curve: Curves.easeOutCubic,
+      builder: (context, progress, child) => FractionalTranslation(
+        translation: Offset(0, (1 - progress) * 0.035),
+        child: Opacity(opacity: progress, child: child),
       ),
       child: child,
     );
