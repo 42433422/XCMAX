@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 from pathlib import Path
 from typing import Any, Dict
@@ -47,19 +48,28 @@ def _bounded_text(value: Any, *, limit: int) -> str:
     return str(value or "").strip()[:limit]
 
 
-def build_source_files(proposal: Dict[str, Any]) -> Dict[str, str]:
-    """Compile one allowlisted pack; LLM prose never becomes executable source."""
+def unsupported_proposal_reason(proposal: Dict[str, Any]) -> str | None:
+    """Classify supported capability identities; malformed proposals still raise."""
 
     validate_proposal(proposal)
     if proposal.get("triggered_by") != "catalog_capability_gap":
-        raise ProposalScaffoldError("only allowlisted catalog gap proposals are materializable")
+        return "only allowlisted catalog gap proposals are materializable"
+    proposed_package_id = _bounded_text(proposal.get("employee_pack", {}).get("name"), limit=128)
+    if proposed_package_id != _ALLOWLISTED_PACKAGE_ID:
+        return "proposal package is not allowlisted"
+    return None
+
+
+def build_source_files(proposal: Dict[str, Any]) -> Dict[str, str]:
+    """Compile one allowlisted pack; LLM prose never becomes executable source."""
+
+    reason = unsupported_proposal_reason(proposal)
+    if reason:
+        raise ProposalScaffoldError(reason)
     # This scaffold implements one reviewed capability only. The proposal's nested
     # employee-pack object can contain LLM-authored/private prose, so no value from
     # it is copied into source. Proposal generation already pins this identity; the
     # second check here makes direct callers fail closed as well.
-    proposed_package_id = _bounded_text(proposal.get("employee_pack", {}).get("name"), limit=128)
-    if proposed_package_id != _ALLOWLISTED_PACKAGE_ID:
-        raise ProposalScaffoldError("proposal package is not allowlisted")
     package_id = _ALLOWLISTED_PACKAGE_ID
     version = _bounded_text(proposal.get("target_version") or "1.0.0", limit=32)
     if not _PACK_NAME_RE.fullmatch(package_id):
@@ -269,7 +279,7 @@ def materialize_proposal(proposal: Dict[str, Any], *, repo_root: Path) -> Dict[s
 
     files = build_source_files(proposal)
     package_id = _ALLOWLISTED_PACKAGE_ID
-    version = str(proposal.get("target_version") or "1.0.0")
+    version = _bounded_text(proposal.get("target_version") or "1.0.0", limit=32)
     source_rel = Path(PACK_FILES_PREFIX) / f"{package_id}@{version}"
     source_dir = (repo_root / source_rel).resolve()
     repo_root_resolved = repo_root.resolve()
@@ -295,9 +305,29 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--proposal-file", required=True, type=Path)
     parser.add_argument("--repo-root", required=True, type=Path)
+    parser.add_argument(
+        "--result-file", type=Path, help="New private receipt directly in RUNNER_TEMP"
+    )
     args = parser.parse_args()
+    if args.result_file:
+        runner_temp = os.environ.get("RUNNER_TEMP")
+        if (
+            not runner_temp
+            or not Path(runner_temp).is_absolute()
+            or not args.result_file.is_absolute()
+            or args.result_file.parent.resolve() != Path(runner_temp).resolve()
+        ):
+            parser.error("--result-file must be an absolute direct child of RUNNER_TEMP")
     proposal = json.loads(args.proposal_file.read_text(encoding="utf-8"))
     result = materialize_proposal(proposal, repo_root=args.repo_root)
+    if args.result_file:
+        receipt = {
+            key: result[key] for key in ("source_dir", "package_id", "version", "file_count")
+        }
+        # Exclusive creation rejects stale receipts and symlinks; stdout stays redacted.
+        descriptor = os.open(args.result_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as output:
+            json.dump(receipt, output, ensure_ascii=False, sort_keys=True)
     print(
         json.dumps(
             {
@@ -319,4 +349,5 @@ __all__ = [
     "ProposalScaffoldError",
     "build_source_files",
     "materialize_proposal",
+    "unsupported_proposal_reason",
 ]

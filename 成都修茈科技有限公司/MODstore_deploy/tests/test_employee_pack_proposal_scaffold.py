@@ -5,14 +5,21 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import json
+from pathlib import Path
 
 import pytest
 
-from modstore_server.employee_pack_proposal import _call_llm, propose_employee_pack
+from modstore_server.employee_pack_proposal import (
+    ProposalValidationError,
+    _call_llm,
+    propose_employee_pack,
+)
 from modstore_server.employee_pack_proposal_scaffold import (
     ProposalScaffoldError,
     build_source_files,
+    main,
     materialize_proposal,
+    unsupported_proposal_reason,
 )
 
 
@@ -157,6 +164,47 @@ def test_direct_caller_cannot_materialize_unreviewed_package_identity():
 
     with pytest.raises(ProposalScaffoldError, match="not allowlisted"):
         build_source_files(proposal)
+
+
+def test_scaffold_classification_does_not_turn_invalid_schema_into_manual_deferral():
+    proposal = propose_employee_pack(_signals(), llm_call=lambda _prompt: {})
+    proposal["triggered_by"] = "slo_metrics"
+    proposal["employee_pack"]["skills"] = "invalid"
+    with pytest.raises(ProposalValidationError, match="skills must be list"):
+        unsupported_proposal_reason(proposal)
+
+
+@pytest.mark.parametrize("destination", ["missing-temp", "outside", "nested", "relative"])
+def test_scaffold_receipt_requires_trusted_runner_temp(tmp_path, monkeypatch, destination):
+    runner_temp = tmp_path / "runner-temp"
+    runner_temp.mkdir()
+    monkeypatch.setenv("RUNNER_TEMP", str(runner_temp))
+    receipt = runner_temp / "receipt.json"
+    if destination == "missing-temp":
+        monkeypatch.delenv("RUNNER_TEMP")
+    elif destination == "outside":
+        receipt = tmp_path / "receipt.json"
+    elif destination == "nested":
+        receipt = runner_temp / "nested" / "receipt.json"
+    else:
+        receipt = Path("receipt.json")
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "scaffold",
+            "--proposal-file",
+            str(tmp_path / "never-read.json"),
+            "--repo-root",
+            str(tmp_path),
+            "--result-file",
+            str(receipt),
+        ],
+    )
+    with pytest.raises(SystemExit) as stopped:
+        main()
+    assert stopped.value.code == 2
+    assert not receipt.exists()
+    assert list(tmp_path.iterdir()) == [runner_temp]
 
 
 def test_malformed_llm_catalog_proposal_uses_safe_fallback():
