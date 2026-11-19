@@ -263,6 +263,7 @@ describe('customer service ticket detail', () => {
     expect(wrapper.text()).toContain('处理中')
     expect(wrapper.text()).toContain('管理员撤销派发')
     const receipt = wrapper.get('[aria-label="撤销派发回执"]')
+    expect(receipt.text()).toContain('撤销时的执行状态')
     expect(receipt.text()).toContain('已派发任务停止状态待核实')
     expect(receipt.text()).toContain('queued-local · 已取消')
     expect(receipt.text()).toContain('running-local · 已申请取消，等待执行端确认')

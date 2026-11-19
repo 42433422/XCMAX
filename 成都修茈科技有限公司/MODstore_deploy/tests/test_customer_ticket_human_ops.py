@@ -303,6 +303,26 @@ def test_revoke_dispatch_preserves_original_ticket_and_fences_queued_work(client
     assert public["dispatch_status"] == "revoked"
     assert public["status"] == "processing" and "dispatch_revocation" not in public
 
+    disposition = {
+        "disposition": "out_of_scope",
+        "request_id": str(uuid.uuid4()),
+        "note": "已复核原始反馈，属于园艺咨询，超出平台受理范围。",
+        "verification": "已对照原始对话、平台功能及受理范围，确认本单为园艺咨询。",
+    }
+    _as(admin)
+    dismissed = client.post(f"{path}/disposition", json=disposition)
+    assert dismissed.status_code == 200, dismissed.text
+    assert dismissed.json()["ticket"]["status"] == "rejected"
+    assert client.post(f"{path}/disposition", json=disposition).json()["replayed"] is True
+    closed = client.get(path).json()
+    assert closed["ticket"]["dispatch_revocation"] == receipt
+    assert closed["ticket"]["disposition"]["execution_stop"]["state"] == "dispatch_blocked"
+    _as(owner)
+    messages = client.get(f"/api/customer-service/sessions/{public['session_id']}").json()[
+        "messages"
+    ]
+    assert len(messages) == 1 and disposition["note"] in messages[0]["content"]
+
 
 def test_verified_repair_cannot_be_dismissed(client):
     from modstore_server.customer_service_tools import json_dumps

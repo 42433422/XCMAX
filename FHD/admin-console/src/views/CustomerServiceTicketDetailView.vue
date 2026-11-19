@@ -119,7 +119,7 @@
         <h3 class="cs-card-title">执行总览</h3>
         <div v-if="dispatchRevocation" aria-label="撤销派发回执">
           <dl class="cs-facts">
-            <div><dt>撤销派发</dt><dd>{{ executionStopLabel(revocationStop.state) }}</dd></div>
+            <div><dt>撤销时的执行状态</dt><dd>{{ executionStopLabel(revocationStop.state) }}</dd></div>
             <div><dt>撤销原因</dt><dd>{{ dispatchRevocation.note }}</dd></div>
             <div><dt>记录时间</dt><dd>{{ formatBeijingTime(dispatchRevocation.at) }}</dd></div>
           </dl>
@@ -131,12 +131,12 @@
               </template>
             </li>
           </ul>
-          <ul v-if="unsettledDispatches.length" class="cs-chips" aria-label="待核实的外部派发">
+          <ul v-if="unsettledDispatches.length" class="cs-chips" aria-label="撤销时待核实的外部派发">
             <li v-for="incident in unsettledDispatches" :key="String(incident.incident_event_id)">
               事件 #{{ incident.incident_event_id }} · {{ Array.isArray(incident.task_ids) ? incident.task_ids.join('、') : '' }} · 停止状态待核实
             </li>
           </ul>
-          <ul v-if="unsettledActions.length" class="cs-chips" aria-label="待核实的原单动作">
+          <ul v-if="unsettledActions.length" class="cs-chips" aria-label="撤销时待核实的原单动作">
             <li v-for="actionId in unsettledActions" :key="String(actionId)">动作 #{{ actionId }} · 停止状态待核实</li>
           </ul>
           <ul v-if="blockedActions.length" class="cs-chips" aria-label="已阻止的原单动作">
