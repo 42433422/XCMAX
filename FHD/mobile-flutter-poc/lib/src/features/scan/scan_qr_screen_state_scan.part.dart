@@ -7,6 +7,11 @@ abstract class _ScanQrStateScan extends _ScanQrStateCamera {
   void _handleScanResult(String raw) {
     if (_scanned || _pairing) return;
     HapticFeedback.mediumImpact();
+    if (widget.returnRawValue) {
+      _scanned = true;
+      Navigator.of(context).pop(raw);
+      return;
+    }
     final authPayload = parseAuthQrPayload(raw);
     if (authPayload != null) {
       setState(() => _scanned = true);

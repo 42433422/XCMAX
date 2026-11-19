@@ -27,10 +27,12 @@ abstract class _ScanQrStateCamera extends State<ScanQrScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _repository = MobileRepositoryScope.resolve(
-      context,
-      explicit: widget.repository,
-    );
+    if (!widget.returnRawValue) {
+      _repository = MobileRepositoryScope.resolve(
+        context,
+        explicit: widget.repository,
+      );
+    }
     _imagePicker = ImagePicker();
     _barcodeScanner = mlkit.BarcodeScanner(
       formats: [mlkit.BarcodeFormat.qrCode],

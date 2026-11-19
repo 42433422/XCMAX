@@ -20,17 +20,22 @@ part 'scan_qr_screen_state_scan.part.dart';
 part 'scan_qr_screen_overlays.part.dart';
 
 class ScanQrScreen extends StatefulWidget {
-  const ScanQrScreen({super.key, this.repository, this.enableCamera = true});
+  const ScanQrScreen({
+    super.key,
+    this.repository,
+    this.enableCamera = true,
+    this.returnRawValue = false,
+  });
 
   final MobileRepository? repository;
   final bool enableCamera;
+  final bool returnRawValue;
 
   @override
   State<ScanQrScreen> createState() => _ScanQrScreenState();
 }
 
 class _ScanQrScreenState extends _ScanQrStateScan {
-
   @override
   Widget build(BuildContext context) {
     final colors = AppTheme.colors(context);
@@ -118,12 +123,14 @@ class _ScanQrScreenState extends _ScanQrStateScan {
                         _ScannerFailure(
                           message: _cameraError!,
                           onRetry: _restartScanner,
-                          onOpenManual: _showManualInput,
+                          onOpenManual:
+                              widget.returnRawValue ? null : _showManualInput,
                         )
                       else if (!cameraEnabled)
                         _ScannerUnavailable(
                           onRequestPermission: _requestCameraPermission,
-                          onOpenManual: _showManualInput,
+                          onOpenManual:
+                              widget.returnRawValue ? null : _showManualInput,
                           requesting: _requestingCameraPermission,
                         ),
                       if (scannerReady)
@@ -133,7 +140,8 @@ class _ScanQrScreenState extends _ScanQrStateScan {
                           !_checkingCameraPermission)
                         _ScannerUnavailable(
                           onRequestPermission: _requestCameraPermission,
-                          onOpenManual: _showManualInput,
+                          onOpenManual:
+                              widget.returnRawValue ? null : _showManualInput,
                           requesting: _requestingCameraPermission,
                         ),
                       if (cameraEnabled && _pairing)
@@ -158,7 +166,7 @@ class _ScanQrScreenState extends _ScanQrStateScan {
                             ),
                           ),
                         ),
-                      if (scannerReady && !_scanned)
+                      if (scannerReady && !_scanned && !widget.returnRawValue)
                         Positioned(
                           bottom: 42,
                           left: 32,

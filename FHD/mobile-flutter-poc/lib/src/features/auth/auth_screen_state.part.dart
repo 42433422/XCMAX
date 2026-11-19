@@ -155,6 +155,15 @@ class _AuthScreenState extends State<AuthScreen> {
                             ),
                           ),
                           const SizedBox(height: 12),
+                          TextButton.icon(
+                            onPressed: () => Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => const LocalWorkspaceScreen(),
+                              ),
+                            ),
+                            icon: const Icon(Icons.folder_open_outlined),
+                            label: const Text('打开本地工作台'),
+                          ),
                           _ScanButton(onTap: _openScan),
                           const SizedBox(height: 10),
                           _RegisterLink(onTap: _openRegister),

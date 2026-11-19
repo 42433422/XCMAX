@@ -1,0 +1,184 @@
+"""Exercise the actual paired-device listener without an internet service."""
+
+from __future__ import annotations
+
+import itertools
+import time
+from urllib.parse import urlsplit
+
+import httpx
+import pytest
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from app.fastapi_routes import local_workspace as routes
+from app.middleware.csrf import CSRFMiddleware
+
+DESK = "1" * 32
+PHONE = "2" * 32
+
+
+def change(op_id, record_id, name, base=None):
+    return {
+        "op_id": op_id * 32,
+        "id": record_id,
+        "kind": "customer",
+        "data": {"name": name},
+        "deleted": False,
+        "base_version": base,
+    }
+
+
+@pytest.fixture
+def local_desktop(tmp_path, monkeypatch):
+    monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")
+    monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(routes, "_lan_address", lambda: "192.168.1.19")
+    app = FastAPI()
+    app.add_middleware(CSRFMiddleware)
+    app.include_router(routes.router)
+    with TestClient(
+        app,
+        base_url="http://127.0.0.1",
+        client=("127.0.0.1", 1234),
+        headers={"X-XCAGI-Desktop-Local": "1"},
+    ) as client:
+        yield client
+    peer = routes._current_peer()
+    if peer.server:
+        peer.server.should_exit = True
+        assert peer.thread is not None
+        peer.thread.join(5)
+    routes._peer.cache_clear()
+
+
+def phone_connection(qr):
+    cipher = AESGCM(routes._decode(qr["key"]))
+    address = urlsplit(qr["endpoint"])
+    url = f"http://127.0.0.1:{address.port}{address.path}"
+    client = httpx.Client(trust_env=False, timeout=3)
+    ids = itertools.count(1)
+
+    def call(action, *, request_id=None, **payload):
+        n = next(ids)
+        request_id = request_id or str(n)
+        nonce = n.to_bytes(12, "big")
+        sealed = cipher.encrypt(
+            nonce,
+            routes.LocalPeer._serialize({"request_id": request_id, "action": action, **payload}),
+            routes._REQUEST_AAD,
+        )
+        response = client.post(
+            url, json={"box": routes._encode(sealed), "nonce": routes._encode(nonce)}
+        )
+        response.raise_for_status()
+        wire = response.json()
+        import json
+
+        data = json.loads(
+            cipher.decrypt(
+                routes._decode(wire["nonce"]), routes._decode(wire["box"]), routes._RESPONSE_AAD
+            )
+        )
+        assert data["request_id"] == request_id
+        return data
+
+    deadline = time.monotonic() + 3
+    while not routes._current_peer().server.started:
+        assert time.monotonic() < deadline
+        time.sleep(0.01)
+    return client, call
+
+
+def test_desktop_seed_bidirectional_exchange_replay_conflict_and_unbind(local_desktop):
+    desktop = local_desktop
+    initial = desktop.get("/api/local-workspace/status").json()
+    workspace_id = initial["workspace_id"]
+    assert desktop.post(
+        "/api/local-workspace/records",
+        json={"workspace_id": workspace_id, "operations": [change("a", DESK, "Desktop")]},
+    ).json()["accepted"] == ["a" * 32]
+    qr = desktop.post("/api/local-workspace/pairing").json()["qr"]
+    assert qr["endpoint"].startswith("http://192.168.1.19:")
+    client, call = phone_connection(qr)
+    with client:
+        seed = call("bind", origin="desktop", request_id="same-binding-attempt")
+        assert seed["records"][0]["id"] == DESK
+        assert call("bind", origin="desktop", request_id="same-binding-attempt") == seed
+        pending = {"workspace_id": workspace_id, "operations": [change("b", PHONE, "Phone")]}
+        assert call("push", **pending)["accepted"] == ["b" * 32]
+        assert call("push", **pending)["accepted"] == ["b" * 32]
+        assert desktop.post(
+            "/api/local-workspace/records",
+            json={"workspace_id": workspace_id, "operations": [change("c", DESK, "New", "a" * 32)]},
+        ).json()["accepted"] == ["c" * 32]
+        assert call(
+            "push", workspace_id=workspace_id, operations=[change("d", DESK, "Conflict", "a" * 32)]
+        )["conflicts"][0]["current"]["data"] == {"name": "New"}
+        first = call("pull", workspace_id=workspace_id, after=seed["cursor"], limit=1)
+        assert first["has_more"] and first["changes"][0]["record"]["id"] == PHONE
+        second = call("pull", workspace_id=workspace_id, after=first["cursor"], limit=1)
+        assert not second["has_more"] and second["changes"][0]["record"]["data"] == {"name": "New"}
+        assert call("unbind", workspace_id=workspace_id)["unbound"]
+        with pytest.raises(httpx.HTTPStatusError, match="401"):
+            call("pull", workspace_id=workspace_id, after=0)
+    assert desktop.get("/api/local-workspace/status").json()["record_count"] == 2
+
+
+def test_mobile_seed_archives_original_desktop_and_restore_after_unbind(local_desktop):
+    desktop = local_desktop
+    before = desktop.get("/api/local-workspace/status").json()["workspace_id"]
+    desktop.post(
+        "/api/local-workspace/records",
+        json={"workspace_id": before, "operations": [change("a", DESK, "Old desk")]},
+    ).raise_for_status()
+    qr = desktop.post("/api/local-workspace/pairing").json()["qr"]
+    client, call = phone_connection(qr)
+    with client:
+        bound = call(
+            "bind",
+            origin="mobile",
+            records=[
+                {
+                    "id": PHONE,
+                    "kind": "customer",
+                    "version": "b" * 32,
+                    "deleted": False,
+                    "data": {"name": "Phone seed"},
+                }
+            ],
+        )
+        assert bound["workspace_id"] != before
+        assert bound["records"][0]["id"] == PHONE
+        assert call("unbind", workspace_id=bound["workspace_id"])["unbound"]
+    result = desktop.post(
+        f"/api/local-workspace/archives/{bound['archive_id']}/restore",
+        json={"workspace_id": bound["workspace_id"]},
+    ).json()
+    assert result["workspace_id"] not in (before, bound["workspace_id"])
+    assert desktop.get("/api/local-workspace/records").json()["records"][0]["id"] == DESK
+
+
+def test_management_requests_require_loopback_and_desktop_mode(local_desktop, monkeypatch):
+    assert (
+        local_desktop.post(
+            "/api/local-workspace/pairing", headers={"x-xcagi-desktop-local": "0"}
+        ).status_code
+        == 403
+    )
+    assert (
+        local_desktop.get(
+            "/api/local-workspace/status", headers={"host": "external.invalid"}
+        ).status_code
+        == 403
+    )
+    assert (
+        local_desktop.post(
+            "/api/local-workspace/pairing", headers={"origin": "https://external.invalid"}
+        ).status_code
+        == 403
+    )
+    monkeypatch.setenv("XCAGI_DESKTOP_MODE", "0")
+    assert local_desktop.get("/api/local-workspace/status").status_code == 404
+    monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")

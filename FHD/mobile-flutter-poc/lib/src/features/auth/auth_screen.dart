@@ -8,6 +8,7 @@ import '../../platform/external_url_launcher.dart';
 import '../../theme/app_assets.dart';
 import '../../theme/app_theme.dart';
 import '../scan/scan_qr_screen.dart';
+import '../workspace/local_workspace_screen.dart';
 import 'register_screen.dart';
 import '../../policy/mobile_error_policy.dart';
 

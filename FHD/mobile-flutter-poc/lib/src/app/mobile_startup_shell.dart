@@ -35,6 +35,7 @@ import '../features/settings/settings_screen.dart';
 import '../features/shell/home_shell.dart';
 import '../features/tools/ocr_screen.dart';
 import '../features/webview/desktop_tool_webview_screen.dart';
+import '../features/workspace/local_workspace_screen.dart';
 import '../models/conversation.dart';
 import '../platform/background_work_scheduler.dart';
 import '../policy/mobile_error_policy.dart';
@@ -111,6 +112,8 @@ class MobileStartupApp extends StatefulWidget {
 }
 
 class _MobileStartupAppState extends _MobileStartupStateBase {
+  bool _canOpenLocalWorkspaceWhileLoading = false;
+
   @override
   void initState() {
     super.initState();
@@ -146,7 +149,17 @@ class _MobileStartupAppState extends _MobileStartupStateBase {
   }
 
   Widget _buildHome() {
-    if (_route == null) return const _StartupLoadingScreen();
+    if (_route == null) {
+      return _StartupLoadingScreen(
+        openLocalWorkspace: _canOpenLocalWorkspaceWhileLoading
+            ? () => _navigatorKey.currentState?.push<void>(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const LocalWorkspaceScreen(),
+                  ),
+                )
+            : null,
+      );
+    }
     if (_checkingBiometric) return const _BiometricLockScreen();
 
     switch (_route!) {
@@ -177,6 +190,10 @@ class _MobileStartupAppState extends _MobileStartupStateBase {
 
   Future<void> _bootstrap() async {
     final session = await _client.loadSession();
+    if (!mounted) return;
+    if (!session.hasAuth && !session.canAutoLogin) {
+      setState(() => _canOpenLocalWorkspaceWhileLoading = true);
+    }
     MobileAppConfigData? config;
     try {
       config = await _client.appConfig();
