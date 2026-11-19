@@ -75,7 +75,9 @@ def outbound_page_http(monkeypatch: pytest.MonkeyPatch):
         if state.respond is not None:
             return state.respond(request)
         return httpx.Response(
-            200, headers={"Content-Type": "text/html"}, content=b"<html><body>public page</body></html>"
+            200,
+            headers={"Content-Type": "text/html"},
+            content=b"<html><body>public page</body></html>",
         )
 
     def client(**options):
@@ -110,7 +112,9 @@ async def test_fetch_page_pins_public_dns_and_disables_ambient_proxy(outbound_pa
 
 
 @pytest.mark.asyncio
-async def test_fetch_page_rejects_private_dns_without_request(outbound_page_http, monkeypatch) -> None:
+async def test_fetch_page_rejects_private_dns_without_request(
+    outbound_page_http, monkeypatch
+) -> None:
     from modstore_server.web_page_fetch import fetch_page_text
 
     monkeypatch.setattr(
