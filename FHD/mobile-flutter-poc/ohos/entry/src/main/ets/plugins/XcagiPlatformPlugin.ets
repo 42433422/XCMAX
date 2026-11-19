@@ -24,23 +24,23 @@ class CredentialCipher implements MethodCallHandler {
   onMethodCall(call: MethodCall, result: MethodResult): void {
     switch (call.method) {
       case 'encrypt': {
-        const plain = call.argument('plain');
+        const plain: ESObject = call.argument('plain');
         if (typeof plain !== 'string') {
           result.error('invalid_argument', '无法加密无效的凭证', null);
           return;
         }
-        this.encrypt(plain).then((encrypted: string) => result.success(encrypted))
+        this.encrypt(plain as string).then((encrypted: string) => result.success(encrypted))
           .catch(() => result.error('credential_cipher', '当前设备无法安全保存凭证', null));
         break;
       }
       case 'decrypt': {
-        const stored = call.argument('stored');
+        const stored: ESObject = call.argument('stored');
         if (typeof stored !== 'string') {
           result.success('');
           return;
         }
         // An invalid envelope or a missing local key must never become a token.
-        this.decrypt(stored).then((plain: string) => result.success(plain))
+        this.decrypt(stored as string).then((plain: string) => result.success(plain))
           .catch(() => result.success(''));
         break;
       }
