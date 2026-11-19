@@ -70,6 +70,13 @@ class LLMWorkflowPlanner:
         from app.application.workflow.sql_execution_policy import rejected_sql_plan
 
         context = dict(context or {})
+        for key in (
+            "planning_failure_reason",
+            "planning_failure_kind",
+            "plan_repair_trace",
+            "goal_coverage_rejected",
+        ):
+            context.pop(key, None)
         session_key = str(context.get("session_id") or context.get("conversation_id") or "").strip()
         plan_id = (
             f"wp-{session_key}-{uuid.uuid4().hex[:8]}" if session_key else f"wp-{uuid.uuid4().hex}"
@@ -204,6 +211,7 @@ class LLMWorkflowPlanner:
                 planned = self._plan_with_llm(plan_id, user_id, message, registry_for_plan, context)
             except MarketModelError as exc:
                 context["planning_failure_reason"] = str(exc)
+                context["planning_failure_kind"] = "model_unavailable"
                 planned = None
                 record_response_error()
         repair_trace: dict[str, Any] = {}
@@ -223,6 +231,13 @@ class LLMWorkflowPlanner:
                 )
             if planned is None:
                 errors = repair_trace.get("errors") or []
+                context["planning_failure_kind"] = (
+                    "model_unavailable"
+                    if errors and errors[-1].get("code") == "repair_request_failed"
+                    and "余额不足" in str(errors[-1].get("message") or "")
+                    else "plan_repair_failed"
+                )
+                context["plan_repair_trace"] = repair_trace
                 if errors:
                     context["planning_failure_reason"] = str(errors[-1].get("message") or "")
                 logger.warning("计划修复未成功，本轮不执行: %s", repair_trace.get("errors"))
@@ -245,6 +260,7 @@ class LLMWorkflowPlanner:
                     context.pop("goal_coverage_rejected", None)
                     break
                 context["planning_failure_reason"] = str(error or "目标核对未完成")
+                context["planning_failure_kind"] = "goal_coverage_rejected"
                 context["goal_coverage_rejected"] = review is not None
                 if attempt or review is None:
                     planned = None
@@ -262,6 +278,7 @@ class LLMWorkflowPlanner:
                         )
                     except MarketModelError as exc:
                         context["planning_failure_reason"] = str(exc)
+                        context["planning_failure_kind"] = "model_unavailable"
                         context.pop("goal_coverage_rejected", None)
                         planned = None
                         record_response_error()
@@ -275,9 +292,18 @@ class LLMWorkflowPlanner:
                             validate=validate_candidate,
                             complete=self.complete_messages,
                         )
+                        if planned is None:
+                            context["planning_failure_kind"] = "plan_repair_failed"
+                            context["plan_repair_trace"] = repair_trace
+                            errors = repair_trace.get("errors") or []
+                            if errors:
+                                context["planning_failure_reason"] = str(
+                                    errors[-1].get("message") or ""
+                                )
                 if planned is None:
                     break
                 context.pop("planning_failure_reason", None)
+                context.pop("planning_failure_kind", None)
         # 统一 Agent Runtime 接缝：把 pre-plan 记忆召回落上计划元数据，
         # 供编排器转成 run.memory_references（主链路可观测闭合）。
         recall_meta = {
@@ -285,6 +311,8 @@ class LLMWorkflowPlanner:
             for key in ("user_memory_rag", "memory_v2")
             if isinstance(context.get(key), dict)
         }
+        if planned is None and repair_trace and repair_trace.get("errors"):
+            context["plan_repair_trace"] = repair_trace
         if planned is not None and repair_trace:
             try:
                 planned.metadata["plan_repair"] = repair_trace

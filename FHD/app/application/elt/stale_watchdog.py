@@ -36,6 +36,15 @@ def stale_after_seconds() -> float:
         return 900.0
 
 
+def lease_grace_seconds() -> float:
+    """租约到期后再给执行线程的宽限；之后仍零进度即可安全回收。"""
+    raw = str(os.environ.get("ELT_LEASE_GRACE_SECONDS") or "120").strip()
+    try:
+        return max(30.0, float(raw))
+    except ValueError:
+        return 120.0
+
+
 def sweep_stale_runs() -> int:
     """仅回收已失效租约；未知批次保留令牌和回执供核对。"""
     from app.db import get_engine
@@ -61,16 +70,34 @@ def sweep_stale_runs() -> int:
         )
     )
     cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(seconds=stale_after_seconds())
+    lease_cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(seconds=lease_grace_seconds())
+    # 已拿租约但一行都没写：没有外部副作用可核对，不必等满 900 秒，
+    # 租约过期加宽限后即可安全判中断，避免占着执行槽位饿死后续导入。
+    claimed_without_progress = (
+        runs.operation_token.is_not(None)
+        & runs.operation_lease_until.is_not(None)
+        & (runs.operation_lease_until <= lease_cutoff)
+        & (runs.executed_rows == 0)
+        & (runs.progress == 0)
+        & (runs.receipt_json == "{}")
+    )
     active = (
         or_(
             runs.status.in_(("previewing", "executing")), batch & (runs.status != "outcome_unknown")
         )
-        & (runs.updated_at <= cutoff)
+        & or_((runs.updated_at <= cutoff), claimed_without_progress)
         & or_(
             runs.operation_token.is_(None), runs.operation_lease_until <= func.current_timestamp()
         )
     )
     sweeps = (
+        (
+            claimed_without_progress & ~batch,
+            "interrupted",
+            "ELT_EXECUTION_INTERRUPTED",
+            "执行已中断，未写入业务数据，请重新导入",
+            _RELEASED,
+        ),
         (
             no_write,
             "interrupted",

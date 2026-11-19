@@ -75,6 +75,19 @@ def test_same_turn_replays_receipt_and_rejects_changed_message(memory_dir: Path)
     assert turn_status(conversation_key(context), "same") == "completed"
 
 
+def test_settle_with_reused_turn_id_does_not_break_the_turn(memory_dir: Path) -> None:
+    context = _context("reuse", "1")
+    assert prepare_chat_turn("真正的那条消息", context) is None
+
+    # 前端重试复用了同一 turn_id：结算只跳过本次，不抛错也不覆盖原轮次。
+    settle_chat_turn("另一条消息", context, {"response": "不应写入"}, "failed")
+
+    assert turn_status(conversation_key(context), "1") == "processing"
+    assert recent_conversation_messages(_context("reuse", "2")) == [
+        {"role": "user", "content": "真正的那条消息"}
+    ]
+
+
 def test_abandoned_turn_is_not_treated_as_completed(memory_dir: Path) -> None:
     context = _context("half", "open")
     # A real worker exits without settling; the OS must release its turn lock.
@@ -123,8 +136,9 @@ def test_unfinished_turn_replays_only_the_original_run(memory_dir: Path, status:
     replay = json.loads(process.stdout)
     assert replay["run_id"] == "run-original"
     assert replay["execution_state"] == status
-    with pytest.raises(ValueError, match="另一项执行"):
-        settle_chat_turn("删除旧记录", context, {"run_id": "other"}, "completed")
+    # 另一项执行的结算不再抛错中断整轮，而是跳过并保留原执行的记录。
+    settle_chat_turn("删除旧记录", context, {"run_id": "other"}, "completed")
+    assert turn_status(conversation_key(context), "original") == status
 
 
 @pytest.mark.parametrize("changed", [{"local_user_id": 2}, {"tenant_id": 2}, {"mod_id": "other"}])

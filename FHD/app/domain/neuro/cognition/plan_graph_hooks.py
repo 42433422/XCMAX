@@ -113,6 +113,13 @@ def finalize_planned_graph(
         "我没能生成通过系统校验的计划，本轮没有执行任何业务操作。请补充业务对象和目标后重试。"
     )
     coverage_rejected = bool((context or {}).get("goal_coverage_rejected"))
+    failure_kind = (
+        "plan_validation_failed"
+        if planned is not None
+        else str((context or {}).get("planning_failure_kind") or "model_unavailable")
+    )
+    if coverage_rejected:
+        failure_kind = "goal_coverage_rejected"
     rejected = plan_type(
         plan_id=plan_id,
         intent="plan_rejected",
@@ -136,8 +143,14 @@ def finalize_planned_graph(
         risk_level="low",
         metadata={
             "planning_rejected": True,
-            "planning_unavailable": planned is None and not coverage_rejected,
+            "planning_unavailable": failure_kind == "model_unavailable",
+            "planning_failure_kind": failure_kind,
             **({"goal_coverage_rejected": True} if coverage_rejected else {}),
+            **(
+                {"plan_repair": context["plan_repair_trace"]}
+                if isinstance((context or {}).get("plan_repair_trace"), dict)
+                else {}
+            ),
             "rejection_reason": rejection[:240],
         },
     )

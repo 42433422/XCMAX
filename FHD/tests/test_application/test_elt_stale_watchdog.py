@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 import threading
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import create_engine
@@ -18,7 +19,7 @@ def _prepare(tmp_path, rows: list[tuple]) -> str:
         "CREATE TABLE elt_runs (id TEXT PRIMARY KEY, status TEXT, stage TEXT, "
         "error_code TEXT, error_message TEXT, operation_kind TEXT, operation_token TEXT, "
         "operation_lease_until TIMESTAMP, updated_at TIMESTAMP, target_type TEXT, executed_rows INTEGER DEFAULT 0, "
-        "receipt_json TEXT DEFAULT '{}', rollback_status TEXT)"
+        "progress INTEGER DEFAULT 0, receipt_json TEXT DEFAULT '{}', rollback_status TEXT)"
     )
     conn.executemany(
         "INSERT INTO elt_runs (id,status,stage,error_code,error_message,operation_kind,operation_token, "
@@ -56,6 +57,11 @@ def test_stale_preview_is_interrupted(monkeypatch, tmp_path):
     )
     engine = create_engine(url)
     monkeypatch.setattr("app.db.get_engine", lambda: engine)
+    # 活跃执行会在每次写入时续租，因此“fresh”用未到期的租约表示。
+    with engine.begin() as conn:
+        conn.exec_driver_sql(
+            "UPDATE elt_runs SET operation_lease_until='2999-01-01 00:00:00' WHERE id='fresh'"
+        )
 
     assert stale_watchdog.sweep_stale_runs() == 1
 
@@ -162,6 +168,57 @@ def test_stale_live_lease_is_not_reclaimed(monkeypatch, tmp_path, kind, status):
             status,
             "tok",
         )
+    engine.dispose()
+
+
+def _hung_run(engine, run_id: str, kind: str, *, progress: int = 0, executed_rows: int = 0) -> None:
+    lease = (datetime.now(UTC) - timedelta(seconds=200)).strftime("%Y-%m-%d %H:%M:%S")
+    with engine.begin() as conn:
+        conn.exec_driver_sql(
+            "INSERT INTO elt_runs (id,status,stage,operation_kind,operation_token,"
+            "operation_lease_until,updated_at,target_type,executed_rows,progress,receipt_json) "
+            "VALUES (?,?,?,?,?,?,'9999-01-01 00:00:00','customers',?,?,'{}')",
+            (run_id, "executing", "executing", kind, "tok", lease, executed_rows, progress),
+        )
+
+
+def test_claimed_lease_without_progress_is_reclaimed_without_waiting(monkeypatch, tmp_path):
+    engine = create_engine(_prepare(tmp_path, []))
+    monkeypatch.setattr("app.db.get_engine", lambda: engine)
+    _hung_run(engine, "hung", "execute")
+
+    assert stale_watchdog.sweep_stale_runs() == 1
+
+    with engine.connect() as conn:
+        row = conn.exec_driver_sql(
+            "SELECT status, error_code, operation_token, operation_lease_until FROM elt_runs"
+        ).one()
+    assert row[0] == "interrupted"
+    assert row[1] == "ELT_EXECUTION_INTERRUPTED"
+    assert row[2:] == (None, None)
+    assert stale_watchdog.sweep_stale_runs() == 0
+    engine.dispose()
+
+
+def test_claimed_lease_without_progress_batch_is_settled_quickly(monkeypatch, tmp_path):
+    engine = create_engine(_prepare(tmp_path, []))
+    monkeypatch.setattr("app.db.get_engine", lambda: engine)
+    _hung_run(engine, "hung-batch", "batch_execute")
+
+    assert stale_watchdog.sweep_stale_runs() == 1
+
+    with engine.connect() as conn:
+        row = conn.exec_driver_sql("SELECT status, error_code, operation_token FROM elt_runs").one()
+    assert row == ("outcome_unknown", "ELT_OUTCOME_UNKNOWN", "tok")
+    engine.dispose()
+
+
+def test_claimed_lease_with_progress_is_not_reclaimed(monkeypatch, tmp_path):
+    engine = create_engine(_prepare(tmp_path, []))
+    monkeypatch.setattr("app.db.get_engine", lambda: engine)
+    _hung_run(engine, "slow", "execute", progress=40)
+
+    assert stale_watchdog.sweep_stale_runs() == 0
     engine.dispose()
 
 

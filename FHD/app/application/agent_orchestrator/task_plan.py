@@ -42,6 +42,17 @@ class UnifiedTaskPlanMixin:
             self._repo.list_run_scopes(user_id=user_id),
         )
 
+    def recent_task_refs(
+        self, *, user_id: str | None = None, limit: int = 200
+    ) -> list[tuple[str, str, str]]:
+        return cast(
+            "list[tuple[str, str, str]]",
+            self._repo.recent_task_refs(user_id=user_id, limit=limit),
+        )
+
+    def task_keys(self, *, user_id: str) -> set[tuple[str, str]]:
+        return cast("set[tuple[str, str]]", self._repo.task_keys(user_id=user_id))
+
     def get_task(
         self,
         *,

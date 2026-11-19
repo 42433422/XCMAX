@@ -178,7 +178,7 @@ _SHAPE_REPAIR_RULES = (
     "保留用户原始意图，只补全或修正结构，不要更换业务对象。",
     "mode=workflow 时必须给出至少一个 nodes；每个 node 必须有非空 tool_id 与 action，params 必须是对象。",
     "mode=reply 时必须给出非空 reply，且不能包含 nodes。",
-    "无法在不臆造业务事实的前提下补全时，改为 mode=workflow 的 clarify.ask 节点提出具体澄清问题。",
+    "仅在确实缺少用户业务事实且能提出具体问题时，才可使用 clarify.ask；未知工具、权限或协议错误不得改写为澄清。",
 )
 
 
@@ -397,6 +397,16 @@ def build_plan_from_payload(
     context: dict[str, Any] | None,
 ) -> PlanGraph:
     """把已解析的模型 JSON 收敛为 ``PlanGraph``；生成与修复共用同一收敛规则。"""
+    # Only these two known malformed spellings are aliases. Never truncate
+    # arbitrary tool/action suffixes or turn an unknown action into a safe one.
+    normalized_actions: list[dict[str, str]] = []
+    for node in nodes:
+        original = (node.tool_id, node.action)
+        if original in {("clarify", "ask.ask"), ("clarify.ask", "ask")}:
+            node.tool_id, node.action = "clarify", "ask"
+            normalized_actions.append(
+                {"node_id": node.node_id, "tool_id": original[0], "action": original[1]}
+            )
     user_memory_rag_summary = ""
     memory_v2_summary = ""
     if isinstance(context, dict):
@@ -417,6 +427,7 @@ def build_plan_from_payload(
         risk_level=normalize_workflow_risk(str(parsed.get("risk_level") or "low")),
         metadata={
             "planner": "llm",
+            **({"normalized_actions": normalized_actions} if normalized_actions else {}),
             "response_mode": "reply" if parsed.get("mode") == "reply" else "workflow",
             **(
                 {"reply": parsed["reply"]}
@@ -532,6 +543,7 @@ class LlmPlanGeneration:
             raise _LightReplyUnavailable
         if _has_native_tool_calls(response):
             context["planning_failure_reason"] = "轻量回复包含未授权工具调用，本轮未执行任何操作"
+            context["planning_failure_kind"] = "plan_format_invalid"
             raise _LightReplyUnavailable
         decoded = _decode_completion(response)
         if decoded is None:
@@ -628,6 +640,7 @@ class LlmPlanGeneration:
                 try:
                     light = self._light_reply(plan_id, message, context)
                 except _LightReplyUnavailable:
+                    context.setdefault("planning_failure_kind", "model_unavailable")
                     return None
                 if light is not None:
                     return light
@@ -711,6 +724,9 @@ class LlmPlanGeneration:
                         policy=policy,
                     )
             if not isinstance(response_data, dict):
+                context["planning_failure_kind"] = (
+                    "model_unavailable" if response_data is None else "plan_format_invalid"
+                )
                 return None
             try:
                 native_payload = native_plan_payload(response_data)
@@ -718,6 +734,7 @@ class LlmPlanGeneration:
                 context["planning_failure_reason"] = (
                     "原生调用未提交有效的完整依赖图，本轮未执行任何操作"
                 )
+                context["planning_failure_kind"] = "plan_format_invalid"
                 return None
             if native_payload is not None:
                 response_data = native_payload
@@ -739,6 +756,7 @@ class LlmPlanGeneration:
                 if repaired is not None:
                     return repaired
                 context["planning_failure_reason"] = (f"计划结构修复未完成：{schema_error}")[:300]
+                context["planning_failure_kind"] = "plan_format_invalid"
                 return None
             parsed, nodes = decoded
             return build_plan_from_payload(
@@ -752,6 +770,8 @@ class LlmPlanGeneration:
             # Exhausted retries must retain the existing fail-closed plan result,
             # not escape into chat or invoke the retired fallback dispatcher.
             logger.warning("模型传输重试已耗尽，拒绝计划：%s", type(err).__name__)
+            context["planning_failure_kind"] = "model_unavailable"
+            context["planning_failure_reason"] = "模型请求传输失败"
             return None
         except (ValueError, TypeError) as err:
             from app.infrastructure.modstore_transport import MarketModelError
@@ -759,6 +779,8 @@ class LlmPlanGeneration:
             if isinstance(err, MarketModelError):
                 raise
             logger.warning("LLM 规划参数错误，拒绝计划并暂停执行: %s", err)
+            context["planning_failure_kind"] = "plan_format_invalid"
+            context["planning_failure_reason"] = "模型计划参数或响应结构不符合协议"
             return None
         except RuntimeError as err:
             from app.infrastructure.llm.model_admission import (
@@ -779,6 +801,8 @@ class LlmPlanGeneration:
             ):
                 raise
             logger.warning("LLM 规划运行时错误，拒绝计划并暂停执行: %s", err)
+            context["planning_failure_kind"] = "planner_error"
+            context["planning_failure_reason"] = "规划服务处理失败"
             return None
 
     def extract_clarification_parameters(

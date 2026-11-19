@@ -8,7 +8,11 @@ from unittest.mock import Mock
 
 import pytest
 
-from app.application.workflow.llm_plan_generation import _load_model_json
+from app.application.workflow.llm_plan_generation import (
+    _decode_completion,
+    _load_model_json,
+    build_plan_from_payload,
+)
 from app.application.workflow.plan_repair import (
     classify_plan_error,
     enforce_repair_scope,
@@ -392,3 +396,140 @@ def test_explicit_repair_attempts_remain_bounded(requested, expected):
     )
     assert fixed is None
     assert len(calls) == trace["attempts"] == expected
+
+
+@pytest.mark.parametrize(
+    ("tool_id", "action", "expected"),
+    [
+        ("clarify", "ask", ("clarify", "ask")),
+        ("clarify", "ask.ask", ("clarify", "ask")),
+        ("clarify.ask", "ask", ("clarify", "ask")),
+        ("clarify", "ask.delete", ("clarify", "ask.delete")),
+        ("clarify", "ask.ask.extra", ("clarify", "ask.ask.extra")),
+        ("clarify.ask.other", "ask", ("clarify.ask.other", "ask")),
+    ],
+)
+def test_exact_clarify_aliases_are_normalized_only_at_plan_build(tool_id, action, expected):
+    from app.application.workflow.planning_graph_policy import validate_required_params
+
+    response = _completion(
+        {
+            "mode": "workflow",
+            "nodes": [
+                {
+                    "node_id": "n1",
+                    "tool_id": tool_id,
+                    "action": action,
+                    "params": {"question": "请确认业务对象"},
+                    "depends_on": ["source"],
+                }
+            ],
+        }
+    )
+    decoded = _decode_completion(response)
+    assert decoded is not None
+    parsed, nodes = decoded
+    first = build_plan_from_payload(
+        plan_id="p1", message="请确认", parsed=parsed, nodes=nodes, context={}
+    )
+    node = first.nodes[0]
+    assert (node.tool_id, node.action) == expected
+    assert node.node_id == "n1" and node.depends_on == ["source"]
+    assert node.params == {"question": "请确认业务对象"}
+    if (tool_id, action) != expected:
+        assert first.metadata["normalized_actions"] == [
+            {"node_id": "n1", "tool_id": tool_id, "action": action}
+        ]
+    else:
+        assert "normalized_actions" not in first.metadata
+    second = build_plan_from_payload(
+        plan_id="p1", message="请确认", parsed=parsed, nodes=nodes, context={}
+    )
+    assert (second.nodes[0].tool_id, second.nodes[0].action) == expected
+    if expected == ("clarify", "ask"):
+        assert validate_required_params(first, {}) is None
+    else:
+        assert validate_required_params(first, {}) is not None
+
+
+def test_repair_uses_same_exact_clarify_alias_normalization():
+    planned = _plan(_node("n1", tool_id="clarify", action="ask.invalid"))
+
+    def validate(plan):
+        return (
+            None
+            if (plan.nodes[0].tool_id, plan.nodes[0].action) == ("clarify", "ask")
+            else "节点 n1 使用未授权动作: clarify.ask.invalid"
+        )
+
+    fixed, trace = repair_plan(
+        planned=planned,
+        plan_id="p1",
+        message="请确认",
+        context={},
+        tool_registry={},
+        validate=validate,
+        complete=lambda **_: _completion(
+            {
+                "mode": "workflow",
+                "nodes": [
+                    {
+                        "node_id": "n1",
+                        "tool_id": "clarify.ask",
+                        "action": "ask",
+                        "params": {"question": "请确认业务对象"},
+                    }
+                ],
+            }
+        ),
+        max_attempts=1,
+    )
+    assert fixed is not None and (fixed.nodes[0].tool_id, fixed.nodes[0].action) == (
+        "clarify", "ask"
+    )
+    assert trace["attempts"] == 1 and trace["fixed"] is True
+
+
+def test_failed_repair_preserves_initial_error_and_response_diagnostic():
+    planned = _plan(_node("node_1", tool_id="clarify", action="ask.invalid"))
+    fixed, trace = repair_plan(
+        planned=planned,
+        plan_id="p1",
+        message="处理业务",
+        context={},
+        tool_registry={},
+        validate=lambda _: "节点 node_1 使用未授权动作: clarify.ask.invalid",
+        complete=lambda **_: _completion({"mode": "workflow", "nodes": []}),
+        max_attempts=1,
+    )
+    assert fixed is None and trace["attempts"] == 1
+    assert trace["initial_error"] == "节点 node_1 使用未授权动作: clarify.ask.invalid"
+    assert trace["invalid_node_actions"] == [
+        {"node_id": "node_1", "tool_id": "clarify", "action": "ask.invalid"}
+    ]
+    assert trace["errors"][0]["code"] == "unauthorized_action"
+    diagnostic = trace["errors"][-1]
+    assert diagnostic["code"] == "unparsable_repair"
+    assert diagnostic["reason"] == "schema_invalid"
+    assert diagnostic["response_length"] > 0
+    assert len(diagnostic["response_sha256"]) == 64
+
+
+def test_planner_repair_failure_is_not_mislabeled_model_unavailable(monkeypatch):
+    planner = LLMWorkflowPlanner(
+        ai_service=Mock(),
+        completion=lambda **_: _completion({"mode": "workflow", "nodes": []}),
+    )
+    monkeypatch.setattr(
+        planner,
+        "_plan_with_llm",
+        lambda *_: _plan(_node("node_1", tool_id="clarify", action="ask.invalid")),
+    )
+    result = planner.plan("owner", "处理业务", {}, context={"session_id": "s1"})
+    assert result.metadata["planning_rejected"] is True
+    assert result.metadata["planning_unavailable"] is False
+    assert result.metadata["planning_failure_kind"] == "plan_repair_failed"
+    trace = result.metadata["plan_repair"]
+    assert trace["attempts"] >= 1
+    assert trace["errors"][0]["code"] == "unauthorized_action"
+    assert trace["errors"][-1]["code"] == "unparsable_repair"
