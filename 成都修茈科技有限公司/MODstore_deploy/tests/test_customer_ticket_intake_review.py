@@ -12,7 +12,11 @@ import pytest
 from modstore_server import customer_issue_api, customer_service_api, customer_service_orchestrator
 from modstore_server.app import app
 from modstore_server.customer_issue_intake import INTAKE_EVENT, dispatch_issue_event
-from modstore_server.customer_ticket_intake_review import parse_intake_review, review_report_async
+from modstore_server.customer_ticket_intake_review import (
+    intake_dispatch_block_reason,
+    parse_intake_review,
+    review_report_async,
+)
 from modstore_server.eventing import db_outbox
 from modstore_server.models import User, get_session_factory
 from modstore_server.models_cs import CustomerServiceMessage, CustomerServiceTicket
@@ -295,7 +299,22 @@ def test_short_anchored_material_reaches_existing_ticket_workflow(
 
 @pytest.mark.parametrize(
     "protected",
-    [None, "invalid", "revoked", "changed_since_review", "repeat_original", "intent_changed"],
+    [
+        None,
+        "invalid",
+        "out_of_scope",
+        "revoked",
+        "changed_since_review",
+        "repeat_original",
+        "intent_changed",
+        "legacy",
+        "revoked_legacy",
+        "typed",
+        "null_review",
+        "empty_review",
+        "unknown_review",
+        "malformed_review",
+    ],
 )
 def test_anchored_reassessment_releases_only_current_hold_once(
     client, authenticated_ticket_admin, monkeypatch, protected
@@ -339,16 +358,34 @@ def test_anchored_reassessment_releases_only_current_hold_once(
     ticket_id = first["ticket"]["id"]
     assert first["ticket"]["evidence"]["intake_review"]["disposition"] == "needs_review"
     assert not scheduled
-    if protected in {"invalid", "revoked"}:
-        with get_session_factory()() as db:
-            row = db.get(CustomerServiceTicket, ticket_id)
-            evidence = json.loads(row.evidence_json)
-            if protected == "invalid":
-                evidence["intake_review"]["disposition"] = "invalid"
-            else:
-                evidence["dispatch_revocation"] = {"note": "核对后停止新派发"}
-            row.evidence_json = json.dumps(evidence)
-            db.commit()
+    malformed_receipts = {
+        "null_review": None,
+        "empty_review": {},
+        "unknown_review": {"disposition": "unrecognized"},
+        "malformed_review": {"disposition": "needs_review", "reason": 123},
+    }
+    with get_session_factory()() as db:
+        row = db.get(CustomerServiceTicket, ticket_id)
+        evidence = json.loads(row.evidence_json)
+        if protected in {"legacy", "revoked_legacy", "typed"}:
+            assert evidence["issue_domain_source"]
+            del evidence["intake_review"]
+        if protected == "typed":
+            evidence["source"] = "enterprise_portal"
+        elif protected in {"invalid", "out_of_scope"}:
+            evidence["intake_review"]["disposition"] = protected
+        elif protected in malformed_receipts:
+            evidence["intake_review"] = malformed_receipts[protected]
+        if protected in {"revoked", "revoked_legacy"}:
+            evidence["dispatch_revocation"] = {"note": "核对后停止新派发"}
+        row.evidence_json = json.dumps(evidence)
+        expected_reason = {
+            "typed": "",
+            "revoked": "ticket_dispatch_revoked",
+            "revoked_legacy": "ticket_dispatch_revoked",
+        }.get(protected, "intake_review_required")
+        assert intake_dispatch_block_reason(row) == expected_reason
+        db.commit()
     body = {
         "message": original if repeats_original else clarification,
         "session_id": first["session"]["id"],
@@ -359,13 +396,23 @@ def test_anchored_reassessment_releases_only_current_hold_once(
     assert reports[-1] == (
         original if repeats_original else f"{original}\n原工单补充：{clarification}"
     )
-    case = updated["evidence"]["intake_review"]["disposition"]
-    if protected not in {None, "repeat_original"}:
-        assert case == ("invalid" if protected == "invalid" else "needs_review")
+    if protected == "typed":
+        assert updated["evidence"]["source"] == "enterprise_portal"
+        assert "intake_review" not in updated["evidence"]
+        assert "intake_reassessment_sha256" not in updated["evidence"]
+        assert scheduled == [{"ticket_id": ticket_id}]
+        return
+    if protected not in {None, "repeat_original", "legacy"}:
+        assert ("intake_review" in updated["evidence"]) == ("intake_review" in evidence)
+        assert updated["evidence"].get("intake_review") == evidence.get("intake_review")
+        assert "intake_reassessment_sha256" not in updated["evidence"]
         assert updated["summary"] == (changed if protected == "changed_since_review" else original)
         assert not scheduled
+        records = db_outbox.fetch_pending(100, aggregate_prefix=f"{updated['ticket_no']}:")
+        assert not any(event.event_name == INTAKE_EVENT for event in records)
         return
-    assert case == "actionable" and updated["summary"] == original
+    assert updated["evidence"]["intake_review"]["disposition"] == "actionable"
+    assert updated["summary"] == original
     repeated = client.post(f"{BASE}/chat", json=body).json()["ticket"]
     assert repeated["id"] == ticket_id
     assert scheduled == [{"ticket_id": ticket_id}]

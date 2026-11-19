@@ -98,6 +98,26 @@ def cached_intake_review(report: str, replies: Iterable[str | None]) -> IntakeRe
     return None
 
 
+def _is_legacy_chat_intake_hold(evidence: dict[str, Any]) -> bool:
+    # Only old chat rows lack a receipt and have no trusted typed intake source.
+    return (
+        "intake_review" not in evidence
+        and bool(evidence.get("issue_domain_source"))
+        and not evidence.get("source")
+    )
+
+
+def _is_releasable_intake_hold(evidence: dict[str, Any]) -> bool:
+    if _is_legacy_chat_intake_hold(evidence):
+        return True
+    try:
+        return (
+            IntakeReview.model_validate(evidence.get("intake_review")).disposition == "needs_review"
+        )
+    except ValidationError:
+        return False
+
+
 def apply_original_ticket_reassessment(
     ticket: CustomerServiceTicket,
     prior: dict[str, Any],
@@ -142,7 +162,7 @@ def apply_original_ticket_reassessment(
         actionable
         and review is not None
         and not status_preserved
-        and previous_disposition == "needs_review"
+        and _is_releasable_intake_hold(prior)
     ):
         extracted["intake_review"] = review.model_dump()
         extracted["intake_reassessment_sha256"] = report_digest
@@ -235,14 +255,12 @@ def intake_dispatch_block_reason(ticket: CustomerServiceTicket) -> str:
     if evidence.get("classification_status") == "pending_verification":
         return "intake_review_required"
     review = evidence.get("intake_review")
-    if review is not None:
+    if "intake_review" in evidence:
         return (
             ""
             if isinstance(review, dict) and review.get("disposition") == "actionable"
             else "intake_review_required"
         )
-    if evidence.get("issue_domain_source") and not evidence.get("source"):
-        # The old chat intake wrote domain provenance but had no semantic
-        # receipt. Typed routes supply their own trusted source instead.
+    if _is_legacy_chat_intake_hold(evidence):
         return "intake_review_required"
     return ""
