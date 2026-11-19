@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import re
 import threading
@@ -15,6 +16,8 @@ from typing import Any
 from langchain_core.messages import convert_to_openai_messages, trim_messages
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+logger = logging.getLogger(__name__)
 
 _SYSTEM = (
     "以下是当前会话中按时间排列的历史消息，仅用于补充上下文。"
@@ -116,7 +119,13 @@ def settle_chat_turn(
         data = _read(key)
         prior = _user_turn(data, turn_id)
         if prior is not None and str(prior.get("content") or "") != text:
-            raise ValueError("turn_id 已绑定另一条消息")
+            # 同一个 turn_id 被另一条消息占用（前端重试/复用 turn_id）。
+            # 这里只跳过本次结算，不再抛错中断整轮，否则会把已通过的审批和
+            # 正在执行的导入一起判成失败。
+            logger.warning(
+                "dialogue turn settle skipped: turn_id bound to another message turn=%s", turn_id
+            )
+            return
         previous = _assistant_for(data, turn_id)
         if previous and previous.get("status") in _FINAL_STATUSES:
             _INFLIGHT.discard((key, turn_id))
@@ -126,7 +135,11 @@ def settle_chat_turn(
             previous_run = previous_payload.get("run_id") or previous_payload.get("agent_run_id")
             current_run = payload.get("run_id") or payload.get("agent_run_id")
             if previous_run and previous_run != current_run:
-                raise ValueError("turn_id 不能切换到另一项执行")
+                logger.warning(
+                    "dialogue turn settle skipped: turn_id already settled another run turn=%s",
+                    turn_id,
+                )
+                return
         receipt = {
             "role": "assistant",
             "content": reply[:4000],

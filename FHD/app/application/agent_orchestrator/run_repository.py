@@ -54,6 +54,12 @@ class AgentRunRepository(Protocol):
 
     def list_run_scopes(self, *, user_id: str) -> dict[str, list[tuple[str, str, str]]]: ...
 
+    def recent_task_refs(
+        self, *, user_id: str | None = None, limit: int = 200
+    ) -> list[tuple[str, str, str]]: ...
+
+    def task_keys(self, *, user_id: str) -> set[tuple[str, str]]: ...
+
     def save_task(self, task: AgentTask) -> AgentTask: ...
 
     def get_task(
@@ -219,6 +225,31 @@ class InMemoryAgentRunRepository:
                 (run.user_id, tenant_id_of_run(run), mod_id_of_run(run))
             )
         return scopes
+
+    def recent_task_refs(
+        self, *, user_id: str | None = None, limit: int = 200
+    ) -> list[tuple[str, str, str]]:
+        """(run_id, task_id, tenant_id) of recent runs without hydrating payloads."""
+        with self._lock:
+            runs = list(self._runs.values())
+        if user_id is not None:
+            runs = [run for run in runs if run.user_id == user_id]
+        runs.sort(key=lambda run: run.updated_at, reverse=True)
+        refs: list[tuple[str, str, str]] = []
+        for run in runs[: max(0, int(limit))]:
+            context = run.metadata.get("task_context")
+            task_id = str(context.get("task_id") or "") if isinstance(context, dict) else ""
+            if task_id:
+                refs.append((run.run_id, task_id, tenant_id_of_run(run)))
+        return refs
+
+    def task_keys(self, *, user_id: str) -> set[tuple[str, str]]:
+        with self._lock:
+            return {
+                (task.tenant_id, task.task_id)
+                for task in self._tasks.values()
+                if task.user_id == user_id
+            }
 
     def save_task(self, task: AgentTask) -> AgentTask:
         with self._lock:

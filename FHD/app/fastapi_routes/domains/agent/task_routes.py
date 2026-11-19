@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
 import time
-from typing import Any, cast
+from typing import Any, Callable, cast
 
 from fastapi import APIRouter, Body, Depends, Query
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -44,6 +45,57 @@ from app.utils.json_safe import json_safe
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 router = APIRouter(tags=["agent"])
+
+# 运行写入时会同步建任务记录，这里只需要为历史运行补建一次。
+# 前端每秒轮询列表，若每次都扫描近期载荷会持续占用整核。
+_BACKFILL_TTL_SECONDS = 60.0
+_BACKFILL_DONE: dict[tuple[str, str], float] = {}
+_BACKFILL_LOCK = threading.Lock()
+
+_STREAM_INTERVAL_SECONDS = 1.0
+_SNAPSHOT_TTL_SECONDS = 1.0
+_SNAPSHOTS: dict[tuple[str, str, str], tuple[float, str]] = {}
+_SNAPSHOTS_LOCK = threading.Lock()
+
+
+def _cached_task_snapshot(key: tuple[str, str, str], build: Callable[[], str]) -> str:
+    """同一身份的任务快照在 1 秒内只序列化一次，供所有订阅连接复用。"""
+    now = time.monotonic()
+    with _SNAPSHOTS_LOCK:
+        cached = _SNAPSHOTS.get(key)
+        if cached is not None and now - cached[0] <= _SNAPSHOT_TTL_SECONDS:
+            return cached[1]
+    encoded = build()
+    with _SNAPSHOTS_LOCK:
+        if len(_SNAPSHOTS) >= 64:
+            _SNAPSHOTS.clear()
+        _SNAPSHOTS[key] = (now, encoded)
+    return encoded
+
+
+def _backfill_task_records(orchestrator: AgentOrchestrator, principal: AgentPrincipal) -> None:
+    key = (str(principal.user_id), str(principal.tenant_id or ""))
+    now = time.monotonic()
+    with _BACKFILL_LOCK:
+        done_at = _BACKFILL_DONE.get(key)
+        if done_at is not None and now - done_at <= _BACKFILL_TTL_SECONDS:
+            return
+        _BACKFILL_DONE[key] = now
+    try:
+        repository = get_agent_run_repository()
+        known = orchestrator.task_keys(user_id=principal.user_id)
+        for run_id, task_id, tenant_id in repository.recent_task_refs(
+            user_id=principal.user_id, limit=200
+        ):
+            if not task_id or tenant_id != key[1] or (tenant_id, task_id) in known:
+                continue
+            run = repository.get(run_id)
+            if run is not None:
+                orchestrator.save_task(task_from_run(run))
+                known.add((tenant_id, task_id))
+    except RECOVERABLE_ERRORS:
+        with _BACKFILL_LOCK:
+            _BACKFILL_DONE.pop(key, None)
 
 
 def _task_envelope(
@@ -141,20 +193,7 @@ def list_agent_tasks(
 ) -> dict[str, Any] | JSONResponse:
     try:
         orchestrator = AgentOrchestrator()
-        for run in get_agent_run_repository().list_recent(
-            user_id=principal.user_id, tenant_id=principal.tenant_id, limit=limit
-        ):
-            context = run.metadata.get("task_context")
-            task_id = str(context.get("task_id") or "") if isinstance(context, dict) else ""
-            if not task_id:
-                continue
-            existing = orchestrator.get_task(
-                user_id=principal.user_id,
-                task_id=task_id,
-                tenant_id=principal.tenant_id,
-            )
-            if existing is None:
-                orchestrator.save_task(task_from_run(run))
+        _backfill_task_records(orchestrator, principal)
         tasks = scoped_tasks(
             orchestrator,
             principal=principal,
@@ -369,6 +408,12 @@ async def stream_agent_tasks(
         snapshot = [_task_stream_envelope(task, executions) for task in tasks]
         return json.dumps(json_safe(snapshot), ensure_ascii=False, sort_keys=True)
 
+    snapshot_key = (
+        str(principal.user_id),
+        str(principal.tenant_id or ""),
+        str((principal.mod_authorization or {}).get("mod_id") or ""),
+    )
+
     async def event_stream():
         previous = ""
         deadline = time.monotonic() + 60.0
@@ -376,7 +421,9 @@ async def stream_agent_tasks(
             if not await authorize():
                 break
             # Blocking store reads must stay off the event loop that serves every other request.
-            encoded = await asyncio.to_thread(encode_snapshot)
+            # 多个任务中心连接（重连、多个页面）共享同一份快照，避免每个连接
+            # 每 250 毫秒各自重建一次完整任务列表。
+            encoded = await asyncio.to_thread(_cached_task_snapshot, snapshot_key, encode_snapshot)
             if encoded != previous:
                 if not await authorize():
                     break
@@ -384,7 +431,7 @@ async def stream_agent_tasks(
                 yield f"event: task.snapshot\ndata: {encoded}\n\n"
             if once:
                 break
-            await asyncio.sleep(0.25)
+            await asyncio.sleep(_STREAM_INTERVAL_SECONDS)
         yield "event: stream.closed\ndata: {}\n\n"
 
     return StreamingResponse(

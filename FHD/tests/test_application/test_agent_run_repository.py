@@ -492,3 +492,37 @@ def test_concurrent_parent_saves_keep_child_receipts_and_reject_rebinding(tmp_pa
             assert repo.get(parent.run_id).metadata["child_results"] == receipts
     finally:
         engine.dispose()
+
+
+def test_run_scopes_read_payload_json_once_and_invalidate_on_save(tmp_path) -> None:
+    from app.application.agent_orchestrator.run_sql_repository import invalidate_run_scopes
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'run-scopes.db'}")
+    factory = sessionmaker(bind=engine)
+    repo = SQLAlchemyAgentRunRepository(session_factory=factory)
+    invalidate_run_scopes()
+    try:
+        run = AgentRun(user_id="owner", message="first")
+        run.metadata["task_context"] = {"task_id": "task-1"}
+        run.metadata["runtime_context"] = {
+            "tenant_id": "t1",
+            "_mod_authorization": {"mod_id": "m1"},
+        }
+        repo.save(run)
+
+        assert repo.list_run_scopes(user_id="owner") == {"task-1": [("owner", "t1", "m1")]}
+        assert [item.run_id for item in repo.list_task_runs(user_id="owner", task_id="task-1")] == [
+            run.run_id
+        ]
+
+        # 缓存期内不重扫；写入新 run 后立即失效，新任务不会长时间不可见。
+        extra = AgentRun(user_id="owner", message="second")
+        extra.metadata["task_context"] = {"task_id": "task-2"}
+        extra.metadata["runtime_context"] = {"tenant_id": "t2"}
+        repo.save(extra)
+        scopes = repo.list_run_scopes(user_id="owner")
+        assert scopes["task-2"] == [("owner", "t2", "")]
+        assert scopes["task-1"] == [("owner", "t1", "m1")]
+    finally:
+        invalidate_run_scopes()
+        engine.dispose()
