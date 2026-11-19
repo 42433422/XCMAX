@@ -508,3 +508,58 @@
     height: min(520px, calc(100vh - 90px));
   }
 }
+
+.floating-chat-root--desktop {
+  inset: 0;
+  display: grid;
+  place-items: center;
+  max-width: none;
+  max-height: none;
+}
+
+.floating-chat-root--desktop .floating-chat-toggle {
+  min-height: 0;
+  margin-top: 8px;
+  gap: 3px;
+  cursor: pointer;
+}
+
+.floating-chat-root--desktop .floating-chat-toggle-avatar { width: 46px; height: 46px; }
+.floating-chat-root--desktop .floating-chat-panel { inset: 6px; width: auto; height: auto; }
+.floating-chat-root--desktop .floating-chat-title-wrap { margin-right: auto; }
+.floating-chat-root--desktop .floating-chat-call-actions { flex-wrap: wrap; }
+.floating-chat-call-action--hangup {
+  background: #b91c1c;
+  border-color: #b91c1c;
+  color: white;
+}
+.floating-chat-desktop-phone {
+  position: absolute;
+  right: 3px;
+  bottom: 9px;
+  z-index: 1;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  padding: 0;
+  border-radius: 50%;
+  -webkit-app-region: no-drag;
+}
+.floating-chat-root--desktop .floating-chat-header { -webkit-app-region: drag; }
+.floating-chat-root--desktop .floating-chat-header button { -webkit-app-region: no-drag; }
+.floating-chat-drag-handle {
+  position: absolute;
+  inset: 0 30px auto;
+  height: 12px;
+  -webkit-app-region: drag;
+}
+.floating-chat-drag-handle::after {
+  content: '';
+  position: absolute;
+  inset: 5px 12px auto;
+  height: 3px;
+  border-radius: 2px;
+  background: #8797bd;
+  box-shadow: 0 0 1px white;
+}

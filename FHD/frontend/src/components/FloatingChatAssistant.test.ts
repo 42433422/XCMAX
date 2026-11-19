@@ -1,22 +1,28 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
-import { nextTick, ref } from 'vue'
+import { nextTick, ref, type Ref } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 
+let chatSessionId: Ref<string>
 const sendMessageMock = vi.fn()
+const syncSessionMessagesMock = vi.fn(async () => undefined)
 const messagesMock = ref([])
 const isLoadingMock = ref(false)
 const isStreamingReplyMock = ref(false)
 const loadingProgressTextMock = ref('')
 
 vi.mock('@/composables/useChatView', () => ({
-  useChatView: () => ({
-    messages: messagesMock,
-    isLoading: isLoadingMock,
-    isStreamingReply: isStreamingReplyMock,
-    loadingProgressText: loadingProgressTextMock,
-    sendMessage: sendMessageMock,
-  }),
+  useChatView: ({ sessionId }: { sessionId: Ref<string> }) => {
+    chatSessionId = sessionId
+    return {
+      messages: messagesMock,
+      isLoading: isLoadingMock,
+      isStreamingReply: isStreamingReplyMock,
+      loadingProgressText: loadingProgressTextMock,
+      sendMessage: sendMessageMock,
+      syncSessionMessages: syncSessionMessagesMock,
+    }
+  },
 }))
 
 vi.mock('@/utils/sanitizeHtml', () => ({
@@ -52,6 +58,7 @@ async function openAssistant() {
 describe('FloatingChatAssistant', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
+    vi.mocked(readAiSessionIdFromStorage).mockReturnValue('test-session-id')
     sendMessageMock.mockClear()
     messagesMock.value = []
     isLoadingMock.value = false
@@ -61,6 +68,7 @@ describe('FloatingChatAssistant', () => {
 
   afterEach(() => {
     vi.restoreAllMocks()
+    vi.unstubAllGlobals()
   })
 
   it.each([
@@ -83,6 +91,60 @@ describe('FloatingChatAssistant', () => {
   it('clicking toggle opens panel', async () => {
     const wrapper = await openAssistant()
     expect(wrapper.find('.floating-chat-panel').exists()).toBe(true)
+  })
+
+  it('expands and collapses the native desktop window and can reopen the main window', async () => {
+    const setExpanded = vi.fn(async () => undefined)
+    const openMain = vi.fn(async () => undefined)
+    vi.stubGlobal('xcagiDesktopAssistant', { setExpanded, openMain })
+    const wrapper = mountAssistant({ desktopWindow: true })
+    await wrapper.get('.floating-chat-toggle').trigger('click')
+    expect(setExpanded).toHaveBeenLastCalledWith(true)
+    expect(syncSessionMessagesMock).toHaveBeenCalled()
+    const header = wrapper.get('.floating-chat-header').element
+    const setPointerCapture = vi.fn()
+    Object.assign(header, { setPointerCapture })
+    const openMainButton = wrapper.get('button[aria-label="打开 XCAGI 主窗口"]')
+    openMainButton.element.dispatchEvent(Object.assign(new MouseEvent('pointerdown', { bubbles: true }), { pointerId: 1 }))
+    expect(setPointerCapture).not.toHaveBeenCalled()
+    await openMainButton.trigger('click')
+    expect(openMain).toHaveBeenCalledOnce()
+    await wrapper.get('textarea').setValue('当前会话草稿')
+    wrapper.vm.resetDesktopPanel()
+    await nextTick()
+    expect(setExpanded).toHaveBeenLastCalledWith(false)
+    expect(wrapper.find('.floating-chat-panel').exists()).toBe(false)
+    await wrapper.get('.floating-chat-toggle').trigger('click')
+    expect(wrapper.get('textarea').element.value).toBe('当前会话草稿')
+    vi.mocked(readAiSessionIdFromStorage).mockReturnValueOnce('other-session')
+    wrapper.vm.resetDesktopPanel()
+    await nextTick()
+    await wrapper.get('.floating-chat-toggle').trigger('click')
+    expect(wrapper.get('textarea').element.value).toBe('')
+  })
+
+  it.each([false, true])('adopts the latest desktop session after loading, reopened=%s', async (reopen) => {
+    vi.stubGlobal('xcagiDesktopAssistant', { setExpanded: vi.fn(async () => undefined) })
+    vi.mocked(readAiSessionIdFromStorage).mockReturnValue('old-session')
+    const syncedSessions: string[] = []
+    syncSessionMessagesMock.mockImplementation(async () => { syncedSessions.push(chatSessionId.value) })
+    const wrapper = mountAssistant({ desktopWindow: true })
+    await wrapper.get('.floating-chat-toggle').trigger('click')
+    await wrapper.get('textarea').setValue('old draft')
+    isLoadingMock.value = true
+    await nextTick()
+    vi.mocked(readAiSessionIdFromStorage).mockReturnValue('next-session')
+    wrapper.vm.resetDesktopPanel()
+    await nextTick()
+    expect(chatSessionId.value).toBe('old-session')
+    if (reopen) await wrapper.get('.floating-chat-toggle').trigger('click')
+    vi.mocked(readAiSessionIdFromStorage).mockReturnValue('latest-session')
+    isLoadingMock.value = false
+    await nextTick()
+    expect(chatSessionId.value).toBe('latest-session')
+    if (!reopen) await wrapper.get('.floating-chat-toggle').trigger('click')
+    expect(wrapper.get('textarea').element.value).toBe('')
+    expect(syncedSessions.at(-1)).toBe('latest-session')
   })
 
   it('clicking toggle again closes panel', async () => {
@@ -266,6 +328,31 @@ describe('FloatingChatAssistant', () => {
     expect(writeAiSessionIdToStorage).toHaveBeenCalledWith(expect.stringMatching(/^[a-z0-9]+$/))
   })
 
+  it('drags the desktop avatar in screen coordinates and keeps its next click usable', async () => {
+    const moveWindow = vi.fn(async () => undefined)
+    const setExpanded = vi.fn(async () => undefined)
+    vi.stubGlobal('xcagiDesktopAssistant', { moveWindow, setExpanded })
+    const wrapper = mountAssistant({ desktopWindow: true })
+    const toggle = wrapper.get('.floating-chat-toggle')
+    const element = toggle.element
+    Object.assign(element, { setPointerCapture: vi.fn(), hasPointerCapture: () => false })
+    const pointer = (kind: string, screenX: number, screenY: number) => {
+      element.dispatchEvent(Object.assign(new MouseEvent(kind, { screenX, screenY, bubbles: true }), { pointerId: 1 }))
+    }
+    pointer('pointerdown', 40, 30)
+    pointer('pointermove', 42, 32)
+    expect(moveWindow).not.toHaveBeenCalled()
+    pointer('pointermove', 112, 90)
+    expect(moveWindow).toHaveBeenLastCalledWith(window.screenX + 72, window.screenY + 60)
+    pointer('pointerup', 112, 90)
+    await toggle.trigger('click')
+    expect(setExpanded).not.toHaveBeenCalled()
+    pointer('pointerdown', 112, 90)
+    pointer('pointerup', 112, 90)
+    await toggle.trigger('click')
+    expect(setExpanded).toHaveBeenLastCalledWith(true)
+  })
+
   it('drags only the active primary pointer, clamps to the viewport and suppresses one post-drag click', async () => {
     const wrapper = mountAssistant()
     await flushPromises()
@@ -275,7 +362,9 @@ describe('FloatingChatAssistant', () => {
     const capture = vi.fn(), release = vi.fn()
     Object.assign(el, { setPointerCapture: capture, hasPointerCapture: () => true, releasePointerCapture: release })
     const pointer = async (kind: string, properties: PointerEventInit = {}) => {
-      el.dispatchEvent(new PointerEvent(kind, { bubbles: true, button: 0, pointerId: 7, clientX: 100, clientY: 100, ...properties }))
+      const { pointerId = 7, ...mouse } = properties
+      const event = new MouseEvent(kind, { bubbles: true, button: 0, clientX: 100, clientY: 100, ...mouse })
+      el.dispatchEvent(Object.assign(event, { pointerId }))
       await nextTick()
     }
     await pointer('pointerdown', { button: 2 })

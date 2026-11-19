@@ -15,12 +15,13 @@ import {
 import { execFile } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
-import { APP_NAME, DEFAULT_PORT, shellIconPath } from './desktop-config'
+import { APP_NAME, DEFAULT_PORT, readPackagedProductSku, shellIconPath } from './desktop-config'
 import { desktopRuntime } from './runtime-state'
 import { broadcastToRenderer, showMainWindow, toggleMainWindow } from './window-manager'
 import { writeBackendLog } from './backend-process'
 import { readLocalProductVersion, runUpdateCheckWithDirectNet } from './updater'
 import { parseDesktopDeepLink } from './desktop-navigation'
+import { syncDesktopAssistant } from './desktop-assistant'
 
 const KELLAI_BUNDLE_ID = 'com.kellai.desktop'
 
@@ -313,6 +314,8 @@ function trayClickOpensMenu(event: Electron.KeyboardEvent | undefined): boolean 
 }
 
 export function createTray(): void {
+  const enterprise = readPackagedProductSku() === 'enterprise'
+  desktopRuntime.assistantEnabled = enterprise && readDesktopSettings().assistantEnabled !== false
   const image = menuBarTrayIcon()
   if (!image) {
     return
@@ -325,8 +328,20 @@ export function createTray(): void {
   if (process.platform === 'darwin' || process.platform === 'win32') {
     tray.setIgnoreDoubleClickEvents(true)
   }
-  const menu = Menu.buildFromTemplate([
+  const menuItems: Electron.MenuItemConstructorOptions[] = [
     { label: '显示 / 隐藏 XCAGI', click: () => toggleMainWindow() },
+  ]
+  if (enterprise) {
+    menuItems.push({
+      label: '显示桌面小 C', type: 'checkbox', checked: desktopRuntime.assistantEnabled,
+      click: item => {
+        desktopRuntime.assistantEnabled = item.checked
+        patchDesktopSettings({ assistantEnabled: item.checked })
+        syncDesktopAssistant()
+      },
+    })
+  }
+  const menu = Menu.buildFromTemplate([...menuItems,
     { label: '打开数据目录', click: () => void shell.openPath(app.getPath('userData')) },
     { label: '导出诊断包…', click: () => void exportSupportBundleInteractive() },
     { label: '检查更新', click: () => void runUpdateCheckWithDirectNet() },

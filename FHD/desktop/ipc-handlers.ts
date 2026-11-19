@@ -5,7 +5,8 @@ import { networkInterfaces } from 'node:os'
 import { APP_NAME, DEFAULT_PORT, isDesktopPackaged, readPackagedAppVersion } from './desktop-config'
 import { desktopRuntime } from './runtime-state'
 import { isTrustedIpcSender } from './ipc-sender-guard'
-import { broadcastToRenderer, desktopWindowCount, openAuxiliaryWindow } from './window-manager'
+import { broadcastToRenderer, desktopWindowCount, openAuxiliaryWindow, showMainWindow } from './window-manager'
+import { desktopAssistantUrl, moveDesktopAssistant, resizeDesktopAssistant } from './desktop-assistant'
 import { runBackendMigrationWithRollback, stopBackend, writeBackendLog } from './backend-process'
 import {
   captureFullScreenScreenshot,
@@ -72,6 +73,29 @@ function handleTrusted<T extends unknown[]>(
  * 仅在 app.whenReady 之后调用一次。
  */
 export function registerDesktopIpcHandlers(): void {
+  const fromAssistant = (event: IpcMainInvokeEvent) => {
+    const win = desktopRuntime.assistantWindow
+    return win && event.senderFrame?.url === desktopAssistantUrl()
+      && isTrustedIpcSender(event, win, { port: DEFAULT_PORT, splashUrl: '' }) ? win : null
+  }
+  ipcMain.handle('xcagi:assistant-expand', (event, expanded: unknown) => {
+    const win = fromAssistant(event)
+    if (!win || typeof expanded !== 'boolean') return { ok: false, reason: 'untrusted_sender' }
+    resizeDesktopAssistant(win, expanded)
+  })
+  ipcMain.handle('xcagi:assistant-open-main', event => {
+    if (!fromAssistant(event)) return { ok: false, reason: 'untrusted_sender' }
+    showMainWindow()
+  })
+  ipcMain.handle('xcagi:assistant-move', (event, x: unknown, y: unknown) => {
+    const win = fromAssistant(event)
+    if (!win?.isVisible() || typeof x !== 'number' || typeof y !== 'number'
+      || !Number.isFinite(x) || !Number.isFinite(y) || Math.abs(x) > 32767 || Math.abs(y) > 32767) {
+      return { ok: false, reason: 'untrusted_sender' }
+    }
+    moveDesktopAssistant(win, x, y)
+  })
+
   handleTrusted('xcagi:pairing-qr', async () => {
     const host = getLanIPv4()
     const port = DEFAULT_PORT

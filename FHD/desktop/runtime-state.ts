@@ -16,6 +16,9 @@ export type DesktopStartupMarks = {
  */
 export const desktopRuntime = {
   mainWindow: null as BrowserWindow | null,
+  assistantWindow: null as BrowserWindow | null,
+  assistantReady: false,
+  assistantEnabled: false,
   /** 同一进程内的附加窗口。关闭主窗口到托盘时它们保持独立，不另起后端。 */
   auxiliaryWindows: new Set<BrowserWindow>(),
   splashUrl: '',

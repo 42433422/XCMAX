@@ -7,6 +7,13 @@ declare module '*.vue' {
 }
 
 interface Window {
+  xcagiDesktopAssistant?: {
+    setExpanded: (expanded: boolean) => Promise<void>
+    moveWindow: (x: number, y: number) => Promise<void>
+    openMain: () => Promise<void>
+    onShow: (callback: () => void) => () => void
+    onHide: (callback: () => void) => () => void
+  }
   xcagiDesktop?: {
     platform: NodeJS.Platform
     versions: Record<string, string>

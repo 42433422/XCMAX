@@ -217,6 +217,7 @@ export function useVoiceCall({ sendMessage, messages, title = '通用助手', re
   let recorder: MediaRecorder | null = null
   let audioCtx: AudioContext | null = null
   let analyser: AnalyserNode | null = null
+  let audioGeneration = 0
   let monitorTimer: number | undefined
   let tickTimer: number | undefined
   let chunks: Blob[] = []
@@ -550,6 +551,7 @@ export function useVoiceCall({ sendMessage, messages, title = '通用助手', re
   }
 
   function releaseAudio() {
+    audioGeneration++
     window.clearInterval(monitorTimer)
     monitorTimer = undefined
     if (recorder && recorder.state !== 'inactive') {
@@ -705,7 +707,7 @@ export function useVoiceCall({ sendMessage, messages, title = '通用助手', re
    * 采集麦克风：约束全部用 ideal，避免设备不支持时 getUserMedia 直接失败；
    * 仍失败则退化为最宽松的 `{ audio: true }`，保证通话可用优先于降噪。
    */
-  async function requestMicrophone(): Promise<MediaStream> {
+  async function requestMicrophone(generation: number): Promise<MediaStream> {
     const media = navigator.mediaDevices
     try {
       return await media.getUserMedia({
@@ -717,7 +719,7 @@ export function useVoiceCall({ sendMessage, messages, title = '通用助手', re
         },
       })
     } catch (error) {
-      if (error instanceof Error && error.name === 'NotAllowedError') throw error
+      if (generation !== audioGeneration || (error instanceof Error && error.name === 'NotAllowedError')) throw error
       return media.getUserMedia({ audio: true })
     }
   }
@@ -737,41 +739,56 @@ export function useVoiceCall({ sendMessage, messages, title = '通用助手', re
   }
 
   async function ensureMicrophone(): Promise<MediaStream> {
+    const generation = audioGeneration
+    const captureEnded = () => new Error('麦克风采集已结束')
+    if (!open.value || muted.value) throw captureEnded()
     if (stream && stream.getAudioTracks().some(track => track.readyState === 'live')) {
-      await applyVoiceConstraints(stream)
-      return stream
+      const currentStream = stream
+      await applyVoiceConstraints(currentStream)
+      if (generation !== audioGeneration) throw captureEnded()
+      return currentStream
     }
     if (!navigator.mediaDevices?.getUserMedia) throw new Error('当前环境不支持麦克风采集')
     if (typeof window.MediaRecorder === 'undefined') throw new Error('当前环境不支持录音')
-    stream = await requestMicrophone()
-    audioCtx = audioCtx || new AudioContext()
-    try { await audioCtx.resume() } catch { /* ignore */ }
-    const source = audioCtx.createMediaStreamSource(stream)
+    const captured = await requestMicrophone(generation)
+    if (generation !== audioGeneration) {
+      captured.getTracks().forEach(track => track.stop())
+      throw captureEnded()
+    }
+    if (stream && stream.getAudioTracks().some(track => track.readyState === 'live')) {
+      captured.getTracks().forEach(track => track.stop())
+      return stream
+    }
+    stream = captured
+    const context = audioCtx = audioCtx || new AudioContext()
+    try { await context.resume() } catch { /* ignore */ }
+    if (generation !== audioGeneration) throw captureEnded()
+    const source = context.createMediaStreamSource(captured)
     // 先滤掉低频轰鸣（空调、桌面震动）与高频嘶声，再进入电平判断和流式通道，
     // 否则固定增益会把底噪一起放大，VAD 与流式识别都会把杂音当成人声。
     // 老环境没有 BiquadFilter 时退化为直连，保证通话仍可用。
     const chain: AudioNode[] = [source]
-    if (typeof audioCtx.createBiquadFilter === 'function') {
-      const highpass = audioCtx.createBiquadFilter()
+    if (typeof context.createBiquadFilter === 'function') {
+      const highpass = context.createBiquadFilter()
       highpass.type = 'highpass'
       highpass.frequency.value = 80
       highpass.Q.value = 0.7
-      const lowpass = audioCtx.createBiquadFilter()
+      const lowpass = context.createBiquadFilter()
       lowpass.type = 'lowpass'
       lowpass.frequency.value = 6500
       chain.push(highpass, lowpass)
     }
     // 部分 USB 麦克风增益偏低，保留轻度放大；阈值随后续底噪自适应，不会误判静音。
-    const gain = audioCtx.createGain()
+    const gain = context.createGain()
     gain.gain.value = 2.0
     chain.push(gain)
-    analyser = audioCtx.createAnalyser()
+    analyser = context.createAnalyser()
     analyser.fftSize = 1024
     analyser.smoothingTimeConstant = 0
     for (let i = 0; i < chain.length - 1; i += 1) chain[i].connect(chain[i + 1])
     chain[chain.length - 1].connect(analyser)
     ensurePcmProcessor()
-    return stream
+    return captured
   }
 
   function readLevel(): number {
@@ -977,7 +994,9 @@ export function useVoiceCall({ sendMessage, messages, title = '通用助手', re
     // 模型思考常常要好几秒，纯静音会让人以为断线：超过 1.2s 还没回复就先垫一句口头确认。
     let ack: Promise<unknown> | null = null
     const ackTimer = speakerOn.value
-      ? window.setTimeout(() => { ack = speakText(randomAckLine()) }, ACK_DELAY_MS)
+      ? window.setTimeout(() => {
+        if (open.value && !muted.value && speakerOn.value) ack = speakText(randomAckLine())
+      }, ACK_DELAY_MS)
       : null
     try {
       // 模型/网络偶发失败：同一句自动重发一次，仍失败再播报“再说一次”。

@@ -3,10 +3,12 @@
     v-if="props.visible && (!externallyHidden || voiceCallActive)"
     ref="rootRef"
     class="floating-chat-root"
-    :class="{ dragging: isDragging }"
-    :style="rootStyle"
+    :class="{ dragging: isDragging, 'floating-chat-root--desktop': props.desktopWindow }"
+    :style="props.desktopWindow ? undefined : rootStyle"
   >
+    <div v-if="props.desktopWindow && !isOpen" class="floating-chat-drag-handle" aria-hidden="true"></div>
     <button
+      v-show="!props.desktopWindow || !isOpen"
       class="floating-chat-toggle"
       :class="{ 'floating-chat-toggle--admin': props.maleAvatar, 'floating-chat-toggle--calling': callOpen }"
       type="button"
@@ -64,6 +66,16 @@
       </span>
       <span v-else class="floating-chat-toggle-label">小C助理</span>
     </button>
+    <button
+      v-if="props.desktopWindow && !isOpen"
+      class="floating-chat-call-entry floating-chat-desktop-phone"
+      type="button"
+      aria-label="语音通话"
+      title="语音通话"
+      @click="startCallFromEntry"
+    >
+      <i class="fa fa-phone" aria-hidden="true"></i>
+    </button>
 
     <div
       v-if="isOpen"
@@ -89,7 +101,23 @@
           <i class="fa fa-phone" aria-hidden="true"></i>
           <span class="floating-chat-call-entry-label">语音通话</span>
         </button>
-        <button class="floating-chat-close" type="button" aria-label="关闭" @click="closePanel">×</button>
+        <button
+          v-if="props.desktopWindow"
+          class="floating-chat-call-entry"
+          type="button"
+          :aria-label="openDesktopMainLabel"
+          :title="openDesktopMainLabel"
+          @click="openDesktopMain"
+        >
+          <i class="fa fa-external-link" aria-hidden="true"></i>
+          <span v-if="callOpen" class="floating-chat-call-entry-label">结束通话并返回</span>
+        </button>
+        <button
+          class="floating-chat-close"
+          type="button"
+          :aria-label="props.desktopWindow ? (callOpen ? '结束通话并收起' : '收起') : '关闭'"
+          @click="closeFloatingChatPanel"
+        >×</button>
       </div>
 
       <div v-if="callOpen" class="floating-chat-call">
@@ -116,6 +144,20 @@
             <i class="fa" :class="callSpeechPaused ? 'fa-play' : 'fa-pause'" aria-hidden="true"></i>
             {{ callSpeechPaused ? '继续朗读' : '暂停朗读' }}
           </button>
+          <template v-if="props.desktopWindow">
+            <button type="button" class="floating-chat-call-action" @click="toggleVoiceCallMute">
+              <i class="fa" :class="callMuted ? 'fa-microphone' : 'fa-microphone-slash'" aria-hidden="true"></i>
+              {{ callMuted ? '取消静音' : '静音' }}
+            </button>
+            <button type="button" class="floating-chat-call-action" @click="toggleVoiceCallSpeaker">
+              <i class="fa" :class="callSpeakerOn ? 'fa-volume-up' : 'fa-volume-off'" aria-hidden="true"></i>
+              {{ callSpeakerOn ? '关闭免提' : '开启免提' }}
+            </button>
+            <button type="button" class="floating-chat-call-action floating-chat-call-action--hangup" @click="hangUpVoiceCall">
+              <i class="fa fa-phone" aria-hidden="true"></i>
+              挂断
+            </button>
+          </template>
         </div>
         <details class="floating-chat-call-settings">
           <summary>语音设置</summary>
@@ -188,6 +230,7 @@ import { sanitizeChatBubbleHtml } from '@/utils/sanitizeHtml'
 import { readAiSessionIdFromStorage, writeAiSessionIdToStorage } from '@/utils/chatStorageKeys'
 
 const props = defineProps({
+  desktopWindow: Boolean,
   visible: {
     type: Boolean,
     default: true,
@@ -218,6 +261,7 @@ if (!storedSessionId) {
   writeAiSessionIdToStorage(currentSessionId.value)
 }
 
+const desktop = props.desktopWindow ? window.xcagiDesktopAssistant : undefined
 const isOpen = ref(false)
 const externallyHidden = ref(false)
 const draft = ref('')
@@ -315,14 +359,9 @@ const startCallFromEntry = () => {
   requestVoiceCallStart()
 }
 
-const closePanel = () => {
-  if (callOpen.value) hangUpVoiceCall()
-  isOpen.value = false
-}
-
 const onStartVoiceCallRequest = (event?: Event) => {
   const detail = (event as CustomEvent<{ expandPanel?: boolean }> | undefined)?.detail
-  expandPanelOnCall.value = props.expandCallPanel && detail?.expandPanel !== false
+  expandPanelOnCall.value = props.desktopWindow || (props.expandCallPanel && detail?.expandPanel !== false)
   isOpen.value = expandPanelOnCall.value
   startVoiceCall()
 }
@@ -349,6 +388,7 @@ const clampRootPosition = (left: number, top: number) => {
 }
 
 const placeRootToBottomRight = async () => {
+  if (desktop) return
   await nextTick()
   const root = rootRef.value
   if (!root) return
@@ -358,6 +398,7 @@ const placeRootToBottomRight = async () => {
 }
 
 const keepRootInViewport = () => {
+  if (desktop) return
   const normalized = clampRootPosition(rootLeft.value, rootTop.value)
   rootLeft.value = normalized.left
   rootTop.value = normalized.top
@@ -373,6 +414,7 @@ const onWindowResize = () => {
 
 /** 展开面板/通话时保证整块面板（含底部静音、免提、挂断）落在视口内。 */
 const ensurePanelInViewport = async () => {
+  if (desktop) return
   await nextTick()
   const root = rootRef.value
   const panel = root?.querySelector('.floating-chat-panel') as HTMLElement | null
@@ -428,16 +470,17 @@ const onDragStart = (event: PointerEvent) => {
   if (event.button !== 0) return
   if (!props.visible) return
   const eventTarget = event.target as HTMLElement | null
-  if (eventTarget?.closest('.floating-chat-close')) return
   const target = event.currentTarget as HTMLElement | null
-  if (!target) return
+  const button = eventTarget?.closest('button')
+  if (!target || (button && button !== target)) return
   dragPointerId.value = event.pointerId
-  dragStartClientX.value = event.clientX
-  dragStartClientY.value = event.clientY
-  dragStartLeft.value = rootLeft.value
-  dragStartTop.value = rootTop.value
+  dragStartClientX.value = desktop ? event.screenX : event.clientX
+  dragStartClientY.value = desktop ? event.screenY : event.clientY
+  dragStartLeft.value = desktop ? window.screenX : rootLeft.value
+  dragStartTop.value = desktop ? window.screenY : rootTop.value
   isDragging.value = false
   hasDraggedSincePointerDown.value = false
+  if (desktop) suppressNextToggleClick.value = false
   target.setPointerCapture(event.pointerId)
   target.addEventListener('pointermove', onDragMove)
   target.addEventListener('pointerup', onDragEnd)
@@ -446,13 +489,17 @@ const onDragStart = (event: PointerEvent) => {
 
 const onDragMove = (event: PointerEvent) => {
   if (dragPointerId.value !== event.pointerId) return
-  const deltaX = event.clientX - dragStartClientX.value
-  const deltaY = event.clientY - dragStartClientY.value
+  const deltaX = (desktop ? event.screenX : event.clientX) - dragStartClientX.value
+  const deltaY = (desktop ? event.screenY : event.clientY) - dragStartClientY.value
   if (!hasDraggedSincePointerDown.value) {
     const distance = Math.hypot(deltaX, deltaY)
     if (distance < DRAG_THRESHOLD_PX) return
     hasDraggedSincePointerDown.value = true
     isDragging.value = true
+  }
+  if (desktop) {
+    void desktop.moveWindow(dragStartLeft.value + deltaX, dragStartTop.value + deltaY).catch(() => undefined)
+    return
   }
   const normalized = clampRootPosition(dragStartLeft.value + deltaX, dragStartTop.value + deltaY)
   rootLeft.value = normalized.left
@@ -499,7 +546,41 @@ watch(
   },
 )
 
+const openDesktopMainLabel = computed(() =>
+  callOpen.value ? '结束通话并打开 XCAGI 主窗口' : '打开 XCAGI 主窗口',
+)
+const openDesktopMain = () => {
+  if (callOpen.value) hangUpVoiceCall()
+  void desktop?.openMain().catch(() => undefined)
+}
+
+const desktopSessionSyncPending = ref(false)
+const syncDesktopSession = () => {
+  if (isLoading.value || !desktopSessionSyncPending.value) return
+  desktopSessionSyncPending.value = false
+  const nextSessionId = readAiSessionIdFromStorage()
+  if (nextSessionId && nextSessionId !== currentSessionId.value) {
+    draft.value = ''
+    currentSessionId.value = nextSessionId
+    if (isOpen.value) void syncSessionMessages().catch(() => undefined)
+  }
+}
+
+const resetDesktopPanel = () => {
+  closeFloatingChatPanel()
+  desktopSessionSyncPending.value = true
+  syncDesktopSession()
+}
+watch(isLoading, syncDesktopSession)
+
+defineExpose({ resetDesktopPanel })
+
 watch(isOpen, (openNow) => {
+  if (desktop) {
+    void desktop.setExpanded(openNow).catch(() => { if (openNow) closeFloatingChatPanel() })
+    if (openNow) void syncSessionMessages().catch(() => undefined)
+    return
+  }
   if (openNow) void ensurePanelInViewport()
   else keepRootInViewport()
 })
@@ -507,7 +588,7 @@ watch(isOpen, (openNow) => {
 watch(callOpen, (active) => {
   voiceCallActive.value = active
   if (active) {
-    expandPanelOnCall.value = props.expandCallPanel
+    expandPanelOnCall.value = props.desktopWindow || props.expandCallPanel
     syncCallPanelVisibility()
   }
 })
@@ -516,12 +597,21 @@ watch(
   () => props.expandCallPanel,
   () => {
     if (!callOpen.value) return
-    expandPanelOnCall.value = props.expandCallPanel
+    expandPanelOnCall.value = props.desktopWindow || props.expandCallPanel
     syncCallPanelVisibility()
   },
 )
 
+let unsubscribeDesktopHide: (() => void) | undefined
+function onDesktopVisibilityChange() {
+  if (document.hidden) closeFloatingChatPanel()
+}
+
 onMounted(() => {
+  if (desktop) {
+    unsubscribeDesktopHide = desktop.onHide?.(closeFloatingChatPanel)
+    document.addEventListener('visibilitychange', onDesktopVisibilityChange)
+  }
   void placeRootToBottomRight()
   window.addEventListener('resize', onWindowResize)
   window.addEventListener('xcagi:close-floating-chat', closeFloatingChatPanel)
@@ -532,6 +622,8 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  unsubscribeDesktopHide?.()
+  document.removeEventListener('visibilitychange', onDesktopVisibilityChange)
   hangUpVoiceCall()
   voiceCallActive.value = false
   window.removeEventListener('resize', onWindowResize)

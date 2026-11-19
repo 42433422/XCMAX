@@ -31,6 +31,7 @@ import {
   isTrustedDesktopOrigin,
 } from './desktop-navigation'
 import { reportRendererError } from './desktop-resilience'
+import { syncDesktopAssistant } from './desktop-assistant'
 
 /** 闪屏进度 0–100；供启动阶段与单测共用。 */
 export function clampSplashProgress(percent: number): number {
@@ -421,6 +422,10 @@ export async function createWindow(): Promise<void> {
   }
   mainWindow.on('move', scheduleWindowStateWrite)
   mainWindow.on('resize', scheduleWindowStateWrite)
+  mainWindow.on('show', syncDesktopAssistant)
+  mainWindow.on('hide', syncDesktopAssistant)
+  mainWindow.on('minimize', syncDesktopAssistant)
+  mainWindow.on('restore', syncDesktopAssistant)
   // 常驻：非退出时关窗仅隐藏到托盘，后端保持常驻实现"秒开"；仅托盘"退出"或
   // app.quit() 才真正关闭（isQuitting 已在 before-quit 置位）。
   mainWindow.on('close', (event) => {
