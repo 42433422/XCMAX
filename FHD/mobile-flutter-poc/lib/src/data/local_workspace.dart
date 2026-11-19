@@ -169,6 +169,10 @@ class LocalWorkspaceController extends ChangeNotifier {
           data: _object(jsonDecode(jsonEncode(data))),
           version: old?.version,
         );
+        final normalized = record.toJson()..remove('version');
+        if (utf8.encode(jsonEncode(normalized)).length > 64 * 1024) {
+          throw const FormatException('单条本地记录超过 64 KiB，请缩短内容后再保存。');
+        }
         await _write(record);
       });
 

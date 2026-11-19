@@ -55,7 +55,7 @@ const _authorizedRouteFallbacks = {
   'ai-ecosystem': '/ai-ecosystem',
 };
 const _staticItems = [
-  _WorkbenchItem('local-workspace', '本地工作台', 'business', Icons.folder_open,
+  _WorkbenchItem('local-workspace', '本地工作台', 'data', Icons.folder_open,
       subtitle: '在本机保存客户、商品和订单草稿'),
   _WorkbenchItem('ai-circle', 'AI交流圈', 'community', Icons.bubble_chart,
       subtitle: '看看员工动态与交流'),

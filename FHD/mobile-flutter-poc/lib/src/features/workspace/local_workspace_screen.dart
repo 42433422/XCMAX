@@ -124,13 +124,15 @@ class _LocalWorkspaceScreenState extends State<LocalWorkspaceScreen>
           ? (_workspace.pendingCount == 0 ? '同步完成' : '还有改动待同步，请重试')
           : '同步完成，请处理数据冲突');
     } catch (_) {
-      _notify('同步失败。请确认手机与电脑在同一网络，且电脑端工作台已打开。');
+      _notify('同步失败。请确认手机与电脑在同一网络，且电脑已开启本地同步。');
     }
   }
 
   Future<void> _unbind() async {
-    if (!await _confirmLocal(context, '解除电脑绑定？', '本机数据会保留，可以继续离线使用。', '解除绑定'))
+    if (!await _confirmLocal(
+        context, '解除电脑绑定？', '本机数据会保留，可以继续离线使用。', '解除绑定')) {
       return;
+    }
     if (!mounted || _workspace.busy) return;
     try {
       await _workspace.unbind();
@@ -144,7 +146,9 @@ class _LocalWorkspaceScreenState extends State<LocalWorkspaceScreen>
 
   Future<void> _remove(LocalWorkspaceRecord record) async {
     if (!await _confirmLocal(
-        context, '删除这条${_area.label}？', _recordTitle(record), '删除')) return;
+        context, '删除这条${_area.label}？', _recordTitle(record), '删除')) {
+      return;
+    }
     if (!mounted || _workspace.busy) return;
     try {
       await _workspace.delete(record.id, kind: record.kind);
@@ -557,11 +561,12 @@ class _LocalRecordFormState extends State<_LocalRecordForm> {
         },
       });
       if (mounted) Navigator.of(context).pop();
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
         setState(() {
           _saving = false;
-          _error = '本机保存失败，请重试。';
+          _error =
+              error is FormatException ? error.message : '本机保存失败，请重试。';
         });
       }
     }

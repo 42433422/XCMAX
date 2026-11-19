@@ -139,6 +139,19 @@ LocalWorkspaceController _controller(_Peer peer, {File? file}) =>
     );
 
 void main() {
+  test('rejects oversized local records before they enter the sync queue',
+      () async {
+    final controller = LocalWorkspaceController(executor: NativeDatabase.memory());
+    addTearDown(controller.closeDatabase);
+
+    await expectLater(
+      controller.save('customer', {'name': List.filled(24000, '客').join()}),
+      throwsFormatException,
+    );
+    expect(controller.records, isEmpty);
+    expect(controller.pendingCount, 0);
+  });
+
   test('LAN transport encrypts the packet and verifies response AAD', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => server.close(force: true));
