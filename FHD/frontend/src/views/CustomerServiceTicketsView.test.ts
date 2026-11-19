@@ -251,6 +251,7 @@ describe('customer service ticket detail', () => {
         state: 'stop_unconfirmed', new_dispatch_blocked: true,
         unsettled_incidents: [{ incident_event_id: 77, task_ids: ['para-pending'] }],
         unsettled_action_ids: [83],
+        blocked_action_ids: [84],
         mac_control_tasks: [{ id: 'queued-local', state: 'cancelled' }, { id: 'running-local', state: 'cancel_requested' }],
       } } },
       audit_logs: [{ event_type: 'admin_ticket_dispatch_revoked', detail: { note } }],
@@ -268,6 +269,7 @@ describe('customer service ticket detail', () => {
     expect(receipt.text()).toContain('最新回执 已取消')
     expect(receipt.text()).toContain('para-pending')
     expect(receipt.text()).toContain('动作 #83 · 停止状态待核实')
+    expect(receipt.text()).toContain('动作 #84 · 启动前已阻止')
     expect(wrapper.findAll('button').find(button => button.text() === '撤销派发')).toBeUndefined()
     expect(wrapper.find('.cs-close-form').exists()).toBe(true)
     wrapper.unmount()

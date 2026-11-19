@@ -189,6 +189,121 @@ def test_disposition_is_scoped_replayable_and_fences_late_work(client, kind):
     )
 
 
+def test_revoke_dispatch_preserves_original_ticket_and_fences_queued_work(client):
+    from modstore_server.customer_issue_intake import dispatch_issue_event, enqueue_issue
+    from modstore_server.customer_service_orchestrator import (
+        apply_customer_ticket_incident_progress,
+    )
+    from modstore_server.customer_service_tools import json_dumps
+    from modstore_server.db.mac_control import MacControlTask
+    from modstore_server.mac_control_store import accept
+    from modstore_server.mac_control_worker import reconcile
+
+    owner, admin, another_admin = _user(admin=False), _user(admin=True), _user(admin=True)
+    ticket_id, other_id = _ticket(owner), _ticket(owner)
+    path = f"/api/customer-service/tickets/{ticket_id}"
+    body = {"request_id": str(uuid.uuid4()), "note": "原问题保留，停止自动派发后转人工诊断。"}
+    _as(owner)
+    assert client.post(f"{path}/dispatch-revoke", json=body).status_code == 403
+    _as(admin)
+    assert (
+        client.post(
+            f"{path}/assign", json={"assignee_id": admin.id, "reason": "安排人工处理原单"}
+        ).status_code
+        == 200
+    )
+    assert client.post(f"{path}/accept", json={"reason": "接受原始问题"}).status_code == 200
+    _as(another_admin)
+    assert client.post(f"{path}/dispatch-revoke", json=body).status_code == 403
+    _as(admin)
+    with get_session_factory()() as db:
+
+        def task_for(target, actor="employee:fixture"):
+            return accept(
+                db,
+                actor=actor,
+                key=uuid.uuid4().hex,
+                request={"source": "employee", "ticket_id": target, "customer_id": owner.id},
+            )
+
+        queued_id = task_for(ticket_id).id
+        unrelated_id = task_for(other_id).id
+        manually_owned_id = task_for(ticket_id, actor=f"admin:{admin.id}").id
+        active = task_for(ticket_id)
+        active.attempt_id, active.para_task_id, active.state = "attempt", "exact-para-id", "running"
+        active_id = active.id
+        db.get(CustomerServiceTicket, ticket_id).evidence_json = json_dumps(
+            {"resolution": {"team": [{"role": "fix", "employee_id": "previous-employee"}]}}
+        )
+        db.commit()
+    original = client.get(path).json()["ticket"]
+    response = client.post(f"{path}/dispatch-revoke", json=body)
+    assert response.status_code == 200, response.text
+    stopped = response.json()["ticket"]
+    assert stopped["status"] == original["status"] == "processing"
+    assert stopped["decision_status"] == original["decision_status"]
+    assert stopped["closed_at"] == original["closed_at"] == ""
+    assert "disposition" not in stopped
+    receipt = stopped["dispatch_revocation"]
+    assert receipt["execution_stop"]["state"] == "stop_unconfirmed"
+    assert receipt["execution_stop"]["new_dispatch_blocked"] is True
+    assert client.post(f"{path}/dispatch-revoke", json=body).json()["replayed"] is True
+    assert (
+        client.post(
+            f"{path}/dispatch-revoke", json={**body, "request_id": str(uuid.uuid4())}
+        ).status_code
+        == 409
+    )
+
+    envelope = {"id": "previously-enqueued", "data": {"ticket_id": ticket_id, "user_id": owner.id}}
+    assert dispatch_issue_event(envelope) == {
+        "ok": True,
+        "skipped": True,
+        "reason": "ticket_dispatch_revoked",
+    }
+    with get_session_factory()() as db:
+        assert db.get(MacControlTask, queued_id).state == "cancelled"
+        assert db.get(MacControlTask, active_id).state == "cancel_requested"
+        assert db.get(MacControlTask, unrelated_id).state == "queued"
+        assert db.get(MacControlTask, manually_owned_id).state == "queued"
+        assert not enqueue_issue(db, db.get(CustomerServiceTicket, ticket_id))
+        assert (
+            apply_customer_ticket_incident_progress(
+                db, ticket_id=ticket_id, event_id=1, team_ok=True
+            )["replayed"]
+            is True
+        )
+    detail = client.get(path).json()
+    assert detail["ticket"]["dispatch_revocation"] == receipt
+    assert detail["execution_overview"]["blocker"] == "dispatch_revoked"
+    responsible = detail["execution_overview"]["responsible"]
+    assert responsible["kind"] == "admin" and responsible["id"] == admin.id
+    prior_receipts = {
+        row["id"]: row for row in detail["execution_overview"]["revocation_task_receipts"]
+    }
+    assert prior_receipts[active_id]["state"] == "cancel_requested"
+    assert len([a for a in detail["actions"] if a["action_type"] == "ticket.dispatch_revoke"]) == 1
+    with get_session_factory()() as db:
+
+        class StoppedExecutor:
+            def task(self, task_id):
+                assert task_id == "exact-para-id"
+                return {"id": task_id, "status": "cancelled"}
+
+        reconcile(db, db.get(MacControlTask, active_id), StoppedExecutor())
+    refreshed = client.get(path).json()
+    assert refreshed["ticket"]["dispatch_revocation"] == receipt
+    assert {
+        row["id"]: row["state"]
+        for row in refreshed["execution_overview"]["revocation_task_receipts"]
+    }[active_id] == "cancelled"
+    assert client.post(f"{path}/diagnose", json={"reason": "继续人工核查原问题"}).status_code == 200
+    _as(owner)
+    public = client.get(path).json()["ticket"]
+    assert public["dispatch_status"] == "revoked"
+    assert public["status"] == "processing" and "dispatch_revocation" not in public
+
+
 def test_verified_repair_cannot_be_dismissed(client):
     from modstore_server.customer_service_tools import json_dumps
 
@@ -213,6 +328,12 @@ def test_verified_repair_cannot_be_dismissed(client):
         )
         db.commit()
     assert client.post(f"{path}/disposition", json=body).status_code == 409
+    assert (
+        client.post(
+            f"{path}/dispatch-revoke", json={"request_id": body["request_id"], "note": body["note"]}
+        ).status_code
+        == 409
+    )
 
 
 def test_human_loop_blocks_false_close_and_keeps_history(client):

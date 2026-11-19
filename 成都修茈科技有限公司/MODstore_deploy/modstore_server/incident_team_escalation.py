@@ -30,7 +30,12 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 _CURSOR = 0
 _TERMINAL = frozenset({"failed", "completed", "cancelled"})
 _DISPATCH_STOPS = frozenset(
-    {"ticket_disposed", "intake_review_required", "invalid_ticket_evidence"}
+    {
+        "ticket_disposed",
+        "ticket_dispatch_revoked",
+        "intake_review_required",
+        "invalid_ticket_evidence",
+    }
 )
 
 

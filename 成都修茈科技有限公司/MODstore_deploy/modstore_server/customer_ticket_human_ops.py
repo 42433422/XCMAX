@@ -112,6 +112,72 @@ def _cas(
     return ticket
 
 
+def revoke_ticket_dispatch(
+    db: Session, ticket: CustomerServiceTicket, user: User, *, request: dict[str, str]
+) -> dict[str, Any]:
+    """Stop new automated work on the original ticket without deciding the ticket."""
+    from modstore_server.custom_delivery_incident_policy import is_delivery_managed
+    from modstore_server.customer_service_orchestrator import ticket_payload
+    from modstore_server.customer_ticket_execution import ticket_dispatch_stop
+
+    if not user.is_admin:
+        raise HTTPException(403, "需要管理员权限")
+    db.refresh(ticket, with_for_update=True)
+    evidence = _evidence(ticket)
+    prior = evidence.get("dispatch_revocation")
+    if isinstance(prior, dict):
+        if (
+            prior.get("request_id") == request["request_id"]
+            and prior.get("operator_id") == int(user.id)
+            and prior.get("note") == request["note"]
+        ):
+            return {"ticket": ticket_payload(ticket), "replayed": True}
+        raise HTTPException(409, "原工单已撤销派发，请核对已保存的回执")
+    before = str(ticket.status or "")
+    if before not in {"open", "processing"} or ticket.closed_at:
+        raise HTTPException(409, "只有待处理或处理中的原工单可以撤销派发")
+    if ticket.assigned_admin_id != int(user.id):
+        raise HTTPException(403, "只有当前工单处理人可以撤销派发")
+    if is_delivery_managed(str(ticket.intent), evidence) or ticket.intent == "custom_delivery":
+        raise HTTPException(409, "定制交付工单须按原交付流程处置")
+    if issue_resolution(ticket, evidence).get("repair_verified") is True:
+        raise HTTPException(409, "已核验修复的工单须沿用原验收流程")
+    receipt = {
+        "request_id": request["request_id"],
+        "operator_id": int(user.id),
+        "note": request["note"],
+        "at": datetime.now(UTC).isoformat(),
+        "execution_stop": ticket_dispatch_stop(db, ticket, reason="ticket_dispatch_revoked"),
+    }
+    evidence["dispatch_revocation"] = receipt
+    _cas(
+        db,
+        ticket,
+        user,
+        expected=before,
+        new_status=before,
+        event="admin_ticket_dispatch_revoked",
+        reason=request["note"],
+        evidence=evidence,
+        commit=False,
+    )
+    db.add(
+        CustomerServiceAction(
+            ticket_id=ticket.id,
+            user_id=user.id,
+            action_type="ticket.dispatch_revoke",
+            target_type="ticket",
+            target_id=str(ticket.id),
+            status="completed",
+            request_json=json_dumps(request),
+            result_json=json_dumps(receipt),
+            idempotency_key=f"admin-ticket-dispatch-revoke:{ticket.id}:{request['request_id']}",
+        )
+    )
+    db.commit()
+    return {"ticket": ticket_payload(ticket), "replayed": False}
+
+
 def dispose_ticket(
     db: Session, ticket: CustomerServiceTicket, user: User, *, request: dict[str, str]
 ) -> dict[str, Any]:

@@ -437,6 +437,65 @@ def test_uncertain_workflow_dispatch_is_not_replayed(client, ticket, monkeypatch
         )
 
 
+@pytest.mark.parametrize("before_slot_claim", [False, True])
+def test_revocation_fences_github_runner_at_slot_claim(
+    client, ticket, monkeypatch, isolated_publisher_stub, before_slot_claim
+):
+    from modstore_server import customer_issue_intake as intake
+    from modstore_server import para_github_runner as runner
+    from modstore_server.db.mac_control import MacControlSyncLease
+    from modstore_server.eventing import db_outbox
+
+    posts = []
+
+    def github(method, path, body=None):
+        if method == "POST":
+            posts.append(path)
+        return {"number": 123, "state": "open"}
+
+    monkeypatch.setattr(bridge, "github", github)
+    path = f"/api/customer-service/tickets/{ticket}"
+    admin = app.dependency_overrides[require_admin]()
+    assert (
+        client.post(
+            f"{path}/assign", json={"assignee_id": admin.id, "reason": "接手原工单"}
+        ).status_code
+        == 200
+    )
+    assert client.post(f"{path}/github", json=DRAFT).status_code == 200
+    assert (
+        client.post(f"{path}/github/start", json={"request_id": str(uuid.uuid4())}).status_code
+        == 200
+    )
+    record = next(
+        row for row in db_outbox.fetch_pending(limit=100) if row.payload.get("ticket_id") == ticket
+    )
+    original_claim = runner._claim_worker_slot
+
+    def claim_and_revoke(db, row):
+        if not before_slot_claim:
+            assert original_claim(db, row)
+        result = client.post(
+            f"{path}/dispatch-revoke",
+            json={"request_id": str(uuid.uuid4()), "note": "原单保留，此次不再启动临时执行器。"},
+        )
+        assert result.status_code == 200, result.text
+        assert result.json()["ticket"]["status"] == "open"
+        assert (
+            result.json()["ticket"]["dispatch_revocation"]["execution_stop"]["state"]
+            == "dispatch_blocked"
+        )
+        return original_claim(db, row) if before_slot_claim else True
+
+    monkeypatch.setattr(runner, "_claim_worker_slot", claim_and_revoke)
+    result = intake.dispatch_issue_event(record.to_envelope())
+    assert result["status"] == "blocked" and result["reason"] == "ticket_dispatch_revoked"
+    assert not any(path.endswith("/dispatches") for path in posts)
+    with get_session_factory()() as db:
+        slot = db.get(MacControlSyncLease, "github-worker")
+        assert not slot.owner
+
+
 def test_github_fix_receipt_is_bound_to_pushed_branch_and_commit(ticket, monkeypatch):
     from modstore_server.para_github_runner import verified_code_identity
 

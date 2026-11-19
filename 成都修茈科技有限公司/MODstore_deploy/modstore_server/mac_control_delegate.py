@@ -12,6 +12,28 @@ from modstore_server.mac_control_store import TERMINAL, accept, digest, request_
 from modstore_server.models_cs import CustomerServiceTicket
 
 
+def _ticket_employee_task_matches(task: MacControlTask, ticket: CustomerServiceTicket) -> bool:
+    request = json_loads(task.request_json, {})
+    return (
+        task.actor.startswith("employee:")
+        and isinstance(request, dict)
+        and (request.get("source"), request.get("ticket_id"), request.get("customer_id"))
+        == ("employee", ticket.id, ticket.user_id)
+    )
+
+
+def ticket_employee_task_receipts(
+    db: Session, ticket: CustomerServiceTicket, task_ids: list[str]
+) -> list[dict[str, Any]]:
+    if not task_ids:
+        return []
+    return [
+        {"id": task.id, "para_task_id": task.para_task_id, "state": task.state}
+        for task in db.query(MacControlTask).filter(MacControlTask.id.in_(task_ids))
+        if _ticket_employee_task_matches(task, ticket)
+    ]
+
+
 def stop_ticket_employee_tasks(db: Session, ticket: CustomerServiceTicket) -> list[dict[str, Any]]:
     rows = (
         db.query(MacControlTask)
@@ -24,12 +46,7 @@ def stop_ticket_employee_tasks(db: Session, ticket: CustomerServiceTicket) -> li
     )
     for_task = []
     for task in rows:
-        request = json_loads(task.request_json, {})
-        if not isinstance(request, dict) or (
-            request.get("source"),
-            request.get("ticket_id"),
-            request.get("customer_id"),
-        ) != ("employee", ticket.id, ticket.user_id):
+        if not _ticket_employee_task_matches(task, ticket):
             continue
         db.refresh(task, with_for_update=True)
         state = (

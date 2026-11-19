@@ -638,7 +638,11 @@ def handle_customer_message(
         if open_ticket is None:
             raise InactiveTicketConversation("原工单已关闭或不属于此会话，请刷新后查看")
     else:
-        open_ticket = open_tickets.order_by(_facade().CustomerServiceTicket.id.desc()).first()
+        open_ticket = (
+            open_tickets.order_by(_facade().CustomerServiceTicket.id.desc())
+            .with_for_update()
+            .first()
+        )
     session.last_message = text
     session.updated_at = _facade().datetime.now(_facade().timezone.utc)
     ctx_for_store = {k: v for (k, v) in (context or {}).items() if k not in {"image_data_url"}}
@@ -958,7 +962,9 @@ def handle_customer_message(
         message=text,
     )
     actions: list[Any] = []
-    held_for_review = bool(intake_dispatch_block_reason(ticket))
+    block_reason = intake_dispatch_block_reason(ticket)
+    held_for_review = bool(block_reason)
+    dispatch_revoked = block_reason == "ticket_dispatch_revoked"
     if not held_for_review:
         actions = _facade().plan_actions(
             db, user=user, ticket=ticket, decision=decision, extracted=extracted
@@ -979,9 +985,10 @@ def handle_customer_message(
                 },
             )
         )
-    ticket.decision_status = decision.decision
+    if not dispatch_revoked:
+        ticket.decision_status = decision.decision
     if held_for_review:
-        if not ticket.assigned_admin_id:
+        if not dispatch_revoked and not ticket.assigned_admin_id:
             ticket.status = (
                 "waiting_user"
                 if extracted.get("classification_status") == "pending_verification"
@@ -1016,7 +1023,9 @@ def handle_customer_message(
     reply, cards = _facade().build_reply(
         ticket=ticket, decision=decision, actions=actions, extracted=extracted
     )
-    if held_for_review:
+    if dispatch_revoked:
+        reply = "我是小C。此工单已停止自动派发，原工单仍保留。可继续补充材料供管理员处理。"
+    elif held_for_review:
         reply = "我是小C。已登记你的原始反馈，等待管理员核实处理范围。可在此工单继续补充说明。"
     elif intent in {"general", "greeting", "product_issue"}:
         issue_text = _facade()._resolve_issue_text_for_reply(
@@ -2253,6 +2262,7 @@ def apply_customer_ticket_incident_progress(
     if (
         ticket.closed_at
         or ticket.status in CLOSED_CUSTOMER_ISSUE_STATES
+        or ev.get("dispatch_revocation")
         or any(
             report.get("progress_sha256") == progress_digest
             for report in ev.get("employee_reports", [])

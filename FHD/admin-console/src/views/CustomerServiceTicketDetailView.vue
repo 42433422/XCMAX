@@ -139,6 +139,9 @@
           <ul v-if="unsettledActions.length" class="cs-chips" aria-label="待核实的原单动作">
             <li v-for="actionId in unsettledActions" :key="String(actionId)">动作 #{{ actionId }} · 停止状态待核实</li>
           </ul>
+          <ul v-if="blockedActions.length" class="cs-chips" aria-label="已阻止的原单动作">
+            <li v-for="actionId in blockedActions" :key="String(actionId)">动作 #{{ actionId }} · 启动前已阻止</li>
+          </ul>
         </div>
         <p v-if="!overview && !dispatchRevocation" class="cs-state">暂无记录</p>
         <template v-if="overview">
@@ -357,6 +360,8 @@ const unsettledDispatches = computed(() => Array.isArray(revocationStop.value.un
   ? revocationStop.value.unsettled_incidents as Row[] : [])
 const unsettledActions = computed(() => Array.isArray(revocationStop.value.unsettled_action_ids)
   ? revocationStop.value.unsettled_action_ids as number[] : [])
+const blockedActions = computed(() => Array.isArray(revocationStop.value.blocked_action_ids)
+  ? revocationStop.value.blocked_action_ids as number[] : [])
 const canRevokeDispatch = computed(() => ['open', 'processing'].includes(String(ticket.value.status))
   && Number(ticket.value.assigned_admin_id) > 0 && !ticket.value.closed_at && !dispatchRevocation.value
   && !customDelivery.value && ticket.value.intent !== 'custom_delivery' && resolution.value?.repair_verified !== true)

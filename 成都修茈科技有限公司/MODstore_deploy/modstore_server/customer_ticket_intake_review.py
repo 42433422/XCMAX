@@ -145,6 +145,8 @@ def intake_dispatch_block_reason(ticket: CustomerServiceTicket) -> str:
         return "invalid_ticket_evidence"
     if not isinstance(evidence, dict):
         return "invalid_ticket_evidence"
+    if evidence.get("dispatch_revocation"):
+        return "ticket_dispatch_revoked"
     if evidence.get("classification_status") == "pending_verification":
         return "intake_review_required"
     review = evidence.get("intake_review")

@@ -198,7 +198,11 @@ async def intake_customer_issue(
             "dispatch_status": (
                 "terminal"
                 if blocked == "ticket_terminal"
-                else "pending_review" if blocked else "queued"
+                else (
+                    "revoked"
+                    if blocked == "ticket_dispatch_revoked"
+                    else "pending_review" if blocked else "queued"
+                )
             ),
             "support_bundle_saved": bool(bundle_b64) and saved,
             "support_bundle_sha256": bundle_sha if bundle_b64 and saved else "",

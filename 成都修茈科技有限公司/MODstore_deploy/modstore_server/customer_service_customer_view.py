@@ -90,6 +90,8 @@ def customer_ticket(ticket: Any) -> dict[str, Any]:
         "cancelled",
     }:
         out["dispatch_status"] = "terminal"
+    elif evidence.get("dispatch_revocation"):
+        out["dispatch_status"] = "revoked"
     elif isinstance(assessment, dict) and assessment.get("disposition") != "actionable":
         out["dispatch_status"] = "pending_review"
     disposition = ticket.get("disposition") if isinstance(ticket, dict) else None

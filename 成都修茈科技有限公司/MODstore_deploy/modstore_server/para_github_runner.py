@@ -169,6 +169,38 @@ def _claim_worker_slot(db, row, *, owner_key=None):
     return bool(changed)
 
 
+def stop_queued_ticket_runner(db, ticket, *, reason):
+    from modstore_server.customer_ticket_github import RUN_ACTION
+
+    blocked, unresolved = [], []
+    rows = (
+        db.query(CustomerServiceAction)
+        .filter_by(
+            ticket_id=ticket.id, user_id=ticket.user_id, action_type=RUN_ACTION, status="queued"
+        )
+        .with_for_update()
+        .all()
+    )
+    for row in rows:
+        receipt = json_loads(row.result_json, {})
+        if receipt.get("run_id"):
+            unresolved.append(row.id)
+            continue
+        row.status = "blocked"
+        row.result_json = json_dumps({**receipt, "reason": reason})
+        _release_worker_slot(db, row.id)
+        blocked.append(row.id)
+    return blocked, unresolved
+
+
+def _release_worker_slot(db, action_id):
+    from modstore_server.db.mac_control import MacControlSyncLease
+
+    db.query(MacControlSyncLease).filter_by(id="github-worker", owner=str(action_id)).update(
+        {"owner": ""}, synchronize_session=False
+    )
+
+
 def ensure_runner(db, payload):
     try:
         return _ensure_runner(db, payload)
@@ -204,6 +236,32 @@ def _ensure_runner(db, payload):
             return None
         if not _claim_worker_slot(db, row):
             return False
+        from modstore_server.customer_service_tools import begin_immediate_write
+        from modstore_server.customer_ticket_intake_review import intake_dispatch_block_reason
+        from modstore_server.models_cs import CustomerServiceTicket
+
+        # Slot acquisition commits separately. Recheck the original ticket under its
+        # write fence before making a new durable downstream dispatch claim.
+        ticket_id = row.ticket_id
+        db.rollback()
+        begin_immediate_write(db)
+        ticket = db.get(CustomerServiceTicket, ticket_id, with_for_update=True)
+        db.refresh(row, with_for_update=True)
+        if row.status == "blocked":
+            _release_worker_slot(db, row.id)
+            db.commit()
+            return None
+        if row.status != "queued":
+            return False
+        blocked = (
+            intake_dispatch_block_reason(ticket)
+            if ticket and ticket.user_id == row.user_id
+            else "ticket_owner_mismatch"
+        )
+        if blocked:
+            _release_worker_slot(db, row.id)
+            _save(db, row, "blocked", reason=blocked)
+            return None
         claimed = (
             db.query(CustomerServiceAction)
             .filter_by(id=row.id, status="queued")
