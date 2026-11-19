@@ -12,6 +12,8 @@ on:
       - "成都修茈科技有限公司/MODstore_deploy/.github/workflows/prod-deploy.yml"
       - ".github/workflows/modstore-prod-deploy.yml"
       - ".github/workflows/dr-resilience-ci.yml"
+      - ".github/workflows/corp-host-maintenance-preflight.yml"
+      - "scripts/dev/test_host_maintenance_preflight.py"
   push:
     branches: [main]
     paths:
@@ -24,6 +26,8 @@ on:
       - "成都修茈科技有限公司/MODstore_deploy/.github/workflows/prod-deploy.yml"
       - ".github/workflows/modstore-prod-deploy.yml"
       - ".github/workflows/dr-resilience-ci.yml"
+      - ".github/workflows/corp-host-maintenance-preflight.yml"
+      - "scripts/dev/test_host_maintenance_preflight.py"
   workflow_dispatch:
 
 permissions:
@@ -64,6 +68,11 @@ jobs:
 
       - name: Verify workflow SSOT publication
         run: python scripts/dev/publish_ci_workflows_to_root.py --check
+
+      - name: Verify read-only host probe and real Docker isolation
+        env:
+          XCMAX_TEST_DOCKER_MOUNTS: "1"
+        run: python3 scripts/dev/test_host_maintenance_preflight.py -v
 
       - name: Verify DR safety contracts
         run: |
