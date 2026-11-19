@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import time
 from unittest.mock import MagicMock, patch
 
@@ -203,6 +204,47 @@ def _make_app() -> FastAPI:
     app = FastAPI()
     app.include_router(router)
     return app
+
+
+@pytest.mark.parametrize(
+    "method,path,expected",
+    [
+        ("POST", "/conversations/message", {"detail": "无权保存该消息。"}),
+        (
+            "DELETE",
+            "/conversations/private-session/messages/1",
+            {"success": False, "message": "无权撤回该消息。"},
+        ),
+    ],
+)
+def test_message_permission_error_does_not_expose_storage_path(monkeypatch, method, path, expected):
+    private_path = "/private/permission-regression/customer-data/xcagi.db"
+    calls = []
+
+    def authenticated_actor(_request):
+        calls.append("authenticated")
+        return MagicMock(id=41)
+
+    def denied_session():
+        calls.append("storage")
+        raise PermissionError(errno.EACCES, "Permission denied", private_path)
+
+    monkeypatch.setattr(
+        "app.infrastructure.auth.dependencies.resolve_session_user", authenticated_actor
+    )
+    # Keep the real store and context manager; fail only when it opens storage.
+    monkeypatch.setattr("app.db.session.SessionLocal", denied_session)
+    with TestClient(_make_app()) as client:
+        response = client.request(
+            method,
+            path,
+            json={"session_id": "private-session", "content": "hello", "user_id": "42"},
+        )
+    assert calls == ["authenticated", "storage"]
+    assert response.status_code == 403
+    assert private_path not in response.text
+    assert "[Errno" not in response.text
+    assert response.json() == expected
 
 
 class TestConversationsSaveMessage:

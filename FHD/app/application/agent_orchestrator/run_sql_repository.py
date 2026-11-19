@@ -9,7 +9,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from typing import cast
 
-from sqlalchemy import Table
+from sqlalchemy import Table, case, func, or_
 from sqlalchemy.orm import Session
 
 from app.application.agent_orchestrator import run_terminal_metrics
@@ -32,6 +32,40 @@ from app.application.agent_orchestrator.task_models import (
     tenant_id_of_run,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+_TASK_ID_PATH = "$.metadata.task_context.task_id"
+_TENANT_PATH = "$.metadata.runtime_context.tenant_id"
+_MOD_PATH = "$.metadata.runtime_context._mod_authorization.mod_id"
+
+
+def _sqlite_identity_columns(column, *paths: str):
+    strict_json = func.json_valid(column) == 1
+    # Multi-path JSON1 extraction preserves scalar types. Non-strict rows use
+    # the existing mapper, which accepts Python JSON values such as NaN.
+    return (
+        case((strict_json, func.json_extract(column, *paths))).label("identity_json"),
+        case((~strict_json, column)).label("payload_json"),
+    )
+
+
+def _sqlite_identity_candidates(column, path: str, expected: str):
+    # Only reject definite mismatches in SQL. The mapper compares uncommon
+    # non-string identities using the same conversion as existing task records.
+    return case(
+        (
+            func.json_valid(column) == 1,
+            or_(
+                func.coalesce(func.json_extract(column, path), "") == expected,
+                func.json_type(column, path).not_in(("text", "null")),
+            ),
+        ),
+        else_=True,
+    )
+
+
+def _explicit_task_id(run: AgentRun) -> str:
+    context = run.metadata.get("task_context")
+    return str(context.get("task_id") or "") if isinstance(context, dict) else ""
 
 
 def same_run_generation(run: AgentRun, previous: AgentRun) -> bool:
@@ -493,21 +527,24 @@ class SQLAlchemyAgentRunRepository:
     def list_task_runs(self, *, user_id: str, task_id: str) -> list[AgentRun]:
         """Resolve a durable task without relying on a recent-run window.
 
-        ``task_id`` currently lives in the versioned AgentRun payload.  Scanning one
-        principal's rows is intentionally slower than adding an un-migrated shadow
-        index, but it keeps idempotency correct for old tasks as well as recent ones.
+        ``task_id`` currently lives in the versioned AgentRun payload. SQLite
+        preselects candidate runs before the mapper compares task identities.
         """
         self._ensure_schema()
         wanted_task = str(task_id or "")
         with self._session_scope(read_only=True) as db:
             from app.db.models.agent import AgentRunRecord
 
-            records = (
-                db.query(AgentRunRecord)
-                .filter(AgentRunRecord.user_id == str(user_id or ""))
-                .order_by(AgentRunRecord.created_at.asc(), AgentRunRecord.run_id.asc())
-                .all()
-            )
+            query = db.query(AgentRunRecord).filter(AgentRunRecord.user_id == str(user_id or ""))
+            if db.get_bind().dialect.name == "sqlite":
+                query = query.filter(
+                    _sqlite_identity_candidates(
+                        AgentRunRecord.payload_json, _TASK_ID_PATH, wanted_task
+                    )
+                )
+            records = query.order_by(
+                AgentRunRecord.created_at.asc(), AgentRunRecord.run_id.asc()
+            ).all()
             runs: list[AgentRun] = []
             for record in records:
                 run = self._record_to_run(record)
@@ -518,24 +555,120 @@ class SQLAlchemyAgentRunRepository:
                     runs.append(run)
             return runs
 
-    def list_run_scopes(self, *, user_id: str) -> dict[str, list[tuple[str, str, str]]]:
-        """One scan per request: task_id → [(run user, tenant, mod)] for list filtering."""
-        from app.application.agent_orchestrator.task_models import (
-            mod_id_of_run,
-            tenant_id_of_run,
-        )
+    def storage_identity(self) -> object:
+        """Bind view caches to the actual database, including desktop DB switches."""
+        with self._session_scope(read_only=True) as db:
+            return db.get_bind()
 
+    def list_run_scopes(self, *, user_id: str) -> dict[str, list[tuple[str, str, str]]]:
+        """Read current authorization scopes without hydrating unrelated payload fields."""
+        user_id = str(user_id or "")
+        self._ensure_schema()
         scopes: dict[str, list[tuple[str, str, str]]] = {}
+        with self._session_scope(read_only=True) as db:
+            from app.db.models.agent import AgentRunRecord
+
+            if db.get_bind().dialect.name == "sqlite":
+                # 只解析任务归属字段，避免构建每条运行的完整对象。
+                rows = (
+                    db.query(
+                        *_sqlite_identity_columns(
+                            AgentRunRecord.payload_json,
+                            "$.user_id",
+                            _TASK_ID_PATH,
+                            _TENANT_PATH,
+                            _MOD_PATH,
+                        )
+                    )
+                    .filter(AgentRunRecord.user_id == user_id)
+                    .all()
+                )
+                for row in rows:
+                    if row.identity_json is None:
+                        run = self._record_to_run(row)
+                        if run is None or not (task_id := _explicit_task_id(run)):
+                            continue
+                        scope = (run.user_id, tenant_id_of_run(run), mod_id_of_run(run))
+                    else:
+                        raw_user, raw_task, raw_tenant, raw_mod = json.loads(row.identity_json)
+                        task_id = str(raw_task or "")
+                        scope = (str(raw_user or ""), str(raw_tenant or ""), str(raw_mod or ""))
+                    if task_id:
+                        scopes.setdefault(task_id, []).append(scope)
+                return scopes
         for run in self.list_task_runs_for_user(user_id=user_id):
-            context = run.metadata.get("task_context")
-            if not isinstance(context, dict):
-                continue
-            task_id = str(context.get("task_id") or "")
-            if task_id:
+            if task_id := _explicit_task_id(run):
                 scopes.setdefault(task_id, []).append(
                     (run.user_id, tenant_id_of_run(run), mod_id_of_run(run))
                 )
         return scopes
+
+    def recent_task_refs(
+        self, *, user_id: str | None = None, tenant_id: str | None = None, limit: int = 200
+    ) -> list[tuple[str, str, str]]:
+        """Read recent (run_id, task_id, tenant_id) with SQLite projections."""
+        limit = max(0, int(limit))
+        if not limit:
+            return []
+        self._ensure_schema()
+        with self._session_scope(read_only=True) as db:
+            from app.db.models.agent import AgentRunRecord
+
+            if db.get_bind().dialect.name == "sqlite":
+                query = db.query(
+                    AgentRunRecord.run_id,
+                    *_sqlite_identity_columns(
+                        AgentRunRecord.payload_json, _TASK_ID_PATH, _TENANT_PATH
+                    ),
+                )
+                if user_id is not None:
+                    query = query.filter(AgentRunRecord.user_id == str(user_id))
+                query = query.order_by(AgentRunRecord.updated_at.desc())
+                if tenant_id is not None:
+                    query = query.filter(
+                        _sqlite_identity_candidates(
+                            AgentRunRecord.payload_json, _TENANT_PATH, tenant_id
+                        )
+                    )
+                else:
+                    query = query.limit(limit)
+                refs: list[tuple[str, str, str]] = []
+                matched = 0
+                for row in query.yield_per(100):
+                    if row.identity_json is None:
+                        run = self._record_to_run(row)
+                        if run is None:
+                            continue
+                        task_id, run_tenant = _explicit_task_id(run), tenant_id_of_run(run)
+                    else:
+                        raw_task, raw_tenant = json.loads(row.identity_json)
+                        task_id, run_tenant = str(raw_task or ""), str(raw_tenant or "")
+                    if tenant_id is not None and run_tenant != tenant_id:
+                        continue
+                    if task_id:
+                        refs.append((row.run_id, task_id, run_tenant))
+                    matched += 1
+                    if matched >= limit:
+                        break
+                return refs
+        return [
+            (run.run_id, task_id, tenant_id_of_run(run))
+            for run in self.list_recent(user_id=user_id, tenant_id=tenant_id, limit=limit)
+            if (task_id := _explicit_task_id(run))
+        ]
+
+    def task_keys(self, *, user_id: str) -> set[tuple[str, str]]:
+        """Existing (tenant_id, task_id) pairs so callers need no per-run lookup."""
+        self._ensure_schema()
+        with self._session_scope(read_only=True) as db:
+            from app.db.models.agent import AgentTaskRecord
+
+            rows = (
+                db.query(AgentTaskRecord.tenant_id, AgentTaskRecord.task_id)
+                .filter(AgentTaskRecord.user_id == str(user_id or ""))
+                .all()
+            )
+            return {(str(tenant or ""), str(task_id or "")) for tenant, task_id in rows}
 
     def list_task_runs_for_user(self, *, user_id: str) -> list[AgentRun]:
         """All runs of one principal, hydrated once (used by scope filtering)."""

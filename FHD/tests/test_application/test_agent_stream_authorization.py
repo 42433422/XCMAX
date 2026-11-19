@@ -49,15 +49,18 @@ def test_stream_authorizer_rechecks_original_identity(monkeypatch, change):
 @pytest.mark.parametrize("kind", ["tasks", "events"])
 @pytest.mark.parametrize("valid_before_read", [False, True])
 def test_stream_drops_data_when_authorization_expires(monkeypatch, kind, valid_before_read):
+    from app.application.agent_orchestrator import InMemoryAgentRunRepository
     from app.fastapi_routes.domains.agent import event_routes, task_routes
 
     principal = AgentPrincipal(user_id="owner")
     authorize = AsyncMock(side_effect=[True, False] if valid_before_read else [False])
     if kind == "tasks":
+        repository = InMemoryAgentRunRepository()
         fetch = Mock(return_value=[])
         monkeypatch.setattr(task_routes, "scoped_tasks", fetch)
         monkeypatch.setattr(task_routes, "_execution_map", lambda tasks: {})
-        monkeypatch.setattr(task_routes, "AgentOrchestrator", lambda: object())
+        monkeypatch.setattr(task_routes, "get_agent_run_repository", lambda: repository)
+        monkeypatch.setattr(task_routes, "AgentOrchestrator", lambda *, repository: object())
         response = asyncio.run(
             task_routes.stream_agent_tasks(once=True, principal=principal, authorize=authorize)
         )

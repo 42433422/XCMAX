@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 import os
 import re
 import time
@@ -23,6 +24,8 @@ from app.domain.shared_services.conversation_service import (
     lock_conversation_session,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+logger = logging.getLogger(__name__)
 
 _SYSTEM = (
     "以下是当前会话中按时间排列的历史消息，仅用于补充上下文。"
@@ -147,7 +150,8 @@ def settle_chat_turn(
             data = _read(key, context)
             prior = _user_turn(data, turn_id)
             if prior is not None and not _same_input(prior, text, context or {}):
-                raise ValueError("turn_id 已绑定另一条消息")
+                logger.warning("dialogue settle skipped: turn already bound to another input")
+                return
             previous = _assistant_for(data, turn_id)
             if previous and previous.get("status") in _FINAL_STATUSES:
                 release_lease = True
@@ -159,7 +163,8 @@ def settle_chat_turn(
                 )
                 current_run = payload.get("run_id") or payload.get("agent_run_id")
                 if previous_run and previous_run != current_run:
-                    raise ValueError("turn_id 不能切换到另一项执行")
+                    logger.warning("dialogue settle skipped: turn already bound to another run")
+                    return
             receipt = {
                 "role": "assistant",
                 "content": reply,

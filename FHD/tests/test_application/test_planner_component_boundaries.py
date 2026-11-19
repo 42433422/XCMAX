@@ -177,6 +177,91 @@ def test_missing_model_result_is_not_reported_as_invalid_business_plan(monkeypat
     risk_gate.evaluate.assert_not_called()
 
 
+def test_repair_failure_message_is_not_model_connection_error(monkeypatch):
+    callbacks = Mock()
+    callbacks._resume_pending_dynamic_workflow.return_value = (False, None)
+    planner = Mock()
+    planner.plan.return_value = PlanGraph(
+        plan_id="repair-failed",
+        intent="plan_rejected",
+        metadata={
+            "planning_rejected": True,
+            "planning_unavailable": False,
+            "planning_failure_kind": "plan_repair_failed",
+            "rejection_reason": "修复输出无法解析",
+            "plan_repair": {
+                "attempts": 1,
+                "initial_error": "节点 node_1 使用未授权动作: clarify.ask.ask",
+                "errors": [{"code": "unparsable_repair", "reason": "schema_invalid"}],
+            },
+        },
+    )
+    risk_gate = Mock()
+    monkeypatch.setattr(
+        "app.application.facades.tools_facade.get_workflow_tool_registry", lambda: {}
+    )
+    notes = []
+    monkeypatch.setattr("app.infrastructure.chat_stream_lifetime.publish_stream_note", notes.append)
+    result = PlannedWorkflowDispatch({}, callbacks, planner, risk_gate, Mock()).handle(
+        "owner", "请查询", "pro", {}, "请查询"
+    )
+    assert not any(note.startswith("已生成") for note in notes)
+    assert result["data"]["action"] == "workflow_planning_failed"
+    assert result["data"]["error_code"] == "workflow_plan_rejected"
+    assert result["data"]["planning_failure_kind"] == "plan_repair_failed"
+    assert result["data"]["planning_diagnostics"]["attempts"] == 1
+    assert "自动修复" in result["response"]
+    assert "模型连接" not in result["response"]
+    assert result["data"]["execution_started"] is False
+    risk_gate.evaluate.assert_not_called()
+
+
+def test_model_plan_format_failure_is_not_unavailability():
+    from app.domain.neuro.cognition.plan_graph_hooks import finalize_planned_graph
+
+    rejected = finalize_planned_graph(
+        None,
+        plan_id="format-bad",
+        context={
+            "planning_failure_kind": "plan_format_invalid",
+            "planning_failure_reason": "计划结构修复未完成：schema_invalid",
+        },
+        validate=lambda _: None,
+        warn=lambda _: None,
+        plan_type=PlanGraph,
+        node_type=WorkflowNode,
+    )
+    assert rejected.metadata["planning_unavailable"] is False
+    assert rejected.metadata["planning_failure_kind"] == "plan_format_invalid"
+
+
+def test_generation_preserves_context_budget_failure_from_gateway(monkeypatch):
+    from app.application.agent_orchestrator.context_window_manager import ContextWindowExceeded
+    from app.application.workflow.planner_llm_gateway import request_planner_completion
+
+    reason = "上下文超过预算且压缩已关闭，原文未被裁剪。"
+    provider = Mock()
+    monkeypatch.setattr(
+        "app.infrastructure.llm.providers.registry.get_active_provider",
+        lambda **_kwargs: provider,
+    )
+
+    def fail(coro):
+        coro.close()
+        raise ContextWindowExceeded(reason)
+
+    monkeypatch.setattr("app.application.employee_runtime.agent_runner._run_async", fail)
+    generator = LlmPlanGeneration(
+        SimpleNamespace(get_context=lambda _: None), request_planner_completion, Mock()
+    )
+    context = {"session_id": "budget-session"}
+
+    assert generator.generate("budget-plan", "owner", "查询库存", {}, context) is None
+    assert context["planning_failure_kind"] == "planner_error"
+    assert context["planning_failure_reason"] == reason
+    provider.chat_completion.assert_not_called()
+
+
 def test_insufficient_model_balance_tells_the_user_to_recharge(monkeypatch):
     from app.domain.neuro.cognition.plan_graph_hooks import finalize_planned_graph
 

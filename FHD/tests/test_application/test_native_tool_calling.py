@@ -181,7 +181,8 @@ def test_valid_native_envelope_is_rejected_when_that_protocol_was_not_offered(mo
 
 
 @pytest.mark.parametrize("invalid", ["batch", "unknown_function", "legacy_function"])
-def test_rejected_native_response_stays_rejected_through_workflow_planner(invalid):
+def test_rejected_native_response_stays_rejected_through_workflow_planner(invalid, monkeypatch):
+    from app.application.ai_chat.planned_workflow_dispatch import PlannedWorkflowDispatch
     from app.application.workflow.planner import LLMWorkflowPlanner
 
     response = _native()
@@ -197,11 +198,30 @@ def test_rejected_native_response_stays_rejected_through_workflow_planner(invali
     planner = LLMWorkflowPlanner(
         ai_service=Mock(get_context=Mock(return_value=None)), completion=completion
     )
-    plan = planner.plan("u1", "先查询再导出", {}, {})
+    request = "先查询再导出"
+    plan = planner.plan("u1", request, {}, {})
+    reason = "原生调用未提交有效的完整依赖图，本轮未执行任何操作"
     assert plan.metadata["planning_rejected"] is True
-    assert plan.metadata["planning_unavailable"] is True
+    assert plan.metadata["planning_unavailable"] is False
+    assert plan.metadata["planning_failure_kind"] == "plan_format_invalid"
+    assert plan.metadata["rejection_reason"] == reason
     assert all(node.tool_id == "clarify" for node in plan.nodes)
     assert completion.call_count == 1
+
+    monkeypatch.setattr(
+        "app.application.facades.tools_facade.get_workflow_tool_registry", lambda: {}
+    )
+    callbacks, risk_gate = Mock(), Mock()
+    callbacks._resume_pending_dynamic_workflow.return_value = (False, None)
+    dispatch = PlannedWorkflowDispatch(
+        {}, callbacks, Mock(plan=Mock(return_value=plan)), risk_gate, Mock()
+    )
+    result = dispatch.handle("u1", request, "pro", {}, request)
+    assert result["data"]["error_code"] == "workflow_plan_rejected"
+    assert result["data"]["reason"] == reason
+    assert result["data"]["execution_started"] is False
+    assert "格式校验" in result["response"]
+    risk_gate.evaluate.assert_not_called()
 
 
 @pytest.mark.parametrize(
