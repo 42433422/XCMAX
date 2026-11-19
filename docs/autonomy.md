@@ -33,10 +33,10 @@ Rundeck 候选不替换这些代码修复及发布流程。
 
 ## Retort 改进闭环
 
-管理端「改进闭环」使用既有 Element Plus；Retort 负责方案和吸收任务，
-LangGraph 1.2.10 负责持久执行、审批中断和恢复，GEPA 0.1.4 仅提供实测辅助方案
-（上游分别为 langchain-ai/langgraph、gepa-ai/gepa，MIT）。18 域及 108 项要求仍以
-`FHD/config/audit_benchmark_ssot.json` 为准，参考仓库不等于已经通过相应基准。
+本配置的角色约定：**终极员工**与**超级员工**均定位为管理员层级；小X的预期角色为管理员。这里描述角色设计，不是账户授权或已启用权限的证明。
+实际 Retort 管理接口仍使用 `retort_evolution_api.py` 的既有 `require_admin` 检查；称谓本身不授予权限，也不改变 `AGENTS.md` 中终极员工与超级员工的合入职责、审批或发布门禁。
+管理端「改进闭环」使用既有 Element Plus；Retort 负责方案和吸收任务，LangGraph 1.2.10 负责持久执行、审批中断和恢复，GEPA 0.1.4 仅提供实测辅助方案（上游分别为 langchain-ai/langgraph、gepa-ai/gepa，MIT）。
+18 域及 108 项要求仍以 `FHD/config/audit_benchmark_ssot.json` 为准，参考仓库不等于已经通过相应基准。
 
 固定流程：冻结要求、测试文件哈希与 main 提交 → Retort 方案 → 可选 GEPA 实验 →
 管理端批准公开任务 → GitHub Issue → 现有员工经 Para 在 Actions 执行 →
