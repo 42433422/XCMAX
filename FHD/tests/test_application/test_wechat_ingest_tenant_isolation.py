@@ -126,19 +126,36 @@ def test_historical_dedupe_hash_replay_is_preserved_in_same_tenant(store) -> Non
     assert result["messages_skipped"] == 1
 
 
-def test_corrupt_cross_tenant_customer_link_does_not_expose_customer(store) -> None:
+def test_corrupt_cross_tenant_customer_and_message_rows_remain_hidden(store) -> None:
     with store() as session:
         foreign = Customer(customer_name="private customer", tenant_id=8)
         session.add(foreign)
         session.flush()
+        contact = WechatContact(
+            contact_key="shared",
+            display_name="shared",
+            tenant_id=7,
+            customer_id=foreign.id,
+            match_status="manual_linked",
+        )
+        session.add(contact)
+        session.flush()
+        # Legacy cross-tenant message rows may already reference this contact.
         session.add(
-            WechatContact(
-                contact_key="shared", display_name="shared", tenant_id=7,
-                customer_id=foreign.id, match_status="manual_linked",
+            WechatMessage(
+                contact_id=contact.id,
+                tenant_id=8,
+                role="other",
+                content="foreign tenant secret",
+                source="db",
+                dedupe_hash="foreign-tenant-corrupt-row",
             )
         )
         session.commit()
-        assert build_contact_context("shared", tenant_id=7, session=session)["customer"] is None
+        payload = build_contact_context("shared", tenant_id=7, session=session)
+        assert payload["customer"] is None
+        assert payload["recent_messages"] == []
+        assert payload["message_count"] == 0
 
 
 def test_ai_context_fails_closed_without_tenant_identity() -> None:
