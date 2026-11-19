@@ -7,7 +7,7 @@
     </header>
 
     <div v-if="errorMessage" class="error" role="alert">{{ errorMessage }}</div>
-    <div v-if="personalActivated" class="flow-note" role="status">个人使用版已开通，请回到 XCAGI 桌面端登录。</div>
+    <div v-if="personalActivated" class="flow-note" role="status">个人使用版已开通，已赠送 5 元 AI 使用额度。请回到 XCAGI 桌面端登录。</div>
     <div v-if="loading" class="loading">正在加载方案…</div>
     <section v-else class="license-grid" aria-label="XCAGI 使用方案">
       <article

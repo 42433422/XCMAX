@@ -12,8 +12,10 @@ from modstore_server.api.app_factory import _iter_route_method_signatures
 from modstore_server.models import (
     Entitlement,
     PlanTemplate,
+    Transaction,
     User,
     UserPlan,
+    Wallet,
     get_session_factory,
 )
 from modstore_server.payment_fulfilment import FulfilContext, PlanFulfilStrategy
@@ -39,6 +41,11 @@ def test_personal_plan_activation_is_idempotent_and_grants_no_mods(client):
     assert mods.json()["mod_ids"] == []
     with get_session_factory()() as session:
         assert session.query(UserPlan).filter_by(user_id=user_id).count() == 1
+        assert session.query(Wallet).filter_by(user_id=user_id).one().balance == 5
+        credit = session.query(Transaction).filter_by(
+            user_id=user_id, txn_type="account_license_quota"
+        ).one()
+        assert credit.amount == 5
         assert not session.query(User).filter_by(id=user_id).one().is_enterprise
 
 

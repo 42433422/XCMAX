@@ -208,6 +208,28 @@ class ItemFulfilStrategy(FulfilStrategy):
                 )
 
 
+def credit_plan_allowance(
+    session: Session, *, user_id: int, amount: Decimal, txn_type: str, description: str,
+    now: datetime, idempotency_key: str = "",
+) -> None:
+    wallet = session.query(Wallet).filter(Wallet.user_id == user_id).with_for_update().first()
+    if wallet is None:
+        wallet = Wallet(user_id=user_id, balance=0)
+        session.add(wallet)
+    wallet.balance = Decimal(wallet.balance or 0) + amount
+    wallet.updated_at = now
+    session.add(
+        Transaction(
+            user_id=user_id,
+            amount=amount,
+            txn_type=txn_type,
+            status="completed",
+            description=description,
+            idempotency_key=idempotency_key,
+        )
+    )
+
+
 # ---------------------------------------------------------------- plan
 
 
@@ -254,7 +276,7 @@ class PlanFulfilStrategy(FulfilStrategy):
         is_license = is_account_license_plan_id(plan.id)
         active_rows = (
             session.query(UserPlan)
-            .filter(UserPlan.user_id == ctx.user_id, UserPlan.is_active == True)
+            .filter(UserPlan.user_id == ctx.user_id, UserPlan.is_active.is_(True))
             .all()
         )
         for active_row in active_rows:
@@ -319,30 +341,17 @@ class PlanFulfilStrategy(FulfilStrategy):
         except BOUNDARY_ERRORS:
             grant_yuan = int(round(float(ctx.total_amount or 0)))
         if grant_yuan > 0:
-            w = (
-                session.query(Wallet)
-                .filter(Wallet.user_id == ctx.user_id)
-                .with_for_update()
-                .first()
-            )
-            if not w:
-                w = Wallet(user_id=ctx.user_id, balance=0.0)
-                session.add(w)
-                session.flush()
-            w.balance = float(w.balance or 0) + float(grant_yuan)
-            w.updated_at = now
-            session.add(
-                Transaction(
-                    user_id=ctx.user_id,
-                    amount=float(grant_yuan),
-                    txn_type=("account_license_quota" if is_license else "plan_membership_tokens"),
-                    status="completed",
-                    description=(
-                        f"账号授权随单 AI 额度(元) ({ctx.out_trade_no})"
-                        if is_license
-                        else f"会员随单：按实付价取整的 LLM 可用余额(元) ({ctx.out_trade_no})"
-                    ),
-                )
+            credit_plan_allowance(
+                session,
+                user_id=ctx.user_id,
+                amount=Decimal(grant_yuan),
+                txn_type="account_license_quota" if is_license else "plan_membership_tokens",
+                description=(
+                    f"账号授权随单 AI 额度(元) ({ctx.out_trade_no})"
+                    if is_license
+                    else f"会员随单：按实付价取整的 LLM 可用余额(元) ({ctx.out_trade_no})"
+                ),
+                now=now,
             )
 
 

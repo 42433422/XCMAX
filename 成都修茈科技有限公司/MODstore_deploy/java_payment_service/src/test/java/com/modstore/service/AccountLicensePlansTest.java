@@ -34,6 +34,9 @@ class AccountLicensePlansTest {
                 .collect(Collectors.toMap(AccountLicensePlans.Metadata::id, AccountLicensePlans.Metadata::price)))
                 .isEqualTo(expectedPrices);
 
+        assertThat(AccountLicensePlans.find("saas-personal-free").orElseThrow().quotaCents())
+                .isEqualTo(500);
+
         String publicCopy = AccountLicensePlans.PLANS.stream()
                 .map(plan -> String.join(" ", plan.name(), plan.description(), plan.badge(),
                         String.join(" ", plan.features())))

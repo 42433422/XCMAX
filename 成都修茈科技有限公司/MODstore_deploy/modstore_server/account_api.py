@@ -5,13 +5,15 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from modstore_server import account_level_service
-from modstore_server.account_license_plans import PERSONAL_PLAN_ID
+from modstore_server.account_license_plans import PERSONAL_PLAN_ID, account_license_plan
 from modstore_server.account_lifecycle import (
     ACCOUNT_SUSPENDED,
     mark_active_after_plan,
@@ -29,6 +31,8 @@ from modstore_server.llm_api import _membership_meta, _provider_labels
 from modstore_server.llm_crypto import fernet_configured
 from modstore_server.llm_key_resolver import KNOWN_PROVIDERS, credential_status
 from modstore_server.models import Transaction, User, UserPlan, Wallet, get_session_factory
+
+from modstore_server.payment_fulfilment import credit_plan_allowance
 
 router = APIRouter(prefix="/api/account", tags=["auth"])
 open_router = APIRouter(prefix="/api/market/open", tags=["auth"])
@@ -98,12 +102,23 @@ def activate_personal_plan(user: User = Depends(_get_current_user)):
         if db_user.account_state == ACCOUNT_SUSPENDED:
             raise HTTPException(403, "当前账号已暂停")
         current = lifecycle_for_user(session, db_user)
-        if current.active_plan_id == PERSONAL_PLAN_ID:
-            return {"ok": True, **current.to_dict()}
-        if current.desktop_access:
-            raise HTTPException(409, "当前账号已有桌面端方案")
-        session.add(UserPlan(user_id=db_user.id, plan_id=PERSONAL_PLAN_ID, auto_renew=False))
-        mark_active_after_plan(db_user, plan_id=PERSONAL_PLAN_ID, session=session)
+        if current.active_plan_id != PERSONAL_PLAN_ID:
+            if current.desktop_access:
+                raise HTTPException(409, "当前账号已有桌面端方案")
+            session.add(UserPlan(user_id=db_user.id, plan_id=PERSONAL_PLAN_ID, auto_renew=False))
+            mark_active_after_plan(db_user, plan_id=PERSONAL_PLAN_ID, session=session)
+        credit_key = f"{PERSONAL_PLAN_ID}:{db_user.id}"
+        if not session.query(Transaction.id).filter_by(idempotency_key=credit_key).first():
+            plan = account_license_plan(PERSONAL_PLAN_ID) or {}
+            credit_plan_allowance(
+                session,
+                user_id=db_user.id,
+                amount=Decimal(plan["quota_cents"]) / 100,
+                txn_type="account_license_quota",
+                description="个人使用版赠送 AI 使用额度",
+                now=datetime.now(UTC),
+                idempotency_key=credit_key,
+            )
         session.commit()
         return {"ok": True, **lifecycle_for_user(session, db_user).to_dict()}
 

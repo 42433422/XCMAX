@@ -21,10 +21,11 @@
       "title": "个人使用版",
       "description": "免费使用 XCAGI 桌面端基础功能，不含任何 Mod。",
       "amount_cents": 0,
+      "quota_cents": 500,
       "license_type": "free",
       "account_tier": "normal",
       "badge": "免费",
-      "features": ["桌面端基础功能", "无 Mod 权益"]
+      "features": ["桌面端基础功能", "赠送 5 元 AI 使用额度", "无 Mod 权益"]
     },
     {
       "id": "saas-trial-30",
