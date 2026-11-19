@@ -16,6 +16,8 @@ from app.application.private_mod_delivery_artifacts import custom_delivery_remot
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+_MARKET_RECEIPT_STATES = {"pending_review": "PENDING_REVIEW", "terminal": "TERMINAL"}
+
 _REPORT_RE = re.compile(
     r"(?i)(问题|故障|缺陷|报错|失败|不能用(?![^。！？\n]{0,40}(?:代替|替代))|没反应|异常|crash|bug)"
 )
@@ -442,7 +444,7 @@ async def submit_product_issue(
         and result.get("support_bundle_sha256") == evidence["sha256"]
     )
     return {
-        "state": "ROUTED",
+        "state": _MARKET_RECEIPT_STATES.get(str(result.get("dispatch_status") or ""), "ROUTED"),
         "work_order_id": wo_id,
         "owner_ticket_id": result["ticket_id"],
         "owner_ticket_no": result["ticket_no"],
@@ -507,7 +509,7 @@ async def receive_pending_report(
     if not result.get("ticket_id") or not result.get("ticket_no"):
         return {"state": "OWNER_ROUTE_UNAVAILABLE"}
     return {
-        "state": "RECEIVED",
+        "state": _MARKET_RECEIPT_STATES.get(str(result.get("dispatch_status") or ""), "RECEIVED"),
         "owner_ticket_id": result["ticket_id"],
         "owner_ticket_no": result["ticket_no"],
         "missing_evidence": sorted(set(missing)),
@@ -534,5 +536,9 @@ async def _existing_ticket_for_source_ref(token: str, source_ref: str) -> dict[s
         ticket_id, ticket_no = item.get("id"), str(item.get("ticket_no") or "")
         if ticket_id is None or not ticket_no:
             continue
-        return {"ticket_id": ticket_id, "ticket_no": ticket_no}
+        return {
+            "ticket_id": ticket_id,
+            "ticket_no": ticket_no,
+            "dispatch_status": item.get("dispatch_status"),
+        }
     return None

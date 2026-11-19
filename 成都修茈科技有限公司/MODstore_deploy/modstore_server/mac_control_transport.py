@@ -72,7 +72,11 @@ class ParaClient:
 
     def task(self, task_id: str) -> dict:
         task = self.request("GET", "/api/tasks/" + quote(task_id, safe="")).get("task", {})
-        if not isinstance(task, dict) or not task.get("id") or not task.get("status"):
+        if (
+            not isinstance(task, dict)
+            or str(task.get("id") or "") != task_id
+            or not task.get("status")
+        ):
             raise ParaUnavailable("task_status_missing")
         return task
 

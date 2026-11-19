@@ -174,6 +174,9 @@ class CustomerTickets:
     async def admin_result_customer_ticket(self, request: Request, ticket_id: int):
         return await self.admin_customer_ticket_command(request, ticket_id, "result")
 
+    async def admin_dispose_customer_ticket(self, request: Request, ticket_id: int):
+        return await self.admin_customer_ticket_command(request, ticket_id, "disposition")
+
     async def admin_sensitive_customer_ticket(self, request: Request, ticket_id: int):
         return await self.admin_customer_ticket_command(request, ticket_id, "sensitive-action")
 

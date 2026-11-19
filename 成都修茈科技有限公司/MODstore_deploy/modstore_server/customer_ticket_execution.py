@@ -14,7 +14,7 @@ from modstore_server.customer_issue_delivery_contract import (
 )
 from modstore_server.customer_service_tools import json_loads
 from modstore_server.customer_ticket_reader import _reader_text
-from modstore_server.models import IncidentEvent, User
+from modstore_server.models import IncidentClaim, IncidentEvent, User
 from modstore_server.models_cs import CustomerServiceAction
 
 
@@ -26,30 +26,105 @@ def _rows(value: Any) -> list[dict]:
     return [row for row in value if isinstance(row, dict)] if isinstance(value, list) else []
 
 
+def _ticket_events(db, ticket):
+    return db.query(IncidentEvent).filter(
+        IncidentEvent.event_type == "ops.intake.customer_ticket",
+        or_(
+            IncidentEvent.payload_json.contains(f'"ticket_id":{ticket.id}'),
+            IncidentEvent.payload_json.contains(f'"ticket_id": {ticket.id}'),
+        ),
+    )
+
+
+def _ticket_event_payload(event, ticket):
+    payload = _object(json_loads(event.payload_json, {}))
+    if (
+        payload.get("ticket_id") == ticket.id
+        and payload.get("user_id") == ticket.user_id
+        and (payload.get("tenant_id") or payload.get("user_id")) == ticket.user_id
+    ):
+        return payload
+    return {}
+
+
+def ticket_dispatch_stop(db, ticket) -> dict[str, Any]:
+    """Snapshot exact existing activity before committing the ticket's dispatch fence."""
+    unsettled = []
+    terminal = {"completed", "failed", "cancelled", "rejected"}
+    for event, state in (
+        _ticket_events(db, ticket)
+        .outerjoin(IncidentClaim, IncidentClaim.event_id == IncidentEvent.id)
+        .add_columns(IncidentClaim.dispatch_state)
+        .order_by(IncidentEvent.id)
+    ):
+        payload = _ticket_event_payload(event, ticket)
+        if not payload:
+            continue
+        claim = _object(payload.get("_team_claim"))
+        receipts = [
+            receipt
+            for receipt in _receipts(claim)
+            if receipt.get("requires_reconciliation") or receipt.get("state") not in terminal
+        ]
+        rows = _rows(claim.get("team"))
+        attempts = [
+            str(row["attempt_id"])
+            for row in rows
+            if row.get("attempt_id")
+            and (row.get("status") not in terminal or row.get("outcome") == "unknown")
+        ]
+        if (
+            receipts
+            or attempts
+            or state in {"dispatching", "unknown"}
+            or (not rows and event.dispatched_count)
+        ):
+            unsettled.append(
+                {
+                    "incident_event_id": event.id,
+                    "dispatch_state": state,
+                    "attempt_ids": attempts,
+                    "task_ids": sorted({str(r["task_id"]) for r in receipts if r.get("task_id")}),
+                }
+            )
+    action_ids = [
+        row.id
+        for row in db.query(CustomerServiceAction).filter(
+            CustomerServiceAction.ticket_id == ticket.id,
+            CustomerServiceAction.status.in_(("pending_execution", "running")),
+        )
+    ]
+    from modstore_server.mac_control_delegate import stop_ticket_employee_tasks
+
+    mac_tasks = stop_ticket_employee_tasks(db, ticket)
+    stop_unconfirmed = (
+        unsettled
+        or action_ids
+        or any(task["state"] in {"cancel_requested", "stop_pending_lease"} for task in mac_tasks)
+    )
+    return {
+        "state": "stop_unconfirmed" if stop_unconfirmed else "dispatch_blocked",
+        "new_dispatch_blocked": True,
+        "unsettled_incidents": unsettled,
+        "unsettled_action_ids": action_ids,
+        "mac_control_tasks": mac_tasks,
+    }
+
+
 def _current_claim(db, ticket, resolution):
     event_id = resolution.get("incident_event_id")
     events = (
         [db.get(IncidentEvent, event_id)]
         if isinstance(event_id, int) and event_id > 0
-        else db.query(IncidentEvent)
-        .filter(
-            IncidentEvent.event_type == "ops.intake.customer_ticket",
-            or_(
-                IncidentEvent.payload_json.contains(f'"ticket_id":{ticket.id}'),
-                IncidentEvent.payload_json.contains(f'"ticket_id": {ticket.id}'),
-            ),
-        )
-        .order_by(IncidentEvent.id.desc())
-        .limit(20)
+        else _ticket_events(db, ticket).order_by(IncidentEvent.id.desc()).limit(20)
     )
     for event in events:
         if event is None or event.event_type != "ops.intake.customer_ticket":
             continue
-        payload = _object(json_loads(event.payload_json, {}))
+        payload = _ticket_event_payload(event, ticket)
         original = _object(payload.get("resolution"))
         if (
-            payload.get("ticket_id") == ticket.id
-            and payload.get("user_id") == ticket.user_id
+            payload
             and original.get("reopened_at") == resolution.get("reopened_at")
             and resolution.get("incident_event_id") in (None, event.id)
         ):
@@ -133,6 +208,8 @@ def _work_order(db, ticket, evidence):
 
 
 def _next_step(ticket, resolution, rows, receipts, *, claim_verified=False):
+    if ticket.status == "rejected":
+        return "none", "原单已记录处置结论，已停止继续派单", "none"
     if ticket.status in {"resolved", "closed", "expired"}:
         return "none", "原单已结束；如问题复现，由客户从原单重开", "none"
     if any(

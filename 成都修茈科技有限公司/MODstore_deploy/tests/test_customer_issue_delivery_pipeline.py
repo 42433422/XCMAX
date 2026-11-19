@@ -10,6 +10,8 @@ import pytest
 
 from modstore_server.customer_service_tools import json_dumps, json_loads
 
+pytestmark = pytest.mark.usefixtures("approved_support_assessment")
+
 
 def make_ticket(client, monkeypatch, *, private=False, schedule=False):
     from modstore_server.api.deps import get_current_user

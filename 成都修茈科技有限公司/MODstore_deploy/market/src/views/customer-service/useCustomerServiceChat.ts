@@ -1,16 +1,17 @@
 /**
  * 对话主流程：草稿、发送管线、气泡点击、会话管理与工单展开联动（原单文件机械迁出）。
  */
-import { nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { Ref } from 'vue'
 import type { RouteLocationNormalizedLoaded } from 'vue-router'
 import { api } from '../../api'
+import { shortTicketRef, ticketIsClosed } from '../../utils/csTicketLifecycle'
 import { composeTicketUserMessage, toUserFacingCards } from '../../utils/csTicketSummary'
 import { asUnknownRecord, errorMessage } from '../../utils/typeNarrowing'
 import type { CustomerTicket, UiMessage } from './customerServiceTypes'
 
 export interface CustomerServiceChatCtx {
-  route: RouteLocationNormalizedLoaded
+  route: Pick<RouteLocationNormalizedLoaded, 'query'>
   pendingImageDataUrl: Ref<string | null>
   imagePicking: Ref<boolean>
   clearPendingImage: () => void
@@ -24,6 +25,14 @@ export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
   const loading = ref(false)
   const error = ref('')
   const activeSessionId = ref<number | null>(null)
+  const openedTicket = ref<CustomerTicket | null>(null)
+  const openedTicketRef = computed(() => openedTicket.value
+    ? shortTicketRef({ ticket_no: openedTicket.value.ticket_no || openedTicket.value.id })
+    : '')
+  const readOnly = computed(() => !!openedTicket.value
+    && (!activeSessionId.value || ticketIsClosed(openedTicket.value)))
+  let conversationGeneration = 0
+  let mounted = true
   const messages = ref<UiMessage[]>([])
   const messagesEl = ref<HTMLElement | null>(null)
 
@@ -33,6 +42,8 @@ export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
     hydrateFromQuery()
     void ctx.loadTickets()
   })
+
+  onBeforeUnmount(() => { mounted = false; conversationGeneration++ })
 
   function hydrateFromQuery() {
     const q = route.query || {}
@@ -71,7 +82,7 @@ export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
   }
 
   function onBubbleClick(ev: MouseEvent, msg: UiMessage) {
-    if (msg.role !== 'assistant') return
+    if (msg.role !== 'assistant' || openedTicket.value) return
     const target = ev.target as HTMLElement | null
     const link = target?.closest?.('[data-cs-action]') as HTMLElement | null
     if (!link) return
@@ -94,7 +105,10 @@ export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
   async function sendText(raw: string, extras?: { reason?: string }) {
     const text = String(raw || '').trim()
     const imageDataUrl = ctx.pendingImageDataUrl.value
-    if ((!text && !imageDataUrl) || loading.value || ctx.imagePicking.value) return
+    if ((!text && !imageDataUrl) || loading.value || readOnly.value || ctx.imagePicking.value) return
+    const generation = conversationGeneration
+    const sessionId = activeSessionId.value
+    const ticketId = openedTicket.value?.id
     error.value = ''
     loading.value = true
     const userMsg: UiMessage = {
@@ -106,24 +120,31 @@ export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
     messages.value.push(userMsg)
     draft.value = ''
     ctx.clearPendingImage()
-    await scrollMessagesToEnd()
+    void scrollMessagesToEnd()
     try {
       const chatCtx = {
-        ...queryContext(),
+        ...(ticketId ? { channel: 'web', ticket_id: Number(ticketId) } : queryContext()),
         ...(extras?.reason ? { reason: extras.reason } : {}),
       }
       const res = asUnknownRecord(
         await api.customerServiceChat({
           message: text,
-          session_id: activeSessionId.value,
+          session_id: sessionId,
           context: chatCtx,
           image_data_url: imageDataUrl || undefined,
         }),
       )
-      const session = asUnknownRecord(res.session)
-      const responseMessage = asUnknownRecord(res.message)
       const ticket = Object.keys(asUnknownRecord(res.ticket)).length ? (asUnknownRecord(res.ticket) as CustomerTicket) : null
-      activeSessionId.value = Number(session.id || activeSessionId.value || 0) || null
+      if (ticket && mounted) void ctx.loadTickets()
+      if (generation !== conversationGeneration) return
+      if (ticket && ticketId && Number(ticket.id) !== Number(ticketId)) {
+        throw new Error('回执与当前原工单不一致，请核对我的工单')
+      }
+      const session = asUnknownRecord(res.session)
+      if (sessionId && session.id && Number(session.id) !== sessionId) throw new Error('返回的客服会话不一致')
+      const responseMessage = asUnknownRecord(res.message)
+      activeSessionId.value = Number(session.id || sessionId || 0) || null
+      if (ticket) openedTicket.value = ticket
       // 对话里只用白话正文；不再堆「进度/下一步/已办理」多卡
       let content = String(responseMessage.content || '已处理。')
       if (ticket) {
@@ -135,13 +156,7 @@ export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
           decision: decisionCard || asUnknownRecord(res.decision),
           actions: Array.isArray(actionsCard?.items) ? actionsCard.items : Array.isArray(res.actions) ? res.actions : [],
         })
-        const st = String(ticket.status || '').toLowerCase()
-        // 已结案用侧栏口径摘要；跟进中优先后端话术（含问题复述），避免盖成「已处理完成」
-        if (['resolved', 'closed', 'done', 'rejected'].includes(st)) {
-          content = composed
-        } else if (!content || content === '已处理。') {
-          content = composed
-        }
+        if (ticketIsClosed(ticket) || content === '已处理。') content = composed
       }
       messages.value.push({
         id: `a-${Date.now()}`,
@@ -149,27 +164,29 @@ export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
         content,
         cards: [],
       })
-      // 先结束「处理中」，侧栏刷新失败/慢不得挡住对话
-      loading.value = false
-      if (ticket) {
-        void ctx.loadTickets()
-      }
       await scrollMessagesToEnd()
     } catch (e: unknown) {
       const detail = errorMessage(e, 'AI 客服处理失败')
       const uncertain = /internal server error|\b5\d\d\b|timeout|timed out|failed to fetch|networkerror/i.test(detail)
+      if (uncertain && mounted) void ctx.loadTickets()
+      if (generation !== conversationGeneration) return
       error.value = uncertain
         ? '暂无法确认工单是否受理。请先查看右侧工单列表，勿重复提交；没有回执不代表未落单。'
         : detail
-      if (uncertain) void ctx.loadTickets()
-      loading.value = false
+    } finally {
+      if (generation === conversationGeneration) loading.value = false
     }
   }
 
   function newSession() {
+    conversationGeneration++
     activeSessionId.value = null
+    openedTicket.value = null
     messages.value = []
+    draft.value = ''
+    ctx.clearPendingImage()
     error.value = ''
+    loading.value = false
   }
 
   function visibleCards(msg: UiMessage) {
@@ -177,31 +194,53 @@ export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
   }
 
   async function openTicket(ticket: CustomerTicket) {
-    const tid = Number(ticket?.id || 0)
-    if (tid) {
-      const next = new Set(ctx.expandedTicketIds.value)
-      next.add(tid)
-      ctx.expandedTicketIds.value = next
-    }
+    const ticketId = Number(ticket.id)
+    if (!Number.isSafeInteger(ticketId) || ticketId <= 0) return
+    newSession()
+    openedTicket.value = ticket
+    loading.value = true
+    const generation = conversationGeneration
+    ctx.expandedTicketIds.value = new Set([...ctx.expandedTicketIds.value, ticketId])
     try {
-      const res = asUnknownRecord(await api.customerServiceTicketDetail(ticket.id))
-      const t = Object.keys(asUnknownRecord(res.ticket)).length ? asUnknownRecord(res.ticket) : ticket
-      const decision = Array.isArray(res.decisions) && res.decisions[0] ? asUnknownRecord(res.decisions[0]) : null
-      const actions = Array.isArray(res.actions) ? res.actions : []
-      messages.value.push({
-        id: `t-${Date.now()}`,
-        role: 'assistant',
-        content: composeTicketUserMessage({ ticket: t, decision, actions }),
-        cards: [],
+      const reply = asUnknownRecord(await api.customerServiceTicketDetail(ticketId))
+      if (generation !== conversationGeneration) return
+      const current = asUnknownRecord(reply.ticket)
+      if (Number(current.id) !== ticketId) throw new Error('返回的工单与当前选择不一致')
+      openedTicket.value = { ...ticket, ...current }
+      const sessionId = Number(current.session_id ?? ticket.session_id)
+      if (!Number.isSafeInteger(sessionId) || sessionId <= 0) {
+        error.value = '这张工单没有关联的原客服会话'
+        return
+      }
+      const transcript = asUnknownRecord(await api.customerServiceSessionDetail(sessionId))
+      if (generation !== conversationGeneration) return
+      if (Number(asUnknownRecord(transcript.session).id) !== sessionId || !Array.isArray(transcript.messages)) {
+        throw new Error('返回的会话与原工单不一致')
+      }
+      activeSessionId.value = sessionId
+      messages.value = transcript.messages.map(asUnknownRecord).flatMap((message): UiMessage[] => {
+        if ((message.ticket_id != null && Number(message.ticket_id) !== ticketId)
+          || (message.role !== 'user' && message.role !== 'assistant')
+          || typeof message.content !== 'string') return []
+        const origin = asUnknownRecord(message.payload).origin
+        return [{
+          id: `persisted-${message.id}`,
+          role: message.role,
+          content: message.content,
+          adminLabel: origin === 'admin_reply' ? '管理员答复'
+            : origin === 'admin_disposition' ? '管理员处置回执' : undefined,
+        }]
       })
       await scrollMessagesToEnd()
-    } catch (e: unknown) {
-      error.value = errorMessage(e, '打开进度失败')
+    } catch (cause: unknown) {
+      if (generation === conversationGeneration) error.value = errorMessage(cause, '打开原客服会话失败')
+    } finally {
+      if (generation === conversationGeneration) loading.value = false
     }
   }
 
   return {
-    draft, loading, error, activeSessionId, messages, messagesEl, quickPrompts,
+    draft, loading, error, activeSessionId, openedTicketRef, readOnly, messages, messagesEl, quickPrompts,
     hydrateFromQuery, queryContext, usePrompt, scrollMessagesToEnd, onBubbleClick,
     send, sendText, newSession, visibleCards, openTicket,
   }

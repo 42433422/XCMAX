@@ -42,6 +42,14 @@ from modstore_server.customer_service_api_helpers import (
 )
 from modstore_server import customer_service_customer_view as customer_view
 from modstore_server.customer_service_tools import json_dumps, json_loads
+from modstore_server.customer_service_orchestrator_merged import (
+    InactiveTicketConversation,
+    intake_report_for_message,
+)
+from modstore_server.customer_ticket_intake_review import (
+    intake_dispatch_block_reason,
+    review_report_async,
+)
 from modstore_server.customer_service_triage import (
     TICKET_DOMAINS,
     TICKET_SOURCES,
@@ -159,28 +167,45 @@ async def customer_service_chat(
     if image:
         ctx["image_data_url"] = image
         ctx["has_image"] = True
-    result = handle_customer_message(
-        db,
-        user=user,
-        message=message or "[用户补充了图片资料]",
-        session_id=body.session_id,
-        context=ctx,
+    target_ticket_id = ctx.pop("ticket_id", None)
+    if target_ticket_id is not None and (
+        type(target_ticket_id) is not int or target_ticket_id <= 0 or not body.session_id
+    ):
+        raise HTTPException(status_code=422, detail="原工单和会话编号无效")
+    report, review = intake_report_for_message(
+        db, user=user, message=message, session_id=body.session_id
     )
+    if review is None and report is not None:
+        review = await review_report_async(report)
+    try:
+        result = handle_customer_message(
+            db,
+            user=user,
+            message=message or "[用户补充了图片资料]",
+            session_id=body.session_id,
+            context=ctx,
+            reviewed_report=report,
+            intake_review=review,
+            target_ticket_id=target_ticket_id,
+        )
+    except InactiveTicketConversation as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     t = result.get("ticket") if isinstance(result.get("ticket"), dict) else {}
+    dispatch_event = ""
     if t:
         from modstore_server.customer_issue_intake import enqueue_issue
 
         ticket = db.get(CustomerServiceTicket, int(t.get("id") or 0))
-        if ticket is not None:
+        if ticket is not None and not intake_dispatch_block_reason(ticket):
             import hashlib
 
             revision = hashlib.sha256(
                 json_dumps({"message": message, "evidence": t.get("evidence")}).encode()
             ).hexdigest()[:24]
-            enqueue_issue(db, ticket, revision=revision)
+            dispatch_event = enqueue_issue(db, ticket, revision=revision)
             result["ticket"] = ticket_payload(ticket)
     db.commit()
-    if t:
+    if dispatch_event:
         _schedule_customer_ticket_incident({"ticket_id": int(t.get("id") or 0)})
     return result if user.is_admin else customer_view.customer_chat_result(result)
 

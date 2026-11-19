@@ -41,7 +41,7 @@ def _user(*, admin: bool) -> User:
         return user
 
 
-def _ticket(owner: User) -> int:
+def _ticket(owner: User, *, legacy: bool = False) -> int:
     with get_session_factory()() as db:
         session = CustomerServiceSession(user_id=owner.id, channel="customer_issue_intake")
         db.add(session)
@@ -49,7 +49,7 @@ def _ticket(owner: User) -> int:
         ticket = CustomerServiceTicket(
             user_id=owner.id,
             session_id=session.id,
-            ticket_no=f"CI{uuid.uuid4().hex}",
+            ticket_no=f"{'CS' if legacy else 'CI'}{uuid.uuid4().hex}",
             title="客户端产品缺陷 · 员工图谱无法显示",
             summary="登录后员工节点无法显示。步骤：打开员工图谱。期望：有节点。实际：暂无员工。",
             intent="product_issue",
@@ -79,12 +79,148 @@ def _as(user: User):
     app.dependency_overrides[customer_service_api._require_admin] = gate
 
 
+@pytest.mark.parametrize("kind", ["invalid", "out_of_scope"])
+def test_disposition_is_scoped_replayable_and_fences_late_work(client, kind):
+    from modstore_server.customer_service_orchestrator import (
+        apply_customer_ticket_incident_progress,
+    )
+    from modstore_server.db.mac_control import MacControlTask
+    from modstore_server.mac_control_store import accept
+
+    customer, another_customer = _user(admin=False), _user(admin=False)
+    admin, another_admin = _user(admin=True), _user(admin=True)
+    ticket_id, another_ticket_id = _ticket(customer), _ticket(another_customer)
+    path = f"/api/customer-service/tickets/{ticket_id}"
+    body = {
+        "disposition": kind,
+        "request_id": str(uuid.uuid4()),
+        "note": "原单核对完成，描述未构成平台受理的问题。",
+        "verification": "已对照正式受理范围与当前页面说明，并逐项复核了提交人提供的原始记录。",
+    }
+    _as(customer)
+    assert client.post(f"{path}/disposition", json=body).status_code == 403
+    _as(admin)
+    assert (
+        client.post(
+            f"{path}/assign", json={"assignee_id": admin.id, "reason": "指派核查原单"}
+        ).status_code
+        == 200
+    )
+    assert client.post(f"{path}/accept", json={"reason": "受理原工单"}).status_code == 200
+    assert client.post(f"{path}/disposition", json=body).status_code == 409
+    assert client.post(f"{path}/diagnose", json={"reason": body["verification"]}).status_code == 200
+    _as(another_admin)
+    assert client.post(f"{path}/disposition", json=body).status_code == 403
+
+    with get_session_factory()() as db:
+
+        def make_task(owner, target):
+            return accept(
+                db,
+                actor="employee:fixture",
+                key=uuid.uuid4().hex,
+                request={"source": "employee", "ticket_id": target, "customer_id": owner.id},
+            )
+
+        queued_id = make_task(customer, ticket_id).id
+        other_id = make_task(another_customer, another_ticket_id).id
+        active_id = None
+        if kind == "out_of_scope":
+            active = make_task(customer, ticket_id)
+            active.attempt_id, active.para_task_id, active.state = (
+                "attempt",
+                "exact-para-id",
+                "running",
+            )
+            db.commit()
+            active_id = active.id
+
+    _as(admin)
+    closed = client.post(f"{path}/disposition", json=body)
+    assert closed.status_code == 200, closed.text
+    ticket = closed.json()["ticket"]
+    assert ticket["status"] == "rejected" and ticket["closed_at"]
+    assert "fault_remains" not in ticket["evidence"]
+    assert ticket["evidence"]["diagnoses"]
+    assert ticket["disposition"]["kind"] == kind
+    stop = ticket["disposition"]["execution_stop"]
+    assert stop["state"] == ("stop_unconfirmed" if active_id else "dispatch_blocked")
+    assert stop["new_dispatch_blocked"] is True
+    assert client.post(f"{path}/disposition", json=body).json()["replayed"] is True
+    assert (
+        client.post(f"{path}/disposition", json={**body, "note": body["note"] + "变更"}).status_code
+        == 409
+    )
+    readback = client.get(path).json()
+    assert readback["ticket"]["disposition"] == ticket["disposition"]
+    assert len([a for a in readback["actions"] if a["action_type"] == "ticket.disposition"]) == 1
+
+    with get_session_factory()() as db:
+        assert db.get(MacControlTask, queued_id).state == "cancelled"
+        assert db.get(MacControlTask, other_id).state == "queued"
+        if active_id:
+            assert db.get(MacControlTask, active_id).state == "cancel_requested"
+            assert any(row["para_task_id"] == "exact-para-id" for row in stop["mac_control_tasks"])
+        assert (
+            apply_customer_ticket_incident_progress(
+                db, ticket_id=ticket_id, event_id=1, team_ok=True
+            )["replayed"]
+            is True
+        )
+
+    _as(customer)
+    public = client.get(path).json()["ticket"]
+    assert set(public["disposition"]) == {"kind", "at", "note"}
+    messages = client.get(f"/api/customer-service/sessions/{ticket['session_id']}").json()[
+        "messages"
+    ]
+    assert len(messages) == 1 and body["note"] in messages[0]["content"]
+    assert messages[0]["payload"] == {"origin": "admin_disposition"}
+    assert (
+        client.post(
+            f"/api/customer-service/issues/{ticket_id}/decision",
+            json={
+                "decision": "reopen",
+                "note": "原样本复查",
+                "idempotency_key": "negative-reopen-1",
+            },
+        ).status_code
+        == 409
+    )
+
+
+def test_verified_repair_cannot_be_dismissed(client):
+    from modstore_server.customer_service_tools import json_dumps
+
+    customer, admin = _user(admin=False), _user(admin=True)
+    ticket_id = _ticket(customer)
+    path = f"/api/customer-service/tickets/{ticket_id}"
+    _as(admin)
+    body = {
+        "disposition": "invalid",
+        "request_id": str(uuid.uuid4()),
+        "note": "原单已有真实修复证据，必须沿用原验收。",
+        "verification": "已核对同一软件版本及修复动作，确认需要保留已有修复和正式验收回执。",
+    }
+    with get_session_factory()() as db:
+        ticket = db.get(CustomerServiceTicket, ticket_id)
+        ticket.status, ticket.assigned_admin_id = "processing", admin.id
+        ticket.evidence_json = json_dumps(
+            {
+                "diagnoses": [{"operator_id": admin.id}],
+                "resolution": {"repair_verified": True},
+            }
+        )
+        db.commit()
+    assert client.post(f"{path}/disposition", json=body).status_code == 409
+
+
 def test_human_loop_blocks_false_close_and_keeps_history(client):
     customer = _user(admin=False)
     first = _user(admin=True)
     second = _user(admin=True)
     outsider = _user(admin=False)
-    ticket_id = _ticket(customer)
+    ticket_id = _ticket(customer, legacy=True)
     http = client
 
     _as(outsider)

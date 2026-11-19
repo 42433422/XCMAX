@@ -50,7 +50,7 @@ const LIFECYCLE_TONE: Record<string, Tone> = { 已收到: 'info', 处理中: 'in
 export function ticketStatusBadge(ticket: Row): Badge {
   const base = badgeFrom(TICKET_STATUS, ticket.status)
   const life = String(ticket.lifecycle_label || '').trim()
-  if (!life) return base
+  if (!life || base.raw === 'rejected') return base
   return { label: life, tone: base.raw in TICKET_STATUS ? base.tone : LIFECYCLE_TONE[life] || 'neutral', raw: base.raw }
 }
 
@@ -147,9 +147,18 @@ export const priorityLabel = plain({ low: '低', normal: '普通', high: '高', 
 export const roleLabel = plain({ scout: '排查', fix: '修复', verify: '验证' })
 export const actorLabel = plain({ ai: 'AI 客服', system: '系统', user: '客户', customer: '客户', admin: '管理员', employee: '数字员工' })
 export const routeLabel = plain({ shared_core: '平台公共修复', custom: '客户定制修复', software: '软件修复' })
-export const actionTypeLabel = plain({ 'employee.dispatch': '派单给处理小组', 'ticket.reply': '回复客户', 'ticket.close': '关闭工单' })
+export const dispositionLabel = plain({
+  resolved: '实际验收已解决', expired: '已过期不再处理（未修复，不影响资金权益）',
+  invalid: '无效反馈', out_of_scope: '超出服务范围',
+})
+export const executionStopLabel = plain({
+  dispatch_blocked: '已阻止后续派发',
+  stop_unconfirmed: '已阻止后续派发，已派发任务停止状态待核实',
+})
+export const actionTypeLabel = plain({ 'employee.dispatch': '派单给处理小组', 'ticket.reply': '回复客户', 'ticket.close': '关闭工单', 'ticket.disposition': '驳回原工单' })
 export const eventLabel = plain({
   admin_ticket_expired: '管理员记录过期（未修复）',
+  admin_ticket_disposed: '管理员驳回原工单', admin_ticket_replied: '管理员回复原客户',
   ticket_title_corrected: '更正工单标题', ticket_classification_corrected: '纠正工单分类',
   ticket_created: '创建工单', decision_made: 'AI 受理决策', employee_progress: '员工处理进展',
   action_executed: '执行动作', action_forbidden: '动作被拒绝', session_created: '创建会话',

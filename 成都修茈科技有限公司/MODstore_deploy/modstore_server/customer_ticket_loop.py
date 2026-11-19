@@ -19,6 +19,7 @@ from modstore_server.customer_service_tools import (
     json_dumps,
     json_loads,
 )
+from modstore_server.customer_ticket_intake_review import intake_dispatch_block_reason
 from modstore_server.models_cs import (
     CustomerServiceAction,
     CustomerServiceAuditLog,
@@ -135,6 +136,8 @@ def run_ticket_loop(
     reschedule: bool = False,
     after_approval: bool = False,
 ) -> list[CustomerServiceAction]:
+    if intake_dispatch_block_reason(ticket):
+        return _actions(db, ticket.id)
     evidence, loop = _load(ticket)
     state = str(loop.get("state") or "")
     if state in _TERMINAL or (state == "failed" and not after_approval):
@@ -212,8 +215,9 @@ def run_ticket_loop(
 
 
 def resume_ticket_loop(db: Session, ticket: CustomerServiceTicket, user: Any) -> dict[str, Any]:
+    db.refresh(ticket, with_for_update=True)
     loop = _loop(ticket)
-    if str(loop.get("state") or "") != "dispatch_failed":
+    if intake_dispatch_block_reason(ticket) or str(loop.get("state") or "") != "dispatch_failed":
         return {"ok": False, "reason": "not_waiting"}
     employee_id = str(loop.get("employee_id") or "")
     if employee_id in HOOKS["offline"]:
@@ -227,6 +231,9 @@ def resume_ticket_loop(db: Session, ticket: CustomerServiceTicket, user: Any) ->
 def approve_ticket_loop(
     db: Session, ticket: CustomerServiceTicket, user: Any, approval_id: str
 ) -> dict[str, Any]:
+    db.refresh(ticket, with_for_update=True)
+    if intake_dispatch_block_reason(ticket):
+        return {"changed": False, "reason": "ticket_dispatch_blocked"}
     action = (
         db.query(CustomerServiceAction)
         .filter(
@@ -253,6 +260,8 @@ def approve_ticket_loop(
 
 
 def mark_loop_timed_out(db: Session, ticket: CustomerServiceTicket, user: Any) -> bool:
+    if intake_dispatch_block_reason(ticket):
+        return False
     evidence, loop = _load(ticket)
     if not loop.get("task_id") or str(loop.get("state") or "") in _TERMINAL | {"failed"}:
         return False

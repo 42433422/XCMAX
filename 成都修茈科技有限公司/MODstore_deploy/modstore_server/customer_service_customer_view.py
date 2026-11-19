@@ -80,6 +80,24 @@ def customer_ticket(ticket: Any) -> dict[str, Any]:
     evidence = ticket.get("evidence") if isinstance(ticket, dict) else None
     evidence = evidence if isinstance(evidence, dict) else {}
     out["evidence"] = _pick(evidence, EVIDENCE_KEYS)
+    assessment = evidence.get("intake_review")
+    if out.get("closed_at") or out.get("status") in {
+        "resolved",
+        "closed",
+        "done",
+        "expired",
+        "rejected",
+        "cancelled",
+    }:
+        out["dispatch_status"] = "terminal"
+    elif isinstance(assessment, dict) and assessment.get("disposition") != "actionable":
+        out["dispatch_status"] = "pending_review"
+    disposition = ticket.get("disposition") if isinstance(ticket, dict) else None
+    if isinstance(disposition, dict) and disposition.get("kind") in {"invalid", "out_of_scope"}:
+        out["disposition"] = {
+            **_pick(disposition, ("kind", "at")),
+            "note": customer_text(disposition.get("note"), "管理员已记录处置结论。"),
+        }
     out["progress"] = [
         {"at": r.get("at") or "", "text": customer_text(r.get("progress"))}
         for r in evidence.get("employee_reports") or []
@@ -117,6 +135,8 @@ def customer_cards(cards: Any) -> list[dict[str, Any]]:
 def customer_message_payload(payload: Any, role: str = "assistant") -> dict[str, Any]:
     payload = payload if isinstance(payload, dict) else {}
     out: dict[str, Any] = _pick(payload, ("customer_decision",))
+    if role == "assistant" and payload.get("origin") in ("admin_reply", "admin_disposition"):
+        out["origin"] = payload["origin"]
     if role == "user" and "context" in payload:
         out["context"] = payload["context"]
     if isinstance(payload.get("ticket"), dict):

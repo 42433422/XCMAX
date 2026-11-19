@@ -23,13 +23,17 @@ const LABEL_ALIASES: Record<string, string> = {
   结果回访: '已完成',
 }
 
+export function ticketIsClosed(ticket: { status?: unknown; closed_at?: unknown }): boolean {
+  return !!ticket.closed_at || ['resolved', 'closed', 'done', 'rejected', 'expired', 'cancelled'].includes(String(ticket.status || '').toLowerCase())
+}
+
 export function resolveTicketLifecycleStage(ticket: { lifecycle_stage?: unknown; status?: unknown; decision_status?: unknown }): number {
   const fromApi = Number(ticket?.lifecycle_stage || 0)
   if (fromApi >= 1 && fromApi <= 5) return fromApi
 
   const s = String(ticket?.status || '').toLowerCase()
   const d = String(ticket?.decision_status || '').toLowerCase()
-  if (['resolved', 'closed', 'done', 'rejected'].includes(s)) return 5
+  if (ticketIsClosed(ticket)) return 5
   if (s === 'waiting_user' || d === 'needs_more_info') return 4
   if (['open', 'pending', 'queued'].includes(s)) return 1
   if (s === 'processing') {
@@ -40,12 +44,19 @@ export function resolveTicketLifecycleStage(ticket: { lifecycle_stage?: unknown;
   return 1
 }
 
+export function ticketDismissalLabel(ticket: { disposition?: unknown }): string {
+  const { kind } = (ticket.disposition || {}) as { kind?: string }
+  return kind === 'invalid' ? '无效反馈' : kind === 'out_of_scope' ? '超出服务范围' : ''
+}
+
 export function ticketLifecycleLabel(ticket: {
+  disposition?: unknown
   lifecycle_label?: unknown
   lifecycle_stage?: unknown
   status?: unknown
   decision_status?: unknown
 }): string {
+  if (ticketDismissalLabel(ticket)) return '已驳回'
   const fromApi = String(ticket?.lifecycle_label || '').trim()
   if (fromApi) return LABEL_ALIASES[fromApi] || fromApi
   const stage = resolveTicketLifecycleStage(ticket)
@@ -102,11 +113,14 @@ export function issueDomainLabel(ticketOrDomain: unknown): string {
 }
 
 export function ticketLifecycleHint(ticket: {
+  disposition?: unknown
   lifecycle_stage?: unknown
   status?: unknown
   decision_status?: unknown
   summary?: unknown
 }): string {
+  const dismissal = ticketDismissalLabel(ticket)
+  if (dismissal) return `${dismissal}，点标题查看处置结论`
   const stage = resolveTicketLifecycleStage(ticket)
   if (stage === 1) return '已收到，正在安排'
   if (stage === 2) return '正在为你处理'
@@ -117,6 +131,7 @@ export function ticketLifecycleHint(ticket: {
 }
 
 export function ticketLifecycleSteps(ticket: {
+  disposition?: unknown
   lifecycle_steps?: unknown
   lifecycle_stage?: unknown
   status?: unknown
@@ -126,7 +141,7 @@ export function ticketLifecycleSteps(ticket: {
   // 始终用口语标签，避免旧 API 文案把用户搞晕
   return TICKET_LIFECYCLE_STEPS.map((step) => ({
     stage: step.stage,
-    label: step.label,
+    label: step.stage === 5 && ticketDismissalLabel(ticket) ? '已驳回' : step.label,
     state: step.stage < current ? 'done' : step.stage === current ? 'current' : 'todo',
   }))
 }

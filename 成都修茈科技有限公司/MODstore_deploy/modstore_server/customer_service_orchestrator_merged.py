@@ -5,10 +5,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib
 from typing import Any
 from uuid import uuid4
 from sqlalchemy.exc import IntegrityError
+
 
 from modstore_server.customer_issue_delivery_contract import (
     projected_dispatch_status,
@@ -17,6 +19,12 @@ from modstore_server.customer_issue_delivery_contract import (
     team_action_state,
     team_succeeded,
 )
+from modstore_server.customer_ticket_intake_review import (
+    IntakeReview,
+    intake_dispatch_block_reason,
+    parse_intake_review,
+    pending_intake_review,
+)
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.customer_service_ticket_view import serialize_ticket
 from modstore_server.customer_service_triage import (
@@ -24,6 +32,11 @@ from modstore_server.customer_service_triage import (
     resolve_triage_lane as resolve_triage_lane,
     ticket_taxonomy as ticket_taxonomy,
 )
+
+
+class InactiveTicketConversation(ValueError):
+    """The original ticket is closed or no longer belongs to this conversation."""
+
 
 # --- from customer_service_orchestrator_part01.py ---
 """Implementation extracted from the public facade module."""
@@ -295,6 +308,7 @@ def classify_customer_intent(
     extracted: _facade().Dict[str, _facade().Any],
     *,
     context: _facade().Optional[_facade().Dict[str, _facade().Any]] = None,
+    intake_review: IntakeReview | None = None,
 ) -> _facade().Dict[str, _facade().Any]:
     """明确业务关键词走规则；模糊语义优先 LLM；LLM 失败再缺陷兜底。"""
     rule_intent = _facade().infer_intent(text, extracted, context=context)
@@ -318,7 +332,11 @@ def classify_customer_intent(
             "source": "rules",
             "reason": "keyword_or_scene",
         }
-    llm = _facade()._llm_classify_intent(text)
+    # A pending submission already used the model once for the validated intake review.
+    if intake_review is None:
+        llm = _facade()._llm_classify_intent(text)
+    else:
+        llm = intake_review.model_dump() if intake_review.disposition == "actionable" else None
     if llm:
         intent = str(llm.get("intent") or "general").strip().lower()
         if intent not in _facade().KNOWN_INTENTS:
@@ -544,6 +562,51 @@ def ensure_session(
 """Implementation extracted from the public facade module."""
 
 
+def intake_report_for_message(
+    db: _facade().Session,
+    *,
+    user: _facade().User,
+    message: str,
+    session_id: int | None,
+) -> tuple[str | None, IntakeReview | None]:
+    """Select original text and a matching server-authored assessment before writes."""
+    facade = _facade()
+    if (
+        not message
+        or facade.is_greeting(message)
+        or facade._looks_like_forbidden_privilege_request(message)
+    ):
+        return None, None
+    if not facade._is_escalate_only(message):
+        return message, None
+    if not session_id:
+        return "", None
+    session = (
+        db.query(facade.CustomerServiceSession).filter_by(id=session_id, user_id=user.id).first()
+    )
+    if session is None:
+        return "", None
+    report = facade._peek_prior_user_issue(db, session=session, exclude_text=message)
+    if not report:
+        return "", None
+    digest = hashlib.sha256(report.encode()).hexdigest()
+    replies = (
+        db.query(facade.CustomerServiceMessage)
+        .filter_by(session_id=session.id, user_id=user.id, role="assistant")
+        .order_by(facade.CustomerServiceMessage.id.desc())
+        .limit(8)
+        .all()
+    )
+    for reply in replies:
+        payload = facade.json_loads(reply.payload_json, {})
+        cache = payload.get("intake_assessment") if isinstance(payload, dict) else None
+        if isinstance(cache, dict) and cache.get("report_sha256") == digest:
+            review = parse_intake_review(facade.json_dumps(cache.get("review")), report=report)
+            if review.disposition != "needs_review":
+                return report, review
+    return report, None
+
+
 def handle_customer_message(
     db: _facade().Session,
     *,
@@ -551,6 +614,9 @@ def handle_customer_message(
     message: str,
     session_id: _facade().Optional[int] = None,
     context: _facade().Optional[_facade().Dict[str, _facade().Any]] = None,
+    reviewed_report: str | None = None,
+    intake_review: IntakeReview | None = None,
+    target_ticket_id: int | None = None,
 ) -> _facade().Dict[str, _facade().Any]:
     context = _facade()._enrich_cs_context(user, context, db=db)
     text = (message or "").strip()
@@ -562,6 +628,17 @@ def handle_customer_message(
     if not text and image_data_url:
         text = "[用户补充了图片资料]"
     session = _facade().ensure_session(db, user=user, session_id=session_id, context=context)
+    open_tickets = (
+        db.query(_facade().CustomerServiceTicket)
+        .filter_by(session_id=session.id, user_id=user.id, closed_at=None)
+        .filter(_facade().CustomerServiceTicket.status.in_(_ACTIVE_TICKET_STATUSES))
+    )
+    if target_ticket_id is not None:
+        open_ticket = open_tickets.filter_by(id=target_ticket_id).with_for_update().first()
+        if open_ticket is None:
+            raise InactiveTicketConversation("原工单已关闭或不属于此会话，请刷新后查看")
+    else:
+        open_ticket = open_tickets.order_by(_facade().CustomerServiceTicket.id.desc()).first()
     session.last_message = text
     session.updated_at = _facade().datetime.now(_facade().timezone.utc)
     ctx_for_store = {k: v for (k, v) in (context or {}).items() if k not in {"image_data_url"}}
@@ -574,6 +651,7 @@ def handle_customer_message(
     user_msg = _facade().CustomerServiceMessage(
         session_id=session.id,
         user_id=user.id,
+        ticket_id=target_ticket_id,
         role="user",
         content=text,
         payload_json=_facade().json_dumps(user_payload),
@@ -652,7 +730,9 @@ def handle_customer_message(
                 extracted.setdefault(k, v)
             extracted["reason"] = prior_issue[:500]
             extracted["_issue_summary"] = _facade()._summarize_user_issue(prior_issue)
-    safety_text = prior_issue or classify_text or text
+    if reviewed_report:
+        classify_text = reviewed_report
+    safety_text = reviewed_report or prior_issue or classify_text or text
     if _facade()._looks_like_forbidden_privilege_request(safety_text):
         reply = _facade()._refuse_forbidden_privilege_reply(safety_text)
         assistant_msg = _facade().CustomerServiceMessage(
@@ -710,7 +790,11 @@ def handle_customer_message(
                 "reason": "privilege_escalation_refused",
             },
         }
-    classified = _facade().classify_customer_intent(classify_text, extracted, context=context)
+    classified = _facade().classify_customer_intent(
+        classify_text, extracted, context=context, intake_review=intake_review
+    )
+    if intake_review and intake_review.disposition in {"invalid", "out_of_scope"}:
+        classified.update(intent="general", triage_lane=resolve_triage_lane("general"))
     intent = str(classified.get("intent") or "general")
     need_ticket = bool(classified.get("need_ticket"))
     if _facade().wants_ticket_escalation(text):
@@ -741,14 +825,10 @@ def handle_customer_message(
         extracted["classification_status"] = "pending_verification"
     session.intent = intent
     standard = _facade().choose_standard(db, intent)
-    open_ticket = (
-        db.query(_facade().CustomerServiceTicket)
-        .filter(_facade().CustomerServiceTicket.session_id == session.id)
-        .filter(_facade().CustomerServiceTicket.status.in_(_ACTIVE_TICKET_STATUSES))
-        .order_by(_facade().CustomerServiceTicket.id.desc())
-        .first()
+    negative_review = bool(
+        intake_review and intake_review.disposition in {"invalid", "out_of_scope"}
     )
-    if open_ticket:
+    if open_ticket and not negative_review:
         if open_ticket.status == "waiting_user" and intent in {"general", "greeting"}:
             intent = open_ticket.intent or intent
             session.intent = intent
@@ -773,16 +853,38 @@ def handle_customer_message(
             ):
                 extracted["reason"] = prior_summary[:500]
                 extracted["_issue_summary"] = _facade()._summarize_user_issue(prior_summary)
+    if target_ticket_id is not None and open_ticket is not None:
+        if negative_review or (intake_review and intake_review.disposition == "needs_review"):
+            need_ticket = False
+        elif need_ticket or image_data_url:
+            intent = open_ticket.intent or intent
+            need_ticket = True
+            session.intent = intent
+            standard = _facade().choose_standard(db, intent)
     if need_ticket:
         _facade()._enrich_extracted_from_prior_issue(
             db, session=session, text=text, extracted=extracted
         )
     if not need_ticket:
-        reply = _facade()._chat_only_reply(text, intent=intent, user=user, db=db)
+        if intake_review and intake_review.disposition != "actionable":
+            review_note = {
+                "invalid": "收到你说明的演练情景。",
+                "out_of_scope": "这项问题超出平台客服处理范围。",
+                "needs_review": "目前无法确认反馈的处理范围。",
+            }[intake_review.disposition]
+            reply = f"我是小C。{review_note}如需留存原文供管理员核实，可以点击「提交工单」。"
+        else:
+            reply = _facade()._chat_only_reply(text, intent=intent, user=user, db=db)
         cards: list[_facade().Dict[str, _facade().Any]] = []
+        intake_assessment = {}
+        if intake_review is not None and reviewed_report:
+            intake_assessment = {
+                "report_sha256": hashlib.sha256(reviewed_report.encode()).hexdigest(),
+                "review": intake_review.model_dump(),
+            }
         assistant_msg = _facade().CustomerServiceMessage(
             session_id=session.id,
-            ticket_id=None,
+            ticket_id=target_ticket_id,
             user_id=user.id,
             role="assistant",
             content=reply,
@@ -793,6 +895,7 @@ def handle_customer_message(
                     "actions": [],
                     "cards": cards,
                     "intent": classified,
+                    "intake_assessment": intake_assessment,
                 }
             ),
         )
@@ -818,8 +921,30 @@ def handle_customer_message(
             "cards": cards,
             "intent": classified,
         }
+    if (
+        target_ticket_id is None
+        and open_ticket is not None
+        and intake_review is not None
+        and intake_review.disposition != "actionable"
+        and not intake_dispatch_block_reason(open_ticket)
+    ):
+        open_ticket = None
+    same_ticket = open_ticket is not None and open_ticket.intent == intent
+    if reviewed_report:
+        extracted["reason"] = reviewed_report[:2000]
+        extracted["_issue_summary"] = _facade()._summarize_user_issue(reviewed_report)
+    if not same_ticket:
+        extracted["intake_review"] = (intake_review or pending_intake_review()).model_dump()
+    elif target_ticket_id is not None or intake_dispatch_block_reason(open_ticket):
+        extracted["reason"] = str(open_ticket.summary or "")
     ticket = _facade().ensure_ticket(
-        db, user=user, session=session, intent=intent, extracted=extracted
+        db,
+        user=user,
+        session=session,
+        intent=intent,
+        extracted=extracted,
+        existing=open_ticket,
+        reuse_latest=False,
     )
     user_msg.ticket_id = ticket.id
     if image_data_url:
@@ -832,26 +957,37 @@ def handle_customer_message(
         extracted=extracted,
         message=text,
     )
-    actions = _facade().plan_actions(
-        db, user=user, ticket=ticket, decision=decision, extracted=extracted
-    )
-    integration_actions = _facade().execute_matching_integrations(
-        db,
-        ticket_id=ticket.id,
-        decision_id=decision.id,
-        user=user,
-        scenario=intent if intent != "greeting" else "general",
-        payload={
-            "ticket_id": ticket.id,
-            "ticket_no": ticket.ticket_no,
-            "intent": intent,
-            "extracted": extracted,
-            "decision": decision.decision,
-        },
-    )
-    actions.extend(integration_actions)
+    actions: list[Any] = []
+    held_for_review = bool(intake_dispatch_block_reason(ticket))
+    if not held_for_review:
+        actions = _facade().plan_actions(
+            db, user=user, ticket=ticket, decision=decision, extracted=extracted
+        )
+        actions.extend(
+            _facade().execute_matching_integrations(
+                db,
+                ticket_id=ticket.id,
+                decision_id=decision.id,
+                user=user,
+                scenario=intent if intent != "greeting" else "general",
+                payload={
+                    "ticket_id": ticket.id,
+                    "ticket_no": ticket.ticket_no,
+                    "intent": intent,
+                    "extracted": extracted,
+                    "decision": decision.decision,
+                },
+            )
+        )
     ticket.decision_status = decision.decision
-    if decision.decision == "rejected":
+    if held_for_review:
+        if not ticket.assigned_admin_id:
+            ticket.status = (
+                "waiting_user"
+                if extracted.get("classification_status") == "pending_verification"
+                else "open"
+            )
+    elif decision.decision == "rejected":
         ticket.status = "resolved"
         ticket.closed_at = _facade().datetime.now(_facade().timezone.utc)
     elif (
@@ -880,7 +1016,9 @@ def handle_customer_message(
     reply, cards = _facade().build_reply(
         ticket=ticket, decision=decision, actions=actions, extracted=extracted
     )
-    if intent in {"general", "greeting", "product_issue"}:
+    if held_for_review:
+        reply = "我是小C。已登记你的原始反馈，等待管理员核实处理范围。可在此工单继续补充说明。"
+    elif intent in {"general", "greeting", "product_issue"}:
         issue_text = _facade()._resolve_issue_text_for_reply(
             extracted=extracted, text=text, prior_issue=prior_issue, ticket=ticket
         )
@@ -937,10 +1075,11 @@ def handle_customer_message(
         and facade._looks_like_concrete_issue(text)
     ):
         record_supplement(db, ticket, user, text)
-    apply_loop_status(ticket)
+    if not held_for_review:
+        apply_loop_status(ticket)
     loaded = facade.json_loads(ticket.evidence_json, {})
     public = loaded.get("loop_public") if isinstance(loaded, dict) else None
-    if isinstance(public, dict) and public.get("conclusion"):
+    if not held_for_review and isinstance(public, dict) and public.get("conclusion"):
         reply = f"{reply} {public['conclusion']}"
     assistant_msg = _facade().CustomerServiceMessage(
         session_id=session.id,
@@ -1071,14 +1210,17 @@ def ensure_ticket(
     session: _facade().CustomerServiceSession,
     intent: str,
     extracted: _facade().Dict[str, _facade().Any],
+    existing: _facade().CustomerServiceTicket | None = None,
+    reuse_latest: bool = True,
 ) -> _facade().CustomerServiceTicket:
-    existing = (
-        db.query(_facade().CustomerServiceTicket)
-        .filter(_facade().CustomerServiceTicket.session_id == session.id)
-        .filter(_facade().CustomerServiceTicket.status.in_(_ACTIVE_TICKET_STATUSES))
-        .order_by(_facade().CustomerServiceTicket.id.desc())
-        .first()
-    )
+    if existing is None and reuse_latest:
+        existing = (
+            db.query(_facade().CustomerServiceTicket)
+            .filter_by(session_id=session.id, user_id=user.id, closed_at=None)
+            .filter(_facade().CustomerServiceTicket.status.in_(_ACTIVE_TICKET_STATUSES))
+            .order_by(_facade().CustomerServiceTicket.id.desc())
+            .first()
+        )
     if existing and existing.intent == intent:
         prior = _facade().json_loads(existing.evidence_json, {})
         if not isinstance(prior, dict):
@@ -1152,7 +1294,12 @@ def decide(
 ) -> _facade().CustomerServiceDecision:
     missing = _facade().missing_fields(ticket.intent, extracted)
     risk_level = standard.risk_level if standard else "low"
-    if str(extracted.get("classification_status") or "") == "pending_verification":
+    blocked = intake_dispatch_block_reason(ticket)
+    if blocked and str(extracted.get("classification_status") or "") != "pending_verification":
+        decision = "needs_more_info"
+        rationale = "已保留原始反馈，受理范围待管理员核实。"
+        confidence = 0.35
+    elif str(extracted.get("classification_status") or "") == "pending_verification":
         decision = "needs_more_info"
         rationale = (
             "描述不足以确定分类，或同时包含技术故障和账号权益。"
@@ -1249,6 +1396,8 @@ _ACTIVE_TICKET_STATUSES = (
     "pending_assignment",
     "waiting_approval",
     "failed",
+    "reopened",
+    "awaiting_customer",
 )
 
 
@@ -2068,6 +2217,7 @@ def apply_customer_ticket_incident_progress(
     ticket = (
         db.query(_facade().CustomerServiceTicket)
         .filter(_facade().CustomerServiceTicket.id == int(ticket_id))
+        .with_for_update()
         .first()
     )
     if not ticket:
@@ -2100,10 +2250,14 @@ def apply_customer_ticket_incident_progress(
             ],
         }
     )
-    if ticket.status in {"resolved", "closed", "expired"} or any(
-        report.get("progress_sha256") == progress_digest
-        for report in ev.get("employee_reports", [])
-        if isinstance(report, dict)
+    if (
+        ticket.closed_at
+        or ticket.status in CLOSED_CUSTOMER_ISSUE_STATES
+        or any(
+            report.get("progress_sha256") == progress_digest
+            for report in ev.get("employee_reports", [])
+            if isinstance(report, dict)
+        )
     ):
         return {
             "ok": True,
@@ -2353,7 +2507,14 @@ def customer_issue_payload(row: _facade().CustomerServiceTicket) -> dict[str, An
         else None
     )
     human_text = str((human or {}).get("text") or "").strip()
-    if human_text:
+    disposition = evidence.get("admin_disposition")
+    if isinstance(disposition, dict):
+        latest_result = {
+            "source": "admin_disposition",
+            "progress": disposition.get("note"),
+            "at": disposition.get("at"),
+        }
+    elif human_text:
         latest_result = {
             "source": "human",
             "progress": human_text,
@@ -2382,6 +2543,6 @@ def customer_issue_payload(row: _facade().CustomerServiceTicket) -> dict[str, An
         "closed_at": row.closed_at.isoformat() if row.closed_at else "",
         "reopen_count": len(evidence.get("reopen_history") or []),
         "can_resolve": row.status == "awaiting_customer" and not closed,
-        "can_reopen": closed
-        or (not fault_open and state not in {"received", "reopened", "processing"}),
+        "can_reopen": not evidence.get("admin_disposition")
+        and (closed or (not fault_open and state not in {"received", "reopened", "processing"})),
     }

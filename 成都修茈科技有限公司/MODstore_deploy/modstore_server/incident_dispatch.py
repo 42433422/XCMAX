@@ -10,6 +10,21 @@ from modstore_server import incident_bus as facade
 from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 
+def _ticket_dispatch_blocked(payload: dict[str, Any], event_type: str) -> bool:
+    if event_type != "ops.intake.customer_ticket":
+        return False
+    from modstore_server.customer_ticket_intake_review import intake_dispatch_block_reason
+    from modstore_server.models_cs import CustomerServiceTicket
+
+    with facade.get_session_factory()() as db:
+        ticket = db.get(CustomerServiceTicket, int(payload.get("ticket_id") or 0))
+        return (
+            ticket is None
+            or ticket.user_id != int(payload.get("user_id") or 0)
+            or bool(intake_dispatch_block_reason(ticket))
+        )
+
+
 def _has_reviewed_duty_binding(event_id: int) -> bool:
     """Return whether this event has an active, unattended reviewed duty."""
 
@@ -66,6 +81,8 @@ def _dispatch_intake_routing_plan(
         return 0
     extra = 0
     for row in _extract_routing_plan(exec_result):
+        if _ticket_dispatch_blocked(incident_payload, event_type):
+            break
         owner = str(row.get("proposed_owner") or "").strip()
         if not owner or owner in skip_ids or owner not in catalog_ids:
             continue
@@ -227,6 +244,12 @@ def _dispatch_incident_body(event_id: int) -> None:
                 dispatch_incident_via_market,
             )
 
+            if event_type_pre == "ops.intake.customer_ticket":
+                with get_session_factory()() as db:
+                    event = db.get(IncidentEvent, event_id)
+                    payload = facade._incident_payload(event) if event is not None else {}
+                if _ticket_dispatch_blocked(payload, event_type_pre):
+                    return
             market = dispatch_incident_via_market(event_id)
             if market.get("ok") and market.get("claimed"):
                 logger.info(
@@ -317,6 +340,8 @@ def _dispatch_incident_body(event_id: int) -> None:
         return
     already_ran: set[str] = set(team_members)
     for eid_emp in binding_ids:
+        if _ticket_dispatch_blocked(payload, event_type):
+            break
         if not eid_emp or eid_emp not in catalog_ids:
             continue
         if team_members and (eid_emp == "intake-dispatcher" or eid_emp in team_members):

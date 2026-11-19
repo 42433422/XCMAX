@@ -39,6 +39,27 @@ class TicketReplyBody(BaseModel, extra="forbid"):
     note: str = Field(min_length=4, max_length=2000)
 
 
+def record_original_session_message(
+    db: Session, ticket: CustomerServiceTicket, user: User, note: str, *, now: datetime, origin: str
+) -> None:
+    session = db.get(CustomerServiceSession, ticket.session_id)
+    if session is None or session.user_id != ticket.user_id:
+        raise HTTPException(409, "原客服会话归属不可核验")
+    db.add(
+        CustomerServiceMessage(
+            session_id=session.id,
+            ticket_id=ticket.id,
+            user_id=ticket.user_id,
+            role="assistant",
+            content=note,
+            created_at=now,
+            payload_json=json_dumps({"origin": origin, "operator_user_id": user.id}),
+        )
+    )
+    setattr(session, "last_message", note)
+    setattr(session, "updated_at", now)
+
+
 def reply_to_ticket(db: Session, user: User, ticket_id: int, body: TicketReplyBody):
     if not user.is_admin:
         raise HTTPException(403, "需要管理员权限")
@@ -63,43 +84,28 @@ def reply_to_ticket(db: Session, user: User, ticket_id: int, body: TicketReplyBo
     }
     if ticket.status not in replyable or ticket.closed_at:
         raise HTTPException(409, "仅可答复未关闭的原工单")
-    session = db.get(CustomerServiceSession, ticket.session_id)
-    if session is None or session.user_id != ticket.user_id:
-        raise HTTPException(409, "原客服会话归属不可核验")
     now = datetime.now(UTC)
-    db.add(
-        CustomerServiceMessage(
-            session_id=session.id,
-            ticket_id=ticket.id,
-            user_id=ticket.user_id,
-            role="assistant",
-            content=note,
-            created_at=now,
-            payload_json=json_dumps({"origin": "admin_reply", "operator_user_id": user.id}),
-        )
-    )
+    record_original_session_message(db, ticket, user, note, now=now, origin="admin_reply")
     db.add(
         CustomerServiceAction(
             ticket_id=ticket.id,
             user_id=user.id,
             action_type="ticket.reply",
             target_type="session",
-            target_id=str(session.id),
+            target_id=str(ticket.session_id),
             status="completed",
             request_json=json_dumps({"note": note}),
-            result_json=json_dumps({"session_id": session.id}),
+            result_json=json_dumps({"session_id": ticket.session_id}),
             idempotency_key=key,
         )
     )
-    setattr(session, "last_message", note)
-    setattr(session, "updated_at", now)
     setattr(ticket, "updated_at", now)
     audit(
         db,
         actor=user,
         actor_type="admin",
         ticket_id=ticket.id,
-        session_id=session.id,
+        session_id=ticket.session_id,
         event_type="admin_ticket_replied",
         detail={"note": note, "request_id": body.request_id},
     )

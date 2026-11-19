@@ -31,6 +31,11 @@ from modstore_server.customer_service_customer_view import (
 )
 from modstore_server.customer_service_orchestrator import CLOSED_CUSTOMER_ISSUE_STATES as _CLOSED
 from modstore_server.customer_service_tools import audit, json_dumps, json_loads
+from modstore_server.customer_ticket_intake_review import (
+    intake_dispatch_block_reason,
+    pending_intake_review,
+    review_report_async,
+)
 from modstore_server.models import User, UserMod
 from modstore_server.models_cs import (
     CustomerServiceAction,
@@ -180,15 +185,21 @@ async def intake_customer_issue(
             values=values,
             request_digest=request_digest,
         )
-        _route_work_order(db, body, user, ticket)
-        _wake_owner_intake(ticket.id, body.source)
+        blocked = intake_dispatch_block_reason(ticket)
+        if not blocked:
+            _route_work_order(db, body, user, ticket)
+            _wake_owner_intake(ticket.id, body.source)
         return {
             "success": True,
             "replayed": replayed,
             "ticket_id": ticket.id,
             "ticket_no": ticket.ticket_no,
             "ticket": customer_ticket_row(ticket),
-            "dispatch_status": "queued",
+            "dispatch_status": (
+                "terminal"
+                if blocked == "ticket_terminal"
+                else "pending_review" if blocked else "queued"
+            ),
             "support_bundle_saved": bool(bundle_b64) and saved,
             "support_bundle_sha256": bundle_sha if bundle_b64 and saved else "",
         }
@@ -200,6 +211,13 @@ async def intake_customer_issue(
         return response(existing, replayed=True)
     private_rework = body.source == "private_mod_rework"
     intent = "custom_delivery" if private_rework else "product_issue"
+    intake_review = None
+    if not private_rework:
+        intake_review = await review_report_async(f"{body.title}\n{body.description}")
+        if intake_review.disposition in {"invalid", "out_of_scope"}:
+            intent = "general"
+        elif intake_review.disposition == "actionable" and intake_review.intent != "product_issue":
+            intake_review = pending_intake_review()
     if private_rework:
         values.update(
             kind="module",
@@ -233,7 +251,13 @@ async def intake_customer_issue(
         status="open",
         decision_status="pending",
         summary=body.description,
-        evidence_json=json_dumps({**values, "intake_request_sha256": request_digest}),
+        evidence_json=json_dumps(
+            {
+                **values,
+                "intake_request_sha256": request_digest,
+                **({"intake_review": intake_review.model_dump()} if intake_review else {}),
+            }
+        ),
     )
     db.add(ticket)
     try:
@@ -397,6 +421,7 @@ def decide_product_issue(
     ticket = (
         db.query(CustomerServiceTicket)
         .filter_by(id=ticket_id, user_id=int(user.id), intent="product_issue")
+        .with_for_update()
         .first()
     )
     if ticket is None:
@@ -405,6 +430,8 @@ def decide_product_issue(
     if len(note) < 4:
         raise HTTPException(400, "请说明原问题现在的使用结果（至少4个字）")
     evidence = json_loads(ticket.evidence_json, {})
+    if evidence.get("admin_disposition"):
+        raise HTTPException(409, "原工单已记录无效或无关处置")
     digest = hashlib.sha256(json.dumps([body.decision, note]).encode()).hexdigest()
     decisions = [r for r in evidence.get("customer_decisions") or [] if isinstance(r, dict)]
     prior = next((r for r in decisions if r.get("idempotency_key") == body.idempotency_key), None)

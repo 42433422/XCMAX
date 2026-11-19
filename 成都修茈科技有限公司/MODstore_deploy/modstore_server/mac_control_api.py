@@ -17,7 +17,13 @@ from modstore_server.db.mac_control import (
     MacControlObservation,
     MacControlTask,
 )
-from modstore_server.mac_control_store import TERMINAL, accept, transition, view
+from modstore_server.mac_control_store import (
+    TERMINAL,
+    accept,
+    request_cancellation,
+    transition,
+    view,
+)
 from modstore_server.mac_control_transport import stale_window
 from modstore_server.models import User
 
@@ -152,15 +158,7 @@ def cancel_task(task_id: str, user: User = Depends(require_admin), db: Session =
     if task.state not in TERMINAL:
         if task.lease_until > time.time():
             raise HTTPException(409, "正在同步执行状态，请稍后重试取消")
-        state = "cancel_requested" if task.attempt_id else "cancelled"
-        # Para currently exposes deletion, not confirmed executor cancellation.
-        # Never delete an active task or falsely report that its process stopped.
-        transition(
-            db,
-            task,
-            state,
-            "executor_stop_confirmation_required" if task.attempt_id else "",
-        )
+        request_cancellation(db, task)
     return {"success": True, "task": view(task)}
 
 

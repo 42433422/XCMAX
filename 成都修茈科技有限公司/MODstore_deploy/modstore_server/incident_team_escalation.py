@@ -29,6 +29,9 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 _CURSOR = 0
 _TERMINAL = frozenset({"failed", "completed", "cancelled"})
+_DISPATCH_STOPS = frozenset(
+    {"ticket_disposed", "intake_review_required", "invalid_ticket_evidence"}
+)
 
 
 def _now() -> str:
@@ -65,8 +68,9 @@ def _save(event_id: int, key: str, changes: dict) -> dict:
         payload = object_json(event.payload_json)
         receipt = _receipts(payload)[key]
         _, blocked = active_context(db, event, receipt=receipt)
+        undispatched = receipt["state"] == "requested"
         receipt.update(changes, updated_at=_now())
-        if blocked:
+        if blocked and (blocked not in _DISPATCH_STOPS or undispatched):
             receipt.update(state="cancelled", requires_reconciliation=False, error=blocked)
         _write(db, event, payload)
         return dict(receipt)
@@ -221,7 +225,7 @@ def _reconcile_one(event_id: int, key: str, *, base: str, fetcher) -> bool:
             if not receipt or receipt["state"] in _TERMINAL:
                 return False
             receipt = dict(receipt)
-        if blocked:
+        if blocked and (blocked not in _DISPATCH_STOPS or receipt["state"] == "requested"):
             _save(event_id, key, {"state": "cancelled", "error": blocked})
         elif receipt["state"] == "requested":
             _dispatch_requested(event_id, receipt)

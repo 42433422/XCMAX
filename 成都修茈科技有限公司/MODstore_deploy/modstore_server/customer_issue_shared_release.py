@@ -180,6 +180,8 @@ def bind_shared_release(
     db: Any, ticket: Any, host_sha: str, *, proofs: _ReleaseProofBatch | None = None
 ) -> dict[str, Any] | None:
     evidence = json_loads(ticket.evidence_json, {})
+    if evidence.get("admin_disposition"):
+        return None
     resolution = issue_resolution(ticket, evidence)
     private_prerequisite = resolution.get("route") == "private_mod" and evidence.get(
         "shared_core_prerequisite"
@@ -286,7 +288,7 @@ def record_shared_runtime(
         if prior.get("request_sha256") != digest:
             raise HTTPException(409, "同一回执标识不可绑定不同内容")
         return {"replayed": True, "record": prior}
-    if ticket.status in {"resolved", "closed", "expired"}:
+    if ticket.status in {"resolved", "closed", "expired", "rejected"}:
         raise HTTPException(409, "该工单已完成，新的问题请通过原交付返工入口受理")
     target = bind_shared_release(db, ticket, str(body.get("host_sha") or ""))
     if not target:

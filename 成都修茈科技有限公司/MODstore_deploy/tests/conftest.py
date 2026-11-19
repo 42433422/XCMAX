@@ -187,3 +187,28 @@ def pytest_sessionstart(session: pytest.Session) -> None:
         ),
         flush=True,
     )
+
+
+@pytest.fixture
+def approved_support_assessment(monkeypatch):
+    """Supply an available positive review for tests of downstream handlers."""
+    from modstore_server import customer_issue_api, customer_service_api
+    from modstore_server.customer_ticket_intake_review import IntakeReview
+
+    async def chat_assessment(report: str):
+        return IntakeReview(
+            disposition="actionable",
+            reason="下游测试已确认原始反馈",
+            evidence_excerpt=report[:300],
+        )
+
+    async def typed_assessment(report: str):
+        return IntakeReview(
+            disposition="actionable",
+            intent="product_issue",
+            reason="下游测试已确认产品问题",
+            evidence_excerpt=report[:300],
+        )
+
+    monkeypatch.setattr(customer_service_api, "review_report_async", chat_assessment)
+    monkeypatch.setattr(customer_issue_api, "review_report_async", typed_assessment)

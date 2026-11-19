@@ -12,7 +12,7 @@
         <div class="cs-toolbar">
           <div class="cs-toolbar__left">
             <b>对话</b>
-            <span class="cs-muted">{{ activeSessionId ? '进行中' : '新会话' }}</span>
+            <span class="cs-muted">{{ openedTicketRef || (activeSessionId ? '进行中' : '新会话') }}</span>
           </div>
           <button type="button" class="cs-btn cs-btn--ghost" @click="newSession">新会话</button>
         </div>
@@ -20,18 +20,21 @@
         <div ref="messagesEl" class="cs-messages">
           <article v-for="msg in messages" :key="msg.id" :class="['cs-message', `cs-message--${msg.role}`]">
             <div class="cs-bubble">
+              <span v-if="msg.adminLabel" class="cs-muted">{{ msg.adminLabel }}</span>
               <p
-                v-if="msg.content && msg.content !== '[用户补充了图片资料]'"
+                v-if="!openedTicketRef && msg.role === 'assistant' && msg.content"
                 class="cs-bubble__text"
                 v-html="renderCsBubbleHtml(msg.content)"
                 @click="onBubbleClick($event, msg)"
               />
-              <p v-else-if="msg.imageDataUrl" class="cs-bubble__text">已附上图片</p>
+              <p v-else-if="msg.content && msg.content !== '[用户补充了图片资料]'" class="cs-bubble__text">{{ msg.content }}</p>
+              <p v-else-if="msg.imageDataUrl || msg.content === '[用户补充了图片资料]'" class="cs-bubble__text">已附上图片</p>
               <img v-if="msg.imageDataUrl" :src="msg.imageDataUrl" alt="补充图片" class="cs-bubble__img" />
             </div>
           </article>
 
-          <div v-if="messages.length === 0" class="cs-empty">
+          <p v-if="openedTicketRef && loading && !messages.length" class="cs-muted" role="status">正在读取原客服会话…</p>
+          <div v-if="!openedTicketRef && messages.length === 0" class="cs-empty">
             <p class="cs-empty__title">先说说你遇到的问题，也可以点下面的示例开始</p>
             <div class="cs-chips">
               <button v-for="chip in quickPrompts" :key="chip" type="button" class="cs-chip" @click="usePrompt(chip)">
@@ -51,18 +54,19 @@
           <textarea
             v-model="draft"
             rows="2"
+            :disabled="readOnly || loading"
             placeholder="尽量带上订单号、说明；也可点「图片」上传截图补充材料…"
             @keydown.meta.enter.prevent="send"
             @keydown.ctrl.enter.prevent="send"
           />
           <div class="cs-composer__footer">
             <div class="cs-composer__left">
-              <button type="button" class="cs-btn cs-btn--ghost" :disabled="loading || imagePicking" @click="openImagePicker">
+              <button type="button" class="cs-btn cs-btn--ghost" :disabled="readOnly || loading || imagePicking" @click="openImagePicker">
                 {{ imagePicking ? '处理中…' : '图片' }}
               </button>
-              <span :class="{ 'cs-error': !!error }">{{ error || 'Enter 换行 · ⌘/Ctrl+Enter 发送' }}</span>
+              <span :class="{ 'cs-error': !!error }">{{ error || (readOnly ? '仅查看原会话' : 'Enter 换行 · ⌘/Ctrl+Enter 发送') }}</span>
             </div>
-            <button type="submit" class="cs-btn" :disabled="loading || imagePicking || (!draft.trim() && !pendingImageDataUrl)">
+            <button type="submit" class="cs-btn" :disabled="readOnly || loading || imagePicking || (!draft.trim() && !pendingImageDataUrl)">
               {{ loading ? '处理中…' : '发送' }}
             </button>
           </div>
@@ -104,7 +108,7 @@ const ticketStore = useCustomerServiceTickets()
 const { tickets, expandedTicketIds, allTicketsExpanded, toggleTicket, toggleAllTickets, loadTickets } = ticketStore
 
 const {
-  draft, loading, error, activeSessionId, messages, messagesEl, quickPrompts,
+  draft, loading, error, activeSessionId, openedTicketRef, readOnly, messages, messagesEl, quickPrompts,
   usePrompt, send, sendText, onBubbleClick, newSession, visibleCards, openTicket,
 } = useCustomerServiceChat({
   route,

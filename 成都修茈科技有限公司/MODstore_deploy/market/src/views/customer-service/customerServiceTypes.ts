@@ -16,5 +16,6 @@ export type UiMessage = {
   role: 'user' | 'assistant'
   content: string
   cards?: UnknownRecord[]
+  adminLabel?: string
   imageDataUrl?: string | null
 }

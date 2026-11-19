@@ -49,6 +49,7 @@ def _write_payload(db, event, payload):
 
 def _context(event_id):
     from modstore_server import incident_team_orchestrator as facade
+    from modstore_server.customer_ticket_intake_review import intake_dispatch_block_reason
 
     with facade.get_session_factory()() as db:
         event = db.get(facade.IncidentEvent, event_id)
@@ -68,6 +69,7 @@ def _context(event_id):
                 or resolution.get("state") in {"closed", "reopened"}
                 or resolution.get("incident_event_id") not in (None, event_id)
                 or shared_repair
+                or intake_dispatch_block_reason(ticket)
             ):
                 return None
         return payload, claim, str(event.event_type or ""), str(event.source or "")
@@ -202,6 +204,7 @@ def execute_member(event_id, member, plan, payload, event_type, source, rows):
 def _follow_up(event_id, context):
     """Persist follow-up intent; an interrupted decision is not proof of completion."""
     from modstore_server import incident_team_orchestrator as facade
+    from modstore_server.customer_ticket_intake_review import intake_dispatch_block_reason
     from modstore_server.node_coordinator import assert_incident_claim
 
     payload, claim, event_type, source = context
@@ -253,7 +256,8 @@ def _follow_up(event_id, context):
         assert_incident_claim(event_id, session=db)
         event = db.get(facade.IncidentEvent, event_id)
         current = facade._payload(event)
-        if locked_ticket_repair(db, current)[1]:
+        ticket, shared_repair = locked_ticket_repair(db, current)
+        if shared_repair or (ticket is not None and intake_dispatch_block_reason(ticket)):
             return
         saved = current["_team_claim"]
         saved["continuation_pending"] = True

@@ -90,13 +90,14 @@
         <button v-if="hasBundle" type="button" class="cs-btn" @click="downloadBundle">下载支持包</button>
       </section>
 
-      <section v-show="section === 'handle'" class="cs-card" aria-label="人工处理">
+      <section v-show="section === 'handle'" v-if="!ticket.closed_at" class="cs-card" aria-label="人工处理">
         <h3 class="cs-card-title">人工处理</h3>
         <p v-if="handleError" role="alert" class="cs-error-text">{{ handleError }}</p>
-        <form class="cs-eta-editor" @submit.prevent="assignHandler">
+        <form class="cs-eta-editor" @submit.prevent="assignHandler()">
           <label>指派给技术管理员 <input v-model="assigneeId" inputmode="numeric" required /></label>
-          <label>原因 <input v-model="handleReason" required minlength="4" /></label>
+          <label>原因 <input v-model="handleReason" required minlength="4" placeholder="填写操作原因或核对结果" /></label>
           <button class="cs-btn cs-btn-primary" type="submit" :disabled="saving">指派</button>
+          <button class="cs-btn" type="button" :disabled="saving" @click="assignHandler(true)">指派给我</button>
           <button class="cs-btn" type="button" :disabled="saving" @click="acceptHandler">受理</button>
           <button class="cs-btn" type="button" :disabled="saving" @click="diagnoseHandler">记录诊断</button>
         </form>
@@ -141,7 +142,16 @@
 
       <section v-show="section === 'progress'" class="cs-card">
         <h3 class="cs-card-title">处理结论</h3>
-        <p v-if="!resolution" class="cs-state">暂无处理结论记录</p>
+        <template v-if="disposition">
+          <dl class="cs-facts">
+            <div><dt>工单处置</dt><dd>{{ dispositionLabel(disposition.kind) }}</dd></div>
+            <div><dt>客户答复</dt><dd>{{ disposition.note }}</dd></div>
+            <div><dt>核对证据</dt><dd>{{ disposition.verification }}</dd></div>
+            <div><dt>处置时间</dt><dd>{{ formatBeijingTime(disposition.at) }}</dd></div>
+            <div><dt>执行状态</dt><dd>{{ executionStopLabel((disposition.execution_stop as Row | undefined)?.state) }}</dd></div>
+          </dl>
+        </template>
+        <p v-else-if="!resolution" class="cs-state">暂无处理结论记录</p>
         <template v-else>
           <div class="cs-badges">
             <span class="cs-badge" :class="`is-${resolutionState.tone}`" :title="resolutionState.raw">{{ resolutionState.label }}</span>
@@ -164,18 +174,23 @@
         </template>
       </section>
 
-      <form v-show="section === 'handle'" v-if="ticket.status === 'processing'" class="cs-card cs-reply-form" @submit.prevent="replyTicket">
+      <form v-show="section === 'handle'" v-if="ticket.status === 'processing' && !ticket.closed_at" class="cs-card cs-reply-form" @submit.prevent="replyTicket">
         <h3 class="cs-card-title">答复原客户</h3>
         <label>客户可见答复<textarea v-model="replyNote" required minlength="4" maxlength="2000" /></label>
         <button class="cs-btn" type="submit" :disabled="saving || savingEta">发送答复并保留原单</button>
       </form>
 
-      <form v-show="section === 'handle'" v-if="ticket.status === 'processing'" class="cs-card cs-close-form" @submit.prevent="closeTicket">
+      <form v-show="section === 'handle'" v-if="ticket.status === 'processing' && !ticket.closed_at" class="cs-card cs-close-form" @submit.prevent="closeTicket">
         <h3 class="cs-card-title">处理原工单</h3>
-        <label v-if="!requiresCustomerAcceptance">处置方式<select v-model="closeDisposition"><option value="resolved">实际验收已解决</option><option value="expired">已过期不再处理（未修复，不影响资金权益）</option></select></label>
+        <label v-if="closeOptions.length > 1">处置方式
+          <select v-model="closeDisposition">
+            <option v-for="option in closeOptions" :key="option" :value="option">{{ dispositionLabel(option) }}</option>
+          </select>
+        </label>
+        <p v-if="isDismissal(closeDisposition)" class="cs-hint">先以当前管理员身份受理并记录诊断。处置结论会发回原客服会话，已派发任务的停止状态以后台回执为准。</p>
         <label>处理结论<textarea v-model="closeNote" required minlength="8" maxlength="2000" /></label>
-        <label>{{ closeDisposition === 'expired' ? '过期与后续活跃需求核对记录' : '实际验收证据' }}<textarea v-model="closeVerification" required minlength="20" maxlength="4000" /></label>
-        <button class="cs-btn" type="submit" :disabled="saving || savingEta">记录管理员处置并关闭</button>
+        <label>{{ closeVerificationLabel }}<textarea v-model="closeVerification" required minlength="20" maxlength="4000" /></label>
+        <button class="cs-btn" type="submit" :disabled="saving || savingEta">{{ isDismissal(closeDisposition) ? '记录处置并驳回' : '记录管理员处置并关闭' }}</button>
       </form>
 
       <section v-show="section === 'history'" class="cs-card" aria-label="处理时间线">
@@ -237,7 +252,7 @@ import DeliveryCommercePanel from '../components/admin/DeliveryCommercePanel.vue
 import CustomerServiceSharedRepair from './CustomerServiceSharedRepair.vue'
 import TicketGithubPanel from '../components/workflow/TicketGithubPanel.vue'
 import {
-  auditItems, buildTimeline, executionOverview, formatBeijingTime, parseServerTime, prettyJson, priorityLabel, resolutionStateBadge,
+  auditItems, buildTimeline, dispositionLabel, executionOverview, executionStopLabel, formatBeijingTime, parseServerTime, prettyJson, priorityLabel, resolutionStateBadge,
   routeLabel, submitterTypeLabel, teamMembers, ticketDomainLabel, ticketSourceLabel, ticketStatusBadge, ticketTypeLabel, yesNoBadge, type Row,
 } from '../utils/customerServiceTicketFormat'
 import { addonTimelineSteps, initialTimelineSteps } from '../utils/deliveryPresentation'
@@ -247,9 +262,10 @@ const route = useRoute()
 const router = useRouter()
 const detail = ref<Detail | null>(null), loading = ref(false), error = ref(''), saving = ref(false), expectedCompletionInput = ref('')
 const savingEta = ref(false), etaMessage = ref(''), etaError = ref('')
-const closeNote = ref(''), closeVerification = ref(''), closeRequestId = ref(''), closeDisposition = ref('resolved')
+type CloseDisposition = 'resolved' | 'expired' | 'invalid' | 'out_of_scope'
+const closeNote = ref(''), closeVerification = ref(''), closeRequestId = ref(''), closeDisposition = ref<CloseDisposition>('resolved')
 const replyNote = ref(''), replyRequestId = ref('')
-const assigneeId = ref(''), handleReason = ref('按客户描述核查员工图谱'), handleError = ref('')
+const assigneeId = ref(''), handleReason = ref(''), handleError = ref('')
 const sensitiveChange = ref('调整客户可见配置'), sensitiveActionId = ref(0)
 const reworkNote = ref(''), deliveryError = ref(''), mainRework = ref(false)
 const canUseMainRework = computed(() => detail.value?.custom_delivery?.kind === 'module' && detail.value?.custom_delivery?.suggested_id === 'sunbird-attendance-custom')
@@ -283,7 +299,19 @@ const sections = computed(() => [
 const taxonomy = computed(() => ({
   type: ticketTypeLabel(ticket.value), domain: ticketDomainLabel(ticket.value), source: ticketSourceLabel(ticket.value),
 }))
-const requiresCustomerAcceptance = computed(() => ['product_issue', 'custom_delivery'].includes(String(ticket.value.intent)) || customDelivery.value)
+const closeOptions = computed<CloseDisposition[]>(() => {
+  if (ticket.value.intent === 'custom_delivery' || customDelivery.value) return ['expired']
+  return ticket.value.intent === 'product_issue'
+    ? ['expired', 'invalid', 'out_of_scope']
+    : ['resolved', 'expired', 'invalid', 'out_of_scope']
+})
+const isDismissal = (value: CloseDisposition) => value === 'invalid' || value === 'out_of_scope'
+const closeVerificationLabel = computed(() => ({
+  resolved: '实际验收证据', expired: '过期与后续活跃需求核对记录',
+  invalid: '无效原因的核对证据', out_of_scope: '超出服务范围的核对证据',
+})[closeDisposition.value])
+const disposition = computed(() => ticket.value.disposition && typeof ticket.value.disposition === 'object'
+  ? ticket.value.disposition as Row : null)
 const resolution = computed(() => {
   const value = evidence.value.resolution
   return value && typeof value === 'object' ? value as Row : null
@@ -373,24 +401,34 @@ async function requestDeliveryRework() {
   finally { saving.value = false }
 }
 
-async function postHandle(command: string, body: Row) {
-  if (!validId.value || saving.value) return
-  saving.value = true
+async function postHandle(command: string, body: Row, assignToMe = false) {
+  const id = ticketId.value, started = generation
+  if (!validId.value || saving.value || savingEta.value || ticket.value.closed_at) return
   handleError.value = ''
+  if (handleReason.value.trim().length < 4) {
+    handleError.value = '请填写至少 4 字的操作原因'
+    return
+  }
+  saving.value = true
   try {
-    await api.post(`/api/xcmax/admin/customer-service/tickets/${ticketId.value}/${command}`, body)
-    await load()
-    const pending = [...(detail.value?.actions || [])].reverse().find((row) => row.action_type === 'ticket.apply_change' && row.status === 'waiting_approval')
-    if (pending) sensitiveActionId.value = Number(pending.id || 0)
+    if (assignToMe) {
+      const staff = await api.get<Row>('/api/xcmax/admin/customer-service/staff')
+      const viewerId = Number(staff?.viewer_id)
+      if (id !== ticketId.value || started !== generation) return
+      if (!Number.isSafeInteger(viewerId) || viewerId <= 0) throw new Error('当前管理员身份不可核验')
+      body.assignee_id = viewerId
+    }
+    await api.post(`/api/xcmax/admin/customer-service/tickets/${id}/${command}`, body)
+    if (id === ticketId.value && started === generation) await load()
   } catch (err) {
-    handleError.value = apiError(err)
+    if (id === ticketId.value && started === generation) handleError.value = apiError(err)
   } finally {
     saving.value = false
   }
 }
 
-function assignHandler() {
-  return postHandle('assign', { assignee_id: Number(assigneeId.value), reason: handleReason.value })
+function assignHandler(assignToMe = false) {
+  return postHandle('assign', { assignee_id: Number(assigneeId.value), reason: handleReason.value }, assignToMe)
 }
 function acceptHandler() { return postHandle('accept', { reason: handleReason.value }) }
 function diagnoseHandler() { return postHandle('diagnose', { reason: handleReason.value }) }
@@ -415,36 +453,47 @@ function apiError(cause: unknown) {
 function backToList() { void router.push({ name: 'customer-service-tickets' }) }
 
 watch([closeNote, closeVerification, closeDisposition], () => { closeRequestId.value = '' })
-watch([ticketId, requiresCustomerAcceptance], () => { closeDisposition.value = requiresCustomerAcceptance.value ? 'expired' : 'resolved' })
+watch(closeOptions, options => {
+  if (!closeRequestId.value && !options.includes(closeDisposition.value)) closeDisposition.value = options[0]
+})
 
 async function replyTicket() {
-  const id = ticketId.value
-  if (saving.value || savingEta.value || replyNote.value.trim().length < 4 || ticket.value.status !== 'processing') return
+  const id = ticketId.value, started = generation
+  if (saving.value || savingEta.value || replyNote.value.trim().length < 4 || ticket.value.status !== 'processing' || ticket.value.closed_at) return
   saving.value = true
   try {
     replyRequestId.value ||= crypto.randomUUID()
     await api.post(`/api/xcmax/admin/customer-service/tickets/${id}/reply`, { request_id: replyRequestId.value, note: replyNote.value })
-    if (ticketId.value === id) { replyNote.value = ''; replyRequestId.value = ''; await load() }
-  } catch (cause) { if (ticketId.value === id) error.value = message(cause) }
+    if (ticketId.value === id && started === generation) { replyNote.value = ''; replyRequestId.value = ''; await load() }
+  } catch (cause) { if (ticketId.value === id && started === generation) error.value = apiError(cause) }
   finally { saving.value = false }
 }
 
 async function closeTicket() {
-  const id = ticketId.value
-  if (saving.value || savingEta.value || ticket.value.status !== 'processing') return
+  const id = ticketId.value, started = generation
+  const selected = closeDisposition.value, note = closeNote.value, verification = closeVerification.value
+  if (saving.value || savingEta.value || ticket.value.status !== 'processing' || ticket.value.closed_at
+    || !closeOptions.value.includes(selected) || note.trim().length < 8 || verification.trim().length < 20) return
+  const dismissing = isDismissal(selected)
+  const question = dismissing
+    ? `确认将工单 ${ticket.value.ticket_no || id} 标记为「${dispositionLabel(selected)}」并将结论发回原客服会话？`
+    : selected === 'expired'
+      ? '确认已核对过期时间及后续需求？本次记为过期，未修复，不影响资金权益。'
+      : '确认已在目标版本完成实际验收，并关闭这张原工单？'
   saving.value = true
   try {
-    if (!await appConfirm(closeDisposition.value === 'expired' ? '确认已核对过期时间及后续需求？本次记为过期，未修复，不影响资金权益。' : '确认已在目标版本完成实际验收，并关闭这张原工单？', { title: '确认管理员处置', confirmText: '记录并关闭', cancelText: '返回检查', danger: true }) || ticketId.value !== id || ticket.value.status !== 'processing') return
+    if (!await appConfirm(question, { title: '确认管理员处置', confirmText: '记录并关闭', cancelText: '返回检查', danger: true })
+      || id !== ticketId.value || started !== generation || selected !== closeDisposition.value
+      || note !== closeNote.value || verification !== closeVerification.value) return
     closeRequestId.value ||= crypto.randomUUID()
-    await api.post(`/api/xcmax/admin/customer-service/tickets/${id}/close`, {
-      request_id: closeRequestId.value, note: closeNote.value, verification: closeVerification.value,
-      disposition: closeDisposition.value,
+    await api.post(`/api/xcmax/admin/customer-service/tickets/${id}/${dismissing ? 'disposition' : 'close'}`, {
+      request_id: closeRequestId.value, note, verification, disposition: selected,
     })
-    if (ticketId.value === id) {
+    if (id === ticketId.value && started === generation) {
       closeNote.value = ''; closeVerification.value = ''; closeRequestId.value = ''
       await load()
     }
-  } catch (cause) { if (ticketId.value === id) error.value = message(cause) }
+  } catch (cause) { if (id === ticketId.value && started === generation) error.value = apiError(cause) }
   finally { saving.value = false }
 }
 
@@ -511,7 +560,13 @@ async function load() {
   } catch (cause) { if (request === generation) error.value = message(cause) }
   finally { if (request === generation) loading.value = false }
 }
-watch(ticketId, () => { reworkNote.value = ''; mainRework.value = false; deliveryError.value = ''; replyNote.value = ''; replyRequestId.value = ''; closeDisposition.value = 'resolved'; closeNote.value = ''; closeVerification.value = ''; closeRequestId.value = ''; etaMessage.value = ''; etaError.value = ''; void load() }, { immediate: true })
+watch(ticketId, () => {
+  reworkNote.value = ''; mainRework.value = false; deliveryError.value = ''
+  assigneeId.value = ''; handleReason.value = ''; handleError.value = ''
+  replyNote.value = ''; replyRequestId.value = ''
+  closeDisposition.value = 'resolved'; closeNote.value = ''; closeVerification.value = ''; closeRequestId.value = ''
+  etaMessage.value = ''; etaError.value = ''; void load()
+}, { immediate: true })
 onBeforeUnmount(() => { generation++ })
 </script>
 

@@ -55,6 +55,11 @@ def serialize_ticket(
         "status": row.status,
         "priority": row.priority,
         "evidence": evidence,
+        **(
+            {"disposition": evidence["admin_disposition"]}
+            if evidence.get("admin_disposition")
+            else {}
+        ),
         "summary": row.summary,
         "decision_status": row.decision_status,
         "automation_level": row.automation_level,
