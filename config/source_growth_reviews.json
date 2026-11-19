@@ -592,7 +592,7 @@
     "FHD/mobile-flutter-poc/lib/src/features/approval/native_approval_workspace.dart": {
       "base_file": "FHD/mobile-flutter-poc/lib/src/features/approval/native_approval_workspace.dart",
       "base_blob": "65ba70c97b4572d5cc2a34f8e8f73356062f91b6",
-      "head_blob": "85d8e1f72208d67e807f9eacd14d2e6446389ff0",
+      "head_blob": "6fcb0d598129f70b5f6e878c70624f03e85926f2",
       "before_lines": 751,
       "after_lines": 1219,
       "reason": "审批列表和详情新增本页搜索、业务金额摘要、固定动作与失效状态反馈。",
@@ -604,7 +604,7 @@
     "FHD/mobile-flutter-poc/lib/src/features/business/native_inventory_screen.dart": {
       "base_file": null,
       "base_blob": null,
-      "head_blob": "277621b69c91c5a14ff3769ab2aecf4ed58ddde1",
+      "head_blob": "a8615343357fe0e2144475a8dfb44cc37c33c555",
       "before_lines": 0,
       "after_lines": 889,
       "reason": "原生替换库存 WebView，提供分仓批次结存、可用量、预警、出入库和流水核对。",
@@ -616,7 +616,7 @@
     "FHD/mobile-flutter-poc/lib/src/features/business/native_order_form.part.dart": {
       "base_file": "FHD/mobile-flutter-poc/lib/src/features/business/native_order_form.part.dart",
       "base_blob": "7d3be6d89fabf2f7fba9962e33c7172500ad131f",
-      "head_blob": "afeef3896c51fe7ea66046f12bd7200afd46ab1a",
+      "head_blob": "4b221833ad7ab83b95555b37a93372f8f7ccfe6d",
       "before_lines": 585,
       "after_lines": 844,
       "reason": "移动开单新增原生日期选择、多商品选择、固定合计与提交、回执反馈和继续开单。",
