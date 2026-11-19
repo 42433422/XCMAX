@@ -9,7 +9,7 @@ name: Evolution Orchestrator
 #   - workflow_dispatch: 手动触发
 #   - pull_request (closed): PR 合并后构建 employee_pack + 注册 catalog + 审核
 #
-# 生成器只允许创建 manifest.json / prompt.txt / skills.json 三个文件；
+# 生成器只允许创建 manifest / prompt / skills 与两个固定 runtime 文件；
 # 源码、制品和生产部署分别经过独立 PR / CI / 审核 / 回执门禁。
 
 on:
@@ -162,6 +162,7 @@ jobs:
           import os, sys, json
           from modstore_server.evolution_signal_collector import aggregate_signals
           from modstore_server.employee_pack_proposal import propose_employee_pack
+          from modstore_server.employee_pack_proposal_scaffold import unsupported_proposal_reason
           from modstore_server.gap_to_issue import open_issue_for_proposal
           from modstore_server.evolution_ledger import append_event
 
@@ -182,7 +183,7 @@ jobs:
                   fh.write('issue_url=\n')
               sys.exit(0)
 
-          print(f'Proposal: {proposal}')
+          print('Validated evolution proposal; retaining details for authorized processing.')
           with open(os.environ['EVOLUTION_PROPOSAL_PATH'], 'w', encoding='utf-8') as fh:
               json.dump(proposal, fh, ensure_ascii=False, sort_keys=True)
           try:
@@ -195,10 +196,20 @@ jobs:
               print(f'Failed to open issue: {e}', file=sys.stderr)
               append_event({'event_type': 'issue_open_failed', 'error': str(e), 'final_status': 'needs_human'})
               sys.exit(1)
+          reason = unsupported_proposal_reason(proposal)
+          if reason:
+              append_event({
+                  'event_type': 'source_generation_deferred', 'final_status': 'needs_human',
+                  'proposal_id': proposal['proposal_id'], 'triggered_by': proposal.get('triggered_by'),
+                  'issue_url': issue_url, 'reason': reason,
+              })
+              print(f'Bounded source generation deferred: {reason}; issue retained for review.')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as fh:
+              fh.write('scaffold_allowed=' + ('false' if reason else 'true') + '\n')
           "
 
       - name: Generate bounded employee-pack source and open PR
-        if: steps.scan.outputs.issue_url != ''
+        if: steps.scan.outputs.issue_url != '' && steps.scan.outputs.scaffold_allowed == 'true'
         working-directory: .
         env:
           ISSUE_URL: ${{ steps.scan.outputs.issue_url }}
@@ -208,10 +219,11 @@ jobs:
           python -m modstore_server.employee_pack_proposal_scaffold \
             --proposal-file "$EVOLUTION_PROPOSAL_PATH" \
             --repo-root "$GITHUB_WORKSPACE" \
-            > "$RUNNER_TEMP/evolution-scaffold.json"
-          source_dir="$(jq -r '.source_dir' "$RUNNER_TEMP/evolution-scaffold.json")"
-          package_id="$(jq -r '.package_id' "$RUNNER_TEMP/evolution-scaffold.json")"
-          version="$(jq -r '.version' "$RUNNER_TEMP/evolution-scaffold.json")"
+            --result-file "$RUNNER_TEMP/evolution-scaffold.json"
+          source_dir="$(jq -er '.source_dir' "$RUNNER_TEMP/evolution-scaffold.json")"
+          package_id="$(jq -er '.package_id' "$RUNNER_TEMP/evolution-scaffold.json")"
+          version="$(jq -er '.version' "$RUNNER_TEMP/evolution-scaffold.json")"
+          jq -e '.file_count == 5' "$RUNNER_TEMP/evolution-scaffold.json" > /dev/null
           test -n "$source_dir"
           test -d "$source_dir"
           test "$(find "$source_dir" -maxdepth 1 -type f | wc -l | tr -d ' ')" = "3"
@@ -228,7 +240,7 @@ jobs:
             --base main \
             --head "$branch" \
             --title "feat(evolution): add ${package_id} ${version} source" \
-            --body "Closes ${ISSUE_URL}. Autonomously generated from a repository-derived capability gap. The change is restricted to three employee-pack source files. CI, protected review, artifact packaging, MODstore deployment, production readback, and veto remain independent gates.")"
+            --body "Closes ${ISSUE_URL}. Autonomously generated from a repository-derived capability gap. The change is restricted to five employee-pack source files. CI, protected review, artifact packaging, MODstore deployment, production readback, and veto remain independent gates.")"
           gh pr merge "$pr_url" --auto --merge
           python FHD/scripts/dev/append_evolution_event.py \
             --event proactive_evolution_source_pr_opened || true
