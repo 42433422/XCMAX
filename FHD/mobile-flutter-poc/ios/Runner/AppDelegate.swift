@@ -79,11 +79,22 @@ import UIKit
       name: "xcagi/session_store",
       binaryMessenger: messenger
     ).setMethodCallHandler { [weak self] call, result in
-      guard call.method == "sessionFilePath" else {
+      switch call.method {
+      case "sessionFilePath":
+        result(self?.sessionFilePath())
+      case "localWorkspaceDirectory":
+        do {
+          result(try Self.localWorkspaceDirectory().path)
+        } catch {
+          result(FlutterError(
+            code: "LOCAL_WORKSPACE_DIRECTORY_FAILED",
+            message: "无法创建不参与备份的本地工作区",
+            details: nil
+          ))
+        }
+      default:
         result(FlutterMethodNotImplemented)
-        return
       }
-      result(self?.sessionFilePath())
     }
 
     FlutterMethodChannel(
@@ -183,6 +194,22 @@ import UIKit
     let directory = base.appendingPathComponent("XCAGI", isDirectory: true)
     try? manager.createDirectory(at: directory, withIntermediateDirectories: true)
     return directory.appendingPathComponent("xcagi_session.json").path
+  }
+
+  private static func localWorkspaceDirectory() throws -> URL {
+    let manager = FileManager.default
+    let base = try manager.url(
+      for: .applicationSupportDirectory,
+      in: .userDomainMask,
+      appropriateFor: nil,
+      create: true
+    )
+    var directory = base.appendingPathComponent("XCAGILocalWorkspace", isDirectory: true)
+    try manager.createDirectory(at: directory, withIntermediateDirectories: true)
+    var backup = URLResourceValues()
+    backup.isExcludedFromBackup = true
+    try directory.setResourceValues(backup)
+    return directory
   }
 
   private func parseDeepLinkRoute(_ url: URL) -> String? {

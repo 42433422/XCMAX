@@ -9,6 +9,7 @@ import 'package:drift_flutter/drift_flutter.dart';
 import 'package:flutter/foundation.dart' show ChangeNotifier, visibleForTesting;
 
 import '../platform/credential_cipher.dart';
+import '../platform/local_workspace_directory.dart';
 
 part 'local_workspace_peer.part.dart';
 
@@ -127,7 +128,14 @@ class LocalWorkspaceController extends ChangeNotifier {
         _cipher = cipher ?? const PlatformCredentialCipher();
 
   static final _shared = _WorkspaceDatabase(
-    driftDatabase(name: 'xcagi_local_workspace'),
+    driftDatabase(
+      name: 'xcagi_local_workspace',
+      native: Platform.isIOS
+          ? const DriftNativeOptions(
+              databaseDirectory: localWorkspaceDatabaseDirectory,
+            )
+          : null,
+    ),
   );
 
   final _WorkspaceDatabase _store;
