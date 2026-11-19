@@ -2,8 +2,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xcagi_flutter_poc/src/features/discover/discover_screen.dart';
 
 void main() {
-  test('inventory ledger retains web route while materials stays native', () {
+  test('inventory ledger and materials have distinct scoped native routes', () {
     expect(nativeMaterialsModForPath('/materials'), '');
+    expect(nativeInventoryModForPath('/inventory'), '');
+    expect(nativeInventoryModForPath('/mod/xcagi-erp-domain-bridge/inventory'),
+        'xcagi-erp-domain-bridge');
+    expect(nativeInventoryModForPath('/mod/erp/inventory'), isNull);
+    expect(nativeInventoryModForPath('/inventory?warehouse=2'), isNull);
+    expect(nativeInventoryModForPath('https://other/inventory'), isNull);
     expect(nativeMaterialsModForPath('/mod/erp/materials'), 'erp');
     for (final path in [
       '/inventory',

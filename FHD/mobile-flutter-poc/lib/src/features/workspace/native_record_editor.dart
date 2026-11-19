@@ -3,6 +3,7 @@ import '../../policy/mobile_error_policy.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/we_ui.dart';
 import 'native_workspace_session.dart';
+import 'workspace_ui.dart';
 
 class NativeFormField {
   const NativeFormField(this.key, this.label,
@@ -131,7 +132,7 @@ class _NativeRecordEditorState extends State<NativeRecordEditor> {
   @override
   Widget build(BuildContext context) => PopScope(
       canPop: !_busy,
-      child: Scaffold(
+      child: WorkspaceScaffold(
       backgroundColor: AppTheme.colors(context).page,
       body: SafeArea(
           child: Column(children: [
