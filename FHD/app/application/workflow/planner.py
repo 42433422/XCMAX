@@ -71,7 +71,9 @@ class LLMWorkflowPlanner:
 
         context = dict(context or {})
         for key in (
-            "planning_failure_reason", "planning_failure_kind", "plan_repair_trace",
+            "planning_failure_reason",
+            "planning_failure_kind",
+            "plan_repair_trace",
             "goal_coverage_rejected",
         ):
             context.pop(key, None)
