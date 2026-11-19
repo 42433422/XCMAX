@@ -26,7 +26,6 @@ from modstore_server.customer_ticket_intake_review import (
     IntakeReview,
     NegativeIntakeConfirmation,
     apply_original_ticket_reassessment,
-    cached_intake_review,
     intake_dispatch_block_reason,
     pending_intake_review,
 )
@@ -34,10 +33,10 @@ from modstore_server.customer_ticket_disposition import (
     NEGATIVE_NOTES,
     close_confirmed_intake,
     confirm_negative_intake,
-    has_linked_support_material,
     read_disposition,
 )
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
+from modstore_server.customer_service_chat_reply import read_chat_assessment, record_chat_only_reply
 from modstore_server.customer_service_ticket_view import serialize_ticket
 from modstore_server.customer_service_tools import json_loads
 from modstore_server.customer_service_triage import (
@@ -620,14 +619,7 @@ def intake_report_for_message(
     report = _peek_prior_user_issue(db, session=session, exclude_text=message)
     if not report:
         return "", None
-    replies = (
-        db.query(CustomerServiceMessage)
-        .filter_by(session_id=session.id, user_id=user.id, role="assistant")
-        .order_by(CustomerServiceMessage.id.desc())
-        .limit(8)
-        .all()
-    )
-    return report, cached_intake_review(report, (reply.payload_json for reply in replies))
+    return report, read_chat_assessment(db, session.id, user.id, report)
 
 
 def handle_customer_message(
@@ -963,76 +955,32 @@ def handle_customer_message(
             db, session=session, text=text, extracted=extracted
         )
     if not need_ticket:
-        if intake_review and intake_review.disposition != "actionable":
-            review_note = {
-                "invalid": "收到你说明的演练情景。",
-                "out_of_scope": "这项问题超出平台客服处理范围。",
-                "needs_review": "目前无法确认反馈的处理范围。",
-            }[intake_review.disposition]
-            reply = f"我是小C。{review_note}如需留存原文供管理员核实，可以点击「提交工单」。"
-        else:
-            reply = _facade()._chat_only_reply(text, intent=intent, user=user, db=db)
-        cards: list[_facade().Dict[str, _facade().Any]] = []
-        intake_assessment = {}
-        confirmation_offer = None
-        if intake_review is not None and reviewed_report:
-            intake_assessment = {
-                "report_sha256": hashlib.sha256(reviewed_report.encode()).hexdigest(),
-                "review": intake_review.model_dump(),
-            }
-            if (
-                intake_review.disposition in ("invalid", "out_of_scope")
-                and reviewed_report == text
-                and open_ticket is None
+        return record_chat_only_reply(
+            db,
+            original=user_msg,
+            user=user,
+            session=_facade().session_payload(session),
+            default_reply=(
+                ""
+                if intake_review and intake_review.disposition != "actionable"
+                else _facade()._chat_only_reply(text, intent=intent, user=user, db=db)
+            ),
+            intent=intent,
+            classified=classified,
+            extracted=extracted,
+            reviewed_report=reviewed_report,
+            intake_review=intake_review,
+            may_offer_confirmation=(
+                open_ticket is None
                 and not image_data_url
                 and not domain_clarify
-                and not has_linked_support_material(extracted)
-                and (intake_review.disposition == "invalid" or not _looks_like_product_issue(text))
-            ):
-                confirmation_offer = {
-                    "source_message_id": user_msg.id,
-                    "kind": intake_review.disposition,
-                }
-        assistant_msg = _facade().CustomerServiceMessage(
-            session_id=session.id,
-            ticket_id=target_ticket_id,
-            user_id=user.id,
-            role="assistant",
-            content=reply,
-            payload_json=_facade().json_dumps(
-                {
-                    "ticket": None,
-                    "decision": None,
-                    "actions": [],
-                    "cards": cards,
-                    "intent": classified,
-                    "intake_assessment": intake_assessment,
-                    **({"intake_confirmation": confirmation_offer} if confirmation_offer else {}),
-                }
+                and (
+                    intake_review is None
+                    or intake_review.disposition != "out_of_scope"
+                    or not _looks_like_product_issue(text)
+                )
             ),
         )
-        db.add(assistant_msg)
-        _facade().audit(
-            db,
-            event_type="chat_only_reply",
-            session_id=session.id,
-            actor=user,
-            detail={"intent": intent, "classified": classified, "extracted": extracted},
-        )
-        return {
-            "ok": True,
-            "session": _facade().session_payload(session),
-            "ticket": None,
-            "message": {
-                "role": "assistant",
-                "content": reply,
-                "payload": _facade().json_loads(assistant_msg.payload_json, {}),
-            },
-            "decision": None,
-            "actions": [],
-            "cards": cards,
-            "intent": classified,
-        }
     if (
         not known_original
         and open_ticket is not None
