@@ -116,9 +116,14 @@ def resume_worker_ready(workspace):
 
 
 def _save(db, row, status, **result):
+    db.refresh(row, with_for_update=True)
+    if row.status in {"blocked", "runner_stopped"} and status != row.status:
+        db.rollback()
+        return False
     row.status = status
     row.result_json = json_dumps({**json_loads(row.result_json, {}), **result})
     db.commit()
+    return True
 
 
 def _find_runner_id(github, repo, request_id):
@@ -441,13 +446,14 @@ def _ensure_runner(db, payload):
         run_id = _find_runner_id(github, repo, request_id)
         if run_id is None:
             return False  # Missing/ambiguous acknowledgement never resubmits.
-        _save(
+        if not _save(
             db,
             row,
             "requested",
             run_id=run_id,
             url=f"https://github.com/{repo}/actions/runs/{run_id}",
-        )
+        ):
+            return None
     run = github("GET", f"/repos/{repo}/actions/runs/{run_id}")
     if run.get("run_attempt") != 1 or run.get("status") == "completed":
         _save(db, row, "runner_stopped", conclusion=run.get("conclusion") or "unknown")
@@ -460,7 +466,8 @@ def _ensure_runner(db, payload):
         response.raise_for_status()
         ready = any(device_matches(d, workspace) for d in response.json().get("devices", []))
     if ready:
-        _save(db, row, "running")
+        if not _save(db, row, "running"):
+            return None
         issue = (
             db.query(CustomerServiceAction)
             .filter_by(ticket_id=row.ticket_id, action_type=ISSUE_ACTION)

@@ -618,6 +618,7 @@ def test_revoked_issued_runner_settles_without_another_github_post(
             assert db_outbox.mark_dispatched(record.id)
             assert runner._claim_worker_slot(db, next_action)
         runner._record_runner_submission(db, previous, "requested")
+        assert not runner._save(db, previous, "running")
         db.refresh(previous)
         assert previous.status == "runner_stopped"
         assert bridge.json_loads(previous.result_json, {})["run_id"] == 456
@@ -628,6 +629,43 @@ def test_revoked_issued_runner_settles_without_another_github_post(
         "/repos/42433422/XCMAX/issues",
         f"/repos/42433422/XCMAX/actions/workflows/{runner.WORKFLOW}/dispatches",
     ]
+
+
+def test_revocation_between_runner_ready_and_incident_publish(client, ticket, monkeypatch):
+    from modstore_server import customer_issue_intake as intake
+    from modstore_server import para_github_runner as runner
+
+    admin = app.dependency_overrides[require_admin]()
+    path = f"/api/customer-service/tickets/{ticket}"
+    assert (
+        client.post(
+            f"{path}/assign", json={"assignee_id": admin.id, "reason": "接手原工单"}
+        ).status_code
+        == 200
+    )
+    with get_session_factory()() as db:
+        original = db.get(CustomerServiceTicket, ticket)
+        payload = {
+            "ticket_id": ticket,
+            "user_id": original.user_id,
+            "github_workspace": {"action_id": 1},
+        }
+
+    def ready_during_revocation(_db, _payload):
+        stopped = client.post(
+            f"{path}/dispatch-revoke",
+            json={"request_id": str(uuid.uuid4()), "note": "撤销后续新派发，保留原工单处理记录。"},
+        )
+        assert stopped.status_code == 200
+        return True
+
+    monkeypatch.setattr(runner, "ensure_runner", ready_during_revocation)
+    monkeypatch.setattr(
+        "modstore_server.incident_bus.publish",
+        lambda *args, **kwargs: pytest.fail("Stale readiness must not publish another incident"),
+    )
+    result = intake.dispatch_issue_event({"id": "stale-ready-envelope", "data": payload})
+    assert result["ok"] is False and result["skipped"] is True
 
 
 def test_github_fix_receipt_is_bound_to_pushed_branch_and_commit(ticket, monkeypatch):

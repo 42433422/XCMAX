@@ -193,6 +193,13 @@ def dispatch_issue_event(event: dict[str, Any]) -> dict[str, Any]:
                 return {"ok": True, "skipped": True, "reason": "github_runner_stopped"}
             if not ready:
                 return {"ok": False, "skipped": True, "message": "等待 GitHub 临时执行器就绪"}
+            db.refresh(ticket)
+            if intake_dispatch_block_reason(ticket):
+                return {
+                    "ok": False,
+                    "skipped": True,
+                    "message": "工单已停止新派发，等待原 GitHub 执行回执",
+                }
     if payload.get("intake_source") == "private_mod_rework":
         from modstore_server.customer_issue_private_factory import (
             dispatch_private_rework,
