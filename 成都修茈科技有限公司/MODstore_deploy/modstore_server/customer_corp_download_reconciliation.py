@@ -6,8 +6,9 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Callable
 
+from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -263,3 +264,17 @@ def reconcile_corp_download_tickets() -> int:
                     db.commit()
                     count += 1
     return count
+
+
+def register_corp_download_job(
+    scheduler: Any, *, track_job: Callable[[str, Callable[[], Any]], Any]
+) -> None:
+    job_id = "customer_corp_download_reconciliation"
+    scheduler.add_job(
+        lambda: track_job(job_id, reconcile_corp_download_tickets),
+        IntervalTrigger(minutes=5),
+        id=job_id,
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+    )

@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
+from apscheduler.schedulers.background import BackgroundScheduler
 
 from modstore_server import customer_corp_download_reconciliation as site
 from modstore_server.api.deps import get_current_user
@@ -19,6 +20,7 @@ from modstore_server.models_cs import (
     CustomerServiceMessage,
     CustomerServiceTicket,
 )
+from modstore_server.scheduler_extensions import register_extensions
 from tests.test_customer_issue_delivery_pipeline import github_fixture, seed_repair
 from tests.test_customer_service_api import _make_user
 
@@ -29,6 +31,22 @@ REPORT = (
     "前者返回 200，显示 XCAGI 产品下载，后者返回 404；www 域名同样。"
     "预期：带末尾斜杠的分享链接也能进入同一下载页，或跳转到正确地址。实际故障可复现。"
 )
+
+
+def test_extension_starts_tracked_corp_download_reconciliation(monkeypatch):
+    scheduler = BackgroundScheduler()
+    runs = []
+    monkeypatch.setattr("modstore_server.para_task_events.start_task_event_listener", lambda: None)
+    monkeypatch.setattr(site, "reconcile_corp_download_tickets", lambda: 1)
+
+    def track(job_id, run):
+        runs.append(job_id)
+        return run()
+
+    register_extensions(scheduler, track_job=track)
+    job = scheduler.get_job("customer_corp_download_reconciliation")
+    assert job is not None and job.func() == 1
+    assert runs == [job.id]
 
 
 @pytest.fixture
