@@ -71,10 +71,10 @@ def build_source_files(proposal: Dict[str, Any]) -> Dict[str, str]:
     # it is copied into source. Proposal generation already pins this identity; the
     # second check here makes direct callers fail closed as well.
     package_id = _ALLOWLISTED_PACKAGE_ID
-    version = _bounded_text(proposal.get("target_version") or "1.0.0", limit=32)
+    version = str(proposal.get("target_version") or "1.0.0").strip()
     if not _PACK_NAME_RE.fullmatch(package_id):
         raise ProposalScaffoldError("unsafe package name")
-    if not _PACK_VERSION_RE.fullmatch(version):
+    if len(version) > 32 or not _PACK_VERSION_RE.fullmatch(version):
         raise ProposalScaffoldError("unsafe package version")
 
     skills = list(_SAFE_SKILLS)
@@ -279,7 +279,7 @@ def materialize_proposal(proposal: Dict[str, Any], *, repo_root: Path) -> Dict[s
 
     files = build_source_files(proposal)
     package_id = _ALLOWLISTED_PACKAGE_ID
-    version = _bounded_text(proposal.get("target_version") or "1.0.0", limit=32)
+    version = json.loads(files["manifest.json"])["version"]
     source_rel = Path(PACK_FILES_PREFIX) / f"{package_id}@{version}"
     source_dir = (repo_root / source_rel).resolve()
     repo_root_resolved = repo_root.resolve()

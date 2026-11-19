@@ -239,16 +239,17 @@ def propose_employee_pack(
     try:
         if strongest == "catalog_capability_gap":
             raw = _normalize_catalog_gap_proposal(raw, signals)
-        raw.setdefault("triggered_by", strongest)
-        raw.setdefault("signal_score", score)
+        # Routing provenance comes from the collected signal, never LLM output.
+        raw["triggered_by"] = strongest
+        raw["signal_score"] = score
         validate_proposal(raw)
     except (ProposalValidationError, TypeError, ValueError) as exc:
         if strongest != "catalog_capability_gap":
             raise
         logger.warning("unsafe LLM proposal replaced by bounded fallback: %s", exc)
         raw = _catalog_gap_fallback(signals)
-        raw.setdefault("triggered_by", strongest)
-        raw.setdefault("signal_score", score)
+        raw["triggered_by"] = strongest
+        raw["signal_score"] = score
         validate_proposal(raw)
     return raw
 

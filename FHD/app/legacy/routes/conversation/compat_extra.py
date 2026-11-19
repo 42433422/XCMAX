@@ -174,7 +174,7 @@ def conversations_save_message(
                 expected_revision=expected_revision,
             )
         except PermissionError as exc:
-            raise HTTPException(status_code=403, detail=str(exc)) from exc
+            raise HTTPException(status_code=403, detail="无权保存该消息。") from exc
         except ConversationRevisionError as exc:
             raise HTTPException(status_code=409, detail="会话已变更，请重新读取历史记录") from exc
         except ValueError as exc:
@@ -482,8 +482,8 @@ def conversations_delete_message(
             user_id=numeric_user_id,
             message_id=int(message_id),
         )
-    except PermissionError as exc:
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=403)
+    except PermissionError:
+        return JSONResponse({"success": False, "message": "无权撤回该消息。"}, status_code=403)
     except RECOVERABLE_ERRORS as exc:
         logger.error("conversations delete message: %s", exc)
         return JSONResponse({"success": False, "message": "撤回消息失败"}, status_code=500)

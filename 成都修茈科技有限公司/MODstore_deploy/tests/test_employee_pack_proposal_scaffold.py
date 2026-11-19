@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from modstore_server.employee_pack_proposal import (
+    PROPOSAL_SOURCES,
     ProposalValidationError,
     _call_llm,
     propose_employee_pack,
@@ -248,3 +249,47 @@ def test_llm_private_text_never_materializes_as_source(tmp_path):
         for path in source_dir.rglob("*")
         if path.is_file()
     )
+
+
+@pytest.mark.parametrize("source", PROPOSAL_SOURCES)
+def test_proposal_provenance_is_bound_to_the_selected_signal(source):
+    raw = propose_employee_pack(_signals(), llm_call=lambda _prompt: {})
+    raw.update(
+        triggered_by=(
+            "slo_metrics" if source == "catalog_capability_gap" else "catalog_capability_gap"
+        ),
+        signal_score=-100,
+    )
+    signals = _signals()
+    signals["catalog_capability_gap"]["signal_score"] = 0
+    signals[source]["signal_score"] = 0.9
+
+    proposal = propose_employee_pack(signals, llm_call=lambda _prompt: raw)
+
+    assert proposal["triggered_by"] == source
+    assert proposal["signal_score"] == 0.9
+    if source != "catalog_capability_gap":
+        with pytest.raises(ProposalScaffoldError, match="only allowlisted catalog"):
+            build_source_files(proposal)
+
+
+def test_materialized_version_matches_validated_manifest_and_directory(tmp_path):
+    proposal = propose_employee_pack(_signals(), llm_call=lambda _prompt: {})
+    proposal["target_version"] = " 1.2.3 "
+
+    result = materialize_proposal(proposal, repo_root=tmp_path)
+
+    source = tmp_path / result["source_dir"]
+    manifest = json.loads((source / "manifest.json").read_text())
+    assert result["version"] == manifest["version"] == "1.2.3"
+    assert source.name == "autonomy-gap-analyst@1.2.3"
+
+
+def test_version_suffix_cannot_hide_beyond_the_validation_limit(tmp_path):
+    proposal = propose_employee_pack(_signals(), llm_call=lambda _prompt: {})
+    proposal["target_version"] = "1.2." + "3" * 28 + "/unexpected"
+
+    with pytest.raises(ProposalScaffoldError, match="unsafe package version"):
+        materialize_proposal(proposal, repo_root=tmp_path)
+
+    assert not list(tmp_path.iterdir())
