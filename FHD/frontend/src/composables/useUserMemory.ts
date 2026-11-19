@@ -57,10 +57,11 @@ export function useUserMemory() {
   const memoryV2Creating = ref(false)
   const memoryV2BusyId = ref('')
   const memoryV2Error = ref('')
+  const memoryV2Saved = ref(false)
   const mutatingMemory = computed(() => Boolean(memoryV2BusyId.value || memoryV2Creating.value))
   const memoryV2StatusFilter = ref<'all' | MemoryV2Status>('all')
   const memoryV2TypeFilter = ref<'all' | MemoryV2Type>('all')
-  const initialDraft = { memoryType: 'preference' as MemoryV2Type, key: '', value: '', confidence: 0.7 }
+  const initialDraft = { memoryType: 'preference' as MemoryV2Type, key: '', value: '' }
   const memoryV2Draft = reactive({ ...initialDraft })
   const memoryV2Edit = reactive({ memoryId: '', key: '', value: '' })
   let generation = 0
@@ -121,7 +122,7 @@ export function useUserMemory() {
   async function mutate(
     busyId: string,
     errorKey: string,
-    action: (userId: string) => Promise<MemoryV2ApiResult>,
+    action: (userId: string, current: () => boolean) => Promise<MemoryV2ApiResult>,
     onSuccess?: () => void,
   ) {
     const userId = memoryV2UserId.value
@@ -132,8 +133,9 @@ export function useUserMemory() {
     if (busyId) memoryV2BusyId.value = busyId
     else memoryV2Creating.value = true
     memoryV2Error.value = ''
+    memoryV2Saved.value = false
     try {
-      const result = await action(userId)
+      const result = await action(userId, current)
       if (!current()) return
       if (result.success !== true) throw new Error(result.message || t(errorKey))
       onSuccess?.()
@@ -148,17 +150,42 @@ export function useUserMemory() {
     }
   }
 
-  async function createMemoryV2Candidate() {
-    const { key, value, memoryType, confidence } = memoryV2Draft
+  async function saveMemoryV2() {
+    const { key, value, memoryType } = memoryV2Draft
     if (!key.trim() || !value.trim()) {
+      memoryV2Saved.value = false
       await appAlert(t('settings.memoryFillKeyValue'))
       return
     }
-    await mutate('', 'settings.memoryCreateFailed', userId => memoryV2Api.createCandidate({
-      userId, memoryType, key: key.trim(), value: parseInput(value), confidence: Number(confidence), source: 'settings_ui',
-    }), () => {
+    await mutate('', 'settings.memorySaveFailed', async (userId, current) => {
+      const result = await memoryV2Api.createCandidate({
+        userId, memoryType, key: key.trim(), value: parseInput(value), confidence: 1, source: 'settings_ui',
+      })
+      if (!current() || result.success !== true) return result
+      const candidate = result.candidate
+      if (candidate?.status === 'rejected') {
+        return { success: false, message: t('settings.memorySaveRejected') }
+      }
+      const memoryId = typeof candidate?.memory_id === 'string' ? candidate.memory_id.trim() : ''
+      if (memoryId && candidate?.status === 'active' && candidate.eligible_for_planner === true) return result
+      if (!memoryId || candidate?.status !== 'pending') {
+        return { success: false, message: t('settings.memorySaveUnverified') }
+      }
+
+      // The authority deduplicates this candidate on a later, explicit save.
+      try {
+        const confirmed = await memoryV2Api.confirm(memoryId, userId)
+        const memory = confirmed.memory
+        if (confirmed.success === true && memory?.memory_id === memoryId &&
+          memory.status === 'active' && memory.eligible_for_planner === true) return confirmed
+      } catch {
+        // A timeout can occur after the confirmation committed.
+      }
+      return { success: false, message: t('settings.memorySaveUnconfirmed') }
+    }, () => {
       memoryV2Draft.key = ''
       memoryV2Draft.value = ''
+      memoryV2Saved.value = true
     })
   }
 
@@ -205,6 +232,7 @@ export function useUserMemory() {
     memoryV2Records.value = []
     memoryV2Loading.value = false
     memoryV2Error.value = ''
+    memoryV2Saved.value = false
     memoryV2BusyId.value = ''
     memoryV2Creating.value = false
     Object.assign(memoryV2Draft, initialDraft)
@@ -219,7 +247,7 @@ export function useUserMemory() {
   return {
     memoryV2UserId, memoryV2Records, memoryV2StatusFilters, memoryV2StatusFilter,
     memoryV2TypeOptions, memoryV2TypeFilter, memoryV2Loading, memoryV2Error, memoryV2Draft,
-    memoryV2Creating, memoryV2Edit, mutatingMemory, loadMemoryV2, createMemoryV2Candidate,
+    memoryV2Creating, memoryV2Edit, memoryV2Saved, mutatingMemory, loadMemoryV2, saveMemoryV2,
     confirmMemoryV2, rejectMemoryV2, startMemoryV2Edit, cancelMemoryV2Edit, saveMemoryV2Edit,
     deleteMemoryV2, memoryV2TypeLabel, memoryV2StatusLabel, memoryV2Time, memoryV2DisplayValue, canEditMemoryV2,
   }

@@ -34,7 +34,7 @@
 
       <p v-if="memoryV2Error" class="memory-v2-error" role="alert">{{ memoryV2Error }}</p>
 
-      <form class="memory-v2-form" @submit.prevent="createMemoryV2Candidate">
+      <form class="memory-v2-form" @submit.prevent="saveMemoryV2">
         <select
           v-model="memoryV2Draft.memoryType"
           class="settings-item__control settings-item__control--select memory-v2-form__type"
@@ -60,19 +60,12 @@
           :placeholder="$t('settings.memoryValue')"
           :disabled="mutatingMemory"
         />
-        <input
-          v-model.number="memoryV2Draft.confidence"
-          :aria-label="$t('settings.memoryConfidenceInput')"
-          class="settings-item__control settings-item__control--text memory-v2-form__confidence"
-          type="number"
-          min="0"
-          max="1"
-          step="0.05"
-          :disabled="mutatingMemory"
-        />
         <button type="submit" class="btn btn-sm btn-primary" :disabled="mutatingMemory">
-          {{ memoryV2Creating ? $t('settings.memoryWriting') : $t('settings.memoryWriteCandidate') }}
+          {{ memoryV2Creating ? $t('settings.memorySaving') : $t('settings.memorySave') }}
         </button>
+        <span v-if="memoryV2Saved && !memoryV2Draft.key && !memoryV2Draft.value" class="muted" role="status">
+          {{ $t('settings.memorySaved') }}
+        </span>
       </form>
 
       <p v-if="memoryV2Loading" class="memory-v2-state muted" role="status">
@@ -188,8 +181,8 @@ import { useUserMemory } from '@/composables/useUserMemory'
 const {
   memoryV2UserId, memoryV2Records, memoryV2StatusFilters, memoryV2StatusFilter,
   memoryV2TypeOptions, memoryV2TypeFilter, memoryV2Loading, memoryV2Error,
-  memoryV2Draft, memoryV2Creating, memoryV2Edit, mutatingMemory,
-  loadMemoryV2, createMemoryV2Candidate, confirmMemoryV2, rejectMemoryV2, startMemoryV2Edit,
+  memoryV2Draft, memoryV2Creating, memoryV2Edit, memoryV2Saved, mutatingMemory,
+  loadMemoryV2, saveMemoryV2, confirmMemoryV2, rejectMemoryV2, startMemoryV2Edit,
   cancelMemoryV2Edit, saveMemoryV2Edit, deleteMemoryV2, memoryV2TypeLabel, memoryV2StatusLabel,
   memoryV2Time, memoryV2DisplayValue, canEditMemoryV2,
 } = useUserMemory()

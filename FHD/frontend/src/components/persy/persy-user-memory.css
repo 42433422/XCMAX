@@ -55,11 +55,6 @@
   max-width: none;
 }
 
-.memory-v2-form__confidence {
-  width: 86px;
-  max-width: 86px;
-}
-
 .memory-v2-error {
   margin: 0 0 10px;
   padding: 8px 10px;
@@ -204,8 +199,7 @@
 @media (max-width: 768px) {
   .memory-v2-select,
   .memory-v2-form__type,
-  .memory-v2-form__input,
-  .memory-v2-form__confidence {
+  .memory-v2-form__input {
     flex: 1 1 100%;
     width: 100%;
     max-width: none;

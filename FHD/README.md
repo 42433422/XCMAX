@@ -92,7 +92,7 @@ cd XCMAX/FHD
 
 ## 对话上下文与技能的来源
 
-记忆与检索优先复用以下固定组件，产品代码保留身份、权限、确认和来源版本校验：
+记忆与检索优先复用以下固定组件。个人记忆表单参考 [Hermes Agent v0.23.2 的写入策略](https://github.com/NousResearch/hermes-agent/blob/v0.23.2/website/docs/user-guide/features/memory.md#controlling-memory-writes)（MIT），用户主动保存时复用 MemoryV2 的候选和确认接口。模型抽取的候选仍需审核，所有写入遵循现有权限和来源校验。
 
 | 能力 | 来源与版本 | 产品适配 |
 |---|---|---|

@@ -541,7 +541,7 @@ describe('PersyUserMemory functions – loadMemoryV2', () => {
   })
 })
 
-describe('PersyUserMemory functions – createMemoryV2Candidate', () => {
+describe('PersyUserMemory functions – saveMemoryV2', () => {
   beforeEach(resetSettingsTest)
 
   it('键或值为空时提示', async () => {
@@ -549,26 +549,104 @@ describe('PersyUserMemory functions – createMemoryV2Candidate', () => {
     const vm = wrapper.vm as any
     vm.memoryV2Draft.key = ''
     vm.memoryV2Draft.value = 'val'
-    await vm.createMemoryV2Candidate()
+    await vm.saveMemoryV2()
     expect(mockAppAlert).toHaveBeenCalledWith('请填写记忆键和值')
     expect(mockMemoryV2CreateCandidate).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 
-  it('成功创建候选记忆', async () => {
-    mockMemoryV2CreateCandidate.mockResolvedValue({ success: true })
+  const pendingMemory = { memory_id: 'mem_1', status: 'pending' }
+  const activeMemory = { ...pendingMemory, status: 'active', eligible_for_planner: true }
+
+  it('用一次保存完成候选登记和确认', async () => {
+    mockMemoryV2CreateCandidate.mockResolvedValue({ success: true, candidate: pendingMemory })
+    mockMemoryV2Confirm.mockResolvedValue({ success: true, memory: activeMemory })
     const wrapper = await mountUserMemoryPanel()
     const vm = wrapper.vm as any
     await wrapper.get('.memory-v2-form__type').setValue('entity')
     const fields = wrapper.findAll('.memory-v2-form__input')
     await fields[0].setValue('testKey')
     await fields[1].setValue('testValue')
-    await wrapper.get('.memory-v2-form__confidence').setValue('0.85')
+    expect(wrapper.get('.memory-v2-form button').text()).toBe('保存记忆')
     await wrapper.get('.memory-v2-form').trigger('submit')
     await flushPromises()
-    expect(mockMemoryV2CreateCandidate).toHaveBeenCalledWith(expect.objectContaining({ key: 'testKey', value: 'testValue', memoryType: 'entity', confidence: 0.85 }))
+    expect(mockMemoryV2CreateCandidate).toHaveBeenCalledWith(expect.objectContaining({ userId: '42', key: 'testKey', value: 'testValue', memoryType: 'entity', confidence: 1 }))
+    expect(mockMemoryV2Confirm).toHaveBeenCalledExactlyOnceWith('mem_1', '42')
+    expect(wrapper.get('.memory-v2-form [role="status"]').text()).toBe('记忆已保存')
     expect(vm.memoryV2Draft.key).toBe('')
     expect(vm.memoryV2Draft.value).toBe('')
+    wrapper.unmount()
+  })
+
+  it('已有可用记忆时按原记录保存且不重复确认', async () => {
+    mockMemoryV2CreateCandidate.mockResolvedValue({ success: true, created: false, candidate: activeMemory })
+    const wrapper = await mountUserMemoryPanel()
+    const vm = wrapper.vm as any
+    Object.assign(vm.memoryV2Draft, { key: '主题', value: '内容' })
+    await vm.saveMemoryV2()
+    expect(mockMemoryV2Confirm).not.toHaveBeenCalled()
+    expect(vm.memoryV2Draft.value).toBe('')
+    wrapper.unmount()
+  })
+
+  it.each([
+    [undefined, '未能核实'],
+    [{ status: 'pending', memory_id: ' ' }, '未能核实'],
+    [{ ...activeMemory, eligible_for_planner: false }, '未能核实'],
+    [{ ...pendingMemory, status: 'rejected' }, '已被拒绝'],
+  ])('候选状态不允许确认时保留草稿 %#', async (candidate, message) => {
+    mockMemoryV2CreateCandidate.mockResolvedValue({ success: true, candidate })
+    const wrapper = await mountUserMemoryPanel()
+    const vm = wrapper.vm as any
+    Object.assign(vm.memoryV2Draft, { key: '主题', value: '内容' })
+    await vm.saveMemoryV2()
+    await nextTick()
+    expect(mockMemoryV2Confirm).not.toHaveBeenCalled()
+    expect(wrapper.get('[role="alert"]').text()).toContain(message)
+    expect(wrapper.find('.memory-v2-form [role="status"]').exists()).toBe(false)
+    expect(vm.memoryV2Draft.value).toBe('内容')
+    wrapper.unmount()
+  })
+
+  it('确认结果未知时等待用户重试，并沿用同一条候选', async () => {
+    mockMemoryV2CreateCandidate
+      .mockResolvedValueOnce({ success: true, created: true, candidate: pendingMemory })
+      .mockResolvedValueOnce({ success: true, created: false, candidate: pendingMemory })
+    mockMemoryV2Confirm
+      .mockRejectedValueOnce(new Error('timeout'))
+      .mockResolvedValueOnce({ success: true, memory: activeMemory })
+    const wrapper = await mountUserMemoryPanel()
+    const vm = wrapper.vm as any
+    Object.assign(vm.memoryV2Draft, { key: '主题', value: '内容' })
+    await vm.saveMemoryV2()
+    await nextTick()
+    expect(mockMemoryV2Confirm).toHaveBeenCalledTimes(1)
+    expect(wrapper.get('[role="alert"]').text()).toContain('确认结果尚未核实')
+    expect(wrapper.find('.memory-v2-form [role="status"]').exists()).toBe(false)
+    expect(vm.memoryV2Draft.value).toBe('内容')
+    await vm.saveMemoryV2()
+    await nextTick()
+    expect(mockMemoryV2Confirm).toHaveBeenNthCalledWith(2, 'mem_1', '42')
+    expect(wrapper.get('.memory-v2-form [role="status"]').text()).toBe('记忆已保存')
+    wrapper.unmount()
+  })
+
+  it('候选返回前切换账号时不再发送确认请求', async () => {
+    let resolveCandidate!: (response: unknown) => void
+    mockMemoryV2CreateCandidate.mockReturnValueOnce(new Promise(done => { resolveCandidate = done }))
+    const wrapper = await mountUserMemoryPanel()
+    const vm = wrapper.vm as any
+    Object.assign(vm.memoryV2Draft, { key: '旧账号', value: '旧账号内容' })
+    const saving = vm.saveMemoryV2()
+    ++productReadAccountEpoch.value
+    mockMemoryAccount.localUserId = 45
+    Object.assign(vm.memoryV2Draft, { key: '新账号', value: '新账号草稿' })
+    resolveCandidate({ success: true, candidate: pendingMemory })
+    await saving
+    await flushPromises()
+    expect(mockMemoryV2Confirm).not.toHaveBeenCalled()
+    expect(wrapper.find('.memory-v2-form [role="status"]').exists()).toBe(false)
+    expect(vm.memoryV2Draft.value).toBe('新账号草稿')
     wrapper.unmount()
   })
 
@@ -578,7 +656,7 @@ describe('PersyUserMemory functions – createMemoryV2Candidate', () => {
     const vm = wrapper.vm as any
     vm.memoryV2Draft.key = 'testKey'
     vm.memoryV2Draft.value = 'testValue'
-    await vm.createMemoryV2Candidate()
+    await vm.saveMemoryV2()
     expect(vm.memoryV2Error).toContain('创建失败')
     wrapper.unmount()
   })
@@ -589,7 +667,7 @@ describe('PersyUserMemory functions – createMemoryV2Candidate', () => {
     const vm = wrapper.vm as any
     vm.memoryV2Draft.key = 'testKey'
     vm.memoryV2Draft.value = 'testValue'
-    await vm.createMemoryV2Candidate()
+    await vm.saveMemoryV2()
     expect(vm.memoryV2Error).toContain('网络错误')
     expect(vm.memoryV2Creating).toBe(false)
     wrapper.unmount()
