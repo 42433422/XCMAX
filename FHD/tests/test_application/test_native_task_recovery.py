@@ -196,7 +196,7 @@ with worker_claim_scope(repo, execution, execution.lease_owner):
         with sqlite3.connect(claim_path) as db:
             receipts = db.execute(
                 "SELECT owner, inflight, output_json FROM tool_idempotency"
-            ).fetchall()
+            ).fetchmany(3)
         assert len(receipts) == 2
         assert all(
             owner != old_owner and flag == 0 and json.loads(body)["success"]

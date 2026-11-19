@@ -18,6 +18,7 @@ from app.application.workflow.workflow_types import (
 )
 from app.db.db_base import Base
 from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime as WorkflowEngine
+from tests.fixtures.backend_ci_isolation import provision_native_checkpoint_schema
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
@@ -468,6 +469,7 @@ def test_restarted_confirmation_resumes_signed_durable_agent_run(
             session_id="sess",
         )
     # New service and repository objects, not the old in-memory run instance.
+    provision_native_checkpoint_schema(session_factory.kw["bind"])
     fresh = SQLAlchemyAgentRunRepository(session_factory=session_factory, auto_create=False)
     monkeypatch.setattr(
         "app.application.agent_orchestrator.AgentOrchestrator",

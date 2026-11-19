@@ -22,8 +22,8 @@ def test_mod_auto_publish_is_real_and_fail_closed() -> None:
     publish_job = workflow["jobs"]["package-and-publish"]
     assert publish_job["needs"] == "prepare"
     assert publish_job["if"] == (
-        "github.event_name == 'workflow_dispatch' && inputs.publish_release "
-        "&& needs.prepare.outputs.count != '0'"
+        "github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' "
+        "&& inputs.publish_release && needs.prepare.outputs.count != '0'"
     )
     publish = next(
         step for step in publish_job["steps"] if "publish_modstore.py" in step.get("run", "")

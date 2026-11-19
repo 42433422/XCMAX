@@ -9,6 +9,7 @@ from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
 from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
 from app.application.employee_runtime.task_continuity import ledger_path, load_employee_task_ledger
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, plan_to_dict
+from tests.fixtures.backend_ci_isolation import provision_native_checkpoint_schema
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
@@ -72,6 +73,7 @@ def test_sqlite_legacy_run_resume_uses_server_workspace(
         run.status = "waiting_user"
         run.steps[0].status = "waiting_user"
     repository.save(run)
+    provision_native_checkpoint_schema(engine)
     engine.dispose()
     # Reopen the database: this is not a reference to a previously mutated run.
     fresh_engine = create_engine(f"sqlite:///{tmp_path / 'runs.sqlite'}")

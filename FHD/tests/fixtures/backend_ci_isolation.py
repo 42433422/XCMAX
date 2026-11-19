@@ -10,6 +10,22 @@ from urllib.error import HTTPError
 import pytest
 
 
+def provision_native_checkpoint_schema(engine):
+    """Run the real offline migration before a test reopens guarded task storage."""
+    from pathlib import Path
+
+    from alembic.config import Config
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+    from alembic.script import ScriptDirectory
+
+    config = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
+    migration = ScriptDirectory.from_config(config).get_revision("2026_11_19_native_checkpoints")
+    assert migration is not None
+    with engine.connect() as db, Operations.context(MigrationContext.configure(db)):
+        migration.module.upgrade()
+
+
 @pytest.fixture
 def isolated_login_host_db(tmp_path, monkeypatch):
     from sqlalchemy import create_engine
