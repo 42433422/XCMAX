@@ -7,10 +7,10 @@ import ipaddress
 import os
 import re
 from html import unescape
-
-import httpx
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urljoin, urlparse
+
+import httpx
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
@@ -85,7 +85,7 @@ def is_fetchable_http_url(url: str) -> bool:
             parsed.scheme not in ("http", "https")
             or "@" in parsed.netloc
             or parsed.fragment
-            or parsed.port is not None and parsed.port <= 0
+            or (parsed.port is not None and parsed.port <= 0)
         ):
             return False
         return not _host_blocked(parsed.hostname or "")
@@ -127,7 +127,9 @@ async def fetch_page_text(
 
     try:
         # No ambient proxies or implicit redirects: both can bypass the initial URL check.
-        async with httpx.AsyncClient(timeout=deadline, trust_env=False, follow_redirects=False) as client:
+        async with httpx.AsyncClient(
+            timeout=deadline, trust_env=False, follow_redirects=False
+        ) as client:
             for _ in range(4):
                 target = await asyncio.to_thread(pin_url_outbound_safe, u)
                 async with client.stream(
