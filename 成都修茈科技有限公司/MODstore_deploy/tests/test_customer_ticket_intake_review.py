@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
+from fastapi.testclient import TestClient
 
 from modstore_server import customer_issue_api, customer_service_api, customer_service_orchestrator
 from modstore_server.app import app
@@ -23,6 +24,11 @@ from modstore_server.models_cs import CustomerServiceMessage, CustomerServiceTic
 from modstore_server.services import llm
 
 BASE = "/api/customer-service"
+
+
+@pytest.fixture
+def client(isolated_modstore):
+    return TestClient(app, client=(f"intake-test-{uuid4().hex}", 50000))
 
 
 @pytest.fixture
