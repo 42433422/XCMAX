@@ -227,7 +227,11 @@ def repair_plan(
     trace["initial_error"] = str(error)[:240]
     mentioned = _mentioned_nodes(error)
     trace["invalid_node_actions"] = [
-        {"node_id": node.node_id[:80], "tool_id": node.tool_id[:120], "action": node.action[:120]}
+        {
+            "node_id": node.node_id[:80],
+            "tool_id": node.tool_id[:120],
+            "action": node.action[:120],
+        }
         for node in (planned.nodes or [])
         if node.node_id in mentioned
     ][:5]
@@ -249,7 +253,8 @@ def repair_plan(
             user_message=message,
             error_code=code,
         )
-        trace["attempts"] += 1  # Count issued requests, including malformed responses and failures.
+        # Count issued requests, including malformed responses and failures.
+        trace["attempts"] += 1
         try:
             response = complete(
                 messages=messages,
