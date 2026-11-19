@@ -261,6 +261,7 @@ class PlannedWorkflowDispatch:
         if (plan.metadata or {}).get("planning_rejected") is True:
             reason = str((plan.metadata or {}).get("rejection_reason") or "").strip()
             unavailable = (plan.metadata or {}).get("planning_unavailable") is True
+            failure_kind = str((plan.metadata or {}).get("planning_failure_kind") or "")
             coverage_rejected = (plan.metadata or {}).get("goal_coverage_rejected") is True
             deterministic = (plan.metadata or {}).get("planning_source") == "deterministic_command"
             if deterministic and reason:
@@ -271,6 +272,18 @@ class PlannedWorkflowDispatch:
                     "请核对并补充任务要求后重试。"
                 )
                 reason = "任务目标、条件或顺序尚未核对完整"
+            elif failure_kind == "plan_repair_failed":
+                message_text = (
+                    "模型已返回任务计划，但计划校验和自动修复均未成功。"
+                    "本次没有执行任何业务操作。请重试。"
+                )
+            elif failure_kind == "plan_format_invalid":
+                message_text = (
+                    "模型已返回内容，但计划格式未通过校验，自动格式修复也未成功。"
+                    "本次没有执行任何业务操作。请重试。"
+                )
+            elif failure_kind == "planner_error":
+                message_text = "规划服务处理失败，本次没有执行任何业务操作。请重试。"
             elif unavailable and "余额不足" in reason:
                 message_text = f"{reason.rstrip('。')}。本次没有执行任何业务操作。"
             elif unavailable:
@@ -297,6 +310,12 @@ class PlannedWorkflowDispatch:
                     else "workflow_plan_rejected",
                     "execution_started": False,
                     **({"reason": reason[:240]} if reason else {}),
+                    **({"planning_failure_kind": failure_kind} if failure_kind else {}),
+                    **(
+                        {"planning_diagnostics": plan.metadata["plan_repair"]}
+                        if isinstance((plan.metadata or {}).get("plan_repair"), dict)
+                        else {}
+                    ),
                 },
             }
         if (plan.metadata or {}).get("response_mode") == "reply":
