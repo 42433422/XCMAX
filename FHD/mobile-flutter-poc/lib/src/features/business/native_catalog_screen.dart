@@ -355,7 +355,7 @@ class _NativeCatalogScreenState extends State<NativeCatalogScreen> {
   @override
   Widget build(BuildContext context) {
     final rows = _visibleRows;
-    return Scaffold(
+    return WorkspaceScaffold(
       backgroundColor: AppTheme.colors(context).page,
       body: SafeArea(
         child: Column(children: [

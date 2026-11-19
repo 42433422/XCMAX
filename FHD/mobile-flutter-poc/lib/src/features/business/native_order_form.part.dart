@@ -452,7 +452,7 @@ class _OrderFormState extends State<NativeOrderFormScreen> {
     final colors = AppTheme.colors(context);
     final canEdit = _session.active && _result == null;
     final amount = _lines.fold<num>(0, (total, line) => total + line.amount);
-    return Scaffold(
+    return WorkspaceScaffold(
       backgroundColor: colors.page,
       body: SafeArea(
         bottom: !canEdit,
@@ -757,7 +757,7 @@ class _ProductPickerState extends State<_ProductPicker> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) => WorkspaceScaffold(
         appBar: AppBar(title: const Text('选择产品')),
         backgroundColor: AppTheme.colors(context).page,
         bottomNavigationBar: !widget.session.active

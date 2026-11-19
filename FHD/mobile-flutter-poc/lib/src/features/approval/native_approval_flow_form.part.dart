@@ -160,7 +160,7 @@ class _ApprovalFlowFormState extends State<_ApprovalFlowForm> {
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     final colors = AppTheme.colors(context);
-    return Scaffold(
+    return WorkspaceScaffold(
       backgroundColor: colors.page,
       body: SafeArea(
         child: Column(

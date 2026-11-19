@@ -2,6 +2,39 @@ import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
 
+class WorkspaceScaffold extends StatelessWidget {
+  const WorkspaceScaffold({
+    super.key,
+    required this.backgroundColor,
+    required this.body,
+    this.appBar,
+    this.bottomNavigationBar,
+  });
+
+  final Color backgroundColor;
+  final Widget body;
+  final PreferredSizeWidget? appBar;
+  final Widget? bottomNavigationBar;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final actionColors = theme.brightness == Brightness.dark
+        ? scheme.copyWith(onPrimary: const Color(0xFF101333))
+        : scheme.copyWith(primary: const Color(0xFF5659D9));
+    return Theme(
+      data: theme.copyWith(colorScheme: actionColors),
+      child: Scaffold(
+        backgroundColor: backgroundColor,
+        appBar: appBar,
+        body: body,
+        bottomNavigationBar: bottomNavigationBar,
+      ),
+    );
+  }
+}
+
 class WorkspacePanel extends StatelessWidget {
   const WorkspacePanel({
     super.key,

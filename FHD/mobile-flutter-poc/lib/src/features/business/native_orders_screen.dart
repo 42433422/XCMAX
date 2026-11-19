@@ -145,7 +145,7 @@ class _NativeOrdersScreenState extends State<NativeOrdersScreen> {
   Widget build(BuildContext context) {
     final colors = AppTheme.colors(context);
     final scheme = Theme.of(context).colorScheme;
-    return Scaffold(
+    return WorkspaceScaffold(
       backgroundColor: colors.page,
       bottomNavigationBar: !_session.active
           ? null

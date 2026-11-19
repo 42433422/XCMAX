@@ -247,7 +247,7 @@ class _NativeApprovalWorkspaceState extends State<NativeApprovalWorkspace> {
   @override
   Widget build(BuildContext context) {
     final colors = AppTheme.colors(context);
-    return Scaffold(
+    return WorkspaceScaffold(
       backgroundColor: colors.page,
       body: SafeArea(
         child: Column(
@@ -702,7 +702,7 @@ class _ApprovalDetailState extends State<_ApprovalDetail> {
     final actions = !widget.session.active || detail == null
         ? const <String>[]
         : _actionLabel.keys.where((action) => _can(action, detail)).toList();
-    return Scaffold(
+    return WorkspaceScaffold(
       backgroundColor: colors.page,
       bottomNavigationBar: actions.isEmpty
           ? null

@@ -317,7 +317,7 @@ class _NativeMaterialsScreenState extends State<NativeMaterialsScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) => WorkspaceScaffold(
       backgroundColor: AppTheme.colors(context).page,
       body: SafeArea(
           child: Column(children: [

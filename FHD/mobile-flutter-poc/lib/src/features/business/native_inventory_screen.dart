@@ -361,7 +361,7 @@ class _NativeInventoryScreenState extends State<NativeInventoryScreen> {
   @override
   Widget build(BuildContext context) {
     final colors = AppTheme.colors(context);
-    return Scaffold(
+    return WorkspaceScaffold(
       backgroundColor: colors.page,
       body: SafeArea(
         child: Column(
@@ -769,7 +769,7 @@ class _InventoryProductPickerState extends State<_InventoryProductPicker> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) => WorkspaceScaffold(
         backgroundColor: AppTheme.colors(context).page,
         body: SafeArea(
           child: Column(

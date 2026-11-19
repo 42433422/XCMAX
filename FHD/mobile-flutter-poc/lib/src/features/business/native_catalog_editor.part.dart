@@ -162,7 +162,7 @@ class _CatalogEditorState extends State<_CatalogEditor> {
     final fields = _fields;
     final basics = fields.where(_isBasicField).toList();
     final details = fields.where((field) => !_isBasicField(field)).toList();
-    return Scaffold(
+    return WorkspaceScaffold(
       backgroundColor: colors.page,
       body: SafeArea(
         child: Column(
