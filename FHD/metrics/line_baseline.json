@@ -1,5 +1,5 @@
 {
   "lines": 2508224,
   "updated": "2026-11-19",
-  "note": "用户要求在统一 Flutter 主线上完成 HarmonyOS 构建并复用成熟组件。净增 1121 行主要为锁定上游 Stage Runner、Linux HAP 构建与校验、工具链 CI、系统扫码和密钥薄适配，原有 Android/iOS 依赖版本不变，提交评审。"
+  "note": "用户要求在同一 Flutter 工程构建 HarmonyOS 版。Stage Runner、锁定工具链、系统桥接与 HAP 校验实现按当前源码记录，ScanKit 插件使用 ArkTS 支持的显式构造字段；Android/iOS 锁定版本保持不变。"
 }

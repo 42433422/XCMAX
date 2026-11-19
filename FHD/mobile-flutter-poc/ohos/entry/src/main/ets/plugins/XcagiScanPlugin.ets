@@ -5,8 +5,11 @@ import { FlutterPlugin, FlutterPluginBinding, MethodCall, MethodCallHandler, Met
 
 export default class XcagiScanPlugin implements FlutterPlugin, MethodCallHandler {
   private channel?: MethodChannel;
+  private readonly context: common.UIAbilityContext;
 
-  constructor(private readonly context: common.UIAbilityContext) {}
+  constructor(context: common.UIAbilityContext) {
+    this.context = context;
+  }
 
   getUniqueClassName(): string {
     return 'XcagiScanPlugin';
