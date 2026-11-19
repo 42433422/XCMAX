@@ -16,11 +16,6 @@ $Version = Resolve-ProductVersion -Version $Version
 $Root = Resolve-Path (Join-Path $PSScriptRoot '..\..')
 $Src = Join-Path $Root 'templates\vue-dist'
 
-$skuEditionMap = @{
-  personal   = 'full'
-  enterprise = 'full'
-}
-
 if ($Build -or -not (Test-Path (Join-Path $Src 'index.html'))) {
   Push-Location (Join-Path $Root 'frontend')
   if (-not (Test-Path 'node_modules')) {

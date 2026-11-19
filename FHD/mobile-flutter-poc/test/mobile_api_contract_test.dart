@@ -620,12 +620,6 @@ void main() {
       expect(capturedAuthorization, 'Bearer market-access');
       expect(config.sku, 'personal');
       expect(MobileProductSkuConfig.remoteSku, 'personal');
-      expect(
-        MobileProductSkuConfig.isPersonal(
-          buildSku: MobileBuildConfig.productSku,
-        ),
-        isTrue,
-      );
       expect(config.profilePage.enabled, isTrue);
       expect(config.profilePage.subtitle, '账号、员工体系、工作台与执行端状态统一管理');
       expect(config.profilePage.statusReady, '资料、头像和工作台状态已同步');

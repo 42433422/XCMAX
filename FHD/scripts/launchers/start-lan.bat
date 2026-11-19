@@ -83,8 +83,8 @@ set "REPO_ROOT="
 
 REM ---- Repo root resolution -------------------------------------------------
 REM 1) XCAGI_ROOT   2) Phase A: ancestors only \<ancestor>\XCAGI\run.py
-REM 3) Phase B: named subfolders; FHD-个人 before FHD when both under same parent
-REM 4) %CD%   5) drive/profile candidates ^(FHD-个人 first^)
+REM 3) Phase B: named FHD subfolders
+REM 4) %CD%   5) drive/profile candidates
 
 for %%I in (
     "%SCRIPT_DIR%."
@@ -112,35 +112,24 @@ if not defined REPO_ROOT for %%I in (
     "%SCRIPT_DIR%..\..\..\..\..\.."
     "%SCRIPT_DIR%..\..\..\..\..\..\.."
 ) do (
-    if not defined REPO_ROOT if exist "%%~fI\FHD-个人\XCAGI\run.py" set "REPO_ROOT=%%~fI\FHD-个人"
     if not defined REPO_ROOT if exist "%%~fI\FHD\XCAGI\run.py" set "REPO_ROOT=%%~fI\FHD"
-    if not defined REPO_ROOT if exist "%%~fI\XCMAX\FHD-个人\XCAGI\run.py" set "REPO_ROOT=%%~fI\XCMAX\FHD-个人"
     if not defined REPO_ROOT if exist "%%~fI\XCMAX\FHD\XCAGI\run.py" set "REPO_ROOT=%%~fI\XCMAX\FHD"
 )
 
 if not defined REPO_ROOT (
     if exist "%CD%\XCAGI\run.py" set "REPO_ROOT=%CD%"
-    if not defined REPO_ROOT if exist "%CD%\FHD-个人\XCAGI\run.py" set "REPO_ROOT=%CD%\FHD-个人"
     if not defined REPO_ROOT if exist "%CD%\FHD\XCAGI\run.py" set "REPO_ROOT=%CD%\FHD"
-    if not defined REPO_ROOT if exist "%CD%\XCMAX\FHD-个人\XCAGI\run.py" set "REPO_ROOT=%CD%\XCMAX\FHD-个人"
     if not defined REPO_ROOT if exist "%CD%\XCMAX\FHD\XCAGI\run.py" set "REPO_ROOT=%CD%\XCMAX\FHD"
 )
 
 if not defined REPO_ROOT (
     for %%D in (
-        "%~d0\XCMAX\FHD-个人"
         "%~d0\XCMAX\FHD"
-        "%~d0\FHD-个人"
         "%~d0\FHD"
-        "%SystemDrive%\XCMAX\FHD-个人"
         "%SystemDrive%\XCMAX\FHD"
-        "%SystemDrive%\FHD-个人"
         "%SystemDrive%\FHD"
-        "%USERPROFILE%\XCMAX\FHD-个人"
         "%USERPROFILE%\XCMAX\FHD"
-        "%USERPROFILE%\Desktop\XCMAX\FHD-个人"
         "%USERPROFILE%\Desktop\XCMAX\FHD"
-        "%USERPROFILE%\Documents\XCMAX\FHD-个人"
         "%USERPROFILE%\Documents\XCMAX\FHD"
     ) do (
         if not defined REPO_ROOT if exist "%%~fD\XCAGI\run.py" set "REPO_ROOT=%%~fD"
@@ -155,19 +144,13 @@ if not defined REPO_ROOT (
     echo 解决方法 ^(任选其一^):
     echo   A^) 把 start-lan.bat 放回 仓库\scripts\launchers\ 下双击
     echo   B^) 设置环境变量 XCAGI_ROOT 指向包含 XCAGI\run.py 的目录, 例如:
-    echo        setx XCAGI_ROOT "E:\XCMAX\FHD-个人"  或  "E:\XCMAX\FHD"
+    echo        setx XCAGI_ROOT "E:\XCMAX\FHD"
     echo      然后重新打开本脚本
     echo   C^) 在命令行里 cd 到对应仓库根后再运行 start-lan.bat
     echo.
     pause
     exit /b 1
 )
-
-REM If this resolves to FHD and sibling FHD-personal exists, force personal repo.
-REM This also handles old shortcuts and old XCAGI_ROOT values.
-set "REPO_ROOT_FIX=!REPO_ROOT!"
-for /f "usebackq delims=" %%G in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$r = $env:REPO_ROOT_FIX; if (-not $r) { exit }; $r = $r -replace '[\\/]+$',''; $leaf = [System.IO.Path]::GetFileName($r); if ($leaf -cne 'FHD') { exit }; $parent = [System.IO.Path]::GetDirectoryName($r); $p = [System.IO.Path]::Combine($parent, ('FHD-' + [char]0x4E2A + [char]0x4EBA)); if (Test-Path -LiteralPath ([System.IO.Path]::Combine($p, 'XCAGI', 'run.py'))) { Write-Output $p }"`) do set "REPO_ROOT=%%G"
-set "REPO_ROOT_FIX="
 
 echo [INFO] 已定位仓库根: %REPO_ROOT%
 cd /d "%REPO_ROOT%"

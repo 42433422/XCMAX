@@ -3,11 +3,11 @@
     <header class="license-header">
       <p class="eyebrow">XCAGI 使用方案</p>
       <h1>选择适合你的方案</h1>
-      <p>个人使用版可免费开通。付费方案完成支付后即可在 XCAGI 桌面端登录使用。</p>
+      <p>个人使用版可免费开通。付费方案完成支付后即可在 XCAGI 登录使用。</p>
     </header>
 
     <div v-if="errorMessage" class="error" role="alert">{{ errorMessage }}</div>
-    <div v-if="personalActivated" class="flow-note" role="status">个人使用版已开通，已赠送 5 元 AI 使用额度。请回到 XCAGI 桌面端登录。</div>
+    <div v-if="personalActivated" class="flow-note" role="status">个人使用版已开通，已赠送 5 元 AI 使用额度。请回到 XCAGI 登录。</div>
     <div v-if="loading" class="loading">正在加载方案…</div>
     <section v-else class="license-grid" aria-label="XCAGI 使用方案">
       <article
@@ -34,7 +34,7 @@
 
     <aside class="flow-note">
       <strong>接下来</strong>
-      <span>付费方案通过支付宝完成支付。方案生效后，回到 XCAGI 桌面端登录即可。</span>
+      <span>付费方案通过支付宝完成支付。方案生效后，回到 XCAGI 登录即可。</span>
     </aside>
   </main>
 </template>
@@ -43,6 +43,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '@/api'
+import { xcagiRegistrationSource } from '@/authPaths'
 import { useAuthStore } from '@/stores/auth'
 import type { AccountLicensePlan } from '@/domain/payment/types'
 
@@ -79,7 +80,7 @@ function planActionLabel(plan: AccountLicensePlan) {
 
 async function buy(plan: AccountLicensePlan) {
   if (!authStore.hasToken()) {
-    await router.push({ name: 'login', query: { redirect: route.fullPath } })
+    await router.push({ name: 'login', query: { redirect: route.fullPath, source: xcagiRegistrationSource(route) } })
     return
   }
   if (checkingOut.value) return

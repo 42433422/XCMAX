@@ -155,8 +155,24 @@ class ModContextMiddleware:
             session_has_personal_plan,
         )
 
-        sid = StarletteRequest(scope).cookies.get(os.environ.get("SESSION_COOKIE_NAME", "session_id"))
-        personal_plan = bool(sid and enterprise_mod_filter_active() and session_has_personal_plan(sid))
+        personal_plan = False
+        if enterprise_mod_filter_active():
+            from app.infrastructure.auth.dependencies import session_id_from_request
+            from app.security.mobile_jwt import verify_mobile_jwt
+
+            request = StarletteRequest(scope)
+            cookie_sid = request.cookies.get(
+                os.environ.get("SESSION_COOKIE_NAME", "session_id"), ""
+            )
+            sid = cookie_sid or session_id_from_request(request)
+            authorization = request.headers.get("Authorization", "")
+            if authorization.startswith("Bearer "):
+                payload = verify_mobile_jwt(authorization[7:].strip())
+                if payload and payload.get("typ") == "access":
+                    sid = str(payload.get("session_id") or "").strip()
+            personal_plan = any(
+                session_has_personal_plan(candidate) for candidate in {sid, cookie_sid} if candidate
+            )
         with request_entitlement_scope(personal_plan=personal_plan):
             await self._dispatch(scope, receive, send)
 

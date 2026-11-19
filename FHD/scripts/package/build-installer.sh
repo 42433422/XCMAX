@@ -4,7 +4,11 @@ set -euo pipefail
 
 . "$(dirname "${BASH_SOURCE[0]}")/../deploy/lib/version.sh"
 VERSION="${1:-$(product_version)}"
-SKU="${2:-}"
+if [[ "${2:-enterprise}" != enterprise ]]; then
+  echo "[err] desktop installer supports only the enterprise SKU" >&2
+  exit 1
+fi
+SKU=enterprise
 VERSION="${VERSION#FHD/}"
 VERSION="${VERSION#[vV]}"
 # workflow_dispatch on branch can leave ref_name=main; never feed that to npm version
@@ -48,34 +52,8 @@ if [ -n "${XCAGI_UPDATE_ED25519_PRIVATE_KEY_FILE:-}" ] && [ -f "${XCAGI_UPDATE_E
   export XCAGI_UPDATE_ED25519_PRIVATE_KEY="$(cat "${XCAGI_UPDATE_ED25519_PRIVATE_KEY_FILE}")"
 fi
 
-sku_label() {
-  case "$1" in
-    personal) echo Personal ;;
-    enterprise) echo Enterprise ;;
-    *) echo "Unknown SKU: $1" >&2; exit 1 ;;
-  esac
-}
-
-sku_app_id() {
-  case "$1" in
-    personal) echo com.xcagi.desktop.personal ;;
-    enterprise) echo com.xcagi.desktop.enterprise ;;
-    *) echo "Unknown SKU: $1" >&2; exit 1 ;;
-  esac
-}
-
-sku_update_url() {
-  case "$1" in
-    personal) echo https://xiu-ci.com/releases/stable/personal/ ;;
-    enterprise) echo https://xiu-ci.com/releases/stable/enterprise/ ;;
-    *) echo "Unknown SKU: $1" >&2; exit 1 ;;
-  esac
-}
-
-build_one_sku() {
-  local sku="$1"
-  local label
-  label="$(sku_label "$sku")"
+build_installer() {
+  local sku="${SKU}" label=Enterprise
   local out_dir="${ROOT}/release/xcagi-v${VERSION}/${sku}"
   # Desktop/iCloud FileProvider can continuously re-attach FinderInfo xattrs to
   # an app bundle under the checkout, which makes codesign reject nested
@@ -143,8 +121,8 @@ PY
       "--config.electronDist=node_modules/electron/dist" \
       "--config.directories.output=${package_stage}" \
       "--config.artifactName=${artifact_name}" \
-      "--config.appId=$(sku_app_id "$sku")" \
-      "--config.publish.url=$(sku_update_url "$sku")" \
+      "--config.appId=com.xcagi.desktop.enterprise" \
+      "--config.publish.url=https://xiu-ci.com/releases/stable/enterprise/" \
       "--config.dmg.title=XCAGI${label}" \
       "--config.extraMetadata.productSku=${sku}"); then
       package_ok=1
@@ -177,7 +155,7 @@ PY
   esac
   # hdiutil on this Mac rejects both spaces and the hyphenated name
   # XCAGI-Enterprise ("could not access /Volumes/XCAGI-Enterprise/XCAGI.app").
-  # Keep the public file name, and mount as XCAGIEnterprise / XCAGIPersonal.
+  # Keep the public file name, and mount as XCAGIEnterprise.
   local dmg_volume_name="XCAGI${label}"
   if [ -n "${XCAGI_DMG_VOLUME_SUFFIX:-}" ]; then
     dmg_volume_name="${dmg_volume_name}-${XCAGI_DMG_VOLUME_SUFFIX}"
@@ -213,21 +191,4 @@ PY
   echo "Done: ${out_dir}/"
 }
 
-if [ -z "${SKU}" ]; then
-  echo "Usage: $0 <version> <personal|enterprise>"
-  echo "   or: $0 <version> all"
-  exit 1
-fi
-
-if [ "${SKU}" = "all" ]; then
-  mkdir -p "${ROOT}/release/xcagi-v${VERSION}"/{personal,enterprise}
-  for s in personal enterprise; do
-    build_one_sku "${s}"
-  done
-  echo "Both macOS SKUs under release/xcagi-v${VERSION}/"
-else
-  case "${SKU}" in
-    personal|enterprise) build_one_sku "${SKU}" ;;
-    *) echo "Invalid SKU: ${SKU}" >&2; exit 1 ;;
-  esac
-fi
+build_installer

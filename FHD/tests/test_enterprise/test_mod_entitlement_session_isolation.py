@@ -272,7 +272,9 @@ async def test_session_expiry_applies_even_with_fresh_entitlement_ttl(
 @pytest.mark.asyncio
 async def test_personal_plan_cannot_use_bundled_or_customer_mods(monkeypatch):
     from app.infrastructure.mods.mod_auth import ModContextMiddleware
+    from app.security.mobile_jwt import issue_mobile_tokens
 
+    monkeypatch.setenv("SESSION_COOKIE_NAME", "session_id")
     monkeypatch.setattr(entitlements, "session_has_personal_plan", lambda sid: sid == "free")
     visible = []
 
@@ -283,10 +285,12 @@ async def test_personal_plan_cannot_use_bundled_or_customer_mods(monkeypatch):
         return {"type": "http.disconnect"}
 
     middleware = ModContextMiddleware(application)
-    for sid in ("free", "enterprise"):
-        await middleware(
-            {"type": "http", "path": "/list", "headers": [(b"cookie", f"session_id={sid}".encode())]},
-            unused,
-            unused,
-        )
-    assert visible == [False, True]
+    mobile = issue_mobile_tokens(user_id=1, session_id="free")
+    for headers in (
+        [(b"cookie", b"session_id=free"), (b"x-session-id", b"enterprise")],
+        [(b"cookie", b"session_id=enterprise")],
+        [(b"authorization", f"Bearer {mobile['access_token']}".encode())],
+        [(b"authorization", f"Bearer {mobile['refresh_token']}".encode())],
+    ):
+        await middleware({"type": "http", "path": "/list", "headers": headers}, unused, unused)
+    assert visible == [False, True, False, True]

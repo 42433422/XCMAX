@@ -200,7 +200,7 @@ async def mobile_auth_register(body: MobileRegisterRequest):
                 "desktop_access": False,
                 "purchase_url": payload.get("purchase_url"),
             },
-            message="注册成功，请选择套餐并完成支付",
+            message="注册成功，请选择 XCAGI 方案",
         )
     data = _mobile_auth_success_payload(
         payload,

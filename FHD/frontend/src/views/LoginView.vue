@@ -69,7 +69,6 @@ const {
   tryAutoLogin,
   switchLoginMode,
   formatLoginFailurePayload,
-  selectEnterpriseLogin,
   selectAdminLogin,
   submitLogin,
   startOidcLogin,
@@ -139,7 +138,7 @@ onUnmounted(() => {
 
     <!-- 右侧登录区 -->
     <section class="login-panel" aria-labelledby="login-heading" aria-describedby="login-data-processing-notice">
-      <LoginAccountActions v-if="!isAdminConsoleSpa()" :enterprise="isEnterpriseEdition" />
+      <LoginAccountActions v-if="!isAdminConsoleSpa()" />
 
       <div class="login-panel-inner">
         <h1 id="login-heading" class="login-heading">{{ loginHeading }}</h1>

@@ -81,7 +81,7 @@ describe('AccountLicensePlansView', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('选择适合你的方案')
-    expect(wrapper.text()).toContain('完成支付后即可在 XCAGI 桌面端登录使用')
+    expect(wrapper.text()).toContain('完成支付后即可在 XCAGI 登录使用')
     expect(wrapper.text()).toContain('30 天全功能体验')
     expect(wrapper.text()).not.toContain('账号授权')
     expect(wrapper.text()).not.toContain('VIP / SVIP')
@@ -109,10 +109,10 @@ describe('AccountLicensePlansView', () => {
     expect(wrapper.text()).not.toContain('database DSN leaked')
   })
 
-  it('sends an anonymous visitor to the separate login page', async () => {
+  it('preserves the mobile source while asking a visitor to log in', async () => {
     hasTokenMock.mockReturnValue(false)
     const router = makeRouter()
-    await router.push('/account-plans')
+    await router.push('/account-plans?source=xcagi-mobile')
     await router.isReady()
     const wrapper = mount(AccountLicensePlansView, { global: { plugins: [router] } })
     await flushPromises()
@@ -120,6 +120,10 @@ describe('AccountLicensePlansView', () => {
     await wrapper.find('button').trigger('click')
     await flushPromises()
     expect(router.currentRoute.value.name).toBe('login')
+    expect(router.currentRoute.value.query).toEqual({
+      redirect: '/account-plans?source=xcagi-mobile',
+      source: 'xcagi-mobile',
+    })
     expect(apiMock.paymentCheckout).not.toHaveBeenCalled()
   })
 })

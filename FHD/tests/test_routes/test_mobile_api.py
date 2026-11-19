@@ -298,6 +298,29 @@ class TestMobileAuthLoginLogic:
 
 
 class TestMobileAuthLoginRoute:
+    def test_personal_plan_login_keeps_shared_account_kind(self, client: TestClient, monkeypatch):
+        async def fake_auth_login(request, payload):
+            return {
+                "success": True,
+                "session_id": "personal-plan-session",
+                "user": {"id": 1, "username": "personal", "role": "user"},
+                "account_kind": "enterprise",
+                "personal_plan": True,
+            }
+
+        monkeypatch.setenv("SECRET_KEY", _TEST_JWT_SECRET)
+        monkeypatch.setattr(
+            "app.fastapi_routes.domains.auth.auth_routes.auth_login", fake_auth_login
+        )
+        resp = client.post(
+            "/api/mobile/v1/auth/login",
+            json={"username": "personal", "password": "personal-pass"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert data["account_kind"] == "enterprise"
+        assert data["personal_plan"] is True
+
     def test_admin_login_retries_with_admin_account_kind(self, client: TestClient, monkeypatch):
         from fastapi.responses import JSONResponse
 

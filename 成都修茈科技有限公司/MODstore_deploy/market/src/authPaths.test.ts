@@ -3,8 +3,6 @@ import {
   safeRedirectPath,
   pickRedirectFromRoute,
   DEFAULT_POST_AUTH,
-  DEFAULT_POST_REGISTER,
-  isXcagiDesktopRegistration,
   pickRegistrationNextFromRoute,
 } from './authPaths'
 
@@ -68,20 +66,23 @@ describe('DEFAULT_POST_AUTH', () => {
 
 describe('registration lifecycle redirect', () => {
   it('always continues from account creation to plan selection', () => {
-    expect(DEFAULT_POST_REGISTER).toEqual({
-      name: 'account-plans',
-      query: { plan: 'saas-trial-30' },
-    })
     expect(pickRegistrationNextFromRoute({ query: { redirect: '/workbench/home' } })).toEqual({
       name: 'account-plans',
       query: { plan: 'saas-trial-30' },
     })
   })
 
-  it('preserves only the known desktop source', () => {
-    expect(pickRegistrationNextFromRoute({ query: { source: 'xcagi-desktop' } })).toEqual({
+  it.each(['xcagi-desktop', 'xcagi-mobile'])('keeps the %s source when choosing a plan', (source) => {
+    expect(pickRegistrationNextFromRoute({ query: { source: [source, 'ignored'] } })).toEqual({
       name: 'account-plans',
-      query: { plan: 'saas-trial-30', source: 'xcagi-desktop' },
+      query: { plan: 'saas-trial-30', source },
+    })
+  })
+
+  it('drops unknown sources', () => {
+    expect(pickRegistrationNextFromRoute({ query: { source: '//external.example' } })).toEqual({
+      name: 'account-plans',
+      query: { plan: 'saas-trial-30' },
     })
   })
 })
@@ -90,6 +91,13 @@ describe('pickRedirectFromRoute', () => {
   it('returns redirect path from query', () => {
     const route = { query: { redirect: '/wallet' } }
     expect(pickRedirectFromRoute(route)).toBe('/wallet')
+  })
+
+  it('continues to plan selection after a mobile user logs in without a redirect', () => {
+    expect(pickRedirectFromRoute({ query: { source: 'xcagi-mobile' } })).toEqual({
+      name: 'account-plans',
+      query: { plan: 'saas-trial-30', source: 'xcagi-mobile' },
+    })
   })
 
   it('returns default when no redirect in query', () => {
@@ -110,18 +118,5 @@ describe('pickRedirectFromRoute', () => {
   it('sanitizes redirect path', () => {
     const route = { query: { redirect: '/login' } }
     expect(pickRedirectFromRoute(route)).toBe('/workbench/home')
-  })
-})
-
-describe('isXcagiDesktopRegistration', () => {
-  it('accepts only the fixed desktop source contract', () => {
-    expect(isXcagiDesktopRegistration({ query: { source: 'xcagi-desktop' } })).toBe(true)
-    expect(isXcagiDesktopRegistration({ query: { source: ['xcagi-desktop', 'web'] } })).toBe(true)
-  })
-
-  it('fails closed for missing or unknown sources', () => {
-    expect(isXcagiDesktopRegistration({ query: {} })).toBe(false)
-    expect(isXcagiDesktopRegistration({ query: { source: 'desktop' } })).toBe(false)
-    expect(isXcagiDesktopRegistration({ query: { source: '//external.example' } })).toBe(false)
   })
 })

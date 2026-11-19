@@ -94,50 +94,28 @@ describe('RegisterView', () => {
     })
   })
 
-  it('sends ordinary web registration to plan selection', async () => {
-    router.push('/register')
-    await router.isReady()
-    const replaceSpy = vi.spyOn(router, 'replace')
-    registerMock.mockResolvedValue({ ok: true })
+  it.each([undefined, 'xcagi-desktop', 'xcagi-mobile'])(
+    'sends registration from %s to plan selection',
+    async (source) => {
+      await router.push({ name: 'register', query: { source } })
+      const replaceSpy = vi.spyOn(router, 'replace')
+      registerMock.mockResolvedValue({ ok: true })
 
-    const wrapper = mount(RegisterView, { global: { plugins: [router] } })
-    await wrapper.find('input[autocomplete="username"]').setValue('web-user')
-    await wrapper.find('input[type="email"]').setValue('web@example.test')
-    await wrapper.find('.input-code').setValue('123456')
-    await wrapper.find('input[type="password"]').setValue('secret123')
-    await wrapper.find('form').trigger('submit')
-    await flushPromises()
+      const wrapper = mount(RegisterView, { global: { plugins: [router] } })
+      expect(wrapper.text()).toContain('创建 XCAGI 账号')
+      expect(wrapper.get('a').text()).toBe('登录')
+      await wrapper.find('input[autocomplete="username"]').setValue('xcagi-user')
+      await wrapper.find('input[type="email"]').setValue('user@example.test')
+      await wrapper.find('.input-code').setValue('123456')
+      await wrapper.find('input[type="password"]').setValue('secret123')
+      await wrapper.find('form').trigger('submit')
+      await flushPromises()
 
-    expect(registerMock).toHaveBeenCalledWith('web-user', 'secret123', 'web@example.test', '123456')
-    expect(replaceSpy).toHaveBeenCalledWith({
-      name: 'account-plans',
-      query: { plan: 'saas-trial-30' },
-    })
-  })
-
-  it('shows a desktop-specific handoff after the same registration call without entering web workbench', async () => {
-    router.push('/register?source=xcagi-desktop')
-    await router.isReady()
-    const replaceSpy = vi.spyOn(router, 'replace')
-    registerMock.mockResolvedValue({ ok: true })
-
-    const wrapper = mount(RegisterView, { global: { plugins: [router] } })
-    expect(wrapper.text()).toContain('来自 XCAGI 桌面端')
-    expect(wrapper.text()).toContain('一个账号即可在网页和 XCAGI 桌面端使用')
-    expect(wrapper.text()).toContain('已有账号？回到 XCAGI 桌面端登录')
-    expect(wrapper.find('a[href="/login"]').exists()).toBe(false)
-    await wrapper.find('input[autocomplete="username"]').setValue('desktop-user')
-    await wrapper.find('input[type="email"]').setValue('desktop@example.test')
-    await wrapper.find('.input-code').setValue('654321')
-    await wrapper.find('input[type="password"]').setValue('secret123')
-    await wrapper.find('form').trigger('submit')
-    await flushPromises()
-
-    expect(registerMock).toHaveBeenCalledWith('desktop-user', 'secret123', 'desktop@example.test', '654321')
-    expect(wrapper.text()).toContain('账号注册成功')
-    expect(wrapper.text()).toContain('选择适合的 XCAGI 方案')
-    expect(wrapper.text()).toContain('随后回到桌面端登录即可')
-    expect(wrapper.text()).not.toContain('账号授权')
-    expect(replaceSpy).not.toHaveBeenCalled()
-  })
+      expect(registerMock).toHaveBeenCalledWith('xcagi-user', 'secret123', 'user@example.test', '123456')
+      expect(replaceSpy).toHaveBeenCalledWith({
+        name: 'account-plans',
+        query: { plan: 'saas-trial-30', ...(source ? { source } : {}) },
+      })
+    },
+  )
 })

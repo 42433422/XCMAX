@@ -86,6 +86,23 @@ describe('auth router guards', () => {
     ).resolves.toBe('/workbench/home')
   })
 
+  it('sends a signed-in user opening mobile registration to plan selection', async () => {
+    localStorage.setItem(ACCESS_TOKEN_KEY, 'token-1')
+    vi.mocked(api.me).mockResolvedValue({ id: 1, username: 'user' })
+    const guard = installAndGetGuard()
+
+    await expect(guard({
+      name: 'register',
+      hash: '',
+      meta: {},
+      query: { source: 'xcagi-mobile' },
+      fullPath: '/register?source=xcagi-mobile',
+    })).resolves.toEqual({
+      name: 'account-plans',
+      query: { plan: 'saas-trial-30', source: 'xcagi-mobile' },
+    })
+  })
+
   it('sends non-admin users away from admin routes', async () => {
     localStorage.setItem(ACCESS_TOKEN_KEY, 'token-1')
     vi.mocked(api.me).mockResolvedValue({ id: 1, username: 'user', is_admin: false })

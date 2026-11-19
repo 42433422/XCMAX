@@ -179,15 +179,14 @@ def _profile_page_config(sku: str) -> Dict[str, Any]:
 @router.get("/app/config", summary="Android/iOS 客户端配置（合规、版本）")
 def api_app_config(
     platform: str = Query("android", max_length=32),
-    sku: str = Query("personal", pattern="^(personal|enterprise)$"),
+    sku: str = Query("enterprise", pattern="^(personal|enterprise)$"),
     current_version_code: int = Query(0, ge=0),
 ) -> Dict[str, Any]:
     base = (os.environ.get("XCAGI_PUBLIC_BASE_URL") or _DEFAULT_BASE).rstrip("/")
-    sku_norm = sku if sku in ("personal", "enterprise") else "personal"
     return {
         "ok": True,
         "platform": platform,
-        "sku": sku_norm,
+        "sku": sku,
         "privacy_url": f"{base}/legal/privacy",
         "terms_url": f"{base}/legal/terms",
         "legal_version": _LEGAL_VERSION,
@@ -199,9 +198,9 @@ def api_app_config(
         "latest_android_version": _ANDROID_LATEST_VERSION,
         "latest_android_version_name": _ANDROID_LATEST_NAME,
         "force_update": _ANDROID_FORCE_UPDATE,
-        "apk_download_url": _apk_url(sku_norm),
-        "apk_delta": _apk_delta(sku_norm, current_version_code),
-        "profile_page": _profile_page_config(sku_norm),
+        "apk_download_url": _apk_url(sku),
+        "apk_delta": _apk_delta(sku, current_version_code),
+        "profile_page": _profile_page_config(sku),
         "feedback_email": os.environ.get("XCAGI_FEEDBACK_EMAIL", "support@xiu-ci.com").strip(),
     }
 

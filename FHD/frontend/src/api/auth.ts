@@ -42,25 +42,12 @@ export interface LoginResponse {
   error?: unknown
   market_access_token?: string
   market_refresh_token?: string
-  registered?: boolean
   account_state?: string
   next_action?: string
   desktop_access?: boolean
   active_plan_id?: string
   account_tier?: string
   personal_plan?: boolean
-  purchase_url?: string
-}
-
-export interface RegisterRequest {
-  username: string
-  password: string
-  email?: string
-  verification_code?: string
-  display_name?: string
-  // 账号体系：预算区间（→ account_tier 派生）与行业
-  budget_range?: string
-  industry_id?: string
 }
 
 const LOGIN_RETRY_DELAYS_MS = [1_000, 2_000, 4_000] as const
@@ -129,7 +116,7 @@ function authOperationOwner(signal: AbortSignal) {
   return { current, assertCurrent }
 }
 
-function loginRequest(path: string, payload: Record<string, unknown>, options: AuthOperationOptions, retry = true) {
+function loginRequest(payload: LoginRequest, options: AuthOperationOptions) {
   return withAuthDeadline(async (signal) => {
     invalidateEnterpriseSessionCache()
     clearMarketCredentials()
@@ -137,9 +124,9 @@ function loginRequest(path: string, payload: Record<string, unknown>, options: A
     await primeCsrfCookie({ signal })
     const request = () => {
       assertCurrent()
-      return api.post<ApiResponse<LoginResponse>>(path, payload, { timeoutMs: 30_000, signal })
+      return api.post<ApiResponse<LoginResponse>>('/api/auth/login', payload, { timeoutMs: 30_000, signal })
     }
-    const res = await (retry ? withTransientLoginRetry(request, signal) : request())
+    const res = await withTransientLoginRetry(request, signal)
     assertCurrent()
     await clearSessionScopedUiCaches(current)
     assertCurrent()
@@ -150,7 +137,7 @@ function loginRequest(path: string, payload: Record<string, unknown>, options: A
 
 export const authApi = {
   async login(username: string, password: string, accountKind: AccountKind = 'enterprise', invitationCode = '', options: AuthOperationOptions = {}): Promise<ApiResponse<LoginResponse>> {
-    return loginRequest('/api/auth/login', {
+    return loginRequest({
       username, password, account_kind: accountKind,
       ...(invitationCode.trim() ? { invitation_code: invitationCode.trim() } : {}),
     }, options)
@@ -188,15 +175,6 @@ export const authApi = {
 
   async updateCompanyBrand(companyBrand: string) {
     return api.post('/api/auth/company-brand', { company_brand: companyBrand })
-  },
-
-  async register(payload: RegisterRequest, options: AuthOperationOptions = {}): Promise<ApiResponse<LoginResponse>> {
-    return loginRequest('/api/auth/register', { ...payload }, options, false)
-  },
-
-  async sendRegisterVerificationCode(email: string): Promise<ApiResponse<{ message?: string }>> {
-    await primeCsrfCookie()
-    return api.post<ApiResponse<{ message?: string }>>('/api/market/send-register-code', { email })
   },
 
   async logout(options: AuthOperationOptions = {}): Promise<ApiResponse<void>> {

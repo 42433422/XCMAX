@@ -1,5 +1,5 @@
 import type { Router } from 'vue-router'
-import { DEFAULT_POST_AUTH, safeRedirectPath } from '../authPaths'
+import { pickRedirectFromRoute, pickRegistrationNextFromRoute, safeRedirectPath, xcagiRegistrationSource } from '../authPaths'
 import { consumeBrowserHandoff, takeBrowserHandoff } from '../infrastructure/storage/fhdMarketHandoff'
 import { useAuthStore } from '../stores/auth'
 
@@ -37,12 +37,10 @@ export function installAuthGuards(router: Router): void {
       if (auth.hasToken()) {
         const user = await auth.refreshSession()
         if (user) {
-          const q = to.query.redirect
-          const raw = Array.isArray(q) ? q[0] : q
-          if (typeof raw === 'string' && raw.length > 0) {
-            return safeRedirectPath(raw)
+          if (to.name === 'register' && xcagiRegistrationSource(to)) {
+            return pickRegistrationNextFromRoute(to)
           }
-          return DEFAULT_POST_AUTH
+          return pickRedirectFromRoute(to)
         }
       }
     }

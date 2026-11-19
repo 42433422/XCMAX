@@ -10,7 +10,6 @@ import '../data/mobile_repository_scope.dart';
 import '../features/about/about_screen.dart';
 import '../features/approval/approval_screens.dart';
 import '../features/auth/auth_screen.dart';
-import '../features/auth/register_screen.dart';
 import '../features/bridge/bridge_screen.dart';
 import '../features/business/business_screens.dart';
 import '../features/chat/chat_screen.dart';
@@ -71,8 +70,10 @@ MobileStartupRoute resolveMobileStartupRoute({
   final adminMode = MobileConversationRuntimePolicy.isAdminAccountKind(
     session.accountKind,
   );
-  final setupComplete =
-      adminMode || session.setupComplete || session.fhdHost.trim().isNotEmpty;
+  final setupComplete = adminMode ||
+      session.personalPlan ||
+      session.setupComplete ||
+      session.fhdHost.trim().isNotEmpty;
   return setupComplete
       ? MobileStartupRoute.home
       : MobileStartupRoute.onboarding;

@@ -71,6 +71,18 @@ void main() {
         session: const MobileSessionData(
           legalAcceptedVersion: 'legal-2',
           accessToken: 'access',
+          accountKind: 'enterprise',
+          personalPlan: true,
+        ),
+        appConfig: config,
+      ),
+      MobileStartupRoute.home,
+    );
+    expect(
+      resolveMobileStartupRoute(
+        session: const MobileSessionData(
+          legalAcceptedVersion: 'legal-2',
+          accessToken: 'access',
           setupComplete: true,
         ),
         appConfig: config,

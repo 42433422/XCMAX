@@ -36,7 +36,7 @@ SAAS_PLANS = ROOT / "config" / "saas_plans.json"
 INDUSTRY_PRESETS = ROOT / "config" / "industry_presets.json"
 INDUSTRY_BASELINE = ROOT / "config" / "industry_baseline.json"
 INDUSTRY_ALIASES = ROOT / "config" / "industry_mod_aliases.json"
-REGISTER_VIEW = ROOT / "frontend" / "src" / "views" / "RegisterView.vue"
+LOGIN_ACTIONS = ROOT / "frontend" / "src" / "components" / "login" / "LoginAccountActions.vue"
 ADMIN_VIEW = ROOT / "frontend" / "src" / "views" / "AdminEntitlementsView.vue"
 AUTH_API = ROOT / "frontend" / "src" / "api" / "auth.ts"
 MARKET_ROOT = ROOT.parent / "成都修茈科技有限公司" / "MODstore_deploy"
@@ -59,6 +59,7 @@ EXPECTED_BUDGET_TO_TIER = {
 }
 LEGACY_BUDGETS = ("5 万以内", "5–20 万", "20–50 万", "50 万以上")
 EXPECTED_PUBLIC_PLAN_TITLES = {
+    "saas-personal-free": "个人使用版",
     "saas-trial-30": "30 天全功能体验",
     "saas-permanent-starter": "企业启航版",
     "saas-permanent-growth": "企业成长版",
@@ -221,16 +222,15 @@ def _check_budgets(errors: list[str]) -> None:
         if leaked_legacy:
             errors.append(f"{_display_path(path)} 仍包含旧档位: {leaked_legacy}")
 
-    registration_text = _read_text(REGISTER_VIEW, errors)
-    for snippet in ("raw.purchase_url", "选择 XCAGI 方案"):
-        if snippet not in registration_text:
-            errors.append(f"{REGISTER_VIEW.relative_to(ROOT)} 缺少授权购买交接: {snippet}")
+    login_actions_text = _read_text(LOGIN_ACTIONS, errors)
+    if "marketRegisterUrl" not in login_actions_text:
+        errors.append(f"{_display_path(LOGIN_ACTIONS)} 缺少市场注册入口")
 
     license_view_text = _read_text(ACCOUNT_LICENSE_VIEW, errors)
     for snippet in (
         "paymentAccountPlans",
         "选择适合你的方案",
-        "完成支付后即可在 XCAGI 桌面端登录使用",
+        "完成支付后即可在 XCAGI 登录使用",
     ):
         if snippet not in license_view_text:
             errors.append(f"{_display_path(ACCOUNT_LICENSE_VIEW)} 缺少购买流程契约: {snippet}")

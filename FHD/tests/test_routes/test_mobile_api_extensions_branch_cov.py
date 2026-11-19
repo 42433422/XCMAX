@@ -2071,6 +2071,15 @@ class TestMobileInstallIndustrySeed:
         assert result.status_code == 500
 
 
+@pytest.mark.asyncio
+async def test_personal_plan_hides_mod_inventory_and_blocks_install(m):
+    user = SimpleNamespace(id=1, account_tier="personal")
+    inventory = await m.mobile_mods_summary(user=user)
+    assert inventory["data"]["items"] == []
+    install = await m.mobile_install_mod(body={"mod_id": "m1"}, user=user)
+    assert install.status_code == 403
+
+
 class TestMobileInstallMod:
     @pytest.mark.asyncio
     async def test_user_none_returns_401(self, m):
