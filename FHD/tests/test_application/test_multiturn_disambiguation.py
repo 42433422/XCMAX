@@ -15,6 +15,7 @@ from app.application.ai_chat.dialogue_memory import (
     settle_chat_turn,
 )
 from app.application.ai_chat.workflow_session import WorkflowSession
+from app.application.task_conversation_store import ConversationRevisionError
 from app.application.workflow.clarification_node import (
     _build_ambiguous_question,
     build_clarify_node,
@@ -274,7 +275,9 @@ def test_short_followup_uses_business_rules_and_preserves_repeated_turns(
     assert captured[0]["user_message"] == "换成上个月"
     assert sum(row["content"] == "第二个" for row in captured[0]["recent_messages"]) == 2
     assert any("payment_state" in rule for rule in captured[0]["rules"])
-    assert recent_conversation_messages({**current, "conversation_id": "other"}) == []
+    with pytest.raises(ConversationRevisionError, match="conversation no longer exists"):
+        recent_conversation_messages({**current, "conversation_id": "other"})
+    assert recent_conversation_messages({**context, "conversation_id": "other"}) == []
 
 
 def test_no_turn_id_keeps_user_history_and_untrusted_history_is_ignored(
@@ -282,8 +285,10 @@ def test_no_turn_id_keeps_user_history_and_untrusted_history_is_ignored(
 ):
     monkeypatch.setenv("XCAGI_DIALOGUE_MEMORY_DIR", str(tmp_path))
     context = {"local_user_id": 71, "tenant_id": 9, "session_id": "no-turn-id"}
-    prepare_chat_turn("查销售订单", context)
-    settle_chat_turn("查销售订单", context, {"response": "请提供日期"}, "completed")
+    turn = dict(context)
+    prepare_chat_turn("查销售订单", turn)
+    settle_chat_turn("查销售订单", turn, {"response": "请提供日期"}, "completed")
+    assert turn["turn_id"]
     assert recent_conversation_messages(context)[0]["content"] == "查销售订单"
     foreign = {
         **context,

@@ -8,7 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from app.application.user_memory.governance import is_recallable_memory
+from app.application.user_memory.policy import is_recallable_memory
 from app.application.user_memory.protocols import (
     MemoryAccess,
     MemoryListing,

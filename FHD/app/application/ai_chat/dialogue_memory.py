@@ -17,7 +17,7 @@ from filelock import FileLock, Timeout
 from langchain_core.messages import convert_to_openai_messages, trim_messages
 
 from app.application.task_conversation_store import task_conversation_store
-from app.infrastructure.database.conversation_lifecycle import (
+from app.domain.shared_services.conversation_service import (
     ConversationRevisionError,
     begin_conversation_write,
     lock_conversation_session,

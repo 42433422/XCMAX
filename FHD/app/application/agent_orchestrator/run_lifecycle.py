@@ -56,12 +56,12 @@ def continuation_conversation_error(run: AgentRun, context: dict[str, Any]) -> s
         return "恢复任务缺少原会话版本，不能使用旧上下文"
     from app.application.task_conversation_store import durable_user_id
     from app.db.session import get_db
-    from app.http.request_context import reset_current_http_request, set_current_http_request
-    from app.infrastructure.auth.agent_mod_scope import _bound_actor, agent_mod_execution_scope
-    from app.infrastructure.database.conversation_lifecycle import (
+    from app.domain.shared_services.conversation_service import (
         begin_conversation_write,
         lock_conversation_session,
     )
+    from app.http.request_context import reset_current_http_request, set_current_http_request
+    from app.infrastructure.auth.agent_mod_scope import _bound_actor, agent_mod_execution_scope
     from app.request_active_mod_ctx import reset_request_active_mod_id, set_request_active_mod_id
 
     try:

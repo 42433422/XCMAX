@@ -146,7 +146,7 @@ def test_user_message_title_keeps_plain_text_and_preserves_message(storage, cont
 
 def test_cursor_pages_are_complete_owner_scoped_and_revision_fenced(storage):
     from app.application.task_conversation_store import TaskConversationStore
-    from app.infrastructure.database.conversation_lifecycle import ConversationRevisionError
+    from app.domain.shared_services.conversation_service import ConversationRevisionError
 
     svc, _, _ = storage
     ids = svc.save_turn(
@@ -191,7 +191,7 @@ def test_save_only_repair_preserves_original_full_turn_and_rejects_withdrawal(
     from app.application.ai_chat.conversation_history import retry_stored_chat_turn
     from app.application.ai_chat.dialogue_memory import prepare_chat_turn, settle_chat_turn
     from app.application.task_conversation_store import TaskConversationStore
-    from app.infrastructure.database.conversation_lifecycle import ConversationRevisionError
+    from app.domain.shared_services.conversation_service import ConversationRevisionError
 
     svc, factory, _ = storage
     monkeypatch.setenv("XCAGI_DIALOGUE_MEMORY_DIR", str(tmp_path / "memory"))

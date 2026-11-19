@@ -44,6 +44,7 @@ streams:
         - { type: "step.skipped", const: STEP_SKIPPED }
         - { type: "task.child_run_attached", const: TASK_CHILD_RUN_ATTACHED }
         - { type: "workflow.concrete_params_rejected", const: WORKFLOW_CONCRETE_PARAMS_REJECTED }
+        - { type: "workflow.conversation_rejected", const: WORKFLOW_CONVERSATION_REJECTED, payload_fields: [execution_started] }
         - { type: "workflow.graph_rejected", const: WORKFLOW_GRAPH_REJECTED }
         - { type: "workflow.plan_audit_rejected", const: WORKFLOW_PLAN_AUDIT_REJECTED }
         - { type: "workflow.plan_audited", const: WORKFLOW_PLAN_AUDITED }

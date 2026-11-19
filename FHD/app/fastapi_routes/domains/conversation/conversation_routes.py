@@ -129,8 +129,8 @@ def conversations_retry_persistence(
     expected_revision: int = Body(embed=True, ge=0),
 ):
     from app.application.ai_chat.conversation_history import retry_stored_chat_turn
+    from app.domain.shared_services.conversation_service import ConversationRevisionError
     from app.fastapi_routes.domains.agent.route_support import request_runtime_context
-    from app.infrastructure.database.conversation_lifecycle import ConversationRevisionError
 
     owner = int(_history_actor(request))
     context = request_runtime_context(request, {})
@@ -211,7 +211,7 @@ def ai_message_save(request: Request, body: dict = Body(default_factory=dict)):
     from app.application.facades.conversation_facade import (
         get_conversation_service as get_conversation_app_service,
     )
-    from app.infrastructure.database.conversation_lifecycle import ConversationRevisionError
+    from app.domain.shared_services.conversation_service import ConversationRevisionError
 
     service = get_conversation_app_service()
     if not body:

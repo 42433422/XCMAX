@@ -2,6 +2,48 @@ import pytest
 
 from app.application.agent_orchestrator import AgentOrchestrator, InMemoryAgentRunRepository
 from app.application.agent_orchestrator.run_models import AgentRun
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+
+
+@pytest.mark.parametrize("revision", [0, 7])
+def test_tool_runtime_preserves_authenticated_conversation_revision(trusted_actor, revision):
+    from app.application.ai_chat_app_service import AIChatApplicationService
+
+    actor = trusted_actor()
+    context = {
+        **actor.context,
+        "conversation_id": "original-chat",
+        "_conversation_revision": revision,
+    }
+    runtime = AIChatApplicationService._merge_tool_runtime_context(
+        str(actor.user_id), "continue", context
+    )
+    assert type(runtime["_conversation_revision"]) is int
+    assert runtime["_conversation_revision"] == revision
+    assert runtime["_actor_authorization"] == context["_actor_authorization"]
+    assert runtime["_actor_authorization"] is not context["_actor_authorization"]
+
+
+def test_unbound_tool_context_cannot_supply_conversation_revision():
+    from app.application.ai_chat_app_service import AIChatApplicationService
+
+    runtime = AIChatApplicationService._merge_tool_runtime_context(
+        "1", "continue", {"conversation_id": "claimed-chat", "_conversation_revision": 7}
+    )
+    assert "_conversation_revision" not in runtime
+
+
+def test_revoked_actor_cannot_forward_conversation_revision(trusted_actor):
+    from app.application.ai_chat_app_service import AIChatApplicationService
+    from app.db.models.user import User
+
+    actor = trusted_actor()
+    with actor.factory.begin() as db:
+        db.get(User, actor.user_id).is_active = False
+    with pytest.raises(ValueError, match="原登录身份已失效"):
+        AIChatApplicationService._merge_tool_runtime_context(
+            str(actor.user_id), "continue", {**actor.context, "_conversation_revision": 0}
+        )
 
 
 @pytest.mark.parametrize(

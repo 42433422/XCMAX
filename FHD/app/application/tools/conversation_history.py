@@ -7,12 +7,12 @@ from sqlalchemy import func
 from app.application.agent_orchestrator.tool_spec import validate_tool_call
 from app.db.models import AIConversation
 from app.db.session import get_host_db
-from app.infrastructure.auth.agent_mod_scope import AgentModAuthorizationError, _bound_actor
-from app.infrastructure.database.conversation_lifecycle import (
+from app.domain.shared_services.conversation_service import (
     ConversationRevisionError,
     begin_conversation_write,
     lock_conversation_session,
 )
+from app.infrastructure.auth.agent_mod_scope import AgentModAuthorizationError, _bound_actor
 
 
 def read_conversation_history(action: str, params: dict, context: dict) -> dict:

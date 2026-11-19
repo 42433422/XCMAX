@@ -310,7 +310,7 @@ def retry_stored_chat_turn(
 ) -> dict[str, Any]:
     """Repair only the original authenticated receipt; never re-enter the planner."""
     from app.application.ai_chat.dialogue_memory import mark_history_persisted, stored_turn_receipt
-    from app.infrastructure.database.conversation_lifecycle import ConversationRevisionError
+    from app.domain.shared_services.conversation_service import ConversationRevisionError
 
     receipt = stored_turn_receipt(context, turn_id)
     if receipt is None:

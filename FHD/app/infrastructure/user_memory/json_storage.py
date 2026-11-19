@@ -8,8 +8,8 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager
 from pathlib import Path
 
-from app.application.user_memory.models import UserMemory
 from app.application.user_memory.protocols import JsonObject
+from app.domain.user_memory.records import UserMemory
 
 
 class JsonMemoryStorage:

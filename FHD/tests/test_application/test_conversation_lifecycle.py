@@ -16,7 +16,7 @@ from app.application.ai_chat.active_conversation import (
 )
 from app.application.task_conversation_store import task_conversation_store as store
 from app.db.models import AIConversation, AIConversationSession
-from app.infrastructure.database.conversation_lifecycle import ConversationRevisionError
+from app.domain.shared_services.conversation_service import ConversationRevisionError
 
 
 @pytest.fixture

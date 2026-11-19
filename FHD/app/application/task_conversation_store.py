@@ -9,10 +9,10 @@ from typing import Any
 
 from app.db.models import AIConversation, AIConversationSession
 from app.db.session import get_db
-from app.infrastructure.database.conversation_lifecycle import (
+from app.domain.shared_services.conversation_service import (
     ConversationRevisionError as ConversationRevisionError,
 )
-from app.infrastructure.database.conversation_lifecycle import (
+from app.domain.shared_services.conversation_service import (
     begin_conversation_write,
     lock_conversation_session,
 )
@@ -230,7 +230,7 @@ class TaskConversationStore:
 
     def iter_conversation_messages(self, *, session_id: str, user_id: int, batch_size: int = 200):
         """Read an authorized, bounded snapshot without an unbounded SQL .all()."""
-        from app.infrastructure.database.conversation_lifecycle import ConversationRevisionError
+        from app.domain.shared_services.conversation_service import ConversationRevisionError
 
         cursor, revision, through = 0, None, None
         while True:

@@ -373,7 +373,7 @@ def _settle_dialogue_turn(body: XcagiCompatChatBody, payload: dict[str, Any], st
 def _persist_compat_chat_turn(body: XcagiCompatChatBody, payload: dict[str, Any]) -> None:
     from app.application import get_ai_chat_app_service
     from app.application.task_conversation_store import durable_user_id
-    from app.infrastructure.database.conversation_lifecycle import ConversationRevisionError
+    from app.domain.shared_services.conversation_service import ConversationRevisionError
 
     acknowledgement = payload.get("history_persistence")
     if isinstance(acknowledgement, dict) and acknowledgement.get("status") in {

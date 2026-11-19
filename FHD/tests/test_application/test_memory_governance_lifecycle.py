@@ -173,7 +173,7 @@ def test_only_explicit_personal_global_preferences_cross_tenants(
 
 
 def test_correction_and_revocation_fence_failed_vector_projection(memory, monkeypatch):
-    from app.application.user_memory.governance import filter_recalled_memories
+    from app.application.user_memory.retrieve import filter_recalled_memories
     from app.application.user_memory_vector_app_service import get_user_memory_rag_app_service
 
     row = capture(memory)
@@ -406,7 +406,7 @@ def test_vector_projection_does_not_replace_new_revision_with_late_old_write(mem
         metadata={},
     )
     with ingest._vector_store._get_conn() as connection:
-        assert connection.execute("SELECT content FROM user_memory_vector_chunks").fetchall() == [
+        assert connection.execute("SELECT content FROM user_memory_vector_chunks").fetchmany(2) == [
             ("new revision",)
         ]
 

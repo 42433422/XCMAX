@@ -25,6 +25,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from datetime import UTC, datetime
+from time import sleep
 from typing import Any, Iterator
 
 from langgraph.checkpoint.base.id import uuid6
@@ -76,7 +77,18 @@ def open_run_checkpointer(repository: Any) -> Iterator[Any]:
             # Upstream schema migrations are not concurrent. Serialize only
             # setup across processes, including CREATE INDEX CONCURRENTLY.
             with connection.cursor() as cursor:
-                cursor.execute("SELECT pg_advisory_lock(%s)", (7412093581,))
+                # A blocking advisory-lock query retains a virtual transaction
+                # which CREATE INDEX CONCURRENTLY can wait on, deadlocking the
+                # initializer against its waiter. Finish every failed probe in
+                # autocommit mode before waiting outside PostgreSQL instead.
+                for _ in range(600):
+                    cursor.execute("SELECT pg_try_advisory_lock(%s)", (7412093581,))
+                    acquired = cursor.fetchone()
+                    if acquired and acquired[0]:
+                        break
+                    sleep(0.05)
+                else:
+                    raise TimeoutError("PostgreSQL 检查点初始化锁等待超时")
                 try:
                     postgres_saver.setup()
                 finally:

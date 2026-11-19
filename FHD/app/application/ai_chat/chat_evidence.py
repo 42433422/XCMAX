@@ -266,7 +266,7 @@ def prepare_chat_evidence(
         if authorized_memory is not None:
             memory_user_id, _memory_access = authorized_memory
             result["_chat_memory_evidence_authorized"] = True
-            from app.application.user_memory.governance import filter_recalled_memories
+            from app.application.user_memory.retrieve import filter_recalled_memories
             from app.application.user_memory_vector_app_service import (
                 get_user_memory_rag_app_service,
             )
@@ -363,7 +363,7 @@ def prepare_chat_evidence(
             )
             memories = recalled.get("memories") if recalled.get("success") else []
             if memories:
-                from app.application.user_memory.governance import is_recallable_memory
+                from app.application.user_memory.policy import is_recallable_memory
 
                 recalled_memories = [item for item in memories if is_recallable_memory(item)]
                 # 知识问句的记忆会作为知识证据注入；其他问句仍保留在个人记忆里。

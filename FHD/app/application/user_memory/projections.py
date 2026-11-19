@@ -7,7 +7,7 @@ from collections.abc import Callable
 from functools import wraps
 from typing import Any, Concatenate, ParamSpec, TypeVar, cast
 
-from app.application.user_memory.governance import (
+from app.application.user_memory.policy import (
     is_recallable_memory,
     is_scoped_memory_owner,
     memory_statement,

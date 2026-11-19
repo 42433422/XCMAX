@@ -178,6 +178,7 @@ class AIChatApplicationService(
                 "tenant_id",
                 "_actor_authorization",
                 "_mod_authorization",
+                "_conversation_revision",
                 "mutation_policy",
                 "_bulk_preview_scopes",
                 "idempotency_key",
@@ -324,7 +325,7 @@ class AIChatApplicationService(
                 neuro_notify_chat_completed(user_id, message, resp)
             except RECOVERABLE_ERRORS:
                 logger.debug("neuro_notify_chat_completed skipped", exc_info=True)
-            from app.infrastructure.database.conversation_lifecycle import ConversationRevisionError
+            from app.domain.shared_services.conversation_service import ConversationRevisionError
 
             try:
                 resp["history_persistence"] = self._persist_chat_turn(user_id, message, ctx, resp)

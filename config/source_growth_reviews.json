@@ -568,7 +568,7 @@
     "FHD/app/application/ai_chat/dialogue_memory.py": {
       "base_file": "FHD/app/application/ai_chat/dialogue_memory.py",
       "base_blob": "0e24a764386a96ccf41e66ac34fe7bef738c87c2",
-      "head_blob": "535f7f577bc3fe578bb83efd3f39377bf7bb85c2",
+      "head_blob": "116688fc85be7051217b719a05a9adf70286cb98",
       "before_lines": 632,
       "after_lines": 934,
       "reason": "评审请求（不代表批准）：移除自制片段摘要，接入 LangChain 真正覆盖游标，并用 filelock 和 SQL revision 保持投影及回执一致。",

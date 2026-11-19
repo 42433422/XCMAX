@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from threading import RLock
 from typing import Any
 
-from app.application.user_memory.models import UserMemory
 from app.application.user_memory.preferences import sync_preference_projection
 from app.application.user_memory.projections import project_after_commit
 from app.application.user_memory.protocols import (
@@ -19,6 +18,7 @@ from app.application.user_memory.protocols import (
     MemoryStatusUpdate,
     memory_transaction,
 )
+from app.domain.user_memory.records import UserMemory
 
 
 def _advance_revision(record: JsonObject, updated: JsonObject, *, action: str, at: str) -> None:

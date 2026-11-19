@@ -531,14 +531,33 @@ def test_normal_chat_and_terminal_feedback_reopen_under_authenticated_owner(
         lambda _: SimpleNamespace(id=41),
     )
     assert (
-        conversations_get(request, "approval-session", user_id="42", mod_id="")["messages"]
+        conversations_get(
+            request,
+            "approval-session",
+            user_id="42",
+            mod_id="",
+            limit=50,
+            before_id=None,
+            turn_id=None,
+        )["messages"]
         == reopened["messages"]
     )
     monkeypatch.setattr(
         "app.infrastructure.auth.dependencies.resolve_session_user",
         lambda _: SimpleNamespace(id=42),
     )
-    assert conversations_get(request, "approval-session", user_id="41", mod_id="")["messages"] == []
+    assert (
+        conversations_get(
+            request,
+            "approval-session",
+            user_id="41",
+            mod_id="",
+            limit=50,
+            before_id=None,
+            turn_id=None,
+        )["messages"]
+        == []
+    )
 
 
 @pytest.mark.parametrize("existing_session", [False, True])

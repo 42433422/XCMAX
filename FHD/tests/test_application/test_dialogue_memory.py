@@ -137,7 +137,7 @@ def test_transcript_is_scoped_to_owner_tenant_and_mod(
     other = {**original, **changed, "turn_id": "2"}
 
     if "local_user_id" in changed:
-        from app.infrastructure.database.conversation_lifecycle import ConversationRevisionError
+        from app.domain.shared_services.conversation_service import ConversationRevisionError
 
         with pytest.raises(ConversationRevisionError):
             recent_conversation_messages(other)

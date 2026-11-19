@@ -5,7 +5,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from app.application.user_memory.governance import is_recallable_memory, memory_statement
+from app.application.user_memory.policy import (
+    is_recallable_memory,
+    is_scoped_memory_owner,
+    memory_statement,
+)
 from app.application.user_memory.write import MemoryFactsStore, default_memory_store
 
 CONTEXT_HEADER = "【相关记忆】"
@@ -72,3 +76,92 @@ def build_memory_context(
     lines = [CONTEXT_HEADER]
     lines.extend(f"{index}. {hit['text']}" for index, hit in enumerate(hits, start=1))
     return "\n".join(lines)[:max_chars]
+
+
+def filter_recalled_memories(
+    user_id: str, hits: list[dict[str, Any]], *, memory_service: Any = None
+) -> list[dict[str, Any]]:
+    """Indexes propose matches; only the current authority revision supplies facts.
+
+    Legacy raw turns and indexes without provenance are intentionally not adopted.
+    This also fences stale replicas when deletion, correction or indexing fails.
+    """
+    if not is_scoped_memory_owner(user_id) or not hits:
+        return []
+    if memory_service is None:
+        from app.domain.shared_services.user_memory_service import get_user_memory_service
+
+        memory_service = get_user_memory_service()
+    current = {
+        str(record.get("memory_id") or ""): record
+        for record in memory_service.list_memories(user_id, status="active")
+        if is_recallable_memory(record)
+    }
+    accepted: list[dict[str, Any]] = []
+    for hit in hits:
+        if not isinstance(hit, dict):
+            continue
+        metadata = hit.get("metadata")
+        if not isinstance(metadata, dict):
+            continue
+        source_id = str(metadata.get("source_memory_id") or "")
+        if metadata.get("source_owner_id") != user_id:
+            continue
+        record = current.get(source_id)
+        if record is None:
+            continue
+        try:
+            revision = int(metadata.get("source_revision") or 0)
+        except (TypeError, ValueError):
+            continue
+        if revision <= 0 or revision != int(record.get("revision") or 1):
+            continue
+        text = memory_statement(record)
+        accepted.append(
+            {
+                **hit,
+                "content": text,
+                "memory": text,
+                "text": text,
+                "metadata": {
+                    **metadata,
+                    "status": "active",
+                    "eligible_for_planner": True,
+                    "source_policy": record.get("source_policy"),
+                },
+            }
+        )
+    return accepted
+
+
+def recall_authoritative_memories(user_id: str, query: str, limit: int = 5) -> list[dict[str, Any]]:
+    """Reuse Persy's bounded lexical fallback when a projection needs rebuilding."""
+    from app.application.persy_memory_utils import _lexical_score, _search_tokens
+    from app.domain.shared_services.user_memory_service import get_user_memory_service
+
+    if not is_scoped_memory_owner(user_id):
+        return []
+    tokens = _search_tokens(query)
+    hits: list[dict[str, Any]] = []
+    for record in get_user_memory_service().list_memories(user_id, status="active"):
+        if not is_recallable_memory(record):
+            continue
+        text = memory_statement(record)
+        score = _lexical_score(query, tokens, text)
+        if score <= 0:
+            continue
+        hits.append(
+            {
+                "content": text,
+                "memory": text,
+                "score": score,
+                "chunk_id": str(record["memory_id"]),
+                "metadata": {
+                    "source": "memory_v2",
+                    "source_memory_id": record["memory_id"],
+                    "source_revision": int(record.get("revision") or 1),
+                    "source_owner_id": user_id,
+                },
+            }
+        )
+    return sorted(hits, key=lambda hit: hit["score"], reverse=True)[:limit]

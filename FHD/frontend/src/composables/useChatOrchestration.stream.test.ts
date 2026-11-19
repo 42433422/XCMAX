@@ -317,7 +317,9 @@ describe('useChatOrchestration stream', () => {
       }),
     }] }))
     await api.sendMessage('hello')
-    expect(getConversation).toHaveBeenCalledWith('dropped-session')
+    const turnId = api.messages.value[0].turnId
+    expect(turnId).toMatch(/^turn_/)
+    expect(getConversation).toHaveBeenCalledWith('dropped-session', { turn_id: turnId })
     expect(applyPlainTextToMessageIndex).toHaveBeenLastCalledWith(0, expect.stringContaining(text))
     expect(api.messages.value[0].workflowAction).toBe(status)
   })

@@ -12,7 +12,7 @@ from typing import Any, Mapping
 
 from app.application.ai_chat.dialogue_memory import _lock, _memory_dir
 from app.application.task_conversation_store import durable_user_id, task_conversation_store
-from app.infrastructure.database.conversation_lifecycle import (
+from app.domain.shared_services.conversation_service import (
     begin_conversation_write,
     lock_conversation_session,
 )

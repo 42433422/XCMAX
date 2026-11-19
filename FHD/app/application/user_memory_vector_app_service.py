@@ -169,7 +169,7 @@ class UserMemoryRagApplicationService:
         self._recall_validator = recall_validator
 
     def _validated_hits(self, user_id: str, hits: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        from app.application.user_memory.governance import filter_recalled_memories
+        from app.application.user_memory.retrieve import filter_recalled_memories
 
         if self._recall_validator is not None:
             return self._recall_validator(hits)
@@ -214,7 +214,7 @@ class UserMemoryRagApplicationService:
         safe_hits: list[dict[str, Any]] = []
         hits = self._validated_hits(user_id, hits)
         if not hits and self._recall_validator is None:
-            from app.application.user_memory.governance import recall_authoritative_memories
+            from app.application.user_memory.retrieve import recall_authoritative_memories
 
             hits = recall_authoritative_memories(user_id, query_text, max(1, min(20, int(top_k))))
         for hit in hits:

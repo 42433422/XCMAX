@@ -12,7 +12,11 @@ Verifies the ``LanggraphCheckpointBridge`` adapter:
 from __future__ import annotations
 
 import tempfile
+from contextlib import nullcontext
 from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
 
 from app.application.workflow.ports import CheckpointStore
 from app.infrastructure.workflow.checkpoint_bridge import LanggraphCheckpointBridge
@@ -25,6 +29,73 @@ def test_vendored_savers_import() -> None:
 
     assert SqliteSaver.__name__ == "SqliteSaver"
     assert PostgresSaver.__name__ == "PostgresSaver"
+
+
+@pytest.mark.parametrize("outcome", ["success", "setup-error", "lock-timeout"])
+def test_postgres_setup_waits_without_an_open_query_and_releases_resources(monkeypatch, outcome):
+    import langgraph.checkpoint.postgres
+    import psycopg
+    from sqlalchemy.engine import make_url
+
+    from app.infrastructure.workflow import checkpoint_bridge
+
+    class Connection:
+        autocommit = False
+        locked = False
+        probes = 0
+
+        def cursor(self):
+            return nullcontext(self)
+
+        def execute(self, query, params):
+            assert self.autocommit
+            if query == "SELECT pg_try_advisory_lock(%s)":
+                self.probes += 1
+                self.locked = outcome != "lock-timeout" and self.probes >= 3
+            elif query == "SELECT pg_advisory_unlock(%s)":
+                assert self.locked
+                self.locked = False
+            else:
+                pytest.fail("A blocking lock query can deadlock concurrent index creation")
+
+        def fetchone(self):
+            return (self.locked,)
+
+    connection = Connection()
+    closed, setups, waits = [], [], []
+    pooled = SimpleNamespace(driver_connection=connection, close=lambda: closed.append(True))
+    bind = SimpleNamespace(
+        url=make_url("postgresql+psycopg://localhost/checkpoints"), raw_connection=lambda: pooled
+    )
+    repository = SimpleNamespace(
+        transaction=lambda **kwargs: nullcontext(SimpleNamespace(get_bind=lambda: bind))
+    )
+
+    def setup():
+        assert connection.locked
+        setups.append(True)
+        if outcome == "setup-error":
+            raise RuntimeError("migration failed")
+
+    def wait(delay):
+        assert connection.autocommit and not connection.locked
+        waits.append(delay)
+
+    saver = SimpleNamespace(setup=setup)
+    monkeypatch.setattr(psycopg, "Connection", Connection)
+    monkeypatch.setattr(langgraph.checkpoint.postgres, "PostgresSaver", lambda conn: saver)
+    monkeypatch.setattr(checkpoint_bridge, "sleep", wait)
+    if outcome == "success":
+        with checkpoint_bridge.open_run_checkpointer(repository) as opened:
+            assert opened is saver
+    else:
+        expected = TimeoutError if outcome == "lock-timeout" else RuntimeError
+        with pytest.raises(expected), checkpoint_bridge.open_run_checkpointer(repository):
+            pytest.fail("Unavailable checkpoints must prevent graph execution")
+    assert waits and all(delay > 0 for delay in waits)
+    assert bool(setups) == (outcome != "lock-timeout")
+    assert closed == [True]
+    assert not connection.locked and not connection.autocommit
 
 
 def test_bridge_implements_checkpointstore_protocol() -> None:

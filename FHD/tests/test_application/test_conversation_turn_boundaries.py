@@ -14,8 +14,8 @@ from app.application.ai_chat import dialogue_memory as memory
 from app.application.ai_chat.conversation_history import persist_chat_turn, retry_stored_chat_turn
 from app.application.task_conversation_store import task_conversation_store as store
 from app.db.models import AIConversation, AIConversationSession
+from app.domain.shared_services.conversation_service import ConversationRevisionError
 from app.fastapi_routes.xcagi_compat_chat_models import XcagiCompatChatBody
-from app.infrastructure.database.conversation_lifecycle import ConversationRevisionError
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 

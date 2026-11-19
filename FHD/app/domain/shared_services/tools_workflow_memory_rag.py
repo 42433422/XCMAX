@@ -382,7 +382,7 @@ def _registered_router_dataset_rag(
 def _registered_router_memory_v2(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
-    from app.application.user_memory.governance import authorized_personal_memory_id
+    from app.application.agent_task_context import authorized_personal_memory_id
     from app.domain.shared_services.user_memory_service import get_user_memory_service
 
     service = get_user_memory_service()

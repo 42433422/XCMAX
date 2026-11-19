@@ -21,10 +21,10 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.application.user_memory.models import UserMemory
 from app.application.user_memory.patterns import chronological_contexts
 from app.application.user_memory.preferences import PreferenceMemory
 from app.application.user_memory.protocols import MemoryAccess
+from app.domain.user_memory.records import UserMemory
 from app.infrastructure.user_memory.persistence import MemoryRepository
 from app.services import user_memory_service as module
 
@@ -314,7 +314,8 @@ def test_components_import_without_the_service_facade() -> None:
                     raise AssertionError("component imported service facade")
 
         sys.meta_path.insert(0, BlockFacade())
-        for name in ("models", "protocols", "policy",
+        importlib.import_module("app.domain.user_memory.records")
+        for name in ("protocols", "policy", "retrieve",
                      "preferences", "candidates", "queries", "patterns", "feedback"):
             importlib.import_module("app.application.user_memory." + name)
         for name in ("json_storage", "persistence"):

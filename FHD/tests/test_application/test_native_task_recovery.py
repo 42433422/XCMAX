@@ -361,7 +361,9 @@ raise SystemExit(99)
     assert [step.step_id for step in stored.steps] == [step.step_id for step in run.steps]
     assert stored.metadata["checkpoint"]["thread_id"] == checkpoint_thread
     with sqlite3.connect(path) as db:
-        assert db.execute("SELECT node,key FROM recovery_effects ORDER BY node").fetchall() == [
+        assert db.execute("SELECT node,key FROM recovery_effects ORDER BY node").fetchmany(
+            len(run.steps) + 1
+        ) == [
             (step.node_id, task_execution_context(run, step)["idempotency_key"])
             for step in run.steps
         ]
