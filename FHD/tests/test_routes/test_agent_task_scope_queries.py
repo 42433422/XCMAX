@@ -101,14 +101,17 @@ def _fresh_task_view_caches(monkeypatch):
     monkeypatch.setattr(task_routes, "_BACKFILL_DONE", task_routes._TaskViewCache[None](60))
 
 
-@pytest.mark.parametrize("fail", [False, True])
-def test_concurrent_snapshot_callers_share_one_builder_and_retry_failures(monkeypatch, fail):
+@pytest.mark.parametrize(
+    "error_type", [None, RuntimeError, asyncio.CancelledError, KeyboardInterrupt, SystemExit]
+)
+def test_concurrent_snapshot_callers_share_one_builder_and_retry_failures(monkeypatch, error_type):
     repository = InMemoryAgentRunRepository()
     key = task_routes._task_view_key(repository, _cache_principal())
     start, release, looked_up = Barrier(8), Event(), Event()
     clock_lock = Lock()
     readers: set[int] = set()
     builds = []
+    failure = error_type("snapshot unavailable") if error_type is not None else None
 
     def clock():
         with clock_lock:
@@ -120,8 +123,8 @@ def test_concurrent_snapshot_callers_share_one_builder_and_retry_failures(monkey
     def build():
         builds.append("build")
         assert release.wait(5)
-        if fail:
-            raise RuntimeError("snapshot unavailable")
+        if failure is not None:
+            raise failure
         return "one snapshot"
 
     def read():
@@ -137,13 +140,15 @@ def test_concurrent_snapshot_callers_share_one_builder_and_retry_failures(monkey
         finally:
             release.set()
         for future in futures:
-            if fail:
-                with pytest.raises(RuntimeError, match="snapshot unavailable"):
+            if failure is not None:
+                with pytest.raises(type(failure), match="snapshot unavailable") as caught:
                     future.result(timeout=5)
+                assert caught.value is failure
             else:
                 assert future.result(timeout=5) == "one snapshot"
     assert builds == ["build"]
-    if fail:
+    if failure is not None:
+        assert key not in task_routes._SNAPSHOTS._entries
         assert task_routes._cached_task_snapshot(key, lambda: "recovered") == "recovered"
 
 
@@ -180,11 +185,15 @@ def test_snapshot_cache_separates_repository_and_complete_authorization():
         assert task_routes._cached_task_snapshot(key, lambda: str(index)) == str(index)
 
 
-def test_bounded_cache_keeps_inflight_builder_until_space_is_available(monkeypatch):
+@pytest.mark.parametrize(
+    "error_type", [None, asyncio.CancelledError, KeyboardInterrupt, SystemExit]
+)
+def test_bounded_cache_keeps_inflight_builder_until_space_is_available(monkeypatch, error_type):
     cache = task_routes._TaskViewCache[str](60, capacity=1)
     first_key, second_key = (object(), object(), "first"), (object(), object(), "second")
     first_started, release, second_lookup, second_started = Event(), Event(), Event(), Event()
     first_thread = []
+    failure = error_type("builder stopped") if error_type is not None else None
 
     def clock():
         if first_thread and get_ident() != first_thread[0]:
@@ -195,6 +204,8 @@ def test_bounded_cache_keeps_inflight_builder_until_space_is_available(monkeypat
         first_thread.append(get_ident())
         first_started.set()
         assert release.wait(5)
+        if failure is not None:
+            raise failure
         return "first"
 
     def second_build():
@@ -212,7 +223,12 @@ def test_bounded_cache_keeps_inflight_builder_until_space_is_available(monkeypat
             assert len(cache._entries) == 1
         finally:
             release.set()
-        assert first.result(timeout=5) == "first"
+        if failure is not None:
+            with pytest.raises(type(failure), match="builder stopped") as caught:
+                first.result(timeout=5)
+            assert caught.value is failure
+        else:
+            assert first.result(timeout=5) == "first"
         assert second.result(timeout=5) == "second"
     assert len(cache._entries) == 1
 

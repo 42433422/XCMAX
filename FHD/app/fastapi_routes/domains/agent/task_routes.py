@@ -56,6 +56,9 @@ _STREAM_INTERVAL_SECONDS = 1.0
 _SNAPSHOT_TTL_SECONDS = 1.0
 _TaskCacheKey = tuple[object, object, str]
 _Value = TypeVar("_Value")
+# The builder owns a shared Future: even cancellation/termination must release
+# its waiters and failed cache slot before the original exception propagates.
+_TASK_VIEW_BUILD_FAILURES: tuple[type[BaseException], ...] = (BaseException,)
 
 
 class _TaskViewCache(Generic[_Value]):
@@ -98,7 +101,7 @@ class _TaskViewCache(Generic[_Value]):
             return future.result()
         try:
             value = build()
-        except BaseException as exc:
+        except _TASK_VIEW_BUILD_FAILURES as exc:
             with self._lock:
                 self._entries.pop(key)
             future.set_exception(exc)
