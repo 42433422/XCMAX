@@ -11,7 +11,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from modstore_server import account_level_service
+from modstore_server.account_license_plans import PERSONAL_PLAN_ID
 from modstore_server.account_lifecycle import (
+    ACCOUNT_SUSPENDED,
+    mark_active_after_plan,
     active_membership_plan,
     lifecycle_for_user,
     lifecycle_for_user_id,
@@ -25,7 +28,7 @@ from modstore_server.auth_service import (
 from modstore_server.llm_api import _membership_meta, _provider_labels
 from modstore_server.llm_crypto import fernet_configured
 from modstore_server.llm_key_resolver import KNOWN_PROVIDERS, credential_status
-from modstore_server.models import Transaction, User, Wallet, get_session_factory
+from modstore_server.models import Transaction, User, UserPlan, Wallet, get_session_factory
 
 router = APIRouter(prefix="/api/account", tags=["auth"])
 open_router = APIRouter(prefix="/api/market/open", tags=["auth"])
@@ -82,6 +85,27 @@ def api_market_open_register(body: OpenRegisterDTO):
         },
         **lifecycle,
     }
+
+
+@router.post("/personal-plan")
+def activate_personal_plan(user: User = Depends(_get_current_user)):
+    """Enable the free desktop license without creating a payment order."""
+    with get_session_factory()() as session:
+        account = session.query(User).filter(User.id == user.id)
+        # Acquire the account write lock before reading grants, including on SQLite.
+        account.update({User.account_state: User.account_state}, synchronize_session=False)
+        db_user = account.one()
+        if db_user.account_state == ACCOUNT_SUSPENDED:
+            raise HTTPException(403, "当前账号已暂停")
+        current = lifecycle_for_user(session, db_user)
+        if current.active_plan_id == PERSONAL_PLAN_ID:
+            return {"ok": True, **current.to_dict()}
+        if current.desktop_access:
+            raise HTTPException(409, "当前账号已有桌面端方案")
+        session.add(UserPlan(user_id=db_user.id, plan_id=PERSONAL_PLAN_ID, auto_renew=False))
+        mark_active_after_plan(db_user, plan_id=PERSONAL_PLAN_ID, session=session)
+        session.commit()
+        return {"ok": True, **lifecycle_for_user(session, db_user).to_dict()}
 
 
 @router.get("/bootstrap")

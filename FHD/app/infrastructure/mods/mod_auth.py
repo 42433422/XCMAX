@@ -149,9 +149,15 @@ class ModContextMiddleware:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
-        from app.enterprise.mod_entitlements import request_entitlement_scope
+        from app.enterprise.mod_entitlements import (
+            enterprise_mod_filter_active,
+            request_entitlement_scope,
+            session_has_personal_plan,
+        )
 
-        with request_entitlement_scope():
+        sid = StarletteRequest(scope).cookies.get(os.environ.get("SESSION_COOKIE_NAME", "session_id"))
+        personal_plan = bool(sid and enterprise_mod_filter_active() and session_has_personal_plan(sid))
+        with request_entitlement_scope(personal_plan=personal_plan):
             await self._dispatch(scope, receive, send)
 
     async def _dispatch(self, scope: Scope, receive: Receive, send: Send) -> None:

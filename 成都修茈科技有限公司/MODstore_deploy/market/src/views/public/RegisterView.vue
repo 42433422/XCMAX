@@ -7,7 +7,7 @@
       <p class="success-lead">你的账号可同时登录网页和 XCAGI 桌面端。</p>
       <div class="next-step">
         <strong>下一步</strong>
-        <span>选择适合的 XCAGI 方案并完成支付，随后回到桌面端登录即可。</span>
+        <span>选择适合的 XCAGI 方案，随后回到桌面端登录即可。</span>
       </div>
       <router-link :to="registrationNext" class="btn btn-primary-solid btn-block success-action">
         选择 XCAGI 方案

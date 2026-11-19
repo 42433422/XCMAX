@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import AccountLicensePlansView from './AccountLicensePlansView.vue'
 
 const apiMock = vi.hoisted(() => ({
+  activatePersonalPlan: vi.fn(),
   paymentAccountPlans: vi.fn(),
   paymentCheckout: vi.fn(),
 }))
@@ -46,6 +47,24 @@ describe('AccountLicensePlansView', () => {
         },
       ],
     })
+  })
+
+  it('activates the free personal plan without checkout', async () => {
+    const router = makeRouter()
+    await router.push('/account-plans')
+    await router.isReady()
+    apiMock.paymentAccountPlans.mockResolvedValueOnce({
+      plans: [{ id: 'saas-personal-free', name: '个人使用版', price: 0, license_type: 'free' }],
+    })
+    apiMock.activatePersonalPlan.mockResolvedValueOnce({ ok: true })
+    const wrapper = mount(AccountLicensePlansView, { global: { plugins: [router] } })
+    await flushPromises()
+    expect(wrapper.get('button').text()).toBe('免费开通')
+    await wrapper.get('button').trigger('click')
+    await flushPromises()
+    expect(apiMock.activatePersonalPlan).toHaveBeenCalledOnce()
+    expect(apiMock.paymentCheckout).not.toHaveBeenCalled()
+    expect(wrapper.get('[role="status"]').text()).toContain('个人使用版已开通')
   })
 
   it('presents customer-friendly plans and creates the selected order', async () => {

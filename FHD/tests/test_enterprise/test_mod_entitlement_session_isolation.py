@@ -267,3 +267,26 @@ async def test_session_expiry_applies_even_with_fresh_entitlement_ttl(
             assert db.query(UserSession).filter_by(session_id="expiry-session").count() == 1
     finally:
         engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_personal_plan_cannot_use_bundled_or_customer_mods(monkeypatch):
+    from app.infrastructure.mods.mod_auth import ModContextMiddleware
+
+    monkeypatch.setattr(entitlements, "session_has_personal_plan", lambda sid: sid == "free")
+    visible = []
+
+    async def application(scope, receive, send):
+        visible.append(entitlements.is_mod_visible_for_enterprise("some-host-mod"))
+
+    async def unused(*args):
+        return {"type": "http.disconnect"}
+
+    middleware = ModContextMiddleware(application)
+    for sid in ("free", "enterprise"):
+        await middleware(
+            {"type": "http", "path": "/list", "headers": [(b"cookie", f"session_id={sid}".encode())]},
+            unused,
+            unused,
+        )
+    assert visible == [False, True]

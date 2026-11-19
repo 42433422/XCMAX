@@ -589,6 +589,22 @@ class TestNormalizeMarketAuthPayload:
         assert result["is_enterprise"] is True
 
     @pytest.mark.asyncio
+    async def test_personal_plan_is_supported_without_the_legacy_desktop_flag(self):
+        payload = {"access_token": "tok1"}
+        profile = {
+            "id": 1,
+            "username": "personal",
+            "desktop_access": False,
+            "account_state": "active",
+            "active_plan_id": "saas-personal-free",
+        }
+        with patch.object(ma, "_proxy_json", return_value=profile):
+            result = await ma._normalize_market_auth_payload(payload)
+        assert result["desktop_access"] is True
+        assert result["is_enterprise"] is True
+        assert result["active_plan_id"] == "saas-personal-free"
+
+    @pytest.mark.asyncio
     async def test_empty_payload(self):
         with patch.object(ma, "_proxy_json", return_value={"user": {}}):
             result = await ma._normalize_market_auth_payload({})

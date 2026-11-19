@@ -166,6 +166,12 @@ router.beforeEach(async (to, _from, finish) => {
         }
       }
     }
+    if (profile.personalPlan && (
+      to.path.startsWith('/mod/') || to.matched.some((record) => Boolean(record.meta.mod))
+    )) {
+      next({ name: 'settings', replace: true })
+      return
+    }
     if (to.name && UNSCOPED_HOST_BUSINESS_KEYS.has(String(to.name)) && profile.loaded && profile.tenantId != null) {
       const modPage = tenantScopedBusinessPath(String(to.name))
       if (modPage && router.resolve(modPage).matched.length === 0) {

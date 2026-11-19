@@ -154,7 +154,7 @@ async function submitRegister() {
 
       <template v-if="registrationComplete">
         <h1 id="register-heading" class="login-heading">账号注册成功</h1>
-        <p class="register-hint" role="status">账号创建成功。选择适合的 XCAGI 方案并完成支付，随后回到桌面端登录即可。</p>
+        <p class="register-hint" role="status">账号创建成功。选择适合的 XCAGI 方案，随后回到桌面端登录即可。</p>
         <a class="login-submit register-purchase-link" :href="pendingPurchaseUrl" target="_blank" rel="noopener noreferrer"
           >选择 XCAGI 方案</a
         >

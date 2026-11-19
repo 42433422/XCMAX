@@ -247,7 +247,7 @@ def _check_budgets(errors: list[str]) -> None:
                 errors.append(f"{_display_path(path)} 包含内部解释词: {prohibited}")
 
     market_registration_text = public_texts[MARKET_REGISTER_VIEW]
-    for snippet in ("创建 XCAGI 账号", "选择适合的 XCAGI 方案并完成支付"):
+    for snippet in ("创建 XCAGI 账号", "选择适合的 XCAGI 方案"):
         if snippet not in market_registration_text:
             errors.append(f"{_display_path(MARKET_REGISTER_VIEW)} 缺少注册流程文案: {snippet}")
 

@@ -19,6 +19,29 @@ from modstore_server.models import (
 from modstore_server.payment_fulfilment import FulfilContext, PlanFulfilStrategy
 
 
+def test_personal_plan_activation_is_idempotent_and_grants_no_mods(client):
+    registered = client.post(
+        "/api/auth/register",
+        json={"username": f"personal_{uuid.uuid4().hex[:12]}", "password": "personal-pass-12"},
+    ).json()
+    headers = {"Authorization": f"Bearer {registered['access_token']}"}
+    user_id = registered["user"]["id"]
+    for _ in range(2):
+        result = client.post("/api/account/personal-plan", headers=headers)
+        assert result.status_code == 200, result.text
+        assert result.json()["active_plan_id"] == "saas-personal-free"
+        assert result.json()["desktop_access"] is True
+    legacy_auth = client.get("/api/auth/me", headers=headers).json()
+    assert legacy_auth["active_plan_id"] == "saas-personal-free"
+    assert legacy_auth["desktop_access"] is False
+    mods = client.get("/api/enterprise/entitled-mod-ids", headers=headers)
+    assert mods.status_code == 200, mods.text
+    assert mods.json()["mod_ids"] == []
+    with get_session_factory()() as session:
+        assert session.query(UserPlan).filter_by(user_id=user_id).count() == 1
+        assert not session.query(User).filter_by(id=user_id).one().is_enterprise
+
+
 def test_registration_payment_and_expiry_drive_desktop_access(client):
     username = f"lifecycle_{uuid.uuid4().hex[:12]}"
     registered = client.post(
@@ -206,6 +229,7 @@ def test_account_license_catalog_is_separate_from_usage_memberships(client):
     assert "saas-trial-30" in license_ids
 
     expected_titles = {
+        "saas-personal-free": "个人使用版",
         "saas-trial-30": "30 天全功能体验",
         "saas-permanent-starter": "企业启航版",
         "saas-permanent-growth": "企业成长版",
@@ -213,6 +237,7 @@ def test_account_license_catalog_is_separate_from_usage_memberships(client):
         "saas-permanent-ultra": "企业旗舰版",
     }
     expected_prices = {
+        "saas-personal-free": 0.0,
         "saas-trial-30": 99.0,
         "saas-permanent-starter": 49999.0,
         "saas-permanent-growth": 99999.0,

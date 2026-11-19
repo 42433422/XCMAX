@@ -9,7 +9,20 @@ from __future__ import annotations
 import json
 from typing import Any
 
+PERSONAL_PLAN_ID = "saas-personal-free"
+
+
 ACCOUNT_LICENSE_PLANS: tuple[dict[str, Any], ...] = (
+    {
+        "id": PERSONAL_PLAN_ID,
+        "title": "个人使用版",
+        "description": "免费使用 XCAGI 桌面端基础功能，不含任何 Mod。",
+        "amount_cents": 0,
+        "license_type": "free",
+        "account_tier": "normal",
+        "badge": "免费",
+        "features": ["桌面端基础功能", "无 Mod 权益"],
+    },
     {
         "id": "saas-trial-30",
         "title": "30 天全功能体验",

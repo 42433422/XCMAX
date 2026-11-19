@@ -9,7 +9,7 @@ export interface PaymentPlan {
 export interface AccountLicensePlan extends PaymentPlan {
   catalog: 'account_license'
   amount_cents: number
-  license_type: 'trial' | 'permanent'
+  license_type: 'free' | 'trial' | 'permanent'
   duration_days?: number | null
   account_tier: 'normal' | 'pro' | 'max' | 'ultra'
   badge?: string

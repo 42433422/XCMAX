@@ -52,14 +52,38 @@ _request_entitlements: ContextVar[_EntitlementState | None] = ContextVar(
 )
 
 
+_personal_plan_request: ContextVar[bool] = ContextVar("personal_plan_request", default=False)
+
+
+def session_has_personal_plan(session_id: str) -> bool:
+    from app.db.models.user import Session as UserSession
+    from app.db.models.user import User
+    from app.utils.time import utc_now_naive
+
+    with _session_row_db_context() as db:
+        return (
+            db.query(UserSession.id)
+            .join(User, User.id == UserSession.user_id)
+            .filter(
+                UserSession.session_id == session_id,
+                UserSession.expires_at > utc_now_naive(),
+                User.account_tier == "personal",
+            )
+            .first()
+            is not None
+        )
+
+
 @contextmanager
-def request_entitlement_scope():
+def request_entitlement_scope(*, personal_plan: bool = False):
     """Start each HTTP request without inheriting another account's rights."""
     token = _request_entitlements.set(_EntitlementState())
+    personal_token = _personal_plan_request.set(personal_plan)
     try:
         yield
     finally:
         _request_entitlements.reset(token)
+        _personal_plan_request.reset(personal_token)
 
 
 def _current_entitlements() -> _EntitlementState:
@@ -178,7 +202,7 @@ def is_admin_account_session() -> bool:
 def is_mod_visible_for_enterprise(mod_id: str) -> bool:
     """企业版下是否允许暴露/加载该 Mod。"""
     mid = (mod_id or "").strip()
-    if not mid:
+    if not mid or _personal_plan_request.get():
         return False
     if not enterprise_mod_filter_active():
         return True
@@ -247,6 +271,13 @@ async def refresh_session_entitlements_from_market(
     market_is_admin = False
     imp_uid: int | None = None
     sid = (session_id or "").strip()
+    if sid and session_has_personal_plan(sid):
+        set_session_entitlements(
+            market_user_id=market_user_id,
+            market_username=market_username,
+            entitled_client_mod_ids=set(),
+        )
+        return set()
     if sid:
         try:
             from app.application.session_account_meta import load_session_account_meta
@@ -395,7 +426,7 @@ async def sync_entitlements_for_session(session_id: str, *, force: bool = False)
 
 
 async def _sync_entitlements_for_session(session_id: str, *, force: bool = False) -> set[str]:
-    if not enterprise_mod_filter_active():
+    if _personal_plan_request.get() or not enterprise_mod_filter_active():
         return set()
     sid = (session_id or "").strip()
     if not sid:

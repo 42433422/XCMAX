@@ -135,7 +135,7 @@ describe('RegisterView', () => {
 
     expect(registerMock).toHaveBeenCalledWith('desktop-user', 'secret123', 'desktop@example.test', '654321')
     expect(wrapper.text()).toContain('账号注册成功')
-    expect(wrapper.text()).toContain('选择适合的 XCAGI 方案并完成支付')
+    expect(wrapper.text()).toContain('选择适合的 XCAGI 方案')
     expect(wrapper.text()).toContain('随后回到桌面端登录即可')
     expect(wrapper.text()).not.toContain('账号授权')
     expect(replaceSpy).not.toHaveBeenCalled()

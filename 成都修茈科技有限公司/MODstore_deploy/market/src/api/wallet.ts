@@ -96,6 +96,7 @@ export const wallet = {
 
 export const payment = {
   paymentPlans: () => req<PaymentPlansResponse>('/api/payment/plans'),
+  activatePersonalPlan: () => req<{ ok: boolean }>('/api/account/personal-plan', { method: 'POST' }),
   paymentAccountPlans: () => req<AccountLicensePlansResponse>('/api/payment/account-plans'),
   paymentMyPlan: () => req<PaymentMyPlanResponse>('/api/payment/my-plan', walletReadOptions),
   paymentQuery: (orderId: string, options?: { reconcile?: boolean }) => {

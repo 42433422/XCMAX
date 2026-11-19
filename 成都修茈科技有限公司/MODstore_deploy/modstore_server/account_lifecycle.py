@@ -10,6 +10,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from modstore_server.account_license_plans import (
+    PERSONAL_PLAN_ID,
     account_license_plan,
     is_account_license_plan_id,
 )
@@ -47,7 +48,7 @@ def _active_plan(session: Session, user_id: int, *, account_license: bool) -> Us
     rows = (
         session.query(UserPlan)
         .filter(UserPlan.user_id == user_id, UserPlan.is_active.is_(True))
-        .order_by(UserPlan.id.desc())
+        .order_by(UserPlan.plan_id == PERSONAL_PLAN_ID, UserPlan.id.desc())
         .all()
     )
     for row in rows:
@@ -125,6 +126,15 @@ def lifecycle_for_user_id(user_id: int) -> AccountLifecycle:
         return lifecycle_for_user(session, user)
 
 
+def auth_lifecycle_fields(lifecycle: AccountLifecycle) -> dict[str, Any]:
+    # Older desktop hosts treat desktop_access as enterprise access and do not
+    # enforce personal-plan Mod restrictions. Updated hosts resolve the plan ID.
+    fields = lifecycle.to_dict()
+    if lifecycle.active_plan_id == PERSONAL_PLAN_ID:
+        fields["desktop_access"] = False
+    return fields
+
+
 def auth_user_payload(user: User, lifecycle: AccountLifecycle | None = None) -> dict[str, Any]:
     """Return the canonical public user shape used by authentication routes."""
 
@@ -136,7 +146,7 @@ def auth_user_payload(user: User, lifecycle: AccountLifecycle | None = None) -> 
         "is_admin": bool(user.is_admin),
         "is_enterprise": bool(getattr(user, "is_enterprise", False)),
         "company": getattr(user, "company", "") or "",
-        **resolved.to_dict(),
+        **auth_lifecycle_fields(resolved),
     }
 
 
@@ -149,7 +159,7 @@ def auth_token_response(user: User, access_token: str, refresh_token: str) -> di
         "access_token": access_token,
         "refresh_token": refresh_token,
         "user": auth_user_payload(user, lifecycle),
-        **lifecycle.to_dict(),
+        **auth_lifecycle_fields(lifecycle),
     }
 
 

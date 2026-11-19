@@ -3,10 +3,11 @@
     <header class="license-header">
       <p class="eyebrow">XCAGI 使用方案</p>
       <h1>选择适合你的方案</h1>
-      <p>先体验，再决定；也可以直接选择永久方案。完成支付后即可在 XCAGI 桌面端登录使用。</p>
+      <p>个人使用版可免费开通。付费方案完成支付后即可在 XCAGI 桌面端登录使用。</p>
     </header>
 
     <div v-if="errorMessage" class="error" role="alert">{{ errorMessage }}</div>
+    <div v-if="personalActivated" class="flow-note" role="status">个人使用版已开通，请回到 XCAGI 桌面端登录。</div>
     <div v-if="loading" class="loading">正在加载方案…</div>
     <section v-else class="license-grid" aria-label="XCAGI 使用方案">
       <article
@@ -18,21 +19,22 @@
         <div class="card-top">
           <span class="badge">{{ plan.badge || '使用方案' }}</span>
           <h2>{{ plan.name }}</h2>
-          <p class="price"><small>¥</small>{{ Number(plan.price || 0).toLocaleString('zh-CN') }}</p>
+          <p v-if="plan.license_type === 'free'" class="price">免费</p>
+          <p v-else class="price"><small>¥</small>{{ Number(plan.price || 0).toLocaleString('zh-CN') }}</p>
           <p class="description">{{ plan.description }}</p>
         </div>
         <ul>
           <li v-for="feature in plan.features || []" :key="feature">{{ feature }}</li>
         </ul>
-        <button :disabled="checkingOut" @click="buy(plan)">
-          {{ checkingOutId === plan.id ? '正在前往支付…' : (plan.license_type === 'trial' ? '立即体验' : '选择此方案') }}
+        <button :disabled="checkingOut || (personalActivated && plan.license_type === 'free')" @click="buy(plan)">
+          {{ planActionLabel(plan) }}
         </button>
       </article>
     </section>
 
     <aside class="flow-note">
       <strong>接下来</strong>
-      <span>选择方案后将前往支付宝。支付完成后，回到 XCAGI 桌面端登录即可。</span>
+      <span>付费方案通过支付宝完成支付。方案生效后，回到 XCAGI 桌面端登录即可。</span>
     </aside>
   </main>
 </template>
@@ -50,6 +52,7 @@ const authStore = useAuthStore()
 const plans = ref<AccountLicensePlan[]>([])
 const loading = ref(true)
 const checkingOut = ref(false)
+const personalActivated = ref(false)
 const checkingOutId = ref('')
 const errorMessage = ref('')
 const requestedPlanId = computed(() => String(Array.isArray(route.query.plan) ? route.query.plan[0] : route.query.plan || ''))
@@ -65,6 +68,15 @@ onMounted(async () => {
   }
 })
 
+function planActionLabel(plan: AccountLicensePlan) {
+  if (plan.license_type === 'free') {
+    if (personalActivated.value) return '已开通'
+    return checkingOutId.value === plan.id ? '正在开通…' : '免费开通'
+  }
+  if (checkingOutId.value === plan.id) return '正在前往支付…'
+  return plan.license_type === 'trial' ? '立即体验' : '选择此方案'
+}
+
 async function buy(plan: AccountLicensePlan) {
   if (!authStore.hasToken()) {
     await router.push({ name: 'login', query: { redirect: route.fullPath } })
@@ -75,6 +87,12 @@ async function buy(plan: AccountLicensePlan) {
   checkingOutId.value = plan.id
   errorMessage.value = ''
   try {
+    if (plan.license_type === 'free') {
+      const result = await api.activatePersonalPlan()
+      personalActivated.value = result.ok
+      if (!result.ok) errorMessage.value = '暂时无法开通个人使用版，请稍后重试。'
+      return
+    }
     const result = await api.paymentCheckout({ plan_id: plan.id })
     if (!result.ok) {
       errorMessage.value = '暂时无法前往支付，请稍后重试。'
@@ -86,7 +104,7 @@ async function buy(plan: AccountLicensePlan) {
       errorMessage.value = '暂时无法打开支付页面，请稍后重试。'
     }
   } catch {
-    errorMessage.value = '暂时无法前往支付，请稍后重试。'
+    errorMessage.value = plan.license_type === 'free' ? '暂时无法开通个人使用版，请确认当前账号尚未开通其他方案。' : '暂时无法前往支付，请稍后重试。'
   } finally {
     checkingOut.value = false
     checkingOutId.value = ''
