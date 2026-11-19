@@ -43,11 +43,11 @@ class UnifiedTaskPlanMixin:
         )
 
     def recent_task_refs(
-        self, *, user_id: str | None = None, limit: int = 200
+        self, *, user_id: str | None = None, tenant_id: str | None = None, limit: int = 200
     ) -> list[tuple[str, str, str]]:
         return cast(
             "list[tuple[str, str, str]]",
-            self._repo.recent_task_refs(user_id=user_id, limit=limit),
+            self._repo.recent_task_refs(user_id=user_id, tenant_id=tenant_id, limit=limit),
         )
 
     def task_keys(self, *, user_id: str) -> set[tuple[str, str]]:

@@ -150,12 +150,7 @@ def settle_chat_turn(
             data = _read(key, context)
             prior = _user_turn(data, turn_id)
             if prior is not None and not _same_input(prior, text, context or {}):
-                # 同一个 turn_id 被另一条消息占用（前端重试/复用 turn_id）。
-                # 这里只跳过本次结算，不再抛错中断整轮，否则会把已通过的审批和
-                # 正在执行的导入一起判成失败。
-                logger.warning(
-                    "dialogue turn settle skipped: turn_id bound to another message turn=%s", turn_id
-                )
+                logger.warning("dialogue settle skipped: turn already bound to another input")
                 return
             previous = _assistant_for(data, turn_id)
             if previous and previous.get("status") in _FINAL_STATUSES:
@@ -168,10 +163,7 @@ def settle_chat_turn(
                 )
                 current_run = payload.get("run_id") or payload.get("agent_run_id")
                 if previous_run and previous_run != current_run:
-                    logger.warning(
-                        "dialogue turn settle skipped: turn_id already settled another run turn=%s",
-                        turn_id,
-                    )
+                    logger.warning("dialogue settle skipped: turn already bound to another run")
                     return
             receipt = {
                 "role": "assistant",

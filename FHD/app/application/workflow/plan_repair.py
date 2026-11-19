@@ -31,6 +31,8 @@ from app.application.workflow.llm_plan_generation import (
     model_plan_schema_error,
 )
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, plan_to_dict
+from app.infrastructure.modstore_transport import MarketModelError
+from app.security.log_redaction import redact_log_text
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +78,11 @@ def classify_plan_error(message: str) -> str:
         if any(marker in text for marker in markers):
             return code
     return "graph_invalid"
+
+
+def _diagnostic_text(value: str, max_chars: int = 240) -> str:
+    """Redact before truncating so exported repair traces cannot split credentials."""
+    return redact_log_text(value)[:max_chars]
 
 
 def _repair_max_attempts() -> int:
@@ -224,13 +231,13 @@ def repair_plan(
         trace["fixed"] = True
         return planned, trace
 
-    trace["initial_error"] = str(error)[:240]
+    trace["initial_error"] = _diagnostic_text(error)
     mentioned = _mentioned_nodes(error)
     trace["invalid_node_actions"] = [
         {
-            "node_id": node.node_id[:80],
-            "tool_id": node.tool_id[:120],
-            "action": node.action[:120],
+            "node_id": _diagnostic_text(node.node_id, 80),
+            "tool_id": _diagnostic_text(node.tool_id, 120),
+            "action": _diagnostic_text(node.action, 120),
         }
         for node in (planned.nodes or [])
         if node.node_id in mentioned
@@ -243,7 +250,7 @@ def repair_plan(
     current = planned
     for _ in range(attempts):
         code = classify_plan_error(error)
-        trace["errors"].append({"code": code, "message": str(error)[:240]})
+        trace["errors"].append({"code": code, "message": _diagnostic_text(error)})
         if code in _NON_REPAIRABLE:
             break
         messages = build_repair_messages(
@@ -262,8 +269,24 @@ def repair_plan(
                 temperature=0.0,
             )
         except (ValueError, TypeError, RuntimeError) as exc:
-            logger.warning("计划修复请求失败: %s", exc)
-            trace["errors"].append({"code": "repair_request_failed", "message": str(exc)[:240]})
+            raw_error = str(exc)
+            reason = (
+                str(MarketModelError({"status": 402}))
+                if isinstance(exc, MarketModelError) and exc.status_code == 402
+                else "计划修复请求失败，请稍后重试。"
+            )
+            logger.warning("计划修复请求失败: %s", type(exc).__name__)
+            trace["errors"].append(
+                {
+                    "code": "repair_request_failed",
+                    "message": reason,
+                    "error_type": type(exc).__name__[:80],
+                    "error_length": len(raw_error),
+                    "error_sha256": hashlib.sha256(
+                        raw_error.encode("utf-8", errors="backslashreplace")
+                    ).hexdigest(),
+                }
+            )
             break
         decoded = _decode_completion(response) if isinstance(response, dict) else None
         if decoded is None:
@@ -285,7 +308,9 @@ def repair_plan(
         )
         scope_error = enforce_repair_scope(raw_current, candidate, error)
         if scope_error:
-            trace["errors"].append({"code": "scope_violation", "message": scope_error})
+            trace["errors"].append(
+                {"code": "scope_violation", "message": _diagnostic_text(scope_error)}
+            )
             break
         next_error = validate(candidate)
         raw_current = copy.deepcopy(candidate)

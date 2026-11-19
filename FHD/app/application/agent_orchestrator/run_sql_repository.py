@@ -5,12 +5,11 @@ from __future__ import annotations
 import copy
 import json
 import threading
-import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from typing import cast
 
-from sqlalchemy import Table, func
+from sqlalchemy import String, Table, case, func
 from sqlalchemy.orm import Session
 
 from app.application.agent_orchestrator import run_terminal_metrics
@@ -34,28 +33,16 @@ from app.application.agent_orchestrator.task_models import (
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-# 前端每 0.5~1 秒轮询任务列表；每次轮询都要做一次「任务→运行」归属扫描。
-# 直接为每个请求重新解析全部 run 载荷（单库可达数十 MB）会把事件循环线程
-# 长期顶到满核，因此按用户缓存数秒，并在写入 run 时失效。
-_SCOPES_TTL_SECONDS = 5.0
-_SCOPES_CACHE: dict[str, tuple[float, dict[str, list[tuple[str, str, str]]]]] = {}
-_SCOPES_LOCK = threading.Lock()
 _TASK_ID_PATH = "$.metadata.task_context.task_id"
 _TENANT_PATH = "$.metadata.runtime_context.tenant_id"
 _MOD_PATH = "$.metadata.runtime_context._mod_authorization.mod_id"
 
 
-def invalidate_run_scopes(user_id: str | None = None) -> None:
-    """运行写入后丢弃归属扫描缓存，避免新建任务长时间不可见。"""
-    with _SCOPES_LOCK:
-        if user_id is None:
-            _SCOPES_CACHE.clear()
-        else:
-            _SCOPES_CACHE.pop(str(user_id or ""), None)
-
-
 def _json_extract(column, path: str):
-    return func.json_extract(column, path)
+    # Legacy corrupt rows were skipped by the payload mapper; one such row must
+    # not break every task listing now that extraction happens inside SQLite.
+    valid_payload = case((func.json_valid(column) == 1, column), else_="{}")
+    return func.json_extract(valid_payload, path)
 
 
 def same_run_generation(run: AgentRun, previous: AgentRun) -> bool:
@@ -467,7 +454,6 @@ class SQLAlchemyAgentRunRepository:
             else None
         )
         self._save_task_record(db, task_from_run(run, existing=existing_task))
-        invalidate_run_scopes(run.user_id)
 
     def get(self, run_id: str) -> AgentRun | None:
         self._ensure_schema()
@@ -529,7 +515,8 @@ class SQLAlchemyAgentRunRepository:
             query = db.query(AgentRunRecord).filter(AgentRunRecord.user_id == str(user_id or ""))
             if db.get_bind().dialect.name == "sqlite":
                 query = query.filter(
-                    _json_extract(AgentRunRecord.payload_json, _TASK_ID_PATH) == wanted_task
+                    _json_extract(AgentRunRecord.payload_json, _TASK_ID_PATH).cast(String)
+                    == wanted_task
                 )
             records = query.order_by(
                 AgentRunRecord.created_at.asc(), AgentRunRecord.run_id.asc()
@@ -544,24 +531,19 @@ class SQLAlchemyAgentRunRepository:
                     runs.append(run)
             return runs
 
-    def list_run_scopes(self, *, user_id: str) -> dict[str, list[tuple[str, str, str]]]:
-        """One scan per request: task_id → [(run user, tenant, mod)] for list filtering."""
-        key = str(user_id or "")
-        with _SCOPES_LOCK:
-            cached = _SCOPES_CACHE.get(key)
-            if cached is not None and time.monotonic() - cached[0] <= _SCOPES_TTL_SECONDS:
-                return cached[1]
-        scopes = self._load_run_scopes(key)
-        with _SCOPES_LOCK:
-            _SCOPES_CACHE[key] = (time.monotonic(), scopes)
-        return scopes
+    def storage_identity(self) -> object:
+        """Bind view caches to the actual database, including desktop DB switches."""
+        with self._session_scope(read_only=True) as db:
+            return db.get_bind()
 
-    def _load_run_scopes(self, user_id: str) -> dict[str, list[tuple[str, str, str]]]:
+    def list_run_scopes(self, *, user_id: str) -> dict[str, list[tuple[str, str, str]]]:
+        """Read current authorization scopes without hydrating unrelated payload fields."""
         from app.application.agent_orchestrator.task_models import (
             mod_id_of_run,
             tenant_id_of_run,
         )
 
+        user_id = str(user_id or "")
         self._ensure_schema()
         scopes: dict[str, list[tuple[str, str, str]]] = {}
         with self._session_scope(read_only=True) as db:
@@ -598,7 +580,7 @@ class SQLAlchemyAgentRunRepository:
         return scopes
 
     def recent_task_refs(
-        self, *, user_id: str | None = None, limit: int = 200
+        self, *, user_id: str | None = None, tenant_id: str | None = None, limit: int = 200
     ) -> list[tuple[str, str, str]]:
         """(run_id, task_id, tenant_id) of recent runs without hydrating payloads."""
         self._ensure_schema()
@@ -613,6 +595,14 @@ class SQLAlchemyAgentRunRepository:
                 )
                 if user_id is not None:
                     query = query.filter(AgentRunRecord.user_id == str(user_id))
+                if tenant_id is not None:
+                    query = query.filter(
+                        func.coalesce(
+                            _json_extract(AgentRunRecord.payload_json, _TENANT_PATH).cast(String),
+                            "",
+                        )
+                        == str(tenant_id)
+                    )
                 rows = (
                     query.order_by(AgentRunRecord.updated_at.desc()).limit(max(0, int(limit))).all()
                 )
@@ -623,7 +613,7 @@ class SQLAlchemyAgentRunRepository:
                 ]
         return [
             (run.run_id, task_id, tenant_id_of_run(run))
-            for run in self.list_recent(user_id=user_id, limit=limit)
+            for run in self.list_recent(user_id=user_id, tenant_id=tenant_id, limit=limit)
             if (task_id := self._run_task_id(run))
         ]
 

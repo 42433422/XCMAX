@@ -76,6 +76,8 @@ def test_same_turn_replays_receipt_and_rejects_changed_message(memory_dir: Path)
 
 
 def test_settle_with_reused_turn_id_does_not_break_the_turn(memory_dir: Path) -> None:
+    from app.application.ai_chat import dialogue_memory as memory
+
     context = _context("reuse", "1")
     assert prepare_chat_turn("真正的那条消息", context) is None
 
@@ -86,6 +88,9 @@ def test_settle_with_reused_turn_id_does_not_break_the_turn(memory_dir: Path) ->
     assert recent_conversation_messages(_context("reuse", "2")) == [
         {"role": "user", "content": "真正的那条消息"}
     ]
+    assert memory._turn_is_live(conversation_key(context), "1")
+    settle_chat_turn("真正的那条消息", context, {"response": "原任务完成"}, "completed")
+    assert prepare_chat_turn("真正的那条消息", context)["response"] == "原任务完成"
 
 
 def test_abandoned_turn_is_not_treated_as_completed(memory_dir: Path) -> None:
@@ -139,6 +144,7 @@ def test_unfinished_turn_replays_only_the_original_run(memory_dir: Path, status:
     # 另一项执行的结算不再抛错中断整轮，而是跳过并保留原执行的记录。
     settle_chat_turn("删除旧记录", context, {"run_id": "other"}, "completed")
     assert turn_status(conversation_key(context), "original") == status
+    assert prepare_chat_turn("删除旧记录", context)["run_id"] == "run-original"
 
 
 @pytest.mark.parametrize("changed", [{"local_user_id": 2}, {"tenant_id": 2}, {"mod_id": "other"}])

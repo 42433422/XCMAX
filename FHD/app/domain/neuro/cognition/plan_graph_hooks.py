@@ -78,8 +78,9 @@ def finalize_planned_graph(
     node_type: Any,
 ) -> Any:
     """Validate generated plans and pause safely on rejection; never execute a fallback plan."""
-    trace_id = str((context or {}).get("trace_id") or plan_id)
-    rejection = str((context or {}).get("planning_failure_reason") or "模型未返回可用计划")
+    context = context or {}
+    trace_id = str(context.get("trace_id") or plan_id)
+    rejection = str(context.get("planning_failure_reason") or "模型未返回可用计划")
     if planned is not None:
         err = validate(planned)
         if err is None:
@@ -112,11 +113,11 @@ def finalize_planned_graph(
     question = (
         "我没能生成通过系统校验的计划，本轮没有执行任何业务操作。请补充业务对象和目标后重试。"
     )
-    coverage_rejected = bool((context or {}).get("goal_coverage_rejected"))
+    coverage_rejected = bool(context.get("goal_coverage_rejected"))
     failure_kind = (
         "plan_validation_failed"
         if planned is not None
-        else str((context or {}).get("planning_failure_kind") or "model_unavailable")
+        else str(context.get("planning_failure_kind") or "model_unavailable")
     )
     if coverage_rejected:
         failure_kind = "goal_coverage_rejected"
@@ -148,7 +149,7 @@ def finalize_planned_graph(
             **({"goal_coverage_rejected": True} if coverage_rejected else {}),
             **(
                 {"plan_repair": context["plan_repair_trace"]}
-                if isinstance((context or {}).get("plan_repair_trace"), dict)
+                if isinstance(context.get("plan_repair_trace"), dict)
                 else {}
             ),
             "rejection_reason": rejection[:240],

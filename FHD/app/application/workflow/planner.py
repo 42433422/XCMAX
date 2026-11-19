@@ -48,6 +48,17 @@ def close_planner_http_client() -> None:
         client.close()
 
 
+def _repair_failure_kind(trace: dict[str, Any]) -> str:
+    errors = trace.get("errors") or []
+    if (
+        errors
+        and errors[-1].get("code") == "repair_request_failed"
+        and "余额不足" in str(errors[-1].get("message") or "")
+    ):
+        return "model_unavailable"
+    return "plan_repair_failed"
+
+
 class LLMWorkflowPlanner:
     def __init__(
         self,
@@ -231,12 +242,7 @@ class LLMWorkflowPlanner:
                 )
             if planned is None:
                 errors = repair_trace.get("errors") or []
-                context["planning_failure_kind"] = (
-                    "model_unavailable"
-                    if errors and errors[-1].get("code") == "repair_request_failed"
-                    and "余额不足" in str(errors[-1].get("message") or "")
-                    else "plan_repair_failed"
-                )
+                context["planning_failure_kind"] = _repair_failure_kind(repair_trace)
                 context["plan_repair_trace"] = repair_trace
                 if errors:
                     context["planning_failure_reason"] = str(errors[-1].get("message") or "")
@@ -293,7 +299,7 @@ class LLMWorkflowPlanner:
                             complete=self.complete_messages,
                         )
                         if planned is None:
-                            context["planning_failure_kind"] = "plan_repair_failed"
+                            context["planning_failure_kind"] = _repair_failure_kind(repair_trace)
                             context["plan_repair_trace"] = repair_trace
                             errors = repair_trace.get("errors") or []
                             if errors:

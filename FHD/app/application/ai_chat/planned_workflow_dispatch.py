@@ -232,9 +232,7 @@ class PlannedWorkflowDispatch:
         plan = self.planner.plan(
             user_id=user_id, message=planner_message, tool_registry=tool_registry, context=context
         )
-        if isinstance(plan, PlanGraph) and not (plan.metadata or {}).get(
-            "planning_rejected"
-        ):
+        if isinstance(plan, PlanGraph) and not (plan.metadata or {}).get("planning_rejected"):
             node_labels = [f"{node.tool_id}.{node.action}" for node in plan.nodes]
             publish_stream_note(f"已生成 {len(node_labels)} 步执行计划：" + "、".join(node_labels))
         if not isinstance(plan, PlanGraph):
@@ -280,10 +278,7 @@ class PlannedWorkflowDispatch:
                     "本次没有执行任何业务操作。请重试。"
                 )
             elif failure_kind == "plan_format_invalid":
-                message_text = (
-                    "模型已返回内容，但计划格式未通过校验，自动格式修复也未成功。"
-                    "本次没有执行任何业务操作。请重试。"
-                )
+                message_text = "规划输出未通过格式校验，本次没有执行任何业务操作。请重试。"
             elif failure_kind == "planner_error":
                 message_text = "规划服务处理失败，本次没有执行任何业务操作。请重试。"
             elif unavailable and "余额不足" in reason:

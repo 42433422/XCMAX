@@ -208,13 +208,13 @@
     "FHD/app/application/agent_orchestrator/run_sql_repository.py": {
       "base_file": "FHD/app/application/agent_orchestrator/run_sql_repository.py",
       "base_blob": "0a0719e4483b85807c0c76cbeb489641752a9908",
-      "head_blob": "a0e985c4eb5336547f9ecab5c5adbe4a956f77e7",
+      "head_blob": "ff01900b64efbe0a7e3821fe7007652ea40bee1e",
       "before_lines": 881,
-      "after_lines": 984,
-      "reason": "评审请求（非批准）：本轮延续run SQL数据仓库，修复N+1与重复JSON反序列化，保留身份范围、原索引和任务幂等边界。 评审请求（不代表批准）：复用已有事务和执行租约完成原生恢复回执，并将仓库既有auto_create策略显式传给原生检查点适配器，阻止受保护请求隐式建表。",
-      "boundary": "沿用原租户/用户/Mod作用域、模型工具授权、审批租约、会话版本、未知写入核对；仅补齐本轮对应调用及缓存路径。 仅原子保存/claim边界和只读schema初始化能力属性；默认及旧适配器兼容原初始化，auto_create=False保持既有schema和授权，不放宽未知写结果重放。",
-      "validation": "来源#3310/#3311回归需要在新整合提交完整执行；已完成#3308的远端CI不能作为新候选通过证据。 整合复验：后端组合2008通过/2项环境跳过、规划预算与无损目录203通过、原生检查点迁移及guarded场景283通过/1项既有PostgreSQL环境跳过、真实审批跨进程恢复50通过；各测试组可重叠，不相加。前端流式67通过，FHD全量mypy已通过。最终提交远端完整CI及真实PostgreSQL仍须通过；本登记不是架构批准。",
-      "follow_up": "继续做实机CPU/任务重启/计划失败输入复验，逐步拆分超大源文件，不以评审记录替代安全审核。 原生schema继续由已固定版本的LangGraph saver和显式离线迁移管理；恢复、租约和未知副作用核对沿用既有仓库协议。",
+      "after_lines": 974,
+      "reason": "Review request only: Replace full run payload hydration with SQLite JSON field projection and filter tenant/task identity before limiting legacy backfill; keep authorization scopes fresh on every read and bind view caches to the actual database.",
+      "boundary": "These are persistence-query and storage-identity methods of the existing SQLAlchemy repository. No new schema, cache of authorization decisions, worker runtime, or cross-layer dependency is introduced; PostgreSQL retains the existing hydrated fallback.",
+      "validation": "Repository suite 13 passed and main-based eight-file task/conversation/ELT/routes combination 242 passed. Cross-database and transaction-commit regressions, numeric task identity, malformed JSON, and tenant-before-limit passed. A 75 MB synthetic warm-read comparison measured median 72.43 ms versus 317.18 ms; final real PostgreSQL and full CI remain required on the published head.",
+      "follow_up": "@42433422 should review the exact blob and query/storage boundaries with the final current-head CI evidence. Keep the repository responsibility intact; do not split it into same-purpose mixins solely to reduce the line count.",
       "review_owner": "@42433422"
     },
     "FHD/app/application/elt/auto_ingest_service.py": {
@@ -499,10 +499,10 @@
       "head_blob": "68b106eb3d051ecd9abc1680bcd961835c5d6436",
       "before_lines": 866,
       "after_lines": 890,
-      "reason": "评审请求（非批准）：规划模型入口添加失败分类与有限轨迹，区分可解析错误、修复输出失败与模型不可用，保留工具授权校验。 评审请求（不代表批准）：使短消息的附件和历史证据进入完整规划，并共享 LangChain 的最终模型预算入口。",
-      "boundary": "沿用原租户/用户/Mod作用域、模型工具授权、审批租约、会话版本、未知写入核对；仅补齐本轮对应调用及缓存路径。 沿用 #3303 的授权工具及拒绝处理；当前附件完整保留并脱敏，超限由统一预算拒绝。",
-      "validation": "来源#3310/#3311回归需要在新整合提交完整执行；已完成#3308的远端CI不能作为新候选通过证据。 整合复验：后端组合2008通过/2项环境跳过、规划预算与无损目录203通过、原生检查点迁移及guarded场景283通过/1项既有PostgreSQL环境跳过、真实审批跨进程恢复50通过；各测试组可重叠，不相加。前端流式67通过，FHD全量mypy已通过。最终提交远端完整CI及真实PostgreSQL仍须通过；本登记不是架构批准。",
-      "follow_up": "继续做实机CPU/任务重启/计划失败输入复验，逐步拆分超大源文件，不以评审记录替代安全审核。 继续统一模型出口，禁止新增绕过上下文预算的直连调用。",
+      "reason": "Review request only: Normalize exactly the two observed clarify/ask.ask and clarify.ask/ask aliases in the shared plan builder, preserving original fields and rejecting all other unknown tool or action suffixes.",
+      "boundary": "The change stays within the existing Pydantic and PlanGraph decoding boundary. First planning and repair reuse one builder; dependency, parameter, risk, approval and execution validation retain their existing authority.",
+      "validation": "Plan repair and planner component boundary suites passed 54 tests after independent review. Exact aliases, unknown suffix rejection, bounded/redacted diagnostics, provider-body exclusion, cross-round state reset and real 402 classification after coverage replan are covered; five production-file mypy and seven-file Ruff checks passed. Final combined full CI is still required.",
+      "follow_up": "@42433422 should review the two exact aliases and final head CI evidence. Future aliases require their own explicit contract and negative tests; do not replace this with suffix stripping or a new permissive parser.",
       "review_owner": "@42433422"
     },
     "FHD/app/application/dataset_rag_app_service.py": {
@@ -568,13 +568,13 @@
     "FHD/app/application/ai_chat/dialogue_memory.py": {
       "base_file": "FHD/app/application/ai_chat/dialogue_memory.py",
       "base_blob": "116688fc85be7051217b719a05a9adf70286cb98",
-      "head_blob": "639263bc45095fce41374b1e7fd9e44ee2b751b4",
+      "head_blob": "024a82734db676abe6f5d097d1f843ef30b925a2",
       "before_lines": 934,
-      "after_lines": 947,
-      "reason": "评审请求（非批准）：会话结算新增重复turn_id防冲突跳过，避免前端迟到重试冒泡破坏有效审批，保留原版本与租约拒绝。 评审请求（不代表批准）：移除自制片段摘要，接入 LangChain 真正覆盖游标，并用 filelock 和 SQL revision 保持投影及回执一致。",
-      "boundary": "沿用原租户/用户/Mod作用域、模型工具授权、审批租约、会话版本、未知写入核对；仅补齐本轮对应调用及缓存路径。 只保留认证会话投影、事务 fencing、完整脱敏回执及原消息 HMAC；没有新增模型执行循环。",
-      "validation": "来源#3310/#3311回归需要在新整合提交完整执行；已完成#3308的远端CI不能作为新候选通过证据。 整合复验：后端组合2008通过/2项环境跳过、规划预算与无损目录203通过、原生检查点迁移及guarded场景283通过/1项既有PostgreSQL环境跳过、真实审批跨进程恢复50通过；各测试组可重叠，不相加。前端流式67通过，FHD全量mypy已通过。最终提交远端完整CI及真实PostgreSQL仍须通过；本登记不是架构批准。",
-      "follow_up": "继续做实机CPU/任务重启/计划失败输入复验，逐步拆分超大源文件，不以评审记录替代安全审核。 后续缩减投影适配时保持 SQL 权威与待保存回执恢复，不再引入自研压缩策略。",
+      "after_lines": 939,
+      "reason": "Review request only: Make mismatched late settlements idempotent no-ops so a duplicate completion cannot cancel or overwrite the original approved run; preserve the existing input fingerprint, filelock and conversation revision fences.",
+      "boundary": "Only the two identity-mismatch settlement branches and fixed diagnostic messages change. Current owner/tenant/Mod checks, durable receipts, deletion/revocation errors, turn lease ownership and retry-on-write-failure behavior remain in the same conversation module.",
+      "validation": "The eight-file main-based task/conversation/ELT/routes combination passed 242 tests. It includes real multi-process dialogue, lifecycle deletion/revocation and lock cleanup; mismatched redacted secrets preserve the original receipt, changed run IDs replay only the original run, and valid settlement still completes after a mismatched no-op.",
+      "follow_up": "@42433422 should verify the exact five-line growth and current-head CI. Keep settlement identity validation adjacent to its durable write and lease-finally path; no separate settlement layer is needed for this correction.",
       "review_owner": "@42433422"
     },
     "FHD/app/desktop_runtime/database_generation_registry.py": {

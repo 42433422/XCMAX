@@ -6,7 +6,9 @@ import asyncio
 import json
 import threading
 import time
-from typing import Any, Callable, cast
+from concurrent.futures import Future, wait
+from dataclasses import asdict
+from typing import Any, Callable, Generic, TypeVar, cast
 
 from fastapi import APIRouter, Body, Depends, Query
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -14,6 +16,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from app.application.agent_orchestrator import AgentOrchestrator, get_agent_run_repository
 from app.application.agent_orchestrator.run_control import run_operation_lock
 from app.application.agent_orchestrator.run_models import utc_now_iso
+from app.application.agent_orchestrator.run_repository import AgentRunRepository
 from app.application.agent_orchestrator.task_dispatcher import get_agent_task_dispatcher
 from app.application.agent_orchestrator.task_execution_repository import (
     get_task_execution_repository,
@@ -49,53 +52,101 @@ router = APIRouter(tags=["agent"])
 # 运行写入时会同步建任务记录，这里只需要为历史运行补建一次。
 # 前端每秒轮询列表，若每次都扫描近期载荷会持续占用整核。
 _BACKFILL_TTL_SECONDS = 60.0
-_BACKFILL_DONE: dict[tuple[str, str], float] = {}
-_BACKFILL_LOCK = threading.Lock()
-
 _STREAM_INTERVAL_SECONDS = 1.0
 _SNAPSHOT_TTL_SECONDS = 1.0
-_SNAPSHOTS: dict[tuple[str, str, str], tuple[float, str]] = {}
-_SNAPSHOTS_LOCK = threading.Lock()
+_TaskCacheKey = tuple[object, object, str]
+_Value = TypeVar("_Value")
 
 
-def _cached_task_snapshot(key: tuple[str, str, str], build: Callable[[], str]) -> str:
-    """同一身份的任务快照在 1 秒内只序列化一次，供所有订阅连接复用。"""
-    now = time.monotonic()
-    with _SNAPSHOTS_LOCK:
-        cached = _SNAPSHOTS.get(key)
-        if cached is not None and now - cached[0] <= _SNAPSHOT_TTL_SECONDS:
-            return cached[1]
-    encoded = build()
-    with _SNAPSHOTS_LOCK:
-        if len(_SNAPSHOTS) >= 64:
-            _SNAPSHOTS.clear()
-        _SNAPSHOTS[key] = (now, encoded)
-    return encoded
+class _TaskViewCache(Generic[_Value]):
+    """Bounded completed values and one in-flight builder per storage/identity key."""
+
+    def __init__(self, ttl: float, capacity: int = 64) -> None:
+        self._ttl = ttl
+        self._capacity = max(1, capacity)
+        self._entries: dict[_TaskCacheKey, tuple[float | None, Future[_Value]]] = {}
+        self._lock = threading.Lock()
+
+    def get(self, key: _TaskCacheKey, build: Callable[[], _Value]) -> _Value:
+        while True:
+            with self._lock:
+                now = time.monotonic()
+                for expired, (completed, _) in list(self._entries.items()):
+                    if completed is not None and now - completed > self._ttl:
+                        self._entries.pop(expired)
+                cached = self._entries.get(key)
+                if cached is not None:
+                    future = cached[1]
+                    owner = False
+                    break
+                if len(self._entries) >= self._capacity:
+                    completed_key = next(
+                        (k for k, (completed, _) in self._entries.items() if completed is not None),
+                        None,
+                    )
+                    if completed_key is not None:
+                        self._entries.pop(completed_key)
+                if len(self._entries) < self._capacity:
+                    future = Future()
+                    self._entries[key] = (None, future)
+                    owner = True
+                    break
+                pending = next(iter(self._entries.values()))[1]
+            # Pending builders are never evicted: that would permit duplicate work.
+            wait((pending,))
+        if not owner:
+            return future.result()
+        try:
+            value = build()
+        except BaseException as exc:
+            with self._lock:
+                self._entries.pop(key)
+            future.set_exception(exc)
+            raise
+        with self._lock:
+            self._entries[key] = (time.monotonic(), future)
+        future.set_result(value)
+        return value
 
 
-def _backfill_task_records(orchestrator: AgentOrchestrator, principal: AgentPrincipal) -> None:
-    key = (str(principal.user_id), str(principal.tenant_id or ""))
-    now = time.monotonic()
-    with _BACKFILL_LOCK:
-        done_at = _BACKFILL_DONE.get(key)
-        if done_at is not None and now - done_at <= _BACKFILL_TTL_SECONDS:
-            return
-        _BACKFILL_DONE[key] = now
-    try:
-        repository = get_agent_run_repository()
-        known = orchestrator.task_keys(user_id=principal.user_id)
+_BACKFILL_DONE = _TaskViewCache[None](_BACKFILL_TTL_SECONDS)
+_SNAPSHOTS = _TaskViewCache[str](_SNAPSHOT_TTL_SECONDS)
+
+
+def _task_view_key(repository: AgentRunRepository, principal: AgentPrincipal) -> _TaskCacheKey:
+    # A desktop repository can keep its identity while its underlying bind changes.
+    return (
+        repository,
+        repository.storage_identity(),
+        json.dumps(asdict(principal), ensure_ascii=False, sort_keys=True),
+    )
+
+
+def _cached_task_snapshot(key: _TaskCacheKey, build: Callable[[], str]) -> str:
+    return _SNAPSHOTS.get(key, build)
+
+
+def _backfill_task_records(repository: AgentRunRepository, principal: AgentPrincipal) -> None:
+    def backfill() -> None:
+        known = repository.task_keys(user_id=principal.user_id)
         for run_id, task_id, tenant_id in repository.recent_task_refs(
-            user_id=principal.user_id, limit=200
+            user_id=principal.user_id, tenant_id=principal.tenant_id, limit=200
         ):
-            if not task_id or tenant_id != key[1] or (tenant_id, task_id) in known:
+            if not task_id or tenant_id != principal.tenant_id or (tenant_id, task_id) in known:
                 continue
             run = repository.get(run_id)
-            if run is not None:
-                orchestrator.save_task(task_from_run(run))
+            if (
+                run is not None
+                and run.user_id == principal.user_id
+                and tenant_id_of_run(run) == principal.tenant_id
+            ):
+                repository.save_task(task_from_run(run))
                 known.add((tenant_id, task_id))
+
+    try:
+        _BACKFILL_DONE.get(_task_view_key(repository, principal), backfill)
     except RECOVERABLE_ERRORS:
-        with _BACKFILL_LOCK:
-            _BACKFILL_DONE.pop(key, None)
+        pass
 
 
 def _task_envelope(
@@ -192,8 +243,9 @@ def list_agent_tasks(
     principal: AgentPrincipal = Depends(require_agent_principal),
 ) -> dict[str, Any] | JSONResponse:
     try:
-        orchestrator = AgentOrchestrator()
-        _backfill_task_records(orchestrator, principal)
+        repository = get_agent_run_repository()
+        orchestrator = AgentOrchestrator(repository=repository)
+        _backfill_task_records(repository, principal)
         tasks = scoped_tasks(
             orchestrator,
             principal=principal,
@@ -397,9 +449,12 @@ async def stream_agent_tasks(
     principal: AgentPrincipal = Depends(require_agent_principal),
     authorize: StreamAuthorizer = Depends(require_stream_authorizer),
 ) -> StreamingResponse:
+    repository = get_agent_run_repository()
+    orchestrator = AgentOrchestrator(repository=repository)
+
     def encode_snapshot() -> str:
         tasks = scoped_tasks(
-            AgentOrchestrator(),
+            orchestrator,
             principal=principal,
             limit=200,
             include_archived=False,
@@ -408,11 +463,8 @@ async def stream_agent_tasks(
         snapshot = [_task_stream_envelope(task, executions) for task in tasks]
         return json.dumps(json_safe(snapshot), ensure_ascii=False, sort_keys=True)
 
-    snapshot_key = (
-        str(principal.user_id),
-        str(principal.tenant_id or ""),
-        str((principal.mod_authorization or {}).get("mod_id") or ""),
-    )
+    def cached_snapshot() -> str:
+        return _cached_task_snapshot(_task_view_key(repository, principal), encode_snapshot)
 
     async def event_stream():
         previous = ""
@@ -423,7 +475,7 @@ async def stream_agent_tasks(
             # Blocking store reads must stay off the event loop that serves every other request.
             # 多个任务中心连接（重连、多个页面）共享同一份快照，避免每个连接
             # 每 250 毫秒各自重建一次完整任务列表。
-            encoded = await asyncio.to_thread(_cached_task_snapshot, snapshot_key, encode_snapshot)
+            encoded = await asyncio.to_thread(cached_snapshot)
             if encoded != previous:
                 if not await authorize():
                     break

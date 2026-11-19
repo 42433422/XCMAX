@@ -54,7 +54,8 @@ def test_retry_reuses_saved_chat_plan_without_another_model_request(monkeypatch)
     assert retried.metadata["plan"]["nodes"][0]["tool_id"] == "customers"
 
 
-def test_sql_tenant_filter_precedes_limit_across_streaming_batches(tmp_path):
+@pytest.mark.parametrize("tenant", ["target", 7])
+def test_sql_tenant_filter_precedes_limit_across_streaming_batches(tmp_path, tenant):
     engine = create_engine(f"sqlite:///{tmp_path / 'tenant-list.db'}")
     factory = sessionmaker(bind=engine)
     repo = SQLAlchemyAgentRunRepository(session_factory=factory)
@@ -64,28 +65,43 @@ def test_sql_tenant_filter_precedes_limit_across_streaming_batches(tmp_path):
         # another tenant's records belonging to the same user.
         for index in range(2):
             run = AgentRun(user_id="owner", message=f"target-{index}")
-            run.metadata["runtime_context"] = {"tenant_id": "target"}
+            run.metadata["runtime_context"] = {"tenant_id": tenant}
+            run.metadata["task_context"] = {"task_id": f"target-{index}"}
             repo.save(run)
             expected.insert(0, run.run_id)
         with factory.begin() as db:
             for index in range(205):
                 run = AgentRun(user_id="owner", message=f"other-{index}")
                 run.metadata["runtime_context"] = {"tenant_id": "other"}
+                run.metadata["task_context"] = {"task_id": f"other-{index}"}
                 repo.save_in_session(db, run)
         legacy = AgentRun(user_id="owner", message="no tenant")
+        legacy.metadata["task_context"] = {"task_id": "legacy"}
         repo.save(legacy)
         outsider = AgentRun(user_id="different-user", message="same tenant other user")
-        outsider.metadata["runtime_context"] = {"tenant_id": "target"}
+        outsider.metadata["runtime_context"] = {"tenant_id": tenant}
+        outsider.metadata["task_context"] = {"task_id": "outsider"}
         repo.save(outsider)
         fresh = SQLAlchemyAgentRunRepository(session_factory=factory, auto_create=False)
         assert [
-            run.run_id for run in fresh.list_recent(user_id="owner", tenant_id="target", limit=2)
+            run.run_id for run in fresh.list_recent(user_id="owner", tenant_id=str(tenant), limit=2)
         ] == expected
         assert [
-            run.run_id for run in fresh.list_recent(user_id="owner", tenant_id="target", limit=1)
+            run.run_id for run in fresh.list_recent(user_id="owner", tenant_id=str(tenant), limit=1)
         ] == expected[:1]
         assert fresh.list_recent(user_id="owner", tenant_id="missing", limit=2) == []
         assert fresh.list_recent(user_id="owner", tenant_id="target", limit=0) == []
+        assert [
+            run_id
+            for run_id, _, _ in fresh.recent_task_refs(
+                user_id="owner", tenant_id=str(tenant), limit=2
+            )
+        ] == expected
+        assert fresh.recent_task_refs(user_id="owner", tenant_id="missing", limit=2) == []
+        assert fresh.recent_task_refs(user_id="owner", tenant_id=str(tenant), limit=0) == []
+        assert fresh.recent_task_refs(user_id="owner", tenant_id="", limit=2) == [
+            (legacy.run_id, "legacy", "")
+        ]
         assert [
             run.run_id for run in fresh.list_recent(user_id="owner", tenant_id="", limit=2)
         ] == [legacy.run_id]
@@ -498,13 +514,10 @@ def test_concurrent_parent_saves_keep_child_receipts_and_reject_rebinding(tmp_pa
         engine.dispose()
 
 
-def test_run_scopes_read_payload_json_once_and_invalidate_on_save(tmp_path) -> None:
-    from app.application.agent_orchestrator.run_sql_repository import invalidate_run_scopes
-
+def test_run_scopes_reads_json_projection_and_observes_saves(tmp_path) -> None:
     engine = create_engine(f"sqlite:///{tmp_path / 'run-scopes.db'}")
     factory = sessionmaker(bind=engine)
     repo = SQLAlchemyAgentRunRepository(session_factory=factory)
-    invalidate_run_scopes()
     try:
         run = AgentRun(user_id="owner", message="first")
         run.metadata["task_context"] = {"task_id": "task-1"}
@@ -519,7 +532,7 @@ def test_run_scopes_read_payload_json_once_and_invalidate_on_save(tmp_path) -> N
             run.run_id
         ]
 
-        # 缓存期内不重扫；写入新 run 后立即失效，新任务不会长时间不可见。
+        # 授权归属直接读取已提交状态，新的运行必须立即参与过滤。
         extra = AgentRun(user_id="owner", message="second")
         extra.metadata["task_context"] = {"task_id": "task-2"}
         extra.metadata["runtime_context"] = {"tenant_id": "t2"}
@@ -528,5 +541,111 @@ def test_run_scopes_read_payload_json_once_and_invalidate_on_save(tmp_path) -> N
         assert scopes["task-2"] == [("owner", "t2", "")]
         assert scopes["task-1"] == [("owner", "t1", "m1")]
     finally:
-        invalidate_run_scopes()
+        engine.dispose()
+
+
+def _scope_run(user_id: str, task_id: str, mod_id: str) -> AgentRun:
+    run = AgentRun(user_id=user_id, message=task_id)
+    run.metadata["task_context"] = {"task_id": task_id}
+    run.metadata["runtime_context"] = {
+        "tenant_id": "tenant-1",
+        "_mod_authorization": {"mod_id": mod_id},
+    }
+    return run
+
+
+def _visible_scoped_task_ids(repo, user_id: str) -> list[str]:
+    from types import SimpleNamespace
+
+    from app.fastapi_routes.domains.agent.route_support import scoped_tasks
+
+    principal = SimpleNamespace(
+        user_id=user_id,
+        tenant_id="tenant-1",
+        mod_authorization={"mod_id": "allowed-mod"},
+    )
+    return [task.task_id for task in scoped_tasks(repo, principal=principal, limit=200)]
+
+
+def test_scope_authority_isolated_across_databases(tmp_path) -> None:
+    user_id = "scope-database-owner"
+    engines = [create_engine(f"sqlite:///{tmp_path / name}") for name in ("a.db", "b.db")]
+    try:
+        first, second = [
+            SQLAlchemyAgentRunRepository(session_factory=sessionmaker(bind=engine))
+            for engine in engines
+        ]
+        first.save(_scope_run(user_id, "safe-a", "allowed-mod"))
+        second.save(_scope_run(user_id, "secret-b", "other-mod"))
+        assert first.list_run_scopes(user_id=user_id) == {
+            "safe-a": [(user_id, "tenant-1", "allowed-mod")]
+        }
+        assert second.list_run_scopes(user_id=user_id) == {
+            "secret-b": [(user_id, "tenant-1", "other-mod")]
+        }
+        assert _visible_scoped_task_ids(second, user_id) == []
+    finally:
+        for engine in engines:
+            engine.dispose()
+
+
+def test_scope_authority_refreshes_after_a_session_commit(tmp_path) -> None:
+    user_id = "scope-commit-owner"
+    engine = create_engine(f"sqlite:///{tmp_path / 'commit.db'}")
+    factory = sessionmaker(bind=engine)
+    repository = SQLAlchemyAgentRunRepository(session_factory=factory)
+    try:
+        repository.save(_scope_run(user_id, "safe-old", "allowed-mod"))
+        with factory() as transaction:
+            repository.save_in_session(
+                transaction, _scope_run(user_id, "secret-after-commit", "other-mod")
+            )
+            transaction.flush()
+            # Another connection reads the prior committed state while this
+            # transaction is still open; it must not become authority after commit.
+            assert repository.list_run_scopes(user_id=user_id) == {
+                "safe-old": [(user_id, "tenant-1", "allowed-mod")]
+            }
+            transaction.commit()
+        assert _visible_scoped_task_ids(repository, user_id) == ["safe-old"]
+    finally:
+        engine.dispose()
+
+
+def test_sql_task_query_preserves_numeric_metadata_identity(tmp_path) -> None:
+    engine = create_engine(f"sqlite:///{tmp_path / 'numeric-task.db'}")
+    repo = SQLAlchemyAgentRunRepository(session_factory=sessionmaker(bind=engine))
+    try:
+        run = _scope_run("owner", "42", "other-mod")
+        run.metadata["task_context"]["task_id"] = 42
+        repo.save(run)
+        assert [item.run_id for item in repo.list_task_runs(user_id="owner", task_id="42")] == [
+            run.run_id
+        ]
+        assert repo.list_task_runs(user_id="other-owner", task_id="42") == []
+    finally:
+        engine.dispose()
+
+
+def test_sql_projection_skips_malformed_payload_without_losing_valid_runs(tmp_path) -> None:
+    from app.db.models.agent import AgentRunRecord
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'malformed-payload.db'}")
+    factory = sessionmaker(bind=engine)
+    repo = SQLAlchemyAgentRunRepository(session_factory=factory)
+    try:
+        valid = _scope_run("owner", "valid", "allowed-mod")
+        broken = _scope_run("owner", "broken", "other-mod")
+        repo.save(valid)
+        repo.save(broken)
+        with factory.begin() as db:
+            db.get(AgentRunRecord, broken.run_id).payload_json = "{"
+        assert repo.list_run_scopes(user_id="owner") == {
+            "valid": [("owner", "tenant-1", "allowed-mod")]
+        }
+        assert [item.run_id for item in repo.list_task_runs(user_id="owner", task_id="valid")] == [
+            valid.run_id
+        ]
+        assert repo.recent_task_refs(user_id="owner") == [(valid.run_id, "valid", "tenant-1")]
+    finally:
         engine.dispose()
