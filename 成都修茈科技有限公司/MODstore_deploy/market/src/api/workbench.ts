@@ -276,6 +276,8 @@ export const customerService = {
     }),
   customerServiceTicketDetail: (id: number | string) =>
     req(`/api/customer-service/tickets/${encodeURIComponent(String(id))}`, { timeoutMs: 15_000 }),
+  customerServiceTicketTranscript: (id: number | string) =>
+    req(`/api/customer-service/tickets/${encodeURIComponent(String(id))}/transcript`, { timeoutMs: 15_000 }),
   customerServiceActions: (ticketId?: number | string) =>
     req(`/api/customer-service/actions${ticketId ? `?ticket_id=${encodeURIComponent(String(ticketId))}` : ''}`, {
       timeoutMs: 15_000,

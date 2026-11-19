@@ -26,11 +26,12 @@ export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
   const error = ref('')
   const activeSessionId = ref<number | null>(null)
   const openedTicket = ref<CustomerTicket | null>(null)
+  const openedTicketCanReply = ref(false)
   const openedTicketRef = computed(() => openedTicket.value
     ? shortTicketRef({ ticket_no: openedTicket.value.ticket_no || openedTicket.value.id })
     : '')
   const readOnly = computed(() => !!openedTicket.value
-    && (!activeSessionId.value || ticketIsClosed(openedTicket.value)))
+    && (!openedTicketCanReply.value || !activeSessionId.value || ticketIsClosed(openedTicket.value)))
   let conversationGeneration = 0
   let mounted = true
   const messages = ref<UiMessage[]>([])
@@ -144,7 +145,10 @@ export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
       if (sessionId && session.id && Number(session.id) !== sessionId) throw new Error('返回的客服会话不一致')
       const responseMessage = asUnknownRecord(res.message)
       activeSessionId.value = Number(session.id || sessionId || 0) || null
-      if (ticket) openedTicket.value = ticket
+      if (ticket) {
+        openedTicket.value = ticket
+        openedTicketCanReply.value = true
+      }
       // 对话里只用白话正文；不再堆「进度/下一步/已办理」多卡
       let content = String(responseMessage.content || '已处理。')
       if (ticket) {
@@ -182,6 +186,7 @@ export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
     conversationGeneration++
     activeSessionId.value = null
     openedTicket.value = null
+    openedTicketCanReply.value = false
     messages.value = []
     draft.value = ''
     ctx.clearPendingImage()
@@ -202,33 +207,33 @@ export function useCustomerServiceChat(ctx: CustomerServiceChatCtx) {
     const generation = conversationGeneration
     ctx.expandedTicketIds.value = new Set([...ctx.expandedTicketIds.value, ticketId])
     try {
-      const reply = asUnknownRecord(await api.customerServiceTicketDetail(ticketId))
+      const transcript = asUnknownRecord(await api.customerServiceTicketTranscript(ticketId))
       if (generation !== conversationGeneration) return
-      const current = asUnknownRecord(reply.ticket)
-      if (Number(current.id) !== ticketId) throw new Error('返回的工单与当前选择不一致')
-      openedTicket.value = { ...ticket, ...current }
-      const sessionId = Number(current.session_id ?? ticket.session_id)
-      if (!Number.isSafeInteger(sessionId) || sessionId <= 0) {
-        error.value = '这张工单没有关联的原客服会话'
-        return
-      }
-      const transcript = asUnknownRecord(await api.customerServiceSessionDetail(sessionId))
-      if (generation !== conversationGeneration) return
-      if (Number(asUnknownRecord(transcript.session).id) !== sessionId || !Array.isArray(transcript.messages)) {
+      const current = asUnknownRecord(transcript.ticket)
+      const sessionId = Number(transcript.session_id)
+      if (Number(current.id) !== ticketId || !Number.isSafeInteger(sessionId) || sessionId <= 0
+        || Number(current.session_id) !== sessionId
+        || (ticket.session_id != null && Number(ticket.session_id) !== sessionId)
+        || !Array.isArray(transcript.messages)) {
         throw new Error('返回的会话与原工单不一致')
       }
+      openedTicket.value = { ...ticket, ...current }
       activeSessionId.value = sessionId
+      openedTicketCanReply.value = transcript.can_reply === true
       messages.value = transcript.messages.map(asUnknownRecord).flatMap((message): UiMessage[] => {
-        if ((message.ticket_id != null && Number(message.ticket_id) !== ticketId)
+        if ((message.ticket_id == null ? !openedTicketCanReply.value : Number(message.ticket_id) !== ticketId)
           || (message.role !== 'user' && message.role !== 'assistant')
           || typeof message.content !== 'string') return []
-        const origin = asUnknownRecord(message.payload).origin
+        const payload = asUnknownRecord(message.payload)
+        const image = payload.image_data_url
         return [{
           id: `persisted-${message.id}`,
           role: message.role,
           content: message.content,
-          adminLabel: origin === 'admin_reply' ? '管理员答复'
-            : origin === 'admin_disposition' ? '管理员处置回执' : undefined,
+          imageDataUrl: message.role === 'user' && typeof image === 'string'
+            && /^data:image\/(?:png|jpeg|webp|gif|bmp|avif);base64,/.test(image) ? image : null,
+          adminLabel: payload.origin === 'admin_reply' ? '管理员答复'
+            : payload.origin === 'admin_disposition' ? '管理员处置回执' : undefined,
         }]
       })
       await scrollMessagesToEnd()

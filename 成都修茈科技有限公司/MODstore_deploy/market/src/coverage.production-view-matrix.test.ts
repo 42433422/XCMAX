@@ -460,6 +460,7 @@ describe('reachable production view matrix', () => {
       status: 'waiting_user',
       issue_domain: 'payment',
     }
+    const screenshot = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jR1sAAAAASUVORK5CYII='
     apiState.responses = {
       customerServiceTickets: { items: [ticket] },
       customerServiceChat: {
@@ -468,10 +469,14 @@ describe('reachable production view matrix', () => {
         ticket,
         cards: [{ type: 'actions', items: [{ label: 'Upload receipt' }] }],
       },
-      customerServiceTicketDetail: {
-        ticket: { ...ticket, status: 'resolved' },
-        decisions: [{ result: 'approved' }],
-        actions: [{ label: 'Refund approved' }],
+      customerServiceTicketTranscript: {
+        ticket: { ...ticket, session_id: 31, status: 'resolved' },
+        session_id: 31,
+        can_reply: true,
+        messages: [
+          { id: 1, ticket_id: 21, role: 'user', content: '[用户补充了图片资料]', payload: { image_data_url: screenshot } },
+          { id: 2, ticket_id: 21, role: 'assistant', content: 'Refund approved' },
+        ],
       },
       me: { id: 1, username: 'tester', email: 'tester@example.invalid', is_admin: true },
       updateProfile: { ok: true },
@@ -495,6 +500,8 @@ describe('reachable production view matrix', () => {
     await cs.sendText('Please refund order ORD-21', { reason: 'damaged item' })
     expect(cs.messages.at(-1)?.role).toBe('assistant')
     await cs.openTicket(ticket)
+    expect(cs.messages.at(-1)?.content).toBe('Refund approved')
+    expect(csWrapper.get('.cs-bubble__img').attributes('src')).toBe(screenshot)
     cs.visibleCards({ role: 'assistant', cards: [{ type: 'progress' }] })
     cs.newSession()
     apiState.responses.customerServiceChat = () => Promise.reject(new Error('service offline'))

@@ -242,3 +242,132 @@ def test_anchored_followup_refuses_a_terminal_or_mismatched_original(
         assert followup.status_code == 409
     with get_session_factory()() as db:
         assert db.query(CustomerServiceMessage).filter_by(ticket_id=ticket_id).count() == 0
+
+
+def test_short_anchored_material_reaches_existing_ticket_workflow(
+    client, authenticated_ticket_admin, monkeypatch
+):
+    original = "重复购买的商品希望退款，请提交工单。"
+    supplement = "订单号：REFUND-123456"
+    reports, executions = [], []
+
+    async def review(_provider, _model, messages, **_opts):
+        report = messages[-1]["content"]
+        reports.append(report)
+        return {
+            "ok": True,
+            "content": json.dumps(
+                {
+                    "disposition": "actionable" if report == original else "needs_review",
+                    "intent": "refund",
+                    "reason": "核对原退款诉求与订单材料",
+                    "evidence_excerpt": original,
+                }
+            ),
+        }
+
+    def execute(_db, action, _user):
+        executions.append((action.ticket_id, action.action_type, action.target_id))
+        action.status = "completed"
+        return action
+
+    monkeypatch.setattr(llm, "chat_dispatch_via_platform_only", review)
+    monkeypatch.setattr(customer_service_orchestrator, "execute_action", execute)
+    monkeypatch.setattr(customer_service_api, "_schedule_customer_ticket_incident", lambda _: None)
+    first = client.post(f"{BASE}/chat", json={"message": original}).json()
+    ticket_id = first["ticket"]["id"]
+    assert first["ticket"]["status"] == "waiting_user" and not executions
+    response = client.post(
+        f"{BASE}/chat",
+        json={
+            "message": supplement,
+            "session_id": first["session"]["id"],
+            "context": {"ticket_id": ticket_id, "order_no": "CLIENT-SPOOFED-ORDER"},
+        },
+    )
+    assert response.status_code == 200, response.text
+    ticket = response.json()["ticket"]
+    assert reports[-1] == f"{original}\n原工单补充：{supplement}"
+    assert ticket["id"] == ticket_id and ticket["summary"] == original
+    assert ticket["evidence"]["order_no"] == "REFUND-123456"
+    assert executions == [(ticket_id, "refund.apply", "REFUND-123456")]
+
+
+@pytest.mark.parametrize(
+    "protected",
+    [None, "invalid", "revoked", "changed_since_review", "repeat_original", "intent_changed"],
+)
+def test_anchored_reassessment_releases_only_current_hold_once(
+    client, authenticated_ticket_admin, monkeypatch, protected
+):
+    original = "官网下载页白屏，请提交工单。"
+    clarification = "我在官网点击下载产品按钮，界面白屏，连续复现两次。"
+    changed = "管理员已更新问题范围，当前等待现场核实。"
+    reports, scheduled = [], []
+    ticket_id = None
+    repeats_original = protected in {"repeat_original", "intent_changed"}
+
+    async def review(_provider, _model, messages, **_opts):
+        report = messages[-1]["content"]
+        reports.append(report)
+        if ticket_id and protected == "changed_since_review":
+            with get_session_factory()() as db:
+                db.get(CustomerServiceTicket, ticket_id).summary = changed
+                db.commit()
+        actionable = clarification in report or (repeats_original and ticket_id is not None)
+        return {
+            "ok": True,
+            "content": json.dumps(
+                {
+                    "disposition": "actionable" if actionable else "needs_review",
+                    "intent": (
+                        "refund"
+                        if actionable and protected == "intent_changed"
+                        else "product_issue"
+                    ),
+                    "reason": "根据原始说明及新增复现场景核对",
+                    "evidence_excerpt": clarification if clarification in report else original,
+                }
+            ),
+        }
+
+    monkeypatch.setattr(llm, "chat_dispatch_via_platform_only", review)
+    monkeypatch.setattr(
+        customer_service_api, "_schedule_customer_ticket_incident", scheduled.append
+    )
+    first = client.post(f"{BASE}/chat", json={"message": original}).json()
+    ticket_id = first["ticket"]["id"]
+    assert first["ticket"]["evidence"]["intake_review"]["disposition"] == "needs_review"
+    assert not scheduled
+    if protected in {"invalid", "revoked"}:
+        with get_session_factory()() as db:
+            row = db.get(CustomerServiceTicket, ticket_id)
+            evidence = json.loads(row.evidence_json)
+            if protected == "invalid":
+                evidence["intake_review"]["disposition"] = "invalid"
+            else:
+                evidence["dispatch_revocation"] = {"note": "核对后停止新派发"}
+            row.evidence_json = json.dumps(evidence)
+            db.commit()
+    body = {
+        "message": original if repeats_original else clarification,
+        "session_id": first["session"]["id"],
+        "context": {} if repeats_original else {"ticket_id": ticket_id},
+    }
+    updated = client.post(f"{BASE}/chat", json=body).json()["ticket"]
+    assert updated["id"] == ticket_id
+    assert reports[-1] == (
+        original if repeats_original else f"{original}\n原工单补充：{clarification}"
+    )
+    case = updated["evidence"]["intake_review"]["disposition"]
+    if protected not in {None, "repeat_original"}:
+        assert case == ("invalid" if protected == "invalid" else "needs_review")
+        assert updated["summary"] == (changed if protected == "changed_since_review" else original)
+        assert not scheduled
+        return
+    assert case == "actionable" and updated["summary"] == original
+    repeated = client.post(f"{BASE}/chat", json=body).json()["ticket"]
+    assert repeated["id"] == ticket_id
+    assert scheduled == [{"ticket_id": ticket_id}]
+    records = db_outbox.fetch_pending(100, aggregate_prefix=f"{updated['ticket_no']}:")
+    assert len([event for event in records if event.event_name == INTAKE_EVENT]) == 1

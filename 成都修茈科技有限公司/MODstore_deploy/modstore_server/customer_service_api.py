@@ -116,7 +116,9 @@ class CustomerServiceChatBody(BaseModel):
     session_id: Optional[int] = None
     context: Dict[str, Any] = Field(default_factory=dict)
     # data:image/...;base64,... 压缩后截图，用于补充材料
-    image_data_url: Optional[str] = Field(default=None, max_length=4_500_000)
+    image_data_url: Optional[str] = Field(
+        default=None, max_length=customer_view.MAX_SCREENSHOT_DATA_LENGTH
+    )
 
 
 class CustomerTicketEtaBody(BaseModel):
@@ -173,7 +175,11 @@ async def customer_service_chat(
     ):
         raise HTTPException(status_code=422, detail="原工单和会话编号无效")
     report, review = intake_report_for_message(
-        db, user=user, message=message, session_id=body.session_id
+        db,
+        user=user,
+        message=message,
+        session_id=body.session_id,
+        target_ticket_id=target_ticket_id,
     )
     if review is None and report is not None:
         review = await review_report_async(report)
@@ -191,8 +197,9 @@ async def customer_service_chat(
     except InactiveTicketConversation as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     t = result.get("ticket") if isinstance(result.get("ticket"), dict) else {}
+    skip_dispatch = result.pop("_skip_issue_dispatch", False)
     dispatch_event = ""
-    if t:
+    if t and not skip_dispatch:
         from modstore_server.customer_issue_intake import enqueue_issue
 
         ticket = db.get(CustomerServiceTicket, int(t.get("id") or 0))
@@ -226,19 +233,7 @@ async def list_sessions(
     return {"items": [session_payload(r) for r in rows]}
 
 
-@router.get("/sessions/{session_id}")
-async def session_detail(
-    session_id: int,
-    db: Session = Depends(get_db),
-    user: User = Depends(_get_current_user),
-):
-    session = _own_session_or_404(db, user, session_id)
-    messages = (
-        db.query(CustomerServiceMessage)
-        .filter(CustomerServiceMessage.session_id == session.id)
-        .order_by(CustomerServiceMessage.id.asc())
-        .all()
-    )
+def _transcript_messages(messages: list[CustomerServiceMessage], *, customer_visible: bool):
     rows = [
         {
             "id": m.id,
@@ -250,9 +245,26 @@ async def session_detail(
         }
         for m in messages
     ]
-    if not user.is_admin:
-        rows = [customer_view.customer_message(m) for m in rows]
-    return {"session": session_payload(session), "messages": rows}
+    return [customer_view.customer_message(row) for row in rows] if customer_visible else rows
+
+
+@router.get("/sessions/{session_id}")
+async def session_detail(
+    session_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(_get_current_user),
+):
+    session = _own_session_or_404(db, user, session_id)
+    messages = (
+        db.query(CustomerServiceMessage)
+        .filter_by(session_id=session.id, user_id=session.user_id)
+        .order_by(CustomerServiceMessage.id.asc())
+        .all()
+    )
+    return {
+        "session": session_payload(session),
+        "messages": _transcript_messages(messages, customer_visible=not user.is_admin),
+    }
 
 
 @router.get("/tickets")
@@ -470,6 +482,38 @@ async def close_ticket_as_admin(
     user: User = Depends(_require_admin),
 ):
     return close_ticket_with_evidence(db, user, ticket_id, body.model_dump())
+
+
+@router.get("/tickets/{ticket_id}/transcript")
+async def ticket_transcript(
+    ticket_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(_get_current_user),
+):
+    if isinstance(user, TicketReader):
+        raise HTTPException(403, "工单读取授权不包含会话内容")
+    ticket = _visible_ticket_or_404(db, user, ticket_id)
+    session = db.get(CustomerServiceSession, ticket.session_id)
+    if session is None or session.user_id != ticket.user_id:
+        raise HTTPException(404, "原客服会话不存在")
+    is_owner = user.id == ticket.user_id
+    selected = CustomerServiceMessage.ticket_id == ticket.id
+    # Only the session owner can see context that predates a ticket.
+    if is_owner:
+        selected = or_(selected, CustomerServiceMessage.ticket_id.is_(None))
+    messages = (
+        db.query(CustomerServiceMessage)
+        .filter_by(session_id=session.id, user_id=ticket.user_id)
+        .filter(selected)
+        .order_by(CustomerServiceMessage.id.asc())
+        .all()
+    )
+    return {
+        "ticket": customer_view.customer_ticket_row(ticket),
+        "session_id": session.id,
+        "can_reply": is_owner,
+        "messages": _transcript_messages(messages, customer_visible=True),
+    }
 
 
 @router.get("/tickets/{ticket_id}")

@@ -138,6 +138,95 @@ def test_customer_views_hide_internal_fields_admin_keeps_everything(client):
         app.dependency_overrides.pop(customer_service_api._get_current_user, None)
 
 
+def test_ticket_transcript_binds_owner_ticket_and_session_and_restores_raster_attachment(client):
+    from modstore_server import customer_service_api
+    from modstore_server import models_cs as cs
+    from modstore_server.app import app
+    from modstore_server.customer_ticket_reader import TicketReader
+    from modstore_server.models import get_session_factory
+
+    owner = _make_user("transcript_owner")
+    admin = _make_user("transcript_admin", admin=True)
+    other = _make_user("transcript_outsider")
+    tid, sid = _seed(owner.id)
+    _, other_sid = _seed(owner.id)
+    png = (
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0l"
+        "EQVR42mP8/x8AAwMCAO+jR1sAAAAASUVORK5CYII="
+    )
+    svg = "data:image/svg+xml;base64,PHN2Zy8+"
+    with get_session_factory()() as db:
+        sibling = cs.CustomerServiceTicket(
+            user_id=owner.id, session_id=sid, ticket_no=f"SIBLING-{uuid.uuid4().hex}"
+        )
+        db.add(sibling)
+        db.flush()
+        for user_id, session_id, ticket_id, role, text, image in (
+            (owner.id, sid, tid, "user", "原单截图", png),
+            (owner.id, sid, tid, "user", "不安全的图片类型", svg),
+            (owner.id, sid, tid, "user", "损坏的图片编码", "data:image/png;base64,%%"),
+            (owner.id, sid, tid, "assistant", "助手不能提供用户截图", png),
+            (owner.id, sid, None, "user", "建单前的会话信息", png),
+            (owner.id, sid, sibling.id, "user", "同会话的其他工单", png),
+            (other.id, sid, tid, "user", "不一致的消息用户", png),
+            (owner.id, other_sid, tid, "user", "不一致的消息会话", png),
+        ):
+            db.add(
+                cs.CustomerServiceMessage(
+                    user_id=user_id,
+                    session_id=session_id,
+                    ticket_id=ticket_id,
+                    role=role,
+                    content=text,
+                    payload_json=json.dumps({"image_data_url": image}),
+                )
+            )
+        db.commit()
+    base = "/api/customer-service"
+    route = f"{base}/tickets/{tid}/transcript"
+    generic = f"{base}/sessions/{sid}"
+
+    def get_as(user, path):
+        app.dependency_overrides[customer_service_api._get_current_user] = lambda: user
+        return client.get(path)
+
+    def by_content(body):
+        return {row["content"]: row["payload"] for row in body["messages"]}
+
+    try:
+        owner_reply = get_as(owner, route)
+        assert owner_reply.status_code == 200, owner_reply.text
+        body = owner_reply.json()
+        assert body["ticket"]["id"] == tid and body["session_id"] == sid
+        assert body["can_reply"] is True
+        rows = by_content(body)
+        assert rows["原单截图"]["image_data_url"] == png
+        assert rows["建单前的会话信息"]["image_data_url"] == png
+        for text in ("不安全的图片类型", "损坏的图片编码", "助手不能提供用户截图"):
+            assert "image_data_url" not in rows[text]
+        assert not {"同会话的其他工单", "不一致的消息用户", "不一致的消息会话"} & rows.keys()
+        assert by_content(get_as(owner, generic).json())["原单截图"]["image_data_url"] == png
+
+        admin_reply = get_as(admin, route)
+        assert admin_reply.status_code == 200, admin_reply.text
+        body = admin_reply.json()
+        assert body["can_reply"] is False and body["ticket"]["id"] == tid
+        assert by_content(body)["原单截图"]["image_data_url"] == png
+        assert "建单前的会话信息" not in by_content(body)
+        assert all(message["ticket_id"] == tid for message in body["messages"])
+        assert get_as(admin, generic).status_code == 404
+        assert get_as(other, route).status_code == 404
+        reader = TicketReader("grant", "company-reader", "company", "instance", (owner.id,))
+        assert get_as(reader, route).status_code == 403
+        with get_session_factory()() as db:
+            db.get(cs.CustomerServiceSession, sid).user_id = other.id
+            db.commit()
+        assert get_as(owner, route).status_code == 404
+        assert get_as(admin, route).status_code == 404
+    finally:
+        app.dependency_overrides.pop(customer_service_api._get_current_user, None)
+
+
 def _dispatch(detail):
     return {
         "action_type": "employee.dispatch",

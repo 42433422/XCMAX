@@ -272,6 +272,11 @@ describe('customerService API', () => {
     expect(mReq).toHaveBeenCalledWith('/api/customer-service/tickets/1', expect.objectContaining({ timeoutMs: 15_000 }))
   })
 
+  it('customerServiceTicketTranscript', async () => {
+    await customerService.customerServiceTicketTranscript(1)
+    expect(mReq).toHaveBeenCalledWith('/api/customer-service/tickets/1/transcript', { timeoutMs: 15_000 })
+  })
+
   it('customerServiceActions', async () => {
     await customerService.customerServiceActions(1)
     expect(mReq).toHaveBeenCalledWith(expect.stringContaining('actions'), expect.objectContaining({ timeoutMs: 15_000 }))

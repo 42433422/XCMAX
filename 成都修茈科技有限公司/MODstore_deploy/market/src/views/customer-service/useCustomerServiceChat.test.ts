@@ -2,11 +2,11 @@ import { defineComponent, h, ref } from 'vue'
 import { mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useCustomerServiceChat, type CustomerServiceChat } from './useCustomerServiceChat'
-const { chat, ticketDetail, sessionDetail } = vi.hoisted(() => ({
-  chat: vi.fn(), ticketDetail: vi.fn(), sessionDetail: vi.fn(),
+const { chat, transcript } = vi.hoisted(() => ({
+  chat: vi.fn(), transcript: vi.fn(),
 }))
 vi.mock('../../api', () => ({
-  api: { customerServiceChat: chat, customerServiceTicketDetail: ticketDetail, customerServiceSessionDetail: sessionDetail },
+  api: { customerServiceChat: chat, customerServiceTicketTranscript: transcript },
 }))
 
 function mountChat() {
@@ -46,11 +46,11 @@ describe('opening original customer-service conversations', () => {
   it('reads the persisted reply, keeps the selected original ticket, and omits other tickets’ messages', async () => {
     const { state, wrapper } = mountChat()
     const ticket = { id: 75, session_id: 101, ticket_no: 'CS-shared-8819a0', status: 'processing' }
-    ticketDetail.mockResolvedValue({ ticket })
-    sessionDetail.mockResolvedValue({
-      session: { id: 101 },
+    const screenshot = 'data:image/png;base64,AAAA'
+    transcript.mockResolvedValue({
+      ticket, session_id: 101, can_reply: true,
       messages: [
-        { id: 1, ticket_id: 75, role: 'user', content: '原问题' },
+        { id: 1, ticket_id: 75, role: 'user', content: '原问题', payload: { image_data_url: screenshot } },
         { id: 2, ticket_id: 76, role: 'assistant', content: '其他工单的答复' },
         { id: 3, ticket_id: 75, role: 'assistant', content: '后台实际答复', payload: { origin: 'admin_reply' } },
       ],
@@ -59,8 +59,8 @@ describe('opening original customer-service conversations', () => {
 
     await state.openTicket(ticket)
 
-    expect(ticketDetail).toHaveBeenCalledWith(75)
-    expect(sessionDetail).toHaveBeenCalledWith(101)
+    expect(transcript).toHaveBeenCalledWith(75)
+    expect(state.messages.value[0]?.imageDataUrl).toBe(screenshot)
     expect(state.openedTicketRef.value).toBe('编号 8819a0')
     expect(state.messages.value.map(message => message.content)).toEqual(['原问题', '后台实际答复'])
     expect(state.messages.value.at(-1)?.adminLabel).toBe('管理员答复')
@@ -68,6 +68,30 @@ describe('opening original customer-service conversations', () => {
     expect(chat).toHaveBeenCalledWith(expect.objectContaining({
       session_id: 101, context: { channel: 'web', ticket_id: 75 },
     }))
+    wrapper.unmount()
+  })
+
+  it('opens a cross-customer administrative transcript read-only and checks its session identity', async () => {
+    const { state, wrapper } = mountChat()
+    const ticket = { id: 75, session_id: 101, status: 'processing' }
+    transcript.mockResolvedValueOnce({
+      ticket, session_id: 404, can_reply: false,
+      messages: [{ id: 1, ticket_id: 75, role: 'user', content: '错误会话' }],
+    }).mockResolvedValueOnce({
+      ticket, session_id: 101, can_reply: false,
+      messages: [
+        { id: 1, ticket_id: 75, role: 'user', content: '准确原单', payload: { image_data_url: 'data:image/svg+xml;base64,PHN2Zy8+' } },
+        { id: 2, ticket_id: null, role: 'user', content: '未绑定的会话内容' },
+      ],
+    })
+    await state.openTicket(ticket)
+    expect(state.messages.value).toEqual([])
+    expect(state.error.value).toContain('返回的会话与原工单不一致')
+    await state.openTicket(ticket)
+    expect(state.messages.value).toMatchObject([{ content: '准确原单', imageDataUrl: null }])
+    expect(state.readOnly.value).toBe(true)
+    await state.sendText('尝试代替客户补充')
+    expect(chat).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 
@@ -87,9 +111,8 @@ describe('opening original customer-service conversations', () => {
   it('shows the persisted disposition receipt and keeps the closed conversation read-only', async () => {
     const { state, wrapper } = mountChat()
     const ticket = { id: 76, session_id: 102, status: 'rejected', disposition: { kind: 'out_of_scope' } }
-    ticketDetail.mockResolvedValue({ ticket })
-    sessionDetail.mockResolvedValue({
-      session: { id: 102 },
+    transcript.mockResolvedValue({
+      ticket, session_id: 102, can_reply: true,
       messages: [{
         id: 1, ticket_id: 76, role: 'assistant', content: '该事项超出平台受理范围',
         payload: { origin: 'admin_disposition' },
@@ -107,15 +130,20 @@ describe('opening original customer-service conversations', () => {
     const { state, wrapper } = mountChat()
     let resolveHistory!: (value: unknown) => void
     let resolveSend!: (value: unknown) => void
-    ticketDetail.mockImplementation((id: number) => Promise.resolve({ ticket: { id, session_id: id * 10 } }))
-    sessionDetail.mockImplementation((id: number) => id === 10
+    transcript.mockImplementation((id: number) => id === 1
       ? new Promise(resolve => { resolveHistory = resolve })
-      : Promise.resolve({ session: { id }, messages: [{ id: 20, role: 'assistant', content: '第二张原单' }] }))
+      : Promise.resolve({
+          ticket: { id, session_id: 20 }, session_id: 20, can_reply: true,
+          messages: [{ id: 20, ticket_id: 2, role: 'assistant', content: '第二张原单' }],
+        }))
     chat.mockImplementation(() => new Promise(resolve => { resolveSend = resolve }))
     const first = state.openTicket({ id: 1 })
     await Promise.resolve()
     await state.openTicket({ id: 2 })
-    resolveHistory({ session: { id: 10 }, messages: [{ id: 10, role: 'assistant', content: '第一张原单' }] })
+    resolveHistory({
+      ticket: { id: 1, session_id: 10 }, session_id: 10, can_reply: true,
+      messages: [{ id: 10, ticket_id: 1, role: 'assistant', content: '第一张原单' }],
+    })
     await first
     expect(state.activeSessionId.value).toBe(20)
     expect(state.messages.value[0]?.content).toBe('第二张原单')

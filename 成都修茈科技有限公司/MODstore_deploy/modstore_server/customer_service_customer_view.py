@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import re
 from typing import Any
 
@@ -15,6 +17,8 @@ INTERNAL_TEXT_RE = re.compile(
     r"bak_\w+|备份表",
     re.I,
 )
+SCREENSHOT_DATA_URL = re.compile(r"data:image/(?:png|jpeg|webp|gif|bmp|avif);base64,")
+MAX_SCREENSHOT_DATA_LENGTH = 4_500_000
 SAFE_PROGRESS = "处理过程中遇到内部问题，值班人员正在继续跟进。"
 SAFE_FAILURE = "处理暂未成功，值班人员正在继续跟进。"
 SAFE_REPLY = "我是小C。工单已有处理进展，值班人员正在继续跟进；如需补充，可直接发送截图或具体页面。"
@@ -134,13 +138,29 @@ def customer_cards(cards: Any) -> list[dict[str, Any]]:
     return out
 
 
+def _screenshot_data_url(value: Any) -> str | None:
+    if not isinstance(value, str) or len(value) > MAX_SCREENSHOT_DATA_LENGTH:
+        return None
+    header = SCREENSHOT_DATA_URL.match(value)
+    if header is None:
+        return None
+    try:
+        decoded = base64.b64decode(value[header.end() :], validate=True)
+    except (binascii.Error, ValueError):
+        return None
+    return value if decoded else None
+
+
 def customer_message_payload(payload: Any, role: str = "assistant") -> dict[str, Any]:
     payload = payload if isinstance(payload, dict) else {}
     out: dict[str, Any] = _pick(payload, ("customer_decision",))
     if role == "assistant" and payload.get("origin") in ("admin_reply", "admin_disposition"):
         out["origin"] = payload["origin"]
-    if role == "user" and "context" in payload:
-        out["context"] = payload["context"]
+    if role == "user":
+        if "context" in payload:
+            out["context"] = payload["context"]
+        if (image := _screenshot_data_url(payload.get("image_data_url"))) is not None:
+            out["image_data_url"] = image
     if isinstance(payload.get("ticket"), dict):
         out["ticket"] = customer_ticket(payload["ticket"])
     if "decision" in payload:
