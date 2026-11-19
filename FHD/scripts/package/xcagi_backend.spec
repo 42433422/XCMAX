@@ -307,7 +307,6 @@ desktop_excludes = [
     "mypy",
     "nbformat",
     "numba",
-    "onnxruntime",
     "OpenGL",
     "patsy",
     "plotly",
