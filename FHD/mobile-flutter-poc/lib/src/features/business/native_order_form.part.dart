@@ -532,11 +532,14 @@ class _OrderFormState extends State<_OrderForm> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  WorkspaceBadge(
-                                    label: _result!['duplicate'] == true
-                                        ? '该单号已生成，未重复创建'
-                                        : '发货单已生成',
-                                    color: colors.success,
+                                  Semantics(
+                                    liveRegion: true,
+                                    child: WorkspaceBadge(
+                                      label: _result!['duplicate'] == true
+                                          ? '该单号已生成，未重复创建'
+                                          : '发货单已生成',
+                                      color: colors.success,
+                                    ),
                                   ),
                                   const SizedBox(height: 12),
                                   Text('${_result!['doc_name'] ?? _number}',

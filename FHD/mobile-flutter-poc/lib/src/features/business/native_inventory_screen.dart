@@ -393,7 +393,10 @@ class _NativeInventoryScreenState extends State<NativeInventoryScreen> {
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.all(16),
                     children: [
-                      _controls(),
+                      WorkspaceTransition(
+                        child: KeyedSubtree(
+                            key: ValueKey(_tab), child: _controls()),
+                      ),
                       if (_loading) const LinearProgressIndicator(),
                       if (_movementToCheck != null) _movementNotice(),
                       if (_error != null)

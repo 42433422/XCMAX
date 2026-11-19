@@ -370,7 +370,10 @@ class _NativeMaterialsScreenState extends State<NativeMaterialsScreen> {
                       physics: const AlwaysScrollableScrollPhysics(),
                       padding: const EdgeInsets.all(16),
                       children: [
-                        _tools(),
+                        WorkspaceTransition(
+                          child: KeyedSubtree(
+                              key: ValueKey(_tab), child: _tools()),
+                        ),
                         if (_movementOutcomeUnknown)
                           const ListTile(
                               title: Text(
