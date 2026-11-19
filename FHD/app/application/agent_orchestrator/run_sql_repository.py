@@ -9,7 +9,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from typing import cast
 
-from sqlalchemy import String, Table, case, func
+from sqlalchemy import Table, case, func, or_
 from sqlalchemy.orm import Session
 
 from app.application.agent_orchestrator import run_terminal_metrics
@@ -38,11 +38,34 @@ _TENANT_PATH = "$.metadata.runtime_context.tenant_id"
 _MOD_PATH = "$.metadata.runtime_context._mod_authorization.mod_id"
 
 
-def _json_extract(column, path: str):
-    # Legacy corrupt rows were skipped by the payload mapper; one such row must
-    # not break every task listing now that extraction happens inside SQLite.
-    valid_payload = case((func.json_valid(column) == 1, column), else_="{}")
-    return func.json_extract(valid_payload, path)
+def _sqlite_identity_columns(column, *paths: str):
+    strict_json = func.json_valid(column) == 1
+    # Multi-path JSON1 extraction preserves scalar types. Non-strict rows use
+    # the existing mapper, which accepts Python JSON values such as NaN.
+    return (
+        case((strict_json, func.json_extract(column, *paths))).label("identity_json"),
+        case((~strict_json, column)).label("payload_json"),
+    )
+
+
+def _sqlite_identity_candidates(column, path: str, expected: str):
+    # Only reject definite mismatches in SQL. The mapper compares uncommon
+    # non-string identities using the same conversion as existing task records.
+    return case(
+        (
+            func.json_valid(column) == 1,
+            or_(
+                func.coalesce(func.json_extract(column, path), "") == expected,
+                func.json_type(column, path).not_in(("text", "null")),
+            ),
+        ),
+        else_=True,
+    )
+
+
+def _explicit_task_id(run: AgentRun) -> str:
+    context = run.metadata.get("task_context")
+    return str(context.get("task_id") or "") if isinstance(context, dict) else ""
 
 
 def same_run_generation(run: AgentRun, previous: AgentRun) -> bool:
@@ -504,8 +527,8 @@ class SQLAlchemyAgentRunRepository:
     def list_task_runs(self, *, user_id: str, task_id: str) -> list[AgentRun]:
         """Resolve a durable task without relying on a recent-run window.
 
-        ``task_id`` currently lives in the versioned AgentRun payload.  On SQLite the
-        payload is filtered in SQL so the caller never hydrates unrelated runs.
+        ``task_id`` currently lives in the versioned AgentRun payload. SQLite
+        preselects candidate runs before the mapper compares task identities.
         """
         self._ensure_schema()
         wanted_task = str(task_id or "")
@@ -515,8 +538,9 @@ class SQLAlchemyAgentRunRepository:
             query = db.query(AgentRunRecord).filter(AgentRunRecord.user_id == str(user_id or ""))
             if db.get_bind().dialect.name == "sqlite":
                 query = query.filter(
-                    _json_extract(AgentRunRecord.payload_json, _TASK_ID_PATH).cast(String)
-                    == wanted_task
+                    _sqlite_identity_candidates(
+                        AgentRunRecord.payload_json, _TASK_ID_PATH, wanted_task
+                    )
                 )
             records = query.order_by(
                 AgentRunRecord.created_at.asc(), AgentRunRecord.run_id.asc()
@@ -538,11 +562,6 @@ class SQLAlchemyAgentRunRepository:
 
     def list_run_scopes(self, *, user_id: str) -> dict[str, list[tuple[str, str, str]]]:
         """Read current authorization scopes without hydrating unrelated payload fields."""
-        from app.application.agent_orchestrator.task_models import (
-            mod_id_of_run,
-            tenant_id_of_run,
-        )
-
         user_id = str(user_id or "")
         self._ensure_schema()
         scopes: dict[str, list[tuple[str, str, str]]] = {}
@@ -550,39 +569,47 @@ class SQLAlchemyAgentRunRepository:
             from app.db.models.agent import AgentRunRecord
 
             if db.get_bind().dialect.name == "sqlite":
-                # 归属字段在载荷 JSON 里；交给 SQLite 的 JSON1 只提取三项，
-                # 避免逐行 json.loads 并把整份运行历史装进内存。
+                # 只解析任务归属字段，避免构建每条运行的完整对象。
                 rows = (
                     db.query(
-                        AgentRunRecord.user_id,
-                        _json_extract(AgentRunRecord.payload_json, _TASK_ID_PATH),
-                        _json_extract(AgentRunRecord.payload_json, _TENANT_PATH),
-                        _json_extract(AgentRunRecord.payload_json, _MOD_PATH),
+                        *_sqlite_identity_columns(
+                            AgentRunRecord.payload_json,
+                            "$.user_id",
+                            _TASK_ID_PATH,
+                            _TENANT_PATH,
+                            _MOD_PATH,
+                        )
                     )
                     .filter(AgentRunRecord.user_id == user_id)
                     .all()
                 )
-                for run_user, task_id, tenant_id, mod_id in rows:
+                for row in rows:
+                    if row.identity_json is None:
+                        run = self._record_to_run(row)
+                        if run is None or not (task_id := _explicit_task_id(run)):
+                            continue
+                        scope = (run.user_id, tenant_id_of_run(run), mod_id_of_run(run))
+                    else:
+                        raw_user, raw_task, raw_tenant, raw_mod = json.loads(row.identity_json)
+                        task_id = str(raw_task or "")
+                        scope = (str(raw_user or ""), str(raw_tenant or ""), str(raw_mod or ""))
                     if task_id:
-                        scopes.setdefault(str(task_id), []).append(
-                            (str(run_user), str(tenant_id or ""), str(mod_id or ""))
-                        )
+                        scopes.setdefault(task_id, []).append(scope)
                 return scopes
-            for run in self.list_task_runs_for_user(user_id=user_id):
-                context = run.metadata.get("task_context")
-                if not isinstance(context, dict):
-                    continue
-                task_id = str(context.get("task_id") or "")
-                if task_id:
-                    scopes.setdefault(task_id, []).append(
-                        (run.user_id, tenant_id_of_run(run), mod_id_of_run(run))
-                    )
+        for run in self.list_task_runs_for_user(user_id=user_id):
+            if task_id := _explicit_task_id(run):
+                scopes.setdefault(task_id, []).append(
+                    (run.user_id, tenant_id_of_run(run), mod_id_of_run(run))
+                )
         return scopes
 
     def recent_task_refs(
         self, *, user_id: str | None = None, tenant_id: str | None = None, limit: int = 200
     ) -> list[tuple[str, str, str]]:
-        """(run_id, task_id, tenant_id) of recent runs without hydrating payloads."""
+        """Read recent (run_id, task_id, tenant_id) with SQLite projections."""
+        limit = max(0, int(limit))
+        if not limit:
+            return []
         self._ensure_schema()
         with self._session_scope(read_only=True) as db:
             from app.db.models.agent import AgentRunRecord
@@ -590,31 +617,44 @@ class SQLAlchemyAgentRunRepository:
             if db.get_bind().dialect.name == "sqlite":
                 query = db.query(
                     AgentRunRecord.run_id,
-                    _json_extract(AgentRunRecord.payload_json, _TASK_ID_PATH),
-                    _json_extract(AgentRunRecord.payload_json, _TENANT_PATH),
+                    *_sqlite_identity_columns(
+                        AgentRunRecord.payload_json, _TASK_ID_PATH, _TENANT_PATH
+                    ),
                 )
                 if user_id is not None:
                     query = query.filter(AgentRunRecord.user_id == str(user_id))
+                query = query.order_by(AgentRunRecord.updated_at.desc())
                 if tenant_id is not None:
                     query = query.filter(
-                        func.coalesce(
-                            _json_extract(AgentRunRecord.payload_json, _TENANT_PATH).cast(String),
-                            "",
+                        _sqlite_identity_candidates(
+                            AgentRunRecord.payload_json, _TENANT_PATH, tenant_id
                         )
-                        == str(tenant_id)
                     )
-                rows = (
-                    query.order_by(AgentRunRecord.updated_at.desc()).limit(max(0, int(limit))).all()
-                )
-                return [
-                    (str(run_id), str(task_id or ""), str(tenant_id or ""))
-                    for run_id, task_id, tenant_id in rows
-                    if task_id
-                ]
+                else:
+                    query = query.limit(limit)
+                refs: list[tuple[str, str, str]] = []
+                matched = 0
+                for row in query.yield_per(100):
+                    if row.identity_json is None:
+                        run = self._record_to_run(row)
+                        if run is None:
+                            continue
+                        task_id, run_tenant = _explicit_task_id(run), tenant_id_of_run(run)
+                    else:
+                        raw_task, raw_tenant = json.loads(row.identity_json)
+                        task_id, run_tenant = str(raw_task or ""), str(raw_tenant or "")
+                    if tenant_id is not None and run_tenant != tenant_id:
+                        continue
+                    if task_id:
+                        refs.append((row.run_id, task_id, run_tenant))
+                    matched += 1
+                    if matched >= limit:
+                        break
+                return refs
         return [
             (run.run_id, task_id, tenant_id_of_run(run))
             for run in self.list_recent(user_id=user_id, tenant_id=tenant_id, limit=limit)
-            if (task_id := self._run_task_id(run))
+            if (task_id := _explicit_task_id(run))
         ]
 
     def task_keys(self, *, user_id: str) -> set[tuple[str, str]]:

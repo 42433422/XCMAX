@@ -774,10 +774,17 @@ class LlmPlanGeneration:
             context["planning_failure_reason"] = "模型请求传输失败"
             return None
         except (ValueError, TypeError) as err:
+            from app.application.agent_orchestrator.context_window_manager import (
+                ContextWindowExceeded,
+            )
             from app.infrastructure.modstore_transport import MarketModelError
 
             if isinstance(err, MarketModelError):
                 raise
+            if isinstance(err, ContextWindowExceeded):
+                context["planning_failure_kind"] = "planner_error"
+                context["planning_failure_reason"] = str(err)
+                return None
             logger.warning("LLM 规划参数错误，拒绝计划并暂停执行: %s", err)
             context["planning_failure_kind"] = "plan_format_invalid"
             context["planning_failure_reason"] = "模型计划参数或响应结构不符合协议"

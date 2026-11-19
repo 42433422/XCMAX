@@ -493,7 +493,11 @@ def test_repair_uses_same_exact_clarify_alias_normalization():
     assert trace["attempts"] == 1 and trace["fixed"] is True
 
 
-def test_failed_repair_preserves_initial_error_and_response_diagnostic():
+@pytest.mark.parametrize(
+    ("content", "reason"),
+    [('{"mode":"workflow","nodes":[]}', "schema_invalid"), ("\ud800", "invalid_json")],
+)
+def test_failed_repair_preserves_initial_error_and_response_diagnostic(content, reason):
     planned = _plan(_node("node_1", tool_id="clarify", action="ask.invalid"))
     fixed, trace = repair_plan(
         planned=planned,
@@ -502,7 +506,7 @@ def test_failed_repair_preserves_initial_error_and_response_diagnostic():
         context={},
         tool_registry={},
         validate=lambda _: "节点 node_1 使用未授权动作: clarify.ask.invalid",
-        complete=lambda **_: _completion({"mode": "workflow", "nodes": []}),
+        complete=lambda **_: {"choices": [{"message": {"content": content}}]},
         max_attempts=1,
     )
     assert fixed is None and trace["attempts"] == 1
@@ -513,8 +517,8 @@ def test_failed_repair_preserves_initial_error_and_response_diagnostic():
     assert trace["errors"][0]["code"] == "unauthorized_action"
     diagnostic = trace["errors"][-1]
     assert diagnostic["code"] == "unparsable_repair"
-    assert diagnostic["reason"] == "schema_invalid"
-    assert diagnostic["response_length"] > 0
+    assert diagnostic["reason"] == reason
+    assert diagnostic["response_length"] == len(content)
     assert len(diagnostic["response_sha256"]) == 64
 
 

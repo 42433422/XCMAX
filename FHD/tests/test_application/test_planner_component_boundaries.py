@@ -235,6 +235,33 @@ def test_model_plan_format_failure_is_not_unavailability():
     assert rejected.metadata["planning_failure_kind"] == "plan_format_invalid"
 
 
+def test_generation_preserves_context_budget_failure_from_gateway(monkeypatch):
+    from app.application.agent_orchestrator.context_window_manager import ContextWindowExceeded
+    from app.application.workflow.planner_llm_gateway import request_planner_completion
+
+    reason = "上下文超过预算且压缩已关闭，原文未被裁剪。"
+    provider = Mock()
+    monkeypatch.setattr(
+        "app.infrastructure.llm.providers.registry.get_active_provider",
+        lambda **_kwargs: provider,
+    )
+
+    def fail(coro):
+        coro.close()
+        raise ContextWindowExceeded(reason)
+
+    monkeypatch.setattr("app.application.employee_runtime.agent_runner._run_async", fail)
+    generator = LlmPlanGeneration(
+        SimpleNamespace(get_context=lambda _: None), request_planner_completion, Mock()
+    )
+    context = {"session_id": "budget-session"}
+
+    assert generator.generate("budget-plan", "owner", "查询库存", {}, context) is None
+    assert context["planning_failure_kind"] == "planner_error"
+    assert context["planning_failure_reason"] == reason
+    provider.chat_completion.assert_not_called()
+
+
 def test_insufficient_model_balance_tells_the_user_to_recharge(monkeypatch):
     from app.domain.neuro.cognition.plan_graph_hooks import finalize_planned_graph
 

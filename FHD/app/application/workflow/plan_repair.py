@@ -196,11 +196,12 @@ def _repair_decode_diagnostic(response: Any) -> dict[str, Any]:
         candidate = dict(parsed)
         candidate.setdefault("mode", "workflow")
         reason = "schema_invalid" if model_plan_schema_error(candidate) else "decoder_rejected"
-    return {
-        "reason": reason,
-        "response_length": len(raw),
-        **({"response_sha256": hashlib.sha256(raw.encode()).hexdigest()} if raw else {}),
-    }
+    diagnostic: dict[str, Any] = {"reason": reason, "response_length": len(raw)}
+    if raw:
+        diagnostic["response_sha256"] = hashlib.sha256(
+            raw.encode("utf-8", errors="backslashreplace")
+        ).hexdigest()
+    return diagnostic
 
 
 def repair_plan(

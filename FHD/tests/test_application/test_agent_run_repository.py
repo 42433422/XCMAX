@@ -54,7 +54,7 @@ def test_retry_reuses_saved_chat_plan_without_another_model_request(monkeypatch)
     assert retried.metadata["plan"]["nodes"][0]["tool_id"] == "customers"
 
 
-@pytest.mark.parametrize("tenant", ["target", 7])
+@pytest.mark.parametrize("tenant", ["target", 7, True])
 def test_sql_tenant_filter_precedes_limit_across_streaming_batches(tmp_path, tenant):
     engine = create_engine(f"sqlite:///{tmp_path / 'tenant-list.db'}")
     factory = sessionmaker(bind=engine)
@@ -612,17 +612,25 @@ def test_scope_authority_refreshes_after_a_session_commit(tmp_path) -> None:
         engine.dispose()
 
 
-def test_sql_task_query_preserves_numeric_metadata_identity(tmp_path) -> None:
+@pytest.mark.parametrize("task_id", [42, True, 1e-8, "", None, 0])
+def test_sql_task_query_preserves_metadata_identity(tmp_path, task_id) -> None:
     engine = create_engine(f"sqlite:///{tmp_path / 'numeric-task.db'}")
     repo = SQLAlchemyAgentRunRepository(session_factory=sessionmaker(bind=engine))
     try:
-        run = _scope_run("owner", "42", "other-mod")
-        run.metadata["task_context"]["task_id"] = 42
+        expected = str(task_id or "")
+        run = _scope_run("owner", expected, "other-mod")
+        run.metadata["task_context"]["task_id"] = task_id
         repo.save(run)
-        assert [item.run_id for item in repo.list_task_runs(user_id="owner", task_id="42")] == [
+        assert [item.run_id for item in repo.list_task_runs(user_id="owner", task_id=expected)] == [
             run.run_id
         ]
-        assert repo.list_task_runs(user_id="other-owner", task_id="42") == []
+        assert repo.list_task_runs(user_id="other-owner", task_id=expected) == []
+        assert repo.list_run_scopes(user_id="owner") == (
+            {expected: [("owner", "tenant-1", "other-mod")]} if expected else {}
+        )
+        assert repo.recent_task_refs(user_id="owner", tenant_id="tenant-1") == (
+            [(run.run_id, expected, "tenant-1")] if expected else []
+        )
     finally:
         engine.dispose()
 
@@ -647,5 +655,31 @@ def test_sql_projection_skips_malformed_payload_without_losing_valid_runs(tmp_pa
             valid.run_id
         ]
         assert repo.recent_task_refs(user_id="owner") == [(valid.run_id, "valid", "tenant-1")]
+    finally:
+        engine.dispose()
+
+
+def test_sql_projection_preserves_existing_scope_for_nonfinite_run_data(tmp_path) -> None:
+    engine = create_engine(f"sqlite:///{tmp_path / 'nonfinite-data.db'}")
+    repo = SQLAlchemyAgentRunRepository(session_factory=sessionmaker(bind=engine))
+    try:
+        safe = _scope_run("owner", "safe", "allowed-mod")
+        restricted = _scope_run("owner", "restricted", "other-mod")
+        restricted.final_output["value"] = float("nan")
+        repo.save(safe)
+        repo.save(restricted)
+
+        assert repo.get(restricted.run_id) is not None
+        assert repo.list_run_scopes(user_id="owner") == {
+            "safe": [("owner", "tenant-1", "allowed-mod")],
+            "restricted": [("owner", "tenant-1", "other-mod")],
+        }
+        assert _visible_scoped_task_ids(repo, "owner") == ["safe"]
+        assert [
+            run.run_id for run in repo.list_task_runs(user_id="owner", task_id="restricted")
+        ] == [restricted.run_id]
+        assert repo.recent_task_refs(user_id="owner", tenant_id="tenant-1", limit=1) == [
+            (restricted.run_id, "restricted", "tenant-1")
+        ]
     finally:
         engine.dispose()
