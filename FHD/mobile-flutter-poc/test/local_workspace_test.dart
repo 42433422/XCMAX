@@ -232,6 +232,50 @@ void main() {
         containsPair('status', 'draft'));
   });
 
+  test(
+      'restore unbound archive preserves the current workspace in a new archive',
+      () async {
+    final peer = _Peer()
+      ..update('desktop-c', 'customer', {'name': '电脑客户'}, 'v1');
+    final workspace = _controller(peer);
+    addTearDown(workspace.closeDatabase);
+    await workspace.save('customer', {'name': '手机客户'});
+    await workspace.bind(_qr(), origin: LocalWorkspaceOrigin.desktop);
+    final phoneArchive = workspace.archives.single.id;
+
+    await expectLater(workspace.restoreArchive(phoneArchive), throwsStateError);
+    expect(workspace.records.single.data['name'], '电脑客户');
+    expect(workspace.archives, hasLength(1));
+    await workspace.unbind();
+    await workspace.save('order', {'title': '新草稿'});
+    await expectLater(workspace.restoreArchive('missing'), throwsStateError);
+    expect(workspace.records, hasLength(2));
+
+    await workspace.restoreArchive(phoneArchive);
+    expect(workspace.records.single.data['name'], '手机客户');
+    expect(workspace.pendingCount, 0);
+    expect(workspace.isBound, isFalse);
+    final laterArchive = workspace.archives.first;
+    expect(laterArchive.id, isNot(phoneArchive));
+    expect(laterArchive.records.map((record) => record.kind),
+        unorderedEquals(['customer', 'order']));
+
+    await workspace.restoreArchive(laterArchive.id);
+    expect(workspace.records.map((record) => record.kind),
+        unorderedEquals(['customer', 'order']));
+    expect(workspace.records.every((record) => record.version == null), isTrue);
+    expect(workspace.archives, hasLength(3));
+
+    for (final record in workspace.records) {
+      await workspace.delete(record.id, kind: record.kind);
+    }
+    await workspace.restoreArchive(phoneArchive);
+    final emptyArchive = workspace.archives.first;
+    expect(emptyArchive.records, isEmpty);
+    await workspace.restoreArchive(emptyArchive.id);
+    expect(workspace.records, isEmpty);
+  });
+
   test('applied push with a lost acknowledgement is recovered from pull',
       () async {
     final peer = _Peer();

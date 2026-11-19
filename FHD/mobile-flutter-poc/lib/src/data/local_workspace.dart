@@ -484,6 +484,24 @@ class LocalWorkspaceController extends ChangeNotifier {
         });
       });
 
+  Future<void> restoreArchive(String id) => _run(() async {
+        await _store.transaction(() async {
+          if (await _store.meta('binding') != null) {
+            throw StateError('请先解除电脑绑定再恢复归档');
+          }
+          final archived = await _store.archivedRecords(id);
+          if (archived == null) throw StateError('未找到本机归档');
+          final current = (await _store.records())
+              .where((record) => !record.deleted)
+              .toList(growable: false);
+          await _store.archive(current);
+          await _store.clearReplica();
+          for (final record in archived.reversed) {
+            await _store.putRecord(record._atVersion(null));
+          }
+        });
+      });
+
   Future<Map<String, Object?>> _requiredBinding() async {
     final binding = await _store.meta('binding');
     if (binding == null) throw StateError('尚未绑定电脑');
@@ -693,19 +711,26 @@ class _WorkspaceDatabase extends GeneratedDatabase {
         ],
       );
 
+  Iterable<LocalWorkspaceRecord> _decodeArchive(Object? value) => _list(value)
+      .map(LocalWorkspaceRecord.fromJson)
+      .where((record) => !record.deleted);
+
+  Future<List<LocalWorkspaceRecord>?> archivedRecords(String id) async {
+    final value = await _get('archives', id);
+    return value == null ? null : _decodeArchive(value).toList(growable: false);
+  }
+
   Future<List<LocalWorkspaceArchive>> archives() async {
-    final rows =
-        await customSelect('SELECT * FROM archives ORDER BY created_at DESC')
-            .get();
+    final rows = await customSelect(
+            'SELECT * FROM archives ORDER BY created_at DESC, rowid DESC')
+        .get();
     return rows.map((row) {
-      final records = _list(jsonDecode(row.read<String>('json')))
-          .map(LocalWorkspaceRecord.fromJson)
-          .where((record) => !record.deleted);
       return LocalWorkspaceArchive(
         id: row.read<String>('id'),
         createdAt:
             DateTime.fromMillisecondsSinceEpoch(row.read<int>('created_at')),
-        records: List.unmodifiable(records),
+        records: List.unmodifiable(
+            _decodeArchive(jsonDecode(row.read<String>('json')))),
       );
     }).toList(growable: false);
   }

@@ -340,8 +340,8 @@ class _LocalWorkspaceScreenState extends State<LocalWorkspaceScreen>
                   TextButton(
                     onPressed: () => Navigator.of(context).push(
                       MaterialPageRoute<void>(
-                        builder: (_) => _LocalWorkspaceArchives(
-                            archives: _workspace.archives),
+                        builder: (_) =>
+                            _LocalWorkspaceArchives(workspace: _workspace),
                       ),
                     ),
                     child: Text('本机归档（$archives）'),
@@ -1029,31 +1029,74 @@ class _LocalWorkspaceConflicts extends StatelessWidget {
 }
 
 class _LocalWorkspaceArchives extends StatelessWidget {
-  const _LocalWorkspaceArchives({required this.archives});
+  const _LocalWorkspaceArchives({required this.workspace});
 
-  final List<LocalWorkspaceArchive> archives;
+  final LocalWorkspaceController workspace;
+
+  Future<void> _restore(
+      BuildContext context, LocalWorkspaceArchive archive) async {
+    if (workspace.busy || workspace.isBound) return;
+    if (!await _confirmLocal(
+      context,
+      '恢复这份归档？',
+      '归档中的记录将成为当前数据。现有记录会先保存为另一份本机归档。',
+      '确认恢复',
+    )) {
+      return;
+    }
+    if (!context.mounted || workspace.busy || workspace.isBound) return;
+    String message;
+    try {
+      await workspace.restoreArchive(archive.id);
+      message = '归档已恢复';
+    } catch (_) {
+      message = '无法恢复本机归档，请重试。';
+    }
+    if (context.mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
 
   @override
   Widget build(BuildContext context) => _LocalSecondaryScreen(
         title: '本机归档',
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            for (final archive in archives)
-              Card(
-                margin: const EdgeInsets.only(bottom: 12),
-                child: ExpansionTile(
-                  key: ValueKey(archive.id),
-                  title: Text(MaterialLocalizations.of(context)
-                      .formatFullDate(archive.createdAt.toLocal())),
-                  subtitle: Text('${archive.records.length} 条记录'),
-                  children: [
-                    for (final record in archive.records)
-                      _recordDetails(_recordTitle(record), record),
-                  ],
+        child: AnimatedBuilder(
+          animation: workspace,
+          builder: (context, _) => ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              if (workspace.isBound)
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 12),
+                  child: Text('解除电脑绑定后即可恢复归档。'),
                 ),
-              ),
-          ],
+              for (final archive in workspace.archives)
+                Card(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  child: ExpansionTile(
+                    key: ValueKey(archive.id),
+                    title: Text(MaterialLocalizations.of(context)
+                        .formatFullDate(archive.createdAt.toLocal())),
+                    subtitle: Text('${archive.records.length} 条记录'),
+                    children: [
+                      for (final record in archive.records)
+                        _recordDetails(_recordTitle(record), record),
+                      if (!workspace.isBound)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                          child: OutlinedButton(
+                            onPressed: workspace.busy
+                                ? null
+                                : () => _restore(context, archive),
+                            child: const Text('恢复此归档'),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
         ),
       );
 }
