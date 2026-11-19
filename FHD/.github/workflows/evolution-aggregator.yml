@@ -78,12 +78,15 @@ jobs:
         if: ${{ inputs.dry-run != true }}
         working-directory: .
         run: |
-          latest=$(ls FHD/metrics/slo-measured-*.json 2>/dev/null | sort | tail -1 || true)
+          latest=$(ls FHD/metrics/slo-production/*.json 2>/dev/null | sort | tail -1 || true)
+          if [ -z "${latest:-}" ]; then
+            latest=$(ls FHD/metrics/slo-measured-*.json 2>/dev/null | sort | tail -1 || true)
+          fi
           if [ -n "${latest:-}" ]; then
             cp "$latest" FHD/metrics/slo-latest.json
             echo "Using SLO report: $latest"
           else
-            echo "No committed SLO report found; SLO signal stays healthy."
+            echo "No committed SLO report found; evidence requires human review."
           fi
 
       - name: Run evolution aggregator (real)

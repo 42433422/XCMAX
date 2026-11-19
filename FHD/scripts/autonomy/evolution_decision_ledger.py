@@ -145,8 +145,7 @@ def _print_event_line(label: str, event: Dict[str, Any], *, trace_id: str) -> No
 def cmd_collect_signals(args: argparse.Namespace) -> int:
     """连接点 1: 聚合信号 → signal_detected 事件。
 
-    调用 evolution_signal_collector.aggregate_signals()，对每个 below_threshold
-    的信号源写一条 signal_detected 事件。
+    记录真实目标异常及需要人工核对的证据缺口，不把缺测当成健康或故障。
     """
     trace_id = args.trace_id or _new_trace_id()
     print(f"[trace_id={trace_id}] Step 1: collect-signals (dry_run={args.dry_run})")
@@ -166,7 +165,9 @@ def cmd_collect_signals(args: argparse.Namespace) -> int:
     event_ids: List[str] = []
     for source in ("legacy_usage", "intent_benchmark", "slo_metrics"):
         src = signals.get(source, {})
-        if not src.get("below_threshold"):
+        evidence = src.get("evidence", {})
+        pending = evidence.get("status") == "needs_human"
+        if not src.get("below_threshold") and not pending:
             continue
         evt = append_event(
             {
@@ -176,8 +177,9 @@ def cmd_collect_signals(args: argparse.Namespace) -> int:
                 "signal_source": source,
                 "signal_score": float(src.get("signal_score") or 0),
                 "signal_report": src.get("report", {}),
+                "evidence": evidence,
                 "dry_run": bool(args.dry_run),
-                "final_status": "signal_detected",
+                "final_status": "needs_human" if pending else "signal_detected",
             }
         )
         event_ids.append(evt["event_id"])
@@ -348,8 +350,6 @@ def _dispatch_implement_workflow(issue_number: int) -> subprocess.CompletedProce
         cmd.extend(["--repo", repo])
     print(f"  dispatching: {' '.join(cmd)}")
     return subprocess.run(cmd, capture_output=True, text=True)
-
-
 
 
 def cmd_implement_pack(args: argparse.Namespace) -> int:

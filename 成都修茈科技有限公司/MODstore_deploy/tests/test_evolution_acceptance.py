@@ -11,6 +11,7 @@ import json
 import os
 import subprocess
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -62,7 +63,12 @@ def proposed_issue(tmp_path, monkeypatch, proposal, proposal_id):
     reports = {
         "legacy": {"legacy_ratio": 0.10, "total_files": 100, "legacy_files": 10},
         "intent": {"accuracy": 0.72, "test_cases": 200, "failures": 56},
-        "slo": {"availability": 0.992, "error_rate": 0.005},
+        "slo": {
+            "generated_at": datetime.now(UTC).isoformat(),
+            "window": "30d",
+            "availability": 0.992,
+            "error_rate": 0.005,
+        },
     }
     for name, report in reports.items():
         path = tmp_path / f"{name}_report.json"
