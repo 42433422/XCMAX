@@ -18,25 +18,35 @@ permissions:
 jobs:
   scan-and-gate:
     name: security-release-gate
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ inputs.release_sha }}
           fetch-depth: 0
+          persist-credentials: false
+      - name: Lock scan checkout to exact SHA
+        id: scan-source
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/main
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo '::error::Invalid release SHA'; exit 1; }
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+          test "$(git rev-parse --is-shallow-repository)" = false
+          origin="$(git remote get-url origin)"
+          test "${origin%.git}" = "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
+          git merge-base --is-ancestor "$RELEASE_SHA" refs/remotes/origin/main
+          mkdir -p "${RUNNER_TEMP}/security-native" "${RUNNER_TEMP}/security-reports"
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
-      - name: Lock scan checkout to exact SHA
-        run: |
-          set -euo pipefail
-          test "$(git rev-parse HEAD)" = "${{ inputs.release_sha }}"
-          test "$(git rev-parse --is-shallow-repository)" = false
-          mkdir -p "${RUNNER_TEMP}/security-native" "${RUNNER_TEMP}/security-reports"
 
       - name: Export open and manually dismissed CodeQL and Dependabot alerts
         continue-on-error: true
@@ -185,7 +195,7 @@ jobs:
             --output "${RUNNER_TEMP}/security-native/production-host.json"
 
       - name: Normalize all scanner reports
-        if: always()
+        if: always() && steps.scan-source.outcome == 'success'
         continue-on-error: true
         run: |
           set +e
@@ -214,7 +224,7 @@ jobs:
           normalize production-host dnf-updateinfo "${RUNNER_TEMP}/security-native/production-host.json"
 
       - name: Enforce all-source zero critical/high gate
-        if: always()
+        if: always() && steps.scan-source.outcome == 'success'
         id: release-gate
         continue-on-error: true
         run: >-

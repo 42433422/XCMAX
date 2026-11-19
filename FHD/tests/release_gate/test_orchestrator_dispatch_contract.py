@@ -35,7 +35,7 @@ def _dispatch_step(workflow_path: Path) -> dict:
     )
 
 
-def _run_dispatch(tmp_path: Path, step: dict, current: str, previous: str):
+def _run_dispatch(tmp_path: Path, step: dict, current: str, previous: str, ci: str = "5678"):
     helper = tmp_path / "FHD/scripts/release/dispatch_workflow_and_wait.sh"
     helper.parent.mkdir(parents=True)
     helper.write_text(
@@ -61,6 +61,7 @@ def _run_dispatch(tmp_path: Path, step: dict, current: str, previous: str):
             "DISPATCH_CALLS": str(calls),
             "RELEASE_SHA": "a" * 40,
             "PRODUCT_VERSION": "1.0.0.1",
+            "CI_RUN_ID": ci,
             "SECURITY_SCAN_RUN_ID": current,
             "PREVIOUS_SECURITY_SCAN_RUN_ID": previous,
         },
@@ -76,13 +77,17 @@ def _run_dispatch(tmp_path: Path, step: dict, current: str, previous: str):
 
 @pytest.mark.parametrize("workflow_path", [SOURCE, MIRROR], ids=["source", "published"])
 def test_each_production_dispatch_keeps_validated_sha_and_scan_pair(tmp_path, workflow_path):
-    jobs = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))["jobs"]
+    workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+    ci_input = workflow.get("on", workflow.get(True))["workflow_dispatch"]["inputs"]["ci_run_id"]
+    assert ci_input["required"] is True and ci_input["type"] == "string"
+    jobs = workflow["jobs"]
     assert jobs["verify-version-anchors"]["needs"] == "security-preflight"
     assert jobs["deploy-servers-in-order"]["needs"] == "verify-version-anchors"
     assert "verify_security_scan_pair.py" in str(jobs["security-preflight"])
     step = _dispatch_step(workflow_path)
     for name, input_name in (
         ("RELEASE_SHA", "release_sha"),
+        ("CI_RUN_ID", "ci_run_id"),
         ("SECURITY_SCAN_RUN_ID", "security_scan_run_id"),
         ("PREVIOUS_SECURITY_SCAN_RUN_ID", "previous_security_scan_run_id"),
     ):
@@ -104,14 +109,28 @@ def test_each_production_dispatch_keeps_validated_sha_and_scan_pair(tmp_path, wo
         assert fields.get("release_sha", fields.get("git_sha")) == "a" * 40
         assert fields["security_scan_run_id"] == "1234"
         assert fields["previous_security_scan_run_id"] == "1234"
+        if call[0] == "modstore-prod-deploy.yml":
+            assert fields["ci_run_id"] == "5678"
         if call[0] == "fhd-deploy.yml":
             assert fields["action"] == "apply-latest"
             assert fields["action_id"] == "release:" + "a" * 40
 
 
-@pytest.mark.parametrize("current,previous", [("", "1200"), ("1234", ""), ("latest", "1200")])
-def test_missing_or_malformed_evidence_stops_before_dispatch(tmp_path, current, previous):
-    result, calls = _run_dispatch(tmp_path, _dispatch_step(SOURCE), current, previous)
+@pytest.mark.parametrize(
+    "current,previous,ci",
+    [
+        ("", "1200", "5678"),
+        ("1234", "", "5678"),
+        ("latest", "1200", "5678"),
+        ("1234", "1234", ""),
+        ("1234", "1234", "latest"),
+        ("1234", "1234", "0"),
+        ("1234", "1234", "-1"),
+        ("1234", "1234", "5678\n9"),
+    ],
+)
+def test_missing_or_malformed_evidence_stops_before_dispatch(tmp_path, current, previous, ci):
+    result, calls = _run_dispatch(tmp_path, _dispatch_step(SOURCE), current, previous, ci)
     assert result.returncode != 0
     assert calls == []
 
