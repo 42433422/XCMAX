@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
+import sys
 import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -14,11 +16,11 @@ from pathlib import Path
 
 import pytest
 import sqlalchemy as sa
-from alembic.migration import MigrationContext
-from alembic.operations import Operations
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session, sessionmaker
 
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
 from modstore_server.models import (
     PersonalPlanAllowanceClaim,
     Transaction,
@@ -546,18 +548,30 @@ def test_existing_database_upgrades_idempotently_without_trusting_existing_email
         connection.exec_driver_sql("DROP TABLE personal_plan_allowance_claims")
         connection.exec_driver_sql("ALTER TABLE users DROP COLUMN verified_email_sha256")
     if migration_path == "deployment":
-        from alembic.config import Config
-
-        from alembic import command
-        from scripts.upgrade_database import upgrade_database
-
         monkeypatch.setenv("MODSTORE_DATABASE_URL", str(engine.url))
         config = Path(__file__).resolve().parents[1] / "alembic.ini"
+
+        def deployment_command(*arguments):
+            result = subprocess.run(
+                [sys.executable, *arguments],
+                cwd=config.parent,
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            assert result.returncode == 0, result.stderr
+            return result.stdout
+
         # Model-backed test bootstraps are unversioned. Establish the actual
         # preceding migration head before exercising the deployment upgrader.
-        command.upgrade(Config(str(config)), "20261119_xiaoc_followups")
-        assert upgrade_database(config) == ("20261119_personal_allowance",)
-        assert upgrade_database(config) == ("20261119_personal_allowance",)
+        # Use deployment processes so Alembic's logging configuration cannot
+        # disable the application's loggers in the surrounding test process.
+        deployment_command(
+            "-m", "alembic", "-c", str(config), "upgrade", "20261119_xiaoc_followups"
+        )
+        for _ in range(2):
+            output = deployment_command(str(config.parent / "scripts/upgrade_database.py"))
+            assert "schema migration verified heads=20261119_personal_allowance" in output
         init_db()
         init_db()
     else:

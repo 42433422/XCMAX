@@ -16,7 +16,10 @@ from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 from app.application.agent_orchestrator.tool_permission import clear_idempotent_replay_for_tests
 from app.application.workflow.clarification_inputs import missing_tool_fields
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+from app.db import session as db_session
 from app.db.models import Product, PurchaseUnit, ShipmentRecord
+from app.db.models.user import Session as UserSession
+from app.infrastructure.auth.agent_principal import require_agent_principal
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 from tests.test_application.test_etl_preview_task_boundaries import preview_store as preview_store
 from tests.test_application.test_etl_preview_task_boundaries import snapshot
@@ -59,10 +62,18 @@ def _linked_preview(store, monkeypatch):
 
 
 def test_new_chat_confirmation_preserves_parent_receipt_and_executes_child_once(
-    tmp_path, monkeypatch, trusted_actor, preview_store, local_tools
+    tmp_path, monkeypatch, request, preview_store, local_tools
 ):
     store = preview_store
-    actor = trusted_actor(user_id=7, tenant_id=1, role="importer", permissions=["elt.execute"])
+    # Build the host authority after the ETL fixture, then keep business data on
+    # its own database. Both fixtures otherwise replace the same session seams.
+    actor = request.getfixturevalue("trusted_actor")(
+        user_id=7, tenant_id=1, role="importer", permissions=["elt.execute"]
+    )
+    monkeypatch.setattr(db_session, "SessionLocal", store.factory)
+    with store.factory() as db:
+        assert db.query(UserSession).filter_by(session_id=actor.session_id).first() is None
+    assert require_agent_principal(actor.request, x_user_id=None).user_id == "7"
     monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
     monkeypatch.setenv("FHD_ELT_CENTER_ENABLED", "1")
     monkeypatch.setenv("XCAGI_TOOL_IDEMPOTENCY_PATH", str(tmp_path / "claims.sqlite"))

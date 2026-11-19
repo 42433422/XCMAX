@@ -32,8 +32,6 @@ from __future__ import annotations
 # 只用 sys + 字符串操作，不引入任何会触发 `from types import ...` 的模块。
 import sys as _sys
 
-from app.utils.operational_errors import RECOVERABLE_ERRORS
-
 _SCRIPT_DIR = _sys.path[0]  # 直接脚本执行时，sys.path[0] 就是脚本所在目录
 if _SCRIPT_DIR:
     _sys.path = [p for p in _sys.path if p != _SCRIPT_DIR]
@@ -57,6 +55,8 @@ from modstore_server.evolution_ledger import (
     mark_audited,
 )
 from modstore_server.evolution_signal_collector import aggregate_signals
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 # ---------------------------------------------------------------------------
 # Helpers

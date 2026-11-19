@@ -161,9 +161,13 @@ class LocalPeer:
         self.host = ""
 
     def start(self, host: str | None = None) -> None:
-        host = host or str(self.binding.get("host") or _lan_address())
-        if not (_private_ipv4(host) or _loopback(host)):
+        try:
+            address = ipaddress.IPv4Address(host or str(self.binding.get("host") or _lan_address()))
+        except ipaddress.AddressValueError as exc:
+            raise OSError("No local interface available for the workspace listener") from exc
+        if not (address.is_loopback or any(address in network for network in _LAN_RANGES)):
             raise OSError("No local interface available for the workspace listener")
+        host = str(address)
         if self.thread is not None and self.thread.is_alive() and self.host == host:
             return
         listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

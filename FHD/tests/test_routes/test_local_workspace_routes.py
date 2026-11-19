@@ -145,6 +145,25 @@ def test_listener_only_accepts_connections_to_the_advertised_interface(local_des
             client.post(unselected, json={})
 
 
+@pytest.mark.parametrize(
+    "host", ["", "0.0.0.0", "::", "::1", "localhost", "203.0.113.4", "not-an-address"]
+)
+def test_listener_rejects_nonlocal_or_non_ipv4_addresses_before_opening_socket(
+    tmp_path, monkeypatch, host
+):
+    peer = routes.LocalPeer(tmp_path)
+    monkeypatch.setattr(routes, "_lan_address", lambda: host)
+
+    def unexpected_socket(*args, **kwargs):
+        pytest.fail("An invalid IPv4 listener address must not allocate a socket")
+
+    monkeypatch.setattr(routes.socket, "socket", unexpected_socket)
+    with pytest.raises(OSError, match="No local interface"):
+        peer.start()
+    assert peer.server is None and peer.thread is None
+    assert peer.host == "" and peer.port == 0
+
+
 def test_repair_on_a_new_interface_retires_the_old_listener(local_desktop, monkeypatch):
     qr = local_desktop.post("/api/local-workspace/pairing").json()["qr"]
     client, _ = phone_connection(qr)

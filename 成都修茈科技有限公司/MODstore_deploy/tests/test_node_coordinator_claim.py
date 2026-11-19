@@ -10,10 +10,10 @@ from pathlib import Path
 
 import pytest
 import sqlalchemy as sa
-from alembic.migration import MigrationContext
-from alembic.operations import Operations
 from sqlalchemy.orm import sessionmaker
 
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
 from modstore_server import models
 from modstore_server import node_coordinator as nc
 
@@ -161,9 +161,8 @@ def test_existing_database_migration_preserves_events_and_is_idempotent():
 def test_merge_upgrades_either_existing_head_without_losing_data(
     tmp_path, monkeypatch, starting_head
 ):
-    from alembic.config import Config
-
     from alembic import command
+    from alembic.config import Config
 
     root = Path(__file__).parents[1]
     url = f"sqlite:///{tmp_path / 'merge.sqlite'}"

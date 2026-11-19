@@ -153,7 +153,13 @@ def test_test_candidate_keeps_explicit_frozen_upgrade_baselines() -> None:
     metadata = json.loads((FHD_ROOT / "config/download_release.json").read_text())
     assert metadata["release_ready"] is False
     assert "测试候选" in metadata["windows_interim_release"]["title"]
-    assert metadata["release_history"][0]["version"] == "1.0.0.6"
+    baseline_history = [
+        item for item in metadata["release_history"] if item["version"] == baselines["default"]
+    ]
+    assert len(baseline_history) == 1
+    assert baseline_history[0]["version"] == "1.0.0.6"
+    assert baseline_history[0]["publication_state"] == "published"
+    assert baseline_history[0]["publication_scope"] == "historical-manual-download"
 
 
 @pytest.mark.parametrize("baseline", ["1.0.0.5", "1.0.0.6"])
