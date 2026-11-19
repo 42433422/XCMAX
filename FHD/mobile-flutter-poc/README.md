@@ -31,7 +31,7 @@ python3 scripts/build_harmony_hap.py \
   --output build/xcagi-harmonyos-arm64-unsigned.hap
 ```
 
-构建同时输出 SHA-256 校验文件。签名、安装和鸿蒙真机验收按发布记录核对。
+构建同时输出 SHA-256 校验文件和记录应用、Flutter 构建提交的 `build-info.json`。签名、安装和鸿蒙真机验收按发布记录核对。
 
 ## 策略摘要
 

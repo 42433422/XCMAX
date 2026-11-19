@@ -1,5 +1,5 @@
 {
-  "lines": 2508224,
+  "lines": 2508253,
   "updated": "2026-11-19",
-  "note": "用户要求在同一 Flutter 工程构建 HarmonyOS 版。Stage Runner、锁定工具链、系统桥接与 HAP 校验实现按当前源码记录，ScanKit 插件使用 ArkTS 支持的显式构造字段；Android/iOS 锁定版本保持不变。"
+  "note": "用户要求完成同一 Flutter 主线的 HarmonyOS HAP 构建。新增固定工具链、Stage Runner、系统桥接及 ARM64 验证，并登记候选包对应的应用和 Flutter 提交及 SHA-256，便于验收时核对产物。"
 }

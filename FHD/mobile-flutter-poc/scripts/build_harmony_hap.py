@@ -27,6 +27,10 @@ def run(*command: str | Path, cwd: Path) -> None:
     subprocess.run([str(argument) for argument in command], cwd=cwd, check=True)
 
 
+def git_output(directory: Path, *arguments: str) -> str:
+    return subprocess.check_output(["git", *arguments], cwd=directory, text=True).strip()
+
+
 def stage_project(destination: Path) -> None:
     destination.mkdir()
     for name in ("pubspec.yaml", "pubspec.lock", ".metadata", ".flutter-version"):
@@ -117,6 +121,17 @@ def main() -> None:
     if output.suffix != ".hap":
         parser.error("--output must use the .hap extension")
 
+    identity = {
+        "source_commit": git_output(PROJECT, "rev-parse", "HEAD"),
+        "source_dirty": bool(git_output(PROJECT, "status", "--porcelain", "--", ".")),
+        "flutter_commit": git_output(flutter.parent.parent, "rev-parse", "HEAD"),
+        "sqlite_revision": SQLITE_REVISION,
+        "bundle_id": BUNDLE_ID,
+        "version_code": BUILD_NUMBER,
+        "target": "ohos-arm64",
+    }
+    checksum = output.with_suffix(".hap.sha256")
+    build_info = output.with_suffix(".hap.build-info.json")
     with tempfile.TemporaryDirectory(prefix="xcmax-harmony-build-") as directory:
         temporary = Path(directory)
         project = temporary / "project"
@@ -141,14 +156,18 @@ def main() -> None:
         validate_hap(hap)
         output.parent.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix=".xcmax-hap-", dir=output.parent) as publish:
-            ready = Path(publish) / output.name
+            staged = Path(publish)
+            ready = staged / output.name
             shutil.copy2(hap, ready)
             with ready.open("rb") as data:
                 digest = hashlib.file_digest(data, "sha256").hexdigest()
-            os.replace(ready, output)
+            (staged / checksum.name).write_text(f"{digest}  {output.name}\n", encoding="utf-8")
+            (staged / build_info.name).write_text(
+                json.dumps({**identity, "sha256": digest}, indent=2) + "\n", encoding="utf-8"
+            )
+            for artifact in (output, checksum, build_info):
+                os.replace(staged / artifact.name, artifact)
 
-    checksum = output.with_suffix(".hap.sha256")
-    checksum.write_text(f"{digest}  {output.name}\n", encoding="utf-8")
     print(f"Unsigned HarmonyOS candidate: {output}\nSHA-256: {digest}")
 
 

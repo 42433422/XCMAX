@@ -167,6 +167,15 @@ jobs:
           cd "$RUNNER_TEMP"
           test -s "$HAP_BASENAME"
           sha256sum --check "$HAP_BASENAME.sha256"
+          python3 - "$HAP_BASENAME.build-info.json" <<'PY'
+          import json, os, sys
+          from pathlib import Path
+
+          info = json.loads(Path(sys.argv[1]).read_text())
+          if (info["source_dirty"] or info["source_commit"] != os.environ["GITHUB_SHA"]
+              or info["flutter_commit"] != os.environ["CPF_FLUTTER_COMMIT"]):
+              raise SystemExit("HAP build identity does not match the checked-out revisions")
+          PY
       - name: Upload verified unsigned HarmonyOS HAP candidate
         uses: actions/upload-artifact@v4
         with:
@@ -174,4 +183,5 @@ jobs:
           path: |
             ${{ runner.temp }}/${{ env.HAP_BASENAME }}
             ${{ runner.temp }}/${{ env.HAP_BASENAME }}.sha256
+            ${{ runner.temp }}/${{ env.HAP_BASENAME }}.build-info.json
           if-no-files-found: error
