@@ -59,11 +59,15 @@ class GovernedMemoryRuntime:
         )["results"]
 
     def vector_rows(self, owner: str | None = None):
+        # These cases retain at most one canonical projection per scoped owner.
+        limit = 1
         with self.store._get_conn() as connection:
-            return connection.execute(
+            rows = connection.execute(
                 "SELECT chunk_id, content, metadata FROM user_memory_vector_chunks WHERE index_id = ?",
                 (owner or owner_id(),),
-            ).fetchall()
+            ).fetchmany(limit + 1)
+        assert len(rows) <= limit, "Unexpected duplicate governed vector projection"
+        return rows
 
     def restart(self) -> None:
         """Release Qdrant handles and reconstruct every cache from the same disk files."""

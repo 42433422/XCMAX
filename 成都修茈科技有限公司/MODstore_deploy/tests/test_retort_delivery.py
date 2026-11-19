@@ -53,6 +53,8 @@ def evidence(monkeypatch, tmp_path):
             "head_branch": "main",
             "status": "completed",
             "conclusion": "success",
+            "event": "push" if run_id == 40 else "workflow_dispatch",
+            "display_title": f"CI/CD {SHA}" if run_id == 40 else "Security full release scan",
         }
         for run_id, workflow in ((40, "fhd-ci-cd.yml"), (41, "fhd-security-full-scan.yml"))
     }
@@ -142,6 +144,35 @@ def test_exact_production_receipt_and_public_identity_complete_delivery(evidence
     assert result["merge_sha"] == SHA and result["candidate_sha"] == HEAD
     assert result["receipt"]["security_scan_run_id"] == 41
     assert result["identity"]["artifact_sha256"] == "d" * 64
+
+
+@pytest.mark.parametrize(
+    "event,title",
+    [
+        ("push", "Legacy push title"),
+        ("schedule", "Nightly CI"),
+        ("workflow_dispatch", f"CI/CD {SHA}"),
+    ],
+)
+def test_ci_checkout_source_accepts_supported_main_events(evidence, event, title):
+    evidence["checks"]["40"].update(event=event, display_title=title)
+    assert delivery.collect_delivery(evidence["state"])["status"] == "deployment_verified"
+
+
+@pytest.mark.parametrize(
+    "event,title",
+    [
+        ("workflow_dispatch", f"CI/CD {HEAD}"),
+        ("workflow_dispatch", f"CI/CD {SHA} candidate"),
+        ("workflow_dispatch", None),
+        ("pull_request", f"CI/CD {SHA}"),
+        (None, f"CI/CD {SHA}"),
+    ],
+)
+def test_ci_controller_sha_without_tested_source_cannot_complete_delivery(evidence, event, title):
+    evidence["checks"]["40"].update(event=event, display_title=title)
+    with pytest.raises(ValueError):
+        delivery.collect_delivery(evidence["state"])
 
 
 @pytest.mark.parametrize(

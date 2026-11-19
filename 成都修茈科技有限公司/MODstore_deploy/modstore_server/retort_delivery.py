@@ -96,6 +96,16 @@ def _release_receipt(repo, run, merge_sha):
             or evidence.get("conclusion") != "success"
         ):
             raise ValueError(f"{key} does not attest the exact successful main release")
+        # Manual CI can test inputs.release_sha while head_sha names main's
+        # controller. Preserve both identities before accepting old receipts.
+        if key == "ci_run_id" and (
+            evidence.get("event") not in {"push", "schedule", "workflow_dispatch"}
+            or (
+                evidence.get("event") == "workflow_dispatch"
+                and evidence.get("display_title") != f"CI/CD {merge_sha}"
+            )
+        ):
+            raise ValueError("CI evidence did not test the exact release source")
     return {**receipt, "artifact_id": artifact["id"], "artifact_digest": artifact["digest"]}
 
 
