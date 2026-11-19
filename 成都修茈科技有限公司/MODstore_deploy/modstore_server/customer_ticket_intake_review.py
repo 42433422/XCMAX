@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-from typing import TYPE_CHECKING, Annotated, Literal
+from typing import TYPE_CHECKING, Annotated, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, StringConstraints, ValidationError
 
@@ -140,7 +140,7 @@ def intake_dispatch_block_reason(ticket: CustomerServiceTicket) -> str:
     }:
         return "ticket_terminal"
     try:
-        evidence = json.loads(ticket.evidence_json or "{}")
+        evidence = json.loads(cast(str | None, ticket.evidence_json) or "{}")
     except (TypeError, ValueError):
         return "invalid_ticket_evidence"
     if not isinstance(evidence, dict):

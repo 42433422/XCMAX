@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, List
+from typing import Any, Dict, List, cast
 
 from modstore_server import incident_bus as facade
 from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
@@ -20,7 +20,7 @@ def _ticket_dispatch_blocked(payload: dict[str, Any], event_type: str) -> bool:
         ticket = db.get(CustomerServiceTicket, int(payload.get("ticket_id") or 0))
         return (
             ticket is None
-            or ticket.user_id != int(payload.get("user_id") or 0)
+            or cast(int, ticket.user_id) != int(payload.get("user_id") or 0)
             or bool(intake_dispatch_block_reason(ticket))
         )
 
@@ -247,8 +247,8 @@ def _dispatch_incident_body(event_id: int) -> None:
             if event_type_pre == "ops.intake.customer_ticket":
                 with get_session_factory()() as db:
                     event = db.get(IncidentEvent, event_id)
-                    payload = facade._incident_payload(event) if event is not None else {}
-                if _ticket_dispatch_blocked(payload, event_type_pre):
+                    market_payload = facade._incident_payload(event) if event is not None else {}
+                if _ticket_dispatch_blocked(market_payload, event_type_pre):
                     return
             market = dispatch_incident_via_market(event_id)
             if market.get("ok") and market.get("claimed"):
