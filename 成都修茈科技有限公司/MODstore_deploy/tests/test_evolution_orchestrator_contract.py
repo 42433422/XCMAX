@@ -9,6 +9,7 @@ import shlex
 import stat
 import subprocess
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -52,23 +53,45 @@ def _proposal(source="catalog_capability_gap", name="autonomy-gap-analyst"):
 
 
 @pytest.mark.parametrize(
-    "source,name,claimed_source,allowed",
+    "source,name,claimed_source,allowed,real_slo",
     [
-        ("slo_metrics", "slo-coverage-auditor", "slo_metrics", False),
-        ("catalog_capability_gap", "autonomy-gap-analyst", "catalog_capability_gap", True),
-        ("catalog_capability_gap", "other-pack", "catalog_capability_gap", False),
-        ("slo_metrics", "autonomy-gap-analyst", "slo_metrics", False),
-        ("slo_metrics", "autonomy-gap-analyst", "catalog_capability_gap", False),
-        ("catalog_capability_gap", "autonomy-gap-analyst", "slo_metrics", True),
+        ("slo_metrics", "slo-coverage-auditor", "slo_metrics", False, False),
+        ("catalog_capability_gap", "autonomy-gap-analyst", "catalog_capability_gap", True, False),
+        ("catalog_capability_gap", "other-pack", "catalog_capability_gap", False, False),
+        ("slo_metrics", "autonomy-gap-analyst", "slo_metrics", False, False),
+        ("slo_metrics", "autonomy-gap-analyst", "catalog_capability_gap", False, False),
+        ("catalog_capability_gap", "autonomy-gap-analyst", "slo_metrics", True, False),
+        ("slo_metrics", "autonomy-gap-analyst", "catalog_capability_gap", False, True),
     ],
 )
 def test_scan_routes_supported_proposals_and_retains_issue(
-    tmp_path, monkeypatch, capsys, source, name, claimed_source, allowed
+    tmp_path, monkeypatch, capsys, source, name, claimed_source, allowed, real_slo
 ):
     proposal = _proposal(claimed_source, name)
     proposal["signal_score"] = 99
-    signals = {source: {"signal_score": 1, "report": {"package_id": name}}, "signals_to_propose": 1}
-    monkeypatch.setattr(evolution_signal_collector, "aggregate_signals", lambda: signals)
+    if real_slo:
+        report = {
+            "generated_at": datetime.now(UTC).isoformat(),
+            "window": "30d",
+            "private_detail": "private-slo-detail-must-not-be-logged",
+            "readings": {
+                "observed_failure": {"reading_numeric": 0, "meets_target": False},
+                "unknown": {"reading_numeric": None, "meets_target": None},
+            },
+        }
+        report_path = tmp_path / "slo.json"
+        report_path.write_text(json.dumps(report))
+        monkeypatch.setenv("MODSTORE_SLO_REPORT_PATH", str(report_path))
+        for other in ("LEGACY", "INTENT"):
+            monkeypatch.delenv(f"MODSTORE_{other}_REPORT_PATH", raising=False)
+        monkeypatch.delenv("MODSTORE_ENABLE_CATALOG_GAP_SCAN", raising=False)
+        signals = evolution_signal_collector.aggregate_signals()
+    else:
+        signals = {
+            source: {"signal_score": 1, "report": {"package_id": name}},
+            "signals_to_propose": 1,
+        }
+        monkeypatch.setattr(evolution_signal_collector, "aggregate_signals", lambda: signals)
     monkeypatch.setattr(employee_pack_proposal, "_call_llm", lambda _prompt: proposal)
     output = tmp_path / "outputs"
     proposal_file = tmp_path / "proposal.json"
@@ -93,7 +116,9 @@ def test_scan_routes_supported_proposals_and_retains_issue(
         isolated.setattr(subprocess, "run", open_issue)
         runpy.run_path(str(script))
 
-    assert proposal["employee_pack"]["prompt_template"] not in capsys.readouterr().out
+    stdout = capsys.readouterr().out
+    assert proposal["employee_pack"]["prompt_template"] not in stdout
+    assert "private-slo-detail-must-not-be-logged" not in stdout
     outputs = dict(line.split("=", 1) for line in output.read_text().splitlines())
     assert outputs == {"issue_url": issue_url, "scaffold_allowed": str(allowed).lower()}
     assert len(calls) == 1
@@ -104,9 +129,10 @@ def test_scan_routes_supported_proposals_and_retains_issue(
     assert [event["issue_url"] for event in events if event["event_type"] == "issue_opened"] == [
         issue_url
     ]
-    deferred = [event for event in events if event.get("final_status") == "needs_human"]
+    deferred = [event for event in events if event["event_type"] == "source_generation_deferred"]
     assert len(deferred) == (0 if allowed else 1)
     if not allowed:
+        assert deferred[0]["final_status"] == "needs_human"
         assert deferred[0]["issue_url"] == issue_url
         assert deferred[0]["proposal_id"] == proposal["proposal_id"]
         assert deferred[0]["triggered_by"] == source
@@ -116,6 +142,87 @@ def test_scan_routes_supported_proposals_and_retains_issue(
     assert generate["if"] == (
         "steps.scan.outputs.issue_url != '' && steps.scan.outputs.scaffold_allowed == 'true'"
     )
+
+
+@pytest.mark.parametrize("entrypoint", ["orchestrator", "ledger-cli"])
+def test_missing_slo_retains_human_receipt_before_zero_signal_exit(
+    tmp_path, monkeypatch, capsys, entrypoint
+):
+    for source in ("LEGACY", "INTENT", "SLO"):
+        monkeypatch.delenv(f"MODSTORE_{source}_REPORT_PATH", raising=False)
+    monkeypatch.delenv("MODSTORE_ENABLE_CATALOG_GAP_SCAN", raising=False)
+    if entrypoint == "orchestrator":
+        monkeypatch.setenv("GITHUB_OUTPUT", str(tmp_path / "outputs"))
+        monkeypatch.setattr(
+            employee_pack_proposal, "_call_llm", lambda _: pytest.fail("no LLM needed")
+        )
+        monkeypatch.setattr(subprocess, "run", lambda *_a, **_kw: pytest.fail("no issue needed"))
+        script = tmp_path / "scan.py"
+        script.write_text(shlex.split(_steps()["scan"]["run"])[2])
+        with pytest.raises(SystemExit) as stopped:
+            runpy.run_path(str(script))
+        assert stopped.value.code == 0
+        assert (tmp_path / "outputs").read_text() == "issue_url=\n"
+    else:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(REPO_ROOT / "FHD/scripts/autonomy/evolution_decision_ledger.py"),
+                "collect-signals",
+            ],
+            env={
+                "PYTHONPATH": str(REPO_ROOT / "FHD"),
+                "PYTHONDONTWRITEBYTECODE": "1",
+                "MODSTORE_EVOLUTION_LEDGER_PATH": os.environ["MODSTORE_EVOLUTION_LEDGER_PATH"],
+            },
+            text=True,
+            capture_output=True,
+            timeout=15,
+        )
+        assert result.returncode == 0, result.stderr
+    events = list_events()
+    assert len(events) == 1
+    event = events[0]
+    assert event["event_type"] == "signal_detected"
+    assert event["final_status"] == "needs_human"
+    evidence = event.get("evidence") or event["signals"]["slo_metrics"]["evidence"]
+    assert "report_missing" in evidence["reasons"]
+    assert not event.get("issue_url")
+
+
+@pytest.mark.parametrize("workflow", ["evolution-orchestrator", "evolution-aggregator"])
+@pytest.mark.parametrize("source", ["missing", "legacy", "production"])
+def test_report_selection_preserves_latest_unavailable_production_evidence(
+    tmp_path, workflow, source
+):
+    metrics = tmp_path / "FHD/metrics"
+    production = metrics / "slo-production"
+    production.mkdir(parents=True)
+    legacy = '{"availability": 1, "error_rate": 0}'
+    unavailable = '{"source_status": "source_unavailable", "generated_at": "2026-11-19T12:00:00Z"}'
+    if source != "missing":
+        (metrics / "slo-measured-20260903.json").write_text(legacy)
+    if source == "production":
+        (production / "20261118T120000Z.json").write_text(legacy)
+        (production / "20261119T120000Z.json").write_text(unavailable)
+    source_path = SOURCE.with_name(f"{workflow}.yml")
+    jobs = yaml.safe_load(source_path.read_text())["jobs"]
+    resolver = next(
+        step
+        for job in jobs.values()
+        for step in job["steps"]
+        if step.get("name") == "Resolve latest committed SLO report"
+    )
+    result = subprocess.run(
+        ["bash", "-c", resolver["run"]], cwd=tmp_path, capture_output=True, text=True, timeout=10
+    )
+    assert result.returncode == 0, result.stderr
+    selected = metrics / "slo-latest.json"
+    if source == "missing":
+        assert not selected.exists()
+        assert "human review" in result.stdout
+    else:
+        assert selected.read_text() == (unavailable if source == "production" else legacy)
 
 
 def _run_scaffold_handoff(tmp_path, proposal):

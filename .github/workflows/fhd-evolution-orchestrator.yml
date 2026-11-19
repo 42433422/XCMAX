@@ -145,12 +145,15 @@ jobs:
         if: steps.scan_scope.outputs.should_scan == 'true'
         working-directory: .
         run: |
-          latest=$(ls FHD/metrics/slo-measured-*.json 2>/dev/null | sort | tail -1 || true)
+          latest=$(ls FHD/metrics/slo-production/*.json 2>/dev/null | sort | tail -1 || true)
+          if [ -z "${latest:-}" ]; then
+            latest=$(ls FHD/metrics/slo-measured-*.json 2>/dev/null | sort | tail -1 || true)
+          fi
           if [ -n "${latest:-}" ]; then
             cp "$latest" FHD/metrics/slo-latest.json
             echo "Using SLO report: $latest"
           else
-            echo "No committed SLO report found; SLO signal stays healthy."
+            echo "No committed SLO report found; evidence requires human review."
           fi
 
       - name: Aggregate evolution signals + LLM propose + open issue
@@ -167,14 +170,16 @@ jobs:
           from modstore_server.evolution_ledger import append_event
 
           signals = aggregate_signals()
-          print(f'Aggregated signals: {signals}')
+          print('Aggregated signals requiring proposals:', signals.get('signals_to_propose', 0))
+          pending = signals.get('slo_metrics', {}).get('evidence', {}).get('status') == 'needs_human'
+          if pending or signals.get('signals_to_propose'):
+              append_event({'event_type': 'signal_detected', 'signals': signals,
+                            'final_status': 'needs_human' if pending else 'signal_detected'})
           if not signals.get('signals_to_propose'):
               print('No signals to propose, exiting.')
               with open(os.environ['GITHUB_OUTPUT'], 'a') as fh:
                   fh.write('issue_url=\n')
               sys.exit(0)
-
-          append_event({'event_type': 'signal_detected', 'signals': signals, 'final_status': 'signal_detected'})
 
           proposal = propose_employee_pack(signals)
           if not proposal:

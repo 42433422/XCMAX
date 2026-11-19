@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
+import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -313,17 +315,111 @@ _AUTONOMY_GAP_PACK_ID = "autonomy-gap-analyst"
 _AUTONOMY_GAP_PACK_VERSION = "1.0.0"
 
 
-def _read_json_report(env_var: str) -> Optional[Dict[str, Any]]:
+def _read_json_report(env_var: str) -> tuple[Dict[str, Any], str | None]:
     path_str = os.environ.get(env_var, "")
-    if not path_str:
-        return None
-    p = Path(path_str)
-    if not p.is_file():
+    if not path_str or not Path(path_str).is_file():
+        return {}, "report_missing"
+    try:
+        report = json.loads(Path(path_str).read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return {}, "report_invalid"
+    return (report, None) if isinstance(report, dict) else ({}, "report_invalid")
+
+
+def _finite_number(value: Any) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
         return None
     try:
-        return json.loads(p.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        number = float(value)
+    except (ValueError, OverflowError):
         return None
+    return number if math.isfinite(number) else None
+
+
+def _slo_signal(report: Dict[str, Any], read_error: str | None) -> Dict[str, Any]:
+    """Route observed target breaches; evidence gaps retain a separate human receipt."""
+    reasons = {read_error} if read_error else set()
+    generated_at, window = report.get("generated_at"), report.get("window")
+    max_age_hours = _lookback_hours()  # Signal freshness, not the Prometheus query window.
+    if not read_error:
+        try:
+            stamp = datetime.fromisoformat(generated_at)
+            if stamp.tzinfo is None:
+                raise ValueError("timezone required")
+            age = datetime.now(UTC) - stamp
+            if age < timedelta(0):
+                reasons.add("generated_at_future")
+            elif age > timedelta(hours=max_age_hours):
+                reasons.add("report_stale")
+        except (TypeError, ValueError, OverflowError):
+            reasons.add("generated_at_invalid")
+        if not isinstance(window, str) or not re.fullmatch(r"[1-9][0-9]{0,5}[mhd]", window):
+            reasons.add("window_invalid")
+    current = not reasons
+    if report.get("source_status", "available") != "available":
+        reasons.add("source_unavailable")
+    if "coverage" in report and _finite_number(report["coverage"]) != 1.0:
+        reasons.add("coverage_incomplete")
+    scrape = _finite_number(report.get("scrape_coverage"))
+    if "scrape_coverage" in report and (scrape is None or not 0.99 <= scrape <= 1):
+        reasons.add("scrape_coverage_incomplete")
+
+    verdicts: list[bool | None] = []
+    if "readings" in report:
+        readings = report["readings"]
+        if not isinstance(readings, dict):
+            reasons.add("readings_invalid")
+        else:
+            for item in readings.values():
+                item = item if isinstance(item, dict) else {}
+                value = _finite_number(item.get("reading_numeric", item.get("reading")))
+                target = item.get("meets_target")
+                if "sample_sufficient" in item and item["sample_sufficient"] is not True:
+                    reasons.add("samples_insufficient")
+                samples = _finite_number(item.get("sample_count"))
+                if "sample_count" in item and (samples is None or samples <= 0):
+                    value = None
+                verdicts.append(target if value is not None and type(target) is bool else None)
+    missing = sum(value is None for value in verdicts)
+    if "readings" in report and (not verdicts or missing):
+        reasons.add("readings_missing_or_invalid")
+    # Explicit aggregate ratios keep their existing precedence over dimension readings.
+    if report.get("availability") is not None or report.get("error_rate") is not None:
+        verdicts = []
+        for key, threshold in (
+            ("availability", _SLO_AVAILABILITY_THRESHOLD),
+            ("error_rate", _SLO_ERROR_RATE_THRESHOLD),
+        ):
+            value = _finite_number(report.get(key))
+            verdicts.append(
+                None
+                if value is None or not 0 <= value <= 1
+                else value >= threshold if key == "availability" else value <= threshold
+            )
+        if "readings" not in report:
+            missing = sum(value is None for value in verdicts)
+        if None in verdicts:
+            reasons.add("summary_missing_or_invalid")
+    elif not verdicts:
+        reasons.add("readings_missing_or_invalid")
+    failed = sum(value is False for value in verdicts)
+    breach = current and failed > 0
+    return {
+        "report": report,
+        "below_threshold": breach,
+        # A binary review priority, never a synthetic availability/error-rate measurement.
+        "signal_score": float(breach),
+        "evidence": {
+            "status": "needs_human" if reasons else "available",
+            "reasons": sorted(reasons),
+            "generated_at": generated_at,
+            "window": window,
+            "max_age_hours": max_age_hours,
+            "missing_readings": missing,
+            "failed_targets": failed,
+            "score_kind": "review_priority",
+        },
+    }
 
 
 def _catalog_capability_gap() -> Dict[str, Any]:
@@ -366,38 +462,30 @@ def aggregate_signals() -> Dict[str, Any]:
     返回每个源的信号强度（signal_score）+ 是否触发提议（below_threshold）。
     signal_score > 0 表示值得进入 LLM 提议器。
     """
-    legacy = _read_json_report("MODSTORE_LEGACY_REPORT_PATH") or {}
-    intent = _read_json_report("MODSTORE_INTENT_REPORT_PATH") or {}
-    slo = _read_json_report("MODSTORE_SLO_REPORT_PATH") or {}
+    legacy, _ = _read_json_report("MODSTORE_LEGACY_REPORT_PATH")
+    intent, _ = _read_json_report("MODSTORE_INTENT_REPORT_PATH")
+    slo, slo_error = _read_json_report("MODSTORE_SLO_REPORT_PATH")
 
     # Intent benchmark: 准确率 < 0.80 触发
-    intent_acc = float(intent.get("accuracy") or 1.0)
-    intent_below = intent_acc < _INTENT_ACCURACY_THRESHOLD
-    intent_score = max(0.0, _INTENT_ACCURACY_THRESHOLD - intent_acc) if intent_below else 0.0
+    intent_acc = _finite_number(intent.get("accuracy"))
+    intent_below = intent_acc is not None and 0 <= intent_acc < _INTENT_ACCURACY_THRESHOLD
+    intent_score = (
+        max(0.0, _INTENT_ACCURACY_THRESHOLD - intent_acc)
+        if intent_acc is not None and intent_below
+        else 0.0
+    )
 
     # Legacy usage: legacy_ratio > 0.25 触发
-    legacy_ratio = float(legacy.get("legacy_ratio") or 0.0)
-    legacy_below = legacy_ratio > _LEGACY_RATIO_THRESHOLD
-    legacy_score = max(0.0, legacy_ratio - _LEGACY_RATIO_THRESHOLD) if legacy_below else 0.0
+    legacy_ratio = _finite_number(legacy.get("legacy_ratio"))
+    legacy_below = legacy_ratio is not None and _LEGACY_RATIO_THRESHOLD < legacy_ratio <= 1
+    legacy_score = (
+        max(0.0, legacy_ratio - _LEGACY_RATIO_THRESHOLD)
+        if legacy_ratio is not None and legacy_below
+        else 0.0
+    )
 
-    # SLO: availability < 0.99 或 error_rate > 0.01 触发
-    # 兼容两种报告格式：
-    #   - 显式字段 availability/error_rate（汇总格式）
-    #   - slo-measured readings 字典：availability = 满足目标项占比，error_rate = 1 - availability
-    slo_avail = float(slo.get("availability") if slo.get("availability") is not None else 1.0)
-    slo_err = float(slo.get("error_rate") or 0.0)
-    readings = slo.get("readings") or {}
-    if isinstance(readings, dict) and readings and slo.get("availability") is None:
-        met = [1 for r in readings.values() if r.get("meets_target")]
-        slo_avail = len(met) / len(readings)
-        slo_err = 1.0 - slo_avail
-    slo_below = (slo_avail < _SLO_AVAILABILITY_THRESHOLD) or (slo_err > _SLO_ERROR_RATE_THRESHOLD)
-    slo_score = 0.0
-    if slo_below:
-        slo_score = max(
-            _SLO_AVAILABILITY_THRESHOLD - slo_avail,
-            slo_err - _SLO_ERROR_RATE_THRESHOLD,
-        )
+    slo_signal = _slo_signal(slo, slo_error)
+    slo_score = slo_signal["signal_score"]
 
     catalog_gap = _catalog_capability_gap()
     catalog_score = float(catalog_gap.get("signal_score") or 0.0)
@@ -418,11 +506,7 @@ def aggregate_signals() -> Dict[str, Any]:
             "below_threshold": intent_below,
             "signal_score": intent_score,
         },
-        "slo_metrics": {
-            "report": slo,
-            "below_threshold": slo_below,
-            "signal_score": slo_score,
-        },
+        "slo_metrics": slo_signal,
         "total_score": catalog_score + intent_score + legacy_score + slo_score,
         "signals_to_propose": signals_to_propose,
     }
