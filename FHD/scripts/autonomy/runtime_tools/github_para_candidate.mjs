@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { sourceIdentity } from './control_git_handoff.mjs';
 
-const exec = promisify(execFile);
+const execFileAsync = promisify(execFile);
 export const CANDIDATE_SCHEMA = 'para-github-candidate/v1';
 export function candidateMode(env = process.env) {
   return env.GITHUB_ACTIONS === 'true' && env.PARA_GITHUB_STAGE === 'execute';
@@ -37,13 +37,13 @@ export async function exportCandidate(task, taskDir, baseHead, env = process.env
       || !env.PARA_GITHUB_CANDIDATE_DIR) throw new Error('candidate_dispatch_identity_mismatch');
   const identity = await sourceIdentity(taskDir);
   if (identity.commit_sha === baseHead) throw new Error('candidate_has_no_commit');
-  await exec('git', ['merge-base', '--is-ancestor', baseHead, identity.commit_sha], { cwd: taskDir });
+  await execFileAsync('git', ['merge-base', '--is-ancestor', baseHead, identity.commit_sha], { cwd: taskDir });
   const directory = env.PARA_GITHUB_CANDIDATE_DIR;
   mkdirSync(directory, { recursive: true });
   // An immutable handoff has exactly one fix/subtask. Never select one from a set.
   writeFileSync(join(directory, '.claim'), `${task.task_id}:${task.subtask_id}`, { flag: 'wx' });
   const bundle = join(directory, 'candidate.bundle');
-  await exec('git', ['bundle', 'create', bundle, `${baseHead}..${task.work_branch}`], { cwd: taskDir });
+  await execFileAsync('git', ['bundle', 'create', bundle, `${baseHead}..${task.work_branch}`], { cwd: taskDir });
   const bytes = readFileSync(bundle);
   if (bytes.length > 64 * 1024 * 1024) throw new Error('candidate_bundle_too_large');
   const receipt = { ...identity, pushed: false, publication: 'artifact_pending', base_sha: baseHead,
