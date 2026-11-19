@@ -60,6 +60,11 @@ for item in [
 ]:
     datas.extend(add_data(item))
 
+_smart_turn_asset = runpy.run_path(str(ROOT / "scripts/dev/fetch_smart_turn_model.py"))[
+    "provision_model"
+]()
+datas.extend(add_data(_smart_turn_asset.relative_to(ROOT).as_posix()))
+
 # 语义意图识别模型（semantic-router + fastembed 的 ONNX 模型）。构建机先运行
 # `python scripts/dev/fetch_intent_model.py` 生成；缺失时不阻断打包，运行时回退规则判定。
 _intent_model = ROOT / "models" / "fastembed"

@@ -78,6 +78,84 @@ def test_read_timeout_never_replays_a_sent_post(local_inference_receiver, monkey
     assert state["posts"] == 1
 
 
+@pytest.mark.asyncio
+async def test_official_market_http_egress_uses_xcagi_address(monkeypatch, tmp_path):
+    from starlette.requests import Request
+
+    from app.application.elt.llm_session_provider import SessionMarketProvider
+    from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
+    from app.fastapi_routes import ai_assistant_tts, market_account, voice_routes
+
+    base_url = "https://xiu-ci.com"
+    address = "192.0.2.10"
+    monkeypatch.setenv("XCAGI_MARKET_BASE_URL", base_url)
+    monkeypatch.setenv("XCAGI_MARKET_LOCAL_ADDRESS", address)
+    monkeypatch.setenv("HTTPS_PROXY", "http://environment-proxy.invalid")
+    monkeypatch.delenv("XCAGI_MARKET_PROXY", raising=False)
+    monkeypatch.setenv("XCAGI_LLM_CHAT_FAILOVER", "0")
+    monkeypatch.setenv("XCAGI_TTS_PLATFORM_ONLY", "1")
+    monkeypatch.setattr(ai_assistant_tts, "_session_market_token", lambda request: "test-token")
+    monkeypatch.setattr(voice_routes, "_asr_wav", lambda path: (b"RIFF", 1.0))
+    replies = {
+        "/api/account/me": {"json": {"id": 71}},
+        "/api/llm/chat/requests/test-call": {"json": {"state": "completed"}},
+        "/api/llm/chat/stream": {"text": 'data: {"delta":"ok"}\n\ndata: [DONE]\n\n'},
+        "/api/workbench/asr": {"json": {"provider": "mimo", "text": "ok"}},
+        "/api/workbench/tts": {
+            "content": b"audio",
+            "headers": {"Content-Type": "audio/wav", "x-tts-provider": "mimo"},
+        },
+    }
+    calls = []
+
+    def respond(request):
+        assert request.url.host == "xiu-ci.com"
+        assert request.headers["Authorization"] == "Bearer test-token"
+        calls.append(request.url.path)
+        return httpx.Response(200, **replies[request.url.path])
+
+    market_transport = httpx.MockTransport(respond)
+
+    def transport_factory(**kwargs):
+        assert kwargs["local_address"] == address
+        assert kwargs["trust_env"] is False
+        return market_transport
+
+    def client_factory(client_type):
+        def create_client(**kwargs):
+            assert kwargs.get("transport") is market_transport
+            assert kwargs.get("trust_env") is False
+            assert kwargs.get("proxy") is None
+            return client_type(**kwargs)
+
+        return create_client
+
+    monkeypatch.setattr(httpx, "HTTPTransport", transport_factory)
+    monkeypatch.setattr(httpx, "AsyncHTTPTransport", transport_factory)
+    monkeypatch.setattr(httpx, "Client", client_factory(httpx.Client))
+    monkeypatch.setattr(httpx, "AsyncClient", client_factory(httpx.AsyncClient))
+    account = market_account._http_transport()
+    assert await account.request("GET", "/api/account/me", authorization="test-token") == {"id": 71}
+    elt = SessionMarketProvider(71, "test-token", timeout_seconds=5)
+    assert await elt.lookup_call("test-call") == {"supported": True, "state": "completed"}
+    chat = ModstorePlatformAdapter(platform_url=base_url, auth_token="test-token", user_id=71)
+    try:
+        messages = [{"role": "user", "content": "test"}]
+        result = chat.chat_completion_sync(messages, model="test/model")
+        assert result["choices"][0]["message"]["content"] == "ok"
+        assert [
+            part async for part in chat.stream_chat_completion(messages, model="test/model")
+        ] == ['{"delta":"ok"}']
+    finally:
+        await chat.close()
+    request = Request({"type": "http"})
+    assert (await voice_routes._platform_transcribe(request, tmp_path / "test.wav", None))[
+        "text"
+    ] == "ok"
+    assert ai_assistant_tts._platform_mimo_audio(request, "test", None, None)["provider"] == "mimo"
+    assert sorted(calls) == sorted([*replies, "/api/llm/chat/stream"])
+
+
 from app.domain.shared_services.conversation.modstore_adapter import (
     _iter_market_sse_data_payloads,
     _iter_market_transport_plans,

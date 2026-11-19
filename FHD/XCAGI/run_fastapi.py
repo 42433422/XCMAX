@@ -227,6 +227,10 @@ def _verify_frozen_critical_runtime() -> None:
     from reportlab.pdfbase.cidfonts import UnicodeCIDFont  # type: ignore[import-untyped]
     from reportlab.pdfgen import canvas  # type: ignore[import-untyped]
 
+    from app.application.voice.smart_turn import _load_session as load_smart_turn
+
+    print("[frozen-runtime-probe] Smart Turn model load begin", file=sys.stderr, flush=True)
+    load_smart_turn()
     print("[frozen-runtime-probe] ELT derivation begin", file=sys.stderr, flush=True)
     _verify_frozen_elt_runtime()
     print("[frozen-runtime-probe] ELT derivation complete", file=sys.stderr, flush=True)
@@ -302,7 +306,7 @@ def _verify_frozen_critical_runtime() -> None:
     print(
         "[run_fastapi] frozen critical runtime probe OK: "
         "XCMAX sync appliers + pypdf + reportlab + "
-        f"PyAV {av.__version__} + faster-whisper {faster_whisper.__version__}"
+        f"PyAV {av.__version__} + faster-whisper {faster_whisper.__version__} + Smart Turn"
     )
 
 
@@ -451,7 +455,7 @@ def _apply_desktop_bootstrap(args: argparse.Namespace) -> None:
 
         if is_desktop_mode():
             configure_desktop_environment(os.environ.get("XCAGI_DATA_DIR"))
-    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001 - desktop bootstrap must stay best-effort
+    except RECOVERABLE_ERRORS as exc:
         print(f"[run_fastapi] desktop bootstrap warning: {exc}", file=sys.stderr)
 
 

@@ -48,11 +48,10 @@ async def test_write_attempt_budget_csrf_and_sensitive_error_logging(monkeypatch
             raise httpx.ConnectError("synthetic connection", request=request)
         return httpx.Response(200, json={"access_token": "synthetic-access"})
 
-    client_class = httpx.AsyncClient
     monkeypatch.setattr(
         market.httpx,
-        "AsyncClient",
-        lambda **kwargs: client_class(transport=httpx.MockTransport(transport), **kwargs),
+        "AsyncHTTPTransport",
+        lambda **kwargs: httpx.MockTransport(transport),
     )
     result = await market._proxy_json(
         "POST",

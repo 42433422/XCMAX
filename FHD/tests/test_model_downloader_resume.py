@@ -67,6 +67,16 @@ def test_download_resumes_valid_partial_response(tmp_path: Path) -> None:
     response.fp.raw._sock.settimeout.assert_called_once_with(60.0)
 
 
+def test_packaging_destination_reuses_verified_model(tmp_path: Path) -> None:
+    content = b"packaged-model"
+    target = tmp_path / "model.bin"
+    target.write_bytes(content)
+
+    with patch("app.desktop_runtime.model_downloader.urllib.request.urlopen") as urlopen:
+        assert download_model(_asset(content), destination_dir=tmp_path) == target
+    urlopen.assert_not_called()
+
+
 def test_download_restarts_when_server_ignores_range(tmp_path: Path) -> None:
     complete = b"complete-model"
     asset = _asset(complete)
