@@ -7,7 +7,11 @@ from collections import deque
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
-from app.application.elt.parser_shipment_history import ledger_row_verification
+from app.application.elt.parser_shipment_history import (
+    is_ledger_customer_name,
+    ledger_row_verification,
+    resolve_shipment_history_customers,
+)
 
 if TYPE_CHECKING:
     from app.application.elt.parser_regions import ParsedDataset, ParsedRow
@@ -18,7 +22,11 @@ def _facade():
 
 
 def parse_customer_product_regions(
-    path: Path, *, max_rows: int, target_type: str = "customer_products"
+    path: Path,
+    *,
+    max_rows: int,
+    target_type: str = "customer_products",
+    source_file_name: str = "",
 ) -> ParsedDataset | None:
     """Parse explicit buyer + product-table regions without treating the whole sheet as one table."""
     from openpyxl import load_workbook
@@ -38,6 +46,8 @@ def parse_customer_product_regions(
     companion_stale_records_skipped = 0
     future_dated_source_rows: list[dict[str, Any]] = []
     ledger_rows: list[ParsedRow] = []
+    unresolved_customers: list[ParsedRow] = []
+    customer_resolution: dict[str, dict[str, Any]] = {}
     ledger_state: dict[int, str] = {}
     same_date_source_conflicts = 0
     model_identity_ambiguity_count = 0
@@ -258,11 +268,14 @@ def parse_customer_product_regions(
         }
         canonical_candidates: dict[str, set[str]] = {}
         for region in regions:
-            if region.get("status") != "selected":
+            if (
+                region.get("status") != "selected"
+                or workbook[region["sheet"]].sheet_state != "visible"
+            ):
                 continue
             customer_name = str(region.get("customer_name") or "").strip()
             alias = _facade().customer_alias_key(customer_name)
-            if alias and customer_name:
+            if alias and is_ledger_customer_name(customer_name):
                 canonical_candidates.setdefault(alias, set()).add(customer_name)
         canonical_by_alias = {
             alias: next(iter(names))
@@ -274,6 +287,10 @@ def parse_customer_product_regions(
             for row in parsed_rows
         } - {""}
         default_customer = next(iter(delivery_customers)) if len(delivery_customers) == 1 else ""
+        file_alias = _facade().customer_alias_key(Path(source_file_name or path.name).stem)
+        workbook_customer = (
+            default_customer if canonical_by_alias.get(file_alias) == default_customer else ""
+        )
         customer_product_latest: dict[tuple[str, str, str], ParsedRow] = {}
         same_date_conflict_rows: list[ParsedRow] = []
         if target_type == "customer_products":
@@ -304,7 +321,7 @@ def parse_customer_product_regions(
             if sheet_domain_hints.get(worksheet.title) == "finance_or_reconciliation":
                 continue
             remaining = (
-                max_rows - len(customer_product_latest)
+                max_rows - len(customer_product_latest) - len(unresolved_customers)
                 if target_type == "customer_products"
                 else max_rows - len(history_latest)
             )
@@ -326,6 +343,22 @@ def parse_customer_product_regions(
                 )
             if companion_rows:
                 companion_sheet_counts[worksheet.title] = len(companion_rows)
+            history = [
+                row
+                for row in companion_rows
+                if row.provenance.get("source_kind")
+                in {"shipment_history_ledger", "structured_shipment_history"}
+            ]
+            if target_type == "customer_products" and history:
+                customer_resolution[worksheet.title] = resolve_shipment_history_customers(
+                    worksheet,
+                    history,
+                    canonical_by_alias,
+                    workbook_customer=workbook_customer,
+                    unresolved_start=sum(
+                        item["unresolved_rows"] for item in customer_resolution.values()
+                    ),
+                )
             ledger_rows.extend(companion_rows)
             for row in companion_rows:
                 if _facade()._is_future_companion(row):
@@ -337,6 +370,10 @@ def parse_customer_product_regions(
                             "source_date": _facade()._companion_source_date(row),
                         }
                     )
+                    continue
+                if target_type == "customer_products" and row.provenance.get("customer_unresolved"):
+                    unresolved_customers.append(row)
+                    ledger_state[id(row)] = "customer_unresolved"
                     continue
                 key = _facade().product_match_key(row.values)
                 if target_type == "customer_products":
@@ -377,7 +414,11 @@ def parse_customer_product_regions(
         if target_type == "customer_products":
             selected_rows: list[ParsedRow] = []
             seen_rows: set[tuple[str, int]] = set()
-            for row in [*customer_product_latest.values(), *same_date_conflict_rows]:
+            for row in [
+                *customer_product_latest.values(),
+                *same_date_conflict_rows,
+                *unresolved_customers,
+            ]:
                 row_key = (str(row.sheet), int(row.row_number))
                 if row_key in seen_rows:
                     continue
@@ -531,6 +572,11 @@ def parse_customer_product_regions(
                 "regions": regions,
                 "shipment_history_product_candidates": companion_candidate_count,
                 "ledger_row_verification": ledger_verification,
+                **(
+                    {"ledger_customer_resolution": customer_resolution}
+                    if customer_resolution
+                    else {}
+                ),
                 "latest_record_selection": {
                     "basis": "source_date_then_same_sheet_row",
                     "unique_candidates": companion_candidate_count,

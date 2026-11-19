@@ -118,6 +118,7 @@ class PreviewWorkerMixin:
                     upload.storage_path,
                     target_type=run.target_type,
                     compatibility_preset_id=compatibility_preset_id or None,
+                    source_file_name=upload.file_name,
                 )
                 run.stage = "loading"
                 self._persist_source_snapshot(db, run, dataset)

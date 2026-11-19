@@ -544,6 +544,7 @@ def parse_file(
     target_type: str,
     max_rows: int = MAX_ROWS,
     compatibility_preset_id: str | None = None,
+    source_file_name: str = "",
 ) -> ParsedDataset:
     source = Path(path).expanduser().resolve()
     suffix = source.suffix.lower()
@@ -601,6 +602,7 @@ def parse_file(
                     source,
                     max_rows=max_rows,
                     target_type=target_type,
+                    source_file_name=source_file_name,
                 )
             except EltError:
                 raise

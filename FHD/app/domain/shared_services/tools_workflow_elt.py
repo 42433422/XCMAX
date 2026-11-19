@@ -1451,8 +1451,10 @@ def _companion_note(companion: dict) -> str:
     skipped = int(companion.get("skip_rows") or 0)
     errors = int(companion.get("error_rows") or 0)
     note = f"；客户及产品写入 {executed} 行"
-    if skipped or errors:
-        note += f"（重复跳过 {skipped} 行，非客户/产品 {errors} 行已忽略）"
+    if skipped:
+        note += f"，重复跳过 {skipped} 行"
+    if errors:
+        note += f"，{errors} 行校验未通过，未写入"
     return note
 
 

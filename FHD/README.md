@@ -30,6 +30,7 @@ GitHub 业务适配复用 [HTTPX 0.28.1](https://github.com/encode/httpx/tree/0.
 | 消息状态 | [Vercel AI SDK 7.0.173](https://github.com/vercel/ai)，Apache-2.0，版本由前端 lockfile 固定 | `readUIMessageStream` 组装原生工具 input/output/error 和稳定 ID 的 data parts；移除产品自建工具事件状态合并器。 |
 | SSE 解析 | [eventsource-parser 3.1.1](https://github.com/rexxars/eventsource-parser)，MIT | 从现有传递依赖提升为直接锁定依赖，代替手写 SSE 分隔解析，支持碎片、CRLF、多行 data。 |
 | 子进程观测 | Python 标准库 `multiprocessing.Pipe` | 只增加隔离工具与现有 StreamLifetime 的 JSON 进度适配，保留业务回执、绝对截止、进程回收、租户和审批控制。 |
+| ELT 台账证据 | [openpyxl 3.1.5](https://openpyxl.readthedocs.io/en/3.1.5/)，MIT | 复用只读行列坐标。现有结构化模型只判断客户归属，入库校验逐行核对原件。 |
 
 ELT 百分比直接读取已持久化阶段数据；缺少进度数值时不显示空进度条，执行阶段不借用预演行数。正文输出与请求生命周期独立：已有正文仍可继续执行工具，流结束且工具没有回执时显示“待核对”。附件读取轨迹和业务工具执行使用同一套 Trace 组件，但保持各自的业务含义。AG-UI / CopilotKit 可用于后续跨运行时集成；本次沿用现有 Python SSE 到 AI SDK 的薄适配，避免为界面迁移另引一套 Agent 运行时。
 

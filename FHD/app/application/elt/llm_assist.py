@@ -709,6 +709,63 @@ def _business_rows(data: dict, cited: set[tuple[str, str]]) -> list[dict]:
     return rows
 
 
+def advise_ledger_customer_scope(
+    sheet: str, rows: dict[int, dict[int, str]], workbook_customer: str
+) -> LlmAssistResult:
+    """Ask only about buyer evidence. Product fields are already parsed."""
+    result = _complete(
+        [
+            {
+                "role": "system",
+                "content": (
+                    "根据原件坐标识别历史出货台账的客户。只返回 JSON 对象 candidates。"
+                    "每个候选包含 name、row、column、confirmed。row、column 是原件样本的整数坐标。"
+                    "为客户列中的每个可确认名称引用其原值；只有确认该列表示这张台账各行的客户时，"
+                    "才设 confirmed=true。不要把品名、联系人、型号、日期或序号当成客户。"
+                    "不能确认列语义时，可引用原件中的候选名称并设 confirmed=false。"
+                    "workbook_customer 来自原件内唯一明确的购货单位，且已与原文件名核对。"
+                    "若样本能判断此台账是该客户的独立明细且没有逐行客户列，可用这个名称，"
+                    "row=0、column=0、confirmed=true。遇到混合客户或证据不足就不要确认。"
+                ),
+            },
+            {
+                "role": "user",
+                "content": json.dumps(
+                    {"sheet": sheet, "rows": rows, "workbook_customer": workbook_customer},
+                    ensure_ascii=False,
+                ),
+            },
+        ],
+        schema={
+            "type": "object",
+            "required": ["candidates"],
+            "properties": {"candidates": {"type": "array", "items": {"type": "object"}}},
+        },
+        max_tokens=1400,
+        lane="database",
+    )
+    items = result.data.get("candidates")
+    result.data = {
+        "candidates": [
+            {
+                "name": _cell(item.get("name")),
+                "row": int(str(item.get("row"))[:8]),
+                "column": int(str(item.get("column"))[:8]),
+                "confirmed": item.get("confirmed") is True,
+            }
+            for item in items[:24]
+            if isinstance(item, dict)
+            and all(
+                str(item.get(key)).isascii() and str(item.get(key)).isdigit()
+                for key in ("row", "column")
+            )
+        ]
+        if isinstance(items, list)
+        else []
+    }
+    return result
+
+
 def _coordinate_missing(row: dict) -> bool:
     return bool(row.get("product_name") or row.get("quantity")) and not (
         row.get("source_sheet") and str(row.get("source_row") or "").isdigit()

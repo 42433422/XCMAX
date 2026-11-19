@@ -904,7 +904,7 @@ def test_execute_writes_linked_customer_products_companion():
     )
     companion = _run(
         status="completed",
-        summary={"new": 12, "update": 0, "skip": 1, "error": 0, "executed": 12},
+        summary={"new": 12, "update": 0, "skip": 1, "error": 2, "executed": 12},
     )
     with (
         patch("app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True),
@@ -930,6 +930,8 @@ def test_execute_writes_linked_customer_products_companion():
     assert service.execute.call_args.kwargs["run_id"] == "companion-1"
     assert result["data"]["customer_products"]["executed_rows"] == 12
     assert "客户及产品写入 12 行" in result["message"]
+    assert "重复跳过 1 行" in result["message"]
+    assert "2 行校验未通过，未写入" in result["message"]
 
 
 def test_execute_requires_run_id():
