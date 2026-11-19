@@ -74,6 +74,9 @@ def test_user_memory_prompt_respects_budget() -> None:
         for _ in range(5)
     ]
     service = UserMemoryRagApplicationService.__new__(UserMemoryRagApplicationService)
+    service._recall_validator = lambda hits: (
+        hits
+    )  # Isolate formatting budgets from authority checks.
     prompt = service.format_for_prompt("u1", "query", hits, max_hits=5, max_chars=300)
     assert len(prompt) <= 300
 
@@ -83,6 +86,9 @@ def test_user_memory_prompt_respects_budget() -> None:
 def test_prompt_budgets_include_newlines_headers_and_footer(budget, has_hits):
     hits = [{"content": "alpha" * 40, "score": 0.9}] if has_hits else []
     service = UserMemoryRagApplicationService.__new__(UserMemoryRagApplicationService)
+    service._recall_validator = lambda hits: (
+        hits
+    )  # Isolate formatting budgets from authority checks.
     prompts = (
         format_recalled_memories(hits, max_chars=budget),
         service.format_for_prompt("u1", "query", hits, max_chars=budget),

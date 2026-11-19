@@ -351,8 +351,37 @@ class EmployeeAgent:
                     "node_results": upstream.get("node_results"),
                 }
 
-            scope = MemoryScope.from_config(employee_id, config)
-            memory_mgr = EmployeeMemoryManager(scope)
+            from app.infrastructure.tenant_scope import current_tenant_id
+
+            tenant = current_tenant_id()
+            declared_tenant = trusted_context.get("tenant_id")
+            if tenant is None:
+                tenant = declared_tenant
+            elif declared_tenant is not None and str(declared_tenant) != str(tenant):
+                # Do not read or write memory if trusted runtime scopes conflict.
+                tenant = None
+            declared_actor = trusted_context.get("local_user_id") or trusted_context.get("user_id")
+            if declared_actor is not None and str(declared_actor) != str(user_id):
+                tenant = None
+            scope = MemoryScope.from_config(employee_id, config, tenant_id=tenant)
+            memory_mgr = EmployeeMemoryManager(
+                scope,
+                provenance={
+                    **{
+                        key: trusted_context[key]
+                        for key in (
+                            "run_id",
+                            "agent_run_id",
+                            "employee_run_id",
+                            "task_id",
+                            "node_id",
+                        )
+                        if key in trusted_context
+                    },
+                    "pack_id": pack.get("pack_id"),
+                    "pack_version": pack.get("version"),
+                },
+            )
             mem_ctx = memory_mgr.recall(task, user_id=user_id, session_id=session_id)
             config = self._augment_config_with_memory(config, mem_ctx)
             config = self._augment_config_with_persona(config, user_id)

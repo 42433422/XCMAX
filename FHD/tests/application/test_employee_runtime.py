@@ -181,6 +181,62 @@ def test_tool_registry_uses_pack_id_as_tool_name(employee_mods_root):
     assert is_employee_tool("csv-full-read-employee")
 
 
+@pytest.mark.parametrize(
+    "ambient_tenant, declared_actor, expected_memories", [(None, 41, 1), (2, 41, 0), (1, 42, 0)]
+)
+def test_execution_memory_uses_trusted_runtime_provenance(
+    employee_mods_root, tmp_path, monkeypatch, ambient_tenant, declared_actor, expected_memories
+):
+    from app.application import user_memory_vector_app_service as memory_service
+    from app.application.employee_runtime.executor import execute_employee_task_local
+    from app.application.employee_runtime.memory import EmployeeMemoryManager
+    from app.domain.employee.memory_scope import MemoryScope
+    from app.infrastructure.mods.package import compute_directory_hash
+    from app.infrastructure.persistence.user_memory_vector_store import SQLiteUserMemoryVectorStore
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    pack_id = "csv-full-read-employee"
+    pack = _write_csv_read_pack(employee_mods_root, pack_id)
+    (pack / ".xcagi-install-receipt.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "signature_verified": True,
+                "content_sha256": compute_directory_hash(str(pack)),
+            }
+        )
+    )
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    monkeypatch.setenv("XCAGI_MEMORY_RAG_MIN_SCORE", "0")
+    source = tmp_path / "input.csv"
+    source.write_text("a,b\n1,2\n")
+    store = SQLiteUserMemoryVectorStore(str(tmp_path / "memory.sqlite"))
+    ingest = memory_service.UserMemoryVectorIngestApplicationService(vector_store=store)
+    monkeypatch.setattr(memory_service, "get_user_memory_vector_store", lambda: store)
+    monkeypatch.setattr(memory_service, "get_user_memory_vector_ingest_app_service", lambda: ingest)
+
+    with tenant_scope(ambient_tenant):
+        result = execute_employee_task_local(
+            pack_id,
+            "读取 CSV",
+            {"file_path": str(source), "tenant_id": 2, "user_id": 42, "run_id": "untrusted-input"},
+            user_id=41,
+            workspace_root=str(tmp_path),
+            runtime_context={"tenant_id": 1, "user_id": declared_actor, "employee_run_id": 71},
+        )
+    assert result["success"] is True
+    manager = EmployeeMemoryManager(MemoryScope(pack_id, tenant_id=1))
+    recalled = manager.recall("读取 CSV", user_id=41)
+    assert len(recalled.hits) == expected_memories
+    if expected_memories:
+        metadata = recalled.hits[0]["metadata"]
+        assert metadata["employee_run_id"] == "71"
+        assert metadata["pack_id"] == pack_id
+        assert metadata["tenant_id"] == "1" and metadata["user_id"] == "41"
+        assert "run_id" not in metadata and "agent_run_id" not in metadata
+    assert manager.recall("读取 CSV", user_id=42).hits == []
+
+
 def test_untrusted_writable_employee_python_is_blocked(employee_mods_root, tmp_path):
     pack_id = "csv-full-read-employee"
     _write_csv_read_pack(employee_mods_root, pack_id)

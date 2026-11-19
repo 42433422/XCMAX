@@ -78,9 +78,20 @@ class InMemoryTaskExecutionRepository:
                     tenant_id=tenant_id_of_run(run),
                     created_at=now,
                 )
+            from app.application.agent_orchestrator.run_lifecycle import safe_continuation_error
             from app.domain.task_lifecycle.adapters import execution_requeue_allowed
 
-            if row.state not in LEASED_STATES and not execution_requeue_allowed(row.state):
+            recovery = run.metadata.get("recovery") or {}
+            retryable = (
+                run.status == "queued"
+                and recovery.get("state") == "safe_checkpoint_resume"
+                and recovery.get("reason") == "explicit_retry"
+                and not safe_continuation_error(run)
+                and not self._book.get("agent", row.tenant_id, row.run_id).get("effects")
+            )
+            if row.state not in LEASED_STATES and not execution_requeue_allowed(
+                row.state, retryable=retryable
+            ):
                 return copy.deepcopy(row)
             if row.state not in LEASED_STATES:
                 row.state = "queued"

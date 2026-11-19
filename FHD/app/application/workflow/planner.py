@@ -85,6 +85,8 @@ class LLMWorkflowPlanner:
         profile = resolve_tool_execution_profile(context)
         registry_for_plan = _filter_tool_registry_for_profile(tool_registry, profile)
         context.pop("available_employees", None)
+        context.pop("user_memory_rag", None)
+        context.pop("memory_v2", None)
         if context.get("_actor_authorization"):
             try:
                 from app.domain.shared_services.auth_service import get_auth_service
@@ -113,25 +115,6 @@ class LLMWorkflowPlanner:
                 rag = get_user_memory_rag_app_service()
                 rag_res = rag.query(user_id=memory_user_id, query_text=message, top_k=3)
                 hits = (rag_res or {}).get("hits") if isinstance(rag_res, dict) else None
-                if memory_user_id != user_id:
-                    # Preserve recall of existing session-scoped chunks while new
-                    # writes move to the stable owner namespace.
-                    legacy_res = rag.query(user_id=user_id, query_text=message, top_k=3)
-                    legacy_hits = (
-                        (legacy_res or {}).get("hits") if isinstance(legacy_res, dict) else None
-                    )
-                    hits = hits if isinstance(hits, list) else []
-                    merged = {
-                        str(hit.get("chunk_id") or f"stable:{index}"): hit
-                        for index, hit in enumerate(hits)
-                        if isinstance(hit, dict)
-                    }
-                    for index, hit in enumerate(legacy_hits or []):
-                        if isinstance(hit, dict):
-                            merged.setdefault(str(hit.get("chunk_id") or f"legacy:{index}"), hit)
-                    hits = sorted(
-                        merged.values(), key=lambda hit: float(hit.get("score") or 0), reverse=True
-                    )[:4]
                 if isinstance(hits, list) and hits:
                     summary = rag.format_for_prompt(
                         user_id=memory_user_id, query_text=message, hits=hits, max_hits=4
@@ -145,16 +128,10 @@ class LLMWorkflowPlanner:
             except RECOVERABLE_ERRORS as e:
                 logger.warning("用户记忆 RAG 不可用（不阻断主流程）: %s", e)
             try:
-                from app.application.task_conversation_store import durable_user_id
                 from app.domain.shared_services.user_memory_service import get_user_memory_service
 
-                owner_id = durable_user_id(context.get("local_user_id") or context.get("actor_id"))
-                memory_v2_summary = (
-                    get_user_memory_service().format_memory_v2_for_prompt(
-                        user_id=str(owner_id), max_items=6
-                    )
-                    if owner_id is not None
-                    else "【MemoryV2】无已确认记忆。"
+                memory_v2_summary = get_user_memory_service().format_memory_v2_for_prompt(
+                    user_id=memory_user_id, max_items=6
                 )
                 if "无已确认记忆" not in memory_v2_summary:
                     context["memory_v2"] = {"summary": memory_v2_summary}

@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import uuid
 from typing import Any, Protocol
 
 from app.infrastructure.modstore_transport import safe_route_metadata
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+logger = logging.getLogger(__name__)
 
 _SECRET_TEXT = re.compile(
     r"(?i)(\b(?:api[_ -]?key|access[_ -]?token|refresh[_ -]?token|password|passwd|secret|密码|口令)\b\s*[:=]\s*)([^\s,;]+)|"
@@ -41,17 +45,14 @@ def _storage_safe(value: Any, *, depth: int = 0) -> Any:
 
 
 class ConversationStore(Protocol):
-    def save_message(
+    def save_turn(
         self,
         *,
         session_id: str,
         user_id: str,
-        role: str,
-        content: str,
-        intent: str,
-        metadata: str,
-        idempotency_key: str,
-    ) -> Any: ...
+        messages: list[dict[str, Any]],
+        expected_revision: int | None = None,
+    ) -> list[int]: ...
 
 
 def apply_history_fault(payload: dict[str, Any]) -> dict[str, Any]:
@@ -102,16 +103,34 @@ def persist_chat_turn(
     response_data: dict[str, Any],
     *,
     store: ConversationStore | None = None,
-) -> None:
+) -> dict[str, Any]:
     """
     在请求携带 session_id / conversation_id 时，将会话与工具结果摘要写入 ai_conversations，
     便于审计与和出货/产品等业务联动检索。
     """
-    message = str(_storage_safe(str(message or "")))
+    # Transcript bodies are authoritative; metadata projections may be bounded,
+    # but must never silently truncate the original user or assistant message.
+    redact = lambda value: _SECRET_TEXT.sub(
+        lambda match: f"{match.group(1) or match.group(3)}[已隐藏]", str(value or "")
+    )
+    message = redact(message)
+    raw_inner = response_data.get("data")
+    raw_inner = raw_inner if isinstance(raw_inner, dict) else {}
+    reply = redact(
+        response_data.get("response")
+        or raw_inner.get("text")
+        or (response_data.get("message") if not response_data.get("success") else "")
+    )
     response_data = _storage_safe(response_data)
-    session_id = str(context.get("session_id") or context.get("conversation_id") or "").strip()
+    session_id = str(context.get("conversation_id") or context.get("session_id") or "").strip()
+    if (
+        context.get("session_id")
+        and context.get("conversation_id")
+        and str(context["session_id"]).strip() != str(context["conversation_id"]).strip()
+    ):
+        raise ValueError("conflicting conversation identifiers")
     if not session_id:
-        return
+        return {"status": "not_requested"}
     from app.application.task_conversation_store import durable_user_id
 
     # The web_normal_* id scopes model memory, not the authenticated history owner.
@@ -120,7 +139,7 @@ def persist_chat_turn(
     ]
     # Conversation identifiers and body user_id never authorize durable ownership.
     if not owners or None in owners or len(set(owners)) != 1:
-        return
+        return {"status": "not_authorized"}
     history_user_id = str(owners[0])
 
     inner = response_data.get("data") if isinstance(response_data.get("data"), dict) else {}
@@ -134,12 +153,6 @@ def persist_chat_turn(
         inner_payload = {}
     if not isinstance(tool_call, dict):
         tool_call = {}
-    reply = str(
-        response_data.get("response")
-        or inner.get("text")
-        or (response_data.get("message") if not response_data.get("success") else "")
-        or ""
-    )[:8000]
     intent = str(
         inner_payload.get("intent")
         or inner_payload.get("tool_key")
@@ -147,10 +160,24 @@ def persist_chat_turn(
         or inner.get("action")
         or ""
     ).strip()
+    from app.application.agent_orchestrator.trace_payloads import _payload_status
+    from app.domain.task_lifecycle.results import (
+        execution_result_requires_reconciliation,
+        execution_result_wait_reason,
+    )
+
+    status: str = _payload_status(response_data)
+    if status == "waiting_user" and execution_result_wait_reason(response_data) in {
+        "authorization",
+        "approval",
+    }:
+        status = "waiting_approval"
+    elif status == "blocked" and execution_result_requires_reconciliation(response_data):
+        status = "unknown"
     summary = {
         "success": bool(response_data.get("success")),
         "action": inner.get("action"),
-        "status": inner.get("status") or inner_payload.get("status"),
+        "status": status,
         "intent": intent,
         "toolCall": tool_call or None,
         "plan_id": inner_payload.get("plan_id"),
@@ -176,7 +203,7 @@ def persist_chat_turn(
         or inner.get("thinking_steps")
         or response_data.get("thinking_steps"),
         "todoSteps": inner_payload.get("todo"),
-        "workflowAction": inner.get("action"),
+        "workflowAction": status if status != "completed" else inner.get("action") or status,
         "nodeResults": inner_payload.get("node_results"),
         "approvalCard": inner_payload.get("approval_card"),
         "attachments": inner_payload.get("attachments"),
@@ -193,7 +220,7 @@ def persist_chat_turn(
     turn_id = str(context.get("turn_id") or "").strip()
     user_fingerprint = uuid.uuid5(
         uuid.NAMESPACE_URL,
-        str(message)[:8000],
+        str(message),
     ).hex
     assistant_fingerprint = uuid.uuid5(
         uuid.NAMESPACE_URL,
@@ -208,12 +235,13 @@ def persist_chat_turn(
     meta_user = json.dumps(
         {
             "role_hint": "user",
+            "input_fingerprint": context.get("_conversation_input_fingerprint"),
             "summary": summary,
             "business_harness": harness_metadata,
         },
         ensure_ascii=False,
         default=str,
-    )[:12000]
+    )
     clarification_candidates = inner_payload.get("candidates")
     meta_assistant = json.dumps(
         {
@@ -234,35 +262,77 @@ def persist_chat_turn(
         },
         ensure_ascii=False,
         default=str,
-    )[:12000]
+    )
     if store is None:
         from app.services import get_conversation_service
 
         store = get_conversation_service()
-    conv = store
-    conv.save_message(
+    message_ids = store.save_turn(
         session_id=session_id,
         user_id=history_user_id,
-        role="user",
-        content=str(message)[:8000],
-        intent=intent or "chat",
-        metadata=meta_user,
-        idempotency_key=user_idempotency_key,
-    )
-    if not isinstance(response_data, dict):
-        response_data = {}
-    conv.save_message(
-        session_id=session_id,
-        user_id=history_user_id,
-        role="assistant",
-        content=reply,
-        intent=intent or "assistant_reply",
-        metadata=meta_assistant,
-        idempotency_key=assistant_idempotency_key,
+        expected_revision=context.get("_conversation_revision"),
+        messages=[
+            {
+                "role": "user",
+                "content": message,
+                "intent": intent or "chat",
+                "metadata": meta_user,
+                "idempotency_key": user_idempotency_key,
+            },
+            {
+                "role": "assistant",
+                "content": reply,
+                "intent": intent or "assistant_reply",
+                "metadata": meta_assistant,
+                "idempotency_key": assistant_idempotency_key,
+            },
+        ],
     )
     from app.application.ai_chat.active_conversation import remember_active_conversation
 
-    remember_active_conversation(context, conversation_id=session_id)
+    try:
+        remember_active_conversation(context, conversation_id=session_id)
+    except RECOVERABLE_ERRORS:
+        logging.getLogger(__name__).warning(
+            "active conversation pointer update failed", exc_info=True
+        )
+    return {
+        "status": "saved",
+        "conversation_id": session_id,
+        "message_ids": message_ids,
+        "revision": context.get("_conversation_revision", 0),
+        "turn_id": turn_id,
+    }
+
+
+def retry_stored_chat_turn(
+    context: dict[str, Any], turn_id: str, expected_revision: int
+) -> dict[str, Any]:
+    """Repair only the original authenticated receipt; never re-enter the planner."""
+    from app.application.ai_chat.dialogue_memory import mark_history_persisted, stored_turn_receipt
+    from app.infrastructure.database.conversation_lifecycle import ConversationRevisionError
+
+    receipt = stored_turn_receipt(context, turn_id)
+    if receipt is None:
+        raise LookupError("本轮原始回执不可用，请核对历史；不会重新执行任务。")
+    if receipt["revision"] != expected_revision:
+        raise ConversationRevisionError("会话已经修改，请重新读取历史。")
+    context = {
+        **context,
+        "turn_id": turn_id,
+        "_conversation_revision": expected_revision,
+        "_conversation_input_fingerprint": receipt.get("input_fingerprint"),
+    }
+    ack = persist_chat_turn(
+        str(context["local_user_id"]), receipt["message"], context, receipt["payload"]
+    )
+    mark_history_persisted(context, turn_id, ack)
+    return {
+        "success": True,
+        "saved": ack["status"] == "saved",
+        "durable": ack["status"] == "saved",
+        **ack,
+    }
 
 
 def authorized_memory_context(
@@ -313,9 +383,8 @@ def authorized_memory_context(
         except access_errors:
             return None
         required = "dataset.write" if write else "dataset.read"
-        if not principal.is_admin and required not in principal.permissions:
-            return None
-        access = principal.to_dict()
+        if principal.is_admin or required in principal.permissions:
+            access = principal.to_dict()
     memory_namespace = scoped_personal_memory_id(context)
     if not memory_namespace:
         return None
@@ -335,7 +404,9 @@ def persist_recallable_chat_turn(
     authorized = authorized_memory_context(user_id, context, write=True)
     if authorized is None:
         return
-    normalized_user_id, access_context = authorized
+    _memory_namespace, access_context = authorized
+    if access_context is None and context.get("persy_memory_scope") == "tenant":
+        return  # A private-memory capability never authorizes a tenant-wide write.
     raw_inner = response_data.get("data")
     inner: dict[str, Any] = raw_inner if isinstance(raw_inner, dict) else {}
     action = str(response_data.get("action") or inner.get("action") or "").strip().lower()
@@ -360,59 +431,30 @@ def persist_recallable_chat_turn(
         assistant_text = str(inner.get("text") or inner.get("message") or "").strip()
     if not assistant_text or sensitive.search(f"{message}\n{assistant_text}"):
         return
-    from app.application.user_memory_vector_app_service import (
-        get_user_memory_vector_ingest_app_service,
-    )
+    # Raw dialogue remains in the conversation store. Long-term model evidence
+    # comes only from candidates explicitly confirmed in MemoryV2.
+    from app.application.persy_memory_app_service import get_persy_memory_app_service
 
-    service = get_user_memory_vector_ingest_app_service()
-    from app.application.ai_feature_isolation import tag_mapping
-
-    tagged = tag_mapping(context)
-    chunk = service.build_chat_turn_chunk(
-        user_id=normalized_user_id,
-        user_message=message,
-        assistant_message=assistant_text,
-        session_id=str(tagged.get("session_id") or tagged.get("conversation_id") or ""),
-        source=str(source or tagged.get("ai_feature_channel") or "chat"),
-    )
-    if tagged.get("ai_feature_channel"):
-        chunk.metadata["ai_feature_channel"] = tagged["ai_feature_channel"]
-    session_scope = str(context.get("session_id") or context.get("conversation_id") or "")
-    service.ingest_chunks(normalized_user_id, [chunk])
-    from app.infrastructure.memory.mem0_backend import (
-        get_long_term_memory,
-        schedule_fact_consolidation,
-    )
-    from app.infrastructure.memory.memory_units import extract_facts
-
-    long_term = get_long_term_memory()
-    if long_term.enabled:
-        # mem0 作为跨会话长期记忆镜像写入；未启用时仅保留原有向量库链路。
-        long_term.remember(
-            user_id=normalized_user_id,
-            user_message=message,
-            assistant_message=assistant_text,
-            metadata={
-                "session_id": session_scope,
-                "source": str(source or tagged.get("ai_feature_channel") or "chat"),
-                "ai_feature_channel": str(tagged.get("ai_feature_channel") or ""),
-            },
-        )
-        # 热路径只做规则抽取与入队，合并（去重/失效）在后台线程完成。
-        schedule_fact_consolidation(
-            user_id=normalized_user_id,
-            facts=extract_facts(message),
-        )
+    service = get_persy_memory_app_service()
     if access_context is not None:
-        from app.application.persy_memory_app_service import get_persy_memory_app_service
-
-        get_persy_memory_app_service().capture_conversation_turn(
+        captured = service.capture_conversation_turn(
             access_context=access_context,
             user_message=message,
             assistant_message=assistant_text,
             session_id=str(context.get("session_id") or context.get("conversation_id") or ""),
             source=str(source or "chat"),
-            scope="tenant"
-            if str(context.get("persy_memory_scope") or "").strip().lower() == "tenant"
-            else "user",
+            scope=str(context.get("persy_memory_scope") or "user"),
+        )
+    else:
+        captured = service.capture_personal_turn(
+            user_id=user_id,
+            context=context,
+            user_message=message,
+            assistant_message=assistant_text,
+            source=str(source or "chat"),
+        )
+    if isinstance(captured, dict) and not captured.get("success"):
+        logger.warning(
+            "memory candidate capture incomplete: %s",
+            captured.get("errors") or captured.get("error_code"),
         )

@@ -2243,12 +2243,17 @@ class TestRunRebuildJobBoundary:
             _ingest(svc)
             job = svc.start_rebuild_index(dataset_id="ds1", background=True, max_attempts=2)["job"]
             job_id = job["job_id"]
+            renumber = svc._renumber_chunks
 
             def fail_after_embedding(state):
+                # Fail this rebuild, leaving persisted-state reload usable.
+                svc._renumber_chunks = renumber
                 if replacement:
                     current = svc._datasets["ds1"].rebuild_jobs[job_id]
                     current.status = "cancelled"
                     current.worker_id = "replacement-owner"
+                    # A replacement owner is authoritative only after publication.
+                    svc._persist_locked()
                 raise RuntimeError("late rebuild failure")
 
             svc._renumber_chunks = fail_after_embedding

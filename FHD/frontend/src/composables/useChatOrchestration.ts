@@ -56,6 +56,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   const { sessionId } = options
   const {
     messages,
+    messagesHaveEarlier, earlierMessagesLoading, earlierMessagesError, loadEarlierMessages,
     cacheError,
     retryMessagesCache,
     retryMessageSave,
@@ -676,6 +677,8 @@ export function useChatOrchestration(options: UseChatViewOptions) {
 
   /** 撤回一条用户消息及其之后的回复，供「撤回编辑」使用。 */
   async function recallUserMessage(index: number): Promise<{ ok: boolean; text: string; message?: string }> {
+    const scope = captureLocalScope()
+    let remoteChanged = false
     const message = messages.value[index]
     if (!message || message.role !== 'user') return { ok: false, text: '', message: '只能撤回自己发送的消息。' }
     if (isLoading.value || isExecuting.value) return { ok: false, text: '', message: '当前对话正在处理，请稍后再撤回。' }
@@ -687,12 +690,18 @@ export function useChatOrchestration(options: UseChatViewOptions) {
         try {
           const result = await chatApi.deleteMessagesFrom(String(sessionId.value || ''), messageId)
           if (!result?.success) return { ok: false, text, message: String(result?.message || '撤回服务端消息失败。') }
+          remoteChanged = true
         } catch {
           return { ok: false, text, message: '撤回服务端消息失败，请稍后重试。' }
         }
       }
     }
+    if (!scope.isCurrent()) return { ok: false, text, message: '会话已切换，请重新查看历史。' }
     messages.value = messages.value.slice(0, index)
+    if (remoteChanged) {
+      try { await syncFromServer({ required: true, isCurrent: scope.isCurrent }) }
+      catch { return { ok: true, text, message: '撤回已完成，历史同步尚未确认，请刷新会话。' } }
+    }
     return { ok: true, text }
   }
 
@@ -776,6 +785,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
 
   return {
     messages,
+    messagesHaveEarlier, earlierMessagesLoading, earlierMessagesError, loadEarlierMessages,
     cacheError,
     retryMessagesCache,
     retryMessageSave,

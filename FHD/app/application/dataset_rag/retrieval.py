@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
+from dataclasses import replace
 from typing import Any, Protocol
 
 from app.application.dataset_rag.access_policy import (
@@ -66,10 +67,42 @@ class RetrieverFactory(Protocol):
         mode: str = "hybrid",
         vector_weight: float = 1.0,
         keyword_weight: float = 1.0,
+        vector_candidates: list[RetrievedChunk] | None = None,
     ) -> EvidenceRetriever: ...
 
 
 _TABLE_MARKER = re.compile(r"(?m)^\[(table|page) \d+\]")
+
+
+def _current_hits(
+    hits: list[RetrievedChunk], current: list[RetrievedChunk], *, dense: bool = False
+) -> list[RetrievedChunk]:
+    """Indexes supply ranking only; content and eligibility come from current state."""
+
+    def identity(chunk: RetrievedChunk) -> tuple[Any, ...]:
+        meta = chunk.metadata or {}
+        return (
+            meta.get("tenant_id"),
+            meta.get("document_id"),
+            meta.get("qa_id"),
+            meta.get("document_version"),
+            chunk.char_start,
+            chunk.char_end,
+            chunk.text,
+        )
+
+    allowed = {identity(chunk): chunk for chunk in current}
+    result = []
+    for hit in hits:
+        chunk = allowed.get(identity(hit))
+        if chunk is None:
+            continue
+        if dense and (hit.metadata or {}).get("_embedding_fingerprint") != (
+            chunk.metadata or {}
+        ).get("_embedding_fingerprint"):
+            continue
+        result.append(replace(chunk, score=hit.score, metadata=dict(chunk.metadata or {})))
+    return result
 
 
 def _table_context(texts: list[str], *, max_chars: int = 4000) -> str:
@@ -255,6 +288,8 @@ class DatasetRetrieval:
         # 术语表（可选）：把用户口语词展开为语料里的写法，只影响召回通道，
         # 引用与证据覆盖率仍按原问题计算。
         retrieval_query = expand_query(query_text, index_snapshot.get("synonyms"))
+        mode = str(retrieval_mode or "hybrid").strip().lower()
+        mode = mode if mode in {"hybrid", "vector", "keyword"} else "hybrid"
         # 向量库只能先取候选再按 ACL 过滤；有受限文档时扩大候选池，避免
         # 受限结果占满名额导致本来可见的文档被挤出。
         context = _coerce_access_context(access_context)
@@ -264,29 +299,26 @@ class DatasetRetrieval:
         candidate_k = max(50, max(1, min(int(top_k), 50)) * 4)
         if not can_bypass_acl and any(document_acl(doc.metadata) for doc in documents_in_state):
             candidate_k = min(500, candidate_k * 8)
-        vector_candidates = self._vector._query_vector_index_candidates(
-            dataset_id=dataset_key,
-            query=retrieval_query,
-            top_k=candidate_k,
-            tenant_id=tenant_key,
-            version=version,
-            metadata_filter=metadata_filter or {},
-        )
+        vector_candidates = None
+        # FAQ vectors are not persisted; rank their joint corpus in memory.
+        # Keyword recall always uses the complete scoped corpus, independently
+        # of the dense backend's top-k, availability, or embedding model.
+        if mode != "keyword" and not qa_pairs:
+            vector_candidates = self._vector._query_vector_index_candidates(
+                dataset_id=dataset_key,
+                query=retrieval_query,
+                top_k=candidate_k,
+                tenant_id=tenant_key,
+                version=version,
+                metadata_filter=metadata_filter or {},
+            )
         used_vector_backend = vector_candidates is not None
         if vector_candidates is not None:
-            chunks = filter_chunks_by_acl(vector_candidates, access_context)
+            vector_candidates = _current_hits(vector_candidates, scope_chunks, dense=True)
             index_snapshot["query_backend"] = self._vector._vector_index_backend_name()
         else:
-            chunks = filter_chunks_by_acl(
-                _filter_chunks(
-                    chunks,
-                    tenant_id=tenant_key,
-                    version=version,
-                    metadata_filter=metadata_filter or {},
-                ),
-                access_context,
-            )
-            index_snapshot["query_backend"] = "in_memory_hybrid"
+            index_snapshot["query_backend"] = "bm25s" if mode == "keyword" else "in_memory_hybrid"
+        chunks = scope_chunks
         if qa_pairs:
             chunks = [*chunks, *qa_chunks(qa_pairs, tenant_id=tenant_key)]
         if not chunks:
@@ -312,9 +344,9 @@ class DatasetRetrieval:
         retrieve_k = max(final_k * 4, 20) if effective_rerank else final_k
         if lambda_value > 0:
             retrieve_k = max(retrieve_k, final_k * 3, 15)
-        mode = str(retrieval_mode or "hybrid").strip().lower()
-        mode = mode if mode in {"hybrid", "vector", "keyword"} else "hybrid"
         factory_kwargs: dict[str, Any] = {"embedder": self._vector.embedder, "top_k": retrieve_k}
+        if vector_candidates is not None:
+            factory_kwargs["vector_candidates"] = vector_candidates
         if mode != "hybrid":
             factory_kwargs["mode"] = mode
         if float(vector_weight) != 1.0:
@@ -338,6 +370,30 @@ class DatasetRetrieval:
             )
         else:
             top = top[:final_k]
+        # Re-read after ranking: a concurrent revoke/delete must also invalidate
+        # keywords, FAQ, expanded context, and a previously captured vector hit.
+        with self._repository.lock:
+            current_state = self._repository.datasets.get(dataset_key)
+            scope_chunks = filter_chunks_by_acl(
+                _filter_chunks(
+                    list(current_state.chunks) if current_state else [],
+                    tenant_id=tenant_key,
+                    version=version,
+                    metadata_filter=metadata_filter or {},
+                ),
+                access_context,
+            )
+            scope_chunks = [
+                replace(chunk, metadata=dict(chunk.metadata or {})) for chunk in scope_chunks
+            ]
+            current_qa = (
+                []
+                if metadata_filter or current_state is None
+                else qa_chunks(
+                    scoped_qa_pairs(current_state.index, tenant_key), tenant_id=tenant_key
+                )
+            )
+            top = _current_hits(top, [*scope_chunks, *current_qa])
         rows = [_chunk_to_dict(c, public=True) for c in top]
         # 命中词高亮：只给前端标记区间，正文保持原样，避免 HTML 注入。
         for row in rows:
@@ -418,7 +474,7 @@ class DatasetRetrieval:
         threshold = resolve_min_relevance(min_relevance)
         result["grounding"] = round(grounding, 4)
         result["min_relevance"] = round(threshold, 4)
-        result["answer_grounded"] = grounding >= threshold
+        result["answer_grounded"] = bool(top) and grounding >= threshold
         if include_sheet_context:
             result["sheet_contexts"] = _named_sheet_context(query_text, top, scope_chunks)
         return result

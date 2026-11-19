@@ -242,7 +242,9 @@ def test_all_offered_candidates_and_distinguishing_attributes_are_visible():
     assert "20. 同名（#119）" in question and "M19" in question
 
 
-def test_short_followup_uses_business_rules_and_preserves_repeated_turns(monkeypatch, tmp_path):
+def test_short_followup_uses_business_rules_and_preserves_repeated_turns(
+    monkeypatch, tmp_path, dialogue_db
+):
     monkeypatch.setenv("XCAGI_DIALOGUE_MEMORY_DIR", str(tmp_path))
     context = {"local_user_id": 71, "tenant_id": 9, "conversation_id": "sales-followup"}
     for index, message in enumerate(["查客户甲已确认的销售订单", "第二个", "第二个"]):
@@ -275,7 +277,9 @@ def test_short_followup_uses_business_rules_and_preserves_repeated_turns(monkeyp
     assert recent_conversation_messages({**current, "conversation_id": "other"}) == []
 
 
-def test_no_turn_id_keeps_user_history_and_untrusted_history_is_ignored(monkeypatch, tmp_path):
+def test_no_turn_id_keeps_user_history_and_untrusted_history_is_ignored(
+    monkeypatch, tmp_path, dialogue_db
+):
     monkeypatch.setenv("XCAGI_DIALOGUE_MEMORY_DIR", str(tmp_path))
     context = {"local_user_id": 71, "tenant_id": 9, "session_id": "no-turn-id"}
     prepare_chat_turn("查销售订单", context)

@@ -163,6 +163,10 @@ def test_http_execution_does_not_replay_or_accept_body_identity(
     assert execute.call_args.kwargs["workspace_root"] == str(tmp_path.resolve())
     assert execute.call_args.kwargs["user_id"] == 7
     assert execute.call_args.kwargs["session_id"] == "trusted-session"
+    trusted = execute.call_args.kwargs["runtime_context"]
+    assert trusted["tenant_id"] == 1 and trusted["user_id"] == 7
+    assert trusted["employee_run_id"] == response.json()["run_id"]
+    assert "run_id" not in trusted and "agent_run_id" not in trusted
 
     record = ledger.list_employee_run_logs("same", tenant_id=1)[0]
     assert record["status"] == expected and not record["verified"]

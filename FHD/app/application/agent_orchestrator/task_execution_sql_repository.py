@@ -79,7 +79,13 @@ class SQLAlchemyTaskExecutionRepository:
         return cast(AgentTaskExecution, self.get(prior or run.run_id))
 
     def enqueue_in_session(
-        self, db: Session, run: AgentRun, *, requested_by: str = "", priority: int = 100
+        self,
+        db: Session,
+        run: AgentRun,
+        *,
+        requested_by: str = "",
+        priority: int = 100,
+        retryable: bool = False,
     ) -> None:
         """Stage queue state in the caller's transaction; never publish it early."""
         now = utc_now_iso()
@@ -103,7 +109,7 @@ class SQLAlchemyTaskExecutionRepository:
             from app.domain.task_lifecycle.adapters import execution_requeue_allowed
 
             if record.state not in LEASED_STATES and not execution_requeue_allowed(
-                str(record.state)
+                str(record.state), retryable=retryable
             ):
                 return
             if record.state not in LEASED_STATES:
@@ -240,9 +246,47 @@ class SQLAlchemyTaskExecutionRepository:
                 recovered = candidate.state in LEASED_STATES
                 from app.domain.task_lifecycle.machine import DEFAULT_MAX_ATTEMPTS
 
-                if recovered and book.get(
+                effects = book.get(
                     "agent", str(candidate.tenant_id or ""), str(candidate.run_id)
-                ).get("effects"):
+                ).get("effects")
+                if recovered:
+                    # Fence the expired observation before either settling receipts
+                    # or failing the row. Another worker may already own a new lease.
+                    fenced = (
+                        db.query(AgentTaskExecutionRecord)
+                        .filter(
+                            AgentTaskExecutionRecord.run_id == candidate.run_id,
+                            AgentTaskExecutionRecord.state == candidate.state,
+                            AgentTaskExecutionRecord.execution_count == candidate.execution_count,
+                            AgentTaskExecutionRecord.lease_owner == candidate.lease_owner,
+                            eligible,
+                        )
+                        .update(
+                            {AgentTaskExecutionRecord.updated_at: candidate.updated_at},
+                            synchronize_session=False,
+                        )
+                    )
+                    if fenced != 1:
+                        continue
+                    if effects:
+                        import json
+
+                        from app.application.agent_orchestrator.resume_transaction import (
+                            unresolved_effects,
+                        )
+                        from app.application.agent_orchestrator.run_models import (
+                            agent_run_from_dict,
+                        )
+                        from app.db.models.agent import AgentRunRecord
+
+                        saved = db.get(AgentRunRecord, candidate.run_id)
+                        if saved is not None:
+                            effects = unresolved_effects(
+                                db,
+                                agent_run_from_dict(json.loads(saved.payload_json)),
+                                clear_confirmed=True,
+                            )
+                if recovered and effects:
                     db.query(AgentTaskExecutionRecord).filter(
                         AgentTaskExecutionRecord.run_id == candidate.run_id,
                         AgentTaskExecutionRecord.state.in_(tuple(LEASED_STATES)),

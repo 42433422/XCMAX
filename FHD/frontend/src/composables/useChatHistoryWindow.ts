@@ -25,7 +25,7 @@ export function useChatHistoryWindow(messages: () => ChatMessage[], host: Ref<HT
     void nextTick().then(bottom)
   }
 
-  async function moveWindow(direction: number) {
+  async function moveWindow(direction: number, targetStart?: number) {
     const el = host.value
     const anchor = el && Array.from(el.querySelectorAll<HTMLElement>('[data-message-index]'))
       .find((row) => row.getBoundingClientRect().bottom > el.getBoundingClientRect().top)
@@ -33,7 +33,7 @@ export function useChatHistoryWindow(messages: () => ChatMessage[], host: Ref<HT
     const index = anchor?.dataset.messageIndex
     const current = ++navigation
     followingLatest.value = false
-    start.value = Math.max(0, Math.min(messages().length - CHAT_HISTORY_WINDOW, start.value + direction * PAGE_STEP))
+    start.value = Math.max(0, Math.min(messages().length - CHAT_HISTORY_WINDOW, targetStart ?? (start.value + direction * PAGE_STEP)))
     await nextTick()
     if (!el || current !== navigation) return
     const retained = index && el.querySelector<HTMLElement>(`[data-message-index="${index}"]`)

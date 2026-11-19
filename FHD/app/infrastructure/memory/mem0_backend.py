@@ -3,21 +3,23 @@
 设计原则：
 - 可选依赖：未安装 mem0ai / qdrant-client 时静默停用，调用方继续走原有记忆链路。
 - 离线可用：嵌入复用本地 ``EmbeddingService``（默认 hash，可切本地模型），不联网、无 torch。
-- 写入分两段：主链只写原始轮次；后台用规则抽取事实并按 ADD / NOOP / SUPERSEDE 合并。
+- Mem0 抽取只产生待确认候选；已确认 MemoryV2 记录按来源 ID / revision 投影。
 - 记忆带有效区间：``valid_from`` / ``valid_to`` / ``superseded_by``，召回时过滤失效项。
 - 数据边界：所有查询强制带 ``user_id`` 过滤，租户/Mod/渠道在应用层再过滤。
 """
 
 from __future__ import annotations
 
+import hashlib
 import inspect
 import logging
 import os
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
+
+from filelock import FileLock
 
 from app.infrastructure.memory.memory_units import (
     expiration_iso,
@@ -36,14 +38,11 @@ os.environ.setdefault("MEM0_TELEMETRY", "False")
 _ENV_BACKEND = "XCAGI_LONG_TERM_MEMORY_BACKEND"
 _ENV_MIN_SCORE = "XCAGI_LONG_TERM_MEMORY_MIN_SCORE"
 _ENV_MAX_CHARS = "XCAGI_LONG_TERM_MEMORY_PROMPT_CHARS"
-_ENV_FACT_TTL_DAYS = "XCAGI_LONG_TERM_MEMORY_FACT_TTL_DAYS"
 _ENV_CONSOLIDATION = "XCAGI_MEMORY_CONSOLIDATION"
 
 _BACKEND_VALUES = {"auto", "mem0", "legacy"}
 _DEFAULT_PROMPT_CHARS = 1800
-_DEFAULT_FACT_TTL_DAYS = 365
 _MAX_MOD_DELETE_PAGES = 1000
-_CONSOLIDATION_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="memory-facts")
 
 
 class OfflineLLM:
@@ -99,15 +98,6 @@ def _backend_choice() -> str:
     return raw if raw in _BACKEND_VALUES else "auto"
 
 
-def _fact_ttl_days() -> int:
-    raw = str(os.environ.get(_ENV_FACT_TTL_DAYS) or "").strip()
-    try:
-        days = int(raw)
-    except ValueError:
-        days = _DEFAULT_FACT_TTL_DAYS
-    return max(30, min(3650, days))
-
-
 def _consolidation_enabled() -> bool:
     raw = str(os.environ.get(_ENV_CONSOLIDATION) or "1").strip().lower()
     return raw not in {"0", "false", "no", "off"}
@@ -132,6 +122,10 @@ class Mem0LongTermMemory:
         self._initialized = False
         self._dims = 0
         self._mode = ""
+        self._embedding_fingerprint = ""
+        self._projection_lock = threading.RLock()
+        self._projected_owners: set[str] = set()
+        self._projection_retry_after: dict[str, float] = {}
         self._min_score = 0.0
 
     # ---------------- 生命周期 ----------------
@@ -183,6 +177,7 @@ class Mem0LongTermMemory:
             raise RuntimeError("嵌入维度为 0")
         self._dims = dims
         self._mode = str(embedding.mode)
+        self._embedding_fingerprint = embedding.embedding_fingerprint
         # hash 向量相似度整体偏低，阈值单独放宽；本地模型用更严格阈值过滤噪声。
         default_score = 0.05 if self._mode == "hash" else 0.2
         self._min_score = _env_float(_ENV_MIN_SCORE, default_score)
@@ -208,7 +203,7 @@ class Mem0LongTermMemory:
             provider="qdrant",
             config={
                 "path": str(root / "vectors"),
-                "collection_name": f"fhd_memory_{dims}",
+                "collection_name": f"fhd_memory_{dims}_{self._embedding_fingerprint[:16]}",
                 "embedding_model_dims": dims,
             },
         )
@@ -277,6 +272,10 @@ class Mem0LongTermMemory:
         text = str(query or "").strip()
         if memory is None or not user_id or not text:
             return []
+        from app.domain.shared_services.user_memory_service import get_user_memory_service
+
+        authority = get_user_memory_service()
+        self._rebuild_owner_projection(user_id, authority)
         top_k = max(1, min(20, int(limit)))
         started = time.perf_counter()
         # 多取候选再重排，给词法与时效留出调整空间。
@@ -303,6 +302,7 @@ class Mem0LongTermMemory:
                     },
                 }
             )
+        hits = authority.filter_recalled_memories(user_id, hits)
         ranked = rank_hits(hits, query=text, limit=top_k)
         observe_memory_recall(
             outcome="hit" if ranked else "empty",
@@ -310,7 +310,178 @@ class Mem0LongTermMemory:
         )
         return ranked
 
-    # ---------------- 事实合并（冷路径） ----------------
+    def _rebuild_owner_projection(self, user_id: str, authority: Any) -> None:
+        """Replay authority once per process/model generation, retrying failed work."""
+        with self._projection_lock:
+            if (
+                user_id in self._projected_owners
+                or time.monotonic() < self._projection_retry_after.get(user_id, 0)
+            ):
+                return
+            generation = time.monotonic() + 30
+            self._projection_retry_after[user_id] = generation
+        # No global replay lock may be held while acquiring a source's file
+        # lock or doing external IO. Failed writes invalidate this generation.
+        try:
+            result = authority.rebuild_memory_projections(user_id)
+            with self._projection_lock:
+                if (
+                    not result.get("retry_required")
+                    and self._projection_retry_after.get(user_id) == generation
+                ):
+                    self._projected_owners.add(user_id)
+                    self._projection_retry_after.pop(user_id, None)
+        except RECOVERABLE_ERRORS as exc:
+            logger.warning("Memory projection rebuild pending: %s", type(exc).__name__)
+
+    def invalidate_projection(self, user_id: str) -> None:
+        """A failed external write invalidates the successful replay cache."""
+        with self._projection_lock:
+            self._projected_owners.discard(user_id)
+            self._projection_retry_after[user_id] = time.monotonic() + 30
+
+    def extract_candidates(
+        self,
+        *,
+        user_id: str,
+        user_message: str,
+        assistant_message: str = "",
+        metadata: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]] | None:
+        from app.infrastructure.memory.candidate_extraction import extract_candidates
+
+        if not user_id or not user_message.strip():
+            return []
+        if _backend_choice() == "legacy" or not _consolidation_enabled():
+            return None
+        return extract_candidates(user_message)
+
+    def _source_rows(
+        self, memory: Any, user_id: str, source_memory_id: str
+    ) -> list[dict[str, Any]]:
+        raw = memory.get_all(
+            filters={"user_id": user_id, "source_memory_id": source_memory_id},
+            top_k=100,
+            show_expired=True,
+        )
+        rows = raw.get("results", []) if isinstance(raw, dict) else raw
+        return [
+            row
+            for row in (rows or [])
+            if isinstance(row, dict)
+            and self._matches_owner(row, user_id)
+            and isinstance(row.get("metadata"), dict)
+            and (row.get("metadata") or {}).get("source_memory_id") == source_memory_id
+        ]
+
+    def upsert_governed(
+        self,
+        *,
+        user_id: str,
+        source_memory_id: str,
+        revision: int,
+        text: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> bool:
+        """Project a confirmed revision; application reads revalidate its authority."""
+        if (
+            not user_id
+            or not source_memory_id
+            or not text.strip()
+            or type(revision) is not int
+            or revision < 1
+        ):
+            return False
+        memory = self._active()
+        if memory is None:
+            self.invalidate_projection(user_id)
+            return False
+        key = hashlib.sha256(f"{user_id}\0{source_memory_id}".encode()).hexdigest()
+        payload = {
+            **(metadata or {}),
+            "memory_type": "fact",
+            "user_id": user_id,
+            "source": "memory_v2",
+            "source_owner_id": user_id,
+            "source_memory_id": source_memory_id,
+            "source_revision": revision,
+            "valid_to": "",
+            "superseded_by": "",
+        }
+        try:
+            with FileLock(str(_memory_root() / f"projection-{key}.lock"), timeout=5):
+                rows = self._source_rows(memory, user_id, source_memory_id)
+                if any(
+                    int((row.get("metadata") or {}).get("source_revision") or 0) > revision
+                    for row in rows
+                ):
+                    self.invalidate_projection(user_id)
+                    return False
+                if rows:
+                    current = max(
+                        rows,
+                        key=lambda row: int(
+                            (row.get("metadata") or {}).get("source_revision") or 0
+                        ),
+                    )
+                    if (
+                        int((current.get("metadata") or {}).get("source_revision") or 0) == revision
+                        and str(current.get("memory") or current.get("data") or "") != text
+                    ):
+                        self.invalidate_projection(user_id)
+                        return False
+                    if str(current.get("memory") or current.get("data") or "") != text or any(
+                        current["metadata"].get(key) != value for key, value in payload.items()
+                    ):
+                        memory.update(memory_id=str(current["id"]), text=text, metadata=payload)
+                    duplicate_ids = [str(row["id"]) for row in rows if row["id"] != current["id"]]
+                    if self._forget_ids(memory, user_id, duplicate_ids, None) < len(duplicate_ids):
+                        self.invalidate_projection(user_id)
+                        return False
+                    return True
+                result = memory.add(
+                    messages=[{"role": "user", "content": text}],
+                    user_id=user_id,
+                    metadata=payload,
+                    infer=False,
+                )
+                written = bool(_result_id(result))
+                if not written:
+                    self.invalidate_projection(user_id)
+                return written
+        except RECOVERABLE_ERRORS as exc:
+            self.invalidate_projection(user_id)
+            logger.warning("Governed memory projection failed: %s", type(exc).__name__)
+            return False
+
+    def forget_source(self, *, user_id: str, source_memory_id: str) -> int:
+        """Remove only this owner's projection; never widen to user-wide deletion."""
+        if not user_id or not source_memory_id:
+            return 0
+        memory = self._active()
+        if memory is None:
+            self.invalidate_projection(user_id)
+            return -1
+        deleted = 0
+        key = hashlib.sha256(f"{user_id}\0{source_memory_id}".encode()).hexdigest()
+        try:
+            with FileLock(str(_memory_root() / f"projection-{key}.lock"), timeout=5):
+                for _ in range(_MAX_MOD_DELETE_PAGES):
+                    rows = self._source_rows(memory, user_id, source_memory_id)
+                    if not rows:
+                        return deleted
+                    count = self._forget_ids(
+                        memory, user_id, [str(row["id"]) for row in rows], None
+                    )
+                    deleted += count
+                    if count < len(rows):
+                        break
+        except RECOVERABLE_ERRORS as exc:
+            logger.warning("Governed memory projection removal failed: %s", type(exc).__name__)
+        self.invalidate_projection(user_id)
+        return -1
+
+    # ---------------- 所有权校验与 SDK 适配 ----------------
     def _search_rows(
         self,
         memory: Any,
@@ -368,125 +539,6 @@ class Mem0LongTermMemory:
         ):
             return item
         return None
-
-    def search_facts(
-        self, user_id: str, fact: dict[str, Any], limit: int = 5
-    ) -> list[dict[str, Any]]:
-        """按事实键找同主题的活跃记忆，供合并决策使用。"""
-        memory = self._active()
-        key = str(fact.get("key") or "").strip()
-        query = str(fact.get("text") or fact.get("value") or key).strip()
-        if memory is None or not user_id or not key or not query:
-            return []
-        rows = self._search_rows(
-            memory,
-            query,
-            user_id=user_id,
-            limit=max(1, min(20, int(limit))),
-            threshold=0.0,
-            filters_extra={"memory_type": "fact"},
-        )
-        hits: list[dict[str, Any]] = []
-        for item in rows:
-            raw_metadata = item.get("metadata")
-            meta: dict[str, Any] = raw_metadata if isinstance(raw_metadata, dict) else {}
-            if str(meta.get("memory_type") or "") != "fact":
-                continue
-            if str(meta.get("fact_key") or "") != key:
-                continue
-            content = str(item.get("memory") or item.get("data") or "").strip()
-            hits.append(
-                {
-                    "chunk_id": str(item.get("id") or ""),
-                    "content": content,
-                    "score": float(item.get("score") or 0.0),
-                    "metadata": meta,
-                }
-            )
-        return hits
-
-    def add_fact(self, user_id: str, fact: dict[str, Any], *, supersedes: str = "") -> str | None:
-        memory = self._active()
-        text = str(fact.get("text") or "").strip()
-        key = str(fact.get("key") or "").strip()
-        if memory is None or not user_id or not text or not key:
-            return None
-        metadata: dict[str, Any] = {
-            "memory_type": "fact",
-            "fact_key": key,
-            "fact_value": str(fact.get("value") or ""),
-            "confidence": float(fact.get("confidence") or 0.7),
-            "valid_from": iso_at(),
-            "valid_to": "",
-            "superseded_by": "",
-            "expiration_date": expiration_iso(_fact_ttl_days()),
-            "source": "long_term_memory",
-        }
-        if supersedes:
-            metadata["supersedes"] = supersedes
-        try:
-            result = memory.add(
-                messages=[{"role": "user", "content": text}],
-                user_id=str(user_id),
-                metadata=metadata,
-                infer=False,
-            )
-        except RECOVERABLE_ERRORS as exc:
-            logger.warning("长期记忆事实写入失败：%s", exc)
-            return None
-        return _result_id(result)
-
-    def supersede_fact(
-        self,
-        user_id: str,
-        memory_id: str,
-        *,
-        content: str,
-        new_id: str,
-        today: str,
-    ) -> bool:
-        """把旧事实标记为失效；兼容 mem0 各版本的 text/data 参数名。"""
-        memory = self._active()
-        if memory is None or not new_id or memory_id == new_id:
-            return False
-        current = self._owned_memory(memory, user_id, memory_id)
-        replacement = self._owned_memory(memory, user_id, new_id)
-        if current is None or replacement is None:
-            return False
-        old_meta, new_meta = current.get("metadata"), replacement.get("metadata")
-        if (
-            not isinstance(old_meta, dict)
-            or not isinstance(new_meta, dict)
-            or old_meta.get("memory_type") != "fact"
-            or new_meta.get("memory_type") != "fact"
-            or not old_meta.get("fact_key")
-            or old_meta.get("fact_key") != new_meta.get("fact_key")
-        ):
-            return False
-        metadata = {**old_meta, "valid_to": today, "superseded_by": new_id}
-        try:
-            parameters = inspect.signature(memory.update).parameters
-            field = "text" if "text" in parameters else "data" if "data" in parameters else ""
-            if not field:
-                return False
-            memory.update(
-                memory_id=memory_id,
-                **{field: str(current.get("memory") or current.get("data") or content or "")},
-                metadata=metadata,
-            )
-            return True
-        except RECOVERABLE_ERRORS as exc:
-            logger.warning("长期记忆失效标记失败：%s", exc)
-            return False
-
-    def consolidate_facts(
-        self, *, user_id: str, facts: list[dict[str, Any]]
-    ) -> list[dict[str, Any]]:
-        from app.infrastructure.memory.consolidation import consolidate
-
-        if not facts or not user_id:
-            return []
-        return consolidate(self, user_id=user_id, facts=facts)
 
     def forget(
         self,
@@ -561,6 +613,8 @@ class Mem0LongTermMemory:
         """释放本地向量库句柄；进程退出与测试清理都会调用。"""
         memory, self._memory = self._memory, None
         self._initialized = False
+        self._projected_owners.clear()
+        self._projection_retry_after.clear()
         if memory is None:
             return
         _close_memory_stores(memory)
@@ -571,6 +625,8 @@ class Mem0LongTermMemory:
             "backend": "mem0" if self._memory is not None else "legacy",
             "embedding_mode": self._mode,
             "embedding_dims": self._dims,
+            "embedding_fingerprint": self._embedding_fingerprint,
+            "semantic_embedding_available": self._mode in {"local", "remote", "fastembed"},
             "min_score": self._min_score,
             "failed": self._failed,
         }
@@ -598,25 +654,6 @@ def format_recalled_memories(hits: list[dict[str, Any]], *, max_chars: int | Non
             break
         lines.append(line)
     return "\n".join(lines) if len(lines) > 1 else ""
-
-
-def schedule_fact_consolidation(*, user_id: str, facts: list[dict[str, Any]]) -> None:
-    """主链只入队，抽取后的事实合并在单线程后台执行。"""
-    if not facts or not user_id or not _consolidation_enabled():
-        return
-    service = get_long_term_memory()
-    if not service.enabled:
-        return
-    _CONSOLIDATION_EXECUTOR.submit(_safe_consolidate, service, user_id, list(facts))
-
-
-def _safe_consolidate(
-    service: Mem0LongTermMemory, user_id: str, facts: list[dict[str, Any]]
-) -> None:
-    try:
-        service.consolidate_facts(user_id=user_id, facts=facts)
-    except RECOVERABLE_ERRORS as exc:
-        logger.warning("长期记忆事实合并失败：%s", exc)
 
 
 _service: Mem0LongTermMemory | None = None
@@ -668,5 +705,4 @@ __all__ = [
     "format_recalled_memories",
     "get_long_term_memory",
     "reset_long_term_memory_for_tests",
-    "schedule_fact_consolidation",
 ]

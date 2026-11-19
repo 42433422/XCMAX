@@ -72,111 +72,116 @@ class ConversationService(NeuroEventPublisherMixin):
         metadata: str = "",
         *,
         idempotency_key: str = "",
+        expected_revision: int | None = None,
     ) -> int:
-        """
-        保存对话消息
+        return self.save_turn(
+            session_id=session_id,
+            user_id=user_id,
+            expected_revision=expected_revision,
+            messages=[
+                {
+                    "role": role,
+                    "content": content,
+                    "intent": intent,
+                    "metadata": metadata,
+                    "idempotency_key": idempotency_key,
+                }
+            ],
+        )[0]
 
-        Args:
-            session_id: 会话 ID
-            user_id: 用户 ID
-            role: 角色（user/assistant）
-            content: 消息内容
-            intent: 意图
-            metadata: 元数据
+    def save_turn(
+        self,
+        *,
+        session_id: str,
+        user_id: str,
+        messages: list[dict[str, Any]],
+        expected_revision: int | None = None,
+    ) -> list[int]:
+        """Commit a complete receipt atomically, fenced by the conversation revision."""
+        from app.infrastructure.database.conversation_lifecycle import (
+            begin_conversation_write,
+            lock_conversation_session,
+        )
 
-        Returns:
-            消息 ID
-        """
+        owner = self._normalize_user_id(user_id)
+        message_owner = str(user_id) if user_id is not None else None
+        ids: list[int] = []
+        notifications: list[tuple[int, int, str]] = []
         with get_db() as db:
-            try:
-                message_user_id = str(user_id) if user_id is not None else None
-                normalized_key = str(idempotency_key or "").strip()[:256]
-                if normalized_key:
-                    try:
-                        metadata_payload = json.loads(metadata) if metadata else {}
-                    except (TypeError, ValueError, json.JSONDecodeError):
-                        metadata_payload = {}
-                    if not isinstance(metadata_payload, dict):
-                        metadata_payload = {}
-                    metadata_payload["idempotency_key"] = normalized_key
-                    metadata = json.dumps(metadata_payload, ensure_ascii=False, default=str)
+            begin_conversation_write(db)
+            session = lock_conversation_session(
+                db,
+                session_id=session_id,
+                user_id=owner,
+                expected_revision=expected_revision,
+                create=True,
+            )
+            for item in messages:
+                role, content = str(item["role"]), str(item["content"])
+                intent = str(item.get("intent") or "")
+                metadata = item.get("metadata") or "{}"
+                payload = json.loads(metadata)
+                if not isinstance(payload, dict):
+                    raise ValueError("conversation metadata must be a JSON object")
+                key = str(item.get("idempotency_key") or "").strip()
+                if len(key) > 256:
+                    raise ValueError("conversation idempotency key is too long")
+                if key:
+                    payload["idempotency_key"] = key
+                    # The session lock serializes duplicate writers. Search the whole
+                    # indexed session, not just its last 100 messages.
+                    marker = json.dumps({"idempotency_key": key}, ensure_ascii=False)[1:-1]
                     candidates = (
                         db.query(AIConversation)
                         .filter(
                             AIConversation.session_id == session_id,
-                            AIConversation.user_id == message_user_id,
-                            AIConversation.role == role,
-                            AIConversation.intent == intent,
+                            AIConversation.user_id == message_owner,
+                            AIConversation.conversation_metadata.contains(marker, autoescape=True),
                         )
-                        .order_by(AIConversation.id.desc())
-                        .limit(100)
                         .all()
                     )
-                    for candidate in candidates:
-                        try:
-                            candidate_metadata = json.loads(candidate.conversation_metadata or "{}")
-                        except (TypeError, ValueError, json.JSONDecodeError):
-                            continue
-                        if (
-                            isinstance(candidate_metadata, dict)
-                            and candidate_metadata.get("idempotency_key") == normalized_key
-                        ):
-                            return int(candidate.id)
-                # 更新或创建会话（必须先创建会话，因为消息有外键依赖）
-                session = (
-                    db.query(AIConversationSession)
-                    .filter(AIConversationSession.session_id == session_id)
-                    .first()
-                )
-
-                normalized_user_id = self._normalize_user_id(user_id)
-
-                if session:
-                    if normalized_user_id is not None and session.user_id != normalized_user_id:
-                        raise PermissionError("conversation session belongs to another user")
-                    session.message_count += 1
-                    session.last_message_at = datetime.now()
-                    if role == "user" and not session.title:
-                        title = _message_title(content)
-                        if title:
-                            session.title = title
-                else:
-                    session = AIConversationSession(
-                        session_id=session_id,
-                        user_id=normalized_user_id,
-                        message_count=1,
-                        last_message_at=datetime.now(),
-                        created_at=datetime.now(),
+                    prior = next(
+                        (
+                            row
+                            for row in candidates
+                            if json.loads(row.conversation_metadata or "{}").get("idempotency_key")
+                            == key
+                        ),
+                        None,
                     )
-                    db.add(session)
-                db.flush()
-
-                # 保存消息
-                conversation = AIConversation(
+                    if prior is not None:
+                        if (prior.role, prior.content, prior.intent or "") != (
+                            role,
+                            content,
+                            intent,
+                        ):
+                            raise ValueError("message retry does not match the original content")
+                        ids.append(int(prior.id))
+                        continue
+                row = AIConversation(
                     session_id=session_id,
-                    user_id=message_user_id,
+                    user_id=message_owner,
                     role=role,
                     content=content,
                     intent=intent,
-                    conversation_metadata=metadata,
+                    conversation_metadata=json.dumps(payload, ensure_ascii=False, default=str),
                     created_at=datetime.now(),
                 )
-                db.add(conversation)
-
-                db.commit()
-                db.refresh(conversation)
-                message_id = conversation.id
-                target_user_id = normalized_user_id or session.user_id
-            except RECOVERABLE_ERRORS as e:
-                db.rollback()
-                logger.error("保存对话消息失败: %s", e)
-                raise
-
-        # assistant 消息推送给用户（AI 员工回复 / 主动消息）
-        if role == "assistant" and target_user_id:
+                db.add(row)
+                db.flush()
+                ids.append(int(row.id))
+                session.message_count = int(session.message_count or 0) + 1
+                session.last_message_at = row.created_at
+                session.summary = _message_title(content)[:120]
+                if role == "user" and not session.title:
+                    session.title = _message_title(content)
+                if role == "assistant" and owner:
+                    notifications.append((owner, int(row.id), content))
+            db.commit()
+        for notification_owner, message_id, content in notifications:
             try:
                 notify_user(
-                    user_id=int(target_user_id),
+                    user_id=notification_owner,
                     title="AI 助手",
                     body=content[:120],
                     data={
@@ -189,32 +194,44 @@ class ConversationService(NeuroEventPublisherMixin):
                 )
             except RECOVERABLE_ERRORS as exc:
                 logger.warning("conversation push notify failed: %s", exc)
+        return ids
 
-        return message_id
-
-    def get_session_messages(self, session_id: str, limit: int = 50) -> list[tuple]:
+    def get_session_messages(
+        self, session_id: str, limit: int = 50, *, user_id: Any = None
+    ) -> list[tuple]:
         """
-        获取会话消息
+        获取最近的会话消息，再按时间正序返回。
 
         Args:
             session_id: 会话 ID
             limit: 返回数量限制
+            user_id: 提供时同时校验会话所有者及消息所有者
 
         Returns:
             消息列表，每个元素是元组 (id, session_id, user_id, role, content, intent, metadata, created_at)
         """
         with get_db() as db:
             try:
+                query = db.query(AIConversation).filter(AIConversation.session_id == session_id)
+                if user_id is not None:
+                    owner = self._normalize_user_id(user_id)
+                    if isinstance(user_id, bool) or owner is None or owner <= 0:
+                        return []
+                    query = query.join(
+                        AIConversationSession,
+                        AIConversationSession.session_id == AIConversation.session_id,
+                    ).filter(
+                        AIConversationSession.user_id == owner,
+                        AIConversation.user_id == str(owner),
+                    )
                 messages = (
-                    db.query(AIConversation)
-                    .filter(AIConversation.session_id == session_id)
-                    .order_by(AIConversation.created_at.asc())
+                    query.order_by(AIConversation.created_at.desc(), AIConversation.id.desc())
                     .limit(limit)
                     .all()
                 )
 
                 result = []
-                for msg in messages:
+                for msg in reversed(messages):
                     result.append(
                         (
                             msg.id,
@@ -245,7 +262,9 @@ class ConversationService(NeuroEventPublisherMixin):
         """
         with get_db() as db:
             try:
-                query = db.query(AIConversationSession)
+                query = db.query(AIConversationSession).filter(
+                    AIConversationSession.deleted_at.is_(None)
+                )
 
                 if user_id:
                     query = query.filter(
@@ -292,7 +311,8 @@ class ConversationService(NeuroEventPublisherMixin):
         with get_db() as db:
             try:
                 query = db.query(AIConversationSession).filter(
-                    AIConversationSession.session_id == session_id
+                    AIConversationSession.session_id == session_id,
+                    AIConversationSession.deleted_at.is_(None),
                 )
                 if user_id is not None:
                     query = query.filter(AIConversationSession.user_id == user_id)
@@ -309,32 +329,31 @@ class ConversationService(NeuroEventPublisherMixin):
                 raise
 
     def delete_session(self, session_id: str, *, user_id: str | None = None) -> bool:
-        """
-        删除会话
+        from app.infrastructure.database.conversation_lifecycle import (
+            ConversationRevisionError,
+            begin_conversation_write,
+            lock_conversation_session,
+        )
 
-        Args:
-            session_id: 会话 ID
-
-        Returns:
-            是否删除成功
-        """
         with get_db() as db:
+            begin_conversation_write(db)
             try:
-                query = db.query(AIConversationSession).filter(
-                    AIConversationSession.session_id == session_id
+                session = lock_conversation_session(
+                    db,
+                    session_id=session_id,
+                    user_id=self._normalize_user_id(user_id),
                 )
-                if user_id is not None:
-                    query = query.filter(AIConversationSession.user_id == user_id)
-                session = query.first()
-                if session is None:
-                    return False
-                db.delete(session)
-                db.commit()
-                return True
-            except RECOVERABLE_ERRORS as e:
-                db.rollback()
-                logger.error("删除会话失败：%s", e)
-                raise
+            except (ConversationRevisionError, PermissionError):
+                return False
+            db.query(AIConversation).filter(AIConversation.session_id == session_id).delete(
+                synchronize_session=False,
+            )
+            session.revision = int(session.revision or 0) + 1
+            session.deleted_at = datetime.now()
+            session.title = session.summary = ""
+            session.message_count = 0
+            db.commit()
+            return True
 
     def create_session(self, user_id: str = "default", title: str | None = None) -> str:
         """

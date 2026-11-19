@@ -77,6 +77,7 @@ class CanonicalEmployeeBackend:
                     user_id=work.user_id,
                     workspace_root=work.workspace_root,
                     session_id=work.session_id,
+                    runtime_context={**runtime_context, "employee_run_id": run_id},
                 )
 
         spec = get_tool_action_spec("employee", "execute")

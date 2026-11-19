@@ -559,7 +559,12 @@ class DocumentLifecycle:
             to_doc = _resolve_document_for_version(
                 state, source=source_label, tenant_id=tenant_key, version=to_version
             )
-            if from_doc is None or to_doc is None:
+            if (
+                from_doc is None
+                or to_doc is None
+                or not document_visible_to(from_doc.metadata, access_context)
+                or not document_visible_to(to_doc.metadata, access_context)
+            ):
                 return {
                     "success": False,
                     "dataset_id": dataset_key,

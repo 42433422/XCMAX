@@ -66,18 +66,20 @@ async def test_summary_reuses_covered_history_and_survives_append_without_cross_
     context.conversation_history = [{"role": "user", "content": "中" * 100} for _ in range(8)]
     messages = [*context.conversation_history, {"role": "user", "content": "接着说"}]
     first = await manager.compress(messages, provider=model, context=context)
-    assert first.strategy == "summarize" and model.chat_completion.await_count == 1
+    assert first.strategy == "summarize"
+    paid_batches = model.chat_completion.await_count
+    assert paid_batches > 0
     assert context.summary and context.summary_covered_until >= 0
     context.conversation_history.extend([messages[-1], {"role": "assistant", "content": "回复"}])
     following = [*context.conversation_history, {"role": "user", "content": "继续"}]
     second = await manager.compress(following, provider=model, context=context)
-    assert model.chat_completion.await_count == 1 and second.summary_llm_call is None
+    assert model.chat_completion.await_count == paid_batches and second.summary_llm_call is None
     assert second.post_estimated_tokens <= manager.token_budget
     another = ConversationContext(
         "different", conversation_history=list(context.conversation_history[:8])
     )
     await manager.compress(messages, provider=model, context=another)
-    assert model.chat_completion.await_count == 2
+    assert model.chat_completion.await_count > paid_batches
 
 
 @pytest.mark.asyncio
@@ -95,19 +97,20 @@ async def test_parallel_same_context_reuses_summary_and_history_edit_invalidates
         return reply
 
     model.chat_completion.side_effect = delayed
-    await asyncio.gather(
+    results = await asyncio.gather(
         *(manager.compress(messages, provider=model, context=context) for _ in range(3))
     )
-    assert model.chat_completion.await_count == 1
+    assert sum(result.summary_llm_call is not None for result in results) == 1
+    paid_batches = model.chat_completion.await_count
     context.conversation_history[0] = {"role": "user", "content": "新" * 100}
     await manager.compress(
         [*context.conversation_history, messages[-1]], provider=model, context=context
     )
-    assert model.chat_completion.await_count == 2
+    assert model.chat_completion.await_count > paid_batches
 
 
 @pytest.mark.asyncio
-async def test_fallback_obeys_budget_and_does_not_orphan_tool_replies():
+async def test_failed_summary_does_not_discard_history_or_orphan_tool_replies():
     manager = ContextWindowManager(token_budget=450, recent_keep=6)
     model = provider()
     model.chat_completion.side_effect = RuntimeError("controlled provider failure")
@@ -123,10 +126,10 @@ async def test_fallback_obeys_budget_and_does_not_orphan_tool_replies():
         },
         {"role": "tool", "tool_call_id": "call", "content": "结果"},
     ]
-    result = await manager.compress([*history, *latest], provider=model)
-    assert result.post_estimated_tokens <= manager.token_budget
-    assert result.messages[-3:] == latest
-    assert estimate_messages_tokens(result.messages) == result.post_estimated_tokens
+    original = [*history, *latest]
+    with pytest.raises(ContextWindowExceeded):
+        await manager.compress(original, provider=model)
+    assert original[-3:] == latest and original[:-3] == history
 
 
 @pytest.mark.asyncio
@@ -135,8 +138,8 @@ async def test_provider_oversized_summary_cannot_escape_postcondition():
     model.chat_completion.return_value = {"choices": [{"message": {"content": "中" * 10000}}]}
     manager = ContextWindowManager(token_budget=1100, recent_keep=2)
     messages = [{"role": "user", "content": "中" * 100} for _ in range(8)]
-    result = await manager.compress(messages, provider=model)
-    assert result.strategy == "truncate" and result.post_estimated_tokens <= manager.token_budget
+    with pytest.raises(ContextWindowExceeded):
+        await manager.compress(messages, provider=model)
 
 
 @pytest.mark.asyncio
@@ -178,7 +181,8 @@ async def test_history_roll_preserves_summary_coverage_without_resummarizing(mon
         provider=model,
         context=context,
     )
-    assert model.chat_completion.await_count == 1
+    paid_batches = model.chat_completion.await_count
+    assert paid_batches > 0
     covered = context.summary_covered_until
     service.add_to_history("u", "user", "新请求")
     service.add_to_history("u", "assistant", "答复")
@@ -189,6 +193,6 @@ async def test_history_roll_preserves_summary_coverage_without_resummarizing(mon
         context=context,
     )
     assert (
-        model.chat_completion.await_count == 1
+        model.chat_completion.await_count == paid_batches
         and result.post_estimated_tokens <= manager.token_budget
     )

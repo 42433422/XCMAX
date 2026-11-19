@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
+from types import SimpleNamespace
 from typing import Any
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -51,26 +53,113 @@ def _meter_planner_completion(payload: dict[str, Any] | None, *, model: str) -> 
         logger.debug("planner LLM metering skipped", exc_info=True)
 
 
+async def _prepare_model_messages(provider, context, messages, max_tokens, extra):
+    """One final budget boundary for sync, stream, repairs and native tools."""
+    from app.application.agent_orchestrator.context_window_manager import (
+        estimate_messages_tokens,
+        get_context_window_manager,
+        summary_fingerprint,
+    )
+    from app.application.ai_chat.dialogue_memory import (
+        _turns_fingerprint,
+        conversation_summary,
+        save_conversation_summary,
+    )
+    from app.infrastructure.llm.model_context_windows import model_for_budget
+
+    history, state = [], None
+    outbound = list(messages)
+    # The planner's typed JSON input keeps history separate until this boundary.
+    # Expand it to native messages so history can be compacted without clipping
+    # the current user JSON, tool schemas, or a tool call/result group.
+    if outbound and outbound[-1].get("role") == "user":
+        try:
+            prompt = json.loads(outbound[-1]["content"])
+        except (TypeError, ValueError):
+            prompt = None
+        if isinstance(prompt, dict) and isinstance(prompt.get("conversation_history"), list):
+            history = prompt.pop("conversation_history")
+            prompt.pop("recent_messages", None)
+            prompt_context = prompt.get("context")
+            if isinstance(prompt_context, dict):
+                for key in ("recent_messages", "chat_owned_history", "chat_history_summary"):
+                    prompt_context.pop(key, None)
+            outbound = [
+                *outbound[:-1],
+                *history,
+                {**outbound[-1], "content": json.dumps(prompt, ensure_ascii=False)},
+            ]
+            if context is not None:
+                saved = conversation_summary(context)
+                state = context.get("_planner_compression_context")
+                if state is None or state.conversation_history != history:
+                    state = SimpleNamespace(
+                        conversation_history=history,
+                        summary=None,
+                        summary_covered_until=-1,
+                        summary_fingerprint="",
+                    )
+                    if saved and saved.get("source") != "sql":
+                        count = int(saved.get("count") or 0)
+                        if 0 < count <= len(history) and saved.get(
+                            "fingerprint"
+                        ) == _turns_fingerprint(history[:count]):
+                            state.summary, state.summary_covered_until = saved["text"], count - 1
+                            state.summary_fingerprint = summary_fingerprint(history[:count])
+                    context["_planner_compression_context"] = state
+    schemas = {key: extra[key] for key in ("tools", "functions", "response_format") if key in extra}
+    schema_tokens = (
+        estimate_messages_tokens(
+            [{"role": "system", "content": json.dumps(schemas, ensure_ascii=False)}]
+        )
+        if schemas
+        else 0
+    )
+    result = await get_context_window_manager().compress(
+        outbound,
+        provider=provider,
+        context=state,
+        user_id=str((context or {}).get("local_user_id") or ""),
+        reserved_tokens=max_tokens + schema_tokens,
+        model=model_for_budget(provider, extra.get("model")),
+    )
+    if context is not None and result.summary_llm_call is not None:
+        save_conversation_summary(
+            context, history, result.summary_covered_count, result.summary_text
+        )
+    return result.messages
+
+
 def stream_planner_completion(
     *,
     ai_service: Any,
     context: dict[str, Any] | None,
-    messages: list[dict[str, str]],
+    messages: list[dict[str, Any]],
     temperature: float = 0.1,
     max_tokens: int | None = None,
+    **extra: Any,
 ) -> Any:
-    """返回正文增量的异步生成器；provider 不支持流式时返回 None。"""
+    """Stream through the same context/output/schema budget as normal completion."""
+    from app.infrastructure.llm.model_admission import model_rate_limit_scope
     from app.infrastructure.llm.providers.registry import get_active_provider
 
     provider = get_active_provider(conversation_service=ai_service)
     stream = getattr(provider, "stream_chat_completion", None) if provider is not None else None
     if stream is None:
         return None
-    return stream(
-        messages=messages,
-        temperature=temperature,
-        max_tokens=max_tokens or planner_max_tokens(),
-    )
+    output_limit = max_tokens or planner_max_tokens()
+
+    async def generate():
+        with model_rate_limit_scope(context):
+            outbound = await _prepare_model_messages(
+                provider, context, messages, output_limit, extra
+            )
+            async for chunk in stream(
+                messages=outbound, temperature=temperature, max_tokens=output_limit, **extra
+            ):
+                yield chunk
+
+    return generate()
 
 
 def request_planner_completion(
@@ -94,15 +183,25 @@ def request_planner_completion(
         from app.infrastructure.llm.model_admission import model_rate_limit_scope
 
         with model_rate_limit_scope(context):
+            output_limit = max_tokens or planner_max_tokens()
+            outbound = _run_async(
+                _prepare_model_messages(provider, context, messages, output_limit, extra)
+            )
             result = _run_async(
                 provider.chat_completion(
-                    messages=messages,
+                    messages=outbound,
                     temperature=temperature,
-                    max_tokens=max_tokens or planner_max_tokens(),
+                    max_tokens=output_limit,
                     **extra,
                 )
             )
     except RECOVERABLE_ERRORS as exc:
+        from app.application.agent_orchestrator.context_window_manager import ContextWindowExceeded
+
+        if isinstance(exc, ContextWindowExceeded):
+            if context is not None:
+                context["planning_failure_reason"] = str(exc)
+            raise
         from .retry_policy import retry_manages_transport_error
         from .tool_calling import unsupported_tool_parameter
 

@@ -14,10 +14,13 @@
   FHD_EMBEDDING_REMOTE_URL       远端 /v1/embeddings 端点
   FHD_EMBEDDING_REMOTE_API_KEY   Bearer token（可选）
   FHD_EMBEDDING_REMOTE_MODEL     远端模型名
+  FHD_EMBEDDING_MODEL_REVISION   模型版本标识；同名模型更新权重时改变此值以重建索引
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import os
 import threading
@@ -69,6 +72,24 @@ class EmbeddingService(EmbedderPort):
     def __init__(self, mode: EmbeddingMode | None = None) -> None:
         # 不在 __init__ 加载模型；lazy load 在首次 embed 时触发。
         self._mode: EmbeddingMode = mode if mode is not None else _resolve_mode()
+        self._model_name = {
+            "local": os.environ.get("FHD_EMBEDDING_LOCAL_MODEL") or _DEFAULT_LOCAL_MODEL,
+            "fastembed": os.environ.get("FHD_EMBEDDING_FASTEMBED_MODEL")
+            or _DEFAULT_FASTEMBED_MODEL,
+            "remote": os.environ.get("FHD_EMBEDDING_REMOTE_MODEL") or "",
+            "hash": f"sha256-bigram-v1-{_HASH_EMBED_DIM}",
+        }.get(self._mode, "").strip()
+        self._remote_url = (os.environ.get("FHD_EMBEDDING_REMOTE_URL") or "").strip()
+        identity = {
+            "schema": 1,
+            "mode": self._mode,
+            "model": self._model_name,
+            "endpoint": self._remote_url if self._mode == "remote" else "",
+            "revision": (os.environ.get("FHD_EMBEDDING_MODEL_REVISION") or "").strip(),
+        }
+        self._embedding_fingerprint = hashlib.sha256(
+            json.dumps(identity, sort_keys=True).encode("utf-8")
+        ).hexdigest()
         self._model: Any | None = None  # SentenceTransformer 实例
         self._fastembed_model: Any | None = None  # fastembed.TextEmbedding 实例
         self._dim_cache: int | None = None
@@ -98,6 +119,15 @@ class EmbeddingService(EmbedderPort):
     @property
     def mode(self) -> EmbeddingMode:
         return self._mode
+
+    @property
+    def embedding_fingerprint(self) -> str:
+        """Stable identity of the configured vector space; excludes credentials.
+
+        Model configuration is fixed with the service instance, matching the
+        lazy-loaded model. Restart after changing model settings or revision.
+        """
+        return self._embedding_fingerprint
 
     def is_semantic(self) -> bool:
         """是否使用真实语义向量；hash 只是确定性降级，不算语义检索。"""
@@ -154,7 +184,6 @@ class EmbeddingService(EmbedderPort):
         中文按二元组、英文数字按词做带符号哈希；192 维在 69 条中文评测上
         比旧的整段 token / 64 维方案显著提升（recall@1 0.17 → 0.84）。
         """
-        import hashlib
         import math
         import re
 
@@ -216,9 +245,7 @@ class EmbeddingService(EmbedderPort):
             if self._load_attempted:
                 return None
             self._load_attempted = True
-            model_name = (
-                os.environ.get("FHD_EMBEDDING_LOCAL_MODEL") or _DEFAULT_LOCAL_MODEL
-            ).strip()
+            model_name = self._model_name
             try:
                 from sentence_transformers import SentenceTransformer
 
@@ -254,9 +281,7 @@ class EmbeddingService(EmbedderPort):
             if self._load_attempted:
                 return None
             self._load_attempted = True
-            model_name = (
-                os.environ.get("FHD_EMBEDDING_FASTEMBED_MODEL") or _DEFAULT_FASTEMBED_MODEL
-            ).strip()
+            model_name = self._model_name
             try:
                 from fastembed import TextEmbedding
 
@@ -269,9 +294,9 @@ class EmbeddingService(EmbedderPort):
 
     # ---------------- remote 模式 ----------------
     def _embed_remote(self, texts: list[str]) -> list[list[float]]:
-        url = (os.environ.get("FHD_EMBEDDING_REMOTE_URL") or "").strip()
+        url = self._remote_url
         api_key = (os.environ.get("FHD_EMBEDDING_REMOTE_API_KEY") or "").strip()
-        model = (os.environ.get("FHD_EMBEDDING_REMOTE_MODEL") or "").strip()
+        model = self._model_name
         if not url:
             logger.warning("FHD_EMBEDDING_REMOTE_URL 未配置，跳过远端 embedding")
             return []

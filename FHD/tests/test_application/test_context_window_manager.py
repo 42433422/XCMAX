@@ -2,7 +2,7 @@
 
 覆盖场景（遵循 ``.trae/rules/test-coverage-90-prompt.md`` 铁律 3）：
 
-- happy path：noop / summarize / truncate 三策略
+- happy path：noop / summarize 与拒绝超预算
 - 空值 / None：``None`` messages、空列表
 - 边界值：恰好等于阈值、恰好等于 recent_keep
 - 异常路径：摘要 LLM 失败、无 provider、空 result、无 choices、空 content
@@ -17,6 +17,8 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+from app.application.agent_orchestrator.context_window_manager import ContextWindowExceeded
 
 
 def _setup_shared_0():
@@ -146,8 +148,8 @@ class TestCompressNoop:
         assert r.pre_message_count == 12
 
     @pytest.mark.asyncio
-    async def test_compress_disabled_returns_noop(self) -> None:
-        """``enabled=False`` 时即使超阈值也返回 noop。"""
+    async def test_disabled_compression_cannot_disable_budget(self) -> None:
+        """Disabling compression must not bypass the hard context budget."""
         from app.application.agent_orchestrator.context_window_manager import (
             ContextWindowManager,
         )
@@ -156,11 +158,8 @@ class TestCompressNoop:
             token_budget=100, recent_keep=2, summarize_threshold=3, enabled=False
         )
         msgs = _make_messages(20)
-        r = await m.compress(msgs, user_id="u1")
-        assert r.strategy == "noop"
-        assert r.pre_message_count == 20
-        assert r.post_message_count == 20
-        assert r.tokens_saved == 0
+        with pytest.raises(ContextWindowExceeded):
+            await m.compress(msgs, user_id="u1")
 
 
 class TestCompressSummarize:
@@ -227,7 +226,7 @@ class TestCompressSummarize:
         # 2 system + 1 summary + 2 recent = 5
         assert r.post_message_count == 5
         system_msgs = [m for m in r.messages if m["role"] == "system"]
-        assert len(system_msgs) == 3  # 2 original + 1 summary
+        assert len(system_msgs) == 2  # A summary is conversation data, never new system authority.
         contents = [m["content"] for m in system_msgs]
         assert "你是助手" in contents
         assert "额外系统指令" in contents
@@ -311,7 +310,9 @@ class TestCompressSummarize:
         assert r.summary_llm_call.metadata["source"] == "context_window_manager.summarize"
         assert r.summary_llm_call.metadata["trace_id"] == "trace-abc"
         assert r.summary_llm_call.metadata["user_id"] == "u1"
-        assert r.summary_llm_call.metadata["input_message_count"] == 4  # 6 - 2 recent
+        assert r.summary_covered_count == 4  # All 6 - 2 recent messages were processed.
+        sent = provider.chat_completion.call_args.kwargs["messages"][0]["content"]
+        assert r.summary_llm_call.metadata["input_message_count"] == sent.count("<message type=")
 
     @pytest.mark.asyncio
     async def test_compress_propagates_trace_id(self) -> None:
@@ -362,78 +363,42 @@ class TestCompressSummarize:
         assert entry["total_tokens"] == 70
 
 
-class TestCompressTruncateFallback:
-    """``compress`` 摘要失败退化为 truncate 测试。"""
+class TestCompressionFailure:
+    """Failed summaries never hide their source prefix or advance coverage."""
 
     @pytest.mark.asyncio
-    async def test_compress_summarize_failure_falls_back_to_truncate(self) -> None:
-        """摘要 LLM 失败 → 退化为 truncate。"""
-        ContextWindowManager, m, provider = _setup_shared_0()
-        provider.chat_completion = AsyncMock(side_effect=RuntimeError("LLM 超时"))
-        msgs = _make_messages(6)
-        r = await m.compress(msgs, user_id="u1", provider=provider)
-        assert r.strategy == "truncate"
-        assert r.pre_message_count == 6
-        # 2 recent only (no summary)
-        assert r.post_message_count == 2
-        assert r.tokens_saved > 0
-        assert r.summary_llm_call is not None
-        assert r.summary_llm_call.status == "failed"
-        assert "RuntimeError" in r.summary_llm_call.error
-
-    @pytest.mark.asyncio
-    async def test_compress_no_provider_falls_back_to_truncate(self) -> None:
-        """无可用 provider → 退化为 truncate。"""
-        from app.application.agent_orchestrator.context_window_manager import (
-            ContextWindowManager,
-        )
-
-        m = ContextWindowManager(token_budget=800, recent_keep=2, summarize_threshold=3)
-        msgs = _make_messages(6)
-        with patch(
-            "app.infrastructure.llm.providers.registry.get_active_provider",
-            return_value=None,
-        ):
-            r = await m.compress(msgs, user_id="u1")
-        assert r.strategy == "truncate"
-        assert r.summary_llm_call is not None
-        assert r.summary_llm_call.status == "failed"
-        assert r.summary_llm_call.error == "no_active_provider"
-
-    @pytest.mark.asyncio
-    async def test_compress_empty_result_falls_back_to_truncate(self) -> None:
-        """provider 返回空 result → 退化为 truncate。"""
-        ContextWindowManager, m, provider = _setup_shared_0()
-        provider.chat_completion = AsyncMock(return_value=None)
-        msgs = _make_messages(6)
-        r = await m.compress(msgs, user_id="u1", provider=provider)
-        assert r.strategy == "truncate"
-        assert r.summary_llm_call.status == "failed"
-        assert r.summary_llm_call.error == "empty_result"
-
-    @pytest.mark.asyncio
-    async def test_compress_no_choices_falls_back_to_truncate(self) -> None:
-        """provider 返回无 choices → 退化为 truncate。"""
-        ContextWindowManager, m, provider = _setup_shared_0()
-        provider.chat_completion = AsyncMock(return_value={"choices": []})
-        msgs = _make_messages(6)
-        r = await m.compress(msgs, user_id="u1", provider=provider)
-        assert r.strategy == "truncate"
-        assert r.summary_llm_call.status == "failed"
-        assert r.summary_llm_call.error == "no_choices"
-
-    @pytest.mark.asyncio
-    async def test_compress_empty_content_falls_back_to_truncate(self) -> None:
-        """provider 返回空 content → 退化为 truncate。"""
-        ContextWindowManager, m, provider = _setup_shared_0()
+    @pytest.mark.parametrize(
+        "answer",
+        [
+            RuntimeError("timeout"),
+            None,
+            {"choices": []},
+            {"choices": [{"message": {"content": ""}}]},
+        ],
+    )
+    async def test_summary_failure_rejects_without_mutating_history(self, answer):
+        _, manager, provider = _setup_shared_0()
         provider.chat_completion = AsyncMock(
-            return_value={"choices": [{"message": {"content": ""}}]}
+            **(
+                {"side_effect": answer}
+                if isinstance(answer, Exception)
+                else {"return_value": answer}
+            )
         )
-        msgs = _make_messages(6)
-        r = await m.compress(msgs, user_id="u1", provider=provider)
-        assert r.strategy == "truncate"
-        assert r.summary_llm_call.status == "failed"
-        assert r.summary_llm_call.error == "empty_content"
+        messages = _make_messages(6)
+        original = [dict(row) for row in messages]
+        with pytest.raises(ContextWindowExceeded):
+            await manager.compress(messages, user_id="u1", provider=provider)
+        assert messages == original
+
+    @pytest.mark.asyncio
+    async def test_missing_provider_rejects_without_losing_history(self):
+        _, manager, _ = _setup_shared_0()
+        with patch(
+            "app.infrastructure.llm.providers.registry.get_active_provider", return_value=None
+        ):
+            with pytest.raises(ContextWindowExceeded):
+                await manager.compress(_make_messages(6), user_id="u1")
 
 
 class TestCompressConcurrency:
@@ -462,7 +427,7 @@ class TestCompressConcurrency:
         results = await asyncio.gather(*tasks, return_exceptions=True)
         for r in results:
             assert not isinstance(r, Exception), f"concurrent compress failed: {r}"
-            assert r in {"summarize", "truncate"}
+            assert r == "summarize"
 
 
 class TestSingleton:
@@ -517,10 +482,10 @@ class TestSingleton:
         assert m.enabled is False
 
     @pytest.mark.asyncio
-    async def test_disabled_manager_compress_returns_noop(
+    async def test_disabled_manager_still_enforces_token_budget(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """禁用的 manager 即使超阈值也返回 noop。"""
+        """An environment toggle cannot disable the provider safety boundary."""
         from app.application.agent_orchestrator.context_window_manager import (
             ContextWindowManager,
         )
@@ -528,9 +493,8 @@ class TestSingleton:
         monkeypatch.setenv("FHD_CONTEXT_WINDOW_MANAGER_ENABLED", "0")
         m = ContextWindowManager(token_budget=800, recent_keep=2, summarize_threshold=3)
         msgs = _make_messages(20)
-        r = await m.compress(msgs, user_id="u1")
-        assert r.strategy == "noop"
-        assert r.post_message_count == 20
+        with pytest.raises(ContextWindowExceeded):
+            await m.compress(msgs, user_id="u1")
 
 
 class TestContextCompressionResult:

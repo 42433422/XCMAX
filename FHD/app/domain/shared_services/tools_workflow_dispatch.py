@@ -73,6 +73,12 @@ def _registered_router_client_product_issue(action, params, runtime_context, pro
     return submit_client_product_issue(resolved or user_message, runtime_context)
 
 
+def _registered_router_conversation_history(action, params, runtime_context, profile, user_message):
+    from app.application.tools.conversation_history import read_conversation_history
+
+    return read_conversation_history(action, params, runtime_context)
+
+
 class _WorkflowRouterMap(dict):
     _hidden_keys = {"employee", "business_db"}
 
@@ -121,6 +127,7 @@ _REGISTERED_WORKFLOW_ROUTERS: dict[str, Callable[..., dict]] = _WorkflowRouterMa
         "business_db": _registered_router_business_db,
         "dataset_rag": _registered_router_dataset_rag,
         "memory_v2": _registered_router_memory_v2,
+        "conversation_history": _registered_router_conversation_history,
         "excel_analysis": _registered_router_excel_analysis,
         "import_excel_to_database": _registered_router_import_excel_to_database,
         "elt_import": _registered_router_elt_import,

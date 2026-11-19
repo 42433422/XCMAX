@@ -87,6 +87,7 @@ class DatasetRepository:
     def _load_persisted_state(self) -> None:
         try:
             if not self.storage_path.exists():
+                self.datasets = {}
                 return
             raw = json.loads(self.storage_path.read_text(encoding="utf-8"))
             datasets = raw.get("datasets") if isinstance(raw, dict) else {}

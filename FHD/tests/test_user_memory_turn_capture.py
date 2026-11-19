@@ -1,68 +1,70 @@
-"""回合记忆捕获：只沉淀显性长期偏好，重复内容合并。"""
+"""Legacy capture is a thin candidate adapter, with no independent raw fact store."""
 
-from __future__ import annotations
+from unittest.mock import MagicMock
 
 import pytest
 
+from app.application.agent_task_context import scoped_personal_memory_id
 from app.application.user_memory import turn_capture
 from app.application.user_memory.retrieve import search
 
 
-def test_extracts_only_explicit_preference_sentences():
-    facts = turn_capture.extract_fact_candidates(
-        "我们公司的默认币种是 CNY。帮我看下这张表。以后对账单都按客户名分类。"
-    )
-    assert facts == ["我们公司的默认币种是 CNY", "以后对账单都按客户名分类"]
+@pytest.fixture
+def captured(monkeypatch, tmp_path):
+    from app.domain.shared_services import user_memory_service as module
 
-
-def test_caps_at_two_and_ignores_short_or_unmarked():
-    facts = turn_capture.extract_fact_candidates(
-        "记住。记住客户A按对账单分类。记住客户B按出货单分类。记住客户C按回款分类。"
-    )
-    assert len(facts) == 2
-    assert facts == ["记住客户A按对账单分类", "记住客户B按出货单分类"]
-
-
-def test_empty_message_returns_nothing():
-    assert turn_capture.extract_fact_candidates("") == []
-    assert turn_capture.extract_fact_candidates("这张表有多少行？") == []
-
-
-def test_capture_merges_duplicates(monkeypatch, tmp_path):
-    monkeypatch.delenv("XCAGI_MEMORY_CAPTURE", raising=False)
     monkeypatch.setenv("XCAGI_USER_MEMORY_JSON_PATH", str(tmp_path / "memory.json"))
-
-    first = turn_capture.capture_turn(user_message="以后对账单都按客户名分类。", owner_id="u1")
-    second = turn_capture.capture_turn(user_message="以后对账单都按客户名分类。", owner_id="u1")
-
-    assert len(first) == 1 and first[0]["created"] is True
-    assert len(second) == 1 and second[0]["merged"] is True
-    hits = search("对账单 客户名 分类", scope="global", owner_id="u1", min_score=0)
-    assert len(hits) == 1
-    assert hits[0]["text"] == "以后对账单都按客户名分类"
-
-
-def test_capture_is_disabled_by_flag(monkeypatch):
-    monkeypatch.setenv("XCAGI_MEMORY_CAPTURE", "off")
-    assert turn_capture.capture_turn(user_message="以后都这样做。", owner_id="u1") == []
-
-
-def test_capture_requires_owner(monkeypatch):
     monkeypatch.delenv("XCAGI_MEMORY_CAPTURE", raising=False)
-    assert turn_capture.capture_turn(user_message="以后都这样做。", owner_id="") == []
-
-
-def test_capture_swallows_store_failure(monkeypatch):
-    monkeypatch.delenv("XCAGI_MEMORY_CAPTURE", raising=False)
-
-    class Boom:
-        def get_memory(self, owner):
-            raise RuntimeError("disk full")
-
-    assert (
-        turn_capture.capture_turn(user_message="以后都这样做。", owner_id="u1", store=Boom()) == []
+    module.reset_user_memory_service()
+    backend = MagicMock()
+    backend.enabled = False
+    backend.extract_candidates.return_value = [
+        {
+            "memory_type": "preference",
+            "key": "report",
+            "confidence": 0.8,
+            "value": {"subject": "用户", "statement": "用户偏好按客户名分类对账单"},
+        }
+    ]
+    monkeypatch.setattr(
+        "app.infrastructure.memory.mem0_backend.get_long_term_memory", lambda: backend
     )
+    yield module.get_user_memory_service(), backend
+    module.reset_user_memory_service()
 
 
-if __name__ == "__main__":
-    raise SystemExit(pytest.main([__file__]))
+def owner():
+    return scoped_personal_memory_id({"actor_id": "7", "tenant_id": "2"})
+
+
+def test_capture_is_deduplicated_but_requires_confirmation(captured):
+    authority, backend = captured
+    first = turn_capture.capture_turn(user_message="以后按客户名分类对账单", owner_id=owner())
+    second = turn_capture.capture_turn(user_message="以后按客户名分类对账单", owner_id=owner())
+    assert first[0]["created"] and second[0]["merged"]
+    assert search("客户名", scope="user", owner_id=owner()) == []
+    assert authority._store.get_memory(owner()).recall_facts == []
+    authority.confirm_memory_candidate(owner(), first[0]["id"])
+    assert search("客户名", scope="user", owner_id=owner())
+    backend.remember.assert_not_called()
+
+
+def test_model_no_fact_does_not_retry_regex(captured):
+    _, backend = captured
+    backend.extract_candidates.return_value = []
+    assert turn_capture.extract_fact_candidates("我喜欢简洁报告") == []
+
+
+def test_fallback_excludes_questions_and_hypotheses(captured):
+    _, backend = captured
+    backend.extract_candidates.return_value = None
+    assert turn_capture.extract_fact_candidates("我喜欢简洁报告？") == []
+    assert turn_capture.extract_fact_candidates("如果我喜欢简洁报告") == []
+    assert turn_capture.extract_fact_candidates("我喜欢简洁报告")
+
+
+def test_capture_requires_scoped_owner_and_honours_opt_out(captured, monkeypatch):
+    assert turn_capture.capture_turn(user_message="我喜欢简洁报告", owner_id="7") == []
+    assert turn_capture.capture_turn(user_message="我喜欢简洁报告", owner_id="") == []
+    monkeypatch.setenv("XCAGI_MEMORY_CAPTURE", "off")
+    assert turn_capture.capture_turn(user_message="我喜欢简洁报告", owner_id=owner()) == []

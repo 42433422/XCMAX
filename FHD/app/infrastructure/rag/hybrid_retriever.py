@@ -1,17 +1,12 @@
-"""混合检索（向量 + BM25 + RRF 融合）。
-
-不依赖 rank_bm25 库（环境可能没有），用纯 Python 实现 BM25，保证 0 依赖。
-"""
+"""混合检索（独立向量候选 + BM25S + RRF 融合）。"""
 
 from __future__ import annotations
 
 import logging
-import math
 import re
-from collections import Counter
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, Protocol, SupportsFloat, cast
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -57,53 +52,45 @@ def _index_text(chunk: RetrievedChunk) -> str:
     return chunk.text
 
 
-class BM25:
-    """
-    轻量 BM25（无第三方依赖）。
+class _BM25Index(Protocol):
+    def index(self, corpus: list[list[str]], *, show_progress: bool) -> None: ...
 
-    score(q, d) = Σ_{t∈q∩d} IDF(t) · (tf(t,d)·(k1+1)) / (tf(t,d) + k1·(1-b+b·|d|/avgdl))
-    """
+    def get_scores(self, query_tokens: list[str]) -> Iterable[SupportsFloat]: ...
+
+
+class _BM25Module(Protocol):
+    def BM25(self, *, k1: float, b: float, method: str) -> _BM25Index: ...
+
+
+# BM25S ships no typing metadata. Keep a static runtime import for frozen builds.
+if TYPE_CHECKING:
+    bm25s: _BM25Module
+else:
+    import bm25s
+
+
+class BM25:
+    """BM25S adapter preserving the application's Chinese tokenization contract."""
 
     def __init__(self, k1: float = 1.5, b: float = 0.75) -> None:
         self.k1 = k1
         self.b = b
-        self._docs: list[list[str]] = []
-        self._doc_lens: list[int] = []
-        self._avgdl: float = 0.0
-        self._df: Counter = Counter()
-        self._idf: dict[str, float] = {}
-        self._n_docs: int = 0
+        self._index: _BM25Index | None = None
+        self._n_docs = 0
 
     def fit(self, docs: list[str]) -> None:
         tokenized = [self._tokenize(d) for d in docs]
-        self._docs = tokenized
-        self._doc_lens = [len(t) for t in tokenized]
         self._n_docs = len(tokenized)
-        self._avgdl = (sum(self._doc_lens) / self._n_docs) if self._n_docs else 0.0
-        self._df = Counter()
-        for toks in tokenized:
-            for term in set(toks):
-                self._df[term] += 1
-        self._idf = {
-            t: math.log((self._n_docs - df + 0.5) / (df + 0.5) + 1.0) for t, df in self._df.items()
-        }
+        self._index = None
+        if any(tokenized):
+            self._index = bm25s.BM25(k1=self.k1, b=self.b, method="lucene")
+            self._index.index(tokenized, show_progress=False)
 
     def score(self, query: str) -> list[float]:
         q_tokens = self._tokenize(query)
-        scores: list[float] = []
-        for i, doc in enumerate(self._docs):
-            s = 0.0
-            dl = self._doc_lens[i] or 1
-            tf = Counter(doc)
-            for t in q_tokens:
-                if t not in tf:
-                    continue
-                idf = self._idf.get(t, 0.0)
-                num = tf[t] * (self.k1 + 1.0)
-                den = tf[t] + self.k1 * (1.0 - self.b + self.b * dl / (self._avgdl or 1.0))
-                s += idf * (num / (den or 1.0))
-            scores.append(s)
-        return scores
+        if self._index is None or not q_tokens:
+            return [0.0] * self._n_docs
+        return [float(score) for score in self._index.get_scores(q_tokens)]
 
     @staticmethod
     def _tokenize(text: str) -> list[str]:
@@ -153,6 +140,7 @@ class HybridRetriever:
         mode: str = DEFAULT_MODE,
         vector_weight: float = DEFAULT_VECTOR_WEIGHT,
         keyword_weight: float = DEFAULT_KEYWORD_WEIGHT,
+        vector_candidates: list[RetrievedChunk] | None = None,
     ) -> None:
         self._embedder = embedder
         self._k = k
@@ -167,11 +155,16 @@ class HybridRetriever:
         self._chunk_texts: list[str] = []
         self._bm25 = BM25()
         self._embeddings: list[list[float]] = []
+        self._vector_candidates = vector_candidates
 
     def index(self, chunks: list[RetrievedChunk]) -> None:
         self._chunks = list(chunks)
         self._chunk_texts = [_index_text(c) for c in chunks]
-        self._bm25.fit(self._chunk_texts)
+        if self._mode != "vector":
+            self._bm25.fit(self._chunk_texts)
+        self._embeddings = []
+        if self._mode == "keyword" or self._vector_candidates is not None:
+            return
         precomputed: list[list[Any]] = []
         for chunk in chunks:
             embedding = (chunk.metadata or {}).get("_embedding")
@@ -216,11 +209,18 @@ class HybridRetriever:
 
         # 2) Vector
         vector_ranked: list[int] = []
-        if self._mode in {"hybrid", "vector"} and self._embedder is not None and self._embeddings:
+        floor = max(0.0, float(min_vector_score))
+        if self._mode in {"hybrid", "vector"} and self._vector_candidates is not None:
+            positions = {self._chunk_key(chunk): i for i, chunk in enumerate(self._chunks)}
+            for candidate in self._vector_candidates:
+                idx = positions.get(self._chunk_key(candidate))
+                if idx is not None and candidate.score > floor and idx not in vector_ranked:
+                    vector_ranked.append(idx)
+            vector_ranked = vector_ranked[: self._top_k_vector]
+        elif self._mode in {"hybrid", "vector"} and self._embedder is not None and self._embeddings:
             try:
                 q_vec = self._embedder(query)
                 sims = [self._cosine(q_vec, e) for e in self._embeddings]
-                floor = max(0.0, float(min_vector_score))
                 vector_ranked = sorted(
                     (i for i in range(len(self._chunks)) if sims[i] > floor),
                     key=lambda i: sims[i],
@@ -259,6 +259,22 @@ class HybridRetriever:
                 )
             )
         return results
+
+    @staticmethod
+    def _chunk_key(chunk: RetrievedChunk) -> tuple[Any, ...]:
+        metadata = chunk.metadata or {}
+        return (
+            str(metadata.get("tenant_id") or ""),
+            str(
+                metadata.get("document_id") or metadata.get("qa_id") or metadata.get("source") or ""
+            ),
+            str(metadata.get("document_version") or ""),
+            str(metadata.get("_embedding_fingerprint") or ""),
+            chunk.chunk_index,
+            chunk.char_start,
+            chunk.char_end,
+            chunk.text,
+        )
 
     @staticmethod
     def _cosine(a: list[float], b: list[float]) -> float:

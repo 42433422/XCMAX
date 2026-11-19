@@ -185,6 +185,7 @@ def test_knowledge_document_delete_removes_document_and_chunks(tmp_path):
 
 def test_knowledge_memory_delete_is_soft_status(tmp_path, monkeypatch):
     """DELETE .../memories/{id} → 记录保留，status=deleted 且写入 deleted_at。"""
+    from app.application.agent_task_context import scoped_personal_memory_id
     from app.application.dataset_rag_app_service import (
         DATASET_READ_PERMISSION,
         DATASET_WRITE_PERMISSION,
@@ -195,8 +196,14 @@ def test_knowledge_memory_delete_is_soft_status(tmp_path, monkeypatch):
 
     try:
         memory_service = _fresh_memory_service(tmp_path, monkeypatch)
+        ctx = DatasetAccessContext(
+            actor_id="1",
+            tenant_id=str(TENANT_ID),
+            permissions=frozenset({DATASET_READ_PERMISSION, DATASET_WRITE_PERMISSION}),
+        )
+        owner = scoped_personal_memory_id(ctx.to_dict())
         created = memory_service.propose_memory_candidate(
-            "u1",
+            owner,
             "preference",
             "reply_style",
             "concise",
@@ -207,11 +214,6 @@ def test_knowledge_memory_delete_is_soft_status(tmp_path, monkeypatch):
         memory_id = created["candidate"]["memory_id"]
 
         persy = PersyMemoryApplicationService(memory_service=memory_service)
-        ctx = DatasetAccessContext(
-            actor_id="u1",
-            tenant_id=str(TENANT_ID),
-            permissions=frozenset({DATASET_READ_PERMISSION, DATASET_WRITE_PERMISSION}),
-        )
         result = persy.mutate(
             access_context=ctx,
             memory_id=memory_id,
@@ -221,14 +223,16 @@ def test_knowledge_memory_delete_is_soft_status(tmp_path, monkeypatch):
         assert result["success"] is True
         assert result["memory"]["status"] == "deleted"
 
-        records = [r for r in memory_service.list_memories("u1") if r.get("memory_id") == memory_id]
+        records = [
+            r for r in memory_service.list_memories(owner) if r.get("memory_id") == memory_id
+        ]
         assert len(records) == 1, "知识库删除不得物理移除记忆行"
         assert records[0]["status"] == "deleted"
         assert records[0].get("deleted_at")
 
         stored = json.loads((tmp_path / "memory_store.json").read_text(encoding="utf-8"))
         persisted = [
-            r for r in stored["u1"]["memory_v2_records"] if r.get("memory_id") == memory_id
+            r for r in stored[owner]["memory_v2_records"] if r.get("memory_id") == memory_id
         ]
         assert persisted and persisted[0]["status"] == "deleted"
     finally:

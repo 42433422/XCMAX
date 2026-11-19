@@ -241,8 +241,8 @@ async def retrieve(
     """跨可见集合做 KNN 检索并归并。
 
     参数 ``query_embedding`` 给已自带向量的调用方（避免重复计算），不传则自动调用
-    embedding 服务。失败时（缺 API Key、向量库不可用等）记录 warning 并返回空列表，
-    保证调用链不中断。
+    embedding 服务。向量通道失败时记录 warning；hybrid 继续独立关键词召回，
+    vector 模式返回空列表。``min_score`` 筛选向量候选；hybrid 最终 score 为 RRF 分数。
     """
     q = (query or "").strip()
     if not q and not query_embedding:
@@ -269,7 +269,10 @@ async def retrieve(
         if not scoped:
             return []
 
+    hybrid = (os.environ.get("MODSTORE_RAG_RETRIEVAL_MODE") or "vector").strip().lower() == "hybrid"
+    query_vec = list(query_embedding) if query_embedding is not None else []
     if query_embedding is None:
+        vecs = []
         try:
             sf_embed = get_session_factory()
             with sf_embed() as session:
@@ -284,74 +287,85 @@ async def retrieve(
                     vecs = await embed_texts([q])
         except EmbeddingConfigError as e:
             logger.warning("rag_service.retrieve: embedding 配置缺失: %s", e)
-            return []
         except BOUNDARY_ERRORS as e:  # noqa: BLE001
             logger.warning("rag_service.retrieve: embedding 调用失败: %s", e)
-            return []
-        if not vecs:
-            return []
-        query_vec = list(vecs[0])
-    else:
-        query_vec = list(query_embedding)
+        query_vec = list(vecs[0]) if vecs else []
+    if not query_vec and not hybrid:
+        return []
 
     chunks: List[RetrievedChunk] = []
     for coll in scoped:
         try:
-            rows = vector_engine.query(
-                vector_engine.kb_collection_name(int(coll.id)),
-                query_embedding=query_vec,
-                top_k=n,
+            rows = (
+                vector_engine.query(
+                    vector_engine.kb_collection_name(int(coll.id)),
+                    query_embedding=query_vec,
+                    top_k=n,
+                )
+                if query_vec
+                else []
             )
         except VectorEngineError as e:
             logger.warning("rag_service.retrieve: 集合 %s 查询失败: %s", coll.id, e)
             continue
-        for r in rows:
-            meta = r.get("metadata") or {}
-            page_no = None
-            page_raw = meta.get("page_no")
-            if page_raw not in (None, "", 0):
-                try:
-                    page_no = int(page_raw)
-                except BOUNDARY_ERRORS:  # noqa: BLE001
-                    page_no = None
-            distance = float(r.get("distance") or 1.0)
-            score = max(0.0, 1.0 - distance)
-            if score < float(min_score or 0.0):
-                continue
-            chunks.append(
-                RetrievedChunk(
-                    collection_id=int(coll.id),
-                    collection_name=str(coll.name or ""),
-                    owner_kind=str(coll.owner_kind or ""),
-                    owner_id=str(coll.owner_id or ""),
-                    doc_id=str(meta.get("doc_id") or ""),
-                    chunk_id=str(meta.get("chunk_id") or r.get("id") or ""),
-                    filename=str(meta.get("filename") or ""),
-                    page_no=page_no,
-                    content=str(r.get("document") or ""),
-                    distance=distance,
-                    score=score,
-                    source_url=str(meta.get("source_url") or ""),
-                    char_range=meta.get("char_range"),
-                )
-            )
+        for row in rows:
+            chunk = _chunk_from_row(coll, row)
+            if chunk.score >= float(min_score or 0.0):
+                chunks.append(chunk)
 
     chunks.sort(key=lambda c: c.distance)
     chunks = chunks[:n]
 
-    retrieval_mode = (os.environ.get("MODSTORE_RAG_RETRIEVAL_MODE") or "vector").strip().lower()
-    if retrieval_mode == "hybrid":
+    if hybrid and q:
         try:
             from modstore_server.hybrid_retriever import get_hybrid_retriever
 
-            corpus = [c.content for c in chunks]
+            corpus: List[RetrievedChunk] = []
+            for coll in scoped:
+                try:
+                    corpus.extend(
+                        _chunk_from_row(coll, row)
+                        for row in vector_engine.iter_documents(
+                            vector_engine.kb_collection_name(int(coll.id))
+                        )
+                    )
+                except VectorEngineError as exc:
+                    logger.warning(
+                        "rag_service.retrieve: 集合 %s 关键词语料读取失败: %s",
+                        coll.id,
+                        exc,
+                    )
             retriever = get_hybrid_retriever()
-            chunks = retriever.fuse(chunks, q, corpus=corpus, final_top_k=n)
+            chunks = retriever.fuse(chunks, q, corpus=corpus, bm25_top_k=max(n, 10), final_top_k=n)
         except RECOVERABLE_ERRORS as exc:
             logger.warning("rag_service.retrieve: hybrid fusion failed, using vector: %s", exc)
 
     chunks = _maybe_rerank(q, chunks)
     return chunks
+
+
+def _chunk_from_row(coll: KnowledgeCollection, row: Dict[str, Any]) -> RetrievedChunk:
+    meta = row.get("metadata") or {}
+    try:
+        page_no = int(meta["page_no"]) if meta.get("page_no") not in (None, "", 0) else None
+    except (TypeError, ValueError):
+        page_no = None
+    distance = float(row["distance"]) if row.get("distance") is not None else 1.0
+    return RetrievedChunk(
+        collection_id=int(coll.id),
+        collection_name=str(coll.name or ""),
+        owner_kind=str(coll.owner_kind or ""),
+        owner_id=str(coll.owner_id or ""),
+        doc_id=str(meta.get("doc_id") or ""),
+        chunk_id=str(meta.get("chunk_id") or row.get("id") or ""),
+        filename=str(meta.get("filename") or ""),
+        page_no=page_no,
+        content=str(row.get("document") or ""),
+        distance=distance,
+        score=max(0.0, 1.0 - distance),
+        source_url=str(meta.get("source_url") or ""),
+        char_range=meta.get("char_range"),
+    )
 
 
 def _maybe_rerank(query: str, chunks: List[RetrievedChunk]) -> List[RetrievedChunk]:

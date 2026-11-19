@@ -168,6 +168,10 @@ async def test_memory_hits_prepended(monkeypatch: pytest.MonkeyPatch, store: Art
         "build_memory_context",
         lambda *args, **kwargs: "【相关记忆】\n1. 对账使用 2025 版模板",
     )
+    monkeypatch.setattr(
+        "app.application.ai_chat.conversation_history.authorized_memory_context",
+        lambda *_: ("personal-memory:v1:authorized", None),
+    )
 
     result = await module.collect_evidence("帮我核对金额", [ARTIFACT_ID], store=store, user_id="u1")
     assert result["evidence"].startswith("【历史记忆】")

@@ -25,7 +25,7 @@ export interface UseChatSessionHistoryDeps {
   lastExcelAnalysisContext: Ref<Record<string, unknown> | null>
   linkedExcelSheet: Ref<LinkedExcelSheet | null>
   linkedExcelAllSheets: Ref<boolean>
-  loadMessages: (msgs: ChatMessage[]) => void
+  loadMessages: (msgs: ChatMessage[], page?: Record<string, unknown>) => void
   clearMessages: () => void
   persistTaskPanelStateForSession: (targetSessionId?: string) => void
   applyPersistedTaskPanelStateForSession: (sid: string) => void
@@ -180,7 +180,14 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
       if (!request.isCurrent() || sessionId.value !== sid || !canApply()) return
       const dataRow = asRecord(data)
       const serverMessages = asArray(dataRow.messages ?? asRecord(dataRow.data).messages)
-      const localMessages = normalizeLocalMessages(readLocalMessagesBySession(sid))
+      if (dataRow.durable === true && dataRow.revision === null) {
+        loadMessages([], dataRow)
+        showHistory.value = false
+        return
+      }
+      const localMessages = normalizeLocalMessages(readLocalMessagesBySession(sid)).filter(message =>
+        typeof dataRow.revision !== 'number' || (message.persistence?.request
+          && (message.persistence.request.expected_revision ?? 0) === dataRow.revision))
       if (data.success && serverMessages.length > 0) {
         const merged = [...localMessages]
         const matched = new Set<number>()
@@ -202,7 +209,7 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
             merged[index] = { ...merged[index], ...message }
           }
         }
-        loadMessages(merged)
+        loadMessages(merged, dataRow)
       } else if (localMessages.length > 0) {
         loadMessages(localMessages)
       } else if (data.success) {

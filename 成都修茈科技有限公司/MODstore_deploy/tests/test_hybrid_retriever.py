@@ -73,3 +73,10 @@ class TestHybridRetriever:
             assert len(result) == 1
         finally:
             hr._bm25_available = original
+
+    def test_keyword_only_candidates_keep_collection_identity(self):
+        first = _make_chunk("same-chunk", "apple fruit")
+        second = _make_chunk("same-chunk", "pear fruit")
+        second.collection_id = 2
+        result = HybridRetriever().fuse([], "fruit", corpus=[first, second], final_top_k=2)
+        assert {chunk.collection_id for chunk in result} == {1, 2}

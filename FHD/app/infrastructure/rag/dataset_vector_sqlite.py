@@ -154,7 +154,6 @@ class DatasetVectorSQLiteIndex:
         if not all(math.isfinite(value) for value in query_vector):
             raise ValueError("Query vectors must contain finite numbers")
         limit = max(1, int(top_k or 1))
-        query_terms = set(_facade()._tokenize_for_lexical(" ".join(str(v) for v in query_vector)))
         selected: list[tuple[float, int, RetrievedChunk]] = []
         latest = str(version or "").strip().lower() == "latest"
         with closing(self._get_conn()) as conn:
@@ -201,9 +200,8 @@ class DatasetVectorSQLiteIndex:
                     continue
                 metadata = chunk.metadata or {}
                 embedding = _facade()._embedding_from_metadata(metadata)
-                vector_score = _facade()._cosine(query_vector, embedding) if embedding else 0.0
-                chunk.score = float(
-                    vector_score + _facade()._lexical_score(chunk.text, query_terms)
+                chunk.score = (
+                    float(_facade()._cosine(query_vector, embedding)) if embedding else 0.0
                 )
                 if not math.isfinite(chunk.score):
                     raise ValueError("Vector index contains a non-finite score; rebuild it")

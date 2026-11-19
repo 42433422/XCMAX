@@ -77,6 +77,7 @@ class CompatChatApplication:
 
         self.assert_access(request)
         context = self.admission.with_tier(context, self.resolve_tier(request))
+        body.context = context
         if is_offline(body.mode):
             turn = ChatTurn(body, body.message, context, "compat_chat_offline")
             from app.application.ai_chat.dialogue_memory import prepare_chat_turn

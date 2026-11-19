@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from copy import deepcopy
 from dataclasses import dataclass
 from threading import RLock
 from typing import Any
 
 from app.application.user_memory.models import UserMemory
 from app.application.user_memory.preferences import sync_preference_projection
+from app.application.user_memory.projections import project_after_commit
 from app.application.user_memory.protocols import (
     CandidateGovernance,
     CandidateProposal,
@@ -17,6 +19,15 @@ from app.application.user_memory.protocols import (
     MemoryStatusUpdate,
     memory_transaction,
 )
+
+
+def _advance_revision(record: JsonObject, updated: JsonObject, *, action: str, at: str) -> None:
+    previous = {key: deepcopy(value) for key, value in record.items() if key != "history"}
+    updated["revision"] = int(record.get("revision") or 1) + 1
+    updated["history"] = [
+        *record.get("history", []),
+        {"action": action, "at": at, "previous": previous},
+    ]
 
 
 @dataclass(frozen=True)
@@ -91,6 +102,15 @@ class CandidateMemory:
             }:
                 return {"success": True, "created": False, "candidate": dict(record)}
         now = self.access.now()
+        if (
+            sum(row.get("status") in {"pending", "active"} for row in memory.memory_v2_records)
+            >= self.ports.max_records()
+        ):
+            return {
+                "success": False,
+                "message": "记忆容量已满，请先审核或撤销候选",
+                "error_code": "memory_capacity_reached",
+            }
         candidate = {
             "memory_id": f"mem_{self.ports.new_id()}",
             "memory_type": normalized_type,
@@ -110,15 +130,17 @@ class CandidateMemory:
             "fingerprint": fingerprint,
             "created_at": now,
             "updated_at": now,
+            "revision": 1,
+            "history": [],
         }
         if candidate["status"] == "rejected":
             candidate["rejected_at"] = now
             candidate["rejected_reason"] = "source_policy_blocked"
         memory.memory_v2_records.insert(0, candidate)
-        memory.memory_v2_records = memory.memory_v2_records[: self.ports.max_records()]
         self.access.save_memory(user_id, memory)
         return {"success": True, "created": True, "candidate": dict(candidate)}
 
+    @project_after_commit
     @memory_transaction
     def confirm(
         self, user_id: str, memory_id: str, *, correction: dict[str, Any] | None = None
@@ -136,6 +158,12 @@ class CandidateMemory:
             return {"success": False, "message": "记忆已拒绝，不能确认"}
         if record.get("source_policy") == "blocked":
             return {"success": False, "message": "记忆来源被策略阻断"}
+        if (
+            record.get("status") == "active"
+            and record.get("eligible_for_planner") is True
+            and not correction
+        ):
+            return {"success": True, "memory": dict(record)}
         updated = dict(record)
         patch = dict(correction or {})
         if patch:
@@ -158,6 +186,7 @@ class CandidateMemory:
         updated["fingerprint"] = self.ports.fingerprint(
             str(updated["memory_type"]), str(updated["key"]), updated.get("value")
         )
+        _advance_revision(record, updated, action="confirm", at=now)
         memory.memory_v2_records[idx] = updated
         sync_preference_projection(memory, record, updated, now)
         self.access.save_memory(user_id, memory)
@@ -169,6 +198,7 @@ class CandidateMemory:
     def delete(self, user_id: str, memory_id: str, *, reason: str = "") -> dict[str, Any]:
         return self.ports.set_status(user_id, memory_id, "deleted", reason=reason)
 
+    @project_after_commit
     @memory_transaction
     def set_status(
         self, user_id: str, memory_id: str, status: str, *, reason: str = ""
@@ -180,9 +210,14 @@ class CandidateMemory:
         idx, record = self.ports.find_record(memory, memory_id)
         if record is None:
             return {"success": False, "message": "记忆不存在"}
+        if record.get("status") == normalized_status:
+            return {"success": True, "memory": dict(record)}
+        if record.get("status") == "deleted":
+            return {"success": False, "message": "记忆已删除"}
         updated = dict(record)
         now = self.access.now()
         updated["status"] = normalized_status
+        updated["eligible_for_planner"] = False
         updated["updated_at"] = now
         if reason:
             updated[f"{normalized_status}_reason"] = reason
@@ -190,12 +225,14 @@ class CandidateMemory:
             updated["deleted_at"] = now
         if normalized_status == "rejected":
             updated["rejected_at"] = now
+        _advance_revision(record, updated, action=normalized_status, at=now)
         memory.memory_v2_records[idx] = updated
         if normalized_status in {"deleted", "rejected"}:
             sync_preference_projection(memory, record, updated, now)
         self.access.save_memory(user_id, memory)
         return {"success": True, "memory": dict(updated)}
 
+    @project_after_commit
     @memory_transaction
     def correct(
         self,
@@ -215,6 +252,8 @@ class CandidateMemory:
             return {"success": False, "message": "记忆不存在"}
         if record.get("status") == "deleted":
             return {"success": False, "message": "记忆已删除"}
+        if record.get("status") not in {"active", "pending"}:
+            return {"success": False, "message": "只能纠正有效记忆或待审核候选"}
         updated = dict(record)
         if key is not None:
             updated["key"] = str(key or "").strip()
@@ -229,6 +268,7 @@ class CandidateMemory:
         updated["fingerprint"] = self.ports.fingerprint(
             str(updated["memory_type"]), str(updated["key"]), updated.get("value")
         )
+        _advance_revision(record, updated, action="correct", at=now)
         memory.memory_v2_records[idx] = updated
         if updated.get("status") == "active":
             sync_preference_projection(memory, record, updated, now)

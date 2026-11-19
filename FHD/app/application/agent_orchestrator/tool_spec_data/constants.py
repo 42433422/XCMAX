@@ -32,6 +32,9 @@ DATASET_RAG_READ_PERMISSION = "dataset.read"
 DATASET_RAG_WRITE_PERMISSION = "dataset.write"
 # tool_id -> fixed permission string (action-independent).
 PERMISSION_OVERRIDES: dict[str, str] = {
+    # Like the history API, current-conversation reads require a live owner binding,
+    # enforced again by the adapter; they grant no access to other users' sessions.
+    "conversation_history": "",
     "memory_v2": "memory_v2.write",
     "client_product_issue": "",
     # Excel 导入属于数据对接（ELT）执行，沿用 elt.execute，而不是发明新的权限码。

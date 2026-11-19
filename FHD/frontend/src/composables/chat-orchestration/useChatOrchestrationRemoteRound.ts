@@ -126,12 +126,31 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
     const routeMetadata = readChatModelRoute(payload.route_metadata)
     const execution = readChatExecution(payload)
     const businessResult = readPlannerBusinessResult(payload)
-    const extras = {
+    const receipt = asRecord(payload.history_persistence)
+    const receiptIds = asArray(receipt.message_ids)
+    const extras: UiChatMessageExtras = {
       ...(routeMetadata ? { routeMetadata } : {}),
       ...(requiresTurnReconciliation(payload) ? { workflowAction: 'unknown' } : failed ? { workflowAction: 'failed' } : {}),
       ...(responseCameFromCache(payload) ? { sameAsPrevious: true } : {}),
       ...(execution ? { execution } : {}),
       ...(businessResult ? { businessResult } : {}),
+    }
+    if (receipt.status === 'saved' && receiptIds.length) {
+      const turnId = String(receipt.turn_id || payload.turn_id || '')
+      for (const message of messages.value) {
+        if (turnId && message.turnId === turnId) {
+          const id = message.role === 'user' ? receiptIds[0] : receiptIds[receiptIds.length - 1]
+          message.persistence = { id: `server:${id}`, status: 'saved' }
+        }
+      }
+      extras.persistence = { id: `server:${receiptIds[receiptIds.length - 1]}`, status: 'saved' }
+    } else if (receipt.status === 'failed') {
+      extras.persistence = {
+        id: `receipt:${String(payload.turn_id || receipt.conversation_id || '')}`,
+        status: 'failed', error: String(receipt.message || '历史尚未保存，请仅重试保存。'),
+        request: { role: 'ai', content: String(payload.response || payload.message || ''),
+          expected_revision: Number(receipt.revision || 0), turn_id: String(receipt.turn_id || payload.turn_id || ''), metadata: JSON.stringify({ ui: extras, business_harness: { turn_id: payload.turn_id } }) },
+      }
     }
     return Object.keys(extras).length ? extras : undefined
   }
@@ -436,8 +455,68 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       if (streamMessage) delete streamMessage.liveSteps
       const ttsShouldSpeakThisMessage = ttsEnabled.value
       let receivedDone = false
+      let completeArtifacts = () => {}
+      let doneApplied = false
+      const applyDonePayload = () => {
+        if (doneApplied || !isOwnerCurrent()) return
+        doneApplied = true
+        completeArtifacts()
+        const donePayload = asPlannerPayload(doneResult)
+        consumeRoute(donePayload.route_metadata)
+        const finalText = collapseExactDuplicateReply(String(donePayload.response ?? streamPlain).trim() || streamPlain || '（无内容）')
+        if (round.isActive()) {
+          cancelStreamFrame()
+          const extras = responseExtras(donePayload, donePayload.success === false) || {}
+          if (responseCameFromCache(donePayload)) extras.sameAsPrevious = true
+          if (extras && Object.keys(extras).length) applyPlainTextToMessageIndex(msgIndex, finalText, extras)
+          else applyPlainTextToMessageIndex(msgIndex, finalText)
+          observeModelOutcome(finalText, donePayload)
+          if (streamMessage && requiresTurnReconciliation(donePayload)) {
+            streamMessage.workflowAction = 'unknown'
+          }
+        }
+        if (round.isActive() && ttsShouldSpeakThisMessage && ttsEnabled.value && donePayload.success !== false) {
+          const clean = stripPlannerDisplayMarkers(finalText.replace(/（正在(?:将 Excel 导入数据库|生成 Word 文档|生成 Excel 工作簿|生成可下载文件)(?:[^（）]|（[^（）]*）)*）/g, '\n')).trim()
+          if (clean && clean !== '（无内容）') queueVoice(clean)
+        }
+        if (!round.isActive()) return
+        const wrap: ChatPlannerPayload = doneResult && typeof doneResult === 'object' ? donePayload : { success: true, response: finalText }
+        syncTaskFromChatResponse(wrap, primaryText)
+        syncStreamRun(wrap, true)
+        consumeStateUpdates(wrap)
+        attachContextSummaryToLastAiMessage()
+        attachThinkingStepsToLastAiMessage(wrap)
+        attachTodoStepsToLastAiMessage(wrap)
+        attachWorkflowTraceToLastAiMessage(wrap)
+        attachApprovalCardToLastAiMessage(wrap)
+        attachBusinessResultToLastAiMessage(wrap)
+        if (streamMessage && !streamMessage.workflowAction) {
+          const data = asRecord(wrap.data)
+          streamMessage.workflowAction = String(wrap.execution_state || asRecord(data.data).status || data.status
+            || data.action || (wrap.success === false ? 'failed' : 'completed'))
+        }
+        if (requiresTurnReconciliation(wrap)) return
+        if (wrap.task) {
+          showTaskConfirm(wrap.task)
+          emitAssistantPush({
+            title: asString(asRecord(wrap.task).title || '新任务'),
+            description: asString(asRecord(wrap.task).description || '收到一条任务，请处理'),
+          })
+        }
+        if (!wrap.task && (wrap?.autoAction?.type === 'show_products_float' || wrap?.autoAction?.type === 'show_products')) {
+          currentTask.value = null
+        }
+        if (wrap.autoAction) {
+          handleAutoAction(wrap.autoAction, primaryText)
+        }
+        if (wrap.task) {
+          maybeCloseAssistantFloatForShipmentTask(wrap.task, wrap.autoAction)
+        }
+      }
       try {
-        const { body, completeArtifacts } = buildPlannerChatRequestPayload(primaryForStream, opts, requestScope)
+        const request = buildPlannerChatRequestPayload(primaryForStream, opts, requestScope)
+        const body = request.body
+        completeArtifacts = request.completeArtifacts
         streamTextFromAi = true
         handlePlannerEventRef = (ev: PlannerSseEvent) => {
           if (replaying) {
@@ -561,52 +640,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           return
         }
         if (!receivedDone) throw new IncompletePlannerSseError()
-        const donePayload = asPlannerPayload(doneResult)
-        consumeRoute(donePayload.route_metadata)
-        const finalText = collapseExactDuplicateReply(String(donePayload.response ?? streamPlain).trim() || streamPlain || '（无内容）')
-        if (round.isActive()) {
-          cancelStreamFrame()
-          const extras = responseExtras(donePayload) || {}
-          if (responseCameFromCache(donePayload)) extras.sameAsPrevious = true
-          if (extras && Object.keys(extras).length) applyPlainTextToMessageIndex(msgIndex, finalText, extras)
-          else applyPlainTextToMessageIndex(msgIndex, finalText)
-          observeModelOutcome(finalText, donePayload)
-          if (streamMessage && requiresTurnReconciliation(donePayload)) {
-            streamMessage.workflowAction = 'unknown'
-          }
-        }
-        if (round.isActive() && ttsShouldSpeakThisMessage && ttsEnabled.value && donePayload.success !== false) {
-          const clean = stripPlannerDisplayMarkers(finalText.replace(/（正在(?:将 Excel 导入数据库|生成 Word 文档|生成 Excel 工作簿|生成可下载文件)(?:[^（）]|（[^（）]*）)*）/g, '\n')).trim()
-          if (clean && clean !== '（无内容）') queueVoice(clean)
-        }
-        if (!round.isActive()) return
-        const wrap: ChatPlannerPayload = doneResult && typeof doneResult === 'object' ? donePayload : { success: true, response: finalText }
-        syncTaskFromChatResponse(wrap, primaryText)
-        syncStreamRun(wrap, true)
-        consumeStateUpdates(wrap)
-        attachContextSummaryToLastAiMessage()
-        attachThinkingStepsToLastAiMessage(wrap)
-        attachTodoStepsToLastAiMessage(wrap)
-        attachWorkflowTraceToLastAiMessage(wrap)
-        attachApprovalCardToLastAiMessage(wrap)
-        attachBusinessResultToLastAiMessage(wrap)
-        if (requiresTurnReconciliation(wrap)) return
-        if (wrap.task) {
-          showTaskConfirm(wrap.task)
-          emitAssistantPush({
-            title: asString(asRecord(wrap.task).title || '新任务'),
-            description: asString(asRecord(wrap.task).description || '收到一条任务，请处理'),
-          })
-        }
-        if (!wrap.task && (wrap?.autoAction?.type === 'show_products_float' || wrap?.autoAction?.type === 'show_products')) {
-          currentTask.value = null
-        }
-        if (wrap.autoAction) {
-          handleAutoAction(wrap.autoAction, primaryText)
-        }
-        if (wrap.task) {
-          maybeCloseAssistantFloatForShipmentTask(wrap.task, wrap.autoAction)
-        }
+        applyDonePayload()
       } catch (err: unknown) {
         plannerEventHandler = null
         streamTextFromAi = false
@@ -640,7 +674,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
               replayController.signal,
             )
             if (result.text) streamPlain = result.text
-            resumed = receivedDone && isOwnerCurrent()
+            resumed = !result.error && !sseError && receivedDone && isOwnerCurrent()
           } catch {
             resumed = false
           } finally {
@@ -650,22 +684,16 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
             plannerEventHandler = null
           }
           if (resumed) {
-            cancelStreamFrame()
-            applyPlainTextToMessageIndex(msgIndex, streamPlain)
-            if (streamMessage) {
-              streamMessage.workflowAction = sseOutcomeUnknown ? 'unknown' : 'completed'
-              delete streamMessage.streamingShell
-              delete streamMessage.waitingHint
-            }
+            applyDonePayload()
             deps.flushMessagesCache?.()
-            round.setStreaming(false)
             return
           }
         }
+
         if (dropped && round.isActive()) {
           let presentation = droppedRoundPresentation({ reachable: false })
           try {
-            const convo = await chatApi.getConversation(String(requestScope.sessionId || ''))
+            const convo = await chatApi.getConversation(String(requestScope.sessionId || ''), { turn_id: requestScope.turnId })
             presentation = droppedRoundFromHistory(convo, String(requestScope.turnId || ''))
           } catch {
             presentation = droppedRoundPresentation({ reachable: false })
@@ -689,7 +717,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
             window.setTimeout(() => {
               void (async () => {
                 try {
-                  const convo = await chatApi.getConversation(String(requestScope.sessionId || ''))
+                  const convo = await chatApi.getConversation(String(requestScope.sessionId || ''), { turn_id: requestScope.turnId })
                   const late = droppedRoundFromHistory(convo, String(requestScope.turnId || ''))
                   if (late.status !== 'completed' || !late.text || !round.isActive()) return
                   const row = messages.value[msgIndex]

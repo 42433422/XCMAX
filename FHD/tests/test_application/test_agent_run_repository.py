@@ -33,6 +33,8 @@ def test_retry_reuses_saved_chat_plan_without_another_model_request(monkeypatch)
                 tool_id="customers",
                 action="query",
                 params={"keyword": "synthetic"},
+                risk="low",
+                idempotent=True,
             )
         ],
     )
@@ -45,9 +47,11 @@ def test_retry_reuses_saved_chat_plan_without_another_model_request(monkeypatch)
         service, "_plan", lambda *_a, **_k: pytest.fail("retry must reuse the saved plan")
     )
     retried = service.retry_run(original.run_id, requested_by="7", auto_execute=False)
-    assert retried.status == "waiting_user"
+    assert retried.status == "queued"
+    assert retried.run_id == original.run_id
+    assert retried.steps[0].step_id == original.steps[0].step_id
     assert retried.steps[0].params == {"keyword": "synthetic"}
-    assert retried.metadata["provided_plan"]["nodes"][0]["tool_id"] == "customers"
+    assert retried.metadata["plan"]["nodes"][0]["tool_id"] == "customers"
 
 
 def test_sql_tenant_filter_precedes_limit_across_streaming_batches(tmp_path):

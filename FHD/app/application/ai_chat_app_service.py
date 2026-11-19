@@ -324,14 +324,31 @@ class AIChatApplicationService(
                 neuro_notify_chat_completed(user_id, message, resp)
             except RECOVERABLE_ERRORS:
                 logger.debug("neuro_notify_chat_completed skipped", exc_info=True)
+            from app.infrastructure.database.conversation_lifecycle import ConversationRevisionError
+
             try:
-                self._persist_chat_turn(user_id, message, ctx, resp)
+                resp["history_persistence"] = self._persist_chat_turn(user_id, message, ctx, resp)
+            except ConversationRevisionError:
+                resp["history_persistence"] = {"status": "invalidated", "retry": "none"}
             except RECOVERABLE_ERRORS as persist_err:
-                logger.warning("会话落库失败（已返回对话结果）: %s", persist_err)
+                resp["history_persistence"] = {
+                    "status": "failed",
+                    "retry": "save_only",
+                    "turn_id": ctx.get("turn_id"),
+                    "revision": ctx.get("_conversation_revision", 0),
+                    "conversation_id": ctx.get("session_id") or ctx.get("conversation_id"),
+                    "message": "本轮结果已返回，但历史尚未保存，请仅重试保存。",
+                }
+                logger.warning("会话落库失败（业务结果保持原状）: %s", persist_err)
             try:
-                self._persist_recallable_chat_turn(
-                    user_id=user_id, message=message, source=source, context=ctx, response_data=resp
-                )
+                if (resp.get("history_persistence") or {}).get("status") != "invalidated":
+                    self._persist_recallable_chat_turn(
+                        user_id=user_id,
+                        message=message,
+                        source=source,
+                        context=ctx,
+                        response_data=resp,
+                    )
             except RECOVERABLE_ERRORS as memory_err:
                 logger.warning("跨会话记忆写入失败（已返回对话结果）: %s", memory_err)
             try:

@@ -308,7 +308,9 @@ class DatasetRagApplicationService:
         # Rehydration runs under the repository lock; probing the embedder here
         # would block the host before the queued job can become running.
         rebuilding = any(job.status in {"queued", "running"} for job in state.rebuild_jobs.values())
-        dirty = False if rebuilding else backfill_missing_embeddings(self._vector.embedder, state)
+        dirty = backfill_missing_embeddings(
+            self._vector.embedder, state, allow_model_io=not rebuilding
+        )
         self._renumber_chunks(state)
         self._vector._sync_vector_index_locked(state)
         self._vector._refresh_index_metadata(state)

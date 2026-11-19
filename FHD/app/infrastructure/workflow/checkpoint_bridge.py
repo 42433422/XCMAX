@@ -35,6 +35,86 @@ _SNAPSHOT_CHANNEL = "__workflow__"
 _Saver = Any
 
 
+@contextmanager
+def open_run_checkpointer(repository: Any) -> Iterator[Any]:
+    """Use the run repository's database, never an unrelated process-local fallback.
+
+    In-memory repositories are explicit development/test adapters. SQL-backed
+    runs must open their real saver successfully before any graph node executes.
+    ``ClaimedRunRepository`` delegates ``transaction`` to its fenced host store.
+    """
+    transaction = getattr(repository, "transaction", None)
+    if transaction is None:
+        yield None
+        return
+    with transaction(read_only=True) as db:
+        bind = db.get_bind()
+        url = bind.url
+    if url.get_backend_name() == "sqlite":
+        if not url.database or url.database == ":memory:":
+            raise ValueError("持久任务检查点需要文件 SQLite 或 PostgreSQL")
+        from langgraph.checkpoint.sqlite import SqliteSaver
+
+        with SqliteSaver.from_conn_string(str(url.database)) as saver:
+            saver.setup()
+            yield saver
+    elif url.get_backend_name() == "postgresql":
+        from langgraph.checkpoint.postgres import PostgresSaver
+        from psycopg import Connection
+
+        # Borrow the configured engine connection so TLS, search_path and all
+        # connect_args stay identical to the host store; never reconstruct a DSN.
+        pooled = bind.raw_connection()
+        connection = pooled.driver_connection
+        if not isinstance(connection, Connection):
+            pooled.close()
+            raise ValueError("PostgreSQL 持久检查点需要 postgresql+psycopg 驱动")
+        autocommit = connection.autocommit
+        try:
+            connection.autocommit = True
+            postgres_saver = PostgresSaver(connection)
+            # Upstream schema migrations are not concurrent. Serialize only
+            # setup across processes, including CREATE INDEX CONCURRENTLY.
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT pg_advisory_lock(%s)", (7412093581,))
+                try:
+                    postgres_saver.setup()
+                finally:
+                    cursor.execute("SELECT pg_advisory_unlock(%s)", (7412093581,))
+            yield postgres_saver
+        finally:
+            try:
+                connection.autocommit = autocommit
+            finally:
+                pooled.close()
+    else:
+        raise ValueError("任务数据库没有受支持的持久检查点后端")
+
+
+def run_checkpoint_thread(run: Any, plan: Any, *, parallel: bool) -> str:
+    """Version accepted plan revisions within the immutable tenant/user/run identity."""
+    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+    from app.application.agent_orchestrator.task_models import tenant_id_of_run
+    from app.application.workflow.workflow_types import plan_fingerprint
+
+    previous = run.metadata.get("checkpoint")
+    if previous is not None and (
+        not isinstance(previous, dict)
+        or previous.get("backend") != "langgraph"
+        or previous.get("schema_version") != 1
+    ):
+        raise ValueError("任务检查点版本不受支持，需要显式迁移后恢复")
+    identity = {
+        "schema_version": 1,
+        "tenant_id": tenant_id_of_run(run),
+        "user_id": run.user_id,
+        "run_id": run.run_id,
+        "plan_sha256": plan_fingerprint(plan),
+        "parallel": parallel,
+    }
+    return "agent:" + canonical_hash(identity)
+
+
 def _snapshot(
     plan_id: str,
     step_index: int,
@@ -223,4 +303,4 @@ class LanggraphCheckpointBridge:
         return self.latest_checkpoint(plan_id)
 
 
-__all__ = ["LanggraphCheckpointBridge"]
+__all__ = ["LanggraphCheckpointBridge", "open_run_checkpointer", "run_checkpoint_thread"]

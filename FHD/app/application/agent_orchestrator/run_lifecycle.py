@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from typing import TYPE_CHECKING, Any, cast
 
 from app.application.agent_orchestrator.execution_lease import DurableExecutionLeaseMixin
@@ -14,13 +15,218 @@ def requires_retry_reconciliation(run: AgentRun) -> bool:
     )
 
 
+def continuation_conversation_error(run: AgentRun, context: dict[str, Any]) -> str:
+    """Never revive old history from a native checkpoint after clear/delete/rebinding."""
+    conversation = str(context.get("conversation_id") or "").strip()
+    session = str(context.get("session_id") or "").strip()
+    if not (conversation or session):
+        return ""
+    if conversation and session and conversation != session:
+        return "恢复任务的会话标识不一致，拒绝使用旧上下文"
+    from app.application.workflow.workflow_types import plan_from_dict
+
+    plan = plan_from_dict(run.metadata.get("plan"))
+    history_required = bool(
+        plan and any(node.tool_id == "conversation_history" for node in plan.nodes)
+    )
+    task = run.metadata.get("task_context") or {}
+    # The unified task API creates an addressable workspace even for non-chat
+    # work. Its server-owned request/plan metadata distinguishes that identity
+    # from a real conversation; caller/model runtime flags cannot opt out.
+    task_workspace = (
+        plan is not None
+        and plan.metadata.get("source") == "unified_task_api"
+        and bool(run.metadata.get("task_request"))
+        and bool(task.get("task_id"))
+        and str(task["task_id"]) == str(context.get("workspace_id") or "")
+    )
+    if task_workspace and not (session or history_required or "_conversation_revision" in context):
+        return ""
+    if not (
+        "_conversation_revision" in context
+        or history_required
+        or run.metadata.get("checkpoint")
+        or run.metadata.get("recovery")
+        or run.metadata.get("control")
+        or any(step.status == "completed" for step in run.steps)
+    ):
+        return ""
+    revision = context.get("_conversation_revision")
+    if type(revision) is not int or revision < 0:
+        return "恢复任务缺少原会话版本，不能使用旧上下文"
+    from app.application.task_conversation_store import durable_user_id
+    from app.db.session import get_db
+    from app.http.request_context import reset_current_http_request, set_current_http_request
+    from app.infrastructure.auth.agent_mod_scope import _bound_actor, agent_mod_execution_scope
+    from app.infrastructure.database.conversation_lifecycle import (
+        begin_conversation_write,
+        lock_conversation_session,
+    )
+    from app.request_active_mod_ctx import reset_request_active_mod_id, set_request_active_mod_id
+
+    try:
+        owner = durable_user_id(context.get("local_user_id") or context.get("actor_id"))
+        identities = [context.get("local_user_id"), context.get("actor_id")]
+        if str(run.user_id).isdigit():
+            identities.append(run.user_id)
+        if (
+            owner is None
+            or any(
+                value not in (None, "") and durable_user_id(value) != owner for value in identities
+            )
+            or int(_bound_actor(context).id) != owner
+        ):
+            raise ValueError("conversation owner changed")
+        # History lives in the authenticated Mod database. A background worker
+        # must restore that scope, including clearing unrelated ambient scopes.
+        token = set_request_active_mod_id("")
+        request_token = set_current_http_request(None)
+        try:
+            with agent_mod_execution_scope(context.get("_mod_authorization")), get_db() as db:
+                begin_conversation_write(db)
+                lock_conversation_session(
+                    db,
+                    session_id=conversation or session,
+                    user_id=owner,
+                    expected_revision=revision,
+                    create=False,
+                )
+        finally:
+            reset_current_http_request(request_token)
+            reset_request_active_mod_id(token)
+    except (PermissionError, ValueError):
+        return "原会话已变更、删除或授权失效，拒绝恢复旧上下文"
+    return ""
+
+
+def safe_continuation_error(run: AgentRun) -> str:
+    """Check persisted receipts and today's registry before any automatic replay."""
+    from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
+    from app.application.workflow.workflow_types import plan_from_dict, validate_plan_graph
+
+    if requires_retry_reconciliation(run):
+        return "任务执行结果尚需人工核对，不能恢复执行"
+    if str(run.metadata.get("trace_mode") or "").startswith("legacy_planner_run"):
+        return "旧执行观察记录不能自动续跑，需要人工核对"
+    plan = plan_from_dict(run.metadata.get("plan"))
+    if plan is None or not plan.nodes or validate_plan_graph(plan) or plan.plan_id != run.plan_id:
+        return "持久化计划缺失或无效，不能自动恢复"
+    steps = {step.node_id: step for step in run.steps}
+    if len(steps) != len(run.steps) or set(steps) != {node.node_id for node in plan.nodes}:
+        return "计划与执行步骤不一致，不能恢复"
+    approval_ids = plan.metadata.get("approval_required_node_ids") or []
+    if not isinstance(approval_ids, list) or any(str(value) not in steps for value in approval_ids):
+        return "持久化审批节点清单无效，不能恢复"
+    for node in plan.nodes:
+        step = steps[node.node_id]
+        if (
+            step.output.get("outcome") == "unknown"
+            or step.output.get("execution_outcome") == "unknown"
+            or step.output.get("outcome_unknown")
+            or step.output.get("reconciliation_required")
+            or step.output.get("requires_reconciliation")
+        ):
+            return "步骤执行结果尚需人工核对，不能恢复执行"
+        if (node.tool_id, node.action, node.params, node.depends_on) != (
+            step.tool_id,
+            step.action,
+            step.params,
+            step.depends_on,
+        ):
+            return "原计划与执行步骤已变化，不能恢复"
+        if step.status == "completed":
+            if step.output.get("success") is not True:
+                return "已完成步骤缺少成功回执，需要人工核对"
+            continue
+        if step.status == "skipped":
+            continue
+        spec = get_tool_action_spec(step.tool_id, step.action)
+        if (
+            node.node_id in approval_ids
+            or step.status not in {"pending", "running", "failed"}
+            or not (
+                node.idempotent
+                and step.idempotent
+                and spec is not None
+                and spec.idempotent
+                and spec.read_only
+                and node.risk == step.risk == spec.risk == "low"
+            )
+        ):
+            return "剩余步骤需要审批或结果核对，请通过原任务审批流程处理"
+    return ""
+
+
+def prepare_safe_continuation(run: AgentRun, *, requested_by: str, reason: str) -> None:
+    if error := safe_continuation_error(run):
+        raise ValueError(error)
+    for step in run.steps:
+        if step.status in {"failed", "running"}:
+            step.status, step.error, step.output = "pending", "", {}
+    for call in run.tool_calls:
+        if call.status == "running":
+            call.status, call.error, call.finished_at = (
+                "failed",
+                "worker_lease_expired",
+                utc_now_iso(),
+            )
+    run.status, run.error = "queued", ""
+    run.metadata["dispatch"] = {
+        "state": "queued",
+        "approved_step_id": "",
+        "requested_by": requested_by,
+        "queued_at": utc_now_iso(),
+    }
+    run.metadata["recovery"] = {"state": "safe_checkpoint_resume", "reason": reason}
+    run.add_event(
+        "run.continuation_queued",
+        "保留已完成步骤，等待继续执行剩余安全步骤",
+        {
+            "requested_by": requested_by,
+            "reason": reason,
+            "completed_step_ids": [s.step_id for s in run.steps if s.status == "completed"],
+        },
+    )
+
+
+def validate_safe_retry_update(run: AgentRun, previous: AgentRun) -> None:
+    """Dedicated terminal-to-queued transition; ordinary saves remain monotonic."""
+    if previous.status not in {"failed", "blocked"} or run.status != "queued":
+        raise ValueError("任务状态不允许安全续跑")
+    if error := safe_continuation_error(previous):
+        raise ValueError(error)
+    if error := safe_continuation_error(run):
+        raise ValueError(error)
+    if (run.run_id, run.user_id, run.created_at, run.metadata.get("plan")) != (
+        previous.run_id,
+        previous.user_id,
+        previous.created_at,
+        previous.metadata.get("plan"),
+    ):
+        raise ValueError("续跑不能更改原任务或计划")
+    candidate = {s.step_id: s for s in run.steps}
+    if set(candidate) != {s.step_id for s in previous.steps} or any(
+        (s.node_id, s.tool_id, s.action, s.params, s.depends_on, s.risk, s.idempotent)
+        != (
+            candidate[s.step_id].node_id,
+            candidate[s.step_id].tool_id,
+            candidate[s.step_id].action,
+            candidate[s.step_id].params,
+            candidate[s.step_id].depends_on,
+            candidate[s.step_id].risk,
+            candidate[s.step_id].idempotent,
+        )
+        or (s.status in {"completed", "skipped"} and candidate[s.step_id].to_dict() != s.to_dict())
+        for s in previous.steps
+    ):
+        raise ValueError("续跑不能重置已完成步骤的回执")
+
+
 class RunLifecycleMixin(DurableExecutionLeaseMixin):
     """Cooperative pause, resume, and cancellation for an agent orchestrator."""
 
     if TYPE_CHECKING:
-        plan_from_snapshot: Any
-        start_run: Any
-        start_task_from_plan: Any
+        execute_dispatched_run: Any
 
     _repo: Any
 
@@ -156,70 +362,38 @@ class RunLifecycleMixin(DurableExecutionLeaseMixin):
         requested_by: str = "",
         runtime_context: dict[str, Any] | None = None,
         auto_execute: bool = True,
+        authenticated_binding: dict[str, Any] | None = None,
     ) -> AgentRun | None:
         previous = self._repo.get(run_id)
         if previous is None:
             return None
         if requires_retry_reconciliation(previous):
-            raise ValueError("任务执行结果尚需人工核对，不能创建重试任务")
-        for event in reversed(previous.events):
-            if event.event_type != "run.retry_created":
-                continue
-            existing_retry_id = str(event.data.get("retry_run_id") or "").strip()
-            existing_retry = self._repo.get(existing_retry_id) if existing_retry_id else None
-            if existing_retry is not None:
-                return cast("AgentRun | None", existing_retry)
-        if previous.status not in {"failed", "cancelled", "blocked"}:
+            raise ValueError("任务执行结果尚需人工核对，不能恢复执行")
+        if previous.status == "cancelled":
+            raise ValueError("已取消任务不能自动重做，请明确发起新的业务任务")
+        if previous.status not in {"failed", "blocked"}:
             return cast("AgentRun | None", previous)
+        from app.application.agent_orchestrator.resume_transaction import retry_and_enqueue
+        from app.application.agent_orchestrator.run_sql_repository import (
+            SQLAlchemyAgentRunRepository,
+        )
 
-        previous_task = previous.metadata.get("task_context")
-        task = dict(previous_task) if isinstance(previous_task, dict) else {}
-        context = merge_runtime_context(previous, runtime_context)
-        context.update(
-            {
-                "task_id": task.get("task_id") or context.get("task_id"),
-                "conversation_id": task.get("conversation_id") or context.get("conversation_id"),
-                "parent_run_id": previous.run_id,
-                "root_run_id": task.get("root_run_id") or previous.run_id,
-                "task_attempt": int(task.get("attempt") or 1) + 1,
-                "task_title": task.get("title") or previous.message,
-                "workspace_id": task.get("workspace_id") or context.get("workspace_id"),
-                "workspace_path": task.get("workspace_path") or context.get("workspace_path"),
-                "workspace_isolation": task.get("isolation") or context.get("workspace_isolation"),
-            }
-        )
-        provided_plan = previous.metadata.get("provided_plan") or previous.metadata.get("plan")
-        if isinstance(provided_plan, dict) and provided_plan.get("nodes"):
-            retry_plan = self.plan_from_snapshot(provided_plan)
-            retry_plan.plan_id = f"{retry_plan.plan_id}:retry:{previous.run_id}"
-            retried = self.start_task_from_plan(
-                user_id=previous.user_id,
-                message=previous.message,
-                plan=retry_plan,
-                runtime_context=context,
+        if isinstance(self._repo, SQLAlchemyAgentRunRepository):
+            return retry_and_enqueue(
+                self._repo,
+                run_id=run_id,
+                principal_id=requested_by,
+                runtime_context=runtime_context or {},
+                authenticated_binding=authenticated_binding,
             )
-        else:
-            retried = self.start_run(
-                user_id=previous.user_id,
-                message=previous.message,
-                runtime_context=context,
-                auto_execute=auto_execute,
-            )
-        for key in ("task_model", "task_request", "task_request_fingerprint"):
-            if key in previous.metadata:
-                retried.metadata[key] = previous.metadata[key]
-        retried.add_event(
-            "run.retried",
-            "任务已重新执行",
-            {"parent_run_id": previous.run_id, "requested_by": requested_by},
-        )
-        previous.add_event(
-            "run.retry_created",
-            "已创建新的重试任务",
-            {"retry_run_id": retried.run_id, "requested_by": requested_by},
-        )
-        self._repo.save(previous)
-        return cast("AgentRun | None", self._repo.save(retried))
+        run = copy.deepcopy(previous)
+        run.metadata["runtime_context"] = merge_runtime_context(run, runtime_context)
+        prepare_safe_continuation(run, requested_by=requested_by, reason="explicit_retry")
+        if not self._repo.save_retry_if_unchanged(run, previous):
+            raise ValueError("任务状态已变化，请刷新后重试")
+        if auto_execute:
+            return cast("AgentRun | None", self.execute_dispatched_run(run_id))
+        return cast("AgentRun", self._repo.get(run_id))
 
     def _apply_requested_control(self, run: AgentRun) -> bool:
         command = self._repo.latest_task_control(run.run_id)

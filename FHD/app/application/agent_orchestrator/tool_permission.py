@@ -12,6 +12,7 @@ import os
 import sqlite3
 import threading
 import uuid
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Any, cast
 
@@ -850,6 +851,46 @@ def recover_idempotent_claims() -> dict[str, int]:
 def begin_idempotent_replay(
     context: dict[str, Any], tool_id: str, action: str, params: dict[str, Any]
 ) -> tuple[str, dict[str, Any] | None]:
+    from app.application.agent_orchestrator.business_write_guard import worker_claim_guard
+    from app.application.agent_orchestrator.worker_repository import WorkerLeaseLost
+
+    spec = get_tool_action_spec(tool_id, action)
+    safe_read = spec is not None and spec.read_only and spec.idempotent and spec.risk == "low"
+    with _IDEMPOTENCY_LOCK:
+        with worker_claim_guard() if safe_read else nullcontext() as claim:
+            if (
+                claim is not None
+                and str(context.get("run_id") or context.get("agent_run_id") or "") != claim[0]
+            ):
+                raise WorkerLeaseLost("read claim does not belong to the current task")
+            return _begin_idempotent_replay(context, tool_id, action, params, read_claim=claim)
+
+
+def _read_claim_marker(claim: tuple[str, str, int]) -> str:
+    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+
+    run_id, owner_id, generation = claim
+    return f"read-lease-v1:{canonical_hash(run_id)}:{generation}:{canonical_hash(owner_id)}:"
+
+
+def _expired_read_claim(owner: str, claim: tuple[str, str, int]) -> bool:
+    parts = owner.split(":")
+    expected = _read_claim_marker(claim).split(":")
+    if len(parts) == 6 and parts[1] == "read-lease-v1":
+        return parts[2] == expected[1] and parts[3].isdigit() and int(parts[3]) < claim[2]
+    # Existing claims predate queue-generation markers. Only proven process
+    # death can release a legacy read, never a live/unknown owner or any write.
+    return _owner_liveness(owner) == "dead"
+
+
+def _begin_idempotent_replay(
+    context: dict[str, Any],
+    tool_id: str,
+    action: str,
+    params: dict[str, Any],
+    *,
+    read_claim: tuple[str, str, int] | None,
+) -> tuple[str, dict[str, Any] | None]:
     """Return a stored result or atomically claim a new key. Unknown effects cannot replay."""
     key = idempotency_scope_key(context, tool_id, action, params)
     if key.endswith(":"):
@@ -865,98 +906,110 @@ def begin_idempotent_replay(
             action=action,
             reason="idempotency_fingerprint_rejected",
         )
-    with _IDEMPOTENCY_LOCK:
-        receipt_marker = (
-            "customer-receipt-v1:" if (tool_id, action) == ("customers", "create") else ""
+    receipt_marker = (
+        _read_claim_marker(read_claim)
+        if read_claim is not None
+        else "customer-receipt-v1:"
+        if (tool_id, action) == ("customers", "create")
+        else ""
+    )
+    owner = f"{os.getpid()}:{receipt_marker}{uuid.uuid4().hex}"
+    record = {"fingerprint": fingerprint, "inflight": True, "output": None, "owner": owner}
+    current = _try_claim(key, record)
+    if current is None:
+        _IDEMPOTENCY[key] = record
+        _LIVE_OWNERS.add(owner)
+        return key, None
+    if current.get("fingerprint") != fingerprint:
+        return key, _denial(
+            "idempotency_conflict",
+            "相同幂等键不能改用新的执行参数",
+            context=context,
+            tool_id=tool_id,
+            action=action,
+            reason="idempotency_conflict",
         )
-        owner = f"{os.getpid()}:{receipt_marker}{uuid.uuid4().hex}"
-        record = {"fingerprint": fingerprint, "inflight": True, "output": None, "owner": owner}
-        current = _try_claim(key, record)
-        if current is None:
-            _IDEMPOTENCY[key] = record
-            _LIVE_OWNERS.add(owner)
-            return key, None
-        if current.get("fingerprint") != fingerprint:
-            return key, _denial(
-                "idempotency_conflict",
-                "相同幂等键不能改用新的执行参数",
-                context=context,
-                tool_id=tool_id,
-                action=action,
-                reason="idempotency_conflict",
-            )
-        cached = current.get("output")
-        saved = _retained_result(cached) if isinstance(cached, dict) else None
-        if not current.get("inflight") and saved is not None:
-            return key, saved
-        if (
-            current.get("inflight")
-            and tool_id == "customers"
-            and action == "create"
-            and _owner_liveness(str(current.get("owner") or "")) == "dead"
-        ):
-            effect, receipt = _customer_create_effect(
-                str(context.get("tenant_id") or ""),
-                params,
-                key=key,
-                fingerprint=fingerprint,
-                receipted=":customer-receipt-v1:" in str(current.get("owner") or ""),
-            )
-            owner = str(current.get("owner") or "")
-            if effect == "matched" and receipt is not None:
-                if _complete_dead_claim(key, owner, receipt):
-                    current["inflight"] = False
-                    current["output"] = receipt
-                    _IDEMPOTENCY[key] = current
-                    return key, receipt
-                latest = _reread_claim(key)
-                replay = latest.get("output") if isinstance(latest, dict) else None
-                restored = _retained_result(replay) if isinstance(replay, dict) else None
-                if restored is not None and restored.get("success") is True:
+    cached = current.get("output")
+    saved = _retained_result(cached) if isinstance(cached, dict) else None
+    if not current.get("inflight") and saved is not None:
+        return key, saved
+    if (
+        current.get("inflight")
+        and read_claim is not None
+        and _expired_read_claim(str(current.get("owner") or ""), read_claim)
+        and _replace_dead_claim(key, str(current["owner"]), fingerprint, owner)
+    ):
+        # The caller still holds the current queue generation's SQL lock.
+        # The previous owner cannot complete its receipt after this CAS.
+        _IDEMPOTENCY[key] = record
+        _LIVE_OWNERS.add(owner)
+        return key, None
+    if (
+        current.get("inflight")
+        and tool_id == "customers"
+        and action == "create"
+        and _owner_liveness(str(current.get("owner") or "")) == "dead"
+    ):
+        effect, receipt = _customer_create_effect(
+            str(context.get("tenant_id") or ""),
+            params,
+            key=key,
+            fingerprint=fingerprint,
+            receipted=":customer-receipt-v1:" in str(current.get("owner") or ""),
+        )
+        owner = str(current.get("owner") or "")
+        if effect == "matched" and receipt is not None:
+            if _complete_dead_claim(key, owner, receipt):
+                current["inflight"] = False
+                current["output"] = receipt
+                _IDEMPOTENCY[key] = current
+                return key, receipt
+            latest = _reread_claim(key)
+            replay = latest.get("output") if isinstance(latest, dict) else None
+            restored = _retained_result(replay) if isinstance(replay, dict) else None
+            if restored is not None and restored.get("success") is True:
+                return key, restored
+        elif effect == "absent":
+            new_owner = f"{os.getpid()}:{receipt_marker}{uuid.uuid4().hex}"
+            if _replace_dead_claim(key, owner, fingerprint, new_owner):
+                record["owner"] = new_owner
+                _IDEMPOTENCY[key] = record
+                _LIVE_OWNERS.add(new_owner)
+                return key, None
+            latest = _reread_claim(key)
+            if latest is not None and str(latest.get("owner") or "") != owner:
+                saved_latest = latest.get("output")
+                restored = (
+                    _retained_result(saved_latest) if isinstance(saved_latest, dict) else None
+                )
+                if not latest.get("inflight") and restored is not None:
                     return key, restored
-            elif effect == "absent":
-                new_owner = f"{os.getpid()}:{receipt_marker}{uuid.uuid4().hex}"
-                if _replace_dead_claim(key, owner, fingerprint, new_owner):
-                    record["owner"] = new_owner
-                    _IDEMPOTENCY[key] = record
-                    _LIVE_OWNERS.add(new_owner)
-                    return key, None
-                latest = _reread_claim(key)
-                if latest is not None and str(latest.get("owner") or "") != owner:
-                    saved_latest = latest.get("output")
-                    restored = (
-                        _retained_result(saved_latest) if isinstance(saved_latest, dict) else None
-                    )
-                    if not latest.get("inflight") and restored is not None:
-                        return key, restored
-                    if _owner_liveness(str(latest.get("owner") or "")) == "alive":
-                        return key, {
-                            **_denial(
-                                "idempotency_in_progress",
-                                "相同幂等键的调用仍在执行或结果待核验，不可重复执行",
-                                context=context,
-                                tool_id=tool_id,
-                                action=action,
-                                reason="idempotency_in_progress",
-                            ),
-                            "outcome": "unknown",
-                            "reconciliation_required": True,
-                        }
-        code = (
-            "idempotency_in_progress" if current.get("inflight") else "idempotency_outcome_unknown"
-        )
-        return key, {
-            **_denial(
-                code,
-                "相同幂等键的调用仍在执行或结果待核验，不可重复执行",
-                context=context,
-                tool_id=tool_id,
-                action=action,
-                reason=code,
-            ),
-            "outcome": "unknown",
-            "reconciliation_required": True,
-        }
+                if _owner_liveness(str(latest.get("owner") or "")) == "alive":
+                    return key, {
+                        **_denial(
+                            "idempotency_in_progress",
+                            "相同幂等键的调用仍在执行或结果待核验，不可重复执行",
+                            context=context,
+                            tool_id=tool_id,
+                            action=action,
+                            reason="idempotency_in_progress",
+                        ),
+                        "outcome": "unknown",
+                        "reconciliation_required": True,
+                    }
+    code = "idempotency_in_progress" if current.get("inflight") else "idempotency_outcome_unknown"
+    return key, {
+        **_denial(
+            code,
+            "相同幂等键的调用仍在执行或结果待核验，不可重复执行",
+            context=context,
+            tool_id=tool_id,
+            action=action,
+            reason=code,
+        ),
+        "outcome": "unknown",
+        "reconciliation_required": True,
+    }
 
 
 def finish_idempotent_replay(key: str, output: dict[str, Any]) -> None:
@@ -970,7 +1023,18 @@ def finish_idempotent_replay(key: str, output: dict[str, Any]) -> None:
         if owner not in _LIVE_OWNERS or not owner.startswith(f"{os.getpid()}:"):
             return
         saved = _retained_result(output)
-        _finish_claim(key, owner, saved)
+        if ":read-lease-v1:" in owner:
+            from app.application.agent_orchestrator.business_write_guard import worker_claim_guard
+            from app.application.agent_orchestrator.worker_repository import WorkerLeaseLost
+
+            with worker_claim_guard() as claim:
+                if claim is None or not owner.startswith(
+                    f"{os.getpid()}:{_read_claim_marker(claim)}"
+                ):
+                    raise WorkerLeaseLost("read receipt belongs to another queue generation")
+                _finish_claim(key, owner, saved)
+        else:
+            _finish_claim(key, owner, saved)
         _LIVE_OWNERS.discard(owner)
         if saved is not None:
             current["output"] = saved
@@ -1150,8 +1214,16 @@ def overlay_resume_context(
     stored: dict[str, Any] | None, incoming: dict[str, Any] | None
 ) -> dict[str, Any]:
     """Resume may add notes. It cannot replace tenant, actor, or employee authority."""
+    from app.application.agent_orchestrator.runtime_context import (
+        CONVERSATION_CONTEXT_FIELDS,
+        validate_conversation_context,
+    )
+
     merged = dict(stored or {})
+    validate_conversation_context(merged, dict(incoming or {}))
     for key, value in dict(incoming or {}).items():
+        if key in CONVERSATION_CONTEXT_FIELDS:
+            continue
         if key in _SERVER_FIELDS and merged.get(key) not in (None, "", [], {}):
             continue
         if key in _UNTRUSTED_CONTROL:

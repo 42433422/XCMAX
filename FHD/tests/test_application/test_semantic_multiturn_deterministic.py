@@ -247,7 +247,7 @@ def test_s4_approved_step_writes_database_and_verifies_readback(trusted_actor) -
             assert int(other.price) == 10, "未选中的候选不应被修改"
 
 
-def test_s1_recent_turns_reach_planner_prompt(monkeypatch, tmp_path) -> None:
+def test_s1_recent_turns_reach_planner_prompt(monkeypatch, tmp_path, dialogue_db) -> None:
     from app.application.ai_chat.dialogue_memory import (
         prepare_chat_turn,
         recent_conversation_messages,

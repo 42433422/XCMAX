@@ -546,6 +546,19 @@ wheels = [
 ]
 
 [[package]]
+name = "bm25s"
+version = "0.3.16"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "numpy", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/95/de/f888ccc0787164b4cf60b318b2225dbc21519beaf099cf2cf7424ca6f616/bm25s-0.3.16.tar.gz", hash = "sha256:96301f99558c2318a889abfe1bc27cf53dc225f3860cdf03b0aaa5e72f8f4a2e", size = 81944, upload-time = "2026-10-28T18:49:06.05Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/dc/5f/73f19cc86ecfd4533f0a82e55e689d5cbc4b5f845526a191316c17d38ee6/bm25s-0.3.16-py3-none-any.whl", hash = "sha256:65d973bd496de883ae525955379e3e7cf90a12c3d54ed175036315ae677512c9", size = 76043, upload-time = "2026-10-28T18:49:04.47Z" },
+]
+
+[[package]]
 name = "boolean-py"
 version = "5.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2894,6 +2907,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/b6/a5/607e533ed6c83ae1a696969b8e1c137dfebd5759a2e9682e26ff1b97740b/kombu-5.6.2.tar.gz", hash = "sha256:8060497058066c6f5aed7c26d7cd0d3b574990b09de842a8c5aaed0b92cc5a55", size = 472594, upload-time = "2025-12-29T20:30:07.779Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/fb/0f/834427d8c03ff1d7e867d3db3d176470c64871753252b21b4f4897d1fa45/kombu-5.6.2-py3-none-any.whl", hash = "sha256:efcfc559da324d41d61ca311b0c64965ea35b4c55cc04ee36e55386145dace93", size = 214219, upload-time = "2025-12-29T20:30:05.74Z" },
+]
+
+[[package]]
+name = "langchain"
+version = "1.3.14"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "langchain-core" },
+    { name = "langgraph" },
+    { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/29/68/a6dbad9c22df4087a0f9e79ddd46226c442b30128bfeee538d5889492a73/langchain-1.3.14.tar.gz", hash = "sha256:1b6696c72ba3bbbce54d745e0180742c9f6ece8bbc59ed5a46c3e20b9a435929", size = 645181, upload-time = "2026-07-16T13:28:18.29Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a9/ec/0f942e78a621f8e3162ff1ed24284f469aaf51fb4607ee5831c626f2b2bc/langchain-1.3.14-py3-none-any.whl", hash = "sha256:4d10dbe91005952cddd56d0dc77aa108964da6bae90ab20063653957e901f782", size = 139560, upload-time = "2026-07-16T13:28:16.498Z" },
 ]
 
 [[package]]
@@ -8363,6 +8390,8 @@ name = "xcagi"
 version = "1.0.0.7"
 source = { editable = "." }
 dependencies = [
+    { name = "filelock" },
+    { name = "langchain" },
     { name = "langchain-core" },
     { name = "langgraph" },
     { name = "langgraph-checkpoint" },
@@ -8430,6 +8459,7 @@ server-api = [
     { name = "alembic" },
     { name = "apscheduler" },
     { name = "av" },
+    { name = "bm25s" },
     { name = "boto3" },
     { name = "celery" },
     { name = "defusedxml" },
@@ -8437,6 +8467,7 @@ server-api = [
     { name = "email-validator" },
     { name = "fastapi" },
     { name = "faster-whisper" },
+    { name = "filelock" },
     { name = "gevent" },
     { name = "gunicorn" },
     { name = "httpx" },
@@ -8487,13 +8518,14 @@ server-api = [
 
 [package.metadata]
 requires-dist = [
-    { name = "apprise", marker = "extra == 'proactive-push'", specifier = ">=1.12,<2" },
     { name = "accelerate", marker = "extra == 'ml'", specifier = ">=0.25.0" },
     { name = "aiofiles", marker = "extra == 'server-api'", specifier = ">=23.2.1" },
     { name = "alembic", marker = "extra == 'server-api'", specifier = ">=1.13.0" },
+    { name = "apprise", marker = "extra == 'proactive-push'", specifier = ">=1.12,<2" },
     { name = "apscheduler", marker = "extra == 'server-api'", specifier = ">=3.10,<4" },
     { name = "av", marker = "extra == 'server-api'", specifier = ">=17.1,<18" },
     { name = "bandit", marker = "extra == 'dev'", specifier = ">=1.7" },
+    { name = "bm25s", marker = "extra == 'server-api'", specifier = "==0.3.16" },
     { name = "boto3", marker = "extra == 'server-api'", specifier = ">=1.34,<2" },
     { name = "boto3-stubs", extras = ["s3"], marker = "extra == 'dev'", specifier = "==1.44.5" },
     { name = "celery", marker = "extra == 'server-api'", specifier = "==5.6.3" },
@@ -8506,6 +8538,7 @@ requires-dist = [
     { name = "fastembed", marker = "extra == 'intent-semantic'", specifier = ">=0.7" },
     { name = "faster-whisper", marker = "extra == 'ml'", specifier = ">=1.0.0" },
     { name = "faster-whisper", marker = "extra == 'server-api'", specifier = ">=1.0.0" },
+    { name = "filelock", specifier = "==4.2.4" },
     { name = "gevent", marker = "extra == 'server-api'", specifier = ">=25.4.2" },
     { name = "gunicorn", marker = "extra == 'server-api'", specifier = ">=22.0.0" },
     { name = "httpx", marker = "extra == 'server-api'", specifier = "==0.28.1" },
@@ -8516,6 +8549,7 @@ requires-dist = [
     { name = "json-repair", marker = "extra == 'server-api'", specifier = "==0.64.9" },
     { name = "jsonschema", marker = "extra == 'dev'", specifier = ">=4.23" },
     { name = "jsonschema", marker = "extra == 'server-api'", specifier = "==4.26.0" },
+    { name = "langchain", specifier = "==1.3.14" },
     { name = "langchain-core", specifier = "==1.5.3" },
     { name = "langgraph", editable = "packages/xcagi_langgraph_core" },
     { name = "langgraph-checkpoint", editable = "packages/xcagi_langgraph_checkpoint" },

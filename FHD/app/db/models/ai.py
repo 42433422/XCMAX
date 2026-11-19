@@ -5,7 +5,7 @@ import logging
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Optional, cast
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.db_base import Base
@@ -54,6 +54,7 @@ class AITool(Base):
 
 class AIConversation(Base):
     __tablename__ = "ai_conversations"
+    __table_args__ = (Index("ix_ai_conversations_owner_cursor", "session_id", "user_id", "id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     session_id: Mapped[str] = mapped_column(
@@ -84,6 +85,8 @@ class AIConversationSession(Base):
     title: Mapped[Optional[str]] = mapped_column(String)
     summary: Mapped[Optional[str]] = mapped_column(String)
     message_count: Mapped[int] = mapped_column(Integer, default=0)
+    revision: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     last_message_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     created_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
 

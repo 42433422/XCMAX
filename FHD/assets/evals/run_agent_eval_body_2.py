@@ -397,6 +397,7 @@ def _run_memory_v2_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     from fastapi.testclient import TestClient
 
     from app.application.agent_orchestrator import InMemoryAgentRunRepository
+    from app.application.agent_task_context import scoped_personal_memory_id
     from app.fastapi_routes.domains.misc.misc_routes import router
     from app.services import user_memory_service as memory_mod
 
@@ -421,6 +422,7 @@ def _run_memory_v2_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
         }
         with ExitStack() as stack:
             user_id = str(stack.enter_context(_authenticated_route_fixture(client)))
+            memory_owner = scoped_personal_memory_id({"actor_id": user_id, "tenant_id": "7"})
             stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
             stack.enter_context(patch.object(memory_mod, "MEMORY_DIR", str(memory_dir)))
             stack.enter_context(
@@ -444,7 +446,7 @@ def _run_memory_v2_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
                 else:
                     service = memory_mod.get_user_memory_service()
                     seed = service.propose_memory_candidate(
-                        user_id,
+                        memory_owner,
                         "preference",
                         "favorite_customer",
                         "ACME Trading",
@@ -453,7 +455,7 @@ def _run_memory_v2_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
                     )
                     memory_id = str((seed.get("candidate") or {}).get("memory_id") or "")
                     if action in {"correct", "delete"}:
-                        service.confirm_memory_candidate(user_id, memory_id)
+                        service.confirm_memory_candidate(memory_owner, memory_id)
                     body.setdefault("user_id", user_id)
                     if action == "confirm":
                         path = f"/memory/v2/{memory_id}/confirm"

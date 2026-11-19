@@ -2,8 +2,8 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 import type { UiChatMessage } from '@/types/chat-ui'
 import { localMessagePersistence, samePersistedMessage, useChatMessagePersistence } from './useChatMessagePersistence'
-const { save } = vi.hoisted(() => ({ save: vi.fn() }))
-vi.mock('@/api/chat', () => ({ default: { saveMessage: save } }))
+const { save, retryTurn } = vi.hoisted(() => ({ save: vi.fn(), retryTurn: vi.fn() }))
+vi.mock('@/api/chat', () => ({ default: { saveMessage: save, retryTurnPersistence: retryTurn } }))
 beforeEach(() => save.mockReset())
 
 function setup() {
@@ -132,4 +132,16 @@ it('does not merge a legacy failed reply with an unrelated same-minute successfu
   expect(samePersistedMessage({ ...local, workflowAction: 'failed' }, server, text => text)).toBe(false)
   expect(samePersistedMessage({ ...local, workflowAction: 'failed' }, { ...server, workflowAction: 'failed' }, text => text)).toBe(true)
   expect(samePersistedMessage({ ...local, content: '订单 B' }, server, text => text)).toBe(false)
+})
+
+it('repairs the original whole turn without calling message save or the planner', async () => {
+  const state = setup()
+  const message = state.messages.value[0]
+  message.persistence = { id: 'receipt:turn-1', status: 'failed',
+    request: { role: 'ai', content: 'original receipt', turn_id: 'turn-1', expected_revision: 7 } }
+  retryTurn.mockResolvedValueOnce({ success: true, saved: true, durable: true })
+  await state.api.retryMessageSave('receipt:turn-1')
+  expect(retryTurn).toHaveBeenCalledWith('session-a', 'turn-1', 7)
+  expect(save).not.toHaveBeenCalled()
+  expect(message.persistence.status).toBe('saved')
 })
