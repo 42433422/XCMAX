@@ -269,8 +269,7 @@ def parse_customer_product_regions(
         if target_type == "shipment_records":
             _facade()._attach_delivery_fingerprints(parsed_rows)
         sheet_domain_hints = {
-            worksheet.title: _facade()._sheet_domain_hint(worksheet)
-            for worksheet in worksheets
+            worksheet.title: _facade()._sheet_domain_hint(worksheet) for worksheet in worksheets
         }
         canonical_candidates: dict[str, set[str]] = {}
         for region in regions:

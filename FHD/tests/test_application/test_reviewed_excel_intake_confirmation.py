@@ -506,7 +506,9 @@ def test_private_intake_requires_preview_and_unscoped_attendance_is_refused(inta
     assert_no_writes(store)
 
 
-def test_archived_attendance_matrix_is_routed_to_the_attendance_workspace(intake_store, monkeypatch):
+def test_archived_attendance_matrix_is_routed_to_the_attendance_workspace(
+    intake_store, monkeypatch
+):
     store = intake_store
     data = review(store)
     workbook = Workbook()

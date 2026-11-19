@@ -325,7 +325,9 @@ def test_hidden_delivery_sheet_does_not_choose_or_feed_a_business_target(tmp_pat
     parsed = parse_file(path, target_type="customer_products")
     try:
         assert {row.sheet for row in parsed.rows} <= {"回款台账"}
-        assert {"name": "旧送货单", "reason": "hidden_sheet"} in parsed.source_features["skipped_sheets"]
+        assert {"name": "旧送货单", "reason": "hidden_sheet"} in parsed.source_features[
+            "skipped_sheets"
+        ]
     finally:
         parsed.close()
 
