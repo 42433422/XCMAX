@@ -30,6 +30,8 @@ const sessionMocks = vi.hoisted(() => {
 
 import { app, BrowserWindow } from 'electron'
 import fs from 'node:fs'
+import http from 'node:http'
+import { createHmac } from 'node:crypto'
 import { waitForBackendPing, waitForBackendApplicationReady, waitForBackendStatus } from './backend-process'
 vi.mock('electron', () => ({
   BrowserWindow: vi.fn(),
@@ -54,6 +56,7 @@ vi.mock('./backend-process', () => ({
 vi.mock('./desktop-config', () => ({
   APP_NAME: 'XCAGI',
   DEFAULT_PORT: 17500,
+  isDesktopPackaged: vi.fn(() => false),
   desktopInitialUrl: vi.fn(() => 'http://127.0.0.1:17500/'),
   markFrontendCacheCleared: vi.fn(),
   shellIconPath: vi.fn(() => '/tmp/icon.png'),
@@ -66,7 +69,7 @@ vi.mock('./window-state', () => ({
   readWindowState: vi.fn(() => null),
   writeWindowState: vi.fn(),
 }))
-vi.mock('./rollback', () => ({ checkPendingRollback: vi.fn(() => null) }))
+vi.mock('./rollback', () => ({ checkPendingRollback: vi.fn(() => null), cancelPreparedRollback: vi.fn() }))
 vi.mock('./updater', () => ({ configureUpdater: vi.fn() }))
 vi.mock('./desktop-navigation', () => ({
   handleDesktopWindowOpen: vi.fn(),
@@ -83,7 +86,9 @@ import { moveDesktopAssistant, resizeDesktopAssistant, syncDesktopAssistant } fr
 import { checkPendingRollback } from './rollback'
 import { reportRendererError } from './desktop-resilience'
 import { writeBackendLog } from './backend-process'
-vi.mock('./desktop-resilience', () => ({ reportRendererError: vi.fn() }))
+import { desktopInitialUrl } from './desktop-config'
+import { desktopWorkspaceToken } from './backend-env'
+vi.mock('./desktop-resilience', () => ({ reportRendererError: vi.fn(), createForceUpgradeHandler: vi.fn(() => vi.fn()) }))
 function makeWindow(overrides: Partial<{
   isVisible: boolean
   isMinimized: boolean
@@ -105,6 +110,8 @@ function makeWindow(overrides: Partial<{
   return win as unknown as NonNullable<typeof desktopRuntime.mainWindow>
 }
 beforeEach(() => {
+  desktopRuntime.backendProcess = { pid: 123, exitCode: null, signalCode: null } as NonNullable<typeof desktopRuntime.backendProcess>
+  desktopRuntime.verifiedBackendProcess = desktopRuntime.backendProcess
   desktopRuntime.splashUrl = ''
   desktopRuntime.mainWindow = null
   desktopRuntime.assistantWindow = null
@@ -114,6 +121,52 @@ beforeEach(() => {
   desktopRuntime.auxiliaryWindows.clear()
   vi.mocked(BrowserWindow).mockReset()
   vi.mocked(isTrustedDesktopOrigin).mockReset()
+})
+
+it.each(['absent', 'unsigned', 'verified'])('loads only an owned listener despite public healthy startup responses: %s', async ownership => {
+  let loadedUnownedPage = false
+  const server = http.createServer((request, response) => {
+    response.setHeader('Server', 'uvicorn')
+    response.setHeader('Content-Type', 'application/json')
+    if (request.url?.startsWith('/api/ping')) {
+      const nonce = new URL(request.url, 'http://localhost').searchParams.get('desktop_challenge')
+      if (ownership === 'verified' && nonce) response.setHeader('X-XCAGI-Desktop-Proof',
+        createHmac('sha256', desktopWorkspaceToken).update(`xcagi-desktop-backend-v1:${nonce}`).digest('hex'))
+      response.end('{"pong":true}')
+    }
+    else if (request.url === '/api/desktop/status') response.end('{"appRoutesReady":true,"readyForUi":true}')
+    else if (request.url === '/api/health') response.end('{"status":"healthy"}')
+    else { loadedUnownedPage = true; response.end('{"unowned":true}') }
+  })
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
+  const port = (server.address() as { port: number }).port
+  const origin = `http://127.0.0.1:${port}`
+  const real = await vi.importActual<typeof import('./backend-process')>('./backend-process')
+  vi.mocked(waitForBackendPing).mockImplementation(() => real.waitForBackendPing(port, 250))
+  vi.mocked(waitForBackendApplicationReady).mockImplementation(() => real.waitForBackendApplicationReady(port, 250, { skipPing: true }))
+  vi.mocked(waitForBackendStatus).mockImplementation(() => real.waitForBackendStatus(port, 250))
+  vi.mocked(desktopInitialUrl).mockReturnValue(`${origin}/`)
+  if (ownership === 'absent') desktopRuntime.backendProcess = null
+  desktopRuntime.verifiedBackendProcess = null
+  const win = Object.assign(makeWindow(), {
+    on: vi.fn(), once: vi.fn(), setAutoHideMenuBar: vi.fn(), setMenuBarVisibility: vi.fn(),
+    loadURL: vi.fn(async (url: string) => { if (url.startsWith(origin)) await (await fetch(url)).text() }),
+    webContents: {
+      on: vi.fn(), getURL: vi.fn(() => 'file:///trusted/splash.html'), setWindowOpenHandler: vi.fn(),
+      session: { on: vi.fn() }, executeJavaScript: vi.fn(async () => undefined),
+    },
+  })
+  vi.mocked(BrowserWindow).mockImplementationOnce(function () { return win as unknown as BrowserWindow })
+  try {
+    await createWindow()
+    await desktopRuntime.mainApplicationReady?.catch(() => undefined)
+    expect(loadedUnownedPage).toBe(ownership === 'verified')
+    expect(win.loadURL).toHaveBeenCalledTimes(ownership === 'verified' ? 2 : 1)
+  } finally {
+    vi.mocked(desktopInitialUrl).mockReturnValue('http://127.0.0.1:17500/')
+    server.closeAllConnections()
+    await new Promise<void>(resolve => server.close(() => resolve()))
+  }
 })
 
 it('shows a single independent assistant only while the main window is hidden and enabled', async () => {

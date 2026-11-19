@@ -15,7 +15,7 @@ import {
   readPackagedProductSku,
   repoRoot,
 } from './desktop-config'
-import { desktopRuntime } from './runtime-state'
+import { desktopRuntime, hasVerifiedDesktopBackend, isLiveDesktopBackend } from './runtime-state'
 import {
   attachDatabaseBackupToRollback,
   cancelPreparedRollback,
@@ -27,7 +27,7 @@ import {
   type RollbackTriggerResult,
 } from './rollback'
 import { relayBackendOutput, terminateChildProcess, waitForChildExit } from './backend-lifecycle'
-import { desktopBackendEnv } from './backend-env'
+import { desktopBackendChallenge, desktopBackendEnv } from './backend-env'
 import { sanitizeBackendProxyEnv } from './backend-env-utils'
 import { createForceUpgradeHandler } from './desktop-resilience'
 import { loopbackHttpGet } from './backend-loopback-http'
@@ -118,19 +118,7 @@ export async function waitForBackendPing(
 ): Promise<void> {
   const started = Date.now()
   while (Date.now() - started <= timeoutMs) {
-    try {
-      const response = await loopbackHttpGet(`http://127.0.0.1:${port}/api/ping`, 2_000)
-      const server = (response.getHeader('server') || '').toLowerCase()
-      if (response.ok && server.includes('uvicorn')) {
-        desktopRuntime.startupMarks.backendHealthMs = Date.now() - (desktopRuntime.startupMarks.backendSpawnMs ?? started)
-        return
-      }
-      if (server.includes('airtunes')) {
-        console.warn(`[xcagi-desktop] 端口 ${port} 被 macOS 隔空播放占用，等待 XCAGI 后端…`)
-      }
-    } catch {
-      /* backend still booting */
-    }
+    if (await probeBackendPing(port, 2_000)) return
     await new Promise(resolve => setTimeout(resolve, 150))
   }
   const airplayHint =
@@ -174,21 +162,33 @@ function broadcastBackendHealth(state: 'unhealthy' | 'restarting' | 'ready'): vo
   }
 }
 
-async function probeBackendPing(): Promise<boolean> {
+async function probeBackendPing(port = DEFAULT_PORT, timeoutMs = 3_000): Promise<boolean> {
+  const owner = desktopRuntime.backendProcess
   try {
-    const response = await loopbackHttpGet(`http://127.0.0.1:${DEFAULT_PORT}/api/ping`, 3_000)
-    return response.ok
-  } catch {
-    return false
-  }
+    if (isLiveDesktopBackend(owner)) {
+      const challenge = desktopBackendChallenge()
+      const response = await loopbackHttpGet(`http://127.0.0.1:${port}/api/ping?desktop_challenge=${challenge.nonce}`, timeoutMs)
+      if (response.ok && response.getHeader('server').toLowerCase().includes('uvicorn')
+        && challenge.verify(response.getHeader('x-xcagi-desktop-proof'))
+        && desktopRuntime.backendProcess === owner && isLiveDesktopBackend(owner)) {
+        desktopRuntime.verifiedBackendProcess = owner
+        desktopRuntime.startupMarks.backendHealthMs ??= Date.now() - (desktopRuntime.startupMarks.backendSpawnMs ?? Date.now())
+        return true
+      }
+    }
+  } catch { /* A missing or unproven listener never establishes ownership. */ }
+  if (desktopRuntime.verifiedBackendProcess === owner) desktopRuntime.verifiedBackendProcess = null
+  return false
 }
 
 async function runHealthCheck(): Promise<void> {
   if (app.isQuitting || migrationStopInProgress || healthRestartInFlight) return
   if (!desktopRuntime.backendProcess) return
+  const wasVerified = hasVerifiedDesktopBackend()
   if (await probeBackendPing()) {
     healthFailures = 0
     healthEverReady = true
+    if (!wasVerified) broadcastBackendHealth('ready')
     return
   }
   // 首次就绪前不判定失联，避免把冷启动阶段的探测失败当成故障。
@@ -427,6 +427,9 @@ export async function startBackend(): Promise<void> {
   desktopRuntime.startupMarks.backendHealthMs = undefined
   writeBackendLog(`[spawn] ${executable.command} ${executable.args.join(' ')}\n`)
   writeBackendLog(`[cwd] ${executable.cwd}\n`)
+  desktopRuntime.verifiedBackendProcess = null
+  healthEverReady = false
+  healthFailures = 0
   const child = spawn(executable.command, executable.args, {
     cwd: executable.cwd,
     env: desktopBackendEnv({
@@ -453,9 +456,11 @@ export async function startBackend(): Promise<void> {
   child.stdout.on('data', data => relayBackendOutput('stdout', data, isDesktopPackaged(), writeBackendLog))
   child.stderr.on('data', data => relayBackendOutput('stderr', data, isDesktopPackaged(), writeBackendLog))
   child.on('error', error => {
+    if (desktopRuntime.verifiedBackendProcess === child) desktopRuntime.verifiedBackendProcess = null
     handleBackendSpawnError(error)
   })
   child.on('exit', code => {
+    if (desktopRuntime.verifiedBackendProcess === child) desktopRuntime.verifiedBackendProcess = null
     const uptimeMs = Date.now() - (desktopRuntime.startupMarks.backendSpawnMs ?? Date.now())
     writeBackendLog(`[exit] backend process exited code=${code} uptime=${uptimeMs}ms\n`)
     if (desktopRuntime.backendProcess === child) desktopRuntime.backendProcess = null
@@ -634,6 +639,7 @@ export function stopBackend(): Promise<void> {
 }
 
 async function stopBackendProcess(): Promise<void> {
+  desktopRuntime.verifiedBackendProcess = null
   const child = desktopRuntime.backendProcess
   desktopRuntime.backendProcess = null
   if (backendRestartTimer) { clearTimeout(backendRestartTimer); backendRestartTimer = null }

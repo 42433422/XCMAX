@@ -5,13 +5,14 @@
  * 桌面端 dev 模式通过 `process.env.PYTHON` 指定后端可执行文件（见 desktop-config.ts
  * backendExecutable）。本脚本以 node shebang 充当该可执行文件，忽略 run.py 等参数，
  * 提供一个最小 HTTP 服务，模拟真实后端的三条关键契约：
- *   GET /api/ping            → 200 且 Server 头含 "uvicorn"（waitForBackendPing 据此判定）
+ *   GET /api/ping            → 200 + uvicorn + 当前随机 challenge 的子进程 HMAC 证明
  *   GET /api/desktop/status  → { appRoutesReady: true, dbRecovery: { action: 'ok' } }
  *   GET /                    → 带 #e2e-marker 的静态页（验证主界面真实加载）
  *
  * 仅用于 e2e/ 测试，不进入安装包（electron-builder files 仅含 dist/resources）。
  */
 import http from 'node:http'
+import { createHmac } from 'node:crypto'
 
 const argv = process.argv.slice(2)
 const portIdx = argv.indexOf('--port')
@@ -45,6 +46,12 @@ const server = http.createServer((req, res) => {
     return
   }
   if (url.pathname === '/api/ping') {
+    const nonce = url.searchParams.get('desktop_challenge') || ''
+    const token = process.env.XCAGI_DESKTOP_WORKSPACE_TOKEN || ''
+    if (/^[0-9a-f]{64}$/.test(nonce) && /^[0-9a-f]{64}$/.test(token)) {
+      res.setHeader('X-XCAGI-Desktop-Proof', createHmac('sha256', token)
+        .update(`xcagi-desktop-backend-v1:${nonce}`).digest('hex'))
+    }
     res.writeHead(200, { 'Content-Type': 'text/plain' })
     res.end('pong')
     return

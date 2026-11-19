@@ -23,6 +23,7 @@ export const desktopRuntime = {
   auxiliaryWindows: new Set<BrowserWindow>(),
   splashUrl: '',
   backendProcess: null as ChildProcessWithoutNullStreams | null,
+  verifiedBackendProcess: null as ChildProcessWithoutNullStreams | null,
   backendLogStream: null as fs.WriteStream | null,
   tray: null as Tray | null,
   restartCount: 0,
@@ -37,4 +38,13 @@ export const desktopRuntime = {
   pendingDeepLink: null as string | null,
   autonomyController: null as AutonomyController | null,
   startupMarks: {} as DesktopStartupMarks,
+}
+
+export function isLiveDesktopBackend(child = desktopRuntime.backendProcess): boolean {
+  return child !== null && typeof child.pid === 'number' && child.pid > 0
+    && child.exitCode === null && child.signalCode === null
+}
+
+export function hasVerifiedDesktopBackend(): boolean {
+  return isLiveDesktopBackend() && desktopRuntime.backendProcess === desktopRuntime.verifiedBackendProcess
 }

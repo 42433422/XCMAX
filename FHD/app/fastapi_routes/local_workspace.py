@@ -37,6 +37,7 @@ _REQUEST_AAD = b"xcagi-local-workspace-request-v1"
 _RESPONSE_AAD = b"xcagi-local-workspace-response-v1"
 _PACKET_LIMIT = 2 * 1024 * 1024
 _BATCH_LIMIT = 20
+_LISTENER_RETRY_SECONDS = 5
 _PAYLOAD_LIMIT = _PACKET_LIMIT * 3 // 4 - 2048
 _DATABASE = Path("data/local-workspace.sqlite3")
 _LAN_RANGES = tuple(
@@ -166,6 +167,24 @@ class LocalPeer:
         self.thread: threading.Thread | None = None
         self.port = int(self.binding.get("port", 0))
         self.host = ""
+        self._resume_after = 0.0
+
+    def resume(self) -> None:
+        with self.lock:
+            if not self.binding or (self.thread is not None and self.thread.is_alive()):
+                return
+            now = time.monotonic()
+            if now < self._resume_after:
+                return
+            self._resume_after = now + _LISTENER_RETRY_SECONDS
+            try:
+                self.start()
+            except OSError as exc:
+                # A saved LAN interface may be offline; local reads/writes still work.
+                logger.warning(
+                    "Desktop local workspace listener unavailable (%s); retrying on access",
+                    type(exc).__name__,
+                )
 
     def start(self, host: str | None = None) -> None:
         try:
@@ -374,19 +393,17 @@ _peer_cache_lock = threading.Lock()
 
 def _current_peer() -> LocalPeer:
     with _peer_cache_lock:
-        return _peer(get_desktop_data_dir())
+        peer = _peer(get_desktop_data_dir())
+    peer.resume()
+    return peer
 
 
 def resume_local_workspace() -> None:
     if is_desktop_mode() and (get_desktop_data_dir() / _DATABASE).is_file():
         try:
-            peer = _current_peer()
+            _current_peer()
         except sqlite3.Error:
             logger.warning("Desktop local workspace database could not open", exc_info=True)
-            return
-        with peer.lock:
-            if peer.binding:
-                peer.start()
 
 
 @router.get("/status", dependencies=[Depends(_desktop_request)])
