@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
-import { nextTick, ref } from 'vue'
+import { nextTick, ref, type Ref } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 
+let chatSessionId: Ref<string>
 const sendMessageMock = vi.fn()
 const syncSessionMessagesMock = vi.fn(async () => undefined)
 const messagesMock = ref([])
@@ -11,14 +12,17 @@ const isStreamingReplyMock = ref(false)
 const loadingProgressTextMock = ref('')
 
 vi.mock('@/composables/useChatView', () => ({
-  useChatView: () => ({
-    messages: messagesMock,
-    isLoading: isLoadingMock,
-    isStreamingReply: isStreamingReplyMock,
-    loadingProgressText: loadingProgressTextMock,
-    sendMessage: sendMessageMock,
-    syncSessionMessages: syncSessionMessagesMock,
-  }),
+  useChatView: ({ sessionId }: { sessionId: Ref<string> }) => {
+    chatSessionId = sessionId
+    return {
+      messages: messagesMock,
+      isLoading: isLoadingMock,
+      isStreamingReply: isStreamingReplyMock,
+      loadingProgressText: loadingProgressTextMock,
+      sendMessage: sendMessageMock,
+      syncSessionMessages: syncSessionMessagesMock,
+    }
+  },
 }))
 
 vi.mock('@/utils/sanitizeHtml', () => ({
@@ -54,6 +58,7 @@ async function openAssistant() {
 describe('FloatingChatAssistant', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
+    vi.mocked(readAiSessionIdFromStorage).mockReturnValue('test-session-id')
     sendMessageMock.mockClear()
     messagesMock.value = []
     isLoadingMock.value = false
@@ -116,6 +121,30 @@ describe('FloatingChatAssistant', () => {
     await nextTick()
     await wrapper.get('.floating-chat-toggle').trigger('click')
     expect(wrapper.get('textarea').element.value).toBe('')
+  })
+
+  it.each([false, true])('adopts the latest desktop session after loading, reopened=%s', async (reopen) => {
+    vi.stubGlobal('xcagiDesktopAssistant', { setExpanded: vi.fn(async () => undefined) })
+    vi.mocked(readAiSessionIdFromStorage).mockReturnValue('old-session')
+    const syncedSessions: string[] = []
+    syncSessionMessagesMock.mockImplementation(async () => { syncedSessions.push(chatSessionId.value) })
+    const wrapper = mountAssistant({ desktopWindow: true })
+    await wrapper.get('.floating-chat-toggle').trigger('click')
+    await wrapper.get('textarea').setValue('old draft')
+    isLoadingMock.value = true
+    await nextTick()
+    vi.mocked(readAiSessionIdFromStorage).mockReturnValue('next-session')
+    wrapper.vm.resetDesktopPanel()
+    await nextTick()
+    expect(chatSessionId.value).toBe('old-session')
+    if (reopen) await wrapper.get('.floating-chat-toggle').trigger('click')
+    vi.mocked(readAiSessionIdFromStorage).mockReturnValue('latest-session')
+    isLoadingMock.value = false
+    await nextTick()
+    expect(chatSessionId.value).toBe('latest-session')
+    if (!reopen) await wrapper.get('.floating-chat-toggle').trigger('click')
+    expect(wrapper.get('textarea').element.value).toBe('')
+    expect(syncedSessions.at(-1)).toBe('latest-session')
   })
 
   it('clicking toggle again closes panel', async () => {

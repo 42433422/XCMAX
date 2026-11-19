@@ -554,14 +554,24 @@ const openDesktopMain = () => {
   void desktop?.openMain().catch(() => undefined)
 }
 
-const resetDesktopPanel = () => {
-  closeFloatingChatPanel()
+const desktopSessionSyncPending = ref(false)
+const syncDesktopSession = () => {
+  if (isLoading.value || !desktopSessionSyncPending.value) return
+  desktopSessionSyncPending.value = false
   const nextSessionId = readAiSessionIdFromStorage()
-  if (!isLoading.value && nextSessionId && nextSessionId !== currentSessionId.value) {
+  if (nextSessionId && nextSessionId !== currentSessionId.value) {
     draft.value = ''
     currentSessionId.value = nextSessionId
+    if (isOpen.value) void syncSessionMessages().catch(() => undefined)
   }
 }
+
+const resetDesktopPanel = () => {
+  closeFloatingChatPanel()
+  desktopSessionSyncPending.value = true
+  syncDesktopSession()
+}
+watch(isLoading, syncDesktopSession)
 
 defineExpose({ resetDesktopPanel })
 
