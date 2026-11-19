@@ -239,7 +239,7 @@ def propose_employee_pack(
     try:
         if strongest == "catalog_capability_gap":
             raw = _normalize_catalog_gap_proposal(raw, signals)
-        # Bind provenance to the measured signal before downstream source admission.
+        # Routing provenance comes from the collected signal, never LLM output.
         raw["triggered_by"] = strongest
         raw["signal_score"] = score
         validate_proposal(raw)

@@ -71,10 +71,10 @@ def build_source_files(proposal: Dict[str, Any]) -> Dict[str, str]:
     # it is copied into source. Proposal generation already pins this identity; the
     # second check here makes direct callers fail closed as well.
     package_id = _ALLOWLISTED_PACKAGE_ID
-    version = _bounded_text(proposal.get("target_version") or "1.0.0", limit=32)
+    version = str(proposal.get("target_version") or "1.0.0").strip()
     if not _PACK_NAME_RE.fullmatch(package_id):
         raise ProposalScaffoldError("unsafe package name")
-    if not _PACK_VERSION_RE.fullmatch(version):
+    if len(version) > 32 or not _PACK_VERSION_RE.fullmatch(version):
         raise ProposalScaffoldError("unsafe package version")
 
     skills = list(_SAFE_SKILLS)
@@ -279,7 +279,7 @@ def materialize_proposal(proposal: Dict[str, Any], *, repo_root: Path) -> Dict[s
 
     files = build_source_files(proposal)
     package_id = _ALLOWLISTED_PACKAGE_ID
-    version = _bounded_text(proposal.get("target_version") or "1.0.0", limit=32)
+    version = json.loads(files["manifest.json"])["version"]
     source_rel = Path(PACK_FILES_PREFIX) / f"{package_id}@{version}"
     source_dir = (repo_root / source_rel).resolve()
     repo_root_resolved = repo_root.resolve()
@@ -319,15 +319,24 @@ def main() -> int:
         ):
             parser.error("--result-file must be an absolute direct child of RUNNER_TEMP")
     proposal = json.loads(args.proposal_file.read_text(encoding="utf-8"))
-    result = materialize_proposal(proposal, repo_root=args.repo_root)
     if args.result_file:
-        receipt = {
-            key: result[key] for key in ("source_dir", "package_id", "version", "file_count")
-        }
-        # Exclusive creation rejects stale receipts and symlinks; stdout stays redacted.
+        # Reserve the receipt before writing source so stale paths cannot strand a checkout.
         descriptor = os.open(args.result_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        with os.fdopen(descriptor, "w", encoding="utf-8") as output:
-            json.dump(receipt, output, ensure_ascii=False, sort_keys=True)
+        receipt_written = False
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8") as output:
+                result = materialize_proposal(proposal, repo_root=args.repo_root)
+                receipt = {
+                    key: result[key]
+                    for key in ("source_dir", "package_id", "version", "file_count")
+                }
+                json.dump(receipt, output, ensure_ascii=False, sort_keys=True)
+            receipt_written = True
+        finally:
+            if not receipt_written:
+                args.result_file.unlink(missing_ok=True)
+    else:
+        result = materialize_proposal(proposal, repo_root=args.repo_root)
     print(
         json.dumps(
             {
