@@ -232,7 +232,9 @@ class PlannedWorkflowDispatch:
         plan = self.planner.plan(
             user_id=user_id, message=planner_message, tool_registry=tool_registry, context=context
         )
-        if isinstance(plan, PlanGraph) and not (plan.metadata or {}).get("planning_rejected"):
+        if isinstance(plan, PlanGraph) and not (plan.metadata or {}).get(
+            "planning_rejected"
+        ):
             node_labels = [f"{node.tool_id}.{node.action}" for node in plan.nodes]
             publish_stream_note(f"已生成 {len(node_labels)} 步执行计划：" + "、".join(node_labels))
         if not isinstance(plan, PlanGraph):
