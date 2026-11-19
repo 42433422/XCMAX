@@ -298,10 +298,10 @@ async def resolve_market_token(session_id: str) -> str:
     return cast("str", await operation(session_id))
 
 
-def request_session_id(request: Request) -> str:
-    from app.infrastructure.auth.dependencies import session_id_from_request as operation
+def session_owner(sid: str) -> int | None:
+    from app.fastapi_routes.market_account import _user_id_from_session as operation
 
-    return cast("str", operation(request))
+    return operation(sid)
 
 
 def session_market_token(sid: str) -> str:

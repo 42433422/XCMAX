@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
 from app.fastapi_routes import market_account as market
@@ -276,3 +276,49 @@ async def test_auth_proxy_does_not_log_upstream_credential_error(monkeypatch, ca
     )
     assert "must-never-be-logged" not in caplog.text
     assert "status=500" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_market_identity_checks_local_ownership_before_using_session(monkeypatch):
+    monkeypatch.setattr(market.bindings, "current_user", lambda _: SimpleNamespace(id=7))
+    monkeypatch.setattr(market, "_user_id_from_session", lambda _: 8)
+    read = MagicMock()
+    save = MagicMock()
+    refresh = AsyncMock()
+    proxy = AsyncMock(return_value={"id": 7})
+    monkeypatch.setattr(market, "session_market_token", read)
+    monkeypatch.setattr(market, "save_session_market_token", save)
+    monkeypatch.setattr(market, "resolve_valid_market_access_token", refresh)
+    monkeypatch.setattr(market, "latest_session_market_token", lambda *, user_id: "")
+    monkeypatch.setattr(market, "_proxy_json", proxy)
+    request = Request({"type": "http", "headers": [(b"x-session-id", b"unowned-session")]})
+    identity = market._request_identity()
+
+    assert identity.authorization(request, {}) == ""
+    assert await identity.resolved_authorization(request, {}) == ""
+    assert identity.market_auth(request) == ""
+    assert identity.bind(request, {"token": "market-token"}) == ("market-token", "")
+    assert (await identity.sync(request, {"token": "market-token"}))["success"] is True
+    read.assert_not_called()
+    save.assert_not_called()
+    refresh.assert_not_awaited()
+
+
+def test_market_session_errors_do_not_log_credentials(caplog):
+    import logging
+
+    from app.fastapi_routes.market_bridge.session_tokens import SessionTokens
+
+    session_id = "test-session-value"
+    token = "test-market-credential"
+    repository = MagicMock()
+    repository.save.side_effect = RuntimeError(token)
+    repository.read.side_effect = RuntimeError(token)
+    repository.clear.side_effect = RuntimeError(token)
+    store = SessionTokens({}, {}, repository, logging.getLogger(__name__))
+    store.save(session_id, token)
+    store.clear(session_id)
+    assert store.read(session_id, "access") == ""
+    assert "RuntimeError" in caplog.text
+    assert session_id not in caplog.text
+    assert token not in caplog.text

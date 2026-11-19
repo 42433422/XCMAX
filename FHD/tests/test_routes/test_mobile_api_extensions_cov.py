@@ -1502,9 +1502,16 @@ class TestMobileAuthOidcExchangePayloadKey:
 
 
 class TestMobileWalletBalance:
+    @pytest.fixture(autouse=True)
+    def owned_market_session(self):
+        with patch(
+            "app.fastapi_routes.market_account._user_id_from_session", return_value=_user().id
+        ):
+            yield
+
     def _req(self, auth_header: str = ""):
         req = MagicMock()
-        req.headers.get = MagicMock(return_value=auth_header)
+        req.headers = {"Authorization": auth_header}
         return req
 
     @pytest.mark.asyncio
@@ -1529,13 +1536,14 @@ class TestMobileWalletBalance:
     @pytest.mark.asyncio
     async def test_bearer_jwt_sets_sid(self, m):
         """branch [2184,2185]: auth_hdr starts with Bearer and payload is truthy."""
-        fake_payload = {"session_id": "sess_abc"}
+        fake_payload = {"typ": "access", "session_id": "sess_abc"}
         wallet = {"balance": "100.50", "currency": "CNY"}
 
         with (
             patch("app.security.mobile_jwt.verify_mobile_jwt", return_value=fake_payload),
             patch(
-                "app.fastapi_routes.market_account.session_market_token", return_value="mkt_token"
+                "app.fastapi_routes.market_account.resolve_valid_market_access_token",
+                return_value="mkt_token",
             ),
             patch("app.fastapi_routes.market_account.latest_session_market_token", return_value=""),
             patch(
@@ -1551,26 +1559,27 @@ class TestMobileWalletBalance:
         assert result is not None
 
     @pytest.mark.asyncio
-    async def test_jwt_payload_none_falls_to_session_id_from_request(self, m):
-        """branch [2184,2188]: verify returns None → session_id_from_request."""
+    async def test_jwt_payload_none_does_not_read_header_session(self, m):
+        """An invalid bearer cannot select a session for the wallet."""
         with (
             patch("app.security.mobile_jwt.verify_mobile_jwt", return_value=None),
             patch(
                 "app.infrastructure.auth.dependencies.session_id_from_request",
                 return_value="req_sess",
             ),
-            patch("app.fastapi_routes.market_account.session_market_token", return_value="tok"),
             patch("app.fastapi_routes.market_account.latest_session_market_token", return_value=""),
-            patch("app.fastapi_routes.market_account._auth_header", return_value="Bearer tok"),
             patch(
-                "app.fastapi_routes.market_account._proxy_json",
-                new=AsyncMock(return_value={"__proxy_error__": True, "payload": "err"}),
-            ),
+                "app.fastapi_routes.market_account.resolve_valid_market_access_token",
+                new=AsyncMock(),
+            ) as refresh,
+            patch("app.fastapi_routes.market_account._proxy_json", new=AsyncMock()) as proxy,
         ):
-            result = await m.mobile_wallet_balance(
-                request=self._req("Bearer bad_jwt"), user=_user()
-            )
-        assert result is not None
+            request = self._req("Bearer bad_jwt")
+            request.headers["X-Session-ID"] = "req_sess"
+            result = await m.mobile_wallet_balance(request=request, user=_user())
+        assert result["data"]["synced"] is False
+        refresh.assert_not_awaited()
+        proxy.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_wallet_proxy_error_falls_back(self, m):
@@ -1586,8 +1595,14 @@ class TestMobileWalletBalance:
             return {"__proxy_error__": True}
 
         with (
-            patch("app.security.mobile_jwt.verify_mobile_jwt", return_value={"session_id": "s1"}),
-            patch("app.fastapi_routes.market_account.session_market_token", return_value="tok"),
+            patch(
+                "app.security.mobile_jwt.verify_mobile_jwt",
+                return_value={"typ": "access", "session_id": "s1"},
+            ),
+            patch(
+                "app.fastapi_routes.market_account.resolve_valid_market_access_token",
+                return_value="tok",
+            ),
             patch("app.fastapi_routes.market_account.latest_session_market_token", return_value=""),
             patch("app.fastapi_routes.market_account._auth_header", return_value="Bearer tok"),
             patch("app.fastapi_routes.market_account._proxy_json", side_effect=mock_proxy),
@@ -1612,8 +1627,14 @@ class TestMobileWalletBalance:
             return {}
 
         with (
-            patch("app.security.mobile_jwt.verify_mobile_jwt", return_value={"session_id": "s2"}),
-            patch("app.fastapi_routes.market_account.session_market_token", return_value="tok"),
+            patch(
+                "app.security.mobile_jwt.verify_mobile_jwt",
+                return_value={"typ": "access", "session_id": "s2"},
+            ),
+            patch(
+                "app.fastapi_routes.market_account.resolve_valid_market_access_token",
+                return_value="tok",
+            ),
             patch("app.fastapi_routes.market_account.latest_session_market_token", return_value=""),
             patch("app.fastapi_routes.market_account._auth_header", return_value="Bearer tok"),
             patch("app.fastapi_routes.market_account._proxy_json", side_effect=mock_proxy),
@@ -1638,8 +1659,14 @@ class TestMobileWalletBalance:
             return {}
 
         with (
-            patch("app.security.mobile_jwt.verify_mobile_jwt", return_value={"session_id": "s3"}),
-            patch("app.fastapi_routes.market_account.session_market_token", return_value="tok"),
+            patch(
+                "app.security.mobile_jwt.verify_mobile_jwt",
+                return_value={"typ": "access", "session_id": "s3"},
+            ),
+            patch(
+                "app.fastapi_routes.market_account.resolve_valid_market_access_token",
+                return_value="tok",
+            ),
             patch("app.fastapi_routes.market_account.latest_session_market_token", return_value=""),
             patch("app.fastapi_routes.market_account._auth_header", return_value="Bearer tok"),
             patch("app.fastapi_routes.market_account._proxy_json", side_effect=mock_proxy),
@@ -1660,8 +1687,14 @@ class TestMobileWalletBalance:
             return err
 
         with (
-            patch("app.security.mobile_jwt.verify_mobile_jwt", return_value={"session_id": "s4"}),
-            patch("app.fastapi_routes.market_account.session_market_token", return_value="tok"),
+            patch(
+                "app.security.mobile_jwt.verify_mobile_jwt",
+                return_value={"typ": "access", "session_id": "s4"},
+            ),
+            patch(
+                "app.fastapi_routes.market_account.resolve_valid_market_access_token",
+                return_value="tok",
+            ),
             patch("app.fastapi_routes.market_account.latest_session_market_token", return_value=""),
             patch("app.fastapi_routes.market_account._auth_header", return_value="Bearer tok"),
             patch("app.fastapi_routes.market_account._proxy_json", side_effect=mock_proxy),
@@ -1686,8 +1719,14 @@ class TestMobileWalletBalance:
             return {}
 
         with (
-            patch("app.security.mobile_jwt.verify_mobile_jwt", return_value={"session_id": "s5"}),
-            patch("app.fastapi_routes.market_account.session_market_token", return_value="tok"),
+            patch(
+                "app.security.mobile_jwt.verify_mobile_jwt",
+                return_value={"typ": "access", "session_id": "s5"},
+            ),
+            patch(
+                "app.fastapi_routes.market_account.resolve_valid_market_access_token",
+                return_value="tok",
+            ),
             patch("app.fastapi_routes.market_account.latest_session_market_token", return_value=""),
             patch("app.fastapi_routes.market_account._auth_header", return_value="Bearer tok"),
             patch("app.fastapi_routes.market_account._proxy_json", side_effect=mock_proxy),
@@ -1712,8 +1751,14 @@ class TestMobileWalletBalance:
             return {}
 
         with (
-            patch("app.security.mobile_jwt.verify_mobile_jwt", return_value={"session_id": "s6"}),
-            patch("app.fastapi_routes.market_account.session_market_token", return_value="tok"),
+            patch(
+                "app.security.mobile_jwt.verify_mobile_jwt",
+                return_value={"typ": "access", "session_id": "s6"},
+            ),
+            patch(
+                "app.fastapi_routes.market_account.resolve_valid_market_access_token",
+                return_value="tok",
+            ),
             patch("app.fastapi_routes.market_account.latest_session_market_token", return_value=""),
             patch("app.fastapi_routes.market_account._auth_header", return_value="Bearer tok"),
             patch("app.fastapi_routes.market_account._proxy_json", side_effect=mock_proxy),
@@ -1725,7 +1770,10 @@ class TestMobileWalletBalance:
     async def test_latest_session_market_token_fallback(self, m):
         """branch [2195,2196],[2195,2197]: sid set but token empty → latest fallback."""
         with (
-            patch("app.security.mobile_jwt.verify_mobile_jwt", return_value={"session_id": "s_x"}),
+            patch(
+                "app.security.mobile_jwt.verify_mobile_jwt",
+                return_value={"typ": "access", "session_id": "s_x"},
+            ),
             patch("app.fastapi_routes.market_account.session_market_token", return_value=""),
             patch(
                 "app.fastapi_routes.market_account.latest_session_market_token",
@@ -1759,8 +1807,14 @@ class TestMobileWalletBalance:
             return {}
 
         with (
-            patch("app.security.mobile_jwt.verify_mobile_jwt", return_value={"session_id": "s7"}),
-            patch("app.fastapi_routes.market_account.session_market_token", return_value="tok"),
+            patch(
+                "app.security.mobile_jwt.verify_mobile_jwt",
+                return_value={"typ": "access", "session_id": "s7"},
+            ),
+            patch(
+                "app.fastapi_routes.market_account.resolve_valid_market_access_token",
+                return_value="tok",
+            ),
             patch("app.fastapi_routes.market_account.latest_session_market_token", return_value=""),
             patch("app.fastapi_routes.market_account._auth_header", return_value="Bearer tok"),
             patch("app.fastapi_routes.market_account._proxy_json", side_effect=mock_proxy),

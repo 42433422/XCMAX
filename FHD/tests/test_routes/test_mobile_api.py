@@ -382,7 +382,7 @@ class TestMobileMeLogic:
             lambda token: {
                 "typ": "access",
                 "user_id": 7,
-                "session_id": "session-7",
+                "session_id": "mobile-relay-7",
                 "account_kind": "enterprise",
                 "username": "bob",
             },
@@ -403,6 +403,28 @@ class TestMobileMeLogic:
 
         assert exc_info.value.status_code == 503
         assert exc_info.value.detail["code"] == "AUTH_BACKEND_UNAVAILABLE"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("token_type", ["access", None])
+    async def test_disabled_account_cannot_use_legacy_relay_identity(self, monkeypatch, token_type):
+        from fastapi import Request
+
+        monkeypatch.setattr(
+            "app.fastapi_routes.mobile_api.verify_mobile_jwt",
+            lambda _: {"typ": token_type, "user_id": 7, "session_id": "mobile-relay-test"},
+        )
+        monkeypatch.setattr(
+            "app.fastapi_routes.mobile_api.user_id_from_mobile_bearer",
+            lambda _: 7 if token_type == "access" else None,
+        )
+        database = MagicMock()
+        database.__enter__.return_value.query.return_value.filter.return_value.first.return_value = SimpleNamespace(
+            id=7, is_active=False
+        )
+        monkeypatch.setattr("app.db.session.get_db", lambda: database)
+
+        request = Request({"type": "http", "headers": []})
+        assert await get_mobile_user(request, authorization="Bearer token") is None
 
     @pytest.mark.asyncio
     async def test_get_mobile_user_expunges_bearer_user_before_session_commit(self, monkeypatch):

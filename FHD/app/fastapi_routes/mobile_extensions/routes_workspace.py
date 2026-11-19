@@ -476,10 +476,6 @@ class WorkspaceRoutes:
 
                 clear_session_entitlements()
                 sid = ports.mobile_session_id_from_request(request)
-                if not sid:
-                    from app.infrastructure.auth.dependencies import session_id_from_request
-
-                    sid = session_id_from_request(request)
                 if sid:
                     await sync_entitlements_for_session(sid)
                     from app.application.session_account_meta import load_session_account_meta

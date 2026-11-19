@@ -94,10 +94,8 @@ class SessionTokens:
             self.refresh_tokens[sid] = refresh
         try:
             self.repository.save(sid, access, refresh)
-        except RECOVERABLE_ERRORS:
-            self.logger.exception(
-                "save_session_market_token: failed to persist market token for session_id=%s", sid
-            )
+        except RECOVERABLE_ERRORS as exc:
+            self.logger.warning("Could not persist market token: %s", type(exc).__name__)
 
     def clear(self, session_id: str) -> None:
         sid = (session_id or "").strip()
@@ -106,10 +104,8 @@ class SessionTokens:
             self.refresh_tokens.pop(sid, None)
         try:
             self.repository.clear(sid)
-        except RECOVERABLE_ERRORS:
-            self.logger.exception(
-                "clear_session_market_token: failed to clear persisted token for session_id=%s", sid
-            )
+        except RECOVERABLE_ERRORS as exc:
+            self.logger.warning("Could not clear market token: %s", type(exc).__name__)
 
     def read(self, session_id: str, kind: TokenKind) -> str:
         sid = (session_id or "").strip()
@@ -125,8 +121,8 @@ class SessionTokens:
             if token:
                 cache[sid] = token
                 return token
-        except RECOVERABLE_ERRORS:
-            self.logger.exception("%s: DB read failed for session_id=%s", operation, sid)
+        except RECOVERABLE_ERRORS as exc:
+            self.logger.warning("%s: DB read failed: %s", operation, type(exc).__name__)
         return ""
 
     def latest(self, kind: TokenKind, user_id: int | None = None) -> str:
@@ -137,8 +133,8 @@ class SessionTokens:
         )
         try:
             return self.repository.latest(kind, user_id)
-        except RECOVERABLE_ERRORS:
-            self.logger.exception("%s: DB read failed", operation)
+        except RECOVERABLE_ERRORS as exc:
+            self.logger.warning("%s: DB read failed: %s", operation, type(exc).__name__)
             return ""
 
     def owner(self, session_id: str) -> int | None:
@@ -147,6 +143,6 @@ class SessionTokens:
             return None
         try:
             return self.repository.owner(sid)
-        except RECOVERABLE_ERRORS:
-            self.logger.exception("_user_id_from_session: DB read failed for sid=%s", sid[:8])
+        except RECOVERABLE_ERRORS as exc:
+            self.logger.warning("Could not resolve market session owner: %s", type(exc).__name__)
             return None

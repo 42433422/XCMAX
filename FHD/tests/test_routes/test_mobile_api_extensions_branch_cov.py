@@ -179,34 +179,38 @@ class TestMobileSessionIdFromRequest:
         req = MagicMock()
         req.headers = {"Authorization": "Bearer valid_jwt"}
         with patch(
-            "app.security.mobile_jwt.verify_mobile_jwt", return_value={"session_id": "jwt-sid"}
+            "app.security.mobile_jwt.verify_mobile_jwt",
+            return_value={"typ": "access", "session_id": "jwt-sid"},
         ):
             result = m._mobile_session_id_from_request(req)
         assert result == "jwt-sid"
 
-    def test_bearer_header_jwt_no_session_id_returns_x_session(self, m):
-        """branch: Bearer header JWT has no session_id → fallback."""
+    def test_bearer_header_jwt_no_session_id_rejects_header(self, m):
+        """branch: Bearer header JWT has no session_id → no session."""
         req = MagicMock()
         req.headers = {"Authorization": "Bearer jwt", "X-Session-ID": "fallback-sid"}
         with patch("app.security.mobile_jwt.verify_mobile_jwt", return_value={}):
             result = m._mobile_session_id_from_request(req)
-        assert result == "fallback-sid"
+        assert result == ""
 
-    def test_bearer_header_jwt_empty_session_id_returns_x_session(self, m):
-        """branch: Bearer header JWT has empty session_id → fallback."""
+    def test_bearer_header_jwt_empty_session_id_rejects_header(self, m):
+        """branch: Bearer header JWT has empty session_id → no session."""
         req = MagicMock()
         req.headers = {"Authorization": "Bearer jwt", "X-Session-ID": "fallback"}
-        with patch("app.security.mobile_jwt.verify_mobile_jwt", return_value={"session_id": ""}):
+        with patch(
+            "app.security.mobile_jwt.verify_mobile_jwt",
+            return_value={"typ": "access", "session_id": ""},
+        ):
             result = m._mobile_session_id_from_request(req)
-        assert result == "fallback"
+        assert result == ""
 
-    def test_bearer_header_jwt_error_returns_x_session(self, m):
-        """branch: verify_mobile_jwt raises OPERATIONAL_ERRORS → fallback."""
+    def test_bearer_header_jwt_error_rejects_header(self, m):
+        """branch: verify_mobile_jwt raises OPERATIONAL_ERRORS → no session."""
         req = MagicMock()
         req.headers = {"Authorization": "Bearer bad", "X-Session-ID": "fallback"}
         with patch("app.security.mobile_jwt.verify_mobile_jwt", side_effect=ValueError("bad jwt")):
             result = m._mobile_session_id_from_request(req)
-        assert result == "fallback"
+        assert result == ""
 
     def test_bearer_header_no_x_session_returns_empty(self, m):
         """branch: Bearer header fails, no X-Session-ID → empty string."""
@@ -221,7 +225,8 @@ class TestMobileSessionIdFromRequest:
         req = MagicMock()
         req.headers = {"Authorization": "Bearer jwt"}
         with patch(
-            "app.security.mobile_jwt.verify_mobile_jwt", return_value={"session_id": "  sid  "}
+            "app.security.mobile_jwt.verify_mobile_jwt",
+            return_value={"typ": "access", "session_id": "  sid  "},
         ):
             result = m._mobile_session_id_from_request(req)
         assert result == "sid"
@@ -238,7 +243,13 @@ class TestMobileMarketAuthorization:
         req = MagicMock()
         req.headers = {"Authorization": "Bearer jwt", "X-Session-ID": "sid"}
         with (
-            patch("app.security.mobile_jwt.verify_mobile_jwt", return_value={"session_id": "sid"}),
+            patch(
+                "app.fastapi_routes.market_account._user_id_from_session", return_value=_user().id
+            ),
+            patch(
+                "app.security.mobile_jwt.verify_mobile_jwt",
+                return_value={"typ": "access", "session_id": "sid"},
+            ),
             patch(
                 "app.fastapi_routes.market_account.session_market_token", return_value="tok"
             ) as mock_smt,
@@ -255,7 +266,11 @@ class TestMobileMarketAuthorization:
         req = MagicMock()
         req.headers = {"Authorization": "Bearer jwt", "X-Session-ID": "sid"}
         with (
-            patch("app.security.mobile_jwt.verify_mobile_jwt", return_value={"session_id": "sid"}),
+            patch("app.fastapi_routes.market_account._user_id_from_session", return_value=5),
+            patch(
+                "app.security.mobile_jwt.verify_mobile_jwt",
+                return_value={"typ": "access", "session_id": "sid"},
+            ),
             patch("app.fastapi_routes.market_account.session_market_token", return_value=""),
             patch(
                 "app.fastapi_routes.market_account.latest_session_market_token",
@@ -265,6 +280,19 @@ class TestMobileMarketAuthorization:
         ):
             result = m._mobile_market_authorization(req, user=_user(uid=5))
         mock_latest.assert_called_once_with(user_id=5)
+
+    @pytest.mark.parametrize("actor", [None, SimpleNamespace(id=0), SimpleNamespace(id=7)])
+    def test_no_market_token_lookup_for_unowned_identity(self, m, actor):
+        req = MagicMock()
+        req.headers = {"X-Session-ID": "other-session"}
+        with (
+            patch("app.fastapi_routes.market_account._user_id_from_session", return_value=8),
+            patch("app.fastapi_routes.market_account.session_market_token") as exact,
+            patch("app.fastapi_routes.market_account.latest_session_market_token") as latest,
+        ):
+            assert m._mobile_market_authorization(req, user=actor) == ""
+        exact.assert_not_called()
+        latest.assert_not_called()
 
     def test_no_sid_uses_latest_session_market_token(self, m):
         """branch: no sid → latest_session_market_token directly."""
@@ -2374,6 +2402,21 @@ class TestMobilePaymentCheckout:
 
 
 class TestMobilePaymentQuery:
+    @pytest.fixture(autouse=True)
+    def market_authorization(self, m):
+        with patch.object(m, "_mobile_market_authorization", return_value="Bearer tok") as auth:
+            yield auth
+
+    @pytest.mark.asyncio
+    async def test_unbound_order_query_is_not_proxied(self, m, market_authorization):
+        market_authorization.return_value = ""
+        with patch("app.fastapi_routes.market_account._proxy_json", new=AsyncMock()) as proxy:
+            result = await m.mobile_payment_query(
+                request=MagicMock(), out_trade_no="ORDER", user=_user()
+            )
+        assert result.status_code == 401
+        proxy.assert_not_awaited()
+
     @pytest.mark.asyncio
     async def test_user_none_returns_401(self, m):
         result = await m.mobile_payment_query(request=MagicMock(), out_trade_no="OTN1", user=None)
