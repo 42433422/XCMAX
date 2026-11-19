@@ -62,7 +62,13 @@ def test_manual_installer_is_part_of_official_workflow_without_stable_publicatio
     assert "Partial signing configuration" in text
     assert all(
         "!inputs.windows_unsigned" in job["env"][name]
-        for name in ("ES_USERNAME", "ES_PASSWORD", "CREDENTIAL_ID", "ES_TOTP_SECRET", "XCAGI_WINDOWS_PUBLISHER_NAME")
+        for name in (
+            "ES_USERNAME",
+            "ES_PASSWORD",
+            "CREDENTIAL_ID",
+            "ES_TOTP_SECRET",
+            "XCAGI_WINDOWS_PUBLISHER_NAME",
+        )
     )
     assert "The selected delivery requires an unsigned installer." in runs
     assert "test-windows-signature-policy.ps1" in text

@@ -556,6 +556,7 @@ def _intake_target_model(monkeypatch, target, mode):
     monkeypatch.setattr(llm_assist, "advise_target_classification", classify)
     monkeypatch.setattr(llm_assist, "advise_business_import", no_shipment)
     monkeypatch.setattr(llm_assist, "advise_knowledge_import", lambda *_: LlmAssistResult())
+    monkeypatch.setattr(llm_assist, "advise_table_schema", lambda **_: LlmAssistResult())
     return seen
 
 
@@ -1286,8 +1287,9 @@ def test_template_save_does_not_wait_for_intake_and_saved_selection_can_preview(
 
 
 @pytest.mark.parametrize("submitted", [False, True])
+@pytest.mark.parametrize("old_policy", [None, "visible_non_finance_v3"])
 def test_obsolete_unsubmitted_preview_regenerates_but_preserves_submitted_receipt(
-    intake_store, submitted
+    intake_store, submitted, old_policy
 ):
     from app.application.elt.service_support import dump_json, load_json
     from app.application.reviewed_excel_review_store import _run
@@ -1297,7 +1299,10 @@ def test_obsolete_unsubmitted_preview_regenerates_but_preserves_submitted_receip
     with tenant_scope(1), store.factory() as db:
         run = _run(db, data["review_id"], 1, 7)
         state = load_json(run.draft_json, {})
-        state["intake_preview"].pop("business_source_policy")
+        if old_policy is None:
+            state["intake_preview"].pop("business_source_policy")
+        else:
+            state["intake_preview"]["business_source_policy"] = old_policy
         state["intake_preview"]["selection_key"] = "legacy-key-before-policy-binding"
         run.draft_json = dump_json(state)
         if submitted:
@@ -1319,7 +1324,7 @@ def test_obsolete_unsubmitted_preview_regenerates_but_preserves_submitted_receip
         fresh = store.client.post(f"{BASE}/intake-preview", data=data)
         assert fresh.status_code == 200, fresh.text
         assert fresh.json()["intake"]["run_id"] != plan["run_id"]
-        assert fresh.json()["intake"]["business_source_policy"] == "visible_non_finance_v3"
+        assert fresh.json()["intake"]["business_source_policy"] == "visible_non_finance_v4"
     assert_no_writes(store)
 
 

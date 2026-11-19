@@ -30,7 +30,8 @@ abstract class _ApiTransportBase extends _ApiSessionCoreBase {
     if (generation != _authGeneration) return false;
     if (session.serverMode.trim().toLowerCase() == 'cloud') return false;
     final host = session.fhdHost.trim();
-    if (host.isEmpty) {
+    final localBase = session.localBaseUrl.trim();
+    if (host.isEmpty && localBase.isEmpty) {
       await _updateSession((current) => current.copyWith(serverMode: 'cloud'),
           authGeneration: generation);
       _lastLanProbeAt = null;
@@ -43,7 +44,7 @@ abstract class _ApiTransportBase extends _ApiSessionCoreBase {
         now.difference(_lastLanProbeAt!) < const Duration(seconds: 15)) {
       return false;
     }
-    final reachable = await probeLanHealth(host);
+    final reachable = await probeLanHealth(host, baseUrl: localBase);
     if (generation != _authGeneration) return false;
     _lastLanProbeAt = now;
     _lastLanProbeOk = reachable;
@@ -56,15 +57,20 @@ abstract class _ApiTransportBase extends _ApiSessionCoreBase {
   }
 
   /// Probe LAN host `/api/health` with a short timeout (pairing-style).
-  Future<bool> probeLanHealth(String hostWithPort) async {
+  Future<bool> probeLanHealth(String hostWithPort,
+      {String baseUrl = ''}) async {
     final host = hostWithPort.trim();
-    if (host.isEmpty) return false;
-    final router = MobileServerRouter(
-      fhdHost: host,
-      mode: MobileServerMode.lan,
-      isEnterprise: true,
-    );
-    final base = router.lanReachableBaseUrl();
+    final explicitBase = baseUrl.trim();
+    if (host.isEmpty && explicitBase.isEmpty) return false;
+    // A verified pairing base includes its scheme and proxy path. Only legacy
+    // sessions without one use the host/port LAN fallback.
+    final base = explicitBase.isNotEmpty
+        ? (explicitBase.endsWith('/') ? explicitBase : '$explicitBase/')
+        : MobileServerRouter(
+            fhdHost: host,
+            mode: MobileServerMode.lan,
+            isEnterprise: true,
+          ).lanReachableBaseUrl();
     HttpClientRequest? request;
     StreamSubscription<List<int>>? body;
     final drained = Completer<void>();
@@ -78,6 +84,7 @@ abstract class _ApiTransportBase extends _ApiSessionCoreBase {
         await opened.close();
         return false;
       }
+      opened.followRedirects = false;
       opened.headers.set(HttpHeaders.acceptHeader, 'application/json');
       opened.headers.set('X-XCAGI-Client', 'android');
       final response = await opened.close();
@@ -244,6 +251,7 @@ abstract class _ApiTransportBase extends _ApiSessionCoreBase {
     String? baseUrl,
     String? authToken,
     bool allowAuthRefresh = true,
+    bool followRedirects = true,
     String? expectedConnectionBase,
     String activeModId = '',
   }) async {
@@ -266,7 +274,8 @@ abstract class _ApiTransportBase extends _ApiSessionCoreBase {
         baseUrl: effectiveBase,
         authToken: authToken,
       );
-      if (expectedConnectionBase != null) request.followRedirects = false;
+      request.followRedirects =
+          followRedirects && expectedConnectionBase == null;
       if (activeModId.isNotEmpty) {
         request.headers.set('X-XCAGI-Active-Mod-Id', activeModId);
       }

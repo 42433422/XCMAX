@@ -391,11 +391,8 @@ def proxy_modstore_api(subpath: str):
             allow_redirects=False,
         )
     except requests.RequestException as exc:
-        err = jsonify(
-            {
-                "detail": f"ModStore 后端不可用（请检查 Uvicorn 与 MODSTORE_BACKEND_URL）: {exc}"
-            }
-        )
+        app.logger.warning("ModStore upstream unavailable (%s)", type(exc).__name__)
+        err = jsonify({"detail": "服务暂时不可用，请稍后重试。"})
         err.status_code = 502
         _apply_cors_headers(err)
         return err
@@ -412,9 +409,15 @@ def proxy_modstore_api(subpath: str):
         lk = key.lower()
         if lk in excluded_resp or lk.startswith("access-control-"):
             continue
-        if "\r" in key or "\n" in key or "\r" in value or "\n" in value:
+        safe_key = key.replace("\n", "").replace("\r", "").replace(":", "")
+        safe_value = value.replace("\n", "").replace("\r", "")
+        if safe_key != key or safe_value != value:
             continue
-        resp.headers[key] = value
+        if not re.fullmatch(
+            r"[!#$%&'*+\-.^_`|~0-9A-Za-z]+", safe_key
+        ) or not re.fullmatch(r"[\t\x20-\x7e\x80-\xff]*", safe_value):
+            continue
+        resp.headers[safe_key] = safe_value
     _apply_cors_headers(resp)
     return resp
 

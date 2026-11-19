@@ -12,11 +12,19 @@ depends_on = None
 
 def upgrade() -> None:
     bind = op.get_bind()
-    if "verified_email_sha256" not in {
-        column["name"] for column in sa.inspect(bind).get_columns("users")
+    schema = sa.inspect(bind)
+    # Historical module-only databases can lack account/billing tables. Do not
+    # invent partial parent tables or query their columns while upgrading them.
+    has_users = schema.has_table("users")
+    if has_users and "verified_email_sha256" not in {
+        column["name"] for column in schema.get_columns("users")
     }:
         op.add_column("users", sa.Column("verified_email_sha256", sa.String(64), nullable=True))
-    if not sa.inspect(bind).has_table("personal_plan_allowance_claims"):
+    if (
+        has_users
+        and schema.has_table("plan_templates")
+        and not schema.has_table("personal_plan_allowance_claims")
+    ):
         op.create_table(
             "personal_plan_allowance_claims",
             sa.Column(
@@ -37,10 +45,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    bind = op.get_bind()
-    if sa.inspect(bind).has_table("personal_plan_allowance_claims"):
+    schema = sa.inspect(op.get_bind())
+    if schema.has_table("personal_plan_allowance_claims"):
         op.drop_table("personal_plan_allowance_claims")
-    if "verified_email_sha256" in {
-        column["name"] for column in sa.inspect(bind).get_columns("users")
+    if schema.has_table("users") and "verified_email_sha256" in {
+        column["name"] for column in schema.get_columns("users")
     }:
         op.drop_column("users", "verified_email_sha256")

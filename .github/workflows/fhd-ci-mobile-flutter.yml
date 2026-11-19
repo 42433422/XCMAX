@@ -6,10 +6,16 @@ on:
   push:
     paths:
       - "FHD/mobile-flutter-poc/**"
+      - "FHD/config/download_release.json"
+      - "FHD/VERSION.md"
+      - "scripts/dev/verify_version_anchors.py"
       - ".github/workflows/fhd-ci-mobile-flutter.yml"
   pull_request:
     paths:
       - "FHD/mobile-flutter-poc/**"
+      - "FHD/config/download_release.json"
+      - "FHD/VERSION.md"
+      - "scripts/dev/verify_version_anchors.py"
       - ".github/workflows/fhd-ci-mobile-flutter.yml"
   workflow_dispatch:
 
@@ -98,11 +104,14 @@ jobs:
       CPF_FLUTTER_TAG: 3.44.9+ohos-1.0.0-beta
       CPF_FLUTTER_COMMIT: 744cbb4f08e577787774c04033cc19a9d318d0d2
       FLUTTER_OHOS_STORAGE_BASE_URL: https://flutter-ohos.obs.cn-south-1.myhuaweicloud.com
-      HAP_BASENAME: XCAGI-HarmonyOS-1.0.0.0-unsigned.hap
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Resolve HarmonyOS candidate from the release SSOT
+        run: |
+          HAP_BASENAME="$(python3 scripts/build_harmony_hap.py --print-basename)"
+          echo "HAP_BASENAME=$HAP_BASENAME" >> "$GITHUB_ENV"
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -164,6 +173,8 @@ jobs:
           node --version
           "$FLUTTER_ROOT/bin/flutter" --version
           "$FLUTTER_ROOT/bin/flutter" build hap --help | grep -F -- '--[no-]codesign'
+      - name: Verify HarmonyOS file sharing and deep-link behavior
+        run: node --experimental-vm-modules --test ohos/test/entry_ability.test.mjs
       - name: Build and validate unsigned ARM64 HAP
         run: |
           python3 scripts/build_harmony_hap.py \

@@ -304,3 +304,6 @@ FHD/admin-console/.vite-bak/
 **/llm/platform-model-config.json
 **/llm/platform-model-config.lock
 **/llm/.platform-model-config.json.*.tmp
+
+# Harmony launcher icon is materialized from its checksum-pinned Android source.
+/FHD/mobile-flutter-poc/ohos/AppScope/resources/base/media/app_icon.png

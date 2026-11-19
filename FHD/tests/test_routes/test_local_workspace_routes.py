@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import itertools
+import json
+import sqlite3
 import time
 from urllib.parse import urlsplit
 
@@ -34,7 +36,7 @@ def change(op_id, record_id, name, base=None):
 def local_desktop(tmp_path, monkeypatch):
     monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
-    monkeypatch.setattr(routes, "_lan_address", lambda: "192.168.1.19")
+    monkeypatch.setattr(routes, "_lan_address", lambda: "127.0.0.1")
     app = FastAPI()
     app.add_middleware(CSRFMiddleware)
     app.include_router(routes.router)
@@ -59,8 +61,7 @@ def stop_peer():
 
 def phone_connection(qr):
     cipher = AESGCM(routes._decode(qr["key"]))
-    address = urlsplit(qr["endpoint"])
-    url = f"http://127.0.0.1:{address.port}{address.path}"
+    url = qr["endpoint"]
     client = httpx.Client(trust_env=False, timeout=3)
     ids = itertools.count(1)
 
@@ -78,8 +79,6 @@ def phone_connection(qr):
         )
         response.raise_for_status()
         wire = response.json()
-        import json
-
         data = json.loads(
             cipher.decrypt(
                 routes._decode(wire["nonce"]), routes._decode(wire["box"]), routes._RESPONSE_AAD
@@ -95,7 +94,7 @@ def phone_connection(qr):
     return client, call
 
 
-def test_desktop_seed_bidirectional_exchange_replay_conflict_and_unbind(local_desktop):
+def test_desktop_seed_bidirectional_exchange_replay_conflict_and_unbind(local_desktop, monkeypatch):
     desktop = local_desktop
     initial = desktop.get("/api/local-workspace/status").json()
     workspace_id = initial["workspace_id"]
@@ -104,7 +103,7 @@ def test_desktop_seed_bidirectional_exchange_replay_conflict_and_unbind(local_de
         json={"workspace_id": workspace_id, "operations": [change("a", DESK, "Desktop")]},
     ).json()["accepted"] == ["a" * 32]
     qr = desktop.post("/api/local-workspace/pairing").json()["qr"]
-    assert qr["endpoint"].startswith("http://192.168.1.19:")
+    assert qr["endpoint"].startswith("http://127.0.0.1:")
     client, call = phone_connection(qr)
     with client:
         seed = call("bind", origin="desktop", request_id="same-binding-attempt")
@@ -117,7 +116,10 @@ def test_desktop_seed_bidirectional_exchange_replay_conflict_and_unbind(local_de
             "/api/local-workspace/records",
             json={"workspace_id": workspace_id, "operations": [change("c", DESK, "New", "a" * 32)]},
         ).json()["accepted"] == ["c" * 32]
+        assert routes._current_peer().store.peer_binding()["host"] == "127.0.0.1"
         stop_peer()
+        # A changed default route must not move a saved pairing to another interface.
+        monkeypatch.setattr(routes, "_lan_address", lambda: "127.0.0.2")
         routes.resume_local_workspace()
         assert call("bind", origin="desktop", request_id="same-binding-attempt") == seed
         assert call(
@@ -131,6 +133,70 @@ def test_desktop_seed_bidirectional_exchange_replay_conflict_and_unbind(local_de
         with pytest.raises(httpx.HTTPStatusError, match="401"):
             call("pull", workspace_id=workspace_id, after=0)
     assert desktop.get("/api/local-workspace/status").json()["record_count"] == 2
+
+
+def test_listener_only_accepts_connections_to_the_advertised_interface(local_desktop):
+    qr = local_desktop.post("/api/local-workspace/pairing").json()["qr"]
+    client, call = phone_connection(qr)
+    with client:
+        assert call("bind", origin="desktop")["success"]
+        unselected = qr["endpoint"].replace("127.0.0.1", "127.0.0.2")
+        with pytest.raises(httpx.ConnectError):
+            client.post(unselected, json={})
+
+
+def test_repair_on_a_new_interface_retires_the_old_listener(local_desktop, monkeypatch):
+    qr = local_desktop.post("/api/local-workspace/pairing").json()["qr"]
+    client, _ = phone_connection(qr)
+    peer = routes._current_peer()
+    old_thread = peer.thread
+    monkeypatch.setattr(routes, "_lan_address", lambda: "127.0.0.2")
+    replacement = local_desktop.post("/api/local-workspace/pairing").json()["qr"]
+    assert urlsplit(replacement["endpoint"]).port == urlsplit(qr["endpoint"]).port
+    assert peer.thread is not old_thread
+    assert old_thread is not None
+    old_thread.join(5)
+    assert not old_thread.is_alive()
+    with client, pytest.raises(httpx.ConnectError):
+        client.post(qr["endpoint"], json={})
+    new_client, call = phone_connection(replacement)
+    with new_client:
+        assert call("bind", origin="desktop")["success"]
+
+
+@pytest.mark.parametrize("unavailable", ["wildcard", "occupied"])
+def test_unavailable_interface_does_not_replace_an_active_invitation(
+    local_desktop, monkeypatch, unavailable
+):
+    qr = local_desktop.post("/api/local-workspace/pairing").json()["qr"]
+    client, call = phone_connection(qr)
+    peer = routes._current_peer()
+    old_thread, invitation = peer.thread, peer.invitation
+    with routes.socket.socket(routes.socket.AF_INET, routes.socket.SOCK_STREAM) as occupied:
+        if unavailable == "occupied":
+            occupied.bind(("127.0.0.2", peer.port))
+            occupied.listen(1)
+        host = "127.0.0.2" if unavailable == "occupied" else "0.0.0.0"
+        monkeypatch.setattr(routes, "_lan_address", lambda: host)
+        assert local_desktop.post("/api/local-workspace/pairing").status_code == 503
+    assert peer.thread is old_thread and peer.invitation == invitation
+    with client:
+        assert call("bind", origin="desktop")["success"]
+
+
+def test_legacy_binding_without_host_resumes_on_selected_interface(local_desktop):
+    qr = local_desktop.post("/api/local-workspace/pairing").json()["qr"]
+    client, call = phone_connection(qr)
+    with client:
+        bound = call("bind", origin="desktop")
+        store = routes._current_peer().store
+        legacy = store.peer_binding()
+        legacy.pop("host")
+        with sqlite3.connect(store.path) as db:
+            db.execute("UPDATE peer_binding SET binding = ?", (json.dumps(legacy),))
+        stop_peer()
+        routes.resume_local_workspace()
+        assert call("pull", workspace_id=bound["workspace_id"], after=0)["success"]
 
 
 def test_mobile_seed_archives_original_desktop_and_restore_after_unbind(local_desktop):
@@ -334,3 +400,20 @@ def test_lan_listener_rejects_public_browser_and_oversized_requests(local_deskto
             == 413
         )
         assert local.post(routes._PEER_PATH, json={}).status_code == 401
+
+
+@pytest.mark.parametrize("failure", [RuntimeError("thread start failed"), KeyboardInterrupt()])
+def test_listener_is_released_when_start_is_interrupted(tmp_path, monkeypatch, failure):
+    peer = routes.LocalPeer(tmp_path)
+    monkeypatch.setattr(routes, "_lan_address", lambda: "127.0.0.1")
+
+    def fail_start(_thread):
+        raise failure
+
+    monkeypatch.setattr(routes.threading.Thread, "start", fail_start)
+    with pytest.raises(type(failure)):
+        peer.start()
+    assert peer.port > 0
+    # The actual listening socket must be released even for cancellation.
+    with routes.socket.socket(routes.socket.AF_INET, routes.socket.SOCK_STREAM) as retry:
+        retry.bind(("127.0.0.1", peer.port))

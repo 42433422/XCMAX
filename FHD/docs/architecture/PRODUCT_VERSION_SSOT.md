@@ -18,6 +18,8 @@
 
 `release_policy` 定义 `candidate → accepted → published → withdrawn`。每条历史可关联 `deliveries`，逐项包含 product、sku、platform、arch、channel、source_sha、build_run_id、artifact_sha256、signature、notarization、state 与 evidence；版本继承所属历史条目。不同架构/渠道不得合并状态。未知身份不填假值；未对账历史保留 `publication_state=unknown`，不能据此生成已发布数量。
 
+尚未冻结 main 原包的源码候选只在 `release_history` 登记 `candidate` 意图并保留 `deliveries` 缺省；生成视图不得据此开放下载、标记验收或晋级。真实构建身份齐全后才录入逐制品记录。
+
 1. **candidate**：从已合入 main 的准确 SHA 构建并冻结字节；源码改动、CI 通过或有安装包均不是发布。
 2. **accepted**：同一原包完成声明范围的实机安装、升级、业务、数据保留及失败恢复，记录 `evidence.acceptance`。新 SHA / 重打包不能沿用旧证据。
 3. **published**：再关联 `evidence.authorization/publication`，原字节晋级，读回 URL、大小、SHA-256、签名/公证、平台架构和更新元数据。未签名临时交付须有风险接受，禁止进入 stable OTA。

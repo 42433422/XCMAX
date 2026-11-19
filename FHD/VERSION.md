@@ -9,7 +9,7 @@
 
 | 口径 | 版本 | 用途 |
 |------|------|------|
-| **XCAGI 稳定产品版本** | `1.0.0.7` | 对外版本、发布目录、下载清单、Windows 文件/产品版本、Python/FastAPI、Android `versionName` |
+| **XCAGI 稳定产品版本** | `1.0.0.7` | 对外版本、发布目录、下载清单、Windows 文件/产品版本、Python/FastAPI、Android / HarmonyOS `versionName` |
 | **工具链兼容版本** | `1.0.0` | npm/Electron、Dart/Flutter、iOS/macOS `MARKETING_VERSION` |
 
 四段产品版本 `1.0.0.7` 是当前 Windows 测试候选目标，尚未构建/发布，不推进 stable OTA；同版本的历史交付与新候选按制品身份区分，不能一概称为未发布。发布口径遵循上方 `PRODUCT_VERSION_SSOT.md`；公开指针须与原制品清单交叉核验。npm SemVer、Electron、Dart pub 和 Apple 市场版本只接受三段版本，因此这些锚点使用等价映射 `1.0.0`；它们不代表另一个产品版本。
@@ -40,6 +40,7 @@ Windows 五模式必须同候选全部通过；五模式是隔离安装链检查
 | **macOS 桌面** | 签约级 | arm64 + x64 dmg |
 | **Web / 后端** | 签约级 | FastAPI + Vue SPA |
 | **Android** | **实验骨架·非签约级** | Flutter 主线已具备登录、SSE 对话、4 Tab、审批和通知；真机二维码/深链、真实审批与签名发布证据未闭环 |
+| **HarmonyOS** | **候选·非签约级** | Flutter ARM64 未签名构建；main 原包冻结、签名及真机安装和业务验收待完成 |
 
 声称 vs 实测差距见 [`docs/CLAIMED_VS_ACTUAL.md`](docs/CLAIMED_VS_ACTUAL.md)。
 

@@ -42,8 +42,9 @@ FastAPI 网关切到 `PAYMENT_BACKEND=java` 后，`/api/payment/*` 与 `/api/wal
 注册时未填邮箱的账号可先开通免费方案，再通过已有邮件发码接口及
 `POST /api/account/personal-plan` 的 `{email, verification_code}` 首次绑定；该接口不允许改绑已有邮箱。
 
-部署执行现有 `alembic upgrade head`（`20261119_personal_allowance`）；现有 `init_db()`
-也会幂等补齐验证字段及专用领取记录。预算检查由计划行写锁串行化，待确认记录也占用预算。
+旧库在启动服务前执行现有 `scripts/upgrade_database.py`（迁移到
+`20261119_personal_allowance`），再运行 `init_db()`；新库由 ORM 建表，启动补列清单不扩张。
+预算检查由计划行写锁串行化，待确认记录也占用预算。
 领取记录冻结钱包后端、金额和一次生成的幂等键；`PAYMENT_BACKEND` 后续切换不重新领取。
 Java 模式通过已鉴权的内部 credit 接口入账，Python 不再写第二笔钱包收入；两端需同步更新。
 只有真实回执的用户、金额、幂等键及有效余额匹配时才确认领取。Java 超时、失败或回执无效

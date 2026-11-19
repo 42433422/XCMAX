@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from app.application.local_workspace import LocalWorkspace, WorkspaceChanged
+from app.infrastructure.persistence.local_workspace import LocalWorkspace, WorkspaceChanged
 
 
 def _operation(op_id, record_id, *, kind="customer", base=None, deleted=False, **data):

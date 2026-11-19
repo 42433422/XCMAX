@@ -74,10 +74,16 @@ def _empty_delta() -> Dict[str, Any]:
 
 
 def _delta_manifest_path(sku: str) -> Path:
+    if sku == "enterprise":
+        default = Path("/var/www/update/releases/stable/enterprise/android_delta_manifest.json")
+    elif sku == "personal":
+        default = Path("/var/www/update/releases/stable/personal/android_delta_manifest.json")
+    else:
+        raise ValueError("Unsupported app SKU")
     explicit = os.environ.get("XCAGI_ANDROID_DELTA_MANIFEST", "").strip()
     if explicit:
         return Path(explicit)
-    return Path(f"/var/www/update/releases/stable/{sku}/android_delta_manifest.json")
+    return default
 
 
 def _apk_delta(sku: str, current_version_code: int) -> Dict[str, Any]:
@@ -165,10 +171,16 @@ _PROFILE_PAGE_KEYS = set(_PROFILE_PAGE_DEFAULTS.keys())
 
 
 def _profile_page_path(sku: str) -> Path:
+    if sku == "enterprise":
+        default = Path("/var/www/update/releases/stable/enterprise/profile_page.json")
+    elif sku == "personal":
+        default = Path("/var/www/update/releases/stable/personal/profile_page.json")
+    else:
+        raise ValueError("Unsupported app SKU")
     explicit = os.environ.get("XCAGI_PROFILE_PAGE_CONFIG", "").strip()
     if explicit:
         return Path(explicit)
-    return Path(f"/var/www/update/releases/stable/{sku}/profile_page.json")
+    return default
 
 
 def _profile_page_config(sku: str) -> Dict[str, Any]:

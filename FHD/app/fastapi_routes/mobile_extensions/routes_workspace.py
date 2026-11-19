@@ -194,7 +194,9 @@ class WorkspaceRoutes:
                     format_mobile_response(None, "未授权", success=False, code=401),
                     status_code=401,
                 )
-            installed = [] if _has_personal_plan(user) else [m["id"] for m in ports.mobile_mod_items()]
+            installed = (
+                [] if _has_personal_plan(user) else [m["id"] for m in ports.mobile_mod_items()]
+            )
 
             return format_mobile_response(data=ports.platform_shell(installed))
 

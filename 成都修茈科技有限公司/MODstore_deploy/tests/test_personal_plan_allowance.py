@@ -14,11 +14,11 @@ from pathlib import Path
 
 import pytest
 import sqlalchemy as sa
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session, sessionmaker
 
-from alembic.migration import MigrationContext
-from alembic.operations import Operations
 from modstore_server.models import (
     PersonalPlanAllowanceClaim,
     Transaction,
@@ -486,26 +486,82 @@ def test_java_reservation_must_commit_before_remote_credit(
     assert len(java_wallet["credits"]) == 1
 
 
-@pytest.mark.parametrize("migration_path", ["alembic", "alembic_interrupted", "init_db"])
+def _allowance_migration():
+    path = Path(__file__).resolve().parents[1] / "alembic/versions/20261119_personal_allowance.py"
+    spec = importlib.util.spec_from_file_location("personal_allowance_migration", path)
+    assert spec and spec.loader
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    return migration
+
+
+@pytest.mark.parametrize("parents", [("users",), ("plan_templates",), ()])
+def test_allowance_migration_preserves_partial_legacy_modules(parents):
+    migration = _allowance_migration()
+    engine = sa.create_engine("sqlite://")
+    try:
+        with engine.begin() as connection:
+            if "users" in parents:
+                connection.exec_driver_sql(
+                    "CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT)"
+                )
+                connection.exec_driver_sql("INSERT INTO users VALUES (7, 'legacy@example.test')")
+            if "plan_templates" in parents:
+                connection.exec_driver_sql(
+                    "CREATE TABLE plan_templates (id VARCHAR(64) PRIMARY KEY)"
+                )
+                connection.exec_driver_sql("INSERT INTO plan_templates VALUES ('legacy-plan')")
+            with Operations.context(MigrationContext.configure(connection)):
+                migration.upgrade()
+                migration.upgrade()
+                assert set(sa.inspect(connection).get_table_names()) == set(parents)
+                if "users" in parents:
+                    assert connection.exec_driver_sql(
+                        "SELECT id, email, verified_email_sha256 FROM users"
+                    ).one() == (7, "legacy@example.test", None)
+                migration.downgrade()
+                migration.downgrade()
+            assert set(sa.inspect(connection).get_table_names()) == set(parents)
+            if "users" in parents:
+                assert connection.exec_driver_sql("SELECT * FROM users").one() == (
+                    7,
+                    "legacy@example.test",
+                )
+            if "plan_templates" in parents:
+                assert (
+                    connection.exec_driver_sql("SELECT id FROM plan_templates").scalar_one()
+                    == "legacy-plan"
+                )
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.parametrize("migration_path", ["alembic", "alembic_interrupted", "deployment"])
 def test_existing_database_upgrades_idempotently_without_trusting_existing_email(
     client, migration_path, monkeypatch
 ):
-    user_id, _ = _register(client, verified=True)
+    user_id, headers = _register(client, verified=True)
     engine = get_engine()
     with engine.begin() as connection:
         connection.exec_driver_sql("DROP TABLE personal_plan_allowance_claims")
         connection.exec_driver_sql("ALTER TABLE users DROP COLUMN verified_email_sha256")
-    if migration_path == "init_db":
+    if migration_path == "deployment":
+        from alembic.config import Config
+
+        from alembic import command
+        from scripts.upgrade_database import upgrade_database
+
+        monkeypatch.setenv("MODSTORE_DATABASE_URL", str(engine.url))
+        config = Path(__file__).resolve().parents[1] / "alembic.ini"
+        # Model-backed test bootstraps are unversioned. Establish the actual
+        # preceding migration head before exercising the deployment upgrader.
+        command.upgrade(Config(str(config)), "20261119_xiaoc_followups")
+        assert upgrade_database(config) == ("20261119_personal_allowance",)
+        assert upgrade_database(config) == ("20261119_personal_allowance",)
         init_db()
         init_db()
     else:
-        path = (
-            Path(__file__).resolve().parents[1] / "alembic/versions/20261119_personal_allowance.py"
-        )
-        spec = importlib.util.spec_from_file_location("personal_allowance_migration", path)
-        assert spec and spec.loader
-        migration = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(migration)
+        migration = _allowance_migration()
         with engine.begin() as connection:
             with Operations.context(MigrationContext.configure(connection)):
                 if migration_path == "alembic_interrupted":
@@ -526,9 +582,27 @@ def test_existing_database_upgrades_idempotently_without_trusting_existing_email
         ("idempotency_key",),
     }
     with get_session_factory()() as session:
-        assert session.get(User, user_id).email
+        email = session.get(User, user_id).email
+        assert email
         assert session.get(User, user_id).verified_email_sha256 is None
         assert session.query(PersonalPlanAllowanceClaim).count() == 0
+    response = client.post("/api/account/personal-plan", headers=headers)
+    assert response.status_code == 200, response.text
+    assert response.json()["allowance"]["status"] == "verification_required"
+    _code(email)
+    response = client.post(
+        "/api/account/personal-plan",
+        headers=headers,
+        json={"email": email, "verification_code": "681492"},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["allowance"]["status"] == "granted"
+    with get_session_factory()() as session:
+        assert session.query(Wallet).filter_by(user_id=user_id).one().balance == 5
+        assert (
+            session.query(PersonalPlanAllowanceClaim).filter_by(user_id=user_id).one().status
+            == "confirmed"
+        )
 
 
 def test_shared_java_ledger_transaction_does_not_double_count_reserved_budget(

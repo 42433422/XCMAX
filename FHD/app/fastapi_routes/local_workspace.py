@@ -26,9 +26,9 @@ from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, Response
 
-from app.application.local_workspace import LocalWorkspace, WorkspaceChanged
 from app.desktop_runtime.desktop_runtime_paths import get_desktop_data_dir, is_desktop_mode
 from app.fastapi_routes.mobile_extensions.pairing_helpers import _guess_lan_ipv4
+from app.infrastructure.persistence.local_workspace import LocalWorkspace, WorkspaceChanged
 
 router = APIRouter(prefix="/api/local-workspace", tags=["local-workspace"])
 logger = logging.getLogger(__name__)
@@ -158,31 +158,47 @@ class LocalPeer:
         self.server: uvicorn.Server | None = None
         self.thread: threading.Thread | None = None
         self.port = int(self.binding.get("port", 0))
+        self.host = ""
 
-    def start(self) -> None:
-        if self.thread is not None and self.thread.is_alive():
+    def start(self, host: str | None = None) -> None:
+        host = host or str(self.binding.get("host") or _lan_address())
+        if not (_private_ipv4(host) or _loopback(host)):
+            raise OSError("No local interface available for the workspace listener")
+        if self.thread is not None and self.thread.is_alive() and self.host == host:
             return
         listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        started = False
         try:
             if os.name != "nt":
                 listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            listener.bind(("0.0.0.0", self.port))
+            listener.bind((host, self.port))
             listener.listen(16)
             self.port = listener.getsockname()[1]
             app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
             app.add_api_route(_PEER_PATH, self.exchange, methods=["POST"])
-            self.server = uvicorn.Server(
+            server = uvicorn.Server(
                 uvicorn.Config(
-                    app, access_log=False, proxy_headers=False, lifespan="off", limit_concurrency=16
+                    app,
+                    access_log=False,
+                    proxy_headers=False,
+                    lifespan="off",
+                    limit_concurrency=16,
+                    timeout_graceful_shutdown=5,
                 )
             )
-            self.thread = threading.Thread(
-                target=self.server.run, kwargs={"sockets": [listener]}, daemon=True
+            thread = threading.Thread(
+                target=server.run, kwargs={"sockets": [listener]}, daemon=True
             )
-            self.thread.start()
-        except BaseException:
-            listener.close()
-            raise
+            thread.start()
+            started = True
+            previous = self.server
+            self.server, self.thread, self.host = server, thread, host
+            if previous is not None:
+                # Retire the old interface only after the new bind/start succeeded.
+                previous.should_exit = True
+        finally:
+            if not started:
+                listener.close()
 
     def issue(self) -> dict:
         with self.lock:
@@ -191,7 +207,7 @@ class LocalPeer:
             host = _lan_address()
             if not host:
                 raise HTTPException(503, "请先将电脑连入局域网")
-            self.start()
+            self.start(host)
             key = secrets.token_bytes(32)
             self.invitation = (key, time.monotonic() + 300, self.store.status()["workspace_id"])
             return {
@@ -260,6 +276,7 @@ class LocalPeer:
                 raise ValueError("请选择起始设备")
             binding = {
                 "key": _encode(key),
+                "host": self.host,
                 "port": self.port,
                 "bind_request": request_id,
                 "bind_digest": digest,

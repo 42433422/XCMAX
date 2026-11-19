@@ -10,17 +10,48 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import zipfile
 from pathlib import Path
 
 PROJECT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT.parent))
+from scripts.dev.verify_version_anchors import canonical_version
+
 SQLITE_SOURCE = "https://github.com/sqlite/sqlite.git"
 SQLITE_REVISION = "b09c88c14082339b66c7b7158d609a771e64ca69"
 SQLITE_VERSION = "3.53.4"
-BUILD_NUMBER = 100010
 BUNDLE_ID = "com.xiuci.xcagi.mobile.enterprise"
 HAP = Path("ohos/entry/build/default/outputs/default/entry-default-unsigned.hap")
+
+
+def candidate_identity() -> dict[str, str | int]:
+    catalog = json.loads((PROJECT.parent / "config/download_release.json").read_text())
+    application = json.loads((PROJECT / "ohos/AppScope/app.json5").read_text())["app"]
+    version = canonical_version()
+    if any(
+        value != version
+        for value in (
+            application["versionName"],
+            catalog["version_lock"],
+            catalog["marketing_version"],
+        )
+    ):
+        raise ValueError("HarmonyOS candidate version differs from VERSION.md/release catalog")
+    if not any(
+        row["version"] == version
+        and row.get("publication_scope") == "harmonyos-arm64-unsigned-candidate"
+        and row.get("publication_state") == "candidate"
+        for row in catalog["release_history"]
+    ):
+        raise ValueError("HarmonyOS candidate is not registered in the release catalog")
+    code = application["versionCode"]
+    if application["bundleName"] != BUNDLE_ID or type(code) is not int or code <= 0:
+        raise ValueError(
+            "HarmonyOS candidate requires the enterprise bundle and a positive build code"
+        )
+    return {"bundle_id": BUNDLE_ID, "version_name": version, "version_code": code}
 
 
 def run(*command: str | Path, cwd: Path) -> None:
@@ -32,6 +63,8 @@ def git_output(directory: Path, *arguments: str) -> str:
 
 
 def stage_project(destination: Path) -> None:
+    root = PROJECT.parents[1]
+    run("node", root / "scripts/dev/materialize_media_assets.mjs", "harmony", cwd=root)
     destination.mkdir()
     for name in ("pubspec.yaml", "pubspec.lock", ".metadata", ".flutter-version"):
         shutil.copy2(PROJECT / name, destination)
@@ -86,11 +119,19 @@ hooks:
     )
 
 
-def validate_hap(path: Path) -> None:
+def validate_hap(path: Path, identity: dict[str, str | int] | None = None) -> None:
+    identity = candidate_identity() if identity is None else identity
     with zipfile.ZipFile(path) as archive:
         application = json.loads(archive.read("module.json"))["app"]
-        if application["bundleName"] != BUNDLE_ID or application["versionCode"] != BUILD_NUMBER:
-            raise ValueError("HAP bundle ID or version code does not match the candidate")
+        if any(
+            application.get(field) != identity[key]
+            for field, key in (
+                ("bundleName", "bundle_id"),
+                ("versionName", "version_name"),
+                ("versionCode", "version_code"),
+            )
+        ):
+            raise ValueError("HAP bundle ID, version name or code does not match the candidate")
         for name in ("libapp.so", "libflutter.so", "libsqlite3.so"):
             library = archive.read(f"libs/arm64-v8a/{name}")
             if library[:6] != b"\x7fELF\x02\x01" or library[18:20] != b"\xb7\x00":
@@ -107,12 +148,21 @@ def validate_hap(path: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--flutter", required=True, type=Path, help="CPF Flutter executable")
     parser.add_argument(
-        "--native-sdk", required=True, type=Path, help="openharmony/native directory"
+        "--print-basename", action="store_true", help="resolve the catalog candidate name"
     )
-    parser.add_argument("--output", required=True, type=Path, help="candidate HAP output path")
+    parser.add_argument("--flutter", type=Path, help="CPF Flutter executable")
+    parser.add_argument("--native-sdk", type=Path, help="openharmony/native directory")
+    parser.add_argument("--output", type=Path, help="candidate HAP output path")
     options = parser.parse_args()
+    candidate = candidate_identity()
+    if options.print_basename:
+        print(
+            f"XCAGI-HarmonyOS-{candidate['version_name']}-arm64-{candidate['version_code']}-unsigned.hap"
+        )
+        return
+    if not all((options.flutter, options.native_sdk, options.output)):
+        parser.error("--flutter, --native-sdk and --output are required for a build")
     flutter = options.flutter.resolve(strict=True)
     native = options.native_sdk.resolve(strict=True)
     output = options.output.resolve()
@@ -122,12 +172,15 @@ def main() -> None:
         parser.error("--output must use the .hap extension")
 
     identity = {
+        **candidate,
         "source_commit": git_output(PROJECT, "rev-parse", "HEAD"),
-        "source_dirty": bool(git_output(PROJECT, "status", "--porcelain", "--", ".")),
+        "source_dirty": bool(git_output(PROJECT, "status", "--porcelain")),
         "flutter_commit": git_output(flutter.parent.parent, "rev-parse", "HEAD"),
         "sqlite_revision": SQLITE_REVISION,
-        "bundle_id": BUNDLE_ID,
-        "version_code": BUILD_NUMBER,
+        "build_run_id": os.environ.get("GITHUB_RUN_ID", ""),
+        "state": "candidate",
+        "signature": "unsigned",
+        "acceptance": "pending",
         "target": "ohos-arm64",
     }
     checksum = output.with_suffix(".hap.sha256")
@@ -148,12 +201,14 @@ def main() -> None:
             "--no-pub",
             "--target-platform",
             "ohos-arm64",
+            "--build-name",
+            str(candidate["version_name"]),
             "--build-number",
-            str(BUILD_NUMBER),
+            str(candidate["version_code"]),
             cwd=project,
         )
         hap = project / HAP
-        validate_hap(hap)
+        validate_hap(hap, candidate)
         output.parent.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix=".xcmax-hap-", dir=output.parent) as publish:
             staged = Path(publish)

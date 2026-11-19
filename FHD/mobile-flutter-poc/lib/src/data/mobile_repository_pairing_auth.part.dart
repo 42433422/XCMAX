@@ -28,7 +28,8 @@ abstract class _RepoPairingAuthBase extends _RepoGroupsBase {
       throw const MobileRepositoryException('无法识别配对码，请刷新电脑端二维码');
     }
 
-    final baseUrl = await _resolvePairingExchangeBaseUrl(parsed, text);
+    final baseUrl = (await _resolvePairingExchangeBaseUrl(parsed, text))
+        .replaceFirst(RegExp(r'/+$'), '/');
     if (baseUrl.isEmpty) {
       throw const MobileRepositoryException(
         '未找到电脑，请确认手机与电脑在同一 WiFi，并在管理端刷新设备码后重试',
@@ -46,13 +47,14 @@ abstract class _RepoPairingAuthBase extends _RepoGroupsBase {
     }
     final hostWithPort = _hostPortFromApiBaseUrl(
       _readStringMap(response.data, const ['api_base_url', 'base_url']),
-    ).ifEmpty(parsed?.hostWithPort ?? '');
+    ).ifEmpty(_hostPortFromApiBaseUrl(baseUrl));
     final relayId = _relayIdFromBindingData(response.data);
     final previous = await _client.loadSession();
     _requireAuthGeneration(generation);
     try {
+      // exchangePairing validated this complete URI; keep it for later requests.
       await _client.persistPairingSession(
-        response.data,
+        {...?response.data, 'local_base_url': baseUrl},
         hostWithPort: hostWithPort,
         clearRelayDesktop: true,
         setupComplete: true,

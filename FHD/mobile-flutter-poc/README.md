@@ -20,7 +20,9 @@ flutter run
 
 鸿蒙 Runner 复用 CPF-Flutter `3.44.9+ohos-1.0.0-beta` 的 Stage 模板，锁定提交 `744cbb4f08e577787774c04033cc19a9d318d0d2`。SDK 与引擎使用 BSD-3-Clause，模板许可随 `ohos/` 保留。需要 DevEco Command Line Tools `26.0.0.851`、HarmonyOS SDK 26.0.0、JDK 21 和 SQLite 源码生成依赖 Tcl、make。最低运行版本为 HarmonyOS `5.0.5(17)`。[CPF-Flutter](https://gitcode.com/CPF-Flutter/flutter_flutter/tree/3.44.9%2Bohos-1.0.0-beta) · [DevEco 命令行工具](https://developer.huawei.com/consumer/cn/download/command-line-tools-for-hmos)
 
-鸿蒙端复用 `path_provider_ohos 2.2.1`、`shared_preferences_ohos 2.2.0`（BSD-3-Clause），`file_selector_ohos 0.5.0+2`、`url_launcher_ohos 6.3.0`（Apache-2.0），以及 `webview_flutter_harmonyos 4.14.1`、`image_picker_harmonyos 1.2.4`、`package_info_plus_harmonyos 0.0.1`（BSD-3-Clause）和 `flutter_tts_ohos 4.2.5`（MIT）。扫码和凭证分别使用系统 Scan Kit 和 HUKS。离线聊天继续使用 Drift 和 SQLite，鸿蒙构建用 NDK 生成目标架构的 SQLite 库。[CPF 插件](https://gitcode.com/CPF-Flutter/flutter_packages) · [Harmony Flutter Packages](https://github.com/Wayaer/harmony_flutter_packages)
+鸿蒙端复用 `path_provider_ohos 2.2.1`、`shared_preferences_ohos 2.2.0`（BSD-3-Clause），`file_selector_ohos 0.5.0+2`、`url_launcher_ohos 6.3.0`（Apache-2.0），以及 `webview_flutter_harmonyos 4.14.1`、`image_picker_harmonyos 1.2.4`、`package_info_plus_harmonyos 0.0.1`（BSD-3-Clause）和 `flutter_tts_ohos 4.2.5`（MIT）。扫码、文件分享和凭证分别使用系统 Scan Kit、[Share Kit](https://developer.huawei.com/consumer/en/doc/harmonyos-references/share-system-share) 和 HUKS；支付回跳由 Stage Ability 转发给现有 Flutter 导航。离线聊天继续使用 Drift 和 SQLite，鸿蒙构建用 NDK 生成目标架构的 SQLite 库。[CPF 插件](https://gitcode.com/CPF-Flutter/flutter_packages) · [Harmony Flutter Packages](https://github.com/Wayaer/harmony_flutter_packages)
+
+原生分享/回跳桥接回归：`node --experimental-vm-modules --test ohos/test/entry_ability.test.mjs`（Node 22.13+）。它执行实际 ArkTS 桥接与本地文件隔离，系统分享面板用替身；SDK 类型由 HAP 构建校验，真机分享和支付回跳仍需验收。
 
 用 CI 中的配置初始化 Flutter OHOS 与 DevEco 环境后，在本目录构建 ARM64 无签名候选包。
 
@@ -31,7 +33,7 @@ python3 scripts/build_harmony_hap.py \
   --output build/xcagi-harmonyos-arm64-unsigned.hap
 ```
 
-构建同时输出 SHA-256 校验文件和记录应用、Flutter 构建提交的 `build-info.json`。签名、安装和鸿蒙真机验收按发布记录核对。
+版本与候选意图登记在 `../config/download_release.json`；`version_sync.py` 从 `VERSION.md` 同步 Runner 的 `versionName`。构建号保留 AppScope 的单调递增值，构建器读取并传入 Flutter，核验 HAP 内的版本名、构建号及包名，输出真实 SHA-256 与源码/Flutter 提交、构建运行号、未签名状态的 `build-info.json`。目录尚无此版本的冻结制品身份与下载地址；合入 main 后须用原包补齐签名、安装及鸿蒙真机验收，不沿用旧分支包的验收或哈希。
 
 ## 策略摘要
 

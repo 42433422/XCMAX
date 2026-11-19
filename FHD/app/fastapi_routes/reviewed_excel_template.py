@@ -2606,7 +2606,10 @@ def reviewed_excel_intake_preview(
                         # Honor the candidate's clears; source values are not restored.
                         chosen_table = read_candidate_table(path)
                     else:
-                        dynamic = dynamic_table_candidate(path) if not target_type else None
+                        # The classifier's fixed enum uses knowledge for unknown
+                        # business tables too. Infer the selected, cleaned schema
+                        # before deciding that only document text can be retained.
+                        dynamic = dynamic_table_candidate(path)
                         if dynamic is not None:
                             # 没有固定业务表时由模型推断结构，写入通用表而不是报错。
                             chosen_table, dynamic_schema = dynamic
@@ -2646,6 +2649,10 @@ def reviewed_excel_intake_preview(
                             else [],
                         ),
                     }
+                    if dynamic_schema is not None:
+                        detection.update(
+                            llm_lane="database", used_llm=True, degraded=False, llm_reason=""
+                        )
                     _authorize_intake(request, (tenant, owner), target_type)
                     intake = get_auto_ingest_service()
                     knowledge = intake.knowledge_plan(

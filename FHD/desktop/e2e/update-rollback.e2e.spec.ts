@@ -155,9 +155,12 @@ test.beforeAll(async () => {
   })
   page = await electronApp.firstWindow()
   await electronApp.evaluate(({ app, BrowserWindow }) => {
-    const { autoUpdater } = require(require('node:path').join(app.getAppPath(), 'node_modules/electron-updater'))
+    const requireFromApp = process.getBuiltinModule('module').createRequire(
+      process.getBuiltinModule('path').join(app.getAppPath(), 'package.json'),
+    )
+    const { autoUpdater } = requireFromApp('electron-updater')
     autoUpdater.forceDevUpdateConfig = true
-    const { configureUpdater } = require(require('node:path').join(app.getAppPath(), 'dist/updater.js'))
+    const { configureUpdater } = requireFromApp('./dist/updater.js')
     configureUpdater(BrowserWindow.getAllWindows()[0])
   })
   page.on('console', msg => {

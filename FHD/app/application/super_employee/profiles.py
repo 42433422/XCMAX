@@ -87,7 +87,7 @@ def _trae_cli_command(cli_path: str, prompt: str, output_path: Path, cwd: str) -
 def _claude_cli_command(cli_path: str, prompt: str, output_path: Path, cwd: str) -> list[str]:
     # Claude Code 无头模式（print）。stream-json：工作时持续吐事件(工具调用/文本)，
     # 作为"还在干活"的心跳，配合 idle-timeout 实现"只要在工作就不超时"。
-    # stream-json 在 print 模式需 --verbose。acceptEdits 允许在 cwd 内改/建文件。
+    # stream-json 在 print 模式需 --verbose。默认保留命令审批，绕过须由运维显式配置。
     perm = (
         os.environ.get("DEVFLEET_CLAUDE_PERMISSION_MODE") or "acceptEdits"
     ).strip() or "acceptEdits"

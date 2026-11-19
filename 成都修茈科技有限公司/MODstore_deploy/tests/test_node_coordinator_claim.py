@@ -10,10 +10,10 @@ from pathlib import Path
 
 import pytest
 import sqlalchemy as sa
-from sqlalchemy.orm import sessionmaker
-
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
+from sqlalchemy.orm import sessionmaker
+
 from modstore_server import models
 from modstore_server import node_coordinator as nc
 
@@ -161,8 +161,9 @@ def test_existing_database_migration_preserves_events_and_is_idempotent():
 def test_merge_upgrades_either_existing_head_without_losing_data(
     tmp_path, monkeypatch, starting_head
 ):
-    from alembic import command
     from alembic.config import Config
+
+    from alembic import command
 
     root = Path(__file__).parents[1]
     url = f"sqlite:///{tmp_path / 'merge.sqlite'}"
@@ -199,7 +200,7 @@ def test_merge_upgrades_either_existing_head_without_losing_data(
     command.upgrade(cfg, "head")
     with engine.connect() as conn:
         assert conn.exec_driver_sql("SELECT version_num FROM alembic_version").scalars().all() == [
-            "20261119_xiaoc_followups"
+            "20261119_personal_allowance"
         ]
         expected_eta = (
             "2026-10-21 03:30:00"
@@ -214,6 +215,9 @@ def test_merge_upgrades_either_existing_head_without_losing_data(
             "SELECT id, claim_token, claim_until FROM event_outbox"
         ).one() == (7, "", None)
         assert {"incident_inbox", "incident_claims"} <= set(sa.inspect(conn).get_table_names())
+        assert not {"users", "plan_templates", "personal_plan_allowance_claims"} & set(
+            sa.inspect(conn).get_table_names()
+        )
         if starting_head.endswith("incident_ownership") or starting_head == "both":
             assert conn.exec_driver_sql(
                 "SELECT inbox_key, incident_event_id FROM incident_inbox"

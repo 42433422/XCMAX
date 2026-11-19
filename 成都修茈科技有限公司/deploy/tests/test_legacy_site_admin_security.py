@@ -143,3 +143,97 @@ def test_valid_bitmap_upload_and_legacy_svg_are_sandboxed(site):
         old = client.get("/uploads/old.svg")
         assert old.status_code == 200
         assert old.headers["Content-Security-Policy"] == "sandbox"
+
+
+def test_proxy_failure_does_not_expose_upstream_exception(site, monkeypatch, caplog):
+    private_detail = (
+        "http://operator:private-password@internal.invalid/api?token=private-token"
+    )
+
+    def unavailable(*_args, **_kwargs):
+        raise site.requests.ConnectionError(private_detail)
+
+    monkeypatch.setattr(site.requests, "request", unavailable)
+    with site.app.test_client() as client:
+        response = client.get("/api/private", headers={"Origin": "https://xiu-ci.com"})
+    assert response.status_code == 502
+    assert response.json == {"detail": "服务暂时不可用，请稍后重试。"}
+    assert response.headers["Access-Control-Allow-Origin"] == "https://xiu-ci.com"
+    assert "ConnectionError" in caplog.text
+    assert private_detail not in caplog.text
+    assert "private-password" not in response.get_data(as_text=True)
+
+
+def _upstream_response(site, headers, *, status=200):
+    upstream = site.requests.Response()
+    upstream.status_code = status
+    upstream.raw = io.BytesIO(b"upstream payload")
+    upstream.headers.update(headers)
+    return upstream
+
+
+@pytest.mark.parametrize(
+    "name,value",
+    [
+        ("X-Unsafe\r\nSet-Cookie", "injected=1"),
+        ("X-Unsafe: Set-Cookie", "injected=1"),
+        ("X Unsafe", "injected=1"),
+        ("Location", "/safe\r\nSet-Cookie: injected=1"),
+        ("Location", "/safe\nX-Injected: yes"),
+        ("X-Unsafe", "hidden\x00value"),
+    ],
+)
+def test_proxy_rejects_malformed_response_headers(site, monkeypatch, name, value):
+    upstream = _upstream_response(site, {name: value, "X-Upstream-Safe": "kept"})
+    monkeypatch.setattr(site.requests, "request", lambda *_args, **_kwargs: upstream)
+    with site.app.test_client() as client:
+        response = client.get("/api/proxy-header-check")
+        assert response.data == b"upstream payload"
+    assert name not in response.headers
+    assert "Set-Cookie" not in response.headers
+    assert response.headers["X-Upstream-Safe"] == "kept"
+
+
+def test_proxy_preserves_payment_redirect_and_auth_headers(site, monkeypatch):
+    location = "xcagi://payment/complete?order_id=public-order&result=success"
+    upstream = _upstream_response(
+        site,
+        {
+            "Location": location,
+            "Set-Cookie": "session=public-test; HttpOnly; Secure; SameSite=Lax",
+            "Content-Type": "text/plain",
+            "Connection": "close",
+            "Content-Length": "999",
+            "Access-Control-Allow-Origin": "https://untrusted.invalid",
+        },
+        status=307,
+    )
+    calls = []
+
+    def forward(method, url, **kwargs):
+        calls.append((method, url, kwargs))
+        return upstream
+
+    monkeypatch.setattr(site.requests, "request", forward)
+    with site.app.test_client() as client:
+        response = client.post(
+            "/api/payment/complete?order=public-order",
+            data=b"payment body",
+            headers={
+                "Authorization": "Bearer public-test",
+                "Origin": "https://xiu-ci.com",
+            },
+        )
+        assert response.data == b"upstream payload"
+    assert response.status_code == 307
+    assert response.headers["Location"] == location
+    assert response.headers["Set-Cookie"].startswith("session=public-test;")
+    assert response.headers["Access-Control-Allow-Origin"] == "https://xiu-ci.com"
+    assert "Connection" not in response.headers
+    assert "Content-Length" not in response.headers
+    assert len(calls) == 1
+    method, url, options = calls[0]
+    assert method == "POST" and url.endswith("/api/payment/complete?order=public-order")
+    assert options["allow_redirects"] is False
+    assert options["headers"]["Authorization"] == "Bearer public-test"
+    assert options["data"] == b"payment body"

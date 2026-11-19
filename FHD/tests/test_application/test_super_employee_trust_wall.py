@@ -5,7 +5,9 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import sys
 from pathlib import Path
 
 import pytest
@@ -110,7 +112,7 @@ def test_relay_real_repo_requires_git_dir(tmp_path, monkeypatch):
     assert cwd == svc._product_ephemeral_workspace()
 
 
-# ── 工具面层：产品域禁写/执行类工具，工厂域不限 ──
+# ── 工具面层：产品域禁写/执行类工具，工厂域默认保留命令审批 ──
 
 
 def test_product_cmd_is_restricted():
@@ -123,12 +125,97 @@ def test_product_cmd_is_restricted():
     assert "bypassPermissions" not in cmd
 
 
-def test_factory_cmd_is_unrestricted():
+def test_factory_cmd_keeps_tool_approval_by_default(monkeypatch):
+    monkeypatch.delenv("DEVFLEET_CLAUDE_PERMISSION_MODE", raising=False)
     svc = _svc()
     svc._grant = CapabilityGrant(ExecutionScope.FACTORY, "xcmax")
     cmd = svc._conversation_cmd("/bin/claude", "hi", None)
     assert "--disallowedTools" not in cmd
     assert "acceptEdits" in cmd
+    assert "bypassPermissions" not in cmd
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("entry", ["direct", "conversation", "stream"])
+@pytest.mark.parametrize(
+    ("scope", "configured", "expected"),
+    [
+        ("factory", None, "acceptEdits"),
+        ("factory", "  ", "acceptEdits"),
+        ("factory", "bypassPermissions", "bypassPermissions"),
+        ("factory", " plan ", "plan"),
+        ("relay", None, "acceptEdits"),
+        ("relay", "  ", "acceptEdits"),
+        ("relay", "bypassPermissions", "bypassPermissions"),
+        ("relay", "plan", "plan"),
+        ("product", None, "default"),
+        ("product", "bypassPermissions", "default"),
+        ("forged_factory", None, "default"),
+    ],
+)
+async def test_executed_claude_argv_obeys_current_scope(
+    tmp_path, monkeypatch, entry, scope, configured, expected
+):
+    """Capture the actual child argv through synchronous, resumed and SSE execution."""
+    monkeypatch.setenv(FACTORY_TOKEN_ENV, "fixture-platform-token")
+    monkeypatch.setenv("GITHUB_TOKEN", "fixture-github-token")
+    if configured is None:
+        monkeypatch.delenv("DEVFLEET_CLAUDE_PERMISSION_MODE", raising=False)
+    else:
+        monkeypatch.setenv("DEVFLEET_CLAUDE_PERMISSION_MODE", configured)
+    monkeypatch.setenv("XCMAX_CLAUDE_CONVERSATION", "1" if entry == "conversation" else "0")
+    monkeypatch.setenv("XCMAX_CLAUDE_CLI_CHAT_ENABLED", "1")
+    executable = tmp_path / "claude-fixture"
+    executable.write_text(
+        f"#!{sys.executable}\n"
+        "import json, os, sys\n"
+        "result = {'argv': sys.argv[1:], "
+        "'factory_token': 'XCMAX_FACTORY_CAPABILITY_TOKEN' in os.environ, "
+        "'github_token': 'GITHUB_TOKEN' in os.environ}\n"
+        "print(json.dumps({'type': 'result', 'result': json.dumps(result)}))\n"
+    )
+    executable.chmod(0o755)
+    monkeypatch.setenv("XCMAX_CLAUDE_CLI_PATH", str(executable))
+    service = ClaudeSuperEmployeeService(storage_root=tmp_path / "messages")
+    monkeypatch.setattr(service, "_cli_workspace", lambda _: str(tmp_path))
+    monkeypatch.setattr(service, "_session_get", lambda _: {"session_id": "fixture-resume"})
+    context = {"mode": "chat"}
+    if scope == "factory":
+        context = factory_context(base=context)
+    elif scope == "relay":
+        context.update(source="mobile_relay", force_cli_direct=True)
+    elif scope == "forged_factory":
+        context.update(_factory_token="wrong-token", scope="factory", source="admin_im")
+    if entry == "stream":
+        events = [
+            event
+            async for event in service.invoke_stream(
+                user_id=1, message="Explain fixture behavior precisely", context=context
+            )
+        ]
+        assert events[-1]["type"] == "done"
+        captured = json.loads(events[-1]["result"]["response"])
+    else:
+        result = service.invoke(
+            user_id=1, message="Explain fixture behavior precisely", context=context
+        )
+        captured = json.loads(result["assistant_message"]["body"])
+    argv = captured["argv"]
+    assert argv.count("--permission-mode") == 1
+    assert argv[argv.index("--permission-mode") + 1] == expected
+    assert ("--resume" in argv) is (entry == "conversation" and scope != "relay")
+    restricted = scope in {"product", "forged_factory"}
+    assert ("--disallowedTools" in argv) is restricted
+    if restricted:
+        assert set(argv[argv.index("--disallowedTools") + 1].split(",")) == {
+            "Bash",
+            "Edit",
+            "Write",
+            "MultiEdit",
+            "NotebookEdit",
+        }
+    assert captured["factory_token"] is (not restricted)
+    assert captured["github_token"] is (not restricted)
 
 
 # ── 凭证层：产品域剥掉平台令牌与 git 凭证 ──

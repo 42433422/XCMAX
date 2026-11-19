@@ -44,6 +44,7 @@ def test_fast_lane_lists_every_account_tier_and_registers_admin_routes(client):
     from modstore_server.models import PlanTemplate, get_session_factory
 
     expected = {
+        "saas-personal-free",
         "saas-trial-30",
         "saas-permanent-starter",
         "saas-permanent-growth",
@@ -59,12 +60,16 @@ def test_fast_lane_lists_every_account_tier_and_registers_admin_routes(client):
 
     by_id = {item["id"]: item for item in items}
     assert expected <= set(by_id)
+    assert by_id["saas-personal-free"]["license_type"] == "free"
+    assert by_id["saas-personal-free"]["account_tier"] == "normal"
+    assert by_id["saas-personal-free"]["price"] == "0.00"
     assert by_id["saas-trial-30"]["license_type"] == "trial"
     assert by_id["saas-permanent-starter"]["account_tier"] == "normal"
     assert by_id["saas-permanent-growth"]["account_tier"] == "pro"
     assert by_id["saas-permanent-max"]["account_tier"] == "max"
     assert by_id["saas-permanent-ultra"]["account_tier"] == "ultra"
-    assert [item["id"] for item in items if item["catalog"] == "account_license"][:5] == [
+    assert [item["id"] for item in items if item["catalog"] == "account_license"] == [
+        "saas-personal-free",
         "saas-trial-30",
         "saas-permanent-starter",
         "saas-permanent-growth",

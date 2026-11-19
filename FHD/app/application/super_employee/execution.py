@@ -69,26 +69,27 @@ class ExecutionPolicy:
 
         把 ``--permission-mode`` 降到 ``default`` 并显式禁用写/执行类工具，使被注入的产品域
         会话即便被诱导喊 git/shell，那些工具也压根没注册 → 硬失败而非软拒绝。工厂域不动；
+        既有可信中继保持 ``acceptEdits`` 默认与显式运维配置，不继承工厂域的新默认。
         codex 命令构造默认已是 ``--sandbox workspace-write``，此处不改。
         """
         if not cmd:
             return cmd
-        if (
-            self._scope.grant.is_factory
-            or self._scope.relay_cli_trusted
-            or self._p.cli_binary != "claude"
-        ):
+        if self._scope.grant.is_factory or self._p.cli_binary != "claude":
             return cmd
+        permission = "default"
+        if self._scope.relay_cli_trusted:
+            permission = (os.environ.get("DEVFLEET_CLAUDE_PERMISSION_MODE") or "").strip()
+            permission = permission or "acceptEdits"
         out: list[str] = []
         i = 0
         while i < len(cmd):
             if cmd[i] == "--permission-mode" and i + 1 < len(cmd):
-                out += ["--permission-mode", "default"]
+                out += ["--permission-mode", permission]
                 i += 2
                 continue
             out.append(cmd[i])
             i += 1
-        if "--disallowedTools" not in out:
+        if not self._scope.relay_cli_trusted and "--disallowedTools" not in out:
             prompt = out.pop()
             out += ["--disallowedTools", "Bash,Edit,Write,MultiEdit,NotebookEdit", prompt]
         return out
