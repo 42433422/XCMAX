@@ -305,7 +305,7 @@ def private_execution_context(db, event_id, payload):
     ]
     if not clean:
         raise ValueError("feedback_execution_context_missing")
-    return {"reproduction": clean}
+    return {"reproduction": clean, "intent": ticket.intent}
 
 
 def check_dispatch(request_id):

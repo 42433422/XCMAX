@@ -613,6 +613,7 @@ def test_feedback_run_binds_original_customer_and_production_release(
         with pytest.raises(ValueError, match="context_changed"):
             feedback.private_execution_context(db, event.id, payload)
         db.rollback()
+    assert private["intent"] == "product_issue"
     assert "首次导入未成功" in private["reproduction"][0]
     assert "test-private@example.com" not in json.dumps(private, ensure_ascii=False)
     assert ticket_no not in json.dumps(private, ensure_ascii=False)

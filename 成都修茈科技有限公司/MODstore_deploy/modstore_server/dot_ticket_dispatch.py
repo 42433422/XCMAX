@@ -212,7 +212,8 @@ def ticket_mode(req: Dict[str, Any], fields: Dict[str, Any]) -> str:
 
     triage = triage_result(req, fields)
     text = " ".join(
-        str(fields.get(key) or "") for key in ("title", "summary", "intent", "issue_domain")
+        str(fields.get(key) or "")
+        for key in ("title", "summary", "intent", "issue_domain", "_retort_risk_context")
     )
     if (
         bool(req.get("report_only"))
@@ -523,6 +524,10 @@ def prepare_dolt_ticket_payload(
     fields = ticket_fields(req)
     if contract:
         fields = {**fields, **contract["source"], "role": contract["role"]}
+        feedback = contract.get("customer_feedback") if retort else None
+        if feedback:
+            fields["intent"] = feedback.get("intent", "")
+            fields["_retort_risk_context"] = " ".join(feedback.get("reproduction") or [])
     mode = ticket_mode(req, fields)
     if contract and contract["role"] in {"scout", "verify", "escalation_review"}:
         mode = MODE_REPORT_ONLY
