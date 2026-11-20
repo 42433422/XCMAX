@@ -167,6 +167,37 @@ def _register_scheduler_phase_04():
     except RECOVERABLE_ERRORS:
         _facade().logger.exception("register strategy bet review job failed")
 
+    def _strategy_planner_job() -> None:
+        try:
+            from modstore_server.strategy_planner import plan_strategy
+
+            out = _facade()._run_tracked_scheduler_job("strategy_planner", plan_strategy)
+            _facade().logger.info(
+                "strategy plan: candidates=%s registered=%s evidence=%s",
+                out.get("candidates"),
+                out.get("registered"),
+                out.get("evidence"),
+            )
+        except RECOVERABLE_ERRORS:
+            _facade().logger.exception("strategy planner job failed")
+
+    try:
+        _facade()._scheduler.add_job(
+            _strategy_planner_job,
+            _facade().CronTrigger(
+                day_of_week="mon", hour=21, minute=50, timezone="Asia/Shanghai"
+            ),
+            id="strategy_planner",
+            replace_existing=True,
+            next_run_time=_facade().datetime.now(_facade().timezone.utc)
+            + _facade().timedelta(seconds=140),
+            misfire_grace_time=_facade()._business_misfire_grace_time(),
+            coalesce=True,
+            max_instances=1,
+        )
+    except RECOVERABLE_ERRORS:
+        _facade().logger.exception("register strategy planner job failed")
+
     def _telemetry_backlog_scan_job() -> None:
         try:
             from modstore_server.telemetry_backlog_loop import run_telemetry_scan
