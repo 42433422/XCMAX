@@ -45,16 +45,34 @@ def client(monkeypatch):
 
 
 def test_platform_tts_uses_current_users_xiaomi_credentials(monkeypatch):
-    from modstore_server import llm_key_resolver, models
+    from modstore_server import llm_operation_routes, models
 
-    monkeypatch.setattr(models, "get_session_factory", lambda: lambda: nullcontext("db"))
+    monkeypatch.setattr(
+        models, "get_session_factory", lambda: lambda: nullcontext("db")
+    )
 
-    def resolve(db, user, provider):
-        assert (db, user, provider) == ("db", 42, "xiaomi")
-        return "account-key", "https://example.test/v1", "user_override"
+    async def resolve(db, user, operation, *, provider, seed, release_before_discovery):
+        assert (db, user, provider, operation) == ("db", 42, "xiaomi", "text_to_speech")
+        assert release_before_discovery is True
+        return llm_operation_routes.OperationRoute(
+            provider, seed, "user_override", "account-key", "https://example.test/v1"
+        )
 
-    monkeypatch.setattr(llm_key_resolver, "resolve_credentials", resolve)
-    synth = AsyncMock(return_value=(b"RIFFaudio", "", {"mime": "audio/wav"}))
+    monkeypatch.setattr(llm_operation_routes, "resolve_operation_route", resolve)
+    synth = AsyncMock(
+        return_value=(
+            b"RIFFaudio",
+            "",
+            {
+                "mime": "audio/wav",
+                "provider_usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 20,
+                    "total_tokens": 30,
+                },
+            },
+        )
+    )
     monkeypatch.setattr(mimo_tts_service, "synthesize_mimo_tts_async", synth)
     app = FastAPI()
 
@@ -67,6 +85,8 @@ def test_platform_tts_uses_current_users_xiaomi_credentials(monkeypatch):
     response = TestClient(app).post("/tts", json={"text": "你好"})
     assert response.status_code == 200
     assert response.headers["x-tts-voice"] == "%E5%86%B0%E7%B3%96"
+    assert response.headers["x-llm-billing-state"] == "byok"
+    assert response.headers["x-llm-total-tokens"] == "30"
     assert synth.await_args.kwargs["credentials"] == (
         "account-key",
         "https://example.test/v1",
@@ -74,15 +94,25 @@ def test_platform_tts_uses_current_users_xiaomi_credentials(monkeypatch):
 
 
 def test_mimo_asr_uses_audio_protocol_and_current_account(monkeypatch):
-    from modstore_server import llm_key_resolver, models
+    from modstore_server import llm_operation_routes, models
 
     monkeypatch.delenv("MODSTORE_MIMO_ASR_ENABLED", raising=False)
     monkeypatch.delenv("MODSTORE_MIMO_ASR_USER_IDS", raising=False)
-    monkeypatch.setattr(models, "get_session_factory", lambda: lambda: nullcontext("db"))
     monkeypatch.setattr(
-        llm_key_resolver,
-        "resolve_credentials",
-        lambda db, uid, p: ("key", "https://example.test/v1", "user_override"),
+        models, "get_session_factory", lambda: lambda: nullcontext("db")
+    )
+    monkeypatch.setattr(
+        llm_operation_routes,
+        "resolve_operation_route",
+        AsyncMock(
+            return_value=llm_operation_routes.OperationRoute(
+                "xiaomi",
+                "mimo-v2.5-asr",
+                "user_override",
+                "key",
+                "https://example.test/v1",
+            )
+        ),
     )
     response = httpx.Response(
         200,
@@ -116,6 +146,9 @@ def test_mimo_asr_uses_audio_protocol_and_current_account(monkeypatch):
         wav.writeframes(b"\0\0" * 1600)
     result = asyncio.run(speech_api.mimo_asr(buffer.getvalue(), "zh", 42))
     assert result["text"] == "你好"
+    assert result["billing"]["input_audio_seconds"] == 0.1
+    assert result["billing"]["state"] == "byok"
+    assert result["billing"]["usage"] is None
     assert post.await_args.kwargs["json"]["model"] == "mimo-v2.5-asr"
     assert post.await_args.kwargs["json"]["messages"][0]["content"][0]["input_audio"][
         "data"
@@ -292,7 +325,11 @@ async def test_mimo_internal_bug_propagates(monkeypatch):
 
 async def test_mimo_valid_audio_async(monkeypatch):
     monkeypatch.setenv("MIMO_API_KEY", "test-key")
-    payload = {"choices": [{"message": {"audio": {"data": base64.b64encode(b"audio").decode()}}}]}
+    payload = {
+        "choices": [
+            {"message": {"audio": {"data": base64.b64encode(b"audio").decode()}}}
+        ]
+    }
     client = httpx.AsyncClient(
         transport=httpx.MockTransport(lambda request: httpx.Response(200, json=payload))
     )
@@ -326,7 +363,9 @@ def test_edge_stream_keeps_first_and_following_chunks(client, monkeypatch, path)
 @pytest.mark.parametrize("asynchronous", [False, True])
 async def test_mimo_invalid_json_is_rejected(monkeypatch, asynchronous):
     monkeypatch.setenv("MIMO_API_KEY", "test-key")
-    transport = httpx.MockTransport(lambda request: httpx.Response(200, content=b"not json"))
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(200, content=b"not json")
+    )
     if asynchronous:
         client = httpx.AsyncClient(transport=transport)
         monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: client)

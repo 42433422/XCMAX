@@ -106,3 +106,49 @@ def reported_token_dimensions(raw: Any) -> dict[str, int]:
     return {
         key: value for key, value in values.items() if type(value) is int and value >= 0
     }
+
+
+def exact_reported_usage(usage: Any) -> UsageMeter | None:
+    """Accept exact counters from an OpenAI-compatible provider without estimating."""
+    if not isinstance(usage, dict):
+        return None
+    input_tokens = usage.get("input_tokens", usage.get("prompt_tokens"))
+    output_tokens = usage.get("output_tokens", usage.get("completion_tokens"))
+    total_tokens = usage.get("total_tokens")
+    if (
+        type(input_tokens) is not int
+        or type(output_tokens) is not int
+        or type(total_tokens) is not int
+        or input_tokens < 0
+        or output_tokens < 0
+        or total_tokens <= 0
+        or total_tokens != input_tokens + output_tokens
+    ):
+        return None
+    return UsageMeter(input_tokens, output_tokens, total_tokens)
+
+
+def media_usage_receipt(
+    operation: str,
+    provider: str,
+    model: str,
+    key_source: str,
+    usage: Any,
+    *,
+    pending: bool = False,
+) -> dict[str, Any]:
+    meter = exact_reported_usage(usage) if not pending else None
+    return {
+        "operation": operation,
+        "provider": provider,
+        "model": model,
+        "key_source": key_source,
+        "state": "byok"
+        if key_source == "user_override"
+        else "awaiting_provider_usage"
+        if pending
+        else "unmetered",
+        "billed": False,
+        "usage": meter.__dict__ if meter else None,
+        "usage_details": reported_token_dimensions(usage) if meter else {},
+    }

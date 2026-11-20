@@ -87,3 +87,7 @@ route, allow/deny and response status; retain INFO logs in the server audit sink
 核对已结算的同一请求，原子补齐用量流水及请求回执。事件持久化参考
 [Lago](https://github.com/getlago/lago) 的幂等用量事件，资金状态参考
 [TigerBeetle](https://docs.tigerbeetle.com/coding/two-phase-transfers/) 的两阶段转账。
+
+兼容网关接受 `Idempotency-Key`，原生对话及视频接口接受 `client_request_id`。
+实时语音沿用回合标识与现有请求账本。视频回执在上游任务未完成时标记等待用量，
+独立语音返回经校验的用量或未计费状态。没有有效计费合同的媒体入口继续报告零平台扣费。

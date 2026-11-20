@@ -1184,6 +1184,7 @@ class LlmImageDTO(_facade().BaseModel):
 class LlmVideoDTO(_facade().BaseModel):
     provider: str
     model: str
+    client_request_id: str | None = Field(None, pattern=r"^[A-Za-z0-9_.:-]{8,128}$")
     prompt: str = _facade().Field(..., min_length=1, max_length=4000)
     size: str = _facade().Field("1280x720", max_length=32)
     seconds: int = _facade().Field(5, ge=1, le=30)
@@ -1252,6 +1253,7 @@ async def llm_chat(
         conversation_id=body.conversation_id,
         allow_failover=bool(body.allow_failover),
         route_snapshot=snapshot,
+        client_request_id=body.client_request_id,
     )
     payload = {
         "ok": out["ok"],
@@ -1363,36 +1365,69 @@ async def llm_video(
     db: _facade().Session = _facade().Depends(_facade().get_db),
     user: _facade().User = _facade().Depends(_facade()._get_current_user),
 ):
-    if body.provider not in _facade().KNOWN_PROVIDERS:
-        raise _facade().HTTPException(400, "unknown provider")
-    api_key, key_source = _facade().resolve_api_key(db, user.id, body.provider)
+    from modstore_server import llm_client_requests as ledger
+    from modstore_server.llm_billing_values import media_usage_receipt
+    from modstore_server.llm_key_resolver import resolve_credentials
+
+    provider = body.provider
+    model = body.model.strip()
+    prompt = body.prompt.strip()
+    size = body.size.strip() or "1280x720"
+    if provider not in _facade().KNOWN_PROVIDERS or not model or not prompt:
+        raise HTTPException(400, "有效的供应商、模型和提示词必填")
+    api_key, base, key_source = resolve_credentials(db, int(user.id), provider)
     if not api_key:
-        raise _facade().HTTPException(400, f"供应商「{body.provider}」未配置可用 API Key。")
-    base = (
-        _facade().resolve_base_url(db, user.id, body.provider)
-        if body.provider in _facade().OAI_COMPAT_OPENAI_STYLE_PROVIDERS
-        else None
-    )
-    result = await _facade().video_dispatch(
-        body.provider,
-        api_key=api_key,
-        base_url=base,
-        model=body.model.strip(),
-        prompt=body.prompt.strip(),
-        size=body.size.strip() or "1280x720",
-        seconds=body.seconds,
-    )
+        raise HTTPException(400, f"供应商「{provider}」未配置可用 API Key。")
+    row = None
+    request_id = None
+    if key := body.client_request_id:
+        digest = ledger.request_digest({
+            "operation": "video_generation", "provider": provider, "model": model,
+            "prompt": prompt, "size": size, "seconds": body.seconds,
+        })
+        outcome, value = ledger.begin(db, int(user.id), key, digest, 180)
+        if outcome == "replay":
+            if not value["ok"]:
+                raise HTTPException(502, "视频供应商已拒绝原请求")
+            return value
+        if outcome != "run":
+            raise HTTPException(409, {"message": "视频提交状态待核对", "state": outcome})
+        row = value
+        request_id = ledger.attempt_request_id(int(user.id), key, row.attempts)
+        ledger.mark_settling(db, row)
+    try:
+        result = await _facade().video_dispatch(
+            provider, api_key=api_key, base_url=base, model=model,
+            prompt=prompt, size=size, seconds=body.seconds,
+        )
+    except RECOVERABLE_ERRORS as exc:
+        if row is not None:
+            raise HTTPException(409, {"message": "视频提交状态待核对", "request_id": request_id}) from exc
+        raise
     if not result.get("ok"):
-        raise _facade().HTTPException(502, result.get("error") or "video upstream error")
-    return {
-        "ok": True,
-        "provider": body.provider,
-        "model": body.model,
-        "key_source": key_source,
-        "job_id": result.get("job_id") or "",
-        "status": result.get("status") or "pending",
-        "preview_url": result.get("preview_url") or "",
+        if row is not None and result.get("status") not in {400, 401, 403, 404, 422, 429}:
+            raise HTTPException(409, {"message": "视频提交状态待核对", "request_id": request_id})
+        if row is not None:
+            ledger.finish(db, row, {"ok": False})
+        raise HTTPException(502, result.get("error") or "video upstream error")
+    status = str(result.get("status") or "pending")
+    job_id = result.get("job_id") or ""
+    preview = result.get("preview_url") or ""
+    if row is not None and not job_id and not preview:
+        raise HTTPException(409, {"message": "视频供应商未返回可核对的任务号", "request_id": request_id})
+    raw = result.get("raw")
+    receipt = {
+        "ok": True, "provider": provider, "model": body.model, "key_source": key_source,
+        "job_id": job_id, "status": status, "preview_url": preview, "request_id": request_id,
+        "billing": media_usage_receipt(
+            "video_generation", provider, model, key_source,
+            raw.get("usage") if isinstance(raw, dict) else None,
+            pending=status.lower() not in {"completed", "succeeded", "success", "failed", "cancelled", "canceled"},
+        ),
     }
+    if row is not None:
+        ledger.finish(db, row, receipt)
+    return receipt
 
 
 @_facade().router.post("/pptx")

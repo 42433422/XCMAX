@@ -168,6 +168,7 @@ describe('xcmaxMarketProxy functions', () => {
         provider: 'openai',
         model: 'gpt-4',
         messages: [{ role: 'user', content: 'hi' }],
+        client_request_id: expect.any(String),
         max_tokens: 1024,
       })
     })

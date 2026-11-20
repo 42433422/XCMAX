@@ -108,6 +108,14 @@ def mark_settling(db: Session, row: LlmClientRequest) -> None:
     db.commit()
 
 
+def confirmed_no_charge(db: Session, row: LlmClientRequest) -> None:
+    """Allow the live handler to continue after a definitive rejection or wallet release."""
+    row.state = "processing"
+    row.done_json = None
+    row.updated_at = datetime.now(UTC)
+    db.commit()
+
+
 def prepare_settlement(db: Session, row: LlmClientRequest, receipt: dict[str, Any]) -> None:
     """Keep provider usage and the intended charge before contacting the wallet."""
     row.done_json = json.dumps({"pending_settlement": receipt}, ensure_ascii=False)

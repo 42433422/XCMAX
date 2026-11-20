@@ -337,6 +337,7 @@ async def openai_chat_completions(
         max_tokens=body.max_tokens,
         conversation_id=None,
         route_snapshot=route_snapshot,
+        client_request_id=request.headers.get("Idempotency-Key"),
     )
     usage = out.get("usage") or {}
     if not isinstance(usage, dict):
@@ -373,6 +374,8 @@ async def openai_chat_completions(
             "request_id": request_id,
             "billed": billed,
             "charge_amount_cny": charge,
+            "pricing": out.get("pricing"),
+            "usage_details": out.get("usage_details", {}),
             "key_source": out.get("key_source"),
             "hold_no": out.get("hold_no"),
             "category": "llm",

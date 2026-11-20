@@ -108,6 +108,7 @@ def billed(monkeypatch, db):
         base_url="https://synthetic.invalid/v1",
     )
     wallet = SimpleNamespace(
+        enabled=True,
         preauthorize=AsyncMock(
             return_value=WalletHold("synthetic-hold", Decimal(".01"), True)
         ),
@@ -166,7 +167,7 @@ async def test_same_key_resend_replays_the_receipt_without_a_second_charge(bille
 
 
 @pytest.mark.asyncio
-async def test_an_upstream_failure_frees_the_key_for_a_new_attempt(billed, db):
+async def test_an_upstream_timeout_keeps_the_key_for_reconciliation(billed, db):
     async def failing(*_args, **_kwargs):
         raise TimeoutError("synthetic upstream timeout")
         yield {}
@@ -174,8 +175,9 @@ async def test_an_upstream_failure_frees_the_key_for_a_new_attempt(billed, db):
     billed.monkeypatch.setattr(llm_billed_chat, "chat_dispatch_stream", failing)
     events = await billed.call()
     assert [event for event, _ in events] == ["status", "meta", "error"]
-    assert ledger.lookup(db, 7, KEY, 90) == "failed"
+    assert ledger.lookup(db, 7, KEY, 90) == "settling"
     billed.wallet.settle.assert_not_awaited()
+    billed.wallet.release.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -226,3 +228,171 @@ async def test_wallet_readback_recovers_a_paid_image_once(db, monkeypatch):
     assert ledger.begin(db, 7, KEY, "image", 180) == ("replay", receipt)
     assert recovery.complete_receipt(db, row, receipt) == receipt
     assert db.query(LlmCallLog).count() == 1
+
+
+@pytest.mark.asyncio
+async def test_sync_chat_replays_after_wallet_response_is_lost(db, monkeypatch):
+    from fastapi import HTTPException
+    from modstore_server import llm_billed_once
+
+    route = ChatRouteSnapshot(
+        provider="openai",
+        model="vision-example",
+        route_source="explicit",
+        key_source="platform",
+        config_revision="r1",
+        api_key="test-key",
+        base_url="https://synthetic.invalid/v1",
+    )
+    wallet = SimpleNamespace(
+        enabled=True,
+        preauthorize=AsyncMock(
+            return_value=WalletHold("sync-hold", Decimal("1"), True)
+        ),
+        settle=AsyncMock(side_effect=HTTPException(502, "wallet timeout")),
+        release=AsyncMock(),
+    )
+    monkeypatch.setattr(llm_billed_once, "JavaWalletClient", lambda **kwargs: wallet)
+    monkeypatch.setattr(llm_billed_once, "enforce_risk_limits", Mock())
+    send = AsyncMock(
+        return_value={
+            "ok": True,
+            "content": "saved",
+            "usage": {"prompt_tokens": 30, "completion_tokens": 40, "total_tokens": 70},
+        }
+    )
+    monkeypatch.setattr(llm_billed_once, "chat_dispatch", send)
+    monkeypatch.setattr(
+        llm_billed_once, "recover_receipt", AsyncMock(return_value=None)
+    )
+
+    async def request():
+        return await llm_billed_chat.run_billed_llm_chat(
+            SimpleNamespace(state=SimpleNamespace(), headers={}),
+            db,
+            SimpleNamespace(id=7),
+            provider=route.provider,
+            model=route.model,
+            route_snapshot=route,
+            messages=[{"role": "user", "content": "test"}],
+            client_request_id=KEY,
+        )
+
+    with pytest.raises(HTTPException) as pending:
+        await request()
+    assert pending.value.status_code == 409
+    assert ledger.lookup(db, 7, KEY, 90) == "settling"
+    wallet.release.assert_not_awaited()
+
+    from modstore_server import llm_billing_recovery as recovery
+
+    request_id = str(wallet.preauthorize.await_args.args[4])
+    charge = wallet.settle.await_args.args[2]
+    read = AsyncMock(
+        return_value={
+            "hold_no": "sync-hold",
+            "request_id": request_id,
+            "provider": route.provider,
+            "model": route.model,
+            "status": "settled",
+            "settled_amount": str(charge),
+        }
+    )
+    monkeypatch.setattr(
+        recovery, "JavaWalletClient", lambda: SimpleNamespace(read_hold=read)
+    )
+    receipt = await request()
+    assert receipt["content"] == "saved"
+    assert receipt["pricing"]["currency"] == "CNY"
+    assert "_history" not in receipt
+    assert await request() == receipt
+    send.assert_awaited_once()
+    wallet.settle.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_video_request_replays_same_supplier_job_id(db, monkeypatch):
+    from modstore_server import llm_api, llm_key_resolver
+
+    send = AsyncMock(
+        return_value={
+            "ok": True,
+            "job_id": "video-id",
+            "status": "pending",
+            "raw": {
+                "usage": {"input_tokens": 2, "output_tokens": 0, "total_tokens": 2}
+            },
+        }
+    )
+    monkeypatch.setattr(llm_api, "video_dispatch", send)
+    monkeypatch.setattr(
+        llm_key_resolver,
+        "resolve_credentials",
+        lambda *args: ("platform-key", "https://example.invalid", "platform"),
+    )
+    body = llm_api.LlmVideoDTO(
+        provider="openai",
+        model="video-model",
+        prompt="test",
+        client_request_id=KEY,
+    )
+    first = await llm_api.llm_video(body, db, SimpleNamespace(id=7))
+    assert first["job_id"] == "video-id"
+    assert first["billing"]["state"] == "awaiting_provider_usage"
+    assert first["billing"]["usage"] is None
+    assert await llm_api.llm_video(body, db, SimpleNamespace(id=7)) == first
+    send.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_voice_turn_replays_text_only_without_second_debit(db, monkeypatch):
+    from modstore_server import voice_s2s_ws as voice
+
+    wallet = SimpleNamespace(
+        enabled=True,
+        preauthorize=AsyncMock(
+            return_value=WalletHold("voice-hold", Decimal("1"), True)
+        ),
+        settle=AsyncMock(),
+        release=AsyncMock(),
+    )
+    monkeypatch.setattr(voice, "JavaWalletClient", lambda **kw: wallet)
+    monkeypatch.setattr(
+        voice, "resolve_credentials", lambda *args: ("key", None, "platform")
+    )
+    monkeypatch.setattr(voice, "enforce_risk_limits", Mock())
+    events = AsyncMock()
+    monkeypatch.setattr(voice, "_send_json", events)
+
+    async def chat(*args, **kwargs):
+        yield {"type": "delta", "delta": "voice answer"}
+        yield {
+            "type": "usage",
+            "usage": {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30},
+        }
+
+    monkeypatch.setattr(voice, "chat_dispatch_stream", chat)
+    args = dict(
+        user=SimpleNamespace(id=7),
+        db=db,
+        auth_header="",
+        provider="openai",
+        model="chat-model",
+        messages=[{"role": "user", "content": "voice test"}],
+        max_tokens=200,
+        voice="",
+        rate=1,
+        tts_enabled=False,
+        cancel=__import__("asyncio").Event(),
+        turn_id="voice-turn-test",
+    )
+    await voice._run_billed_s2s_turn(object(), **args)
+    await voice._run_billed_s2s_turn(object(), **args)
+    done = [
+        arg.args[1]
+        for arg in events.await_args_list
+        if arg.args[1]["type"] == "text_done"
+    ]
+    assert len(done) == 2 and done[1]["replayed"] is True
+    assert done[0]["usage"]["total_tokens"] == 30
+    assert wallet.settle.await_count == 1
