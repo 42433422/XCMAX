@@ -1,5 +1,5 @@
 {
-  "lines": 2526057,
+  "lines": 2526133,
   "updated": "2026-11-20",
-  "note": "Follow-up to PR3336 after its protected automatic squash merge: authenticate owned desktop backend before page/capability use, recover verification via the existing watchdog, and resume paired LAN listener after offline startup. Measured main20cff 2525649 to 2526057 (+408: regression tests339, backend34, desktop35). No new oversized source-growth item; existing thresholds unchanged."
+  "note": "用户要求修复全部 PR；在 PR3336 后继续修复桌面身份校验、看门狗恢复和回环端口占用，并补充测试；在此前记录基线基础上净增 76 行，最终 CI 与合入条件待核对。"
 }
