@@ -35,7 +35,6 @@ _LAST_TIME_RAIL_OBSERVABILITY_SYNC_TS = 0.0
 _LAST_TIME_RAIL_OBSERVABILITY_MISSING = -1
 _REQUIRED_CORE_JOB_IDS = frozenset(
     {
-        "auto_fix_event_bindings_refresh",
         "auto_merge_audit_sampling",
         "auto_version_bump_daily",
         "autonomy_metrics_snapshot",

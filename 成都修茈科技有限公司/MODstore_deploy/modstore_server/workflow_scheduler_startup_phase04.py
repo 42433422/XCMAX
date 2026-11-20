@@ -139,21 +139,6 @@ def _register_scheduler_phase_04():
     except RECOVERABLE_ERRORS:
         _facade().logger.exception("register self evolution metrics job failed")
 
-    def _auto_fix_loop_job() -> None:
-        try:
-            from modstore_server.auto_fix_loop import register_auto_fix_event_bindings
-
-            register_auto_fix_event_bindings()
-        except RECOVERABLE_ERRORS:
-            _facade().logger.debug("auto_fix event bindings registration skipped")
-
-    _facade()._scheduler.add_job(
-        _auto_fix_loop_job,
-        _facade().CronTrigger(hour=21, minute=15),
-        id="auto_fix_event_bindings_refresh",
-        replace_existing=True,
-    )
-
     def _auto_version_bump_job() -> None:
         try:
             from modstore_server.auto_version_bump import auto_version_bump

@@ -23,8 +23,8 @@ cat > "$CRON_FILE" <<'EOF'
 # 每日 16:15 UTC / 次日 00:15 行级数据保留（分批删除 + VACUUM，配置见 /etc/fhd/pg-retention.conf）
 15 16 * * * root /opt/fhd-full/scripts/deploy/fhd-pg-retention.sh >> /var/log/fhd-pg-retention.log 2>&1
 
-# 每月 1 日 13:30 UTC / 21:30 恢复演练（真实恢复到临时库 + 行数断言）
-30 13 1 * * root /opt/fhd-full/scripts/deploy/fhd-restore-drill.sh >> /var/log/fhd-backup.log 2>&1
+# 每月 1 日 13:20 UTC / 21:20 恢复演练（真实恢复到临时库 + 行数断言）
+20 13 1 * * root /opt/fhd-full/scripts/deploy/fhd-restore-drill.sh >> /var/log/fhd-backup.log 2>&1
 EOF
 
 chmod 644 "$CRON_FILE"
