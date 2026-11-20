@@ -280,7 +280,10 @@ class PlannedWorkflowDispatch:
             elif failure_kind == "plan_format_invalid":
                 message_text = "规划输出未通过格式校验，本次没有执行任何业务操作。请重试。"
             elif failure_kind == "planner_error":
-                message_text = "规划服务处理失败，本次没有执行任何业务操作。请重试。"
+                message_text = (
+                    f"{(reason or '规划服务处理失败').rstrip('。')}。"
+                    "本次没有执行任何业务操作。"
+                )
             elif unavailable and "余额不足" in reason:
                 message_text = f"{reason.rstrip('。')}。本次没有执行任何业务操作。"
             elif unavailable:

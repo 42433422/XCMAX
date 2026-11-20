@@ -11,6 +11,7 @@ import type { useChatSessionActivity } from '../useChatSessionActivity'
 import type { ShipmentTask } from '../useShipmentTask'
 import type { ChatPlannerPayload } from '@/types/chat'
 import chatApi from '@/api/chat'
+import agentRunsApi from '@/api/agentRuns'
 import { useAiSdkChatRound } from './useAiSdkChatRound'
 import productsApi from '@/api/products'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
@@ -629,10 +630,8 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         streamTextFromAi = false
         if (!isOwnerCurrent()) return
         if (!awaitingAuthorization && roundResult.text) streamPlain = roundResult.text
-        if (roundResult.error) throw roundResult.error
-        if (sseError) {
-          throw new Error(sseError)
-        }
+        if (sseError) throw new Error(sseError)
+        if (roundResult.error && !receivedDone) throw roundResult.error
         // 请求已成功送出并拿到流：本轮工件 id 用毕即清，避免串到下一轮。
         completeArtifacts()
         if (awaitingAuthorization) {
@@ -698,6 +697,17 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           } catch {
             presentation = droppedRoundPresentation({ reachable: false })
           }
+          if (presentation.status === 'unknown' && streamRunId && round.isActive()) {
+            try {
+              const receipt = await agentRunsApi.getRun(streamRunId)
+              const run = receipt.data
+              if (receipt.success && run?.run_id === streamRunId && run.status === 'failed') {
+                presentation = droppedRoundPresentation({ reachable: true, serverStatus: run.status, serverText: run.error })
+              }
+            } catch {
+              // Keep the unknown state if the authoritative run cannot be read.
+            }
+          }
           if (!round.isActive()) return
           const pendingText = err instanceof IncompletePlannerSseError
             ? `${streamPlain.trim()}${streamPlain.trim() ? '\n\n' : ''}[回复未完成] `
@@ -751,7 +761,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         cancelStreamFrame()
         if (streamMessage) streamMessage.streamStatus = streamMessage.workflowAction === 'failed' ? 'error' : 'ready'
         if (round.isActive() && streamMessage) delete streamMessage.waitingHint
-        if (round.isActive() && streamMessage?.streamingShell) {
+        if (!doneApplied && round.isActive() && streamMessage?.streamingShell) {
           const leftover = streamPlain.trim()
           const unfinished = leftover
             ? `${leftover}\n\n[回复未完成] 本轮回复已结束，但没有完成回执。请重试。`

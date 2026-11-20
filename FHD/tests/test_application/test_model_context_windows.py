@@ -42,6 +42,8 @@ def test_missing_catalog_degrades_to_defaults(tmp_path, monkeypatch):
 def test_manager_resolves_budget_from_model_when_not_explicit():
     manager = ContextWindowManager()
     assert manager.budget_for("deepseek-chat") == 32000
+    assert manager.budget_for("mimo-v2.6-flash") == 32000
+    assert manager.budget_for("xiaomi/mimo-v2.6-flash") == 32000
     assert manager.budget_for(None) == 8192
 
 

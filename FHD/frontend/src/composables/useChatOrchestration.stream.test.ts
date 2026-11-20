@@ -324,6 +324,35 @@ describe('useChatOrchestration stream', () => {
     expect(api.messages.value[0].workflowAction).toBe(status)
   })
 
+  it('keeps a terminal planning failure when the connection closes after the receipt', async () => {
+    const error = '规划请求超过上下文预算。本次没有执行任何业务操作。'
+    readPlannerSseResponse.mockImplementationOnce(async (_response, onEvent) => {
+      onEvent({ type: 'done', result: { success: false, response: error } })
+      throw new TypeError('Failed to fetch')
+    })
+    const api = useChatOrchestration({ sessionId: ref('planning-failure') })
+    api.messages.value = [{ role: 'ai', content: '', time: '', streamingShell: true }]
+    await api.sendMessage('hello')
+    expect(applyPlainTextToMessageIndex).toHaveBeenLastCalledWith(0, error, { workflowAction: 'failed' })
+    expect(api.messages.value[0].workflowAction).toBe('failed')
+    expect(getConversation).not.toHaveBeenCalled()
+  })
+
+  it('reads the original run failure when the stream and history lack a receipt', async () => {
+    const error = '系统指令和工具定义超过模型的上下文预算。'
+    const api = useChatOrchestration({ sessionId: ref('planning-failure') })
+    api.messages.value = [{ role: 'ai', content: '', time: '', streamingShell: true }]
+    readPlannerSseResponse.mockImplementationOnce(async (_response, onEvent) => {
+      onEvent({ type: 'tool_progress', run_id: 'run-budget' })
+      throw new TypeError('Failed to fetch')
+    }).mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    getRun.mockResolvedValueOnce({ success: true, data: { run_id: 'run-budget', status: 'failed', error } })
+    await api.sendMessage('hello')
+    expect(getRun).toHaveBeenCalledWith('run-budget')
+    expect(applyPlainTextToMessageIndex).toHaveBeenLastCalledWith(0, error)
+    expect(api.messages.value[0].workflowAction).toBe('failed')
+  })
+
   it.each(['owner', 'conversation', 'stop'])('discards dropped-stream history after a %s change', async action => {
     const sessionId = ref('dropped-session')
     const api = useChatOrchestration({ sessionId })
