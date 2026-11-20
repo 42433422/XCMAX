@@ -139,7 +139,7 @@ async def _execute_billed_chat(
         personal_provider_quota,
     )
 
-    await enforce_vision_operation(user.id, route, messages)
+    await enforce_vision_operation(user.id, route, messages, session=db)
     model = model.strip()
     if getattr(request.state, "llm_pat_user_id", None) is not None:
         await assert_llm_chat_allowed(db, int(user.id), provider, model, is_byok=is_byok)

@@ -80,6 +80,7 @@ async def resolve_default_llm_route(
             }
         return prefs, credentials, state
 
+    db.commit()
     prefs, credentials, state = await asyncio.to_thread(load)
     explicit_query = bool(provider or model)
     mode = "explicit" if explicit_query else str(prefs.get("mode") or "")
@@ -1310,6 +1311,18 @@ async def llm_chat_stream(
     ),
 ):
     msgs = [m.model_dump(exclude_none=True) for m in body.messages]
+    options = {}
+    if body.model.strip() == "auto" and body.client_request_id:
+        from modstore_server.llm_billed_chat import _replay, _stream_response
+        from modstore_server.llm_billing_recovery import existing_chat_receipt
+
+        original = {"operation": "native_auto_chat_stream", "request": body.model_dump()}
+        receipt = await existing_chat_receipt(
+            db, int(user.id), body.client_request_id, original, request
+        )
+        if receipt is not None:
+            return _stream_response(_replay(receipt))
+        options["client_request_payload"] = original
     snapshot = await _requested_chat_snapshot(db, user, body, msgs)
     return await _chat_endpoint_facade.stream_billed_llm_chat(
         request,
@@ -1325,6 +1338,7 @@ async def llm_chat_stream(
         tool_choice=body.tool_choice,
         route_snapshot=snapshot,
         client_request_id=body.client_request_id,
+        **options,
     )
 
 

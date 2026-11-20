@@ -444,7 +444,7 @@ async def stream_billed_llm_chat(
                 else new_request_id()
             )
             try:
-                await enforce_vision_operation(user.id, route, msgs)
+                await enforce_vision_operation(user.id, route, msgs, session=db)
                 enforce_risk_limits(db, user.id, prov, mdl, msgs, request)
             except HTTPException as exc:
                 last_error = str(exc.detail)

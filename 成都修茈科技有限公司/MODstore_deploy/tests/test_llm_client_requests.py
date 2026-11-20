@@ -429,6 +429,47 @@ async def test_native_auto_chat_replays_before_resolving_changed_route(db, monke
 
 
 @pytest.mark.asyncio
+async def test_native_auto_stream_replays_original_request_after_route_removal(
+    billed, db, monkeypatch
+):
+    from modstore_server import llm_api, llm_api_merged
+
+    route = ChatRouteSnapshot(
+        provider="xiaomi",
+        model="mimo-v2.6-flash",
+        route_source="platform_configuration",
+        key_source="platform",
+        config_revision="r1",
+        api_key="test-key",
+        base_url=None,
+    )
+    resolve = AsyncMock(return_value=route)
+    monkeypatch.setattr(llm_api_merged, "_requested_chat_snapshot", resolve)
+    body = llm_api.LlmChatDTO(
+        model="auto",
+        messages=[{"role": "user", "content": "hello"}],
+        client_request_id=KEY,
+        tools=[{"type": "function", "function": {"name": "lookup"}}],
+    )
+    request = SimpleNamespace(state=SimpleNamespace(), headers={})
+    first = await llm_api.llm_chat_stream(request, body, db, SimpleNamespace(id=7))
+    events = _frames([frame async for frame in first.body_iterator])
+    assert events[-1][0] == "done"
+    resolve.side_effect = HTTPException(503, "removed route")
+    response = await llm_api.llm_chat_stream(request, body, db, SimpleNamespace(id=7))
+    replay = _frames([frame async for frame in response.body_iterator])
+    assert replay == [("done", {**events[-1][1], "replayed": True})]
+    billed.wallet.settle.assert_awaited_once()
+    resolve.assert_awaited_once()
+    with pytest.raises(HTTPException) as exc:
+        await llm_api.llm_chat_stream(
+            request, body.model_copy(update={"tools": []}), db, SimpleNamespace(id=7)
+        )
+    assert exc.value.status_code == 409
+    resolve.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("overlong", ["job_id", "status", "preview_url"])
 async def test_video_rejects_unbounded_provider_receipt_without_retry(db, monkeypatch, overlong):
     from modstore_server import llm_api, llm_key_resolver

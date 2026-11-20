@@ -780,6 +780,9 @@ class ModstorePlatformAdapter:
                 str(_transport.MarketModelError({"status": response.status_code})),
             )
         if not isinstance(data, dict) or data.get("ok") is not True:
+            status = data.get("status") if isinstance(data, dict) else None
+            if type(status) is int and status in {400, 401, 402, 403, 404, 413, 422, 429}:
+                raise HTTPException(status, "生图请求被拒绝")
             raise HTTPException(502, "生图平台未返回可确认的结果")
         return data
 

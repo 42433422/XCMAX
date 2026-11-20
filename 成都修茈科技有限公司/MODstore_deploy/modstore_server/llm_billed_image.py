@@ -22,6 +22,12 @@ from modstore_server.llm_billing import (
 from modstore_server.llm_billing_recovery import complete_receipt, recover_receipt
 from modstore_server.llm_billing_values import reported_token_dimensions
 from modstore_server.llm_chat_proxy import image_dispatch
+from modstore_server.llm_image_receipts import (
+    discard_image_receipt,
+    materialize_image_receipt,
+    reserve_image_receipt,
+    save_image_receipt,
+)
 from modstore_server.llm_model_gates import _get_priced_row
 from modstore_server.llm_operation_routes import OperationRoute, resolve_operation_route
 from modstore_server.models import AiModelPrice
@@ -89,6 +95,10 @@ async def run_billed_image(
     if not prompt:
         raise HTTPException(422, "生图提示词不能为空")
 
+    def response(receipt: dict[str, Any]) -> dict[str, Any]:
+        db.commit()
+        return materialize_image_receipt(user_id, receipt)
+
     digest = None
     if client_request_id:
         digest = ledger.request_digest(
@@ -105,7 +115,7 @@ async def run_billed_image(
         if completed is not None:
             outcome, value = completed
             if outcome == "replay" and isinstance(value, dict):
-                return value
+                return response(value)
             raise HTTPException(
                 409, {"message": "生图请求已提交或请求内容发生变化", "state": outcome}
             )
@@ -165,13 +175,13 @@ async def run_billed_image(
             db, user_id, client_request_id, digest, _IMAGE_DEADLINE_SECONDS
         )
         if outcome == "replay" and isinstance(value, dict):
-            return value
+            return response(value)
         if outcome == "processing":
             recovered = await recover_receipt(
                 db, user_id, client_request_id, auth, operation="image_generation", request=request
             )
             if recovered is not None:
-                return recovered
+                return response(recovered)
         if outcome != "run":
             raise HTTPException(
                 409, {"message": "生图请求已提交或请求内容发生变化", "state": outcome}
@@ -179,130 +189,166 @@ async def run_billed_image(
         row = value
         request_id = ledger.attempt_request_id(user_id, client_request_id, row.attempts)
 
+    image_asset = None
     if row is not None:
-        ledger.mark_settling(db, row)
-    hold = None
-    if tariff:
-        assert row is not None
-        amount = estimate_preauthorization(
-            db,
-            route.provider,
-            route.model,
-            messages,
-            _PREAUTH_OUTPUT_TOKENS_PER_IMAGE * count,
-        )
+        db.commit()
         try:
-            hold = await wallet.preauthorize(auth, amount, route.provider, route.model, request_id)
+            image_asset = reserve_image_receipt(user_id)
         except HTTPException as exc:
-            if exc.status_code in {400, 401, 402, 403, 422, 429}:
+            if exc.status_code == 429:
                 return finish_rejected_image(db, row, exc.status_code, request_id)
-            raise HTTPException(
-                409, {"message": "生图预授权状态待核对", "request_id": request_id}
-            ) from exc
-        if not hold.enabled or not hold.hold_no:
-            raise HTTPException(409, {"message": "生图预授权状态待核对", "request_id": request_id})
-
+            ledger.finish(db, row, None)
+            raise
     try:
-        result = await image_dispatch(
-            route.provider,
-            api_key=route.api_key,
-            base_url=route.base_url,
-            model=route.model,
-            prompt=prompt,
-            size=size,
-            n=count,
-        )
-        status = result.get("status")
-        if not result.get("ok") or not result.get("images"):
-            if isinstance(status, int) and status in {400, 401, 403, 404, 422, 429}:
-                if hold:
-                    await wallet.release(auth, hold, "image provider rejected request", request_id)
+        if row is not None:
+            ledger.mark_settling(db, row)
+        hold = None
+        if tariff:
+            assert row is not None
+            amount = estimate_preauthorization(
+                db,
+                route.provider,
+                route.model,
+                messages,
+                _PREAUTH_OUTPUT_TOKENS_PER_IMAGE * count,
+            )
+            try:
+                hold = await wallet.preauthorize(
+                    auth, amount, route.provider, route.model, request_id
+                )
+            except HTTPException as exc:
+                if exc.status_code in {400, 401, 402, 403, 422, 429}:
+                    return finish_rejected_image(db, row, exc.status_code, request_id)
+                raise HTTPException(
+                    409, {"message": "生图预授权状态待核对", "request_id": request_id}
+                ) from exc
+            if not hold.enabled or not hold.hold_no:
+                raise HTTPException(
+                    409, {"message": "生图预授权状态待核对", "request_id": request_id}
+                )
+
+        try:
+            result = await image_dispatch(
+                route.provider,
+                api_key=route.api_key,
+                base_url=route.base_url,
+                model=route.model,
+                prompt=prompt,
+                size=size,
+                n=count,
+            )
+            status = result.get("status")
+            if not result.get("ok") or not result.get("images"):
+                if isinstance(status, int) and status in {400, 401, 403, 404, 422, 429}:
+                    if hold:
+                        await wallet.release(
+                            auth, hold, "image provider rejected request", request_id
+                        )
+                    if row is not None:
+                        return finish_rejected_image(db, row, status, request_id)
+                    raise HTTPException(status, "生图供应商拒绝请求")
                 if row is not None:
-                    return finish_rejected_image(db, row, status, request_id)
-                raise HTTPException(status, "生图供应商拒绝请求")
+                    raise HTTPException(
+                        409,
+                        {"message": "生图结果与计费状态待核对", "request_id": request_id},
+                    )
+                raise HTTPException(502, "生图供应商未返回图像")
+            usage = exact_image_usage(result.get("raw"))
+            charge = Decimal("0")
+            if hold and tariff:
+                if usage is None:
+                    raise HTTPException(
+                        409,
+                        {
+                            "message": "供应商未返回可核验的 token 用量",
+                            "request_id": request_id,
+                        },
+                    )
+                charge = money(
+                    (usage.prompt_tokens * tariff[0] + usage.completion_tokens * tariff[1]) / 1000
+                )
+            if image_asset:
+                db.commit()
+                image_digest = save_image_receipt(user_id, image_asset, result["images"])
+            receipt = {
+                "ok": True,
+                **(
+                    {
+                        "image_asset": {
+                            "id": image_asset[0],
+                            "filename": image_asset[1],
+                            "sha256": image_digest,
+                        }
+                    }
+                    if image_asset
+                    else {"images": result["images"]}
+                ),
+                "provider": route.provider,
+                "model": route.model,
+                "key_source": route.key_source,
+                "billed": hold is not None,
+                "charge_amount": str(charge),
+                "usage": vars(usage) if usage else None,
+                "usage_details": reported_token_dimensions(
+                    result.get("raw", {}).get("usage")
+                    if isinstance(result.get("raw"), dict)
+                    else None
+                ),
+                "request_id": request_id,
+                "operation": "image_generation",
+            }
+            if hold and tariff:
+                assert row is not None
+                receipt.update(
+                    hold_no=hold.hold_no,
+                    pricing={
+                        "currency": "CNY",
+                        "effective_input_per_1k": str(tariff[0]),
+                        "effective_output_per_1k": str(tariff[1]),
+                    },
+                )
+                ledger.prepare_settlement(db, row, receipt)
+                try:
+                    await wallet.settle(auth, hold, charge, request_id)
+                except HTTPException as exc:
+                    if client_request_id:
+                        recovered = await recover_receipt(
+                            db,
+                            user_id,
+                            client_request_id,
+                            auth,
+                            operation="image_generation",
+                            request=request,
+                        )
+                        if recovered is not None:
+                            return response(recovered)
+                    raise HTTPException(
+                        409,
+                        {
+                            "message": "图像已生成，钱包结算状态待核对",
+                            "request_id": request_id,
+                        },
+                    ) from exc
+                return response(complete_receipt(db, row, receipt))
+            if row is not None:
+                ledger.finish(db, row, receipt)
+            return response(receipt)
+        except HTTPException as exc:
+            if row is not None and exc.status_code >= 500:
+                raise HTTPException(
+                    409, {"message": "生图与计费状态待核对", "request_id": request_id}
+                ) from exc
+            raise
+        except RECOVERABLE_ERRORS as exc:
             if row is not None:
                 raise HTTPException(
-                    409,
-                    {"message": "生图结果与计费状态待核对", "request_id": request_id},
-                )
-            raise HTTPException(502, "生图供应商未返回图像")
-        usage = exact_image_usage(result.get("raw"))
-        charge = Decimal("0")
-        if hold and tariff:
-            if usage is None:
-                raise HTTPException(
-                    409,
-                    {
-                        "message": "供应商未返回可核验的 token 用量",
-                        "request_id": request_id,
-                    },
-                )
-            charge = money(
-                (usage.prompt_tokens * tariff[0] + usage.completion_tokens * tariff[1]) / 1000
-            )
-        receipt = {
-            "ok": True,
-            "images": result["images"],
-            "provider": route.provider,
-            "model": route.model,
-            "key_source": route.key_source,
-            "billed": hold is not None,
-            "charge_amount": str(charge),
-            "usage": vars(usage) if usage else None,
-            "usage_details": reported_token_dimensions(
-                result.get("raw", {}).get("usage") if isinstance(result.get("raw"), dict) else None
-            ),
-            "request_id": request_id,
-            "operation": "image_generation",
-        }
-        if hold and tariff:
-            assert row is not None
-            receipt.update(
-                hold_no=hold.hold_no,
-                pricing={
-                    "currency": "CNY",
-                    "effective_input_per_1k": str(tariff[0]),
-                    "effective_output_per_1k": str(tariff[1]),
-                },
-            )
-            ledger.prepare_settlement(db, row, receipt)
-            try:
-                await wallet.settle(auth, hold, charge, request_id)
-            except HTTPException as exc:
-                if client_request_id:
-                    recovered = await recover_receipt(
-                        db,
-                        user_id,
-                        client_request_id,
-                        auth,
-                        operation="image_generation",
-                        request=request,
-                    )
-                    if recovered is not None:
-                        return recovered
-                raise HTTPException(
-                    409,
-                    {
-                        "message": "图像已生成，钱包结算状态待核对",
-                        "request_id": request_id,
-                    },
+                    409, {"message": "生图与计费状态待核对", "request_id": request_id}
                 ) from exc
-            return complete_receipt(db, row, receipt)
-        if row is not None:
-            ledger.finish(db, row, receipt)
-        return receipt
-    except HTTPException as exc:
-        if row is not None and exc.status_code >= 500:
-            raise HTTPException(
-                409, {"message": "生图与计费状态待核对", "request_id": request_id}
-            ) from exc
-        raise
-    except RECOVERABLE_ERRORS as exc:
-        if row is not None:
-            raise HTTPException(
-                409, {"message": "生图与计费状态待核对", "request_id": request_id}
-            ) from exc
-        raise HTTPException(502, "生图供应商调用失败") from exc
+            raise HTTPException(502, "生图供应商调用失败") from exc
+    finally:
+        if image_asset:
+            db.rollback()
+            discard_image_receipt(user_id, image_asset)
 
 
 def finish_rejected_image(db: Session, row, status: int, request_id: str) -> dict[str, Any]:

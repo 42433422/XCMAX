@@ -110,6 +110,44 @@ async def test_speech_releases_credential_session_before_catalog_wait(monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_vision_discovery_returns_connection_without_detaching_journal(tmp_path, monkeypatch):
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.orm import sessionmaker
+
+    engine = create_engine(
+        f"sqlite:///{tmp_path / 'vision.db'}", pool_size=1, max_overflow=0, pool_timeout=0.1
+    )
+    session = sessionmaker(bind=engine)()
+    session.execute(text("SELECT 1"))
+    assert engine.pool.checkedout() == 1
+
+    async def select(*args, **kwargs):
+        assert engine.pool.checkedout() == 0
+        with engine.connect() as connection:
+            assert connection.scalar(text("SELECT 1")) == 1
+        return "gpt-4o"
+
+    monkeypatch.setattr(routes, "select_operation_model", select)
+    route = routes.OperationRoute("openai", "gpt-4o", "platform", "secret", None)
+    try:
+        await routes.enforce_vision_operation(
+            7,
+            route,
+            [
+                {
+                    "role": "user",
+                    "content": [{"type": "image_url", "image_url": {"url": routes.RED_PNG}}],
+                }
+            ],
+            session=session,
+        )
+        assert session.execute(text("SELECT 1")).scalar() == 1
+    finally:
+        session.close()
+        engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_vision_probe_uses_image_and_requires_expected_result(monkeypatch, catalog):
     monkeypatch.setattr(routes, "read_state", lambda: {})
     monkeypatch.setattr(

@@ -91,3 +91,26 @@ def test_desktop_sends_native_image_only_after_account_vision_route(monkeypatch,
     assert data["model"] == "vision-model"
     assert data["route_token"] == "pinned-token"
     assert data["allow_failover"] is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [402, 429])
+async def test_confirmed_image_rejection_keeps_its_definitive_status(monkeypatch, status):
+    from fastapi import HTTPException
+
+    adapter = modstore_adapter.ModstorePlatformAdapter(
+        platform_url="https://example.test", auth_token="account-token"
+    )
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, json={"ok": False, "status": status})
+        )
+    ) as client:
+
+        async def get_client():
+            return client
+
+        monkeypatch.setattr(adapter, "_get_client", get_client)
+        with pytest.raises(HTTPException) as exc:
+            await adapter.generate_image({"prompt": "test", "client_request_id": "image-test-key"})
+        assert exc.value.status_code == status

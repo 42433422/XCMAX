@@ -157,9 +157,13 @@ def bind_resolved_chat_route(session, user_id, resolved):
     return route
 
 
-async def enforce_vision_operation(user_id, route, messages):
+async def enforce_vision_operation(user_id, route, messages, *, session=None):
     if not messages_have_multimodal_images(messages):
         return
+    if session is not None:
+        # End the credential transaction without detaching the request journal.
+        # user_id and route are already values, so discovery cannot re-checkout a connection.
+        session.commit()
     try:
         async with asyncio.timeout(4):
             model = await select_operation_model(
