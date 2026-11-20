@@ -27,6 +27,11 @@ if os.environ.get('PARA_PLATFORM_POOL') == '1':
         f'base_url = {json.dumps(base_url)}\n'
         'env_key = "CODEX_API_KEY"\n'
         'wire_api = "responses"\n'
+        '[model_providers.volcengine-agent-plan]\n'
+        'name = "Volcengine Agent Plan"\n'
+        'base_url = "https://ark.cn-beijing.volces.com/api/plan/v3"\n'
+        'env_key = "CODEX_API_KEY"\n'
+        'wire_api = "responses"\n'
     )
     target.chmod(0o600)
     raise SystemExit(0)

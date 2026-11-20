@@ -169,3 +169,15 @@ def test_sync_admission_uses_isolated_http_on_each_loop(monkeypatch):
     assert platform_model_admission()["status"] == "admitted"
     assert len(loops) == 2 and loops[0] is not loops[1]
     assert all(client.is_closed for client in closed)
+
+    monkeypatch.setenv("MODSTORE_PARA_ARK_PLAN_FIRST", "1")
+    decision = platform_model_admission()
+    assert decision["model"] == "ark-code-latest"
+    assert decision["approved_models"] == ["ark-code-latest", "model-a"]
+    assert decision["platform_fallback"]["reserve_percent"] == 80
+
+    monkeypatch.setenv("MODSTORE_PARA_PLATFORM_RESERVE_PERCENT", "99")
+    decision = platform_model_admission()
+    assert decision["status"] == "admitted"
+    assert decision["approved_models"] == ["ark-code-latest"]
+    assert decision["platform_fallback"]["status"] == "waiting"

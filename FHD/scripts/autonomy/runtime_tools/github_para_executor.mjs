@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { ARK_AGENT_PLAN_MODEL } from './codex_model_gateway.mjs';
 
 export async function runGithubExecutor({ env = process.env, fetchStatus = fetch, spawnWorker = spawn,
   sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), now = Date.now } = {}) {
@@ -44,6 +45,7 @@ export async function runGithubExecutor({ env = process.env, fetchStatus = fetch
   delete agentEnv.PARA_PLATFORM_MODEL_CANDIDATES;
   delete agentEnv.PARA_PLATFORM_APPROVED_KEYRING;
   delete agentEnv.PARA_PLATFORM_GATEWAY_KEYS_JSON;
+  delete agentEnv.PARA_PLATFORM_AGENT_PLAN_FIRST;
   if (env.PARA_PLATFORM_POOL === '1' || allocation) {
     const approved = allocation?.approved_models ?? [allocation?.model];
     if (env.PARA_PLATFORM_POOL !== '1' || allocation?.status !== 'admitted'
@@ -60,8 +62,17 @@ export async function runGithubExecutor({ env = process.env, fetchStatus = fetch
     } catch {
       throw new Error('invalid_platform_model_keyring');
     }
-    if (!keys || typeof keys !== 'object' || Array.isArray(keys)
-        || approved.some(model => !Object.hasOwn(keys, model)
+    if (!keys || typeof keys !== 'object' || Array.isArray(keys)) {
+      throw new Error('invalid_platform_model_keyring');
+    }
+    if (allocation.agent_plan_first === true) {
+      if (allocation.model !== ARK_AGENT_PLAN_MODEL || env.DEVFLEET_CODEX_MODEL_CANDIDATES !== ARK_AGENT_PLAN_MODEL) {
+        throw new Error('agent_plan_primary_not_configured');
+      }
+      keys[ARK_AGENT_PLAN_MODEL] = env.CODEX_API_KEY;
+      agentEnv.PARA_PLATFORM_AGENT_PLAN_FIRST = '1';
+    }
+    if (approved.some(model => !Object.hasOwn(keys, model)
           || typeof keys[model] !== 'string' || !/^\S+$/.test(keys[model]))) {
       throw new Error('platform_model_allocation_or_gateway_missing');
     }

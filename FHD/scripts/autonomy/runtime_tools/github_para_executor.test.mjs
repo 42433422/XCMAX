@@ -48,7 +48,7 @@ test('platform execution uses the admitted route and limited gateway credential'
       PARA_PLATFORM_GATEWAY_KEYS_JSON: JSON.stringify({
         'coding-route': 'fixture-platform-key', 'backup-route': 'fixture-backup-key',
         'unapproved-route': 'fixture-unused-key',
-      }), CODEX_API_KEY: 'fixture-legacy-key' };
+      }), CODEX_API_KEY: 'fixture-agent-plan-key', DEVFLEET_CODEX_MODEL_CANDIDATES: 'ark-code-latest' };
     const stub = (data) => async () => ({ ok: true, json: async () => data });
     await assert.rejects(runGithubExecutor({ env, fetchStatus: stub(identity),
       spawnWorker: () => assert.fail('must not start without model admission') }), /platform_model_allocation/);
@@ -72,5 +72,20 @@ test('platform execution uses the admitted route and limited gateway credential'
       },
     });
     assert.equal(result, 0);
+    reads = 0;
+    const agentPlan = { ...model_allocation, model: 'ark-code-latest', agent_plan_first: true,
+      approved_models: ['ark-code-latest', 'coding-route'] };
+    const withPlan = await runGithubExecutor({ env,
+      fetchStatus: () => stub({ ...identity, finished: ++reads > 1, conclusion: 'success', model_allocation: agentPlan })(),
+      spawnWorker: (_exe, _args, { env: child }) => {
+        assert.equal(child.CODEX_API_KEY, 'fixture-agent-plan-key');
+        assert.equal(child.PARA_PLATFORM_AGENT_PLAN_FIRST, '1');
+        assert.deepEqual(JSON.parse(child.PARA_PLATFORM_APPROVED_KEYRING), {
+          'ark-code-latest': 'fixture-agent-plan-key', 'coding-route': 'fixture-platform-key',
+        });
+        return agent;
+      },
+    });
+    assert.equal(withPlan, 0);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

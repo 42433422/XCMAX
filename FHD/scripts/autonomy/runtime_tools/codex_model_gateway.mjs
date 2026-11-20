@@ -1,3 +1,8 @@
+import { randomUUID } from 'node:crypto';
+import { once } from 'node:events';
+import { createServer } from 'node:http';
+import { Writable } from 'node:stream';
+
 /**
  * Codex 模型网关：同一执行器内的有序模型候选 + 探活 + 自动降级。
  *
@@ -13,6 +18,7 @@
 
 export const DEFAULT_CODEX_MODEL_CANDIDATES = Object.freeze(['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna']);
 export const CODEX_MODELS_TRIED_MARKER = 'codex_models_tried=';
+export const ARK_AGENT_PLAN_MODEL = 'ark-code-latest';
 
 const MODEL_UNAVAILABLE_PATTERNS = [
   /model[^\n]{0,80}not supported/i,
@@ -202,6 +208,61 @@ export function classifyModelError(text) {
   return '';
 }
 
+export function classifyAgentPlanError(output) {
+  const text = asText(output);
+  const exhausted = /\bQuotaExceeded\.AgentPlanQuotaExceeded\b/i.test(text)
+    || (/\bQuotaExceeded\b(?!\.)/i.test(text) && /(?:5-hour|weekly|monthly) usage quota/i.test(text));
+  return exhausted ? 'quota' : '';
+}
+
+/** Forward one read-only Codex probe and retain Ark's error code before Codex drops it. */
+export async function probeAgentPlan({ key, runProbe, requestUpstream = fetch }) {
+  const probeToken = randomUUID();
+  const lifetime = new AbortController();
+  let quotaExhausted = false;
+  const server = createServer((request, response) => {
+    if (request.method !== 'POST' || request.url !== '/responses'
+        || request.headers.authorization !== `Bearer ${probeToken}`) {
+      response.writeHead(404).end();
+      return;
+    }
+    async function forward() {
+      const headers = { Authorization: `Bearer ${key}` };
+      for (const field of ['content-type', 'content-encoding', 'accept', 'user-agent']) {
+        if (request.headers[field]) headers[field] = request.headers[field];
+      }
+      const upstream = await requestUpstream('https://ark.cn-beijing.volces.com/api/plan/v3/responses', {
+        method: 'POST', headers, body: request, duplex: 'half', redirect: 'error',
+        signal: AbortSignal.any([lifetime.signal, AbortSignal.timeout(90_000)]),
+      });
+      response.writeHead(upstream.status, { 'Content-Type': upstream.headers.get('content-type') || 'application/json' });
+      if (upstream.status === 429) {
+        const body = await upstream.text();
+        quotaExhausted = classifyAgentPlanError(body) === 'quota';
+        response.end(body);
+      } else if (upstream.body) {
+        await upstream.body.pipeTo(Writable.toWeb(response));
+      } else {
+        response.end();
+      }
+    }
+    forward().catch(() => {
+      if (response.headersSent) response.destroy();
+      else response.writeHead(502).end();
+    });
+  });
+  try {
+    await once(server.listen(0, '127.0.0.1'), 'listening');
+    const result = await runProbe(`http://127.0.0.1:${server.address().port}`, probeToken);
+    return quotaExhausted && !result.ok
+      ? { ...result, output: `${result.output}\nQuotaExceeded.AgentPlanQuotaExceeded` } : result;
+  } finally {
+    lifetime.abort();
+    server.close();
+    server.closeAllConnections();
+  }
+}
+
 export function formatModelsTried(attempts) {
   return `${CODEX_MODELS_TRIED_MARKER}${attempts.map((a) => `${a.model}:${a.status}`).join(',')}`;
 }
@@ -254,7 +315,7 @@ export async function probeModels({ candidates, availability, runProbe, log = ()
  * 依序尝试候选模型执行同一任务。runAttempt(model) 返回 {ok, output, nonZero}。
  * 只有模型级错误才降级；其余失败立即返回给调用方。
  */
-export async function runWithModelFallback({ candidates, availability, runAttempt, log = () => {} }) {
+export async function runWithModelFallback({ candidates, availability, runAttempt, classify = classifyModelError, log = () => {} }) {
   const attempts = [];
   let last = null;
   for (const model of candidates) {
@@ -272,7 +333,7 @@ export async function runWithModelFallback({ candidates, availability, runAttemp
       attempts.push({ model, status: 'ok' });
       return { ok: true, model, output: result.output, attempts, exhausted: false };
     }
-    const kind = classifyModelError(result?.output);
+    const kind = classify(result?.output, model);
     if (!kind) {
       attempts.push({ model, status: 'failed' });
       return { ok: false, model, output: result?.output ?? '', attempts, exhausted: false };

@@ -9,14 +9,15 @@ from collections.abc import Callable
 from typing import Any
 
 from modstore_server.llm_quota_monitor import platform_quota_snapshot
-from modstore_server.para_coding_leaderboard import SOURCES, current_coding_scores
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
+from modstore_server.para_coding_leaderboard import SOURCES, current_coding_scores
 from modstore_server.runtime_async import run_coro_sync
 
 _MODEL_NAME = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9._:/-]{0,127}")
 
 
 BASE_CAPABILITIES = frozenset({"responses_stream", "tool_calling", "token_usage"})
+ARK_AGENT_PLAN_MODEL = "ark-code-latest"
 
 
 def select_route(
@@ -134,14 +135,19 @@ def platform_model_admission(profile: str = "repair") -> dict[str, Any] | None:
         reserve = int(os.environ.get("MODSTORE_PARA_PLATFORM_RESERVE_PERCENT", "80"))
         profiles = json.loads(os.environ.get("MODSTORE_PARA_PLATFORM_CAPABILITY_PROFILES", "{}"))
         if not isinstance(profiles, dict):
-            raise ValueError("invalid Para capability profiles")
+            raise TypeError("invalid Para capability profiles")
         extra = profiles.get(profile, [])
         if not isinstance(extra, list) or any(not isinstance(value, str) for value in extra):
             raise ValueError("invalid Para capability requirements")
         if not isinstance(routes, dict) or not routes or not 80 <= reserve <= 100:
             raise ValueError("invalid Para platform policy")
-    except ValueError:
+    except (TypeError, ValueError):
         return {"status": "waiting", "reason": "invalid_platform_policy"}
+    agent_plan_first = os.environ.get("MODSTORE_PARA_ARK_PLAN_FIRST") == "1" and not (
+        set(extra) - BASE_CAPABILITIES
+    )
+    if agent_plan_first:
+        routes.pop(ARK_AGENT_PLAN_MODEL, None)
     try:
         # Admission needs quota, not remote model discovery. Avoid opening the
         # process-wide catalog client's connections on this short-lived loop.
@@ -163,12 +169,24 @@ def platform_model_admission(profile: str = "repair") -> dict[str, Any] | None:
             platform_quota_snapshot(live_probe=False, catalog=catalog, isolated_http=True)
         )
     except RECOVERABLE_ERRORS:
-        return {"status": "waiting", "reason": "platform_quota_unavailable"}
-    decision = select_route(
-        snapshot.get("providers", []),
-        routes,
-        reserve,
-        required=frozenset(extra),
-        leaderboard=current_coding_scores,
-    )
+        snapshot = {}
+        decision = {"status": "waiting", "reason": "platform_quota_unavailable"}
+    else:
+        decision = select_route(
+            snapshot.get("providers", []),
+            routes,
+            reserve,
+            required=frozenset(extra),
+            leaderboard=current_coding_scores,
+        )
+    if agent_plan_first:
+        decision = {
+            "status": "admitted",
+            "reason": "dedicated_agent_plan",
+            "model": ARK_AGENT_PLAN_MODEL,
+            "provider": "ark_agent_plan",
+            "agent_plan_first": True,
+            "approved_models": [ARK_AGENT_PLAN_MODEL, *decision.get("approved_models", [])],
+            "platform_fallback": decision,
+        }
     return {**decision, "checked_at": snapshot.get("checked_at"), "profile": profile}

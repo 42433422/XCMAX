@@ -13,7 +13,10 @@ import { promisify } from 'node:util';
 import { createRequire } from 'node:module';
 import { probeTools } from './tool_preflight.mjs';
 import {
+  ARK_AGENT_PLAN_MODEL,
   checkIncidentExecutionBudget,
+  classifyAgentPlanError,
+  classifyModelError,
   codexExecutionConfig,
   codexModelCandidates,
   createModelAvailability,
@@ -21,6 +24,7 @@ import {
   insertBeforeLoopContext,
   modelCandidatesFromPrompt,
   modelGatewayEnabled,
+  probeAgentPlan,
   probeModels,
   resolveCodexAuth,
   runCodexBudgetedAttempt,
@@ -344,12 +348,12 @@ function spawnCodexOnce(cwd, prompt, { args, env, timeoutMs = toolCommandTimeout
   });
 }
 
-async function probeCodexModel(model, env) {
+async function probeCodexModel(model, env, providerArgs = []) {
   const output = await spawnCodexOnce(
     tmpdir(),
     'Health check. Reply with exactly: OK',
     {
-      args: ['exec', '--sandbox', 'read-only', '--ephemeral', '--skip-git-repo-check', '-m', model, '-'],
+      args: ['exec', '--sandbox', 'read-only', '--ephemeral', '--skip-git-repo-check', ...providerArgs, '-m', model, '-'],
       env,
       timeoutMs: positiveIntEnv('DEVFLEET_CODEX_MODEL_PROBE_TIMEOUT_MS', 90_000),
     },
@@ -361,8 +365,8 @@ async function runCodexAgent(taskDir, prompt, log = () => {}) {
   const isReportOnly = String(prompt || '').toLowerCase().includes('modstore_report_only=1');
   const execution = codexExecutionConfig({ prompt, reportOnly: isReportOnly });
   const codexEnv = toolEnv(prompt, 'codex');
-  const invoke = (model, env) => runCodexBudgetedAttempt({
-    execution, model, log,
+  const invoke = (model, env, providerArgs = []) => runCodexBudgetedAttempt({
+    execution: { ...execution, args: [...execution.args, ...providerArgs] }, model, log,
     run: (args) => spawnCodexOnce(taskDir, prompt, { args, env }),
   });
   if (process.env.PARA_PLATFORM_MODEL) {
@@ -370,17 +374,27 @@ async function runCodexAgent(taskDir, prompt, log = () => {}) {
     const candidates = (process.env.PARA_PLATFORM_MODEL_CANDIDATES || process.env.PARA_PLATFORM_MODEL).split(',');
     const keyring = JSON.parse(process.env.PARA_PLATFORM_APPROVED_KEYRING || '{}');
     const modelEnv = model => ({ ...codexEnv, CODEX_API_KEY: keyring[model] || codexEnv.CODEX_API_KEY });
-    if (candidates.length === 1) return invoke(candidates[0], modelEnv(candidates[0]));
+    const isAgentPlan = model => process.env.PARA_PLATFORM_AGENT_PLAN_FIRST === '1' && model === ARK_AGENT_PLAN_MODEL;
+    const providerArgs = model => isAgentPlan(model) ? ['-c', 'model_provider="volcengine-agent-plan"'] : [];
+    if (candidates.length === 1 && !isAgentPlan(candidates[0])) return invoke(candidates[0], modelEnv(candidates[0]));
     // Only retry a read-only probe. Once the real task starts, preserve its effects for reconciliation.
     const preflight = await runWithModelFallback({
       candidates,
       availability: codexModelAvailability,
-      runAttempt: model => probeCodexModel(model, modelEnv(model)),
+      runAttempt: model => isAgentPlan(model)
+        ? probeAgentPlan({
+          key: modelEnv(model).CODEX_API_KEY,
+          runProbe: (url, probeToken) => probeCodexModel(model, { ...modelEnv(model), CODEX_API_KEY: probeToken }, [
+            ...providerArgs(model), '-c', `model_providers.volcengine-agent-plan.base_url="${url}"`,
+          ]),
+        })
+        : probeCodexModel(model, modelEnv(model)),
+      classify: (output, model) => isAgentPlan(model) ? classifyAgentPlanError(output) : classifyModelError(output),
       log,
     });
     codexModelAttemptsByTaskDir.set(taskDir, formatModelsTried(preflight.attempts));
     if (!preflight.ok) return preflight.output;
-    return invoke(preflight.model, modelEnv(preflight.model));
+    return invoke(preflight.model, modelEnv(preflight.model), providerArgs(preflight.model));
   }
   if (!modelGatewayEnabled()) {
     // Disabling fallback does not erase an explicit role's selected model.
