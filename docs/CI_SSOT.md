@@ -232,7 +232,7 @@ python scripts/ci/measure_required_checks.py snapshot.json --output report.json
 > **生成 vs 手写**：根仓 `fhd-*.yml` / `modstore-*.yml` 由 publish 脚本从实现源生成，文件头为
 > `# CI SSOT: generated from … — DO NOT edit here`。**请改实现源后重跑 publish**，勿直接改根副本。
 > 以下根仓 workflow 为手写（无生成头，直接在根仓维护）：
-> `archive-hygiene.yml`、`corp-site-deploy.yml`、`desktop-macos-smoke.yml`、
+> `corp-site-deploy.yml`、`desktop-macos-smoke.yml`、
 > `e2e.yml`、`e2e-playwright-reusable.yml`。
 
 ## 常用 workflow
@@ -248,7 +248,6 @@ python scripts/ci/measure_required_checks.py snapshot.json --output report.json
 | Flutter Android 发布 | [`fhd-release-android.yml`](../.github/workflows/fhd-release-android.yml) |
 | Flutter iOS / TestFlight 发布 | [`fhd-release-ios.yml`](../.github/workflows/fhd-release-ios.yml) |
 | MODstore Python CI | [`modstore-ci-backend-python.yml`](../.github/workflows/modstore-ci-backend-python.yml) |
-| Archive 卫生 | [`archive-hygiene.yml`](../.github/workflows/archive-hygiene.yml) |
 | FHD 服务器 API 发布包校验 | [`fhd-ci-cd.yml`](../.github/workflows/fhd-ci-cd.yml) → job `pack-verify` |
 | FHD 全产品线 tag 编排 | [`fhd-release-orchestrator.yml`](../.github/workflows/fhd-release-orchestrator.yml) |
 | FHD 单机 CVM 手动 rolling | [`fhd-deploy.yml`](../.github/workflows/fhd-deploy.yml) |

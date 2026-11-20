@@ -117,6 +117,11 @@ def dispatch_cursor_delegate(
     employee_id: str = "vibe-coding-maintainer",
 ) -> Dict[str, Any]:
     """Cursor 委派主入口：SDK → Webhook → 降级说明。"""
+    from modstore_server.strategic_portfolio_usage import unmetered_delegate_block
+
+    blocked = unmetered_delegate_block("cursor_delegate", input_data)
+    if blocked is not None:
+        return blocked
     if not _cursor_delegate_enabled():
         return {
             "handler": "cursor_delegate",

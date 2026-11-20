@@ -1,0 +1,88 @@
+name: version-ssot-sync
+
+# release_train 在服务器上只负责「当日时间线闭环后应该是什么版本」，
+# 本 workflow 读取该状态，把版本写进 VERSION.md 并同步 25 个锚点后提交 main。
+# 服务器不持有仓库写权限；PARA 候选分支禁止改动版本文件（发布链会拒绝）。
+on:
+  schedule:
+    - cron: "15 1 * * *" # 09:15 Asia/Shanghai，晚于 08:00 每日摘要
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: version-ssot-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 读取 release_train 版本状态
+        env:
+          TOKEN: ${{ secrets.MODSTORE_PARA_DISPATCH_TOKEN }}
+          API_BASE: ${{ vars.MODSTORE_API_BASE }}
+        run: |
+          set -euo pipefail
+          base="${API_BASE:-https://xiu-ci.com}"
+          code=$(curl -sS -o /tmp/state.json -w '%{http_code}' --max-time 20 \
+            -H "Authorization: Bearer $TOKEN" \
+            "$base/api/service/mac-control/release-train/state")
+          if [ "$code" != "200" ]; then
+            echo "版本状态接口不可用：HTTP $code"
+            cat /tmp/state.json || true
+            exit 1
+          fi
+          target=$(jq -r '.state.current // empty' /tmp/state.json)
+          day=$(jq -r '.state.last_bump_day // ""' /tmp/state.json)
+          if [ -z "$target" ]; then
+            echo "release_train 状态缺少 current"
+            exit 1
+          fi
+          echo "TARGET_VERSION=$target" >> "$GITHUB_ENV"
+          echo "STATE_DAY=$day" >> "$GITHUB_ENV"
+
+      - name: 对比 VERSION.md
+        id: diff
+        run: |
+          set -euo pipefail
+          current=$(python -c 'import pathlib,re;t=pathlib.Path("FHD/VERSION.md").read_text(encoding="utf-8");m=re.search(r"XCAGI 稳定产品版本\*\*\s*\|\s*`([0-9]+(?:\.[0-9]+){2,3})`",t);print(m.group(1) if m else "")')
+          echo "VERSION.md=$current release_train=$TARGET_VERSION day=$STATE_DAY"
+          if [ -z "$current" ] || [ "$current" = "$TARGET_VERSION" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 同步 SSOT 与 25 个锚点
+        if: steps.diff.outputs.changed == 'true'
+        working-directory: FHD
+        run: |
+          set -euo pipefail
+          python scripts/dev/version_sync.py --apply --version "$TARGET_VERSION"
+          python scripts/dev/verify_version_anchors.py
+
+      - name: 提交并推送
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -u
+          if git diff --cached --quiet; then
+            echo "没有需要提交的版本改动"
+            exit 0
+          fi
+          git commit -m "chore(version): 同步 SSOT 到 ${TARGET_VERSION}（${STATE_DAY} 闭环）"
+          git push origin HEAD:main

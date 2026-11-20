@@ -4,7 +4,8 @@ name: Performance Smoke Test
 
 on:
   schedule:
-    - cron: "0 17 * * *"
+    # 每周日 15:00 UTC（23:00 北京时间）；PR 触发保留
+    - cron: "0 15 * * 0"
   workflow_dispatch:
   pull_request:
     paths:

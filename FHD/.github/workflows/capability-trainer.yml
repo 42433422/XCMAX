@@ -1,0 +1,169 @@
+name: Capability Trainer
+
+# 在职训练：拉取真实失败簇 → 沉淀回归用例 → LLM 改 prompt → promptfoo 对比
+# → 同用例/模型成对比较通过后，仅创建待审批候选；线上实验另行验收。
+
+on:
+  schedule:
+    - cron: '5 14 * * *'   # 每天 14:05 UTC = 22:05 北京时间
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  train:
+    if: github.ref == 'refs/heads/main'
+    concurrency:
+      group: capability-trainer
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DISPATCH_TOKEN: ${{ secrets.MODSTORE_PARA_DISPATCH_TOKEN }}
+      API_BASE: ${{ secrets.MODSTORE_PARA_GITHUB_API_BASE }}
+      XCAGI_LLM_API_KEY: ${{ secrets.XCAGI_LLM_API_KEY }}
+      XCAGI_LLM_BASE_URL: ${{ secrets.XCAGI_LLM_BASE_URL }}
+      XCAGI_LLM_MODEL: ${{ secrets.XCAGI_LLM_MODEL }}
+      OPENAI_API_KEY: ${{ secrets.XCAGI_LLM_API_KEY }}
+      PYTHONPATH: ${{ github.workspace }}/成都修茈科技有限公司/MODstore_deploy
+      PACKS_DIR: ${{ github.workspace }}/成都修茈科技有限公司/MODstore_deploy/modstore_server/catalog_data/files
+      CORPUS_DIR: ${{ github.workspace }}/FHD/evals/employee
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install bounded model client
+        run: python -m pip install httpx==0.28.1
+
+      - name: Fetch failure clusters
+        id: fetch
+        run: |
+          set -euo pipefail
+          if [ -z "${DISPATCH_TOKEN:-}" ] || [ -z "${API_BASE:-}" ]; then
+            echo "::notice::training secrets 未配置，跳过本轮"
+            echo "clusters=0" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          curl -fsS -H "Authorization: Bearer ${DISPATCH_TOKEN}" \
+            "${API_BASE%/}/api/service/mac-control/training/failures?days=14&min_count=2" \
+            -o /tmp/clusters.json
+          count="$(jq '.clusters | length' /tmp/clusters.json)"
+          echo "clusters=$count" >> "$GITHUB_OUTPUT"
+          jq -ce '.clusters[:1]' /tmp/clusters.json > /tmp/top-cluster.json
+          if [ "$count" = "0" ]; then
+            echo "::notice::近 14 天没有可训练的失败簇"
+          fi
+
+      - name: Suggest candidate prompt
+        if: steps.fetch.outputs.clusters != '0'
+        run: |
+          set -euo pipefail
+          employee="$(jq -r '.[0].employee_id // empty' /tmp/top-cluster.json)"
+          [[ "$employee" =~ ^[A-Za-z0-9_-]{1,128}$ ]] || exit 1
+          echo "employee=$employee" >> "$GITHUB_ENV"
+          pack="$(ls -d "$PACKS_DIR/${employee}@"* 2>/dev/null | sort -V | tail -1 || true)"
+          if [ -z "$pack" ] || [ ! -f "$pack/prompt.txt" ]; then
+            echo "::warning::找不到 $employee 的员工包 prompt，跳过"
+            echo "skip=true" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          echo "pack=$pack" >> "$GITHUB_ENV"
+          python -m modstore_server.capability_trainer suggest \
+            --baseline "$pack/prompt.txt" \
+            --clusters /tmp/top-cluster.json \
+            --out /tmp/candidate-prompt.txt
+
+      - name: Prepare regression cases and promptfoo config
+        if: steps.fetch.outputs.clusters != '0' && env.skip != 'true'
+        run: |
+          set -euo pipefail
+          python -m modstore_server.capability_trainer prepare \
+            --clusters /tmp/top-cluster.json \
+            --packs-dir "$PACKS_DIR" \
+            --corpus-dir "$CORPUS_DIR" \
+            --out-dir /tmp/eval \
+            --employee-id "$employee" \
+            --candidate-prompt /tmp/candidate-prompt.txt > /tmp/prepare.json
+          cat /tmp/prepare.json
+          jq -e '.ok == true' /tmp/prepare.json > /dev/null
+
+      - name: Run promptfoo regression
+        if: steps.fetch.outputs.clusters != '0' && env.skip != 'true'
+        env:
+          PROMPTFOO_DISABLE_TELEMETRY: '1'
+        run: |
+          set -euo pipefail
+          umask 077
+          if npx -y promptfoo@0.126.0 eval \
+            -c /tmp/eval/promptfooconfig.yaml \
+            -o /tmp/eval/result.json \
+            --no-cache --max-concurrency 2 > /tmp/promptfoo-private.log 2>&1; then
+            evaluation_status=0
+          else
+            evaluation_status=$?
+          fi
+          # A failing baseline is expected in paired regression. The sealed
+          # result parser distinguishes failed assertions from provider errors.
+          if [ "$evaluation_status" != 0 ] && [ "$evaluation_status" != 100 ]; then
+            echo "::error::promptfoo evaluation failed; private cases and model output are not published in Actions logs"
+            exit "$evaluation_status"
+          fi
+
+      - name: Create the reviewed candidate request
+        if: steps.fetch.outputs.clusters != '0' && env.skip != 'true'
+        run: |
+          set -euo pipefail
+          python -m modstore_server.capability_trainer decide \
+            --bundle /tmp/eval/training-bundle.json \
+            --result /tmp/eval/result.json > /tmp/eval/verdict.json
+          if [ "$(jq -r '.verdict' /tmp/eval/verdict.json)" != "candidate_for_approval" ]; then
+            echo "::notice::候选未通过成对回归，本轮结束"
+            exit 0
+          fi
+          python - <<'PY_PAYLOAD'
+          import json, os
+          from pathlib import Path
+          folder = Path('/tmp/eval')
+          bundle = json.loads((folder / 'training-bundle.json').read_text())
+          clusters = json.loads(Path('/tmp/top-cluster.json').read_text())
+          payload = {
+              'request_key': f"training:{os.environ['GITHUB_RUN_ID']}:{os.environ['employee']}",
+              'employee_id': os.environ['employee'], 'source_sha': os.environ['GITHUB_SHA'],
+              'workflow_run_id': int(os.environ['GITHUB_RUN_ID']),
+              'failure_run_ids': sorted({str(sample['run_id']) for cluster in clusters for sample in cluster['samples'] if sample.get('run_id')}),
+              'bundle_json': (folder / 'training-bundle.json').read_bytes().decode('utf-8'),
+              'files': {name: (folder / entry['name']).read_bytes().decode('utf-8') for name, entry in bundle['files'].items()},
+              'result_json': (folder / 'result.json').read_bytes().decode('utf-8'),
+          }
+          (folder / 'candidate-request.json').write_text(json.dumps(payload, ensure_ascii=False))
+          PY_PAYLOAD
+          curl --proto '=https' --max-time 60 --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer ${DISPATCH_TOKEN}" -H 'Content-Type: application/json' \
+            --data-binary @/tmp/eval/candidate-request.json \
+            "${API_BASE%/}/api/service/mac-control/training/candidates" \
+            -o /tmp/eval/candidate-response.json
+          jq -e '.request_id or .id or .run.id' /tmp/eval/candidate-response.json >/dev/null
+          echo "候选已登记，等待原审批与线上实验验收。" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload eval evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capability-trainer-evidence
+          retention-days: 7
+          path: |
+            /tmp/eval/training-bundle.json
+            /tmp/eval/verdict.json
+            /tmp/eval/candidate-response.json
+          if-no-files-found: ignore

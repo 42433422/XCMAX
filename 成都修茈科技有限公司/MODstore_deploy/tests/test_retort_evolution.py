@@ -709,11 +709,15 @@ def test_feedback_run_binds_original_customer_and_production_release(
     if customer_decision == "resolved_then_reopen":
         from modstore_server import retort_feedback_measurements
 
-        templates["restore"]["customer_feedback"]["growthbook"] = {"project": "prod"}
+        templates["restore"]["customer_feedback"]["growthbook"] = {
+            "project": "prod",
+            "metric": "first_import",
+            "minimum_users": 100,
+        }
         monkeypatch.setattr(
             retort_feedback_measurements,
             "experiment_measurement",
-            lambda *_: {"status": "running"},
+            lambda *_, **__: {"status": "running"},
         )
     with open(os.environ["MODSTORE_RETORT_PROTOCOLS"], "w", encoding="utf-8") as fh:
         json.dump(templates, fh)
@@ -911,8 +915,14 @@ def test_feedback_run_binds_original_customer_and_production_release(
             db.commit()
     final = resume()
     if customer_decision in {"reopen", "resolved_then_reopen"}:
-        assert final["status"] == "customer_impact_rejected"
+        assert final["status"] == "waiting_recovery"
         assert final["snapshot"]["impact"]["release_sha"] == "c" * 40
+        assert final["effects"]["recovery"]["reason"] == "recovery_not_authorized"
+        assert service.accepted_knowledge() == []
+        lessons = service.outcome_knowledge()
+        assert lessons[0]["outcome"] == "rejected"
+        assert lessons[0]["customer_impact"]["reason"] == "original_customer_reopened"
+        assert "ticket_id" not in lessons[0]["customer_impact"]
         return
     assert final["status"] == "completed"
     assert final["snapshot"]["impact"]["release_sha"] == "c" * 40
@@ -979,6 +989,7 @@ def test_growthbook_requires_same_run_production_exposure_and_valid_sample():
         == "unbound"
     )
     assert observed["status"] == "measured"
+    assert observed["decision"] == "promote"
     assert observed["lift"] == 0.12
     assert _snapshot(result, spec, "other-run", delivery)["status"] == "unbound"
     result["result"]["results"][0]["checks"]["srm"] = 0.0001
@@ -1012,3 +1023,188 @@ def test_commercial_evidence_uses_successful_job_bound_not_poll_time(monkeypatch
     del delivery["deployment_completed_at"]
     assert commercial_measurement(17, delivery)["status"] == "release_artifact_unavailable"
     assert len(observed) == 1
+
+
+def test_training_service_submits_frozen_candidate_only_to_original_approval(
+    setup, tmp_path, monkeypatch
+):
+    import base64
+    import hashlib
+    from pathlib import Path
+
+    from modstore_server import capability_trainer as trainer
+
+    monkeypatch.setenv("XCAGI_LLM_MODEL", "approved-model")
+    monkeypatch.setenv("XCAGI_LLM_BASE_URL", "https://platform.test/v1")
+    token = "training-service-fixture-" + "t" * 32
+    monkeypatch.setenv(
+        "MODSTORE_PARA_DISPATCH_TOKEN_SHA256", hashlib.sha256(token.encode()).hexdigest()
+    )
+    built = trainer.build_config(
+        out_dir=tmp_path / "bundle",
+        baseline_prompt="baseline",
+        candidate_prompt="candidate",
+        cases=[{"task": "private reproduction"}],
+    )
+    bundle = json.loads(Path(built["bundle"]).read_bytes())
+    result = {
+        "metadata": {"promptfooVersion": trainer.PROMPTFOO_VERSION},
+        "results": {
+            "prompts": [
+                {"raw": Path(built[key]).read_bytes().decode()} for key in ("baseline", "candidate")
+            ],
+            "results": [
+                {
+                    "promptIdx": i,
+                    "testIdx": 0,
+                    "success": bool(i),
+                    "failureReason": 0 if i else 1,
+                    "gradingResult": {"pass": bool(i)},
+                    "error": None if i else "Deterministic assertion failed",
+                    "provider": {"id": bundle["provider_id"]},
+                    "vars": {"task": "private reproduction", "case_id": bundle["case_ids"][0]},
+                }
+                for i in (0, 1)
+            ],
+        },
+    }
+    templates_path = Path(os.environ["MODSTORE_RETORT_PROTOCOLS"])
+    templates = json.loads(templates_path.read_bytes())
+    with get_session_factory()() as db:
+        other = User(username=uuid4().hex, password_hash="test-only")
+        db.add(other)
+        db.commit()
+        cohort = [setup["user"].id, other.id]
+    templates["restore"]["training_candidate"] = {
+        "employee_id": "help-desk",
+        "owner_id": setup["user"].id,
+        "goal": "Improve observed support execution",
+        "prompt_path": "catalog/help-desk@1.0.0/prompt.txt",
+        "growthbook": {
+            "project": "prod",
+            "metric": "success",
+            "minimum_users": 2,
+            "stats_engine": "frequentist",
+            "lifecycle": {
+                "employee_id": "help-desk",
+                "surface": "employee_prompt",
+                "cohort_user_ids": cohort,
+                "datasource_id": "warehouse",
+                "assignment_query_id": "actual-exposures",
+                "duration_hours": 24,
+                "coverage": 0.1,
+            },
+        },
+    }
+    templates_path.write_text(json.dumps(templates))
+    monkeypatch.setattr(
+        trainer,
+        "mine",
+        lambda *_, **__: [{"employee_id": "help-desk", "samples": [{"run_id": "real-failure"}]}],
+    )
+    calls = []
+
+    def github(method, path, body=None):
+        calls.append((method, path))
+        assert method == "GET"
+        return (
+            {"sha": "a" * 40}
+            if path.endswith("/commits/main")
+            else {"encoding": "base64", "content": base64.b64encode(b"baseline").decode()}
+        )
+
+    monkeypatch.setattr("modstore_server.customer_ticket_github.github", github)
+    body = {
+        "request_key": "training-fixture-1",
+        "employee_id": "help-desk",
+        "source_sha": "a" * 40,
+        "failure_run_ids": ["real-failure"],
+        "workflow_run_id": 77,
+        "bundle_json": Path(built["bundle"]).read_bytes().decode(),
+        "result_json": json.dumps(result, indent=2) + "\n",
+        "files": {
+            key: Path(built[key]).read_bytes().decode()
+            for key in ("baseline", "candidate", "config", "tests")
+        },
+    }
+    client, endpoint = setup["client"], "/api/service/mac-control/training/candidates"
+    auth = {"Authorization": f"Bearer {token}"}
+    assert client.post(endpoint, json=body).status_code == 401
+    assert (
+        client.post(
+            endpoint, headers=auth, json={**body, "failure_run_ids": ["invented"]}
+        ).status_code
+        == 409
+    )
+    assert (
+        client.post(endpoint, headers=auth, json={**body, "source_sha": "b" * 40}).status_code
+        == 409
+    )
+    response = client.post(endpoint, headers=auth, json=body)
+    assert response.status_code == 202, response.text
+    request_id = response.json()["request_id"]
+    assert response.json()["approval_required"] is True
+    assert client.post(endpoint, headers=auth, json=body).json()["request_id"] == request_id
+    current = read(client, request_id)
+    assert current["status"] == "awaiting_dispatch_approval"
+    assert current["snapshot"]["has_customer_feedback"] is True
+    assert (
+        current["snapshot"]["plan"]["feedback_policy"]["growthbook"]["lifecycle"][
+            "offline_evidence"
+        ]["verdict"]
+        == "candidate_for_approval"
+    )
+    assert "private reproduction" not in current["snapshot"]["plan"]["public_body"]
+    private = current["effects"]["training_candidate"]["private_evidence"]
+    assert private["result_json"] == body["result_json"]
+    assert not [call for call in setup["calls"] if call[0] == "POST"]
+    assert (
+        client.post(endpoint, headers=auth, json={**body, "workflow_run_id": 78}).status_code == 409
+    )
+    conflict = client.post(
+        endpoint, headers=auth, json={**body, "request_key": "training-fixture-2"}
+    )
+    assert conflict.status_code == 409 and "surface_already_reserved" in conflict.text
+    # Two independent request IDs must not reserve one surface concurrently.
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    with get_session_factory()() as db:
+        db.get(RetortEvolutionRun, request_id).status = "cancelled"
+        db.commit()
+    barrier = Barrier(2)
+    request = {
+        key: templates["restore"][key] for key in ("criterion_ids", "checks", "container_image")
+    }
+    request.update(
+        title="Training reservation",
+        goal="Bounded experiment",
+        repository="example/product",
+        source_sha="a" * 40,
+    )
+
+    def reserve(_index):
+        barrier.wait(timeout=5)
+        try:
+            return service.create_run(
+                {**request, "request_id": str(uuid4())},
+                setup["user"].id,
+                training_candidate=current["effects"]["training_candidate"],
+            )
+        except (ValueError, TimeoutError):
+            return None
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        assert sum(result is not None for result in pool.map(reserve, (0, 1))) == 1
+    with get_session_factory()() as db:
+        db.get(User, setup["user"].id).account_state = "disabled"
+        db.commit()
+    unavailable = client.post(endpoint, headers=auth, json=body)
+    assert unavailable.status_code == 409 and "training_owner_unavailable" in unavailable.text
+    app.dependency_overrides.pop(require_admin)
+    denied = client.post(
+        f"/api/retort-evolution/{request_id}/decision",
+        headers=auth,
+        json={"approved": True, "digest": current["snapshot"]["pending"][0]["digest"]},
+    )
+    assert denied.status_code in {401, 403}

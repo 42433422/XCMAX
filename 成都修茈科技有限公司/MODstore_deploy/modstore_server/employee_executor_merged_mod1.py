@@ -635,6 +635,7 @@ async def _cognition_real(
     cog_cfg = _facade()._get_section(config, "cognition")
     agent = cog_cfg.get("agent") if isinstance(cog_cfg.get("agent"), dict) else cog_cfg
     system_prompt = agent.get("system_prompt", "你是智能员工助手")
+    experiment_assignment = None
     if employee_id:
         try:
             from modstore_server.prompt_evolution_ab import get_effective_system_prompt
@@ -642,6 +643,14 @@ async def _cognition_real(
             system_prompt = get_effective_system_prompt(str(employee_id), str(system_prompt))
         except RECOVERABLE_ERRORS:
             pass
+        from modstore_server.retort_experiment_runtime import select_variant
+
+        system_prompt, experiment_assignment = select_variant(
+            surface="employee_prompt",
+            resource_id=str(employee_id),
+            subject_id=user_id,
+            default_value=str(system_prompt),
+        )
     if str(task or "").strip() and (
         not _facade()._is_all_hands_cognition_context(
             perceived.get("normalized_input") if isinstance(perceived, dict) else {}
@@ -822,6 +831,13 @@ async def _cognition_real(
     from modstore_server.mod_employee_agent_runner import _llm_timeout_seconds
 
     llm_timeout_s = _llm_timeout_seconds()
+    import time
+
+    call_started, result = time.monotonic(), None
+    if experiment_assignment is not None:
+        from modstore_server.retort_experiment_runtime import begin_observation
+
+        begin_observation(experiment_assignment)
     try:
         if use_platform_dispatch:
             from modstore_server.services.llm import chat_dispatch_via_platform_only
@@ -849,6 +865,15 @@ async def _cognition_real(
             "ok": False,
             "error": f"employee cognition LLM timeout ({int(llm_timeout_s)}s)",
         }
+    finally:
+        if experiment_assignment is not None:
+            from modstore_server.retort_experiment_runtime import record_observation
+
+            record_observation(
+                experiment_assignment,
+                result=result,
+                duration_ms=(time.monotonic() - call_started) * 1000,
+            )
     if not result.get("ok"):
         err = str(result.get("error") or "llm call failed")
         if "missing api key" in err.lower():
@@ -1868,10 +1893,20 @@ def _actions_real(
     # 跳过规划 LLM 后 llm_md/echo 只会回显空文本，且台账把 llm_md 视为本地回退，不再产出。
     skip_echo = reasoning.get("skipped_cognition_reason") == "para_first"
     for handler in handlers:
+        from modstore_server.strategic_portfolio_usage import remaining_execution_seconds
+
+        remaining_seconds = remaining_execution_seconds()
         if (skip_local_after_para_ok or para_only) and str(handler) in _LOCAL_FALLBACK_HANDLERS:
             continue
         if skip_echo and str(handler) in ("llm_md", "echo"):
             continue
+        if handler in {"para_delegate", "cursor_delegate"}:
+            from modstore_server.strategic_portfolio_usage import unmetered_delegate_block
+
+            blocked = unmetered_delegate_block(str(handler), direct_input)
+            if blocked is not None:
+                outputs.append(blocked)
+                continue
         if handler == "echo":
             outputs.append({"handler": "echo", "output": reasoning.get("reasoning", "")})
         elif handler == "http_request":
@@ -1887,7 +1922,11 @@ def _actions_real(
                 continue
             try:
                 resp = _facade().httpx.request(
-                    method, url, headers=headers, content=body, timeout=30.0
+                    method,
+                    url,
+                    headers=headers,
+                    content=body,
+                    timeout=min(30.0, remaining_seconds) if remaining_seconds is not None else 30.0,
                 )
                 outputs.append(
                     {
@@ -1910,7 +1949,11 @@ def _actions_real(
                 "result": reasoning.get("reasoning", ""),
             }
             try:
-                resp = _facade().httpx.post(url, json=payload, timeout=30.0)
+                resp = _facade().httpx.post(
+                    url,
+                    json=payload,
+                    timeout=min(30.0, remaining_seconds) if remaining_seconds is not None else 30.0,
+                )
                 outputs.append({"handler": "webhook", "status_code": resp.status_code})
             except RECOVERABLE_ERRORS as e:
                 outputs.append({"handler": "webhook", "error": str(e)})
@@ -2021,7 +2064,9 @@ def _actions_real(
     try:
         _rep_input = reasoning.get("input") if isinstance(reasoning.get("input"), dict) else {}
         _rep_body = ""
-        if not _rep_input.get("im_reply_managed"):
+        if not _rep_input.get("im_reply_managed") and not _flag_enabled(
+            _rep_input.get("suppress_employee_im")
+        ):
             for _o in outputs:
                 if not isinstance(_o, dict):
                     continue

@@ -89,7 +89,7 @@ def test_corporate_component_workflows_are_published_with_root_paths() -> None:
     assert "- '成都修茈科技有限公司/vibe-coding/**'" in vibe[1]
 
 
-@pytest.mark.parametrize("failed_workflow", ["", "fhd-security-full-scan.yml"])
+@pytest.mark.parametrize("failed_workflow", ["", "fhd-alembic-ssot.yml"])
 def test_nightly_dispatch_supplies_required_inputs_and_propagates_failure(
     tmp_path: Path, failed_workflow: str
 ) -> None:
@@ -136,8 +136,8 @@ def test_nightly_dispatch_supplies_required_inputs_and_propagates_failure(
     assert result.returncode == (1 if failed_workflow else 0), result.stderr
     commands = [json.loads(line) for line in calls.read_text().splitlines()]
     dispatched = [command for command in commands if command[:2] == ["workflow", "run"]]
-    assert len(dispatched) == 7
-    assert len([c for c in commands if c[:2] == ["run", "watch"]]) == (0 if failed_workflow else 7)
+    assert len(dispatched) == 6
+    assert len([c for c in commands if c[:2] == ["run", "watch"]]) == (0 if failed_workflow else 6)
     for command in dispatched:
         assert command[command.index("--ref") + 1] == "main"
         assert command[command.index("--repo") + 1] == "example/test"
@@ -154,9 +154,7 @@ def test_nightly_dispatch_supplies_required_inputs_and_propagates_failure(
             if spec.get("required") == "true" and "default" not in spec
         }
         assert required <= supplied.keys()
-        assert supplied == (
-            {"release_sha": sha} if command[2] == "fhd-security-full-scan.yml" else {}
-        )
+        assert supplied == {}
 
 
 def test_market_checks_initialized_child_without_mixing_parent_types() -> None:

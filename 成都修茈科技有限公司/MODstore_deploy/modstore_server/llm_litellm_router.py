@@ -404,6 +404,13 @@ async def chat(
 ) -> Optional[Dict[str, Any]]:
     """走 LiteLLM Router 的非流式调用；不支持该 provider 时返回 ``None``。"""
 
+    from modstore_server.strategic_portfolio_usage import require_call_reservation, scope_active
+
+    budgeted = scope_active()
+    if budgeted:
+        require_call_reservation()
+        fallbacks = []
+
     specs = _build_specs(provider, model, api_key, base_url, fallbacks)
     if specs is None or not available():
         return None
@@ -421,6 +428,7 @@ async def chat(
             messages=messages,
             max_tokens=max_tokens,
             response_format=response_format,
+            **({"num_retries": 0, "max_retries": 0, "disable_fallbacks": True} if budgeted else {}),
             **({"timeout": float(primary_timeout_s)} if primary_timeout_s else {}),
         )
         response = await asyncio.wait_for(call, timeout=float(timeout_s))
@@ -583,7 +591,11 @@ def stream_events(
     fallbacks: Optional[List[Dict[str, Any]]] = None,
 ) -> Optional[AsyncIterator[Dict[str, Any]]]:
     """返回 LiteLLM 流事件迭代器；不支持时返回 ``None`` 由调用方降级。"""
+    from modstore_server.strategic_portfolio import PortfolioError
+    from modstore_server.strategic_portfolio_usage import scope_active
 
+    if scope_active():
+        raise PortfolioError("strategic streaming needs a persisted usage receipt adapter")
     if _build_specs(provider, model, api_key, base_url, fallbacks) is None or not available():
         return None
     return _stream_impl(

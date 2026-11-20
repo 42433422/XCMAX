@@ -334,8 +334,22 @@ def test_status_participants_sort_by_each_participant_without_scratch_loop_state
     assert "item" not in state and "run_id" not in state
 
 
+@pytest.mark.parametrize(
+    "legacy,receipts,production,expected_envs,half_closed",
+    [
+        (False, False, False, [], True),
+        (True, False, True, [], True),
+        (False, True, False, ["staging"], True),
+        (False, True, True, ["staging", "production"], False),
+    ],
+)
 def test_runtime_status_projects_complete_read_model_without_previous_call_state(
     monkeypatch,
+    legacy,
+    receipts,
+    production,
+    expected_envs,
+    half_closed,
 ):
     from modstore_server import (
         duty_employee_registry,
@@ -344,6 +358,12 @@ def test_runtime_status_projects_complete_read_model_without_previous_call_state
     )
     from modstore_server.maintenance_loop import config, review, schedule, status, store
 
+    for suffix, enabled in (
+        ("AUTO_DISPATCH_DEPLOY", legacy),
+        ("DEPLOY_RECEIPTS_ENABLED", receipts),
+        ("PRODUCTION_DEPLOY_ENABLED", production),
+    ):
+        monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_" + suffix, str(int(enabled)))
     employees = ["vibe-coding-maintainer", "change-request-auditor", "test-qa-runner"]
     rows = [{"phase": "start", "run_id": "visible", "created_at": "2026-10-22T00:00:00Z"}]
     rows.extend(
@@ -387,6 +407,9 @@ def test_runtime_status_projects_complete_read_model_without_previous_call_state
     assert [item["employee_id"] for item in first["participants"]] == list(reversed(employees))
     assert first["roster_alignment"]["gate"]["ok"] is True
     assert list(first["evidence"]["steps_by_open_run"]) == ["visible"]
+    assert first["policy"]["auto_dispatch_deploy_envs"] == expected_envs
+    assert first["policy"]["deployment_receipts_enabled"] is receipts
+    assert first["l4_closure"]["half_closed_without_deploy"] is half_closed
     rows.clear()
     second = status.get_self_maintenance_runtime_status()
     assert second["participants"] == []

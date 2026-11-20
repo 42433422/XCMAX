@@ -1,0 +1,28 @@
+{
+  "standard_version": "1.0.0",
+  "scoring_version": "external-anchors-v1",
+  "audited_at": "2026-11-15",
+  "source": "FHD/docs/audit/xcmax-18-domain-evidence-audit-2026-11-15.md",
+  "domain_status": "UNRATED",
+  "total_score": null,
+  "domains": [
+    {"domain_id": "di-layering", "name": "依赖注入与分层", "status": "UNRATED", "score": null, "evidence_level": "E2", "blocking_gap": "无替换实现/故障演练；C1 未测"},
+    {"domain_id": "erp-order-funds", "name": "ERP 订单与资金闭环", "status": "UNRATED", "score": null, "evidence_level": "E2", "blocking_gap": "多币种/期间对账无实现证据；C3 审批身份存在反证"},
+    {"domain_id": "agent-orchestration-approval", "name": "Agent 编排与审批", "status": "UNRATED", "score": null, "evidence_level": "E2", "blocking_gap": "真实模型多步任务与超时强制中断未验"},
+    {"domain_id": "etl-business-files", "name": "ETL 与业务文件处理", "status": "UNRATED", "score": null, "evidence_level": "E2", "blocking_gap": "登记范围路径不存在；C1 无全链路 lineage"},
+    {"domain_id": "ai-intent-routing", "name": "AI 意图与工具路由", "status": "UNRATED", "score": null, "evidence_level": "E2", "blocking_gap": "每域样本少于 30；B2 已有观察失败"},
+    {"domain_id": "neurobus-event-core", "name": "NeuroBus 事件内核", "status": "UNRATED", "score": null, "evidence_level": "E2", "blocking_gap": "无网络分区/恢复演练；重放存在已知缺陷"},
+    {"domain_id": "mod-sdk-industry-modules", "name": "Mod SDK 与行业模块", "status": "UNRATED", "score": null, "evidence_level": "E2", "blocking_gap": "客户安装/升级与跨租户负向未验"},
+    {"domain_id": "desktop-shell-update", "name": "桌面壳与更新恢复", "status": "UNRATED", "score": null, "evidence_level": "E1", "blocking_gap": "目标设备批量更新与数据保留未验收"},
+    {"domain_id": "fhd-frontend-user-tasks", "name": "FHD 前端与用户任务", "status": "UNRATED", "score": null, "evidence_level": "E2", "blocking_gap": "工作台只追踪健康，不追踪业务结果"},
+    {"domain_id": "storefront-ui-workflow", "name": "商城前端与工作流 UI", "status": "UNRATED", "score": null, "evidence_level": "E2", "blocking_gap": "无后台订单接口；无组织管理实现"},
+    {"domain_id": "store-commerce-delivery", "name": "商城交易与交付后端", "status": "UNRATED", "score": null, "evidence_level": "E2", "blocking_gap": "无压测/故障注入；交付一致性未验"},
+    {"domain_id": "autonomy-maintenance-execution", "name": "自治与维护执行", "status": "UNRATED", "score": null, "evidence_level": "E2", "blocking_gap": "无队列容量控制；跨节点执行未验"},
+    {"domain_id": "java-payment-service", "name": "Java 支付服务", "status": "UNRATED", "score": null, "evidence_level": "E1", "blocking_gap": "集成测试仍把 verifyNotify mock 为 true；退款不调用渠道"},
+    {"domain_id": "flutter-mobile", "name": "Flutter 移动端", "status": "UNRATED", "score": null, "evidence_level": "E1", "blocking_gap": "Android 发布链仍用 stable 通道；无真机与跨设备测试"},
+    {"domain_id": "retort-shared-engine", "name": "Retort 共享引擎", "status": "UNRATED", "score": null, "evidence_level": "E2", "blocking_gap": "执行证据未绑定产物哈希；缺长期运行证据"},
+    {"domain_id": "vibe-coding-sandbox", "name": "Vibe 编码与沙箱", "status": "UNRATED", "score": null, "evidence_level": "E1", "blocking_gap": "无留出任务评测；无检查点/恢复"},
+    {"domain_id": "kelailai-subsystem", "name": "客来来独立子系统", "status": "UNRATED", "score": null, "evidence_level": "E0", "blocking_gap": "子模块未初始化，无法取证"},
+    {"domain_id": "ci-release-governance", "name": "CI、发布与治理", "status": "UNRATED", "score": null, "evidence_level": "E2", "blocking_gap": "产物身份/安装升级回退未闭环；无自动回滚"}
+  ]
+}

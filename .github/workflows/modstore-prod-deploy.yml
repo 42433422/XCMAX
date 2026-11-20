@@ -198,6 +198,9 @@ jobs:
               git -C "$SOURCE_ROOT" show "${CONTROLLER_SHA}:ops/backup/xcmax_backup.sh" | \
               bash -s -- --modstore-release "$TARGET_SHA" )
             git -C "$SOURCE_ROOT" show "${CONTROLLER_SHA}:成都修茈科技有限公司/MODstore_deploy/scripts/xcmax-immutable-release.sh" > "$BOOTSTRAP/immutable.sh"
+            for file in immutable_release_runtime.sh immutable_release_recovery.py; do
+              git -C "$SOURCE_ROOT" show "${CONTROLLER_SHA}:成都修茈科技有限公司/MODstore_deploy/scripts/$file" > "$BOOTSTRAP/$file"
+            done
             git -C "$SOURCE_ROOT" show "${CONTROLLER_SHA}:成都修茈科技有限公司/MODstore_deploy/scripts/sync_site_download_release.py" > "$BOOTSTRAP/sync_site_download_release.py"
             for file in xcmax_release_sync.sh xcmax_release_sync_prune.py; do
               git -C "$SOURCE_ROOT" show "${CONTROLLER_SHA}:ops/dr/$file" > "$BOOTSTRAP/$file"

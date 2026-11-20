@@ -37,11 +37,11 @@ def report_enabled() -> bool:
 
 
 def report_hour_utc() -> int:
-    raw = (os.environ.get("MODSTORE_BOSS_IM_REPORT_HOUR_UTC") or "1").strip()
+    raw = (os.environ.get("MODSTORE_BOSS_IM_REPORT_HOUR_UTC") or "8").strip()
     try:
         return min(23, max(0, int(raw)))
     except ValueError:
-        return 1
+        return 8
 
 
 def _reporter_identity() -> Tuple[str, str]:

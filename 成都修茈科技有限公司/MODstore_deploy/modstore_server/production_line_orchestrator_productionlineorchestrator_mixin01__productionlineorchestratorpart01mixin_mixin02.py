@@ -94,12 +94,18 @@ class __ProductionLineOrchestratorPart01MixinPart02Mixin:
     async def _step_version_evolution(
         self, context: _facade().Dict[str, _facade().Any]
     ) -> _facade().Dict[str, _facade().Any]:
-        from modstore_server.auto_version_bump import auto_version_bump
-        from modstore_server.integrations.ops_action_handlers import repo_root
+        # 版本递增唯一入口是 release_train（每日摘要落库后 bump_release_train），
+        # 这里不再自行改版本文件，避免两套版本语义互相覆盖。
+        from modstore_server.release_train import snapshot_public
 
-        root = str(repo_root())
-        out = auto_version_bump(root)
-        return {"step": "P9", "result": out}
+        return {
+            "step": "P9",
+            "result": {
+                "skipped": True,
+                "reason": "release_train_owns_version",
+                "state": snapshot_public(),
+            },
+        }
 
     async def _step_ai_self_driven(
         self, context: _facade().Dict[str, _facade().Any]

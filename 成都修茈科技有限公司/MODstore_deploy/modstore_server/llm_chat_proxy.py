@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+from functools import wraps
 from typing import Any, AsyncIterator, Dict, List, Optional
 from urllib.parse import urlsplit
 
@@ -162,6 +163,17 @@ def _openai_assistant_message_parts(msg: Dict[str, Any]) -> tuple[str, str]:
     return content, reasoning
 
 
+def _strategic_budgeted_dispatch(invoke):
+    @wraps(invoke)
+    async def wrapped(provider: str, **kwargs) -> Dict[str, Any]:
+        from modstore_server.strategic_portfolio_usage import dispatch_budgeted
+
+        return await dispatch_budgeted(invoke, provider, kwargs)
+
+    return wrapped
+
+
+@_strategic_budgeted_dispatch
 async def chat_dispatch(
     provider: str,
     *,
@@ -181,6 +193,12 @@ async def chat_dispatch(
     fallback_base_url: Optional[str] = None,
     fallbacks: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
+    from modstore_server.strategic_portfolio_usage import scope_active
+
+    budgeted = scope_active()
+    if budgeted:
+        # A retry is another paid attempt and needs its own durable reservation.
+        timeout_fallback_s, fallbacks = None, []
     if isinstance(api_key, PlatformApiKey) and api_key.configuration["provider"] != provider:
         return {"ok": False, "error": "平台密钥不允许跨供应商使用"}
     if isinstance(api_key, PlatformApiKey):
@@ -263,6 +281,8 @@ async def chat_dispatch(
         if provider == "anthropic":
             return await chat_anthropic(api_key, model, messages, max_tokens=max_tokens or 1024)
         if provider == "google":
+            if max_tokens is not None:
+                return await chat_google(api_key, model, messages, max_tokens=max_tokens)
             return await chat_google(api_key, model, messages)
         return {"ok": False, "error": f"unsupported provider: {provider}"}
 
@@ -270,7 +290,7 @@ async def chat_dispatch(
         import asyncio as _asyncio
 
         last: Dict[str, Any] = {"ok": False, "error": "no primary attempt"}
-        attempts = _primary_max_attempts()
+        attempts = 1 if budgeted else _primary_max_attempts()
         for attempt in range(attempts):
             transient_exc = False
             try:
@@ -446,6 +466,11 @@ async def chat_dispatch_stream(
     tool_choice: Any = None,
     fallbacks: Optional[List[Dict[str, Any]]] = None,
 ) -> AsyncIterator[Dict[str, Any]]:
+    from modstore_server.strategic_portfolio import PortfolioError
+    from modstore_server.strategic_portfolio_usage import scope_active
+
+    if scope_active():
+        raise PortfolioError("strategic streaming needs a persisted usage receipt adapter")
     if isinstance(api_key, PlatformApiKey) and api_key.configuration["provider"] != provider:
         yield {"type": "error", "error": "平台密钥不允许跨供应商使用"}
         return

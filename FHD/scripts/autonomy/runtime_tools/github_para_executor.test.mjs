@@ -6,15 +6,47 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runGithubExecutor } from './github_para_executor.mjs';
 import { modelChildEnv } from './credential_vault.mjs';
-import { openCodePlatformConfig } from './opencode_agent.mjs';
+import { openCodePlatformConfig, OPENCODE_CREDENTIAL_ISOLATION } from './opencode_agent.mjs';
 
 const identity = { request_id: '11111111-2222-4333-8444-555555555555', run_id: '123', repository: 'owner/repo', issue_number: 42, finished: false };
+
+for (const kind of ['customer_feedback_repair', 'training_candidate_repair']) {
+test(`${kind} requires the admitted header-only native profile and bound candidate`, async t => {
+  const root = mkdtempSync(join(tmpdir(), 'para-header-only-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const env = { ...environment(root), DEVFLEET_FORCE_OPENCODE: '1', PARA_PLATFORM_POOL: '1',
+    PARA_PLATFORM_GATEWAY_URL: 'https://gateway.example.test/v1',
+    PARA_PLATFORM_GATEWAY_KEYS_JSON: JSON.stringify({ coding: 'fixture-key' }) };
+  const manifest = { commit_sha: 'c'.repeat(40), task_id: 'task-1' };
+  mkdirSync(env.PARA_GITHUB_CANDIDATE_DIR);
+  writeFileSync(join(env.PARA_GITHUB_CANDIDATE_DIR, 'manifest.json'), JSON.stringify(manifest));
+  const accepted = { ...identity, kind, publication_candidate: manifest,
+    model_allocation: { status: 'admitted', model: 'coding', approved_models: ['coding'],
+      execution_isolation: OPENCODE_CREDENTIAL_ISOLATION } };
+  const fetchStatus = async () => ({ ok: true, json: async () => accepted });
+  let verified = 0, launched = 0;
+  const options = { env, fetchStatus,
+    verifyFeedbackIsolation: () => { verified += 1; },
+    spawnWorker: () => { launched += 1; const child = new EventEmitter(); child.kill = () => {}; return child; } };
+  assert.equal(await runGithubExecutor(options), 0);
+  assert.equal(verified, 1); assert.equal(launched, 1);
+  assert.deepEqual(JSON.parse(readFileSync(join(env.PARA_GITHUB_EVIDENCE_DIR, 'execution.json'))), {
+    request_id: identity.request_id, run_id: '123', status: 'awaiting_publication', finished: false,
+    execution_isolation: OPENCODE_CREDENTIAL_ISOLATION, source_sha: env.GITHUB_SHA, candidate_sha: manifest.commit_sha,
+  });
+  await assert.rejects(runGithubExecutor({ ...options, verifyFeedbackIsolation: () => { throw new Error('native_boundary_missing'); } }), /native_boundary_missing/);
+  assert.equal(launched, 1);
+  accepted.model_allocation.execution_isolation = 'srt-0.0.83-masked-platform-v1';
+  await assert.rejects(runGithubExecutor(options), /requires_non_exportable/);
+  assert.equal(launched, 1);
+});
+}
 function environment(root, stage = 'execute') {
   return { GITHUB_ACTIONS: 'true', GITHUB_RUN_ATTEMPT: '1', GITHUB_RUN_ID: '123', GITHUB_SHA: 'a'.repeat(40),
     GITHUB_REPOSITORY: 'owner/repo', PARA_GITHUB_STAGE: stage, PARA_GITHUB_REQUEST_ID: identity.request_id,
     PARA_GITHUB_CANDIDATE_DIR: join(root, 'candidate'), PARA_GITHUB_EVIDENCE_DIR: join(root, 'evidence'), MODSTORE_PARA_DISPATCH_TOKEN: 'management' };
 }
-for (const kind of ['original_pr_repair', 'customer_feedback_repair']) {
+for (const kind of ['original_pr_repair', 'customer_feedback_repair', 'training_candidate_repair']) {
 test(`${kind} cannot launch a credential-bearing model, including login and OpenCode`, async () => {
   const root = mkdtempSync(join(tmpdir(), 'para-repair-credentials-'));
   try {
@@ -22,7 +54,7 @@ test(`${kind} cannot launch a credential-bearing model, including login and Open
     writeFileSync(join(root, '.codex', 'auth.json'), JSON.stringify({ access_token: 'fixture-login-only' }));
     const accepted = { ...identity, kind,
       ...(kind === 'original_pr_repair' ? { pull_request: 7, source_sha: 'b'.repeat(40) } : {}) };
-    const reason = kind === 'customer_feedback_repair'
+    const reason = kind !== 'original_pr_repair'
       ? 'customer_feedback_requires_non_exportable_model_credentials'
       : 'original_pr_repair_requires_non_exportable_model_credentials';
     for (const credentials of [
@@ -40,7 +72,7 @@ test(`${kind} cannot launch a credential-bearing model, including login and Open
       assert.equal(JSON.parse(evidence).reason, reason);
       assert.doesNotMatch(evidence, /fixture-(?:codex|openai|login|opencode)-only/);
     }
-    if (kind === 'customer_feedback_repair') {
+    if (kind !== 'original_pr_repair') {
       await assert.rejects(runGithubExecutor({ env: environment(root, 'resume'),
         fetchStatus: async () => ({ ok: true, json: async () => accepted }),
         spawnWorker: () => assert.fail('resuming a customer task cannot bypass the credential boundary'),
