@@ -66,11 +66,12 @@ def platform_model_admission() -> dict[str, Any] | None:
         # process-wide catalog client's connections on this short-lived loop.
         from modstore_server.llm_key_resolver import platform_api_key
 
-        providers = {
-            route.get("provider")
-            for route in routes.values()
-            if isinstance(route, dict) and isinstance(route.get("provider"), str)
-        }
+        providers: set[str] = set()
+        for route in routes.values():
+            if isinstance(route, dict):
+                provider = route.get("provider")
+                if isinstance(provider, str):
+                    providers.add(provider)
         catalog = {
             "providers": [
                 {"provider": provider, "configured": bool(platform_api_key(provider))}
