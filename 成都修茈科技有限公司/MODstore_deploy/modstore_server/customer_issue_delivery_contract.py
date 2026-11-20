@@ -380,6 +380,14 @@ def record_team_progress(
     resolution = issue_resolution(ticket, evidence)
     successful = team_ok is not False and team_succeeded(rows)
     action_state, _ = team_action_state(rows, team_ok=team_ok)
+    target = resolution.get("release_target")
+    website_verified = (
+        isinstance(target, dict)
+        and target.get("surface") == "corp_download"
+        and target.get("incident_event_id") == event_id
+        and target.get("repair_action_id") == evidence.get("corp_download_repair_action_id")
+        and successful
+    )
     # An employee run cannot establish release or customer-runtime postconditions.
     resolution.update(
         state={
@@ -392,6 +400,13 @@ def record_team_progress(
         team=[{k: row.get(k) for k in ("role", "employee_id", "ok", "status")} for row in rows],
         updated_at=datetime.now(UTC).isoformat(),
     )
+    if website_verified:
+        resolution.update(
+            state="awaiting_customer_verification",
+            **repair_verification("corp_download_deployment"),
+        )
+    elif isinstance(target, dict) and target.get("surface") == "corp_download":
+        resolution.pop("release_target", None)
     from modstore_server.incident_team_handler_digest import handler_output_digest
 
     resolution["processing"] = [

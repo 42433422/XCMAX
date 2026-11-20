@@ -254,12 +254,24 @@ export const openApiConnectors = {
     req(`/api/openapi-connectors/${encodeURIComponent(String(id))}/logs?limit=${limit}&offset=${offset}`),
 }
 
+export interface CustomerServiceIntakeConfirmation {
+  source_message_id: number
+  kind: 'invalid' | 'out_of_scope'
+}
+
+export interface CustomerServiceIssueDecision {
+  decision: 'resolved' | 'reopen'
+  note: string
+  idempotency_key: string
+}
+
 export const customerService = {
   customerServiceChat: (payload: {
     message: string
     session_id?: number | null
     context?: Record<string, unknown>
     image_data_url?: string
+    intake_confirmation?: CustomerServiceIntakeConfirmation
   }) =>
     req('/api/customer-service/chat', {
       method: 'POST',
@@ -276,6 +288,22 @@ export const customerService = {
     }),
   customerServiceTicketDetail: (id: number | string) =>
     req(`/api/customer-service/tickets/${encodeURIComponent(String(id))}`, { timeoutMs: 15_000 }),
+  customerServiceTicketTranscript: (id: number | string, beforeId?: number, signal?: AbortSignal) => {
+    const cursor = beforeId === undefined ? '' : `&transcript_before_id=${encodeURIComponent(String(beforeId))}`
+    return req(`/api/customer-service/tickets/${encodeURIComponent(String(id))}?include_transcript=true${cursor}`, {
+      timeoutMs: 15_000, ...(signal ? { signal } : {}),
+    })
+  },
+  customerServiceTicketTranscriptImage: (id: number | string, messageId: number, signal: AbortSignal) =>
+    requestBlob(`/api/customer-service/tickets/${encodeURIComponent(String(id))}?transcript_image_message_id=${encodeURIComponent(String(messageId))}`, {
+      method: 'GET', signal,
+    }),
+  customerServiceIssueDecision: (id: number, payload: CustomerServiceIssueDecision) =>
+    req(`/api/customer-service/issues/${encodeURIComponent(String(id))}/decision`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      timeoutMs: 15_000,
+    }),
   customerServiceActions: (ticketId?: number | string) =>
     req(`/api/customer-service/actions${ticketId ? `?ticket_id=${encodeURIComponent(String(ticketId))}` : ''}`, {
       timeoutMs: 15_000,

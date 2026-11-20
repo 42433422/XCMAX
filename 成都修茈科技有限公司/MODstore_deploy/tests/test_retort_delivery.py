@@ -40,6 +40,13 @@ def evidence(monkeypatch, tmp_path):
         "conclusion": "success",
         "html_url": f"https://github.com/{REPO}/actions/runs/50",
     }
+    job = {
+        "name": "deploy",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-19T00:10:00Z",
+        "completed_at": "2026-11-19T00:20:00Z",
+    }
     receipt = {
         "merge_sha": SHA,
         "git_sha": SHA,
@@ -90,6 +97,8 @@ def evidence(monkeypatch, tmp_path):
             ("deploy", "Verify independent public runtime readback"),
         )
     ]
+    jobs[1].update(job)
+    job = jobs[1]
     jobs_by_attempt = {"1": jobs[:1], "2": jobs}
     manifest = {
         "git_sha": SHA,
@@ -172,6 +181,7 @@ def evidence(monkeypatch, tmp_path):
         },
         "pr": pr,
         "run": run,
+        "job": job,
         "checks": checks,
         "jobs": jobs,
         "jobs_by_attempt": jobs_by_attempt,
@@ -198,6 +208,7 @@ def test_exact_production_receipt_and_public_identity_complete_delivery(evidence
     assert result["merge_sha"] == result["release_sha"] == SHA
     assert result["candidate_sha"] == HEAD
     assert result["identity"]["product_version"] == VERSION
+    assert result["deployment_completed_at"] == "2026-11-19T00:20:00+00:00"
     assert result["receipt"]["security_scan_run_id"] == 41
     assert result["identity"]["artifact_sha256"] == "d" * 64
 
@@ -401,3 +412,10 @@ def test_pagination_limit_never_promotes_partial_evidence(monkeypatch):
     monkeypatch.setattr(delivery, "github", lambda *_: {"workflow_runs": [{}] * 100})
     with pytest.raises(ValueError, match="pagination is incomplete"):
         list(delivery._rows("/runs", "workflow_runs"))
+
+
+def test_missing_or_untrusted_job_time_never_establishes_exposure(evidence):
+    evidence["job"]["completed_at"] = "2026-11-18T00:20:00Z"
+    assert delivery.collect_delivery(evidence["state"])["deployment_completed_at"] is None
+    evidence["job"]["completed_at"] = None
+    assert delivery.collect_delivery(evidence["state"])["deployment_completed_at"] is None

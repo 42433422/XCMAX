@@ -8,7 +8,7 @@ class _AuthScreenState extends State<AuthScreen> {
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   var _passwordVisible = false;
-  var _agreed = true;
+  late bool _agreed = widget.legalConsentAlreadyRecorded;
   var _adminMode = false;
   var _rememberPass = false;
   var _autoLogin = false;

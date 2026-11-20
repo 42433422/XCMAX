@@ -699,8 +699,59 @@ class WorkflowSession:
         accepted = bool(result.get("accepted"))
         waiting_decision = bool(execution.get("waiting_user_decision"))
         executed_nodes = int(execution.get("nodes_executed") or 0)
-        wrote_nothing = not success and not waiting_decision and executed_nodes <= 0
-        if accepted and waiting_decision:
+        elt_step = any(
+            (step.tool_id, step.action) == ("elt_import", "execute")
+            for step in getattr(agent_run, "steps", None) or []
+        )
+        if run_id and (success or elt_step):
+            try:
+                from app.application.agent_orchestrator import AgentOrchestrator
+
+                agent_run = AgentOrchestrator().get_run(run_id) or agent_run
+            except RECOVERABLE_ERRORS:
+                logger.warning("auto approve reload run failed run=%s", run_id, exc_info=True)
+        if elt_step and accepted and agent_run.status in {"queued", "running", "retrying"}:
+            from app.application.elt.batch_continuation import batch_turn_view
+
+            if active_turn := batch_turn_view(agent_run):
+                reply = _control_reply(
+                    "审批已通过，导入已交给后台任务。",
+                    "workflow_waiting",
+                    {"agent_run_id": run_id, "approval_request_id": request_id},
+                )[1]
+                return {
+                    **reply,
+                    "run_id": run_id,
+                    "agent_run_id": run_id,
+                    "status": active_turn["status"],
+                    "active_turn": active_turn,
+                }
+        partial = ""
+        deferred = ""
+        unknown = execution.get("code") == "outcome_unknown"
+        for step in getattr(agent_run, "steps", None) or []:
+            if not success and (step.tool_id, step.action) == ("elt_import", "execute"):
+                output = step.output if isinstance(step.output, dict) else {}
+                data = output.get("data")
+                if output.get("committed") is True or (
+                    isinstance(data, dict)
+                    and type(data.get("executed_rows")) is int
+                    and data["executed_rows"] > 0
+                ):
+                    partial = str(output.get("message") or "部分文件已处理，详细结果见任务回执。")
+                if output.get("deferred") is True:
+                    deferred = str(output.get("message") or "导入剩余步骤待继续。")
+                unknown = unknown or output.get("outcome") == "unknown"
+        if unknown:
+            deferred = ""
+        wrote_nothing = (
+            not (success or waiting_decision or partial or unknown) and executed_nodes <= 0
+        )
+        if partial or deferred:
+            text = partial or deferred
+        elif unknown:
+            text = message or "业务结果待核对，请查看原任务回执。"
+        elif accepted and waiting_decision:
             # 自动审批已通过，但预演要求用户确认目标表/字段：如实说明在等什么。
             text = f"自动审批已通过，但需要你确认后才会写入：{message}"
         elif accepted:
@@ -713,22 +764,12 @@ class WorkflowSession:
             text = f"本轮未执行任何写入（自动审批在写入前终止）：{detail}"
         else:
             text = f"自动审批未完成执行：{message or '请到任务中核对结果'}"
-        # 自动审批在同一轮返回，必须把节点产物（如生成的 Excel）与下载链接写回回复，
-        # 否则用户只能看到「执行完成」，拿不到真实文件。
         if success and run_id:
-            fresh_run = agent_run
-            try:
-                from app.application.agent_orchestrator import AgentOrchestrator
-
-                fresh_run = AgentOrchestrator().get_run(run_id) or agent_run
-                agent_run = fresh_run
-            except RECOVERABLE_ERRORS:
-                logger.warning("auto approve reload run failed run=%s", run_id, exc_info=True)
             from app.application.business_harness_projection import (
                 completed_deliverable_lines,
             )
 
-            deliverable_lines = completed_deliverable_lines(fresh_run)
+            deliverable_lines = completed_deliverable_lines(agent_run)
             if deliverable_lines:
                 text = "\n".join([text, *deliverable_lines])
         reply = _control_reply(
@@ -737,7 +778,7 @@ class WorkflowSession:
                 "workflow_done"
                 if success
                 else "workflow_waiting"
-                if waiting_decision
+                if waiting_decision or deferred
                 else "workflow_failed"
             ),
             {
@@ -748,11 +789,25 @@ class WorkflowSession:
                 # 失败语义交给前端三档：写入前失败必须是 not_executed，
                 # 不能让界面退化成「已执行但结果未知，不要重复提交」。
                 "execution": {
-                    "committed": bool(success) and executed_nodes > 0,
-                    "effect": "none" if wrote_nothing else ("partial" if not success else "write"),
-                    "outcome": "not_executed"
-                    if wrote_nothing
-                    else ("unknown" if not success else "succeeded"),
+                    "committed": bool(partial) or (success and executed_nodes > 0),
+                    "effect": (
+                        "unknown"
+                        if unknown
+                        else "none"
+                        if wrote_nothing or (deferred and not partial)
+                        else "write"
+                        if success
+                        else "partial"
+                    ),
+                    "outcome": (
+                        "not_executed"
+                        if wrote_nothing or (deferred and not partial)
+                        else "succeeded"
+                        if success
+                        else "partial"
+                        if partial and not unknown
+                        else "unknown"
+                    ),
                 },
                 "artifacts": [
                     artifact.to_dict() for artifact in (getattr(agent_run, "artifacts", None) or [])
@@ -764,6 +819,8 @@ class WorkflowSession:
                 if success
                 else "自动审批已通过，等待你确认"
                 if waiting_decision
+                else "导入待继续"
+                if deferred
                 else "自动审批执行未完成"
             ),
         )[1]
@@ -1268,6 +1325,7 @@ class WorkflowSession:
             return _control_reply(
                 reply,
                 "clarification_required",
+                {"reason": "no_pending_workflow"} if not pending else None,
                 success=not invalid_plan,
                 message="需要澄清",
             )

@@ -369,6 +369,7 @@ class EnterpriseCsAutomationService:
             _bare_intake,
             _plain_intake_match,
             looks_like_issue_report,
+            market_ticket_followup_reply,
             receive_pending_report,
         )
         from app.application.im_app_service import ImApplicationService
@@ -458,10 +459,12 @@ class EnterpriseCsAutomationService:
                     source_ref=source_ref,
                     readback_only=readback_only,
                 )
-            if result.get("state") == "RECEIVED":
+            if result.get("state") == "RECEIVED" and result.get("owner_ticket_no"):
                 reply = f"工单已受理，编号：{result['owner_ticket_no']}。后续可在原工单补充截图和复现步骤；受理不代表故障已确认或修复。"
             else:
-                reply = "暂无法确认工单受理结果，请先查看当前账号的问题工单处理结果，勿重复提交。"
+                reply = market_ticket_followup_reply(result) or (
+                    "暂无法确认工单受理结果，请先查看当前账号的问题工单处理结果，勿重复提交。"
+                )
         existing = self._db.scalar(
             select(ImMessage)
             .where(

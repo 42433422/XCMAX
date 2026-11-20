@@ -54,6 +54,33 @@ def lookup(db: Session, user_id: int, client_request_id: str, deadline_s: float)
     return str(row.state)
 
 
+def completed_receipt(db: Session, user_id: int, client_request_id: str, digest: str):
+    """Read an already completed receipt without acquiring a new execution lease."""
+    row = (
+        db.query(LlmClientRequest)
+        .filter_by(user_id=user_id, client_request_id=client_request_id)
+        .populate_existing()
+        .one_or_none()
+    )
+    if row is None or row.state != "completed":
+        return None
+    if row.request_sha256 != digest:
+        return "conflict", None
+    return "replay", json.loads(row.done_json or "{}")
+
+
+def existing_state(db: Session, user_id: int, client_request_id: str, digest: str) -> str:
+    row = (
+        db.query(LlmClientRequest)
+        .filter_by(user_id=user_id, client_request_id=client_request_id)
+        .populate_existing()
+        .one_or_none()
+    )
+    if row is None:
+        return "not_found"
+    return str(row.state) if row.request_sha256 == digest else "conflict"
+
+
 def begin(
     db: Session, user_id: int, client_request_id: str, digest: str, deadline_s: float
 ) -> tuple[str, Any]:
@@ -92,6 +119,30 @@ def mark_settling(db: Session, row: LlmClientRequest) -> None:
     row.state = "settling"
     row.updated_at = datetime.now(UTC)
     db.commit()
+
+
+def confirmed_no_charge(db: Session, row: LlmClientRequest) -> None:
+    """Allow the live handler to continue after a definitive rejection or wallet release."""
+    row.state = "processing"
+    row.done_json = None
+    row.updated_at = datetime.now(UTC)
+    db.commit()
+
+
+def prepare_settlement(db: Session, row: LlmClientRequest, receipt: dict[str, Any]) -> None:
+    """Keep provider usage and the intended charge before contacting the wallet."""
+    row.done_json = json.dumps({"pending_settlement": receipt}, ensure_ascii=False)
+    mark_settling(db, row)
+
+
+def lock_request(db: Session, user_id: int, client_request_id: str) -> LlmClientRequest | None:
+    return (
+        db.query(LlmClientRequest)
+        .filter_by(user_id=user_id, client_request_id=client_request_id)
+        .populate_existing()
+        .with_for_update()
+        .one_or_none()
+    )
 
 
 def finish(db: Session, row: LlmClientRequest, done: dict[str, Any] | None) -> None:

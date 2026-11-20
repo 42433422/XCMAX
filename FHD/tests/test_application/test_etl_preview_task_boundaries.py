@@ -302,6 +302,12 @@ def test_customer_products_csv_preview_and_confirmed_execution_persist_aggregate
     store.executor.futures[-1].result(timeout=10)
     preview = snapshot(store, run_id)
     assert preview["status"] == "preview_ready" and preview["summary"]["new"] == 2
+    chat_context = {
+        "conversation_id": "conversation-1",
+        "turn_id": "turn-1",
+        "run_id": "agent-run-1",
+        "step_id": "step-1",
+    }
     with store.factory() as db:
         assert db.query(PurchaseUnit).count() == db.query(Product).count() == 0
         store.service.execute(
@@ -311,12 +317,27 @@ def test_customer_products_csv_preview_and_confirmed_execution_persist_aggregate
             confirmed=True,
             valid_rows_only=False,
             preview_revision=preview["preview_revision"],
+            chat_context=chat_context,
         )
     store.executor.futures[-1].result(timeout=10)
     result = snapshot(store, run_id)
     assert result["status"] == "completed" and result["summary"]["executed"] == 2
     assert result["lease"] == (None, None, None)
     with store.factory() as db:
+        with pytest.raises(EltConflict, match="请先完成预演再执行"):
+            store.service.execute(
+                db,
+                run_id=run_id,
+                owner_user_id=7,
+                confirmed=True,
+                valid_rows_only=False,
+                preview_revision=preview["preview_revision"],
+                chat_context={**chat_context, "turn_id": "other-turn"},
+            )
+        assert load_json(db.get(EltRun, run_id).summary_json, {})["chat_import_origin"] == {
+            **chat_context,
+            "mod_id": "",
+        }
         customer = db.query(PurchaseUnit).one()
         assert customer.unit_name == "隔离联合客户"
         products = db.query(Product).order_by(Product.model_number).all()

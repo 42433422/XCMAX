@@ -129,6 +129,8 @@ domains:
     enabled: true
     ssot: FHD/config/public_cases.json
     derived:
+      # Curated public summary; cases, releases and prices retain their existing SSOT.
+      - 成都修茈科技有限公司/llms.txt
       - 成都修茈科技有限公司/site/data/public-site.json
       - 成都修茈科技有限公司/site/data/site-release-acceptance.json
       - 成都修茈科技有限公司/scripts/build_public_site.py

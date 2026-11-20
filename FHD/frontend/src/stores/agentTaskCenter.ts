@@ -20,6 +20,17 @@ function isUnauthorized(error: unknown): boolean {
   return status === 401 || status === 403
 }
 
+function preserveFileProgress(incoming: AgentTaskSummary, known?: AgentTaskSummary | null): AgentTaskSummary {
+  if (known?.progress?.basis !== 'files' || known.task_id !== incoming.task_id
+    || !incoming.active_run_id || known.active_run_id !== incoming.active_run_id) return incoming
+  if (incoming.progress?.basis === 'files') {
+    const knownAt = Date.parse(known.progress.updated_at || '')
+    const incomingAt = Date.parse(incoming.progress.updated_at || '')
+    if (!(knownAt > incomingAt)) return incoming
+  }
+  return { ...incoming, progress: known.progress }
+}
+
 export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
   const tasks = ref<AgentTaskSummary[]>([])
   const selectedTask = ref<AgentTaskSummary | null>(null)
@@ -55,10 +66,16 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
   )
 
   function replaceTasks(snapshot: AgentTaskSummary[]): void {
-    tasks.value = Array.isArray(snapshot) ? snapshot : []
+    const previous = new Map(tasks.value.map(task => [task.task_id, task]))
+    tasks.value = Array.isArray(snapshot) ? snapshot.map(task =>
+      preserveFileProgress(preserveFileProgress(task, previous.get(task.task_id)), selectedTask.value)) : []
     if (!selectedTaskId.value) return
     const summary = tasks.value.find((task) => task.task_id === selectedTaskId.value)
-    if (summary && !selectedTask.value?.runs?.length) selectedTask.value = summary
+    if (summary) {
+      const detail = selectedTask.value
+      if (!detail?.runs?.length || detail.active_run_id !== summary.active_run_id) selectedTask.value = summary
+      else selectedTask.value = preserveFileProgress(detail, summary)
+    }
     if (!summary && !selectedTask.value) selectedTaskId.value = ''
   }
 
@@ -97,7 +114,8 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
       const response = await agentRunsApi.getTask(requestedTaskId)
       if (!isCurrent()) return
       if (response.success === false || !response.data) throw new Error('任务详情读取失败，请刷新核对')
-      selectedTask.value = response.data || null
+      const summary = tasks.value.find(task => task.task_id === requestedTaskId)
+      selectedTask.value = preserveFileProgress(preserveFileProgress(response.data, summary), selectedTask.value)
       error.value = ''
     } catch (reason) {
       if (!isCurrent()) return
@@ -121,8 +139,11 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
       if (requestedScopeVersion !== scopeVersion) return
       const updated = response.data
       if (updated) {
-        tasks.value = tasks.value.map((task) => (task.task_id === id ? { ...task, ...updated } : task))
-        if (selectedTaskId.value === id) selectedTask.value = updated
+        const summary = tasks.value.find(task => task.task_id === id)
+        if (summary?.active_run_id && summary.active_run_id !== updated.active_run_id) return
+        const task = preserveFileProgress(preserveFileProgress(updated, summary), selectedTask.value)
+        tasks.value = tasks.value.map(current => current.task_id === id ? { ...current, ...task } : current)
+        if (selectedTaskId.value === id) selectedTask.value = task
       }
       error.value = ''
     } catch (reason) {
@@ -257,8 +278,13 @@ export const useAgentTaskCenterStore = defineStore('agentTaskCenter', () => {
   function pauseForLoggedOutSession(): void {
     if (authPaused) return
     authPaused = true
+    scopeVersion += 1
     error.value = ''
     tasks.value = []
+    selectedTask.value = null
+    selectedTaskId.value = ''
+    loading.value = false
+    actionPending.value = ''
     stop()
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('xcagi:session-unauthorized'))

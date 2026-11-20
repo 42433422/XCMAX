@@ -15,7 +15,13 @@ from modstore_server.db.mac_control import (
     MacControlSyncLease,
     MacControlTask,
 )
-from modstore_server.mac_control_store import TERMINAL, acquire, encoded, transition
+from modstore_server.mac_control_store import (
+    TERMINAL,
+    acquire,
+    encoded,
+    request_cancellation,
+    transition,
+)
 from modstore_server.mac_control_transport import (
     ParaClient,
     ParaUnavailable,
@@ -55,6 +61,7 @@ def observe(db, client, now):
 
 
 def reconcile(db, task, client):
+    stop_requested = task.state == "cancel_requested"
     if not task.para_task_id:
         marker = f"[xcmax:{task.id}:{task.attempt_id}]"
         found = [t for t in client.tasks() if str(t.get("title", "")).startswith(marker)]
@@ -62,7 +69,7 @@ def reconcile(db, task, client):
             transition(
                 db,
                 task,
-                "reconciling",
+                "cancel_requested" if stop_requested else "reconciling",
                 "dispatch_outcome_unknown_no_automatic_resubmit",
             )
             return
@@ -76,16 +83,16 @@ def reconcile(db, task, client):
         "failed": "failed",
         "cancelled": "cancelled",
     }.get(status, "running")
-    if task.state == "cancel_requested" and state == "running":
+    if stop_requested and state == "running":
         state = "cancel_requested"
-    reason = ""
+    reason = "executor_stop_confirmation_required" if state == "cancel_requested" else ""
     if (
         state == "running"
         and raw.get("subTasks")
         and all(sub.get("status") == "pending" for sub in raw["subTasks"])
     ):
         state, reason = "waiting_device", "waiting_in_para_executor_queue"
-    if state == "execution_completed":
+    if state == "execution_completed" and not stop_requested:
         from modstore_server.mac_control_handoff import schedule_windows_verification
 
         reason = schedule_windows_verification(db, task, raw)
@@ -96,14 +103,34 @@ def reconcile(db, task, client):
     transition(db, task, state, reason, snapshot=execution_view(raw))
 
 
+def _ticket_dispatch_blocked(db, request, *, lock=False):
+    if request.get("source") != "employee" or not request.get("ticket_id"):
+        return False
+    from modstore_server.customer_ticket_intake_review import intake_dispatch_block_reason
+    from modstore_server.models_cs import CustomerServiceTicket
+
+    ticket = db.get(
+        CustomerServiceTicket, request["ticket_id"], with_for_update=lock, populate_existing=True
+    )
+    return (
+        ticket is None
+        or ticket.user_id != request.get("customer_id")
+        or bool(intake_dispatch_block_reason(ticket))
+    )
+
+
 def process(db, task, client, devices):
+    request = json.loads(task.request_json)
+    if _ticket_dispatch_blocked(db, request):
+        request_cancellation(db, task)
     if task.attempt_id or task.para_task_id:
         reconcile(db, task, client)
+        return
+    if task.state == "cancelled":
         return
     if task.state == "cancel_requested":
         transition(db, task, "cancelled", "cancelled_before_dispatch")
         return
-    request = json.loads(task.request_json)
     from modstore_server.mac_control_facts import context_facts
     from modstore_server.mac_control_preflight import prepare_windows_probe
 
@@ -127,6 +154,9 @@ def process(db, task, client, devices):
         transition(db, task, "waiting_device", "workspace_reserved")
         return
     facts = context_facts(db, request)
+    if _ticket_dispatch_blocked(db, request, lock=True):
+        request_cancellation(db, task)
+        return
     task.device_id, task.attempt_id = device["id"], uuid.uuid4().hex
     transition(db, task, "dispatching")  # commit before network mutation
     marker = f"[xcmax:{task.id}:{task.attempt_id}]"
@@ -198,6 +228,9 @@ def run_mac_control_sync():
 
 
 def _sync(factory):
+    from modstore_server.para_github_repair import REPAIR_ACTOR, sync
+
+    sync(factory)
     try:
         client = ParaClient()
     except ParaUnavailable as exc:
@@ -216,6 +249,7 @@ def _sync(factory):
                 r.id
                 for r in db.query(MacControlTask)
                 .filter(
+                    MacControlTask.actor != REPAIR_ACTOR,
                     MacControlTask.state.notin_(TERMINAL),
                 )
                 .order_by(MacControlTask.updated_at)
@@ -231,7 +265,11 @@ def _sync(factory):
                     transition(
                         db,
                         task,
-                        "reconciling" if task.attempt_id else "waiting_device",
+                        (
+                            task.state
+                            if task.state == "cancel_requested"
+                            else "reconciling" if task.attempt_id else "waiting_device"
+                        ),
                         "para_unreachable_or_result_pending",
                     )
                 finally:

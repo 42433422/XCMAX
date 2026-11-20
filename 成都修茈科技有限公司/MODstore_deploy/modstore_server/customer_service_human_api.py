@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Literal
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -30,6 +31,18 @@ class HumanResultBody(BaseModel):
     fault_remains: bool = True
 
 
+class TicketDispositionBody(BaseModel, extra="forbid", str_strip_whitespace=True):
+    disposition: Literal["invalid", "out_of_scope"]
+    request_id: UUID
+    note: str = Field(min_length=8, max_length=2000)
+    verification: str = Field(min_length=20, max_length=4000)
+
+
+class TicketDispatchRevokeBody(BaseModel, extra="forbid", str_strip_whitespace=True):
+    request_id: UUID
+    note: str = Field(min_length=8, max_length=2000)
+
+
 class SensitiveRequestBody(BaseModel):
     change: str = Field(min_length=2, max_length=200)
     reason: str = Field(min_length=4, max_length=2000)
@@ -48,6 +61,22 @@ def _human_ticket(db: Session, ticket_id: int):
     return ticket
 
 
+@router.post("/tickets/{ticket_id}/disposition")
+async def dispose_original_ticket(
+    ticket_id: int,
+    body: TicketDispositionBody,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    from modstore_server.customer_service_tools import begin_immediate_write
+    from modstore_server.customer_ticket_human_ops import dispose_ticket
+
+    begin_immediate_write(db)
+    return dispose_ticket(
+        db, _human_ticket(db, ticket_id), user, request=body.model_dump(mode="json")
+    )
+
+
 @router.get("/staff")
 async def list_ticket_staff(db: Session = Depends(get_db), user: User = Depends(require_admin)):
     rows = db.query(User).filter(User.is_admin.is_(True)).order_by(User.id.asc()).limit(50).all()
@@ -55,6 +84,22 @@ async def list_ticket_staff(db: Session = Depends(get_db), user: User = Depends(
         "items": [{"id": row.id, "username": row.username} for row in rows],
         "viewer_id": user.id,
     }
+
+
+@router.post("/tickets/{ticket_id}/dispatch-revoke")
+async def revoke_original_ticket_dispatch(
+    ticket_id: int,
+    body: TicketDispatchRevokeBody,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    from modstore_server.customer_service_tools import begin_immediate_write
+    from modstore_server.customer_ticket_human_ops import revoke_ticket_dispatch
+
+    begin_immediate_write(db)
+    return revoke_ticket_dispatch(
+        db, _human_ticket(db, ticket_id), user, request=body.model_dump(mode="json")
+    )
 
 
 @router.post("/tickets/{ticket_id}/assign")

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { OnBeforeSendHeadersListenerDetails, Session } from 'electron'
 
 const hook = vi.hoisted(() => vi.fn())
@@ -10,6 +10,10 @@ import { desktopRuntime } from './runtime-state'
 import { installDesktopWorkspaceCapability } from './session-security'
 
 const origin = 'http://127.0.0.1:17500'
+beforeEach(() => {
+  desktopRuntime.backendProcess = { pid: 123, exitCode: null, signalCode: null } as NonNullable<typeof desktopRuntime.backendProcess>
+  desktopRuntime.verifiedBackendProcess = desktopRuntime.backendProcess
+})
 function windowFixture(id = 1, url = `${origin}/local-workspace`) {
   return {
     isDestroyed: () => false,
@@ -34,11 +38,20 @@ function request(overrides: Partial<OnBeforeSendHeadersListenerDetails> = {}) {
 }
 
 afterEach(() => {
+  desktopRuntime.backendProcess = desktopRuntime.verifiedBackendProcess = null
   desktopRuntime.mainWindow = null
   desktopRuntime.auxiliaryWindows.clear()
 })
 
 describe('main-process workspace capability', () => {
+  it.each(['missing', 'unverified', 'replacement', 'exited', 'signaled'])('rejects an unverified or no longer live backend: %s', state => {
+    if (state === 'missing') desktopRuntime.backendProcess = null
+    if (state === 'unverified') desktopRuntime.verifiedBackendProcess = null
+    if (state === 'replacement') desktopRuntime.backendProcess = { ...desktopRuntime.backendProcess! } as NonNullable<typeof desktopRuntime.backendProcess>
+    if (state === 'exited') Object.assign(desktopRuntime.backendProcess!, { exitCode: 0 })
+    if (state === 'signaled') Object.assign(desktopRuntime.backendProcess!, { signalCode: 'SIGTERM' })
+    expect(request({ requestHeaders: { 'X-XCAGI-Workspace-Capability': desktopWorkspaceToken } })).toEqual({})
+  })
   it('authenticates the owning main frame without requiring an account session', () => {
     expect(request()).toEqual({
       'X-XCAGI-Desktop-Local': '1', 'X-XCAGI-Workspace-Capability': desktopWorkspaceToken,

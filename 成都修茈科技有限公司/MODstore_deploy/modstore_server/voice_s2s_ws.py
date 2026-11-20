@@ -15,9 +15,10 @@ import time
 from decimal import Decimal
 from typing import Any
 
-from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 
+from modstore_server import llm_client_requests as ledger
 from modstore_server.llm_billing import (
     JavaWalletClient,
     WalletHold,
@@ -25,22 +26,24 @@ from modstore_server.llm_billing import (
     enforce_risk_limits,
     estimate_preauthorization,
     new_request_id,
+    rate_usage,
     save_failure_log,
     save_success_log,
     usage_from_response,
 )
+from modstore_server.llm_billing_recovery import complete_receipt, recover_receipt
+from modstore_server.llm_billing_values import reported_token_dimensions
 from modstore_server.llm_chat_proxy import chat_dispatch_stream
 from modstore_server.llm_key_resolver import (
     KNOWN_PROVIDERS,
-    OAI_COMPAT_OPENAI_STYLE_PROVIDERS,
-    resolve_api_key,
-    resolve_base_url,
+    resolve_credentials,
 )
 from modstore_server.models import User, get_session_factory
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.voice_s2s_sentence import VoiceStreamSentenceSplitter
 
 logger = logging.getLogger(__name__)
+_VOICE_BILLING_ERRORS = (HTTPException,) + RECOVERABLE_ERRORS
 
 router = APIRouter(prefix="/api/workbench/voice", tags=["workbench-voice"])
 
@@ -112,22 +115,18 @@ async def _run_billed_s2s_turn(
     rate: float,
     tts_enabled: bool,
     cancel: asyncio.Event,
+    turn_id: str = "",
 ) -> None:
     if provider not in KNOWN_PROVIDERS:
         await _send_json(ws, {"type": "error", "message": "unknown provider"})
         return
 
-    api_key, key_source = resolve_api_key(db, user.id, provider)
+    api_key, base, key_source = resolve_credentials(db, int(user.id), provider)
     if not api_key:
         await _send_json(ws, {"type": "error", "message": f"供应商「{provider}」未配置 API Key"})
         return
 
     is_byok = key_source == "user_override"
-    base = (
-        resolve_base_url(db, user.id, provider)
-        if provider in OAI_COMPAT_OPENAI_STYLE_PROVIDERS
-        else None
-    )
     model = model.strip()
     request_id = new_request_id()
 
@@ -137,12 +136,66 @@ async def _run_billed_s2s_turn(
         await _send_json(ws, {"type": "error", "message": str(exc)})
         return
 
-    wallet = JavaWalletClient()
+    wallet = JavaWalletClient(verify_receipt=bool(turn_id))
+    row = None
+    client_key = ""
+    if turn_id and not is_byok and wallet.enabled:
+        digest = ledger.request_digest(
+            {
+                "operation": "s2s",
+                "turn_id": turn_id,
+                "provider": provider,
+                "model": model,
+                "messages": messages,
+                "max_tokens": max_tokens,
+            }
+        )
+        client_key = "s2s-" + digest[:48]
+        outcome, value = ledger.begin(db, int(user.id), client_key, digest, 180)
+        recovered = value if outcome == "replay" else None
+        if outcome == "processing":
+            recovered = await recover_receipt(
+                db, int(user.id), client_key, auth_header, operation="chat"
+            )
+        if recovered is not None:
+            await _send_json(ws, {"type": "text_done", **recovered, "replayed": True})
+            await _send_json(ws, {"type": "turn_done"})
+            return
+        if outcome != "run":
+            await _send_json(
+                ws,
+                {
+                    "type": "error",
+                    "message": "语音回合状态待核对",
+                    "client_request_id": client_key,
+                },
+            )
+            return
+        row = value
+        request_id = ledger.attempt_request_id(int(user.id), client_key, row.attempts)
+        ledger.mark_settling(db, row)
     if is_byok:
         hold = WalletHold(hold_no=f"byok-{request_id}", amount=Decimal("0"), enabled=False)
     else:
         preauth_amount = estimate_preauthorization(db, provider, model, messages, max_tokens)
-        hold = await wallet.preauthorize(auth_header, preauth_amount, provider, model, request_id)
+        try:
+            hold = await wallet.preauthorize(
+                auth_header, preauth_amount, provider, model, request_id
+            )
+        except HTTPException as exc:
+            if row is not None and exc.status_code in {400, 401, 402, 403, 422, 429}:
+                ledger.confirmed_no_charge(db, row)
+                ledger.finish(db, row, None)
+            await _send_json(
+                ws,
+                {
+                    "type": "error",
+                    "message": "语音回合预授权失败或待核对",
+                    "status": exc.status_code,
+                    "client_request_id": client_key,
+                },
+            )
+            return
 
     parts: list[str] = []
     upstream_usage: dict[str, Any] = {}
@@ -182,6 +235,7 @@ async def _run_billed_s2s_turn(
 
     audio_task = asyncio.create_task(audio_worker())
 
+    settlement_started = False
     try:
         async for ev in chat_dispatch_stream(
             provider,
@@ -204,8 +258,19 @@ async def _run_billed_s2s_turn(
                     hold_no=hold.hold_no,
                 )
                 try:
-                    await wallet.release(auth_header, hold, err, request_id)
-                except RECOVERABLE_ERRORS:
+                    if row is None or ev.get("status") in {
+                        400,
+                        401,
+                        403,
+                        404,
+                        422,
+                        429,
+                    }:
+                        await wallet.release(auth_header, hold, err, request_id)
+                        if row is not None:
+                            ledger.confirmed_no_charge(db, row)
+                            ledger.finish(db, row, None)
+                except _VOICE_BILLING_ERRORS:
                     logger.exception("S2S release hold failed")
                 await _send_json(ws, {"type": "error", "message": err})
                 return
@@ -226,7 +291,10 @@ async def _run_billed_s2s_turn(
         if cancel.is_set():
             try:
                 await wallet.release(auth_header, hold, "cancelled", request_id)
-            except RECOVERABLE_ERRORS:
+                if row is not None:
+                    ledger.confirmed_no_charge(db, row)
+                    ledger.finish(db, row, None)
+            except _VOICE_BILLING_ERRORS:
                 pass
             await _send_json(ws, {"type": "cancelled"})
             return
@@ -237,39 +305,80 @@ async def _run_billed_s2s_turn(
             await audio_queue.put((f"s{sentence_seq}", sentence))
 
         usage = usage_from_response(upstream_usage, messages, content)
+        pricing = None
         if is_byok:
             charge = Decimal("0")
+        elif row is not None:
+            charge, pricing = rate_usage(db, provider, model, usage)
         else:
             charge = calculate_charge(db, provider, model, usage)
+        receipt = {
+            "type": "text_done",
+            "ok": True,
+            "content": content,
+            "conversation_id": None,
+            "operation": "chat",
+            "provider": provider,
+            "model": model,
+            "request_id": request_id,
+            "client_request_id": client_key,
+            "hold_no": hold.hold_no,
+            "usage": vars(usage),
+            "usage_details": reported_token_dimensions(upstream_usage),
+            "charge_amount": float(charge),
+            "pricing": pricing,
+            "billed": not is_byok,
+        }
+        if row is not None:
+            receipt["_history"] = messages
+            ledger.prepare_settlement(db, row, receipt)
+        if not is_byok:
+            settlement_started = hold.enabled
             await wallet.settle(auth_header, hold, charge, request_id)
-        save_success_log(
-            db,
-            user_id=user.id,
-            provider=provider,
-            model=model,
-            messages=messages,
-            content=content,
-            usage=usage,
-            charge=charge,
-            hold_no=hold.hold_no,
-            conversation_id=None,
-        )
-        await _send_json(
-            ws,
-            {
-                "type": "text_done",
-                "content": content,
-                "billed": not is_byok,
-            },
-        )
+        if row is not None:
+            receipt = complete_receipt(db, row, receipt, save_chat=save_success_log)
+        else:
+            save_success_log(
+                db,
+                user_id=user.id,
+                provider=provider,
+                model=model,
+                messages=messages,
+                content=content,
+                usage=usage,
+                charge=charge,
+                hold_no=hold.hold_no,
+                conversation_id=None,
+            )
+        await _send_json(ws, receipt)
         await _send_json(ws, {"type": "turn_done"})
-    except RECOVERABLE_ERRORS as exc:
+    except _VOICE_BILLING_ERRORS as exc:
         logger.exception("S2S turn failed")
-        try:
-            await wallet.release(auth_header, hold, str(exc), request_id)
-        except RECOVERABLE_ERRORS:
-            pass
-        await _send_json(ws, {"type": "error", "message": str(exc)})
+        if settlement_started or row is not None:
+            if settlement_started and row is not None:
+                db.rollback()
+                recovered = await recover_receipt(
+                    db, int(user.id), client_key, auth_header, operation="chat"
+                )
+                if recovered is not None:
+                    await _send_json(ws, recovered)
+                    await _send_json(ws, {"type": "turn_done"})
+                    return
+            await _send_json(
+                ws,
+                {
+                    "type": "error",
+                    "message": "语音回合或钱包结算待核对",
+                    "request_id": request_id,
+                    "client_request_id": client_key,
+                },
+            )
+        else:
+            try:
+                await wallet.release(auth_header, hold, str(exc), request_id)
+            except _VOICE_BILLING_ERRORS:
+                pass
+            await _send_json(ws, {"type": "error", "message": "语音模型请求失败"})
     finally:
         await audio_queue.put(None)
         try:
@@ -382,6 +491,7 @@ async def voice_s2s_ws(
                     rate=rate,
                     tts_enabled=tts_enabled,
                     cancel=cancel,
+                    turn_id=turn_id,
                 )
             finally:
                 db.close()

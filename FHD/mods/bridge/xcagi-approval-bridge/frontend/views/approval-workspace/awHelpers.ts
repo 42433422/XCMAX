@@ -25,6 +25,13 @@ export function salesApprovalPreview(request?: ApprovalRequest | null) {
     const [whole, fraction = ''] = text.split('.')
     return { value: BigInt(whole + fraction), scale: fraction.length }
   }
+  const fulfillment = payload && isRecord(payload.fulfillment) ? payload.fulfillment : null
+  const explicitQuantities = fulfillment?.line_quantities
+  const deliveryQuantities = fulfillment?.requested === true
+    ? Array.isArray(explicitQuantities)
+      ? items.map((_, index) => decimal(explicitQuantities[index]) ? explicitQuantities[index] : null)
+      : items.map(item => item.quantity)
+    : null
   const terms = items.map(item => {
     const quantity = decimal(item.quantity), price = decimal(item.unit_price)
     return quantity && quantity.value > 0n && price
@@ -38,13 +45,15 @@ export function salesApprovalPreview(request?: ApprovalRequest | null) {
     const digits = sum.toString().padStart(scale + 1, '0')
     amount = `${scale ? digits.slice(0, -scale) : digits}.${(scale ? digits.slice(-scale) : '').padEnd(2, '0')}`
   }
+  const receipt = payload && isRecord(payload.payment_allocation) ? payload.payment_allocation : null
+  const receiptAmount = receipt?.requested === true && decimal(receipt.amount) ? String(receipt.amount) : null
   const customerName = termSource.customer_name
   const currency = termSource.currency
   const operation = data.action === 'quote' ? '创建销售报价'
     : data.action === 'execute_closed_loop' ? '销售闭环' : '创建销售订单'
   return {
     operation,
-    customer: typeof customerName === 'string' && customerName.trim() ? customerName : '未填写', items, amount,
+    customer: typeof customerName === 'string' && customerName.trim() ? customerName : '未填写', items, deliveryQuantities, amount, receiptAmount,
     currency: currency === undefined ? 'CNY' : typeof currency === 'string' ? currency : '币种待确认',
   }
 }

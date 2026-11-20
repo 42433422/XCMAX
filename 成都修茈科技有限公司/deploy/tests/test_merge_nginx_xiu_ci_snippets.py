@@ -32,6 +32,9 @@ server {
     listen 443 ssl http2;
     server_name xiu-ci.com;
     ssl_certificate /etc/nginx/ssl/xiu-ci.com.crt;
+    location = /download/ {
+        return 302 /download;
+    }
     location / { return 200; }
 }
 """.lstrip()
@@ -56,6 +59,8 @@ def test_full_admin_isolated_on_www_and_apex_includes_remain_separate() -> None:
 
     assert "include /etc/nginx/snippets/founder-autonomy-admin.inc.conf;" in apex
     assert "admin-console-www.inc.conf" not in apex
+    assert "location = /download/" not in apex
+    assert "include /etc/nginx/snippets/marketing-site-static.inc.conf;" in apex
 
 
 def test_merge_is_idempotent() -> None:

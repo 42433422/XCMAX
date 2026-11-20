@@ -41,6 +41,18 @@ beforeEach(() => {
 })
 
 describe('chatApi thin wrappers', () => {
+  it('observes a submitted turn using only its identifier on a GET request', async () => {
+    const signal = new AbortController().signal
+    await chatApi.resumeChatStream('turn/id', signal)
+    expect(fetch).toHaveBeenCalledWith('http://x/api/ai/chat/stream/resume?turn_id=turn%2Fid',
+      expect.objectContaining({ method: 'GET', signal, credentials: 'include' }))
+    expect(vi.mocked(fetch).mock.calls[0][1]?.body).toBeUndefined()
+  })
+  it('uses the dedicated rollback and recall route', async () => {
+    await chatApi.recallMessage('session/one', 12)
+    expect(apiMock.post).toHaveBeenCalledWith('/api/conversations/session%2Fone/messages/12/recall', {}, { timeoutMs: 90_000 })
+  })
+
   it('reads model status through the session-owned client endpoint without selecting another account', async () => {
     await chatApi.getModelStatus()
     expect(apiMock.get).toHaveBeenCalledWith('/api/conversation/model-status', {}, { timeoutMs: 20_000, cache: 'no-store' })

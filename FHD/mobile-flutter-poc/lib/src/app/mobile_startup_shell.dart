@@ -34,7 +34,6 @@ import '../features/settings/settings_screen.dart';
 import '../features/shell/home_shell.dart';
 import '../features/tools/ocr_screen.dart';
 import '../features/webview/desktop_tool_webview_screen.dart';
-import '../features/workspace/local_workspace_screen.dart';
 import '../models/conversation.dart';
 import '../platform/background_work_scheduler.dart';
 import '../platform/external_url_launcher.dart';
@@ -50,6 +49,15 @@ import '../widgets/we_ui.dart';
 part 'mobile_startup_shell_state.part.dart';
 part 'mobile_startup_shell_screens.part.dart';
 
+const mobileBundledLegalVersion = '1';
+
+String _requiredLegalVersion(MobileAppConfigData? config, String accepted) {
+  final rawVersion = config?.raw['legal_version'];
+  final version = rawVersion is String ? rawVersion.trim() : '';
+  if (config?.ok == true && version.isNotEmpty) return version;
+  return accepted.isEmpty ? mobileBundledLegalVersion : accepted;
+}
+
 enum MobileStartupRoute { legal, authAutoLogin, auth, onboarding, home }
 
 @visibleForTesting
@@ -57,10 +65,8 @@ MobileStartupRoute resolveMobileStartupRoute({
   required MobileSessionData session,
   required MobileAppConfigData? appConfig,
 }) {
-  final legalVersion = appConfig?.legalVersion.trim();
-  if (legalVersion != null &&
-      legalVersion.isNotEmpty &&
-      session.legalAcceptedVersion.trim() != legalVersion) {
+  final accepted = session.legalAcceptedVersion.trim();
+  if (accepted != _requiredLegalVersion(appConfig, accepted)) {
     return MobileStartupRoute.legal;
   }
 
@@ -101,6 +107,7 @@ class MobileStartupApp extends StatefulWidget {
     this.deepLinkBridge = const MobileDeepLinkBridge(),
     this.backgroundWorkScheduler = const PlatformBackgroundWorkScheduler(),
     this.openExternalUrl = launchExternalUrl,
+    this.openLegalDocument = openMobileLegalDocument,
     this.enableBiometricGate = true,
   });
 
@@ -109,6 +116,7 @@ class MobileStartupApp extends StatefulWidget {
   final MobileDeepLinkBridge deepLinkBridge;
   final PlatformBackgroundWorkScheduler backgroundWorkScheduler;
   final ExternalUrlLauncher openExternalUrl;
+  final MobileLegalReader openLegalDocument;
   final bool enableBiometricGate;
 
   @override
@@ -116,7 +124,10 @@ class MobileStartupApp extends StatefulWidget {
 }
 
 class _MobileStartupAppState extends _MobileStartupStateBase {
-  bool _canOpenLocalWorkspaceWhileLoading = false;
+  bool _checkedRemoteConfig = false;
+
+  String get _legalVersion =>
+      _requiredLegalVersion(_appConfig, _session.legalAcceptedVersion.trim());
 
   @override
   void initState() {
@@ -153,24 +164,14 @@ class _MobileStartupAppState extends _MobileStartupStateBase {
   }
 
   Widget _buildHome() {
-    if (_route == null) {
-      return _StartupLoadingScreen(
-        openLocalWorkspace: _canOpenLocalWorkspaceWhileLoading
-            ? () => _navigatorKey.currentState?.push<void>(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const LocalWorkspaceScreen(),
-                  ),
-                )
-            : null,
-      );
-    }
+    if (_route == null) return const _StartupLoadingScreen();
     if (_checkingBiometric) return const _BiometricLockScreen();
 
     switch (_route!) {
       case MobileStartupRoute.legal:
         return LegalConsentScreen(
-          api: _client,
-          legalVersion: _appConfig?.legalVersion ?? '1',
+          key: ValueKey(_legalVersion),
+          openDocument: widget.openLegalDocument,
           onAccepted: _acceptLegalAndRefresh,
         );
       case MobileStartupRoute.authAutoLogin:
@@ -179,6 +180,7 @@ class _MobileStartupAppState extends _MobileStartupStateBase {
           repository: widget.repository,
           onDone: _refreshRouteFromSession,
           openExternalUrl: widget.openExternalUrl,
+          legalConsentAlreadyRecorded: true,
         );
       case MobileStartupRoute.onboarding:
         return MobileOnboardingScreen(
@@ -196,29 +198,48 @@ class _MobileStartupAppState extends _MobileStartupStateBase {
   Future<void> _bootstrap() async {
     final session = await _client.loadSession();
     if (!mounted) return;
-    if (!session.hasAuth && !session.canAutoLogin) {
-      setState(() => _canOpenLocalWorkspaceWhileLoading = true);
+    if (session.legalAcceptedVersion.trim().isEmpty) {
+      await _applyStartupSession(session);
+    } else {
+      await _continueAfterLegal(session);
     }
-    MobileAppConfigData? config;
-    try {
-      config = await _client.appConfig();
-    } catch (_) {
-      config = null;
+  }
+
+  Future<void> _continueAfterLegal(MobileSessionData session) async {
+    if (!_checkedRemoteConfig) {
+      // Do not unlock operational screens until checking the remote version.
+      setState(() => _route = null);
+      try {
+        _appConfig = await _client.appConfig();
+      } catch (_) {
+        _appConfig = null;
+      }
+      _checkedRemoteConfig = true;
     }
-    if (!mounted) return;
+    if (mounted) await _applyStartupSession(session);
+  }
+
+  Future<void> _applyStartupSession(MobileSessionData session) async {
     setState(() {
       _session = session;
-      _appConfig = config;
-      _route = resolveMobileStartupRoute(session: session, appConfig: config);
+      _route = resolveMobileStartupRoute(session: session, appConfig: _appConfig);
+      _autoLoginStarted = false;
     });
+    if (_route == MobileStartupRoute.legal) return;
     await _runBiometricGateIfNeeded(session);
+    if (!mounted) return;
     unawaited(_reconcileBackgroundWork(session));
     _startAutoLoginIfNeeded();
     _tryHandlePendingDeepLink();
   }
 
   void _handleSessionChanged(MobileSessionData session) {
-    if (!mounted || _handlingDeepLink) return;
+    if (!mounted ||
+        _handlingDeepLink ||
+        _route == null ||
+        _route == MobileStartupRoute.legal) {
+      return;
+    }
     final nextRoute = resolveMobileStartupRoute(
       session: session,
       appConfig: _appConfig,
@@ -230,6 +251,7 @@ class _MobileStartupAppState extends _MobileStartupStateBase {
         _autoLoginStarted = false;
       }
     });
+    if (_route == MobileStartupRoute.legal) return;
     unawaited(_reconcileBackgroundWork(session));
     unawaited(_runBiometricGateIfNeeded(session));
     _tryHandlePendingDeepLink();
@@ -265,9 +287,9 @@ class _MobileStartupAppState extends _MobileStartupStateBase {
   }
 
   Future<void> _acceptLegalAndRefresh() async {
-    final version = _appConfig?.legalVersion ?? '1';
-    await _client.saveLegalAcceptedVersion(version);
-    await _refreshRouteFromSession();
+    await _client.saveLegalAcceptedVersion(_legalVersion);
+    final session = await _client.loadSession();
+    if (mounted) await _continueAfterLegal(session);
   }
 
   Future<void> _finishOnboarding() async {
@@ -277,18 +299,7 @@ class _MobileStartupAppState extends _MobileStartupStateBase {
 
   Future<void> _refreshRouteFromSession() async {
     final session = await _client.loadSession();
-    if (!mounted) return;
-    setState(() {
-      _session = session;
-      _route = resolveMobileStartupRoute(
-        session: session,
-        appConfig: _appConfig,
-      );
-      _autoLoginStarted = false;
-    });
-    unawaited(_reconcileBackgroundWork(session));
-    _startAutoLoginIfNeeded();
-    _tryHandlePendingDeepLink();
+    if (mounted) await _applyStartupSession(session);
   }
 
   void _startAutoLoginIfNeeded() {

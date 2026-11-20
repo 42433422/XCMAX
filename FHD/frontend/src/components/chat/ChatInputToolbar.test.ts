@@ -1,13 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { ref } from 'vue'
 import ChatInputToolbar from './ChatInputToolbar.vue'
 import { useApprovalMode } from '@/composables/useApprovalMode'
 
 function mountToolbar(propsOverrides = {}) {
   return mount(ChatInputToolbar, {
     props: {
-      excelAnalyzeUploading: false,
+      attachmentUploading: false,
       multimodalPendingCount: 0,
       proactiveSuggestionsEnabled: false,
       ttsEnabled: false,
@@ -100,35 +99,29 @@ describe('ChatInputToolbar', () => {
     )
   })
 
-  it('emits register-excel-input on mount', () => {
-    const wrapper = mountToolbar()
-    const registered = wrapper.emitted('register-excel-input') || []
-    expect(registered.length).toBeGreaterThan(0)
-  })
-
-  it('upload button is disabled when excelAnalyzeUploading is true', () => {
-    const wrapper = mountToolbar({ excelAnalyzeUploading: true })
+  it('upload button is disabled when attachmentUploading is true', () => {
+    const wrapper = mountToolbar({ attachmentUploading: true })
     const btn = wrapper.find('[data-tutorial-id="toolbar-excel-analyze"]')
     expect(btn.attributes('disabled')).toBeDefined()
   })
 
-  it('upload button is enabled when excelAnalyzeUploading is false', () => {
-    const wrapper = mountToolbar({ excelAnalyzeUploading: false })
+  it('upload button is enabled when attachmentUploading is false', () => {
+    const wrapper = mountToolbar({ attachmentUploading: false })
     const btn = wrapper.find('[data-tutorial-id="toolbar-excel-analyze"]')
     expect(btn.attributes('disabled')).toBeUndefined()
   })
 
-  it('shows analyzing text when uploading', () => {
-    const wrapper = mountToolbar({ excelAnalyzeUploading: true })
+  it('shows upload progress', () => {
+    const wrapper = mountToolbar({ attachmentUploading: true })
     const btn = wrapper.find('[data-tutorial-id="toolbar-excel-analyze"]')
-    expect(btn.text()).toContain('shell.uploadAnalyzing')
+    expect(btn.text()).toContain('shell.uploadingAttachment')
   })
 
   it('shows upload text when not uploading', () => {
-    const wrapper = mountToolbar({ excelAnalyzeUploading: false })
+    const wrapper = mountToolbar({ attachmentUploading: false })
     const btn = wrapper.find('[data-tutorial-id="toolbar-excel-analyze"]')
     expect(btn.text()).toContain('chat.uploadAttachment')
-    expect(btn.text()).not.toContain('shell.uploadAnalyzing')
+    expect(btn.text()).not.toContain('shell.uploadingAttachment')
   })
 
   it('shows pending count when multimodalPendingCount > 0', () => {
@@ -164,10 +157,10 @@ describe('ChatInputToolbar', () => {
     expect(input.attributes('multiple')).toBeDefined()
   })
 
-  it('emits excel-file-change when file input changes', async () => {
+  it('emits attachment-file-change when file input changes', async () => {
     const wrapper = mountToolbar()
     await wrapper.find('input[type="file"]').trigger('change')
-    expect(wrapper.emitted('excel-file-change')).toHaveLength(1)
+    expect(wrapper.emitted('attachment-file-change')).toHaveLength(1)
   })
 
   it('renders auto-refresh toggle', () => {
@@ -221,14 +214,6 @@ describe('ChatInputToolbar', () => {
     const checkbox = ttsLabel!.find('input[type="checkbox"]')
     await checkbox.setValue(false)
     expect(wrapper.emitted('toggle-tts')![0]).toEqual([false])
-  })
-
-  it('forwards file input ref to parent via excelAnalyzeInputRef', async () => {
-    const parentRef = ref<HTMLInputElement | null>(null)
-    const wrapper = mountToolbar({ excelAnalyzeInputRef: parentRef })
-    await wrapper.vm.$nextTick()
-    expect(parentRef.value).not.toBeNull()
-    expect(parentRef.value).toBeInstanceOf(HTMLInputElement)
   })
 
   it('upload button has correct title', () => {

@@ -79,7 +79,11 @@ def stream_sync(
     last_error: Exception | None = None
     for index, candidate in enumerate(candidates):
         check_stream_active()
-        messages = ports.prepare_sync(request.messages, *candidate)
+        messages = (
+            request.messages
+            if request.native_vision
+            else ports.prepare_sync(request.messages, *candidate)
+        )
         payload = request.payload(
             connection, candidate, messages, stream=True, allow_failover=index == 0
         )
@@ -155,7 +159,11 @@ async def stream_async(
     candidates = await asyncio.to_thread(ports.candidates, *route) if allow_failover else [route]
     last_error: Exception | None = None
     for index, candidate in enumerate(candidates):
-        messages = await ports.prepare_async(request.messages, *candidate)
+        messages = (
+            request.messages
+            if request.native_vision
+            else await ports.prepare_async(request.messages, *candidate)
+        )
         payload = request.payload(
             connection, candidate, messages, stream=True, allow_failover=index == 0
         )

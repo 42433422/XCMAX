@@ -19,6 +19,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import get_current_user, get_db
+from modstore_server.customer_issue_acceptance import customer_issue_decision_permissions
 from modstore_server.customer_issue_delivery_contract import (
     issue_resolution,
     repair_verification,
@@ -31,6 +32,11 @@ from modstore_server.customer_service_customer_view import (
 )
 from modstore_server.customer_service_orchestrator import CLOSED_CUSTOMER_ISSUE_STATES as _CLOSED
 from modstore_server.customer_service_tools import audit, json_dumps, json_loads
+from modstore_server.customer_ticket_intake_review import (
+    intake_dispatch_block_reason,
+    pending_intake_review,
+    review_report_async,
+)
 from modstore_server.models import User, UserMod
 from modstore_server.models_cs import (
     CustomerServiceAction,
@@ -180,15 +186,25 @@ async def intake_customer_issue(
             values=values,
             request_digest=request_digest,
         )
-        _route_work_order(db, body, user, ticket)
-        _wake_owner_intake(ticket.id, body.source)
+        blocked = intake_dispatch_block_reason(ticket)
+        if not blocked:
+            _route_work_order(db, body, user, ticket)
+            _wake_owner_intake(ticket.id, body.source)
         return {
             "success": True,
             "replayed": replayed,
             "ticket_id": ticket.id,
             "ticket_no": ticket.ticket_no,
             "ticket": customer_ticket_row(ticket),
-            "dispatch_status": "queued",
+            "dispatch_status": (
+                "terminal"
+                if blocked == "ticket_terminal"
+                else (
+                    "revoked"
+                    if blocked == "ticket_dispatch_revoked"
+                    else "pending_review" if blocked else "queued"
+                )
+            ),
             "support_bundle_saved": bool(bundle_b64) and saved,
             "support_bundle_sha256": bundle_sha if bundle_b64 and saved else "",
         }
@@ -200,6 +216,13 @@ async def intake_customer_issue(
         return response(existing, replayed=True)
     private_rework = body.source == "private_mod_rework"
     intent = "custom_delivery" if private_rework else "product_issue"
+    intake_review = None
+    if not private_rework:
+        intake_review = await review_report_async(f"{body.title}\n{body.description}")
+        if intake_review.disposition in {"invalid", "out_of_scope"}:
+            intent = "general"
+        elif intake_review.disposition == "actionable" and intake_review.intent != "product_issue":
+            intake_review = pending_intake_review()
     if private_rework:
         values.update(
             kind="module",
@@ -233,7 +256,13 @@ async def intake_customer_issue(
         status="open",
         decision_status="pending",
         summary=body.description,
-        evidence_json=json_dumps({**values, "intake_request_sha256": request_digest}),
+        evidence_json=json_dumps(
+            {
+                **values,
+                "intake_request_sha256": request_digest,
+                **({"intake_review": intake_review.model_dump()} if intake_review else {}),
+            }
+        ),
     )
     db.add(ticket)
     try:
@@ -397,6 +426,7 @@ def decide_product_issue(
     ticket = (
         db.query(CustomerServiceTicket)
         .filter_by(id=ticket_id, user_id=int(user.id), intent="product_issue")
+        .with_for_update()
         .first()
     )
     if ticket is None:
@@ -405,6 +435,8 @@ def decide_product_issue(
     if len(note) < 4:
         raise HTTPException(400, "请说明原问题现在的使用结果（至少4个字）")
     evidence = json_loads(ticket.evidence_json, {})
+    if evidence.get("admin_disposition"):
+        raise HTTPException(409, "原工单已记录无效或无关处置")
     digest = hashlib.sha256(json.dumps([body.decision, note]).encode()).hexdigest()
     decisions = [r for r in evidence.get("customer_decisions") or [] if isinstance(r, dict)]
     prior = next((r for r in decisions if r.get("idempotency_key") == body.idempotency_key), None)
@@ -428,24 +460,28 @@ def decide_product_issue(
                 _wake_owner_intake(ticket.id, "customer_reopen")
         return {"success": True, "replayed": True, "issue": _issue_row(ticket)}
     resolution = issue_resolution(ticket, evidence)
-    closed = ticket.status in _CLOSED
+    permissions = customer_issue_decision_permissions(ticket)
+    binding = evidence.get("retort_delivery")
+    current_result = (
+        ticket.status == "awaiting_customer"
+        and resolution.get("state") == "awaiting_customer_verification"
+        and resolution.get("verification_mode") == "customer_decision"
+        and not resolution.get("release_target")
+    )
+    reopening_confirmed = (
+        body.decision == "reopen"
+        and ticket.status == "resolved"
+        and resolution.get("state") == "resolved"
+        and bool(decisions)
+        and decisions[-1].get("decision") == "resolved"
+        and decisions[-1].get("user_id") == int(user.id)
+        and decisions[-1].get("retort_delivery") == binding
+    )
+    retort_delivery = binding if binding and (current_result or reopening_confirmed) else None
     now = datetime.now(UTC)
     event_id = ""
     if body.decision == "resolved":
-        if evidence.get("fault_remains") is True or ticket.status != "awaiting_customer":
-            raise HTTPException(409, "问题尚未核验完成，不能关闭工单")
-        if closed:
-            raise HTTPException(409, "工单已关闭；如问题仍存在，请重新打开")
-        ready = (
-            str(resolution.get("state") or "")
-            in {
-                "awaiting_customer_verification",
-                "awaiting_delivery",
-                "repair_verified",
-            }
-            or resolution.get("repair_verified") is True
-        )
-        if not ready:
+        if not permissions["can_resolve"]:
             raise HTTPException(409, "问题尚未核验完成，不能关闭工单")
         ticket.status, ticket.decision_status, ticket.closed_at = (
             "resolved",
@@ -467,11 +503,9 @@ def decide_product_issue(
             ),
         )
     else:
-        if not closed and (
-            resolution.get("state") in {"received", "reopened", "processing"}
-            or evidence.get("fault_remains") is True
-        ):
+        if not permissions["can_reopen"]:
             raise HTTPException(409, "工单仍在处理中，请等处理结果出来后再决定")
+        evidence.pop("retort_delivery", None)
         history = [r for r in evidence.get("reopen_history") or [] if isinstance(r, dict)]
         evidence["reopen_history"] = [
             *history,
@@ -520,6 +554,7 @@ def decide_product_issue(
             "user_id": int(user.id),
             "at": now.isoformat(),
             "event_id": event_id,
+            **({"retort_delivery": retort_delivery} if retort_delivery else {}),
         },
     ][-50:]
     ticket.evidence_json = json_dumps(evidence)

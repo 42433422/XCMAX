@@ -35,6 +35,7 @@ MANAGED_LOCATION_HEADERS = (
     "location = /admin/vite.svg {",
     "location = /api/xcmax/ops/founder-autonomy {",
     "location = /download-founder-autonomy.json {",
+    "location = /download/ {",
     "location ^~ /market/assets/assets/ {",
     "location ^~ /market/assets/ {",
     "location = /market/main.js {",

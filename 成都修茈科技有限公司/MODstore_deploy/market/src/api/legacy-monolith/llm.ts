@@ -29,17 +29,18 @@ export const llmEndpoints = {
     messages: unknown[],
     maxTokens: number | null = null,
     conversationId: number | null = null,
+    clientRequestId: string = crypto.randomUUID(),
   ) => {
     const res = (await req('/api/llm/chat', {
       method: 'POST',
-      body: JSON.stringify({ provider, model, messages, max_tokens: maxTokens, conversation_id: conversationId }),
+      body: JSON.stringify({ provider, model, messages, client_request_id: clientRequestId, max_tokens: maxTokens, conversation_id: conversationId }),
     })) as { billed?: boolean; charge_amount?: number; content?: unknown } & Record<string, unknown>
     if (res && (res.billed === true || (Number(res.charge_amount) || 0) > 0)) {
       void import('../../utils/llmBillingRefresh').then((m) => m.refreshLevelAndWalletAfterLlm())
     }
     return res
   },
-  llmChatStream: (provider: string, model: string, messages: unknown[], maxTokens: number | null = null, conversationId: number | null = null, signal?: AbortSignal) => {
+  llmChatStream: (provider: string, model: string, messages: unknown[], maxTokens: number | null = null, conversationId: number | null = null, signal?: AbortSignal, clientRequestId: string = crypto.randomUUID()) => {
     const headers = new Headers(authHeaders())
     headers.set('Content-Type', 'application/json')
     headers.set('Accept', 'text/event-stream')
@@ -47,27 +48,29 @@ export const llmEndpoints = {
       method: 'POST',
       headers,
       signal,
-      body: JSON.stringify({ provider, model, messages, max_tokens: maxTokens, conversation_id: conversationId }),
+      body: JSON.stringify({ provider, model, messages, client_request_id: clientRequestId, max_tokens: maxTokens, conversation_id: conversationId }),
     })
   },
-  llmGenerateImage: (provider: string, model: string, prompt: string, opts: { size?: string; count?: number; n?: number } = {}) =>
+  llmGenerateImage: (provider: string, model: string, prompt: string, opts: { size?: string; count?: number; n?: number; clientRequestId?: string } = {}) =>
     req('/api/llm/image', {
       method: 'POST',
       body: JSON.stringify({
         provider,
         model,
         prompt,
+        client_request_id: opts.clientRequestId || crypto.randomUUID(),
         size: opts.size || '1024x1024',
         n: opts.count || opts.n || 1,
       }),
     }),
-  llmGenerateVideo: (provider: string, model: string, prompt: string, opts: { size?: string; seconds?: number; durationSec?: number } = {}) =>
+  llmGenerateVideo: (provider: string, model: string, prompt: string, opts: { size?: string; seconds?: number; durationSec?: number; clientRequestId?: string } = {}) =>
     req('/api/llm/video', {
       method: 'POST',
       body: JSON.stringify({
         provider,
         model,
         prompt,
+        client_request_id: opts.clientRequestId || crypto.randomUUID(),
         size: opts.size || '1280x720',
         seconds: opts.seconds || opts.durationSec || 5,
       }),

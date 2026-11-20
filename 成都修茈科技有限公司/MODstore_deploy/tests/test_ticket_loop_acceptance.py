@@ -20,7 +20,7 @@ BASE = "/api/customer-service"
 
 
 @pytest.fixture(autouse=True)
-def isolate_customer_ticket_workers(monkeypatch):
+def isolate_customer_ticket_workers(monkeypatch, approved_support_assessment):
     from modstore_server import incident_bus
 
     monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")

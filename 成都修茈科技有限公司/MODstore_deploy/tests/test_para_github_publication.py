@@ -390,12 +390,32 @@ def test_staged_receipt_waits_for_exact_remote_branch_and_pr(monkeypatch):
         verified_code_identity(snapshot(), workspace=WORKSPACE, attempt_id=ATTEMPT)
 
 
+@pytest.mark.parametrize("original_pr", [False, True])
 def test_publisher_reuses_same_remote_sha_and_pr_and_retains_pending_delivery(
-    tmp_path, monkeypatch
+    tmp_path,
+    monkeypatch,
+    original_pr,
 ):
     value = manifest()
+    if original_pr:
+        from types import SimpleNamespace
+
+        monkeypatch.syspath_prepend(str(ROOT / "FHD"))
+        from scripts.dev import para_pr_repair
+
+        value["base_sha"] = "a" * 40
+        chosen = SimpleNamespace(number=42, branch="fix/original", old_sha=value["base_sha"])
+        monkeypatch.setattr(publisher, "authorized_original_pr", lambda *a: chosen)
+
+        def checked_diff(git, old, new):
+            assert (old, new) == (value["base_sha"], value["commit_sha"])
+            return 1
+
+        monkeypatch.setattr(para_pr_repair, "_check_diff", checked_diff)
     data, digest = artifact(value)
     state = {**WORKSPACE, "publication_candidate": value, "finished": False}
+    if original_pr:
+        state.update(kind="original_pr_repair", source_sha=value["base_sha"], pull_request=42)
     run = {
         "id": 123,
         "head_sha": "b" * 40,
@@ -482,9 +502,12 @@ def test_publisher_reuses_same_remote_sha_and_pr_and_retains_pending_delivery(
     first = publisher.publish(env, command=command, opener=opener)
     second = publisher.publish(env, command=command, opener=opener)
     assert first == second and first["delivered"] is False
-    assert first["status"] == "published_for_review"
+    assert first["status"] == (
+        "awaiting_original_pr_update" if original_pr else "published_for_review"
+    )
+    assert first["pull_request_url"] == "https://github.com/owner/repo/pull/42"
     assert sum(c[0] == "push" for c in calls) == 1
-    assert sum(c[0] == "node" for c in calls) == 1
+    assert sum(c[0] == "node" for c in calls) == (0 if original_pr else 1)
     assert not any("--force" in c or "merge" in c for c in calls)
     with pytest.raises(ValueError, match="redirect_rejected"):
         publisher.NoRedirect().redirect_request(None, None, None, None, None, None)

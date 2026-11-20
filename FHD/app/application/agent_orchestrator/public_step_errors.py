@@ -19,7 +19,10 @@ _USER_FACING_CODES = frozenset(
         "ELT_SCHEMA_OUTDATED",
         "elt_file_path_required",
         "elt_preview_not_ready",
+        "elt_companion_incomplete",
+        "elt_execute_batch_incomplete",
         "elt_center_disabled",
+        "tool_worker_exited",
     }
 )
 _INVENTORY_GUIDANCE = {

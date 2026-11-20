@@ -144,7 +144,7 @@ async def test_evidence_truncated_to_max_chars(
     assert len(result["evidence"]) <= 30
 
 
-async def test_switch_off_disables_everything(
+async def test_switch_off_keeps_only_owned_attachment_manifest(
     monkeypatch: pytest.MonkeyPatch, store: ArtifactStore
 ) -> None:
     monkeypatch.setenv("XCAGI_ATTACHMENT_EVIDENCE", "off")
@@ -155,7 +155,12 @@ async def test_switch_off_disables_everything(
     monkeypatch.setattr(module, "chat_completion_openai_format", _boom)
 
     result = await module.collect_evidence("看看数据", [ARTIFACT_ID], store=store)
-    assert result == {"evidence": "", "trace": [], "artifacts": []}
+    assert result == {
+        "evidence": "",
+        "trace": [],
+        "artifacts": [],
+        "manifest": [{"id": ARTIFACT_ID, "name": "订单.xlsx", "suffix": ".xlsx"}],
+    }
     assert module.evidence_enabled() is False
 
 
@@ -213,6 +218,29 @@ def test_evidence_system_block_text() -> None:
     assert "不要编造" in block
     assert "只依据该证据中的数字作答" in block
     assert "【工件 订单.xlsx / 概览】金额 120" in block
+
+
+async def test_list_evidence_only_includes_this_turns_artifacts(monkeypatch, store):
+    old_id = "a" * 40
+    store.save(
+        ArtifactRecord(
+            id=old_id,
+            name="上一轮.xlsx",
+            suffix=".xlsx",
+            size=1,
+            sha1=old_id,
+            created_at="2026-11-15T10:00:00",
+        )
+    )
+    monkeypatch.setattr(
+        module,
+        "chat_completion_openai_format",
+        _fake_llm('{"calls":[{"tool":"list_attachments","args":{}}]}'),
+    )
+    result = await module.collect_evidence("导入", [ARTIFACT_ID], store=store)
+    assert [item["id"] for item in result["manifest"]] == [ARTIFACT_ID]
+    assert "订单.xlsx" in result["evidence"]
+    assert "上一轮.xlsx" not in result["evidence"]
 
 
 def test_list_attachments_render_keeps_every_name() -> None:

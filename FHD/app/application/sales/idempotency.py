@@ -9,6 +9,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.application.invoicing_service import find_sale_invoice_entry
 from app.db.models import ReceivableAllocation, SalesOrder
 from app.infrastructure.tenant_scope import apply_tenant_filter
 
@@ -21,6 +22,10 @@ CLOSED_LOOP_FP_PREFIX = "w1-10-closed-loop-composite"
 def closed_loop_order_no(idempotency_key: str, tenant_id: int) -> str:
     digest = hashlib.sha256(str(idempotency_key).encode("utf-8")).hexdigest()[:16]
     return f"CL{int(tenant_id)}-{digest}"
+
+
+def closed_loop_payment_key(idempotency_key: str) -> str:
+    return hashlib.sha256(idempotency_key.encode("utf-8")).hexdigest()
 
 
 def composite_fingerprint(
@@ -73,6 +78,10 @@ def composite_fingerprint(
             "currency": pa.get("currency"),
         },
     }
+    if "line_quantities" in fulfillment:
+        canonical["fulfillment"]["line_quantities"] = [
+            canonical_decimal(quantity) for quantity in fulfillment["line_quantities"]
+        ]
     canonical_str = json.dumps(canonical, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(canonical_str.encode("utf-8")).hexdigest()
 
@@ -123,17 +132,28 @@ def verify_fingerprint(db: Session, order_id: int, fingerprint: str) -> None:
 
 
 def verify_payment_replay(db: Session, order_id: int, payment_key: str, tenant_id: int) -> None:
-    keys = {
-        row[0]
-        for row in apply_tenant_filter(
-            db.query(ReceivableAllocation.request_key), ReceivableAllocation, tenant_id=tenant_id
-        ).filter(
+    receipt = (
+        apply_tenant_filter(
+            db.query(ReceivableAllocation), ReceivableAllocation, tenant_id=tenant_id
+        )
+        .filter(
             ReceivableAllocation.sales_order_id == order_id,
             ReceivableAllocation.reference_type == "payment",
+            ReceivableAllocation.request_key == payment_key,
         )
-    }
-    if None in keys and payment_key not in keys:
+        .one_or_none()
+    )
+    order = db.get(SalesOrder, order_id)
+    invoice = find_sale_invoice_entry(db, order_id)
+    if (
+        receipt is None
+        or receipt.status == "refunded"
+        or order is None
+        or order.invoice_status != "invoiced"
+        or invoice is None
+        or invoice.debit_total != order.total_amount
+    ):
         raise ClosedLoopExecutionError(
             "payment_reconciliation",
-            "旧收款缺少请求身份（含已退款记录），须人工核对，禁止自动再次收款",
+            "原收款或开票凭证缺失或已冲销，须人工核对，禁止自动再次收款",
         )

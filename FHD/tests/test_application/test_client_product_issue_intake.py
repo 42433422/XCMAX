@@ -270,6 +270,54 @@ def test_text_only_report_is_accepted_without_a_support_bundle(intake_env, monke
     assert len(posted) == 1 and posted[0][0].endswith("issues/intake")
 
 
+@pytest.mark.parametrize("with_support_bundle", [False, True])
+@pytest.mark.parametrize("use_readback", [False, True])
+def test_native_intake_reports_pending_review_truthfully(
+    intake_env, monkeypatch, with_support_bundle, use_readback
+):
+    from app.application import client_product_issue_intake as intake
+    from app.desktop_runtime import support_bundle
+    from app.fastapi_routes.xcagi_compat_chat_stream import _client_issue_reply
+
+    intake_env.identity(instance="client-pending-identity", version="1.0.0.7", git_sha="e" * 40)
+    if not with_support_bundle:
+        monkeypatch.setattr(support_bundle, "build_evidence_ref", lambda **_: None)
+    ref = ""
+
+    async def remote(token, route, *, method="GET", payload=None):
+        nonlocal ref
+        if route.endswith("customer-candidate"):
+            return {"wo_id": "WO-18443017efd5", "status": "candidate", "created": True}
+        if route.endswith("issues/intake"):
+            ref = payload["source_ref"]
+            if use_readback:
+                raise RuntimeError("request deadline")
+            return {
+                "success": True,
+                "ticket_id": 12,
+                "ticket_no": "CI-held",
+                "dispatch_status": "pending_review",
+            }
+        return {
+            "items": [
+                {
+                    "id": 12,
+                    "ticket_no": "CI-held",
+                    "dispatch_status": "pending_review",
+                    "evidence": {"source_ref": ref},
+                }
+            ]
+        }
+
+    monkeypatch.setattr(intake, "custom_delivery_remote_json", remote)
+    receipt = _submit_issue(tenant_id=1, confidence=0.9)
+    assert receipt["state"] == "PENDING_REVIEW"
+    assert receipt["owner_ticket_no"] == "CI-held"
+    reply = _client_issue_reply(receipt)
+    assert "CI-held" in reply and "待管理员核实" in reply
+    assert "已受理" not in reply
+
+
 def test_repeat_report_reuses_existing_ticket_when_market_refuses_replay(intake_env, monkeypatch):
     """拒绝补报时保留原工单号，同时不冒充新附件已保存。"""
     from app.application import client_product_issue_intake as intake

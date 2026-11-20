@@ -33,6 +33,7 @@ export interface UseChatRequestDeps {
   resolveChatDbTokensForPayload: () => { db_read_token?: string; db_write_token?: string }
   injectExcelContextPayload: (ctx: Record<string, unknown>, parts: string[]) => boolean
   consumeMultimodalIntoPlannerContext: (ctx: Record<string, unknown>, parts: string[]) => void
+  captureArtifacts?: typeof captureChatArtifacts
 }
 
 export function useChatRequest(deps: UseChatRequestDeps) {
@@ -44,19 +45,22 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     resolveChatDbTokensForPayload,
     injectExcelContextPayload,
     consumeMultimodalIntoPlannerContext,
+    captureArtifacts = captureChatArtifacts,
   } = deps
 
   const progressBySession = ref<Record<string, string>>({})
-  const waitProgressTickers = new Map<string, number>()
+  const waitingSince = new Map<string, number>()
+  let waitProgressTicker: number | undefined
+  let chatPageActive = true
   const { state: approvalModeState } = useApprovalMode()
   const progressKey = (target?: string) => String(target || sessionId?.value || '').trim() || 'default'
   const loadingProgressText = computed(() => progressBySession.value[progressKey()] || '处理中...')
-  let chatBatchTimer: number | null = null
-  const chatBatchQueue: string[] = []
+  const queuedBatches = new Map<string, { messages: string[]; timer: number }>()
 
   // 一个 turn 的首次提交决定附件；同 turn 重连和显式 retry 均复用快照。
   const artifactBatches = new Map<string, ReturnType<typeof captureChatArtifacts>>()
   function artifactsForTurn(session: string, turn: string, retryOf?: string, scope?: ChatRequestScope) {
+    const identity = scope?.identity || ''
     // 按仍在界面历史中的 turn 保留，不能按发给模型的 40 条窗口淘汰可重试消息。
     const history = [...(scope?.messages || []), ...(sessionId?.value === session ? messages.value : [])]
     const visibleTurns = new Set(history.map(message => message.turnId).filter(Boolean))
@@ -64,18 +68,19 @@ export function useChatRequest(deps: UseChatRequestDeps) {
       visibleTurns.add(turn)
       if (retryOf) visibleTurns.add(retryOf)
       for (const key of artifactBatches.keys()) {
-        const [owner, previousTurn] = JSON.parse(key) as [string, string]
-        if (owner === session && !visibleTurns.has(previousTurn)) artifactBatches.delete(key)
+        const [owner, sid, previousTurn] = JSON.parse(key) as [string, string, string]
+        if (owner === identity && sid === session && !visibleTurns.has(previousTurn)) artifactBatches.delete(key)
       }
     }
-    const key = JSON.stringify([session, retryOf || turn])
+    const key = JSON.stringify([identity, session, retryOf || turn])
     let batch = artifactBatches.get(key)
     if (!batch) {
       // 找不到原 turn 时不能误拿输入框中新选择的文件。
-      batch = retryOf ? { ids: [], complete: () => {} } : captureChatArtifacts()
+      batch = retryOf || progressKey() !== progressKey(session)
+        ? { ids: [], complete: () => {} } : captureArtifacts()
       artifactBatches.set(key, batch)
     }
-    artifactBatches.set(JSON.stringify([session, turn]), batch)
+    artifactBatches.set(JSON.stringify([identity, session, turn]), batch)
     return batch
   }
 
@@ -114,8 +119,10 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     // industry 由后端根据 session account_kind 自动派生（单一真相源），前端不传
     const contextParts: string[] = []
     contextParts.push(`最近对话 ${compactHistory.length} 条`)
-    const hasExcelContext = !plannerOpts?.expectedWorkflowPlanId && injectExcelContextPayload(contextPayload, contextParts)
-    if (!plannerOpts?.expectedWorkflowPlanId) consumeMultimodalIntoPlannerContext(contextPayload, contextParts)
+    const isActive = progressKey() === progressKey(scopedSessionId)
+    const includeDraft = isActive && !plannerOpts?.expectedWorkflowPlanId
+    const hasExcelContext = includeDraft && injectExcelContextPayload(contextPayload, contextParts)
+    if (includeDraft) consumeMultimodalIntoPlannerContext(contextPayload, contextParts)
     // 选文件时登记的附件工件：只认本轮上传，失败重试沿用同一批。
     const artifactBatch = artifactsForTurn(scopedSessionId, turnId, plannerOpts?.retryOf, scope)
     const artifactIds = artifactBatch.ids
@@ -124,8 +131,8 @@ export function useChatRequest(deps: UseChatRequestDeps) {
       contextParts.push(`后端工件 ${artifactIds.length} 个`)
     }
     const linkedCount = compactHistory.length + (hasExcelContext ? 1 : 0)
-    lastRequestContextSummary.value = `已关联上下文：${contextParts.join(' + ')}（共 ${linkedCount}）`
-    if (plannerOpts?.fromWriteUnlock) {
+    if (isActive) lastRequestContextSummary.value = `已关联上下文：${contextParts.join(' + ')}（共 ${linkedCount}）`
+    if (isActive && plannerOpts?.fromWriteUnlock) {
       contextPayload.chat_db_write_authorized = true
       const draftRaw = plannerWriteUnlockResumeDraft.value.trim()
       plannerWriteUnlockResumeDraft.value = ''
@@ -229,45 +236,49 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     }
   }
 
+  function updateWaitProgress() {
+    const now = Date.now()
+    for (const [key, startedAt] of waitingSince) {
+      const elapsedSec = Math.floor((now - startedAt) / 1000)
+      if (elapsedSec < 1) continue
+      const hint = elapsedSec >= 8 ? ' 等待较久，可点击“停止回复”；操作可能仍在执行，请先到任务面板核对，勿重复提交。网络异常时请恢复连接后重试（故障编号：CHAT_WAIT）。' : ''
+      setLoadingProgress(`已发送请求，正在等待服务端响应（${elapsedSec}s）...${hint}`, key)
+    }
+  }
+
+  function syncWaitProgressTicker() {
+    if (chatPageActive && waitingSince.size) {
+      waitProgressTicker ??= window.setInterval(updateWaitProgress, 1000)
+    } else {
+      window.clearInterval(waitProgressTicker)
+      waitProgressTicker = undefined
+    }
+  }
+
   function startWaitProgressTimer(targetSessionId?: string) {
-    const key = progressKey(targetSessionId)
     const startedAt = Date.now()
-    const existing = waitProgressTickers.get(key)
-    if (existing) window.clearInterval(existing)
-    waitProgressTickers.set(
-      key,
-      window.setInterval(() => {
-        const elapsedSec = Math.max(1, Math.floor((Date.now() - startedAt) / 1000))
-        const hint = elapsedSec >= 8 ? ' 等待较久，可点击“停止回复”；操作可能仍在执行，请先到任务面板核对，勿重复提交。网络异常时请恢复连接后重试（故障编号：CHAT_WAIT）。' : ''
-        setLoadingProgress(`已发送请求，正在等待服务端响应（${elapsedSec}s）...${hint}`, key)
-      }, 1000),
-    )
+    waitingSince.set(progressKey(targetSessionId), startedAt)
+    syncWaitProgressTicker()
+    return startedAt
   }
 
   function stopLoadingProgress(targetSessionId?: string) {
     const key = progressKey(targetSessionId)
-    const ticker = waitProgressTickers.get(key)
-    if (ticker) window.clearInterval(ticker)
-    waitProgressTickers.delete(key)
+    waitingSince.delete(key)
+    syncWaitProgressTicker()
     setLoadingProgress('处理中...', key)
   }
 
-  let pausedProgressKeys: string[] = []
   function pauseWaitProgress(): void {
-    if (waitProgressTickers.size === 0) return
-    pausedProgressKeys = [...waitProgressTickers.keys()]
-    for (const key of pausedProgressKeys) {
-      const ticker = waitProgressTickers.get(key)
-      if (ticker) window.clearInterval(ticker)
-      waitProgressTickers.delete(key)
-    }
+    chatPageActive = false
+    syncWaitProgressTicker()
   }
   if (getCurrentInstance()) {
     onDeactivated(pauseWaitProgress)
     onActivated(() => {
-      const keys = pausedProgressKeys
-      pausedProgressKeys = []
-      for (const key of keys) startWaitProgressTimer(key)
+      chatPageActive = true
+      updateWaitProgress()
+      syncWaitProgressTicker()
     })
     onBeforeUnmount(pauseWaitProgress)
   }
@@ -311,10 +322,12 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     return withRequestTimeout(signal => requestChatByModeBatch(batchTexts, { signal }, scope), timeoutMs, scope?.signal)
   }
 
-  function cancelPendingChatBatch() {
-    if (chatBatchTimer != null) window.clearTimeout(chatBatchTimer)
-    chatBatchTimer = null
-    chatBatchQueue.length = 0
+  function cancelPendingChatBatch(targetSessionId?: string) {
+    const keys = targetSessionId ? [progressKey(targetSessionId)] : [...queuedBatches.keys()]
+    for (const key of keys) {
+      window.clearTimeout(queuedBatches.get(key)?.timer)
+      queuedBatches.delete(key)
+    }
   }
 
   function resolveChatTimeoutMs(message: string): number {
@@ -324,21 +337,21 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     return isComplexTask ? 180_000 : 90_000
   }
 
-  function enqueueChatBatchMessage(message: string, debounceMs: number, onFlush: (messages: string[]) => void): void {
-    chatBatchQueue.push(message)
-    if (chatBatchTimer != null) {
-      window.clearTimeout(chatBatchTimer)
-    }
-    chatBatchTimer = window.setTimeout(() => {
-      chatBatchTimer = null
-      const msgs = chatBatchQueue.splice(0)
-      onFlush(msgs)
+  function enqueueChatBatchMessage(message: string, debounceMs: number, onFlush: (messages: string[]) => void, targetSessionId?: string): void {
+    const key = progressKey(targetSessionId)
+    const pending = queuedBatches.get(key)
+    if (pending) window.clearTimeout(pending.timer)
+    const messages = [...(pending?.messages || []), message]
+    const timer = window.setTimeout(() => {
+      queuedBatches.delete(key)
+      onFlush(messages)
     }, debounceMs)
+    queuedBatches.set(key, { messages, timer })
   }
 
   return {
     loadingProgressText,
-    chatBatchQueue,
+    get chatBatchQueue() { return queuedBatches.get(progressKey())?.messages || [] },
     cancelPendingChatBatch,
     enqueueChatBatchMessage,
     buildPlannerChatRequestPayload,

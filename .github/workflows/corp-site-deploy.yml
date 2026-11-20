@@ -28,6 +28,7 @@ on:
     paths:
       - '成都修茈科技有限公司/*.html'
       - '成都修茈科技有限公司/robots.txt'
+      - '成都修茈科技有限公司/llms.txt'
       - '成都修茈科技有限公司/sitemap.xml'
       - '成都修茈科技有限公司/baidu_urls.txt'
       - '成都修茈科技有限公司/BingSiteAuth.xml'
@@ -129,8 +130,30 @@ jobs:
             flock -w 60 8
             # Publish git-tree site chrome into nginx live root. Production serves
             # /root/成都修茈科技有限公司 (immutable-release symlink), not /root/XCMAX/...
-            LIVE_SITE="$(readlink -f /root/成都修茈科技有限公司 2>/dev/null || true)"
-            if [ -z "${LIVE_SITE}" ]; then LIVE_SITE="/root/成都修茈科技有限公司"; fi
+            LIVE_SITE="$(readlink -f /root/成都修茈科技有限公司)"
+            if [[ ! "$LIVE_SITE" =~ ^/opt/xcmax/releases/[0-9a-f]{40}/成都修茈科技有限公司$ &&
+                  "$LIVE_SITE" != /root/成都修茈科技有限公司 ]] || [ ! -d "$LIVE_SITE" ]; then
+              echo "[err] unexpected live site root" >&2
+              exit 1
+            fi
+            deployment_marker_path() {
+              local parent
+              for parent in "$LIVE_SITE/site" "$LIVE_SITE/site/data"; do
+                if [ -L "$parent" ] || { [ -e "$parent" ] && [ ! -d "$parent" ]; }; then
+                  echo "[err] unsafe deployment marker directory" >&2
+                  return 1
+                fi
+              done
+              printf '%s\n' "$LIVE_SITE/site/data/corp-download-deployment.json"
+            }
+            # The marker is generated here only. Invalidate it before changing the site.
+            DEPLOYMENT_MARKER="$(deployment_marker_path)"
+            rm -f -- "$DEPLOYMENT_MARKER"
+            if [ -e "$GIT_SITE/site/data/corp-download-deployment.json" ] ||
+               [ -L "$GIT_SITE/site/data/corp-download-deployment.json" ]; then
+              echo "[err] deployment marker must not be included in Git site data" >&2
+              exit 1
+            fi
             if [ -d "${GIT_SITE}" ] && [ -d "${LIVE_SITE}" ] && [ "$(readlink -f "${GIT_SITE}")" != "${LIVE_SITE}" ]; then
               echo "[info] publishing site chrome ${GIT_SITE} -> ${LIVE_SITE}"
               chmod u+w "${LIVE_SITE}" 2>/dev/null || true
@@ -144,6 +167,7 @@ jobs:
                        "${GIT_SITE}/world-will.js" "${GIT_SITE}/world-will-ticker.js" \
                        "${GIT_SITE}/world-will-ticker.css" \
                        "${GIT_SITE}/robots.txt" "${GIT_SITE}/sitemap.xml" \
+                       "${GIT_SITE}/llms.txt" \
                        "${GIT_SITE}/baidu_urls.txt" "${GIT_SITE}/BingSiteAuth.xml" \
                        "${GIT_SITE}/download-action-board.js"; do
                 [ -e "$f" ] || continue
@@ -189,9 +213,9 @@ jobs:
               chmod a+rx "${LIVE_SITE}" 2>/dev/null || true
               echo "[ok] live site chrome published"
             else
-              echo "[info] live site root coincides with git tree or missing; skip publish copy"
+              echo "[err] live site root coincides with git tree or source is missing" >&2
+              exit 1
             fi
-            exec 8>&-
             SYNC_STAGE=nginx
             NGINX_SRC="${SITE_ROOT}/nginx-xiu-ci-root.conf"
             if [ -f /etc/nginx/conf.d/xiu-ci.com.conf ]; then
@@ -266,9 +290,62 @@ jobs:
             grep -E -q 'plan-trial|plan-permanent|价格' /tmp/xc-pricing.html
             xc_curl -o /tmp/xc-cases2.html https://xiu-ci.com/cases.html
             grep -E -q '客户案例|case' /tmp/xc-cases2.html
-            echo "[verify] download center is new product page (not old stub):"
-            xc_curl -o /tmp/xc-download.html https://xiu-ci.com/download
-            grep -E -q 'download/releases|更新日志|产品下载' /tmp/xc-download.html
+            # Verify the original slash URL without following unapproved redirect targets.
+            (
+              download_html="$(mktemp)"
+              trap 'rm -f "$download_html"' EXIT
+              download_response() {
+                local response
+                response="$(xc_curl -w '%{http_code} %{redirect_url}\n' "$@")" || return
+                # curl also emits write-out for failed attempts; xc_curl retries them.
+                printf '%s' "${response##*$'\n'}"
+              }
+              verify_download_routes() {
+                local suffix="$1" download_host original slash_url redirect_hop redirect download_url download_status
+                for download_host in xiu-ci.com www.xiu-ci.com; do
+                  original="https://${download_host}/download/${suffix}"
+                  slash_url="$original"
+                  for redirect_hop in 1 2; do
+                    redirect="$(download_response -o /dev/null "$slash_url")"
+                    if [ "$(download_response --head -o /dev/null "$slash_url")" != "$redirect" ]; then
+                      printf '[err] %s HEAD did not match GET at hop %s (sha=%s)\n' \
+                        "$original" "$redirect_hop" "$DEPLOY_SHA" >&2
+                      exit 1
+                    fi
+                    # Production redirects www to the apex before evaluating the path.
+                    if [ "$redirect_hop" = 1 ] && [ "$download_host" = www.xiu-ci.com ] && \
+                       [ "$redirect" = "301 https://xiu-ci.com/download/${suffix}" ]; then
+                      slash_url="${redirect#301 }"
+                      continue
+                    fi
+                    break
+                  done
+                  case "$redirect" in
+                    "301 https://xiu-ci.com/download${suffix}"|"301 https://www.xiu-ci.com/download${suffix}") ;;
+                    *)
+                      printf '[err] %s expected a 301 to the approved download page preserving the query (sha=%s, status=%s)\n' \
+                        "$original" "$DEPLOY_SHA" "${redirect%% *}" >&2
+                      exit 1
+                      ;;
+                  esac
+                  download_url="${redirect#301 }"
+                  download_status="$(download_response -o "$download_html" "$download_url")"
+                  if [ "$download_status" != "200 " ] || ! grep -Fq '<title>XCAGI 产品下载</title>' "$download_html"; then
+                    printf '[err] %s did not reach the download page (sha=%s, status=%s)\n' \
+                      "$original" "$DEPLOY_SHA" "${download_status%% *}" >&2
+                    exit 1
+                  fi
+                  if [ "$(download_response --head -o /dev/null "$download_url")" != "$download_status" ]; then
+                    printf '[err] %s final HEAD did not match GET (sha=%s)\n' "$original" "$DEPLOY_SHA" >&2
+                    exit 1
+                  fi
+                  printf '[verify] download redirect sha=%s host=%s get=301 head=301 hops=%s target=%s status=200\n' \
+                    "$DEPLOY_SHA" "$download_host" "$redirect_hop" "$download_url"
+                done
+              }
+              verify_download_routes "?xcmax_download_probe=${DEPLOY_SHA}"
+              verify_download_routes ""
+            )
             echo "[verify] capability center must never 404 after merge (regression guard):"
             xc_curl -o /tmp/xc-capabilities.html https://xiu-ci.com/capabilities/
             grep -E -q '产品能力|能力目录' /tmp/xc-capabilities.html
@@ -316,3 +393,46 @@ jobs:
             ! grep -E -q '<!DOCTYPE html>' /tmp/xc-partial-loader.js
             echo "[verify] logo bytes:"
             wc -c "${SITE_ROOT}/assets/xiu-ci-logo.png" 2>/dev/null || true
+            SYNC_STAGE=deployment-marker
+            if [ "$BRANCH" = main ] && [ "${{ github.ref }}" = refs/heads/main ] &&
+               [ "$DEPLOY_SHA" = "${{ github.sha }}" ]; then
+              # Keep the shared lock until publication, so other site writers cannot
+              # swap the live root or overwrite the verified pages during the smoke test.
+              test "$(readlink -f /root/成都修茈科技有限公司)" = "$LIVE_SITE"
+              test "$(git -C "$REMOTE_ROOT" rev-parse HEAD)" = "$DEPLOY_SHA"
+              git -C "$REMOTE_ROOT" show "$DEPLOY_SHA:成都修茈科技有限公司/download.html" |
+                cmp -s - "$LIVE_SITE/download.html"
+              test "$(deployment_marker_path)" = "$DEPLOYMENT_MARKER"
+              python3 - "$DEPLOYMENT_MARKER" "$DEPLOY_SHA" "${{ github.run_id }}" "${{ github.run_attempt }}" <<'PY'
+            import json
+            import os
+            import sys
+            import tempfile
+            from datetime import datetime, timezone
+            from pathlib import Path
+
+            marker, sha, run_id, attempt = sys.argv[1:]
+            marker = Path(marker)
+            payload = {
+                "deployed_sha": sha,
+                "workflow_run_id": int(run_id),
+                "run_attempt": int(attempt),
+                "verified_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            }
+            tmp = None
+            try:
+                with tempfile.NamedTemporaryFile(mode="w", dir=marker.parent, delete=False) as stream:
+                    tmp = Path(stream.name)
+                    json.dump(payload, stream)
+                    stream.write("\n")
+                    os.fchmod(stream.fileno(), 0o644)
+                os.replace(tmp, marker)
+            finally:
+                if tmp is not None:
+                    tmp.unlink(missing_ok=True)
+            PY
+              echo "[verify] published corp download deployment marker sha=$DEPLOY_SHA"
+            else
+              echo "[info] deployment is not the controller main SHA; leaving deployment marker absent"
+            fi
+            exec 8>&-

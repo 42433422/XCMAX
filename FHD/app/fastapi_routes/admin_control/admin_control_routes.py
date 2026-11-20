@@ -363,6 +363,16 @@ def register_routes(
                 customer_tickets.admin_result_customer_ticket,
             ),
             (
+                "/admin/customer-service/tickets/{ticket_id}/disposition",
+                "POST",
+                customer_tickets.admin_dispose_customer_ticket,
+            ),
+            (
+                "/admin/customer-service/tickets/{ticket_id}/dispatch-revoke",
+                "POST",
+                customer_tickets.admin_revoke_customer_ticket_dispatch,
+            ),
+            (
                 "/admin/customer-service/tickets/{ticket_id}/sensitive-action",
                 "POST",
                 customer_tickets.admin_sensitive_customer_ticket,

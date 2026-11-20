@@ -76,19 +76,6 @@ vi.mock('./useChatPersistence', () => ({
   }),
 }))
 
-vi.mock('./useExcelAnalysis', async () => {
-  const { ref } = await import('vue')
-  return {
-    useExcelAnalysis: () => ({
-      excelAnalyzeUploading: ref(false),
-      excelAnalyzeInputRef: ref(null),
-      triggerUpload: vi.fn(),
-      onExcelAnalyzeFileChange: vi.fn(),
-      setOnMultimodalFileChangeCallback: vi.fn(),
-    }),
-  }
-})
-
 vi.mock('./useShipmentTask', async () => {
   const { ref } = await import('vue')
   return {
@@ -255,8 +242,7 @@ describe('useChatOrchestration – API surface', () => {
     expect(typeof api.isStartPrintMessage).toBe('function')
     expect(typeof api.setTtsEnabled).toBe('function')
     expect(typeof api.refetchTaskOrderNumber).toBe('function')
-    expect(typeof api.triggerUpload).toBe('function')
-    expect(typeof api.onExcelAnalyzeFileChange).toBe('function')
+    expect(typeof api.onAttachmentFileChange).toBe('function')
     expect(typeof api.showHistoryPanel).toBe('function')
     expect(typeof api.loadSession).toBe('function')
     expect(typeof api.clearHistorySessions).toBe('function')

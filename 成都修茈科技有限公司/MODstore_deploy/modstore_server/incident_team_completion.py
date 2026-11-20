@@ -309,8 +309,14 @@ def persist_role_attempt(event_id: int, row: dict[str, Any], *, expected_attempt
             raise ValueError("incident not found")
         original = event.payload_json
         payload = json.loads(str(event.payload_json or "{}"))
-        if not expected_attempt and locked_ticket_repair(db, payload)[1]:
-            raise ValueError("shared_repair_reused")
+        if not expected_attempt:
+            from modstore_server.customer_ticket_intake_review import intake_dispatch_block_reason
+
+            ticket, shared_repair = locked_ticket_repair(db, payload)
+            if shared_repair:
+                raise ValueError("shared_repair_reused")
+            if ticket is not None and (reason := intake_dispatch_block_reason(ticket)):
+                raise ValueError(reason)
         claim = payload.setdefault("_team_claim", {"ok": False, "team": []})
         rows = claim.setdefault("team", [])
         previous = next((item for item in rows if item.get("role") == row.get("role")), None)

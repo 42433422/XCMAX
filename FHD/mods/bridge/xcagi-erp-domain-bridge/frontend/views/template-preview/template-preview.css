@@ -320,28 +320,3 @@
   color: #007bff;
   font-weight: 600;
 }
-
-.grid-tool-card {
-  margin: 0 0 14px;
-  padding: 10px 12px;
-  border: 1px solid #d8e3ea;
-  border-radius: 8px;
-  background: #fbfdff;
-}
-
-.grid-tool-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #2f4f63;
-  margin-bottom: 8px;
-}
-
-.grid-tool-actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.grid-tool-file-input { display: none; }
-.grid-tool-file-name { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }

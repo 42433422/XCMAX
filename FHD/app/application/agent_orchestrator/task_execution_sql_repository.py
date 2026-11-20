@@ -271,6 +271,9 @@ class SQLAlchemyTaskExecutionRepository:
                     if effects:
                         import json
 
+                        from app.application.agent_orchestrator.elt_checkpoint_recovery import (
+                            checkpoint_step,
+                        )
                         from app.application.agent_orchestrator.resume_transaction import (
                             unresolved_effects,
                         )
@@ -281,11 +284,17 @@ class SQLAlchemyTaskExecutionRepository:
 
                         saved = db.get(AgentRunRecord, candidate.run_id)
                         if saved is not None:
+                            run = agent_run_from_dict(json.loads(saved.payload_json))
                             effects = unresolved_effects(
                                 db,
-                                agent_run_from_dict(json.loads(saved.payload_json)),
+                                run,
                                 clear_confirmed=True,
                             )
+                            approved = checkpoint_step(run)
+                            if approved is not None and set(effects) <= {approved.step_id}:
+                                # Let only the exact native router reconcile. The
+                                # stored effect remains open until a final receipt.
+                                effects = []
                 if recovered and effects:
                     db.query(AgentTaskExecutionRecord).filter(
                         AgentTaskExecutionRecord.run_id == candidate.run_id,

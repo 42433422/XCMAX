@@ -39,20 +39,25 @@ def reset_cache() -> None:
     _read_catalog.cache_clear()
 
 
-def model_for_budget(provider: Any, requested_model: str | None = None) -> str | None:
+async def model_for_budget(
+    provider: Any, requested_model: str | None = None, requested_provider: str | None = None
+) -> str | None:
     """Use the selected provider's model, including admission/telemetry wrappers."""
-    if requested_model:
-        return requested_model
     for _ in range(4):
         inner = getattr(provider, "_inner", None)
         if inner is None:
             break
         provider = inner
+    adapter = getattr(provider, "_adapter", None)
+    if getattr(provider, "provider_id", None) == "modstore" and adapter is not None:
+        vendor, model = await adapter.resolve_chat_route(requested_provider, requested_model)
+        return model if "/" in model else f"{vendor}/{model}"
+    if requested_model:
+        return requested_model
     if getattr(provider, "provider_id", None) == "openai_sdk":
         from app.infrastructure.llm.client import resolve_chat_model
 
         return resolve_chat_model()
-    adapter = getattr(provider, "_adapter", None)
     ensure_adapter = getattr(provider, "_ensure_adapter", None)
     if adapter is None and callable(ensure_adapter):
         adapter = ensure_adapter()
@@ -77,9 +82,11 @@ def _positive_int(value: Any, fallback: int) -> int:
 def context_window_for(model: str | None, *, catalog: dict[str, Any] | None = None) -> int:
     """Return the input context window for ``model``, falling back to the catalog default."""
     data = load_catalog() if catalog is None else catalog
-    name = str(model or "").strip()
+    name = str(model or "").strip().lower()
     models = data.get("models")
-    entry = models.get(name) if isinstance(models, dict) else None
+    entry = (
+        models.get(name, models.get(name.rsplit("/", 1)[-1])) if isinstance(models, dict) else None
+    )
     if isinstance(entry, dict):
         entry = entry.get("max_input_tokens")
     if entry is not None:

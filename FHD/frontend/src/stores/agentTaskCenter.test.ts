@@ -21,6 +21,7 @@ vi.mock('@/api/agentRuns', () => ({ default: apiMock }))
 vi.mock('@/api/core', () => ({ buildFullApiUrl: (path: string) => path }))
 
 import { useAgentTaskCenterStore } from './agentTaskCenter'
+import type { AgentTaskProgress } from '@/api/agentRuns'
 
 const task = {
   task_id: 'task-1',
@@ -42,6 +43,13 @@ const task = {
   },
   active_run: { run_id: 'run-1', user_id: 'owner', message: '核对库存', status: 'waiting_user' },
 }
+
+const fileProgress: AgentTaskProgress = {
+  basis: 'files', percent: 62, completed_units: 13, settled_units: 13, total_units: 21,
+  current_unit: 14, stage: '结果待核对', detail: '13/21 份已完成 · 已确认写入 141 行',
+  status: 'blocked', attempt: 1, indeterminate: false, updated_at: '2026-11-19T12:00:00Z',
+}
+const stepProgress: AgentTaskProgress = { ...fileProgress, basis: 'steps', percent: 99, stage: '已阻断' }
 
 describe('agent task center store', () => {
   beforeEach(() => {
@@ -112,7 +120,7 @@ describe('agent task center store', () => {
     expect(apiMock.getTask).toHaveBeenCalledTimes(3)
   })
 
-  it('replaces the task list from the authenticated SSE snapshot', async () => {
+  it('preserves verified file progress across coarse snapshots for the same run only', async () => {
     class FakeEventSource {
       static instances: FakeEventSource[] = []
       listeners = new Map<string, (event: MessageEvent) => void>()
@@ -137,14 +145,26 @@ describe('agent task center store', () => {
     }
     vi.stubGlobal('EventSource', FakeEventSource)
     const store = useAgentTaskCenterStore()
+    apiMock.listTasks.mockResolvedValueOnce({ success: true, data: [{ ...task, progress: fileProgress }] })
 
     store.start()
     await vi.waitFor(() => expect(FakeEventSource.instances).toHaveLength(1))
-    FakeEventSource.instances[0].emit('task.snapshot', [{ ...task, status: 'completed', attention_state: 'result_unread' }])
+    await vi.waitFor(() => expect(store.tasks[0]?.progress).toEqual(fileProgress))
+    const connection = FakeEventSource.instances[0]
+    connection.emit('task.snapshot', [{ ...task, status: 'blocked', progress: stepProgress }])
+    expect(store.tasks[0]).toMatchObject({ status: 'blocked', progress: fileProgress })
 
-    expect(FakeEventSource.instances[0].url).toBe('/api/agent/tasks/events/stream')
+    const laterProgress = { ...fileProgress, percent: 67, updated_at: '2026-11-19T12:00:01Z' }
+    connection.emit('task.snapshot', [{ ...task, status: 'blocked', progress: laterProgress }])
+    connection.emit('task.snapshot', [{ ...task, status: 'blocked', progress: fileProgress }])
+    expect(store.tasks[0].progress).toEqual(laterProgress)
+
+    connection.emit('task.snapshot', [{ ...task, active_run_id: 'run-2', status: 'completed', attention_state: 'result_unread', progress: stepProgress }])
+
+    expect(connection.url).toBe('/api/agent/tasks/events/stream')
     expect(store.connected).toBe(true)
     expect(store.tasks[0].status).toBe('completed')
+    expect(store.tasks[0].progress).toEqual(stepProgress)
     expect(store.attentionCount).toBe(0)
     expect(store.approvalCount).toBe(0)
     expect(store.unreadCount).toBe(1)
@@ -193,15 +213,19 @@ describe('agent task center store', () => {
     const store = useAgentTaskCenterStore()
     apiMock.listTasks.mockResolvedValueOnce({
       success: true,
-      data: [{ ...task, status: 'completed', attention_state: 'result_unread', unread_count: 1 }],
+      data: [{ ...task, status: 'completed', attention_state: 'result_unread', unread_count: 1, progress: fileProgress }],
     })
+    apiMock.markTaskRead.mockResolvedValueOnce({ success: true, data: { ...task, attention_state: '', unread_count: 0, progress: stepProgress } })
     await store.refresh()
+    await store.openTask('task-1')
     expect(store.unreadCount).toBe(1)
 
     await store.markTaskRead('task-1')
 
     expect(apiMock.markTaskRead).toHaveBeenCalledWith('task-1')
     expect(store.tasks[0].attention_state).toBe('')
+    expect(store.tasks[0].progress).toEqual(fileProgress)
+    expect(store.selectedTask?.progress).toEqual(fileProgress)
     expect(store.unreadCount).toBe(0)
   })
 
@@ -445,16 +469,16 @@ it('does not submit an approval fetched before a scope switch', async () => {
   expect(store.actionPending).toBe('')
 })
 
-it('does not apply an old read receipt to a same-id task in a new scope', async () => {
+it.each(['scope', 'run'])('does not apply an old read receipt after the %s changes', async change => {
   setActivePinia(createPinia())
   let resolve!: (value: unknown) => void
   apiMock.markTaskRead.mockReturnValueOnce(new Promise((r) => { resolve = r }))
   const store = useAgentTaskCenterStore()
   const pending = store.markTaskRead('task-1')
-  store.restartForScope()
-  store.tasks = [{ ...task, title: 'new scope', attention_state: 'result_unread' }]
+  if (change === 'scope') store.restartForScope()
+  store.tasks = [{ ...task, ...(change === 'run' ? { active_run_id: 'run-2' } : {}), title: 'new snapshot', attention_state: 'result_unread' }]
   resolve({ success: true, data: { ...task, title: 'old scope', attention_state: '' } })
   await pending
-  expect(store.tasks[0].title).toBe('new scope')
+  expect(store.tasks[0].title).toBe('new snapshot')
   expect(store.tasks[0].attention_state).toBe('result_unread')
 })

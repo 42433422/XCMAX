@@ -44,6 +44,15 @@ acquire_publication_lock() {
   flock -w 60 8 || fail "another public-site publication is active"
 }
 
+clear_corp_download_marker() {
+  local site="$1/$SITE_SUBDIR" parent
+  [[ -d "$site" && "$(readlink -f "$site")" == "$site" ]] || return 1
+  for parent in "$site/site" "$site/site/data"; do
+    [[ ! -L "$parent" && ( ! -e "$parent" || -d "$parent" ) ]] || return 1
+  done
+  rm -f -- "$site/site/data/corp-download-deployment.json"
+}
+
 log() { printf '[xcmax-release] %s\n' "$*"; }
 fail() { log "ERROR: $*" >&2; exit 1; }
 
@@ -458,14 +467,15 @@ else
     "$BUILD_ROOT/FHD/packages/xcagi_langgraph_checkpoint_backends/checkpoint-sqlite" \
     "$BUILD_ROOT/FHD/packages/xcagi_langgraph_checkpoint_backends/checkpoint-postgres" \
     "$BUILD_ROOT/FHD/packages/xcagi_langgraph_prebuilt" "$BUILD_ROOT/FHD/packages/xcagi_langgraph_sdk" \
-    -e '.[web,knowledge,evolution-metrics,governance]')
+    -e '.[web,knowledge,evolution-metrics,governance,llm-router]')
   "$DEPLOY_DIR/.venv/bin/python" -c \
     'import langgraph.checkpoint.postgres; from modstore_server.integrations.repository_packages import load_repository_module; load_repository_module("retort_engine.intent_alignment"); load_repository_module("retort_engine.clarification"); load_repository_module("retort_engine.evolution_workflow"); load_repository_module("retort_engine.evolution_optimizer"); load_repository_module("xcagi_common.employee_pack")'
   mkdir -p "$BUILD_ROOT/.runtime-build"
   MODSTORE_ENV=production \
     MODSTORE_JWT_SECRET="$BUILD_JWT_SECRET" \
     MODSTORE_RUNTIME_DIR="$BUILD_ROOT/.runtime-build" \
-    "$DEPLOY_DIR/.venv/bin/python" -c 'import fastapi, pytest, pytest_cov, uvicorn, modstore_server.app'
+    LITELLM_LOCAL_MODEL_COST_MAP=True \
+    "$DEPLOY_DIR/.venv/bin/python" -c 'import fastapi, litellm, pytest, pytest_cov, uvicorn, modstore_server.app'
   rm -rf -- "$BUILD_ROOT/.runtime-build"
 
   log "installing the locked private Mod compiler inside the release"
@@ -929,6 +939,10 @@ rollback() {
     log "ERROR: rollback blocked by changed public desktop pointers; operator reconciliation required"
     return 1
   fi
+  if ! clear_corp_download_marker "$PREVIOUS_ROOT"; then
+    log "ERROR: rollback blocked by an unsafe deployment marker path"
+    return 1
+  fi
   log "promotion failed; rolling current back to $PREVIOUS_ROOT"
   ln -s "$PREVIOUS_ROOT" "${CURRENT_LINK}.rollback"
   mv -Tf "${CURRENT_LINK}.rollback" "$CURRENT_LINK"
@@ -1078,6 +1092,7 @@ migrate_delivery_state false
 # and rollback; those paths must not reacquire it through a child publisher.
 acquire_publication_lock
 verify_public_pointers "$FINAL_ROOT" || fail "public desktop pointers changed before activation"
+clear_corp_download_marker "$FINAL_ROOT" || fail "unsafe deployment marker path before activation"
 ln -s "$FINAL_ROOT" "${CURRENT_LINK}.next"
 mv -Tf "${CURRENT_LINK}.next" "$CURRENT_LINK"
 RELEASE_SWITCHED=1

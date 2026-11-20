@@ -38,9 +38,13 @@ jobs:
       - name: Prepare existing Para executor
         env:
           PARA_CODEX_VERSION: ${{ vars.PARA_CODEX_VERSION }}
+          PARA_PLATFORM_POOL: ${{ vars.PARA_PLATFORM_POOL }}
+          PARA_PLATFORM_GATEWAY_URL: ${{ vars.PARA_PLATFORM_GATEWAY_URL }}
+          PARA_PLATFORM_GATEWAY_KEY: ${{ secrets.PARA_PLATFORM_GATEWAY_KEY }}
+          PARA_PLATFORM_GATEWAY_KEYS_JSON: ${{ secrets.PARA_PLATFORM_GATEWAY_KEYS_JSON }}
           PARA_CODEX_AUTH_JSON: ${{ secrets.PARA_CODEX_AUTH_JSON }}
           PARA_CODEX_CONFIG_TOML: ${{ secrets.PARA_CODEX_CONFIG_TOML }}
-          PARA_CODEX_API_KEY: ${{ secrets.PARA_CODEX_API_KEY }}
+          PARA_CODEX_API_KEY: ${{ secrets.PARA_CODEX_API_KEY || (vars.PARA_PLATFORM_POOL != '1' && !secrets.PARA_CODEX_AUTH_JSON && !secrets.PARA_CODEX_CONFIG_TOML && secrets.OPENAI_API_KEY) || '' }}
         run: bash scripts/autonomy/runtime_tools/prepare_github_executor.sh
       - name: Run original Para tasks without publication credentials
         env:
@@ -54,7 +58,10 @@ jobs:
           DEVFLEET_WORKSPACE_ROOT: ${{ runner.temp }}/para-workspaces
           XCMAX_CONTROL_REPORTS_ENABLED: "1"
           DEVFLEET_CODEX_MODEL_CANDIDATES: ${{ vars.PARA_CODEX_MODEL_CANDIDATES }}
-          CODEX_API_KEY: ${{ secrets.PARA_CODEX_API_KEY }}
+          PARA_PLATFORM_POOL: ${{ vars.PARA_PLATFORM_POOL }}
+          PARA_PLATFORM_GATEWAY_KEY: ${{ secrets.PARA_PLATFORM_GATEWAY_KEY }}
+          PARA_PLATFORM_GATEWAY_KEYS_JSON: ${{ secrets.PARA_PLATFORM_GATEWAY_KEYS_JSON }}
+          CODEX_API_KEY: ${{ secrets.PARA_CODEX_API_KEY || (vars.PARA_PLATFORM_POOL != '1' && !secrets.PARA_CODEX_AUTH_JSON && !secrets.PARA_CODEX_CONFIG_TOML && secrets.OPENAI_API_KEY) || '' }}
           MODSTORE_PARA_DISPATCH_TOKEN: ${{ secrets.MODSTORE_PARA_DISPATCH_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }} # job permissions are contents:read only
         run: node "$RUNNER_TEMP/para-worker/github_para_executor.mjs"
@@ -77,6 +84,8 @@ jobs:
 
   publish-candidate:
     needs: employee-workspace
+    outputs:
+      original_pr: ${{ steps.publish.outputs.original_pr }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -95,9 +104,11 @@ jobs:
         with:
           python-version: "3.12"
       - name: Validate original dispatch and publish inert Git objects
+        id: publish
         env:
           PARA_GITHUB_REQUEST_ID: ${{ inputs.request_id }}
           MODSTORE_PARA_DISPATCH_TOKEN: ${{ secrets.MODSTORE_PARA_DISPATCH_TOKEN }}
+          PYTHONPATH: ${{ github.workspace }}/FHD
           # This existing credential allows ordinary PR CI to start automatically.
           GH_TOKEN: ${{ secrets.CI_COMMIT_TOKEN }}
         run: python scripts/autonomy/publish_para_candidate.py
@@ -111,6 +122,7 @@ jobs:
 
   resume-verification:
     needs: publish-candidate
+    if: needs.publish-candidate.outputs.original_pr != 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     permissions:
@@ -130,9 +142,13 @@ jobs:
       - name: Prepare existing Para executor
         env:
           PARA_CODEX_VERSION: ${{ vars.PARA_CODEX_VERSION }}
+          PARA_PLATFORM_POOL: ${{ vars.PARA_PLATFORM_POOL }}
+          PARA_PLATFORM_GATEWAY_URL: ${{ vars.PARA_PLATFORM_GATEWAY_URL }}
+          PARA_PLATFORM_GATEWAY_KEY: ${{ secrets.PARA_PLATFORM_GATEWAY_KEY }}
+          PARA_PLATFORM_GATEWAY_KEYS_JSON: ${{ secrets.PARA_PLATFORM_GATEWAY_KEYS_JSON }}
           PARA_CODEX_AUTH_JSON: ${{ secrets.PARA_CODEX_AUTH_JSON }}
           PARA_CODEX_CONFIG_TOML: ${{ secrets.PARA_CODEX_CONFIG_TOML }}
-          PARA_CODEX_API_KEY: ${{ secrets.PARA_CODEX_API_KEY }}
+          PARA_CODEX_API_KEY: ${{ secrets.PARA_CODEX_API_KEY || (vars.PARA_PLATFORM_POOL != '1' && !secrets.PARA_CODEX_AUTH_JSON && !secrets.PARA_CODEX_CONFIG_TOML && secrets.OPENAI_API_KEY) || '' }}
         run: bash scripts/autonomy/runtime_tools/prepare_github_executor.sh
       - name: Run original Para tasks without publication credentials
         env:
@@ -146,7 +162,10 @@ jobs:
           DEVFLEET_WORKSPACE_ROOT: ${{ runner.temp }}/para-workspaces
           XCMAX_CONTROL_REPORTS_ENABLED: "1"
           DEVFLEET_CODEX_MODEL_CANDIDATES: ${{ vars.PARA_CODEX_MODEL_CANDIDATES }}
-          CODEX_API_KEY: ${{ secrets.PARA_CODEX_API_KEY }}
+          PARA_PLATFORM_POOL: ${{ vars.PARA_PLATFORM_POOL }}
+          PARA_PLATFORM_GATEWAY_KEY: ${{ secrets.PARA_PLATFORM_GATEWAY_KEY }}
+          PARA_PLATFORM_GATEWAY_KEYS_JSON: ${{ secrets.PARA_PLATFORM_GATEWAY_KEYS_JSON }}
+          CODEX_API_KEY: ${{ secrets.PARA_CODEX_API_KEY || (vars.PARA_PLATFORM_POOL != '1' && !secrets.PARA_CODEX_AUTH_JSON && !secrets.PARA_CODEX_CONFIG_TOML && secrets.OPENAI_API_KEY) || '' }}
           MODSTORE_PARA_DISPATCH_TOKEN: ${{ secrets.MODSTORE_PARA_DISPATCH_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }} # job permissions are contents:read only
         run: node "$RUNNER_TEMP/para-worker/github_para_executor.mjs"

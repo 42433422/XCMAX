@@ -12,6 +12,15 @@
     "newSession": "新会话",
     "messageCount": "{count} 条消息",
     "localOnly": "仅本地",
+    "conversationStatus": {
+      "submitted": "正在提交",
+      "streaming": "处理中",
+      "ready": "已回复",
+      "error": "失败",
+      "waiting": "待确认",
+      "review": "待核对",
+      "stopped": "已停止接收"
+    },
     "expand": "展开详情",
     "collapse": "收起",
     "downloadShipment": "下载发货单",

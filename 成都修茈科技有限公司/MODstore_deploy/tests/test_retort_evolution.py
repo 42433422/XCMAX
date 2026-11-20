@@ -465,3 +465,363 @@ def test_advance_only_projects_operational_errors(setup, monkeypatch, failure):
     after = read(setup["client"], request_id)
     assert after["error"] == ("" if isinstance(failure, AssertionError) else "invalid dispatch")
     assert not [call for call in setup["calls"] if call[0] == "POST"]
+
+
+def test_feedback_selection_scans_past_already_used_candidates(setup, monkeypatch):
+    from modstore_server import retort_customer_feedback as feedback
+    from modstore_server.models_cs import CustomerServiceSession, CustomerServiceTicket
+
+    with get_session_factory()() as db:
+        customer = User(username=uuid4().hex, password_hash="test-only", is_admin=False)
+        db.add(customer)
+        db.flush()
+        session = CustomerServiceSession(user_id=customer.id)
+        db.add(session)
+        db.flush()
+        tickets = [
+            CustomerServiceTicket(
+                user_id=customer.id,
+                session_id=session.id,
+                ticket_no=f"{uuid4()}",
+                submitter_type="customer",
+                intent="product_issue",
+                status="open",
+                summary="真实问题",
+                evidence_json="{}",
+            )
+            for _ in range(21)
+        ]
+        db.add_all(tickets)
+        db.flush()
+        monkeypatch.setattr(
+            feedback, "_eligible", lambda _db, item, _domain: item.user_id == customer.id
+        )
+        selected = feedback._candidates(db, "platform", {(item.id, "") for item in tickets[1:]})
+        assert [item["ticket_id"] for item in selected.values()] == [tickets[0].id]
+
+
+@pytest.mark.parametrize("customer_decision", ["resolved", "reopen", "resolved_then_reopen"])
+def test_feedback_run_binds_original_customer_and_production_release(
+    setup, monkeypatch, customer_decision
+):
+    from datetime import UTC, datetime
+
+    from modstore_server.api.deps import get_current_user
+    from modstore_server.models_cs import (
+        CustomerServiceMessage,
+        CustomerServiceSession,
+        CustomerServiceTicket,
+    )
+
+    ticket_no = f"isolated-feedback-{uuid4()}"
+    with get_session_factory()() as db:
+        customer = User(username=uuid4().hex, password_hash="test-only", is_admin=False)
+        db.add(customer)
+        db.flush()
+        session = CustomerServiceSession(user_id=customer.id)
+        db.add(session)
+        db.flush()
+        db.add(
+            CustomerServiceTicket(
+                user_id=customer.id,
+                session_id=session.id,
+                ticket_no=ticket_no,
+                submitter_type="customer",
+                intent="product_issue",
+                status="open",
+                summary="首次导入未成功。联系 test-private@example.com",
+                evidence_json=json_dumps(
+                    {
+                        "issue_domain": "platform",
+                        "resolution": {"state": "received", "route": "shared_core"},
+                    }
+                ),
+            )
+        )
+        db.commit()
+        ticket = db.query(CustomerServiceTicket).filter_by(ticket_no=ticket_no).one()
+        ticket_id = ticket.id
+        db.refresh(customer)
+        db.expunge(customer)
+
+    with open(os.environ["MODSTORE_RETORT_PROTOCOLS"], encoding="utf-8") as fh:
+        templates = json.load(fh)
+    templates["restore"]["customer_feedback"] = {
+        "domain": "platform",
+        "surface": "shared_web",
+        "goal": "验证首次导入反馈并恢复正确路径",
+    }
+    if customer_decision == "resolved_then_reopen":
+        from modstore_server import retort_feedback_measurements
+
+        templates["restore"]["customer_feedback"]["growthbook"] = {"project": "prod"}
+        monkeypatch.setattr(
+            retort_feedback_measurements,
+            "experiment_measurement",
+            lambda *_: {"status": "running"},
+        )
+    with open(os.environ["MODSTORE_RETORT_PROTOCOLS"], "w", encoding="utf-8") as fh:
+        json.dump(templates, fh)
+
+    def model(messages, **kwargs):
+        assert "首次导入未成功" in messages[1]["content"]
+        assert "test-private@example.com" not in messages[1]["content"]
+        assert ticket_no not in messages[1]["content"]
+        return {"ok": True, "content": '{"candidate": 1}'}
+
+    monkeypatch.setattr(service, "reflect", model)
+    client, request_id = setup["client"], str(uuid4())
+    base = "/api/retort-evolution"
+    body = {"request_id": request_id, "template_id": "restore", "source": "customer_feedback"}
+    response = client.post(base, json=body)
+    assert response.status_code == 200, response.text
+    assert client.post(base, json=body).json()["id"] == request_id
+    selected = read(client, request_id)
+    assert selected["status"] == "awaiting_dispatch_approval"
+    assert selected["effects"]["customer_feedback"]["ticket_id"] == ticket_id
+    assert selected["effects"]["customer_feedback"]["allocated_worker_slots"] == 1
+    assert ticket_no not in selected["snapshot"]["plan"]["public_body"]
+    approval_context = selected["snapshot"]["plan"]["private_customer_feedback"]
+    assert "首次导入未成功" in approval_context["reproduction"][0]
+    assert "test-private@example.com" not in json.dumps(approval_context)
+
+    from modstore_server import retort_customer_feedback as feedback
+    from modstore_server.dot_ticket_dispatch import _incident_prompt
+
+    with get_session_factory()() as db:
+        run = db.get(RetortEvolutionRun, request_id)
+        protocol = json_loads(run.protocol_json, {})
+        effects = json_loads(run.effects_json, {})
+        event = IncidentEvent(
+            event_type="ops.retort.evolution",
+            source="retort",
+            fingerprint=str(uuid4()),
+            payload_json="{}",
+        )
+        db.add(event)
+        db.flush()
+        run.event_id, run.status = event.id, "waiting_execution"
+        effects.update(
+            authorization={
+                "approved": True,
+                "digest": selected["snapshot"]["pending"][0]["digest"],
+            },
+            plan=selected["snapshot"]["plan"],
+            optimization=selected["snapshot"]["optimization"],
+            run_id=100,
+            issue_number=20,
+        )
+        run.effects_json = json_dumps(effects)
+        payload = {
+            "retort_run_id": request_id,
+            "user_id": run.user_id,
+            "github_workspace": {
+                "retort_run_id": request_id,
+                "request_id": request_id,
+                "repository": protocol["repository"],
+                "source_sha": protocol["source_sha"],
+                "run_id": 100,
+                "issue_number": 20,
+            },
+        }
+        db.flush()
+        private = feedback.private_execution_context(db, event.id, payload)
+        effects["plan"]["private_customer_feedback"]["reproduction"] = ["not approved"]
+        run.effects_json = json_dumps(effects)
+        with pytest.raises(ValueError, match="not_approved"):
+            feedback.private_execution_context(db, event.id, payload)
+        effects["plan"]["private_customer_feedback"] = private
+        run.effects_json = json_dumps(effects)
+        with pytest.raises(ValueError, match="not_authorized"):
+            feedback.private_execution_context(db, event.id + 1, payload)
+        ticket = db.get(CustomerServiceTicket, ticket_id)
+        ticket.summary = "选题之后被替换的内容"
+        db.flush()
+        with pytest.raises(ValueError, match="context_changed"):
+            feedback.private_execution_context(db, event.id, payload)
+        db.rollback()
+    assert private["intent"] == "product_issue"
+    assert "首次导入未成功" in private["reproduction"][0]
+    assert "test-private@example.com" not in json.dumps(private, ensure_ascii=False)
+    assert ticket_no not in json.dumps(private, ensure_ascii=False)
+    prompt = _incident_prompt(
+        {"role": "scout", "source": {}, "handoffs": [], "review": {}, "customer_feedback": private},
+        {},
+    )
+    assert "首次导入未成功" in prompt and "test-private@example.com" not in prompt
+
+    monkeypatch.setattr(service.ComponentPorts, "collect", lambda _self, _: {"status": "completed"})
+    monkeypatch.setattr(
+        service.ComponentPorts,
+        "verify",
+        lambda _self, _: {"status": "checks_passed", "target_sha": "b" * 40},
+    )
+    monkeypatch.setattr(
+        service.ComponentPorts, "delivery", lambda _self, _: {"status": "waiting_delivery"}
+    )
+
+    def approve():
+        status = read(client, request_id)
+        digest = status["snapshot"]["pending"][0]["digest"]
+        result = client.post(
+            f"{base}/{request_id}/decision", json={"digest": digest, "approved": True}
+        )
+        assert result.status_code == 200, result.text
+
+    def resume():
+        result = client.post(f"{base}/{request_id}/resume")
+        assert result.status_code == 200, result.text
+        return read(client, request_id)
+
+    approve()
+    assert resume()["status"] == "awaiting_acceptance"
+    approve()
+    assert resume()["status"] == "waiting_delivery"
+    with get_session_factory()() as db:
+        assert db.get(CustomerServiceTicket, ticket_id).status == "open"
+
+    delivery = {
+        "status": "deployment_verified",
+        "merge_sha": "a" * 40,
+        "release_sha": "c" * 40,
+        "deployment_run_id": 205,
+        "verified_at": datetime.now(UTC).isoformat(),
+    }
+    monkeypatch.setattr(service.ComponentPorts, "delivery", lambda _self, _: delivery)
+    assert resume()["status"] == "delivered"
+    assert resume()["status"] == "waiting_customer_impact"
+    assert resume()["status"] == "waiting_customer_impact"
+    with get_session_factory()() as db:
+        assert db.get(CustomerServiceTicket, ticket_id).status == "awaiting_customer"
+        assert db.query(CustomerServiceMessage).filter_by(ticket_id=ticket_id).count() == 1
+
+    decision_path = f"/api/customer-service/issues/{ticket_id}/decision"
+    decision = {
+        "decision": (
+            "resolved" if customer_decision == "resolved_then_reopen" else customer_decision
+        ),
+        "note": "已按原业务路径复测成功",
+        "idempotency_key": str(uuid4()),
+    }
+    app.dependency_overrides[get_current_user] = lambda: setup["user"]
+    assert client.post(decision_path, json=decision).status_code == 404
+    app.dependency_overrides[get_current_user] = lambda: customer
+    result = client.post(decision_path, json=decision)
+    assert result.status_code == 200, result.text
+    if customer_decision == "resolved_then_reopen":
+        assert resume()["status"] == "waiting_customer_impact"
+        reopened = client.post(
+            decision_path,
+            json={"decision": "reopen", "note": "原问题再次出现", "idempotency_key": str(uuid4())},
+        )
+        assert reopened.status_code == 200, reopened.text
+    if customer_decision in {"reopen", "resolved_then_reopen"}:
+        with get_session_factory()() as db:
+            ticket = db.get(CustomerServiceTicket, ticket_id)
+            evidence = json_loads(ticket.evidence_json, {})
+            evidence["resolution"]["state"] = "processing"
+            ticket.evidence_json = json_dumps(evidence)
+            db.commit()
+    final = resume()
+    if customer_decision in {"reopen", "resolved_then_reopen"}:
+        assert final["status"] == "customer_impact_rejected"
+        assert final["snapshot"]["impact"]["release_sha"] == "c" * 40
+        return
+    assert final["status"] == "completed"
+    assert final["snapshot"]["impact"]["release_sha"] == "c" * 40
+    assert final["snapshot"]["impact"]["status"] == "customer_impact_verified"
+    assert final["snapshot"]["impact"]["commercial"]["status"] == "not_configured"
+
+
+def test_growthbook_requires_same_run_production_exposure_and_valid_sample():
+    from modstore_server.retort_feedback_measurements import _snapshot
+
+    sha = "c" * 40
+    spec = {"id": "exp_feedback", "project": "prod", "metric": "first_import", "minimum_users": 100}
+    delivery = {
+        "merge_sha": "a" * 40,
+        "release_sha": sha,
+        "deployment_completed_at": "2026-01-01T00:00:00Z",
+        "verified_at": "2026-01-04T00:00:00Z",
+    }
+    result = {
+        "experiment": {
+            "id": spec["id"],
+            "project": "prod",
+            "type": "standard",
+            "status": "stopped",
+            "trackingKey": "xcagi-retort-run",
+            "tags": [f"xcagi-release-{sha}"],
+        },
+        "result": {
+            "id": "snapshot_feedback",
+            "experimentId": spec["id"],
+            "dateStart": "2026-01-02T00:00:00Z",
+            "dateUpdated": "2026-01-03T00:00:00Z",
+            "dimension": {"type": "none"},
+            "results": [
+                {
+                    "totalUsers": 120,
+                    "checks": {"srm": 0.9},
+                    "metrics": [
+                        {
+                            "metricId": "first_import",
+                            "variations": [
+                                {"users": 60},
+                                {
+                                    "users": 60,
+                                    "analyses": [
+                                        {"percentChange": 0.12, "ciLow": 0.02, "ciHigh": 0.22}
+                                    ],
+                                },
+                            ],
+                        }
+                    ],
+                }
+            ],
+        },
+    }
+    observed = _snapshot(result, spec, "run", delivery)
+    assert (
+        _snapshot(
+            result,
+            spec,
+            "run",
+            {"merge_sha": "a" * 40, "release_sha": sha, "verified_at": "2026-01-01T00:00:00Z"},
+        )["status"]
+        == "unbound"
+    )
+    assert observed["status"] == "measured"
+    assert observed["lift"] == 0.12
+    assert _snapshot(result, spec, "other-run", delivery)["status"] == "unbound"
+    result["result"]["results"][0]["checks"]["srm"] = 0.0001
+    assert _snapshot(result, spec, "run", delivery)["status"] == "sample_unverified"
+
+
+def test_commercial_evidence_uses_successful_job_bound_not_poll_time(monkeypatch):
+    from datetime import UTC, datetime
+
+    from modstore_server import customer_value_evidence
+    from modstore_server.retort_feedback_measurements import commercial_measurement
+
+    observed = []
+
+    def ledger(**kwargs):
+        observed.append(kwargs["delivery_scope"])
+        return {
+            "value_ledger_ready": True,
+            "paid_acceptance_count": 1,
+            "verified_paid_amount_cents": 500,
+        }
+
+    monkeypatch.setattr(customer_value_evidence, "build_customer_value_evidence", ledger)
+    delivery = {
+        "identity": {"artifact_sha256": "a" * 64},
+        "deployment_completed_at": "2026-01-01T00:00:00Z",
+        "verified_at": "2026-01-04T00:00:00Z",
+    }
+    assert commercial_measurement(17, delivery)["status"] == "verified"
+    assert observed == [(17, "a" * 64, datetime(2026, 1, 1, tzinfo=UTC))]
+    del delivery["deployment_completed_at"]
+    assert commercial_measurement(17, delivery)["status"] == "release_artifact_unavailable"
+    assert len(observed) == 1

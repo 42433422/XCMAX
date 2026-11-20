@@ -41,6 +41,13 @@
 4. 运行期产物（outbox、webhook 投递 JSON、payment_orders、chroma）不进入源码仓库；
    由 `MODSTORE_RUNTIME_DIR` / `MODSTORE_WEBHOOK_EVENTS_DIR` 指向数据盘。
    提交门禁见 [`ci-runtime-artifacts-guard.yml`](.github/workflows/ci-runtime-artifacts-guard.yml)。
+5. 客服工单复用 [Pydantic 2.13.4](https://github.com/pydantic/pydantic)（MIT，结构化受理判断）、
+   [SQLAlchemy 2.0.51](https://github.com/sqlalchemy/sqlalchemy)（MIT，原单事务与并发校验）和
+   [Vue 3.5.45](https://github.com/vuejs/core)（MIT，原会话回放）。版本取现有锁文件的验证基线。
+   小C的自动处置沿用这些组件。提交人确认是演练或仅涉及外部事项时，原单状态、回复和审计同事务保存。
+   官网下载使用 [NGINX 1.27.5](https://github.com/nginx/nginx/tree/release-1.27.5)（BSD-2-Clause）
+   的原生精确匹配与重定向，验证时保留原查询参数。
+   官网复测沿用现有部署工作流、HTTPX 和 APScheduler。原报障路径与已合入修复、正式部署提交及实时探测匹配后，系统在原会话回写并等待原提交人验收。
 
 ## 证据资源与发布副本
 

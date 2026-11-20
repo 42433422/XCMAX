@@ -71,7 +71,7 @@ def bridge(factory):
             "_xcagi_planner_stream_bytes": factory,
             "_sse_event_line": lambda value: json.dumps(value).encode(),
         },
-    )(None, None, ai_tier="synthetic")
+    )(None, NS(context={}), ai_tier="synthetic")
 
 
 async def wait(event):

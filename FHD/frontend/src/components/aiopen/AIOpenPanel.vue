@@ -46,41 +46,17 @@
       <button
         class="aiopen-primary-btn"
         type="button"
-        :disabled="setupRunning || shutdownRunning"
+        :disabled="!panelAvailable || setupRunning || shutdownRunning"
         @click="handlePrimaryAction"
       >
         {{ setupRunning ? '开启中…' : shutdownRunning ? '关闭中…' : primaryBtnLabel }}
       </button>
 
       <div class="aiopen-oneline">
-        <p class="aiopen-oneline-label">发给其他 AI 助手</p>
-        <p class="aiopen-oneline-preview">{{ oneLinerPreview }}</p>
-        <div class="aiopen-oneline-actions">
-          <button class="aiopen-oneline-btn" type="button" @click="copyOneLiner">
-            复制一句话
-          </button>
-          <button class="aiopen-oneline-btn aiopen-oneline-btn--ghost" type="button" @click="copyAiAssistantPrompt">
-            完整配置
-          </button>
-        </div>
-      </div>
-
-      <div class="aiopen-client-section">
-        <p class="aiopen-client-title">选择 AI 软件接入 <span class="aiopen-client-sub">可同时配置多个</span></p>
-        <div class="aiopen-client-grid">
-          <button
-            v-for="client in aiClients"
-            :key="client.id"
-            type="button"
-            class="aiopen-client-btn"
-            :class="{ done: installedClientIds.includes(client.id) }"
-            @click="handleClientClick(client)"
-          >
-            <span class="aiopen-client-icon" aria-hidden="true">{{ client.icon }}</span>
-            <span class="aiopen-client-name">{{ client.name }}</span>
-            <span class="aiopen-client-action">{{ clientActionLabel(client) }}</span>
-          </button>
-        </div>
+        <p class="aiopen-oneline-preview">包含连接口令和 MCP 配置。复制后粘贴给本机 AI 助手。</p>
+        <button class="aiopen-oneline-btn" type="button" :disabled="!panelAvailable || keyRunning" @click="copyOneLiner">
+          {{ keyRunning ? '准备连接配置…' : '复制一句话' }}
+        </button>
       </div>
 
       <details v-if="friendlyTools.length" class="aiopen-tools-preview">
@@ -100,9 +76,9 @@
       <summary>更多设置</summary>
       <div class="aiopen-more-body">
         <button class="aiopen-link-btn" type="button" @click="loadPanel">刷新状态</button>
-        <p v-if="!panelAvailable" class="aiopen-offline-hint">离线模式：可先配置 AI 软件；开启远程操控需后端在线</p>
+        <p v-if="!panelAvailable" class="aiopen-offline-hint">登录并刷新状态后可获取连接口令。</p>
 
-        <label class="aiopen-switch-row">
+        <label v-if="panelAvailable && !clientMode" class="aiopen-switch-row">
           <input type="checkbox" :checked="remoteControlEnabled" @change="toggleRemoteControl($event)">
           <span>允许 AI 远程操控</span>
         </label>
@@ -111,28 +87,34 @@
           <span>本页待命（默认开启）{{ cursorConnected ? ' · 已连接' : '' }}</span>
         </label>
 
-        <div class="aiopen-more-actions">
-          <button class="btn btn-secondary btn-sm" type="button" @click="copyClientConfig(selectedClientId)">复制 MCP JSON</button>
-          <button class="btn btn-secondary btn-sm" type="button" @click="copyGuideUrl">复制说明链接</button>
-          <button v-if="!activeKey" class="btn btn-secondary btn-sm" type="button" @click="createKey">获取口令</button>
-        </div>
-
-        <div class="aiopen-client-picker">
-          <span class="aiopen-client-picker-label">配置预览</span>
-          <select v-model="selectedClientId" class="aiopen-select aiopen-client-select">
-            <option v-for="client in aiClients" :key="client.id" :value="client.id">{{ client.name }}</option>
-          </select>
-          <p class="aiopen-client-picker-hint">{{ selectedClient?.configPath }} · {{ selectedClient?.hint }}</p>
-        </div>
+        <button v-if="panelAvailable && (!clientMode || hasActiveClientKey)" class="btn btn-secondary btn-sm" type="button" :disabled="keyRunning" @click="revokeClientKey">撤销本账号智控口令</button>
 
         <details class="aiopen-nested">
           <summary>开发者 / 高级</summary>
           <div class="aiopen-advanced-body">
-            <pre class="aiopen-pre">{{ selectedClientConfigSnippet }}</pre>
-            <div class="aiopen-endpoint-row">
-              <code class="aiopen-endpoint-code">{{ mcpUrl }}</code>
-              <button class="btn btn-secondary btn-sm" type="button" @click="copyText(mcpUrl)">MCP</button>
+            <div class="aiopen-client-section">
+              <p class="aiopen-client-title">按客户端复制配置</p>
+              <div class="aiopen-client-grid">
+                <button
+                  v-for="client in aiClients"
+                  :key="client.id"
+                  type="button"
+                  class="aiopen-client-btn"
+                  :class="{ done: installedClientIds.includes(client.id) }"
+                  :disabled="!panelAvailable || keyRunning"
+                  @click="handleClientClick(client)"
+                >
+                  <span class="aiopen-client-icon" aria-hidden="true">{{ client.icon }}</span>
+                  <span class="aiopen-client-name">{{ client.name }}</span>
+                  <span class="aiopen-client-action">{{ clientActionLabel(client) }}</span>
+                </button>
+              </div>
+              <button v-if="!activeKey" class="btn btn-secondary btn-sm" type="button" :disabled="!panelAvailable || keyRunning" @click="createKey">
+                {{ hasActiveClientKey && clientMode ? '重新生成口令' : '获取口令' }}
+              </button>
+              <p v-if="clientMode && hasActiveClientKey && !activeKey" class="aiopen-offline-hint">重新生成会撤销旧口令，已配置的客户端需要更新。</p>
             </div>
+            <pre class="aiopen-pre">{{ selectedClientConfigSnippet }}</pre>
             <div v-if="usage" class="aiopen-usage">
               <p class="aiopen-usage-title">
                 近 {{ usage.days }} 天调用 {{ usage.calls }} 次 · 失败 {{ usage.errors }} 次 · 平均 {{ usage.avg_duration_ms }}ms
@@ -148,6 +130,7 @@
                 <span>{{ tool.desc }}</span>
               </div>
             </div>
+            <template v-if="panelAvailable && !clientMode">
             <div class="aiopen-route-list">
               <div class="aiopen-row" style="margin-bottom:8px;gap:8px;flex-wrap:wrap;">
                 <button class="btn btn-secondary btn-sm" type="button" :disabled="seedRunning" @click="seedFullWhitelist">
@@ -188,6 +171,7 @@
               <button class="btn btn-secondary btn-sm" type="button" :disabled="wsConnected || wsConnecting" @click="connectOpenclawWs">WS</button>
             </div>
             <div class="aiopen-result">{{ wsStatusText }}</div>
+            </template>
           </div>
         </details>
       </div>
@@ -229,6 +213,9 @@ const {
   accessResult,
   panelError,
   panelAvailable,
+  clientMode,
+  hasActiveClientKey,
+  keyRunning,
   manifestTools,
   setupRunning,
   shutdownRunning,
@@ -239,20 +226,13 @@ const {
   mcpHealthy,
   mcpHealthText,
   installedClientIds,
-  selectedClientId,
   stdioScriptPath,
-  oneLinerCopied,
   openclawBase,
   openclawMessage,
   openclawSending,
   openclawResult,
-  mcpUrl,
-  guideUrl,
   activeKey,
   hasConnectConfig,
-  aiAssistantPrompt,
-  oneLinerText,
-  oneLinerPreview,
   readyStatus,
   aiOpenActive,
   featureIntro,
@@ -262,7 +242,6 @@ const {
   primaryBtnLabel,
   friendlyTools,
   aiClients,
-  selectedClient,
   selectedClientConfigSnippet,
 } = state
 
@@ -270,16 +249,11 @@ const {
   refreshInstalledClients,
   clientActionLabel,
   handleClientClick,
-  copyClientConfig,
   formatPanelError,
   loadPanel,
-  copyText,
   copyOneLiner,
-  copyAiAssistantPrompt,
-  copyCursorConfig,
-  copyGuideUrl,
-  copyGuidePrompt,
   createKey,
+  revokeClientKey,
   handlePrimaryAction,
   toggleWhitelist,
   seedFullWhitelist,
@@ -303,7 +277,6 @@ const {
 } = openclaw
 
 onMounted(() => {
-  try { oneLinerCopied.value = localStorage.getItem('aiopen_oneliner_copied') === '1' } catch { /* ignore */ }
   refreshInstalledClients()
   loadPanel()
 })

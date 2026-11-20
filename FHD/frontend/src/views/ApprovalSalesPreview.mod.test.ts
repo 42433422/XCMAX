@@ -4,8 +4,13 @@ import { ref } from 'vue'
 import AwDetailModal from '../../../mods/bridge/xcagi-approval-bridge/frontend/views/approval-workspace/AwDetailModal.vue'
 import { formatRequestTitle } from '../../../mods/bridge/xcagi-approval-bridge/frontend/views/approval-workspace/awHelpers'
 
-function render(items: Record<string, unknown>[], tool = 'sales', status = 'pending', runtime?: boolean) {
-  const request = { id: 12, request_no: 'test-approval', title: '智能对话写操作：sales.create_order', status, runtime_available: runtime, business_type: 'workflow_tool', records: [], description: JSON.stringify({ customer_name: '验收客户', items }), business_data: { tool_id: tool, action: 'create_order', params: { customer_name: '验收客户', items } } }
+function render(items: Record<string, unknown>[], tool = 'sales', status = 'pending', runtime?: boolean, lineQuantities?: number[]) {
+  const order = { customer_name: '验收客户', items }
+  const sale = lineQuantities ? {
+    action: 'execute_closed_loop',
+    params: { payload: { order, fulfillment: { requested: true, line_quantities: lineQuantities } } },
+  } : { action: 'create_order', params: order }
+  const request = { id: 12, request_no: 'test-approval', title: '智能对话写操作：sales.create_order', status, runtime_available: runtime, business_type: 'workflow_tool', records: [], description: JSON.stringify({ customer_name: '验收客户', items }), business_data: { tool_id: tool, ...sale } }
   const before = JSON.stringify(request)
   const approve = vi.fn()
   const wrapper = mount(AwDetailModal, {
@@ -25,6 +30,19 @@ describe('sales approval details before execution', () => {
     expect(f.approve).not.toHaveBeenCalled()
     await f.wrapper.get('.btn-approve').trigger('click')
     expect(f.approve).toHaveBeenCalledExactlyOnceWith(12)
+    expect(JSON.stringify(f.request)).toBe(f.before)
+    f.wrapper.unmount()
+  })
+
+  it('shows each proposed shipment quantity next to the original order quantity', () => {
+    const f = render([
+      { product_name: '商品甲', quantity: 10, unit_price: 2 },
+      { product_name: '商品乙', quantity: 5, unit_price: 3 },
+    ], 'sales', 'pending', undefined, [3, 5])
+    expect(f.wrapper.get('thead').text()).toContain('本次交付')
+    expect(f.wrapper.findAll('tbody tr').map(row => row.findAll('td').slice(2, 4).map(cell => cell.text())))
+      .toEqual([['10', '3'], ['5', '5']])
+    expect(f.approve).not.toHaveBeenCalled()
     expect(JSON.stringify(f.request)).toBe(f.before)
     f.wrapper.unmount()
   })

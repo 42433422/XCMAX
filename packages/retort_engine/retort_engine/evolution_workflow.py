@@ -20,6 +20,8 @@ class EvolutionState(TypedDict, total=False):
     delivery: dict[str, Any]
     approval: dict[str, Any]
     knowledge: dict[str, Any]
+    has_customer_feedback: bool
+    impact: dict[str, Any]
     status: str
 
 
@@ -34,6 +36,7 @@ class EvolutionPorts(Protocol):
     def collect(self, state: EvolutionState) -> dict[str, Any]: ...
     def verify(self, state: EvolutionState) -> dict[str, Any]: ...
     def delivery(self, state: EvolutionState) -> dict[str, Any]: ...
+    def impact(self, state: EvolutionState) -> dict[str, Any]: ...
     def remember(self, state: EvolutionState) -> dict[str, Any]: ...
 
 
@@ -124,6 +127,16 @@ def build_evolution_graph(ports: EvolutionPorts, checkpointer: Any):
             else "waiting_delivery",
         }
 
+    def impact(state: EvolutionState):
+        interrupt(
+            {"kind": "customer_impact", "request_id": state["protocol"]["request_id"]}
+        )
+        result = ports.impact(state)
+        return {
+            "impact": result,
+            "status": result["status"],
+        }
+
     graph = StateGraph(EvolutionState)
     for name, fn in (
         ("plan", plan),
@@ -134,6 +147,7 @@ def build_evolution_graph(ports: EvolutionPorts, checkpointer: Any):
         ("verify", verify),
         ("accept", accept),
         ("delivery", delivery),
+        ("impact", impact),
         ("remember", remember),
     ):
         graph.add_node(name, fn)
@@ -158,9 +172,17 @@ def build_evolution_graph(ports: EvolutionPorts, checkpointer: Any):
     )
     graph.add_conditional_edges(
         "delivery",
-        lambda s: {"delivered": "remember", "waiting_delivery": "delivery"}.get(
-            s["status"], END
-        ),
+        lambda s: {
+            "delivered": "impact" if s.get("has_customer_feedback") else "remember",
+            "waiting_delivery": "delivery",
+        }.get(s["status"], END),
+    )
+    graph.add_conditional_edges(
+        "impact",
+        lambda s: {
+            "customer_impact_verified": "remember",
+            "waiting_customer_impact": "impact",
+        }.get(s["status"], END),
     )
     graph.add_edge("remember", END)
     return graph.compile(checkpointer=checkpointer)

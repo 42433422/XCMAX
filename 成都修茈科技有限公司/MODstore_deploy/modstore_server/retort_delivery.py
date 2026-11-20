@@ -13,6 +13,7 @@ import httpx
 from fastapi import HTTPException
 
 from modstore_server.customer_ticket_github import configuration, github
+from modstore_server.customer_value_classification import parse_datetime
 from modstore_server.retort_github_workspace import _download_artifact
 from modstore_server.self_maintenance_deploy_receipts import (
     BuildIdentity,
@@ -178,6 +179,29 @@ def _release_receipt(repo, run, release, product_version, release_id):
     }
 
 
+def _deployment_completed_at(repo, run, merged_at):
+    """Use successful deployment-job completion as a conservative exposure bound."""
+    attempt = run.get("run_attempt")
+    if type(attempt) is not int or attempt < 1:
+        return None
+    jobs = list(_rows(f"/repos/{repo}/actions/runs/{run['id']}/attempts/{attempt}/jobs", "jobs"))
+    matched = [job for job in jobs if job.get("name") == "deploy"]
+    if len(matched) != 1:
+        return None
+    job = matched[0]
+    started = parse_datetime(job.get("started_at"))
+    completed = parse_datetime(job.get("completed_at"))
+    merged = parse_datetime(merged_at)
+    if (
+        job.get("status") != "completed"
+        or job.get("conclusion") != "success"
+        or not all((merged, started, completed))
+        or not merged <= started <= completed <= datetime.now(UTC)
+    ):
+        return None
+    return completed.isoformat()
+
+
 def collect_delivery(state):
     try:
         return _collect_delivery(state)
@@ -269,6 +293,7 @@ def _collect_delivery(state):
         "status": "deployment_verified",
         "scope": "shared_host_production",
         "verified_at": datetime.now(UTC).isoformat(),
+        "deployment_completed_at": _deployment_completed_at(repo, run, pr.get("merged_at")),
         "candidate_sha": candidate,
         "pull_request_number": number,
         "receipt": receipt,

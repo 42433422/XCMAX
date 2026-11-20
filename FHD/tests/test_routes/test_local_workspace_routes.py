@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import errno
 import itertools
 import json
 import socket
 import sqlite3
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
+from types import SimpleNamespace
 from urllib.parse import urlsplit
 
 import httpx
@@ -256,6 +259,88 @@ def test_legacy_binding_without_host_resumes_on_selected_interface(local_desktop
         stop_peer()
         routes.resume_local_workspace()
         assert call("pull", workspace_id=bound["workspace_id"], after=0)["success"]
+
+
+@pytest.mark.parametrize("access", ["status", "records"])
+def test_paired_workspace_access_retries_offline_start_without_repairing(
+    local_desktop, monkeypatch, access
+):
+    qr = local_desktop.post("/api/local-workspace/pairing").json()["qr"]
+    phone, call = phone_connection(qr)
+    with phone:
+        bound = call("bind", origin="desktop")
+    saved = routes._current_peer().store.peer_binding()
+    address = (saved["host"], saved["port"])
+    stop_peer()
+
+    clock = [1000.0]
+    monkeypatch.setattr(routes, "time", SimpleNamespace(monotonic=lambda: clock[0]))
+    monkeypatch.setattr(routes, "_lan_address", lambda: "127.0.0.2")
+    bind = socket.socket.bind
+    attempts = []
+    online = [False]
+
+    def unavailable_until_reconnected(listener, requested):
+        if requested == address:
+            attempts.append(listener)
+            if not online[0]:
+                raise OSError(errno.EADDRNOTAVAIL, "Saved LAN interface is offline")
+        return bind(listener, requested)
+
+    monkeypatch.setattr(socket.socket, "bind", unavailable_until_reconnected)
+    try:
+        routes.resume_local_workspace()
+    except OSError as exc:
+        # Infrastructure mounting already catches this startup failure.
+        assert exc.errno == errno.EADDRNOTAVAIL
+    peer = routes._peer(routes.get_desktop_data_dir())
+    assert len(attempts) == 1 and attempts[0].fileno() == -1
+    assert peer.server is None and peer.store.peer_binding() == saved
+
+    # Local reads/writes remain available without restarting or discarding pairing.
+    response = local_desktop.post(
+        "/api/local-workspace/records",
+        json={
+            "workspace_id": bound["workspace_id"],
+            "operations": [change("a", DESK, "Written while offline")],
+        },
+    )
+    assert response.status_code == 200 and response.json()["accepted"] == ["a" * 32]
+    clock[0] += 1
+    assert local_desktop.get("/api/local-workspace/status").json()["paired"]
+    assert local_desktop.get("/api/local-workspace/records").json()["records"][0]["id"] == DESK
+    assert local_desktop.post("/api/local-workspace/pairing").status_code == 409
+    assert len(attempts) == 1
+
+    clock[0] += 60
+    assert (
+        local_desktop.get(
+            f"/api/local-workspace/{access}",
+            headers={"X-XCAGI-Workspace-Capability": "b" * 64},
+        ).status_code
+        == 403
+    )
+    assert len(attempts) == 1
+    with ThreadPoolExecutor(max_workers=4) as requests:
+        responses = list(
+            requests.map(lambda _: local_desktop.get(f"/api/local-workspace/{access}"), range(8))
+        )
+    assert all(response.status_code == 200 for response in responses)
+    assert len(attempts) == 2 and attempts[1].fileno() == -1 and peer.server is None
+
+    online[0] = True
+    clock[0] += 60
+    local_desktop.get(f"/api/local-workspace/{access}").raise_for_status()
+    assert len(attempts) == 3 and peer.host == saved["host"] and peer.port == saved["port"]
+    assert peer.store.peer_binding() == saved and peer.invitation is None
+
+    # The original phone key and endpoint still exchange the persisted offline write.
+    phone, call = phone_connection(qr)
+    with phone:
+        pulled = call("pull", workspace_id=bound["workspace_id"], after=bound["cursor"])
+    assert pulled["success"] and len(pulled["changes"]) == 1
+    assert pulled["changes"][0]["record"]["data"] == {"name": "Written while offline"}
+    assert len(attempts) == 3
 
 
 def test_mobile_seed_archives_original_desktop_and_restore_after_unbind(local_desktop):

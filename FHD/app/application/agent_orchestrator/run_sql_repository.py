@@ -362,27 +362,30 @@ class SQLAlchemyAgentRunRepository:
         )
 
     def _save_if_unchanged(self, run: AgentRun, previous: AgentRun) -> bool:
-        from app.db.models.agent import AgentRunRecord
-
         self._ensure_schema()
         with self._session_scope() as db:
-            record = db.get(AgentRunRecord, previous.run_id)
-            if record is None:
-                return False
-            current = self._record_to_run(record)
-            if current is None or current.to_dict() != previous.to_dict():
-                return False
-            matched = (
-                db.query(AgentRunRecord)
-                .filter(
-                    AgentRunRecord.run_id == previous.run_id,
-                    AgentRunRecord.payload_json == record.payload_json,
-                )
-                .update({AgentRunRecord.status: record.status}, synchronize_session=False)
+            return self.save_if_unchanged_in_session(db, run, previous)
+
+    def save_if_unchanged_in_session(self, db: Session, run: AgentRun, previous: AgentRun) -> bool:
+        from app.db.models.agent import AgentRunRecord
+
+        record = db.get(AgentRunRecord, previous.run_id)
+        if record is None:
+            return False
+        current = self._record_to_run(record)
+        if current is None or current.to_dict() != previous.to_dict():
+            return False
+        matched = (
+            db.query(AgentRunRecord)
+            .filter(
+                AgentRunRecord.run_id == previous.run_id,
+                AgentRunRecord.payload_json == record.payload_json,
             )
-            if matched != 1:
-                return False
-            self.save_in_session(db, run)
+            .update({AgentRunRecord.status: record.status}, synchronize_session=False)
+        )
+        if matched != 1:
+            return False
+        self.save_in_session(db, run)
         return True
 
     def save_claimed(self, run: AgentRun, *, owner_id: str, execution_count: int) -> AgentRun:
@@ -493,6 +496,7 @@ class SQLAlchemyAgentRunRepository:
         limit: int = 50,
         tenant_id: str | None = None,
         mod_id: str | None = None,
+        matches: Callable[[AgentRun], bool] | None = None,
     ) -> list[AgentRun]:
         self._ensure_schema()
         with self._session_scope(read_only=True) as db:
@@ -502,7 +506,7 @@ class SQLAlchemyAgentRunRepository:
             if user_id is not None:
                 query = query.filter(AgentRunRecord.user_id == str(user_id))
             query = query.order_by(AgentRunRecord.updated_at.desc())
-            if tenant_id is None and mod_id is None:
+            if tenant_id is None and mod_id is None and matches is None:
                 records = query.limit(max(0, int(limit))).all()
                 return [
                     run for record in records if (run := self._record_to_run(record)) is not None
@@ -518,6 +522,7 @@ class SQLAlchemyAgentRunRepository:
                     run is not None
                     and (tenant_id is None or tenant_id_of_run(run) == tenant_id)
                     and (mod_id is None or mod_id_of_run(run) == mod_id)
+                    and (matches is None or matches(run))
                 ):
                     result.append(run)
                     if len(result) >= limit:

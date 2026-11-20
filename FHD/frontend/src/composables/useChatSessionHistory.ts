@@ -14,6 +14,7 @@ import { asRecord, asArray, asString } from '@/utils/typeGuards'
 import { formatChatMessageTime } from '@/utils/chatTaskLabels'
 import { readAiSessionIdFromStorage, resolveChatStorageScope, writeAiSessionIdToStorage } from '@/utils/chatStorageKeys'
 import { captureAuthSession } from '@/utils/authSessionCache'
+import type { ChatConversationStatus } from './useChatSessionActivity'
 
 export interface UseChatSessionHistoryDeps {
   sessionId: Ref<string>
@@ -33,6 +34,9 @@ export interface UseChatSessionHistoryDeps {
   generateSessionId: () => string
   normalizeServerContentToHtml: (raw: unknown) => string
   onIdentityChange?: () => void
+  isSessionBusy?: (sessionId: string) => boolean
+  captureRound?: (sessionId: string) => () => boolean
+  onConversation?: (data: unknown) => void
 }
 
 export type HistorySessionItem = {
@@ -41,6 +45,7 @@ export type HistorySessionItem = {
   message_count?: number
   last_message_at?: string
   is_local_only?: boolean
+  activity?: ChatConversationStatus
 }
 
 export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
@@ -79,17 +84,19 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
   let serverHistory: unknown[] = []
   let nextHistoryOffset = 0
   let requestEpoch = 0
+  let selectionEpoch = 0
+  let clearingHistory = false
   let disposed = false
   if (getCurrentScope()) onScopeDispose(() => { disposed = true; requestEpoch += 1 })
 
-  function captureRequest() {
-    const epoch = ++requestEpoch
+  function captureRequest(selecting = false) {
+    const epoch = selecting ? ++selectionEpoch : ++requestEpoch
     const modId = String(modsStore.activeModId || '')
     const tenant = resolveChatStorageScope()
     const isOwnerCurrent = captureAuthSession()
     return {
       epoch,
-      isCurrent: () => !disposed && isOwnerCurrent() && epoch === requestEpoch && modId === String(modsStore.activeModId || '')
+      isCurrent: () => !disposed && isOwnerCurrent() && epoch === (selecting ? selectionEpoch : requestEpoch) && modId === String(modsStore.activeModId || '')
         && tenant === resolveChatStorageScope(),
     }
   }
@@ -142,7 +149,7 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
       const page = asArray(dataRow.sessions ?? dataRow.data ?? dataRow.conversations)
       if (append && dataRow.next_offset === undefined) throw new Error('当前服务尚不支持历史分页，请更新服务后重新加载')
       serverHistory = append ? [...serverHistory, ...page] : page
-      historySessions.value = mergeHistorySessions(serverHistory) as HistorySessionItem[]
+      refreshLocalHistorySessions()
       nextHistoryOffset = Number(dataRow.next_offset ?? page.length)
       historyHasMore.value = dataRow.has_more === true || (dataRow.has_more === undefined && page.length === 20)
     } catch (e) {
@@ -154,6 +161,7 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
     }
   }
 
+  function refreshLocalHistorySessions() { historySessions.value = mergeHistorySessions(serverHistory) as HistorySessionItem[] }
   async function refreshHistorySessions() { await fetchHistoryPage() }
   async function loadMoreHistorySessions() { await fetchHistoryPage(true) }
 
@@ -164,25 +172,32 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
 
   async function loadSession(targetSessionId: string, canApply = () => true) {
     const sid = String(targetSessionId || '').trim()
-    if (!sid || historyLoading.value || !canApply()) return
-    const request = captureRequest()
+    if (!sid || clearingHistory || !canApply()) return
+    const request = captureRequest(true)
 
     const previousSessionId = String(sessionId.value || '').trim()
     persistTaskPanelStateForSession(previousSessionId || 'default')
     historyError.value = ''
-    historyLoading.value = true
     sessionId.value = sid
     writeAiSessionIdToStorage(sid)
     applyPersistedTaskPanelStateForSession(sid)
+    if (deps.isSessionBusy?.(sid)) {
+      showHistory.value = false
+      return
+    }
+    const isRoundCurrent = deps.captureRound?.(sid)
+    const canLoad = () => request.isCurrent() && sessionId.value === sid && canApply()
+      && isRoundCurrent?.() !== false && !deps.isSessionBusy?.(sid)
 
     try {
       const data = await chatApi.getConversation(sid)
-      if (!request.isCurrent() || sessionId.value !== sid || !canApply()) return
+      if (!canLoad()) return
       const dataRow = asRecord(data)
       const serverMessages = asArray(dataRow.messages ?? asRecord(dataRow.data).messages)
       if (dataRow.durable === true && dataRow.revision === null) {
         loadMessages([], dataRow)
         showHistory.value = false
+        deps.onConversation?.(dataRow)
         return
       }
       const localMessages = normalizeLocalMessages(readLocalMessagesBySession(sid)).filter(message =>
@@ -224,8 +239,9 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
         throw new Error(asString((data as { message?: unknown }).message, '加载会话失败'))
       }
       showHistory.value = false
+      deps.onConversation?.(dataRow)
     } catch (e) {
-      if (!request.isCurrent() || sessionId.value !== sid || !canApply()) return
+      if (!canLoad()) return
       const localMessages = readLocalMessagesBySession(sid)
       if (localMessages.length > 0) {
         loadMessages(
@@ -240,16 +256,16 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
         applyPersistedTaskPanelStateForSession(previousSessionId || 'default')
         console.error('加载会话失败:', e)
       }
-    } finally {
-      finishRequest(request.epoch)
     }
   }
 
   async function clearHistorySessions() {
-    if (historyLoading.value) return
+    if (historyLoading.value || historySessions.value.some(row => deps.isSessionBusy?.(row.session_id))) return
     const confirmed = window.confirm('确认清空所有历史对话吗？此操作不可撤销。')
     if (!confirmed) return
     const request = captureRequest()
+    selectionEpoch += 1
+    clearingHistory = true
 
     historyLoading.value = true
     historyError.value = ''
@@ -272,6 +288,7 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
         : e instanceof Error ? e.message : '清空历史失败，本机记录已保留，请稍后重试'
       console.error('清空历史失败:', e)
     } finally {
+      clearingHistory = false
       finishRequest(request.epoch)
     }
   }
@@ -300,7 +317,7 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
 
   async function deleteSession(targetSessionId: string): Promise<boolean> {
     const sid = String(targetSessionId || '').trim()
-    if (!sid || historyLoading.value) return false
+    if (!sid || historyLoading.value || deps.isSessionBusy?.(sid)) return false
     const request = captureRequest()
     historyError.value = ''
     try {
@@ -351,6 +368,8 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
   }
 
   function newConversation() {
+    if (clearingHistory) return
+    selectionEpoch += 1
     requestEpoch += 1
     historyLoading.value = false
     historyLoadingMore.value = false
@@ -365,6 +384,7 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
     watch(
       () => JSON.stringify([String(modsStore.activeModId || ''), resolveChatStorageScope()]),
       () => {
+        selectionEpoch += 1
         requestEpoch += 1
         deps.onIdentityChange?.()
         historyLoading.value = false
@@ -391,6 +411,7 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
     historyHasMore,
     historyLoadingMore,
     loadMoreHistorySessions,
+    refreshLocalHistorySessions,
     refreshHistorySessions,
     restoreLatestOwnedSession,
     showHistoryPanel,

@@ -9,6 +9,16 @@ from modstore_server import app_config_api as api
 from modstore_server.app_config_api import api_app_config
 
 
+def test_enterprise_uses_published_combined_legal_document(monkeypatch):
+    monkeypatch.setenv("XCAGI_PUBLIC_BASE_URL", "https://xiu-ci.com")
+    enterprise = api_app_config("android", "enterprise", 0)
+    assert enterprise["privacy_url"] == "https://xiu-ci.com/privacy.html"
+    assert enterprise["terms_url"] == enterprise["privacy_url"]
+    personal = api_app_config("android", "personal", 0)
+    assert personal["privacy_url"].endswith("/legal/privacy")
+    assert personal["terms_url"].endswith("/legal/terms")
+
+
 def test_ios_update_requires_published_store_metadata(monkeypatch):
     monkeypatch.delenv("XCAGI_IOS_APP_STORE_ID", raising=False)
     monkeypatch.delenv("XCAGI_IOS_LATEST_VERSION_NAME", raising=False)

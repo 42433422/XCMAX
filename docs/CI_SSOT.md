@@ -631,9 +631,25 @@ curl -sf https://xiu-ci.com/fhd-api/api/health
 |---|---|---|
 | `fhd-ai-self-heal.yml` | 失败运行 + 每小时 17/47 分已有事故对账 + 手动只读盘点 | `.github/workflows/fhd-ai-self-heal.yml` |
 | `fhd-ai-review.yml` | `pull_request` opened/synchronize | `.github/workflows/fhd-ai-review.yml` |
-| `fhd-ai-self-heal-auto-merge.yml` | 原风险门禁合并 + 已合入 PR 的主干 CI 回执恢复 | `.github/workflows/fhd-ai-self-heal-auto-merge.yml` |
+| `fhd-ai-self-heal-auto-merge.yml` | 北京时间每天 02:00–05:00 串行集成已排定的主线 PR，持续核对已合入 PR 的主干 CI 回执 | `.github/workflows/fhd-ai-self-heal-auto-merge.yml` |
+| `fhd-para-nightly-release.yml` | GitHub Actions 每天北京时间 06:00 核对合入回执，提交待审核的版本候选 PR | `.github/workflows/fhd-para-nightly-release.yml` |
 | `fhd-para-github-worker.yml` | 原派工 → 独立执行/发布/续验/验收 job | `.github/workflows/fhd-para-github-worker.yml` |
 | `fhd-cvm-autonomy-watcher.yml` | `schedule(*/10 * * * *)` + workflow_dispatch | `.github/workflows/fhd-cvm-autonomy-watcher.yml` |
+
+Para 在窗口内可唤起既有 GitHub Actions 工作流。工作流按 `XCMAX_MAIN_MERGE_QUEUE`
+中的次序处理 `main` 的 PR。仓库维护者在所需评审完成后，按终极员工已确认的顺序登记 JSON 数组，
+每项包含 `pr` 和完整 `head_sha`。空数组等同于本轮没有待合入 PR。首个未合入的 PR 如有
+`hold-merge`、检查未通过或提交变化，后续 PR 等待该项处理。分支落后于 `main` 时，发起
+GitHub 分支同步，评审和 CI 核对新提交后更新队列中的 `head_sha`，再继续集成。
+GitHub 上未解除的评审修改要求会暂停合入。源码增长评审在登记该提交前完成。
+每次请求合入前复核当前时刻，05:00 起仅处理已有回执及原 SLA 事项。
+
+02:00–05:00 盘点北京时间昨天创建、当前目标为 `main` 的全部 PR，包括队列外与已关闭的
+PR。合入仍使用既定顺序和 GitHub 保护规则。06:00 仅由批准队列中的 PR 阻断候选准备，
+并逐个核对批准的提交及其合入回执属于 `main`；队列外与已关闭的未批准 PR 只作盘点。
+本轮有新增合入且队列已收口时，预检后生成带 `hold-merge` 的候选版本 PR。维护者审核并
+登记该精确提交的顺序后才可合入，随后沿既有正式发布流程构建和验收。该工作流的手动触发供只读核对。
+全域 OTA 晋级以 Para 复测、各渠道签名与发布回执为输入。
 
 ### 关键约束
 
@@ -651,6 +667,8 @@ curl -sf https://xiu-ci.com/fhd-api/api/health
 | 所有动作必审计 | AuditEntry 是唯一事后真相，三端共用语义；通过 `audit_query.py` CLI 查询 |
 
 从 `FHD/` 执行 `python scripts/ci/ai_self_heal.py --reconcile --dry-run` 仅生成 `test_reports/self_heal_reconciliation.json`；省略 `--dry-run` 才按证据续接或处理已替代事故。手动工作流设置 `reconcile=true` 默认只读，定时对账自动恢复。超过文件体量、授权缺失或不明写入结果仍明确等待处理，不通过提高阈值回避。GitHub 发布凭据按 VM 隔离；执行器仍使用现有 Para 设备及管理服务身份，不宣称模型与同一执行 VM 的管理进程相互隔离。现有 `run_attempt=1` 保护继续有效，失败 GitHub 工作空间需按原派工核对，不保证任意 workflow 重跑都能续接。
+
+GitHub Actions 定期查找同仓库开放 PR 的当前提交上仍失败的代码检查。MODstore 在原事故和当前提交下登记派工，调用已有 Para GitHub Worker。云端执行任务只提交 Git 候选，独立发布任务校验原事故、原 PR、提交和制品摘要后发布修复分支。原 PR 更新用 Git 快进和 pre-push 钩子核对服务端当前 HEAD。派工回执关联控制任务、Para 任务、GitHub 云端运行、新 HEAD 和新 CI。正式合入沿用主线保护。 [Git 钩子文档](https://git-scm.com/docs/githooks#_pre_push)
 
 ### 触发条件矩阵
 

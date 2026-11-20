@@ -9,7 +9,7 @@ import {
   shellIconPath,
   shouldClearFrontendCache,
 } from './desktop-config'
-import { desktopRuntime } from './runtime-state'
+import { desktopRuntime, hasVerifiedDesktopBackend } from './runtime-state'
 import {
   checkForceUpgrade,
   packagedBackendHealthTimeoutMs,
@@ -170,6 +170,7 @@ export function openTrustedAuxiliaryFromHandler(
  * 存储分区不共享，关窗即销毁，不隐藏到托盘，也不再起一个后端。
  */
 export function openAuxiliaryWindow(rawUrl: string): Electron.BrowserWindow | null {
+  if (!hasVerifiedDesktopBackend()) return null
   if (!isTrustedDesktopOrigin(rawUrl, DEFAULT_PORT)) {
     writeBackendLog('[window] refused untrusted auxiliary url\n')
     return null
@@ -217,6 +218,7 @@ export function openAuxiliaryWindow(rawUrl: string): Electron.BrowserWindow | nu
     try {
       await copyDesktopLoginCookies(isolated)
       if (win.isDestroyed()) return
+      if (!hasVerifiedDesktopBackend()) { win.close(); return }
       await win.loadURL(rawUrl)
     } catch (error) {
       writeBackendLog(`[window] auxiliary load failed: ${error instanceof Error ? error.message : String(error)}\n`)
@@ -555,6 +557,7 @@ export async function createWindow(): Promise<void> {
     try {
       updateSplashProgress(92, '正在打开主界面…')
       await frontendCacheReady
+      if (!hasVerifiedDesktopBackend()) throw new Error('本机后端的启动身份尚未确认')
       await desktopRuntime.mainWindow.loadURL(desktopInitialUrl(), {
         extraHeaders: 'Cache-Control: no-cache\r\n'
       })
@@ -631,7 +634,7 @@ export async function createWindow(): Promise<void> {
     if (desktopRuntime.mainWindow) tagDesktopWebContents(desktopRuntime.mainWindow)
   })
 
-  void waitForBackendStatus(DEFAULT_PORT).then(status => {
+  void pingReady.then(() => waitForBackendStatus(DEFAULT_PORT)).then(status => {
     console.info(
       '[xcagi-desktop] startup',
       JSON.stringify({
@@ -640,7 +643,7 @@ export async function createWindow(): Promise<void> {
       })
     )
     void showDbRecoveryDialogIfNeeded(status)
-  })
+  }, () => undefined)
 
   // E2E（XCAGI_DESKTOP_E2E=1）跳过 updater 挂载：避免 60s 后的真实 OTA 检查出网。
   if (process.env.XCAGI_DESKTOP_E2E !== '1') {

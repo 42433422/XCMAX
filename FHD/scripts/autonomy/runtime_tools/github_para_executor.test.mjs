@@ -40,3 +40,52 @@ test('resume waits for the original team and returns failure for failed verifica
     }
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test('platform execution uses the admitted route and limited gateway credential', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'para-platform-'));
+  try {
+    const env = { ...environment(root, 'resume'), PARA_PLATFORM_POOL: '1',
+      PARA_PLATFORM_GATEWAY_KEYS_JSON: JSON.stringify({
+        'coding-route': 'fixture-platform-key', 'backup-route': 'fixture-backup-key',
+        'unapproved-route': 'fixture-unused-key',
+      }), CODEX_API_KEY: 'fixture-agent-plan-key', DEVFLEET_CODEX_MODEL_CANDIDATES: 'ark-code-latest' };
+    const stub = (data) => async () => ({ ok: true, json: async () => data });
+    await assert.rejects(runGithubExecutor({ env, fetchStatus: stub(identity),
+      spawnWorker: () => assert.fail('must not start without model admission') }), /platform_model_allocation/);
+    let reads = 0;
+    const model_allocation = { status: 'admitted', model: 'coding-route', approved_models: ['coding-route', 'backup-route'] };
+    await assert.rejects(runGithubExecutor({ env, fetchStatus: stub({ ...identity, model_allocation: { ...model_allocation, approved_models: ['other'] } }),
+      spawnWorker: () => assert.fail('must reject a list inconsistent with the approved primary') }), /platform_model_allocation/);
+    const agent = new EventEmitter(); agent.kill = () => {};
+    const result = await runGithubExecutor({ env,
+      fetchStatus: () => stub({ ...identity, finished: ++reads > 1, conclusion: 'success', model_allocation })(),
+      spawnWorker: (_exe, _args, { env: child }) => {
+        assert.equal(child.CODEX_API_KEY, 'fixture-platform-key');
+        assert.equal(child.PARA_PLATFORM_GATEWAY_KEY, undefined);
+        assert.equal(child.PARA_PLATFORM_GATEWAY_KEYS_JSON, undefined);
+        assert.deepEqual(JSON.parse(child.PARA_PLATFORM_APPROVED_KEYRING), {
+          'coding-route': 'fixture-platform-key', 'backup-route': 'fixture-backup-key',
+        });
+        assert.equal(child.PARA_PLATFORM_MODEL, 'coding-route');
+        assert.equal(child.PARA_PLATFORM_MODEL_CANDIDATES, 'coding-route,backup-route');
+        return agent;
+      },
+    });
+    assert.equal(result, 0);
+    reads = 0;
+    const agentPlan = { ...model_allocation, model: 'ark-code-latest', agent_plan_first: true,
+      approved_models: ['ark-code-latest', 'coding-route'] };
+    const withPlan = await runGithubExecutor({ env,
+      fetchStatus: () => stub({ ...identity, finished: ++reads > 1, conclusion: 'success', model_allocation: agentPlan })(),
+      spawnWorker: (_exe, _args, { env: child }) => {
+        assert.equal(child.CODEX_API_KEY, 'fixture-agent-plan-key');
+        assert.equal(child.PARA_PLATFORM_AGENT_PLAN_FIRST, '1');
+        assert.deepEqual(JSON.parse(child.PARA_PLATFORM_APPROVED_KEYRING), {
+          'ark-code-latest': 'fixture-agent-plan-key', 'coding-route': 'fixture-platform-key',
+        });
+        return agent;
+      },
+    });
+    assert.equal(withPlan, 0);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});

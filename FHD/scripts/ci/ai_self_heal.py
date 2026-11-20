@@ -1059,12 +1059,19 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--dry-run", action="store_true", help="只读诊断/对账，不派发或关闭事件")
     parser.add_argument("--reconcile", action="store_true", help="对账并恢复已有 auto-incident")
+    parser.add_argument(
+        "--scan-open-prs",
+        action="store_true",
+        help="扫描授权的 main PR，并将当前 HEAD 上受支持的失败 CI 接入既有 Para 自愈链路",
+    )
     args = parser.parse_args(argv)
 
     token = os.environ.get("GITHUB_TOKEN", "")
     repo = os.environ.get("GITHUB_REPOSITORY", "")
     if args.reconcile:
         return reconcile_incidents(token, repo, dry_run=args.dry_run)
+    if args.scan_open_prs:
+        return scan_open_prs(token, repo, dry_run=args.dry_run)
 
     # autonomy/ 分支不递归
     if is_autonomy_branch(args.branch):
@@ -1211,6 +1218,135 @@ def main(argv: list[str] | None = None) -> int:
     )
     print(f"[heal] fingerprint recorded: {fingerprint[:8]}")
     return 2
+
+
+def scan_open_prs(token: str, repo: str, *, dry_run: bool = False) -> int:
+    """Backstop workflow_run delivery by discovering eligible failures on open PRs.
+
+    This is deliberately narrow: same-repository, trusted author, non-draft PRs
+    targeting this repository's main branch, and a completed failure from an
+    allowlisted code workflow on the exact current PR HEAD. Each candidate is
+    handed to the normal self-heal entrypoint, which rechecks freshness and
+    authorization before creating an incident or dispatching Para.
+    """
+    if not token or not repo or httpx is None:
+        print("::error::[scan] GitHub token, repository, or HTTP client unavailable")
+        return 2
+
+    from scripts.dev import para_pr_repair
+
+    get = _github_getter(token, repo)
+    authors = para_pr_repair.load_trusted_authors()
+    failures: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    try:
+        prs = freshness.pages(
+            get,
+            f"/repos/{repo}/pulls",
+            {"state": "open", "base": "main", "sort": "updated", "direction": "desc"},
+        )
+        for pr in prs:
+            head, base = pr.get("head") or {}, pr.get("base") or {}
+            number, branch, sha = (
+                pr.get("number"),
+                str(head.get("ref") or ""),
+                str(head.get("sha") or ""),
+            )
+            if (
+                type(number) is not int
+                or not para_pr_repair.authorized_pr(pr, authors)
+                or not para_pr_repair.BRANCH.fullmatch(branch)
+                or ".." in branch
+                or branch == "main"
+                or is_autonomy_branch(branch)
+                or base.get("ref") != "main"
+                or (base.get("repo") or {}).get("full_name", "").casefold() != repo.casefold()
+                or (head.get("repo") or {}).get("full_name", "").casefold() != repo.casefold()
+                or not re.fullmatch(r"[0-9a-f]{40}", sha)
+            ):
+                continue
+
+            runs = freshness.pages(
+                get,
+                f"/repos/{repo}/actions/runs",
+                {"head_sha": sha, "event": "pull_request", "per_page": 100},
+                key="workflow_runs",
+            )
+            latest = {}
+            for run in runs:
+                path = run.get("path")
+                if (
+                    path not in freshness.CODE_CI_PATHS
+                    or run.get("head_sha") != sha
+                    or run.get("head_branch") != branch
+                    or run.get("event") != "pull_request"
+                    or (
+                        run.get("pull_requests")
+                        and [item.get("number") for item in run["pull_requests"]] != [number]
+                    )
+                ):
+                    continue
+                current = latest.get(path)
+                if current is None or _run_order(run) > _run_order(current):
+                    latest[path] = run
+            eligible = [
+                run
+                for run in latest.values()
+                if run.get("status") == "completed" and run.get("conclusion") == "failure"
+            ]
+            if not eligible:
+                continue
+            run = max(eligible, key=_run_order)
+            workflow_id = int(run.get("workflow_id") or 0)
+            path = str(run.get("path") or "")
+            if workflow_id < 1:
+                continue
+            target = para_pr_repair.Target(number, branch, sha, int(run["id"]), workflow_id, path)
+            # Reuse the original-PR authorization contract; discovery alone never
+            # grants write permission or weakens the implementation workflow gate.
+            try:
+                para_pr_repair.open_pr(repo, target, sha, get)
+            except ValueError:
+                print(f"::notice::[scan] PR #{number} could not be reauthorized")
+                continue
+            failures.append((pr, run))
+    except (
+        freshness.LookupFailed,
+        AttributeError,
+        KeyError,
+        TypeError,
+        ValueError,
+        *RECOVERABLE_ERRORS,
+    ) as exc:
+        print(f"::error::[scan] fail-closed GitHub discovery: {type(exc).__name__}: {exc}")
+        return 2
+
+    print(f"[scan] eligible exact-HEAD PR failures={len(failures)}")
+    result = 0
+    for pr, run in failures:
+        print(
+            f"[scan] PR #{pr['number']} head={pr['head']['sha']} "
+            f"run={run['id']} workflow={run['name']}"
+        )
+        code = main(
+            [
+                "--run-id",
+                str(run["id"]),
+                "--workflow",
+                freshness.CODE_CI_PATHS[run["path"]],
+                "--branch",
+                str(pr["head"]["ref"]),
+                "--head-repo",
+                repo,
+                *(["--dry-run"] if dry_run else []),
+            ]
+        )
+        if code:
+            result = code
+    return result
+
+
+def _run_order(run: dict) -> tuple[str, int, int]:
+    return str(run.get("created_at") or ""), int(run["id"]), int(run.get("run_attempt") or 0)
 
 
 def _run_id_from_env() -> int | None:

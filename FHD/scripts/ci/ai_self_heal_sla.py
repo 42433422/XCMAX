@@ -85,6 +85,14 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
+from scripts.ci.para_pr_integration import (
+    QUEUE_VARIABLE,
+    REPOSITORY,
+    WINDOW_CLOSED,
+    integration_queue,
+    integration_window_open,
+    process_integration_queue,
+)
 
 try:
     import httpx
@@ -340,6 +348,22 @@ class GitHubClient:
     def get_pr_files(self, pr_number: int) -> list[str]:
         return [item["filename"] for item in self._pages(f"pulls/{pr_number}/files")]
 
+    def check_integration_reviews(self, pr: PRInfo) -> tuple[bool, str]:
+        """Respect unresolved GitHub review vetoes on PRs already approved for the queue."""
+        latest_reviews = {}
+        for review in self._pages(f"pulls/{pr.number}/reviews"):
+            reviewer = _extract_login(review.get("user")).casefold()
+            if (
+                reviewer
+                and reviewer != pr.author.casefold()
+                and review.get("author_association") in {"OWNER", "MEMBER", "COLLABORATOR"}
+                and review.get("state") in {"APPROVED", "CHANGES_REQUESTED", "DISMISSED"}
+            ):
+                latest_reviews[reviewer] = review["state"]
+        if "CHANGES_REQUESTED" in latest_reviews.values():
+            return False, "review:changes_requested"
+        return True, "ok"
+
     def get_pr_check_runs(self, pr_number: int, head_sha: str) -> tuple[bool, str]:
         """Require complete, current-head checks and legacy commit statuses."""
         if not head_sha:
@@ -464,6 +488,8 @@ class GitHubClient:
         url = f"{GITHUB_API}/repos/{self.repo}/pulls/{pr_number}/merge"
         if not _valid_sha(expected_head_sha):
             return False, "invalid_head_sha", ""
+        if self.repo.casefold() == REPOSITORY.casefold() and not integration_window_open():
+            return False, WINDOW_CLOSED, ""
         resp = self.client.put(url, json={"merge_method": method, "sha": expected_head_sha})
         if resp.status_code == 200:
             try:
@@ -944,6 +970,13 @@ def _try_auto_merge(
     返回 auto_merged / branch_updated / post_merge_dispatch_failed /
     merge_failed / skipped。
     """
+    scheduled = client.repo.casefold() == REPOSITORY.casefold()
+    if scheduled and not integration_window_open():
+        return WINDOW_CLOSED
+    if scheduled:
+        reviews_ok, reason = client.check_integration_reviews(pr)
+        if not reviews_ok:
+            return reason
     mergeable, mreason = client.get_pr_mergeability(pr.number)
     if mergeable is None:
         print(f"  skip: mergeable 未知 ({mreason})")
@@ -993,12 +1026,14 @@ def _try_auto_merge(
                 }
             )
             return "skipped"
+        if scheduled and not integration_window_open():
+            return WINDOW_CLOSED
         updated, update_reason = client.update_pr_branch(pr.number, expected_head_sha)
         if updated:
-            print(
-                f"  branch update requested: head={expected_head_sha}; "
-                "等待新 head 的 AI Review + CI"
-            )
+            next_step = "等待新 head 的 AI Review + CI"
+            if scheduled:
+                next_step += "，评审后更新队列中的提交 SHA"
+            print(f"  branch update requested: head={expected_head_sha}; {next_step}")
             _append_stale(
                 {
                     "pr": pr.number,
@@ -1034,6 +1069,8 @@ def _try_auto_merge(
     ok, reason, merge_sha = client.merge_pr(
         pr.number, expected_head_sha=pr.head_sha, method="squash"
     )
+    if reason == WINDOW_CLOSED:
+        return WINDOW_CLOSED
     if ok:
         delivery = client.reconcile_delivery(pr.number, expected_merge_sha=merge_sha)
         failed = delivery in ("blocked", "dispatch_failed")
@@ -1337,6 +1374,7 @@ def process_pr(
     r3_stale_days: int,
     r3_close_days: int,
     dry_run: bool = False,
+    allow_auto_merge: bool = True,
 ) -> str:
     """按 SLA 处理单个 PR，返回动作（auto_merged / stale_warned / closed / skipped）。"""
     now = time.time()
@@ -1373,6 +1411,8 @@ def process_pr(
 
     # ===== R0 / R1: auto-merge 候选 =====
     if risk in AUTO_MERGE_RISK_LEVELS:
+        if not allow_auto_merge:
+            return "skipped"
         threshold = r0_hours if risk == "r0" else r1_hours
         if age_hours < threshold:
             print(f"  skip: 未达 {threshold}h 阈值 ({age_hours:.1f}h)")
@@ -1521,6 +1561,27 @@ def main(argv: list[str] | None = None) -> int:
         # Do not merge more PRs while the durable recovery index is unreadable.
         return 1
 
+    scheduled = args.repo.casefold() == REPOSITORY.casefold()
+    try:
+        ordered = integration_queue(os.environ.get(QUEUE_VARIABLE, "")) if scheduled else {}
+    except ValueError as exc:
+        print(f"[error] integration queue: {exc}", file=sys.stderr)
+        return 1
+
+    def handle_ai(pr: PRInfo, *, allow_auto_merge: bool) -> str:
+        return process_pr(
+            client,
+            pr,
+            r0_hours=args.auto_merge_r0_hours,
+            r1_hours=args.auto_merge_r1_hours,
+            r2_stale_days=args.stale_r2_days,
+            r2_close_days=args.close_r2_days,
+            r3_stale_days=args.stale_r3_days,
+            r3_close_days=args.close_r3_days,
+            dry_run=args.dry_run,
+            allow_auto_merge=allow_auto_merge,
+        )
+
     # ===== ai-self-heal / ai-generated PR: risk 分级 SLA =====
     prs = client.list_self_heal_prs()
     by_kind = {"self_heal": 0, "ai_generated": 0}
@@ -1541,24 +1602,42 @@ def main(argv: list[str] | None = None) -> int:
         "skipped": 0,
     }
     for pr in prs:
+        if pr.number in ordered:
+            continue
         try:
-            action = process_pr(
-                client,
-                pr,
-                r0_hours=args.auto_merge_r0_hours,
-                r1_hours=args.auto_merge_r1_hours,
-                r2_stale_days=args.stale_r2_days,
-                r2_close_days=args.close_r2_days,
-                r3_stale_days=args.stale_r3_days,
-                r3_close_days=args.close_r3_days,
-                dry_run=args.dry_run,
-            )
+            action = handle_ai(pr, allow_auto_merge=not scheduled)
             stats[action] = stats.get(action, 0) + 1
         except BOUNDARY_ERRORS as e:
             errors += 1
             print(f"[error] PR #{pr.number} 处理失败: {e}", file=sys.stderr)
 
     print(f"[sla] AI PR 处理完成: {stats}")
+
+    if scheduled:
+        allowlist_path = Path(args.allowlist_path) if args.allowlist_path else None
+        trusted_authors = load_trusted_authors(allowlist_path) if args.scan_regular_prs else []
+
+        def handle_ordered(data: dict[str, Any]) -> str:
+            labels = {label["name"] for label in data.get("labels", [])}
+            if labels.intersection(AI_PR_LABELS):
+                kind = "self_heal" if "ai-self-heal" in labels else "ai_generated"
+                risks = {label for label in labels if label.startswith("risk:")}
+                if risks not in ({"risk:r0"}, {"risk:r1"}):
+                    return "manual_or_ambiguous_risk"
+                return handle_ai(client._pr_info(data, kind), allow_auto_merge=True)
+            return process_regular_pr(
+                client, client._pr_info(data, "regular"), trusted_authors, dry_run=args.dry_run
+            )
+
+        print(f"[integration] approved queue entries={len(ordered)}")
+        try:
+            completed = process_integration_queue(
+                ordered, client.get_pr, handle_ordered, dry_run=args.dry_run
+            )
+        except BOUNDARY_ERRORS as exc:
+            print(f"[error] integration queue paused: {exc}", file=sys.stderr)
+            return 1
+        return int(not completed or bool(errors))
 
     # ===== 普通 PR: 三重门禁 auto-merge（opt-in）=====
     regular_stats: dict[str, int] = {}

@@ -11,6 +11,20 @@ function mockResponse(status: number, body: string, contentType = 'application/j
 }
 
 describe('safeJsonRequest', () => {
+  it('sends the session cookie and CSRF header on API mutations', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(mockResponse(200, '{"success":true}'))
+    vi.stubGlobal('fetch', fetchMock)
+    document.cookie = 'csrf_token=session-csrf; path=/'
+    try {
+      await safeJsonRequest('/api/aiopen/client/key', { method: 'DELETE' })
+      expect(fetchMock).toHaveBeenCalledWith('/api/aiopen/client/key', expect.objectContaining({
+        credentials: 'include', headers: expect.objectContaining({ 'X-CSRF-Token': 'session-csrf' }),
+      }))
+    } finally {
+      document.cookie = 'csrf_token=; Max-Age=0; path=/'
+    }
+  })
+
   it('parses successful JSON', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(mockResponse(200, '{"ok":true}')))
     const res = await safeJsonRequest<{ ok: boolean }>('/api/x')

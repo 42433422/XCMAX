@@ -17,17 +17,21 @@ describe('useChatSessionActivity', () => {
     taskA.setLoading(true)
     taskA.setStreaming(true)
     taskB.setLoading(true)
+    expect(activity.statuses.value).toEqual({ 'task-a': 'streaming', 'task-b': 'submitted' })
     expect(activity.isLoading.value).toBe(true)
     expect(activity.isStreamingReply.value).toBe(true)
 
     activeSessionId.value = 'task-b'
     expect(activity.isLoading.value).toBe(true)
     expect(activity.isStreamingReply.value).toBe(false)
-    taskA.setLoading(false)
+    activity.cancelSession('task-a')
     expect(activity.isLoading.value).toBe(true)
+    expect(activity.statuses.value).toEqual({ 'task-a': 'stopped', 'task-b': 'submitted' })
 
+    taskB.setStatus('waiting')
     taskB.setLoading(false)
     expect(activity.isLoading.value).toBe(false)
+    expect(activity.statuses.value['task-b']).toBe('waiting')
   })
 
   it('records product fast paths under the original task identity', async () => {

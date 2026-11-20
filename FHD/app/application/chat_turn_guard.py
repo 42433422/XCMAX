@@ -21,7 +21,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 _POLICY: ContextVar[str] = ContextVar("xcagi_chat_mutation_policy", default="allow")
 
 _BULK_ACTION = re.compile(r"(清理|删除|清空|清除).{0,16}(全部|所有|全量)")
-_BULK_TARGET = re.compile(r"客户|产品|订单|资料|数据")
+_NON_MASTER_TARGET = re.compile(r"知识库|数据库|模[板版]库|订单|资料|数据")
 _MUTATION = re.compile(
     r"delete|clear|remove|drop|update|create|write|insert|upsert|清理|删除|清空|写入", re.IGNORECASE
 )
@@ -104,7 +104,7 @@ def joined_display_text(parts: list[str]) -> str | None:
 
 def is_bulk_destructive(message: str) -> bool:
     text = str(message or "").strip()
-    return bool(text and _BULK_ACTION.search(text) and _BULK_TARGET.search(text))
+    return bool(_BULK_ACTION.search(text))
 
 
 def _tenant(ctx: dict[str, Any]) -> str:
@@ -176,6 +176,7 @@ def execution_payload(record: TurnRecord) -> dict[str, Any]:
         "intent": record.intent,
         "committed": record.committed,
         "effect": record.effect,
+        "confirmable": record.effect == "preview" and bool(record.key),
         "tenant_id": record.tenant_id,
         "customer_count": record.customer_count,
         "product_count": record.product_count,
@@ -225,7 +226,11 @@ def prepare_turn(message: str, ctx: dict[str, Any]) -> dict[str, Any] | None:
     key = _key(ctx)
     retry = bool(str(ctx.get("retry_of") or "").strip())
     confirmed = ctx.get("destructive_confirmed") is True and bool(key)
-    bulk = is_bulk_destructive(message)
+    bulk = (
+        is_bulk_destructive(message)
+        and ("客户" in message or "产品" in message)
+        and not _NON_MASTER_TARGET.search(message)
+    )
     existing = _LEDGER.get(_scope_key(ctx)) if key else None
     if retry:
         _use_policy("model_only")
@@ -235,6 +240,11 @@ def prepare_turn(message: str, ctx: dict[str, Any]) -> dict[str, Any] | None:
         return _remember(existing, ctx)
     if bulk and not confirmed:
         customers, products, customer_scope, product_scope = scope_snapshot(ctx)
+        if ("客户" in message and (customers is None or customer_scope is None)) or (
+            "产品" in message and (products is None or product_scope is None)
+        ):
+            _use_policy("model_only")
+            return None
         text = preview_message(ctx, message, customers=customers, products=products)
         record = TurnRecord(
             key,
@@ -265,13 +275,9 @@ def prepare_turn(message: str, ctx: dict[str, Any]) -> dict[str, Any] | None:
                     "message": text,
                     "execution": {**execution_payload(existing), "effect": "unknown"},
                 }
-            valid_scope = ("客户" in message or "产品" in message) and not any(
-                label in message for label in ("订单", "资料", "数据")
-            )
             if (
                 not existing
                 or existing.effect != "preview"
-                or not valid_scope
                 or existing.request_text != message.strip()
                 or (
                     "客户" in message

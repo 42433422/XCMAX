@@ -12,11 +12,14 @@ import httpx
 
 from app.application.workflow.clarification_selection import CLARIFICATION_PARSER
 from app.application.workflow.planner_prompt_profile import (
-    memory_digest as _memory_digest,
-)
-from app.application.workflow.planner_prompt_profile import (
+    BASE_RULES,
+    ELT_IMPORT_RULE,
+    attachment_import_manifest,
     select_rules_for_prompt,
     select_tools_for_prompt,
+)
+from app.application.workflow.planner_prompt_profile import (
+    memory_digest as _memory_digest,
 )
 from app.application.workflow.workflow_types import (
     Branch,
@@ -644,11 +647,36 @@ class LlmPlanGeneration:
                     return None
                 if light is not None:
                     return light
-            # A coverage miss can be a selector miss. Replanning sees the full
-            # authorized catalog, still filtered for retired/hidden tools.
-            selected_registry = select_tools_for_prompt(
-                tool_registry, "" if coverage_feedback is not None else routing_message, context
-            )
+            manifest = attachment_import_manifest(routing_message, context)
+            model_context = context
+            if manifest and "elt_import" in tool_registry:
+                elt_tool = tool_registry["elt_import"]
+                actions = {"execute"} if len(manifest) > 1 else {"preview", "execute"}
+                selected_registry = {
+                    "elt_import": {
+                        **elt_tool,
+                        "actions": {
+                            key: action
+                            for key, action in elt_tool["actions"].items()
+                            if key in actions
+                        },
+                    }
+                }
+                model_context = {"file_context": {"attachment_manifest": manifest}}
+                rules = [
+                    *BASE_RULES,
+                    (
+                        "直接导入本轮全部附件时，只选一个 elt_import.execute 节点，params 写 {}。"
+                        "系统会绑定本轮已核验的全部附件，并由工具逐份预演校验后再写入。"
+                        if len(manifest) > 1
+                        else ELT_IMPORT_RULE
+                    ),
+                ]
+            else:
+                rules = select_rules_for_prompt(routing_message, context)
+                selected_registry = select_tools_for_prompt(
+                    tool_registry, "" if coverage_feedback is not None else routing_message, context
+                )
             tool_specs = _tool_specs(selected_registry)
             conv_ctx = self.conversation.get_context(user_id)
             if (
@@ -660,18 +688,19 @@ class LlmPlanGeneration:
                 recent_messages = history_messages[-12:]
             prompt = {
                 "task": "根据用户输入和授权上下文，选择普通回复或生成完整业务工作流（JSON）。",
-                "rules": select_rules_for_prompt(routing_message, context),
+                "rules": rules,
                 "user_message": message,
                 "conversation_history": history_messages,
                 "recent_messages": _model_context_value(recent_messages, newest_first=True),
-                "context": _model_context_value(context),
+                "context": _model_context_value(model_context),
                 "tool_registry": tool_specs,
                 "output_schema": _PLAN_OUTPUT_SCHEMA_DOC,
             }
             if coverage_feedback is not None:
                 prompt["coverage_feedback"] = _model_context_value(coverage_feedback)
                 prompt["task"] = (
-                    "执行前重新生成完整计划，修复目标核对发现的遗漏或冲突；只服务于本轮原始请求。"
+                    "按目标核对反馈重新规划。能补齐时生成完整计划；范围仍无法确定时只向用户提问。"
+                    "若授权工具只能完成部分范围，用 mode=reply 说明可处理的范围，询问是否继续，勿生成部分写入计划。"
                 )
             messages = [
                 {
@@ -784,6 +813,7 @@ class LlmPlanGeneration:
             if isinstance(err, ContextWindowExceeded):
                 context["planning_failure_kind"] = "planner_error"
                 context["planning_failure_reason"] = str(err)
+                context["_planning_failure_code"] = "context_window_exceeded"
                 return None
             logger.warning("LLM 规划参数错误，拒绝计划并暂停执行: %s", err)
             context["planning_failure_kind"] = "plan_format_invalid"

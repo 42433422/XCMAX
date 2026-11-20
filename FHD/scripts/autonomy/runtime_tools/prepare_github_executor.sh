@@ -7,11 +7,38 @@ npm install --prefix "$RUNNER_TEMP/para-worker" --package-lock=false "ws@8.18.0"
 python - <<'PY'
 import json, os
 from pathlib import Path
+from urllib.parse import urlsplit
+
+root = Path.home() / '.codex'
+root.mkdir(mode=0o700, exist_ok=True)
+if os.environ.get('PARA_PLATFORM_POOL') == '1':
+    base_url = os.environ.get('PARA_PLATFORM_GATEWAY_URL', '').rstrip('/')
+    url = urlsplit(base_url)
+    if (url.scheme != 'https' or not url.hostname or url.username or url.password
+            or url.query or url.fragment or not url.path.endswith('/v1')
+            or not (os.environ.get('PARA_PLATFORM_GATEWAY_KEY', '').strip()
+                    or os.environ.get('PARA_PLATFORM_GATEWAY_KEYS_JSON', '').strip())):
+        raise SystemExit('Para platform Responses endpoint or virtual key is not configured')
+    target = root / 'config.toml'
+    target.write_text(
+        'model_provider = "xcmax-platform"\n'
+        '[model_providers.xcmax-platform]\n'
+        'name = "XCMAX Platform"\n'
+        f'base_url = {json.dumps(base_url)}\n'
+        'env_key = "CODEX_API_KEY"\n'
+        'wire_api = "responses"\n'
+        '[model_providers.volcengine-agent-plan]\n'
+        'name = "Volcengine Agent Plan"\n'
+        'base_url = "https://ark.cn-beijing.volces.com/api/plan/v3"\n'
+        'env_key = "CODEX_API_KEY"\n'
+        'wire_api = "responses"\n'
+    )
+    target.chmod(0o600)
+    raise SystemExit(0)
+
 auth = os.environ.get('PARA_CODEX_AUTH_JSON', '')
 if not auth and not os.environ.get('PARA_CODEX_API_KEY'):
     raise SystemExit('Para Codex authorization is not configured')
-root = Path.home() / '.codex'
-root.mkdir(mode=0o700, exist_ok=True)
 if auth:
     json.loads(auth)
     target = root / 'auth.json'

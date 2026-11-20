@@ -17,7 +17,7 @@ from modstore_server.integrations.repository_packages import load_repository_mod
 from modstore_server.models import RetortEvolutionRun, get_engine, get_session_factory
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
-TERMINAL = {"completed", "rejected", "failed", "cancelled"}
+TERMINAL = {"completed", "rejected", "failed", "cancelled", "customer_impact_rejected"}
 
 
 def catalog():
@@ -72,7 +72,7 @@ def run_lock(request_id):
             connection.execute(text("SELECT " + release), {"key": key})
 
 
-def create_run(request, actor_id):
+def create_run(request, actor_id, *, customer_feedback=None):
     contract = load_repository_module("retort_engine.evolution_contract")
     protocol = contract.freeze_request(request, catalog())
     from modstore_server.customer_ticket_github import configuration
@@ -82,11 +82,21 @@ def create_run(request, actor_id):
     with get_session_factory()() as db:
         previous = db.get(RetortEvolutionRun, protocol["request_id"])
         if previous:
-            if previous.user_id != actor_id or json_loads(previous.protocol_json, {}) != protocol:
+            if (
+                previous.user_id != actor_id
+                or json_loads(previous.protocol_json, {}) != protocol
+                or json_loads(previous.effects_json, {}).get("customer_feedback")
+                != customer_feedback
+            ):
                 raise ValueError("相同请求编号已绑定其他任务")
             return previous.id
         row = RetortEvolutionRun(
-            id=protocol["request_id"], user_id=actor_id, protocol_json=json_dumps(protocol)
+            id=protocol["request_id"],
+            user_id=actor_id,
+            protocol_json=json_dumps(protocol),
+            effects_json=json_dumps(
+                {"customer_feedback": customer_feedback} if customer_feedback else {}
+            ),
         )
         db.add(row)
         try:
@@ -98,6 +108,8 @@ def create_run(request, actor_id):
                 previous is None
                 or previous.user_id != actor_id
                 or json_loads(previous.protocol_json, {}) != protocol
+                or json_loads(previous.effects_json, {}).get("customer_feedback")
+                != customer_feedback
             ):
                 raise ValueError("相同请求编号已绑定其他任务") from None
             return previous.id
@@ -109,6 +121,8 @@ class ComponentPorts:
         self.request_id = request_id
 
     def plan(self, protocol):
+        from modstore_server.retort_customer_feedback import private_approval_context
+
         module = load_repository_module("retort_engine.models")
         tasks = [
             module.ImprovementTask(
@@ -124,7 +138,9 @@ class ComponentPorts:
             for item in protocol["criteria"]
         ]
         sources = protocol["references"]
+        feedback = private_approval_context(self.request_id)
         return {
+            **({"private_customer_feedback": feedback} if feedback else {}),
             "tasks": tasks,
             "sources": sources,
             "public_title": protocol["title"],
@@ -161,8 +177,10 @@ class ComponentPorts:
             }
 
     def dispatch(self, state):
+        from modstore_server.retort_customer_feedback import check_dispatch
         from modstore_server.retort_github_workspace import begin_dispatch
 
+        check_dispatch(self.request_id, state)
         return begin_dispatch(self.request_id, state)
 
     def collect(self, state):
@@ -180,6 +198,11 @@ class ComponentPorts:
 
         return collect_delivery(state)
 
+    def impact(self, state):
+        from modstore_server.retort_customer_feedback import read_impact
+
+        return read_impact(self.request_id, state["delivery"])
+
     def remember(self, state):
         knowledge = {
             "request_id": self.request_id,
@@ -192,6 +215,8 @@ class ComponentPorts:
             "evidence_verified": True,
             "scope": "accepted_shared_host_delivery",
         }
+        if state.get("impact"):
+            knowledge["customer_impact"] = state["impact"]
         with get_session_factory()() as db:
             row = db.get(RetortEvolutionRun, self.request_id)
             row.knowledge_json = json_dumps(knowledge)
@@ -213,6 +238,7 @@ def advance_run(request_id, *, approval=None, ports=None):
                     raise ValueError("该任务已经结束，不能重复批准")
                 return json_loads(row.snapshot_json, {})
             protocol = json_loads(row.protocol_json, {})
+            customer_feedback = bool(json_loads(row.effects_json, {}).get("customer_feedback"))
         graph = workflow.build_evolution_graph(ports or ComponentPorts(request_id), saver)
         config = {"configurable": {"thread_id": request_id}}
         before = graph.get_state(config)
@@ -225,14 +251,18 @@ def advance_run(request_id, *, approval=None, ports=None):
             ):
                 raise ValueError("审批内容已变化，请刷新证据后重新审阅")
             value = Command(resume=approval)
-        elif pauses and pauses[0].get("kind") in {"execution", "delivery"}:
+        elif pauses and pauses[0].get("kind") in {"execution", "delivery", "customer_impact"}:
             value = Command(resume={"poll": True})
         elif pauses:
             snapshot = _snapshot(before)
             _project(request_id, snapshot)
             return snapshot
         else:
-            value = {"protocol": protocol} if not before.values else None
+            value = (
+                {"protocol": protocol, "has_customer_feedback": customer_feedback}
+                if not before.values
+                else None
+            )
         try:
             graph.invoke(value, config, durability="sync")
             snapshot = _snapshot(graph.get_state(config))
@@ -264,7 +294,7 @@ def _project(request_id, snapshot, error=""):
         db.commit()
 
 
-def reflect(messages):
+def reflect(messages, *, max_tokens=4096):
     from modstore_server.runtime_async import run_coro_sync
     from modstore_server.services.llm import (
         chat_dispatch_via_platform_only,
@@ -277,7 +307,7 @@ def reflect(messages):
     if isinstance(messages, str):
         messages = [{"role": "user", "content": messages}]
     return run_coro_sync(
-        chat_dispatch_via_platform_only(provider, model, messages, max_tokens=4096)
+        chat_dispatch_via_platform_only(provider, model, messages, max_tokens=max_tokens)
     )
 
 

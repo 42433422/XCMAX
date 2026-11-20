@@ -4,7 +4,7 @@
       <TraceCollapsibleTrigger class="asc-summary">
         <TraceLine :status="traceStatus(state)">
           <TraceIcon><i class="fa fa-sitemap"></i></TraceIcon>
-          <TraceTitle class="asc-title">执行链</TraceTitle>
+          <TraceTitle class="asc-title">工具步骤</TraceTitle>
           <TraceDescription>{{ steps.length }} 步</TraceDescription>
           <span :class="['asc-pill', `is-${state}`]">{{ stateLabel }}</span>
           <TraceDescription v-if="durationLabel">{{ durationLabel }}</TraceDescription>
@@ -28,7 +28,9 @@
                     formatStepDuration(step.durationMs)
                   }}</TraceDescription>
                   <TraceIcon class="asc-step-status"><i class="fa" :class="stepStateIcon(step.state)"></i></TraceIcon>
-                  <span class="sr-only">{{ stepStateLabel(step.state) }}</span>
+                  <span :class="['deferred', 'partial'].includes(step.state) ? 'asc-badge' : 'sr-only'">
+                    {{ stepStateLabel(step.state) }}
+                  </span>
                 </TraceLine>
               </component>
               <p v-if="(step.state === 'running' || step.state === 'unknown') && step.hint" class="asc-live-hint" role="status">
@@ -101,14 +103,15 @@ const durationLabel = computed(() => {
   return ms ? formatStepDuration(ms) : ''
 })
 
-/** 执行中自动展开，落终态自动收起；用户手动点过后以用户为准。 */
-const autoOpen = computed(() => ['running', 'waiting', 'unknown', 'failed'].includes(state.value))
+/** 执行中或有待处理事项时自动展开，用户手动设置优先。 */
+const autoOpen = computed(() => ['running', 'waiting', 'unknown', 'failed', 'deferred', 'partial'].includes(state.value))
 const userOpen = ref<boolean>()
 
 function traceStatus(value: AgentStepState): 'running' | 'error' | 'pending' | undefined {
   if (value === 'failed' || value === 'blocked') return 'error'
-  if (value === 'waiting' || value === 'unknown') return 'pending'
-  return value === 'success' ? undefined : value
+  if (value === 'running') return 'running'
+  if (value === 'success') return undefined
+  return 'pending'
 }
 
 function hasDetails(step: AgentStepView): boolean {

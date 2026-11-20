@@ -74,6 +74,7 @@ def _artifact_briefs(store: ArtifactStore, artifact_ids: list[str]) -> list[dict
             {
                 "id": record.id,
                 "name": record.name,
+                "suffix": record.suffix,
                 "sheets": [
                     {
                         "name": sheet.name,
@@ -276,7 +277,7 @@ async def collect_evidence(
 ) -> dict[str, Any]:
     """收集本轮可用的附件证据；无工件、未启用或存储缺失时返回空结果。"""
     result: dict[str, Any] = {"evidence": "", "trace": [], "artifacts": []}
-    if not evidence_enabled() or store is None:
+    if store is None:
         return result
     raw_ids = artifact_ids if isinstance(artifact_ids, (list, tuple, set)) else []
     ids = [str(item).strip() for item in raw_ids if str(item).strip()]
@@ -285,6 +286,11 @@ async def collect_evidence(
 
     briefs = _artifact_briefs(store, ids)
     if not briefs:
+        return result
+    result["manifest"] = [
+        {"id": item["id"], "name": item["name"], "suffix": item["suffix"]} for item in briefs
+    ]
+    if not evidence_enabled():
         return result
 
     calls = await _plan_calls(message, briefs, limit_calls)
@@ -301,9 +307,15 @@ async def collect_evidence(
         tool = str(call.get("tool") or "")
         raw_args = call.get("args")
         args = raw_args if isinstance(raw_args, dict) else {}
+        if tool != "list_attachments" and str(args.get("artifact_id") or "") not in names:
+            continue
         started = time.perf_counter()
         try:
             output = execute_tool(tool, args, store)
+            if tool == "list_attachments" and output.get("ok"):
+                output["attachments"] = [
+                    item for item in output["attachments"] if item["id"] in names
+                ]
         except BOUNDARY_ERRORS as exc:
             logger.debug("attachment evidence tool failed", exc_info=True)
             output = {"ok": False, "error": str(exc)}
@@ -340,6 +352,7 @@ async def collect_evidence(
     blocks.extend(sections)
     evidence = "\n\n".join(blocks)
     return {
+        **result,
         "evidence": evidence[: max(0, int(max_chars))],
         "trace": trace,
         "artifacts": used,

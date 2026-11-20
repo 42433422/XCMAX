@@ -72,6 +72,17 @@ def test_only_an_unsettled_attempt_may_run_again(db):
     assert ledger.begin(db, 7, KEY, "d1", 90) == ("processing", None)
 
 
+def test_completed_receipt_is_bound_to_user_key_and_digest(db):
+    _, row = ledger.begin(db, 7, KEY, "digest", 90)
+    ledger.finish(db, row, {"ok": True, "images": ["receipt"]})
+    assert ledger.completed_receipt(db, 7, KEY, "digest") == (
+        "replay",
+        {"ok": True, "images": ["receipt"]},
+    )
+    assert ledger.completed_receipt(db, 7, KEY, "different") == ("conflict", None)
+    assert ledger.completed_receipt(db, 8, KEY, "digest") is None
+
+
 def _frames(frames):
     out = []
     for frame in frames:
@@ -97,6 +108,7 @@ def billed(monkeypatch, db):
         base_url="https://synthetic.invalid/v1",
     )
     wallet = SimpleNamespace(
+        enabled=True,
         preauthorize=AsyncMock(return_value=WalletHold("synthetic-hold", Decimal(".01"), True)),
         settle=AsyncMock(),
         release=AsyncMock(),
@@ -147,7 +159,7 @@ async def test_same_key_resend_replays_the_receipt_without_a_second_charge(bille
 
 
 @pytest.mark.asyncio
-async def test_an_upstream_failure_frees_the_key_for_a_new_attempt(billed, db):
+async def test_an_upstream_timeout_keeps_the_key_for_reconciliation(billed, db):
     async def failing(*_args, **_kwargs):
         raise TimeoutError("synthetic upstream timeout")
         yield {}
@@ -155,8 +167,9 @@ async def test_an_upstream_failure_frees_the_key_for_a_new_attempt(billed, db):
     billed.monkeypatch.setattr(llm_billed_chat, "chat_dispatch_stream", failing)
     events = await billed.call()
     assert [event for event, _ in events] == ["status", "meta", "error"]
-    assert ledger.lookup(db, 7, KEY, 90) == "failed"
+    assert ledger.lookup(db, 7, KEY, 90) == "settling"
     billed.wallet.settle.assert_not_awaited()
+    billed.wallet.release.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -166,3 +179,415 @@ async def test_a_live_key_is_refused_instead_of_run_twice(billed, db):
         await billed.call()
     assert refused.value.status_code == 409 and refused.value.detail["state"] == "conflict"
     billed.wallet.preauthorize.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_wallet_readback_recovers_a_paid_image_once(db, monkeypatch):
+    from modstore_server import llm_billing_recovery as recovery
+    from modstore_server.db.llm_chat import LlmCallLog
+
+    _, row = ledger.begin(db, 7, KEY, "image", 180)
+    receipt = {
+        "ok": True,
+        "operation": "image_generation",
+        "provider": "openai",
+        "model": "gpt-image-2",
+        "hold_no": "AIH-test",
+        "request_id": "request-test",
+        "charge_amount": "0.42",
+        "images": ["test-result"],
+        "usage": {"prompt_tokens": 17, "completion_tokens": 42, "total_tokens": 59},
+    }
+    ledger.prepare_settlement(db, row, receipt)
+    hold = {key: receipt[key] for key in ("provider", "model", "hold_no", "request_id")}
+    read = AsyncMock(return_value={**hold, "status": "settled", "settled_amount": "0.43"})
+    monkeypatch.setattr(recovery, "JavaWalletClient", lambda: SimpleNamespace(read_hold=read))
+
+    assert await recovery.recover_receipt(db, 8, KEY, "other-token") is None
+    read.assert_not_awaited()
+    assert await recovery.recover_receipt(db, 7, KEY, "owner-token") is None
+    assert ledger.lookup(db, 7, KEY, 180) == "settling"
+    assert db.query(LlmCallLog).count() == 0
+
+    read.return_value["settled_amount"] = "0.42"
+    assert await recovery.recover_receipt(db, 7, KEY, "owner-token") == receipt
+    assert ledger.begin(db, 7, KEY, "image", 180) == ("replay", receipt)
+    assert recovery.complete_receipt(db, row, receipt) == receipt
+    assert db.query(LlmCallLog).count() == 1
+
+
+@pytest.mark.asyncio
+async def test_sync_chat_replays_after_wallet_response_is_lost(db, monkeypatch):
+    from fastapi import HTTPException
+
+    from modstore_server import llm_billed_once
+
+    route = ChatRouteSnapshot(
+        provider="openai",
+        model="vision-example",
+        route_source="explicit",
+        key_source="platform",
+        config_revision="r1",
+        api_key="test-key",
+        base_url="https://synthetic.invalid/v1",
+    )
+    wallet = SimpleNamespace(
+        enabled=True,
+        preauthorize=AsyncMock(return_value=WalletHold("sync-hold", Decimal("1"), True)),
+        settle=AsyncMock(side_effect=HTTPException(502, "wallet timeout")),
+        release=AsyncMock(),
+    )
+    monkeypatch.setattr(llm_billed_once, "JavaWalletClient", lambda **kwargs: wallet)
+    monkeypatch.setattr(llm_billed_once, "enforce_risk_limits", Mock())
+    send = AsyncMock(
+        return_value={
+            "ok": True,
+            "content": "saved",
+            "usage": {"prompt_tokens": 30, "completion_tokens": 40, "total_tokens": 70},
+        }
+    )
+    monkeypatch.setattr(llm_billed_once, "chat_dispatch", send)
+    monkeypatch.setattr(llm_billed_once, "recover_receipt", AsyncMock(return_value=None))
+
+    async def request():
+        return await llm_billed_chat.run_billed_llm_chat(
+            SimpleNamespace(state=SimpleNamespace(), headers={}),
+            db,
+            SimpleNamespace(id=7),
+            provider=route.provider,
+            model=route.model,
+            route_snapshot=route,
+            messages=[{"role": "user", "content": "test"}],
+            client_request_id=KEY,
+        )
+
+    with pytest.raises(HTTPException) as pending:
+        await request()
+    assert pending.value.status_code == 409
+    assert ledger.lookup(db, 7, KEY, 90) == "settling"
+    wallet.release.assert_not_awaited()
+
+    from modstore_server import llm_billing_recovery as recovery
+
+    request_id = str(wallet.preauthorize.await_args.args[4])
+    charge = wallet.settle.await_args.args[2]
+    read = AsyncMock(
+        return_value={
+            "hold_no": "sync-hold",
+            "request_id": request_id,
+            "provider": route.provider,
+            "model": route.model,
+            "status": "settled",
+            "settled_amount": str(charge),
+        }
+    )
+    monkeypatch.setattr(recovery, "JavaWalletClient", lambda: SimpleNamespace(read_hold=read))
+    receipt = await request()
+    assert receipt["content"] == "saved"
+    assert receipt["pricing"]["currency"] == "CNY"
+    assert "_history" not in receipt
+    assert await request() == receipt
+    send.assert_awaited_once()
+    wallet.settle.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_video_request_replays_same_supplier_job_id(db, monkeypatch):
+    from modstore_server import llm_api, llm_key_resolver
+
+    send = AsyncMock(
+        return_value={
+            "ok": True,
+            "job_id": "video-id",
+            "status": "pending",
+            "raw": {"usage": {"input_tokens": 2, "output_tokens": 0, "total_tokens": 2}},
+        }
+    )
+    monkeypatch.setattr(llm_api, "video_dispatch", send)
+    monkeypatch.setattr(
+        llm_key_resolver,
+        "resolve_credentials",
+        lambda *args: ("platform-key", "https://example.invalid", "platform"),
+    )
+    body = llm_api.LlmVideoDTO(
+        provider="openai",
+        model="video-model",
+        prompt="test",
+        client_request_id=KEY,
+    )
+    first = await llm_api.llm_video(body, db, SimpleNamespace(id=7))
+    assert first["job_id"] == "video-id"
+    assert first["billing"]["state"] == "awaiting_provider_usage"
+    assert first["billing"]["usage"] is None
+    assert await llm_api.llm_video(body, db, SimpleNamespace(id=7)) == first
+    send.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_gateway_replays_auto_route_before_current_config_lookup(db, monkeypatch):
+    from modstore_server import openai_llm_gateway_api as gateway
+
+    resolve = AsyncMock(return_value={"provider": "openai", "model": "model-a"})
+    attempt = AsyncMock(
+        return_value={"content": "saved answer", "provider": "openai", "model": "model-a"}
+    )
+    monkeypatch.setattr(gateway, "resolve_default_llm_route", resolve)
+    monkeypatch.setattr(llm_billed_chat, "_run_sync_attempts", attempt)
+    body = gateway.OAIChatCompletionRequest(
+        model="xcauto-account", messages=[{"role": "user", "content": "hello"}]
+    )
+    request = SimpleNamespace(headers={"Idempotency-Key": KEY})
+    first = await gateway.openai_chat_completions(request, body, db, SimpleNamespace(id=7))
+    assert json.loads(first.body)["choices"][0]["message"]["content"] == "saved answer"
+    resolve.side_effect = HTTPException(503, "current route unavailable")
+    replay = await gateway.openai_chat_completions(request, body, db, SimpleNamespace(id=7))
+    assert json.loads(replay.body)["choices"][0]["message"]["content"] == "saved answer"
+    assert resolve.await_count == 1
+    assert attempt.await_count == 1
+    changed = body.model_copy(update={"max_tokens": 10})
+    with pytest.raises(HTTPException) as exc:
+        await gateway.openai_chat_completions(request, changed, db, SimpleNamespace(id=7))
+    assert exc.value.status_code == 409
+    assert resolve.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_gateway_recovers_settlement_before_resolving_changed_route(db, monkeypatch):
+    from modstore_server import llm_billing_recovery
+    from modstore_server import openai_llm_gateway_api as gateway
+
+    body = gateway.OAIChatCompletionRequest(
+        model="xcauto-account", messages=[{"role": "user", "content": "hello"}]
+    )
+    digest = ledger.request_digest(
+        {"operation": "openai_gateway_chat", "request": body.model_dump()}
+    )
+    _, row = ledger.begin(db, 7, KEY, digest, 90)
+    ledger.mark_settling(db, row)
+    recover = AsyncMock(
+        return_value={"content": "settled", "provider": "openai", "model": "saved-model"}
+    )
+    resolve = AsyncMock(side_effect=AssertionError("must not resolve current route"))
+    monkeypatch.setattr(llm_billing_recovery, "recover_receipt", recover)
+    monkeypatch.setattr(gateway, "resolve_default_llm_route", resolve)
+    request = SimpleNamespace(headers={"Idempotency-Key": KEY, "authorization": "Bearer token"})
+    result = await gateway.openai_chat_completions(request, body, db, SimpleNamespace(id=7))
+    assert json.loads(result.body)["choices"][0]["message"]["content"] == "settled"
+    recover.assert_awaited_once_with(db, 7, KEY, "Bearer token", operation="chat", request=request)
+    resolve.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_gateway_does_not_reexecute_an_old_unmatched_receipt(db, monkeypatch):
+    from modstore_server import openai_llm_gateway_api as gateway
+
+    _, row = ledger.begin(db, 7, KEY, "legacy-route-digest", 90)
+    ledger.finish(db, row, {"content": "prior paid answer"})
+    resolve = AsyncMock(side_effect=AssertionError("must not issue a new request"))
+    monkeypatch.setattr(gateway, "resolve_default_llm_route", resolve)
+    body = gateway.OAIChatCompletionRequest(
+        model="xcauto-account", messages=[{"role": "user", "content": "hello"}]
+    )
+    with pytest.raises(HTTPException) as exc:
+        await gateway.openai_chat_completions(
+            SimpleNamespace(headers={"Idempotency-Key": KEY}), body, db, SimpleNamespace(id=7)
+        )
+    assert exc.value.status_code == 409
+    resolve.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_native_auto_chat_replays_before_resolving_changed_route(db, monkeypatch):
+    from modstore_server import llm_api, llm_api_merged
+
+    snapshot = SimpleNamespace(provider="openai", model="model-a")
+    resolve = AsyncMock(return_value=snapshot)
+    receipt = {
+        "ok": True,
+        "content": "saved",
+        "conversation_id": None,
+        "usage": {},
+        "charge_amount": "1.00",
+        "hold_no": "hold-1",
+        "key_source": "platform",
+        "billed": True,
+        "provider": "openai",
+        "model": "model-a",
+    }
+    attempt = AsyncMock(return_value=receipt)
+    monkeypatch.setattr(llm_api_merged, "_requested_chat_snapshot", resolve)
+    monkeypatch.setattr(llm_billed_chat, "_run_sync_attempts", attempt)
+    body = llm_api.LlmChatDTO(
+        model="auto", messages=[{"role": "user", "content": "hello"}], client_request_id=KEY
+    )
+    request = SimpleNamespace(headers={})
+    first = await llm_api.llm_chat(request, body, db, SimpleNamespace(id=7))
+    resolve.side_effect = HTTPException(503, "changed route unavailable")
+    replay = await llm_api.llm_chat(request, body, db, SimpleNamespace(id=7))
+    assert first == replay and replay["content"] == "saved"
+    assert resolve.await_count == 1 and attempt.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_native_auto_stream_replays_original_request_after_route_removal(
+    billed, db, monkeypatch
+):
+    from modstore_server import llm_api, llm_api_merged
+
+    route = ChatRouteSnapshot(
+        provider="xiaomi",
+        model="mimo-v2.6-flash",
+        route_source="platform_configuration",
+        key_source="platform",
+        config_revision="r1",
+        api_key="test-key",
+        base_url=None,
+    )
+    resolve = AsyncMock(return_value=route)
+    monkeypatch.setattr(llm_api_merged, "_requested_chat_snapshot", resolve)
+    body = llm_api.LlmChatDTO(
+        model="auto",
+        messages=[{"role": "user", "content": "hello"}],
+        client_request_id=KEY,
+        tools=[{"type": "function", "function": {"name": "lookup"}}],
+    )
+    request = SimpleNamespace(state=SimpleNamespace(), headers={})
+    first = await llm_api.llm_chat_stream(request, body, db, SimpleNamespace(id=7))
+    events = _frames([frame async for frame in first.body_iterator])
+    assert events[-1][0] == "done"
+    resolve.side_effect = HTTPException(503, "removed route")
+    response = await llm_api.llm_chat_stream(request, body, db, SimpleNamespace(id=7))
+    replay = _frames([frame async for frame in response.body_iterator])
+    assert replay == [("done", {**events[-1][1], "replayed": True})]
+    billed.wallet.settle.assert_awaited_once()
+    resolve.assert_awaited_once()
+    with pytest.raises(HTTPException) as exc:
+        await llm_api.llm_chat_stream(
+            request, body.model_copy(update={"tools": []}), db, SimpleNamespace(id=7)
+        )
+    assert exc.value.status_code == 409
+    resolve.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("overlong", ["job_id", "status", "preview_url"])
+async def test_video_rejects_unbounded_provider_receipt_without_retry(db, monkeypatch, overlong):
+    from modstore_server import llm_api, llm_key_resolver
+
+    response = {"ok": True, "job_id": "video-id", "status": "pending", "preview_url": ""}
+    response[overlong] = "x" * 3000
+    send = AsyncMock(return_value=response)
+    monkeypatch.setattr(llm_api, "video_dispatch", send)
+    monkeypatch.setattr(
+        llm_key_resolver, "resolve_credentials", lambda *args: ("key", None, "platform")
+    )
+    body = llm_api.LlmVideoDTO(
+        provider="openai", model="video-model", prompt="test", client_request_id=KEY
+    )
+    for _ in range(2):
+        with pytest.raises(HTTPException) as exc:
+            await llm_api.llm_video(body, db, SimpleNamespace(id=7))
+        assert exc.value.status_code == 409
+    send.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_voice_turn_replays_text_only_without_second_debit(db, monkeypatch):
+    from modstore_server import voice_s2s_ws as voice
+
+    wallet = SimpleNamespace(
+        enabled=True,
+        preauthorize=AsyncMock(return_value=WalletHold("voice-hold", Decimal("1"), True)),
+        settle=AsyncMock(),
+        release=AsyncMock(),
+    )
+    monkeypatch.setattr(voice, "JavaWalletClient", lambda **kw: wallet)
+    monkeypatch.setattr(voice, "resolve_credentials", lambda *args: ("key", None, "platform"))
+    monkeypatch.setattr(voice, "enforce_risk_limits", Mock())
+    events = AsyncMock()
+    monkeypatch.setattr(voice, "_send_json", events)
+
+    async def chat(*args, **kwargs):
+        yield {"type": "delta", "delta": "voice answer"}
+        yield {
+            "type": "usage",
+            "usage": {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30},
+        }
+
+    monkeypatch.setattr(voice, "chat_dispatch_stream", chat)
+    args = dict(
+        user=SimpleNamespace(id=7),
+        db=db,
+        auth_header="",
+        provider="openai",
+        model="chat-model",
+        messages=[{"role": "user", "content": "voice test"}],
+        max_tokens=200,
+        voice="",
+        rate=1,
+        tts_enabled=False,
+        cancel=__import__("asyncio").Event(),
+        turn_id="voice-turn-test",
+    )
+    await voice._run_billed_s2s_turn(object(), **args)
+    await voice._run_billed_s2s_turn(object(), **args)
+    done = [arg.args[1] for arg in events.await_args_list if arg.args[1]["type"] == "text_done"]
+    assert len(done) == 2 and done[1]["replayed"] is True
+    assert done[0]["usage"]["total_tokens"] == 30
+    assert wallet.settle.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_pat_recovery_uses_authenticated_request_and_bound_wallet_id(db, monkeypatch):
+    from modstore_server import llm_billing_recovery as recovery
+
+    _, row = ledger.begin(db, 7, KEY, "image-pat", 180)
+    receipt = {
+        "operation": "image_generation",
+        "provider": "openai",
+        "model": "gpt-image-2",
+        "hold_no": "hold-1",
+        "request_id": "attempt-1",
+        "charge_amount": "0.42",
+        "images": ["result"],
+        "usage": {"prompt_tokens": 17, "completion_tokens": 42, "total_tokens": 59},
+    }
+    ledger.prepare_settlement(db, row, receipt)
+    read = AsyncMock(
+        return_value={
+            **{k: receipt[k] for k in ("provider", "model", "hold_no", "request_id")},
+            "status": "settled",
+            "settled_amount": "0.42",
+        }
+    )
+    request = SimpleNamespace(state=SimpleNamespace(llm_pat_user_id=7))
+    factory = Mock(return_value=SimpleNamespace(read_hold=read))
+    monkeypatch.setattr(recovery, "JavaWalletClient", factory)
+    wrong = SimpleNamespace(state=SimpleNamespace(llm_pat_user_id=8))
+    assert await recovery.recover_receipt(db, 7, KEY, "Bearer pat", request=wrong) is None
+    factory.assert_not_called()
+    assert await recovery.recover_receipt(db, 7, KEY, "Bearer pat", request=request) == receipt
+    factory.assert_called_once_with(request=request)
+    read.assert_awaited_once_with("Bearer pat", "hold-1", request_id="attempt-1")
+
+
+@pytest.mark.asyncio
+async def test_pat_wallet_read_uses_signed_internal_operation(monkeypatch):
+    from modstore_server.llm_wallet_client import JavaWalletClient
+
+    request = SimpleNamespace(state=SimpleNamespace(llm_pat_user_id=7))
+    client = JavaWalletClient(request=request)
+    client.gateway.backend = "java"
+    monkeypatch.setattr(client, "validate_pat", Mock())
+    post = AsyncMock(return_value={"ok": True, "hold": {"hold_no": "hold-1"}})
+    monkeypatch.setattr(client, "_post", post)
+    assert await client.read_hold("Bearer pat", "hold-1") is None
+    assert await client.read_hold("Bearer pat", "hold-1", request_id="attempt-1") == {
+        "hold_no": "hold-1"
+    }
+    client.validate_pat.assert_called_once_with("Bearer pat")
+    post.assert_awaited_once_with(
+        "/api/wallet/ai/read",
+        "Bearer pat",
+        {"hold_no": "hold-1", "request_id": "attempt-1", "idempotency_key": "attempt-1:read"},
+    )

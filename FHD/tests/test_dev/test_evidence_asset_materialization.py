@@ -299,9 +299,23 @@ def test_actual_deployer_rebuilds_before_publishing_and_stops_on_corruption(repo
     for name in ("release-history.json", "release-presentation.json"):
         (site / "data" / name).write_text('{"derived":"approved-source"}')
     (site / "index.html").write_text("new page")
+    summary = site / "llms.txt"
+    _git(root, "init", "-q")
+    _git(root, "config", "user.name", "Static test")
+    _git(root, "config", "user.email", "static@example.invalid")
+    summary.write_text("# Previous summary")
+    _git(root, "add", str(summary))
+    _git(root, "commit", "-qm", "old summary")
+    old_sha = _git(root, "rev-parse", "HEAD")
+    summary.write_text("# Public summary")
+    _git(root, "commit", "-qam", "new summary")
+    new_sha = _git(root, "rev-parse", "HEAD")
+    _git(root, "update-ref", "refs/remotes/origin/main", new_sha)
+    _git(root, "checkout", old_sha, "--", str(summary))
     live = root / "live"
     live.mkdir()
     (live / "index.html").write_text("previous page")
+    (live / "llms.txt").write_text("# Previous summary")
     (live / "download-release.json").write_text('{"verified":true}')
     (site / "download-release.json").write_text('{"candidate":"must-not-publish"}')
     (site / "corp-butler").mkdir(exist_ok=True)
@@ -317,19 +331,28 @@ def test_actual_deployer_rebuilds_before_publishing_and_stops_on_corruption(repo
     script = (
         ROOT / ASSETS["SITE"] / "MODstore_deploy/scripts/xcmax-site-auto-update.sh"
     ).read_text()
-    function = re.search(r"^publish_site_static_to_live\(\) \{.*?^\}", script, re.M | re.S)
-    assert function is not None
+    functions = re.findall(
+        r"^(?:guard_corp_download_marker|publish_site_static_to_live|sync_site_static)\(\) \{.*?^\}",
+        script,
+        re.M | re.S,
+    )
+    assert len(functions) == 3
     env = {
         **os.environ,
         "XCMAX_ROOT": str(root),
         "SITE_SUBDIR": ASSETS["SITE"],
         "SITE_ROOT": str(live),
+        "MODSTORE_PREFIX": f"{ASSETS['SITE']}/MODstore_deploy",
+        "BRANCH": "main",
+        "LOG": str(root / "sync.log"),
     }
     run = subprocess.run(
         [
             "bash",
             "-c",
-            "set -eu\nlog() { :; }\n" + function.group() + "\npublish_site_static_to_live",
+            "\n".join(
+                ["set -eu", "log() { :; }", *functions, f"sync_site_static {old_sha} {new_sha}"]
+            ),
         ],
         env=env,
         capture_output=True,
@@ -338,10 +361,13 @@ def test_actual_deployer_rebuilds_before_publishing_and_stops_on_corruption(repo
     if corrupt:
         assert run.returncode != 0
         assert (live / "index.html").read_text() == "previous page"
+        assert (live / "llms.txt").read_text() == "# Previous summary"
         assert not (live / "capabilities").exists()
     else:
         assert run.returncode == 0, run.stderr
         assert (live / "index.html").read_text() == "new page"
+        assert summary.read_text() == "# Public summary"
+        assert (live / "llms.txt").read_bytes() == summary.read_bytes()
         assert (live / "data/release-history.json").read_bytes() == (
             site / "data/release-history.json"
         ).read_bytes()

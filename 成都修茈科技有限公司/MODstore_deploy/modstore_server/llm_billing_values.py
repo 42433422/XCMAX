@@ -76,3 +76,69 @@ def usage_from_response(
     prompt = sum(estimate_tokens_from_message_content(row.get("content")) for row in messages)
     completion = estimate_tokens_from_text(content)
     return UsageMeter(prompt, completion, prompt + completion, estimated=True)
+
+
+def reported_token_dimensions(raw: Any) -> dict[str, int]:
+    """Project LiteLLM/OpenAI usage details without trusting arbitrary provider fields."""
+    if not isinstance(raw, dict):
+        return {}
+    prompt = raw.get("prompt_tokens_details") or raw.get("input_tokens_details") or {}
+    completion = raw.get("completion_tokens_details") or raw.get("output_tokens_details") or {}
+    if not isinstance(prompt, dict) or not isinstance(completion, dict):
+        return {}
+    values = {
+        "cache_read_input_tokens": prompt.get("cached_tokens", raw.get("cache_read_input_tokens")),
+        "cache_write_input_tokens": raw.get("cache_creation_input_tokens"),
+        "image_input_tokens": prompt.get("image_tokens"),
+        "audio_input_tokens": prompt.get("audio_tokens"),
+        "reasoning_output_tokens": completion.get("reasoning_tokens"),
+        "image_output_tokens": completion.get("image_tokens"),
+        "audio_output_tokens": completion.get("audio_tokens"),
+    }
+    return {key: value for key, value in values.items() if type(value) is int and value >= 0}
+
+
+def exact_reported_usage(usage: Any) -> UsageMeter | None:
+    """Accept exact counters from an OpenAI-compatible provider without estimating."""
+    if not isinstance(usage, dict):
+        return None
+    input_tokens = usage.get("input_tokens", usage.get("prompt_tokens"))
+    output_tokens = usage.get("output_tokens", usage.get("completion_tokens"))
+    total_tokens = usage.get("total_tokens")
+    if (
+        type(input_tokens) is not int
+        or type(output_tokens) is not int
+        or type(total_tokens) is not int
+        or input_tokens < 0
+        or output_tokens < 0
+        or total_tokens <= 0
+        or total_tokens != input_tokens + output_tokens
+    ):
+        return None
+    return UsageMeter(input_tokens, output_tokens, total_tokens)
+
+
+def media_usage_receipt(
+    operation: str,
+    provider: str,
+    model: str,
+    key_source: str,
+    usage: Any,
+    *,
+    pending: bool = False,
+) -> dict[str, Any]:
+    meter = exact_reported_usage(usage) if not pending else None
+    return {
+        "operation": operation,
+        "provider": provider,
+        "model": model,
+        "key_source": key_source,
+        "state": (
+            "byok"
+            if key_source == "user_override"
+            else "awaiting_provider_usage" if pending else "unmetered"
+        ),
+        "billed": False,
+        "usage": meter.__dict__ if meter else None,
+        "usage_details": reported_token_dimensions(usage) if meter else {},
+    }

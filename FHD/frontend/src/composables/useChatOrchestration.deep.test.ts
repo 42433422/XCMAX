@@ -61,23 +61,6 @@ vi.mock('./useChatPersistence', () => ({
     applyPersistedTaskPanelStateForSession: vi.fn(),
   }),
 }))
-vi.mock('./useExcelAnalysis', async () => {
-  const { ref } = await import('vue')
-  return {
-    useExcelAnalysis: () => ({
-      excelAnalyzeUploading: ref(false),
-      excelAnalyzeInputRef: ref(null),
-      triggerUpload: vi.fn(),
-      onExcelAnalyzeFileChange: vi.fn(),
-      setOnMultimodalFileChangeCallback: vi.fn(),
-      lastExcelAnalysisContext: ref(null),
-      excelSheetOptions: ref([]),
-      linkedExcelSheet: ref(''),
-      linkedExcelAllSheets: ref(false),
-      multimodalPendingCount: ref(0),
-    }),
-  }
-})
 vi.mock('./useShipmentTask', async () => {
   const { ref } = await import('vue')
   return {

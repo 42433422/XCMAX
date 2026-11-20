@@ -32,6 +32,8 @@ Version/release/download/client-update changes must follow `FHD/docs/architectur
 
 ## 合入顺序与快车道（2026-10-19 03:37 用户定）
 
+超级员工可以评审主序列和快车道候选 PR，并记录代码、架构和 CI 的评审结论。
+
 主序列 PR 按终极员工排定的顺序串行合入。快车道：小修复类 PR 可不进主序列串行合入，可优先于主序列其他 PR 合入。条件（全部满足）：
 
 1. CI 全绿；

@@ -315,28 +315,33 @@ describe('useChatSessionHistory — coverage ramp', () => {
       expect(chatApiMock.getConversation).not.toHaveBeenCalled()
     })
 
-    it('does nothing when already loading', async () => {
-      chatApiMock.getConversation.mockImplementation(() => new Promise(() => {}))
-      const { deps } = makeDeps()
-      const { loadSession, historyLoading } = makeHistory(deps)
-      const p = loadSession('s1')
-      expect(historyLoading.value).toBe(true)
+    it('opens a running session without replacing its messages with a stale history request', async () => {
+      let finish!: (data: unknown) => void
+      chatApiMock.getConversation.mockReturnValueOnce(new Promise(resolve => { finish = resolve }))
+      const { deps, mocks, refs } = makeDeps()
+      const { loadSession } = makeHistory({ ...deps, isSessionBusy: id => id === 's2' })
+      const pending = loadSession('s1')
       await loadSession('s2')
-      // Still loading first
-      expect(historyLoading.value).toBe(true)
-      void p
+      expect(refs.sessionId.value).toBe('s2')
+      expect(chatApiMock.getConversation).toHaveBeenCalledTimes(1)
+      finish({ success: true, messages: [{ role: 'ai', content: 'old' }] })
+      await pending
+      expect(mocks.loadMessages).not.toHaveBeenCalled()
     })
 
     it('loads server messages when success and serverMessages non-empty', async () => {
+      const activeTurn = { turn_id: 'turn-live', run_id: 'run-live', status: 'running' }
       chatApiMock.getConversation.mockResolvedValue({
         success: true,
+        active_turn: activeTurn,
         messages: [
           { role: 'user', content: 'hello' },
           { role: 'ai', content: 'world' },
         ],
       })
       const { deps, refs, mocks } = makeDeps({ sessionId: 'old-sid' })
-      const { loadSession, showHistory } = makeHistory(deps)
+      const onConversation = vi.fn()
+      const { loadSession, showHistory } = makeHistory({ ...deps, onConversation })
       // Pre-open history panel
       showHistory.value = true
 
@@ -347,6 +352,7 @@ describe('useChatSessionHistory — coverage ramp', () => {
       expect(mocks.applyPersistedTaskPanelStateForSession).toHaveBeenCalledWith('new-sid')
       expect(mocks.persistTaskPanelStateForSession).toHaveBeenCalledWith('old-sid')
       expect(mocks.loadMessages).toHaveBeenCalled()
+      expect(onConversation).toHaveBeenCalledWith(expect.objectContaining({ active_turn: activeTurn }))
       // showHistory should be closed after successful load
       expect(showHistory.value).toBe(false)
     })

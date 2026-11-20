@@ -81,6 +81,13 @@ export async function parseChatStreamErrorResponse(res: Response, onRouteMetadat
 }
 
 export const chatApi = {
+  generateImage(prompt: string, clientRequestId: string) {
+    return api.post<{ images: string[]; model: string; billed: boolean; charge_amount: string }>(
+      '/api/conversation/image',
+      { prompt, client_request_id: clientRequestId },
+      withMarketAuthorization({ timeoutMs: 185_000, retry: false }),
+    )
+  },
   getModelStatus(): Promise<{ ok: boolean; provider: string; model: string } & Partial<ChatModelRoute>> {
     return api.get('/api/conversation/model-status', {}, { timeoutMs: 20_000, cache: 'no-store' })
   },
@@ -113,6 +120,17 @@ export const chatApi = {
       headers,
       body,
       ...rest,
+    })
+  },
+
+  resumeChatStream(turnId: string, signal?: AbortSignal): Promise<Response> {
+    const query = new URLSearchParams({ turn_id: turnId })
+    return fetch(`${buildFullApiUrl('/api/ai/chat/stream/resume')}?${query}`, {
+      method: 'GET',
+      credentials: 'include',
+      headers: { 'X-Request-ID': createTraceId(), ...readMarketBearerHeader() },
+      cache: 'no-store',
+      signal,
     })
   },
 
@@ -191,10 +209,12 @@ export const chatApi = {
     return api.delete<ApiResponse<{ success: boolean }>>(`/api/conversations/${sessionId}`)
   },
 
-  /** 撤回一条用户消息及其之后的回复（撤回编辑）。 */
-  deleteMessagesFrom(sessionId: string, messageId: number): Promise<ApiResponse<{ success: boolean; deleted?: number; message?: string }>> {
-    return api.delete<ApiResponse<{ success: boolean; deleted?: number; message?: string }>>(
-      `/api/conversations/${sessionId}/messages/${messageId}`,
+  /** 撤回业务结果后，由服务端确认截断会话。 */
+  recallMessage(sessionId: string, messageId: number): Promise<ApiResponse & { deleted?: number; rolled_back?: number }> {
+    return api.post<ApiResponse & { deleted?: number; rolled_back?: number }>(
+      `/api/conversations/${encodeURIComponent(sessionId)}/messages/${messageId}/recall`,
+      {},
+      { timeoutMs: 90_000 },
     )
   },
 

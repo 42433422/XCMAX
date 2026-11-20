@@ -15,6 +15,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from modstore_server import llm_client_requests as ledger
+from modstore_server.db.llm_chat import LlmClientRequest
 from modstore_server.llm_billed_once import (
     failed_chat_route_detail,
 )
@@ -27,10 +28,13 @@ from modstore_server.llm_billing import (
     enforce_risk_limits,
     estimate_preauthorization,
     new_request_id,
+    rate_usage,
     save_failure_log,
     save_success_log,
     usage_from_response,
 )
+from modstore_server.llm_billing_recovery import complete_receipt, recover_receipt
+from modstore_server.llm_billing_values import reported_token_dimensions
 from modstore_server.llm_chat_failover import (
     is_chat_failoverable_failure,
     list_chat_failover_candidates,
@@ -45,9 +49,15 @@ from modstore_server.llm_key_resolver import (
     resolve_chat_route_snapshot,
 )
 from modstore_server.llm_model_taxonomy import classify_model
+from modstore_server.llm_operation_routes import (
+    enforce_vision_operation,
+    model_runtime_messages,
+    personal_provider_quota,
+)
 from modstore_server.models import User
 from modstore_server.multimodal_llm import (
     messages_use_openai_multipart_content,
+    redact_message_content_for_storage,
     validate_multimodal_payload_size,
 )
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
@@ -128,6 +138,80 @@ async def run_billed_llm_chat(
     conversation_id: Optional[int] = None,
     allow_failover: bool = True,
     route_snapshot: ChatRouteSnapshot | None = None,
+    client_request_id: str | None = None,
+    client_request_payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    row = None
+    if client_request_id:
+        if not ledger.KEY_PATTERN.fullmatch(client_request_id):
+            raise HTTPException(422, "模型请求键无效")
+        digest = ledger.request_digest(
+            client_request_payload
+            if client_request_payload is not None
+            else {
+                "operation": "sync_chat",
+                "provider": provider,
+                "model": model,
+                "messages": messages,
+                "max_tokens": max_tokens,
+                "conversation_id": conversation_id,
+                "allow_failover": allow_failover,
+            }
+        )
+        outcome, value = ledger.begin(
+            db, int(user.id), client_request_id, digest, _chat_total_deadline_s()
+        )
+        if outcome == "replay" and isinstance(value, dict):
+            return value
+        if outcome == "processing":
+            recovered = await recover_receipt(
+                db,
+                int(user.id),
+                client_request_id,
+                authorization_header(request),
+                operation="chat",
+                request=request,
+            )
+            if recovered is not None:
+                return recovered
+        if outcome != "run":
+            raise HTTPException(409, {"message": "同一请求键正在处理或内容不同", "state": outcome})
+        row = value
+    try:
+        receipt = await _run_sync_attempts(
+            request,
+            db,
+            user,
+            provider=provider,
+            model=model,
+            messages=messages,
+            max_tokens=max_tokens,
+            conversation_id=conversation_id,
+            allow_failover=allow_failover,
+            route_snapshot=route_snapshot,
+            billing_row=row,
+        )
+        if row is not None and row.state != "completed":
+            ledger.finish(db, row, receipt)
+        return receipt
+    finally:
+        if row is not None and row.state == "processing":
+            ledger.finish(db, row, None)
+
+
+async def _run_sync_attempts(
+    request: Request,
+    db: Session,
+    user: User,
+    *,
+    provider: str,
+    model: str,
+    messages: list[dict[str, Any]],
+    max_tokens: Optional[int] = None,
+    conversation_id: Optional[int] = None,
+    allow_failover: bool = True,
+    route_snapshot: ChatRouteSnapshot | None = None,
+    billing_row: LlmClientRequest | None = None,
 ) -> dict[str, Any]:
     """执行一轮 LLM 对话并完成钱包预授权/结算；配额/限流时可自动切换备用模型。"""
     primary = route_snapshot or resolve_chat_route_snapshot(db, user.id, provider, model)
@@ -172,6 +256,8 @@ async def run_billed_llm_chat(
                 conversation_id=conversation_id,
                 route_snapshot=snapshots[prov, mdl],
                 upstream_timeout_s=max(5.0, min(remaining, 90.0)),
+                billing_row=billing_row,
+                attempt_index=idx,
             )
             if len(attempted) > 1:
                 out["failover_from"] = f"{primary_provider}/{primary_model}"
@@ -194,7 +280,6 @@ async def run_billed_llm_chat(
             )
             if (
                 exc.status_code == 409
-                and getattr(request.state, "llm_pat_user_id", None) is not None
                 and isinstance(exc.detail, dict)
                 and exc.detail.get("request_id")
             ):
@@ -242,6 +327,7 @@ async def stream_billed_llm_chat(
     tool_choice: Any = None,
     route_snapshot: ChatRouteSnapshot | None = None,
     client_request_id: str | None = None,
+    client_request_payload: dict[str, Any] | None = None,
 ) -> StreamingResponse:
     primary = route_snapshot or resolve_chat_route_snapshot(db, user.id, provider, model)
     primary_provider, primary_model = primary.provider, primary.model
@@ -280,7 +366,9 @@ async def stream_billed_llm_chat(
     ledger_row = None
     if client_request_id:
         digest = ledger.request_digest(
-            {
+            client_request_payload
+            if client_request_payload is not None
+            else {
                 "provider": primary_provider,
                 "model": primary_model,
                 "messages": msgs,
@@ -294,6 +382,17 @@ async def stream_billed_llm_chat(
         )
         if outcome == "replay":
             return _stream_response(_replay(value))
+        if outcome == "processing":
+            recovered = await recover_receipt(
+                db,
+                int(user.id),
+                client_request_id,
+                authorization_header(request),
+                operation="chat",
+                request=request,
+            )
+            if recovered is not None:
+                return _stream_response(_replay(recovered))
         if outcome != "run":
             raise HTTPException(
                 409,
@@ -345,6 +444,7 @@ async def stream_billed_llm_chat(
                 else new_request_id()
             )
             try:
+                await enforce_vision_operation(user.id, route, msgs, session=db)
                 enforce_risk_limits(db, user.id, prov, mdl, msgs, request)
             except HTTPException as exc:
                 last_error = str(exc.detail)
@@ -362,14 +462,24 @@ async def stream_billed_llm_chat(
                 idx += 1
                 continue
 
-            wallet = JavaWalletClient()
+            wallet = (
+                JavaWalletClient(verify_receipt=True)
+                if ledger_row is not None
+                else JavaWalletClient()
+            )
+            journaled_attempt = ledger_row is not None and not is_byok and wallet.enabled
+            upstream_messages = model_runtime_messages(route, msgs, max_tokens)
             try:
                 if is_byok:
                     hold = WalletHold(
                         hold_no=f"byok-{request_id}", amount=Decimal("0"), enabled=False
                     )
                 else:
-                    preauth_amount = estimate_preauthorization(db, prov, mdl, msgs, max_tokens)
+                    preauth_amount = estimate_preauthorization(
+                        db, prov, mdl, upstream_messages, max_tokens
+                    )
+                    if journaled_attempt:
+                        ledger.mark_settling(db, ledger_row)
                     hold = await wallet.preauthorize(
                         authorization_header(request),
                         preauth_amount,
@@ -378,6 +488,19 @@ async def stream_billed_llm_chat(
                         request_id,
                     )
             except HTTPException as exc:
+                if journaled_attempt:
+                    if exc.status_code in {400, 401, 402, 403, 422, 429}:
+                        ledger.confirmed_no_charge(db, ledger_row)
+                    else:
+                        yield _route_error(
+                            route,
+                            {
+                                "message": "模型预授权状态待核对",
+                                "request_id": request_id,
+                            },
+                            409,
+                        )
+                        return
                 last_error = str(exc.detail)
                 rest = remaining_candidates_after_failure(
                     queue,
@@ -416,13 +539,18 @@ async def stream_billed_llm_chat(
             upstream_usage: Dict[str, Any] = {}
             finish_reason = ""
             emitted_delta = False
+            settlement_started = False
+            pricing = None
             try:
+                remaining_percent = await personal_provider_quota(route)
                 async for ev in chat_dispatch_stream(
                     prov,
                     api_key=api_key,
                     base_url=base,
                     model=mdl,
-                    messages=msgs,
+                    messages=model_runtime_messages(
+                        route, msgs, max_tokens, hold, remaining_percent=remaining_percent
+                    ),
                     max_tokens=max_tokens,
                     tools=tools,
                     tool_choice=tool_choice,
@@ -434,6 +562,17 @@ async def stream_billed_llm_chat(
                             status_code = int(status) if status is not None else None
                         except (TypeError, ValueError):
                             status_code = None
+                        if journaled_attempt and status_code not in {400, 401, 403, 404, 422, 429}:
+                            yield _route_error(
+                                route,
+                                {
+                                    "message": "模型请求状态待核对",
+                                    "request_id": request_id,
+                                    "hold_no": hold.hold_no,
+                                },
+                                409,
+                            )
+                            return
                         save_failure_log(
                             db,
                             user_id=user.id,
@@ -449,7 +588,20 @@ async def stream_billed_llm_chat(
                                 str(err),
                                 request_id,
                             )
-                        except RECOVERABLE_ERRORS:
+                            if journaled_attempt:
+                                ledger.confirmed_no_charge(db, ledger_row)
+                        except _CHAT_ERRORS:
+                            if journaled_attempt:
+                                yield _route_error(
+                                    route,
+                                    {
+                                        "message": "预授权释放状态待核对",
+                                        "request_id": request_id,
+                                        "hold_no": hold.hold_no,
+                                    },
+                                    409,
+                                )
+                                return
                             logger.exception(
                                 "failed to release LLM wallet hold after stream upstream error"
                             )
@@ -505,34 +657,25 @@ async def stream_billed_llm_chat(
                     # 正常结束（未因 failover break）
                     content = "".join(parts)
                     usage = usage_from_response(upstream_usage, msgs, content)
+                    durable_billing = ledger_row is not None and hold.enabled and not is_byok
                     if is_byok:
                         charge = Decimal("0")
+                    elif durable_billing:
+                        charge, pricing = rate_usage(db, prov, mdl, usage)
                     else:
                         charge = calculate_charge(db, prov, mdl, usage)
-                        if ledger_row is not None:
-                            # A cancel during settle may have charged: never run this key again.
-                            ledger.mark_settling(db, ledger_row)
-                        await wallet.settle(authorization_header(request), hold, charge, request_id)
-                    saved_conversation_id = save_success_log(
-                        db,
-                        user_id=user.id,
-                        provider=prov,
-                        model=mdl,
-                        messages=msgs,
-                        content=content,
-                        usage=usage,
-                        charge=charge,
-                        hold_no=hold.hold_no,
-                        conversation_id=conversation_id,
-                    )
                     done = {
                         "ok": True,
                         "content": content,
-                        "conversation_id": saved_conversation_id,
+                        "conversation_id": conversation_id,
                         "usage": usage.__dict__,
+                        "usage_details": reported_token_dimensions(upstream_usage),
                         "charge_amount": float(charge),
+                        "pricing": pricing,
+                        "request_id": request_id,
                         "hold_no": hold.hold_no,
                         **route.public_metadata(),
+                        "operation": "chat",
                         "route_state": "completed",
                         "billed": not is_byok,
                     }
@@ -541,13 +684,70 @@ async def stream_billed_llm_chat(
                     if len(attempted) > 1:
                         done["failover_from"] = f"{primary_provider}/{primary_model}"
                         done["failover_attempts"] = list(attempted)
-                    if ledger_row is not None:
-                        ledger.finish(db, ledger_row, done)
+                    if durable_billing:
+                        done["_history"] = [
+                            {
+                                "role": msg.get("role"),
+                                "content": redact_message_content_for_storage(msg.get("content")),
+                            }
+                            for msg in msgs
+                            if msg.get("role") in {"user", "assistant", "system"}
+                        ]
+                        ledger.prepare_settlement(db, ledger_row, done)
+                    if not is_byok:
+                        settlement_started = hold.enabled
+                        await wallet.settle(authorization_header(request), hold, charge, request_id)
+                    if durable_billing:
+                        done = complete_receipt(db, ledger_row, done, save_chat=save_success_log)
+                    else:
+                        done["conversation_id"] = save_success_log(
+                            db,
+                            user_id=user.id,
+                            provider=prov,
+                            model=mdl,
+                            messages=msgs,
+                            content=content,
+                            usage=usage,
+                            charge=charge,
+                            hold_no=hold.hold_no,
+                            conversation_id=conversation_id,
+                        )
+                        if ledger_row is not None:
+                            ledger.finish(db, ledger_row, done)
                     yield _sse("done", done)
                     return
                 # break from async for → try next candidate
                 continue
             except _CHAT_ERRORS as exc:
+                if settlement_started or journaled_attempt:
+                    if settlement_started and ledger_row is not None and client_request_id:
+                        db.rollback()
+                        recovered = await recover_receipt(
+                            db,
+                            int(user.id),
+                            client_request_id,
+                            authorization_header(request),
+                            operation="chat",
+                            request=request,
+                        )
+                        if recovered is not None:
+                            yield _sse("done", recovered)
+                            return
+                    yield _route_error(
+                        route,
+                        {
+                            "code": (
+                                "WALLET_SETTLEMENT_PENDING"
+                                if settlement_started
+                                else "MODEL_REQUEST_PENDING"
+                            ),
+                            "message": "模型请求或钱包结算状态待核对",
+                            "request_id": request_id,
+                            "hold_no": hold.hold_no,
+                        },
+                        409,
+                    )
+                    return
                 status_code = exc.status_code if isinstance(exc, HTTPException) else None
                 last_error = str(exc.detail) if isinstance(exc, HTTPException) else str(exc)
                 try:

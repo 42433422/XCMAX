@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -141,6 +142,268 @@ def test_completed_task_opens_pr(issue, monkeypatch):
     pulls = [b for u, b in issue if u.endswith("/pulls")]
     assert pulls and pulls[0]["head"] == "devfleet/fix"
     assert "Refs #5" in pulls[0]["body"] and "Closes #" not in pulls[0]["body"]
+
+
+@pytest.mark.parametrize(
+    ("held", "fault"),
+    [(False, ""), (False, "intent"), (False, "label"), (False, "push"), (True, "")],
+)
+def test_ci_incident_pushes_back_to_original_pr_and_reconciles_a_retry(
+    issue, monkeypatch, held, fault
+):
+    repo, branch, old, new = "o/r", "fix/ci", "a" * 40, "d" * 40
+    workflow_path = ".github/workflows/fhd-ci-cd.yml"
+    bot = {"login": "github-actions[bot]", "type": "Bot"}
+    incident = {
+        "state": "open",
+        "title": "CI repair",
+        "user": bot,
+        "body": (
+            "- Workflow: `CI/CD Pipeline`\n- Run ID: `70`\n- Branch: `fix/ci`\n"
+            "- Head Repository: `o/r`\n- Self-Heal-Run: `70/1`\n"
+            f"- Self-Heal-Workflow: `99@{workflow_path}`\n"
+        ),
+        "labels": [{"name": "ai-implement"}, {"name": "auto-incident"}],
+    }
+    pr = {
+        "number": 42,
+        "state": "open",
+        "draft": False,
+        "labels": [{"name": "hold-merge"}] if held else [],
+        "user": {"login": "maintainer"},
+        "head": {"ref": branch, "sha": old, "repo": {"full_name": repo}},
+        "base": {"ref": "main", "repo": {"full_name": repo}},
+    }
+    run = {
+        "id": 70,
+        "workflow_id": 99,
+        "path": workflow_path,
+        "run_attempt": 1,
+        "event": "pull_request",
+        "head_sha": old,
+        "head_branch": branch,
+        "head_repository": {"full_name": repo},
+        "pull_requests": [{"number": 42}],
+        "name": "CI/CD Pipeline",
+        "conclusion": "failure",
+        "status": "completed",
+        "created_at": "2026-11-20T01:00:00Z",
+    }
+    comments, sent, pushes = [], [], []
+    interrupted = False
+
+    def get(path, params):
+        if path.endswith("/issues/5/comments"):
+            return 200, comments
+        if path.endswith("/pulls/42"):
+            return 200, pr
+        if path.endswith("/actions/runs/70"):
+            return 200, run
+        if path.endswith("/actions/workflows/99/runs"):
+            return 200, {
+                "workflow_runs": (
+                    [
+                        {
+                            **run,
+                            "id": 71,
+                            "head_sha": new,
+                            "status": "queued",
+                            "conclusion": None,
+                        }
+                    ]
+                    if params.get("head_sha") == new
+                    else []
+                )
+            }
+        pytest.fail(f"unexpected GitHub read: {path}")
+
+    def post(url, token, payload):
+        nonlocal interrupted
+        assert token == "gh"
+        if url.endswith("/issues/42/labels"):
+            assert payload["labels"] == ["hold-merge", "ai-generated"]
+            if fault == "label":
+                return {"_error": 403}
+            pr["labels"] = [{"name": label} for label in payload["labels"]]
+            return pr["labels"]
+        assert url.endswith("/issues/5/comments")
+        comments.append({"user": bot, **payload})
+        if (
+            fault == "intent"
+            and not interrupted
+            and payload["body"].startswith(mod.repair.INTENT_MARKER)
+        ):
+            interrupted = True
+            raise OSError("workflow stopped after durable intent")
+        return {"id": len(comments)}
+
+    class Client:
+        def __init__(self, base, token):
+            pass
+
+        def create(self, body):
+            sent.append(body)
+            return {"id": "ctl1"}
+
+        def get(self, task_id):
+            assert task_id == "ctl1"
+            return {
+                "id": "ctl1",
+                "state": "execution_completed",
+                "para_task_id": "p1",
+                "executor": mod.GITHUB_REPAIR,
+                "github_run_id": 502,
+                "execution": {
+                    "id": "p1",
+                    "subtasks": [{"branch_name": "devfleet/fix"}],
+                    "reports": [
+                        {
+                            "report": {
+                                "branch": "devfleet/fix",
+                                "pushed": True,
+                                "commit_sha": new,
+                            }
+                        }
+                    ],
+                },
+            }
+
+    def push(remote, target, head, token, *, before_write):
+        nonlocal interrupted
+        assert (remote, target.number, target.branch, target.old_sha, head, token) == (
+            "https://github.com/o/r.git",
+            42,
+            branch,
+            old,
+            new,
+            "independent-token",
+        )
+        before_write(1)
+        assert any(c["body"].startswith(mod.repair.INTENT_MARKER) for c in comments)
+        assert {"hold-merge", "ai-generated"} <= {row["name"] for row in pr["labels"]}
+        if fault == "push" and not interrupted:
+            interrupted = True
+            raise subprocess.CalledProcessError(1, ["git", "push"])
+        pr["head"]["sha"] = head
+        pushes.append(head)
+        return 1
+
+    for key, value in {
+        "MODSTORE_PARA_DISPATCH_TOKEN": "dispatch",
+        "PR_CREATE_TOKEN": "independent-token",
+        "GITHUB_ACTIONS": "true",
+        "GITHUB_REF": "refs/heads/main",
+        "GITHUB_REPOSITORY": repo,
+    }.items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.setattr(mod, "_read_github", lambda _: get)
+    monkeypatch.setattr(mod.impl, "_fetch_issue", lambda *args: incident)
+    monkeypatch.setattr(mod.impl, "_gh_post", post)
+    monkeypatch.setattr(mod.repair, "load_trusted_authors", lambda: ["maintainer"])
+    monkeypatch.setattr(mod.repair, "advance", push)
+    monkeypatch.setattr(mod, "DispatchClient", Client)
+    monkeypatch.setattr(mod, "_branch_head", lambda *args: new)
+    monkeypatch.setattr(mod.time, "sleep", lambda _: None)
+
+    if held:
+        with pytest.raises(SystemExit) as exc:
+            mod.run(_args(base_branch=branch))
+        assert exc.value.code == 6
+        assert not sent and not pushes
+        return
+
+    if fault:
+        with pytest.raises(SystemExit) as exc:
+            mod.run(_args(base_branch=branch))
+        assert exc.value.code == 6
+        assert not pushes and len(sent) == 1
+        assert sum(c["body"].startswith(mod.repair.INTENT_MARKER) for c in comments) == 1
+        if fault == "label":
+            return
+        if fault == "push":
+            with pytest.raises(SystemExit) as exc:
+                mod.run(_args(base_branch=branch))
+            assert exc.value.code == 6  # A human-review hold is never cleared by recovery.
+            assert not pushes and len(sent) == 1
+            pr["labels"] = [{"name": "ai-generated"}]  # Maintainer authorizes retry.
+
+    for _ in range(2):
+        with pytest.raises(SystemExit) as exc:
+            mod.run(_args(base_branch=branch))
+        assert exc.value.code == 0
+        saved = json.loads((mod.REPORT_DIR / "para_issue_dispatch_5.json").read_text())
+        assert (saved["pr_number"], saved["head_sha"], saved["ci_run_id"]) == (
+            42,
+            new,
+            71,
+        )
+        assert (saved["control_task_id"], saved["para_task_id"]) == ("ctl1", "p1")
+        assert saved["github_run_id"] == 502
+    assert pushes == [new]
+    assert sum(c["body"].startswith(mod.repair.INTENT_MARKER) for c in comments) == 1
+    assert len(sent) == 1
+    assert (sent[0]["source_sha"], sent[0]["pull_request"], sent[0]["source_run_id"]) == (
+        old,
+        42,
+        70,
+    )
+
+
+@pytest.mark.parametrize("move_during_push", [False, True])
+def test_ordinary_git_push_checks_the_exact_advertised_head(tmp_path, move_during_push):
+    remote, work = tmp_path / "origin.git", tmp_path / "work"
+    subprocess.run(["git", "init", "--bare", str(remote)], check=True, capture_output=True)
+    subprocess.run(["git", "init", str(work)], check=True, capture_output=True)
+
+    def git(*args):
+        return subprocess.check_output(
+            [
+                "git",
+                "-C",
+                str(work),
+                "-c",
+                "user.name=Fixture",
+                "-c",
+                "user.email=fixture@example.invalid",
+                *args,
+            ],
+            text=True,
+            stderr=subprocess.PIPE,
+        ).strip()
+
+    file = work / "code.py"
+    commits = []
+    for value in (0, 1, 2):
+        file.write_text(f"answer = {value}\n")
+        git("add", "code.py")
+        git("commit", "-m", f"fixture {value}")
+        commits.append(git("rev-parse", "HEAD"))
+    old, next_sha, new = commits
+    branch = "fix/ci"
+    git(
+        "push",
+        str(remote),
+        f"{old}:refs/heads/{branch}",
+        f"{new}:refs/heads/devfleet/fix",
+    )
+    target = mod.repair.Target(42, branch, old, 70, 99, ".github/workflows/fhd-ci-cd.yml")
+
+    def before_write(count):
+        assert count == 1
+        if move_during_push:
+            # This intermediate commit is still an ancestor of the candidate. A plain fast-forward
+            # would accept it. The trusted pre-push check must notice the original HEAD changed.
+            git("push", str(remote), f"{next_sha}:refs/heads/{branch}")
+
+    if move_during_push:
+        with pytest.raises(subprocess.CalledProcessError):
+            mod.repair.advance(str(remote), target, new, "fixture", before_write=before_write)
+    else:
+        assert (
+            mod.repair.advance(str(remote), target, new, "fixture", before_write=before_write) == 1
+        )
+    confirmed = git("ls-remote", str(remote), f"refs/heads/{branch}").split()[0]
+    assert confirmed == (next_sha if move_during_push else new)
 
 
 @pytest.mark.parametrize("reason", ["private connection details", ""])

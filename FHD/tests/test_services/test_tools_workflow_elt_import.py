@@ -30,6 +30,29 @@ def _context():
     return {"user_id": 7, "tenant_id": 1}
 
 
+@pytest.fixture
+def elt_tools(monkeypatch):
+    from app.application.elt import service as elt_service
+    from app.domain.shared_services import tools_workflow_elt as elt
+
+    service = MagicMock()
+    monkeypatch.setattr(elt_service, "get_elt_service", lambda: service)
+    monkeypatch.setattr(elt, "_elt_enabled", lambda: True)
+    monkeypatch.setattr(elt, "_bound_actor", lambda _context: SimpleNamespace(id=7))
+    monkeypatch.setattr(elt, "get_db", lambda: nullcontext(MagicMock()))
+    return elt, service
+
+
+@pytest.fixture
+def elt_preview(elt_tools, monkeypatch):
+    elt, service = elt_tools
+    service.create_preview.return_value = {"id": "run-1"}
+    upload = {"id": "upload-1", "storage_path": "/tmp/x.xlsx", "suffix": ".xlsx"}
+    monkeypatch.setattr(elt, "_owned_upload", lambda *_args: upload)
+    monkeypatch.setattr(elt, "_resolve_template", lambda *_args: ("products", {}))
+    return elt, service
+
+
 def test_wait_delivers_real_changes_before_preview_finishes(monkeypatch):
     from app.domain.shared_services import tools_workflow_elt as elt
     from app.infrastructure.chat_stream_lifetime import StreamLifetime, current_lifetime
@@ -109,41 +132,24 @@ def test_wait_timeout_does_not_invent_completion_or_orphan_nodes(monkeypatch):
     assert notes == ["正在写入业务数据"]  # No percent or success without persisted evidence.
 
 
-def test_preview_returns_run_id_for_execute():
-    service = MagicMock()
-    service.create_preview.return_value = {"id": "run-1"}
-    with (
-        patch("app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True),
-        patch(
-            "app.domain.shared_services.tools_workflow_elt._bound_actor",
-            return_value=MagicMock(id=7),
-        ),
-        patch(
-            "app.domain.shared_services.tools_workflow_elt._owned_upload",
-            return_value={"id": "upload-1", "storage_path": "/tmp/x.xlsx", "suffix": ".xlsx"},
-        ),
-        patch(
-            "app.domain.shared_services.tools_workflow_elt._resolve_template",
-            return_value=("products", {}),
-        ),
-        patch(
-            "app.domain.shared_services.tools_workflow_elt.get_db",
-            return_value=MagicMock(__enter__=MagicMock(), __exit__=MagicMock()),
-        ),
-        patch("app.domain.shared_services.tools_workflow_elt._wait", return_value=_run()),
-        patch("app.application.elt.service.get_elt_service", return_value=service),
-    ):
+def test_preview_returns_run_id_for_execute(elt_preview):
+    elt, service = elt_preview
+    with patch.object(elt, "_wait", return_value=_run()):
         result = _registered_router_elt_import(
-            "preview", {"file_path": "宗南.xlsx"}, _context(), "normal", "导入"
+            "preview",
+            {"file_path": "宗南.xlsx"},
+            {**_context(), "chat_approval_mode": "auto"},
+            "normal",
+            "导入",
         )
     assert result["success"] is True
     assert result["data"]["run_id"] == "run-1"
     assert result["data"]["target_type"] == "products"
+    service.execute.assert_not_called()
 
 
-def test_preview_reports_pending_mappings():
-    service = MagicMock()
-    service.create_preview.return_value = {"id": "run-1"}
+def test_preview_reports_pending_mappings(elt_preview):
+    elt, _service = elt_preview
     run = _run(
         draft={
             "field_mappings": [
@@ -152,27 +158,7 @@ def test_preview_reports_pending_mappings():
             ]
         }
     )
-    with (
-        patch("app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True),
-        patch(
-            "app.domain.shared_services.tools_workflow_elt._bound_actor",
-            return_value=MagicMock(id=7),
-        ),
-        patch(
-            "app.domain.shared_services.tools_workflow_elt._owned_upload",
-            return_value={"id": "upload-1", "storage_path": "/tmp/x.xlsx", "suffix": ".xlsx"},
-        ),
-        patch(
-            "app.domain.shared_services.tools_workflow_elt._resolve_template",
-            return_value=("products", {}),
-        ),
-        patch(
-            "app.domain.shared_services.tools_workflow_elt.get_db",
-            return_value=MagicMock(__enter__=MagicMock(), __exit__=MagicMock()),
-        ),
-        patch("app.domain.shared_services.tools_workflow_elt._wait", return_value=run),
-        patch("app.application.elt.service.get_elt_service", return_value=service),
-    ):
+    with patch.object(elt, "_wait", return_value=run):
         result = _registered_router_elt_import(
             "preview", {"file_path": "宗南.xlsx"}, _context(), "normal", "导入"
         )
@@ -183,7 +169,7 @@ def test_preview_reports_pending_mappings():
     assert "AI 建议" in result["message"]
 
 
-def test_preview_expands_to_all_recent_uploads_in_auto_chat():
+def test_preview_keeps_only_selected_paths_in_auto_chat():
     captured: list[list[str]] = []
 
     def fake_batch(paths, _payload, _context):
@@ -195,10 +181,6 @@ def test_preview_expands_to_all_recent_uploads_in_auto_chat():
         patch(
             "app.domain.shared_services.tools_workflow_elt._bound_actor",
             return_value=MagicMock(id=7),
-        ),
-        patch(
-            "app.domain.shared_services.tools_workflow_elt._recent_upload_ids",
-            return_value=["u1", "u2", "u3"],
         ),
         patch(
             "app.domain.shared_services.tools_workflow_elt._preview_batch",
@@ -212,40 +194,24 @@ def test_preview_expands_to_all_recent_uploads_in_auto_chat():
             "normal",
             "导入",
         )
-    assert result["file_count"] == 3
-    assert captured == [["u1", "u2", "u3"]]
+    assert result["file_count"] == 1
+    assert captured == [["温总.xlsx"]]
 
 
-def test_preview_keeps_explicit_paths_when_user_names_file():
-    captured: list[list[str]] = []
-
-    def fake_batch(paths, _payload, _context):
-        captured.append(list(paths))
-        return {"success": True, "file_count": len(paths)}
-
+def test_preview_requires_explicit_scope_even_in_auto_chat():
     with (
         patch("app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True),
-        patch(
-            "app.domain.shared_services.tools_workflow_elt._bound_actor",
-            return_value=MagicMock(id=7),
-        ),
-        patch(
-            "app.domain.shared_services.tools_workflow_elt._recent_upload_ids",
-            return_value=["u1", "u2", "u3"],
-        ),
-        patch(
-            "app.domain.shared_services.tools_workflow_elt._preview_batch",
-            side_effect=fake_batch,
-        ),
+        patch("app.domain.shared_services.tools_workflow_elt._preview_batch") as preview,
     ):
-        _registered_router_elt_import(
+        result = _registered_router_elt_import(
             "preview",
-            {"file_paths": ["温总.xlsx"]},
+            {},
             {**_context(), "chat_approval_mode": "auto"},
             "normal",
-            "只导入温总.xlsx",
+            "导入",
         )
-    assert captured == [["温总.xlsx"]]
+    assert result["error_code"] == "elt_file_path_required"
+    preview.assert_not_called()
 
 
 def test_batch_preview_stops_before_budget_is_exhausted():
@@ -265,7 +231,9 @@ def test_batch_preview_stops_before_budget_is_exhausted():
             ["a.xlsx", "b.xlsx", "c.xlsx"], {}, {"deadline_monotonic": _time.monotonic() - 1}
         )
     preview.assert_not_called()
-    assert "继续导入" in result["message"]
+    assert result["deferred_count"] == 3
+    assert result["success"] is False
+    assert result["data"]["executable"] is False
     assert notes and "剩余 3 个文件" in notes[0]
 
 
@@ -304,7 +272,7 @@ def test_preview_batch_publishes_progress_and_result_per_file():
 
     notes: list[str] = []
 
-    def fake_preview(params, _context):
+    def fake_preview(params, _context, **_kwargs):
         if params["file_path"] == "a.xlsx":
             return {
                 "success": True,
@@ -321,7 +289,7 @@ def test_preview_batch_publishes_progress_and_result_per_file():
 
     with (
         patch.object(elt, "_preview", side_effect=fake_preview),
-        patch.object(elt, "_upload_label", side_effect=lambda path, _ctx: path),
+        patch.object(elt, "_owned_upload", return_value={}),
         patch(
             "app.domain.shared_services.tools_workflow_elt.publish_stream_note",
             side_effect=notes.append,
@@ -332,7 +300,8 @@ def test_preview_batch_publishes_progress_and_result_per_file():
     assert notes[1].startswith("「a.xlsx」预演完成")
     assert notes[2] == "正在预演 2/2：b.xlsx"
     assert notes[3] == "「b.xlsx」预演失败：无法解析"
-    assert result["run_ids"] == ["run-a"]
+    assert result["run_ids"] == []
+    assert result["results"][0]["data"]["run_id"] == "run-a"
     assert result["results"][0]["file_name"] == "a.xlsx"
 
 
@@ -586,26 +555,14 @@ def test_preview_passes_selected_template_to_create_preview():
     assert result["data"]["template_name"] == "送货单模板"
 
 
-def test_execute_completes_with_elt_run():
-    service = MagicMock()
-    service.get_run.return_value = {"id": "run-1", "preview_revision": "a" * 64}
+def test_execute_completes_with_elt_run(elt_tools):
+    elt, service = elt_tools
+    service.get_run.return_value = _run(preview_revision="a" * 64)
     service.execute.return_value = {"id": "run-1"}
     run = _run(
         status="completed", summary={"new": 0, "update": 0, "skip": 0, "error": 0, "executed": 10}
     )
-    with (
-        patch("app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True),
-        patch(
-            "app.domain.shared_services.tools_workflow_elt._bound_actor",
-            return_value=MagicMock(id=7),
-        ),
-        patch(
-            "app.domain.shared_services.tools_workflow_elt.get_db",
-            return_value=MagicMock(__enter__=MagicMock(), __exit__=MagicMock()),
-        ),
-        patch("app.domain.shared_services.tools_workflow_elt._wait", return_value=run),
-        patch("app.application.elt.service.get_elt_service", return_value=service),
-    ):
+    with patch.object(elt, "_wait", return_value=run):
         result = _registered_router_elt_import(
             "execute", {"run_id": "run-1"}, _context(), "normal", "导入"
         )
@@ -614,6 +571,15 @@ def test_execute_completes_with_elt_run():
     service.execute.assert_called_once()
     assert service.execute.call_args.kwargs["confirmed"] is True
     assert service.execute.call_args.kwargs["preview_revision"] == "a" * 64
+
+
+def test_execute_reports_original_uncertain_receipt_without_resubmitting(elt_tools):
+    elt, service = elt_tools
+    service.get_run.return_value = _run(status="outcome_unknown")
+    out = elt._execute({"run_id": "run-1"}, _context())
+    service.execute.assert_not_called()
+    assert out["outcome"] == "unknown" and out["retryable"] is False
+    assert out["data"]["run_id"] == "run-1"
 
 
 def test_execute_syncs_source_to_knowledge_base():
@@ -987,6 +953,212 @@ def test_existing_preview_read_precedes_auto_import_and_refreshes_live_status(mo
     create.assert_not_called()
     service.create_preview.assert_not_called()
     service.execute.assert_not_called()
+
+
+def test_execute_waits_for_linked_preview_before_submitting_main(elt_tools):
+    elt, service = elt_tools
+    service.get_run.return_value = _run(
+        target_type="shipment_records",
+        details={"linked_customer_products_preview": {"run_id": "companion-1"}},
+    )
+    with patch.object(elt, "_wait", return_value=_run(status="previewing")):
+        result = elt._execute({"run_id": "run-1"}, _context())
+
+    service.execute.assert_not_called()
+    assert result["success"] is False and result["deferred"] is True
+    assert result["data"]["customer_products"]["run_id"] == "companion-1"
+    assert result["data"]["executed_rows"] == 0
+
+
+def test_linked_preview_gets_bounded_read_budget_before_normal_write_budget(elt_tools):
+    import time
+
+    from app.application.agent_orchestrator.tool_timeouts import ELT_LINKED_PREVIEW_TIMEOUT_SECONDS
+
+    elt, service = elt_tools
+    primary = _run(
+        target_type="shipment_records",
+        details={"linked_customer_products_preview": {"run_id": "companion-1"}},
+    )
+    service.get_run.return_value = primary
+    renew = MagicMock(
+        side_effect=lambda _phase: time.monotonic() + ELT_LINKED_PREVIEW_TIMEOUT_SECONDS + 5
+    )
+    with (
+        patch.object(elt, "_finalize_import", return_value=({}, {}, "")),
+        patch.object(
+            elt,
+            "_wait",
+            side_effect=[
+                _run(status="previewing"),
+                _run(),
+                {**primary, "status": "completed"},
+                _run(status="completed"),
+            ],
+        ) as wait,
+    ):
+        result = elt._execute(
+            {"run_id": "run-1"}, {**_context(), "_renew_elt_file_deadline": renew}
+        )
+
+    assert result["success"] is True
+    assert [call.args for call in renew.call_args_list] == [("linked_preview",), ("execute",)]
+    assert wait.call_args_list[1].kwargs["timeout"] == ELT_LINKED_PREVIEW_TIMEOUT_SECONDS
+    assert wait.call_args_list[2].kwargs["timeout"] == elt.EXECUTION_TIMEOUT_SECONDS
+    service.execute.assert_called_once()
+
+
+@pytest.mark.parametrize("initial_state", ["queued", "previewing", "interrupted"])
+def test_exact_linked_child_resumes_only_unsubmitted_preview(initial_state, elt_tools):
+    elt, service = elt_tools
+    child = _run(
+        id="child",
+        status=initial_state,
+        target_type="customer_products",
+        details={"linked_from_shipment_preview": "parent"},
+        confirmed_at=None,
+        executed_at=None,
+        error={"code": "ELT_EXECUTION_INTERRUPTED"} if initial_state == "interrupted" else None,
+    )
+    ready = {**child, "status": "preview_ready", "preview_revision": "a" * 64}
+    service.get_run.return_value = child
+    service.retry.return_value = {**child, "status": "previewing"}
+    with (
+        patch.object(
+            elt,
+            "_verified_companion_source",
+            return_value=SimpleNamespace(id="child", tenant_id=1, status=initial_state),
+        ),
+        patch.object(elt, "_wait", side_effect=[ready, {**ready, "status": "completed"}]),
+    ):
+        result = elt._execute({"run_id": "child", "preview_revision": "a" * 64}, _context())
+
+    assert result["success"] is True
+    assert service.retry.call_count == int(initial_state == "interrupted")
+    assert service._submit_preview.call_count == int(initial_state == "queued")
+    service.execute.assert_called_once()
+    assert service.execute.call_args.kwargs["run_id"] == "child"
+
+
+def test_approved_ready_child_fails_closed_when_parent_business_rows_are_gone(elt_tools):
+    elt, service = elt_tools
+    source = {"tenant_id": 1, "upload_id": "upload", "file_sha256": "sha"}
+    parent = SimpleNamespace(
+        **source,
+        status="completed",
+        target_type="shipment_records",
+        executed_at="date",
+        rollback_status=None,
+        summary_json='{"linked_customer_products_preview": {"run_id": "child"}}',
+    )
+    child = SimpleNamespace(
+        **source, id="child", confirmed_at=None, executed_at=None, executed_rows=0
+    )
+    service.get_run.return_value = _run(
+        id="child",
+        target_type="customer_products",
+        details={"linked_from_shipment_preview": "parent"},
+        preview_revision="a" * 64,
+    )
+    service._owned_run.side_effect = [child, parent]
+    with patch(
+        "app.application.elt.batch_continuation.shipment_parent_writes_present", return_value=False
+    ) as readback:
+        result = elt._execute({"run_id": "child", "preview_revision": "a" * 64}, _context())
+
+    readback.assert_called_once()
+    service.execute.assert_not_called()
+    assert result["success"] is False and result["error_code"] == "elt_companion_incomplete"
+
+
+@pytest.mark.parametrize("unresolved_write", [False, True])
+def test_durable_batch_resumes_original_slots_or_stops_on_unknown(
+    elt_tools, monkeypatch, unresolved_write
+):
+    from uuid import UUID
+
+    from app.application.agent_orchestrator import business_write_guard
+
+    elt, service = elt_tools
+    paths = [str(UUID(int=index)) for index in (1, 2, 3)]
+    context = {**_context(), "run_id": "agent", "step_id": "step", "durable_elt_batch": True}
+    monkeypatch.setattr(
+        business_write_guard, "capture_worker_claim", lambda: ("agent", "worker", 2)
+    )
+    monkeypatch.setattr(elt, "tenant_id_for_write", lambda: 1)
+    ids = elt.durable_elt_checkpoint_ids("agent", "step", paths)
+    rows = {
+        ids[path]: SimpleNamespace(
+            tenant_id=1, owner_user_id=7, upload_id=path, rolled_back_at=None, rollback_status=None
+        )
+        for path in (paths[:1] + paths[2:] if unresolved_write else paths[:1])
+    }
+    completed = _run(
+        id=ids[paths[0]],
+        status="completed",
+        file_name="done.xlsx",
+        confirmed_at="earlier",
+        executed_at="earlier",
+        summary={"executed": 8},
+        receipt={"run_id": ids[paths[0]], "target_type": "products", "executed_rows": 8},
+    )
+    interrupted = _run(
+        id=ids[paths[2]], status="interrupted", file_name="pending.xlsx", confirmed_at="earlier"
+    )
+    db = MagicMock()
+    db.get.side_effect = lambda _model, run_id: rows.get(run_id)
+    service.get_run.side_effect = lambda db, *, run_id, owner_user_id: (
+        completed if run_id == completed["id"] else interrupted
+    )
+    monkeypatch.setattr(elt, "get_db", lambda: nullcontext(db))
+    monkeypatch.setattr(elt, "_owned_upload", lambda path, _ctx: {"id": path})
+    preview = MagicMock(
+        side_effect=lambda *args, checkpoint_id, **kw: {
+            "success": True,
+            "data": {"run_id": checkpoint_id, "executable": True},
+        }
+    )
+    execute = MagicMock(return_value={"success": True, "data": {"executed_rows": 2}})
+    monkeypatch.setattr(elt, "_preview", preview)
+    monkeypatch.setattr(elt, "_execute", execute)
+
+    result = elt._preview_batch(paths, {}, context, write=True)
+
+    assert result["data"]["executed_rows"] == (8 if unresolved_write else 12)
+    if unresolved_write:
+        assert result["outcome"] == "unknown" and result["deferred_count"] == 1
+        preview.assert_not_called()
+        execute.assert_not_called()
+    else:
+        assert result["success"] is True and result["done_count"] == 3
+        assert [call.kwargs["checkpoint_id"] for call in preview.call_args_list] == [
+            ids[path] for path in paths[1:]
+        ]
+        assert [call.args[0]["run_id"] for call in execute.call_args_list] == [
+            ids[path] for path in paths[1:]
+        ]
+
+
+def test_resuming_preview_keeps_existing_elt_run_id(elt_preview):
+    elt, service = elt_preview
+    existing = _run(id="saved-preview", status="queued")
+    with (
+        patch.object(elt, "tenant_id_for_write", return_value=1),
+        patch.object(elt, "_wait", return_value={**existing, "status": "preview_ready"}),
+    ):
+        result = elt._preview({"file_path": "saved"}, _context(), checkpoint=existing)
+    assert result["success"] is True and result["data"]["run_id"] == "saved-preview"
+    service.create_preview.assert_not_called()
+    service._submit_preview.assert_called_once_with("saved-preview", 1, 7)
+
+
+def test_new_durable_preview_passes_checkpoint_to_native_creation(elt_preview):
+    elt, service = elt_preview
+    service.create_preview.return_value = {"id": "checkpoint"}
+    with patch.object(elt, "_wait", return_value=_run(id="checkpoint")):
+        result = elt._preview({"file_path": "new"}, _context(), checkpoint_id="checkpoint")
+    assert result["data"]["run_id"] == "checkpoint"
+    assert service.create_preview.call_args.kwargs["checkpoint_run_id"] == "checkpoint"
 
 
 def test_execute_requires_run_id():

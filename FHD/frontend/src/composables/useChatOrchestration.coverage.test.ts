@@ -1,7 +1,7 @@
 /**
  * useChatOrchestration.ts 覆盖率补齐测试
  * 针对未覆盖行：errorMessage、normalizeServerContentToHtml、scrollToBottom、
- * useExcelAnalysis 回调、runShipmentMgmtAfterPrintSuccess、
+ * runShipmentMgmtAfterPrintSuccess、
  * refetchTaskOrderNumber、setCustomOrderNumber、
  * shouldAutoRunTask/scheduleAutoConfirmTask、showTaskConfirm、emitAssistantPush、
  * maybeCloseAssistantFloatForShipmentTask、confirmTask 各分支、handleAutoAction 各分支、
@@ -133,12 +133,6 @@ const {
 }))
 
 // ── 可控 ref 状态（在 async vi.mock 工厂中赋值到 state） ──────
-let capturedExcelCallbacks: {
-  onAnalyzed?: (e: unknown) => void
-  onAnalyzeStart?: (e: unknown) => void
-  onAnalyzeProgress?: (e: unknown) => void
-  onAnalyzeDone?: (e: unknown) => void
-} = {}
 let capturedNormalizeFn: (raw: unknown) => string = () => ''
 
 // ── vi.mock 声明 ───────────────────────────────────────────────
@@ -203,22 +197,6 @@ vi.mock('./useChatPersistence', () => ({
     applyPersistedTaskPanelStateForSession: vi.fn(),
   }),
 }))
-
-vi.mock('./useExcelAnalysis', async () => {
-  const { ref } = await import('vue')
-  return {
-    useExcelAnalysis: (_deps: unknown, opts: unknown) => {
-      capturedExcelCallbacks = (opts as typeof capturedExcelCallbacks) || {}
-      return {
-        excelAnalyzeUploading: ref(false),
-        excelAnalyzeInputRef: ref(null),
-        triggerUpload: vi.fn(),
-        onExcelAnalyzeFileChange: vi.fn(),
-        setOnMultimodalFileChangeCallback: vi.fn(),
-      }
-    },
-  }
-})
 
 vi.mock('./useShipmentTask', async () => {
   const { ref } = await import('vue')
@@ -478,159 +456,6 @@ describe('useChatOrchestration coverage – scrollToBottom', () => {
     const api = createApi()
     api.chatMessagesRef.value = null
     expect(() => api.scrollToBottom()).not.toThrow()
-  })
-})
-
-describe('useChatOrchestration coverage – ExcelAnalysis 回调', () => {
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    localStorage.clear()
-    resetMockState()
-  })
-
-  it('onAnalyzeStart 创建 excel_analyze 任务', () => {
-    createApi()
-    expect(capturedExcelCallbacks.onAnalyzeStart).toBeDefined()
-    capturedExcelCallbacks.onAnalyzeStart!({ fileName: 'test.xlsx' })
-  })
-
-  it('onAnalyzed 有 persistedPath 时设置 file_path', () => {
-    createApi()
-    mockResolveExcelFilePathFromAnalysis.mockReturnValue('/tmp/test.xlsx')
-    mockResolveExcelSheetOptionsFromContext.mockReturnValue([{ name: 'Sheet1' }])
-    capturedExcelCallbacks.onAnalyzed!({
-      fileName: 'test.xlsx',
-      summary: '摘要',
-      result: { fields: [], preview_data: {}, sheets: [] },
-    })
-    expect(mockPersistExcelAnalysisContext).toHaveBeenCalled()
-    expect(state.lastExcelAnalysisContext!.value).toBeTruthy()
-  })
-
-  it('onAnalyzed 无 persistedPath 时不设置 file_path', () => {
-    createApi()
-    mockResolveExcelFilePathFromAnalysis.mockReturnValue(null)
-    capturedExcelCallbacks.onAnalyzed!({
-      fileName: '',
-      summary: '摘要',
-      result: { fields: ['f1'], preview_data: { a: 1 }, sheets: [{ name: 'S1' }] },
-    })
-    expect(state.lastExcelAnalysisContext!.value).toBeTruthy()
-    expect(state.lastExcelAnalysisContext!.value).not.toHaveProperty('file_path')
-  })
-
-  it('onAnalyzed 有 __VUE_CHAT_FILL__ 时调用它', () => {
-    createApi()
-    const fillFn = vi.fn(() => true)
-    ;(window as unknown as { __VUE_CHAT_FILL__: typeof fillFn }).__VUE_CHAT_FILL__ = fillFn
-    const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
-      cb(0)
-      return 0
-    })
-    capturedExcelCallbacks.onAnalyzed!({
-      fileName: 'test.xlsx',
-      summary: '摘要',
-      result: { fields: [], preview_data: {}, sheets: [] },
-    })
-    expect(fillFn).toHaveBeenCalled()
-    delete (window as unknown as { __VUE_CHAT_FILL__?: typeof fillFn }).__VUE_CHAT_FILL__
-    rafSpy.mockRestore()
-  })
-
-  it('onAnalyzed 无 __VUE_CHAT_FILL__ 时兜底写 DOM', () => {
-    createApi()
-    document.body.innerHTML = '<div id="view-chat"><textarea id="messageInput"></textarea></div>'
-    const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
-      cb(0)
-      return 0
-    })
-    capturedExcelCallbacks.onAnalyzed!({
-      fileName: 'test.xlsx',
-      summary: '摘要',
-      result: { fields: [], preview_data: {}, sheets: [] },
-    })
-    const input = document.querySelector('#messageInput') as HTMLTextAreaElement
-    expect(input.value).toContain('@uploads/')
-    document.body.innerHTML = ''
-    rafSpy.mockRestore()
-  })
-
-  it('onAnalyzed 有 running excel_analyze 任务时标记成功', () => {
-    createApi()
-    state.taskList!.value = [
-      {
-        id: 'excel-1',
-        type: 'excel_analyze',
-        status: 'running',
-        title: '分析Excel',
-        source: 'excel',
-      },
-    ]
-    capturedExcelCallbacks.onAnalyzed!({
-      fileName: 'test.xlsx',
-      summary: '摘要',
-      result: { fields: [], preview_data: {}, sheets: [] },
-    })
-  })
-
-  it('onAnalyzeProgress 有 running 任务时更新进度', () => {
-    createApi()
-    state.taskList!.value = [
-      {
-        id: 'excel-1',
-        type: 'excel_analyze',
-        status: 'running',
-        title: '分析Excel',
-        source: 'excel',
-        progress: 5,
-      },
-    ]
-    capturedExcelCallbacks.onAnalyzeProgress!({ step: '解析中', progress: 50 })
-  })
-
-  it('onAnalyzeProgress 无 running 任务时早返回', () => {
-    createApi()
-    state.taskList!.value = []
-    expect(() => {
-      capturedExcelCallbacks.onAnalyzeProgress!({ step: '解析中', progress: 50 })
-    }).not.toThrow()
-  })
-
-  it('onAnalyzeDone 成功时 finishTask', () => {
-    createApi()
-    state.taskList!.value = [
-      {
-        id: 'excel-1',
-        type: 'excel_analyze',
-        status: 'running',
-        title: '分析Excel',
-        source: 'excel',
-        summary: '摘要',
-      },
-    ]
-    capturedExcelCallbacks.onAnalyzeDone!({ success: true, message: '完成' })
-  })
-
-  it('onAnalyzeDone 失败时 failTask', () => {
-    createApi()
-    state.taskList!.value = [
-      {
-        id: 'excel-1',
-        type: 'excel_analyze',
-        status: 'running',
-        title: '分析Excel',
-        source: 'excel',
-      },
-    ]
-    capturedExcelCallbacks.onAnalyzeDone!({ success: false, message: '失败原因' })
-  })
-
-  it('onAnalyzeDone 无 running 任务时早返回', () => {
-    createApi()
-    state.taskList!.value = []
-    expect(() => {
-      capturedExcelCallbacks.onAnalyzeDone!({ success: true, message: '' })
-    }).not.toThrow()
   })
 })
 

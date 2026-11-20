@@ -195,10 +195,10 @@ const xcmaxMarketProxy = {
     marketReq<{ ok?: boolean; total_catalog_items?: number; total_users?: number }>('admin/status'),
   llmStatus: () => marketReq('llm/status'),
   llmResolveChatDefault: () => marketReq('llm/resolve-chat-default'),
-  llmChat: (provider: string, model: string, messages: unknown[], maxTokens = 1024) =>
+  llmChat: (provider: string, model: string, messages: unknown[], maxTokens = 1024, clientRequestId = crypto.randomUUID()) =>
     marketReq('llm/chat', {
       method: 'POST',
-      body: { provider, model, messages, max_tokens: maxTokens },
+      body: { provider, model, messages, max_tokens: maxTokens, client_request_id: clientRequestId },
     }),
   /** 员工大会轮询：走 FHD 本地 MODstore :8788，不再代理远端 xiu-ci。 */
   workbenchGetSession: (sessionId: string) =>

@@ -12,6 +12,15 @@
     "newSession": "New session",
     "messageCount": "{count} messages",
     "localOnly": "Local only",
+    "conversationStatus": {
+      "submitted": "Submitting",
+      "streaming": "In progress",
+      "ready": "Replied",
+      "error": "Failed",
+      "waiting": "Needs confirmation",
+      "review": "Needs review",
+      "stopped": "Reply stopped"
+    },
     "expand": "Expand",
     "collapse": "Collapse",
     "downloadShipment": "Download shipment doc",

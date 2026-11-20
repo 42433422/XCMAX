@@ -369,6 +369,35 @@ def _sse_payload_with_run_id(payload: dict[str, Any], run_id: str | None) -> dic
     return enriched
 
 
+def _observe_original_batch(request: Request, body: XcagiCompatChatBody) -> dict | None:
+    from app.application.elt.batch_continuation import active_batch_turn
+    from app.application.task_conversation_store import durable_user_id, task_conversation_store
+    from app.infrastructure.auth.dependencies import resolve_session_user
+    from app.infrastructure.tenant_scope import current_tenant_id
+    from app.request_active_mod_ctx import get_request_active_mod_id
+
+    context = body.context or {}
+    session = str(context.get("session_id") or context.get("conversation_id") or "")
+    turn_id = str(context.get("turn_id") or "")
+    tenant = current_tenant_id()
+    if not (session and turn_id and tenant):
+        return None
+    owner = durable_user_id(getattr(resolve_session_user(request), "id", None))
+    if owner is None:
+        return None
+    snapshot = task_conversation_store.memory_snapshot(session_id=session, user_id=owner)
+    if snapshot is None:
+        return None
+    return active_batch_turn(
+        owner=str(owner),
+        tenant=str(tenant),
+        mod=get_request_active_mod_id() or "",
+        session=session,
+        revision=snapshot["revision"],
+        turn_id=turn_id,
+    )
+
+
 def _thinking_steps_from_planner_stream_text(merged: str) -> str | None:
     if not (merged or "").strip():
         return None
@@ -464,6 +493,33 @@ async def _xcagi_planner_stream_bytes_async(
                 break
             yield item
     except TimeoutError as error:
+        try:
+            active_turn = await asyncio.wait_for(
+                asyncio.to_thread(_observe_original_batch, request, body),
+                timeout=_STREAM_SAFETY_STORE_TIMEOUT,
+            )
+        except RECOVERABLE_ERRORS:
+            active_turn = None
+        if active_turn is not None:
+            text = (
+                "原导入任务的写入回执待核对。"
+                if active_turn["status"] == "blocked"
+                else "导入任务仍在后台，可继续查看原任务进度。"
+            )
+            yield _sse_event_line(
+                {
+                    "type": "done",
+                    "result": {
+                        "success": True,
+                        "response": text,
+                        "message": text,
+                        "run_id": active_turn["run_id"],
+                        "active_turn": active_turn,
+                        "data": {"action": "workflow_waiting"},
+                    },
+                }
+            )
+            return
         reason = getattr(error, "reason", "observation_timeout")
         lifetime.cancel(reason)
         status_code = getattr(error, "status_code", 504)

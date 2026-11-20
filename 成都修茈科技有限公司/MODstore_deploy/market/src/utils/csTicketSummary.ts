@@ -1,4 +1,4 @@
-import { shortTicketRef, ticketIntentLabel, ticketLifecycleLabel } from './csTicketLifecycle'
+import { shortTicketRef, ticketDismissalLabel, ticketIntentLabel, ticketLifecycleLabel } from './csTicketLifecycle'
 import { asUnknownRecord, type UnknownRecord } from './typeNarrowing'
 
 function humanizeRationale(raw: unknown): string {
@@ -81,6 +81,8 @@ export function composeTicketUserMessage(input: { ticket: UnknownRecord; decisio
   const ref = shortTicketRef(ticket)
   const subject = String(ticket.subject_id || '').trim()
   const head = subject ? `你的${kind}（${ref}）` : `你的${kind}`
+  const dismissal = ticketDismissalLabel(ticket)
+  if (dismissal) return `${head}：已驳回（${dismissal}）。请查看原会话中的处置回执。`
   const act = actionLine(actions)
   const rationale = humanizeRationale(decision?.rationale)
   const decisionKey = String(decision?.decision || ticket.decision_status || '').toLowerCase()

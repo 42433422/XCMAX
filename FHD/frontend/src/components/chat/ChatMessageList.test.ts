@@ -80,8 +80,8 @@ describe('ChatMessageList', () => {
       props: { ...defaultProps, messages: messages.value, isLoading: true, isStreamingReply: true },
     })
     expect(wrapper.get('.message-html').text()).toContain('已开始读取附件')
-    expect(wrapper.find('.chat-typing-indicator').exists()).toBe(true)
-    expect(wrapper.find('.message-receipt__spinner').exists()).toBe(true)
+    expect(wrapper.get('.chat-typing-indicator').text()).toContain('正在读取附件')
+    expect(wrapper.find('[data-testid="agent-step-chain"]').exists()).toBe(false)
     expect(wrapper.get('.message-receipt__status').text()).toBe('进行中')
 
     messages.value[0].content += '正在写入。'
@@ -92,8 +92,26 @@ describe('ChatMessageList', () => {
     messages.value[0].executionProgress![0].status = 'success'
     await nextTick()
     expect(wrapper.find('.chat-typing-indicator').exists()).toBe(false)
-    expect(wrapper.find('.message-receipt__spinner').exists()).toBe(false)
     expect(wrapper.get('.message-receipt__status').text()).toBe('已完成')
+  })
+
+  it('keeps attachments and planning in one execution chain without a synthetic tool step', async () => {
+    const wrapper = mount(ChatMessageList, { props: { ...defaultProps, messages: [{
+      role: 'ai', content: '', time: '12:00', streamStatus: 'streaming',
+      toolProgressLabel: '正在处理任务…', thinkingSteps: '生成计划…',
+      trace: [{ tool: 'list_attachments', ok: true, ms: 0 }],
+      agentRunTrace: {
+        run_id: 'run-plan', intent: '', status: 'running', terminal: false,
+        phases: [{ kind: 'planner', started_event_id: 'plan', status: 'running', title: '正在生成执行计划' }],
+      },
+    }] } })
+    const chain = wrapper.get('[data-testid="chat-task-trace"]')
+    expect(chain.get('.chat-typing-indicator').text()).toContain('正在生成执行计划')
+    expect(chain.find('[data-testid="chat-turn-trace"]').exists()).toBe(true)
+    expect(chain.find('[data-testid="agent-run-trace"]').exists()).toBe(true)
+    expect(chain.find('[data-testid="agent-step-chain"]').exists()).toBe(false)
+    expect(chain.find('.message-task-trace__activity').exists()).toBe(false)
+    expect(chain.text()).not.toContain('1 步')
   })
 
   it('updates the first parallel node without waiting for the last node or replacing the message', async () => {
@@ -112,8 +130,7 @@ describe('ChatMessageList', () => {
     })
     const messageElement = wrapper.get('[data-message-index="0"]').element
     expect(wrapper.find('[data-testid="agent-run-trace"]').exists()).toBe(false)
-    expect(wrapper.get('.message-thinking').attributes('open')).toBeUndefined()
-    expect(wrapper.get('.message-thinking').text()).toContain('旧的过程说明')
+    expect(wrapper.find('.message-task-trace__activity').exists()).toBe(false)
     expect(wrapper.find('.message-receipt').exists()).toBe(false)
     expect(wrapper.findAll('.asc-step')).toHaveLength(2)
     expect(wrapper.findAll('.asc-step')[0].get('progress').attributes('value')).toBe('10')
@@ -182,6 +199,41 @@ describe('ChatMessageList', () => {
     expect(rows[1].get('.asc-live-hint').text()).toBe('执行结果待核对')
     expect(wrapper.find('.fa-spin').exists()).toBe(false)
     expect(messages.value[0].liveSteps!.map(step => step.state)).toEqual(['running', 'running'])
+  })
+
+  it('retains explicit incomplete ELT receipts when the final workflow trace arrives', () => {
+    const wrapper = mount(ChatMessageList, {
+      props: { ...defaultProps, messages: [{
+        role: 'ai', content: '运单已写入，客户及产品尚未提交写入。', time: '12:00', streamStatus: 'ready',
+        turnId: 'elt-turn', workflowAction: 'failed',
+        agentRunTrace: { run_id: 'elt-run', intent: 'import', status: 'failed', terminal: true, phases: [] },
+        nodeResults: [{ node_id: 'node-a', tool_id: 'elt_import', action: 'execute', success: false }],
+        liveSteps: [
+          runningStep({ state: 'partial', output: '运单已写入' }),
+          runningStep({ id: 'link', title: '客户及产品预演', state: 'deferred', output: '尚未提交写入' }),
+        ],
+      }] },
+    })
+
+    expect(wrapper.get('.asc-pill').text()).toBe('部分完成')
+    expect(wrapper.get('.asc-step.is-deferred').text()).toContain('待处理')
+    expect(wrapper.find('.asc-step.is-failed').exists()).toBe(false)
+    expect(wrapper.find('.fa-spin').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="chat-error-recovery"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="chat-retry-model"]').exists()).toBe(false)
+  })
+
+  it('routes a blocked continuation to the original task without presenting it as a failure', async () => {
+    const wrapper = mount(ChatMessageList, { props: { ...defaultProps, messages: [{
+      role: 'ai', content: '原导入任务待核对。', time: '12:00', turnId: 'original-turn',
+      workflowAction: 'blocked', recoveryTaskId: 'original-task',
+      toolProgressLabel: '请核对原任务回执',
+    }] } })
+    expect(wrapper.get('.message-receipt__status').text()).toBe('待核对')
+    expect(wrapper.find('[data-testid="chat-error-recovery"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="chat-retry-model"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="chat-open-original-task"]').trigger('click')
+    expect(wrapper.emitted('open-original-task')).toEqual([['original-task']])
   })
 
   it('renders a visible Business Harness result on the assistant message', () => {
@@ -253,7 +305,7 @@ describe('ChatMessageList', () => {
     expect(wrapper.get('.message-html').text()).not.toContain('&quot;')
   })
 
-  it('hides internal context counters by default but keeps thinking steps reachable', () => {
+  it('hides internal context counters by default but keeps legacy activity in the execution chain', async () => {
     const wrapper = mount(ChatMessageList, {
       props: {
         ...defaultProps,
@@ -263,19 +315,23 @@ describe('ChatMessageList', () => {
             content: '已清空知识库。',
             time: '17:00',
             thinkingSteps: '[正在调用工具:dataset_rag.clear_dataset]',
+            agentRunTrace: { run_id: 'without-phases', intent: '', status: 'success', terminal: true, phases: [] },
           },
         ],
       },
     })
     expect(wrapper.find('.context-summary').exists()).toBe(false)
-    expect(wrapper.get('.thinking-panel').text()).toContain('dataset_rag.clear_dataset')
+    const chain = wrapper.get('[data-testid="chat-task-trace"]')
+    expect(chain.text()).not.toContain('dataset_rag.clear_dataset')
+    await chain.get('.message-task-trace__trigger').trigger('click')
+    expect(chain.text()).toContain('dataset_rag.clear_dataset')
     expect(wrapper.find('.trace-panel').exists()).toBe(false)
   })
 
-  it('allows an explicit diagnostic surface to show context metadata', () => {
+  it('allows an explicit diagnostic surface to show context metadata', async () => {
     const wrapper = mountList(true)
+    await wrapper.get('.message-receipt__summary').trigger('click')
     expect(wrapper.get('.context-summary').text()).toContain('已关联上下文')
-    expect(wrapper.get('.thinking-panel').text()).toContain('internal chain')
     expect(wrapper.get('.trace-panel').text()).toContain('internal_node')
   })
 
@@ -414,9 +470,11 @@ it('renders execution progress, safe user text, diagnostic errors and forwards m
     messageHeights: new Map([[0, 200]]), isLoading: true, loadingProgressText: '正在导出' } })
   await wrapper.vm.$nextTick()
   expect(host.value).toBe(wrapper.get('#chatMessages').element)
+  const summary = wrapper.get('.message-receipt__summary')
+  expect(summary.attributes('aria-expanded')).toBe('false')
+  await summary.trigger('click')
   expect(wrapper.findAll('.execution-timeline__marker').map(x => x.text())).toEqual(['✓', '×', '■', 'Ⅱ', '↻', '●'])
   expect(wrapper.get('.execution-timeline__current').text()).toBe('步骤5')
-  expect(wrapper.get('.message-receipt').attributes('open')).toBeUndefined()
   expect(wrapper.get('.todo-panel').text()).toContain('检查库存')
   expect(wrapper.get('.trace-node-meta').text()).toContain('重试 2 次 · 150ms')
   expect(wrapper.get('.trace-node-error').text()).toContain('暂时不可用')
@@ -516,7 +574,7 @@ it('asks for an explicit delete confirmation and does not offer it after a commi
   const preview = mount(ChatMessageList, { props: { ...defaultProps, messages: [
     { role: 'user', content: '清理全部客户和产品', time: '12:00', turnId: 'turn-a' },
     { role: 'ai', content: '这是删除预览，尚未写入。', time: '12:00', turnId: 'turn-a', execution: {
-      idempotencyKey: 'turn-a', intent: 'bulk_destructive', committed: false, effect: 'preview', tenantId: 'demo', customerCount: 2, productCount: 3,
+      idempotencyKey: 'turn-a', intent: 'bulk_destructive', committed: false, effect: 'preview', confirmable: true, tenantId: 'demo', customerCount: 2, productCount: 3,
     } },
   ] } })
   await preview.get('[data-testid="chat-destructive-preview"] button').trigger('click')
@@ -532,6 +590,32 @@ it('asks for an explicit delete confirmation and does not offer it after a commi
   expect(committed.get('[data-testid="chat-error-recovery"]').text()).toContain('已提交的业务操作不会再次执行')
   expect(committed.find('[data-testid="chat-destructive-preview"]').exists()).toBe(false)
   committed.unmount()
+})
+
+it('hides old unresolved confirmations and stale running receipts', () => {
+  const wrapper = mount(ChatMessageList, { props: { ...defaultProps, messages: [
+    { role: 'user', content: '清理全部知识库数据库模版库', time: '12:00' },
+    { role: 'ai', content: '范围尚未确定', time: '12:00', toolProgressLabel: '正在处理任务',
+      executionProgress: [{ at: '12:00', label: '正在处理任务', status: 'running' }],
+      execution: { idempotencyKey: 'old', intent: 'bulk_destructive', committed: false, effect: 'preview' },
+    },
+  ] } })
+  expect(wrapper.find('[data-testid="chat-destructive-preview"]').exists()).toBe(false)
+  expect(wrapper.text()).not.toContain('正在处理任务')
+  wrapper.unmount()
+})
+
+it('offers reconciliation only when the original write could have committed', async () => {
+  const wrapper = mount(ChatMessageList, { props: { ...defaultProps, messages: [
+    { role: 'user', content: '导入这些附件', time: '12:00', turnId: 'import-turn' },
+    { role: 'ai', content: '工具进程退出，请核对原任务', time: '12:01', turnId: 'import-turn', workflowAction: 'failed', execution: {
+      idempotencyKey: 'import-turn', intent: 'elt_import', committed: false, effect: 'unknown', outcome: 'unknown',
+    } },
+  ] } })
+  expect(wrapper.get('[data-testid="chat-error-recovery"]').text()).toContain('结果未知')
+  expect(wrapper.find('[data-testid="chat-retry-model"]').exists()).toBe(false)
+  await wrapper.get('[data-testid="chat-reconcile-turn"]').trigger('click')
+  expect(wrapper.emitted('reconcile-turn')).toEqual([[1]])
 })
 
 it('keeps an empty conversation blank without welcome decorations', async () => {

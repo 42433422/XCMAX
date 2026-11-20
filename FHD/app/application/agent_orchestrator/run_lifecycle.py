@@ -99,7 +99,9 @@ def continuation_conversation_error(run: AgentRun, context: dict[str, Any]) -> s
     return ""
 
 
-def safe_continuation_error(run: AgentRun) -> str:
+def safe_continuation_error(
+    run: AgentRun, *, approved_unsubmitted_step_id: str = "", elt_checkpoint_step_id: str = ""
+) -> str:
     """Check persisted receipts and today's registry before any automatic replay."""
     from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
     from app.application.workflow.workflow_types import plan_from_dict, validate_plan_graph
@@ -142,6 +144,23 @@ def safe_continuation_error(run: AgentRun) -> str:
             continue
         spec = get_tool_action_spec(step.tool_id, step.action)
         if (
+            step.risk == "high"
+            and spec is not None
+            and (
+                (
+                    approved_unsubmitted_step_id
+                    and step.step_id == approved_unsubmitted_step_id
+                    and step.status == "pending"
+                )
+                or (
+                    elt_checkpoint_step_id
+                    and step.step_id == elt_checkpoint_step_id
+                    and step.status in {"running", "pending"}
+                )
+            )
+        ):
+            continue
+        if (
             node.node_id in approval_ids
             or step.status not in {"pending", "running", "failed"}
             or not (
@@ -157,8 +176,19 @@ def safe_continuation_error(run: AgentRun) -> str:
     return ""
 
 
-def prepare_safe_continuation(run: AgentRun, *, requested_by: str, reason: str) -> None:
-    if error := safe_continuation_error(run):
+def prepare_safe_continuation(
+    run: AgentRun,
+    *,
+    requested_by: str,
+    reason: str,
+    approved_unsubmitted_step_id: str = "",
+    elt_checkpoint_step_id: str = "",
+) -> None:
+    if error := safe_continuation_error(
+        run,
+        approved_unsubmitted_step_id=approved_unsubmitted_step_id,
+        elt_checkpoint_step_id=elt_checkpoint_step_id,
+    ):
         raise ValueError(error)
     for step in run.steps:
         if step.status in {"failed", "running"}:
@@ -171,9 +201,11 @@ def prepare_safe_continuation(run: AgentRun, *, requested_by: str, reason: str) 
                 utc_now_iso(),
             )
     run.status, run.error = "queued", ""
+    approved_step_id = elt_checkpoint_step_id or approved_unsubmitted_step_id
     run.metadata["dispatch"] = {
+        **(dict(run.metadata.get("dispatch") or {}) if approved_step_id else {}),
         "state": "queued",
-        "approved_step_id": "",
+        "approved_step_id": approved_step_id,
         "requested_by": requested_by,
         "queued_at": utc_now_iso(),
     }

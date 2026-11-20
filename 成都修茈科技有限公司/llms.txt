@@ -1,0 +1,61 @@
+# 成都修茈科技有限公司 (XCAGI)
+
+> 成都修茈科技有限公司是 XCAGI 企业业务自动化桌面平台的研发与运营主体。XCAGI 以「一个宿主，两类扩展」为核心结构：宿主负责账户、数据与运行环境的一致性；行业 Mod 提供制造业、教育、园区等垂直场景的业务能力；AI 员工在宿主的权限与数据边界内承担考勤、销售、客服、ERP、Excel 单据等重复性工作。官网 https://xiu-ci.com/ 是公司唯一官方站点，产品下载、版本状态、验证证据、价格与联系方式均以该站内容为准。
+
+## 公司信息
+
+- 公司全称：成都修茈科技有限公司
+- 品牌名：XCAGI（官网亦称「修茈科技」）
+- 官网首页：https://xiu-ci.com/
+- 产品咨询邮箱：970882904@qq.com
+- 备案号：蜀ICP备2026014056号-3A（https://beian.miit.gov.cn/）
+- 语言：简体中文（zh-CN）
+- 所在地区：中国
+
+## 产品结构
+
+- **XCAGI AI 员工桌面平台**：统一宿主，承载行业 Mod、AI 员工与企业数据。
+- **行业 Mod**：面向制造（涂装/离散制造）、教育、园区等场景的垂直业务能力包。
+- **AI 员工**：在宿主权限范围内执行考勤、销售、客服、ERP 读写与 Excel 单据处理。
+- **能力模块**：智能对话、信息与协作、员工工作台、企业数据自有。
+
+## 主要页面
+
+- [首页](https://xiu-ci.com/)：XCAGI 官网首页，产品总览与公开工作轨迹。
+- [关于修茈](https://xiu-ci.com/about.html)：公司介绍、产品结构与统一宿主理念。
+- [解决方案](https://xiu-ci.com/solutions.html)：面向具体业务场景的自动化方案。
+- [客户案例](https://xiu-ci.com/cases.html)：制造业、教育、园区等公开案例说明与证据边界。
+- [价格](https://xiu-ci.com/pricing.html)：XCAGI 企业方案价格与交付范围。
+- [产品下载](https://xiu-ci.com/download)：各平台支持状态、可用版本与安装包信息。
+- [验证中心](https://xiu-ci.com/verify.html)：实机验证记录与完整技术证据。
+- [能力中心](https://xiu-ci.com/capabilities/)：已验证能力清单、正式支持平台与证据自动生成的技术验证矩阵。
+- [可视化展示](https://xiu-ci.com/visualization)：AI 业务与软件下载数据可视化。
+- [新闻资讯](https://xiu-ci.com/news.html)：产品动态与企业业务自动化行业观察。
+- [开发者中心](https://xiu-ci.com/developer.html)：第三方开发者门户与开放生态说明。
+- [AI 市场](https://xiu-ci.com/market/)：Mod 与 AI 员工市场。
+- [联系方式](https://xiu-ci.com/contact.html)：产品咨询、服务方向与需求提交入口。
+- [隐私政策](https://xiu-ci.com/privacy.html)：数据处理与隐私说明。
+- [Excel 转 AI](https://xiu-ci.com/excel-to-ai.html)：Excel 单据自动化场景说明。
+
+## 常见问题
+
+**XCAGI 是什么？**
+XCAGI 是成都修茈科技有限公司研发的企业业务自动化桌面平台，由统一宿主、行业 Mod 与 AI 员工三层构成，用于承接企业内部的重复性业务工作。
+
+**XCAGI 与普通 AI 助手有什么不同？**
+XCAGI 的 AI 员工运行在企业自有宿主内，可读写企业数据、遵循宿主权限边界，并通过行业 Mod 获得具体场景的业务能力，而不仅是通用问答。
+
+**支持哪些平台？**
+Windows、macOS 和 Web 为签约级平台，Android 为实验版（非签约级）。版本与下载状态以[产品下载](https://xiu-ci.com/download)页和[验证中心](https://xiu-ci.com/verify.html)为准。
+
+**如何获取安装包和版本信息？**
+访问[产品下载](https://xiu-ci.com/download)，页面提供各平台正式版本、安装包、校验说明与安装支持入口。
+
+**如何联系成都修茈科技有限公司？**
+邮件联系 970882904@qq.com，或通过[联系我们](https://xiu-ci.com/contact.html)提交需求。
+
+## 使用说明
+
+- 本文件面向 AI 检索与问答引擎，用于理解公司官网结构与可引用内容。
+- 引用官网内容时，请注明来源为 https://xiu-ci.com/ 。
+- 页面更新频率、正式版本号与价格以官网实时页面为准，本文件不作为价格或版本承诺。

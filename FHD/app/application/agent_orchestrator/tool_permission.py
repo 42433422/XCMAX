@@ -851,36 +851,48 @@ def recover_idempotent_claims() -> dict[str, int]:
 def begin_idempotent_replay(
     context: dict[str, Any], tool_id: str, action: str, params: dict[str, Any]
 ) -> tuple[str, dict[str, Any] | None]:
-    from app.application.agent_orchestrator.business_write_guard import worker_claim_guard
+    from app.application.agent_orchestrator.business_write_guard import (
+        owns_elt_step,
+        worker_claim_guard,
+    )
     from app.application.agent_orchestrator.worker_repository import WorkerLeaseLost
 
     spec = get_tool_action_spec(tool_id, action)
     safe_read = spec is not None and spec.read_only and spec.idempotent and spec.risk == "low"
+    elt = (tool_id, action) == ("elt_import", "execute") and owns_elt_step(context)
+    claim_kind = "elt" if elt else "read"
     with _IDEMPOTENCY_LOCK:
-        with worker_claim_guard() if safe_read else nullcontext() as claim:
+        with worker_claim_guard() if safe_read or elt else nullcontext() as claim:
             if (
                 claim is not None
                 and str(context.get("run_id") or context.get("agent_run_id") or "") != claim[0]
             ):
-                raise WorkerLeaseLost("read claim does not belong to the current task")
-            return _begin_idempotent_replay(context, tool_id, action, params, read_claim=claim)
+                raise WorkerLeaseLost("tool claim does not belong to the current task")
+            return _begin_idempotent_replay(
+                context, tool_id, action, params, lease_claim=claim, claim_kind=claim_kind
+            )
 
 
-def _read_claim_marker(claim: tuple[str, str, int]) -> str:
+def _lease_claim_marker(claim: tuple[str, str, int], kind: str) -> str:
     from app.application.agent_orchestrator.business_action_ledger import canonical_hash
 
     run_id, owner_id, generation = claim
-    return f"read-lease-v1:{canonical_hash(run_id)}:{generation}:{canonical_hash(owner_id)}:"
+    return f"{kind}-lease-v1:{canonical_hash(run_id)}:{generation}:{canonical_hash(owner_id)}:"
 
 
-def _expired_read_claim(owner: str, claim: tuple[str, str, int]) -> bool:
+def _expired_lease_claim(owner: str, claim: tuple[str, str, int], kind: str) -> bool:
     parts = owner.split(":")
-    expected = _read_claim_marker(claim).split(":")
-    if len(parts) == 6 and parts[1] == "read-lease-v1":
-        return parts[2] == expected[1] and parts[3].isdigit() and int(parts[3]) < claim[2]
+    expected = _lease_claim_marker(claim, kind).split(":")
+    if len(parts) == 6 and parts[1].endswith("-lease-v1"):
+        return (
+            parts[1] == expected[0]
+            and parts[2] == expected[1]
+            and parts[3].isdigit()
+            and int(parts[3]) < claim[2]
+        )
     # Existing claims predate queue-generation markers. Only proven process
     # death can release a legacy read, never a live/unknown owner or any write.
-    return _owner_liveness(owner) == "dead"
+    return kind == "read" and _owner_liveness(owner) == "dead"
 
 
 def _begin_idempotent_replay(
@@ -889,7 +901,8 @@ def _begin_idempotent_replay(
     action: str,
     params: dict[str, Any],
     *,
-    read_claim: tuple[str, str, int] | None,
+    lease_claim: tuple[str, str, int] | None,
+    claim_kind: str,
 ) -> tuple[str, dict[str, Any] | None]:
     """Return a stored result or atomically claim a new key. Unknown effects cannot replay."""
     key = idempotency_scope_key(context, tool_id, action, params)
@@ -907,8 +920,8 @@ def _begin_idempotent_replay(
             reason="idempotency_fingerprint_rejected",
         )
     receipt_marker = (
-        _read_claim_marker(read_claim)
-        if read_claim is not None
+        _lease_claim_marker(lease_claim, claim_kind)
+        if lease_claim is not None
         else "customer-receipt-v1:"
         if (tool_id, action) == ("customers", "create")
         else ""
@@ -935,8 +948,8 @@ def _begin_idempotent_replay(
         return key, saved
     if (
         current.get("inflight")
-        and read_claim is not None
-        and _expired_read_claim(str(current.get("owner") or ""), read_claim)
+        and lease_claim is not None
+        and _expired_lease_claim(str(current.get("owner") or ""), lease_claim, claim_kind)
         and _replace_dead_claim(key, str(current["owner"]), fingerprint, owner)
     ):
         # The caller still holds the current queue generation's SQL lock.
@@ -1023,15 +1036,16 @@ def finish_idempotent_replay(key: str, output: dict[str, Any]) -> None:
         if owner not in _LIVE_OWNERS or not owner.startswith(f"{os.getpid()}:"):
             return
         saved = _retained_result(output)
-        if ":read-lease-v1:" in owner:
+        claim_kind = next((kind for kind in ("read", "elt") if f":{kind}-lease-v1:" in owner), "")
+        if claim_kind:
             from app.application.agent_orchestrator.business_write_guard import worker_claim_guard
             from app.application.agent_orchestrator.worker_repository import WorkerLeaseLost
 
             with worker_claim_guard() as claim:
                 if claim is None or not owner.startswith(
-                    f"{os.getpid()}:{_read_claim_marker(claim)}"
+                    f"{os.getpid()}:{_lease_claim_marker(claim, claim_kind)}"
                 ):
-                    raise WorkerLeaseLost("read receipt belongs to another queue generation")
+                    raise WorkerLeaseLost("tool receipt belongs to another queue generation")
                 _finish_claim(key, owner, saved)
         else:
             _finish_claim(key, owner, saved)

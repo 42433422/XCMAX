@@ -38,8 +38,14 @@ def active_context(db, event, *, receipt: dict | None = None) -> tuple[dict, str
             return payload, "ticket_owner_mismatch"
         resolution = object_json(ticket.evidence_json).get("resolution") or {}
         original = payload.get("resolution") or {}
+        if ticket.status == "rejected":
+            return payload, "ticket_disposed"
         if ticket.closed_at or ticket.status in {"closed", "resolved", "expired"}:
             return payload, "ticket_closed"
+        from modstore_server.customer_ticket_intake_review import intake_dispatch_block_reason
+
+        if blocked := intake_dispatch_block_reason(ticket):
+            return payload, blocked
         if resolution.get("reopened_at") != original.get("reopened_at"):
             return payload, "ticket_reopened"
         if int(resolution.get("incident_event_id") or 0) > event.id:
@@ -64,6 +70,19 @@ def active_context(db, event, *, receipt: dict | None = None) -> tuple[dict, str
         if current.get("ok") is True:
             return payload, "attempt_recovered"
     return payload, ""
+
+
+def claimed_ticket_dispatch_block_reason() -> str:
+    from modstore_server.models import IncidentEvent, get_session_factory
+    from modstore_server.node_coordinator import current_claim
+
+    claim = current_claim()
+    if claim:
+        with get_session_factory()() as db:
+            event = db.get(IncidentEvent, int(claim["event_id"]))
+            if event is not None and event.event_type == "ops.intake.customer_ticket":
+                return active_context(db, event)[1]
+    return ""
 
 
 def review_input(event_id: int, payload: dict, receipt: dict) -> dict:
