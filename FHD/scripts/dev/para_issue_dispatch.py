@@ -8,8 +8,8 @@ sends any LLM key. It:
   2. creates a Mac control *code* task through MODstore's dispatch-only service
      endpoint (``/api/service/mac-control/tasks``, preferred tool ``cursor``);
   3. polls the receipt until the task is terminal;
-  4. opens a PR from the branch Para pushed, and records the Para task id, PR and
-     result on the issue.
+  4. verifies the branch Para pushed, then opens a repair PR or updates the
+     authorized original PR and records its new CI run.
 
 Merging stays with the normal CI/review gates; this script never merges.
 
@@ -31,13 +31,18 @@ import urllib.request
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 FHD_ROOT = Path(__file__).resolve().parents[2]
 if str(FHD_ROOT / "scripts" / "dev") not in sys.path:
     sys.path.insert(0, str(FHD_ROOT / "scripts" / "dev"))
+if str(FHD_ROOT) not in sys.path:
+    sys.path.insert(0, str(FHD_ROOT))
 
 import ai_issue_implement as impl
+
+from scripts.ci import self_heal_freshness as freshness
+from scripts.dev import para_pr_repair as repair
 
 REPORT_DIR = FHD_ROOT / "test_reports"
 DEFAULT_DISPATCH_BASE = "https://xiu-ci.com"
@@ -68,6 +73,8 @@ class DispatchResult:
     pr_url: str = ""
     pr_number: int = 0
     llm_used: bool = False
+    original_sha: str = ""
+    ci_run_id: int = 0
 
 
 def _now() -> str:
@@ -82,7 +89,9 @@ def _write_report(result: DispatchResult) -> None:
     pending.replace(path)
 
 
-def _finish(result: DispatchResult, status: str, reason: str, code: int, token: str = "") -> None:
+def _finish(
+    result: DispatchResult, status: str, reason: str, code: int, token: str = ""
+) -> NoReturn:
     result.status, result.reason, result.finished_at = status, reason, _now()
     result.ok = code == 0
     _write_report(result)
@@ -192,6 +201,7 @@ def _receipt(result: DispatchResult, token: str) -> None:
         "issue_number": result.issue_number,
         "base_branch": result.base_branch,
         "control_task_id": result.control_task_id,
+        **({"source_sha": result.original_sha} if result.original_sha else {}),
     }
     pending = result.status == "timeout"
     outcome = (
@@ -217,13 +227,21 @@ def _receipt(result: DispatchResult, token: str) -> None:
         f"- Para 任务：`{result.para_task_id or '未回报'}`\n"
         f"- 执行器状态：`{result.final_state or '未查询'}`\n"
         f"- PR：{result.pr_url or '未创建'}\n"
-        f"- 诊断：{result.reason if result.status != 'para_failed' else '执行器未成功完成，请凭任务号核查私有执行回执'}\n"
+        + (f"- Head：`{result.head_sha}`\n" if result.original_sha and result.head_sha else "")
+        + (
+            f"- CI：https://github.com/{result.repo}/actions/runs/{result.ci_run_id}\n"
+            if result.ci_run_id
+            else ""
+        )
+        + f"- 诊断：{result.reason if result.status != 'para_failed' else '执行器未成功完成，请凭任务号核查私有执行回执'}\n"
         f"- 工作流：https://github.com/{result.repo}/actions/runs/{os.environ.get('GITHUB_RUN_ID', '')}"
         f"{detail}",
     )
 
 
-def _validated_resume(args: argparse.Namespace, comments: list[dict[str, Any]]) -> str:
+def _validated_resume(
+    args: argparse.Namespace, comments: list[dict[str, Any]], *, source_sha: str = ""
+) -> str:
     """Only resume an identity previously receipted by this repository's workflow."""
     task_id = str(getattr(args, "control_task_id", "") or "").strip()
     if not task_id:
@@ -233,18 +251,23 @@ def _validated_resume(args: argparse.Namespace, comments: list[dict[str, Any]]) 
         if user.get("login") != "github-actions[bot]" or user.get("type") != "Bot":
             continue
         for raw in re.findall(
-            re.escape(RECEIPT_MARKER) + r"(\{[^\n]+\}) -->", str(comment.get("body") or "")
+            re.escape(RECEIPT_MARKER) + r"(\{[^\n]+\}) -->",
+            str(comment.get("body") or ""),
         ):
             try:
                 identity = json.loads(raw)
             except ValueError:
                 continue
-            if identity == {
+            expected = {
                 "repo": args.repo,
                 "issue_number": int(args.issue_number),
                 "base_branch": args.base_branch,
                 "control_task_id": task_id,
-            }:
+                **({"source_sha": source_sha} if source_sha else {}),
+            }
+            if isinstance(identity, dict) and all(
+                identity.get(k) == v for k, v in expected.items()
+            ):
                 return task_id
     raise ValueError("恢复任务未匹配此 Issue、目标分支的可信工作流回执，拒绝重新派单")
 
@@ -286,6 +309,53 @@ def _branch_head(repo: str, branch: str, token: str) -> str:
     return str(((data or {}).get("commit") or {}).get("sha") or "")
 
 
+def _read_github(token: str):
+    def get(path, params):
+        query = "?" + urllib.parse.urlencode(params) if params else ""
+        try:
+            return 200, impl._gh_get(f"https://api.github.com{path}{query}", token)
+        except urllib.error.HTTPError as exc:
+            return exc.code, None
+
+    return get
+
+
+def _observe_update(result: DispatchResult, target: repair.Target, head: str, get) -> bool:
+    repo = result.repo
+    for attempt in range(7):
+        current = repair.open_pr(repo, target, None, get, authorize=False)["head"]["sha"]
+        if current == head:
+            result.ci_run_id = repair.new_ci_run(repo, target, head, get)
+            if result.ci_run_id:
+                repair.open_pr(repo, target, head, get, authorize=False)
+                return True
+        elif current != target.old_sha:
+            raise ValueError("original PR advanced to an unrelated HEAD")
+        if attempt < 6:
+            time.sleep(15)
+    if current != head:
+        raise ValueError("original PR update is not visible yet")
+    return False
+
+
+def _finish_update(
+    result: DispatchResult, target: repair.Target, head: str, token: str, get
+) -> NoReturn:
+    try:
+        observed = _observe_update(result, target, head, get)
+    except (OSError, ValueError, TypeError, freshness.LookupFailed):
+        _finish(
+            result,
+            "pr_update_unconfirmed",
+            "原 PR 更新或 CI 回读未确认，保留回执以供恢复",
+            6,
+            token,
+        )
+    if observed:
+        _finish(result, "pr_updated_ci_observed", "已回读原 PR 新 HEAD 与 CI 运行", 0, token)
+    _finish(result, "pr_updated_ci_pending", "原 PR 新 HEAD 已确认，暂未读到 CI 运行", 6, token)
+
+
 def run(args: argparse.Namespace) -> None:
     repo, number = args.repo, int(args.issue_number)
     result = DispatchResult(
@@ -325,8 +395,50 @@ def run(args: argparse.Namespace) -> None:
     authorized, auth_reason, _source = impl._is_authorized(issue, comments, repo)
     if not authorized:
         finish("waiting_confirmation", auth_reason, 2)
+    target = None
+    if repair.is_repair_incident(issue):
+        try:
+            if (
+                os.environ.get("GITHUB_ACTIONS") != "true"
+                or os.environ.get("GITHUB_REF") != "refs/heads/main"
+                or os.environ.get("GITHUB_REPOSITORY") != repo
+                or not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo)
+            ):
+                raise ValueError("original PR update requires the trusted main workflow")
+            get = _read_github(args.token)
+            comments = list(freshness.pages(get, f"/repos/{repo}/issues/{number}/comments"))
+            intent = repair.prior_intent(repo, number, args.base_branch, comments)
+            if intent:
+                target, head, result.control_task_id, result.para_task_id = intent
+                result.original_sha = target.old_sha
+                result.head_sha = head
+                result.pr_number = target.number
+                result.pr_url = f"https://github.com/{repo}/pull/{target.number}"
+                _finish_update(result, target, head, args.token, get)
+            target = repair.select_target(repo, issue, args.base_branch, get)
+            if target:
+                result.original_sha = target.old_sha
+                result.pr_number = target.number
+                result.pr_url = f"https://github.com/{repo}/pull/{target.number}"
+                write_token = os.environ.get("PR_CREATE_TOKEN", "").strip()
+                if not write_token or write_token == args.token:
+                    finish(
+                        "pr_repair_blocked",
+                        "缺独立 GitHub 写入凭据，无法触发原 PR 必需 CI",
+                        6,
+                    )
+        except (
+            OSError,
+            ValueError,
+            TypeError,
+            KeyError,
+            freshness.LookupFailed,
+        ) as exc:
+            finish("pr_repair_blocked", f"原 PR 更新身份未确认：{type(exc).__name__}", 6)
     try:
-        result.control_task_id = _validated_resume(args, comments)
+        result.control_task_id = _validated_resume(
+            args, comments, source_sha=target.old_sha if target else ""
+        )
     except ValueError as exc:
         finish("invalid_resume", str(exc), 6)
     estimate = impl._estimate_files(str(issue.get("title") or ""), str(issue.get("body") or ""))
@@ -343,7 +455,11 @@ def run(args: argparse.Namespace) -> None:
     client = DispatchClient(args.dispatch_base, token)
     run_id = os.environ.get("GITHUB_RUN_ID", "local")
     # Rerunning the same workflow must recover the same idempotent dispatch.
-    result.request_key = f"gh-issue-{number}-run-{run_id}"
+    result.request_key = (
+        f"gh-issue-{number}-ci-{target.run_id}-{target.old_sha}"
+        if target
+        else f"gh-issue-{number}-run-{run_id}"
+    )
     if not result.control_task_id:
         result.status = "dispatching"
         _write_report(result)
@@ -352,6 +468,7 @@ def run(args: argparse.Namespace) -> None:
                 {
                     "request_key": result.request_key,
                     "message": build_message(number, issue, args.base_branch),
+                    **({"source_sha": target.old_sha} if target else {}),
                     "tool": args.tool,
                     "github_issue": number,
                 }
@@ -415,7 +532,9 @@ def run(args: argparse.Namespace) -> None:
     try:
         if not re.fullmatch(r"[0-9a-f]{40}", reported_head):
             finish(
-                "verification_failed", "执行器未回报不可变提交 SHA，拒绝用当前分支代替原任务结果", 6
+                "verification_failed",
+                "执行器未回报不可变提交 SHA，拒绝用当前分支代替原任务结果",
+                6,
             )
         remote_head = _branch_head(repo, branch, args.token) if branch else ""
         result.head_sha = remote_head
@@ -423,6 +542,51 @@ def run(args: argparse.Namespace) -> None:
             finish("no_branch", "执行器完成，但推送分支不可用", 6)
         if reported_head and reported_head != remote_head:
             finish("head_mismatch", "回报提交与远端分支不一致，拒绝创建 PR", 6)
+        if target:
+            if (
+                task.get("id") != result.control_task_id
+                or not result.para_task_id
+                or str(execution.get("id") or "") != result.para_task_id
+                or not repair.candidate_belongs_to_task(branch, execution, target)
+            ):
+                finish("pr_repair_blocked", "修复分支与原任务回执不一致", 6)
+
+            def before_write(changed_files):
+                result.changed_files = changed_files
+                current = impl._fetch_issue(repo, number, args.token)
+                latest_comments = list(freshness.pages(get, f"/repos/{repo}/issues/{number}/comments"))
+                if (
+                    current.get("state") != "open"
+                    or not impl._has_aimplement_label(current)
+                    or not repair.is_repair_incident(current)
+                    or not impl._is_authorized(current, latest_comments, repo)[0]
+                    or repair.select_target(repo, current, args.base_branch, get) != target
+                ):
+                    raise ValueError("original PR source changed during repair")
+                response = impl._gh_post(
+                    f"https://api.github.com/repos/{repo}/issues/{number}/comments",
+                    args.token,
+                    {"body": repair.intent_body(
+                        repo, number, target, remote_head,
+                        control_task_id=result.control_task_id, para_task_id=result.para_task_id,
+                    )},
+                )
+                if type(response.get("id")) is not int or response.get("_error"):
+                    raise ValueError("durable original PR update intent not confirmed")
+
+            try:
+                repair.advance(
+                    f"https://github.com/{repo}.git",
+                    target,
+                    remote_head,
+                    write_token,
+                    before_write=before_write,
+                )
+            except repair.GIT_ERRORS:
+                # A failed response does not establish whether GitHub applied the update.
+                # Read the exact ref before considering this attempt complete.
+                pass
+            _finish_update(result, target, remote_head, args.token, get)
         result.changed_files = _checked_diff(repo, args.base_branch, remote_head, args.token)
         if result.changed_files > impl.MAX_CHANGED_FILES:
             finish(
@@ -432,12 +596,16 @@ def run(args: argparse.Namespace) -> None:
             )
         if _branch_head(repo, branch, args.token) != remote_head:
             finish("head_mismatch", "核验后分支发生变化，拒绝创建 PR", 6)
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, TypeError, KeyError, freshness.LookupFailed) as exc:
         finish("verification_failed", f"无法核验真实改动：{type(exc).__name__}", 6)
 
     pr_token = os.environ.get("PR_CREATE_TOKEN", "").strip()
     if not pr_token:
-        finish("pr_failed", "PR_CREATE_TOKEN 未配置：GITHUB_TOKEN 开的 PR 不会触发必需 CI", 6)
+        finish(
+            "pr_failed",
+            "PR_CREATE_TOKEN 未配置：GITHUB_TOKEN 开的 PR 不会触发必需 CI",
+            6,
+        )
     try:
         pr = _existing_pr(repo, branch, args.base_branch, args.token)
         if not pr:
