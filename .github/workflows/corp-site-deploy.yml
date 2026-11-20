@@ -28,6 +28,7 @@ on:
     paths:
       - '成都修茈科技有限公司/*.html'
       - '成都修茈科技有限公司/robots.txt'
+      - '成都修茈科技有限公司/llms.txt'
       - '成都修茈科技有限公司/sitemap.xml'
       - '成都修茈科技有限公司/baidu_urls.txt'
       - '成都修茈科技有限公司/BingSiteAuth.xml'
@@ -144,6 +145,7 @@ jobs:
                        "${GIT_SITE}/world-will.js" "${GIT_SITE}/world-will-ticker.js" \
                        "${GIT_SITE}/world-will-ticker.css" \
                        "${GIT_SITE}/robots.txt" "${GIT_SITE}/sitemap.xml" \
+                       "${GIT_SITE}/llms.txt" \
                        "${GIT_SITE}/baidu_urls.txt" "${GIT_SITE}/BingSiteAuth.xml" \
                        "${GIT_SITE}/download-action-board.js"; do
                 [ -e "$f" ] || continue
