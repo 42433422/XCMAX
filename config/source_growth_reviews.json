@@ -1,6 +1,18 @@
 {
   "schema_version": 1,
   "reviews": {
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_autonomy_service_merged.py": {
+      "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_autonomy_service_merged.py",
+      "base_blob": "b381e33fa505357f7a4bd1b8b96eeb65ce74f289",
+      "head_blob": "44a260e1e24b31cd17e1a50d795ae0125666d822",
+      "before_lines": 1315,
+      "after_lines": 1347,
+      "reason": "Review request only: route approved employee-evolution suggestions to the existing curator execution adapter and preserve approval and retry state.",
+      "boundary": "The existing suggestion facade keeps approval authorization and event publication; execution and receipt handling remain in employee_evolution_dispatch.",
+      "validation": "Focused curator execution and receipt tests passed locally; final-head CI and architecture review remain outstanding. This request is not approval.",
+      "follow_up": "Review locking, idempotent dispatch and recovery of previously dispatched suggestions against the curator execution adapter.",
+      "review_owner": "@42433422"
+    },
     "FHD/app/application/agent_orchestrator/catalog_product_edit.py": {
       "base_file": "FHD/app/application/agent_orchestrator/catalog_product_edit.py",
       "base_blob": "65b106cd2bd2cbd21d2129bfbba002f0607caaf0",
