@@ -1,5 +1,5 @@
 {
-  "lines": 2528358,
+  "lines": 2528390,
   "updated": "2026-11-20",
-  "note": "按用户要求新增第 5 个 CLI，复用 OpenCode v1.19.6 原生 SSE 和既有 WebSocket，接入平台 Responses 并实现可逆停用策略"
+  "note": "用户要求 OpenCode 处理新代码任务及实时回执，沿用 OpenCode v1.19.6 原生 SSE，覆盖 Mac 主控首派与请求幂等，累计净增 454 行"
 }

@@ -104,6 +104,8 @@ def process(db, task, client, devices):
         transition(db, task, "cancelled", "cancelled_before_dispatch")
         return
     request = json.loads(task.request_json)
+    if os.environ.get("DEVFLEET_FORCE_OPENCODE") == "1":
+        request["tool"] = "opencode"
     from modstore_server.mac_control_facts import context_facts
     from modstore_server.mac_control_preflight import prepare_windows_probe
 

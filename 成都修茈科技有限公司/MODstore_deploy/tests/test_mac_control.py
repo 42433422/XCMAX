@@ -160,6 +160,36 @@ def test_offline_preserves_queued_task(factory, para):
         assert db.get(MacControlTask, task_id).state == "running"
 
 
+def test_opencode_policy_applies_to_mac_control_before_first_dispatch(factory, para, monkeypatch):
+    monkeypatch.setenv("DEVFLEET_FORCE_OPENCODE", "1")
+    row = device()
+    row["capabilities"]["tool_preflight"]["opencode"] = {
+        "ok": True,
+        "checked_at": datetime.now(UTC).isoformat(),
+    }
+    row["tools"] = [
+        {"toolName": "codex", "status": "disabled"},
+        {"toolName": "opencode", "status": "idle"},
+    ]
+    monkeypatch.setattr(para, "devices", lambda: [row])
+    submit = para.submit
+    submitted_tools = []
+
+    def capture(body):
+        submitted_tools.append(body["tool_name"])
+        return submit(body)
+
+    monkeypatch.setattr(para, "submit", capture)
+    original = {**request(), "tool": "codex"}
+    with factory() as db:
+        task_id = accept(db, actor="a", key="stable-key", request=original).id
+    worker.run_mac_control_sync()
+    worker.run_mac_control_sync()
+    assert submitted_tools == ["opencode"]
+    with factory() as db:
+        assert accept(db, actor="a", key="stable-key", request=original).id == task_id
+
+
 def test_unknown_preflight_and_busy_device_are_rejected():
     assert choose_device([device(capabilities={})], request(), time.time())[0] is None
     assert choose_device([device(status="offline")], request(), time.time())[0] is None
