@@ -122,7 +122,7 @@ class ConversationService(NeuroEventPublisherMixin):
         idempotency_key: str = "",
         expected_revision: int | None = None,
     ) -> int:
-        from app.application.ai_chat.conversation_history import strip_client_recall_binding
+        from app.domain.conversation.client_metadata import strip_client_recall_binding
 
         return self.save_turn(
             session_id=session_id,

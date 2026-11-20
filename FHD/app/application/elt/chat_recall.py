@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from app.application.elt.errors import EltConflict
 from app.application.elt.service_support import dump_json, load_json
 from app.db.models.elt import EltRun, EltRunRow
+from app.domain.shipment.import_rollback import ImportRollback, confirmed_rollback
 from app.infrastructure.tenant_scope import tenant_id_for_write
 from app.request_active_mod_ctx import get_request_active_mod_id
 
@@ -26,13 +26,6 @@ _KNOWLEDGE_SKIPS = _NO_SOURCE | {
     "source_exists_update_not_confirmed",
 }
 _TEMPLATE_SKIPS = _NO_SOURCE | {"no_region"}
-
-
-@dataclass(frozen=True)
-class ImportRollback:
-    run_id: str
-    origin: dict[str, str]
-    rows: int
 
 
 def _origin(context: dict) -> dict[str, str]:
@@ -142,19 +135,10 @@ def _checked_run(
         .count()
     )
     if rows != item.rows or (
-        run.rollback_status == "completed" and not _confirmed_rollback(receipt, item)
+        run.rollback_status == "completed" and not confirmed_rollback(receipt, item)
     ):
         raise EltConflict("ELT_RECALL_INCOMPLETE", "入库行与回执不一致，请在原任务中核对。")
     return run
-
-
-def _confirmed_rollback(receipt: dict, item: ImportRollback) -> bool:
-    rollback = receipt.get("rollback")
-    return (
-        isinstance(rollback, dict)
-        and rollback.get("status") == "completed"
-        and rollback.get("rows") == item.rows
-    )
 
 
 def prepare_import_rollback(
@@ -223,7 +207,7 @@ def rollback_imports(
         if run.rollback_status == "completed":
             continue
         result = service.rollback(db, run_id=item.run_id, owner_user_id=owner_user_id)
-        if result.get("rollback_status") != "completed" or not _confirmed_rollback(
+        if result.get("rollback_status") != "completed" or not confirmed_rollback(
             result.get("receipt") or {}, item
         ):
             raise EltConflict("ELT_RECALL_INCOMPLETE", "入库撤回尚未收到完整回执，已保留原对话。")

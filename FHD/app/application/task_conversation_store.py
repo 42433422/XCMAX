@@ -91,7 +91,7 @@ class TaskConversationStore:
         client_message_id: str = "",
         expected_revision: int | None = None,
     ) -> int:
-        from app.application.ai_chat.conversation_history import strip_client_recall_binding
+        from app.domain.conversation.client_metadata import strip_client_recall_binding
 
         metadata = strip_client_recall_binding(metadata)
         now = datetime.now()
@@ -433,22 +433,34 @@ class TaskConversationStore:
             return int(session.revision or 0), [_message_row(row) for row in rows]
 
     def delete_messages_from(
-        self, *, session_id: str, user_id: int, message_id: int,
-        expected_revision: int | None = None, expected_ids: tuple[int, ...] | None = None,
+        self,
+        *,
+        session_id: str,
+        user_id: int,
+        message_id: int,
+        expected_revision: int | None = None,
+        expected_ids: tuple[int, ...] | None = None,
     ) -> int:
         """Withdraw a user turn and fence every completion based on the old transcript."""
         with get_db() as db:
             begin_conversation_write(db)
             session = lock_conversation_session(
-                db, session_id=session_id, user_id=user_id, expected_revision=expected_revision,
+                db,
+                session_id=session_id,
+                user_id=user_id,
+                expected_revision=expected_revision,
             )
             suffix = _message_suffix(db, session_id, user_id, message_id)
             target = suffix.filter(AIConversation.id == message_id).first()
             if target is None or target.role != "user":
                 raise PermissionError("only user messages can be withdrawn")
             if expected_ids is not None:
-                current = tuple(row.id for row in suffix.with_entities(AIConversation.id)
-                                .order_by(AIConversation.id).limit(len(expected_ids) + 1))
+                current = tuple(
+                    row.id
+                    for row in suffix.with_entities(AIConversation.id)
+                    .order_by(AIConversation.id)
+                    .limit(len(expected_ids) + 1)
+                )
                 if current != expected_ids:
                     raise ConversationRevisionError("会话已有新消息，撤回范围已变更")
             deleted = suffix.delete(synchronize_session=False)
