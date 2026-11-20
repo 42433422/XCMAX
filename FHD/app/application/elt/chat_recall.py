@@ -196,6 +196,19 @@ def prepare_import_rollback(
     return [item for _, item in sorted(plan, key=lambda entry: entry[0], reverse=True)]
 
 
+def imports_already_rolled_back(db: Session, *, candidates: list[tuple[dict, dict]],
+                                owner_user_id: int, tenant_id: int) -> bool:
+    """Verify the original owned receipts before ignoring a deleted chat turn."""
+    plan = prepare_import_rollback(
+        db, candidates=candidates, owner_user_id=owner_user_id, tenant_id=tenant_id
+    )
+    return bool(plan) and all(
+        _checked_run(db, item, owner_user_id=owner_user_id, tenant_id=tenant_id).rollback_status
+        == "completed"
+        for item in plan
+    )
+
+
 def rollback_imports(
     db: Session, plan: list[ImportRollback], *, owner_user_id: int, tenant_id: int
 ) -> int:

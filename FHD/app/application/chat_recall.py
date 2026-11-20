@@ -50,6 +50,30 @@ def _read_only(tool_id: str, action: str) -> bool:
     return bool(spec and spec.read_only) or (tool_id, action) == ("elt_import", "preview")
 
 
+def _deleted_turn_is_compensated(run, harness, *, user_id: str, tenant_id: str, mod_id: str) -> bool:
+    from app.application.elt.chat_recall import imports_already_rolled_back
+    from app.application.elt.errors import EltConflict
+
+    if not user_id.isdecimal() or not tenant_id.isdecimal() or int(tenant_id) <= 0:
+        return False
+    candidates = []
+    for step in run.steps:
+        if _read_only(step.tool_id, step.action):
+            continue
+        if (step.tool_id, step.action) != ("elt_import", "execute") or step.status != "completed":
+            return False
+        candidates.append(({**harness, "step_id": step.step_id, "mod_id": mod_id}, step.output))
+    if not candidates:
+        return False
+    try:
+        with tenant_scope(int(tenant_id)), get_db() as db:
+            return imports_already_rolled_back(
+                db, candidates=candidates, owner_user_id=int(user_id), tenant_id=int(tenant_id)
+            )
+    except EltConflict:
+        return False
+
+
 def _undo_candidates(
     rows: list[dict],
     *,
@@ -126,6 +150,15 @@ def _undo_candidates(
             or any(not _read_only(call.tool_id, call.action) for call in run.tool_calls)
         ):
             raise ConversationRevisionError(_UNVERIFIED)
+        if (
+            run.run_id not in recorded_runs
+            and harness["turn_id"] not in known_turns
+            and run.status == "completed"
+            and _deleted_turn_is_compensated(
+                run, harness, user_id=user_id, tenant_id=tenant_id, mod_id=mod_id
+            )
+        ):
+            continue
         for step in reversed(run.steps):
             if _read_only(step.tool_id, step.action) or (
                 step.status in {"pending", "skipped"}

@@ -16,6 +16,7 @@ from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker
 
 from app.application.elt.chat_recall import (
+    imports_already_rolled_back,
     prepare_import_rollback,
     record_import_origin,
     rollback_imports,
@@ -229,10 +230,33 @@ def test_chat_rollback_requires_original_step_and_complete_effect_receipts(store
         service = EltService(adviser=MagicMock())
         monkeypatch.setattr("app.application.elt.service.get_elt_service", lambda: service)
         plan = prepare_import_rollback(db, candidates=[(origin, receipt)], **owner)
+        assert imports_already_rolled_back(db, candidates=[(origin, receipt)], **owner) is False
         assert rollback_imports(db, plan, **owner) == 1
         assert rollback_imports(db, plan, **owner) == 1
+        assert imports_already_rolled_back(db, candidates=[(origin, receipt)], **owner) is True
         assert db.query(EltRunRow).one().execution_status == "rolled_back"
         assert db.get(Product, ids[1]).price == Decimal("10")
+
+        from app.application import chat_recall
+        from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
+
+        previous = AgentRun(user_id="1", message="import", run_id="agent-run", status="completed",
+                            metadata={"runtime_context": {"tenant_id": "1", "turn_id": "turn",
+                                      "conversation_id": "conversation"}}, steps=[AgentStep(
+            node_id="import", step_id="step", tool_id="elt_import", action="execute",
+            status="completed", output=receipt,
+        )])
+        monkeypatch.setattr(chat_recall, "get_db", factory)
+        monkeypatch.setattr(chat_recall, "get_agent_run_repository", lambda: MagicMock(
+            list_task_runs_for_user=MagicMock(return_value=[previous])))
+        rows = [{"timestamp": "2000-01-01T00:00:00", "metadata": "{}", "role": "user",
+                 "content": "earlier message"}]
+        assert chat_recall._undo_candidates(rows, session_id="conversation", user_id="1",
+                                             tenant_id="1", mod_id="") == []
+        previous.steps[0].step_id = "different-step"
+        with pytest.raises(chat_recall.ConversationRevisionError):
+            chat_recall._undo_candidates(rows, session_id="conversation", user_id="1",
+                                         tenant_id="1", mod_id="")
 
 
 UPDATE_CASES = [
