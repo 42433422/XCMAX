@@ -12,7 +12,7 @@ CHECK_TIME = datetime(2026, 11, 20, 22, tzinfo=UTC)
 
 
 def ready_fixtures():
-    return {
+    data = {
         "git/ref/heads/main": {"object": {"sha": SOURCE}},
         "pulls/41": {
             "number": 41,
@@ -21,9 +21,12 @@ def ready_fixtures():
             "base": {"ref": "main", "repo": {"full_name": release.REPOSITORY}},
             "merge_commit_sha": MERGE,
             "merged_at": "2026-11-20T18:15:00Z",
+            "created_at": "2026-11-19T17:00:00Z",
         },
         f"compare/{MERGE}...{SOURCE}": {"status": "ahead"},
     }
+    data["pulls?state=all&sort=created&direction=desc&per_page=100&page=1"] = [data["pulls/41"]]
+    return data
 
 
 def test_queue_id_comes_from_approved_window_receipts():
@@ -41,6 +44,7 @@ def test_queue_id_comes_from_approved_window_receipts():
     ("key", "value", "expected"),
     [
         ("merged", False, "missing_exact_merge_receipt"),
+        ("merged_at", None, "yesterday_prs_unresolved"),
         ("head", {"sha": "d" * 40}, "missing_exact_merge_receipt"),
         ("merged_at", "2026-11-19T18:15:00Z", "no_new_merge_in_current_window"),
         ("merged_at", "2026-11-20T21:00:00Z", "no_new_merge_in_current_window"),
@@ -62,3 +66,14 @@ def test_github_clock_and_read_only_diagnostic():
     assert workflow["on"]["schedule"] == [{"cron": "0 22 * * *"}]
     assert "github.event_name == 'schedule'" in workflow["jobs"]["prepare-version"]["if"]
     assert workflow["jobs"]["build-private-candidates"]["needs"] == "prepare-version"
+
+
+def test_pr_omitted_from_the_merge_order_still_blocks_release():
+    data = ready_fixtures()
+    data["pulls?state=all&sort=created&direction=desc&per_page=100&page=1"].insert(
+        0, {**data["pulls/41"], "number": 42, "merged_at": None, "state": "closed"}
+    )
+    assert release.completed_batch({41: REVIEWED}, CHECK_TIME, data.__getitem__) == {
+        "reason": "yesterday_prs_unresolved",
+        "prs": [42],
+    }

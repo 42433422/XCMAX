@@ -51,6 +51,12 @@ jobs:
       - name: Install pinned GitHub adapter dependencies
         run: pip install -r scripts/ci/requirements-self-heal.txt
 
+      - name: Inventory yesterday's main PRs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          XCMAX_MAIN_MERGE_QUEUE: ${{ vars.XCMAX_MAIN_MERGE_QUEUE }}
+        run: python scripts/ci/para_pr_integration.py
+
       - name: Process ai-self-heal PRs by SLA
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

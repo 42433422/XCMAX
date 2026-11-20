@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import subprocess
 from collections.abc import Callable
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -13,6 +15,36 @@ REPOSITORY = "42433422/XCMAX"
 QUEUE_VARIABLE = "XCMAX_MAIN_MERGE_QUEUE"
 SHANGHAI = ZoneInfo("Asia/Shanghai")
 WINDOW_CLOSED = "integration_window_closed"
+
+
+def github(path: str) -> Any:
+    return json.loads(
+        subprocess.check_output(["gh", "api", f"repos/{REPOSITORY}/{path}"], text=True)
+    )
+
+
+def yesterday_main_pulls(now: datetime, read=github) -> dict[int, dict]:
+    """Enumerate yesterday's main PRs, including drafts and closed PRs."""
+    yesterday = now.astimezone(SHANGHAI).date() - timedelta(days=1)
+    pulls = {}
+    for page in range(1, 11):
+        rows = read(f"pulls?state=all&sort=created&direction=desc&per_page=100&page={page}")
+        if not isinstance(rows, list):
+            raise ValueError("invalid PR inventory")
+        for row in rows:
+            created = datetime.fromisoformat(row["created_at"]).astimezone(SHANGHAI).date()
+            if created < yesterday:
+                return pulls
+            base = row["base"]
+            if (
+                created == yesterday
+                and base["ref"] == "main"
+                and base["repo"]["full_name"].casefold() == REPOSITORY.casefold()
+            ):
+                pulls[row["number"]] = row
+        if len(rows) < 100:
+            return pulls
+    raise ValueError("yesterday PR inventory exceeded the pagination limit")
 
 
 def integration_window_open(now: datetime | None = None) -> bool:
@@ -75,3 +107,43 @@ def process_integration_queue(
         if result not in {"auto_merged", "auto_merged_dry"}:
             break
     return True
+
+
+def report_yesterday() -> None:
+    now = datetime.now(SHANGHAI)
+    if not integration_window_open(now):
+        return
+    approved = integration_queue(os.environ.get(QUEUE_VARIABLE, ""))
+    rows = []
+    for number in sorted(yesterday_main_pulls(now)):
+        pull = github(f"pulls/{number}")
+        labels = {row["name"] for row in pull.get("labels", [])}
+        rows.append(
+            {
+                "pr": number,
+                "head_sha": pull["head"]["sha"],
+                "state": "merged" if pull["merged"] else pull["state"],
+                "mergeability": pull["mergeable_state"],
+                "draft": pull["draft"],
+                "hold": "hold-merge" in labels,
+                "ordered_head": approved.get(number) == pull["head"]["sha"],
+            }
+        )
+    summary = [
+        "### 昨日目标为 main 的 PR",
+        "",
+        "| PR | 状态 | GitHub 合入状态 | 草稿 | 暂缓 | 已排定当前提交 |",
+        "|---|---|---|---|---|---|",
+    ]
+    for row in rows:
+        summary.append(
+            "| #{pr} | {state} | {mergeability} | {draft} | {hold} | {ordered_head} |".format(**row)
+        )
+    print(json.dumps(rows))
+    if path := os.environ.get("GITHUB_STEP_SUMMARY"):
+        with open(path, "a", encoding="utf-8") as stream:
+            stream.write("\n".join(summary) + "\n")
+
+
+if __name__ == "__main__":
+    report_yesterday()

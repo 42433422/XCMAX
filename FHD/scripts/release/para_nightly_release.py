@@ -15,29 +15,35 @@ from pathlib import Path
 FHD = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(FHD))
 
-from scripts.ci.para_pr_integration import REPOSITORY, SHANGHAI, integration_queue
+from scripts.ci.para_pr_integration import (
+    REPOSITORY,
+    SHANGHAI,
+    github,
+    integration_queue,
+    yesterday_main_pulls,
+)
 from scripts.dev.verify_version_anchors import canonical_version
 from scripts.dev.version_sync import sync
 
 CATALOG = FHD / "config/download_release.json"
 
 
-def github(path: str) -> dict:
-    return json.loads(
-        subprocess.check_output(["gh", "api", f"repos/{REPOSITORY}/{path}"], text=True)
-    )
-
-
 def completed_batch(queue: dict[int, str], now: datetime, read=github) -> dict:
     day = now.astimezone(SHANGHAI).date()
-    if not queue:
+    yesterday = yesterday_main_pulls(now, read)
+    unfinished = sorted(number for number, pull in yesterday.items() if not pull.get("merged_at"))
+    if unfinished:
+        return {"reason": "yesterday_prs_unresolved", "prs": unfinished}
+    batch = {number: pull["head"]["sha"] for number, pull in sorted(yesterday.items())}
+    batch.update(queue)
+    if not batch:
         return {"reason": "empty_integration_queue"}
     source = read("git/ref/heads/main")["object"]["sha"]
     if not re.fullmatch(r"[0-9a-f]{40}", source):
         raise ValueError("invalid main SHA from GitHub")
     receipts = []
     current_window = False
-    for number, expected_head in queue.items():
+    for number, expected_head in batch.items():
         pull = read(f"pulls/{number}")
         base = pull.get("base") or {}
         merge = pull.get("merge_commit_sha") or ""
