@@ -97,4 +97,30 @@ describe('Retort native approval console', () => {
     await flushPromises()
     expect(mocks.post).toHaveBeenCalledWith('/api/xcmax/admin/retort-evolution/run-1/decision', { digest: 'c'.repeat(64), approved: true })
   })
+  it('shows the merged repair and verified running release as distinct revisions', async () => {
+    const merge = 'c'.repeat(40)
+    const release = 'd'.repeat(40)
+    const detail = {
+      ...run(),
+      status: 'completed',
+      snapshot: {
+        delivery: {
+          status: 'deployment_verified',
+          merge_sha: merge,
+          release_sha: release,
+          identity: { product_version: '1.0.0.7' },
+          url: 'https://github.com/example/product/actions/runs/42',
+        },
+      },
+    }
+    mocks.get.mockImplementation((url: string) => Promise.resolve(url.endsWith('run-1') ? detail : overview()))
+    render()
+    await flushPromises()
+    await wrapper.get('.el-table__body button').trigger('click')
+    await flushPromises()
+    expect(document.body.textContent).toContain(merge)
+    expect(document.body.textContent).toContain(release)
+    expect(document.body.textContent).toContain('1.0.0.7')
+    expect(document.body.textContent).toContain('正式发布验收记录')
+  })
 })
