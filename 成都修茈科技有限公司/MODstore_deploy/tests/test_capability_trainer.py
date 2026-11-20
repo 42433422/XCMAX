@@ -1,5 +1,6 @@
 import json
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from modstore_server import capability_trainer as trainer
 
@@ -55,10 +56,10 @@ def test_build_config_writes_promptfoo_inputs(tmp_path):
         candidate_prompt="候选",
         cases=[{"task": "任务一"}],
     )
-    config = json.loads(open(built["config"], encoding="utf-8").read())
+    config = json.loads(Path(built["config"]).read_text(encoding="utf-8"))
     assert len(config["prompts"]) == 2
     assert config["tests"].startswith("file://")
-    assert "{{task}}" in open(built["baseline"], encoding="utf-8").read()
+    assert "{{task}}" in Path(built["baseline"]).read_text(encoding="utf-8")
 
 
 def test_decide_only_promotes_strict_improvement():
