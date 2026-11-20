@@ -564,7 +564,14 @@ async def reply_to_ticket_status_request(
     text = text.strip()
     if _TICKET_NUMBER.fullmatch(text) and (not text.isdigit() or len(text) >= 6):
         numbers = [text]
-    elif "工单" in text and _STATUS_REQUEST.search(text) and not _FEATURE_REFERENCE.search(text):
+    elif (
+        "工单" in text
+        and (
+            _STATUS_REQUEST.search(text)
+            or re.fullmatch(r"工单(?:号|编号)?\s*[:：]?\s*[A-Za-z0-9-]{3,64}", text, re.I)
+        )
+        and not _FEATURE_REFERENCE.search(text)
+    ):
         numbers = list(dict.fromkeys(_TICKET_NUMBER.findall(text)))
     else:
         return None
