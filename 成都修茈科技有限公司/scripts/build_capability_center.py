@@ -885,7 +885,46 @@ def css(href: str) -> str:
     return f'<link rel="stylesheet" href="{href}?v=20261010a" />'
 
 
+def _seo_jsonld(canonical: str, title_suffix: str, description: str) -> str:
+    """能力中心各页共用的 BreadcrumbList + WebPage 结构化数据（GEO/搜索）。"""
+    names = ["首页", "验证中心"]
+    if canonical.startswith("/capabilities/feature/"):
+        names.append(title_suffix)
+    elif canonical == "/capabilities/catalog.html":
+        names.append("能力目录")
+    url = f"https://xiu-ci.com{canonical}"
+    items = [{"@type": "ListItem", "position": 1, "name": names[0], "item": "https://xiu-ci.com/"}]
+    for index, name in enumerate(names[1:], start=2):
+        items.append({
+            "@type": "ListItem",
+            "position": index,
+            "name": name,
+            "item": url if index == len(names) else "https://xiu-ci.com/capabilities/",
+        })
+    payload = {
+        "@context": "https://schema.org",
+        "@graph": [
+            {"@type": "BreadcrumbList", "@id": f"{url}#breadcrumb", "itemListElement": items},
+            {
+                "@type": "WebPage",
+                "@id": f"{url}#webpage",
+                "url": url,
+                "name": f"{title_suffix} | XCAGI",
+                "description": description,
+                "isPartOf": {"@id": "https://xiu-ci.com/#website"},
+                "about": {"@id": "https://xiu-ci.com/#organization"},
+                "breadcrumb": {"@id": f"{url}#breadcrumb"},
+                "inLanguage": "zh-CN",
+            },
+        ],
+    }
+    return json.dumps(payload, ensure_ascii=False, indent=2)
+
+
 def header_html(page_key: str, title_suffix: str, description: str, canonical: str) -> str:
+    if len(description) < 50:
+        description = f"{description} 成都修茈科技有限公司 XCAGI 产品能力说明，含验证状态与证据入口。"
+    jsonld = _seo_jsonld(canonical, title_suffix, description)
     return f"""<!doctype html>
 <!-- 此文件由 scripts/build_capability_center.py 自动生成，请勿手改（DO NOT EDIT）。 -->
 <html lang="zh-CN">
@@ -894,15 +933,24 @@ def header_html(page_key: str, title_suffix: str, description: str, canonical: s
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{esc(title_suffix)} | XCAGI</title>
     <meta name="description" content="{esc(description)}" />
-    <meta property="og:site_name" content="XCAGI" />
+    <meta name="author" content="成都修茈科技有限公司" />
+    <meta name="robots" content="index,follow,max-snippet:-1,max-image-preview:large,max-video-preview:-1" />
+    <meta property="og:site_name" content="XCAGI｜成都修茈科技有限公司" />
+    <meta property="og:locale" content="zh_CN" />
     <meta property="og:title" content="{esc(title_suffix)} | XCAGI" />
     <meta property="og:description" content="{esc(description)}" />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://xiu-ci.com{esc(canonical)}" />
     <meta property="og:image" content="https://xiu-ci.com/assets/brand-logo.jpg" />
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="{esc(title_suffix)} | XCAGI" />
+    <meta name="twitter:description" content="{esc(description)}" />
+    <link rel="alternate" type="text/plain" href="https://xiu-ci.com/llms.txt" title="XCAGI 官网内容摘要（LLM/GEO）" />
     <link rel="canonical" href="https://xiu-ci.com{esc(canonical)}" />
     <link rel="icon" href="/assets/xiu-ci-logo.png" type="image/png" />
+    <script type="application/ld+json">
+{jsonld}
+    </script>
     <link rel="stylesheet" href="/styles.css?v=20260925a" />
     {css("/capabilities/assets/capabilities.css")}
   </head>
