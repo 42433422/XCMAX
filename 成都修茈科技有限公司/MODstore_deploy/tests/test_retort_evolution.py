@@ -465,3 +465,187 @@ def test_advance_only_projects_operational_errors(setup, monkeypatch, failure):
     after = read(setup["client"], request_id)
     assert after["error"] == ("" if isinstance(failure, AssertionError) else "invalid dispatch")
     assert not [call for call in setup["calls"] if call[0] == "POST"]
+
+
+def test_feedback_run_binds_original_customer_and_production_release(setup, monkeypatch):
+    from datetime import UTC, datetime
+
+    from modstore_server.api.deps import get_current_user
+    from modstore_server.models_cs import (
+        CustomerServiceMessage,
+        CustomerServiceSession,
+        CustomerServiceTicket,
+    )
+
+    with get_session_factory()() as db:
+        customer = User(username=uuid4().hex, password_hash="test-only", is_admin=False)
+        db.add(customer)
+        db.flush()
+        session = CustomerServiceSession(user_id=customer.id)
+        db.add(session)
+        db.flush()
+        db.add(
+            CustomerServiceTicket(
+                user_id=customer.id,
+                session_id=session.id,
+                ticket_no="isolated-feedback-original",
+                submitter_type="customer",
+                intent="product_issue",
+                status="open",
+                summary="首次导入未成功。联系 test-private@example.com",
+                evidence_json=json_dumps(
+                    {
+                        "issue_domain": "platform",
+                        "resolution": {"state": "received", "route": "shared_core"},
+                    }
+                ),
+            )
+        )
+        db.commit()
+        ticket = (
+            db.query(CustomerServiceTicket).filter_by(ticket_no="isolated-feedback-original").one()
+        )
+        ticket_id = ticket.id
+        db.refresh(customer)
+        db.expunge(customer)
+
+    with open(os.environ["MODSTORE_RETORT_PROTOCOLS"], encoding="utf-8") as fh:
+        templates = json.load(fh)
+    templates["restore"]["customer_feedback"] = {
+        "domain": "platform",
+        "surface": "shared_web",
+        "goal": "验证首次导入反馈并恢复正确路径",
+    }
+    with open(os.environ["MODSTORE_RETORT_PROTOCOLS"], "w", encoding="utf-8") as fh:
+        json.dump(templates, fh)
+
+    def model(messages, **kwargs):
+        assert "首次导入未成功" in messages[1]["content"]
+        assert "test-private@example.com" not in messages[1]["content"]
+        assert "isolated-feedback-original" not in messages[1]["content"]
+        return {"ok": True, "content": '{"candidate": 1}'}
+
+    monkeypatch.setattr(service, "reflect", model)
+    client, request_id = setup["client"], str(uuid4())
+    base = "/api/retort-evolution"
+    body = {"request_id": request_id, "template_id": "restore", "source": "customer_feedback"}
+    response = client.post(base, json=body)
+    assert response.status_code == 200, response.text
+    assert client.post(base, json=body).json()["id"] == request_id
+    selected = read(client, request_id)
+    assert selected["status"] == "awaiting_dispatch_approval"
+    assert selected["effects"]["customer_feedback"]["ticket_id"] == ticket_id
+    assert selected["effects"]["customer_feedback"]["allocated_worker_slots"] == 1
+    assert "isolated-feedback-original" not in selected["snapshot"]["plan"]["public_body"]
+
+    monkeypatch.setattr(service.ComponentPorts, "collect", lambda _self, _: {"status": "completed"})
+    monkeypatch.setattr(
+        service.ComponentPorts,
+        "verify",
+        lambda _self, _: {"status": "checks_passed", "target_sha": "b" * 40},
+    )
+    monkeypatch.setattr(
+        service.ComponentPorts, "delivery", lambda _self, _: {"status": "waiting_delivery"}
+    )
+
+    def approve():
+        status = read(client, request_id)
+        digest = status["snapshot"]["pending"][0]["digest"]
+        result = client.post(
+            f"{base}/{request_id}/decision", json={"digest": digest, "approved": True}
+        )
+        assert result.status_code == 200, result.text
+
+    def resume():
+        result = client.post(f"{base}/{request_id}/resume")
+        assert result.status_code == 200, result.text
+        return read(client, request_id)
+
+    approve()
+    assert resume()["status"] == "awaiting_acceptance"
+    approve()
+    assert resume()["status"] == "waiting_delivery"
+    with get_session_factory()() as db:
+        assert db.get(CustomerServiceTicket, ticket_id).status == "open"
+
+    delivery = {
+        "status": "deployment_verified",
+        "merge_sha": "c" * 40,
+        "deployment_run_id": 205,
+        "verified_at": datetime.now(UTC).isoformat(),
+    }
+    monkeypatch.setattr(service.ComponentPorts, "delivery", lambda _self, _: delivery)
+    assert resume()["status"] == "delivered"
+    assert resume()["status"] == "waiting_customer_impact"
+    assert resume()["status"] == "waiting_customer_impact"
+    with get_session_factory()() as db:
+        assert db.get(CustomerServiceTicket, ticket_id).status == "awaiting_customer"
+        assert db.query(CustomerServiceMessage).filter_by(ticket_id=ticket_id).count() == 1
+
+    decision_path = f"/api/customer-service/issues/{ticket_id}/decision"
+    decision = {
+        "decision": "resolved",
+        "note": "已按原业务路径复测成功",
+        "idempotency_key": str(uuid4()),
+    }
+    app.dependency_overrides[get_current_user] = lambda: setup["user"]
+    assert client.post(decision_path, json=decision).status_code == 404
+    app.dependency_overrides[get_current_user] = lambda: customer
+    result = client.post(decision_path, json=decision)
+    assert result.status_code == 200, result.text
+    final = resume()
+    assert final["status"] == "completed"
+    assert final["snapshot"]["impact"]["release_sha"] == "c" * 40
+    assert final["snapshot"]["impact"]["status"] == "customer_impact_verified"
+    assert final["snapshot"]["impact"]["commercial"]["status"] == "not_configured"
+
+
+def test_growthbook_requires_same_run_production_exposure_and_valid_sample():
+    from modstore_server.retort_feedback_measurements import _snapshot
+
+    sha = "c" * 40
+    spec = {"id": "exp_feedback", "project": "prod", "metric": "first_import", "minimum_users": 100}
+    delivery = {"merge_sha": sha, "verified_at": "2026-01-01T00:00:00Z"}
+    result = {
+        "experiment": {
+            "id": spec["id"],
+            "project": "prod",
+            "type": "standard",
+            "status": "stopped",
+            "trackingKey": "xcagi-retort-run",
+            "tags": [f"xcagi-release-{sha}"],
+        },
+        "result": {
+            "id": "snapshot_feedback",
+            "experimentId": spec["id"],
+            "dateStart": "2026-01-02T00:00:00Z",
+            "dateUpdated": "2026-01-03T00:00:00Z",
+            "dimension": {"type": "none"},
+            "results": [
+                {
+                    "totalUsers": 120,
+                    "checks": {"srm": 0.9},
+                    "metrics": [
+                        {
+                            "metricId": "first_import",
+                            "variations": [
+                                {"users": 60},
+                                {
+                                    "users": 60,
+                                    "analyses": [
+                                        {"percentChange": 0.12, "ciLow": 0.02, "ciHigh": 0.22}
+                                    ],
+                                },
+                            ],
+                        }
+                    ],
+                }
+            ],
+        },
+    }
+    observed = _snapshot(result, spec, "run", delivery)
+    assert observed["status"] == "measured"
+    assert observed["lift"] == 0.12
+    assert _snapshot(result, spec, "other-run", delivery)["status"] == "unbound"
+    result["result"]["results"][0]["checks"]["srm"] = 0.0001
+    assert _snapshot(result, spec, "run", delivery)["status"] == "sample_unverified"

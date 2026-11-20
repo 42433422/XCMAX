@@ -22,6 +22,17 @@
   } from 'element-plus';
   import api, { ApiError } from '@/api/core';
 
+  type Source = 'manual' | 'customer_feedback';
+
+  interface CustomerFeedback {
+    ticket_id: number;
+    ticket_no: string;
+    selected_at: string;
+    candidates_considered: number;
+    allocated_worker_slots: number;
+    validation_budget_seconds: number;
+  }
+
   interface Run {
     id: string;
     status: string;
@@ -48,15 +59,28 @@
       execution?: { reason?: string };
       delivery?: { reason?: string; merge_sha?: string; url?: string };
       knowledge?: { recorded?: boolean };
+      impact?: {
+        status: string;
+        reason?: string;
+        release_sha?: string;
+        verified_at?: string;
+        experiment?: { status: string; metric_name?: string; sample_size?: number; lift?: number };
+        commercial?: { status: string; matching_paid_orders?: number; matched_paid_amount_cents?: number };
+      };
     };
-    effects: { issue_number?: number; run_id?: number; pull_request_number?: number };
+    effects: {
+      issue_number?: number;
+      run_id?: number;
+      pull_request_number?: number;
+      customer_feedback?: CustomerFeedback;
+    };
   }
   interface Overview {
     items: Run[];
     total: number;
     standard_version: string;
     domains: { id: string; name: string; criteria: { id: string; requirement: string }[] }[];
-    templates: { id: string; name: string; criterion_ids: string[] }[];
+    templates: { id: string; name: string; criterion_ids: string[]; customer_feedback?: boolean }[];
     connections: Record<string, boolean>;
   }
   const base = '/api/xcmax/admin/retort-evolution';
@@ -67,7 +91,7 @@
     error = ref('');
   const drawer = ref(false),
     creating = ref(false),
-    draft = ref({ request_id: '', template_id: '', title: '', goal: '' });
+    draft = ref({ request_id: '', template_id: '', title: '', goal: '', source: 'manual' as Source });
   const labels: Record<string, string> = {
     created: '待编排',
     planned: '已规划',
@@ -80,12 +104,15 @@
     branch_accepted: '分支已验收，交付待核对',
     waiting_delivery: '等待上线验收',
     delivered: '上线已核验',
+    waiting_customer_impact: '待原客户复测',
+    customer_impact_verified: '原客户已确认',
+    customer_impact_rejected: '原客户复测后重开',
     completed: '已上线并归档',
     rejected: '已拒绝',
     failed: '未通过',
     cancelled: '已取消',
   };
-  const phases = [
+  const basePhases = [
     '18 域任务',
     'Retort 规划',
     'RSI 辅助',
@@ -112,6 +139,11 @@
     health_artifact_digest_mismatch: '线上程序与发布制品尚未匹配',
     accepted_pull_request_identity_changed: '验收后的代码已变化，需要重新验证',
     pull_request_closed_without_merge: '代码提案已关闭，尚未合入',
+    awaiting_ticket_release_binding: '原单尚未绑定这次发布，请核对原处理进度',
+    awaiting_original_customer_receipt: '已通知原提交人，等待原场景复测',
+    original_ticket_unavailable: '原单不可读取，效果待核对',
+    awaiting_experiment_result: '等待已绑定实验的有效结果',
+    awaiting_paid_outcome: '等待同版付费与客户验收凭证',
   };
   const stages: Record<string, number> = {
     created: 0,
@@ -125,9 +157,19 @@
     branch_accepted: 7,
     waiting_delivery: 7,
     delivered: 8,
+    waiting_customer_impact: 8,
+    customer_impact_verified: 9,
+    customer_impact_rejected: 8,
     completed: 9,
   };
-  const active = computed(() => stages[detail.value?.status || ''] ?? 0);
+  const feedback = computed(() => detail.value?.effects.customer_feedback);
+  const impact = computed(() => detail.value?.snapshot.impact);
+  const phases = computed(() =>
+    feedback.value ? [...basePhases.slice(0, -1), '客户复测', '知识回流'] : basePhases
+  );
+  const active = computed(() =>
+    detail.value?.status === 'completed' ? phases.value.length : stages[detail.value?.status || ''] ?? 0
+  );
   const pending = computed(() =>
     detail.value?.snapshot.pending?.find((p) =>
       ['dispatch_approval', 'acceptance'].includes(p.kind)
@@ -153,8 +195,13 @@
       ) || []
     );
   });
+  const feedbackTemplates = computed(() => data.value?.templates.filter(t => t.customer_feedback) || []);
+  const availableTemplates = computed(() =>
+    draft.value.source === 'customer_feedback' ? feedbackTemplates.value : data.value?.templates
+  );
   const canCreate = computed(
-    () => !!draft.value.title.trim() && !!draft.value.goal.trim() && !!draft.value.template_id
+    () => !!draft.value.template_id &&
+      (draft.value.source === 'customer_feedback' || (!!draft.value.title.trim() && !!draft.value.goal.trim()))
   );
   async function action(fn: () => Promise<void>) {
     busy.value = true;
@@ -191,8 +238,8 @@
       drawer.value = true;
     });
   }
-  function newRun() {
-    draft.value = { request_id: crypto.randomUUID(), template_id: '', title: '', goal: '' };
+  function newRun(source: Source = 'manual') {
+    draft.value = { request_id: crypto.randomUUID(), template_id: '', title: '', goal: '', source };
     detail.value = undefined;
     creating.value = true;
     drawer.value = true;
@@ -242,8 +289,11 @@
       <span>{{ data ? `${data.domains.length} 域 · ${data.total} 个改进任务` : '改进任务' }}</span>
       <div>
         <el-button :loading="busy" @click="refresh">刷新</el-button>
-        <el-button type="primary" :disabled="!data?.templates.length || busy" @click="newRun"
+        <el-button :disabled="!data?.templates.length || busy" @click="newRun()"
           >新建改进任务</el-button
+        >
+        <el-button type="primary" :disabled="!feedbackTemplates.length || busy" @click="newRun('customer_feedback')"
+          >AI 从客户反馈选题</el-button
         >
       </div>
     </div>
@@ -261,6 +311,12 @@
         min-width="180"
         show-overflow-tooltip
       />
+      <el-table-column label="来源" min-width="112">
+        <template #default="{ row }">
+          <el-tag v-if="row.effects.customer_feedback" type="info">客户反馈</el-tag>
+          <span v-else>验收方案</span>
+        </template>
+      </el-table-column>
       <el-table-column label="验收范围" min-width="100"
         ><template #default="{ row }"
           >{{ row.protocol.criterion_ids.length }} 项要求</template
@@ -294,17 +350,17 @@
     />
     <el-drawer
       v-model="drawer"
-      :title="creating ? '新建改进任务' : detail?.protocol.title || '改进任务'"
+      :title="creating ? (draft.source === 'customer_feedback' ? 'AI 从客户反馈选题' : '新建改进任务') : detail?.protocol.title || '改进任务'"
       size="min(780px, 96vw)"
       append-to-body
       destroy-on-close
     >
       <el-alert v-if="error" :title="error" type="error" :closable="false" />
       <el-form v-if="creating" label-position="top" @submit.prevent="create">
-        <el-form-item label="任务名称"
+        <el-form-item v-if="draft.source === 'manual'" label="任务名称"
           ><el-input v-model="draft.title" maxlength="160" aria-label="任务名称"
         /></el-form-item>
-        <el-form-item label="目标和验收场景"
+        <el-form-item v-if="draft.source === 'manual'" label="目标和验收场景"
           ><el-input
             v-model="draft.goal"
             type="textarea"
@@ -315,7 +371,7 @@
         <el-form-item label="验收方案"
           ><el-select v-model="draft.template_id" aria-label="验收方案" style="width: 100%">
             <el-option
-              v-for="template in data?.templates"
+              v-for="template in availableTemplates"
               :key="template.id"
               :label="template.name"
               :value="template.id"
@@ -330,7 +386,7 @@
       <template v-else-if="detail">
         <el-steps
           :active="active"
-          :process-status="detail.status === 'failed' ? 'error' : 'process'"
+          :process-status="['failed', 'customer_impact_rejected'].includes(detail.status) ? 'error' : 'process'"
           finish-status="success"
           align-center
         >
@@ -352,7 +408,45 @@
           <el-descriptions-item v-if="detail.snapshot.delivery?.reason" label="交付状态">{{
             reasons[detail.snapshot.delivery.reason] || '交付证据待核对'
           }}</el-descriptions-item>
+          <el-descriptions-item v-if="feedback" label="选题依据">
+            <a :href="`/admin/customer-service-tickets/${feedback.ticket_id}`">原工单 {{ feedback.ticket_no }}</a>
+            AI 在 {{ feedback.candidates_considered }} 条反馈中选择
+          </el-descriptions-item>
           <el-descriptions-item label="目标">{{ detail.protocol.goal }}</el-descriptions-item>
+          <el-descriptions-item v-if="feedback" label="资源">
+            {{ feedback.allocated_worker_slots }} 个云端执行名额 · 独立验证上限 {{ feedback.validation_budget_seconds }} 秒
+            · {{ detail.effects.run_id ? '执行已登记' : '待审批派工' }}
+          </el-descriptions-item>
+          <el-descriptions-item v-if="feedback" label="生产版本">{{
+            detail.snapshot.delivery?.merge_sha || '待正式上线'
+          }}</el-descriptions-item>
+          <el-descriptions-item v-if="feedback" label="客户效果">
+            <el-tag v-if="impact?.verified_at && impact.status !== 'customer_impact_rejected'" type="success">
+              原客户已确认解决
+            </el-tag>
+            <el-tag v-else-if="detail.snapshot.impact?.status === 'customer_impact_rejected'" type="danger">
+              原客户反馈仍有问题
+            </el-tag>
+            <span v-else>{{ reasons[detail.snapshot.impact?.reason || ''] || '待生产验证' }}</span>
+            <span v-if="impact?.verified_at">
+              · {{ new Date(impact.verified_at).toLocaleString('zh-CN') }}
+            </span>
+            <span v-if="impact?.reason && impact.verified_at"> · {{ reasons[impact.reason] }}</span>
+          </el-descriptions-item>
+          <el-descriptions-item v-if="feedback" label="群体效果">
+            <span v-if="impact?.experiment?.status === 'measured'">
+              {{ impact.experiment.metric_name }} · {{ impact.experiment.sample_size }} 个样本
+              · 相对变化 {{ ((impact.experiment.lift || 0) * 100).toFixed(2) }}%
+            </span>
+            <span v-else>{{ impact?.experiment?.status === 'not_configured' ? '未配置实验' : '待有效实验结果' }}</span>
+          </el-descriptions-item>
+          <el-descriptions-item v-if="feedback" label="商业结果">
+            <span v-if="impact?.commercial?.status === 'verified'">
+              {{ impact.commercial.matching_paid_orders }} 笔同版订单通过核验 · 实付
+              {{ ((impact.commercial.matched_paid_amount_cents || 0) / 100).toFixed(2) }} 元
+            </span>
+            <span v-else>{{ impact?.commercial?.status === 'not_configured' ? '未配置商业验证' : '待同版付费凭证' }}</span>
+          </el-descriptions-item>
           <el-descriptions-item label="RSI 辅助">{{
             detail.snapshot.optimization?.status === 'proposed'
               ? '实测方案待批准'
@@ -429,7 +523,7 @@
           :disabled="!canCreate"
           :loading="busy"
           @click="create"
-          >生成待审方案</el-button
+          >{{ draft.source === 'customer_feedback' ? '从原单选题并生成待审方案' : '生成待审方案' }}</el-button
         >
         <template v-else-if="pending">
           <el-button :disabled="busy" @click="decide(false)">拒绝</el-button>
@@ -439,7 +533,7 @@
         </template>
         <el-button
           v-else-if="
-            detail && !['completed', 'failed', 'rejected', 'cancelled'].includes(detail.status)
+            detail && !['completed', 'failed', 'rejected', 'cancelled', 'customer_impact_rejected'].includes(detail.status)
           "
           :loading="busy"
           @click="resume"

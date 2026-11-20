@@ -428,6 +428,14 @@ def decide_product_issue(
                 _wake_owner_intake(ticket.id, "customer_reopen")
         return {"success": True, "replayed": True, "issue": _issue_row(ticket)}
     resolution = issue_resolution(ticket, evidence)
+    retort_delivery = (
+        evidence.get("retort_delivery")
+        if ticket.status == "awaiting_customer"
+        and resolution.get("state") == "awaiting_customer_verification"
+        and resolution.get("verification_mode") == "customer_decision"
+        and not resolution.get("release_target")
+        else None
+    )
     closed = ticket.status in _CLOSED
     now = datetime.now(UTC)
     event_id = ""
@@ -472,6 +480,7 @@ def decide_product_issue(
             or evidence.get("fault_remains") is True
         ):
             raise HTTPException(409, "工单仍在处理中，请等处理结果出来后再决定")
+        evidence.pop("retort_delivery", None)
         history = [r for r in evidence.get("reopen_history") or [] if isinstance(r, dict)]
         evidence["reopen_history"] = [
             *history,
@@ -520,6 +529,7 @@ def decide_product_issue(
             "user_id": int(user.id),
             "at": now.isoformat(),
             "event_id": event_id,
+            **({"retort_delivery": retort_delivery} if retort_delivery else {}),
         },
     ][-50:]
     ticket.evidence_json = json_dumps(evidence)

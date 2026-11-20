@@ -562,3 +562,41 @@ def test_paid_item_requires_real_entitlement_artifact_proof(
     assert result["skipped"] == {reason: 1}
     models._engine = None
     models._SessionFactory = None
+
+
+def test_scoped_paid_outcome_requires_same_owner_goal_artifact_and_time(tmp_path, monkeypatch):
+    import json
+    from datetime import timedelta
+
+    sf = _init_db(tmp_path, monkeypatch)
+    order = _verified_payment(user_id=54)
+    digest = "c" * 64
+    with sf() as db:
+        for kind in ("outcome", "acceptance"):
+            db.add(
+                models.CustomerValueReceipt(
+                    receipt_id=f"scoped-{kind}",
+                    receipt_kind=kind,
+                    verification_status="verified",
+                    customer_ref="enterprise",
+                    customer_goal_id="goal-same",
+                    order_no=order["out_trade_no"],
+                    artifact_id="running-build",
+                    environment="production",
+                    evidence_json=json.dumps({"artifact_sha256": digest}),
+                    evidence_digest="a" * 64,
+                    occurred_at=NOW,
+                )
+            )
+        db.commit()
+
+    def verify(owner, artifact, start):
+        return build_customer_value_evidence(
+            orders=[order], now=NOW, session_factory=sf, delivery_scope=(owner, artifact, start)
+        )
+
+    assert verify(54, digest, NOW)["paid_acceptance_count"] == 1
+    assert verify(54, digest, NOW)["verified_paid_amount_cents"] == 9900
+    assert verify(55, digest, NOW)["verified_paid_amount_cents"] == 0
+    assert verify(54, "d" * 64, NOW)["verified_paid_amount_cents"] == 0
+    assert verify(54, digest, NOW + timedelta(seconds=1))["paid_acceptance_count"] == 0

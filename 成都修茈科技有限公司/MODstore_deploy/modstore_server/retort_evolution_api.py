@@ -5,10 +5,11 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.orm import Session
 
 from modstore_server import retort_evolution as service
@@ -17,6 +18,7 @@ from modstore_server.customer_service_tools import json_loads
 from modstore_server.customer_ticket_github import configuration, github
 from modstore_server.models import RetortEvolutionRun, User
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
+from modstore_server.retort_customer_feedback import feedback_templates, select_run
 
 router = APIRouter(
     prefix="/api/retort-evolution", tags=["retort-evolution"], dependencies=[Depends(require_admin)]
@@ -60,6 +62,7 @@ def overview(
 ):
     catalog = service.catalog()
     templates = _templates()
+    sources = feedback_templates(templates)
     config = configuration()
     query = db.query(RetortEvolutionRun)
     return {
@@ -81,7 +84,12 @@ def overview(
             for d in catalog["domains"]
         ],
         "templates": [
-            {"id": key, "name": value["name"], "criterion_ids": value["criterion_ids"]}
+            {
+                "id": key,
+                "name": value["name"],
+                "criterion_ids": value["criterion_ids"],
+                "customer_feedback": key in sources,
+            }
             for key, value in templates.items()
         ],
         "components": {"workflow": "LangGraph", "rsi": "GEPA", "executor": "GitHub Actions · Para"},
@@ -104,8 +112,15 @@ class NewRun(BaseModel):
     model_config = ConfigDict(extra="forbid")
     request_id: UUID
     template_id: str = Field(min_length=1, max_length=100)
-    title: str = Field(min_length=1, max_length=160)
-    goal: str = Field(min_length=1, max_length=12000)
+    title: str = Field(default="", max_length=160)
+    goal: str = Field(default="", max_length=12000)
+    source: Literal["manual", "customer_feedback"] = "manual"
+
+    @model_validator(mode="after")
+    def require_manual_goal(self):
+        if self.source == "manual" and (not self.title or not self.goal):
+            raise ValueError("任务名称和目标不能为空")
+        return self
 
 
 def _advance(request_id, approval=None):
@@ -122,7 +137,23 @@ def _advance(request_id, approval=None):
 
 @router.post("")
 def create(body: NewRun, background: BackgroundTasks, user: User = Depends(require_admin)):
-    template = _templates().get(body.template_id)
+    templates = _templates()
+    if body.source == "customer_feedback":
+        try:
+            request_id = select_run(
+                str(body.request_id),
+                user.id,
+                body.template_id,
+                feedback_templates(templates).get(body.template_id),
+                github,
+            )
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        if request_id is None:
+            raise HTTPException(409, "当前没有符合该方案且尚未选过的客户反馈，或模型未选中。")
+        background.add_task(_advance, request_id)
+        return {"id": request_id, "status": "created"}
+    template = templates.get(body.template_id)
     if not template:
         raise HTTPException(422, "请选择已冻结的验收方案")
     config = configuration()
