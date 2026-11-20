@@ -75,7 +75,7 @@ export function useEnterpriseCsBridge(options: Options) {
         await nextTick()
         if (current()) restoreScroll()
       }
-      return update.changed || conversationChanged || local?.cs_status === 'ai_processing' || enterpriseCsUnconfirmed.value
+      return update.changed || conversationChanged || (local?.cs_status === 'ai_processing' || local?.cs_status === 'ai_retrying' || local?.cs_status === 'ai_waiting_session') || enterpriseCsUnconfirmed.value
     } catch (error) {
       if (current()) enterpriseCsReadError.value = error instanceof Error ? error.message : '企业专属客服读取失败'
       if (!notifyIncoming) throw error

@@ -286,6 +286,11 @@ ignore_missing_imports = true
 module = "apprise"
 ignore_missing_imports = true
 
+# APScheduler 3.x has no py.typed marker. The support worker has runtime tests.
+[[tool.mypy.overrides]]
+module = "apscheduler.schedulers.asyncio"
+ignore_missing_imports = true
+
 # Optional heavyweight/platform adapters are imported behind runtime feature
 # probes.  Their availability is validated by the owning capability, while the
 # core type gate remains independent of platform-only or ML-only distributions.
