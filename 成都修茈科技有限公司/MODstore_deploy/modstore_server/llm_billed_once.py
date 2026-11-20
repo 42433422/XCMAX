@@ -121,18 +121,24 @@ async def _execute_billed_chat(
             "多模态消息仅支持 OpenAI 兼容供应商（含 SiliconFlow、DashScope 等 chat/completions 网关）；"
             "请更换 provider 或改发纯文本。",
         )
+    from modstore_server.llm_operation_routes import (
+        enforce_vision_operation, model_runtime_messages, personal_provider_quota,
+    )
+
+    await enforce_vision_operation(user.id, route, messages)
     model = model.strip()
     if getattr(request.state, "llm_pat_user_id", None) is not None:
         await assert_llm_chat_allowed(db, int(user.id), provider, model, is_byok=is_byok)
     request_id = new_request_id()
     enforce_risk_limits(db, user.id, provider, model, messages, request)
     wallet = JavaWalletClient(request=request)
+    upstream_messages = model_runtime_messages(route, messages, max_tokens)
     if is_byok:
         if getattr(request.state, "llm_pat_user_id", None) is not None:
             wallet.validate_pat(authorization_header(request))
         hold = WalletHold(hold_no=f"byok-{request_id}", amount=Decimal("0"), enabled=False)
     else:
-        preauth_amount = estimate_preauthorization(db, provider, model, messages, max_tokens)
+        preauth_amount = estimate_preauthorization(db, provider, model, upstream_messages, max_tokens)
         try:
             hold = await wallet.preauthorize(
                 authorization_header(request),
@@ -154,13 +160,16 @@ async def _execute_billed_chat(
     charge = Decimal("0")
     upstream_started = False
     try:
+        remaining_percent = await personal_provider_quota(route)
         upstream_started = True
         result = await chat_dispatch(
             provider,
             api_key=api_key,
             base_url=base,
             model=model,
-            messages=messages,
+            messages=model_runtime_messages(
+                route, messages, max_tokens, hold, remaining_percent=remaining_percent
+            ),
             max_tokens=max_tokens,
             total_timeout_s=upstream_timeout_s,
         )

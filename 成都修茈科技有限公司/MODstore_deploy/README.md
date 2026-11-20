@@ -70,3 +70,10 @@ credentials in each executor's protected local file or credential manager, never
 in source, chat, tool arguments or Para tasks. Removing a grant or setting
 `revoked:true` takes effect on the next request. `ticket_read` logs record grant,
 route, allow/deny and response status; retain INFO logs in the server audit sink.
+
+### 模型池组件
+
+复用现有模型目录、凭据路由和钱包预授权。跨供应商对话路由及模型限制元数据使用
+[LiteLLM 1.109.3](https://github.com/BerriAI/litellm/tree/v1.109.3) 的 MIT 许可 SDK。
+对话与看图使用现有 Chat API，图片生成使用图像代理，语音使用现有 MiMo 协议适配。
+管理端可调用 `POST /api/llm/admin/runtime-route/probe-operation` 验证指定模型的指定操作。

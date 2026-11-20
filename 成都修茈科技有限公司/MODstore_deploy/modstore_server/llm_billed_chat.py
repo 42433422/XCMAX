@@ -45,6 +45,9 @@ from modstore_server.llm_key_resolver import (
     resolve_chat_route_snapshot,
 )
 from modstore_server.llm_model_taxonomy import classify_model
+from modstore_server.llm_operation_routes import (
+    enforce_vision_operation, model_runtime_messages, personal_provider_quota,
+)
 from modstore_server.models import User
 from modstore_server.multimodal_llm import (
     messages_use_openai_multipart_content,
@@ -345,6 +348,7 @@ async def stream_billed_llm_chat(
                 else new_request_id()
             )
             try:
+                await enforce_vision_operation(user.id, route, msgs)
                 enforce_risk_limits(db, user.id, prov, mdl, msgs, request)
             except HTTPException as exc:
                 last_error = str(exc.detail)
@@ -363,13 +367,14 @@ async def stream_billed_llm_chat(
                 continue
 
             wallet = JavaWalletClient()
+            upstream_messages = model_runtime_messages(route, msgs, max_tokens)
             try:
                 if is_byok:
                     hold = WalletHold(
                         hold_no=f"byok-{request_id}", amount=Decimal("0"), enabled=False
                     )
                 else:
-                    preauth_amount = estimate_preauthorization(db, prov, mdl, msgs, max_tokens)
+                    preauth_amount = estimate_preauthorization(db, prov, mdl, upstream_messages, max_tokens)
                     hold = await wallet.preauthorize(
                         authorization_header(request),
                         preauth_amount,
@@ -417,12 +422,15 @@ async def stream_billed_llm_chat(
             finish_reason = ""
             emitted_delta = False
             try:
+                remaining_percent = await personal_provider_quota(route)
                 async for ev in chat_dispatch_stream(
                     prov,
                     api_key=api_key,
                     base_url=base,
                     model=mdl,
-                    messages=msgs,
+                    messages=model_runtime_messages(
+                        route, msgs, max_tokens, hold, remaining_percent=remaining_percent
+                    ),
                     max_tokens=max_tokens,
                     tools=tools,
                     tool_choice=tool_choice,

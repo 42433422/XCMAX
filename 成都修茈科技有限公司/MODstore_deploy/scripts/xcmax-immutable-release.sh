@@ -451,14 +451,15 @@ else
     "$BUILD_ROOT/FHD/packages/xcagi_langgraph_checkpoint_backends/checkpoint-sqlite" \
     "$BUILD_ROOT/FHD/packages/xcagi_langgraph_checkpoint_backends/checkpoint-postgres" \
     "$BUILD_ROOT/FHD/packages/xcagi_langgraph_prebuilt" "$BUILD_ROOT/FHD/packages/xcagi_langgraph_sdk" \
-    -e '.[web,knowledge,evolution-metrics,governance]')
+    -e '.[web,knowledge,evolution-metrics,governance,llm-router]')
   "$DEPLOY_DIR/.venv/bin/python" -c \
     'import langgraph.checkpoint.postgres; from modstore_server.integrations.repository_packages import load_repository_module; load_repository_module("retort_engine.intent_alignment"); load_repository_module("retort_engine.clarification"); load_repository_module("retort_engine.evolution_workflow"); load_repository_module("retort_engine.evolution_optimizer"); load_repository_module("xcagi_common.employee_pack")'
   mkdir -p "$BUILD_ROOT/.runtime-build"
   MODSTORE_ENV=production \
     MODSTORE_JWT_SECRET="$BUILD_JWT_SECRET" \
     MODSTORE_RUNTIME_DIR="$BUILD_ROOT/.runtime-build" \
-    "$DEPLOY_DIR/.venv/bin/python" -c 'import fastapi, pytest, pytest_cov, uvicorn, modstore_server.app'
+    LITELLM_LOCAL_MODEL_COST_MAP=True \
+    "$DEPLOY_DIR/.venv/bin/python" -c 'import fastapi, litellm, pytest, pytest_cov, uvicorn, modstore_server.app'
   rm -rf -- "$BUILD_ROOT/.runtime-build"
 
   log "installing the locked private Mod compiler inside the release"

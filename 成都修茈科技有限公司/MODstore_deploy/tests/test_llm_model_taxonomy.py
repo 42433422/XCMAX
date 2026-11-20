@@ -121,7 +121,7 @@ def test_tts_capability_is_preserved_but_not_runtime_selectable() -> None:
     assert row["capabilities"]["output_modalities"] == ["audio"]
     assert row["capabilities"]["operations"] == ["text_to_speech"]
     assert row["runtime_selectable"] is False
-    assert row["capability_source"] == "model_id_inference"
+    assert row["capability_source"] in {"litellm_registry", "model_id_inference"}
 
 
 def test_mimo_audio_variants_are_not_chat_runtime_models() -> None:

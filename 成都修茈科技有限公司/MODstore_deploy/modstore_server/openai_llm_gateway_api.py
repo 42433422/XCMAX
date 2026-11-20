@@ -41,7 +41,6 @@ from modstore_server.auth_service import PAT_PREFIX, resolve_pat_identity
 from modstore_server.infrastructure.db import get_db
 from modstore_server.llm_api import resolve_default_llm_route, run_billed_llm_chat
 from modstore_server.llm_billing import merge_catalog_pricing
-from modstore_server.llm_catalog import get_models_for_provider
 from modstore_server.llm_key_resolver import KNOWN_PROVIDERS
 from modstore_server.llm_model_gates import merge_catalog_capabilities
 from modstore_server.llm_model_taxonomy import CATEGORY_ORDER, category_labels_zh
@@ -184,20 +183,16 @@ def _oai_model_entry(
 
 async def _build_catalog_model_entries(db: Session, user_id: int) -> List[Dict[str, Any]]:
     """从完整平台目录展开 ``provider/model``，保留 category / pricing / selectable。"""
-    providers_out: List[Dict[str, Any]] = []
-    for provider in KNOWN_PROVIDERS:
-        try:
-            block = await get_models_for_provider(db, user_id, provider, force_refresh=False)
-        except BOUNDARY_ERRORS:  # noqa: BLE001
-            logger.exception("gateway /v1/models catalog fetch failed for %s", provider)
-            block = {"models": [], "models_detailed": []}
-        providers_out.append(
-            {
-                "provider": provider,
-                "models": list(block.get("models") or []),
-                "models_detailed": list(block.get("models_detailed") or []),
-            }
+    import asyncio
+
+    from modstore_server.llm_api import _fetch_catalog_provider_block
+
+    providers_out = await asyncio.gather(
+        *(
+            _fetch_catalog_provider_block(user_id, provider, force_refresh=False)
+            for provider in KNOWN_PROVIDERS
         )
+    )
     try:
         merge_catalog_capabilities(db, providers_out)
     except BOUNDARY_ERRORS:  # noqa: BLE001
@@ -317,13 +312,21 @@ async def openai_chat_completions(
             501,
             "stream=true 暂未在本网关实现；请使用 stream=false 或调用 POST /api/llm/chat/stream",
         )
-    prov, mid = _parse_requested_model(body.model)
-    if not prov:
-        resolved = await resolve_default_llm_route(db, int(user.id))
-        prov = str(resolved["provider"])
-        mid = str(resolved["model"])
+    from modstore_server.multimodal_llm import messages_have_multimodal_images
 
     msgs = [{"role": m.role, "content": m.content} for m in body.messages]
+    operation = "vision" if messages_have_multimodal_images(msgs) else "chat"
+    prov, mid = _parse_requested_model(body.model)
+    route_snapshot = None
+    if not prov:
+        resolved = await resolve_default_llm_route(db, int(user.id), operation=operation)
+        prov = str(resolved["provider"])
+        mid = str(resolved["model"])
+        if operation == "vision":
+            from modstore_server.llm_operation_routes import bind_resolved_chat_route
+
+            route_snapshot = bind_resolved_chat_route(db, int(user.id), resolved)
+
     out = await run_billed_llm_chat(
         request,
         db,
@@ -333,12 +336,14 @@ async def openai_chat_completions(
         messages=msgs,
         max_tokens=body.max_tokens,
         conversation_id=None,
+        route_snapshot=route_snapshot,
     )
     usage = out.get("usage") or {}
     if not isinstance(usage, dict):
         usage = {}
     cid = f"chatcmpl-{uuid.uuid4().hex[:24]}"
     created = int(time.time())
+    prov, mid = str(out.get("provider") or prov), str(out.get("model") or mid)
     resp_model = f"{prov}/{mid}"
     billed = bool(out.get("billed"))
     charge = out.get("charge_amount") or 0

@@ -27,6 +27,7 @@ async def resolve_default_llm_route(
     provider: str = "",
     model: str = "",
     platform_only: bool = False,
+    operation: str = "chat",
 ) -> dict[str, _facade().Any]:
     """Resolve a chat-capable route and bind its credentials before any catalog await."""
     import asyncio
@@ -38,6 +39,7 @@ async def resolve_default_llm_route(
         resolve_credentials,
     )
     from modstore_server.llm_model_taxonomy import classify_model
+    from modstore_server.llm_operation_routes import select_operation_model
     from modstore_server.models import User as UserModel, get_session_factory
     from modstore_server.platform_model_config import read_state
 
@@ -96,7 +98,15 @@ async def resolve_default_llm_route(
             key_source = "platform" if key else "none"
         if not key:
             return None
-        if m:
+        if operation == "vision":
+            try:
+                async with asyncio.timeout(4):
+                    m = await select_operation_model(uid, p, operation, key, base, model=m)
+            except TimeoutError:
+                return None
+            if not m:
+                return None
+        elif m:
             if classify_model(p, m) not in {"llm", "vlm"}:
                 if platform_only:
                     invalid(
@@ -136,6 +146,8 @@ async def resolve_default_llm_route(
         if mode == "byok" and credentials[pref_p][2] != "user_override":
             invalid("所选 BYOK 不可用，未切换到收费平台", "NO_BYOK_CHAT_MODEL")
         selected = await select(pref_p, pref_m, "explicit" if provider else "preference")
+        if not selected and operation == "vision" and not explicit_query and pref_m:
+            selected = await select(pref_p, "", "operation_preference")
         if selected:
             return selected
         invalid("账户所选供应商没有可用聊天模型或密钥，请重新选择；未切换到收费平台")
@@ -259,11 +271,13 @@ async def resolve_chat_default(
     provider: str = "",
     model: str = "",
     platform_only: bool = False,
+    operation: str = _facade().Query("chat", pattern="^(chat|vision)$"),
 ):
     """Resolve account selection (or an explicit route) with a short-lived tool-round snapshot."""
     response.headers["Cache-Control"] = "no-store"
     return await _facade().resolve_default_llm_route(
-        db, int(user.id), provider=provider, model=model, platform_only=platform_only
+        db, int(user.id), provider=provider, model=model, platform_only=platform_only,
+        operation=operation,
     )
 
 
@@ -308,6 +322,7 @@ async def _fetch_catalog_provider_block(
                 api_key=api_key,
                 base_url=base_url,
                 force_refresh=force_refresh,
+                discover_operations=True,
             )
         mids: _facade().List[str] = list(block.get("models") or [])
         detailed = list(block.get("models_detailed") or [])
@@ -438,6 +453,25 @@ async def get_platform_runtime_route_catalog(
     if not result.get("ok"):
         raise _facade().HTTPException(400, str(result.get("error") or "catalog failed"))
     return result
+
+
+class LlmOperationProbeDTO(_facade().BaseModel):
+    provider: str = Field(..., min_length=1, max_length=64)
+    model: str = Field(..., min_length=1, max_length=256)
+    operation: str = Field(
+        ..., pattern="^(chat|vision|image_generation|speech_to_text|text_to_speech)$"
+    )
+
+
+@_facade().router.post("/admin/runtime-route/probe-operation")
+async def probe_llm_operation(
+    body: LlmOperationProbeDTO,
+    db: _facade().Session = _facade().Depends(_facade().get_db),
+    admin: _facade().User = _facade().Depends(_facade()._require_admin),
+):
+    from modstore_server.llm_operation_routes import probe_operation
+
+    return await probe_operation(db, admin.id, body.provider, body.model, body.operation)
 
 
 @_facade().router.get("/admin/runtime-route/quota")
@@ -1114,8 +1148,8 @@ class ChatMessageDTO(_facade().BaseModel):
 
 
 class LlmChatDTO(_facade().BaseModel):
-    provider: str
-    model: str
+    provider: str = ""
+    model: str = "auto"
     route_token: str | None = Field(None, max_length=20000, repr=False)
     config_revision: str | None = Field(None, max_length=128)
     key_source: str | None = None
@@ -1138,8 +1172,8 @@ class LlmChatDTO(_facade().BaseModel):
 
 
 class LlmImageDTO(_facade().BaseModel):
-    provider: str
-    model: str = "gpt-image-1"
+    provider: str = ""
+    model: str = ""
     prompt: str = _facade().Field(..., min_length=1, max_length=4000)
     size: str = _facade().Field("1024x1024", max_length=32)
     n: int = _facade().Field(1, ge=1, le=4)
@@ -1159,7 +1193,18 @@ class LlmPptxDTO(_facade().BaseModel):
     filename: str = _facade().Field("ai-presentation.pptx", max_length=160)
 
 
-def _requested_chat_snapshot(db, user, body):
+async def _requested_chat_snapshot(db, user, body, messages):
+    if body.model.strip() == "auto":
+        from modstore_server.llm_operation_routes import bind_resolved_chat_route
+        from modstore_server.multimodal_llm import messages_have_multimodal_images
+
+        if body.route_token or body.config_revision is not None or body.key_source is not None:
+            raise HTTPException(400, "自动选模不能同时绑定模型快照")
+        result = await _facade().resolve_default_llm_route(
+            db, int(user.id), provider=body.provider,
+            operation="vision" if messages_have_multimodal_images(messages) else "chat",
+        )
+        return bind_resolved_chat_route(db, int(user.id), result)
     from modstore_server.llm_key_resolver import read_chat_route_token, resolve_chat_route_snapshot
 
     if not body.route_token and body.config_revision is None:
@@ -1193,13 +1238,13 @@ async def llm_chat(
     user: _facade().User = _facade().Depends(_facade()._get_current_user),
 ):
     msgs = [{"role": m.role, "content": m.content} for m in body.messages]
-    snapshot = _requested_chat_snapshot(db, user, body)
+    snapshot = await _requested_chat_snapshot(db, user, body, msgs)
     out = await _facade().run_billed_llm_chat(
         request,
         db,
         user,
-        provider=body.provider,
-        model=body.model.strip(),
+        provider=snapshot.provider if snapshot else body.provider,
+        model=snapshot.model if snapshot else body.model.strip(),
         messages=msgs,
         max_tokens=body.max_tokens,
         conversation_id=body.conversation_id,
@@ -1240,13 +1285,13 @@ async def llm_chat_stream(
     ),
 ):
     msgs = [m.model_dump(exclude_none=True) for m in body.messages]
-    snapshot = _requested_chat_snapshot(db, user, body)
+    snapshot = await _requested_chat_snapshot(db, user, body, msgs)
     return await _chat_endpoint_facade.stream_billed_llm_chat(
         request,
         db,
         user,
-        provider=body.provider,
-        model=body.model.strip(),
+        provider=snapshot.provider if snapshot else body.provider,
+        model=snapshot.model if snapshot else body.model.strip(),
         messages=msgs,
         max_tokens=body.max_tokens,
         conversation_id=body.conversation_id,
@@ -1282,33 +1327,29 @@ async def llm_image(
     db: _facade().Session = _facade().Depends(_facade().get_db),
     user: _facade().User = _facade().Depends(_facade()._get_current_user),
 ):
-    if body.provider not in _facade().KNOWN_PROVIDERS:
-        raise _facade().HTTPException(400, "unknown provider")
-    api_key, key_source = _facade().resolve_api_key(db, user.id, body.provider)
-    if not api_key:
-        raise _facade().HTTPException(400, f"供应商「{body.provider}」未配置可用 API Key。")
-    base = (
-        _facade().resolve_base_url(db, user.id, body.provider)
-        if body.provider in _facade().OAI_COMPAT_OPENAI_STYLE_PROVIDERS
-        else None
+    from modstore_server.llm_operation_routes import resolve_operation_route
+
+    route = await resolve_operation_route(
+        db, user.id, "image_generation", provider=body.provider,
+        model=body.model.strip(), seed="gpt-image-1" if body.provider == "openai" else "",
     )
     result = await _facade().image_dispatch(
-        body.provider,
-        api_key=api_key,
-        base_url=base,
-        model=body.model.strip() or "gpt-image-1",
+        route.provider,
+        api_key=route.api_key,
+        base_url=route.base_url,
+        model=route.model,
         prompt=body.prompt.strip(),
         size=body.size.strip() or "1024x1024",
         n=body.n,
     )
-    if not result.get("ok"):
+    if not result.get("ok") or not result.get("images"):
         raise _facade().HTTPException(502, result.get("error") or "image upstream error")
     return {
         "ok": True,
-        "images": result.get("images") or [],
-        "provider": body.provider,
-        "model": body.model,
-        "key_source": key_source,
+        "images": result["images"],
+        "provider": route.provider,
+        "model": route.model,
+        "key_source": route.key_source,
     }
 
 

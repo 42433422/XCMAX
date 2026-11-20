@@ -270,7 +270,7 @@ def _declared_profile(
         operations.add("embeddings")
     if "score" in outputs:
         operations.add("rerank")
-    if "audio" in inputs and "text" in outputs:
+    if "audio" in inputs and "text" in outputs and "chat" not in operations:
         operations.add("speech_to_text")
     if "text" in inputs and "audio" in outputs:
         operations.add("text_to_speech")
@@ -312,6 +312,8 @@ def _category_from_profile(
         return "video"
     if "image_generation" in operations or "image" in outputs:
         return "image"
+    if "chat" in operations and "text" in outputs:
+        return "vlm" if "vision" in operations or "image" in inputs else "llm"
     if operations & {"text_to_speech", "speech_to_text", "audio_generation"}:
         return "audio"
     if "audio" in outputs and "text" not in outputs:
@@ -336,6 +338,37 @@ def discover_model_capabilities(
 
     raw: Mapping[str, Any] = metadata or {}
     declared_in, declared_out, declared_ops, evidence = _declared_profile(raw)
+    registry_used = False
+    if not evidence:
+        from modstore_server.llm_litellm_router import model_registry_entry
+
+        entry = model_registry_entry(provider, model_id)
+        type_name = {
+            "audio_transcription": "speech-to-text",
+            "audio_speech": "text-to-speech",
+        }.get(entry.get("mode"), entry.get("mode"))
+        flags = {
+            "vision": entry.get("supports_vision") is True,
+            "audio-input": entry.get("supports_audio_input") is True,
+            "audio-output": entry.get("supports_audio_output") is True,
+        }
+        params = [
+            parameter for parameter, field in (
+                ("tools", "supports_function_calling"),
+                ("response_format", "supports_response_schema"),
+                ("reasoning_effort", "supports_reasoning"),
+            ) if entry.get(field) is True
+        ]
+        declared_in, declared_out, declared_ops, evidence = _declared_profile(
+            {"type": type_name, "capabilities": flags, "supported_parameters": params}
+        )
+        if evidence:
+            registry_used = True
+            if "chat" in declared_ops:
+                declared_in.add("text")
+                declared_out.add("text")
+            if "vision" in declared_ops:
+                declared_out.add("text")
     inferred_in, inferred_out, inferred_ops = _infer_profile(provider, model_id)
     inputs = set(declared_in)
     outputs = set(declared_out)
@@ -363,7 +396,10 @@ def discover_model_capabilities(
     fallback_category = classify_model(provider, model_id)
     category = _category_from_profile(fallback_category, inputs, outputs, operations)
     origin = str(raw.get("_catalog_origin") or "").strip()
-    if evidence and used_inference:
+    if registry_used:
+        source = "litellm_registry"
+        confidence = "mixed" if used_inference else "declared"
+    elif evidence and used_inference:
         source = "hybrid"
         confidence = "mixed"
     elif evidence:

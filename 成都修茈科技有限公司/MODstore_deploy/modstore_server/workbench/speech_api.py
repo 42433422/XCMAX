@@ -68,13 +68,19 @@ async def mimo_asr(audio: bytes, language: str, user_id: int) -> dict[str, str]:
         raise HTTPException(422, "录音格式无效或超过 2 分钟") from None
     if language not in {"auto", "zh", "en"}:
         raise HTTPException(422, "不支持的识别语言")
-    from modstore_server.llm_key_resolver import resolve_credentials
+    from modstore_server.llm_operation_routes import MIMO_ASR_MODEL, resolve_operation_route
     from modstore_server.models import get_session_factory
 
     with get_session_factory()() as session:
-        key, base, _source = resolve_credentials(session, user_id, "xiaomi")
-    if not key:
-        raise HTTPException(503, "当前账户的 MiMo 模型未配置")
+        route = await resolve_operation_route(
+            session, user_id, "speech_to_text", provider="xiaomi", seed=MIMO_ASR_MODEL
+        )
+    return await _transcribe_mimo(audio, language, route.api_key, route.base_url, route.model)
+
+
+async def _transcribe_mimo(
+    audio: bytes, language: str, key: str, base: str | None, model: str
+) -> dict[str, str]:
     import httpx
 
     from modstore_server.mimo_tts_service import _DEFAULT_ROOT, _chat_completions_url
@@ -83,7 +89,7 @@ async def mimo_asr(audio: bytes, language: str, user_id: int) -> dict[str, str]:
     if root.endswith("/v1"):
         root = root[:-3]
     body = {
-        "model": "mimo-v2.5-asr",
+        "model": model,
         "stream": False,
         "messages": [
             {
@@ -214,13 +220,22 @@ async def workbench_unified_tts(
     mimo_voice = (body.voice or "").strip() or MIMO_VOICE
     kwargs: dict[str, Any] = {}
     if _user is not None:
-        from modstore_server.llm_key_resolver import resolve_credentials
+        from modstore_server.llm_operation_routes import MIMO_TTS_MODEL, resolve_operation_route
         from modstore_server.models import get_session_factory
 
-        with get_session_factory()() as session:
-            key, base, _source = resolve_credentials(session, cast(int, _user.id), "xiaomi")
-        # A broken user override must not silently borrow the platform key.
-        kwargs["credentials"] = (key, base)
+        try:
+            with get_session_factory()() as session:
+                route = await resolve_operation_route(
+                    session, cast(int, _user.id), "text_to_speech",
+                    provider="xiaomi", seed=MIMO_TTS_MODEL,
+                )
+        except HTTPException as exc:
+            if exc.status_code != 503:
+                raise
+            # Preserve the explicit require_mimo and existing Edge fallback policy.
+            kwargs["credentials"] = (None, None)
+        else:
+            kwargs.update(credentials=(route.api_key, route.base_url), model=route.model)
     audio, err, meta = await synthesize_mimo_tts_async(text, voice=mimo_voice, **kwargs)
     if audio and (not err):
         mime = str(meta.get("mime") or "audio/wav")
