@@ -6,12 +6,15 @@ import json
 from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass
+from functools import wraps
 from hashlib import sha256
 from pathlib import Path
 from secrets import compare_digest
 from tempfile import NamedTemporaryFile
 from threading import RLock
 from typing import Any
+
+from filelock import FileLock
 
 from app.domain.aiopen.principal import ScreenPrincipal
 
@@ -33,6 +36,22 @@ def _storage_key(secret: str) -> str:
     if secret.startswith(_CLIENT_PREFIX):
         return _CLIENT_DIGEST_PREFIX + sha256(secret.encode()).hexdigest()
     return "" if secret.startswith(_CLIENT_DIGEST_PREFIX) else secret
+
+
+def _shared_keys(method):
+    """Serialize disk read/modify/write across workers using the existing filelock."""
+    @wraps(method)
+    def wrapped(self, *args, **kwargs):
+        with self._lock:
+            path = self._path()
+            if path is None:
+                return method(self, *args, **kwargs)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with FileLock(str(path) + ".lock", timeout=5):
+                self._reload_shared(path)
+                return method(self, *args, **kwargs)
+
+    return wrapped
 
 
 @dataclass
@@ -111,6 +130,28 @@ class ApiKeyRegistry:
                                 entries.setdefault(key, meta)
             return entries
 
+    def _reload_shared(self, path: Path) -> None:
+        entries = self._state.keys(create=True)
+        if not path.exists():
+            if self._loaded:
+                entries.clear()
+            self._loaded = True
+            return
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            entries.clear()
+            raise OSError("could not read shared API keys") from exc
+        if not isinstance(raw, dict) or any(
+            not isinstance(key, str) or not key or not isinstance(meta, dict)
+            for key, meta in raw.items()
+        ):
+            entries.clear()
+            raise OSError("invalid shared API keys")
+        entries.clear()
+        entries.update(raw)
+        self._loaded = True
+
     def _persist(self) -> bool:
         path = self._path()
         if path is None:
@@ -134,6 +175,7 @@ class ApiKeyRegistry:
 
     # ── 校验与生命周期 ────────────────────────────────────────────────
 
+    @_shared_keys
     def verify(self, provided: str | None) -> bool:
         """Require a configured key; uninitialized installations fail closed."""
         env_key = self._env_key()
@@ -148,6 +190,7 @@ class ApiKeyRegistry:
         # Compatibility endpoints verify a service key without a per-tool scope.
         return got in entries and not got.startswith(_CLIENT_DIGEST_PREFIX)
 
+    @_shared_keys
     def generate(
         self,
         label: str = "",
@@ -211,6 +254,7 @@ class ApiKeyRegistry:
                 self._rpm.pop(previous, None)
         return {"key": key, **entry}
 
+    @_shared_keys
     def resolve_principal(self, provided: str | None) -> ScreenPrincipal | None:
         """Legacy/environment keys authenticate a service, not a screen owner."""
         key = (provided or "").strip()
@@ -222,6 +266,7 @@ class ApiKeyRegistry:
             return None
         return ScreenPrincipal.from_ids(entry.get("principal_id"), entry.get("tenant_id"))
 
+    @_shared_keys
     def revoke(self, key: str | None) -> bool:
         with self._lock:
             stored = _storage_key((key or "").strip())
@@ -231,6 +276,7 @@ class ApiKeyRegistry:
                 self._persist()
         return removed
 
+    @_shared_keys
     def revoke_client_key(self, principal: ScreenPrincipal) -> bool:
         with self._lock:
             entries = self._entries()
@@ -244,6 +290,7 @@ class ApiKeyRegistry:
                 self._rpm.pop(key, None)
             return bool(removed)
 
+    @_shared_keys
     def has_active_client_key(self, principal: ScreenPrincipal) -> bool:
         with self._lock:
             now = self._clock()
@@ -272,6 +319,7 @@ class ApiKeyRegistry:
         except (TypeError, ValueError):
             return True
 
+    @_shared_keys
     def list_keys(self) -> list[dict[str, Any]]:
         out: list[dict[str, Any]] = []
         if self._env_key():
@@ -300,6 +348,7 @@ class ApiKeyRegistry:
 
     # ── 授权与计量 ────────────────────────────────────────────────────
 
+    @_shared_keys
     def authorize(
         self, provided: str | None, tool: str = "", *, now: float | None = None
     ) -> dict[str, Any]:
@@ -352,6 +401,7 @@ class ApiKeyRegistry:
                 return self._deny(_QUOTA_EXCEEDED, f"已达每日 {quota} 次调用配额", preview)
         return {"ok": True, "code": "", "message": "", "key_preview": preview, "env": False}
 
+    @_shared_keys
     def record_use(
         self,
         provided: str | None,

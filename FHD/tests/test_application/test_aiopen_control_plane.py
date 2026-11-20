@@ -8,6 +8,14 @@ from app.application.aiopen.runtime import ApiKeyRegistry, RuntimeState
 from app.application.aiopen.usage import UsageLedger
 
 
+def _authorization_worker(path, key, ready, proceed):
+    registry = ApiKeyRegistry(RuntimeState({}), lambda: "", lambda _: "unused", lambda: 1000.0,
+                              storage=lambda: path)
+    ready.put(registry.authorize(key, "ui_click")["ok"])
+    proceed.get(timeout=10)
+    ready.put(registry.authorize(key, "ui_click")["ok"])
+
+
 def _registry(tmp_path, *, env: str = ""):
     issued = count(1)
     return ApiKeyRegistry(
@@ -51,6 +59,69 @@ def test_keys_survive_registry_reload(tmp_path):
     listed = second.list_keys()
     assert listed[0]["today_calls"] == 1
     assert listed[0]["total_calls"] == 1
+
+
+def test_client_revocation_is_visible_to_other_workers_and_not_resurrected(tmp_path):
+    from app.domain.aiopen.principal import ScreenPrincipal
+
+    first, second = _registry(tmp_path), _registry(tmp_path)
+    alice = ScreenPrincipal("alice", "tenant-a")
+    key = first.generate("screen", principal=alice, scopes=["ui_click"],
+                         expires_at=2000.0, client_key=True)["key"]
+    assert second.authorize(key, "ui_click")["ok"] is True
+    assert first.revoke_client_key(alice) is True
+    assert second.authorize(key, "ui_click")["ok"] is False
+    second.record_use(key, "ui_click")
+    assert first.authorize(key, "ui_click")["ok"] is False
+    assert second.resolve_principal(key) is None
+
+
+def test_revocation_is_visible_in_a_running_separate_process(tmp_path):
+    from multiprocessing import get_context
+
+    from app.domain.aiopen.principal import ScreenPrincipal
+
+    registry = _registry(tmp_path)
+    owner = ScreenPrincipal("alice", "tenant-a")
+    key = registry.generate(principal=owner, scopes=["ui_click"], expires_at=2000.0,
+                            client_key=True)["key"]
+    context = get_context("spawn")
+    ready, proceed = context.Queue(), context.Queue()
+    worker = context.Process(target=_authorization_worker,
+                             args=(tmp_path / "keys.json", key, ready, proceed))
+    worker.start()
+    try:
+        assert ready.get(timeout=10) is True
+        assert registry.revoke_client_key(owner) is True
+        proceed.put(True)
+        assert ready.get(timeout=10) is False
+        worker.join(timeout=10)
+        assert worker.exitcode == 0
+    finally:
+        if worker.is_alive():
+            worker.terminate()
+            worker.join(timeout=5)
+        ready.close()
+        proceed.close()
+
+
+def test_workers_do_not_overwrite_each_others_keys(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    from uuid import uuid4
+
+    from app.domain.aiopen.principal import ScreenPrincipal
+
+    def issue(index):
+        registry = ApiKeyRegistry(RuntimeState({}), lambda: "", lambda _: uuid4().hex,
+                                  lambda: 1000.0, storage=lambda: tmp_path / "keys.json")
+        principal = ScreenPrincipal(f"owner-{index}", "tenant-a")
+        return registry.generate(principal=principal, scopes=["ui_click"], expires_at=2000.0,
+                                 client_key=True)["key"]
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        keys = list(pool.map(issue, range(16)))
+    reader = _registry(tmp_path)
+    assert all(reader.authorize(key, "ui_click")["ok"] for key in keys)
 
 
 def test_usage_ledger_aggregates_and_persists(tmp_path):
