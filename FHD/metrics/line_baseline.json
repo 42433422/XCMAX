@@ -1,5 +1,5 @@
 {
-  "lines": 2527344,
+  "lines": 2527346,
   "updated": "2026-11-20",
-  "note": "Restore formal client dispatch from the exact validated main checkout and test fail-closed ordering in both workflow copies"
+  "note": "正式发布编排测试按稳定步骤名定位实际触发步骤，保留精确 SHA 校验及原有发布参数断言；净增 2 行，待 PR 审核。"
 }
