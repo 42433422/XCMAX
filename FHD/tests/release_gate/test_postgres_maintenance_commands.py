@@ -16,7 +16,9 @@ def commands(tmp_path):
     binary = tmp_path / "bin"
     binary.mkdir()
     runner = binary / "docker"
-    runner.write_text(f"#!{sys.executable}\n" + r'''
+    runner.write_text(
+        f"#!{sys.executable}\n"
+        + r"""
 import json, os, sys
 from pathlib import Path
 args = sys.argv[1:]
@@ -45,20 +47,26 @@ else:
     elif sql.startswith('WITH d'): print(0)
     elif 'information_schema.tables' in sql: print(1)
     elif sql.startswith('SELECT count(*)'): print(10)
-''')
+"""
+    )
     runner.chmod(0o700)
     (binary / "coscmd").symlink_to(runner)
     config = tmp_path / "retention.conf"
     config.write_text("tickets|created_at|30|100\nother_events|created_at|30|100\n")
     return {
-        **os.environ, "PATH": str(binary) + os.pathsep + os.environ["PATH"],
-        "FHD_MODSTORE_PG_CONTAINER": "fixture-postgres", "CLI_LOG": str(tmp_path / "calls.jsonl"),
-        "FHD_PG_RETENTION_CONF": str(config), "FHD_PG_RETENTION_LOG": str(tmp_path / "retention.log"),
+        **os.environ,
+        "PATH": str(binary) + os.pathsep + os.environ["PATH"],
+        "FHD_MODSTORE_PG_CONTAINER": "fixture-postgres",
+        "CLI_LOG": str(tmp_path / "calls.jsonl"),
+        "FHD_PG_RETENTION_CONF": str(config),
+        "FHD_PG_RETENTION_LOG": str(tmp_path / "retention.log"),
     }
 
 
 def execute(name, env, *args):
-    return subprocess.run(["bash", str(SCRIPTS / name), *args], env=env, capture_output=True, text=True, timeout=20)
+    return subprocess.run(
+        ["bash", str(SCRIPTS / name), *args], env=env, capture_output=True, text=True, timeout=20
+    )
 
 
 def calls(env):

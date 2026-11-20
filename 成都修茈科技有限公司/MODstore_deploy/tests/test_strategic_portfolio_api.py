@@ -146,3 +146,25 @@ def test_scheduler_runs_approved_work_once_and_rechecks_principal(api, database,
     assert result["reason"] == "approving_principal_no_longer_authorized"
     assert portfolio.portfolio_status(decision_id)["status"] == "withdrawn"
     assert scheduler.tick()["selected"] == 0
+
+
+@pytest.mark.parametrize("account_state", ["disabled", "suspended", "blocked", "deleted"])
+def test_scheduler_withdraws_frozen_owner_before_dispatch(
+    api, database, monkeypatch, account_state
+):
+    client, _identity = api
+    decision_id, expected = propose(client)
+    assert (
+        client.post(
+            BASE + f"/portfolios/{decision_id}/approve", json={"expected_proposal_sha256": expected}
+        ).status_code
+        == 200
+    )
+    with database() as session:
+        session.get(User, 7).account_state = account_state
+        session.commit()
+    monkeypatch.setattr(runtime, "_execute", lambda _task: pytest.fail("frozen account dispatched"))
+    result = scheduler.tick()["results"][0]
+    assert result["reason"] == "approving_principal_no_longer_authorized"
+    assert portfolio.portfolio_status(decision_id)["status"] == "withdrawn"
+    assert scheduler.tick()["selected"] == 0

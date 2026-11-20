@@ -89,11 +89,7 @@ def test_release_checkout_guard_rejects_untrusted_history(tmp_path, depth, case)
         _git(clone, "update-ref", "-d", "refs/remotes/origin/main")
     head = _git(clone, "rev-parse", "HEAD")
     lock = next(s for s in _steps() if s.get("name") == "Lock scan checkout to exact SHA")
-    release_sha = (
-        ""
-        if case == "auto"
-        else (ancestor if case == "wrong_sha" else head)
-    )
+    release_sha = "" if case == "auto" else (ancestor if case == "wrong_sha" else head)
     if case == "invalid_sha":
         release_sha = "$(touch guard-injection)"
     evidence = tmp_path / "evidence"

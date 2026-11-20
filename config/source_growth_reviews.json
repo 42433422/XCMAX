@@ -399,14 +399,14 @@
     },
     "FHD/frontend/src/components/chat/ChatMessageList.vue": {
       "base_file": "FHD/frontend/src/components/chat/ChatMessageList.vue",
-      "base_blob": "eff3cd697d9b8e8f3ac56f3cc281bccd9a091c17",
-      "head_blob": "a0117e8d12c078385565a52268d58f77d05f0123",
-      "before_lines": 939,
-      "after_lines": 998,
-      "reason": "将执行链、工具步骤、过程记录和回执整理为开放式消息布局，让未执行、待继续与部分完成的状态可读并可定位原任务。",
-      "boundary": "组件仅依据同一消息携带的步骤和回执呈现状态。业务确认仍使用可执行回执和既有事件，组件不会自行发起业务写入。",
-      "validation": "验证范围包括去除边框和底色、执行链展开、工具步骤状态、等待审批及执行回执展示。待远端 CI 和桌面实际显示核验。 本地 925 项前端测试与构建类型检查通过。",
-      "follow_up": "执行链验收后继续归并步骤状态和回执的重复显示判断，保持既有 Trace 组件语义。",
+      "base_blob": "a0117e8d12c078385565a52268d58f77d05f0123",
+      "head_blob": "a16edc069eb54140a2a8892d1a5ce59a8ef36598",
+      "before_lines": 998,
+      "after_lines": 1001,
+      "reason": "评审请求：修复真实同页聊天页首次挂载时Teleport缓存空目标并抛出insertBefore异常，既有组件净增3行，保留原消息和分页交互。",
+      "boundary": "只将原布尔目标改为实际已挂载HTMLElement并同步绑定Teleport的to；无目标时继续原地分页，不替换聊天组件、不改变数据流或权限。",
+      "validation": "真实同树目标加1条欢迎消息及81条分页消息的回归修复前均失败；修复后聊天/启动50项和预算负控3项通过。构建、类型检查及真实App本地启动组合通过，远端浏览器SLA和人工架构复核待完成；此请求不是批准。",
+      "follow_up": "由 @42433422 复核实际DOM目标与既有生命周期的兼容边界。后续消息组件职责变化再按真实业务边界收敛，不为3行根因修复机械拆分已有组件。",
       "review_owner": "@42433422"
     },
     "FHD/frontend/src/components/template/ReviewedExcelTemplate.vue": {
@@ -723,14 +723,14 @@
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/para_delegate_handler_merged.py": {
       "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/para_delegate_handler_merged.py",
-      "base_blob": "08281cf6f5557c4e2af7d4d943648c593d2405c2",
-      "head_blob": "899aa9c40bbd23705fd94306d2496ed75e3219dd",
-      "before_lines": 1665,
-      "after_lines": 1700,
-      "reason": "自动派单交给执行器前核对已保存的工单状态，保证原单处置后仍排队的动作无法开始。 同一入口复用显式 OpenCode 首派策略，并排除已暂停的设备工具。",
-      "boundary": "沿用现有派发入口和执行回执，检查仅作用于可核验的客户工单派发。 OpenCode 默认关闭；云端主管、原请求身份、私有合同和已有尝试的回执恢复保持原边界。",
-      "validation": "同工单、跨租户任务以及已有执行凭证均有回归，扩展任务派发与事件链路 179 项通过。 整合后专项 197 项 MODstore 与 54 项 Node 回归通过，包含原工具、OpenCode、额度等待、原单派发回包丢失和私有只读反馈。",
-      "follow_up": "待 Para 提供可核验的任务停止回执后，通过现有执行状态读回核对已递交任务。",
+      "base_blob": "899aa9c40bbd23705fd94306d2496ed75e3219dd",
+      "head_blob": "f0ccdb36716bbe96e8ef0e7e653004d466ac34e9",
+      "before_lines": 1700,
+      "after_lines": 1705,
+      "reason": "评审请求：在原Para派发入口增加5行统一预算准入调用，使直接调用该入口也不能绕过战略作用域的未计量远程执行阻断。",
+      "boundary": "只有携带战略预算上下文的未计量派发被拒绝；原工单/隔离/平台模型分配仍由既有入口核验，消费协议复用strategic_portfolio_usage，不在此新增第二套预算。",
+      "validation": "原Para派发、租户和平台准入回归已纳入本地432项统一验证；新撤权/异常传播专项已通过。真实远程逐调用usage适配器尚未实现，保持出站前阻断；当前PR最终CI待完成。",
+      "follow_up": "由 @42433422 复核直接入口与actions入口一致拒绝。后续只有接入可信持久usage回执并完成同作用域验收后才允许战略远程执行；本记录仅提出审查请求。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/elt/batch_continuation.py": {
@@ -743,6 +743,30 @@
       "boundary": "只使用同租户、同所有人且可核验的上传回执。审批前规范化保留首个来源；已有冻结计划保持原附件集合，每个批准 ID 必须具有真实执行或行级跳过回执，无法读取和未知写入均保持未完成。 复用SQLAlchemy JSON查询，原matches保留最终核验，旧别名及非标准JSON兼容；不设置会漏掉旧目标的固定窗口。",
       "validation": "131 项 ELT、checkpoint、batch 与进度回归通过，包含审批前规范化及真实 CSV/SQLite 的 fresh、resume、unreadable 三种重复附件场景。最终远端 CI 与人工架构审查仍需完成；此登记不是批准。 最终 CI 类型修复保留既有装饰器、仓库及附件身份契约；在同 CI Python 3.11.18 / mypy 2.4.1 与依赖版本环境中，全量 app 类型检查和 186 项相关回归通过。 历史评审补修：续接复用仓库 matches 在 limit 前筛选完整授权范围；真实内存与文件 SQLite 各加入64条跨范围记录及外部账号，旧8失败/2通过，修复后续接与仓库56项通过，定点mypy及Ruff通过。 新增SQLite旧实现4失败，修后无匹配0条/有目标1条反序列化；相关完整文件60项及新增旧标量4项通过，独立复核162组无假阴性。PostgreSQL16真实场景与完整mypy待本head CI。",
       "follow_up": "评审后沿既有批次入口拆分上传来源核对与续接计划构造，保留冻结审批和真实回执契约。",
+      "review_owner": "@42433422"
+    },
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/daily_digest_merged.py": {
+      "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/daily_digest_merged.py",
+      "base_blob": "74c795b1690c962fa1106ceca3ec89fc4305e91d",
+      "head_blob": "a3ef8a7d986b09927bc35516d43fcacddad43398",
+      "before_lines": 2006,
+      "after_lines": 2007,
+      "reason": "评审请求：整合 #3396，将版本递增调用移动到当日时间线结果持久化之后；只增加一行解释因果顺序的注释，防止未闭环时间线提升版本。",
+      "boundary": "现有摘要入口只负责按原 record_id/day 调用原 release_train；闭环判定和版本写入仍在既有发布模块，不新增摘要中的发布策略。",
+      "validation": "版本与摘要定向回归已通过；真实 APScheduler 与 release_train 定向24项通过，远端当前PR的版本/发布链验证仍须完成。本记录不是架构批准。",
+      "follow_up": "由 @42433422 复核时间线先落盘再递增的顺序。只有后续摘要职责实际扩张时再按业务边界重构，不为一行注释机械拆分文件。",
+      "review_owner": "@42433422"
+    },
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_executor_merged_mod1.py": {
+      "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_executor_merged_mod1.py",
+      "base_blob": "b9f538e97e17f60326c29821ad4d8d0d4225585f",
+      "head_blob": "4ce6413684ce75dbe183f7dee86abd39abcf54cf",
+      "before_lines": 2294,
+      "after_lines": 2339,
+      "reason": "评审请求：用户要求补齐真实反馈实验和受约束战略执行，在既有员工cognition/actions入口接入固定实验分流、实际曝光/结果与执行预算检查，净增45行。",
+      "boundary": "实验生命周期、租户/审批、预算账本和优化仍在独立既有协议适配模块；此入口只传递真实员工与账号、调用耗时、结果，限制未计量派发和剩余HTTP时间，不复制业务决策。",
+      "validation": "本地MODstore统一定向432项通过及GrowthBook官方API合同/预算回归通过；实际线上曝光、已授权流量与客户效果仍待部署验收。远端CI与维护者架构评审尚未完成，此登记不是批准。",
+      "follow_up": "由 @42433422 复核实际曝光发生位置、异常路径结果、未计量派发阻断和剩余时间传递。后续入口变化继续通过现有runtime适配，避免增加动态facade或机械part拆分。",
       "review_owner": "@42433422"
     }
   }

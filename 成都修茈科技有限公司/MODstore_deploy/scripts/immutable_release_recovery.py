@@ -155,27 +155,33 @@ def _verify_health(target: dict[str, str], env: dict[str, str], read_health) -> 
 
 
 def _payment_present() -> bool:
-    return (
-        subprocess.run(
-            ["systemctl", "cat", "modstore-payment.service"],
+    try:
+        result = subprocess.run(
+            ["systemctl", "show", "modstore-payment.service", "--property=LoadState", "--value"],
             capture_output=True,
+            text=True,
             timeout=10,
-        ).returncode
-        == 0
-    )
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise RecoveryError("rollback_payment_presence_unknown") from exc
+    state = result.stdout.strip()
+    if result.returncode == 0 and state == "loaded":
+        return True
+    if result.returncode in (0, 4) and state == "not-found":
+        return False
+    raise RecoveryError("rollback_payment_presence_unknown")
 
 
 def _run_native(env: dict[str, str], lock_fd: int) -> None:
     program = """set -euo pipefail
 . "$1"
-PAYMENT_SERVICE_PRESENT=0
 PAYMENT_JAVA_BIN=/usr/bin/java
-if systemctl cat modstore-payment.service >/dev/null 2>&1; then
-  PAYMENT_SERVICE_PRESENT=1
+if [[ "$PAYMENT_SERVICE_PRESENT" == 1 ]]; then
   resolve_java_home
   PAYMENT_JAVA_BIN="$JAVA_HOME/bin/java"
 fi
-RUNTIME_NODE_BIN="$(command -v node)"
+RUNTIME_NODE_BIN="${MODSTORE_NODE_EXECUTABLE:-}"
+if [[ -z "$RUNTIME_NODE_BIN" ]]; then RUNTIME_NODE_BIN="$(command -v node)"; fi
 RUNTIME_NODE_BIN="$(readlink -f "$RUNTIME_NODE_BIN")"
 [[ -x "$RUNTIME_NODE_BIN" ]] || fail "rollback Node runtime is unavailable"
 acquire_publication_lock
@@ -192,7 +198,7 @@ fi
             "immutable-recovery",
             str(SCRIPT_DIR / "immutable_release_runtime.sh"),
         ],
-        env=env,
+        env={**env, "PAYMENT_SERVICE_PRESENT": "1" if _payment_present() else "0"},
         capture_output=True,
         text=True,
         timeout=600,
@@ -202,10 +208,7 @@ fi
         raise RecoveryError("native_rollback_failed")
 
 
-def recover(
-    value: Any, *, env: dict[str, str], run_native=_run_native, read_health=_read_health
-) -> dict[str, Any]:
-    request = request_payload(value)
+def _recovery_paths(request: dict[str, Any], env: dict[str, str]):
     base = _plain_path(Path(env["RELEASE_BASE"]))
     if str(base) != "/opt/xcmax" and env.get("XCMAX_ALLOW_CUSTOM_RELEASE_BASE") != "1":
         raise RecoveryError("custom_release_base_not_authorized")
@@ -215,15 +218,61 @@ def recover(
     state = _plain_path(Path(env["RUNTIME_DIR"])) / "release-recovery"
     if state.is_relative_to(releases):
         raise RecoveryError("rollback_state_must_survive_pruning")
-    _plain_path(state)
-    state.mkdir(parents=True, exist_ok=True, mode=0o700)
+    state = _plain_path(state)
     key = hashlib.sha256(request["request_id"].encode()).hexdigest()
-    receipt = state / f"{key}.json"
-    _plain_path(receipt)
-    digest = hashlib.sha256(
+    receipt = _plain_path(state / f"{key}.json")
+    lock_path = _plain_path(Path(env["LOCK_FILE"]))
+    return releases, state, receipt, lock_path
+
+
+def _request_digest(request: dict[str, Any]) -> str:
+    return hashlib.sha256(
         json.dumps(request, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
-    lock_path = _plain_path(Path(env["LOCK_FILE"]))
+
+
+def readback(value: Any, *, env: dict[str, str], read_health=_read_health) -> dict[str, Any]:
+    """Confirm an already verified rollback under the deployment lock without any mutation."""
+    try:
+        request = request_payload(value)
+        releases, _state, receipt, lock_path = _recovery_paths(request, env)
+        # Only the recovery/deploy command may create the lock or any runtime state.
+        with os.fdopen(os.open(lock_path, os.O_RDONLY | os.O_NOFOLLOW), "r") as lock:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as exc:
+                raise RecoveryError("immutable_release_busy") from exc
+            if not receipt.is_file():
+                raise RecoveryError("rollback_receipt_missing")
+            record = json.loads(receipt.read_text())
+            if not isinstance(record, dict) or record.get("status") != "rollback_verified":
+                raise RecoveryError("rollback_receipt_not_verified")
+            if request_payload(record) != request or record.get(
+                "request_sha256"
+            ) != _request_digest(request):
+                raise RecoveryError("rollback_request_conflict")
+            target = request["target_identity"]
+            if record.get("identity") != target:
+                raise RecoveryError("rollback_receipt_identity_mismatch")
+            if _release(releases / target["git_sha"], releases) != target:
+                raise RecoveryError("rollback_target_identity_mismatch")
+            if _current(Path(env["CURRENT_LINK"]), releases) != target:
+                raise RecoveryError("rollback_receipt_superseded")
+            _verify_health(target, env, read_health)
+            return record
+    except RecoveryError:
+        raise
+    except (ValueError, OSError, KeyError, subprocess.SubprocessError) as exc:
+        raise RecoveryError("rollback_readback_unavailable") from exc
+
+
+def recover(
+    value: Any, *, env: dict[str, str], run_native=_run_native, read_health=_read_health
+) -> dict[str, Any]:
+    request = request_payload(value)
+    releases, state, receipt, lock_path = _recovery_paths(request, env)
+    digest = _request_digest(request)
+    state.mkdir(parents=True, exist_ok=True, mode=0o700)
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     with os.fdopen(os.open(lock_path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600), "a+") as lock:
         try:
@@ -280,6 +329,11 @@ def recover(
                         raise RecoveryError("rollback_cannot_move_runtime_data")
                     native_env[variable] = str(path)
                 native_env["PREVIOUS_LIBRARY_DIR"] = native_env["LIBRARY_DIR"]
+                if settings.get("MODSTORE_NODE_EXECUTABLE"):
+                    node = _plain_path(Path(settings["MODSTORE_NODE_EXECUTABLE"]))
+                    if not node.is_file() or not os.access(node, os.X_OK):
+                        raise RecoveryError("rollback_node_runtime_unavailable")
+                    native_env["MODSTORE_NODE_EXECUTABLE"] = str(node)
                 native_env["GITHUB_REPOSITORY_SLUG"] = settings.get(
                     "MODSTORE_CAPABILITY_PROPOSAL_REPO", ""
                 )

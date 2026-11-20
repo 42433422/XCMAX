@@ -1,6 +1,9 @@
 """Regression results drive compensation, never success from mere measurement."""
 
+import hashlib
+import json
 from copy import deepcopy
+from functools import partial
 from uuid import uuid4
 
 import pytest
@@ -162,7 +165,60 @@ def failed_run(client, monkeypatch):
     return request_id, state
 
 
-def test_recovery_reconciles_unknown_command_without_reexecuting(failed_run, monkeypatch):
+@pytest.fixture
+def rollback_receipt(failed_run, monkeypatch, tmp_path):
+    """Use the real immutable receipt reader with local runtime/health fixtures."""
+    request_id, state = failed_run
+    immutable = recovery._immutable_recovery()
+    request = {
+        "request_id": f"retort:{request_id}:rollback",
+        "expected_identity": identity("a"),
+        "target_identity": identity("b"),
+        "reason": state["impact"]["reason"],
+    }
+    record = {
+        **request,
+        "request_sha256": hashlib.sha256(
+            json.dumps(request, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest(),
+        "status": "rollback_verified",
+        "identity": identity("b"),
+        "submitted": True,
+    }
+    releases = tmp_path / "releases"
+    for char in ("a", "b"):
+        root = releases / (char * 40)
+        root.mkdir(parents=True)
+        (root / ".xcmax-release.json").write_text(json.dumps(identity(char)))
+    (tmp_path / "current").symlink_to(releases / ("b" * 40), target_is_directory=True)
+    runtime = tmp_path / "runtime"
+    receipts = runtime / "release-recovery"
+    receipts.mkdir(parents=True)
+    receipt_path = receipts / (hashlib.sha256(request["request_id"].encode()).hexdigest() + ".json")
+    lock = tmp_path / "release.lock"
+    lock.touch()
+    monkeypatch.setenv("XCMAX_RELEASE_BASE", str(tmp_path))
+    monkeypatch.setenv("XCMAX_ALLOW_CUSTOM_RELEASE_BASE", "1")
+    monkeypatch.setenv("XCMAX_RELEASE_LOCK", str(lock))
+    monkeypatch.setenv("MODSTORE_RUNTIME_DIR", str(runtime))
+    monkeypatch.setenv("MODSTORE_DEPLOY_HEALTH_URL", "http://local-api/health")
+    monkeypatch.setenv("MODSTORE_SCHEDULER_HEALTH_URL", "http://local-scheduler/health")
+    monkeypatch.setenv("MODSTORE_PUBLIC_HEALTH_URL", "https://public/health")
+    health = {"ok": True, "deploy_tier": "production", **identity("b")}
+    monkeypatch.setattr(immutable, "_payment_present", lambda: False)
+    monkeypatch.setattr(
+        immutable, "readback", partial(immutable.readback, read_health=lambda _: health)
+    )
+
+    def write(**changes):
+        receipt_path.write_text(json.dumps({**record, **changes}))
+
+    return write, health
+
+
+def test_recovery_reconciles_unknown_command_without_reexecuting(
+    failed_run, rollback_receipt, monkeypatch
+):
     request_id, state = failed_run
     current = {"value": identity("a")}
     monkeypatch.setattr(recovery, "_release_identity", lambda: current["value"])
@@ -179,10 +235,80 @@ def test_recovery_reconciles_unknown_command_without_reexecuting(failed_run, mon
     assert first["reason"] == "recovery_outcome_unknown"
     assert recovery.recover_release(request_id, state)["reason"] == "awaiting_recovery_readback"
     current["value"] = identity("b")
+    assert recovery.recover_release(request_id, state)["status"] == "waiting_recovery"
+    write, _health = rollback_receipt
+    write()
     assert recovery.recover_release(request_id, state)["status"] == "rollback_verified"
     assert len(calls) == 1
     assert calls[0]["payload"]["expected_identity"] == identity("a")
     assert calls[0]["payload"]["target_identity"] == identity("b")
+
+
+@pytest.mark.parametrize("command_ok", [False, True])
+def test_switched_pointer_never_finishes_a_failed_or_missing_health_receipt(
+    failed_run, rollback_receipt, monkeypatch, command_ok
+):
+    request_id, state = failed_run
+    write, _health = rollback_receipt
+    current = {"value": identity("a")}
+    calls = []
+    monkeypatch.setattr(recovery, "_release_identity", lambda: current["value"])
+
+    def execute(**kwargs):
+        calls.append(kwargs)
+        current["value"] = identity("b")
+        write(status="readback_required", error="rollback_health_probe_failed")
+        return {
+            "executed": True,
+            "ok": command_ok,
+            "exit_code": 0 if command_ok else 1,
+            "output": "rollback_health_probe_failed",
+        }
+
+    monkeypatch.setattr(
+        "modstore_server.release_recovery_orchestrator.maybe_execute_recovery", execute
+    )
+    first = recovery.recover_release(request_id, state)
+    assert first["status"] == "waiting_recovery"
+    assert first["execution"]["ok"] is command_ok
+    second = recovery.recover_release(request_id, state)
+    assert second["status"] == "waiting_recovery"
+    assert second["reason"] == "awaiting_recovery_readback"
+    assert len(calls) == 1
+    # Later operator reconciliation can produce the same verified receipt.
+    # A historical nonzero command exit must not erase subsequent real evidence.
+    write()
+    final = recovery.recover_release(request_id, state)
+    assert final["status"] == "rollback_verified"
+    assert final["receipt"]["request_id"] == f"retort:{request_id}:rollback"
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize(
+    "tamper", ["request_id", "request_sha256", "expected_identity", "identity"]
+)
+def test_recovery_rejects_an_unrelated_or_changed_durable_receipt(
+    failed_run, rollback_receipt, monkeypatch, tamper
+):
+    request_id, state = failed_run
+    write, _health = rollback_receipt
+    monkeypatch.setattr(recovery, "_release_identity", lambda: identity("b"))
+    replacement = identity("c") if tamper in {"expected_identity", "identity"} else "wrong-request"
+    write(**{tamper: replacement})
+    assert recovery.recover_release(request_id, state)["status"] == "waiting_recovery"
+
+
+def test_verified_rollback_receipt_requires_fresh_runtime_health(
+    failed_run, rollback_receipt, monkeypatch
+):
+    request_id, state = failed_run
+    write, health = rollback_receipt
+    write()
+    health["git_sha"] = "a" * 40
+    monkeypatch.setattr(recovery, "_release_identity", lambda: identity("b"))
+    assert recovery.recover_release(request_id, state)["status"] == "waiting_recovery"
+    health["git_sha"] = "b" * 40
+    assert recovery.recover_release(request_id, state)["status"] == "rollback_verified"
 
 
 def test_unavailable_or_changed_release_preserves_recovery_claim(failed_run, monkeypatch):

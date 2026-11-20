@@ -15,6 +15,7 @@ from sqlalchemy import select
 
 from modstore_server.db.db_base import get_session_factory
 from modstore_server.db.strategic import StrategicActionItem, StrategicDecision
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.strategic_portfolio import (
     RESOURCES,
     SCHEMA,
@@ -333,29 +334,14 @@ def _finish(task: dict[str, Any], result: dict[str, Any], elapsed: int) -> None:
         if saved["lease_token"] != task["lease_token"] or saved["status"] != "running":
             raise PortfolioError("execution completion does not own its lease")
         from modstore_server.cred_vault import redact
-        from modstore_server.employee_orchestrator import _evaluate_execution_success
+        from modstore_server.strategic_execution_receipts import evaluate_execution_receipt
 
-        ok, reason = _evaluate_execution_success(result)
-        pending_states = {"pending", "queued", "running", "in_progress", "waiting_approval"}
-
-        def deferred(value: Any, depth: int = 0) -> bool:
-            if depth > 5:
-                return False
-            if isinstance(value, dict):
-                status = value.get("status")
-                return (
-                    value.get("accepted") is True
-                    and value.get("completed") is False
-                    or value.get("queued") is True
-                    or value.get("requires_reconciliation") is True
-                    or (isinstance(status, str) and status in pending_states)
-                    or any(deferred(item, depth + 1) for item in value.values())
-                )
-            return isinstance(value, list) and any(
-                deferred(item, depth + 1) for item in value[:100]
-            )
-
-        pending_execution = deferred(result)
+        receipt = evaluate_execution_receipt(result)
+        ok, reason = receipt.status == "completed", receipt.reason
+        unknown_receipt = receipt.status == "unknown"
+        if unknown_receipt:
+            state.update(halted=True, stop_reason=reason)
+        pending_execution = receipt.status == "pending"
         bound_worker = (
             pending_execution
             and saved.get("worker_binding")
@@ -374,10 +360,14 @@ def _finish(task: dict[str, Any], result: dict[str, Any], elapsed: int) -> None:
         saved.update(
             status=(
                 "unknown"
-                if unknown_usage or (pending_execution and not bound_worker)
+                if unknown_usage or unknown_receipt or (pending_execution and not bound_worker)
                 else "waiting" if bound_worker else "completed" if ok else "failed"
             ),
-            completed_at=None if bound_worker else datetime.now(UTC).isoformat(),
+            completed_at=(
+                None
+                if bound_worker or unknown_usage or unknown_receipt or pending_execution
+                else datetime.now(UTC).isoformat()
+            ),
             compute_seconds=elapsed,
             actual_tokens=sum(call.get("actual_tokens", call["reserved_tokens"]) for call in calls),
             accrued_cost_cents=sum(
@@ -394,7 +384,7 @@ def _finish(task: dict[str, Any], result: dict[str, Any], elapsed: int) -> None:
             else {"sha256": digest(result), "preview": serialized[:8000], "truncated": True}
         )
         failures = sum(item["status"] in {"failed", "unknown"} for item in state["tasks"].values())
-        if failures >= proposal["limits"]["max_failures"]:
+        if failures >= proposal["limits"]["max_failures"] and not state.get("halted"):
             state.update(halted=True, stop_reason="failure_guardrail")
         action = session.execute(
             select(StrategicActionItem).where(
@@ -407,7 +397,9 @@ def _finish(task: dict[str, Any], result: dict[str, Any], elapsed: int) -> None:
             if saved["status"] == "completed"
             else "in_progress" if saved["status"] == "waiting" else "blocked"
         )
-        action.completed_at = None if bound_worker else datetime.now(UTC)
+        action.completed_at = (
+            None if saved["status"] in {"waiting", "unknown"} else datetime.now(UTC)
+        )
         action.updated_at = datetime.now(UTC)
         action.result_json, action.block_reason = _json(saved), "" if ok else reason[:500]
 
@@ -424,9 +416,9 @@ def execute_portfolio_worker(
         try:
             result = execute(task)
             if not isinstance(result, dict):
-                result = {"ok": False, "error": "invalid worker receipt"}
-        except Exception as exc:
-            result = {"ok": False, "error": type(exc).__name__}
+                result = {"status": "unknown", "receipt_error": "invalid worker receipt"}
+        except RECOVERABLE_ERRORS as exc:
+            result = {"status": "unknown", "receipt_error": type(exc).__name__}
         elapsed = max(1, math.ceil((datetime.now(UTC) - _date(task["started_at"])).total_seconds()))
         _finish(task, result, elapsed)
     return portfolio_status(binding["decision_id"], owner_user_id=owner_user_id)
@@ -448,9 +440,9 @@ def run_portfolio_cycle(
         try:
             result = _execute(task)
             if not isinstance(result, dict):
-                result = {"ok": False, "error": "invalid executor receipt"}
-        except Exception as exc:
-            result = {"ok": False, "error": type(exc).__name__}
+                result = {"status": "unknown", "receipt_error": "invalid executor receipt"}
+        except RECOVERABLE_ERRORS as exc:
+            result = {"status": "unknown", "receipt_error": type(exc).__name__}
         _finish(task, result, max(1, math.ceil(time.monotonic() - started)))
         processed += 1
         if portfolio_status(decision_id)["halted"]:

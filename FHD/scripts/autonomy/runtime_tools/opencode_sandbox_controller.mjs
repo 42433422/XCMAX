@@ -1,7 +1,7 @@
 /** Trusted, per-task embedding of SRT. Only this host process holds the model key. */
 import { spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { readFileSync, realpathSync } from 'node:fs';
+import { readFileSync, realpathSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -149,8 +149,24 @@ export async function runSandboxController(payload) {
     if (typeof workload.sandboxPrivateKeyPath !== 'string' || !workload.sandboxPrivateKeyPath.startsWith('/')) {
       throw new Error('opencode_controller_private_key_boundary_missing');
     }
+    let commandPolicy;
+    if (process.platform === 'linux') {
+      const sockets = [...new Set([
+        SandboxManager.getLinuxHttpSocketPath(), SandboxManager.getLinuxSocksSocketPath(),
+      ])];
+      if (sockets.some(path => typeof path !== 'string' || !path.startsWith('/') || !statSync(path).isSocket())) {
+        throw new Error('opencode_controller_network_bridge_missing');
+      }
+      // SRT creates its Unix bridges under the controller's private TMPDIR.
+      // Its later denyRead mounts can hide the earlier bridge binds. Re-expose
+      // only the observed socket files for SRT's pre-seccomp socat relays; the
+      // directory and CA key remain denied, and the workload still cannot open
+      // Unix sockets. The filesystem profile is compiled at wrap time.
+      commandPolicy = { filesystem: { ...policy.filesystem,
+        allowRead: [...new Set([...(policy.filesystem?.allowRead || []), ...sockets])] } };
+    }
     const command = await SandboxManager.wrapWithSandbox(payload.command.map(shellQuote).join(' '),
-      '/bin/bash', undefined, interrupted.signal);
+      '/bin/bash', commandPolicy, interrupted.signal);
     interrupted.signal.throwIfAborted();
     return await new Promise((resolveExit, reject) => {
       // SRT guarantees a composable simple command. Exec keeps the tracked PID

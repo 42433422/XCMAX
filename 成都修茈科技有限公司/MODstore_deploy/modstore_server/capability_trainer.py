@@ -331,10 +331,14 @@ def decide(result: Dict[str, Any], *, bundle=None) -> Dict[str, Any]:
         return {**blocked, "reason": "case_provider_sets_differ"}
     if (
         bundle is None
+        or not isinstance(bundle.get("case_sha256"), list)
+        or len(bundle["case_sha256"]) != len(bundle["case_ids"])
         or any(
             key[1] != bundle["provider_id"]
             or key[0] >= len(bundle["case_ids"])
             or value[1]["case_id"] != bundle["case_ids"][key[0]]
+            or not isinstance(value[1].get("task"), str)
+            or _hash(value[1]["task"]) != bundle["case_sha256"][key[0]]
             for key, value in arms[0].items()
         )
         or {key[0] for key in arms[0]} != set(range(len(bundle["case_ids"])))
@@ -454,7 +458,7 @@ def _default_ledger() -> Path:
         from modstore_server.maintenance_loop.store import ledger_path
 
         return ledger_path()
-    except Exception:
+    except (OSError, ValueError, ImportError):
         return (
             Path(os.environ.get("MODSTORE_TRAINING_LEDGER_PATH", ""))
             if os.environ.get("MODSTORE_TRAINING_LEDGER_PATH")

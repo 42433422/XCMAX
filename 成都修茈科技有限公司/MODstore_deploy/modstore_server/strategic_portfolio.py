@@ -276,7 +276,30 @@ def mutate_portfolio(
     raise PortfolioError("concurrent portfolio change; retry with the same identity")
 
 
+def portfolio_principal_active(principal: Any) -> bool:
+    """Shared revocation rule for scheduling and every new execution reservation."""
+    return bool(
+        principal is not None
+        and principal.is_admin
+        and getattr(principal, "is_active", True) is not False
+        and principal.deleted_at is None
+        and principal.account_state not in {"disabled", "suspended", "blocked", "deleted"}
+    )
+
+
+def require_active_portfolio_owner(owner_user_id: int, session: Any = None) -> None:
+    from modstore_server.db.identity import User
+
+    if session is None:
+        with get_session_factory()() as owned_session:
+            require_active_portfolio_owner(owner_user_id, owned_session)
+        return
+    if not portfolio_principal_active(session.get(User, owner_user_id)):
+        raise PortfolioError("portfolio owner is no longer an active administrator")
+
+
 def require_authorization(row: Any, proposal: dict[str, Any], state: dict[str, Any]) -> None:
+    require_active_portfolio_owner(proposal["owner_user_id"])
     if row.status not in {"approved", "executing"} or row.decided_by not in {
         "user",
         "council-vote",
@@ -381,6 +404,7 @@ def authorize_portfolio(
     def apply(
         row: Any, proposal: dict[str, Any], state: dict[str, Any], _session: Any
     ) -> dict[str, Any]:
+        require_active_portfolio_owner(owner_user_id, _session)
         if row.status != "proposed" or proposal["proposal_sha256"] != expected_proposal_sha256:
             raise PortfolioError("portfolio approval state or proposal hash changed")
         if _date(proposal["limits"]["expires_at"]) <= datetime.now(UTC):

@@ -13,6 +13,7 @@ from modstore_server.db.strategic import StrategicDecision
 from modstore_server.strategic_portfolio import (
     PortfolioError,
     _date,
+    portfolio_principal_active,
     portfolio_status,
     stop_portfolio,
 )
@@ -38,7 +39,7 @@ def tick(*, limit: int = 10) -> dict[str, Any]:
             owner = status["owner_user_id"]
             with get_session_factory()() as session:
                 principal = session.get(User, owner)
-                authorized = bool(principal and principal.is_admin and not principal.deleted_at)
+                authorized = portfolio_principal_active(principal)
             reason = ""
             if not authorized:
                 reason = "approving_principal_no_longer_authorized"

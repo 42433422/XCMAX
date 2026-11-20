@@ -203,6 +203,7 @@ for (const native of [false, true]) test(`real OpenCode 1.19.6 Responses SSE ${n
   t.after(() => disposeMitmCA(upstreamCA));
   const leaf = mintLeafCert(upstreamCA, '127.0.0.2');
   const requests = [];
+  let upstreamConnections = 0, upstreamTlsErrors = 0;
   const output = 'READY ' + placeholder;
   const upstream = https.createServer({ cert: leaf.certPem, key: leaf.keyPem }, async (req, res) => {
     let body = '';
@@ -230,6 +231,8 @@ for (const native of [false, true]) test(`real OpenCode 1.19.6 Responses SSE ${n
     event('response.completed', { response });
     res.end();
   });
+  upstream.on('connection', () => { upstreamConnections += 1; });
+  upstream.on('tlsClientError', () => { upstreamTlsErrors += 1; });
   // 127.0.0.2 is outside SRT's exact localhost NO_PROXY list. The native test
   // must cross the host proxy because its private loopback has no upstream.
   const upstreamPort = await listen(upstream, t, '127.0.0.2');
@@ -262,6 +265,9 @@ for (const native of [false, true]) test(`real OpenCode 1.19.6 Responses SSE ${n
       workload: { executable: openCodeBinary, prompt, reportOnly: true, timeoutMs: 35000,
         workloadPath: env.PATH, workloadTemp } }));
     const [code] = await closed;
+    if (code !== 0) t.diagnostic(JSON.stringify({ stage: 'native-model-request',
+      sessionStarted: stdout.includes('会话已启动'), upstreamConnections, upstreamTlsErrors,
+      acceptedUpstreamRequests: requests.length }));
     assert.equal(code, 0, stdout + stderr);
     result = stdout.trim().split('\n').map(line => { try { return JSON.parse(line); } catch { return {}; } })
       .find(row => row.type === 'result')?.text;
@@ -303,9 +309,17 @@ for (const mode of ['TERM', 'KILL after ignored TERM', 'failed initialization'])
   const boundary = join(root, 'deny-boundary');
   const workerPid = join(root, 'worker.pid');
   const receipts = join(root, 'cleanup.jsonl');
+  const bridgeSocket = join(root, 'bridge.sock');
   writeFileSync(join(runtimeRoot, 'dist', 'index.js'), `
 import fs from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 const boundary = ${JSON.stringify(boundary)}, pidFile = ${JSON.stringify(workerPid)}, receipts = ${JSON.stringify(receipts)};
+const bridgeSocket = ${JSON.stringify(bridgeSocket)};
+// This lifecycle fixture supplies only SRT hook/socket metadata. Actual socket
+// transport and filesystem enforcement are exercised by the admitted native test.
+const originalStat = fs.statSync;
+fs.statSync = (path, ...args) => path === bridgeSocket ? { isSocket: () => true } : originalStat(path, ...args);
+syncBuiltinESMExports();
 export const SandboxRuntimeConfigSchema = { parse: value => value };
 export const SandboxManager = {
   async initialize() {
@@ -315,12 +329,18 @@ export const SandboxManager = {
     process.once('exit', () => fs.appendFileSync(receipts, JSON.stringify({exitCleanup:true})+'\\n'));
     ${failedInit ? "throw new Error('fixture_initialization_failed');" : ''}
   },
-  async wrapWithSandbox(command) { return command; },
+  async wrapWithSandbox(command, shell, policy) {
+    if (process.platform === 'linux') fs.appendFileSync(receipts, JSON.stringify({filesystem:policy.filesystem})+'\\n');
+    return command;
+  },
+  getLinuxHttpSocketPath() { return bridgeSocket; },
+  getLinuxSocksSocketPath() { return bridgeSocket; },
   getMitmCA() { return {keyPath: boundary}; },
   async reset() {
     let alive = false;
     if (fs.existsSync(pidFile)) { try { process.kill(Number(fs.readFileSync(pidFile, 'utf8')), 0); alive = true; } catch {} }
     fs.appendFileSync(receipts, JSON.stringify({reset:true,alive,boundary:fs.existsSync(boundary)})+'\\n');
+    fs.statSync = originalStat; syncBuiltinESMExports();
     fs.rmSync(boundary,{force:true});
   }
 };`);
@@ -354,7 +374,8 @@ process.exitCode = await runSandboxController(JSON.parse(raw));
     lines.on('line', line => { if (line === 'READY') resolveReady(); });
     child.once('exit', () => reject(new Error('worker not started: ' + stderr)));
   });
-  child.stdin.end(JSON.stringify({ runtime: join(runtimeRoot, 'dist', 'cli.js'), settings: {},
+  child.stdin.end(JSON.stringify({ runtime: join(runtimeRoot, 'dist', 'cli.js'),
+    settings: { filesystem: { denyRead: ['/'], allowRead: [worker], allowWrite: [], denyWrite: [] } },
     gateway: 'https://gateway.example/v1', model, command: [process.execPath, worker],
     workload: {}, timeoutMs: 7000 }));
   await ready;
@@ -369,4 +390,6 @@ process.exitCode = await runSandboxController(JSON.parse(raw));
   assert.ok(records.some(row => row.exitCleanup));
   assert.equal(records.some(row => row.premature), false);
   assert.equal(existsSync(boundary), false);
+  if (process.platform === 'linux' && !failedInit) assert.deepEqual(records.find(row => row.filesystem)?.filesystem,
+    { denyRead: ['/'], allowRead: [worker, bridgeSocket], allowWrite: [], denyWrite: [] });
 });

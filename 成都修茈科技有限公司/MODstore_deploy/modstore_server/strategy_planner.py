@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from modstore_server import strategy_bets
+from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 UTC = timezone.utc
 MAX_NEW_BETS = 1
@@ -100,7 +101,7 @@ def _model_assets() -> Dict[str, Any]:
         if loop_running:
             return {"status": "unknown", "reason": "event_loop_active"}
         catalog = asyncio.run(platform_model_catalog(refresh=False))
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return {"status": "unknown", "reason": "catalog_unavailable"}
     providers = [row for row in (catalog or {}).get("providers") or [] if isinstance(row, dict)]
     configured = [row for row in providers if row.get("configured")]
@@ -117,7 +118,7 @@ def _repo_signals() -> Dict[str, Any]:
         from modstore_server.evolution_signal_collector import aggregate_signals
 
         signals = aggregate_signals()
-    except Exception:
+    except RECOVERABLE_ERRORS:
         return {"status": "unknown", "signals": {}}
     if not isinstance(signals, dict):
         return {"status": "unknown", "signals": {}}
@@ -554,7 +555,7 @@ async def run_scheduled_discovery(
                 registered=[proposal["decision"]["decision_id"]],
                 proposal_sha256=proposal["decision"]["decision_payload"]["proposal_sha256"],
             )
-    except Exception as exc:
+    except RECOVERABLE_ERRORS as exc:
         result = {
             "status": "requires_reconciliation",
             "period": period,

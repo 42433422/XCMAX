@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import re
 from datetime import UTC, datetime
+from functools import lru_cache
+from pathlib import Path
 
 from fastapi import HTTPException
 
@@ -54,6 +57,43 @@ def _save(request_id, result):
     return result
 
 
+@lru_cache(maxsize=1)
+def _immutable_recovery():
+    """Load the release script shipped with this server, never an operator-supplied module."""
+    path = Path(__file__).resolve().parents[1] / "scripts" / "immutable_release_recovery.py"
+    spec = importlib.util.spec_from_file_location("_xcmax_immutable_release_recovery", path)
+    if spec is None or spec.loader is None:
+        raise ValueError("immutable_recovery_reader_unavailable")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _read_recovery_receipt(payload):
+    """Reuse the rollback writer's locked request/receipt/health verification contract."""
+    base = os.environ.get("XCMAX_RELEASE_BASE") or "/opt/xcmax"
+    return _immutable_recovery().readback(
+        payload,
+        env={
+            "RELEASE_BASE": base,
+            "RELEASES_DIR": f"{base.rstrip('/')}/releases",
+            "CURRENT_LINK": os.environ.get("XCMAX_CURRENT_LINK") or f"{base}/current",
+            "RUNTIME_DIR": os.environ.get("MODSTORE_RUNTIME_DIR") or f"{base}/runtime",
+            "LOCK_FILE": os.environ.get("XCMAX_RELEASE_LOCK")
+            or "/run/lock/xcmax-immutable-release.lock",
+            "XCMAX_ALLOW_CUSTOM_RELEASE_BASE": os.environ.get(
+                "XCMAX_ALLOW_CUSTOM_RELEASE_BASE", ""
+            ),
+            "HEALTH_URL": os.environ.get("MODSTORE_DEPLOY_HEALTH_URL")
+            or "http://127.0.0.1:9999/api/health",
+            "SCHEDULER_HEALTH_URL": os.environ.get("MODSTORE_SCHEDULER_HEALTH_URL")
+            or "http://127.0.0.1:9990/api/health",
+            "PUBLIC_HEALTH_URL": os.environ.get("MODSTORE_PUBLIC_HEALTH_URL")
+            or "https://xiu-ci.com/api/health",
+        },
+    )
+
+
 def recover_release(request_id, state):
     """Called under Retort's cross-process run lock; unknown submissions are never replayed."""
     from modstore_server.integrations.repository_packages import load_repository_module
@@ -101,16 +141,50 @@ def recover_release(request_id, state):
         current = _release_identity()
     except (*RECOVERABLE_ERRORS, HTTPException):
         return _save(request_id, {**pending, "reason": "recovery_identity_unavailable"})
-    identity_keys = ("git_sha", "artifact_sha256", "image_digest", "release_id")
+    identity_keys = ("git_sha", "artifact_sha256", "image_digest", "product_version", "release_id")
     same = lambda left, right: all(left.get(key, "") == right.get(key, "") for key in identity_keys)
-    if same(current, target):
+    payload = {
+        "request_id": f"retort:{request_id}:rollback",
+        "expected_identity": expected,
+        "target_identity": target,
+        "reason": state["impact"].get("reason", "customer_impact_rejected"),
+    }
+    previous = effects.get("recovery") or {}
+    if previous.get("recovery_request", payload) != payload:
+        return _save(request_id, {**pending, "reason": "recovery_request_mismatch"})
+
+    def confirm():
+        # A switched current symlink/public process can coexist with a failed
+        # scheduler or payment restart. Only the exact durable rollback receipt
+        # plus fresh readback of every runtime surface can finish compensation.
+        try:
+            receipt = _read_recovery_receipt(payload)
+        except (*RECOVERABLE_ERRORS, HTTPException) as exc:
+            return _save(
+                request_id,
+                {
+                    **pending,
+                    "reason": "awaiting_recovery_readback",
+                    "readback_error": str(exc)[:300],
+                },
+            )
         return _save(
             request_id,
-            {"status": "rollback_verified", "request_id": request_id, "identity": current},
+            {
+                "status": "rollback_verified",
+                "request_id": request_id,
+                "identity": receipt["identity"],
+                "receipt": receipt,
+                "reason": "",
+                "readback_error": "",
+                "verified_at": datetime.now(UTC).isoformat(),
+            },
         )
+
+    if same(current, target):
+        return confirm()
     if not same(current, expected):
         return _save(request_id, {**pending, "reason": "active_release_changed"})
-    previous = effects.get("recovery") or {}
     if previous.get("submitted"):
         return _save(request_id, {**previous, **pending, "reason": "awaiting_recovery_readback"})
     if not os.environ.get("MODSTORE_AUTO_ROLLBACK_COMMAND", "").strip():
@@ -121,6 +195,7 @@ def recover_release(request_id, state):
         "submitted_at": datetime.now(UTC).isoformat(),
         "expected_identity": expected,
         "target_identity": target,
+        "recovery_request": payload,
     }
     _save(request_id, claim)
     # The existing operator command receives a fixed CAS contract. It must compare
@@ -129,21 +204,12 @@ def recover_release(request_id, state):
         result = maybe_execute_recovery(
             event_id=int(row.event_id or 0),
             event_type="release.retort.feedback_rejected",
-            payload={
-                "priority": 100,
-                "request_id": f"retort:{request_id}:rollback",
-                "expected_identity": expected,
-                "target_identity": target,
-                "reason": state["impact"].get("reason", "customer_impact_rejected"),
-            },
+            payload={"priority": 100, **payload},
         )
         _save(request_id, {**claim, "execution": result})
         current = _release_identity()
         if same(current, target):
-            return _save(
-                request_id,
-                {**claim, "status": "rollback_verified", "identity": current, "execution": result},
-            )
+            return confirm()
     except (*RECOVERABLE_ERRORS, HTTPException) as exc:
         return _save(
             request_id,

@@ -34,11 +34,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 POINTER_SYNC="$SCRIPT_DIR/sync_site_download_release.py"
 # shellcheck source=immutable_release_runtime.sh
 . "$SCRIPT_DIR/immutable_release_runtime.sh"
-if [[ "${1:-}" == --rollback-json ]]; then
+if [[ "${1:-}" == --rollback-json || "${1:-}" == --submit-rollback-json ]]; then
   export RELEASE_BASE RELEASES_DIR CURRENT_LINK RUNTIME_DIR LIBRARY_DIR CATALOG_DIR \
     SITE_LINK ENV_DIR ENV_FILE SCHEDULER_ENV_FILE SITE_SUBDIR MODSTORE_SUBDIR LOCK_FILE \
     PUBLICATION_LOCK POINTER_SYNC HEALTH_URL SCHEDULER_HEALTH_URL PUBLIC_HEALTH_URL \
     GITHUB_REPOSITORY_SLUG
+  if [[ "$1" == --submit-rollback-json ]]; then
+    exec python3 "$SCRIPT_DIR/immutable_release_submit.py"
+  fi
   exec python3 "$SCRIPT_DIR/immutable_release_recovery.py"
 fi
 
@@ -189,6 +192,17 @@ prune_releases() {
   local removed=0
   local -a ordered_releases=()
   local -a protected_releases=("$@")
+  local recovery_protected=""
+
+  # Read protected service configuration and durable in-flight bindings while
+  # holding the same deployment lock used to register independent recovery.
+  recovery_protected="$(RELEASES_DIR="$RELEASES_DIR" RUNTIME_DIR="$RUNTIME_DIR" \
+    ENV_FILE="$ENV_FILE" SCHEDULER_ENV_FILE="$SCHEDULER_ENV_FILE" \
+    python3 "$SCRIPT_DIR/immutable_release_submit.py" --protected-releases)" \
+    || fail "cannot verify recovery controller retention"
+  while IFS= read -r protected_root; do
+    if [[ -n "$protected_root" ]]; then protected_releases+=("$protected_root"); fi
+  done <<< "$recovery_protected"
 
   releases_root="$(canonical_path "$RELEASES_DIR")"
   while IFS= read -r -d '' candidate; do

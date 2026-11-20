@@ -389,18 +389,15 @@ def test_codeql_provenance_requires_fresh_exact_sha_for_each_language() -> None:
         },
     ]
 
-    assert (
-        normalizer._validate_codeql_provenance(
-            analyses,
-            release_sha=sha,
-            required_categories=[
-                "/language:python",
-                "/language:javascript-typescript",
-            ],
-            now=now,
-        )
-        == (sha, "exact")
-    )
+    assert normalizer._validate_codeql_provenance(
+        analyses,
+        release_sha=sha,
+        required_categories=[
+            "/language:python",
+            "/language:javascript-typescript",
+        ],
+        now=now,
+    ) == (sha, "exact")
 
     analyses[1]["commit_sha"] = "b" * 40
     with pytest.raises(ValueError, match="SHA mismatch"):

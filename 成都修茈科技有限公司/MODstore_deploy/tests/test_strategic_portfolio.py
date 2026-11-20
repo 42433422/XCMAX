@@ -72,6 +72,14 @@ def opportunity(key="a", **overrides):
 
 
 def proposal(database, *, rows=None, caps=None, approved=True):
+    from modstore_server.db.identity import User
+
+    with database() as session:
+        if session.get(User, 7) is None:
+            session.add(
+                User(id=7, username="portfolio-owner", password_hash="unused", is_admin=True)
+            )
+            session.commit()
     result = p.create_portfolio_proposal(
         owner_user_id=7,
         goal="Improve delivery",
@@ -254,7 +262,16 @@ def test_outcome_rejects_unrelated_future_refunded_or_wrong_customer_payments(
     )
     p.plan_portfolio(decision_id)
     task = runtime._claim(decision_id, 7)
-    runtime._finish(task, {"ok": True, "artifact_id": "artifact-a", "artifact_sha256": "b" * 64}, 1)
+    runtime._finish(
+        task,
+        {
+            "ok": True,
+            "status": "completed",
+            "artifact_id": "artifact-a",
+            "artifact_sha256": "b" * 64,
+        },
+        1,
+    )
     start = datetime.now(UTC) - timedelta(days=2)
 
     def backdate(_r, _p, state, _db):
@@ -406,7 +423,11 @@ def test_discovery_reuses_planner_and_filters_other_account_context(database, mo
 
     with database() as session:
         for owner in (7, 8):
-            session.add(User(id=owner, username=f"owner-{owner}", password_hash="unused"))
+            session.add(
+                User(
+                    id=owner, username=f"owner-{owner}", password_hash="unused", is_admin=owner == 7
+                )
+            )
             session.add(CustomerServiceSession(id=owner, user_id=owner))
             session.add(
                 CustomerServiceTicket(
@@ -491,7 +512,14 @@ def test_dispatched_downstream_job_is_not_claimed_completed(database):
     p.plan_portfolio(decision_id)
     task = runtime._claim(decision_id, 7)
     runtime._finish(
-        task, {"ok": True, "result": {"outputs": [{"status": "queued", "job_id": "job-1"}]}}, 1
+        task,
+        {
+            "ok": True,
+            "result": {
+                "outputs": [{"handler": "local_queue", "status": "queued", "job_id": "job-1"}]
+            },
+        },
+        1,
     )
     state = p.portfolio_status(decision_id)
     assert state["tasks"]["a"]["status"] == "unknown"
@@ -687,6 +715,11 @@ def test_direct_model_dispatch_cannot_bypass_lease_or_usage(database, monkeypatc
 
 
 def test_parallel_planning_shares_one_durable_owner_slot(database):
+    from modstore_server.db.identity import User
+
+    with database() as session:
+        session.add(User(id=7, username="planner", password_hash="unused", is_admin=True))
+        session.commit()
     barrier = Barrier(2)
     admission = {
         "provider": "test",
@@ -723,6 +756,107 @@ def test_execution_boundary_observes_admin_stop(database):
         p.stop_portfolio(decision_id, owner_user_id=7, actor="admin:7", reason="operator stop")
         with pytest.raises(p.PortfolioError):
             usage.remaining_execution_seconds()
+
+
+@pytest.mark.parametrize("account_state", ["disabled", "suspended", "blocked", "deleted"])
+def test_owner_freeze_blocks_new_reservations_and_dispatch_but_settles_prior_usage(
+    database, account_state
+):
+    from modstore_server.db.identity import User
+
+    decision_id = proposal(database)
+    p.plan_portfolio(decision_id)
+    task = runtime._claim(decision_id, 7)
+    calls = []
+
+    async def outbound(*_args, **_kwargs):
+        calls.append(True)
+        return {"ok": True}
+
+    with usage.portfolio_usage_scope(decision_id, "a", task["lease_token"]):
+        reservation = usage.prepare_platform_call("test", "model", [], 20)
+        with database() as session:
+            session.get(User, 7).account_state = account_state
+            session.commit()
+        # A completed in-flight call is still accounted after authority is revoked.
+        usage.complete_platform_call(
+            reservation, {"usage": {"prompt_tokens": 12, "completion_tokens": 3}}
+        )
+        with pytest.raises(p.PortfolioError, match="active administrator"):
+            usage.prepare_platform_call("test", "model", [], 20)
+        with usage.platform_call_reservation(reservation):
+            with pytest.raises(p.PortfolioError, match="active administrator"):
+                asyncio.run(
+                    usage.dispatch_budgeted(outbound, "test", {"model": "model", "messages": []})
+                )
+    state = p.portfolio_status(decision_id)
+    call = next(iter(state["tasks"]["a"]["calls"].values()))
+    assert call["status"] == "settled" and call["actual_tokens"] == 15
+    assert not calls and len(state["tasks"]["a"]["calls"]) == 1
+
+
+def test_worker_and_planning_reservations_recheck_frozen_owner(database):
+    from modstore_server.db.identity import User
+
+    decision_id = proposal(database)
+    p.plan_portfolio(decision_id)
+    task = runtime._claim(decision_id, 7)
+    with usage.portfolio_usage_scope(decision_id, "a", task["lease_token"]):
+        binding = usage.bind_portfolio_worker("queue:revoked", owner_user_id=7)
+    runtime._finish(task, {"ok": True, "status": "queued", "worker_receipt_id": "queue:revoked"}, 1)
+    with database() as session:
+        session.get(User, 7).account_state = "suspended"
+        session.commit()
+    with pytest.raises(p.PortfolioError, match="active administrator"):
+        runtime.execute_portfolio_worker(
+            binding, owner_user_id=7, execute=lambda _task: pytest.fail("revoked worker dispatched")
+        )
+    admission = {
+        "provider": "test",
+        "model": "model",
+        "max_total_tokens": 32768,
+        "max_output_tokens": 1600,
+    }
+    with usage.planning_usage_scope(7, admission):
+        with pytest.raises(p.PortfolioError, match="active administrator"):
+            usage.prepare_platform_call("test", "model", [], 20)
+    assert p.portfolio_status(decision_id)["tasks"]["a"]["status"] == "waiting"
+
+
+@pytest.mark.parametrize("error_type", [asyncio.CancelledError, AssertionError, TimeoutError])
+@pytest.mark.parametrize("entrypoint", ["platform", "direct"])
+def test_model_failure_preserves_original_exception_and_unsettled_cost_hold(
+    database, monkeypatch, error_type, entrypoint
+):
+    from modstore_server import llm_chat_proxy, llm_key_resolver
+    from modstore_server.services.llm import chat_dispatch_via_platform_only
+
+    decision_id = proposal(database)
+    p.plan_portfolio(decision_id)
+    task = runtime._claim(decision_id, 7)
+    monkeypatch.setattr(llm_key_resolver, "platform_api_key", lambda _: "unit-key")
+
+    async def fail(*_args, **_kwargs):
+        raise error_type("original model failure")
+
+    monkeypatch.setattr(llm_chat_proxy, "chat_dispatch", fail)
+    with usage.portfolio_usage_scope(decision_id, "a", task["lease_token"]):
+        call = (
+            chat_dispatch_via_platform_only("test", "model", [], max_tokens=20)
+            if entrypoint == "platform"
+            else usage.dispatch_budgeted(
+                fail,
+                "test",
+                {"api_key": "unit-key", "model": "model", "messages": [], "max_tokens": 20},
+            )
+        )
+        with pytest.raises(error_type, match="original model failure"):
+            asyncio.run(call)
+    state = p.portfolio_status(decision_id)
+    calls = list(state["tasks"]["a"]["calls"].values())
+    assert state["halted"] and len(calls) == 1
+    assert calls[0]["status"] == "unknown" and calls[0]["reserved_cost_cents"] > 0
+    assert "accrued_cost_cents" not in calls[0]
 
 
 def test_strategy_streaming_rejects_unmetered_adapter_before_outbound():

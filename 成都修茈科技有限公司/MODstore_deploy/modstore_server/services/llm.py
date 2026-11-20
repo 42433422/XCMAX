@@ -352,6 +352,7 @@ async def chat_dispatch_via_platform_only(
         # A hidden second provider call has no separate budget reservation.
         # The strategic runtime may select another approved route on a new call.
         fallback_kwargs = {}
+    result = None
     try:
         call = chat_dispatch(
             provider,
@@ -369,10 +370,9 @@ async def chat_dispatch_via_platform_only(
                 result = await asyncio.wait_for(call, timeout=reservation["timeout_seconds"])
         else:
             result = await call
-    except BaseException:
-        complete_platform_call(reservation, None)
-        raise
-    complete_platform_call(reservation, result)
+    finally:
+        # Preserve cancellation/error propagation while retaining unresolved usage.
+        complete_platform_call(reservation, result)
     if result.get("_fallback_used"):
         result["_fallback_provider"] = fallback_provider
         result["_fallback_model"] = fallback_model

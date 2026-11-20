@@ -141,7 +141,9 @@ def build_evolution_graph(ports: EvolutionPorts, checkpointer: Any):
             "status": (
                 "delivered"
                 if status == "deployment_verified"
-                else "failed" if status == "failed" else "waiting_delivery"
+                else "failed"
+                if status == "failed"
+                else "waiting_delivery"
             ),
         }
 

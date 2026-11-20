@@ -498,6 +498,7 @@ def test_production_workflow_requires_manually_orchestrated_exact_sha() -> None:
         assert "XCMAX_GITHUB_REPOSITORY" in rendered
         assert "XCMAX_PRODUCT_VERSION" in rendered
         assert "xcmax-immutable-release.sh" in rendered
+        assert "immutable_release_submit.py" in rendered
         assert "export XCMAX_PRESERVE_RELEASE_HISTORY=" in rendered
         assert "${CONTROLLER_SHA}:ops/dr/$file" in rendered
         assert "modstore-deployment-correlation" in rendered

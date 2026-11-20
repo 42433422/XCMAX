@@ -26,6 +26,7 @@ from modstore_server.strategic_portfolio import (
     _json,
     digest,
     mutate_portfolio,
+    require_active_portfolio_owner,
     require_authorization,
 )
 
@@ -60,6 +61,10 @@ async def dispatch_budgeted(
     """One admission point covers direct pipelines as well as the platform facade."""
     if not scope_active():
         return await invoke(provider, **kwargs)
+    if _SCOPE.get() is not None:
+        remaining_execution_seconds()
+    if (planning := _PLANNING.get()) is not None:
+        require_active_portfolio_owner(planning["owner_user_id"])
     from modstore_server.llm_chat_proxy import _normalize_openai_base, normalize_model
     from modstore_server.llm_key_resolver import (
         OAI_COMPAT_OPENAI_STYLE_PROVIDERS,
@@ -88,6 +93,7 @@ async def dispatch_budgeted(
     )
     assert reservation is not None
     kwargs["max_tokens"] = reservation["max_tokens"]
+    result = None
     try:
         with platform_call_reservation(reservation):
             active = _CALL.get()
@@ -96,10 +102,9 @@ async def dispatch_budgeted(
             result = await asyncio.wait_for(
                 invoke(provider, **kwargs), timeout=reservation["timeout_seconds"]
             )
-    except BaseException:
-        complete_platform_call(reservation, None)
-        raise
-    complete_platform_call(reservation, result)
+    finally:
+        # Cancellation and programming errors retain the hold and propagate.
+        complete_platform_call(reservation, result)
     return result
 
 
@@ -302,6 +307,7 @@ def _reserve_planning(
     }
     record_sha = digest(record)
     with get_session_factory()() as session:
+        require_active_portfolio_owner(context["owner_user_id"], session)
         unresolved = session.execute(
             select(LlmClientRequest.id)
             .where(

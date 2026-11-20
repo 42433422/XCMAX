@@ -90,7 +90,11 @@ def paired_result():
 
 
 def test_decide_requires_paired_provider_case_and_frozen_bundle():
-    result, bundle = paired_result(), {"provider_id": "model", "case_ids": ["case"]}
+    result, bundle = paired_result(), {
+        "provider_id": "model",
+        "case_ids": ["case"],
+        "case_sha256": [trainer._hash("actual case")],
+    }
     assert trainer.decide(result)["verdict"] == "keep_baseline"
     assert trainer.decide(result, bundle=bundle)["verdict"] == "candidate_for_approval"
     unavailable = deepcopy(result)
@@ -157,6 +161,38 @@ def test_frozen_input_result_hashes_survive_transport_and_detect_mutation(tmp_pa
     body["files"]["candidate"] += "changed"
     with pytest.raises(ValueError, match="input_changed"):
         _candidate(body)
+
+
+@pytest.mark.parametrize("result_vars", ["vars", "testCase"])
+def test_paired_results_cannot_substitute_a_different_task_for_frozen_cases(
+    tmp_path, monkeypatch, result_vars
+):
+    built, result_path = frozen_evaluation(tmp_path, monkeypatch)
+    result = json.loads(result_path.read_bytes())
+    for row in result["results"]["results"]:
+        variables = row["vars"]
+        variables["task"] = "Different task that was not in the frozen regression corpus"
+        if result_vars == "testCase":
+            row["testCase"] = {"vars": row.pop("vars")}
+    result_path.write_text(json.dumps(result), encoding="utf-8")
+    sealed = trainer.seal_evaluation(Path(built["bundle"]), result_path)
+    assert sealed["verdict"] == "keep_baseline"
+    assert sealed["reason"] == "evaluation_bundle_unbound"
+    with pytest.raises(ValueError, match="training_candidate_not_improved"):
+        trainer.candidate_for_experiment(Path(built["bundle"]), result_path)
+
+
+def test_case_binding_preserves_exact_json_decoded_text_including_newlines():
+    result = paired_result()
+    task = "真实案例\r\n第二行\n"
+    for row in result["results"]["results"]:
+        row["vars"]["task"] = task
+    bundle = {"provider_id": "model", "case_ids": ["case"], "case_sha256": [trainer._hash(task)]}
+    transported = json.loads(json.dumps(result, ensure_ascii=True))
+    assert trainer.decide(transported, bundle=bundle)["verdict"] == "candidate_for_approval"
+    for row in transported["results"]["results"]:
+        row["vars"]["task"] = task.replace("\r\n", "\n")
+    assert trainer.decide(transported, bundle=bundle)["verdict"] == "keep_baseline"
 
 
 def test_observation_without_reproduction_is_not_synthetic_case(tmp_path):

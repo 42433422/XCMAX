@@ -34,11 +34,6 @@ on:
         required: false
         default: false
         type: boolean
-      dispatch_evolution:
-        description: "Run the independent Evolution workflow after CVM upload"
-        required: false
-        default: true
-        type: boolean
       push_image_tar:
         description: "Also push the optional 600MB+ offline image archive"
         required: false
