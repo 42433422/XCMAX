@@ -105,7 +105,7 @@ def _register_scheduler_phase_03():
 
     _facade()._scheduler.add_job(
         _time_rail_observability_job,
-        _facade().CronTrigger(hour=3, minute=0),
+        _facade().CronTrigger(hour=22, minute=45),
         id="time_rail_observability_sync",
         replace_existing=True,
         misfire_grace_time=_facade()._cleanup_misfire_grace_time(),
@@ -374,7 +374,7 @@ def _register_scheduler_phase_03():
         if report_enabled():
             _facade()._scheduler.add_job(
                 _boss_daily_im_report_job,
-                _facade().CronTrigger(hour=report_hour_utc(), minute=15),
+                _facade().CronTrigger(hour=report_hour_utc(), minute=20),
                 id="boss_daily_im_report",
                 replace_existing=True,
                 misfire_grace_time=_facade()._business_misfire_grace_time(),

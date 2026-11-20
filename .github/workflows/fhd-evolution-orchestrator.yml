@@ -3,7 +3,7 @@
 name: Evolution Orchestrator
 
 # 演化闭环编排：
-#   - schedule: 每周一 04:00 UTC 扫描信号 → LLM 提议 → 开 issue → 安全源码 PR
+#   - schedule: 每周一 14:10 UTC（22:10 北京时间）扫描信号 → LLM 提议 → 开 issue → 安全源码 PR
 #   - push: 编排器自身修复合并后启动一次 bootstrap 扫描
 #   - workflow_run: Actions bot 合并抑制 push 时，由 main CI/CD 成功回执补发 bootstrap
 #   - workflow_dispatch: 手动触发
@@ -14,7 +14,7 @@ name: Evolution Orchestrator
 
 on:
   schedule:
-    - cron: '0 4 * * 1'  # 每周一 04:00 UTC
+    - cron: '10 14 * * 1'  # 每周一 14:10 UTC（22:10 北京时间）
   push:
     branches: [main]
     paths:

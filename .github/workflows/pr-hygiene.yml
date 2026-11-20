@@ -22,7 +22,8 @@ name: pr-hygiene
 
 on:
   schedule:
-    - cron: "0 0,12 * * *"  # 每天 08:00 / 20:00（北京时间）
+    - cron: "45 13 * * *"  # 每天 21:45（北京时间）
+    - cron: "50 15 * * *"  # 每天 23:50（北京时间）
   workflow_dispatch:
 
 permissions:

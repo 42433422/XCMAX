@@ -127,7 +127,7 @@ def _register_scheduler_phase_04():
     try:
         _facade()._scheduler.add_job(
             _self_evolution_metrics_job,
-            _facade().CronTrigger(day_of_week="sun", hour=0, minute=35, timezone="UTC"),
+            _facade().CronTrigger(day_of_week="sun", hour=0, minute=50, timezone="UTC"),
             id="self_evolution_metrics",
             replace_existing=True,
             next_run_time=_facade().datetime.now(_facade().timezone.utc)
@@ -149,7 +149,7 @@ def _register_scheduler_phase_04():
 
     _facade()._scheduler.add_job(
         _auto_fix_loop_job,
-        _facade().CronTrigger(hour=9, minute=30),
+        _facade().CronTrigger(hour=21, minute=15),
         id="auto_fix_event_bindings_refresh",
         replace_existing=True,
     )
@@ -173,7 +173,7 @@ def _register_scheduler_phase_04():
 
     _facade()._scheduler.add_job(
         _auto_version_bump_job,
-        _facade().CronTrigger(hour=6, minute=0),
+        _facade().CronTrigger(hour=21, minute=30),
         id="auto_version_bump_daily",
         replace_existing=True,
     )

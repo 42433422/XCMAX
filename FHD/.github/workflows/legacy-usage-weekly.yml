@@ -2,7 +2,8 @@ name: Legacy usage weekly
 
 on:
   schedule:
-    - cron: "0 8 * * 1"
+    # 每周一 00:45 UTC（08:45 北京时间）
+    - cron: "45 0 * * 1"
   workflow_dispatch:
 
 permissions:

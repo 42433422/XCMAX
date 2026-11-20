@@ -179,7 +179,7 @@ def _register_scheduler_phase_01():
 
     _facade()._scheduler.add_job(
         _retention_janitor_daily,
-        _facade().CronTrigger(hour=3, minute=15),
+        _facade().CronTrigger(hour=23, minute=15),
         id="retention_janitor_daily",
         replace_existing=True,
         misfire_grace_time=_facade()._cleanup_misfire_grace_time(),

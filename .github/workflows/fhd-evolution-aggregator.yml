@@ -2,7 +2,7 @@
 # Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
 name: Evolution Aggregator
 
-# 演化闭环 5 连接点统一入口 — 每周一 05:00 UTC 触发（错开 evolution-orchestrator 的 04:00）：
+# 演化闭环 5 连接点统一入口 — 每周一 15:05 UTC（23:05 北京时间）触发（错开 evolution-orchestrator 的 14:10）：
 #   - schedule: 默认真实执行（collect-signals 采集真实信号写入 ledger，
 #     闭环其余步骤由 evolution-orchestrator.yml 继续，避免重复开 issue）
 #   - workflow_dispatch: 手动触发，可选 dry-run=true 走干跑验证
@@ -24,7 +24,7 @@ name: Evolution Aggregator
 
 on:
   schedule:
-    - cron: '0 5 * * 1'  # 每周一 05:00 UTC
+    - cron: '5 15 * * 1'  # 每周一 15:05 UTC（23:05 北京时间）
   workflow_dispatch:
     inputs:
       dry-run:

@@ -23,7 +23,7 @@ on:
       - ".github/scripts/parse-electronegativity-csv.js"
       - ".github/electronegativity-suppressions.json"
   schedule:
-    - cron: "0 3 * * 1"  # 每周一 03:00 UTC 全量扫描
+    - cron: "40 14 * * 1"  # 每周一 14:40 UTC（22:40 北京时间）全量扫描
   workflow_dispatch:
     inputs:
       gate_severity:

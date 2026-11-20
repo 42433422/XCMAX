@@ -9,8 +9,8 @@ name: Desktop Manifest Drift Check
 
 on:
   schedule:
-    - cron: "30 2 * * *"  # 当前公开版本每天核验
-    - cron: "30 3 * * 0"  # 每周核验完整 SHA-256
+    - cron: "30 14 * * *"  # 当前公开版本每天核验（22:30 北京时间）
+    - cron: "55 15 * * 0"  # 每周核验完整 SHA-256（周日 23:55 北京时间）
   workflow_dispatch:
     inputs:
       version:
