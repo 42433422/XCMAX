@@ -28,6 +28,19 @@ function baseProps() {
 }
 
 describe('ConversationChat enterprise CS controls', () => {
+  it('shows when automatic recovery awaits the customer session', () => {
+    const wrapper = mount(ConversationChat, {
+      props: {
+        ...baseProps(),
+        csCustomerState: {
+          id: 8, title: '客服', is_direct: true, last_message_at: null,
+          last_message_preview: '', unread_count: 0, cs_status: 'ai_waiting_session',
+        },
+      },
+    })
+    expect(wrapper.text()).toContain('等待账号连接后继续')
+  })
+
   it('shows AI provenance and lets admin take over', async () => {
     const wrapper = mount(ConversationChat, {
       props: {

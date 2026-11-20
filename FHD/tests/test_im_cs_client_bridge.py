@@ -99,6 +99,39 @@ def test_remote_bridge_uses_canonical_market_user_and_schedules_ai(bridge_db) ->
     ]
 
 
+def test_authenticated_poll_resumes_oldest_customer_message(bridge_db) -> None:
+    from app.application.im_app_service import ImApplicationService
+    from app.fastapi_routes import im_cs_client_routes as routes
+
+    with bridge_db() as db:
+        svc = ImApplicationService(db)
+        cs = svc._ensure_enterprise_dedicated_cs_user()
+        cid = int(svc.get_or_create_direct(39, int(cs.id))["id"])
+        first = svc.send_message(cid, 39, "待恢复工单", origin="customer")["message"]
+        svc.send_message(cid, 39, "后一条消息", origin="customer")
+    app = FastAPI()
+    app.include_router(routes.router)
+    background = AsyncMock(return_value={"handled": True})
+    with (
+        patch.object(routes, "_ensure_schema"),
+        patch.object(routes, "HostSessionLocal", side_effect=bridge_db),
+        patch.object(
+            routes,
+            "_validate_market_identity",
+            AsyncMock(return_value={"market_user_id": 501, "username": "wuxinghua1"}),
+        ),
+        patch.object(routes, "process_enterprise_cs_customer_message", background),
+    ):
+        response = TestClient(app).get(
+            "/api/im/enterprise-cs/remote/messages",
+            headers={"Authorization": "Bearer owner-token"},
+        )
+    assert response.status_code == 200
+    assert background.await_args.args[:3] == (cid, 39, first["id"])
+    assert background.await_args.kwargs == {"market_token": "owner-token"}
+    assert "owner-token" not in response.text
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "flags", [{"is_enterprise": False}, {"is_enterprise": True, "is_admin": True}]
