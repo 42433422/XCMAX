@@ -73,7 +73,11 @@ route, allow/deny and response status; retain INFO logs in the server audit sink
 
 ## Para 云端平台模型
 
-XCMAX 读取现有平台额度快照。启用 `MODSTORE_PARA_PLATFORM_POOL=1` 后，新派工只选有精确额度且高于平台保留线的路由，按可用余量排序。设置 `MODSTORE_PARA_PLATFORM_ROUTES` 为 JSON 对象，例如 `{"coding":{"provider":"minimax","resource":"general"}}`，其中键是 LiteLLM 模型别名，值对应同一上游配额池及额度资源。只登记已通过 Codex 流式工具调用验收、能返回供应商 token 用量的模型。`MODSTORE_PARA_PLATFORM_RESERVE_PERCENT` 默认 80，可提高到 100 暂停新派工。
+XCMAX 读取现有平台额度快照。启用 `MODSTORE_PARA_PLATFORM_POOL=1` 后，新派工先检查已验收的流式 Responses、工具调用和实际 token 回执，再按供应商及资源的有效余量选模。共享额度无法核验或低于保留线时等待。`MODSTORE_PARA_PLATFORM_RESERVE_PERCENT` 默认 80，可提高到 100 暂停新派工。
+
+在 `MODSTORE_PARA_PLATFORM_ROUTES` 里登记 LiteLLM 别名及对应的上游资源，例如 `{"xcmax-para-coding":{"provider":"minimax","resource":"general","capabilities":["responses_stream","tool_calling","token_usage"]}}`。`MODSTORE_PARA_PLATFORM_CAPABILITY_PROFILES` 可分别为 `repair` 和 `benchmark` 添加入场所需能力，例如 `{"benchmark":["verified_long_context"]}`。角色配置不能移除基础能力。只登记实际验收过的能力。
+
+额度余量相同时，给双方配置确切的 `benchmark_id` 才会读取 [LiveBench 2.0](https://livebench.ai/) 当前发布的 Coding 分数。每 6 小时按需刷新，回执记录实际使用的发布日期。榜单打不开、某模型未收录、或找不到同版本标识时，按配置顺序处理同额度候选。移动别名所指的模型后应重新验收并更新对应 ID。
 
 GitHub 配置 `PARA_PLATFORM_POOL=1`、`PARA_PLATFORM_GATEWAY_URL=https://…/v1` 和 Secret `PARA_PLATFORM_GATEWAY_KEY`。使用 [LiteLLM Proxy 的 Codex Responses 接入](https://docs.litellm.ai/docs/proxy/client_setup/codex_cli) 和有限额的虚拟密钥。启用前在网关配置 Para 的模型白名单、预算及 RPM/TPM，按需要在供应商侧划分硬配额。派工检查只控制新任务准入，运行中金额和速率由网关限制。缺少可核验额度时任务等待。
 

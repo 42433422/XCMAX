@@ -1,6 +1,10 @@
 import pytest
 
-from modstore_server.para_model_admission import platform_model_admission, select_route
+from modstore_server.para_model_admission import (
+    BASE_CAPABILITIES,
+    platform_model_admission,
+    select_route,
+)
 
 
 def provider(name, remaining, *, visibility="exact", model_remaining=100):
@@ -16,8 +20,18 @@ def provider(name, remaining, *, visibility="exact", model_remaining=100):
 
 
 ROUTES = {
-    "para-a": {"provider": "a", "resource": "coding"},
-    "para-b": {"provider": "b", "resource": "coding"},
+    "para-a": {
+        "provider": "a",
+        "resource": "coding",
+        "capabilities": sorted(BASE_CAPABILITIES),
+        "benchmark_id": "a-model",
+    },
+    "para-b": {
+        "provider": "b",
+        "resource": "coding",
+        "capabilities": sorted(BASE_CAPABILITIES),
+        "benchmark_id": "b-model",
+    },
 }
 
 
@@ -38,6 +52,44 @@ def test_invalid_active_policy_leaves_task_waiting(monkeypatch):
     monkeypatch.setenv("MODSTORE_PARA_PLATFORM_POOL", "1")
     monkeypatch.setenv("MODSTORE_PARA_PLATFORM_ROUTES", "{}")
     assert platform_model_admission()["reason"] == "invalid_platform_policy"
+
+
+def test_capability_and_reserve_filter_before_benchmark():
+    def must_not_fetch():
+        raise AssertionError("blocked or single candidate must not query leaderboard")
+
+    result = select_route(
+        [provider("a", 80), provider("b", 98)],
+        ROUTES,
+        80,
+        required=frozenset({"vision"}),
+        leaderboard=must_not_fetch,
+    )
+    assert result["reason"] == "no_capability_match"
+    result = select_route(
+        [provider("a", 80), provider("b", 98)],
+        ROUTES,
+        80,
+        leaderboard=must_not_fetch,
+    )
+    assert result["model"] == "para-b"
+
+
+def test_uses_current_benchmark_only_for_comparable_tied_routes():
+    quota = [provider("a", 92), provider("b", 92)]
+    decision = select_route(
+        quota,
+        ROUTES,
+        80,
+        leaderboard=lambda: ("20261106", {"a-model": 40, "b-model": 90}),
+    )
+    assert decision["model"] == "para-b"
+    assert decision["benchmark_release"] == "20261106"
+    assert decision["coding_score"] == 90
+    for benchmark in [None, ("20261106", {"b-model": 90})]:
+        decision = select_route(quota, ROUTES, 80, leaderboard=lambda: benchmark)
+        assert decision["model"] == "para-a"
+        assert decision["selection"] == "quota_then_config_order"
 
 
 def test_sync_admission_uses_isolated_http_on_each_loop(monkeypatch):
@@ -78,7 +130,11 @@ def test_sync_admission_uses_isolated_http_on_each_loop(monkeypatch):
         "MODSTORE_PARA_PLATFORM_ROUTES",
         json.dumps(
             {
-                "model-a": {"provider": "minimax", "resource": "general"},
+                "model-a": {
+                    "provider": "minimax",
+                    "resource": "general",
+                    "capabilities": sorted(BASE_CAPABILITIES),
+                },
             }
         ),
     )

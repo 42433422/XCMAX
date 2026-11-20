@@ -106,7 +106,7 @@ def _ensure_runner(request_id, protocol, effects):
             from modstore_server.para_github_runner import _claim_worker_slot
             from modstore_server.para_model_admission import platform_model_admission
 
-            allocation = platform_model_admission()
+            allocation = platform_model_admission("benchmark")
             if allocation and allocation["status"] != "admitted":
                 return {**effects, "model_allocation": allocation}
             with get_session_factory()() as db:
