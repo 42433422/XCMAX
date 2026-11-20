@@ -8,7 +8,9 @@ import os
 import re
 from html import unescape
 from typing import Any, Dict, List, Optional, Tuple
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
+
+import httpx
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
@@ -77,10 +79,18 @@ def _host_blocked(host: str) -> bool:
 
 
 def is_fetchable_http_url(url: str) -> bool:
-    parsed = urlparse((url or "").strip())
-    if parsed.scheme not in ("http", "https"):
+    try:
+        parsed = urlparse((url or "").strip())
+        if (
+            parsed.scheme not in ("http", "https")
+            or "@" in parsed.netloc
+            or parsed.fragment
+            or (parsed.port is not None and parsed.port <= 0)
+        ):
+            return False
+        return not _host_blocked(parsed.hostname or "")
+    except ValueError:
         return False
-    return not _host_blocked(parsed.hostname or "")
 
 
 def html_to_plain_text(html: str, *, max_chars: int) -> str:
@@ -99,11 +109,11 @@ async def fetch_page_text(
     max_chars: Optional[int] = None,
     timeout: Optional[float] = None,
 ) -> Tuple[str, Optional[str]]:
-    """GET 目标页并提取纯文本。返回 (text, error)。"""
+    """只抓取公网网页：逐跳校验并固定 DNS，流式限制响应体。"""
     u = (url or "").strip()
     if not is_fetchable_http_url(u):
         return "", "url 不可抓取"
-    cap = max_chars if max_chars is not None else web_fetch_max_chars_per_page()
+    cap = min(8000, max(1, max_chars if max_chars is not None else web_fetch_max_chars_per_page()))
     deadline = timeout if timeout is not None else web_fetch_timeout_sec()
     headers = {
         "User-Agent": (
@@ -111,26 +121,75 @@ async def fetch_page_text(
             "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
         ),
         "Accept": "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.8",
+        "Accept-Encoding": "identity",
         "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
     }
-    from modstore_server.infrastructure.http_clients import get_external_client
+    from modstore_server.openapi_connector_runtime import pin_url_outbound_safe
 
-    client = get_external_client()
     try:
-        r = await client.get(u, headers=headers, timeout=deadline, follow_redirects=True)
-        r.raise_for_status()
-    except RECOVERABLE_ERRORS as e:
-        return "", str(e)[:200]
-
-    ctype = (r.headers.get("content-type") or "").lower()
-    body = r.text or ""
-    if not body.strip():
-        return "", "空响应"
-    if "html" in ctype or "<html" in body[:800].lower():
-        return html_to_plain_text(body, max_chars=cap), None
-    if "json" in ctype:
-        return _truncate(body.replace("\n", " "), cap), None
-    return _truncate(body, cap), None
+        # No ambient proxies or implicit redirects: both can bypass the initial URL check.
+        cookies = httpx.Cookies()
+        async with (
+            asyncio.timeout(deadline),
+            httpx.AsyncClient(timeout=deadline, trust_env=False, follow_redirects=False) as client,
+        ):
+            for _ in range(4):
+                target = await asyncio.to_thread(pin_url_outbound_safe, u)
+                # HTTPX sees the pinned IP as the URL host. Keep cookie policy
+                # bound to the original hostname, including paths and Secure.
+                origin_request = httpx.Request("GET", u)
+                cookies.set_cookie_header(origin_request)
+                client.cookies.clear()
+                request_headers = {**headers, "Host": target.host_header}
+                if "Cookie" in origin_request.headers:
+                    request_headers["Cookie"] = origin_request.headers["Cookie"]
+                async with client.stream(
+                    "GET",
+                    target.request_url,
+                    headers=request_headers,
+                    extensions={"sni_hostname": target.server_hostname},
+                ) as response:
+                    cookies.extract_cookies(
+                        httpx.Response(
+                            response.status_code, headers=response.headers, request=origin_request
+                        )
+                    )
+                    if response.status_code in (301, 302, 303, 307, 308):
+                        location = response.headers.get("Location")
+                        if not location:
+                            return "", "无效重定向"
+                        next_url = urljoin(u, location)
+                        if not is_fetchable_http_url(next_url):
+                            return "", "重定向目标不可抓取"
+                        u = next_url
+                        continue
+                    response.raise_for_status()
+                    # HTTPX decodes before yielding chunks, so a compressed
+                    # response can allocate beyond our byte cap. Require an
+                    # uncompressed representation and reject before reading.
+                    encoding = response.headers.get("Content-Encoding", "").strip().lower()
+                    if encoding not in ("", "identity"):
+                        return "", "不支持压缩响应"
+                    body_bytes = bytearray()
+                    async for chunk in response.aiter_bytes(chunk_size=64 * 1024):
+                        if len(body_bytes) + len(chunk) > 1_000_000:
+                            return "", "响应过大"
+                        body_bytes.extend(chunk)
+                    try:
+                        body = body_bytes.decode(response.encoding or "utf-8", errors="replace")
+                    except LookupError:
+                        body = body_bytes.decode("utf-8", errors="replace")
+                    if not body.strip():
+                        return "", "空响应"
+                    ctype = (response.headers.get("content-type") or "").lower()
+                    if "html" in ctype or "<html" in body[:800].lower():
+                        return html_to_plain_text(body, max_chars=cap), None
+                    if "json" in ctype:
+                        return _truncate(body.replace("\n", " "), cap), None
+                    return _truncate(body, cap), None
+        return "", "跳转次数过多"
+    except RECOVERABLE_ERRORS:
+        return "", "抓取失败"
 
 
 async def enrich_web_results_with_pages(

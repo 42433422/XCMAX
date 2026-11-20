@@ -8,18 +8,20 @@ import 'package:speech_to_text/speech_to_text.dart';
 
 import '../../data/mobile_repository.dart';
 import '../../models/conversation.dart';
+import '../../platform/speech_recognition_support.dart';
 import '../../policy/avatar_policy.dart';
 import '../../policy/mobile_error_policy.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_avatar.dart';
 
-/// 通话方式选择：语音可用，视频暂未解锁。
+/// 通话方式选择；没有识别适配的平台保留文字聊天。
 Future<void> showCallOptionsSheet(
   BuildContext context, {
   required VoidCallback onVoice,
 }) {
   final colors = AppTheme.colors(context);
   final textTheme = Theme.of(context).textTheme;
+  final unavailable = unsupportedSpeechRecognitionMessage;
   return showModalBottomSheet<void>(
     context: context,
     backgroundColor: colors.surface,
@@ -43,15 +45,22 @@ Future<void> showCallOptionsSheet(
           const SizedBox(height: 8),
           ListTile(
             key: const ValueKey('call_option_voice'),
-            leading: Icon(Icons.call, color: colors.brand),
+            enabled: unavailable == null,
+            leading: Icon(
+              unavailable == null ? Icons.call : Icons.phone_disabled,
+              color: unavailable == null ? colors.brand : colors.textTertiary,
+            ),
             title: Text(
               '语音通话',
               style: textTheme.bodyLarge?.copyWith(color: colors.textPrimary),
             ),
-            onTap: () {
-              Navigator.of(sheetContext).pop();
-              onVoice();
-            },
+            subtitle: unavailable == null ? null : Text(unavailable),
+            onTap: unavailable != null
+                ? null
+                : () {
+                    Navigator.of(sheetContext).pop();
+                    onVoice();
+                  },
           ),
           ListTile(
             key: const ValueKey('call_option_video'),
@@ -109,24 +118,28 @@ class VoiceCallScreen extends StatefulWidget {
     required this.repository,
     required this.title,
     this.avatarUrl,
+    this.speech,
   });
 
   final ConversationItem conversation;
   final MobileRepository repository;
   final String title;
   final String? avatarUrl;
+  @visibleForTesting
+  final SpeechToText? speech;
 
   @override
   State<VoiceCallScreen> createState() => _VoiceCallScreenState();
 }
 
 class _VoiceCallScreenState extends State<VoiceCallScreen> {
-  final SpeechToText _speech = SpeechToText();
+  late final SpeechToText _speech = widget.speech ?? SpeechToText();
   final FlutterTts _tts = FlutterTts();
   Timer? _ticker;
 
   _CallStage _stage = _CallStage.connecting;
   bool _speechReady = false;
+  bool _pluginsStarted = false;
   bool _muted = false;
   bool _speakerOn = true;
   bool _handlingTurn = false;
@@ -142,18 +155,23 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
       if (!mounted || _stage == _CallStage.ended) return;
       setState(() => _seconds += 1);
     });
-    _prepare();
+    unawaited(_prepare());
   }
 
   @override
   void dispose() {
     _ticker?.cancel();
-    _speech.cancel();
-    _tts.stop();
+    unawaited(_stopAudio());
     super.dispose();
   }
 
   Future<void> _prepare() async {
+    final unavailable = unsupportedSpeechRecognitionMessage;
+    if (unavailable != null) {
+      _endWithError(unavailable);
+      return;
+    }
+    _pluginsStarted = true;
     try {
       await _tts.setLanguage('zh-CN');
       await _tts.setSpeechRate(0.95);
@@ -162,40 +180,79 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
     } catch (_) {
       // 系统缺少中文语音时仍保留文字字幕与对话能力。
     }
-    final ready = await _speech.initialize(
-      onError: _onSpeechError,
-      onStatus: _onSpeechStatus,
-    );
-    if (!mounted) return;
-    setState(() {
-      _speechReady = ready;
+    if (!mounted || _stage == _CallStage.ended) return;
+    try {
+      final ready = await _speech.initialize(
+        onError: _onSpeechError,
+        onStatus: _onSpeechStatus,
+      );
+      if (!mounted || _stage == _CallStage.ended) return;
       if (!ready) {
-        _errorText = '语音识别不可用，请允许麦克风与语音识别权限后重试';
-        _stage = _CallStage.ended;
+        _endWithError(speechRecognitionUnavailableMessage);
+        return;
       }
+      _speechReady = true;
+      await _startListening();
+    } catch (_) {
+      _endWithError(speechRecognitionUnavailableMessage);
+    }
+  }
+
+  void _endWithError(String message) {
+    if (!mounted || _stage == _CallStage.ended) return;
+    _ticker?.cancel();
+    setState(() {
+      _speechReady = false;
+      _errorText = message;
+      _stage = _CallStage.ended;
     });
-    if (ready) await _startListening();
+    unawaited(_stopAudio());
+  }
+
+  Future<void> _stopAudio() async {
+    if (!_pluginsStarted) return;
+    try {
+      await _speech.cancel();
+    } catch (_) {
+      // A missing or failed native service must not prevent leaving the call.
+    }
+    try {
+      await _tts.stop();
+    } catch (_) {
+      // Cleanup remains best effort after a native initialization failure.
+    }
   }
 
   Future<void> _startListening() async {
-    if (!_speechReady || _handlingTurn || _muted) return;
+    if (!mounted ||
+        !_speechReady ||
+        _handlingTurn ||
+        _muted ||
+        _stage == _CallStage.ended) {
+      return;
+    }
     setState(() {
       _stage = _CallStage.listening;
       _errorText = '';
     });
-    await _speech.listen(
-      onResult: _onSpeechResult,
-      listenOptions: SpeechListenOptions(
-        listenFor: const Duration(seconds: 30),
-        pauseFor: const Duration(seconds: 3),
-        localeId: 'zh_CN',
-        partialResults: true,
-        cancelOnError: true,
-      ),
-    );
+    try {
+      await _speech.listen(
+        onResult: _onSpeechResult,
+        listenOptions: SpeechListenOptions(
+          listenFor: const Duration(seconds: 30),
+          pauseFor: const Duration(seconds: 3),
+          localeId: 'zh_CN',
+          partialResults: true,
+          cancelOnError: true,
+        ),
+      );
+    } catch (_) {
+      _endWithError(speechRecognitionUnavailableMessage);
+    }
   }
 
   void _onSpeechResult(SpeechRecognitionResult result) {
+    if (!mounted || _stage == _CallStage.ended) return;
     final text = result.recognizedWords.trim();
     if (text.isEmpty) return;
     setState(() => _heardText = text);
@@ -206,8 +263,13 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
 
   void _onSpeechError(SpeechRecognitionError error) {
     if (!mounted || _stage == _CallStage.ended) return;
+    if (error.permanent) {
+      _endWithError(speechRecognitionUnavailableMessage);
+      return;
+    }
     // no-speech 属正常停顿，继续听即可。
-    if (error.errorMsg == 'error_no_speech' || error.errorMsg == 'error_speech_timeout') {
+    if (error.errorMsg == 'error_no_speech' ||
+        error.errorMsg == 'error_speech_timeout') {
       if (!_muted) unawaited(_startListening());
       return;
     }
@@ -224,17 +286,17 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
 
   Future<void> _handleUtterance(String text) async {
     _handlingTurn = true;
-    await _speech.stop();
-    if (!mounted) return;
-    setState(() => _stage = _CallStage.thinking);
     try {
+      await _speech.stop();
+      if (!mounted || _stage == _CallStage.ended) return;
+      setState(() => _stage = _CallStage.thinking);
       final message = await widget.repository.sendMessage(
         conversation: widget.conversation,
         body: text,
       );
       final reply = message.body.trim();
       _replyText = reply.isEmpty ? '我在。' : reply;
-      if (!mounted) return;
+      if (!mounted || _stage == _CallStage.ended) return;
       setState(() {
         _stage = _CallStage.speaking;
         _errorText = '';
@@ -267,12 +329,11 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
       await _startListening();
       return;
     }
-    await _speech.cancel();
-    await _tts.stop();
     setState(() {
       _muted = true;
       _stage = _CallStage.muted;
     });
+    await _stopAudio();
   }
 
   Future<void> _toggleSpeaker() async {
@@ -282,10 +343,10 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
 
   Future<void> _hangUp() async {
     _ticker?.cancel();
-    await _speech.cancel();
-    await _tts.stop();
     if (!mounted) return;
     setState(() => _stage = _CallStage.ended);
+    await _stopAudio();
+    if (!mounted) return;
     Navigator.of(context).maybePop();
   }
 
@@ -334,7 +395,8 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
                   const Spacer(),
                   Text(
                     '语音通话',
-                    style: textTheme.titleSmall?.copyWith(color: Colors.white70),
+                    style:
+                        textTheme.titleSmall?.copyWith(color: Colors.white70),
                   ),
                   const Spacer(),
                   const SizedBox(width: 48),
@@ -383,9 +445,13 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
                     _stage == _CallStage.speaking ||
                     _stage == _CallStage.listening)
                   const SizedBox(width: 8),
-                Text(
-                  _statusText,
-                  style: textTheme.bodyMedium?.copyWith(color: Colors.white70),
+                Flexible(
+                  child: Text(
+                    _statusText,
+                    textAlign: TextAlign.center,
+                    style:
+                        textTheme.bodyMedium?.copyWith(color: Colors.white70),
+                  ),
                 ),
               ],
             ),
@@ -427,32 +493,39 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(32, 8, 32, 28),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  _CallControl(
-                    key: const ValueKey('call_mute_button'),
-                    icon: _muted ? Icons.mic_off : Icons.mic,
-                    label: _muted ? '取消静音' : '静音',
-                    active: _muted,
-                    onTap: _toggleMute,
-                  ),
-                  _CallControl(
-                    key: const ValueKey('call_hangup_button'),
-                    icon: Icons.call_end,
-                    label: '挂断',
-                    danger: true,
-                    onTap: _hangUp,
-                  ),
-                  _CallControl(
-                    key: const ValueKey('call_speaker_button'),
-                    icon: _speakerOn ? Icons.volume_up : Icons.volume_down,
-                    label: '免提',
-                    active: _speakerOn,
-                    onTap: _toggleSpeaker,
-                  ),
-                ],
-              ),
+              child: _stage == _CallStage.ended
+                  ? FilledButton.icon(
+                      onPressed: _hangUp,
+                      icon: const Icon(Icons.keyboard),
+                      label: const Text('返回文字聊天'),
+                    )
+                  : Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        _CallControl(
+                          key: const ValueKey('call_mute_button'),
+                          icon: _muted ? Icons.mic_off : Icons.mic,
+                          label: _muted ? '取消静音' : '静音',
+                          active: _muted,
+                          onTap: _toggleMute,
+                        ),
+                        _CallControl(
+                          key: const ValueKey('call_hangup_button'),
+                          icon: Icons.call_end,
+                          label: '挂断',
+                          danger: true,
+                          onTap: _hangUp,
+                        ),
+                        _CallControl(
+                          key: const ValueKey('call_speaker_button'),
+                          icon:
+                              _speakerOn ? Icons.volume_up : Icons.volume_down,
+                          label: '免提',
+                          active: _speakerOn,
+                          onTap: _toggleSpeaker,
+                        ),
+                      ],
+                    ),
             ),
           ],
         ),

@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import logging
 import threading
+import uuid
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -12,6 +13,7 @@ from pathlib import Path
 from app.domain.user_memory.records import UserMemory
 from app.infrastructure.user_memory.json_storage import JsonMemoryStorage
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.process_lock import exclusive_file_lock
 
 
 class MemoryRepository:
@@ -29,6 +31,15 @@ class MemoryRepository:
         self._memory_path = memory_path
         self._lock_path = memory_path.with_name(f"{memory_path.name}.lock")
         self._backend = backend
+        if self._backend is None and storage_type == "json":
+            self._backend = JsonMemoryStorage(
+                memory_path,
+                lock=lambda: exclusive_file_lock(
+                    self._lock_path, blocking=True, timeout=60, reject_symlink=True
+                ),
+                deserialize=UserMemory.from_dict,
+                temporary_id=lambda: uuid.uuid4().hex,
+            )
         self._new_memory = new_memory
         self._now = now
         self._logger = logger

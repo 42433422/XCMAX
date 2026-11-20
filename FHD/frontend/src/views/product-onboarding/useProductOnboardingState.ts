@@ -226,8 +226,7 @@ export function useProductOnboardingState(route: RouteLocationNormalizedLoaded) 
     const sku = String(productSku.value || '')
       .trim()
       .toLowerCase()
-    if (sku === 'enterprise') return '企业版 enterprise'
-    if (sku === 'personal') return '个人版 personal'
+    if (sku === 'enterprise' || sku === 'personal') return '企业版 enterprise'
     const e = readBuildEdition()
     if (e === 'minimal') return '空壳 minimal'
     if (e === 'generic') return '通用 generic'

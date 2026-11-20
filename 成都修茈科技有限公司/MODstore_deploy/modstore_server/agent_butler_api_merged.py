@@ -594,6 +594,7 @@ def _build_messages(
     *,
     user: _facade().User | None = None,
     db: _facade().Session | None = None,
+    admin_context: str = "",
 ) -> _facade().List[_facade().Dict[str, _facade().Any]]:
     """组装最终 messages：小C SSOT 人设 + 对话对象 + 管理端知识库 + 页面上下文。"""
     from modstore_server.xiaoc_cs_ssot import (
@@ -605,21 +606,8 @@ def _build_messages(
     )
 
     system_content = xiaoc_system_prompt(mode="admin")
-    if "enhance_current_page" in _facade().BUTLER_SYSTEM_PROMPT:
-        system_content += "\n\n【工具能力补充】\n" + "\n".join(
-            (
-                line
-                for line in _facade().BUTLER_SYSTEM_PROMPT.splitlines()
-                if line.startswith("6.")
-                or line.startswith("可识别")
-                or line.startswith("- /workbench")
-                or line.startswith("操作原则")
-                or line.startswith("- 低风险")
-                or line.startswith("- 中风险")
-                or line.startswith("- 高风险")
-                or line.startswith("回复要简洁")
-            )
-        )
+    if admin_context and user is not None and getattr(user, "is_admin", False) is True:
+        system_content += f"\n\n{admin_context}"
     if user is not None:
         vb = format_visitor_block(resolve_user_identity(user, db=db, source="butler"))
         if vb:
@@ -634,9 +622,8 @@ def _build_messages(
         {"role": "system", "content": system_content}
     ]
     for m in body.messages:
-        if m.role == "system":
-            continue
-        msgs.append({"role": m.role, "content": m.content})
+        if m.role in {"user", "assistant"}:
+            msgs.append({"role": m.role, "content": m.content})
     return msgs
 
 
@@ -1139,7 +1126,13 @@ async def butler_chat(
     _api = _facade()
     provider, model, api_key, key_source, base_url = _api._resolve_butler_credentials(db, user.id)
     is_byok = key_source == "user_override"
-    msgs = _api._build_messages(body, body.page_context, user=user, db=db)
+    from modstore_server.xiaoc_admin_context import admin_context_for_chat
+    from modstore_server.xiaoc_cs_ssot import last_user_text
+
+    admin_context = await admin_context_for_chat(user, last_user_text(body.messages))
+    msgs = _api._build_messages(
+        body, body.page_context, user=user, db=db, admin_context=admin_context
+    )
     if not msgs:
         raise _api.HTTPException(400, "messages 不能为空")
     request_id = _api.new_request_id()

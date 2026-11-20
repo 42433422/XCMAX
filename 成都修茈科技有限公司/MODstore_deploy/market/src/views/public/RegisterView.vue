@@ -1,24 +1,8 @@
 <template>
   <div class="auth-page">
-    <div v-if="registrationComplete" class="auth-card auth-card--success" role="status">
-      <div class="success-mark" aria-hidden="true">✓</div>
-      <p class="source-badge">XCAGI 桌面端</p>
-      <h2>账号注册成功</h2>
-      <p class="success-lead">你的账号可同时登录网页和 XCAGI 桌面端。</p>
-      <div class="next-step">
-        <strong>下一步</strong>
-        <span>选择适合的 XCAGI 方案并完成支付，随后回到桌面端登录即可。</span>
-      </div>
-      <router-link :to="registrationNext" class="btn btn-primary-solid btn-block success-action">
-        选择 XCAGI 方案
-      </router-link>
-    </div>
-    <div v-else class="auth-card">
-      <p v-if="desktopRegistration" class="source-badge">来自 XCAGI 桌面端</p>
+    <div class="auth-card">
       <h2>创建 XCAGI 账号</h2>
-      <p v-if="desktopRegistration" class="auth-intro">
-        一个账号即可在网页和 XCAGI 桌面端使用。
-      </p>
+      <p class="auth-intro">注册后可选择适合的 XCAGI 方案。</p>
       <div v-if="err" class="flash flash-err">{{ err }}</div>
       <form @submit.prevent="doRegister">
         <div class="form-group">
@@ -66,10 +50,7 @@
           {{ loading ? '注册中...' : '注册' }}
         </button>
       </form>
-      <p v-if="desktopRegistration" class="auth-footer">
-        已有账号？回到 XCAGI 桌面端登录
-      </p>
-      <p v-else class="auth-footer">
+      <p class="auth-footer">
         已有账号？<router-link :to="loginRoute" class="link">登录</router-link>
       </p>
     </div>
@@ -80,10 +61,7 @@
 import { ref, computed, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '@/api'
-import {
-  isXcagiDesktopRegistration,
-  pickRegistrationNextFromRoute,
-} from '@/authPaths'
+import { pickRegistrationNextFromRoute } from '@/authPaths'
 
 const router = useRouter()
 const route = useRoute()
@@ -95,11 +73,9 @@ const loading = ref(false)
 const sendCodeLoading = ref(false)
 const err = ref('')
 const cooldown = ref(0)
-const registrationComplete = ref(false)
 let tick: ReturnType<typeof setInterval> | null = null
 
 const emailTrimmed = computed(() => email.value.trim())
-const desktopRegistration = computed(() => isXcagiDesktopRegistration(route))
 const registrationNext = computed(() => pickRegistrationNextFromRoute(route))
 const loginRoute = computed(() => ({ name: 'login', query: route.query }))
 
@@ -157,10 +133,6 @@ async function doRegister() {
       return
     }
     await api.register(username.value, password.value, em, em ? code : '')
-    if (desktopRegistration.value) {
-      registrationComplete.value = true
-      return
-    }
     await router.replace(registrationNext.value)
   } catch (e) {
     err.value = (e as Error)?.message || String(e)
@@ -197,58 +169,12 @@ async function doRegister() {
   text-align: center;
   color: var(--wb-text-primary, #1d1d1f);
 }
-.source-badge {
-  width: fit-content;
-  margin: 0 auto 10px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--wb-accent-primary, #0071e3) 10%, transparent);
-  color: var(--wb-accent-primary, #0071e3);
-  font-size: 12px;
-  font-weight: 600;
-}
-.auth-intro,
-.success-lead {
+.auth-intro {
   margin: -10px 0 22px;
   color: var(--wb-text-muted, #6e6e73);
   font-size: 14px;
   line-height: 1.65;
   text-align: center;
-}
-.auth-card--success {
-  text-align: center;
-}
-.success-mark {
-  display: grid;
-  place-items: center;
-  width: 52px;
-  height: 52px;
-  margin: 0 auto 16px;
-  border-radius: 50%;
-  background: #e8f7ee;
-  color: #18864b;
-  font-size: 28px;
-  font-weight: 700;
-}
-.auth-card--success .success-lead {
-  margin-top: -8px;
-}
-.next-step {
-  display: grid;
-  gap: 6px;
-  margin: 0 0 20px;
-  padding: 14px 16px;
-  border-radius: 10px;
-  background: var(--wb-surface-sunken, rgba(0, 0, 0, 0.04));
-  color: var(--wb-text-primary, #1d1d1f);
-  font-size: 13px;
-  line-height: 1.6;
-  text-align: left;
-}
-.success-action {
-  display: block;
-  box-sizing: border-box;
-  text-decoration: none;
 }
 .form-group { margin-bottom: 16px; }
 .form-group label {

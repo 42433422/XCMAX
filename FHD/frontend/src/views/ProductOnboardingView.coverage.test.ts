@@ -728,7 +728,7 @@ describe('ProductOnboardingView three-step configuration contracts', () => {
   })
 
   it.each([
-    ['enterprise', 'full', '企业版 enterprise'], ['personal', 'full', '个人版 personal'],
+    ['enterprise', 'full', '企业版 enterprise'], ['personal', 'full', '企业版 enterprise'],
     ['generic', 'minimal', '空壳 minimal'], ['generic', 'generic', '通用 generic'], ['generic', 'full', '完整 full'],
   ])('labels SKU %s and build %s', async (productSku, buildEdition, expected) => {
     const { wrapper } = await mountComponent({ productSku, buildEdition })

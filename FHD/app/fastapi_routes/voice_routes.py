@@ -233,6 +233,21 @@ def _funasr_ws_url(token: str) -> str:
     return f"{'wss' if scheme == 'https' else 'ws'}://{host}/api/asr/funasr?token={quote(token, safe='')}"
 
 
+def _connect_funasr(ws_url: str, *, open_timeout: float):
+    import websockets
+
+    from app.infrastructure.modstore_transport import market_local_address
+
+    local_address = market_local_address()
+    return websockets.connect(
+        ws_url,
+        open_timeout=open_timeout,
+        close_timeout=2,
+        proxy=None,
+        local_addr=(local_address, 0) if local_address else None,
+    )
+
+
 _FUNASR_STREAM_CONFIG = {
     "mode": "2pass",
     "chunk_size": [5, 10, 5],
@@ -271,9 +286,7 @@ async def _platform_funasr_transcribe(token: str, wav: bytes) -> str:
 async def _funasr_stream(ws_url: str, pcm: bytes) -> str:
     import json as _json
 
-    import websockets
-
-    async with websockets.connect(ws_url, open_timeout=10, close_timeout=2) as ws:
+    async with _connect_funasr(ws_url, open_timeout=10) as ws:
         try:
             ready = _json.loads(await asyncio.wait_for(ws.recv(), timeout=10))
         except (TimeoutError, ValueError, TypeError):
@@ -322,6 +335,7 @@ async def _platform_transcribe(
     from app.fastapi_routes.ai_assistant_tts import _session_market_token
     from app.fastapi_routes.market_bridge.http_transport import _auth_header
     from app.fastapi_routes.market_bridge.settings import _market_api_base_url
+    from app.infrastructure.modstore_transport import httpx_async_client
 
     token = _session_market_token(request)
     if not token:
@@ -329,7 +343,7 @@ async def _platform_transcribe(
     wav, duration = await run_in_threadpool(_asr_wav, path)
     failure: HTTPException | None = None
     try:
-        async with httpx.AsyncClient(timeout=75.0) as client:
+        async with httpx_async_client(timeout=75.0) as client:
             response = await client.post(
                 f"{_market_api_base_url()}/api/workbench/asr",
                 headers={"Authorization": _auth_header(token)},
@@ -674,14 +688,13 @@ async def voice_stream(ws: WebSocket):
         await ws.close()
         return
     try:
-        import websockets
         from websockets.exceptions import WebSocketException
     except ImportError:
         await ws.send_json({"type": "unavailable", "reason": "no_component"})
         await ws.close()
         return
     try:
-        upstream = await websockets.connect(_funasr_ws_url(token), open_timeout=6, close_timeout=2)
+        upstream = await _connect_funasr(_funasr_ws_url(token), open_timeout=6)
     except (OSError, TimeoutError, WebSocketException):
         await ws.send_json({"type": "unavailable", "reason": "platform"})
         await ws.close()

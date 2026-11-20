@@ -249,6 +249,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.9.5"
+  file_selector_ohos:
+    dependency: "direct main"
+    description:
+      name: file_selector_ohos
+      sha256: "387cf6651500197c1efc6644a4b83ea79ae95b882fefbbfcec7190e1f6294675"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.5.0+2"
   file_selector_platform_interface:
     dependency: transitive
     description:
@@ -320,6 +328,14 @@ packages:
     description:
       name: flutter_tts
       sha256: ce5eb209b40e95f2f4a1397116c87ab2fcdff32257d04ed7a764e75894c03775
+      url: "https://pub.dev"
+    source: hosted
+    version: "4.2.5"
+  flutter_tts_ohos:
+    dependency: "direct main"
+    description:
+      name: flutter_tts_ohos
+      sha256: eaa5511ceb74d2e7152c0408018d732510ce087681676fcf0b09a4390f11a129
       url: "https://pub.dev"
     source: hosted
     version: "4.2.5"
@@ -416,6 +432,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.1.1"
+  image_picker_harmonyos:
+    dependency: "direct main"
+    description:
+      name: image_picker_harmonyos
+      sha256: "19a1374867e71c332a15dc0aa03d7f73bf54e6788f1784b584618c0858704b63"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.2.4"
   image_picker_ios:
     dependency: transitive
     description:
@@ -632,6 +656,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "8.3.1"
+  package_info_plus_harmonyos:
+    dependency: "direct main"
+    description:
+      name: package_info_plus_harmonyos
+      sha256: "64c6a88d95405938f718f06abe0b17179606b7faed0d92b2a579e2616df7f0c4"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.0.1"
   package_info_plus_platform_interface:
     dependency: transitive
     description:
@@ -680,6 +712,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.2.2"
+  path_provider_ohos:
+    dependency: "direct main"
+    description:
+      name: path_provider_ohos
+      sha256: "6b479a99543743a9e0882f69521345b1ec78ceacb50ba155dffd43d01b1f84d0"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.2.1"
   path_provider_platform_interface:
     dependency: transitive
     description:
@@ -721,7 +761,7 @@ packages:
     source: hosted
     version: "6.1.5+1"
   pub_semver:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: pub_semver
       sha256: "261236774e8b1d69cfc6b9eabbc96c40f25e7a2d6b171f3385d4f65d5734fb24"
@@ -784,6 +824,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.4.1"
+  shared_preferences_ohos:
+    dependency: "direct main"
+    description:
+      name: shared_preferences_ohos
+      sha256: "4f143582552822b4198491a5ddfa066e3e2658d646a8e55302267e77379f00d0"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.2.0"
   shared_preferences_platform_interface:
     dependency: transitive
     description:
@@ -981,6 +1029,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.2.5"
+  url_launcher_ohos:
+    dependency: "direct main"
+    description:
+      name: url_launcher_ohos
+      sha256: a6ab56765be876fbcfac6f2a8de4f5bc5dc62b0c66e0fa37e33db263cb5d4ba7
+      url: "https://pub.dev"
+    source: hosted
+    version: "6.3.0"
   url_launcher_platform_interface:
     dependency: transitive
     description:
@@ -1061,6 +1117,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.13.0"
+  webview_flutter_harmonyos:
+    dependency: "direct main"
+    description:
+      name: webview_flutter_harmonyos
+      sha256: "2fa6c4f613dcac2ec6e8b5809c410a23d3a22653b0877fdd3227ce82e3619987"
+      url: "https://pub.dev"
+    source: hosted
+    version: "4.14.1"
   webview_flutter_platform_interface:
     dependency: "direct dev"
     description:

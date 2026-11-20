@@ -11,7 +11,7 @@ import asyncio
 import json
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import contextmanager
+from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -20,10 +20,15 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 from app.application.ai_group_chat_service import AiGroupChatService
+from app.db.models.user import Session as UserSession
+from app.db.models.user import User
 from app.infrastructure.request_context import get_current_request
 from app.infrastructure.tenant_scope import current_tenant_id, tenant_scope
+from app.utils.time import utc_now_naive
 
 # 测试内的显式边界：响应体解析失败与线程内异常收集都需要捕获全部错误，
 # 用命名元组替代直接 broad except，满足 broad-except 门禁。
@@ -106,25 +111,6 @@ def _assert_cross_tenant_denied(resp, *secrets: str) -> None:
     assert resp.status_code in {403, 404}
 
 
-def _extract_filter_int(expr: Any) -> int | None:
-    if expr is None:
-        return None
-    if isinstance(expr, int):
-        return expr
-    value = getattr(expr, "value", None)
-    if value is not None and not callable(value):
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            pass
-    for attr in ("right", "left", "element", "clause"):
-        if hasattr(expr, attr):
-            found = _extract_filter_int(getattr(expr, attr))
-            if found is not None:
-                return found
-    return None
-
-
 def _install_session_users(monkeypatch: pytest.MonkeyPatch, users_by_sid: dict[str, Any]) -> None:
     session_service = MagicMock()
     session_service.validate_session.side_effect = lambda sid: users_by_sid.get(str(sid or ""))
@@ -138,35 +124,50 @@ def _install_session_users(monkeypatch: pytest.MonkeyPatch, users_by_sid: dict[s
     )
 
 
-def _install_mobile_user_db(monkeypatch: pytest.MonkeyPatch, users_by_id: dict[int, Any]) -> None:
-    class _Query:
-        def __init__(self) -> None:
-            self._uid: int | None = None
+@pytest.fixture
+def host_sessions(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    from app.domain.shared_services.session_service import SessionService
 
-        def query(self, _model: Any) -> _Query:
-            return self
-
-        def filter(self, *criteria: Any) -> _Query:
-            for item in criteria:
-                found = _extract_filter_int(item)
-                if found is not None:
-                    self._uid = found
-            return self
-
-        def first(self) -> Any | None:
-            if self._uid is None:
-                return None
-            return users_by_id.get(self._uid)
-
-    @contextmanager
-    def _get_db():
-        yield _Query()
-
-    monkeypatch.setattr("app.db.session.get_db", _get_db)
+    engine = create_engine(f"sqlite:///{tmp_path / 'host.db'}")
+    User.__table__.create(engine)
+    UserSession.__table__.create(engine)
+    factory = sessionmaker(bind=engine)
+    monkeypatch.setattr("app.db.HostSessionLocal", factory)
+    service = SessionService()
     monkeypatch.setattr(
-        "app.application.session_account_meta.load_session_account_meta",
-        lambda _sid: None,
+        "app.application.facades.session_facade.get_session_service", lambda: service
     )
+    now = utc_now_naive()
+    with factory() as db:
+        for suffix, uid, tid in (("a", 101, 11), ("b", 202, 22)):
+            db.add(
+                User(
+                    id=uid,
+                    username=f"user-{suffix}",
+                    password="unused",
+                    tenant_id=tid,
+                    role="enterprise",
+                    tier="enterprise",
+                    account_tier="normal",
+                    is_active=True,
+                )
+            )
+            for prefix in ("sess", "jwt"):
+                db.add(
+                    UserSession(
+                        session_id=f"{prefix}-{suffix}",
+                        user_id=uid,
+                        tenant_id=tid,
+                        account_kind="enterprise",
+                        created_at=now,
+                        expires_at=now + timedelta(days=1),
+                    )
+                )
+        db.commit()
+    try:
+        yield factory
+    finally:
+        engine.dispose()
 
 
 def _install_runtime_context(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -318,18 +319,11 @@ def test_sticky_instance_does_not_follow_later_tenant_scope(tmp_path: Path) -> N
 
 
 def test_admin_and_mobile_routes_establish_tenant_and_hide_cross_tenant(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, host_sessions
 ) -> None:
     from app.security.mobile_jwt import issue_mobile_tokens
 
     _legacy_shared(tmp_path)
-    user_a = _user(user_id=101, tenant_id=11, username="alice")
-    user_b = _user(user_id=202, tenant_id=22, username="bob")
-    _install_session_users(
-        monkeypatch,
-        {"sess-a": user_a, "sess-b": user_b},
-    )
-    _install_mobile_user_db(monkeypatch, {101: user_a, 202: user_b})
     observed: list[int | None] = []
     app = _build_app(tmp_path, monkeypatch, observed=observed)
     secrets = ("甲的群", "甲的机密", "共享目录旧群")
@@ -414,6 +408,11 @@ def test_admin_and_mobile_routes_establish_tenant_and_hide_cross_tenant(
         # --- mobile JWT only (no session cookie): bind must set request.state.tenant_id ---
         token_a = mobile_headers(101, "jwt-a")
         token_b = mobile_headers(202, "jwt-b")
+        missing_user = client.get(
+            "/api/mobile/v1/ai-groups", headers=mobile_headers(999, "jwt-missing")
+        )
+        assert missing_user.status_code == 401
+        _assert_no_existence_leak(missing_user, *secrets)
         mobile_create = client.post(
             "/api/mobile/v1/ai-groups", json={"name": "甲的移动群"}, headers=token_a
         )
@@ -478,6 +477,13 @@ def test_admin_and_mobile_routes_establish_tenant_and_hide_cross_tenant(
 
         hide_ok = client.put(f"/api/mobile/v1/ai-groups/{mobile_id}/hidden", headers=token_a)
         assert hide_ok.status_code == 200, hide_ok.text
+
+        with host_sessions() as db:
+            db.get(User, 101).is_active = False
+            db.commit()
+        disabled_user = client.get("/api/mobile/v1/ai-groups", headers=token_a)
+        assert disabled_user.status_code == 401
+        _assert_no_existence_leak(disabled_user, "甲的移动群", *secrets)
 
         assert current_tenant_id() is None
         assert get_current_request() is None

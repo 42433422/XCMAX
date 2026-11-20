@@ -291,6 +291,9 @@ class WorkbookReader:
                     fallback = (unit_name_hint or path.stem).strip() or path.stem
                     parsed = ParsedSheets()
                     for sheet in workbook.worksheets:
+                        if sheet.sheet_state != "visible":
+                            parsed.skipped.append({"sheet": sheet.title, "reason": "hidden_sheet"})
+                            continue
                         self._read_sheet(sheet, profiles, fallback, min_score, parsed)
                     notes, mode = parsed.select(include_ledger)
                     delivery_count = sum(

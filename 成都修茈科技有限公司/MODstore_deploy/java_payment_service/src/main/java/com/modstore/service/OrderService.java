@@ -130,6 +130,9 @@ public class OrderService {
             return resolved;
         }
 
+        if (AccountLicensePlans.PERSONAL_PLAN_ID.equals(planId)) {
+            throw new IllegalArgumentException("个人使用版可直接开通");
+        }
         if (!planId.isBlank()) {
             PlanTemplate plan = planTemplateRepository.findById(planId)
                     .filter(PlanTemplate::isActive)

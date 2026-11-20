@@ -205,7 +205,7 @@ export async function registerModRoutes(router: Router, entries: ModRouteApiEntr
       for (const r of routes) {
         const currentBefore = router.currentRoute.value
         const beforeNames = new Set(currentBefore.matched.map((m) => String(m.name || '')).filter(Boolean))
-        router.addRoute(r)
+        router.addRoute({ ...r, meta: { ...r.meta, mod: mod_id } } as RouteRecordRaw)
         const currentAfter = router.currentRoute.value
         const resolvedAfter = router.resolve(currentRefreshFullPath(router))
         const resolvedNames = resolvedAfter.matched.map((m) => String(m.name || '')).filter(Boolean)

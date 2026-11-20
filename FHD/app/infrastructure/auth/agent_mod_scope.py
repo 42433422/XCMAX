@@ -209,6 +209,8 @@ def _check_row(row: Any, *, user_id: str, mod_id: str) -> None:
         raise AgentModAuthorizationError("任务绑定的登录会话已失效")
     if row.user is None or not row.user.is_active:
         raise AgentModAuthorizationError("任务所属账号已停用")
+    if row.user.account_tier == "personal":
+        raise AgentModAuthorizationError("个人使用版不包含 Mod 权益")
     ids = json.loads(row.entitled_mod_ids_json or "[]")
     if not isinstance(ids, list) or any(not isinstance(item, str) for item in ids):
         raise AgentModAuthorizationError("任务 Mod 权益记录无效")

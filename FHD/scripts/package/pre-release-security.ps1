@@ -2,8 +2,8 @@
   [ValidateSet('pre', 'post')]
   [string]$Phase = 'pre',
   [string]$Version = '',
-  [ValidateSet('personal', 'enterprise', 'all')]
-  [string]$ProductSku = 'all',
+  [ValidateSet('enterprise')]
+  [string]$ProductSku = 'enterprise',
   [switch]$AllowUnsigned
 )
 
@@ -15,7 +15,6 @@ Set-Location $Root
 $Version = $Version.TrimStart('v', 'V')
 $erpMod = 'xcagi-erp-domain-bridge'
 $excludedMods = @('taiyangniao-pro', 'sz-qsm-pro', '_employees', 'industry-solutions')
-$skus = if ($ProductSku -eq 'all') { @('personal', 'enterprise') } else { @($ProductSku) }
 
 function Fail([string]$msg) {
   Write-Error "[pre-release-security] $msg"
@@ -79,18 +78,15 @@ function Assert-WindowsGuiSubsystem {
 }
 
 function Test-StagedSku {
-  param([string]$Sku, [bool]$ExpectErp)
+  param([string]$Sku)
   & "$PSScriptRoot\stage-bundled-mods.ps1" -ProductSku $Sku | Out-Null
   $stage = Join-Path $Root "build\staged-mods-$Sku"
   if (-not (Test-Path $stage)) {
     Fail "staging failed: $stage"
   }
   $hasErp = Test-Path (Join-Path $stage $erpMod)
-  if ($ExpectErp -and -not $hasErp) {
+  if (-not $hasErp) {
     Fail "SKU $Sku must include $erpMod"
-  }
-  if (-not $ExpectErp -and $hasErp) {
-    Fail "SKU $Sku must NOT include $erpMod"
   }
   foreach ($bad in $excludedMods) {
     if (Test-Path (Join-Path $stage $bad)) {
@@ -109,9 +105,7 @@ if ($Phase -eq 'pre') {
   if (Test-Path $dotEnv) {
     Write-Warning 'Root .env exists; PyInstaller spec must ship only .env.example'
   }
-  foreach ($sku in $skus) {
-    Test-StagedSku $sku ($sku -eq 'enterprise')
-  }
+  Test-StagedSku $ProductSku
   & "$PSScriptRoot\verify-desktop-database-default.ps1"
   Write-Host 'Pre-build security: PASSED'
   exit 0
@@ -120,58 +114,57 @@ if ($Phase -eq 'pre') {
 Write-Host '=== Post-build security scan ==='
 $releaseRoot = Join-Path $Root "release\xcagi-v$Version"
 if (-not (Test-Path $releaseRoot)) {
-  Fail "release dir missing: $releaseRoot (run build-all-skus first)"
+  Fail "release dir missing: $releaseRoot (run build-installer.ps1 first)"
 }
 
 $legacy = Get-ChildItem $releaseRoot -Filter 'XCAGI-Setup-*.exe' -File -ErrorAction SilentlyContinue
 if ($legacy) {
-  Fail "release 根目录不得放置 legacy 单包（请仅保留 personal/enterprise 子目录）: $($legacy.Name -join ', ')"
+  Fail "release 根目录不得放置 legacy 单包（请将当前安装包置于 enterprise 子目录）: $($legacy.Name -join ', ')"
 }
 $flatSku = Get-ChildItem $releaseRoot -Filter 'XCAGI-*-Setup-*-x64.exe' -File -ErrorAction SilentlyContinue
 if ($flatSku) {
   Fail "安装包必须位于 SKU 子目录内，不得放在 release 根: $($flatSku.Name -join ', ')"
 }
 
-foreach ($sku in $skus) {
-  $skuDir = Join-Path $releaseRoot $sku
-  if (-not (Test-Path $skuDir)) {
-    Fail "missing SKU dir: $skuDir"
-  }
-  $backendExe = Join-Path $skuDir 'win-unpacked\resources\backend\xcagi-backend.exe'
-  if (-not (Test-Path $backendExe)) {
-    Fail "$sku missing packaged backend executable: $backendExe"
-  }
-  Assert-WindowsGuiSubsystem -Path $backendExe -Label "$sku packaged backend executable"
-  $modsDir = Join-Path $skuDir 'win-unpacked\resources\backend\_internal\mods'
-  if (Test-Path $modsDir) {
-    $verifyErrorCount = $Error.Count
-    & "$PSScriptRoot\verify-bundled-mods.ps1" -ProductSku $sku -UnpackedDir $modsDir
-    if (-not $? -or $Error.Count -gt $verifyErrorCount) {
-      Fail "verify-bundled-mods failed for $sku"
-    }
-    Scan-SecretsInTree $modsDir "built-mods-$sku"
-  } else {
-    Fail "$sku missing bundled mods dir: $modsDir"
-  }
-  $skuJson = Join-Path $skuDir 'win-unpacked\resources\product-sku.json'
-  if (Test-Path $skuJson) {
-    $meta = Get-Content $skuJson -Raw | ConvertFrom-Json
-    if ($meta.sku -ne $sku) {
-      Fail "product-sku.json sku=$($meta.sku) != folder $sku"
-    }
-  } else {
-    Fail "$sku missing product-sku.json: $skuJson"
-  }
-  $setup = Get-ChildItem $skuDir -Filter 'XCAGI-*-Setup-*-x64.exe' -File -ErrorAction SilentlyContinue |
-    Select-Object -First 1
-  $yml = Join-Path $skuDir 'latest.yml'
-  if (-not $setup) { Fail "$sku missing Setup exe" }
-  if (-not (Test-Path $yml)) { Fail "$sku missing latest.yml" }
-  $desktopExe = Join-Path $skuDir 'win-unpacked\XCAGI.exe'
-  & "$PSScriptRoot\verify-windows-signature.ps1" -Path $desktopExe -AllowUnsigned:$AllowUnsigned
-  & "$PSScriptRoot\verify-windows-signature.ps1" -Path $backendExe -AllowUnsigned:$AllowUnsigned
-  & "$PSScriptRoot\verify-windows-signature.ps1" -Path $setup.FullName -AllowUnsigned:$AllowUnsigned
-  Write-Host "OK $sku artifact: $($setup.Name)"
+$sku = $ProductSku
+$skuDir = Join-Path $releaseRoot $sku
+if (-not (Test-Path $skuDir)) {
+  Fail "missing SKU dir: $skuDir"
 }
+$backendExe = Join-Path $skuDir 'win-unpacked\resources\backend\xcagi-backend.exe'
+if (-not (Test-Path $backendExe)) {
+  Fail "$sku missing packaged backend executable: $backendExe"
+}
+Assert-WindowsGuiSubsystem -Path $backendExe -Label "$sku packaged backend executable"
+$modsDir = Join-Path $skuDir 'win-unpacked\resources\backend\_internal\mods'
+if (Test-Path $modsDir) {
+  $verifyErrorCount = $Error.Count
+  & "$PSScriptRoot\verify-bundled-mods.ps1" -ProductSku $sku -UnpackedDir $modsDir
+  if (-not $? -or $Error.Count -gt $verifyErrorCount) {
+    Fail "verify-bundled-mods failed for $sku"
+  }
+  Scan-SecretsInTree $modsDir "built-mods-$sku"
+} else {
+  Fail "$sku missing bundled mods dir: $modsDir"
+}
+$skuJson = Join-Path $skuDir 'win-unpacked\resources\product-sku.json'
+if (Test-Path $skuJson) {
+  $meta = Get-Content $skuJson -Raw | ConvertFrom-Json
+  if ($meta.sku -ne $sku) {
+    Fail "product-sku.json sku=$($meta.sku) != folder $sku"
+  }
+} else {
+  Fail "$sku missing product-sku.json: $skuJson"
+}
+$setup = Get-ChildItem $skuDir -Filter 'XCAGI-*-Setup-*-x64.exe' -File -ErrorAction SilentlyContinue |
+  Select-Object -First 1
+$yml = Join-Path $skuDir 'latest.yml'
+if (-not $setup) { Fail "$sku missing Setup exe" }
+if (-not (Test-Path $yml)) { Fail "$sku missing latest.yml" }
+$desktopExe = Join-Path $skuDir 'win-unpacked\XCAGI.exe'
+& "$PSScriptRoot\verify-windows-signature.ps1" -Path $desktopExe -AllowUnsigned:$AllowUnsigned
+& "$PSScriptRoot\verify-windows-signature.ps1" -Path $backendExe -AllowUnsigned:$AllowUnsigned
+& "$PSScriptRoot\verify-windows-signature.ps1" -Path $setup.FullName -AllowUnsigned:$AllowUnsigned
+Write-Host "OK $sku artifact: $($setup.Name)"
 
 Write-Host 'Post-build security: PASSED'

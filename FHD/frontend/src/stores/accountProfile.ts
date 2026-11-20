@@ -70,6 +70,7 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
   // 账号体系真相源（前端只读展示）：身份 / 等级 / 预算 / 已授权行业 / 会员
   const tier = ref<AccountKind | null>(null)
   const accountTier = ref<AccountTier | null>(null)
+  const personalPlan = ref(false)
   const budgetRange = ref('')
   const entitledIndustries = ref<string[]>([])
   const marketMembershipTier = ref<string | null>(null)
@@ -133,6 +134,7 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
     impersonatingUsername.value = String(data.impersonating_username || '').trim()
     const t = String(data.tier || '').trim()
     tier.value = t === 'personal' || t === 'enterprise' || t === 'admin' ? t : null
+    if ('personal_plan' in data) personalPlan.value = data.personal_plan === true
     const at = String(data.account_tier || '').trim()
     accountTier.value = at === 'normal' || at === 'pro' || at === 'max' || at === 'ultra' ? at : null
     budgetRange.value = String(data.budget_range || '').trim()
@@ -292,6 +294,7 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
     impersonatingUsername.value = ''
     tier.value = null
     accountTier.value = null
+    personalPlan.value = false
     budgetRange.value = ''
     entitledIndustries.value = []
     marketMembershipTier.value = null
@@ -316,6 +319,7 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
     impersonatingUsername,
     tier,
     accountTier,
+    personalPlan,
     budgetRange,
     entitledIndustries,
     marketMembershipTier,

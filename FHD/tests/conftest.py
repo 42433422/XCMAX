@@ -152,6 +152,22 @@ def _default_enterprise_tenant_scope_for_tests(request):
         yield
 
 
+@pytest.fixture
+def owned_market_session(monkeypatch):
+    """Opt-in identity for unit tests exercising an authenticated market session."""
+    from types import SimpleNamespace
+
+    from app.fastapi_routes import market_account
+    from app.fastapi_routes.market_bridge import bindings
+
+    user = SimpleNamespace(id=71, is_active=True)
+    monkeypatch.setattr(bindings, "current_user", lambda request: user)
+    monkeypatch.setattr(
+        market_account, "_user_id_from_session", lambda sid: user.id if sid else None
+    )
+    return user
+
+
 @pytest.fixture(autouse=True)
 def _workspace_root_for_excel_reload_tests(request, monkeypatch):
     """Keep direct Excel reload unit tests inside the production workspace boundary."""

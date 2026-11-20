@@ -66,9 +66,22 @@ class _CatalogEditorState extends State<_CatalogEditor> {
   }
 
   Future<void> _save() async {
-    if (_busy || !widget.session.active || !_form.currentState!.validate()) {
+    if (_busy || !widget.session.active) return;
+    final invalid = _form.currentState!.validateGranularly();
+    if (invalid.isNotEmpty) {
+      final target = invalid.first.context;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (target.mounted) {
+          unawaited(Scrollable.ensureVisible(
+            target,
+            alignment: 0.2,
+            duration: AppTheme.motionDuration(target),
+          ));
+        }
+      });
       return;
     }
+    FocusScope.of(context).unfocus();
     final body = <String, Object?>{
       for (final field in _fields)
         field.key: field.type == 'number'
@@ -144,76 +157,157 @@ class _CatalogEditorState extends State<_CatalogEditor> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-      backgroundColor: AppTheme.colors(context).page,
+  Widget build(BuildContext context) {
+    final colors = AppTheme.colors(context);
+    final fields = _fields;
+    final basics = fields.where(_isBasicField).toList();
+    final details = fields.where((field) => !_isBasicField(field)).toList();
+    return WorkspaceScaffold(
+      backgroundColor: colors.page,
       body: SafeArea(
-          child: Column(children: [
-        WeTopBar(
-            title: '${_edit ? '编辑' : '新建'}${widget.title}',
-            showBack: true,
-            onBack: () => Navigator.maybePop(context)),
-        if (!widget.session.active)
-          const Expanded(child: Center(child: Text('账号或连接已切换，请返回后重新打开')))
-        else
-          Expanded(
-              child: Form(
+        child: Column(
+          children: [
+            WeTopBar(
+              title: '${_edit ? '编辑' : '新建'}${widget.title}',
+              showBack: true,
+            ),
+            if (!widget.session.active)
+              const Expanded(
+                child: Center(child: Text('账号或连接已切换，请返回后重新打开')),
+              )
+            else ...[
+              Expanded(
+                child: Form(
                   key: _form,
-                  child: ListView(padding: const EdgeInsets.all(20), children: [
-                    for (final field in _fields)
-                      Padding(
-                          padding: const EdgeInsets.only(bottom: 18),
-                          child: (field.key == 'unit'
-                                      ? widget.units
-                                      : field.options)
-                                  .isNotEmpty
-                              ? DropdownButtonFormField<String>(
-                                  initialValue: (field.key == 'unit'
-                                              ? widget.units
-                                              : field.options)
-                                          .contains(
-                                              _controllers[field.key]!.text)
-                                      ? _controllers[field.key]!.text
-                                      : null,
-                                  decoration: InputDecoration(
-                                      labelText:
-                                          '${field.label}${field.required ? ' *' : ''}'),
-                                  items: [
-                                    for (final option in (field.key == 'unit'
-                                        ? widget.units
-                                        : field.options))
-                                      DropdownMenuItem(
-                                          value: option, child: Text(option))
-                                  ],
-                                  onChanged: _busy
-                                      ? null
-                                      : (value) {
-                                          _controllers[field.key]!.text =
-                                              value ?? '';
-                                        },
-                                  validator: (_) => field
-                                      .validate(_controllers[field.key]!.text),
-                                )
-                              : TextFormField(
-                                  key: ValueKey('field-${field.key}'),
-                                  controller: _controllers[field.key],
-                                  enabled: !_busy,
-                                  decoration: InputDecoration(
-                                      labelText:
-                                          '${field.label}${field.required ? ' *' : ''}'),
-                                  keyboardType: field.type == 'number'
-                                      ? const TextInputType.numberWithOptions(
-                                          decimal: true)
-                                      : TextInputType.text,
-                                  validator: field.validate)),
-                    if (_error != null)
-                      Padding(
-                          padding: const EdgeInsets.only(bottom: 16),
-                          child: Text(_error!)),
-                    FilledButton(
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      children: [
+                        if (basics.isNotEmpty)
+                          _fieldPanel(
+                            widget.shipments ? '购买单位与联系人' : '基本信息',
+                            basics,
+                          ),
+                        if (details.isNotEmpty)
+                          _fieldPanel(
+                            widget.shipments ? '出货明细' : '补充信息',
+                            details,
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              ColoredBox(
+                color: colors.surface,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (_error != null &&
+                          MediaQuery.viewInsetsOf(context).bottom == 0)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Semantics(
+                            liveRegion: true,
+                            child: Text(
+                              _error!,
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                            ),
+                          ),
+                        ),
+                      FilledButton(
                         onPressed: _busy ? null : _save,
-                        child: Text(_busy ? '正在保存…' : '保存')),
-                  ]))),
-      ])));
+                        child: Text(_busy ? '正在保存…' : '保存'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  bool _isBasicField(_Field field) =>
+      const {
+        'name',
+        'unit',
+        'unit_name',
+        'purchase_unit',
+        'model_number',
+        'contact_person',
+        'contact_phone',
+      }.contains(field.key) &&
+      !(widget.shipments && field.key == 'model_number');
+
+  Widget _fieldPanel(String title, List<_Field> fields) => Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: WorkspacePanel(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Semantics(
+                header: true,
+                child:
+                    Text(title, style: Theme.of(context).textTheme.titleSmall),
+              ),
+              for (final field in fields)
+                Padding(
+                  padding: const EdgeInsets.only(top: 14),
+                  child: _inputFor(field),
+                ),
+            ],
+          ),
+        ),
+      );
+
+  Widget _inputFor(_Field field) {
+    final controller = _controllers[field.key]!;
+    final options = field.key == 'unit' ? widget.units : field.options;
+    final decoration = InputDecoration(
+      border: const OutlineInputBorder(),
+      labelText: '${field.label}${field.required ? ' *' : ''}',
+    );
+    if (options.isNotEmpty) {
+      return DropdownButtonFormField<String>(
+        initialValue:
+            options.contains(controller.text) ? controller.text : null,
+        isExpanded: true,
+        decoration: decoration,
+        items: [
+          for (final option in options)
+            DropdownMenuItem(
+              value: option,
+              child: Text(option, overflow: TextOverflow.ellipsis),
+            ),
+        ],
+        onChanged: _busy ? null : (value) => controller.text = value ?? '',
+        validator: (_) => field.validate(controller.text),
+      );
+    }
+    return TextFormField(
+      key: ValueKey('field-${field.key}'),
+      controller: controller,
+      enabled: !_busy,
+      decoration: decoration,
+      keyboardType: switch (field.type) {
+        'number' => const TextInputType.numberWithOptions(decimal: true),
+        _ => field.key == 'contact_phone'
+            ? TextInputType.phone
+            : TextInputType.text,
+      },
+      validator: field.validate,
+    );
+  }
 }
 
 Map<String, Object?> _map(Object? value) =>

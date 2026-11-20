@@ -12,12 +12,14 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.fastapi_routes.debug_client_log import router
+from app.infrastructure.auth.dependencies import get_logged_in_user
 
 
 @pytest.fixture
 def client() -> TestClient:
     app = FastAPI()
     app.include_router(router)
+    app.dependency_overrides[get_logged_in_user] = lambda: object()
     with TestClient(app) as test_client:
         yield test_client
 

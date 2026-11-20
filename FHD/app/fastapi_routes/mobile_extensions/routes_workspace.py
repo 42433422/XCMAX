@@ -38,6 +38,17 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 
+def _has_personal_plan(user: MobilePrincipal) -> bool:
+    return getattr(user, "account_tier", None) == "personal"
+
+
+def _personal_mod_denied() -> JSONResponse:
+    return JSONResponse(
+        format_mobile_response(None, "个人使用版无 Mod 权限", success=False, code=403),
+        status_code=403,
+    )
+
+
 class MobileWorkspacePrefsPatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
     workflow_ai_employees: dict[str, bool]
@@ -149,6 +160,15 @@ class WorkspaceRoutes:
                     format_mobile_response(None, "未授权", success=False, code=401),
                     status_code=401,
                 )
+            if _has_personal_plan(user):
+                return format_mobile_response(
+                    data={
+                        "items": [],
+                        "market_connected": False,
+                        "market_profile_count": 0,
+                        "market_error": "",
+                    }
+                )
             (
                 market_profiles,
                 market_connected,
@@ -174,7 +194,9 @@ class WorkspaceRoutes:
                     format_mobile_response(None, "未授权", success=False, code=401),
                     status_code=401,
                 )
-            installed = [m["id"] for m in ports.mobile_mod_items()]
+            installed = (
+                [] if _has_personal_plan(user) else [m["id"] for m in ports.mobile_mod_items()]
+            )
 
             return format_mobile_response(data=ports.platform_shell(installed))
 
@@ -227,6 +249,8 @@ class WorkspaceRoutes:
             """Persist the mobile onboarding industry selection to the shared workspace SSOT."""
             if user is None:
                 return ports.mobile_unauthorized_response()
+            if _has_personal_plan(user):
+                return _personal_mod_denied()
             industry_id = str(body.get("industry_id") or body.get("industryId") or "").strip()
             industry_mod_id = str(
                 body.get("industry_mod_id") or body.get("industryModId") or ""
@@ -272,6 +296,8 @@ class WorkspaceRoutes:
             """为移动端账号安装宿主基础能力包。"""
             if user is None:
                 return ports.mobile_unauthorized_response()
+            if _has_personal_plan(user):
+                return _personal_mod_denied()
             try:
                 result = await ports.install_foundation(edition)
                 return format_mobile_response(
@@ -296,6 +322,8 @@ class WorkspaceRoutes:
             """按行业安装移动端初始化种子包。"""
             if user is None:
                 return ports.mobile_unauthorized_response()
+            if _has_personal_plan(user):
+                return _personal_mod_denied()
             raw = str(
                 body.get("industry_id") or body.get("industryId") or body.get("mod_id") or ""
             ).strip()
@@ -334,6 +362,8 @@ class WorkspaceRoutes:
             """从移动端安装指定市场 Mod。"""
             if user is None:
                 return ports.mobile_unauthorized_response()
+            if _has_personal_plan(user):
+                return _personal_mod_denied()
             mod_id = str(
                 body.get("mod_id") or body.get("pkg_id") or body.get("package_file") or ""
             ).strip()
@@ -366,6 +396,8 @@ class WorkspaceRoutes:
             """安装客户交付场景的移动端种子包。"""
             if user is None:
                 return ports.mobile_unauthorized_response()
+            if _has_personal_plan(user):
+                return _personal_mod_denied()
             mod_id = str(body.get("mod_id") or body.get("pkg_id") or "").strip()
             industry_id = str(body.get("industry_id") or body.get("industryId") or "").strip()
             if not mod_id:
@@ -413,7 +445,11 @@ class WorkspaceRoutes:
                 market_connected,
                 market_error,
             ) = await ports.load_market_ai_employee_profile_index()
-            mod_items = ports.mobile_mod_items(market_profiles, market_connected=market_connected)
+            mod_items = (
+                []
+                if _has_personal_plan(user)
+                else ports.mobile_mod_items(market_profiles, market_connected=market_connected)
+            )
             installed = [m["id"] for m in mod_items]
 
             sync_data: dict[str, Any] = {}
@@ -476,10 +512,6 @@ class WorkspaceRoutes:
 
                 clear_session_entitlements()
                 sid = ports.mobile_session_id_from_request(request)
-                if not sid:
-                    from app.infrastructure.auth.dependencies import session_id_from_request
-
-                    sid = session_id_from_request(request)
                 if sid:
                     await sync_entitlements_for_session(sid)
                     from app.application.session_account_meta import load_session_account_meta
@@ -490,7 +522,8 @@ class WorkspaceRoutes:
                         account_kind = "admin"
                     elif account_kind != "admin" and session_kind in {"personal", "enterprise"}:
                         account_kind = session_kind
-                mod_items = ports.mobile_mod_items()
+                if not _has_personal_plan(user):
+                    mod_items = ports.mobile_mod_items()
             except RECOVERABLE_ERRORS as exc:
                 logger.warning("nav-menu mod items failed: %s", exc)
             items = resolve_mobile_navigation(

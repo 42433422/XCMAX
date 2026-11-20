@@ -109,4 +109,9 @@ async def wechat_contact_link(
         customer_id = int(str(raw))
     except (TypeError, ValueError):
         raise HTTPException(status_code=400, detail="customer_id must be int") from None
-    return link_wechat_contact(contact_key, customer_id)
+    tenant_raw = payload.get("tenant_id")
+    try:
+        tenant_id = int(str(tenant_raw)) if tenant_raw not in (None, "") else None
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="tenant_id must be int") from None
+    return link_wechat_contact(contact_key, customer_id, tenant_id=tenant_id)

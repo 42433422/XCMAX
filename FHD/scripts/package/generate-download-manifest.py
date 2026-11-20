@@ -36,8 +36,7 @@ import sys
 from pathlib import Path
 
 # Product-line SSOT: specs/product-lines-3-plus-2.md.
-# Personal remains build-compatible for a future recovery, but it is frozen and must
-# never enter the current stable release manifest.
+# The frozen personal SKU is historical and must stay out of current channels.
 ACTIVE_RELEASE_SKUS = ("enterprise",)
 FROZEN_RELEASE_SKUS = ("personal",)
 _GIT_SHA = re.compile(r"^[0-9a-f]{40}$")

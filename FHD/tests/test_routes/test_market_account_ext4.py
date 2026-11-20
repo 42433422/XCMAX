@@ -613,7 +613,7 @@ class TestSessionIdFromRequest:
 
 
 class TestAuthorizationFromRequest:
-    def test_with_session_token(self):
+    def test_with_session_token(self, owned_market_session):
         from app.fastapi_routes.market_account import _authorization_from_request
 
         mock_request = MagicMock()
@@ -700,7 +700,7 @@ class TestSessionTokenManagement:
         # Use a unique key to avoid collision
         sid = f"test_sid_{id(self)}"
         try:
-            with patch("app.db.session.get_db", side_effect=ImportError("no db")):
+            with patch("app.db.session.get_host_db", side_effect=ImportError("no db")):
                 save_session_market_token(sid, "tok123")
             result = session_market_token(sid)
             assert result == "tok123"
@@ -728,7 +728,7 @@ class TestSessionTokenManagement:
 
         sid = f"test_clear_sid_{id(self)}"
         try:
-            with patch("app.db.session.get_db", side_effect=ImportError("no db")):
+            with patch("app.db.session.get_host_db", side_effect=ImportError("no db")):
                 _MARKET_SESSION_TOKENS[sid] = "tok_to_clear"
             clear_session_market_token(sid)
             result = session_market_token(sid)
@@ -878,7 +878,7 @@ class TestDemoMarketLoginPayload:
 
 
 class TestMarketAuthFromRequest:
-    def test_extracts_auth(self):
+    def test_extracts_auth(self, owned_market_session):
         from app.fastapi_routes.market_account import _market_auth_from_request
 
         mock_request = MagicMock()

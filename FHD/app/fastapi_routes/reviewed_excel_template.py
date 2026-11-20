@@ -59,6 +59,7 @@ from app.application.reviewed_excel_evidence import (
 from app.application.reviewed_excel_review_projection import build_candidate_previews
 from app.application.reviewed_excel_review_store import (
     _CLASS_SAVING,
+    _INTAKE_SOURCE_POLICY,
     _MODEL_PENDING,
     _READY,
     _SAVED,
@@ -2347,12 +2348,17 @@ def reviewed_excel_intake_status(review_id: str, request: Request, user=Depends(
             return {"status": "not_started"}
         if plan.get("mod_id") != mod_id:
             raise HTTPException(status_code=409, detail="业务空间已变化，请重新核对")
+        receipt = load_json(review.receipt_json, {})
+        if plan.get("business_source_policy") != _INTAKE_SOURCE_POLICY and not receipt.get(
+            "intake_request_key"
+        ):
+            return {"status": "not_started", "reason": "preview_policy_changed"}
         _authorize_intake(request, (tenant, owner), plan.get("target_type"))
         business = get_elt_service().get_run(db, run_id=plan["run_id"], owner_user_id=owner)
         return {
             "status": "created",
             "intake": {**plan, "business": business},
-            "auto_ingest": load_json(review.receipt_json, {}).get("auto_ingest"),
+            "auto_ingest": receipt.get("auto_ingest"),
         }
 
 
@@ -2457,10 +2463,11 @@ def reviewed_excel_intake_preview(
             claimed_draft = dump_json(state)
             _cas(db, review, old_draft, expected_status=expected_status, draft_json=claimed_draft)
             old_draft = claimed_draft
-            # The review upload is the template fragment. Database and knowledge
-            # read the classification's archived original, which still has item rows.
+            # Classify the selected fragment before considering archived item rows.
             template_source = _source(db, review, tenant, owner)
             archived = _archived_original(db, review, tenant, owner)
+            from app.application.elt.attendance_pipeline import has_attendance_matrix
+
             chosen = clean_workbook(template_source, review.file_sha256, selected)
             service = get_elt_service()
             upload = service.save_upload(
@@ -2484,15 +2491,19 @@ def reviewed_excel_intake_preview(
                 dataset_from_business_rows,
                 dataset_from_document_text,
                 dynamic_table_candidate,
+                read_candidate_table,
                 read_delivery_note_business,
             )
             from app.application.elt.llm_assist import (
                 advise_business_import,
+                advise_target_classification,
                 audit_intake_calls,
                 elt_llm_enabled,
             )
+            from app.application.elt.target_detection import _KNOWN_TARGETS, _LLM_ACCEPT_CONFIDENCE
 
             original_text = workbook_text(archived)
+            selected_text = workbook_text(template_source)
             from app.application.elt.llm_session_provider import (
                 bind_elt_llm_owner,
                 reset_elt_llm_owner,
@@ -2519,41 +2530,87 @@ def reviewed_excel_intake_preview(
             try:
                 with bind_model_session(model_session), audit_intake_calls(record_intake_call):
                     model_started = True
-                    business_llm = (
-                        advise_business_import(original_text) if elt_llm_enabled() else None
+                    target_llm = (
+                        advise_target_classification(selected_text) if elt_llm_enabled() else None
                     )
+                    classified_target = (
+                        str(target_llm.data.get("target_type") or "") if target_llm else ""
+                    )
+                    classified = bool(
+                        target_llm
+                        and target_llm.used_llm
+                        and not target_llm.degraded
+                        and float(target_llm.data.get("confidence") or 0) >= _LLM_ACCEPT_CONFIDENCE
+                        and classified_target in _KNOWN_TARGETS - {"abnormal"}
+                    )
+                    target_type = classified_target if classified else ""
+                    if not target_type:
+                        # Rules only recover an unavailable/unusable model decision,
+                        # and cannot promote an unrelated sheet in the full archive.
+                        if has_attendance_matrix(template_source):
+                            target_type = "attendance"
+                        elif read_delivery_note_business(template_source) is not None:
+                            target_type = "shipment_records"
+                        else:
+                            confirmed = confirmed_business_table(template_source)
+                            target_type = confirmed[1] if confirmed else ""
+                    try:
+                        _authorize_intake(request, (tenant, owner), target_type)
+                    except HTTPException as exc:
+                        attempt = state["intake_attempt"]
+                        if (
+                            target_type == "attendance"
+                            and exc.status_code == 409
+                            and all(
+                                call["status"] in {"answered", "answered_invalid"}
+                                for call in attempt.get("model_calls", [])
+                            )
+                        ):
+                            # This refusal is final; retain its audit without an
+                            # unknown live claim. Unanswered calls stay protected.
+                            attempt.update(
+                                status="rejected", reason="attendance_workspace_required"
+                            )
+                            state.setdefault("intake_attempt_history", []).append(attempt)
+                            state.pop("intake_attempt")
+                            _cas(
+                                db,
+                                review,
+                                old_draft,
+                                expected_status=expected_status,
+                                draft_json=dump_json(state),
+                            )
+                            attempt_id = ""
+                        raise
+                    business_llm = None
                     ai_table = None
                     dynamic_schema: dict[str, Any] | None = None
-                    if (
-                        business_llm is not None
-                        and business_llm.used_llm
-                        and not business_llm.degraded
-                    ):
-                        ai_table = dataset_from_business_rows(
-                            list(business_llm.data.get("rows") or [])
+                    detection_reason = "target_classify_llm" if classified else "candidate_headers"
+                    if target_type == "shipment_records":
+                        # Filled shipment lines may lie outside the banner selected
+                        # for a template. Only that target may use this archive lane.
+                        business_llm = (
+                            advise_business_import(original_text) if elt_llm_enabled() else None
                         )
-                    delivery = read_delivery_note_business(archived)
-                    if ai_table is not None:
-                        chosen_table = ai_table
-                        target_type = "shipment_records"
-                        detection_reason = "database_llm"
-                    elif delivery is not None:
-                        chosen_table = delivery
-                        target_type = "shipment_records"
-                        detection_reason = "delivery_note_business_rows"
+                        if business_llm and business_llm.used_llm and not business_llm.degraded:
+                            ai_table = dataset_from_business_rows(
+                                list(business_llm.data.get("rows") or [])
+                            )
+                        delivery = read_delivery_note_business(archived)
+                        chosen_table = ai_table or delivery or read_candidate_table(path)
+                        if ai_table is not None:
+                            detection_reason = "database_llm"
+                        elif delivery is not None:
+                            detection_reason = "delivery_note_business_rows"
+                    elif target_type and target_type != "knowledge":
+                        # Honor the candidate's clears; source values are not restored.
+                        chosen_table = read_candidate_table(path)
                     else:
-                        confirmed = confirmed_business_table(path) or confirmed_business_table(
-                            archived
-                        )
-                        dynamic = (
-                            None
-                            if confirmed is not None
-                            else dynamic_table_candidate(path) or dynamic_table_candidate(archived)
-                        )
-                        if confirmed is not None:
-                            chosen_table, target_type = confirmed
-                            detection_reason = "candidate_headers"
-                        elif dynamic is not None:
+                        # The classifier's fixed enum uses knowledge for unknown
+                        # business tables too. Infer the selected, cleaned schema
+                        # before deciding that only document text can be retained.
+                        dynamic = dynamic_table_candidate(path)
+                        if dynamic is not None:
                             # 没有固定业务表时由模型推断结构，写入通用表而不是报错。
                             chosen_table, dynamic_schema = dynamic
                             target_type = "dynamic_table"
@@ -2561,17 +2618,19 @@ def reviewed_excel_intake_preview(
                         else:
                             chosen_table = dataset_from_document_text(original_text, name.strip())
                             target_type = "knowledge"
-                            detection_reason = "archived_document"
+                            if not classified:
+                                detection_reason = "archived_document"
                     from app.application.elt.auto_ingest_service import row_coverage
 
+                    model_advice = business_llm or target_llm
                     detection = {
                         "target_type": target_type,
                         "reason": detection_reason,
                         "confirmed": True,
-                        "llm_lane": "database",
-                        "used_llm": bool(business_llm and business_llm.used_llm),
-                        "degraded": bool(business_llm and business_llm.degraded),
-                        "llm_reason": (business_llm.degradation_code if business_llm else "")
+                        "llm_lane": "database" if business_llm else "target_classify",
+                        "used_llm": bool(model_advice and model_advice.used_llm),
+                        "degraded": bool(model_advice and model_advice.degraded),
+                        "llm_reason": (model_advice.degradation_code if model_advice else "")
                         or (
                             "no_business_rows"
                             if business_llm and business_llm.used_llm and ai_table is None
@@ -2590,6 +2649,10 @@ def reviewed_excel_intake_preview(
                             else [],
                         ),
                     }
+                    if dynamic_schema is not None:
+                        detection.update(
+                            llm_lane="database", used_llm=True, degraded=False, llm_reason=""
+                        )
                     _authorize_intake(request, (tenant, owner), target_type)
                     intake = get_auto_ingest_service()
                     knowledge = intake.knowledge_plan(
@@ -2616,6 +2679,7 @@ def reviewed_excel_intake_preview(
                 "upload_id": upload["upload_id"],
                 "selection_key": key,
                 "source_sha256": review.file_sha256,
+                "business_source_policy": _INTAKE_SOURCE_POLICY,
                 "candidate_sha256": upload["sha256"],
                 "target_type": target_type,
                 "mod_id": mod_id,

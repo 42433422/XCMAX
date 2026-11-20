@@ -51,7 +51,6 @@ vi.mock('@/constants/loginBranding', () => ({
   loginPageTitle: () => 'XCAGI 登录',
   loginPasswordInputPlaceholder: () => '请输入密码',
   marketRegisterUrl: () => 'https://xiu-ci.com/market/register?source=xcagi-desktop',
-  purchaseAuthorizationUrl: () => 'https://xiu-ci.com/#pricing',
 }))
 
 vi.mock('@/constants/accountModBinding', () => ({

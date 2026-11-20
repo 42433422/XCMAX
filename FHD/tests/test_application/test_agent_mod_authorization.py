@@ -151,7 +151,7 @@ def test_authenticated_request_binds_server_session_without_persisting_token(
     assert "secret-session" not in str(context)
 
 
-@pytest.mark.parametrize("invalidity", ["expired", "disabled", "deleted"])
+@pytest.mark.parametrize("invalidity", ["expired", "disabled", "deleted", "personal-plan"])
 def test_background_mod_binding_rejects_invalidated_session(mod_session, invalidity):
     from app.infrastructure.auth.agent_mod_scope import agent_mod_execution_scope
 
@@ -164,6 +164,8 @@ def test_background_mod_binding_rejects_invalidated_session(mod_session, invalid
             row.expires_at = utc_now_naive() - timedelta(seconds=1)
         elif invalidity == "disabled":
             row.user.is_active = False
+        elif invalidity == "personal-plan":
+            row.user.account_tier = "personal"
         else:
             db.delete(row)
     with pytest.raises(AgentModAuthorizationError):
@@ -172,7 +174,10 @@ def test_background_mod_binding_rejects_invalidated_session(mod_session, invalid
 
 
 @pytest.mark.parametrize("token_kind", ["access_token", "refresh_token"])
-def test_mobile_token_binds_only_verified_access_session(mod_session, monkeypatch, token_kind):
+@pytest.mark.parametrize("personal_plan", [False, True])
+def test_mobile_token_binds_only_verified_access_session(
+    mod_session, monkeypatch, token_kind, personal_plan
+):
     from app.infrastructure.auth.agent_principal import require_agent_principal
     from app.security.mobile_jwt import issue_mobile_tokens
 
@@ -180,6 +185,9 @@ def test_mobile_token_binds_only_verified_access_session(mod_session, monkeypatc
     monkeypatch.setattr(
         "app.infrastructure.auth.agent_principal.resolve_session_user", lambda request: None
     )
+    if personal_plan:
+        with mod_session.begin() as db:
+            db.get(User, 1).account_tier = "personal"
     tokens = issue_mobile_tokens(user_id=1, session_id="secret-session", username="mod-owner")
     request = Request(
         {
@@ -194,6 +202,10 @@ def test_mobile_token_binds_only_verified_access_session(mod_session, monkeypatc
         with pytest.raises(HTTPException) as error:
             require_agent_principal(request, x_user_id=None)
         assert error.value.status_code == 401
+    elif personal_plan:
+        with pytest.raises(HTTPException) as error:
+            require_agent_principal(request, x_user_id=None)
+        assert error.value.status_code == 403
     else:
         principal = require_agent_principal(request, x_user_id=None)
         assert principal.mod_authorization["user_id"] == "1"

@@ -45,14 +45,12 @@ def test_desktop_enterprise_installer_builds_full_frontend() -> None:
     sh_thin = (scripts / "build-windows-electron-only.sh").read_text(encoding="utf-8")
     spec = (scripts / "xcagi_backend.spec").read_text(encoding="utf-8")
 
-    assert "personal = 'full'" in ps_backend
-    assert "enterprise = 'full'" in ps_backend
-    assert "build:minimal" not in ps_backend
-    assert "build:generic" not in ps_backend
-    assert "personal   = 'full'" in ps_sync
-    assert "enterprise = 'full'" in ps_sync
-    assert "build:minimal" not in ps_sync
-    assert "build:generic" not in ps_sync
+    assert "[ValidateSet('enterprise', '')]" in ps_backend
+    for script in (ps_backend, ps_sync):
+        assert "$env:VITE_XCAGI_PRODUCT_SKU = 'enterprise'" in script
+        assert "npm run build:full" in script
+        assert "build:minimal" not in script
+        assert "build:generic" not in script
 
     assert "build-installer.ps1" in sh_windows and "-ProductSku" in sh_windows
     for script in (sh_thin,):
@@ -409,7 +407,7 @@ def test_desktop_package_preserves_vendored_langgraph_provenance() -> None:
         assert f'"{module_name}"' in spec
 
 
-def test_windows_package_probes_real_elt_runtime_without_development_dependencies() -> None:
+def test_windows_package_probes_elt_and_smart_turn_without_development_dependencies() -> None:
     spec = (REPO_ROOT / "scripts/package/xcagi_backend.spec").read_text(encoding="utf-8")
     assert 'collect_submodules("defusedxml", on_error="raise")' in spec
     assert 'importlib.util.find_spec("defusedxml") is None' in spec
@@ -419,12 +417,12 @@ def test_windows_package_probes_real_elt_runtime_without_development_dependencie
         for node in entrypoint.body
         if isinstance(node, ast.FunctionDef) and node.name == "_verify_frozen_critical_runtime"
     )
-    assert any(
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id == "_verify_frozen_elt_runtime"
+    probe_calls = {
+        node.func.id
         for node in ast.walk(critical_probe)
-    )
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    }
+    assert {"_verify_frozen_elt_runtime", "load_smart_turn"} <= probe_calls
     for filename in ("build-backend.ps1", "verify-windows-installed-runtime.ps1"):
         script = (REPO_ROOT / "scripts/package" / filename).read_text(encoding="utf-8-sig")
         assert "Start-Process -FilePath $backendExe" in script

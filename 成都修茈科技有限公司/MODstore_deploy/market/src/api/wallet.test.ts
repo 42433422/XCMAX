@@ -57,6 +57,16 @@ describe('wallet api', () => {
 })
 
 describe('payment api', () => {
+  it('preserves allowance outcomes and sends verification only when supplied', async () => {
+    const result = { ok: true, allowance: { status: 'pending', amount_cents: 500, message: '入账待确认' } }
+    vi.mocked(req).mockResolvedValue(result)
+    expect(await payment.activatePersonalPlan()).toEqual(result)
+    expect(req).toHaveBeenLastCalledWith('/api/account/personal-plan', { method: 'POST' })
+    const verification = { email: 'owner@example.com', verification_code: '123456' }
+    expect(await payment.activatePersonalPlan(verification)).toEqual(result)
+    expect(req).toHaveBeenLastCalledWith('/api/account/personal-plan', { method: 'POST', body: JSON.stringify(verification) })
+  })
+
   it('paymentPlans calls req', async () => {
     vi.mocked(req).mockResolvedValue([])
     await payment.paymentPlans()

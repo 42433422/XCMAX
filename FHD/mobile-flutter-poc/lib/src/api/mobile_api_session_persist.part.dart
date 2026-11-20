@@ -37,6 +37,7 @@ abstract class _ApiSessionPersistBase extends _ApiTransportBase {
         accountKind: _readString(data, const [
           'account_kind',
         ]).ifEmpty(fallbackAccountKind),
+        personalPlan: data['personal_plan'] == true,
         userId: _readInt(user, const ['id'], 0),
         marketAccessToken: marketToken,
         marketRefreshToken: _readString(data, const ['market_refresh_token']),
@@ -52,6 +53,7 @@ abstract class _ApiSessionPersistBase extends _ApiTransportBase {
           sessionId: next.sessionId,
           username: next.username,
           accountKind: next.accountKind,
+          personalPlan: next.personalPlan,
           userId: next.userId,
           marketAccessToken: next.marketAccessToken,
           marketRefreshToken: next.marketRefreshToken,
@@ -179,6 +181,7 @@ abstract class _ApiSessionPersistBase extends _ApiTransportBase {
             _readString(payload, const ['account_kind']),
             'enterprise',
           ]),
+          personalPlan: payload['personal_plan'] == true,
           userId: _readInt(user, const ['id'], 0),
         );
       }

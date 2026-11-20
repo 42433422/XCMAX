@@ -20,7 +20,6 @@ import '../../data/offline/mobile_offline_store.dart';
 import '../../models/conversation.dart';
 import '../../policy/mobile_error_policy.dart';
 import '../../policy/avatar_policy.dart';
-import '../../platform/android_record_audio_permission.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_icons.dart';
 import '../../theme/message_avatar_layout.dart';

@@ -156,18 +156,42 @@ class CatalogApi extends MobileApiClient {
 }
 
 Future<void> show(WidgetTester tester, CatalogApi api,
-    {String resource = 'products'}) async {
+    {String resource = 'products', double textScale = 1}) async {
   final repository = MobileRepository(client: api);
   addTearDown(() async {
     await repository.dispose();
     api.dispose();
   });
   await tester.pumpWidget(MaterialApp(
+      builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: TextScaler.linear(textScale)),
+          child: child!),
       home: NativeCatalogScreen(
           repository: repository,
           resource: resource,
           apiBase: 'api/mod/account-erp',
-          title: resource == 'products' ? '产品' : '客户')));
+          title: switch (resource) {
+            'products' => '产品',
+            'shipment-records' => '出货记录',
+            _ => '客户',
+          })));
+  await tester.pumpAndSettle();
+}
+
+Future<void> reveal(WidgetTester tester, Finder target) async {
+  await tester.scrollUntilVisible(target, 160,
+      scrollable: find
+          .descendant(
+              of: find.byType(ListView).last, matching: find.byType(Scrollable))
+          .first);
+  await tester.pumpAndSettle();
+}
+
+Future<void> expandRecord(WidgetTester tester, String title) async {
+  final record = find.text(title);
+  await reveal(tester, record);
+  await tester.tap(record);
   await tester.pumpAndSettle();
 }
 
@@ -222,17 +246,12 @@ void main() {
     expect(api.calls.last.path,
         'api/mod/account-erp/shipment/shipment-records/records');
     expect(api.calls.last.query['unit_name'], '客户甲');
-    await tester.tap(find.text('未打印'));
+    await tester.tap(find.widgetWithText(ChoiceChip, '未打印'));
     await tester.pumpAndSettle();
     expect(find.text('已打印产品'), findsNothing);
-    await tester.scrollUntilVisible(find.text('删除'), 200,
-        scrollable: find
-            .descendant(
-                of: find.byType(ListView).last,
-                matching: find.byType(Scrollable))
-            .first);
-    await tester.ensureVisible(find.widgetWithText(TextButton, '删除'));
-    await tester.pumpAndSettle();
+    expect(find.text('显示 1 条 · 已读取 2 条'), findsOneWidget);
+    await expandRecord(tester, '出货产品');
+    await reveal(tester, find.widgetWithText(TextButton, '删除'));
     await tester.tap(find.text('删除'));
     await tester.pumpAndSettle();
     expect(api.calls.where((c) => c.method != 'GET'), isEmpty);
@@ -241,6 +260,20 @@ void main() {
     final write = api.calls.firstWhere((c) => c.method == 'DELETE');
     expect(write.body, {'id': 9});
     expect(write.query, isEmpty);
+  });
+  testWidgets('shipment search reports empty filtered results', (tester) async {
+    final api = CatalogApi();
+    await show(tester, api, resource: 'shipment-records');
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('客户甲').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '不存在的产品');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+    expect(find.text('显示 0 条 · 已读取 2 条'), findsOneWidget);
+    expect(find.text('没有符合筛选条件的记录'), findsOneWidget);
+    expect(find.text('出货产品'), findsNothing);
   });
   testWidgets('native list supports server search and pagination within Mod',
       (tester) async {
@@ -252,32 +285,30 @@ void main() {
     await tester.testTextInput.receiveAction(TextInputAction.search);
     await tester.pumpAndSettle();
     expect(api.calls.last.query['keyword'], '名称');
-    await tester.scrollUntilVisible(find.text('加载更多'), 200,
-        scrollable: find
-            .descendant(
-                of: find.byType(ListView).last,
-                matching: find.byType(Scrollable))
-            .first);
+    await tester.tap(find.text('选择'));
+    await tester.pumpAndSettle();
+    await reveal(tester, find.byType(Checkbox).first);
+    await tester.tap(find.byType(Checkbox).first);
+    await tester.pumpAndSettle();
+    await reveal(tester, find.text('加载更多'));
     await tester.tap(find.text('加载更多'));
     await tester.pumpAndSettle();
     expect(api.calls.last.path, 'api/mod/account-erp/products/list');
     expect(api.calls.last.query['page'], '2');
     expect(find.text('第二页'), findsOneWidget);
+    expect(find.text('已选择 1 条'), findsOneWidget);
+    expect(tester.widget<Checkbox>(find.byType(Checkbox).first).value, isTrue);
   });
   testWidgets('native edit preserves fields and awaits successful save',
       (tester) async {
     final api = CatalogApi()..saving = Completer();
     await show(tester, api);
-    await tester.tap(find.byTooltip('编辑 产品甲'));
+    await expandRecord(tester, '产品甲');
+    await reveal(tester, find.widgetWithText(FilledButton, '编辑'));
+    await tester.tap(find.widgetWithText(FilledButton, '编辑'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('field-quantity')), findsNothing);
     await tester.enterText(find.byKey(const ValueKey('field-price')), '18.50');
-    await tester.scrollUntilVisible(find.text('保存'), 200,
-        scrollable: find
-            .descendant(
-                of: find.byType(ListView).last,
-                matching: find.byType(Scrollable))
-            .first);
     await tester.tap(find.text('保存'));
     await tester.pump();
     final write = api.calls.last;
@@ -296,8 +327,8 @@ void main() {
       (tester) async {
     final api = CatalogApi();
     await show(tester, api);
-    await tester.ensureVisible(find.widgetWithText(TextButton, '删除'));
-    await tester.pumpAndSettle();
+    await expandRecord(tester, '产品甲');
+    await reveal(tester, find.widgetWithText(TextButton, '删除'));
     await tester.tap(find.text('删除'));
     await tester.pumpAndSettle();
     expect(api.calls.where((c) => c.method != 'GET'), isEmpty);
@@ -308,8 +339,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(
         tester
-            .widget<IconButton>(
-                find.widgetWithIcon(IconButton, Icons.edit_outlined))
+            .widget<FilledButton>(find.widgetWithText(FilledButton, '编辑'))
             .onPressed,
         isNull);
     expect(
@@ -322,14 +352,10 @@ void main() {
       (tester) async {
     final api = CatalogApi()..saving = Completer();
     await show(tester, api);
-    await tester.tap(find.byTooltip('编辑 产品甲'));
+    await expandRecord(tester, '产品甲');
+    await reveal(tester, find.widgetWithText(FilledButton, '编辑'));
+    await tester.tap(find.widgetWithText(FilledButton, '编辑'));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('保存'), 200,
-        scrollable: find
-            .descendant(
-                of: find.byType(ListView).last,
-                matching: find.byType(Scrollable))
-            .first);
     await tester.tap(find.text('保存'));
     await tester.pump();
     await api.clearActiveAuth();
@@ -339,5 +365,27 @@ void main() {
     api.saving!.complete({'success': true});
     await tester.pumpAndSettle();
     expect(find.text('产品甲'), findsNothing);
+  });
+  testWidgets('catalog editor keeps saving reachable with a keyboard',
+      (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(320, 640);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetViewInsets);
+    final api = CatalogApi();
+    await show(tester, api, textScale: 2);
+    await tester.tap(find.text('新建'));
+    await tester.pumpAndSettle();
+    await tester.showKeyboard(find.byKey(const ValueKey('field-name')));
+    tester.view.viewInsets = const FakeViewPadding(bottom: 260);
+    await tester.pumpAndSettle();
+    final save = find.widgetWithText(FilledButton, '保存');
+    expect(save.hitTestable(), findsOneWidget);
+    await tester.tap(save);
+    await tester.pumpAndSettle();
+    expect(find.text('请输入所属客户'), findsOneWidget);
+    expect(api.calls.where((call) => call.method != 'GET'), isEmpty);
+    expect(tester.takeException(), isNull);
   });
 }

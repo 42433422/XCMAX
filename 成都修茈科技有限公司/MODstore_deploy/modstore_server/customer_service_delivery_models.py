@@ -129,6 +129,39 @@ def custom_delivery_evidence(ticket: CustomerServiceTicket) -> dict[str, Any]:
     return evidence if isinstance(evidence, dict) else {}
 
 
+def current_delivery_run(evidence: dict[str, Any]) -> dict[str, Any]:
+    """An explicit generation wins; initial production may only have a runs entry."""
+    runs = [
+        row for row in evidence.get("runs") or [] if isinstance(row, dict) and row.get("session_id")
+    ]
+    generation = str(evidence.get("delivery_generation") or "")
+    if generation:
+        return next(
+            (row for row in reversed(runs) if row.get("session_id") == generation),
+            {"session_id": generation},
+        )
+    return runs[-1] if runs else {}
+
+
+def delivery_snapshot_matches(
+    snapshot: dict[str, Any] | None, ticket: CustomerServiceTicket, generation: str
+) -> bool:
+    if (
+        not snapshot
+        or snapshot.get("id") != generation
+        or snapshot.get("user_id") != ticket.user_id
+        or (snapshot.get("ticket_id") is not None and snapshot["ticket_id"] != ticket.id)
+    ):
+        return False
+    scope = snapshot.get("source_scope")
+    return scope is None or (
+        isinstance(scope, dict)
+        and scope.get("owner_user_id") == ticket.user_id
+        and scope.get("session_id") == generation
+        and scope.get("ticket_id") == ticket.id
+    )
+
+
 def custom_delivery_brief(evidence: dict[str, Any], rework_note: str = "") -> str:
     kind_labels = {
         "module": "定制业务模块",

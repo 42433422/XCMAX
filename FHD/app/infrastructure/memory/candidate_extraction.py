@@ -1,4 +1,4 @@
-"""Mem0 extraction and LangChain parsing; outputs require MemoryV2 confirmation."""
+"""Mem0 extraction and LangChain parsing for governed MemoryV2 writes."""
 
 from __future__ import annotations
 
@@ -49,12 +49,12 @@ def extract_candidates(user_message: str) -> list[dict[str, Any]] | None:
             "project, subject, negation, and applicable date in every statement. "
             "Keep separate projects and time periods separate. Never infer a "
             "project-wide value from an unscoped example. Use memory_type=preference "
-            "only for a stated personal preference; use subject=user only when the "
-            "speaker explicitly describes their own preference. Company/customer "
+            "only for a stated personal preference. Use subject=user only when the "
+            "speaker directly states a durable fact about themselves or their own preference. "
+            "Keep project or company facts tied to their named subject. Company/customer "
             "preferences retain their named subject and must not become user preferences. "
             "Use memory_type=entity for business facts. Return an empty memory "
-            "array when there are no asserted facts. All results are unconfirmed "
-            "candidates for human review. Return at most eight memories.\n"
+            "array when there are no asserted facts. Return at most eight memories.\n"
             + parser.get_format_instructions()
         )
         prompt = generate_additive_extraction_prompt(

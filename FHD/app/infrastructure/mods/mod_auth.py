@@ -13,6 +13,7 @@ from starlette.requests import Request as StarletteRequest
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from app.infrastructure.auth.dependencies import session_id_from_request
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -149,12 +150,26 @@ class ModContextMiddleware:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
-        from app.enterprise.mod_entitlements import request_entitlement_scope
+        from app.enterprise.mod_entitlements import (
+            mobile_token_has_personal_plan,
+            request_entitlement_scope,
+            session_has_personal_plan,
+        )
 
-        with request_entitlement_scope():
-            await self._dispatch(scope, receive, send)
+        request = StarletteRequest(scope)
+        sid = session_id_from_request(request)
+        authorization = request.headers.get("Authorization", "")
+        bearer = authorization[7:].strip() if authorization.startswith("Bearer ") else ""
+        personal_plan = bool(
+            (sid and session_has_personal_plan(sid))
+            or (bearer and bearer != sid and mobile_token_has_personal_plan(bearer))
+        )
+        with request_entitlement_scope(personal_plan=personal_plan):
+            await self._dispatch(scope, receive, send, personal_plan=personal_plan)
 
-    async def _dispatch(self, scope: Scope, receive: Receive, send: Send) -> None:
+    async def _dispatch(
+        self, scope: Scope, receive: Receive, send: Send, *, personal_plan: bool = False
+    ) -> None:
         request = StarletteRequest(scope, receive)
         mod_context = ModContext()
         token = None
@@ -170,8 +185,7 @@ class ModContextMiddleware:
                 mod_context = self._mod_context_from_path(str(scope.get("path") or ""))
             if mod_context.mod_id:
                 try:
-                    cookie_name = os.environ.get("SESSION_COOKIE_NAME", "session_id")
-                    sid = (request.cookies.get(cookie_name) or "").strip()
+                    sid = session_id_from_request(request)
                     from app.enterprise.mod_entitlements import (
                         enterprise_mod_filter_active,
                         is_client_mod_id,
@@ -179,7 +193,7 @@ class ModContextMiddleware:
                         sync_entitlements_for_session,
                     )
 
-                    if enterprise_mod_filter_active():
+                    if personal_plan or enterprise_mod_filter_active():
                         from app.mod_sdk.industry_seed import open_industry_seed_mod_ids
 
                         if sid:

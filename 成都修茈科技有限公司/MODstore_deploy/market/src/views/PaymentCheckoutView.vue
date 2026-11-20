@@ -91,9 +91,8 @@
           <div class="success-icon">✓</div>
           <h2 class="success-title">支付成功</h2>
           <p v-if="isCustomDeliveryOrder" class="success-desc">定制交付收款已确认，生产员工将自动开始本次新增开发。</p>
-          <p v-else-if="isAccountLicenseOrder" class="success-desc">你的 XCAGI 方案已生效，现在可以回到桌面端登录使用。</p>
+          <p v-else-if="isAccountLicenseOrder" class="success-desc">你的 XCAGI 方案已生效，请回到 XCAGI 登录。</p>
           <p v-else class="success-desc">你购买的内容已到账，可以开始使用。</p>
-          <p v-if="isAccountLicenseOrder" class="success-desc success-desc--desktop">现在可以回到 XCAGI 桌面端，使用这个账号登录。</p>
           <div class="success-actions">
             <router-link v-if="isCustomDeliveryOrder" to="/deliveries" class="btn btn-primary">返回我的交付</router-link>
             <router-link to="/wallet" class="btn btn-primary">查看订单与账户</router-link>

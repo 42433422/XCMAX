@@ -328,6 +328,7 @@ def _summary(data: dict) -> dict[str, Any]:
         "run_id": data.get("id"),
         "target_type": data.get("target_type"),
         "status": data.get("status"),
+        "preview_revision": data.get("preview_revision"),
         "stage": data.get("stage"),
         "total_rows": data.get("total_rows"),
         "new_rows": data.get("summary", {}).get("new"),
@@ -337,6 +338,7 @@ def _summary(data: dict) -> dict[str, Any]:
         "executed_rows": data.get("summary", {}).get("executed"),
         "error": data.get("error"),
         "reversible": data.get("reversible"),
+        "customer_products": _linked_companion_preview(data),
     }
 
 
@@ -1133,6 +1135,7 @@ def _preview(params: dict, runtime_context: dict) -> dict:
         runtime_context=runtime_context,
     )
     summary = _summary(data)
+    summary["customer_products"] = _read_linked_companion(service, actor, data)
     if not summary.get("target_type"):
         summary["target_type"] = target_type
     summary["template_id"] = str(template.get("id") or "")
@@ -1190,6 +1193,7 @@ def _preview(params: dict, runtime_context: dict) -> dict:
             )
         if blockers:
             message += "".join(blockers)
+        message += _companion_note(summary["customer_products"])
     # 预演发现阻断项时，契约要求编排在此暂停询问用户，而不是继续执行后失败。
     requires_decision = ok and not summary["executable"]
     resume_params: dict[str, Any] = {}
@@ -1353,6 +1357,21 @@ def _execute(params: dict, runtime_context: dict) -> dict:
             # 自动审批档下预演可能已经触发入库（executing/completed）：
             # 计划里的执行步骤只需等待或收口，重复调用 execute 会报「请先完成预演再执行」。
             if status not in ("executing", "completed"):
+                revisions = params.get("preview_revisions")
+                confirmed_revision = str(
+                    (revisions.get(run_id) if isinstance(revisions, dict) else None)
+                    or params.get("preview_revision")
+                    or ""
+                )
+                linked = (current.get("draft") or {}).get("linked_preview")
+                if (linked and not confirmed_revision) or (
+                    confirmed_revision and confirmed_revision != revision
+                ):
+                    raise EltError(
+                        "ELT_PREVIEW_CHANGED",
+                        "请单独核对当前预演的目标、行数及映射，并确认对应 preview_revision 后执行。"
+                        f"可发送新消息：查看导入预演，run_id={run_id}",
+                    )
                 service.execute(
                     db,
                     run_id=run_id,
@@ -1374,15 +1393,13 @@ def _execute(params: dict, runtime_context: dict) -> dict:
     )
     summary = _summary(data)
     ok = data.get("status") == "completed"
-    companion = _execute_linked_companion(service, actor, data, runtime_context) if ok else {}
-    if companion:
-        summary["customer_products"] = companion
+    summary["customer_products"] = _read_linked_companion(service, actor, data)
     # 业务数据已入库；知识库与模板库并行写，一个慢或失败不影响另一个。
     knowledge, template, notes = _finalize_import(data, actor.id) if ok else ({}, {}, "")
     summary["knowledge"] = knowledge
     summary["template"] = template
     message = (
-        _execution_message(summary, notes + _companion_note(companion))
+        _execution_message(summary, notes + _companion_note(summary["customer_products"]))
         if ok
         else f"ELT 导入未完成：{summary.get('error') or data.get('stage')}"
     )
@@ -1394,65 +1411,108 @@ def _execute(params: dict, runtime_context: dict) -> dict:
     }
 
 
-def _execute_linked_companion(
-    service, actor, data: dict, runtime_context: dict[str, Any] | None = None
-) -> dict[str, Any]:
-    """同一文件附表生成的「客户及产品」预演，在主运单执行时一并落库。
-
-    只预演不执行会让客户库/产品库永远没有数据，而用户看到的是「导入完成」。
-    """
-    from app.application.elt.errors import EltError
-
+def _linked_companion_preview(data: dict) -> dict[str, Any]:
+    """Disclose the separate target without inheriting shipment execution consent."""
     raw_details = data.get("details")
     details = raw_details if isinstance(raw_details, dict) else {}
     link = details.get("linked_customer_products_preview") or {}
     if not isinstance(link, dict):
         return {}
     run_id = str(link.get("run_id") or "")
-    if not run_id or str(link.get("status") or "") != "preview_ready":
+    if not run_id:
         return {}
+    return {
+        "run_id": run_id,
+        "target_type": "customer_products",
+        "status": str(link.get("status") or "queued"),
+        "preview_revision": link.get("preview_revision"),
+        "total_rows": link.get("total_rows"),
+        "summary": link.get("summary") or {},
+        "preview_only": link.get("status") in PREVIEW_PENDING | {"preview_ready"},
+        "requires_user_confirmation": link.get("status") == "preview_ready",
+    }
+
+
+def _read_linked_companion(service, actor, data: dict) -> dict[str, Any]:
+    link = _linked_companion_preview(data)
+    if not link:
+        return {}
+    from app.application.elt.errors import EltError
+
     try:
         with get_db() as db:
-            current = service.get_run(db, run_id=run_id, owner_user_id=actor.id)
-            if str(current.get("status") or "") != "preview_ready":
-                return {}
-            revision = str(current.get("preview_revision") or "")
-            service.execute(
-                db,
-                run_id=run_id,
-                owner_user_id=actor.id,
-                confirmed=True,
-                # 附表通常夹杂非客户/产品行，只写校验通过的行，避免整批被阻断。
-                valid_rows_only=True,
-                preview_revision=revision or None,
-                accept_suggested=True,
-            )
-        waited = _wait(
-            service,
-            run_id,
-            actor.id,
-            pending=EXECUTION_PENDING,
-            timeout=30.0,
-            runtime_context=runtime_context,
-        )
+            child = service.get_run(db, run_id=link["run_id"], owner_user_id=actor.id)
+        if child.get("target_type") != "customer_products" or (
+            child.get("draft", {}).get("linked_preview") or {}
+        ).get("parent_run_id") != data.get("id"):
+            return {"run_id": link["run_id"], "status": "unavailable"}
+        return _review_summary(child)
     except EltError:
-        return {"run_id": run_id, "status": "failed"}
-    result = _summary(waited)
-    result["run_id"] = run_id
-    return result
+        return {"run_id": link["run_id"], "status": "unavailable"}
+
+
+def _review_summary(data: dict) -> dict[str, Any]:
+    return {
+        **_summary(data),
+        "mapping_pending": [
+            f"{item.get('source') or '未指定来源'} → {item.get('target') or '未指定字段'}"
+            for item in _pending_mappings(data)
+        ],
+        "preview_only": data.get("status") in PREVIEW_PENDING | {"preview_ready"},
+        "requires_user_confirmation": data.get("status") == "preview_ready",
+    }
+
+
+def _review_existing(run_id: str, runtime_context: dict) -> dict:
+    """Read an owned existing preview even in auto mode; never create or execute it."""
+    from app.application.elt.errors import EltError
+    from app.application.elt.service import get_elt_service
+
+    actor = _bound_actor(runtime_context)
+    service = get_elt_service()
+    try:
+        with get_db() as db:
+            data = service.get_run(db, run_id=run_id, owner_user_id=actor.id)
+        summary = _review_summary(data)
+        companion = _read_linked_companion(service, actor, data)
+        summary["customer_products"] = companion
+        message = (
+            _companion_note(summary)
+            if (data.get("draft") or {}).get("linked_preview")
+            else f"导入目标「{summary['target_type']}」，状态 {summary['status']}"
+            + _companion_note(companion)
+        )
+        return {"success": True, "preview": True, "message": message, "data": summary}
+    except EltError as exc:
+        return {"success": False, "error_code": exc.code, "message": exc.message}
 
 
 def _companion_note(companion: dict) -> str:
     if not companion:
         return ""
-    if companion.get("status") != "completed":
-        return "；客户及产品未能写入，请到数据对接中心重试"
-    executed = int(companion.get("executed_rows") or 0)
-    skipped = int(companion.get("skip_rows") or 0)
-    errors = int(companion.get("error_rows") or 0)
-    note = f"；客户及产品写入 {executed} 行"
-    if skipped or errors:
-        note += f"（重复跳过 {skipped} 行，非客户/产品 {errors} 行已忽略）"
+    status = companion.get("status")
+    if status == "completed":
+        return f"；客户及产品已写入 {int(companion.get('executed_rows') or 0)} 行，跳过 {int(companion.get('skip_rows') or 0)} 行"
+    if status != "preview_ready":
+        return (
+            f"；附表客户及产品的独立处理状态：{status}。可发送新消息只读核对："
+            f"查看导入预演，run_id={companion['run_id']}"
+        )
+    note = (
+        f"；附表客户及产品仅预演，共 {int(companion.get('total_rows') or 0)} 行，"
+        f"拟写入 {int(companion.get('new_rows') or 0) + int(companion.get('update_rows') or 0)} 行，"
+        f"重复跳过 {int(companion.get('skip_rows') or 0)} 行，错误 {int(companion.get('error_rows') or 0)} 行，"
+        "未随本次出货写入，需单独确认"
+    )
+    revision = companion.get("preview_revision")
+    if revision:
+        mappings = companion.get("mapping_pending") or []
+        mapping_note = f"，接受建议映射（{'、'.join(mappings)}）" if mappings else ""
+        note += (
+            "。核对后可发送新消息：确认导入附表客户及产品，"
+            f"run_id={companion['run_id']}，preview_revision={revision}，"
+            f"仅写入校验通过的行{mapping_note}"
+        )
     return note
 
 
@@ -1468,6 +1528,8 @@ def _registered_router_elt_import(
         }
     payload = dict(params or {})
     if action == "preview":
+        if run_id := str(payload.get("run_id") or "").strip():
+            return _review_existing(run_id, runtime_context)
         paths = _split_paths(payload.get("file_paths"))
         if not paths and not str(payload.get("file_path") or "").strip():
             # 用户说「导入」但模型只看到被截断的附件清单时，按本轮上传的全部文件预演，
@@ -1688,6 +1750,9 @@ def _preview_batch(paths: list[str], payload: dict, runtime_context: dict) -> di
             runtime_context,
         )
         message += f"；已自动入库 {execution.get('done_count', 0)} 个"
+    message += "".join(
+        _companion_note((item.get("data") or {}).get("customer_products") or {}) for item in ready
+    )
     return {
         "success": bool(ready),
         "batch": True,
@@ -1758,6 +1823,9 @@ def _execute_batch(run_ids: list[str], payload: dict, runtime_context: dict) -> 
     deferred_count = total - processed
     if deferred_count:
         message += f"；剩余 {deferred_count} 个预演超出本轮时间预算，请回复「继续导入」"
+    message += "".join(
+        _companion_note((item.get("data") or {}).get("customer_products") or {}) for item in done
+    )
     return {
         "success": bool(done),
         "batch": True,

@@ -124,6 +124,24 @@ describe('packaged backend build identity resource handoff', () => {
     expect(options.env.XCAGI_PARENT_PID).toBe(String(process.pid))
   })
 
+  it('hands an unguessable process capability to every backend restart without logging or accepting an inherited value', async () => {
+    vi.stubEnv('XCAGI_DESKTOP_WORKSPACE_TOKEN', 'inherited-public-value')
+    await startBackend()
+    const [command, args, first] = state.spawn.mock.calls[0]
+    const token = first.env.XCAGI_DESKTOP_WORKSPACE_TOKEN
+    expect(token).toMatch(/^[0-9a-f]{64}$/)
+    expect(token).not.toBe(process.env.XCAGI_DESKTOP_WORKSPACE_TOKEN)
+    expect(JSON.stringify([command, args])).not.toContain(token)
+    desktopRuntime.backendProcess = null
+    await startBackend()
+    expect(state.spawn.mock.calls[1][2].env.XCAGI_DESKTOP_WORKSPACE_TOKEN).toBe(token)
+    const stream = desktopRuntime.backendLogStream
+    if (stream) await new Promise<void>(resolve => stream.write('', () => resolve()))
+    for (const name of fs.readdirSync(path.join(state.userData, 'logs'))) {
+      expect(fs.readFileSync(path.join(state.userData, 'logs', name), 'utf8')).not.toContain(token)
+    }
+  })
+
   it.each([
     { defaultApp: true, appPackaged: true, packaged: false },
     { defaultApp: true, appPackaged: false, packaged: false },

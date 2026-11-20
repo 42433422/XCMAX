@@ -166,7 +166,7 @@ curl -X POST "http://127.0.0.1:5000/api/mod-store/bootstrap-edition-pack?edition
 ```powershell
 powershell -File scripts/dev/adcdfg_acceptance.ps1
 powershell -File scripts/dev/deliverable_smoke.ps1
-powershell -File scripts/package/build-all-skus.ps1 -Version 1.0.0.0
+powershell -File scripts/package/build-installer.ps1
 ```
 
 完整清单：[DELIVERABLE_PRODUCT.md](DELIVERABLE_PRODUCT.md)

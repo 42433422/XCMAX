@@ -1610,7 +1610,7 @@ class TestConversationPrompt:
 
 
 class TestConversationPerm:
-    def test_default_acceptEdits(self, tmp_path, monkeypatch) -> None:
+    def test_default_accept_edits(self, tmp_path, monkeypatch) -> None:
         monkeypatch.delenv("DEVFLEET_CLAUDE_PERMISSION_MODE", raising=False)
         svc = _make_svc(tmp_path, cli_runner=_null_runner)
         assert svc._conversation_perm() == "acceptEdits"

@@ -10,7 +10,12 @@ from typing import Any
 from app.db.models.tenant import Tenant
 from app.db.models.user import User
 from app.db.session import get_host_db as get_db
-from app.infrastructure.billing.saas_plans import is_saas_plan_id, plan_by_id, trial_days
+from app.infrastructure.billing.saas_plans import (
+    PERSONAL_PLAN_ID,
+    is_saas_plan_id,
+    plan_by_id,
+    trial_days,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.time import utc_now_naive
 
@@ -141,6 +146,9 @@ def subscription_status_for_user(user_id: int) -> dict[str, Any]:
         except RECOVERABLE_ERRORS:
             logger.debug("surface audit demo subscription bypass skipped", exc_info=True)
 
+        if user.account_tier == "personal":
+            return {"active": True, "reason": "personal_plan", "plan_id": PERSONAL_PLAN_ID}
+
         tenant: Tenant | None = None
         if user.tenant_id:
             tenant = db.query(Tenant).filter(Tenant.id == int(user.tenant_id)).first()
@@ -222,7 +230,13 @@ def apply_paid_plan_for_user(*, user_id: int, plan_id: str) -> bool:
     plan = plan_by_id(plan_id) or {}
     with get_db() as db:
         user = db.query(User).filter(User.id == int(user_id)).first()
-        if not user or not user.tenant_id:
+        if not user:
+            return False
+        if plan_id == PERSONAL_PLAN_ID:
+            user.account_tier = "personal"
+            db.commit()
+            return True
+        if not user.tenant_id:
             return False
         tenant_id = int(user.tenant_id)
         tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()

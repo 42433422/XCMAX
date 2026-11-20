@@ -37,6 +37,11 @@ def _sys(stmt: Select) -> Select:
     return stmt.execution_options(**_SYS_READ)
 
 
+def _for_tenant(stmt: Select, tenant_column: Any, tenant_id: int | None) -> Select:
+    """Every skip_tenant_filter query must enforce its own tenant boundary."""
+    return stmt.where(tenant_column.is_(None) if tenant_id is None else tenant_column == tenant_id)
+
+
 def _open_session():
     from app.db import SessionLocal
 
@@ -65,10 +70,18 @@ def _normalize_contact_key(value: Any) -> str:
     return str(value or "").strip()[:128]
 
 
-def _dedupe_hash(contact_key: str, role: str, content: str, client_seq: int | None) -> str:
-    """幂等指纹：本机为每条新消息分配单调 client_seq（含同文重复），缺省退化为内容指纹。"""
+def _dedupe_hash(
+    contact_key: str,
+    role: str,
+    content: str,
+    client_seq: int | None,
+    tenant_id: int | None = None,
+) -> str:
+    """Namespace new fingerprints by tenant while retaining the legacy format for replay."""
     seq_part = str(client_seq) if client_seq is not None else ""
     raw = f"{contact_key}|{seq_part}|{role}|{content}"
+    if tenant_id is not None:
+        raw = f"tenant:{tenant_id}|{raw}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
@@ -76,11 +89,15 @@ def _match_customer(session: Any, display_name: str, tenant_id: int | None) -> C
     name = str(display_name or "").strip()
     if not name:
         return None
-    stmt = _sys(
-        select(Customer).where(or_(Customer.customer_name == name, Customer.contact_person == name))
+    stmt = _for_tenant(
+        _sys(
+            select(Customer).where(
+                or_(Customer.customer_name == name, Customer.contact_person == name)
+            )
+        ),
+        Customer.tenant_id,
+        tenant_id,
     )
-    if tenant_id is not None:
-        stmt = stmt.where(Customer.tenant_id == tenant_id)
     row: Customer | None = session.scalars(stmt.order_by(Customer.id).limit(1)).first()
     return cast("Customer | None", row)
 
@@ -93,9 +110,11 @@ def _upsert_contact(
     wxid: str | None,
     tenant_id: int | None,
 ) -> WechatContact:
-    stmt = _sys(select(WechatContact).where(WechatContact.contact_key == contact_key))
-    if tenant_id is not None:
-        stmt = stmt.where(WechatContact.tenant_id == tenant_id)
+    stmt = _for_tenant(
+        _sys(select(WechatContact).where(WechatContact.contact_key == contact_key)),
+        WechatContact.tenant_id,
+        tenant_id,
+    )
     contact = session.scalars(stmt.limit(1)).first()
     if contact is None:
         contact = WechatContact(
@@ -137,9 +156,14 @@ def _insert_message(
     client_seq: int | None = None,
 ) -> bool:
     """幂等插入：dedupe_hash 冲突视为重复，返回是否新插入。"""
-    dedupe = _dedupe_hash(contact.contact_key, role, content, client_seq)
+    dedupe = _dedupe_hash(contact.contact_key, role, content, client_seq, tenant_id)
+    legacy = _dedupe_hash(contact.contact_key, role, content, client_seq)
     existing = session.scalars(
-        _sys(select(WechatMessage.id).where(WechatMessage.dedupe_hash == dedupe).limit(1))
+        _sys(
+            _for_tenant(select(WechatMessage.id), WechatMessage.tenant_id, tenant_id)
+            .where(WechatMessage.dedupe_hash.in_((dedupe, legacy)))
+            .limit(1)
+        )
     ).first()
     if existing is not None:
         return False
@@ -236,7 +260,13 @@ def ingest_wechat_payload(payload: dict[str, Any], *, session: Any = None) -> di
             if source not in _VALID_SOURCES:
                 source = "db"
             contact = session.scalars(
-                _sys(select(WechatContact).where(WechatContact.contact_key == key).limit(1))
+                _sys(
+                    _for_tenant(
+                        select(WechatContact).where(WechatContact.contact_key == key),
+                        WechatContact.tenant_id,
+                        tenant_id,
+                    ).limit(1)
+                )
             ).first()
             if contact is None:
                 contact = _upsert_contact(
@@ -305,9 +335,11 @@ def build_contact_context(
     if owned:
         session = _open_session()
     try:
-        stmt = _sys(select(WechatContact).where(WechatContact.contact_key == key))
-        if tenant_id is not None:
-            stmt = stmt.where(WechatContact.tenant_id == tenant_id)
+        stmt = _for_tenant(
+            _sys(select(WechatContact).where(WechatContact.contact_key == key)),
+            WechatContact.tenant_id,
+            tenant_id,
+        )
         contact = session.scalars(stmt.limit(1)).first()
         if contact is None:
             return {"success": True, "known": False, "contact_key": key}
@@ -315,7 +347,13 @@ def build_contact_context(
         customer_payload: dict[str, Any] | None = None
         if contact.customer_id:
             customer = session.scalars(
-                _sys(select(Customer).where(Customer.id == contact.customer_id).limit(1))
+                _sys(
+                    _for_tenant(
+                        select(Customer).where(Customer.id == contact.customer_id),
+                        Customer.tenant_id,
+                        contact.tenant_id,
+                    ).limit(1)
+                )
             ).first()
             if customer is not None:
                 customer_payload = {
@@ -331,8 +369,11 @@ def build_contact_context(
         if include_messages:
             rows = session.scalars(
                 _sys(
-                    select(WechatMessage)
-                    .where(WechatMessage.contact_id == contact.id)
+                    _for_tenant(
+                        select(WechatMessage).where(WechatMessage.contact_id == contact.id),
+                        WechatMessage.tenant_id,
+                        contact.tenant_id,
+                    )
                     .order_by(WechatMessage.msg_ts.desc(), WechatMessage.id.desc())
                     .limit(max(1, min(int(limit), 200)))
                 )
@@ -350,9 +391,13 @@ def build_contact_context(
         message_count = int(
             session.scalar(
                 _sys(
-                    select(func.count())
-                    .select_from(WechatMessage)
-                    .where(WechatMessage.contact_id == contact.id)
+                    _for_tenant(
+                        select(func.count())
+                        .select_from(WechatMessage)
+                        .where(WechatMessage.contact_id == contact.id),
+                        WechatMessage.tenant_id,
+                        contact.tenant_id,
+                    )
                 )
             )
             or 0
@@ -424,13 +469,27 @@ def link_wechat_contact(
     if owned:
         session = _open_session()
     try:
-        contact = session.scalars(
-            _sys(select(WechatContact).where(WechatContact.contact_key == key).limit(1))
-        ).first()
-        if contact is None:
+        stmt = _sys(select(WechatContact).where(WechatContact.contact_key == key))
+        if tenant_id is not None:
+            stmt = stmt.where(WechatContact.tenant_id == tenant_id)
+        contacts = session.scalars(stmt.limit(2)).all()
+        if len(contacts) > 1:
+            return {
+                "success": False,
+                "message": "tenant_id required for ambiguous contact",
+                "error_code": "ambiguous_tenant",
+            }
+        if not contacts:
             return {"success": False, "message": "contact not found", "error_code": "not_found"}
+        contact = contacts[0]
         customer = session.scalars(
-            _sys(select(Customer).where(Customer.id == int(customer_id)).limit(1))
+            _sys(
+                _for_tenant(
+                    select(Customer).where(Customer.id == int(customer_id)),
+                    Customer.tenant_id,
+                    contact.tenant_id,
+                ).limit(1)
+            )
         ).first()
         if customer is None:
             return {"success": False, "message": "customer not found", "error_code": "not_found"}

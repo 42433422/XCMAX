@@ -1530,32 +1530,43 @@ class TestServiceExecution:
 
 class TestServicePreview:
     def test_create_preview_simple(self, elt_db, svc, app_data, fake_adapter, no_background):
-        up = _make_upload_file(app_data, elt_db, id="upx", file_name="a.xlsx")
+        _make_upload_file(app_data, elt_db, id="upx", file_name="a.xlsx")
+        _make_template(elt_db, id="tpl1", target_type="shipment_records")
         fake_adapter.type = "shipment_records"
         run = svc.create_preview(
             elt_db,
             owner_user_id=1,
             upload_id="upx",
             target_type="shipment_records",
+            template_id="tpl1",
         )
         assert run["id"]
-        assert elt_db.query(EltRun).filter(EltRun.upload_id == "upx").count() >= 1
+        assert elt_db.query(EltRun).filter(EltRun.upload_id == "upx").count() == 1
 
+    @pytest.mark.parametrize("template_id", [None, "tpl1"])
     def test_create_preview_auto_detection(
-        self, elt_db, svc, app_data, fake_adapter, no_background, monkeypatch
+        self, elt_db, svc, app_data, fake_adapter, no_background, monkeypatch, template_id
     ):
         up = _make_upload_file(app_data, elt_db, id="upx", file_name="a.xlsx")
+        _make_template(elt_db, id="tpl1", target_type="shipment_records")
         detect = MagicMock(return_value={"target_type": "shipment_records"})
         monkeypatch.setattr(
             "app.application.elt.target_detection.detect_elt_target",
             detect,
         )
         fake_adapter.type = "shipment_records"
-        run = svc.create_preview(elt_db, owner_user_id=1, upload_id="upx", target_type="auto")
-        assert run["id"]
+        run = svc.create_preview(
+            elt_db, owner_user_id=1, upload_id="upx", target_type="auto", template_id=template_id
+        )
         detect.assert_called_once_with(
             up.storage_path, suffix=up.suffix, owner_user_id=up.owner_user_id
         )
+        parent = elt_db.get(EltRun, run["id"])
+        link = load_json(parent.summary_json, {})["linked_customer_products_preview"]
+        child = elt_db.get(EltRun, link["run_id"])
+        assert parent.template_id == template_id
+        assert child.target_type == "customer_products" and child.template_id is None
+        assert child.upload_id == parent.upload_id and child.status == "queued"
 
     def test_create_preview_knowledge_only_rejected(
         self, elt_db, svc, app_data, fake_adapter, no_background

@@ -118,6 +118,7 @@ class PreviewWorkerMixin:
                     upload.storage_path,
                     target_type=run.target_type,
                     compatibility_preset_id=compatibility_preset_id or None,
+                    source_file_name=upload.file_name,
                 )
                 run.stage = "loading"
                 self._persist_source_snapshot(db, run, dataset)
@@ -199,10 +200,11 @@ class PreviewWorkerMixin:
                     "outcome": "preview_ready",
                 },
             )
-            self._update_linked_companion_summary(db, run, status="preview_ready")
             if int(run.total_rows or 0) > 0:
                 publish_preview(db, run)
             finish_operation(db, operation)
+            db.refresh(run)
+            self._update_linked_companion_summary(db, run, status="preview_ready")
             db.commit()
             self._record_preview_metrics(run, started_at, status="success")
         except BOUNDARY_ERRORS as exc:  # Background task boundary has no HTTP error handler.

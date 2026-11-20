@@ -73,20 +73,6 @@ class CandidateGovernance(Protocol):
     ) -> JsonObject: ...
 
 
-class CandidateProposal(Protocol):
-    def __call__(
-        self,
-        user_id: str,
-        memory_type: str,
-        key: str,
-        value: Any,
-        *,
-        source: str = "agent_observation",
-        confidence: float = 0.5,
-        evidence: list[JsonObject] | None = None,
-    ) -> JsonObject: ...
-
-
 class MemoryStatusUpdate(Protocol):
     def __call__(
         self, user_id: str, memory_id: str, status: str, *, reason: str = ""

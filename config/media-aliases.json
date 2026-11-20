@@ -2,6 +2,7 @@
   "schema": "xcmax.media-aliases/v1",
   "note": "Only exact publication/build aliases. Canonical product media remain tracked; acceptance evidence uses its separate reviewed manifest.",
   "aliases": {
+    "FHD/mobile-flutter-poc/ohos/AppScope/resources/base/media/app_icon.png": {"scope":"harmony","source":"FHD/mobile-flutter-poc/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png","sha256":"2fe670c3dda80d061ee1e8670e2fa6bc21e8d1272636577fb7e830f025324446","size":19983},
     "FHD/frontend/public/startup/xc-logo-base.jpg": {"scope":"frontend","source":"FHD/frontend/public/brand-xc-logo.jpg","sha256":"96716cc3010a6712767bbb44a37b26ec2bc76906406572fa42fa397bce0c222a","size":74665},
     "FHD/frontend/public/yuangong/staff-busy.png": {"scope":"frontend","source":"FHD/frontend/public/yuangong/staff.png","sha256":"ec5634814d6bbef47608943362f4b046fb53a299f5563d4da0f8055fba1ca1b8","size":2105461},
     "appstore-screenshots/live/ipad-01-messages-live.png": {"scope":"appstore","source":"appstore-screenshots/2.3.3-accurate-metadata/ipad-13/ipad-01-messages-live.png","sha256":"93f8f8accc5797a59746637108413953d9da471c203f95fbac0777d470503716","size":427065},

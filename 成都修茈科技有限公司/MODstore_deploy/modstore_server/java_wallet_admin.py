@@ -9,7 +9,7 @@ from __future__ import annotations
 import importlib
 import os
 import uuid
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 import httpx
@@ -19,7 +19,9 @@ def payment_backend_is_java() -> bool:
     return os.environ.get("PAYMENT_BACKEND", "").strip().lower() == "java"
 
 
-def credit_user(user_id: int, amount: Decimal, description: str) -> dict[str, Any]:
+def credit_user(
+    user_id: int, amount: Decimal, description: str, *, idempotency_key: str | None = None
+) -> dict[str, Any]:
     payload = _call(
         "POST",
         "/api/internal/payment/wallet/credit",
@@ -27,11 +29,29 @@ def credit_user(user_id: int, amount: Decimal, description: str) -> dict[str, An
             "user_id": int(user_id),
             "amount": format(amount, ".2f"),
             "description": description,
-            "idempotency_key": f"admin_credit:{int(user_id)}:{uuid.uuid4().hex}",
+            "idempotency_key": idempotency_key or f"admin_credit:{int(user_id)}:{uuid.uuid4().hex}",
         },
     )
     if payload.get("source") != "java_postgresql" or "balance" not in payload:
         raise _http_error(503, "Java 钱包服务回执无效")
+    if idempotency_key:
+        try:
+            credited = Decimal(str(payload.get("amount")))
+            balance = Decimal(str(payload["balance"]))
+        except InvalidOperation as exc:
+            raise _http_error(503, "Java 钱包服务回执无效") from exc
+        if (
+            payload.get("ok") is not True
+            or payload.get("idempotency_key") != idempotency_key
+            or payload.get("status") != "completed"
+            or isinstance(payload.get("user_id"), bool)
+            or payload.get("user_id") != int(user_id)
+            or not credited.is_finite()
+            or credited != amount
+            or not balance.is_finite()
+            or balance < 0
+        ):
+            raise _http_error(503, "Java 钱包服务回执无效")
     return payload
 
 

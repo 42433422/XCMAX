@@ -12,6 +12,7 @@ class MobileSessionData {
     this.sessionId = '',
     this.username = '',
     this.accountKind = '',
+    this.personalPlan = false,
     this.userId = 0,
     this.marketAccessToken = '',
     this.marketRefreshToken = '',
@@ -50,6 +51,7 @@ class MobileSessionData {
   final String sessionId;
   final String username;
   final String accountKind;
+  final bool personalPlan;
   final int userId;
   final String marketAccessToken;
   final String marketRefreshToken;
@@ -112,6 +114,7 @@ class MobileSessionData {
       sessionId: _readString(json, 'session_id'),
       username: _readString(json, 'username'),
       accountKind: _readString(json, 'account_kind'),
+      personalPlan: _readBool(json, 'personal_plan'),
       userId: _readInt(json, 'user_id'),
       marketAccessToken: _readString(json, 'market_access_token'),
       marketRefreshToken: _readString(json, 'market_refresh_token'),
@@ -153,6 +156,7 @@ class MobileSessionData {
         'session_id': sessionId,
         'username': username,
         'account_kind': accountKind,
+        'personal_plan': personalPlan,
         'user_id': userId,
         'market_access_token': marketAccessToken,
         'market_refresh_token': marketRefreshToken,
@@ -199,6 +203,7 @@ class MobileSessionData {
       sessionId: _firstNonBlank(other.sessionId, sessionId),
       username: _firstNonBlank(other.username, username),
       accountKind: _firstNonBlank(other.accountKind, accountKind),
+      personalPlan: personalPlan,
       userId: other.userId > 0 ? other.userId : userId,
       marketAccessToken: _firstNonBlank(
         other.marketAccessToken,
@@ -262,6 +267,7 @@ class MobileSessionData {
     Object? sessionId = _unset,
     Object? username = _unset,
     Object? accountKind = _unset,
+    bool? personalPlan,
     Object? userId = _unset,
     Object? marketAccessToken = _unset,
     Object? marketRefreshToken = _unset,
@@ -308,6 +314,7 @@ class MobileSessionData {
       accountKind: identical(accountKind, _unset)
           ? this.accountKind
           : accountKind as String,
+      personalPlan: personalPlan ?? this.personalPlan,
       userId: identical(userId, _unset) ? this.userId : userId as int,
       marketAccessToken: identical(marketAccessToken, _unset)
           ? this.marketAccessToken

@@ -7,6 +7,7 @@
 
 - **Flutter 统一前端（唯一交付主线）**：新移动页面、路由、状态、组件、缓存和移动端业务流程 **只** 落到 `FHD/mobile-flutter-poc`。
 - **Android / iOS 均从 Flutter 发版**：统一 CI 验证两端；Android 产出 APK/AAB，iOS 通过 TestFlight / App Store Connect 发布。
+- **HarmonyOS 候选构建**由同一 Flutter 工程的 `ohos/` Runner 和 CI 构建 ARM64 无签名 HAP。工具链、兼容版本和依赖见[移动端 README](../mobile-flutter-poc/README.md#harmonyos-候选构建)。
 - **独立原生工程已删除**：Kotlin、SwiftUI、HarmonyOS 产品实现及重复 CI 已退出活跃仓库；历史仅可从 Git 取证。
 - **OpenAPI 统一前后端契约**：`FHD/assets/contracts/openapi.json` 是移动端与 FastAPI 后端之间的机器可读契约。Flutter 的 DTO/API client 应从 OpenAPI 或经裁剪的 mobile contract 派生，不允许手写一套与 OpenAPI 漂移的字段口径。
 - **FastAPI 统一后端业务**：账号、权限、员工系统、聊天、SSE/WebSocket、支付、审批、同步、移动 relay、行业选择和数据写入都归 FastAPI 服务端实现；Flutter 只承载交互、展示、本地缓存和必要的端侧适配。
@@ -21,6 +22,7 @@
 | 移动前端主实现 | `FHD/mobile-flutter-poc` | **唯一交付主线**；Android+iOS |
 | Android Runner | `FHD/mobile-flutter-poc/android` | Manifest、平台通道、签名、APK/AAB |
 | iOS Runner | `FHD/mobile-flutter-poc/ios` | entitlements、平台通道、签名、IPA |
+| HarmonyOS Runner | `FHD/mobile-flutter-poc/ohos` | Stage Runner、平台通道、无签名 HAP 候选构建 |
 | 入口文档 | [`guides/MOBILE_FLUTTER.md`](guides/MOBILE_FLUTTER.md) | 日常开发与发版说明 |
 | 前后端契约 | `FHD/assets/contracts/openapi.json` | Flutter `lib/src/api/*` |
 | 后端业务实现 | `FHD/app/fastapi_routes/mobile_api.py`、`FHD/app/fastapi_routes/mobile_api_extensions.py` 与 `/api/mobile/v1/*` | OpenAPI 导出、移动端 API client |

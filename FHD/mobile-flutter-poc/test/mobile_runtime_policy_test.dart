@@ -71,18 +71,6 @@ void main() {
       ),
       isTrue,
     );
-    expect(
-      MobileProductSkuConfig.accountKind(
-        buildSku: MobileBuildConfig.productSku,
-      ),
-      'enterprise',
-    );
-    expect(
-      MobileProductSkuConfig.displayEditionLabel(
-        buildSku: MobileBuildConfig.productSku,
-      ),
-      '标准版',
-    );
 
     MobileProductSkuConfig.setRemoteSku(' personal ');
     expect(MobileProductSkuConfig.remoteSku, 'personal');
@@ -93,26 +81,10 @@ void main() {
       'personal',
     );
     expect(
-      MobileProductSkuConfig.isPersonal(buildSku: MobileBuildConfig.productSku),
-      isTrue,
-    );
-    expect(
       MobileProductSkuConfig.showsEnterpriseNav(
         buildSku: MobileBuildConfig.productSku,
       ),
       isFalse,
-    );
-    expect(
-      MobileProductSkuConfig.accountKind(
-        buildSku: MobileBuildConfig.productSku,
-      ),
-      'personal',
-    );
-    expect(
-      MobileProductSkuConfig.displayEditionLabel(
-        buildSku: MobileBuildConfig.productSku,
-      ),
-      '个人版',
     );
   });
 

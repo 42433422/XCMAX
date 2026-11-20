@@ -1,13 +1,47 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_recognition_error.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
+import '../../platform/android_record_audio_permission.dart';
+import '../../platform/speech_recognition_support.dart';
 import '../../theme/app_theme.dart';
 
 part 'voice_input_sheet_widgets.part.dart';
 
 enum _SpeechUiState { idle, listening, processing, error }
+
+Future<void> showVoiceInputSheet(
+  BuildContext context, {
+  required ValueChanged<String> onResult,
+}) async {
+  var unavailable = unsupportedSpeechRecognitionMessage;
+  if (unavailable == null &&
+      !await const AndroidRecordAudioPermission().ensureGranted()) {
+    unavailable = '需要麦克风权限才能使用语音输入';
+  }
+  if (!context.mounted) return;
+  if (unavailable != null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(unavailable), behavior: SnackBarBehavior.floating),
+    );
+    return;
+  }
+  await showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: AppTheme.colors(context).surface,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(
+        top: Radius.circular(VoiceInputDesign.sheetTopCornerRadius),
+      ),
+    ),
+    clipBehavior: Clip.antiAlias,
+    builder: (_) => VoiceInputSheet(onResult: onResult),
+  );
+}
 
 class VoiceInputDesign {
   static const sheetTopCornerRadius = 28.0;
@@ -79,16 +113,19 @@ class VoiceInputDesign {
 }
 
 class VoiceInputSheet extends StatefulWidget {
-  const VoiceInputSheet({super.key, required this.onResult});
+  const VoiceInputSheet({super.key, required this.onResult, this.speech});
 
   final ValueChanged<String> onResult;
+  @visibleForTesting
+  final SpeechToText? speech;
 
   @override
   State<VoiceInputSheet> createState() => _VoiceInputSheetState();
 }
 
 class _VoiceInputSheetState extends State<VoiceInputSheet> {
-  final _speech = SpeechToText();
+  late final _speech = widget.speech ?? SpeechToText();
+  bool _speechStarted = false;
   var _state = _SpeechUiState.idle;
   var _partial = '';
   var _final = '';
@@ -101,16 +138,19 @@ class _VoiceInputSheetState extends State<VoiceInputSheet> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _startListening());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_startListening());
+    });
   }
 
   @override
   void dispose() {
-    _speech.cancel();
+    if (_speechStarted) unawaited(_speech.cancel().catchError((_) {}));
     super.dispose();
   }
 
   Future<void> _startListening() async {
+    if (!mounted || unsupportedSpeechRecognitionMessage != null) return;
     setState(() {
       _state = _SpeechUiState.listening;
       _partial = '';
@@ -119,6 +159,7 @@ class _VoiceInputSheetState extends State<VoiceInputSheet> {
       _soundLevel = 0.16;
     });
     try {
+      _speechStarted = true;
       final available = await _speech.initialize(
         onStatus: _handleStatus,
         onError: _handleError,
@@ -127,7 +168,7 @@ class _VoiceInputSheetState extends State<VoiceInputSheet> {
       if (!available) {
         setState(() {
           _state = _SpeechUiState.error;
-          _errorText = '没听清';
+          _errorText = speechRecognitionUnavailableMessage;
         });
         return;
       }
@@ -147,7 +188,7 @@ class _VoiceInputSheetState extends State<VoiceInputSheet> {
       if (!mounted) return;
       setState(() {
         _state = _SpeechUiState.error;
-        _errorText = '没听清';
+        _errorText = speechRecognitionUnavailableMessage;
       });
     }
   }
@@ -219,12 +260,31 @@ class _VoiceInputSheetState extends State<VoiceInputSheet> {
   }
 
   void _cancel() {
-    _speech.cancel();
     Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
+    final unavailable = unsupportedSpeechRecognitionMessage;
+    if (unavailable != null) {
+      return SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(unavailable, textAlign: TextAlign.center),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: _cancel,
+                icon: const Icon(Icons.keyboard),
+                label: const Text('返回文字输入'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     final colors = AppTheme.colors(context);
     final palette = _VoicePalette.of(context, _state);
     return SafeArea(

@@ -2,6 +2,8 @@ from contextlib import nullcontext
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from app.domain.shared_services.tools_workflow_elt import (
     _registered_router_elt_import,
     _resolve_template,
@@ -883,53 +885,108 @@ def test_execute_reports_all_duplicate_rows():
     assert "没有新增数据" in result["message"]
 
 
-def test_execute_writes_linked_customer_products_companion():
-    """同一文件附表的客户及产品预演，必须随主运单一起落库。"""
+@pytest.mark.parametrize(
+    "selected,revision",
+    [
+        ("run-1", None),
+        ("companion-1", None),
+        ("companion-1", "stale"),
+        ("companion-1", "a" * 64),
+    ],
+)
+def test_companion_requires_separate_current_preview_confirmation(selected, revision):
     service = MagicMock()
-
-    def _get_run(_db, *, run_id, owner_user_id):
-        status = "preview_ready" if run_id == "companion-1" else "completed"
-        return {"id": run_id, "status": status, "preview_revision": "a" * 64}
-
-    service.get_run.side_effect = _get_run
-    primary = _run(
-        status="completed",
-        details={
-            "linked_customer_products_preview": {
-                "run_id": "companion-1",
-                "status": "preview_ready",
-            }
-        },
-        summary={"new": 2, "update": 0, "skip": 0, "error": 0, "executed": 2},
-    )
+    link = {"run_id": "companion-1", "status": "preview_ready", "preview_revision": "a" * 64}
+    primary = _run(status="completed", details={"linked_customer_products_preview": link})
     companion = _run(
-        status="completed",
-        summary={"new": 12, "update": 0, "skip": 1, "error": 0, "executed": 12},
+        status="preview_ready",
+        id="companion-1",
+        target_type="customer_products",
+        preview_revision="a" * 64,
+        draft={"linked_preview": {"read_only": True, "parent_run_id": "run-1"}},
+    )
+    service.get_run.side_effect = lambda _db, *, run_id, owner_user_id: (
+        primary if run_id == "run-1" else companion
     )
     with (
-        patch("app.domain.shared_services.tools_workflow_elt._elt_enabled", return_value=True),
         patch(
             "app.domain.shared_services.tools_workflow_elt._bound_actor",
             return_value=MagicMock(id=7),
         ),
         patch(
             "app.domain.shared_services.tools_workflow_elt.get_db",
-            return_value=MagicMock(__enter__=MagicMock(), __exit__=MagicMock()),
+            return_value=nullcontext(MagicMock()),
         ),
         patch(
             "app.domain.shared_services.tools_workflow_elt._wait",
-            side_effect=[primary, companion],
+            return_value={**(primary if selected == "run-1" else companion), "status": "completed"},
+        ),
+        patch(
+            "app.domain.shared_services.tools_workflow_elt._finalize_import",
+            return_value=({}, {}, ""),
         ),
         patch("app.application.elt.service.get_elt_service", return_value=service),
     ):
-        result = _registered_router_elt_import(
-            "execute", {"run_id": "run-1"}, _context(), "normal", "导入"
-        )
-    # 主预演已是 completed（自动审批时预演即入库），只需执行附带的客户及产品预演。
-    assert service.execute.call_count == 1
-    assert service.execute.call_args.kwargs["run_id"] == "companion-1"
-    assert result["data"]["customer_products"]["executed_rows"] == 12
-    assert "客户及产品写入 12 行" in result["message"]
+        from app.domain.shared_services.tools_workflow_elt import _execute
+
+        result = _execute({"run_id": selected, "preview_revision": revision}, _context())
+    if selected == "run-1":
+        service.execute.assert_not_called()
+        disclosed = result["data"]["customer_products"]
+        assert disclosed["run_id"] == "companion-1"
+        assert disclosed["preview_revision"] == "a" * 64
+        assert disclosed["requires_user_confirmation"] is True
+        assert "未随本次出货写入" in result["message"]
+        assert not result.get("requires_user_decision")
+        assert "resume_params" not in result
+        assert "发送新消息" in result["message"]
+        assert "run_id=companion-1" in result["message"]
+        assert "preview_revision=" + "a" * 64 in result["message"]
+    elif revision != "a" * 64:
+        service.execute.assert_not_called()
+        assert result["error_code"] == "ELT_PREVIEW_CHANGED"
+    else:
+        assert result["success"] is True
+        assert service.execute.call_count == 1
+        submitted = service.execute.call_args.kwargs
+        assert submitted["run_id"] == "companion-1" and submitted["preview_revision"] == revision
+        assert submitted["confirmed"] is True
+        assert submitted["valid_rows_only"] is False and submitted["accept_suggested"] is False
+
+
+def test_existing_preview_read_precedes_auto_import_and_refreshes_live_status(monkeypatch):
+    from app.domain.shared_services import tools_workflow_elt as elt
+
+    child = _run(
+        id="child",
+        status="queued",
+        target_type="customer_products",
+        draft={"linked_preview": {"parent_run_id": "parent"}},
+    )
+    service = MagicMock()
+    service.get_run.side_effect = lambda *_args, **_kwargs: dict(child)
+    monkeypatch.setattr(elt, "_elt_enabled", lambda: True)
+    monkeypatch.setattr(elt, "_bound_actor", lambda _ctx: SimpleNamespace(id=7))
+    monkeypatch.setattr(elt, "get_db", lambda: nullcontext(MagicMock()))
+    monkeypatch.setattr("app.application.elt.service.get_elt_service", lambda: service)
+    create = MagicMock()
+    monkeypatch.setattr(elt, "_preview", create)
+    monkeypatch.setattr(elt, "_execute", create)
+    params = {"run_id": "child", "file_path": "do-not-import.xlsx"}
+    context = {**_context(), "chat_approval_mode": "auto"}
+    pending = elt._registered_router_elt_import(
+        "preview", params, context, "normal", "查看导入预演"
+    )
+    assert pending["data"]["status"] == "queued"
+    assert "查看导入预演，run_id=child" in pending["message"]
+    child.update(status="preview_ready", preview_revision="b" * 64)
+    ready = elt._registered_router_elt_import("preview", params, context, "normal", "查看导入预演")
+    assert ready["data"]["preview_revision"] == "b" * 64
+    assert "preview_revision=" + "b" * 64 in ready["message"]
+    assert not ready.get("requires_user_decision")
+    create.assert_not_called()
+    service.create_preview.assert_not_called()
+    service.execute.assert_not_called()
 
 
 def test_execute_requires_run_id():

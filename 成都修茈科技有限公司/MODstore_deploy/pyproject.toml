@@ -37,7 +37,7 @@ web = [
     "pika>=1.3",
     "edge-tts>=6.1",
     # Was previously pulled in transitively by qq-botpy; keep explicit after QQ Bot retirement.
-    "APScheduler>=3.10,<4",
+    "APScheduler==3.11.3",
 ]
 knowledge = [
     "chromadb>=0.5",

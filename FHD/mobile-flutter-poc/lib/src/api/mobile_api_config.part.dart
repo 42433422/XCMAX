@@ -235,6 +235,9 @@ class MobileUpdateCheckResult {
     required this.versionName,
     required this.downloadUrl,
     required this.raw,
+    this.targetVersionCode = 0,
+    this.channelAvailable = true,
+    this.isAppStore = false,
   });
 
   final bool available;
@@ -242,14 +245,13 @@ class MobileUpdateCheckResult {
   final String versionName;
   final String downloadUrl;
   final Map<String, Object?> raw;
+  final int targetVersionCode;
+  final bool channelAvailable;
+  final bool isAppStore;
 
   String get title => force ? '需要更新' : '发现新版本';
 
-  String get updatePromptMessage => '最新版本 $versionName，将下载完整安装包并交给系统安装器安装。';
-
-  Map<String, Object?> get apkDelta {
-    final value = raw['apk_delta'];
-    if (value is! Map) return const {};
-    return value.map((key, value) => MapEntry(key.toString(), value));
-  }
+  String get updatePromptMessage => isAppStore
+      ? '最新版本 $versionName，请前往 App Store 更新。'
+      : '最新版本 $versionName，将下载完整安装包并交给系统安装器安装。';
 }

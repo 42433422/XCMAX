@@ -39,9 +39,6 @@ class _AuthScreenState extends State<AuthScreen> {
   Widget build(BuildContext context) {
     final canLogin = _canLogin;
     final colors = AppTheme.colors(context);
-    final isEnterprise = MobileProductSkuConfig.isEnterprise(
-      buildSku: MobileBuildConfig.productSku,
-    );
     return Scaffold(
       backgroundColor: colors.surface,
       body: SafeArea(
@@ -66,7 +63,7 @@ class _AuthScreenState extends State<AuthScreen> {
                           const Center(child: _AuthLogo()),
                           const SizedBox(height: 16),
                           Text(
-                            isEnterprise ? 'XCAGI 修茈企业版' : 'XCAGI 个人版',
+                            'XCAGI',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               color: colors.textPrimary,
@@ -88,11 +85,7 @@ class _AuthScreenState extends State<AuthScreen> {
                           const SizedBox(height: 12),
                           _AuthTextField(
                             controller: _usernameController,
-                            hintText: _adminMode
-                                ? '管理员账号'
-                                : isEnterprise
-                                    ? '账号或邮箱'
-                                    : '请输入用户名',
+                            hintText: _adminMode ? '管理员账号' : '账号或邮箱',
                             onChanged: (_) => setState(() {}),
                           ),
                           const SizedBox(height: 14),
@@ -155,6 +148,15 @@ class _AuthScreenState extends State<AuthScreen> {
                             ),
                           ),
                           const SizedBox(height: 12),
+                          TextButton.icon(
+                            onPressed: () => Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => const LocalWorkspaceScreen(),
+                              ),
+                            ),
+                            icon: const Icon(Icons.folder_open_outlined),
+                            label: const Text('打开本地工作台'),
+                          ),
                           _ScanButton(onTap: _openScan),
                           const SizedBox(height: 10),
                           _RegisterLink(onTap: _openRegister),
@@ -307,14 +309,8 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
-  void _openRegister() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => RegisterScreen(
-          onLogin: () =>
-              Navigator.of(context).popUntil((route) => route.isFirst),
-        ),
-      ),
-    );
+  Future<void> _openRegister() async {
+    if (await openMarketRegistration(_openExternalUrl)) return;
+    if (mounted) setState(() => _error = '无法打开注册页面，请稍后重试');
   }
 }

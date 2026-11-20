@@ -14,6 +14,7 @@ class Api extends MobileApiClient {
                 .copyWith(userId: 1, accessToken: 'one')));
   final writes = <Map<String, Object?>>[];
   final paths = <String>[];
+  final deletes = <String>[];
   Completer<Map<String, Object?>>? generation;
   bool fail = false, missingTemplate = false;
   String unitName = '客户甲';
@@ -27,6 +28,7 @@ class Api extends MobileApiClient {
       String activeModId = ''}) async {
     paths.add(path);
     expect(activeModId, 'tenant-erp');
+    if (method == 'DELETE') deletes.add(path);
     if (path.endsWith('/generate')) {
       writes.add(body!);
       return generation!.future;
@@ -70,9 +72,16 @@ class Api extends MobileApiClient {
             'model_number': 'A01',
             'specification': '5',
             'price': 8
-          }
+          },
+          {
+            'id': 2,
+            'name': '产品乙',
+            'model_number': 'B02',
+            'specification': '2',
+            'price': 3,
+          },
         ],
-        'total': 1
+        'total': 2
       };
     }
     if (fail) throw StateError('读取失败');
@@ -93,25 +102,20 @@ class Api extends MobileApiClient {
   }
 }
 
-Future<void> show(WidgetTester tester, Api api) async {
+Future<void> show(WidgetTester tester, Api api, {bool direct = false}) async {
   final repo = MobileRepository(client: api);
   addTearDown(() async {
     await repo.dispose();
     api.dispose();
   });
   await tester.pumpWidget(MaterialApp(
-      home:
-          NativeOrdersScreen(repository: repo, apiBase: 'api/mod/tenant-erp')));
+    home: direct
+        ? NativeOrderFormScreen(repository: repo, apiBase: 'api/mod/tenant-erp')
+        : NativeOrdersScreen(repository: repo, apiBase: 'api/mod/tenant-erp'),
+  ));
   await tester.pumpAndSettle();
 }
 
-Future<void> scrollTo(WidgetTester tester, String text) =>
-    tester.scrollUntilVisible(find.text(text), 250,
-        scrollable: find
-            .descendant(
-                of: find.byType(ListView).last,
-                matching: find.byType(Scrollable))
-            .first);
 void main() {
   for (final nextUnit in ['客户改名', '']) {
     testWidgets(
@@ -131,9 +135,12 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('客户甲').last);
       await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('选择产品'));
       await tester.tap(find.text('选择产品'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('产品甲'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('添加所选产品（1）'));
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('刷新选项'));
       await tester.pumpAndSettle();
@@ -162,7 +169,7 @@ void main() {
       }
       expect(find.text('产品甲'), findsOneWidget);
       expect(find.text('订单编号：20261117A001'), findsOneWidget);
-      expect(find.text('张先生'), findsNothing);
+      expect(find.textContaining('张先生'), findsNothing);
       await tester.tap(find.text('生成发货单'));
       await tester.pumpAndSettle();
       expect(api.writes, isEmpty);
@@ -188,9 +195,35 @@ void main() {
             .onPressed,
         isNull);
   });
+  testWidgets('direct opening loads the order form in its Mod workspace',
+      (tester) async {
+    final api = Api();
+    await show(tester, api, direct: true);
+    expect(find.text('新建发货单'), findsOneWidget);
+    expect(find.text('订单编号：20261117A001'), findsOneWidget);
+    expect(api.paths, contains('api/mod/tenant-erp/purchase_units'));
+    expect(api.paths, isNot(contains('api/mod/tenant-erp/orders')));
+  });
+
+  testWidgets('deletes by the record id while confirming the displayed number',
+      (tester) async {
+    final api = Api();
+    await show(tester, api);
+    await tester.tap(find.byTooltip('订单 历史单号 的操作'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('删除'));
+    await tester.pumpAndSettle();
+    expect(find.text('删除订单 历史单号？'), findsOneWidget);
+    await tester.tap(find.text('确认删除'));
+    await tester.pumpAndSettle();
+    expect(api.deletes, ['api/mod/tenant-erp/shipment/orders/2']);
+  });
+
   testWidgets(
       'native shipment form calculates amounts and waits for server receipt',
       (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final api = Api()..generation = Completer();
     await show(tester, api);
     await tester.tap(find.text('新建订单'));
@@ -203,12 +236,15 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('客户甲').last);
     await tester.pumpAndSettle();
-    await scrollTo(tester, '选择产品');
+    await tester.ensureVisible(find.text('选择产品'));
     await tester.tap(find.text('选择产品'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('产品甲'));
+    await tester.tap(find.text('产品乙'));
     await tester.pumpAndSettle();
-    await scrollTo(tester, '生成发货单');
+    await tester.tap(find.text('添加所选产品（2）'));
+    await tester.pumpAndSettle();
+    expect(find.text('¥46.00'), findsOneWidget);
     await tester.tap(find.text('生成发货单'));
     await tester.pump();
     expect(api.writes, hasLength(1));
@@ -216,7 +252,9 @@ void main() {
     expect(body['unit_name'], '客户甲');
     expect(body['order_number'], '20261117A001');
     expect(body['template_id'], 'db:1');
-    expect((body['products'] as List).single, {
+    final products = body['products'] as List;
+    expect(products, hasLength(2));
+    expect(products.first, {
       'name': '产品甲',
       'model_number': 'A01',
       'quantity_tins': 1,
@@ -225,12 +263,18 @@ void main() {
       'unit_price': 8,
       'amount': 40
     });
+    expect(products.last['model_number'], 'B02');
+    expect(products.last['amount'], 6);
     expect(find.text('发货单已生成'), findsNothing);
     api.generation!.complete({'success': true, 'doc_name': '出货单.xlsx'});
     await tester.pumpAndSettle();
-    await tester.drag(find.byType(ListView).last, const Offset(0, 1600));
-    await tester.pumpAndSettle();
     expect(find.text('发货单已生成'), findsOneWidget);
+    await tester.tap(find.text('继续开单'));
+    await tester.pumpAndSettle();
+    expect(find.text('产品甲'), findsNothing);
+    expect(find.text('生成发货单'), findsOneWidget);
+    expect(
+        api.paths.where((path) => path.endsWith('/next_number')), hasLength(2));
     expect(api.writes, hasLength(1));
   });
 }

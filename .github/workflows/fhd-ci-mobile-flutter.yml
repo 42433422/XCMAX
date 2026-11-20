@@ -6,10 +6,16 @@ on:
   push:
     paths:
       - "FHD/mobile-flutter-poc/**"
+      - "FHD/config/download_release.json"
+      - "FHD/VERSION.md"
+      - "scripts/dev/verify_version_anchors.py"
       - ".github/workflows/fhd-ci-mobile-flutter.yml"
   pull_request:
     paths:
       - "FHD/mobile-flutter-poc/**"
+      - "FHD/config/download_release.json"
+      - "FHD/VERSION.md"
+      - "scripts/dev/verify_version_anchors.py"
       - ".github/workflows/fhd-ci-mobile-flutter.yml"
   workflow_dispatch:
 
@@ -87,3 +93,112 @@ jobs:
         run: env -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u http_proxy -u https_proxy -u all_proxy NO_PROXY=127.0.0.1,localhost flutter test --no-pub
       - name: Flutter build ios (release, no codesign)
         run: flutter build ios --release --no-codesign
+
+  harmony-hap-candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: FHD/mobile-flutter-poc
+    env:
+      CPF_FLUTTER_TAG: 3.44.9+ohos-1.0.0-beta
+      CPF_FLUTTER_COMMIT: 744cbb4f08e577787774c04033cc19a9d318d0d2
+      FLUTTER_OHOS_STORAGE_BASE_URL: https://flutter-ohos.obs.cn-south-1.myhuaweicloud.com
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Resolve HarmonyOS candidate from the release SSOT
+        run: |
+          HAP_BASENAME="$(python3 scripts/build_harmony_hap.py --print-basename)"
+          echo "HAP_BASENAME=$HAP_BASENAME" >> "$GITHUB_ENV"
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Install SQLite build prerequisites
+        run: |
+          if ! command -v tclsh >/dev/null; then
+            sudo apt-get update -q
+            sudo apt-get install -y tcl
+          fi
+          command -v make
+      - name: Fetch and verify DevEco Command Line Tools 26.0.0.851
+        run: |
+          scratch="$(mktemp -d "$RUNNER_TEMP/xcagi-deveco.XXXXXX")"
+          cd "$scratch"
+          base=https://github.com/zhongdaiqi/command-line-tools-for-hmos/releases/download/clt-26.0.0.851/commandline-tools-linux-x64-26.0.0.851
+          for part in aa ab; do
+            curl --fail --location --retry 4 --proto '=https' --silent --show-error \
+              "$base.part_$part" --output "deveco.part_$part"
+          done
+          sha256sum --check <<'SHA256'
+          58cf09ea8882785fba6f7156a6be426b27390ad113cc1506c86bd25616fdb805  deveco.part_aa
+          c454ffa7ebb318dbf70dff8b7a1281de565cec3751c5b498f40f7f9500872fe6  deveco.part_ab
+          SHA256
+          cat deveco.part_aa deveco.part_ab > deveco.zip
+          printf '%s\n' 'ab604bd92721d5cbcafd154e6461d46b9f1b105e7b89eab04a9d046681198082  deveco.zip' | sha256sum --check
+          rm -- deveco.part_aa deveco.part_ab
+          unzip -q deveco.zip
+          rm -- deveco.zip
+          deveco="$scratch/command-line-tools"
+          test -x "$deveco/bin/hvigorw"
+          test -x "$deveco/bin/ohpm"
+          test -d "$deveco/sdk/default/openharmony/native"
+          {
+            echo "DEVECO_SDK_HOME=$deveco/sdk"
+            echo "HOS_SDK_HOME=$deveco/sdk"
+            echo "OHOS_SDK_HOME=$deveco/sdk"
+            echo "NODE_HOME=$deveco/tool/node"
+            echo "DEVECO_NODE_HOME=$deveco/tool/node"
+          } >> "$GITHUB_ENV"
+          {
+            echo "$deveco/bin"
+            echo "$deveco/tool/node/bin"
+            echo "$deveco/sdk/default/openharmony/toolchains"
+          } >> "$GITHUB_PATH"
+      - name: Fetch pinned CPF Flutter OHOS SDK
+        run: |
+          sdk="$RUNNER_TEMP/xcagi-cpf-flutter"
+          git clone --depth 1 --branch "$CPF_FLUTTER_TAG" \
+            https://github.com/zhongdaiqi/flutter_flutter.git "$sdk"
+          actual="$(git -C "$sdk" rev-parse HEAD)"
+          if [[ "$actual" != "$CPF_FLUTTER_COMMIT" ]]; then
+            echo "::error::CPF Flutter OHOS commit mismatch, expected $CPF_FLUTTER_COMMIT, received $actual"
+            exit 1
+          fi
+          echo "FLUTTER_ROOT=$sdk" >> "$GITHUB_ENV"
+      - name: Verify Flutter OHOS tooling
+        run: |
+          node --version
+          "$FLUTTER_ROOT/bin/flutter" --version
+          "$FLUTTER_ROOT/bin/flutter" build hap --help | grep -F -- '--[no-]codesign'
+      - name: Verify HarmonyOS file sharing and deep-link behavior
+        run: node --experimental-vm-modules --test ohos/test/entry_ability.test.mjs
+      - name: Build and validate unsigned ARM64 HAP
+        run: |
+          python3 scripts/build_harmony_hap.py \
+            --flutter "$FLUTTER_ROOT/bin/flutter" \
+            --native-sdk "$DEVECO_SDK_HOME/default/openharmony/native" \
+            --output "$RUNNER_TEMP/$HAP_BASENAME"
+          cd "$RUNNER_TEMP"
+          test -s "$HAP_BASENAME"
+          sha256sum --check "$HAP_BASENAME.sha256"
+          python3 - "$HAP_BASENAME.build-info.json" <<'PY'
+          import json, os, sys
+          from pathlib import Path
+
+          info = json.loads(Path(sys.argv[1]).read_text())
+          if (info["source_dirty"] or info["source_commit"] != os.environ["GITHUB_SHA"]
+              or info["flutter_commit"] != os.environ["CPF_FLUTTER_COMMIT"]):
+              raise SystemExit("HAP build identity does not match the checked-out revisions")
+          PY
+      - name: Upload verified unsigned HarmonyOS HAP candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcagi-harmonyos-arm64-unsigned-candidate
+          path: |
+            ${{ runner.temp }}/${{ env.HAP_BASENAME }}
+            ${{ runner.temp }}/${{ env.HAP_BASENAME }}.sha256
+            ${{ runner.temp }}/${{ env.HAP_BASENAME }}.build-info.json
+          if-no-files-found: error

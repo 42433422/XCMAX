@@ -8,6 +8,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -15,6 +16,7 @@ from sqlalchemy import (
     event,
     select,
 )
+from sqlalchemy.orm import Mapped, mapped_column
 
 from modstore_server.db.db_base import Base
 
@@ -218,3 +220,17 @@ class CustomerServiceAuditLog(Base):
     event_type = Column(String(64), nullable=False, index=True)
     detail_json = Column(Text, default="{}")
     created_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
+
+
+class XiaoCDeliveryFollowup(Base):
+    __tablename__ = "xiaoc_delivery_followups"
+    __table_args__ = (Index("ix_xiaoc_delivery_followups_due", "following", "next_check_at"),)
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    ticket_id: Mapped[int] = mapped_column(
+        ForeignKey("customer_service_tickets.id"), primary_key=True
+    )
+    following: Mapped[bool] = mapped_column(default=True)
+    last_observed: Mapped[str] = mapped_column(String(64), default="")
+    next_check_at: Mapped[datetime]
+    version: Mapped[int] = mapped_column(default=0)

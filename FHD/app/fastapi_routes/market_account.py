@@ -85,8 +85,17 @@ _user_blob_from_market_payload = _market_payloads.user_blob_from_market_payload
 
 
 def _http_transport() -> MarketHTTP:
+    from app.infrastructure.modstore_transport import market_local_address
+
     return MarketHTTP(
-        client=lambda timeout: httpx.AsyncClient(timeout=timeout, trust_env=False),
+        client=lambda timeout: httpx.AsyncClient(
+            timeout=timeout,
+            trust_env=False,
+            transport=httpx.AsyncHTTPTransport(
+                local_address=market_local_address(),
+                trust_env=False,
+            ),
+        ),
         api_base_url=_market_api_base_url,
         base_url=_market_base_url,
         auth_header=_auth_header,

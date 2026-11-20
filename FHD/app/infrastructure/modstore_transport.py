@@ -88,6 +88,10 @@ def market_fallback_proxy() -> str | None:
     return raw or None
 
 
+def market_local_address() -> str | None:
+    return (os.environ.get("XCAGI_MARKET_LOCAL_ADDRESS") or "").strip() or None
+
+
 MARKET_TRANSPORT_ERRORS = (
     httpx.ConnectError,
     httpx.ConnectTimeout,
@@ -117,6 +121,7 @@ def httpx_sync_client(**kwargs: Any) -> httpx.Client:
         # HTTPX retries only connection establishment, never a sent POST/read timeout.
         kwargs["transport"] = httpx.HTTPTransport(
             retries=market_connect_attempts() - 1,
+            local_address=market_local_address(),
             trust_env=kwargs["trust_env"],
             verify=kwargs.get("verify", True),
             cert=kwargs.get("cert"),
@@ -127,20 +132,27 @@ def httpx_sync_client(**kwargs: Any) -> httpx.Client:
     return httpx.Client(**kwargs)
 
 
-def httpx_async_client(*, timeout: float) -> httpx.AsyncClient:
+def httpx_async_client(
+    *, timeout: float | httpx.Timeout, headers: dict[str, str] | None = None
+) -> httpx.AsyncClient:
     limits = httpx.Limits(max_keepalive_connections=10, max_connections=30)
     proxy = (os.environ.get("XCAGI_MARKET_PROXY") or "").strip() or None
     transport = (
         None
         if proxy
         else httpx.AsyncHTTPTransport(
-            retries=market_connect_attempts() - 1, trust_env=False, limits=limits
+            retries=market_connect_attempts() - 1,
+            local_address=market_local_address(),
+            trust_env=False,
+            limits=limits,
         )
     )
     return httpx.AsyncClient(
-        timeout=httpx.Timeout(timeout, connect=10.0),
+        timeout=timeout
+        if isinstance(timeout, httpx.Timeout)
+        else httpx.Timeout(timeout, connect=10.0),
         limits=limits,
-        headers={"Content-Type": "application/json", "Accept": "application/json"},
+        headers={"Accept": "application/json", **(headers or {})},
         trust_env=False,
         proxy=proxy,
         transport=transport,

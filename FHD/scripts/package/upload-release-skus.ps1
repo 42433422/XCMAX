@@ -1,7 +1,7 @@
 ﻿param(
   [string]$Version = '',
-  [ValidateSet('personal', 'enterprise', 'all')]
-  [string]$ProductSku = 'all',
+  [ValidateSet('enterprise')]
+  [string]$ProductSku = 'enterprise',
   [switch]$DryRun
 )
 
@@ -31,10 +31,9 @@ if (-not $hostName -or -not $sshUser -or -not $remoteBase) {
 
 $releaseRoot = Join-Path $Root "release\xcagi-v$Version"
 if (-not (Test-Path $releaseRoot)) {
-  throw "本地 release 不存在: $releaseRoot — 请先 build-all-skus.ps1"
+  throw "本地 release 不存在: $releaseRoot — 请先 build-installer.ps1"
 }
 
-$skus = if ($ProductSku -eq 'all') { @('personal', 'enterprise') } else { @($ProductSku) }
 $sshTarget = "${sshUser}@${hostName}"
 $rsyncSsh = 'ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30'
 if ($sshKey) {
@@ -42,59 +41,58 @@ if ($sshKey) {
   $rsyncSsh = "ssh -i `"$keyPath`" -o StrictHostKeyChecking=no -o ServerAliveInterval=30"
 }
 
-foreach ($sku in $skus) {
-  $localDir = Join-Path $releaseRoot $sku
-  if (-not (Test-Path $localDir)) {
-    throw "缺少 SKU 目录: $localDir"
-  }
-  $trimmedRemoteBase = $remoteBase.TrimEnd('/')
-  $legacyRemoteDir = "$trimmedRemoteBase/$sku/"
-  $versionedRemoteDir = "$trimmedRemoteBase/xcagi-v$Version/$sku/"
-  $remoteDirs = @($legacyRemoteDir, $versionedRemoteDir) | Sort-Object -Unique
-  $files = @(
-    Get-ChildItem $localDir -Filter 'XCAGI-*-Setup-*-x64.exe' -File -ErrorAction SilentlyContinue
-    Get-ChildItem $localDir -Filter 'latest.yml' -File -ErrorAction SilentlyContinue
-    Get-ChildItem (Join-Path $localDir 'tools') -Filter 'XcagiDownloader.exe' -File -ErrorAction SilentlyContinue
-  ) | Where-Object { $_ }
-  if (-not $files) {
-    throw "$sku 目录无待上传文件"
-  }
+$sku = $ProductSku
+$localDir = Join-Path $releaseRoot $sku
+if (-not (Test-Path $localDir)) {
+  throw "缺少 SKU 目录: $localDir"
+}
+$trimmedRemoteBase = $remoteBase.TrimEnd('/')
+$legacyRemoteDir = "$trimmedRemoteBase/$sku/"
+$versionedRemoteDir = "$trimmedRemoteBase/xcagi-v$Version/$sku/"
+$remoteDirs = @($legacyRemoteDir, $versionedRemoteDir) | Sort-Object -Unique
+$files = @(
+  Get-ChildItem $localDir -Filter 'XCAGI-*-Setup-*-x64.exe' -File -ErrorAction SilentlyContinue
+  Get-ChildItem $localDir -Filter 'latest.yml' -File -ErrorAction SilentlyContinue
+  Get-ChildItem (Join-Path $localDir 'tools') -Filter 'XcagiDownloader.exe' -File -ErrorAction SilentlyContinue
+) | Where-Object { $_ }
+if (-not $files) {
+  throw "$sku 目录无待上传文件"
+}
 
-  Write-Host "Upload $sku -> $sshTarget`: $legacyRemoteDir and $versionedRemoteDir"
-  $remotePathList = $remoteDirs | ForEach-Object { "  - $_" }
-  Write-Host ($remotePathList -join "`n")
-  $rsyncArgs = @(
-    '-avz',
-    '--progress',
-    '--chmod=D755,F644',
-    '-e', $rsyncSsh,
-    "$localDir/",
-    ''
-  )
+Write-Host "Upload $sku -> $sshTarget`: $legacyRemoteDir and $versionedRemoteDir"
+$remotePathList = $remoteDirs | ForEach-Object { "  - $_" }
+Write-Host ($remotePathList -join "`n")
+$rsyncArgs = @(
+  '-avz',
+  '--progress',
+  '--chmod=D755,F644',
+  '-e', $rsyncSsh,
+  "$localDir/",
+  ''
+)
 
-  if ($DryRun) {
-    foreach ($remoteDir in $remoteDirs) {
-      $args = @($rsyncArgs)
-      $args[$args.Length - 1] = "${sshTarget}:${remoteDir}"
-      Write-Host "DRY RUN: rsync $($args -join ' ')"
-    }
-    continue
-  }
-
+if ($DryRun) {
   foreach ($remoteDir in $remoteDirs) {
     $args = @($rsyncArgs)
     $args[$args.Length - 1] = "${sshTarget}:${remoteDir}"
-    & rsync @args
-    if ($LASTEXITCODE -ne 0) {
-      throw "rsync failed for SKU $sku at ${remoteDir} (exit $LASTEXITCODE)"
-    }
+    Write-Host "DRY RUN: rsync $($args -join ' ')"
   }
+  return
+}
 
-  $setup = $files | Where-Object { $_.Extension -eq '.exe' -and $_.Name -like 'XCAGI-*-Setup-*' } | Select-Object -First 1
-  if ($setup) {
-    $url = "https://xiu-ci.com/xcagi-v$Version/$sku/$($setup.Name)"
-    Write-Host "  Public URL (verify): $url"
+foreach ($remoteDir in $remoteDirs) {
+  $args = @($rsyncArgs)
+  $args[$args.Length - 1] = "${sshTarget}:${remoteDir}"
+  & rsync @args
+  if ($LASTEXITCODE -ne 0) {
+    throw "rsync failed for SKU $sku at ${remoteDir} (exit $LASTEXITCODE)"
   }
+}
+
+$setup = $files | Where-Object { $_.Extension -eq '.exe' -and $_.Name -like 'XCAGI-*-Setup-*' } | Select-Object -First 1
+if ($setup) {
+  $url = "https://xiu-ci.com/xcagi-v$Version/$sku/$($setup.Name)"
+  Write-Host "  Public URL (verify): $url"
 }
 
 Write-Host 'Upload complete.'

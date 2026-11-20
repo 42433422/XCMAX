@@ -14,17 +14,15 @@
         <button class="btn btn-action" :disabled="!connected || pushing || !effectiveModId" @click="pushAndTest">
           {{ pushing ? '推送中...' : '推送当前 Mod 并测试' }}
         </button>
-        <button class="btn btn-action" :disabled="!connected" @click="openFullscreen">全屏</button>
+        <button class="btn btn-action" :disabled="!connected" @click="openHostInNewTab">打开宿主测试页</button>
       </div>
     </div>
 
-    <div v-if="connected && (!effectiveModId || isMixedContentBlocked || pushMessage)" class="sandbox-helper">
+    <div v-if="connected" class="sandbox-helper">
       <div class="helper-copy">
-        <strong>{{ isMixedContentBlocked ? '已匹配，但浏览器拦截了画面' : '沙箱已匹配' }}</strong>
-        <p v-if="isMixedContentBlocked">
-          当前市场页是 HTTPS，但匹配到的宿主是 HTTP：{{ iframeSrc }}。请改用 HTTPS 宿主地址，或从本地 HTTP 页面打开沙箱。
-        </p>
-        <p v-else-if="!effectiveModId">当前地址没有携带 modId，所以不能自动推送“当前 Mod”。输入一个测试 Mod ID 后可直接推送并跳转测试。</p>
+        <strong>沙箱已匹配</strong>
+        <p>在独立页面中打开宿主，登录后继续测试已推送的 Mod。</p>
+        <p v-if="!effectiveModId">输入一个测试 Mod ID 后可推送到宿主。</p>
         <p v-if="pushMessage" class="helper-message">{{ pushMessage }}</p>
       </div>
       <div class="helper-actions">
@@ -37,34 +35,11 @@
         <button class="btn btn-action" :disabled="pushing || !effectiveModId" @click="pushAndTest">
           {{ pushing ? '推送中...' : '推送测试 Mod' }}
         </button>
-        <button class="btn" :disabled="!hostUrl" @click="openHostInNewTab">打开宿主页</button>
+        <button class="btn" :disabled="!hostUrl" @click="openHostInNewTab">打开宿主测试页</button>
       </div>
     </div>
 
-    <div v-if="connected && !isMixedContentBlocked" class="sandbox-iframe-wrap">
-      <iframe ref="iframeRef" :src="iframeSrc" class="sandbox-iframe" allow="clipboard-read; clipboard-write" />
-    </div>
-    <div v-else-if="connected" class="sandbox-placeholder">
-      <div class="placeholder-icon">
-        <svg
-          width="48"
-          height="48"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.5"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-          <line x1="8" y1="21" x2="16" y2="21" />
-          <line x1="12" y1="17" x2="12" y2="21" />
-        </svg>
-      </div>
-      <p class="placeholder-text">画面被浏览器安全策略拦截</p>
-      <p class="placeholder-hint">HTTPS 市场页不能嵌入 HTTP 宿主 iframe。请在上方填入 HTTPS 宿主地址后重新扫描。</p>
-    </div>
-    <div v-else class="sandbox-placeholder">
+    <div v-if="!connected" class="sandbox-placeholder">
       <div class="placeholder-icon">
         <svg
           width="48"
@@ -96,11 +71,11 @@ import { useSandboxHost } from './sandbox/useSandboxHost'
 /* eslint-disable @typescript-eslint/no-unused-vars -- 测试兼容面：既有测试经 setupState 访问 */
 const {
   hostUrl, connected, connecting, connectError, probeProgress, pushing,
-  hostInfo, iframeRef, manualModId, pushMessage,
-  effectiveModId, statusText, statusClass, iframeSrc, isMixedContentBlocked,
+  hostInfo, manualModId, pushMessage,
+  effectiveModId, statusText, statusClass, hostPageUrl,
   normalizeHostOrigin, isLoopbackHost, isLoopbackOrigin,
   shouldProbeFromBrowser, buildDiscoveryCandidates,
-  discoverAndConnect, pushAndTest, openHostInNewTab, openFullscreen, shouldAutoPush,
+  discoverAndConnect, pushAndTest, openHostInNewTab, shouldAutoPush,
 } = useSandboxHost()
 /* eslint-enable @typescript-eslint/no-unused-vars */
 </script>

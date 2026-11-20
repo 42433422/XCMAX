@@ -13,6 +13,12 @@ export const CORE_ROUTES: RouteRecordRaw[] = [
     meta: { title: '登录', publicAccess: true, hideChrome: true },
   },
   {
+    path: '/local-workspace',
+    name: 'local-workspace',
+    component: () => import('../../views/LocalWorkspaceView.vue'),
+    meta: { title: '本地工作区', publicAccess: true, hideChrome: true },
+  },
+  {
     path: '/login/help',
     name: 'login-help',
     component: () => import('../../views/LoginHelpView.vue'),
@@ -63,6 +69,7 @@ export const CORE_ROUTES: RouteRecordRaw[] = [
     path: '/persy/knowledge',
     name: 'persy-knowledge',
     component: () => import('../../views/PersyKnowledgeView.vue'),
+    props: (route) => ({ space: route.query.space === 'user-memory' ? 'user-memory' : undefined }),
     meta: { title: 'Persy 知识库' },
   },
   {

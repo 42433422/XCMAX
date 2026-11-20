@@ -13,7 +13,7 @@ from typing import Any, Optional
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
-from modstore_server.account_license_plans import is_account_license_plan_id
+from modstore_server.account_license_plans import PERSONAL_PLAN_ID, is_account_license_plan_id
 from modstore_server.models import CatalogItem, PlanTemplate, Purchase, UserPlan
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
@@ -366,6 +366,8 @@ def _resolve_checkout_fields(
         subject = (body.subject or "").strip() or "XC AGI 钱包充值"
         order_kind = "wallet"
     elif body.plan_id:
+        if body.plan_id.strip() == PERSONAL_PLAN_ID:
+            raise HTTPException(400, "个人使用版可直接开通")
         plan_row = (
             session.query(PlanTemplate)
             .filter(PlanTemplate.id == body.plan_id, PlanTemplate.is_active.is_(True))

@@ -79,11 +79,22 @@ import UIKit
       name: "xcagi/session_store",
       binaryMessenger: messenger
     ).setMethodCallHandler { [weak self] call, result in
-      guard call.method == "sessionFilePath" else {
+      switch call.method {
+      case "sessionFilePath":
+        result(self?.sessionFilePath())
+      case "localWorkspaceDirectory":
+        do {
+          result(try Self.localWorkspaceDirectory().path)
+        } catch {
+          result(FlutterError(
+            code: "LOCAL_WORKSPACE_DIRECTORY_FAILED",
+            message: "无法创建不参与备份的本地工作区",
+            details: nil
+          ))
+        }
+      default:
         result(FlutterMethodNotImplemented)
-        return
       }
-      result(self?.sessionFilePath())
     }
 
     FlutterMethodChannel(
@@ -137,26 +148,6 @@ import UIKit
     }
 
     FlutterMethodChannel(
-      name: "xcagi/update_installer",
-      binaryMessenger: messenger
-    ).setMethodCallHandler { call, result in
-      guard call.method == "startPackageUpdate" else {
-        result(FlutterMethodNotImplemented)
-        return
-      }
-      let args = call.arguments as? [String: Any] ?? [:]
-      let urlString = (args["downloadUrl"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-      if !urlString.isEmpty, let url = URL(string: urlString) {
-        DispatchQueue.main.async {
-          UIApplication.shared.open(url)
-        }
-        result("已跳转 App Store")
-      } else {
-        result("请通过 App Store 搜索 XCAGI 更新")
-      }
-    }
-
-    FlutterMethodChannel(
       name: "xcagi/content_uri",
       binaryMessenger: messenger
     ).setMethodCallHandler { call, result in
@@ -183,6 +174,22 @@ import UIKit
     let directory = base.appendingPathComponent("XCAGI", isDirectory: true)
     try? manager.createDirectory(at: directory, withIntermediateDirectories: true)
     return directory.appendingPathComponent("xcagi_session.json").path
+  }
+
+  private static func localWorkspaceDirectory() throws -> URL {
+    let manager = FileManager.default
+    let base = try manager.url(
+      for: .applicationSupportDirectory,
+      in: .userDomainMask,
+      appropriateFor: nil,
+      create: true
+    )
+    var directory = base.appendingPathComponent("XCAGILocalWorkspace", isDirectory: true)
+    try manager.createDirectory(at: directory, withIntermediateDirectories: true)
+    var backup = URLResourceValues()
+    backup.isExcludedFromBackup = true
+    try directory.setResourceValues(backup)
+    return directory
   }
 
   private func parseDeepLinkRoute(_ url: URL) -> String? {

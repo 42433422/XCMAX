@@ -11,10 +11,10 @@ import hashlib as hashlib
 import json as json
 import logging
 import os
-import threading
 import uuid
 from collections import defaultdict as defaultdict
 from collections.abc import Callable
+from contextlib import AbstractContextManager
 from contextlib import contextmanager as contextmanager
 from dataclasses import asdict as asdict
 from dataclasses import dataclass as dataclass
@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any, Concatenate, ParamSpec, Protocol, Self, TypeVar, cast
 
 from app.application.user_memory.candidates import CandidateMemory, CandidatePorts
+from app.application.user_memory.composition import create_memory_repository
 from app.application.user_memory.feedback import FeedbackMemory, FeedbackPorts
 from app.application.user_memory.patterns import ActionMemory, PatternPorts
 from app.application.user_memory.policy import MemoryPolicy, PolicyPorts
@@ -36,14 +37,11 @@ from app.domain.user_memory.records import ActionPattern as ActionPattern
 from app.domain.user_memory.records import ContextSummary as ContextSummary
 from app.domain.user_memory.records import FeedbackRecord as FeedbackRecord
 from app.domain.user_memory.records import UserMemory as UserMemory
-from app.infrastructure.user_memory.json_storage import JsonMemoryStorage
-from app.infrastructure.user_memory.persistence import MemoryRepository
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.neuro_bus.neuro_service_instrumentation import (
     instrument_service_layer_class as instrument_service_layer_class,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS as RECOVERABLE_ERRORS
-from app.utils.process_lock import exclusive_file_lock
 
 logger = logging.getLogger(__name__)
 
@@ -119,8 +117,8 @@ def memory_store_transaction(
     return wrapped
 
 
-class UserMemoryStore(MemoryRepository):
-    """Legacy singleton constructor for the explicit snapshot repository."""
+class UserMemoryStore:
+    """Legacy singleton facade over the replaceable memory-store port."""
 
     _instance: UserMemoryStore | None = None
     _initialized: bool
@@ -131,7 +129,9 @@ class UserMemoryStore(MemoryRepository):
             cls._instance._initialized = False
         return cast(Self, cls._instance)
 
-    def __init__(self, storage_type: str = "json") -> None:
+    def __init__(
+        self, storage_type: str = "json", *, repository: MemoryStore | None = None
+    ) -> None:
         if getattr(self, "_initialized", False):
             return
         configured_dir = os.environ.get("XCAGI_USER_MEMORY_DIR")
@@ -141,27 +141,31 @@ class UserMemoryStore(MemoryRepository):
             configured_path
             or (memory_dir / "memory_store.json" if configured_dir else JSON_MEMORY_PATH)
         )
-        backend = (
-            JsonMemoryStorage(
-                path,
-                lock=lambda: exclusive_file_lock(
-                    self._lock_path, blocking=True, timeout=60, reject_symlink=True
-                ),
-                deserialize=lambda data: UserMemory.from_dict(data),
-                temporary_id=lambda: uuid.uuid4().hex,
+        self._repository = (
+            repository
+            if repository is not None
+            else create_memory_repository(
+                storage_type=storage_type,
+                memory_path=path,
+                new_memory=lambda user_id: UserMemory(user_id=user_id),
+                now=lambda: datetime.now().isoformat(),
+                logger=logger,
             )
-            if storage_type == "json"
-            else None
-        )
-        super().__init__(
-            storage_type=storage_type,
-            memory_path=path,
-            backend=backend,
-            new_memory=lambda user_id: UserMemory(user_id=user_id),
-            now=lambda: datetime.now().isoformat(),
-            logger=logger,
         )
         self._initialized = True
+
+    def transaction(self) -> AbstractContextManager[None]:
+        return self._repository.transaction()
+
+    def get_memory(self, user_id: str) -> UserMemory | None:
+        return self._repository.get_memory(user_id)
+
+    def save_memory(self, user_id: str, memory: UserMemory) -> None:
+        self._repository.save_memory(user_id, memory)
+
+    def __getattr__(self, name: str) -> Any:
+        """Keep historical snapshot diagnostics available on the compatibility facade."""
+        return getattr(object.__getattribute__(self, "_repository"), name)
 
 
 class UserMemoryService(NeuroEventPublisherMixin):
@@ -181,7 +185,6 @@ class UserMemoryService(NeuroEventPublisherMixin):
         if getattr(self, "_initialized", False):
             return
         self._store = UserMemoryStore(storage_type=storage_type)
-        self._memory_v2_lock = threading.RLock()
         access = MemoryAccess(
             transaction=late_callback(lambda: self._store.transaction),
             get_memory=late_callback(lambda: self._store.get_memory),
@@ -209,9 +212,7 @@ class UserMemoryService(NeuroEventPublisherMixin):
                 fingerprint=late_callback(lambda: self._memory_v2_fingerprint),
                 govern=late_callback(lambda: self._govern_memory_v2_candidate),
                 find_record=late_callback(lambda: self._find_memory_v2_record),
-                propose_unlocked=late_callback(lambda: self._propose_memory_candidate_unlocked),
                 set_status=late_callback(lambda: self._set_memory_v2_status),
-                proposal_lock=lambda: self._memory_v2_lock,
                 max_records=lambda: MAX_MEMORY_V2_RECORDS,
                 new_id=lambda: uuid.uuid4().hex[:12],
             ),
@@ -290,6 +291,7 @@ class UserMemoryService(NeuroEventPublisherMixin):
         source: str = "agent_observation",
         confidence: float = 0.5,
         evidence: list[dict[str, Any]] | None = None,
+        activate_personal_capture: bool = False,
     ) -> dict[str, Any]:
         return self._candidates.propose(
             user_id,
@@ -299,27 +301,7 @@ class UserMemoryService(NeuroEventPublisherMixin):
             source=source,
             confidence=confidence,
             evidence=evidence,
-        )
-
-    def _propose_memory_candidate_unlocked(
-        self,
-        user_id: str,
-        memory_type: str,
-        key: str,
-        value: Any,
-        *,
-        source: str = "agent_observation",
-        confidence: float = 0.5,
-        evidence: list[dict[str, Any]] | None = None,
-    ) -> dict[str, Any]:
-        return self._candidates.propose_unlocked(
-            user_id,
-            memory_type,
-            key,
-            value,
-            source=source,
-            confidence=confidence,
-            evidence=evidence,
+            activate_personal_capture=activate_personal_capture,
         )
 
     def confirm_memory_candidate(

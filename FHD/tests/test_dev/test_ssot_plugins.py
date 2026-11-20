@@ -9,6 +9,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
@@ -65,13 +67,39 @@ def test_docs_ssot_adapter_run_check():
 
 
 def test_account_system_uses_registration_handoff_and_license_catalog():
-    """注册页负责交接；价格档位由独立账号授权目录展示。"""
+    """宿主交接到市场统一注册；价格档位由独立账号授权目录展示。"""
     from scripts.dev.ssot_plugins import account_system
 
-    assert account_system.REGISTER_VIEW not in account_system.BUDGET_FRONT_FILES
+    for path in (account_system.LOGIN_ACTIONS, account_system.MARKET_REGISTER_VIEW):
+        assert path.is_file()
+        assert path not in account_system.BUDGET_FRONT_FILES
     assert account_system.ACCOUNT_LICENSE_CATALOG.is_file()
     assert account_system.ACCOUNT_LICENSE_VIEW.is_file()
     assert account_system.check_drift() == 0
+
+
+@pytest.mark.parametrize(
+    ("source_name", "required", "message"),
+    [
+        ("LOGIN_ACTIONS", "marketRegisterUrl", "缺少市场注册入口"),
+        ("MARKET_REGISTER_VIEW", "选择适合的 XCAGI 方案", "缺少注册流程文案"),
+        ("ACCOUNT_LICENSE_CATALOG", "个人使用版", "缺少方案名称"),
+    ],
+)
+def test_account_system_rejects_registration_and_catalog_drift(
+    tmp_path, monkeypatch, capsys, source_name, required, message
+):
+    from scripts.dev.ssot_plugins import account_system
+
+    source = getattr(account_system, source_name)
+    text = source.read_text(encoding="utf-8")
+    assert required in text
+    changed = tmp_path / source.name
+    changed.write_text(text.replace(required, "removed-contract"), encoding="utf-8")
+    monkeypatch.setattr(account_system, source_name, changed)
+
+    assert account_system.check_drift() == 1
+    assert f"{changed} {message}" in capsys.readouterr().out
 
 
 def test_test_files_adapter_run_check():

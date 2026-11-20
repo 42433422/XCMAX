@@ -1,6 +1,6 @@
 {
   "schema": "xcagi.product_lines_status/v1",
-  "generated_at": "2026-11-13 04:50 UTC",
+  "generated_at": "2026-11-19 17:43 UTC",
   "generator": "FHD/scripts/dev/product_lines_status.py",
   "config": "FHD/config/product_lines.yaml",
   "policy": "本文件为生成物：版本/发布/能力/覆盖率的数字全部取自各自权威源，禁止手改；三线「成熟度」只呈现能力目录自有的证据分级计数与 Release Gate 结论，不合成任何自造评分。",
@@ -11,6 +11,27 @@
   },
   "release": {
     "history": [
+      {
+        "kind": "release",
+        "publication_state": "candidate",
+        "publication_scope": "harmonyos-arm64-unsigned-candidate",
+        "version": "1.0.0.7",
+        "date": "2026-11-19",
+        "title": "HarmonyOS ARM64 源码候选（未签名、未验收）",
+        "channel": "候选构建 · 未发布",
+        "notes": [
+          "Flutter 鸿蒙 Runner 共用 VERSION.md 的产品版本；构建号由 AppScope 读取，构建器核验原包 versionName/versionCode 并写入 build-info。",
+          "本条仅登记候选意图。须在合入 main 后构建并冻结原包，再登记真实 source_sha、build_run_id、artifact_sha256 与签名、实机安装及业务验收证据；当前未登记 deliveries，不提供下载地址，不代表正式发布或 OTA 可用。"
+        ],
+        "platforms": [
+          "HarmonyOS arm64 未签名候选（签名、安装与真机验收待完成）"
+        ],
+        "provenance": {
+          "repository": "42433422/XCMAX",
+          "path": "FHD/mobile-flutter-poc/scripts/build_harmony_hap.py",
+          "artifact_reconciliation": "pending"
+        }
+      },
       {
         "kind": "release",
         "publication_state": "published",
@@ -276,7 +297,7 @@
       "last_bump_at": "2026-08-18T00:04:28.127731+00:00"
     },
     "download": {
-      "history_generations": 17,
+      "history_generations": 18,
       "history_scope": "product_evolution_not_published_release_count",
       "version_lock": "1.0.0.7",
       "download_version": "1.0.0.7",
@@ -308,7 +329,8 @@
     "Windows 桌面": "签约级",
     "macOS 桌面": "签约级",
     "Web / 后端": "签约级",
-    "Android": "实验骨架·非签约级"
+    "Android": "实验骨架·非签约级",
+    "HarmonyOS": "候选·非签约级"
   },
   "coverage": {
     "source": "FHD/metrics/coverage-dual-summary.json",

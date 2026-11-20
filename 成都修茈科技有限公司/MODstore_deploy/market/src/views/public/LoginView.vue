@@ -18,7 +18,7 @@
         </button>
       </form>
       <p class="auth-footer">
-        <router-link to="/login-email" class="link">邮箱验证码登录</router-link>
+        <router-link :to="{ name: 'login-email', query: route.query }" class="link">邮箱验证码登录</router-link>
         · <router-link to="/forgot-password" class="link">忘记密码</router-link>
         · 没有账号？<router-link :to="registerRoute" class="link">注册</router-link>
       </p>

@@ -247,7 +247,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useRouter } from 'vue-router';
 import { useTutorialStore } from '@/stores/tutorial';
@@ -441,7 +441,14 @@ watch(
   }
 );
 
+let stopDesktopProductSearch;
 onMounted(() => {
+  stopDesktopProductSearch = window.xcagiDesktop?.onAssistantProductSearch?.(async (query) => {
+    onOpenAssistantFloat(new CustomEvent('xcagi:open-assistant-float', {
+      detail: { feature: 'products', query, forceOpen: true },
+    }));
+    await nextTick();
+  });
   window.addEventListener('keydown', onDocumentKeydownCapture, true);
   window.addEventListener('xcagi:assistant-push', onAssistantPush);
   window.addEventListener('xcagi:open-assistant-float', onOpenAssistantFloat);
@@ -467,6 +474,7 @@ watch(
 );
 
 onBeforeUnmount(() => {
+  stopDesktopProductSearch?.();
   window.removeEventListener('keydown', onDocumentKeydownCapture, true);
   window.removeEventListener('xcagi:assistant-push', onAssistantPush);
   window.removeEventListener('xcagi:open-assistant-float', onOpenAssistantFloat);

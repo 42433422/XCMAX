@@ -1132,7 +1132,7 @@ class TestGetMobileUser:
             def __exit__(self, *args):
                 return False
 
-        monkeypatch.setattr("app.db.session.get_db", lambda: FakeDb())
+        monkeypatch.setattr("app.db.session.get_host_db", lambda: FakeDb())
         result = await get_mobile_user(request, authorization=f"Bearer {tokens['access_token']}")
         assert result is fake_user
 
@@ -1179,7 +1179,7 @@ class TestGetMobileUser:
             def __exit__(self, *args):
                 return False
 
-        monkeypatch.setattr("app.db.session.get_db", lambda: FakeDb())
+        monkeypatch.setattr("app.db.session.get_host_db", lambda: FakeDb())
         result = await get_mobile_user(request, authorization=f"Bearer {tokens['access_token']}")
         assert result is None
 
@@ -1216,7 +1216,7 @@ class TestGetMobileUser:
             def __exit__(self, *args):
                 return False
 
-        monkeypatch.setattr("app.db.session.get_db", lambda: FakeDb())
+        monkeypatch.setattr("app.db.session.get_host_db", lambda: FakeDb())
         result = await get_mobile_user(request, authorization=f"Bearer {tokens['access_token']}")
         assert result is None
 

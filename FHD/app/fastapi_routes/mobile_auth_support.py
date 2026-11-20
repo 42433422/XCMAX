@@ -157,6 +157,7 @@ def mobile_auth_success_payload(
         "market_is_admin",
         "market_is_enterprise",
         "entitled_mod_ids",
+        "personal_plan",
         "tier",
         "account_tier",
         "budget_range",

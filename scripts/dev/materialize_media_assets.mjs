@@ -7,12 +7,13 @@ import { fileURLToPath } from 'node:url'
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const SITE = '成都修茈科技有限公司'
 const TARGETS = {
+  harmony: ['FHD/mobile-flutter-poc/ohos/AppScope/resources/base/media/'],
   frontend: ['FHD/frontend/public/'],
   market: [`${SITE}/MODstore_deploy/market/public/`],
   marketing: [`${SITE}/corp-butler/`, `${SITE}/assets/optimized/`, `${SITE}/marketing-assets/xc-brand-film/assets/`],
   appstore: ['appstore-screenshots/live/'],
 }
-const SOURCES = ['FHD/frontend/public/', `${SITE}/assets/`, 'appstore-screenshots/2.3.3-accurate-metadata/']
+const SOURCES = ['FHD/mobile-flutter-poc/android/app/src/main/res/', 'FHD/frontend/public/', `${SITE}/assets/`, 'appstore-screenshots/2.3.3-accurate-metadata/']
 const sha = (bytes) => createHash('sha256').update(bytes).digest('hex')
 
 function inside(root, relative) {

@@ -18,6 +18,8 @@
 
 `release_policy` 定义 `candidate → accepted → published → withdrawn`。每条历史可关联 `deliveries`，逐项包含 product、sku、platform、arch、channel、source_sha、build_run_id、artifact_sha256、signature、notarization、state 与 evidence；版本继承所属历史条目。不同架构/渠道不得合并状态。未知身份不填假值；未对账历史保留 `publication_state=unknown`，不能据此生成已发布数量。
 
+尚未冻结 main 原包的源码候选只在 `release_history` 登记 `candidate` 意图并保留 `deliveries` 缺省；生成视图不得据此开放下载、标记验收或晋级。真实构建身份齐全后才录入逐制品记录。
+
 1. **candidate**：从已合入 main 的准确 SHA 构建并冻结字节；源码改动、CI 通过或有安装包均不是发布。
 2. **accepted**：同一原包完成声明范围的实机安装、升级、业务、数据保留及失败恢复，记录 `evidence.acceptance`。新 SHA / 重打包不能沿用旧证据。
 3. **published**：再关联 `evidence.authorization/publication`，原字节晋级，读回 URL、大小、SHA-256、签名/公证、平台架构和更新元数据。未签名临时交付须有风险接受，禁止进入 stable OTA。
@@ -33,7 +35,7 @@
 |---|---|
 | 官网历史 / 下载 | `product_lines_status.py::generated_views` 对目录复用公开脱敏策略；HTML 读 `/data/release-history.json`。下载仍核对既有指针与原包 manifest/hotfix，不以历史决定可用性。`generate-download-manifest.py::load_release_history` 已读取同目录。 |
 | 发布说明 | 官网 notes 同源；`generate-update-metadata.mjs` 仍读 `XCAGI_RELEASE_NOTES` 或通用 fallback，CHANGELOG 是独立贡献记录/历史证据，尚未自动投影到 OTA。 |
-| 客户端 OTA | `desktop-config.ts::SKU_UPDATE_URL` → `updater.ts` 读取 `latest[-mac].yml` 并验 Ed25519；metadata 生成器绑定 SHA/releaseId/包哈希，`release-desktop.yml` 校验跨平台与公开元数据。Mac OTA/fix-feed 晋级仍有独立入口。 |
+| 客户端更新 | 桌面 `SKU_UPDATE_URL` 交给 electron-updater。自定义 provider 验证同一份频道清单的 Ed25519 签名，上游按清单选择、校验和安装制品。Windows 未签名候选走临时手动下载。Android 官网 APK 由系统下载安装。iOS 通过已发布的 App Store 版本更新。 |
 | GitHub Release | `release-desktop.yml::github-release` 在 tag 与双平台/签名/下载中心门禁通过后上传同 manifest/pointer/assets；尚未配置同源 body，不能据此证明官网全部历史已登记 GitHub。 |
 
 旧 market 下载页已由 `ca8bd212e` 迁出；本次退役无生产消费者的 `xcagiDownloadLinks` 静态猜 URL 工具、专属测试及构建参数/v8上传脚本，现役入口只使用经校验的官网数据。

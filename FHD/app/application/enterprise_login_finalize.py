@@ -11,6 +11,7 @@ from fastapi import BackgroundTasks, HTTPException
 
 from app.application.session_account_meta import AccountKind
 from app.application.tenant_rbac_app_service import TenantIdentityError
+from app.infrastructure.billing.saas_plans import PERSONAL_PLAN_ID
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _DELIVERY_ERRORS: tuple[type[Exception], ...] = RECOVERABLE_ERRORS + (HTTPException,)
@@ -80,6 +81,7 @@ async def finalize_enterprise_login(
             company_brand = flow.company_brand_from_user_blob(user_blob)
             tenant_id: int | None = None
             tenant_name = company_brand
+            personal_plan = market_result.get("active_plan_id") == PERSONAL_PLAN_ID
             market_is_admin = bool(market_result.get("is_market_admin"))
             market_is_enterprise = bool(market_result.get("is_enterprise"))
             user_id = (result.get("user") or {}).get("id")
@@ -102,6 +104,7 @@ async def finalize_enterprise_login(
                     if (
                         not market_token
                         or local_demo_market
+                        or personal_plan
                         or not market_is_enterprise
                         or market_is_admin
                     ):
@@ -141,6 +144,7 @@ async def finalize_enterprise_login(
                     )
 
                     if apply_paid_plan_for_user(user_id=int(user_id), plan_id=active_plan_id):
+                        result["personal_plan"] = personal_plan
                         result["account_license_plan_id"] = active_plan_id
                         result["account_tier"] = str(market_result.get("account_tier") or "normal")
             account_kind = flow._derive_and_heal_account_kind(

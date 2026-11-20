@@ -101,6 +101,22 @@ def test_two_enterprises_real_read_and_create_readback(stores):
         )
 
 
+def test_personal_plan_cannot_reuse_enterprise_tool_grants(stores):
+    from app.db.models.user import User
+
+    actor, _, _, engine = stores
+    with actor.factory.begin() as db:
+        db.get(User, actor.user_id).account_tier = "personal"
+    before = rows(engine)
+    assert customer(actor)["success"] is False
+    assert product(actor)["success"] is False
+    assert rows(engine) == before
+    with actor.factory.begin() as db:
+        db.get(User, actor.user_id).account_tier = "normal"
+    assert product(actor)["exists"] is True
+    assert customer(actor)["success"] is True
+
+
 @pytest.mark.parametrize(
     "kind",
     ["anonymous", "forged", "expired", "tenant", "mod", "grant", "tenant-role", "tenantless"],

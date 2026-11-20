@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import json
-import logging
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -14,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from modstore_server.account_license_plans import account_license_plan
 from modstore_server.api.deps import get_current_user, get_db
+from modstore_server.customer_delivery_failure import start_failure_message
 from modstore_server.customer_service_api import _schedule_customer_ticket_incident
 from modstore_server.customer_service_delivery_api import (
     _custom_delivery_payload,
@@ -39,7 +39,6 @@ from modstore_server.models_cs import (
 )
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
-logger = logging.getLogger(__name__)
 router = APIRouter()
 _get_current_user = get_current_user
 
@@ -217,11 +216,7 @@ async def create_custom_delivery(
             active_evidence["runs"] = [*runs, run]
             active_evidence.pop("start_error", None)
         except RECOVERABLE_ERRORS as exc:
-            logger.exception(
-                "pre-delivery included revision start failed ticket=%s",
-                active_initial.ticket_no,
-            )
-            active_evidence["start_error"] = str(exc)[:1000]
+            active_evidence["start_error"] = start_failure_message("revision", type(exc).__name__)
         active_initial.evidence_json = json_dumps(active_evidence)
         active_initial.status = "processing"
         active_initial.decision_status = "pending"
@@ -398,8 +393,7 @@ async def create_custom_delivery(
             )
             evidence["runs"] = [run]
         except RECOVERABLE_ERRORS as exc:
-            logger.exception("custom delivery production start failed ticket=%s", ticket.ticket_no)
-            evidence["start_error"] = str(exc)[:1000]
+            evidence["start_error"] = start_failure_message("initial", type(exc).__name__)
     ticket.evidence_json = json_dumps(evidence)
     ticket.updated_at = datetime.now(UTC)
     db.commit()

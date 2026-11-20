@@ -52,6 +52,12 @@ def _is_shipment_download(path: str) -> bool:
     return path == _DOWNLOAD_PREFIX or path.startswith(_DOWNLOAD_PREFIX + "/")
 
 
+def _requires_rbac(user) -> bool:
+    return (
+        resolve_product_sku() == "enterprise" or getattr(user, "account_tier", None) == "personal"
+    )
+
+
 def require_tenant_scoped_permission(read_code: str, write_code: str | None = None):
     def guard(request: Request):
         user = resolve_session_user(request)
@@ -61,7 +67,7 @@ def require_tenant_scoped_permission(read_code: str, write_code: str | None = No
             return None
         if getattr(user, "tenant_id", None) is None:
             raise HTTPException(status_code=403, detail="该旧业务接口尚未提供安全的租户数据隔离")
-        if resolve_product_sku() == "enterprise":
+        if _requires_rbac(user):
             from app.application.facades.session_facade import get_auth_service
 
             code = _permission_code(request, read_code, write_code)
@@ -78,7 +84,7 @@ def check_legacy_business_user_permission(user, permission_code: str):
     This preserves local HTTP anonymous behavior. Tool callers must establish
     their authenticated actor separately before using this policy.
     """
-    if resolve_product_sku() != "enterprise":
+    if not _requires_rbac(user):
         if user is not None and user.tenant_id is not None:
             raise HTTPException(status_code=403, detail="该旧业务接口尚未提供安全的租户数据隔离")
         return None
@@ -99,10 +105,10 @@ def _guard_shipment_download(request: Request, read_code: str):
     if user is None:
         raise HTTPException(status_code=401, detail="请先登录")
     if getattr(user, "tenant_id", None) is None:
-        if resolve_product_sku() == "enterprise":
+        if _requires_rbac(user):
             raise HTTPException(status_code=403, detail="该旧业务接口尚未提供安全的租户数据隔离")
         return user
-    if resolve_product_sku() == "enterprise":
+    if _requires_rbac(user):
         from app.application.facades.session_facade import get_auth_service
 
         if not get_auth_service().has_permission(user, read_code):
@@ -135,7 +141,8 @@ def require_print_permission(code: str = "print.label"):
     def guard(request: Request):
         if request.url.path.rstrip("/") not in _PRINTER_DEVICE_PATHS:
             return scoped(request)
-        if resolve_product_sku() != "enterprise":
+        user = resolve_session_user(request)
+        if not _requires_rbac(user):
             return None
         user = get_logged_in_user(request)
         from app.application.facades.session_facade import get_auth_service

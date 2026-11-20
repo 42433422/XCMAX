@@ -189,7 +189,8 @@ export function useReviewedDocuments(options: { capture: () => () => boolean; ou
   }
   async function prepare(doc: ReviewedDocument) {
     if (!canPrepare(doc) || doc.intakePending) return
-    if (doc.intakeKey === intakeSelection(doc)) { void submitIntake(doc); return }
+    const submitAfterPreview = saved(doc)
+    if (doc.intakeKey === intakeSelection(doc)) { if (submitAfterPreview) void submitIntake(doc); return }
     const session = options.capture()
     if (!session()) return
     clearIntake(doc)
@@ -199,7 +200,7 @@ export function useReviewedDocuments(options: { capture: () => () => boolean; ou
     const accept = (run: EltRun) => {
       if (!valid()) return
       doc.intake!.business = run
-      if (run.status === 'preview_ready' && run.preview_revision) { doc.intakeKey = selection; doc.intakePending = false; doc.intakeError = intakeWarning(doc.intake!); void submitIntake(doc) }
+      if (run.status === 'preview_ready' && run.preview_revision) { doc.intakeKey = selection; doc.intakePending = false; doc.intakeError = intakeWarning(doc.intake!); if (submitAfterPreview) void submitIntake(doc) }
       else if (['queued', 'previewing'].includes(run.status)) timers.set(doc.key, setTimeout(() => { void poll() }, 800))
       else { doc.intakePending = false; doc.intakeError = run.error?.message || '入库预演未完成。' }
     }
@@ -275,11 +276,11 @@ export function useReviewedDocuments(options: { capture: () => () => boolean; ou
     } finally { if (valid()) doc.ingestPending = false }
   }
   function choose(doc: ReviewedDocument, index: number) {
-    if (!owned(doc) || doc.phase || doc.unknown || saved(doc) || !Number.isInteger(index) || !proposal(doc)?.candidates[index]) return
+    if (!owned(doc) || doc.phase || doc.unknown || saved(doc) || index === doc.candidateIndex || !Number.isInteger(index) || !proposal(doc)?.candidates[index]) return
     doc.candidateIndex = index; clearIntake(doc)
   }
   function canSave(doc: ReviewedDocument) {
-    return canPrepare(doc) && !saved(doc)
+    return canPrepare(doc) && !saved(doc) && !doc.intakePending
   }
   async function save(doc: ReviewedDocument) {
     if (!canSave(doc)) return
