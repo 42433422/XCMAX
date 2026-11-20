@@ -57,7 +57,8 @@ def test_production_deploy_uses_preprovisioned_auto_publish_secret() -> None:
     assert "AUTO_PUBLISH_TOKEN" not in workflow
     parsed = yaml.safe_load(workflow)
     deploy = next(
-        step for step in parsed["jobs"]["deploy"]["steps"]
+        step
+        for step in parsed["jobs"]["deploy"]["steps"]
         if step.get("name") == "Deploy immutable release and verify exact runtime identity"
     )
     forwarded = {value.strip() for value in deploy["with"]["envs"].split(",")}
