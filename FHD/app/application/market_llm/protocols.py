@@ -40,6 +40,7 @@ class ChatInput:
     temperature: float = 0.7
     max_tokens: int = 2000
     extra: Payload = field(default_factory=dict)
+    native_vision: bool = False
 
     def payload(
         self,

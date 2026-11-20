@@ -48,7 +48,7 @@ def supports_operation(provider, model, operation, details=None):
 
 
 async def select_operation_model(
-    user_id, provider, operation, key, base, *, model="", seed=""
+    user_id, provider, operation, key, base, *, model="", seed="", model_filter=None
 ):
     """Use declared operations and the provider's existing catalog cache."""
     if not key or (
@@ -68,13 +68,15 @@ async def select_operation_model(
         # A configured MiMo deployment may expose just its chat model in /models.
         if not candidate or (candidate not in rows and candidate != seed):
             continue
-        if supports_operation(provider, candidate, operation, rows.get(candidate)):
+        if supports_operation(provider, candidate, operation, rows.get(candidate)) and (
+            model_filter is None or model_filter(candidate)
+        ):
             return candidate
     return None
 
 
 async def resolve_operation_route(
-    session, user_id, operation, *, provider="", model="", seed=""
+    session, user_id, operation, *, provider="", model="", seed="", route_filter=None
 ):
     """Honor an explicit provider and keep automatic BYOK routes in the BYOK pool."""
     if provider and provider not in KNOWN_PROVIDERS:
@@ -103,8 +105,13 @@ async def resolve_operation_route(
     async def resolve(p, key, base, source):
         try:
             async with asyncio.timeout(4):
+                params = {"model": model, "seed": seed}
+                if route_filter is not None:
+                    params["model_filter"] = lambda mid: route_filter(
+                        OperationRoute(p, mid, source, key, base)
+                    )
                 selected = await select_operation_model(
-                    user_id, p, operation, key, base, model=model, seed=seed
+                    user_id, p, operation, key, base, **params
                 )
         except TimeoutError:
             selected = (
@@ -112,7 +119,10 @@ async def resolve_operation_route(
                 if seed and (not model or model == seed) and p == "xiaomi"
                 else None
             )
-        return OperationRoute(p, selected, source, key, base) if selected else None
+        if not selected:
+            return None
+        route = OperationRoute(p, selected, source, key, base)
+        return route if route_filter is None or route_filter(route) else None
 
     results = await asyncio.gather(*(resolve(*item) for item in eligible))
     chosen = next((item for item in results if item is not None), None)

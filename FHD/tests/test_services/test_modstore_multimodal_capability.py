@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+import json
+
+import httpx
+import pytest
+
+from app.domain.shared_services.conversation import modstore_adapter
 from app.domain.shared_services.conversation.modstore_adapter import _catalog_model_vision_support
 
 
@@ -32,3 +38,56 @@ def test_catalog_allows_vlm_and_known_vision_name() -> None:
     }
     assert _catalog_model_vision_support(catalog, "openai", "visual-model") is True
     assert _catalog_model_vision_support({}, "openai", "gpt-4o") is True
+
+
+@pytest.mark.parametrize("vision_ack", [True, False])
+def test_desktop_sends_native_image_only_after_account_vision_route(monkeypatch, vision_ack):
+    requests = []
+    adapter = modstore_adapter.ModstorePlatformAdapter(
+        platform_url="https://example.test",
+        auth_token="account-token",
+    )
+    adapter._use_account_default = True
+    image = {"type": "image_url", "image_url": {"url": "data:image/png;base64,AA=="}}
+    messages = [{"role": "user", "content": [image]}]
+
+    def respond(request):
+        requests.append(request)
+        if request.method == "GET":
+            return httpx.Response(
+                200,
+                json={
+                    "provider": "openai",
+                    "model": "vision-model",
+                    "route_token": "pinned-token",
+                    "operation": "vision" if vision_ack else "chat",
+                },
+            )
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            text='data: {"content":"native image"}\n\ndata: [DONE]\n\n',
+        )
+
+    monkeypatch.setattr(
+        modstore_adapter,
+        "_httpx_sync_client",
+        lambda **kwargs: httpx.Client(
+            transport=httpx.MockTransport(respond),
+            **kwargs,
+        ),
+    )
+    if not vision_ack:
+        with pytest.raises(ValueError):
+            adapter.chat_completion_sync(messages)
+        assert len(requests) == 1
+        return
+    result = adapter.chat_completion_sync(messages)
+    assert result["choices"][0]["message"]["content"] == "native image"
+    assert requests[0].url.params["operation"] == "vision"
+    assert requests[1].url.path == "/api/llm/chat/stream"
+    data = json.loads(requests[1].content)
+    assert data["messages"] == messages
+    assert data["model"] == "vision-model"
+    assert data["route_token"] == "pinned-token"
+    assert data["allow_failover"] is False

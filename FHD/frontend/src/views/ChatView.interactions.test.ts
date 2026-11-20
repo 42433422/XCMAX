@@ -10,8 +10,9 @@ import { voiceChatBridge } from '@/composables/voiceCallHost'
 
 // ===== 模块级 mock =====
 
-const { getActiveConversation, approveRunWithFreshGrant, showAppToast } = vi.hoisted(() => ({
+const { getActiveConversation, generateImage, approveRunWithFreshGrant, showAppToast } = vi.hoisted(() => ({
   getActiveConversation: vi.fn(),
+  generateImage: vi.fn(),
   approveRunWithFreshGrant: vi.fn(async () => ({ status: 'running' })),
   showAppToast: vi.fn(),
 }))
@@ -21,7 +22,7 @@ vi.mock('pinia', async () => {
   return { ...actual, storeToRefs: (store: any) => store }
 })
 
-vi.mock('@/api/chat', () => ({ default: { getActiveConversation } }))
+vi.mock('@/api/chat', () => ({ default: { getActiveConversation, generateImage } }))
 
 vi.mock('@/api/agentRunApproval', () => ({
   APPROVAL_GRANT_REJECTED_MESSAGE: '审批凭证已被使用，请刷新后重试',
@@ -1157,6 +1158,20 @@ describe('ChatView interactions', () => {
     window.dispatchEvent(new CustomEvent('xcagi:assistant-push', { detail: { title: '任务完成', description: '发货单已生成' } }))
     await nextTick()
     expect(latestAssistantPushRef.value).toEqual({ title: '任务完成', description: '发货单已生成' })
+  })
+
+  it('生图使用独立请求并显示钱包结算', async () => {
+    generateImage.mockResolvedValueOnce({
+      images: ['data:image/png;base64,AA=='], model: 'gpt-image-2', billed: true, charge_amount: '1.28',
+    })
+    const wrapper = await mountChatView()
+    await wrapper.get('#messageInput').setValue('生成一个红色方块')
+    await wrapper.get('[data-testid="generate-chat-image"]').trigger('click')
+    await flushPromises()
+    expect(generateImage).toHaveBeenCalledWith('生成一个红色方块', expect.any(String))
+    expect(wrapper.get('img[alt="AI 生成图片"]').attributes('src')).toBe('data:image/png;base64,AA==')
+    expect(wrapper.text()).toContain('本次扣费 ¥1.28')
+    expect(mockChatViewApi.sendMessage).not.toHaveBeenCalled()
   })
 
   it('回车发送与输入内容联动', async () => {

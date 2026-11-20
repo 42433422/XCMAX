@@ -257,6 +257,15 @@
             <span class="voice-input-btn-label">{{ voiceButtonText }}</span>
           </button>
         </div>
+        <button
+          type="button"
+          class="btn"
+          :disabled="!messageInput.trim() || isLoading || imagePending || multimodalPendingCount > 0 || artifactStaging.length > 0 || unsupportedStaging.length > 0"
+          data-testid="generate-chat-image"
+          @click="generateChatImage"
+        >
+          {{ imagePending ? '生图中' : '生图' }}
+        </button>
         <button v-if="isLoading" type="button" class="btn" data-testid="stop-reply" @click="stopReply()">停止回复</button>
         <button
           class="btn btn-primary send-message-btn"
@@ -268,6 +277,12 @@
         >
           {{ isLoading ? '发送纠正' : '发送' }}
         </button>
+      </div>
+      <div v-if="chatImage?.scope === messageSessionKey" aria-live="polite">
+        <figure v-for="image of chatImage.images" :key="image">
+          <img :src="image" alt="AI 生成图片" referrerpolicy="no-referrer" width="256" />
+          <figcaption>{{ chatImage.model }} · {{ chatImage.charge }}</figcaption>
+        </figure>
       </div>
       <div
         v-if="composerStatusText"
@@ -349,6 +364,7 @@ import { buildChatMessagesKey, buildChatScopedKey, readAiSessionIdFromStorage, r
 import { captureAuthSession } from '@/utils/authSessionCache'
 import { plainTextFromChatHtml } from '@/utils/sanitizeHtml'
 import chatApi from '@/api/chat'
+import { ApiError } from '@/api/core'
 import { isDurableChatScope } from '@/utils/chatSessionRestore'
 import { resolveWorkspaceSessionId, useRoutedTaskWorkspace, useTaskApprovalFeedback } from '@/composables/useRoutedTaskWorkspace'
 
@@ -805,6 +821,48 @@ const composerStatusText = computed(() => {
   if (!messageInput.value.trim()) return '请输入内容后再发送'
   return ''
 })
+
+const imagePending = ref(false)
+const chatImage = ref<{ scope: string; images: string[]; model: string; charge: string } | null>(null)
+const pendingImageRequests = new Map<string, string>()
+
+async function generateChatImage() {
+  const prompt = messageInput.value.trim()
+  if (!prompt || isLoading.value || imagePending.value || multimodalPendingCount.value || artifactStaging.value.length || unsupportedStaging.value.length) return
+  const scope = messageSessionKey.value
+  const draft = JSON.stringify([scope, prompt])
+  const requestId = pendingImageRequests.get(draft) || crypto.randomUUID()
+  pendingImageRequests.set(draft, requestId)
+  imagePending.value = true
+  try {
+    const result = await chatApi.generateImage(prompt, requestId)
+    pendingImageRequests.delete(draft)
+    if (messageSessionKey.value !== scope) return
+    const images = result.images.filter(url =>
+      /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(url) || url.startsWith('https://'),
+    )
+    if (!images.length) {
+      showAppToast('生图结果没有可显示的图片。')
+      return
+    }
+    chatImage.value = {
+      scope,
+      images,
+      model: result.model,
+      charge: result.billed ? `本次扣费 ¥${result.charge_amount}` : '自带密钥',
+    }
+    if (messageInput.value.trim() === prompt) messageInput.value = ''
+  } catch (error: unknown) {
+    if (error instanceof ApiError && [400, 401, 402, 403, 404, 422, 429].includes(error.status)) {
+      pendingImageRequests.delete(draft)
+    }
+    if (messageSessionKey.value === scope) {
+      showAppToast(error instanceof Error ? error.message : '生图失败，请核对模型和计费状态。')
+    }
+  } finally {
+    imagePending.value = false
+  }
+}
 
 const sendMessage = async () => {
   const domInput = document.getElementById('messageInput') as HTMLTextAreaElement | null

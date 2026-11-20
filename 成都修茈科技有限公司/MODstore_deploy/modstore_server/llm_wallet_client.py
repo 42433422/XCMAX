@@ -17,9 +17,10 @@ from modstore_server.llm_billing_values import WalletHold, money, money_str
 
 
 class JavaWalletClient:
-    def __init__(self, request: Request | None = None):
+    def __init__(self, request: Request | None = None, *, verify_receipt: bool = False):
         self.gateway = PaymentGatewayService()
         self.request = request
+        self.verify_receipt = verify_receipt
 
     def _is_pat(self) -> bool:
         return (
@@ -75,7 +76,7 @@ class JavaWalletClient:
             },
         )
         hold = data.get("hold") or {}
-        if self._is_pat():
+        if self._is_pat() or self.verify_receipt:
             try:
                 received = Decimal(str(hold.get("amount"))) if isinstance(hold, dict) else None
                 if (
@@ -119,7 +120,7 @@ class JavaWalletClient:
                 authorization,
                 body,
             )
-            if self._is_pat():
+            if self._is_pat() or self.verify_receipt:
                 try:
                     result = data.get("hold")
                     actual = (
@@ -158,7 +159,7 @@ class JavaWalletClient:
                 authorization,
                 body,
             )
-            if self._is_pat():
+            if self._is_pat() or self.verify_receipt:
                 result = data.get("hold")
                 if (
                     not isinstance(result, dict)
@@ -218,10 +219,10 @@ class JavaWalletClient:
         try:
             data = response.json()
         except ValueError as error:
-            if self._is_pat():
+            if self._is_pat() or self.verify_receipt:
                 raise HTTPException(502, "模型计费响应无效") from error
             raise
-        if self._is_pat() and not isinstance(data, dict):
+        if (self._is_pat() or self.verify_receipt) and not isinstance(data, dict):
             raise HTTPException(502, "模型计费响应无效")
         if data.get("ok") is False:
             message = str(data.get("message") or "钱包扣费失败")

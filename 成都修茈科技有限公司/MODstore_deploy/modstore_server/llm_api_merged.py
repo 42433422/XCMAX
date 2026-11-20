@@ -137,6 +137,7 @@ async def resolve_default_llm_route(
             "ok": True,
             **snapshot.public_metadata(),
             "source": source,
+            "operation": operation,
             "route_token": chat_route_token(snapshot, uid),
         }
 
@@ -1174,6 +1175,7 @@ class LlmChatDTO(_facade().BaseModel):
 class LlmImageDTO(_facade().BaseModel):
     provider: str = ""
     model: str = ""
+    client_request_id: str | None = Field(None, pattern=r"^[A-Za-z0-9_.:-]{8,128}$")
     prompt: str = _facade().Field(..., min_length=1, max_length=4000)
     size: str = _facade().Field("1024x1024", max_length=32)
     n: int = _facade().Field(1, ge=1, le=4)
@@ -1323,34 +1325,24 @@ def llm_chat_request_state(
 
 @_facade().router.post("/image")
 async def llm_image(
+    request: _facade().Request,
     body: LlmImageDTO,
     db: _facade().Session = _facade().Depends(_facade().get_db),
     user: _facade().User = _facade().Depends(_facade()._get_current_user),
 ):
-    from modstore_server.llm_operation_routes import resolve_operation_route
+    from modstore_server.llm_billed_image import run_billed_image
 
-    route = await resolve_operation_route(
-        db, user.id, "image_generation", provider=body.provider,
-        model=body.model.strip(), seed="gpt-image-1" if body.provider == "openai" else "",
+    receipt = await run_billed_image(
+        request, db, int(user.id), provider=body.provider.strip().lower(),
+        model=body.model.strip(), prompt=body.prompt.strip(),
+        size=body.size.strip() or "1024x1024", count=body.n,
+        client_request_id=body.client_request_id,
     )
-    result = await _facade().image_dispatch(
-        route.provider,
-        api_key=route.api_key,
-        base_url=route.base_url,
-        model=route.model,
-        prompt=body.prompt.strip(),
-        size=body.size.strip() or "1024x1024",
-        n=body.n,
-    )
-    if not result.get("ok") or not result.get("images"):
-        raise _facade().HTTPException(502, result.get("error") or "image upstream error")
-    return {
-        "ok": True,
-        "images": result["images"],
-        "provider": route.provider,
-        "model": route.model,
-        "key_source": route.key_source,
-    }
+    if not receipt["ok"]:
+        raise HTTPException(receipt["status"], {
+            "message": receipt["message"], "request_id": receipt["request_id"],
+        })
+    return receipt
 
 
 @_facade().router.post("/video")

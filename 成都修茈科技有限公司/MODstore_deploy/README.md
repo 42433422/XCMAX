@@ -77,3 +77,7 @@ route, allow/deny and response status; retain INFO logs in the server audit sink
 [LiteLLM 1.109.3](https://github.com/BerriAI/litellm/tree/v1.109.3) 的 MIT 许可 SDK。
 对话与看图使用现有 Chat API，图片生成使用图像代理，语音使用现有 MiMo 协议适配。
 管理端可调用 `POST /api/llm/admin/runtime-route/probe-operation` 验证指定模型的指定操作。
+
+桌面生图复用现有 OpenAI 图像适配器及 Java 钱包。平台代付只接受官方
+[OpenAI 图像生成用量回执](https://developers.openai.com/api/reference/resources/images/methods/generate)，
+且需要为实际模型配置有效 token 定价。缺用量或结算回执不确定时保留原请求待核对。

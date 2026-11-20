@@ -171,6 +171,7 @@ export const llm = {
         provider,
         model,
         prompt,
+        client_request_id: crypto.randomUUID(),
         size: opts.size || '1024x1024',
         n: opts.count || opts.n || 1,
       }),

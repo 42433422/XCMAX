@@ -450,8 +450,22 @@ class ModstorePlatformAdapter:
         snapshot = self._route_snapshots.get((connection, route)) or {}
         return snapshot if snapshot.get("key_source") or snapshot.get("route_token") else {}
 
-    def _chat_input(self, connection, route, messages, temperature, max_tokens, extra):
-        snapshot = self._pinned_snapshot(connection, route)
+    def _vision_snapshot(self, connection, provider, model, messages):
+        from app.application.workflow.multimodal_user_content import messages_have_image_parts
+
+        if (
+            self._use_account_default
+            and not provider
+            and not model
+            and messages_have_image_parts(messages)
+        ):
+            return routing.resolve_account_route(connection, _httpx_sync_client, operation="vision")
+        return None
+
+    def _chat_input(
+        self, connection, route, messages, temperature, max_tokens, extra, *, vision=None
+    ):
+        snapshot = vision or self._pinned_snapshot(connection, route)
         extra = dict(extra or {})
         # Callers that explicitly opt into client failover (template analyze/preview)
         # must keep allow_failover=True even when a route snapshot is pinned.
@@ -469,9 +483,9 @@ class ModstorePlatformAdapter:
                     if key in snapshot
                 },
             }
-            if not force_failover:
+            if vision or not force_failover:
                 extra["allow_failover"] = False
-        return ChatInput(messages, temperature, max_tokens, extra)
+        return ChatInput(messages, temperature, max_tokens, extra, native_vision=vision is not None)
 
     @contextmanager
     def _route_observation(self):
@@ -662,11 +676,20 @@ class ModstorePlatformAdapter:
         """
         connection = self._connection()
         authentication.validate_demo_destination(connection)
-        route = await self._resolve_provider_model_async(provider, model, connection)
+        vision = await asyncio.to_thread(
+            self._vision_snapshot, connection, provider, model, messages
+        )
+        route = (
+            (vision["provider"], vision["model"])
+            if vision
+            else await self._resolve_provider_model_async(provider, model, connection)
+        )
         source = streaming.stream_async(
             connection,
             route,
-            self._chat_input(connection, route, messages, temperature, max_tokens, kwargs),
+            self._chat_input(
+                connection, route, messages, temperature, max_tokens, kwargs, vision=vision
+            ),
             self._stream_ports(connection),
         )
         with self._route_observation():
@@ -709,15 +732,56 @@ class ModstorePlatformAdapter:
         """同步版平台流式补全，逐条产出 SSE data payload。"""
         connection = self._connection()
         authentication.validate_demo_destination(connection)
-        route = self._resolve_provider_model(provider, model, connection=connection)
+        vision = self._vision_snapshot(connection, provider, model, messages)
+        route = (
+            (vision["provider"], vision["model"])
+            if vision
+            else self._resolve_provider_model(provider, model, connection=connection)
+        )
         with self._route_observation():
             for data in streaming.stream_sync(
                 connection,
                 route,
-                self._chat_input(connection, route, messages, temperature, max_tokens, kwargs),
+                self._chat_input(
+                    connection, route, messages, temperature, max_tokens, kwargs, vision=vision
+                ),
                 self._stream_ports(connection),
             ):
                 yield self._observe_stream_payload(data)
+
+    async def generate_image(self, body: dict[str, Any]) -> dict[str, Any]:
+        from fastapi import HTTPException
+
+        connection = self._connection()
+        authentication.validate_demo_destination(connection)
+        client = await self._get_client()
+        try:
+            response = await client.post(
+                f"{connection.platform_url}/api/llm/image",
+                headers=connection.headers(),
+                json=body,
+                timeout=httpx.Timeout(180.0, connect=15.0),
+            )
+            data = response.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            raise HTTPException(409, "生图结果待核对，请保留原请求键") from exc
+        if response.status_code >= 400:
+            detail = data.get("detail") if isinstance(data, dict) else None
+            if response.status_code == 409 and isinstance(detail, dict):
+                raise HTTPException(
+                    409,
+                    {
+                        "message": str(detail.get("message") or "生图结果待核对"),
+                        "request_id": str(detail.get("request_id") or ""),
+                    },
+                )
+            raise HTTPException(
+                response.status_code,
+                str(_transport.MarketModelError({"status": response.status_code})),
+            )
+        if not isinstance(data, dict) or data.get("ok") is not True:
+            raise HTTPException(502, "生图平台未返回可确认的结果")
+        return data
 
     async def get_available_providers(self) -> List[Dict[str, Any]]:
         """获取当前凭据可用的供应商列表。"""

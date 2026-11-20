@@ -14,6 +14,7 @@ from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import BaseModel, Field
 
 from app.application import chat_stream_replay
 from app.application.planner_compat_service import (
@@ -87,6 +88,26 @@ def conversation_model_status(request: Request, _user=Depends(get_logged_in_user
             )
         raise HTTPException(status_code=status, detail=detail, headers=headers) from None
     return JSONResponse({"ok": True, **metadata}, headers=headers)
+
+
+class ConversationImageBody(BaseModel):
+    prompt: str = Field(min_length=1, max_length=4000)
+    client_request_id: str = Field(pattern=r"^[A-Za-z0-9_.:-]{8,128}$")
+
+
+@router.post("/conversation/image")
+async def conversation_image(
+    request: Request, body: ConversationImageBody, _user=Depends(get_logged_in_user)
+):
+    from app.application.modstore_conversation_app import create_modstore_openai_client_from_request
+
+    adapter = create_modstore_openai_client_from_request(request).adapter
+    if not adapter.auth_token:
+        raise HTTPException(401, "当前会话未绑定市场模型服务授权")
+    try:
+        return await adapter.generate_image(body.model_dump())
+    finally:
+        await adapter.close()
 
 
 @router.put("/conversation/model-preference", deprecated=False)
