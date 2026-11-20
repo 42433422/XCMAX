@@ -156,10 +156,25 @@ jobs:
             echo "No committed SLO report found; evidence requires human review."
           fi
 
-      - name: Aggregate evolution signals + LLM propose + open issue
+      - name: Resolve active strategy bet
         if: steps.scan_scope.outputs.should_scan == 'true'
+        id: bet
+        working-directory: 成都修茈科技有限公司/MODstore_deploy
+        env:
+          MODSTORE_EVOLUTION_LEDGER_PATH: ${{ github.workspace }}/FHD/evolution_decisions.jsonl
+        run: |
+          bet_id="$(python -m modstore_server.strategy_bets active-bet-id 2>/dev/null || true)"
+          echo "bet_id=$bet_id" >> "$GITHUB_OUTPUT"
+          if [ -z "$bet_id" ]; then
+            echo "No active strategy bet; evolution proposals stay disabled until one is registered."
+          fi
+
+      - name: Aggregate evolution signals + LLM propose + open issue
+        if: steps.scan_scope.outputs.should_scan == 'true' && (steps.bet.outputs.bet_id != '' || vars.MODSTORE_EVOLUTION_REQUIRE_BET == '0')
         working-directory: 成都修茈科技有限公司/MODstore_deploy
         id: scan
+        env:
+          STRATEGY_BET_ID: ${{ steps.bet.outputs.bet_id }}
         run: |
           python -c "
           import os, sys, json
@@ -168,7 +183,9 @@ jobs:
           from modstore_server.employee_pack_proposal_scaffold import unsupported_proposal_reason
           from modstore_server.gap_to_issue import open_issue_for_proposal
           from modstore_server.evolution_ledger import append_event
+          from modstore_server.strategy_bets import record_spend
 
+          bet_id = os.environ.get('STRATEGY_BET_ID', '')
           signals = aggregate_signals()
           print('Aggregated signals requiring proposals:', signals.get('signals_to_propose', 0))
           pending = signals.get('slo_metrics', {}).get('evidence', {}).get('status') == 'needs_human'
@@ -187,6 +204,15 @@ jobs:
               with open(os.environ['GITHUB_OUTPUT'], 'a') as fh:
                   fh.write('issue_url=\n')
               sys.exit(0)
+
+          try:
+              if bet_id:
+                  record_spend(bet_id, proposals=1, source='evolution-proposal')
+          except ValueError as exc:
+              print(f'Strategy budget exhausted: {exc}', file=sys.stderr)
+              append_event({'event_type': 'strategy_budget_exhausted', 'bet_id': bet_id,
+                            'final_status': 'needs_human'})
+              sys.exit(1)
 
           print('Validated evolution proposal; retaining details for authorized processing.')
           with open(os.environ['EVOLUTION_PROPOSAL_PATH'], 'w', encoding='utf-8') as fh:

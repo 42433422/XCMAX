@@ -139,6 +139,34 @@ def _register_scheduler_phase_04():
     except RECOVERABLE_ERRORS:
         _facade().logger.exception("register self evolution metrics job failed")
 
+    def _strategy_bet_review_job() -> None:
+        try:
+            from modstore_server.strategy_bets import run_review
+
+            out = _facade()._run_tracked_scheduler_job("strategy_bet_review", run_review)
+            _facade().logger.info(
+                "strategy bet review: reviewed=%s verdicts=%s",
+                out.get("reviewed"),
+                out.get("verdicts"),
+            )
+        except RECOVERABLE_ERRORS:
+            _facade().logger.exception("strategy bet review job failed")
+
+    try:
+        _facade()._scheduler.add_job(
+            _strategy_bet_review_job,
+            _facade().CronTrigger(hour=21, minute=40, timezone="Asia/Shanghai"),
+            id="strategy_bet_review",
+            replace_existing=True,
+            next_run_time=_facade().datetime.now(_facade().timezone.utc)
+            + _facade().timedelta(seconds=115),
+            misfire_grace_time=_facade()._business_misfire_grace_time(),
+            coalesce=True,
+            max_instances=1,
+        )
+    except RECOVERABLE_ERRORS:
+        _facade().logger.exception("register strategy bet review job failed")
+
     def _telemetry_backlog_scan_job() -> None:
         try:
             from modstore_server.telemetry_backlog_loop import run_telemetry_scan
