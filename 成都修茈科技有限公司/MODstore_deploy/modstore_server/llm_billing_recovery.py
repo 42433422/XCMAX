@@ -6,13 +6,49 @@ import json
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-from fastapi import Request
+from fastapi import HTTPException, Request
 from sqlalchemy.orm import Session
 
 from modstore_server import llm_client_requests as ledger
 from modstore_server.db.llm_chat import LlmCallLog, LlmClientRequest
 from modstore_server.llm_billing import UsageMeter, save_success_log
 from modstore_server.llm_wallet_client import JavaWalletClient
+
+
+async def existing_chat_receipt(
+    db: Session, user_id: int, key: str | None, original: dict[str, Any], request: Request
+) -> dict[str, Any] | None:
+    """Read completed or settling requests before resolving mutable model routes."""
+    if not key:
+        return None
+    if not ledger.KEY_PATTERN.fullmatch(key):
+        raise HTTPException(422, "模型请求键无效")
+    digest = ledger.request_digest(original)
+    replay = ledger.completed_receipt(db, user_id, key, digest)
+    if replay:
+        if replay[0] == "conflict":
+            raise HTTPException(409, {"message": "同一请求键内容不同", "state": "conflict"})
+        if isinstance(replay[1], dict):
+            return replay[1]
+        raise HTTPException(409, {"message": "原请求回执待核对", "state": "completed"})
+    state = ledger.existing_state(db, user_id, key, digest)
+    if state == "conflict":
+        raise HTTPException(409, {"message": "同一请求键内容不同", "state": state})
+    if state == "completed":
+        replay = ledger.completed_receipt(db, user_id, key, digest)
+        if not replay or replay[0] != "replay" or not isinstance(replay[1], dict):
+            raise HTTPException(409, {"message": "原请求回执待核对", "state": state})
+        return replay[1]
+    if state == "settling":
+        from modstore_server.llm_billing import authorization_header
+
+        receipt = await recover_receipt(
+            db, user_id, key, authorization_header(request), operation="chat", request=request
+        )
+        if receipt is None:
+            raise HTTPException(409, {"message": "原请求结算状态待核对", "state": state})
+        return receipt
+    return None
 
 
 def complete_receipt(

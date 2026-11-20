@@ -397,6 +397,38 @@ async def test_gateway_does_not_reexecute_an_old_unmatched_receipt(db, monkeypat
 
 
 @pytest.mark.asyncio
+async def test_native_auto_chat_replays_before_resolving_changed_route(db, monkeypatch):
+    from modstore_server import llm_api, llm_api_merged
+
+    snapshot = SimpleNamespace(provider="openai", model="model-a")
+    resolve = AsyncMock(return_value=snapshot)
+    receipt = {
+        "ok": True,
+        "content": "saved",
+        "conversation_id": None,
+        "usage": {},
+        "charge_amount": "1.00",
+        "hold_no": "hold-1",
+        "key_source": "platform",
+        "billed": True,
+        "provider": "openai",
+        "model": "model-a",
+    }
+    attempt = AsyncMock(return_value=receipt)
+    monkeypatch.setattr(llm_api_merged, "_requested_chat_snapshot", resolve)
+    monkeypatch.setattr(llm_billed_chat, "_run_sync_attempts", attempt)
+    body = llm_api.LlmChatDTO(
+        model="auto", messages=[{"role": "user", "content": "hello"}], client_request_id=KEY
+    )
+    request = SimpleNamespace(headers={})
+    first = await llm_api.llm_chat(request, body, db, SimpleNamespace(id=7))
+    resolve.side_effect = HTTPException(503, "changed route unavailable")
+    replay = await llm_api.llm_chat(request, body, db, SimpleNamespace(id=7))
+    assert first == replay and replay["content"] == "saved"
+    assert resolve.await_count == 1 and attempt.await_count == 1
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("overlong", ["job_id", "status", "preview_url"])
 async def test_video_rejects_unbounded_provider_receipt_without_retry(db, monkeypatch, overlong):
     from modstore_server import llm_api, llm_key_resolver

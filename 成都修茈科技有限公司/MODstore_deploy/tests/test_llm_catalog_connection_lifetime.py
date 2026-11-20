@@ -107,3 +107,81 @@ async def test_cancelled_catalog_does_not_retain_credential_connection(small_poo
             await task
     with small_pool.connect() as connection:
         assert connection.scalar(text("SELECT 1")) == 1
+
+
+@pytest.mark.asyncio
+async def test_managed_discovery_blocks_private_dns_without_using_shared_client(monkeypatch):
+    from modstore_server import llm_catalog, openapi_connector_runtime
+    from modstore_server.infrastructure import http_clients
+    from modstore_server.platform_model_config import PlatformApiKey
+
+    key = PlatformApiKey(
+        "synthetic-key",
+        {
+            "provider": "openai",
+            "base_url": "https://models.example",
+            "model": "model-a",
+            "display_name": "Model A",
+            "revision": 1,
+            "source": "stored",
+        },
+    )
+    monkeypatch.setattr(
+        http_clients, "get_external_client", lambda: pytest.fail("unpinned client used")
+    )
+    monkeypatch.setattr(
+        openapi_connector_runtime,
+        "pin_url_outbound_safe",
+        lambda _url: (_ for _ in ()).throw(OSError("private DNS")),
+    )
+    llm_catalog.clear_all_catalog_cache()
+    result = await llm_catalog.get_models_for_credentials(
+        7,
+        "openai",
+        api_key=key,
+        base_url="https://models.example/v1",
+        discover_operations=True,
+    )
+    assert result["error"]
+    assert "synthetic-key" not in str(result)
+
+
+@pytest.mark.asyncio
+async def test_managed_openrouter_catalog_pins_each_discovery_request(monkeypatch):
+    from contextlib import asynccontextmanager
+
+    import httpx
+
+    from modstore_server import llm_catalog, platform_model_transport
+    from modstore_server.infrastructure import http_clients
+    from modstore_server.platform_model_config import PlatformApiKey
+
+    key = PlatformApiKey(
+        "synthetic-key",
+        {
+            "provider": "openrouter",
+            "base_url": "https://models.example",
+            "model": "model-a",
+            "display_name": "Model A",
+            "revision": 1,
+            "source": "stored",
+        },
+    )
+    calls = []
+
+    @asynccontextmanager
+    async def pinned(url, supplied_key, headers, body, **options):
+        calls.append((url, supplied_key, options["method"]))
+        data = {"data": [{"id": "video-b" if "/videos/" in url else "model-a"}]}
+        yield httpx.Response(200, json=data, request=httpx.Request("GET", url))
+
+    monkeypatch.setattr(platform_model_transport, "llm_http_response", pinned)
+    monkeypatch.setattr(
+        http_clients, "get_external_client", lambda: pytest.fail("unpinned client used")
+    )
+    records, error = await llm_catalog._fetch_openai_compatible_records(
+        "https://models.example/v1", key, provider="openrouter"
+    )
+    assert error is None
+    assert {row["id"] for row in records} == {"model-a", "video-b"}
+    assert len(calls) == 2 and all(call[1] is key and call[2] == "GET" for call in calls)

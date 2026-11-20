@@ -1247,20 +1247,32 @@ async def llm_chat(
     user: _facade().User = _facade().Depends(_facade()._get_current_user),
 ):
     msgs = [{"role": m.role, "content": m.content} for m in body.messages]
-    snapshot = await _requested_chat_snapshot(db, user, body, msgs)
-    out = await _facade().run_billed_llm_chat(
-        request,
-        db,
-        user,
-        provider=snapshot.provider if snapshot else body.provider,
-        model=snapshot.model if snapshot else body.model.strip(),
-        messages=msgs,
-        max_tokens=body.max_tokens,
-        conversation_id=body.conversation_id,
-        allow_failover=bool(body.allow_failover),
-        route_snapshot=snapshot,
-        client_request_id=body.client_request_id,
-    )
+    original = None
+    out = None
+    if body.model.strip() == "auto" and body.client_request_id:
+        from modstore_server.llm_billing_recovery import existing_chat_receipt
+
+        original = {"operation": "native_auto_chat", "request": body.model_dump()}
+        out = await existing_chat_receipt(
+            db, int(user.id), body.client_request_id, original, request
+        )
+    if out is None:
+        snapshot = await _requested_chat_snapshot(db, user, body, msgs)
+        options = {"client_request_payload": original} if original is not None else {}
+        out = await _facade().run_billed_llm_chat(
+            request,
+            db,
+            user,
+            provider=snapshot.provider if snapshot else body.provider,
+            model=snapshot.model if snapshot else body.model.strip(),
+            messages=msgs,
+            max_tokens=body.max_tokens,
+            conversation_id=body.conversation_id,
+            allow_failover=bool(body.allow_failover),
+            route_snapshot=snapshot,
+            client_request_id=body.client_request_id,
+            **options,
+        )
     payload = {
         "ok": out["ok"],
         "content": out["content"],
