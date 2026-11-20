@@ -157,6 +157,35 @@ describe('packaged backend build identity resource handoff', () => {
     expect(desktopRuntime.startupMarks.backendHealthMs).toBe(firstVerifiedAt)
   })
 
+  it('keeps the watchdog armed when a restarted backend remains unresponsive', async () => {
+    vi.useFakeTimers()
+    let responsive = true
+    vi.spyOn(loopback, 'loopbackHttpGet').mockImplementation(async url => {
+      if (!responsive) throw new Error('backend has stopped answering ping')
+      return provenResponse(url)
+    })
+    state.spawn.mockImplementation(() => {
+      const child = Object.assign(new EventEmitter(), {
+        stdout: new EventEmitter(), stderr: new EventEmitter(),
+        kill: vi.fn(), pid: 123, exitCode: null as number | null, signalCode: null,
+      })
+      child.kill.mockImplementation(() => {
+        queueMicrotask(() => { child.exitCode = 0; child.emit('exit', 0, null) })
+        return true
+      })
+      return child
+    })
+    await startBackend()
+    startBackendHealthWatchdog()
+    await vi.advanceTimersByTimeAsync(20_000)
+    expect(hasVerifiedDesktopBackend()).toBe(true)
+    responsive = false
+    // 3 failures trigger the first restart; the replacement then fails the
+    // 90-second readiness wait. The watchdog must still attempt another one.
+    await vi.advanceTimersByTimeAsync(320_000)
+    expect(state.spawn.mock.calls.length).toBeGreaterThanOrEqual(3)
+  })
+
   it('does not let a late proof from the old child authorize or revoke its replacement', async () => {
     vi.useFakeTimers()
     let resolveOld!: (value: ReturnType<typeof provenResponse>) => void
