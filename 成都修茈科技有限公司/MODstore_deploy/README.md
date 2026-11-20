@@ -81,3 +81,9 @@ route, allow/deny and response status; retain INFO logs in the server audit sink
 桌面生图复用现有 OpenAI 图像适配器及 Java 钱包。平台代付只接受官方
 [OpenAI 图像生成用量回执](https://developers.openai.com/api/reference/resources/images/methods/generate)，
 且需要为实际模型配置有效 token 定价。缺用量或结算回执不确定时保留原请求待核对。
+
+计费继续使用 LiteLLM 1.109.3 的标准用量字段、现有 Java 钱包和客户端请求账本。
+流式对话与生图在结算前保存用量、价格、请求号和预授权号。响应丢失后用认证钱包读回
+核对已结算的同一请求，原子补齐用量流水及请求回执。事件持久化参考
+[Lago](https://github.com/getlago/lago) 的幂等用量事件，资金状态参考
+[TigerBeetle](https://docs.tigerbeetle.com/coding/two-phase-transfers/) 的两阶段转账。

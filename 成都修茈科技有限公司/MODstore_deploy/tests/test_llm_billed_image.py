@@ -38,9 +38,12 @@ def paid(monkeypatch):
     monkeypatch.setattr(image, "enforce_risk_limits", Mock())
     monkeypatch.setattr(image, "estimate_preauthorization", lambda *_: Decimal("1"))
     monkeypatch.setattr(image, "image_dispatch", upstream)
-    row = SimpleNamespace(attempts=1)
+    row = SimpleNamespace(
+        attempts=1, user_id=7, client_request_id="image-test-key", state="settling"
+    )
     monkeypatch.setattr(image.ledger, "begin", Mock(return_value=("run", row)))
     monkeypatch.setattr(image.ledger, "mark_settling", Mock())
+    monkeypatch.setattr(image.ledger, "lock_request", Mock(return_value=row))
     monkeypatch.setattr(image.ledger, "finish", Mock())
     return wallet, upstream, Mock()
 

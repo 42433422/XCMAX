@@ -176,6 +176,20 @@ class WalletControllerContractTest {
     }
 
     @Test
+    void aiHoldReadbackBindsToCurrentAccount() {
+        WalletHold reservation = hold();
+        when(walletService.findAiHoldForReadback(user, "H-1")).thenReturn(Optional.of(reservation));
+        Map<?, ?> returned = (Map<?, ?>) controller.readAiHold("H-1").get("hold");
+        assertEquals("H-1", returned.get("hold_no"));
+        verify(walletService).findAiHoldForReadback(user, "H-1");
+
+        when(walletService.findAiHoldForReadback(user, "foreign-hold")).thenReturn(Optional.empty());
+        assertEquals(404, assertThrows(
+                ResponseStatusException.class, () -> controller.readAiHold("foreign-hold"))
+                .getStatusCode().value());
+    }
+
+    @Test
     void transactionsAndOverviewExposeAuditableMoneyHistory() {
         Transaction transaction = transaction();
         Order order = order();

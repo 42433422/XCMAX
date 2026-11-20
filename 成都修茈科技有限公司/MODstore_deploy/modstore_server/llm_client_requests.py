@@ -94,6 +94,22 @@ def mark_settling(db: Session, row: LlmClientRequest) -> None:
     db.commit()
 
 
+def prepare_settlement(db: Session, row: LlmClientRequest, receipt: dict[str, Any]) -> None:
+    """Keep provider usage and the intended charge before contacting the wallet."""
+    row.done_json = json.dumps({"pending_settlement": receipt}, ensure_ascii=False)
+    mark_settling(db, row)
+
+
+def lock_request(db: Session, user_id: int, client_request_id: str) -> LlmClientRequest | None:
+    return (
+        db.query(LlmClientRequest)
+        .filter_by(user_id=user_id, client_request_id=client_request_id)
+        .populate_existing()
+        .with_for_update()
+        .one_or_none()
+    )
+
+
 def finish(db: Session, row: LlmClientRequest, done: dict[str, Any] | None) -> None:
     """Record the receipt, or an unsettled failure; ``settling`` and done keys never revert."""
     if done is None and row.state in {"completed", "settling"}:
