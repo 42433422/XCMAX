@@ -19,9 +19,7 @@ from modstore_server.db.llm_chat import LlmClientRequest
 from modstore_server.llm_billed_once import (
     failed_chat_route_detail,
 )
-from modstore_server.llm_billed_once import (
-    run_billed_llm_chat_once as _run_billed_llm_chat_once,
-)
+from modstore_server.llm_billed_once import run_billed_llm_chat_once as _run_billed_llm_chat_once
 from modstore_server.llm_billing import (
     JavaWalletClient,
     WalletHold,
