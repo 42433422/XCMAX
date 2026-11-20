@@ -19,6 +19,14 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 SCHEMA = "para-github-candidate/v1"
 MAX_BUNDLE = 64 * 1024 * 1024
+VERSION_SSOT_PATHS = {
+    "VERSION.md",
+    "FHD/VERSION.md",
+    "FHD/release/VERSION",
+    "release/VERSION",
+    "FHD/config/download_release.json",
+    "FHD/config/release_train.json",
+}
 
 
 class NoRedirect(HTTPRedirectHandler):
@@ -156,11 +164,19 @@ def import_candidate(directory, manifest, bundle, *, env, command=run_command):
     # change product code, but may not replace the workflow/controller boundary
     # that keeps that code away from repository secrets and write-capable tokens.
     # Use raw NUL-delimited paths and include both sides of renames/deletions.
-    changed = call(
-        "diff", "--no-renames", "--name-only", "-z", manifest["base_sha"], actual, binary=True
-    )
-    if any(b".github" in path.split(b"/") for path in changed.split(b"\0") if path):
+    changed = [
+        path.decode("utf-8", "replace")
+        for path in call(
+            "diff", "--no-renames", "--name-only", "-z", manifest["base_sha"], actual, binary=True
+        ).split(b"\0")
+        if path
+    ]
+    if any(".github" in path.split("/") for path in changed):
         raise ValueError("candidate_actions_control_change_requires_review")
+    # 版本 SSOT 只由 release_train 在 main 上递增；候选分支不得自带版本变更，
+    # 否则公开版本号会绕过「时间线闭环 → 升版本」这条唯一链路。
+    if any(path in VERSION_SSOT_PATHS for path in changed):
+        raise ValueError("candidate_version_ssot_change_requires_release_train")
     source = call("archive", "--format=tar", actual, binary=True)
     if hashlib.sha256(source).hexdigest() != manifest["archive_sha256"]:
         raise ValueError("candidate_archive_digest_mismatch")

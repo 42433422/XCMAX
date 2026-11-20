@@ -281,6 +281,36 @@ def mark_backup_guard_probe_escalated(
 TIMELINE_NODES = ("ASM", "P", "M", "PPTX", "SW", "SS", "SA", "V")
 
 
+def sync_version_ssot(version: str) -> _facade().Dict[str, _facade().Any]:
+    """把 release_train 的新版本写进 VERSION.md 并同步 25 个锚点（SSOT 唯一更新入口）。"""
+    import subprocess
+    import sys
+
+    root = _facade().ssot_path().parent.parent
+    script = root / "scripts" / "dev" / "version_sync.py"
+    if not script.is_file():
+        return {"ok": False, "reason": "version_sync_script_missing", "root": str(root)}
+    try:
+        done = subprocess.run(
+            [sys.executable, str(script), "--apply", "--version", version],
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+    except RECOVERABLE_ERRORS:
+        _facade().logger.exception("release_train: version_sync 执行失败 version=%s", version)
+        return {"ok": False, "reason": "version_sync_exec_error", "root": str(root)}
+    if done.returncode != 0:
+        return {
+            "ok": False,
+            "reason": "version_sync_failed",
+            "root": str(root),
+            "stderr": (done.stderr or "")[-2000:],
+        }
+    return {"ok": True, "version": version, "root": str(root)}
+
+
 def _record_day(value: _facade().Any) -> str:
     """把节点 last_run（UTC ISO）折算成北京日历日。"""
     raw = str(value or "").strip()
@@ -438,6 +468,11 @@ def bump_release_train(
         st["last_major_push_at"] = now_iso
     _facade().save_state(st)
     _facade()._snapshot_state_to_history(st, reason="post_bump", path=_facade().ssot_path())
+    ssot = sync_version_ssot(after)
+    if not ssot.get("ok"):
+        _facade().logger.error(
+            "release_train: 版本 SSOT 同步失败 after=%s detail=%s", after, ssot
+        )
     result: _facade().Dict[str, _facade().Any] = {
         "ok": True,
         "skipped": False,
@@ -448,6 +483,7 @@ def bump_release_train(
         "digest_day": day,
         "push_installer": kind in ("installer", "major"),
         "push_major": kind == "major",
+        "version_ssot": ssot,
     }
     if record_id and int(record_id) > 0:
         _facade().attach_release_train_to_digest(int(record_id), result)
