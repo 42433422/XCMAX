@@ -305,7 +305,12 @@ def resolve_catalog_credentials(session, user_id: int, provider: str):
 
 
 async def get_models_for_credentials(
-    user_id: int, provider: str, *, api_key, base_url, force_refresh: bool = False,
+    user_id: int,
+    provider: str,
+    *,
+    api_key,
+    base_url,
+    force_refresh: bool = False,
     discover_operations: bool = False,
 ) -> _facade().Dict[str, _facade().Any]:
     """Fetch a catalog after the caller has released its credential connection."""

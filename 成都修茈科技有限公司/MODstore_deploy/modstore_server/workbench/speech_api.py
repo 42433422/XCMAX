@@ -16,8 +16,8 @@ from fastapi import Depends, HTTPException
 from fastapi.responses import Response, StreamingResponse
 
 from modstore_server.api.deps import _get_current_user
-from modstore_server.llm_billing_values import media_usage_receipt
 from modstore_server.edge_tts_service import UPSTREAM_ERRORS
+from modstore_server.llm_billing_values import media_usage_receipt
 from modstore_server.models import User
 from modstore_server.workbench.schemas import (
     WorkbenchEdgeTtsBody,
@@ -64,10 +64,7 @@ async def mimo_asr(audio: bytes, language: str, user_id: int) -> dict[str, Any]:
                 source.getframerate(),
             ) != (1, 2, 16000):
                 raise ValueError("invalid audio format")
-            if (
-                not 0 < frames <= 120 * 16000
-                or len(source.readframes(frames)) != frames * 2
-            ):
+            if not 0 < frames <= 120 * 16000 or len(source.readframes(frames)) != frames * 2:
                 raise ValueError("invalid audio length")
     except (wave.Error, EOFError, ValueError):
         raise HTTPException(422, "录音格式无效或超过 2 分钟") from None
@@ -88,9 +85,7 @@ async def mimo_asr(audio: bytes, language: str, user_id: int) -> dict[str, Any]:
             seed=MIMO_ASR_MODEL,
             release_before_discovery=True,
         )
-    result = await _transcribe_mimo(
-        audio, language, route.api_key, route.base_url, route.model
-    )
+    result = await _transcribe_mimo(audio, language, route.api_key, route.base_url, route.model)
     result["billing"] = media_usage_receipt(
         "speech_to_text",
         route.provider,
@@ -142,9 +137,7 @@ async def _transcribe_mimo(
             raise ValueError("invalid transcription")
     except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError) as exc:
         _LOG.warning("MiMo ASR failed: %s", type(exc).__name__)
-        raise HTTPException(
-            502, "MiMo 识别失败，请核对平台状态；请勿自动重试"
-        ) from None
+        raise HTTPException(502, "MiMo 识别失败，请核对平台状态；请勿自动重试") from None
     return {
         "text": text.strip(),
         "language": language,
@@ -211,9 +204,7 @@ async def _edge_response(body: WorkbenchEdgeTtsBody, ports: SpeechPorts):
     if ports.edge is None:
         raise HTTPException(503, "服务端未安装 edge-tts")
     voice = (body.voice or "").strip() or "zh-CN-XiaoxiaoNeural"
-    first, chunks = await _checked_edge_chunks(
-        text, voice, _edge_tts_rate_str(body.rate)
-    )
+    first, chunks = await _checked_edge_chunks(text, voice, _edge_tts_rate_str(body.rate))
 
     async def stream():
         try:
@@ -281,9 +272,7 @@ async def workbench_unified_tts(
             # Preserve the explicit require_mimo and existing Edge fallback policy.
             kwargs["credentials"] = (None, None)
         else:
-            kwargs.update(
-                credentials=(route.api_key, route.base_url), model=route.model
-            )
+            kwargs.update(credentials=(route.api_key, route.base_url), model=route.model)
             key_source = route.key_source
     audio, err, meta = await synthesize_mimo_tts_async(text, voice=mimo_voice, **kwargs)
     if audio and (not err):
@@ -372,9 +361,7 @@ async def workbench_edge_tts(
     voice = (body.voice or "").strip() or "zh-CN-XiaoxiaoNeural"
     try:
         parts = []
-        async for chunk in _edge_tts_stream_chunks(
-            text, voice, _edge_tts_rate_str(body.rate)
-        ):
+        async for chunk in _edge_tts_stream_chunks(text, voice, _edge_tts_rate_str(body.rate)):
             if not isinstance(chunk, bytes):
                 raise HTTPException(502, "TTS 上游返回无效音频")
             parts.append(chunk)

@@ -353,11 +353,13 @@ def discover_model_capabilities(
             "audio-output": entry.get("supports_audio_output") is True,
         }
         params = [
-            parameter for parameter, field in (
+            parameter
+            for parameter, field in (
                 ("tools", "supports_function_calling"),
                 ("response_format", "supports_response_schema"),
                 ("reasoning_effort", "supports_reasoning"),
-            ) if entry.get(field) is True
+            )
+            if entry.get(field) is True
         ]
         declared_in, declared_out, declared_ops, evidence = _declared_profile(
             {"type": type_name, "capabilities": flags, "supported_parameters": params}

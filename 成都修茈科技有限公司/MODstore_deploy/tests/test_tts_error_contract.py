@@ -47,9 +47,7 @@ def client(monkeypatch):
 def test_platform_tts_uses_current_users_xiaomi_credentials(monkeypatch):
     from modstore_server import llm_operation_routes, models
 
-    monkeypatch.setattr(
-        models, "get_session_factory", lambda: lambda: nullcontext("db")
-    )
+    monkeypatch.setattr(models, "get_session_factory", lambda: lambda: nullcontext("db"))
 
     async def resolve(db, user, operation, *, provider, seed, release_before_discovery):
         assert (db, user, provider, operation) == ("db", 42, "xiaomi", "text_to_speech")
@@ -98,9 +96,7 @@ def test_mimo_asr_uses_audio_protocol_and_current_account(monkeypatch):
 
     monkeypatch.delenv("MODSTORE_MIMO_ASR_ENABLED", raising=False)
     monkeypatch.delenv("MODSTORE_MIMO_ASR_USER_IDS", raising=False)
-    monkeypatch.setattr(
-        models, "get_session_factory", lambda: lambda: nullcontext("db")
-    )
+    monkeypatch.setattr(models, "get_session_factory", lambda: lambda: nullcontext("db"))
     monkeypatch.setattr(
         llm_operation_routes,
         "resolve_operation_route",
@@ -325,11 +321,7 @@ async def test_mimo_internal_bug_propagates(monkeypatch):
 
 async def test_mimo_valid_audio_async(monkeypatch):
     monkeypatch.setenv("MIMO_API_KEY", "test-key")
-    payload = {
-        "choices": [
-            {"message": {"audio": {"data": base64.b64encode(b"audio").decode()}}}
-        ]
-    }
+    payload = {"choices": [{"message": {"audio": {"data": base64.b64encode(b"audio").decode()}}}]}
     client = httpx.AsyncClient(
         transport=httpx.MockTransport(lambda request: httpx.Response(200, json=payload))
     )
@@ -363,9 +355,7 @@ def test_edge_stream_keeps_first_and_following_chunks(client, monkeypatch, path)
 @pytest.mark.parametrize("asynchronous", [False, True])
 async def test_mimo_invalid_json_is_rejected(monkeypatch, asynchronous):
     monkeypatch.setenv("MIMO_API_KEY", "test-key")
-    transport = httpx.MockTransport(
-        lambda request: httpx.Response(200, content=b"not json")
-    )
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, content=b"not json"))
     if asynchronous:
         client = httpx.AsyncClient(transport=transport)
         monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: client)
