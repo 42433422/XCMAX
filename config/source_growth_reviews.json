@@ -232,13 +232,25 @@
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_api_merged.py": {
       "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_api_merged.py",
       "base_blob": "a15c70e7ebfefdea8ac022652cce75a8dedc694c",
-      "head_blob": "466330eaa88d5753a65a67f7e172cb8aa8aa5d24",
+      "head_blob": "fe61f49e1bed245157bb04d5e0e6eb01e987e44b",
       "before_lines": 1372,
-      "after_lines": 1496,
+      "after_lines": 1502,
       "reason": "Extend the existing model endpoints for capability routing, request receipts and settlement recovery, passing authenticated PAT identity for signed wallet readback.",
       "boundary": "Keep account credentials and billing checks; uncertain settlement requires existing wallet reconciliation and signed service ownership checks.",
       "validation": "183 Python regressions and PostgreSQL Java wallet tests passed locally; exact-head CI and production wallet readback remain required.",
       "follow_up": "Architecture review of the legacy endpoint, format-driven growth and production settlement verification remain outstanding.",
+      "review_owner": "@42433422"
+    },
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_billed_chat.py": {
+      "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_billed_chat.py",
+      "base_blob": "7c56489410ee85dba69dc184a955e5bb2335ce68",
+      "head_blob": "94e3dd3a07841a7afb10d90176bcb9947a1bbede",
+      "before_lines": 606,
+      "after_lines": 805,
+      "reason": "Extend the existing billed chat orchestration for route snapshots, idempotent receipt recovery and multimodal operation checks, including formatting required by the backend gate.",
+      "boundary": "Use the existing durable request ledger and wallet verification; uncertain settlement remains pending and legacy receipt mismatches never reexecute.",
+      "validation": "49 focused ledger, gateway, media and wallet tests passed locally; exact-head CI and real wallet acceptance remain pending.",
+      "follow_up": "Architecture review and verification of vision discovery connection lifetime remain outstanding.",
       "review_owner": "@42433422"
     },
     "FHD/app/application/shipment_excel_etl_security.py": {
