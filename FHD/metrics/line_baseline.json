@@ -1,5 +1,5 @@
 {
-  "lines": 2528084,
-  "updated": "2026-11-20",
-  "note": "棘轮下调"
+  "lines": 2528245,
+  "updated": "2026-11-21",
+  "note": "自维护闭环改由 GitHub Actions 统一触发 CVM：远端脚本增加运行时身份/闸门前置校验并合并重复探测，workflow 增加 target_sha 输入与 job summary；用户批准。"
 }
