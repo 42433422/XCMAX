@@ -229,6 +229,7 @@ def _mock_client(
 ) -> MagicMock:
     """Mock GitHubClient，仅暴露 check_regular_pr_gates 调用到的方法。"""
     client = MagicMock(spec=sla.GitHubClient)
+    client.repo = "test/repo"
     client.get_workflow_run_conclusion.return_value = (ai_review_ok, ai_review_reason)
     client.get_pr_check_runs.return_value = (ci_ok, ci_reason)
     client.get_pr_head_sha.return_value = "d" * 40
@@ -1053,7 +1054,7 @@ class TestMainScanRegularPrs:
             head_sha="e" * 40,
         )
 
-        created_client = MagicMock(spec=sla.GitHubClient)
+        created_client = _mock_client()
         created_client.list_self_heal_prs.return_value = []
         created_client.list_regular_prs.return_value = [pr]
         created_client.get_pr_check_runs.return_value = (True, "ok")

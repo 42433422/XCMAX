@@ -45,7 +45,23 @@ import {
   selectTaskMergeBase,
   selfUpdateTemporaryPath,
   taskHasRecoverableIndeterminateReviewConflict,
+  usesOrderedMainIntegration,
+  withinMainIntegrationWindow,
 } from './merge_worker.mjs';
+
+test('Para uses the Shanghai integration window for the canonical XCMAX main only', () => {
+  assert.equal(usesOrderedMainIntegration('42433422/XCMAX'), true);
+  assert.equal(usesOrderedMainIntegration('42433422/XCMAX', 'release'), false);
+  assert.equal(usesOrderedMainIntegration('another/XCMAX'), false);
+  for (const [time, expected] of [
+    ['2026-11-19T17:59:59Z', false],
+    ['2026-11-19T18:00:00Z', true],
+    ['2026-11-19T20:59:59Z', true],
+    ['2026-11-19T21:00:00Z', false],
+  ]) {
+    assert.equal(withinMainIntegrationWindow(Date.parse(time)), expected, time);
+  }
+});
 
 test('automatic merge never bypasses the security release orchestrator by default', () => {
   assert.deepEqual(automaticProductionDeploymentDecision(false), {

@@ -631,9 +631,16 @@ curl -sf https://xiu-ci.com/fhd-api/api/health
 |---|---|---|
 | `fhd-ai-self-heal.yml` | 失败运行 + 每小时 17/47 分已有事故对账 + 手动只读盘点 | `.github/workflows/fhd-ai-self-heal.yml` |
 | `fhd-ai-review.yml` | `pull_request` opened/synchronize | `.github/workflows/fhd-ai-review.yml` |
-| `fhd-ai-self-heal-auto-merge.yml` | 原风险门禁合并 + 已合入 PR 的主干 CI 回执恢复 | `.github/workflows/fhd-ai-self-heal-auto-merge.yml` |
+| `fhd-ai-self-heal-auto-merge.yml` | 北京时间每天 02:00–05:00 串行集成已排定的主线 PR，持续核对已合入 PR 的主干 CI 回执 | `.github/workflows/fhd-ai-self-heal-auto-merge.yml` |
 | `fhd-para-github-worker.yml` | 原派工 → 独立执行/发布/续验/验收 job | `.github/workflows/fhd-para-github-worker.yml` |
 | `fhd-cvm-autonomy-watcher.yml` | `schedule(*/10 * * * *)` + workflow_dispatch | `.github/workflows/fhd-cvm-autonomy-watcher.yml` |
+
+Para 在窗口内可唤起既有 GitHub Actions 工作流。工作流按 `XCMAX_MAIN_MERGE_QUEUE`
+中的次序处理 `main` 的 PR。仓库维护者在所需评审完成后，按终极员工已确认的顺序登记 JSON 数组，
+每项包含 `pr` 和完整 `head_sha`。空数组等同于本轮没有待合入 PR。首个未合入的 PR 如有
+`hold-merge`、检查未通过、落后于 `main` 或提交变化，后续 PR 等待该项处理。
+GitHub 上未解除的评审修改要求会暂停合入。源码增长评审在登记该提交前完成。
+每次请求合入前复核当前时刻，05:00 起仅处理已有回执及原 SLA 事项。
 
 ### 关键约束
 

@@ -6,9 +6,9 @@ name: AI Self-Heal Auto-Merge SLA
 
 on:
   schedule:
-    # 每 30 分钟：避开 GitHub Actions 整点高负载，降低 schedule 延迟/丢弃概率。
-    # 普通 PR auto-merge 三重门禁闭环 + ai-self-heal/ai-generated SLA。
-    - cron: "7,37 * * * *"
+    # 北京时间 02:00–05:00 集成，窗口外继续已有的发布回执核对和 SLA 管理。
+    - cron: "0,15,30,45 18-20 * * *"
+    - cron: "7,37 0-17,21-23 * * *"
   workflow_dispatch:
     inputs:
       dry_run:
@@ -40,6 +40,7 @@ defaults:
 
 jobs:
   process-prs:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -63,6 +64,7 @@ jobs:
           WORKFLOW_DISPATCH_TOKEN: ${{ secrets.CI_COMMIT_TOKEN }}
           REQUIRE_INDEPENDENT_WORKFLOW_DISPATCH_TOKEN: "1"
           GITHUB_REPOSITORY: ${{ github.repository }}
+          XCMAX_MAIN_MERGE_QUEUE: ${{ vars.XCMAX_MAIN_MERGE_QUEUE }}
         run: |
           DRY_RUN_FLAG=""
           if [[ "${{ github.event.inputs.dry_run }}" == "true" ]]; then
