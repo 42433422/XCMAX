@@ -2575,7 +2575,7 @@ void main() {
     expect(find.text('稍后'), findsNothing);
   });
 
-  testWidgets('legal documents are independent and unavailable policy blocks consent',
+  testWidgets('combined legal document must be readable before consent',
       (tester) async {
     final opened = <Uri>[];
     var readable = false;
@@ -2588,28 +2588,26 @@ void main() {
         },
         openDocument: (_, __, uri) async {
           opened.add(uri);
-          return uri.path.endsWith('/terms') || readable;
+          return readable;
         },
       ),
     ));
     FilledButton agree() => tester.widget(find.widgetWithText(
-          FilledButton, '同意并继续',
+          FilledButton,
+          '同意并继续',
         ));
     expect(agree().onPressed, isNull);
-    for (final label in ['《用户协议》', '《隐私政策》']) {
-      await tester.tap(find.text(label));
-      await tester.pumpAndSettle();
-    }
+    await tester.tap(find.text('《用户协议与隐私政策》'));
+    await tester.pumpAndSettle();
     expect(agree().onPressed, isNull);
     expect(saves, 0);
     readable = true;
-    await tester.tap(find.text('《隐私政策》'));
+    await tester.tap(find.text('《用户协议与隐私政策》'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('同意并继续'));
     await tester.pumpAndSettle();
     expect(saves, 1);
-    expect(opened.map((uri) => uri.path),
-        ['/legal/terms', '/legal/privacy', '/legal/privacy']);
+    expect(opened.map((uri) => uri.path), ['/privacy.html', '/privacy.html']);
   });
 
   testWidgets(
@@ -2731,12 +2729,15 @@ void main() {
     expect(find.text('免登录'), findsOneWidget);
 
     expect(
-      tester.widget<FilledButton>(
-        find.widgetWithText(FilledButton, '进入企业工作台'),
-      ).onPressed,
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, '进入企业工作台'),
+          )
+          .onPressed,
       isNull,
     );
-    await tester.ensureVisible(find.byKey(const ValueKey('auth-legal-consent-checkbox')));
+    await tester.ensureVisible(
+        find.byKey(const ValueKey('auth-legal-consent-checkbox')));
     await tester.tap(find.byKey(const ValueKey('auth-legal-consent-checkbox')));
     await tester.pump();
     await tester.ensureVisible(find.widgetWithText(FilledButton, '进入企业工作台'));
@@ -2780,12 +2781,15 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(
-      tester.widget<FilledButton>(
-        find.widgetWithText(FilledButton, '进入企业工作台'),
-      ).onPressed,
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, '进入企业工作台'),
+          )
+          .onPressed,
       isNull,
     );
-    await tester.ensureVisible(find.byKey(const ValueKey('auth-legal-consent-checkbox')));
+    await tester.ensureVisible(
+        find.byKey(const ValueKey('auth-legal-consent-checkbox')));
     await tester.tap(find.byKey(const ValueKey('auth-legal-consent-checkbox')));
     await tester.pump();
     await tester.ensureVisible(find.widgetWithText(FilledButton, '进入企业工作台'));
@@ -2826,8 +2830,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(opened, [
-      Uri.parse('https://xiu-ci.com/legal/terms'),
-      Uri.parse('https://xiu-ci.com/legal/privacy'),
+      Uri.parse('https://xiu-ci.com/privacy.html'),
+      Uri.parse('https://xiu-ci.com/privacy.html'),
     ]);
     expect(find.byType(DesktopToolWebViewScreen), findsNothing);
   });

@@ -670,11 +670,12 @@ void main() {
   });
 }
 
-Future<bool> _readableLegal(BuildContext context, String title, Uri url) async =>
+Future<bool> _readableLegal(
+        BuildContext context, String title, Uri url) async =>
     true;
 
 Future<void> _agree(WidgetTester tester) async {
-  for (final label in ['《用户协议》', '《隐私政策》', '同意并继续']) {
+  for (final label in ['《用户协议与隐私政策》', '同意并继续']) {
     await tester.tap(find.text(label));
     await tester.pumpAndSettle();
   }

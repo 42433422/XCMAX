@@ -6,8 +6,8 @@ import 'package:webview_flutter/webview_flutter.dart';
 import '../../theme/app_assets.dart';
 import '../../theme/app_theme.dart';
 
-const mobileTermsUrl = 'https://xiu-ci.com/legal/terms';
-const mobilePrivacyUrl = 'https://xiu-ci.com/legal/privacy';
+const mobileTermsUrl = 'https://xiu-ci.com/privacy.html';
+const mobilePrivacyUrl = mobileTermsUrl;
 
 typedef MobileLegalReader = Future<bool> Function(
   BuildContext context,
@@ -30,17 +30,18 @@ class LegalConsentScreen extends StatefulWidget {
 }
 
 class _LegalConsentScreenState extends State<LegalConsentScreen> {
-  final _opened = <String>{};
+  bool _opened = false;
   bool _busy = false, _declined = false;
 
   Future<void> _read(String title, String url) async {
     setState(() => _busy = true);
-    final opened = await widget.openDocument(context, title, Uri.parse(url))
+    final opened = await widget
+        .openDocument(context, title, Uri.parse(url))
         .catchError((_) => false);
     if (!mounted) return;
     setState(() {
       _busy = false;
-      if (opened) _opened.add(url);
+      if (opened) _opened = true;
     });
   }
 
@@ -73,13 +74,12 @@ class _LegalConsentScreenState extends State<LegalConsentScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Image.asset(appLauncherIconAsset, width: 64, height: 64),
-                Text('XCAGI', style: TextStyle(color: foreground, fontSize: 34)),
+                Text('XCAGI',
+                    style: TextStyle(color: foreground, fontSize: 34)),
                 Text('AI 工作平台', style: TextStyle(color: foreground)),
                 const SizedBox(height: 24),
                 Text(
-                  _declined
-                      ? '你已拒绝。应用不会启动登录及后台服务。'
-                      : '请先阅读用户协议和隐私政策，再选择是否同意。',
+                  _declined ? '你已拒绝。应用不会启动登录及后台服务。' : '请先阅读用户协议和隐私政策，再选择是否同意。',
                   style: TextStyle(color: foreground),
                   textAlign: TextAlign.center,
                 ),
@@ -89,20 +89,17 @@ class _LegalConsentScreenState extends State<LegalConsentScreen> {
                     child: const Text('返回查看协议'),
                   )
                 else ...[
-                  for (final (title, url) in [
-                    ('《用户协议》', mobileTermsUrl),
-                    ('《隐私政策》', mobilePrivacyUrl),
-                  ])
-                    TextButton(
-                      style: TextButton.styleFrom(foregroundColor: foreground),
-                      onPressed: _busy ? null : () => _read(title, url),
-                      child: Text(title),
-                    ),
-                  if (_opened.length != 2)
-                    Text('两份文件均可阅读后才能同意。',
-                        style: TextStyle(color: foreground)),
+                  TextButton(
+                    style: TextButton.styleFrom(foregroundColor: foreground),
+                    onPressed: _busy
+                        ? null
+                        : () => _read('《用户协议与隐私政策》', mobileTermsUrl),
+                    child: const Text('《用户协议与隐私政策》'),
+                  ),
+                  if (!_opened)
+                    Text('文件可阅读后才能同意。', style: TextStyle(color: foreground)),
                   FilledButton(
-                    onPressed: _busy || _opened.length != 2 ? null : _accept,
+                    onPressed: _busy || !_opened ? null : _accept,
                     child: const Text('同意并继续'),
                   ),
                   TextButton(
@@ -110,7 +107,7 @@ class _LegalConsentScreenState extends State<LegalConsentScreen> {
                     onPressed: _busy
                         ? null
                         : () => setState(() {
-                              _opened.clear();
+                              _opened = false;
                               _declined = true;
                             }),
                     child: const Text('不同意'),
@@ -156,13 +153,14 @@ class _LegalDocumentState extends State<_LegalDocument> {
     unawaited(_load());
   }
 
-  bool _allowed(Uri? parsed) => parsed != null &&
-        parsed.scheme == 'https' &&
-        (parsed.host == widget.url.host || parsed.host == 'www.xiu-ci.com') &&
-        parsed.port == 443 &&
-        parsed.userInfo.isEmpty &&
-        parsed.path == widget.url.path &&
-        !parsed.hasQuery;
+  bool _allowed(Uri? parsed) =>
+      parsed != null &&
+      parsed.scheme == 'https' &&
+      (parsed.host == widget.url.host || parsed.host == 'www.xiu-ci.com') &&
+      parsed.port == 443 &&
+      parsed.userInfo.isEmpty &&
+      parsed.path == widget.url.path &&
+      !parsed.hasQuery;
 
   Future<void> _load() async {
     _deadline = Timer(const Duration(seconds: 15), _fail);
