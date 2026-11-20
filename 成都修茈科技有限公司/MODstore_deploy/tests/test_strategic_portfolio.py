@@ -71,7 +71,7 @@ def opportunity(key="a", **overrides):
     }
 
 
-def proposal(database, *, rows=None, caps=None, approved=True):
+def seed_owner(database):
     from modstore_server.db.identity import User
 
     with database() as session:
@@ -80,6 +80,10 @@ def proposal(database, *, rows=None, caps=None, approved=True):
                 User(id=7, username="portfolio-owner", password_hash="unused", is_admin=True)
             )
             session.commit()
+
+
+def proposal(database, *, rows=None, caps=None, approved=True):
+    seed_owner(database)
     result = p.create_portfolio_proposal(
         owner_user_id=7,
         goal="Improve delivery",
@@ -97,6 +101,22 @@ def proposal(database, *, rows=None, caps=None, approved=True):
             expected_proposal_sha256=result["decision"]["decision_payload"]["proposal_sha256"],
         )
     return decision_id
+
+
+def claim_proposal(database, **kwargs):
+    decision_id = proposal(database, **kwargs)
+    p.plan_portfolio(decision_id)
+    return decision_id, runtime._claim(decision_id, 7)
+
+
+def planning_budget(**overrides):
+    return {
+        "provider": "test",
+        "model": "model",
+        "max_total_tokens": 32768,
+        "max_output_tokens": 1600,
+        **overrides,
+    }
 
 
 def test_optimizer_is_not_greedy_and_checks_dependencies():
@@ -169,9 +189,7 @@ def test_claim_is_exclusive_and_completed_task_is_not_replayed(database, monkeyp
 
 
 def test_real_usage_settles_and_unknown_usage_keeps_hold(database):
-    decision_id = proposal(database)
-    p.plan_portfolio(decision_id)
-    task = runtime._claim(decision_id, 7)
+    decision_id, task = claim_proposal(database)
     with usage.portfolio_usage_scope(decision_id, "a", task["lease_token"]):
         held = usage.prepare_platform_call(
             "test", "model", [{"role": "user", "content": "test"}], 100
@@ -193,9 +211,7 @@ def test_real_usage_settles_and_unknown_usage_keeps_hold(database):
 
 
 def test_stop_revokes_active_lease_admission_but_still_settles_paid_usage(database):
-    decision_id = proposal(database)
-    p.plan_portfolio(decision_id)
-    task = runtime._claim(decision_id, 7)
+    decision_id, task = claim_proposal(database)
     with usage.portfolio_usage_scope(decision_id, "a", task["lease_token"]):
         held = usage.prepare_platform_call("test", "model", [], 10)
         p.stop_portfolio(decision_id, owner_user_id=7, actor="admin:7", reason="operator veto")
@@ -206,9 +222,7 @@ def test_stop_revokes_active_lease_admission_but_still_settles_paid_usage(databa
 
 
 def test_unapproved_route_and_spend_limit_fail_before_call(database):
-    decision_id = proposal(database, caps=limits(stop_loss_cents=0))
-    p.plan_portfolio(decision_id)
-    task = runtime._claim(decision_id, 7)
+    decision_id, task = claim_proposal(database, caps=limits(stop_loss_cents=0))
     with usage.portfolio_usage_scope(decision_id, "a", task["lease_token"]):
         with pytest.raises(p.PortfolioError, match="tariff"):
             usage.prepare_platform_call("unapproved", "model", [], 10)
@@ -388,9 +402,7 @@ def test_platform_model_hook_reserves_before_call_and_records_actual_usage(datab
     from modstore_server import llm_chat_proxy, llm_key_resolver
     from modstore_server.services.llm import chat_dispatch_via_platform_only
 
-    decision_id = proposal(database)
-    p.plan_portfolio(decision_id)
-    task = runtime._claim(decision_id, 7)
+    decision_id, task = claim_proposal(database)
     monkeypatch.setattr(llm_key_resolver, "platform_api_key", lambda _: "unit-test-key")
     calls = []
 
@@ -450,14 +462,7 @@ def test_discovery_reuses_planner_and_filters_other_account_context(database, mo
     monkeypatch.setattr(llm, "resolve_platform_bench_llm", lambda: ("test", "model"))
 
     async def admission(*_args):
-        return {
-            "provider": "test",
-            "model": "model",
-            "budget_source": "existing_platform_subscription_quota",
-            "max_calls": 1,
-            "max_total_tokens": 32768,
-            "max_output_tokens": 1600,
-        }
+        return planning_budget(budget_source="existing_platform_subscription_quota", max_calls=1)
 
     monkeypatch.setattr(usage, "planning_admission", admission)
     monkeypatch.setattr(
@@ -508,9 +513,7 @@ def test_discovery_reuses_planner_and_filters_other_account_context(database, mo
 
 
 def test_dispatched_downstream_job_is_not_claimed_completed(database):
-    decision_id = proposal(database)
-    p.plan_portfolio(decision_id)
-    task = runtime._claim(decision_id, 7)
+    decision_id, task = claim_proposal(database)
     runtime._finish(
         task,
         {
@@ -527,9 +530,7 @@ def test_dispatched_downstream_job_is_not_claimed_completed(database):
 
 
 def test_worker_binding_restores_metered_scope_once_across_threads(database):
-    decision_id = proposal(database)
-    p.plan_portfolio(decision_id)
-    task = runtime._claim(decision_id, 7)
+    decision_id, task = claim_proposal(database)
     with usage.portfolio_usage_scope(decision_id, "a", task["lease_token"]):
         binding = usage.bind_portfolio_worker("durable-queue:1", owner_user_id=7)
     runtime._finish(
@@ -563,9 +564,7 @@ def test_worker_binding_restores_metered_scope_once_across_threads(database):
 def test_unmetered_remote_delegate_blocks_before_external_submission(database, monkeypatch):
     from modstore_server import cursor_delegate_handler, para_delegate_handler
 
-    decision_id = proposal(database)
-    p.plan_portfolio(decision_id)
-    task = runtime._claim(decision_id, 7)
+    decision_id, task = claim_proposal(database)
     monkeypatch.setattr(
         para_delegate_handler, "_post_webhook", lambda *_: pytest.fail("unmetered Para submission")
     )
@@ -588,20 +587,11 @@ def test_planning_spends_only_observed_subscription_quota_and_persists_actual_us
     database, monkeypatch
 ):
     from modstore_server import llm_chat_proxy, llm_key_resolver
-    from modstore_server.db.identity import User
     from modstore_server.db.llm_chat import LlmCallLog, LlmClientRequest
     from modstore_server.services.llm import chat_dispatch_via_platform_only
 
-    with database() as session:
-        session.add(User(id=7, username="planner", password_hash="unused", is_admin=True))
-        session.commit()
-    admission = {
-        "provider": "test",
-        "model": "model",
-        "budget_source": "existing_platform_subscription_quota",
-        "max_total_tokens": 32768,
-        "max_output_tokens": 1600,
-    }
+    seed_owner(database)
+    admission = planning_budget(budget_source="existing_platform_subscription_quota")
     monkeypatch.setattr(llm_key_resolver, "platform_api_key", lambda _: "test-key")
 
     async def dispatch(*_args, **_kwargs):
@@ -644,9 +634,7 @@ def test_budgeted_raw_proxy_does_not_retry_uncertain_paid_request(database, monk
 
     caps = limits()
     caps["tariffs"][0]["provider"] = "openai"
-    decision_id = proposal(database, caps=caps)
-    p.plan_portfolio(decision_id)
-    task = runtime._claim(decision_id, 7)
+    decision_id, task = claim_proposal(database, caps=caps)
     monkeypatch.setattr(llm_key_resolver, "platform_api_key", lambda _: "unit-key")
     monkeypatch.setattr(llm_key_resolver, "platform_base_url", lambda _: None)
 
@@ -705,9 +693,7 @@ def test_direct_model_dispatch_cannot_bypass_lease_or_usage(database, monkeypatc
     assert not calls
     caps = limits()
     caps["tariffs"][0]["provider"] = "openai"
-    decision_id = proposal(database, caps=caps)
-    p.plan_portfolio(decision_id)
-    task = runtime._claim(decision_id, 7)
+    decision_id, task = claim_proposal(database, caps=caps)
     with usage.portfolio_usage_scope(decision_id, "a", task["lease_token"]):
         asyncio.run(llm_chat_proxy.chat_dispatch("openai", **kwargs))
     call = next(iter(p.portfolio_status(decision_id)["tasks"]["a"]["calls"].values()))
@@ -715,18 +701,10 @@ def test_direct_model_dispatch_cannot_bypass_lease_or_usage(database, monkeypatc
 
 
 def test_parallel_planning_shares_one_durable_owner_slot(database):
-    from modstore_server.db.identity import User
 
-    with database() as session:
-        session.add(User(id=7, username="planner", password_hash="unused", is_admin=True))
-        session.commit()
+    seed_owner(database)
     barrier = Barrier(2)
-    admission = {
-        "provider": "test",
-        "model": "model",
-        "max_total_tokens": 32768,
-        "max_output_tokens": 1600,
-    }
+    admission = planning_budget()
 
     def reserve():
         with usage.planning_usage_scope(7, admission):
@@ -748,9 +726,7 @@ def test_parallel_planning_shares_one_durable_owner_slot(database):
 
 
 def test_execution_boundary_observes_admin_stop(database):
-    decision_id = proposal(database)
-    p.plan_portfolio(decision_id)
-    task = runtime._claim(decision_id, 7)
+    decision_id, task = claim_proposal(database)
     with usage.portfolio_usage_scope(decision_id, "a", task["lease_token"]):
         assert usage.remaining_execution_seconds() > 0
         p.stop_portfolio(decision_id, owner_user_id=7, actor="admin:7", reason="operator stop")
@@ -764,9 +740,7 @@ def test_owner_freeze_blocks_new_reservations_and_dispatch_but_settles_prior_usa
 ):
     from modstore_server.db.identity import User
 
-    decision_id = proposal(database)
-    p.plan_portfolio(decision_id)
-    task = runtime._claim(decision_id, 7)
+    decision_id, task = claim_proposal(database)
     calls = []
 
     async def outbound(*_args, **_kwargs):
@@ -798,9 +772,7 @@ def test_owner_freeze_blocks_new_reservations_and_dispatch_but_settles_prior_usa
 def test_worker_and_planning_reservations_recheck_frozen_owner(database):
     from modstore_server.db.identity import User
 
-    decision_id = proposal(database)
-    p.plan_portfolio(decision_id)
-    task = runtime._claim(decision_id, 7)
+    decision_id, task = claim_proposal(database)
     with usage.portfolio_usage_scope(decision_id, "a", task["lease_token"]):
         binding = usage.bind_portfolio_worker("queue:revoked", owner_user_id=7)
     runtime._finish(task, {"ok": True, "status": "queued", "worker_receipt_id": "queue:revoked"}, 1)
@@ -811,12 +783,7 @@ def test_worker_and_planning_reservations_recheck_frozen_owner(database):
         runtime.execute_portfolio_worker(
             binding, owner_user_id=7, execute=lambda _task: pytest.fail("revoked worker dispatched")
         )
-    admission = {
-        "provider": "test",
-        "model": "model",
-        "max_total_tokens": 32768,
-        "max_output_tokens": 1600,
-    }
+    admission = planning_budget()
     with usage.planning_usage_scope(7, admission):
         with pytest.raises(p.PortfolioError, match="active administrator"):
             usage.prepare_platform_call("test", "model", [], 20)
@@ -831,9 +798,7 @@ def test_model_failure_preserves_original_exception_and_unsettled_cost_hold(
     from modstore_server import llm_chat_proxy, llm_key_resolver
     from modstore_server.services.llm import chat_dispatch_via_platform_only
 
-    decision_id = proposal(database)
-    p.plan_portfolio(decision_id)
-    task = runtime._claim(decision_id, 7)
+    decision_id, task = claim_proposal(database)
     monkeypatch.setattr(llm_key_resolver, "platform_api_key", lambda _: "unit-key")
 
     async def fail(*_args, **_kwargs):
@@ -926,9 +891,7 @@ def test_preregistered_metric_window_freezes_miss_and_stops_investment(
         "window_days": 1,
         "kill_criteria": ["stop on miss"],
     }
-    decision_id = proposal(database, rows=[opportunity(hypothesis=target)])
-    p.plan_portfolio(decision_id)
-    task = runtime._claim(decision_id, 7)
+    decision_id, task = claim_proposal(database, rows=[opportunity(hypothesis=target)])
     runtime._finish(task, {"ok": True, "status": "completed"}, 1)
     start = datetime.now(UTC) - timedelta(days=2)
     p.mutate_portfolio(
@@ -965,11 +928,8 @@ def test_legacy_bets_cannot_self_authorize_or_dispatch():
 
 def test_scheduled_discovery_persists_once_and_never_approves(database, monkeypatch):
     from modstore_server import strategy_planner
-    from modstore_server.db.identity import User
 
-    with database() as session:
-        session.add(User(id=7, username="planner", password_hash="unused", is_admin=True))
-        session.commit()
+    seed_owner(database)
     calls = []
 
     async def discover(**_kwargs):
