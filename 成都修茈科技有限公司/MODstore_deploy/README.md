@@ -17,6 +17,8 @@
 
 ## 本地启动
 
+OpenAI 兼容客户端通过 `GET /v1/models` 发现管理员登记的池内别名，并使用同一别名请求 `POST /v1/chat/completions`。设置 `MODSTORE_LLM_POOL_ALIASES` 为别名到现有计费模型 ID 的 JSON 映射，例如 `{"xcmax-doubao-code":"doubao/doubao-seed-2-1-pro-260915"}`。仅列出当前账户能通过平台凭据调用、且已通过聊天能力和平台计费规则的条目。套餐路线应先在平台单独配置凭据和计费。
+
 ```bash
 bash FHD/scripts/dev/run_modstore_daily_local.sh restart
 ```

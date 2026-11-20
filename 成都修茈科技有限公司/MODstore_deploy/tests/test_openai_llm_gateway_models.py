@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+from fastapi import HTTPException
 
 
 def test_public_developer_page_links_to_existing_portal_and_describes_current_auth():
@@ -64,3 +66,56 @@ async def test_openai_list_models_includes_non_llm_categories():
     assert cats["openai/gpt-4o-mini"] == "vlm"
     assert cats["openai/dall-e-3"] == "image"
     assert "category_labels" in out
+
+
+@pytest.mark.asyncio
+async def test_pool_alias_discovery_and_call_share_account_catalog(monkeypatch):
+    from modstore_server import openai_llm_gateway_api as gateway
+
+    alias = "xcmax-doubao-code"
+    model = "doubao-seed-2-1-pro-260915"
+    target = f"doubao/{model}"
+    monkeypatch.setenv("MODSTORE_LLM_POOL_ALIASES", json.dumps({alias: target}))
+    db, user = object(), SimpleNamespace(id=7)
+    row = {
+        "id": target,
+        "chat_compatible": True,
+        "runtime_selectable": True,
+        "pricing": {"platform_billing_ok": True},
+    }
+    catalog = AsyncMock(return_value=[row])
+    billed_chat = AsyncMock(return_value={"content": "ok"})
+    monkeypatch.setattr(gateway, "_build_catalog_model_entries", catalog)
+    monkeypatch.setattr(gateway, "run_billed_llm_chat", billed_chat)
+    credentials = Mock(return_value=("fixture", None, "platform"))
+    snapshot = SimpleNamespace(key_source="platform", model=model)
+    monkeypatch.setattr(gateway, "resolve_credentials", credentials)
+    monkeypatch.setattr(gateway, "resolve_chat_route_snapshot", Mock(return_value=snapshot))
+    request = object()
+    body = gateway.OAIChatCompletionRequest(
+        model=alias, messages=[gateway.OAIChatMessage(role="user", content="test")]
+    )
+
+    listed = await gateway.openai_list_models(db=db, user=user)
+    assert any(item["id"] == alias and item["resolved_model"] == target for item in listed["data"])
+    response = await gateway.openai_chat_completions(request, body, db, user)
+    assert json.loads(response.body)["model"] == target
+    catalog.assert_awaited_with(db, 7, ("doubao",))
+    assert billed_chat.await_args.kwargs["model"] == model
+    assert billed_chat.await_args.kwargs["route_snapshot"] is snapshot
+    assert billed_chat.await_args.args == (request, db, user)
+
+    row["runtime_selectable"] = False
+    listed = await gateway.openai_list_models(db=db, user=user)
+    assert alias not in {item["id"] for item in listed["data"]}
+    with pytest.raises(HTTPException) as error:
+        await gateway.openai_chat_completions(request, body, db, user)
+    assert error.value.status_code == 404
+    row["runtime_selectable"] = True
+    credentials.return_value = (None, None, "none")
+    listed = await gateway.openai_list_models(db=db, user=user)
+    assert alias not in {item["id"] for item in listed["data"]}
+    with pytest.raises(HTTPException) as error:
+        await gateway.openai_chat_completions(request, body, db, user)
+    assert error.value.status_code == 404
+    billed_chat.assert_awaited_once()
