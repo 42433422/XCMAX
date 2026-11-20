@@ -153,6 +153,7 @@ def test_exact_production_receipt_and_public_identity_complete_delivery(evidence
     result = delivery.collect_delivery(evidence["state"])
     assert result["status"] == "deployment_verified"
     assert result["merge_sha"] == SHA and result["candidate_sha"] == HEAD
+    assert result["release_sha"] == SHA
     assert result["deployment_completed_at"] == "2026-11-19T00:20:00+00:00"
     assert result["receipt"]["security_scan_run_id"] == 41
     assert result["identity"]["artifact_sha256"] == "d" * 64

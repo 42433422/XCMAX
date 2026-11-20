@@ -192,6 +192,7 @@ def collect_delivery(state):
         "verified_at": datetime.now(UTC).isoformat(),
         "deployment_completed_at": _deployment_completed_at(repo, run, pr.get("merged_at")),
         "candidate_sha": candidate,
+        "release_sha": merge_sha,
         "pull_request_number": number,
         "receipt": receipt,
         "identity": identity,

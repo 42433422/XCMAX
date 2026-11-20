@@ -69,13 +69,16 @@ def _snapshot(payload, spec, request_id, delivery):
     experiment, result = payload["experiment"], payload["result"]
     launch, measured = parse_datetime(result["dateStart"]), parse_datetime(result["dateUpdated"])
     deployed = parse_datetime(delivery.get("deployment_completed_at"))
+    release_sha = delivery.get("release_sha")
     if (
-        experiment["id"] != spec["id"]
+        not isinstance(release_sha, str)
+        or not re.fullmatch(r"[0-9a-f]{40}", release_sha)
+        or experiment["id"] != spec["id"]
         or result["experimentId"] != spec["id"]
         or experiment["type"] != "standard"
         or experiment["project"] != spec["project"]
         or experiment["trackingKey"] != f"xcagi-retort-{request_id}"
-        or f"xcagi-release-{delivery['merge_sha']}" not in experiment["tags"]
+        or f"xcagi-release-{release_sha}" not in experiment["tags"]
         or not (
             deployed and launch and measured and deployed <= launch <= measured <= datetime.now(UTC)
         )

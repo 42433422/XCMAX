@@ -654,7 +654,8 @@ def test_feedback_run_binds_original_customer_and_production_release(
 
     delivery = {
         "status": "deployment_verified",
-        "merge_sha": "c" * 40,
+        "merge_sha": "a" * 40,
+        "release_sha": "c" * 40,
         "deployment_run_id": 205,
         "verified_at": datetime.now(UTC).isoformat(),
     }
@@ -701,7 +702,8 @@ def test_growthbook_requires_same_run_production_exposure_and_valid_sample():
     sha = "c" * 40
     spec = {"id": "exp_feedback", "project": "prod", "metric": "first_import", "minimum_users": 100}
     delivery = {
-        "merge_sha": sha,
+        "merge_sha": "a" * 40,
+        "release_sha": sha,
         "deployment_completed_at": "2026-01-01T00:00:00Z",
         "verified_at": "2026-01-04T00:00:00Z",
     }
@@ -744,9 +746,12 @@ def test_growthbook_requires_same_run_production_exposure_and_valid_sample():
     }
     observed = _snapshot(result, spec, "run", delivery)
     assert (
-        _snapshot(result, spec, "run", {"merge_sha": sha, "verified_at": "2026-01-01T00:00:00Z"})[
-            "status"
-        ]
+        _snapshot(
+            result,
+            spec,
+            "run",
+            {"merge_sha": "a" * 40, "release_sha": sha, "verified_at": "2026-01-01T00:00:00Z"},
+        )["status"]
         == "unbound"
     )
     assert observed["status"] == "measured"

@@ -382,7 +382,7 @@ def read_impact(request_id, production_delivery):
         source, ticket = _bound_ticket(db, run)
         if ticket is None:
             return {"status": "waiting_customer_impact", "reason": "original_ticket_unavailable"}
-        sha = str(production_delivery.get("merge_sha") or "")
+        sha = str(production_delivery.get("release_sha") or "")
         if (
             production_delivery.get("status") != "deployment_verified"
             or not re.fullmatch(r"[0-9a-f]{40}", sha)
