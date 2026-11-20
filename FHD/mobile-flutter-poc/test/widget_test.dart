@@ -2736,8 +2736,10 @@ void main() {
       ).onPressed,
       isNull,
     );
+    await tester.ensureVisible(find.byKey(const ValueKey('auth-legal-consent-checkbox')));
     await tester.tap(find.byKey(const ValueKey('auth-legal-consent-checkbox')));
     await tester.pump();
+    await tester.ensureVisible(find.widgetWithText(FilledButton, '进入企业工作台'));
     await tester.tap(find.widgetWithText(FilledButton, '进入企业工作台'));
     await tester.pumpAndSettle();
 
@@ -2783,8 +2785,10 @@ void main() {
       ).onPressed,
       isNull,
     );
+    await tester.ensureVisible(find.byKey(const ValueKey('auth-legal-consent-checkbox')));
     await tester.tap(find.byKey(const ValueKey('auth-legal-consent-checkbox')));
     await tester.pump();
+    await tester.ensureVisible(find.widgetWithText(FilledButton, '进入企业工作台'));
     await tester.tap(find.widgetWithText(FilledButton, '进入企业工作台'));
     await tester.pumpAndSettle();
     expect(completed, isTrue);
