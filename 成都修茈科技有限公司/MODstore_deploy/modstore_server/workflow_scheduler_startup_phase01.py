@@ -177,15 +177,16 @@ def _register_scheduler_phase_01():
         except RECOVERABLE_ERRORS:
             _facade().logger.exception("retention janitor failed")
 
-    _facade()._scheduler.add_job(
-        _retention_janitor_daily,
-        _facade().CronTrigger(hour=23, minute=15),
-        id="retention_janitor_daily",
-        replace_existing=True,
-        misfire_grace_time=_facade()._cleanup_misfire_grace_time(),
-        coalesce=True,
-        max_instances=1,
-    )
+    if _facade()._env_bool("MODSTORE_RETENTION_JANITOR_ENABLED", True):
+        _facade()._scheduler.add_job(
+            _retention_janitor_daily,
+            _facade().CronTrigger(hour=23, minute=15),
+            id="retention_janitor_daily",
+            replace_existing=True,
+            misfire_grace_time=_facade()._cleanup_misfire_grace_time(),
+            coalesce=True,
+            max_instances=1,
+        )
     from modstore_server.storage_pressure_self_heal import register_storage_pressure_job
 
     register_storage_pressure_job(
