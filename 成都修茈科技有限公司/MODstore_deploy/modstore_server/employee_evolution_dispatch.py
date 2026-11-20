@@ -65,7 +65,10 @@ def _candidate_archive(
         manifest = json.loads(current.read(entry))
         if not isinstance(manifest, dict) or manifest.get("id") != record.employee_id:
             raise CuratorCandidateDenied("employee_pack_identity_mismatch")
-        agent = manifest.get("employee_config_v2", {}).get("cognition", {}).get("agent", {})
+        cognition = manifest.get("employee_config_v2", {}).get("cognition", {})
+        agent = cognition.get("agent")
+        legacy = not isinstance(agent, dict)
+        prompt_field = cognition if legacy else agent
         before, after = str(record.prompt_before or ""), str(record.prompt_after or "")
         if not before or not after or before == after:
             raise CuratorCandidateDenied("invalid_prompt_change")
@@ -78,13 +81,18 @@ def _candidate_archive(
         ).strip()
         if normalized[:30000] != before:
             raise CuratorCandidateDenied("employee_pack_baseline_changed")
-        raw_prompt = str(agent.get("system_prompt") or "").strip()
+        raw_prompt = str(prompt_field.get("system_prompt") or "").strip()
         if raw_prompt and not normalized.endswith(raw_prompt):
             raise CuratorCandidateDenied("employee_pack_prompt_shape_unsupported")
         prefix = normalized[: -len(raw_prompt)] if raw_prompt else ""
         if prefix and not after.startswith(prefix):
             raise CuratorCandidateDenied("employee_pack_structured_prompt_changed")
-        agent["system_prompt"] = after[len(prefix) :]
+        if legacy:
+            translated = parse_employee_config_v2(manifest).get("cognition", {})
+            cognition.clear()
+            cognition.update(translated)
+            prompt_field = cognition["agent"]
+        prompt_field["system_prompt"] = after[len(prefix) :]
         result_prompt = str(
             parse_employee_config_v2(manifest)
             .get("cognition", {})
@@ -155,6 +163,28 @@ def _audit_manifest(manifest: dict, pack: dict, actor_id: int) -> dict:
 
 def _receipt_id(suggestion_id: int) -> str:
     return str(uuid5(NAMESPACE_URL, f"xcmax:employee-evolution:{suggestion_id}"))
+
+
+def _report_dispatch(suggestion_id: int, result: dict[str, Any]) -> None:
+    from modstore_server import employee_autonomy_service
+    from modstore_server.employee_collab_reporter import report_suggestion_dispatched
+
+    try:
+        employee_autonomy_service._publish_event(
+            "employee.suggestion.dispatched",
+            {
+                "suggestion_id": suggestion_id,
+                "target_employee_ids": [_CURATOR],
+                "ok": bool(result.get("ok")),
+                "error": str(result.get("error") or "")[:500],
+            },
+            source="suggestion_dispatcher",
+        )
+        report_suggestion_dispatched(suggestion_id=suggestion_id)
+    except RECOVERABLE_ERRORS:
+        employee_autonomy_service.logger.exception(
+            "curator dispatch report failed sid=%s", suggestion_id
+        )
 
 
 def completed_curator_receipt(db, suggestion: EmployeeSuggestion) -> dict[str, Any]:
@@ -309,7 +339,9 @@ def execute_approved_evolution(suggestion_id: int) -> dict[str, Any]:
             suggestion.created_task_ids_json = json_dumps([metric.id])
             suggestion.status = "dispatched"
             db.commit()
-            return {"ok": False, "error": error, "metric_id": metric.id}
+            result = {"ok": False, "error": error, "metric_id": metric.id}
+            _report_dispatch(suggestion_id, result)
+            return result
 
         metric = EmployeeExecutionMetric(
             user_id=actor.id,
@@ -329,4 +361,6 @@ def execute_approved_evolution(suggestion_id: int) -> dict[str, Any]:
         suggestion.payload_json = json_dumps({**payload, "curator_execution": receipt})
         suggestion.status = "done"
         db.commit()
-        return {"ok": True, "status": "done", "suggestion_id": suggestion_id, **receipt}
+        result = {"ok": True, "status": "done", "suggestion_id": suggestion_id, **receipt}
+        _report_dispatch(suggestion_id, result)
+        return result

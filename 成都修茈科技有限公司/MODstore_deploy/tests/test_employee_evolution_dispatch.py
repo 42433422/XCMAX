@@ -46,7 +46,7 @@ def test_candidate_rejects_changes_to_structured_prompt_prefix(tmp_path):
 
 
 @pytest.mark.parametrize("legacy_dispatched", [False, True])
-@pytest.mark.parametrize("structured", [False, True])
+@pytest.mark.parametrize("structured", [False, True, "legacy"])
 def test_operator_approval_executes_real_curator_and_reads_private_candidate(
     tmp_path, monkeypatch, legacy_dispatched, structured
 ):
@@ -58,12 +58,24 @@ def test_operator_approval_executes_real_curator_and_reads_private_candidate(
     monkeypatch.setenv("MODSTORE_CATALOG_DIR", str(catalog))
     monkeypatch.setenv("MODSTORE_RUNTIME_DIR", str(runtime))
     monkeypatch.setenv("RETORT_ARTIFACT_MASTER_KEY", Fernet.generate_key().decode("ascii"))
-    monkeypatch.setattr(employee_autonomy_service, "_publish_event", lambda *args, **kwargs: None)
+    events = []
+    reports = []
+    monkeypatch.setattr(
+        employee_autonomy_service, "_publish_event", lambda *args, **kwargs: events.append(args[0])
+    )
+    monkeypatch.setattr(
+        "modstore_server.employee_collab_reporter.report_suggestion_dispatched",
+        lambda **kwargs: reports.append(kwargs["suggestion_id"]),
+    )
     init_db()
     employee_id = "doc-knowledge-curator"
     manifest = load_reviewed_duty_manifest(employee_id)
     agent = manifest["employee_config_v2"]["cognition"]["agent"]
-    if structured:
+    if structured == "legacy":
+        cognition = manifest["employee_config_v2"]["cognition"]
+        cognition["system_prompt"] = agent["system_prompt"]
+        del cognition["agent"]
+    elif structured:
         agent["role"] = {"name": "知识策展员"}
         agent["behavior_rules"] = ["核对来源"]
         agent["few_shot_examples"] = [{"input": "问题", "output": "引用"}]
@@ -140,6 +152,8 @@ def test_operator_approval_executes_real_curator_and_reads_private_candidate(
         assert client.post(route, json={"dispatch_now": True}).json() == receipt
 
     assert receipt["signature_status"] == "awaiting_release_signature"
+    assert events.count("employee.suggestion.dispatched") == 1
+    assert reports == [suggestion_id]
     assert artifact.read_bytes() == original
     private = load_repository_module("retort_engine.secure_artifacts")
     evidence = private.read_private_json(runtime / receipt["artifact_ref"], allow_legacy=False)
@@ -151,7 +165,7 @@ def test_operator_approval_executes_real_curator_and_reads_private_candidate(
             parse_employee_config_v2(actual_manifest)["cognition"]["agent"]["system_prompt"]
             == after
         )
-        if structured:
+        if structured is True:
             assert (
                 actual_manifest["employee_config_v2"]["cognition"]["agent"]["role"] == agent["role"]
             )

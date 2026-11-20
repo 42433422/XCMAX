@@ -213,6 +213,7 @@ def load_employee_pack(session, pack_id: str) -> Dict[str, Any]:
             name = str(duty_rec.get("name") or pkg_id)
             version = str(duty_rec.get("version") or "")
             stored_filename = str(duty_rec.get("stored_filename") or "")
+            sha256 = str(duty_rec.get("sha256") or "")
         else:
             rec = employee_pack_records_from_store().get(requested_id)
             if not isinstance(rec, dict):
