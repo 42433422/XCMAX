@@ -1,40 +1,62 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
-import '../../api/mobile_api.dart';
-import '../../data/mobile_repository_scope.dart';
 import '../../theme/app_assets.dart';
 import '../../theme/app_theme.dart';
+
+const mobileTermsUrl = 'https://xiu-ci.com/legal/terms';
+const mobilePrivacyUrl = 'https://xiu-ci.com/legal/privacy';
+
+typedef MobileLegalReader = Future<bool> Function(
+  BuildContext context,
+  String title,
+  Uri url,
+);
 
 class LegalConsentScreen extends StatefulWidget {
   const LegalConsentScreen({
     super.key,
-    this.api,
-    this.legalVersion = 'public-v1',
-    this.onAccepted,
-    this.onAbout,
+    required this.onAccepted,
+    this.openDocument = openMobileLegalDocument,
   });
 
-  final MobileApiClient? api;
-  final String legalVersion;
-  final VoidCallback? onAccepted;
-  final VoidCallback? onAbout;
+  final Future<void> Function() onAccepted;
+  final MobileLegalReader openDocument;
 
   @override
   State<LegalConsentScreen> createState() => _LegalConsentScreenState();
 }
 
 class _LegalConsentScreenState extends State<LegalConsentScreen> {
-  late final MobileApiClient _api;
-  var _checked = false;
+  final _opened = <String>{};
+  bool _busy = false, _declined = false;
 
-  @override
-  void initState() {
-    super.initState();
-    _api = widget.api ??
-        MobileRepositoryScope.maybeRead(context)?.client ??
-        MobileApiClient();
+  Future<void> _read(String title, String url) async {
+    setState(() => _busy = true);
+    final opened = await widget.openDocument(context, title, Uri.parse(url))
+        .catchError((_) => false);
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      if (opened) _opened.add(url);
+    });
+  }
+
+  Future<void> _accept() async {
+    setState(() => _busy = true);
+    try {
+      await widget.onAccepted();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('未能保存同意记录，请重试。')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   @override
@@ -44,161 +66,161 @@ class _LegalConsentScreenState extends State<LegalConsentScreen> {
     return Scaffold(
       backgroundColor: colors.brand,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32),
-          child: Column(
-            children: [
-              const Spacer(),
-              Container(
-                width: 88,
-                height: 88,
-                decoration: BoxDecoration(
-                  color: foreground.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(24),
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Image.asset(appLauncherIconAsset, width: 64, height: 64),
+                Text('XCAGI', style: TextStyle(color: foreground, fontSize: 34)),
+                Text('AI 工作平台', style: TextStyle(color: foreground)),
+                const SizedBox(height: 24),
+                Text(
+                  _declined
+                      ? '你已拒绝。应用不会启动登录及后台服务。'
+                      : '请先阅读用户协议和隐私政策，再选择是否同意。',
+                  style: TextStyle(color: foreground),
+                  textAlign: TextAlign.center,
                 ),
-                alignment: Alignment.center,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: Image.asset(
-                    appLauncherIconAsset,
-                    width: 64,
-                    height: 64,
-                    fit: BoxFit.contain,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-              Text(
-                'XCAGI',
-                style: TextStyle(
-                  color: foreground,
-                  fontSize: 34,
-                  height: 1.12,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 2,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'AI 工作平台',
-                style: TextStyle(
-                  color: foreground.withValues(alpha: 0.7),
-                  fontSize: 14,
-                  height: 1.36,
-                  letterSpacing: 0,
-                ),
-              ),
-              const Spacer(),
-              InkWell(
-                onTap: () => setState(() => _checked = !_checked),
-                borderRadius: BorderRadius.circular(8),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 4,
-                    vertical: 8,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        width: 18,
-                        height: 18,
-                        decoration: BoxDecoration(
-                          color: _checked
-                              ? foreground
-                              : foreground.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        alignment: Alignment.center,
-                        child: _checked
-                            ? Icon(Icons.check, size: 14, color: colors.brand)
-                            : null,
-                      ),
-                      const SizedBox(width: 8),
-                      Flexible(
-                        child: Wrap(
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            Text(
-                              '我已阅读并同意',
-                              style: TextStyle(
-                                color: foreground.withValues(alpha: 0.6),
-                                fontSize: 12,
-                                height: 1.34,
-                                letterSpacing: 0,
-                              ),
-                            ),
-                            const _LegalLabel('《用户协议》'),
-                            Text(
-                              '和',
-                              style: TextStyle(
-                                color: foreground.withValues(alpha: 0.6),
-                                fontSize: 12,
-                                height: 1.34,
-                                letterSpacing: 0,
-                              ),
-                            ),
-                            const _LegalLabel('《隐私政策》'),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 18),
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: FilledButton(
-                  onPressed: _checked ? _accept : null,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: foreground,
-                    disabledBackgroundColor: foreground.withValues(alpha: 0.2),
-                    foregroundColor: colors.brand,
-                    disabledForegroundColor: foreground.withValues(alpha: 0.5),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(24),
+                if (_declined)
+                  FilledButton(
+                    onPressed: () => setState(() => _declined = false),
+                    child: const Text('返回查看协议'),
+                  )
+                else ...[
+                  for (final (title, url) in [
+                    ('《用户协议》', mobileTermsUrl),
+                    ('《隐私政策》', mobilePrivacyUrl),
+                  ])
+                    TextButton(
+                      style: TextButton.styleFrom(foregroundColor: foreground),
+                      onPressed: _busy ? null : () => _read(title, url),
+                      child: Text(title),
                     ),
+                  if (_opened.length != 2)
+                    Text('两份文件均可阅读后才能同意。',
+                        style: TextStyle(color: foreground)),
+                  FilledButton(
+                    onPressed: _busy || _opened.length != 2 ? null : _accept,
+                    child: const Text('同意并继续'),
                   ),
-                  child: Text(_checked ? '进入 XCAGI' : '请先同意协议'),
-                ),
-              ),
-              const SizedBox(height: 32),
-            ],
+                  TextButton(
+                    style: TextButton.styleFrom(foregroundColor: foreground),
+                    onPressed: _busy
+                        ? null
+                        : () => setState(() {
+                              _opened.clear();
+                              _declined = true;
+                            }),
+                    child: const Text('不同意'),
+                  ),
+                ],
+              ],
+            ),
           ),
         ),
       ),
     );
   }
-
-  void _accept() {
-    unawaited(
-      _api.saveLegalAcceptedVersion(widget.legalVersion).catchError((_) {}),
-    );
-    if (!mounted) return;
-    widget.onAccepted?.call();
-  }
 }
 
-class _LegalLabel extends StatelessWidget {
-  const _LegalLabel(this.label);
+// User-initiated and isolated from the app's authenticated API session.
+Future<bool> openMobileLegalDocument(
+  BuildContext context,
+  String title,
+  Uri url,
+) async =>
+    await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => _LegalDocument(title, url)),
+    ) ??
+    false;
 
-  final String label;
+class _LegalDocument extends StatefulWidget {
+  const _LegalDocument(this.title, this.url);
+  final String title;
+  final Uri url;
 
   @override
-  Widget build(BuildContext context) {
-    final foreground = AppTheme.colors(context).chatUserBubbleText;
-    return Text(
-      label,
-      style: TextStyle(
-        color: foreground,
-        fontSize: 12,
-        height: 1.34,
-        decoration: TextDecoration.underline,
-        decorationColor: foreground,
-        letterSpacing: 0,
-      ),
-    );
+  State<_LegalDocument> createState() => _LegalDocumentState();
+}
+
+class _LegalDocumentState extends State<_LegalDocument> {
+  WebViewController? _controller;
+  bool _readable = false, _failed = false;
+  Timer? _deadline;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
   }
+
+  bool _allowed(Uri? parsed) => parsed != null &&
+        parsed.scheme == 'https' &&
+        (parsed.host == widget.url.host || parsed.host == 'www.xiu-ci.com') &&
+        parsed.port == 443 &&
+        parsed.userInfo.isEmpty &&
+        parsed.path == widget.url.path &&
+        !parsed.hasQuery;
+
+  Future<void> _load() async {
+    _deadline = Timer(const Duration(seconds: 15), _fail);
+    try {
+      final controller = WebViewController();
+      await controller.setJavaScriptMode(JavaScriptMode.disabled);
+      await controller.setNavigationDelegate(NavigationDelegate(
+        onNavigationRequest: (request) => _allowed(Uri.tryParse(request.url))
+            ? NavigationDecision.navigate
+            : NavigationDecision.prevent,
+        onHttpError: (error) {
+          final uri = error.request?.uri;
+          if (uri == null || _allowed(uri)) _fail();
+        },
+        onWebResourceError: (error) {
+          if (error.isForMainFrame != false) _fail();
+        },
+        onPageFinished: (url) {
+          if (!mounted || _failed || !_allowed(Uri.tryParse(url))) return;
+          _deadline?.cancel();
+          setState(() => _readable = true);
+        },
+      ));
+      if (!mounted || _failed) return;
+      setState(() => _controller = controller);
+      await controller.loadRequest(widget.url);
+    } catch (_) {
+      _fail();
+    }
+  }
+
+  void _fail() {
+    if (!mounted) return;
+    _deadline?.cancel();
+    setState(() => _failed = true);
+  }
+
+  @override
+  void dispose() {
+    _deadline?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: Text(widget.title)),
+        body: _failed
+            ? const Center(child: Text('暂时无法打开文件。请返回后重试。'))
+            : _controller == null
+                ? const Center(child: CircularProgressIndicator())
+                : WebViewWidget(controller: _controller!),
+        bottomNavigationBar: SafeArea(
+          child: TextButton(
+            onPressed: _readable && !_failed
+                ? () => Navigator.of(context).pop(true)
+                : null,
+            child: const Text('返回选择'),
+          ),
+        ),
+      );
 }

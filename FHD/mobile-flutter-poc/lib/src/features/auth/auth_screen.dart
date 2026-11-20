@@ -6,6 +6,8 @@ import '../../data/mobile_repository_scope.dart';
 import '../../platform/external_url_launcher.dart';
 import '../../theme/app_assets.dart';
 import '../../theme/app_theme.dart';
+import '../legal/legal_consent_screen.dart'
+    show mobilePrivacyUrl, mobileTermsUrl;
 import '../scan/scan_qr_screen.dart';
 import '../workspace/local_workspace_screen.dart';
 import '../../policy/mobile_error_policy.dart';
@@ -30,11 +32,13 @@ class AuthScreen extends StatefulWidget {
     this.repository,
     this.onDone,
     this.openExternalUrl,
+    this.legalConsentAlreadyRecorded = false,
   });
 
   final MobileRepository? repository;
   final VoidCallback? onDone;
   final ExternalUrlLauncher? openExternalUrl;
+  final bool legalConsentAlreadyRecorded;
 
   @override
   State<AuthScreen> createState() => _AuthScreenState();
