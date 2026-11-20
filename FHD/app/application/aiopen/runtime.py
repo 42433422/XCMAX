@@ -12,7 +12,7 @@ from pathlib import Path
 from secrets import compare_digest
 from tempfile import NamedTemporaryFile
 from threading import RLock
-from typing import Any
+from typing import Any, Concatenate, ParamSpec, TypeVar
 
 from filelock import FileLock
 
@@ -26,6 +26,8 @@ _QUOTA_EXCEEDED = "AIOPEN_QUOTA_EXCEEDED"
 _CLIENT_PREFIX = "aiopen_client_"
 _CLIENT_DIGEST_PREFIX = "client-sha256:"
 _MAX_ACTIVE_CLIENT_KEYS = 8
+_KeyParams = ParamSpec("_KeyParams")
+_KeyResult = TypeVar("_KeyResult")
 
 
 class ClientKeyLimitReached(Exception):
@@ -38,11 +40,15 @@ def _storage_key(secret: str) -> str:
     return "" if secret.startswith(_CLIENT_DIGEST_PREFIX) else secret
 
 
-def _shared_keys(method):
+def _shared_keys(
+    method: Callable[Concatenate[ApiKeyRegistry, _KeyParams], _KeyResult],
+) -> Callable[Concatenate[ApiKeyRegistry, _KeyParams], _KeyResult]:
     """Serialize disk read/modify/write across workers using the existing filelock."""
 
     @wraps(method)
-    def wrapped(self, *args, **kwargs):
+    def wrapped(
+        self: ApiKeyRegistry, *args: _KeyParams.args, **kwargs: _KeyParams.kwargs
+    ) -> _KeyResult:
         with self._lock:
             path = self._path()
             if path is None:

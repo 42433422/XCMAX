@@ -260,7 +260,7 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         tool_executor: AgentToolExecutor | None = None,
         dependencies: RuntimeDependencies | None = None,
     ) -> None:
-        self._repo = repository or get_agent_run_repository()
+        self._repo: AgentRunRepository = repository or get_agent_run_repository()
         self._repository_status = {
             "mode": "sqlalchemy"
             if isinstance(self._repo, SQLAlchemyAgentRunRepository)

@@ -668,7 +668,7 @@ PR。合入仍使用既定顺序和 GitHub 保护规则。06:00 仅由批准队�
 
 从 `FHD/` 执行 `python scripts/ci/ai_self_heal.py --reconcile --dry-run` 仅生成 `test_reports/self_heal_reconciliation.json`；省略 `--dry-run` 才按证据续接或处理已替代事故。手动工作流设置 `reconcile=true` 默认只读，定时对账自动恢复。超过文件体量、授权缺失或不明写入结果仍明确等待处理，不通过提高阈值回避。GitHub 发布凭据按 VM 隔离；执行器仍使用现有 Para 设备及管理服务身份，不宣称模型与同一执行 VM 的管理进程相互隔离。现有 `run_attempt=1` 保护继续有效，失败 GitHub 工作空间需按原派工核对，不保证任意 workflow 重跑都能续接。
 
-GitHub Actions 定期查找同仓库开放 PR 的当前提交上仍失败的代码检查。MODstore 在原事故和当前提交下登记派工，调用已有 Para GitHub Worker。云端执行任务只提交 Git 候选，独立发布任务校验原事故、原 PR、提交和制品摘要后发布修复分支。原 PR 更新用 Git 快进和 pre-push 钩子核对服务端当前 HEAD。派工回执关联控制任务、Para 任务、GitHub 云端运行、新 HEAD 和新 CI。正式合入沿用主线保护。 [Git 钩子文档](https://git-scm.com/docs/githooks#_pre_push)
+原 PR 自动修复的新执行、候选发布和晋级当前暂停，直到任务模型凭据具备不可导出的隔离边界；环境白名单、工作区权限与秘密扫描不能代替该边界。原事故、原 PR、当前提交、派工与候选制品摘要的持久身份仍保留，已应用结果仅作只读核对，普通非修复 Para 任务维持既有流程。原 PR 更新协议仍要求 Git 快进和 pre-push 钩子核对服务端当前 HEAD，并将控制任务、Para 任务、GitHub 云端运行、新 HEAD 与新 CI 关联；这些协议不代表暂停中的自动修复已启用。正式合入沿用主线保护。 [Git 钩子文档](https://git-scm.com/docs/githooks#_pre_push)
 
 ### 触发条件矩阵
 

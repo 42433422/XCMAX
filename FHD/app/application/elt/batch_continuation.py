@@ -218,7 +218,7 @@ def _resolve_uploads(
         if canonicalize_batch:
             if len(set(selected)) != len(selected):
                 raise BatchContinuationBlocked("附件清单中存在重复上传记录，任务尚未提交。")
-            by_identity = {}
+            by_identity: dict[tuple[str, str, str] | tuple[str], str] = {}
             for upload_id in selected:
                 upload = ids[upload_id]
                 identity = (

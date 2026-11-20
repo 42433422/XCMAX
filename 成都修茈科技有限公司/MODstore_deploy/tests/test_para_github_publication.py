@@ -14,8 +14,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from modstore_server import para_github_publication as publication
 
+from modstore_server import para_github_publication as publication
 from tests.test_incident_team_continuation import incident as incident_fixture
 from tests.test_para_first_no_planning_llm import fresh_db as fresh_db_fixture
 
@@ -664,11 +664,11 @@ def test_publisher_reuses_same_remote_sha_and_pr_and_retains_pending_delivery(
 
 def test_original_team_waits_for_publication_and_resume_then_verifies_once(incident, monkeypatch):
     from fastapi import HTTPException
+
     from modstore_server import customer_ticket_github as bridge
     from modstore_server import incident_team_completion as completion
     from modstore_server import incident_team_orchestrator as team
     from modstore_server import models, para_github_runner
-
     from tests.test_incident_team_continuation import _accepted, _claim, _terminal
 
     workspace = {

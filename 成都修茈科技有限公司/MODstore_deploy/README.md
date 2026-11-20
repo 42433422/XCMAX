@@ -46,6 +46,8 @@ GitHub 安装步骤不接收模型、网关、设备或 GitHub 凭据；使用 `
 
 每个任务使用独立配置、缓存和临时目录，只允许任务目录内的授权写入，网络限于受信网关和 npm 依赖源。只读任务不能写任务目录；原生会话权限拒绝未知工具，交互授权请求自动拒绝。Windows 的固定版沙箱尚不能保持本适配器的模型配置传递与原生会话校验合同，因此设备明确报告 OpenCode 不就绪；不会改走绕过校验的 CLI 路径。这些限制不构成模型凭据不可导出的保证，原 PR 自动修复仍按[凭据迁移边界](../../FHD/docs/autonomy/CREDENTIAL_VAULT_MIGRATION.md)暂停。
 
+Linux 工作设备须以非 root 身份运行。Ubuntu 的 AppArmor 用户命名空间限制生效时，复用 [bubblewrap 0.11.1](https://github.com/containers/bubblewrap/tree/v0.11.1)（LGPL-2.0-or-later）的私有 user namespace 能力与 SRT 0.0.83 原生 helper 初始化路径：固定初始化 shell、socat 和 helper 暂持 `CAP_SYS_ADMIN`，不接任务文本或启动 hooks；helper 建立新的 PID/mount 隔离后清除 ambient 能力。原生 `exec` 入口保留 mount profile 文件描述符和父进程死亡清理，不留下中间监督进程。工作进程启动前强制核对 `CapEff/CapPrm/CapAmb=0`、`NoNewPrivs=1`、`Seccomp=2` 与单层 `NSpid`，仅可能保留的 inheritable 位受 NNP 与命名空间 seccomp 限制，不能重新取得能力。既有宿主策略不变；CI 在真实 Linux 上核对能力状态、嵌套命名空间／Unix socket／受保护文件拒绝及原生会话权限。
+
 `DEVFLEET_FORCE_OPENCODE` 默认关闭；须先部署支持 OpenCode 的 DevFleet 协调服务（配套 `devfleet-private#17`）与工作设备，确认设备工具就绪后，再由运维在 MODstore、设备和 GitHub 仓库变量中显式设置为 `1`。未升级的设备保持等待，不将任务转给其他工具。首次派工遵循该可信策略，既有请求与 attempt 继续按原身份核对回执。
 
 GitHub Worker 还须启用下文的云端平台模型准入。客服与 Retort 先持久化同一次额度分配，再启动工作流；OpenCode 使用该分配的模型、受信 `PARA_PLATFORM_GATEWAY_URL` 和对应的专用 key，不使用独立的全局模型别名。它只接收本次选中模型的密钥；`MODSTORE_PARA_ARK_PLAN_FIRST=1` 的专用计划组合暂不兼容，明确等待，不交换凭据或改用其他模型。本地非池设备仍可显式配置网关、`PARA_OPENCODE_MODEL` 和 `OPENCODE_API_KEY`，并通过 `MODSTORE_CREDENTIAL_GRANT_SCOPES` 授予该模型凭据。平台请求沿用原生 `/v1/responses`，执行前回读有效模型、网关和认证配置。增量文字、工具活动与实际 token 用量经现有任务 WebSocket 回传。

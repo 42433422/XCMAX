@@ -49,11 +49,11 @@ export default defineConfig({
       },
       {
         find: /^@vue-office\/docx$/,
-        replacement: path.resolve(__dirname, './node_modules/@vue-office/docx'),
+        replacement: path.resolve(__dirname, './node_modules/@vue-office/docx/lib/v3/index.js'),
       },
       {
         find: /^@vue-office\/pptx$/,
-        replacement: path.resolve(__dirname, './node_modules/@vue-office/pptx'),
+        replacement: path.resolve(__dirname, './node_modules/@vue-office/pptx/lib/v3/index.js'),
       },
       { find: '@', replacement: path.resolve(__dirname, './src') },
       // Real Mod views live outside frontend/src, matching production Vite resolution.

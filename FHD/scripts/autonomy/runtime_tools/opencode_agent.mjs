@@ -10,6 +10,78 @@ import { fileURLToPath } from 'node:url';
 
 const entry = fileURLToPath(import.meta.url);
 
+function restrictedUserNamespaces() {
+  if (process.platform !== 'linux') return false;
+  const path = '/proc/sys/kernel/apparmor_restrict_unprivileged_userns';
+  return existsSync(path) && readFileSync(path, 'utf8').trim() === '1';
+}
+
+// SRT 0.0.83's fixed helper first tries its PID/mount setup in bwrap's userns.
+// Ubuntu's AppArmor policy strips capabilities from its nested-userns fallback.
+// This is not a host privilege grant: bwrap creates the private userns first.
+export function privateUserNamespaceArgs(args, { restricted, uid, euid }) {
+  const end = args.indexOf('--');
+  const flags = args.slice(0, end < 0 ? args.length : end);
+  const profiles = flags.flatMap((flag, index) => flag === '--args' ? [index] : []);
+  if (profiles.length > 1 || (profiles.length === 1 && flags[profiles[0] + 1] !== '9')) {
+    throw new Error('opencode_unexpected_bwrap_profile_fd');
+  }
+  if (!restricted || (args.length === 1 && ['--version', '--help'].includes(args[0]))) return [...args];
+  const drop = flags.indexOf('--cap-drop'), proc = flags.indexOf('--proc');
+  if (!Number.isSafeInteger(uid) || uid < 1 || euid !== uid || end < 0
+      || !['--unshare-user', '--unshare-pid', '--unshare-net', '--die-with-parent'].every(flag => flags.includes(flag))
+      || drop < 0 || flags[drop + 1] !== 'ALL' || proc < 0 || flags[proc + 1] !== '/proc'
+      || ['--cap-add', '--uid', '--gid', '--userns', '--userns2', '--as-pid-1'].some(flag => flags.includes(flag))) {
+    throw new Error('opencode_private_user_namespace_required');
+  }
+  return [...flags, '--cap-add', 'CAP_SYS_ADMIN', ...args.slice(end)];
+}
+
+export function privateUserNamespaceLauncher(node, bwrap) {
+  const quote = value => "'" + value.replaceAll("'", "'\\''") + "'";
+  // Native exec preserves SRT's anonymous read-only mount profile on fd 9
+  // and --die-with-parent; no Node supervisor may outlive SRT's outer shell.
+  return `#!/usr/bin/bash
+set -eu
+if ${quote(node)} ${quote(entry)} --sandbox-bwrap-check "$@"; then
+  exec ${quote(bwrap)} "$@"
+else
+  status=$?
+  [[ $status == 42 ]] || exit "$status"
+fi
+flags=()
+while (( $# )); do
+  if [[ $1 == -- ]]; then
+    exec ${quote(bwrap)} "\${flags[@]}" --cap-add CAP_SYS_ADMIN "$@"
+  fi
+  flags+=("$1")
+  shift
+done
+exit 1
+`;
+}
+
+function trustedSystemExecutable(path) {
+  const actual = realpathSync(path), stat = statSync(actual);
+  accessSync(actual, constants.X_OK);
+  if (!stat.isFile() || stat.uid !== 0 || (stat.mode & 0o6022)) throw new Error('opencode_untrusted_system_executable');
+  return actual;
+}
+
+export function assertLinuxWorkloadIsolation(status) {
+  const field = name => status.match(new RegExp('^' + name + ':\\s*(\\S+)', 'm'))?.[1];
+  const namespacePids = status.match(/^NSpid:[ \t]*([^\n]*)/m)?.[1].trim();
+  if (!['CapEff', 'CapPrm', 'CapAmb'].every(name => /^0+$/.test(field(name) || ''))
+      || field('NoNewPrivs') !== '1' || field('Seccomp') !== '2'
+      // A procfs mounted in an outer PID namespace exposes multiple NSpid
+      // values. SRT tolerates a refused remount; this adapter must not.
+      || !/^[1-9][0-9]*$/.test(namespacePids || '')
+      || !/^[0-9a-f]+$/i.test(field('CapInh') || '')
+      || (BigInt('0x' + field('CapInh')) & ~(1n << 21n)) !== 0n) {
+    throw new Error('opencode_workload_isolation_required');
+  }
+}
+
 export function openCodeSandboxEntry(env = process.env) {
   const [major, minor] = process.versions.node.split('.').map(Number);
   // The pinned Windows sandbox does not forward this worker's model environment.
@@ -72,6 +144,7 @@ export function openCodeExecutable(env = process.env) {
 }
 
 export function isOpenCodeReady(env = process.env) {
+  if (process.platform === 'linux' && (!process.getuid?.() || process.geteuid?.() !== process.getuid())) return false;
   if (!openCodeExecutable(env) || !openCodeSandboxEntry(env)) return false;
   try { openCodePlatformConfig(env); return true; } catch { return false; }
 }
@@ -221,9 +294,11 @@ export function sandboxSettings(cwd, temp, executable, node, gateway, reportOnly
       '/etc/hosts', '/etc/resolv.conf', '/etc/nsswitch.conf', '/etc/ld.so.cache'];
   return {
     ...(applySeccomp ? { seccomp: { applyPath: applySeccomp } } : {}),
+    allowNestedUserNamespaces: false,
     network: {
       allowedDomains: [`${gateway.hostname}:${gateway.port || 443}`, 'registry.npmjs.org:443'],
       deniedDomains: [],
+      allowAllUnixSockets: false,
       // Linux gives the two processes a private loopback namespace.
       allowLocalBinding: process.platform === 'darwin',
     },
@@ -268,6 +343,9 @@ export async function runOpenCodeAgent(cwd, prompt, {
     const reason = 'OpenCode 需要 Linux/macOS 文件系统沙箱、Node 22.12+ 和已安装的 CLI';
     throw Object.assign(new Error(reason), { code: 'ENOENT', stderr: reason });
   }
+  if (process.platform === 'linux' && (!process.getuid?.() || process.geteuid?.() !== process.getuid())) {
+    throw new Error('opencode_private_user_namespace_requires_non_root');
+  }
   const platform = openCodePlatformConfig(env);
   const gateway = new URL(env.PARA_PLATFORM_GATEWAY_URL);
   const workspace = realpathSync(cwd);
@@ -280,14 +358,28 @@ export async function runOpenCodeAgent(cwd, prompt, {
   const temp = await mkdtemp(join(scratchRoot, 'para-opencode-'));
   const policy = join(temp, 'sandbox.json');
   try {
-    await writeFile(policy, JSON.stringify(sandboxSettings(workspace, temp, cli, node, gateway, reportOnly, sandbox)), {
+    const settings = sandboxSettings(workspace, temp, cli, node, gateway, reportOnly, sandbox);
+    const childEnv = agentEnvironment(env, temp, platform, reportOnly);
+    if (restrictedUserNamespaces()) {
+      // Only the fixed SRT builder reaches this entry. Its outer bash/socat
+      // briefly share the private-namespace cap; no task text or startup hooks
+      // enter their commands. The helper hides them behind a fresh PID /proc,
+      // clears ambient caps, then enforces NNP and both seccomp filters.
+      const bwrap = trustedSystemExecutable('/usr/bin/bwrap');
+      trustedSystemExecutable('/usr/bin/bash');
+      settings.socatPath = trustedSystemExecutable('/usr/bin/socat');
+      childEnv.PATH = '/usr/bin:/bin:' + (childEnv.PATH || '');
+      settings.bwrapPath = join(temp, 'bwrap');
+      await writeFile(settings.bwrapPath, privateUserNamespaceLauncher(node, bwrap), { mode: 0o700 });
+    }
+    await writeFile(policy, JSON.stringify(settings), {
       mode: 0o600,
     });
     log?.('OpenCode 平台模型 ' + platform.model);
     return await new Promise((resolve, reject) => {
       const child = spawn(node, [sandbox, '--settings', policy, '--', node, entry, '--sandbox-worker'], {
         cwd: workspace,
-        env: agentEnvironment(env, temp, platform, reportOnly),
+        env: childEnv,
         stdio: ['pipe', 'pipe', 'pipe'],
         signal: AbortSignal.timeout(timeoutMs + 5000),
       });
@@ -310,10 +402,28 @@ export async function runOpenCodeAgent(cwd, prompt, {
         }
       });
       child.stdin.on('error', () => {}); // The child exit carries sandbox setup failures.
-      child.stdin.end(JSON.stringify({ executable: cli, prompt, reportOnly, timeoutMs }));
+      child.stdin.end(JSON.stringify({ executable: cli, prompt, reportOnly, timeoutMs, workloadPath: env.PATH }));
     });
   } finally {
     await rm(temp, { recursive: true, force: true });
+  }
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === entry && process.argv[2] === '--sandbox-bwrap-check') {
+  try {
+    if (Object.keys(process.env).some(key => /^(BASH_ENV|ENV|SHELLOPTS|BASHOPTS|PS4|BASH_FUNC_.*|LD_.*|NODE_OPTIONS|NODE_PATH)$/.test(key))) {
+      throw new Error('opencode_untrusted_initialization_hook');
+    }
+    const original = process.argv.slice(3);
+    const args = privateUserNamespaceArgs(original, {
+      restricted: restrictedUserNamespaces(), uid: process.getuid?.(), euid: process.geteuid?.(),
+    });
+    trustedSystemExecutable('/usr/bin/bwrap');
+    // The shell consumes this decision, then execs bwrap without a new parent.
+    process.exitCode = args.length === original.length ? 0 : 42;
+  } catch (error) {
+    process.stderr.write(error.message + '\n');
+    process.exitCode = 1;
   }
 }
 
@@ -325,9 +435,13 @@ if (process.argv[1] && resolve(process.argv[1]) === entry && ['--sandbox-worker'
     process.stdout.write(JSON.stringify(event) + '\n');
   };
   try {
+    if (!nativeTask && process.platform === 'linux') assertLinuxWorkloadIsolation(readFileSync('/proc/self/status', 'utf8'));
     const chunks = [];
     for await (const chunk of process.stdin) chunks.push(chunk);
-    const { executable, prompt, reportOnly, timeoutMs } = JSON.parse(Buffer.concat(chunks).toString());
+    const { executable, prompt, reportOnly, timeoutMs, workloadPath } = JSON.parse(Buffer.concat(chunks).toString());
+    // Restore the caller's toolchain only after the trusted initialization has
+    // dropped its capabilities and the private PID/seccomp checks have passed.
+    if (!nativeTask && typeof workloadPath === 'string') process.env.PATH = workloadPath;
     const log = text => emit('log', text);
     const result = nativeTask
       ? await runOpenCodeAgent(process.cwd(), prompt, { env: process.env, executable, reportOnly, timeoutMs, log })

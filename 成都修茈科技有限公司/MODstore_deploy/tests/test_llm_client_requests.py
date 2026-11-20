@@ -1,14 +1,17 @@
 """A client idempotency key runs one billed execution and replays its receipt."""
 
+import asyncio
 import json
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from threading import Event
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
 from fastapi import HTTPException
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 
 from modstore_server import llm_billed_chat
@@ -214,6 +217,120 @@ async def test_wallet_readback_recovers_a_paid_image_once(db, monkeypatch):
     assert ledger.begin(db, 7, KEY, "image", 180) == ("replay", receipt)
     assert recovery.complete_receipt(db, row, receipt) == receipt
     assert db.query(LlmCallLog).count() == 1
+
+
+@pytest.mark.parametrize("operation", ["chat", "image_generation"])
+@pytest.mark.parametrize("first_fails", [False, True])
+def test_sqlite_concurrent_settlement_recovery_publishes_once(
+    tmp_path, monkeypatch, operation, first_fails
+):
+    from modstore_server import llm_billing_recovery as recovery
+    from modstore_server.db.llm_chat import (
+        ChatConversation,
+        ChatMessage,
+        LlmCallLog,
+        LlmClientRequest,
+    )
+    from modstore_server.models import Base, User
+
+    engine = create_engine(
+        f"sqlite:///{tmp_path / 'billing.sqlite'}",
+        connect_args={"check_same_thread": False, "timeout": 10},
+        pool_size=2,
+        max_overflow=0,
+    )
+    Base.metadata.create_all(
+        engine,
+        tables=[
+            model.__table__
+            for model in (User, ChatConversation, ChatMessage, LlmCallLog, LlmClientRequest)
+        ],
+    )
+    sessions = sessionmaker(bind=engine)
+    receipt = {
+        "ok": True,
+        "operation": operation,
+        "provider": "openai",
+        "model": "model-a",
+        "hold_no": "AIH-concurrent",
+        "request_id": "request-concurrent",
+        "charge_amount": "0.42",
+        "usage": {"prompt_tokens": 17, "completion_tokens": 42, "total_tokens": 59},
+    }
+    if operation == "chat":
+        receipt.update(
+            content="saved answer",
+            conversation_id=None,
+            _history=[{"role": "user", "content": "saved question"}],
+        )
+    else:
+        receipt["images"] = ["saved-image"]
+    with sessions() as db:
+        db.add(User(id=7, username="concurrent-user", password_hash="test-only"))
+        db.commit()
+        _, row = ledger.begin(db, 7, KEY, "digest", 180)
+        ledger.prepare_settlement(db, row, receipt)
+
+    hold = {name: receipt[name] for name in ("provider", "model", "hold_no", "request_id")}
+    read_hold = AsyncMock(return_value={**hold, "status": "settled", "settled_amount": "0.42"})
+    monkeypatch.setattr(recovery, "JavaWalletClient", lambda: SimpleNamespace(read_hold=read_hold))
+    first_write, release_first, second_lock, second_finished = (Event() for _ in range(4))
+    original_lock = ledger.lock_request
+
+    def observed_lock(db, user_id, key):
+        if db.info["worker"] == "second":
+            second_lock.set()
+        return original_lock(db, user_id, key)
+
+    def pause_first_write(db, _context, _instances):
+        if db.info["worker"] == "first" and db.new:
+            first_write.set()
+            assert release_first.wait(10), "first completion was not released"
+            if first_fails:
+                raise RuntimeError("interrupted completion")
+
+    def recover(worker):
+        try:
+            with sessions() as db:
+                db.info["worker"] = worker
+                event.listen(db, "before_flush", pause_first_write)
+                return asyncio.run(recovery.recover_receipt(db, 7, KEY, "owner-token"))
+        finally:
+            if worker == "second":
+                second_finished.set()
+
+    monkeypatch.setattr(ledger, "lock_request", observed_lock)
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            first = pool.submit(recover, "first")
+            try:
+                assert first_write.wait(10), "first completion did not reach its write"
+                second = pool.submit(recover, "second")
+                assert second_lock.wait(10), "second recovery did not attempt to lock"
+                # Keep the first transaction open while the other connection tries
+                # to finish. Without serialization it commits a duplicate receipt.
+                second_finished.wait(1)
+            finally:
+                release_first.set()
+            if first_fails:
+                with pytest.raises(RuntimeError, match="interrupted completion"):
+                    first.result(timeout=10)
+            else:
+                first_receipt = first.result(timeout=10)
+            completed = second.result(timeout=10)
+        with sessions() as db:
+            logs = db.query(LlmCallLog).all()
+            assert len(logs) == 1
+            assert logs[0].charge_amount == Decimal("0.42") and logs[0].total_tokens == 59
+            assert db.query(ChatConversation).count() == (1 if operation == "chat" else 0)
+            assert db.query(ChatMessage).count() == (2 if operation == "chat" else 0)
+            assert ledger.completed_receipt(db, 7, KEY, "digest") == ("replay", completed)
+        if not first_fails:
+            assert completed == first_receipt
+        assert read_hold.await_count == 2
+    finally:
+        release_first.set()
+        engine.dispose()
 
 
 @pytest.mark.asyncio

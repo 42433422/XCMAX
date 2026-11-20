@@ -136,13 +136,14 @@ def prepare_settlement(db: Session, row: LlmClientRequest, receipt: dict[str, An
 
 
 def lock_request(db: Session, user_id: int, client_request_id: str) -> LlmClientRequest | None:
-    return (
-        db.query(LlmClientRequest)
-        .filter_by(user_id=user_id, client_request_id=client_request_id)
-        .populate_existing()
-        .with_for_update()
-        .one_or_none()
+    query = db.query(LlmClientRequest).filter_by(
+        user_id=user_id, client_request_id=client_request_id
     )
+    if db.get_bind().dialect.name == "sqlite":
+        # SQLite ignores FOR UPDATE. Reserve its writer before reading the state;
+        # retain this lock through the usage rows and receipt's existing commit.
+        query.update({LlmClientRequest.state: LlmClientRequest.state}, synchronize_session=False)
+    return query.populate_existing().with_for_update().one_or_none()
 
 
 def finish(db: Session, row: LlmClientRequest, done: dict[str, Any] | None) -> None:
