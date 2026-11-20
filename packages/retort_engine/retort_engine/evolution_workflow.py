@@ -128,7 +128,9 @@ def build_evolution_graph(ports: EvolutionPorts, checkpointer: Any):
         }
 
     def impact(state: EvolutionState):
-        interrupt({"kind": "customer_impact", "request_id": state["protocol"]["request_id"]})
+        interrupt(
+            {"kind": "customer_impact", "request_id": state["protocol"]["request_id"]}
+        )
         result = ports.impact(state)
         return {
             "impact": result,
