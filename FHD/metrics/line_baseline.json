@@ -1,5 +1,5 @@
 {
-  "lines": 2532670,
+  "lines": 2533943,
   "updated": "2026-11-20",
-  "note": "用户授权修复全部开放 PR：#3372 修正流式超时测试请求体及多模态规划结果的可选澄清字段断言，保留原行为与完整校验，59 项目标回归通过。本次测试修改净增 1 行；按当前提交树实测校准为 2532670 行，较原分支基线 2534677 下调 2007 行。"
+  "note": "Re-measure existing workspace integration and regression fixes against main after the Retort integration; retain both independently scoped code paths"
 }
