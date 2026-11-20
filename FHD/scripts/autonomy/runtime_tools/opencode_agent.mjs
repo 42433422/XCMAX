@@ -6,7 +6,7 @@ import { homedir, tmpdir } from 'node:os';
 import { delimiter, dirname, join, resolve, sep } from 'node:path';
 import { createInterface } from 'node:readline';
 import { Readable } from 'node:stream';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const entry = fileURLToPath(import.meta.url);
 
@@ -171,14 +171,19 @@ function runtimeReadPath(executable) {
   return moduleRoot < 0 ? executable : executable.slice(0, moduleRoot + marker.length - 1);
 }
 
-export function sandboxSettings(cwd, temp, executable, node, gateway, reportOnly) {
+export function sandboxSettings(cwd, temp, executable, node, gateway, reportOnly, runtime) {
   const windows = process.platform === 'win32';
+  const applySeccomp = process.platform === 'linux'
+    ? join(dirname(runtime), '..', 'vendor', 'seccomp', process.arch, 'apply-seccomp')
+    : undefined;
+  if (applySeccomp) accessSync(applySeccomp, constants.X_OK);
   const systemPaths = windows ? [] : process.platform === 'darwin'
     ? ['/System', '/usr/lib', '/usr/share', '/usr/bin', '/bin', '/private/etc/ssl',
       '/private/etc/hosts', '/private/var/db/timezone', '/Library/Preferences/SystemConfiguration']
     : ['/usr', '/lib', '/lib64', '/bin', '/dev/null', '/dev/urandom', '/etc/ssl',
       '/etc/hosts', '/etc/resolv.conf', '/etc/nsswitch.conf', '/etc/ld.so.cache'];
   return {
+    ...(applySeccomp ? { seccomp: { applyPath: applySeccomp } } : {}),
     network: {
       allowedDomains: [`${gateway.hostname}:${gateway.port || 443}`, 'registry.npmjs.org:443'],
       deniedDomains: [],
@@ -188,7 +193,7 @@ export function sandboxSettings(cwd, temp, executable, node, gateway, reportOnly
     filesystem: {
       denyRead: windows ? [homedir(), dirname(cwd)] : ['/'],
       allowRead: [...systemPaths.filter(path => existsSync(path)), cwd, temp, entry,
-        node, runtimeReadPath(executable)],
+        node, runtimeReadPath(executable), ...(applySeccomp ? [applySeccomp] : [])],
       allowWrite: reportOnly ? [temp] : [cwd, temp],
       denyWrite: [join(cwd, '.git'), join(cwd, '.devfleet'),
         ...(windows ? [] : ['/tmp/claude', '/private/tmp/claude'])],
@@ -198,10 +203,7 @@ export function sandboxSettings(cwd, temp, executable, node, gateway, reportOnly
 
 function agentEnvironment(env, temp, platform, reportOnly) {
   return {
-    PATH: env.PATH,
-    ...(process.platform === 'win32' ? {
-      SystemRoot: env.SystemRoot, WINDIR: env.WINDIR, TEMP: temp, TMP: temp,
-    } : {}),
+    ...(process.platform === 'win32' ? { TEMP: temp, TMP: temp } : {}),
     XDG_CONFIG_HOME: join(temp, 'config'),
     XDG_CACHE_HOME: join(temp, 'cache'),
     XDG_DATA_HOME: join(temp, 'data'),
@@ -220,6 +222,27 @@ function agentEnvironment(env, temp, platform, reportOnly) {
       bash: 'deny', task: 'deny', external_directory: 'deny',
     }),
   };
+}
+
+async function runWindowsSandboxHost(runtime, policy) {
+  const sdk = pathToFileURL(join(dirname(runtime), 'index.js'));
+  const { SandboxManager, SandboxRuntimeConfigSchema } = await import(sdk.href);
+  const config = SandboxRuntimeConfigSchema.parse(JSON.parse(readFileSync(policy, 'utf8')));
+  await SandboxManager.initialize(config);
+  try {
+    // Use native argv. The generic SRT CLI quotes arguments for POSIX shells.
+    const node = { exe: realpathSync(process.execPath), args: [entry] };
+    const { argv, env } = await SandboxManager.wrapWithSandboxArgv(
+      '--sandbox-worker', node, undefined, undefined, process.cwd(),
+    );
+    return await new Promise((resolve, reject) => {
+      const child = spawn(argv[0], argv.slice(1), { env, stdio: 'inherit', windowsHide: true });
+      child.once('error', reject);
+      child.once('exit', code => resolve(code ?? 1));
+    });
+  } finally {
+    await SandboxManager.reset();
+  }
 }
 
 export async function runOpenCodeAgent(cwd, prompt, {
@@ -242,14 +265,23 @@ export async function runOpenCodeAgent(cwd, prompt, {
   const temp = await mkdtemp(join(scratchRoot, 'para-opencode-'));
   const policy = join(temp, 'sandbox.json');
   try {
-    await writeFile(policy, JSON.stringify(sandboxSettings(workspace, temp, cli, node, gateway, reportOnly)), {
+    const settings = sandboxSettings(workspace, temp, cli, node, gateway, reportOnly, sandbox);
+    await writeFile(policy, JSON.stringify(settings), {
       mode: 0o600,
     });
+    const windows = process.platform === 'win32';
+    const workerEnvironment = agentEnvironment(env, temp, platform, reportOnly);
+    const runtimeArgs = windows
+      ? [entry, '--windows-sandbox-host', sandbox, policy]
+      : [sandbox, '--settings', policy, '--', node, entry, '--sandbox-worker'];
+    const runtimeEnvironment = windows
+      ? { PATH: env.PATH, SystemRoot: env.SystemRoot, WINDIR: env.WINDIR }
+      : { PATH: env.PATH, ...workerEnvironment };
     log?.('OpenCode 平台模型 ' + platform.model);
     return await new Promise((resolve, reject) => {
-      const child = spawn(node, [sandbox, '--settings', policy, '--', node, entry, '--sandbox-worker'], {
+      const child = spawn(node, runtimeArgs, {
         cwd: workspace,
-        env: agentEnvironment(env, temp, platform, reportOnly),
+        env: runtimeEnvironment,
         stdio: ['pipe', 'pipe', 'pipe'],
         signal: AbortSignal.timeout(timeoutMs + 5000),
       });
@@ -272,7 +304,12 @@ export async function runOpenCodeAgent(cwd, prompt, {
         }
       });
       child.stdin.on('error', () => {}); // The child exit carries sandbox setup failures.
-      child.stdin.end(JSON.stringify({ executable: cli, prompt, reportOnly, timeoutMs }));
+      // SRT starts the Windows worker with a fresh profile environment. Carry
+      // its settings and credential on stdin so the broker argv stays public.
+      child.stdin.end(JSON.stringify({
+        executable: cli, prompt, reportOnly, timeoutMs,
+        ...(windows ? { workerEnvironment } : {}),
+      }));
     });
   } finally {
     await rm(temp, { recursive: true, force: true });
@@ -284,11 +321,13 @@ async function runOpenCodeWindows(executable, prompt, reportOnly, timeoutMs, log
   if (reportOnly) args.push('--agent', 'plan');
   return new Promise((resolve, reject) => {
     const child = spawn(executable, args, {
-      stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true,
+      stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true,
       signal: AbortSignal.timeout(timeoutMs),
     });
     let output = '';
+    let stderr = '';
     let failure;
+    child.stderr.setEncoding('utf8').on('data', chunk => { stderr = (stderr + chunk).slice(-1000); });
     createInterface({ input: child.stdout }).on('line', line => {
       const event = events(line)[0];
       if (event?.type === 'tool_use') log('[OpenCode] 工具执行已返回');
@@ -300,15 +339,28 @@ async function runOpenCodeWindows(executable, prompt, reportOnly, timeoutMs, log
     });
     child.once('error', reject);
     child.once('close', code => {
-      if (code === 0 && !failure) resolve(output.trim());
-      else reject(new Error(failure || `OpenCode CLI 执行退出 (${code})`));
+      if (code === 0 && !failure) {
+        resolve(output.trim());
+        return;
+      }
+      const reason = failure || stderr.trim() || `OpenCode CLI 执行退出 (${code})`;
+      const key = process.env.OPENCODE_API_KEY;
+      reject(new Error(key ? reason.replaceAll(key, '[redacted]') : reason));
     });
     child.stdin.on('error', () => {});
     child.stdin.end(prompt);
   });
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === entry && ['--sandbox-worker', '--task'].includes(process.argv[2])) {
+const invokedDirectly = process.argv[1] && resolve(process.argv[1]) === entry;
+if (invokedDirectly && process.platform === 'win32' && process.argv[2] === '--windows-sandbox-host') {
+  try {
+    process.exitCode = await runWindowsSandboxHost(process.argv[3], process.argv[4]);
+  } catch (error) {
+    console.error(error.message);
+    process.exitCode = 1;
+  }
+} else if (invokedDirectly && ['--sandbox-worker', '--task'].includes(process.argv[2])) {
   const nativeTask = process.argv[2] === '--task';
   const emit = (type, text) => {
     const event = nativeTask && type === 'log' ? { type: 'text', part: { text } }
@@ -318,7 +370,8 @@ if (process.argv[1] && resolve(process.argv[1]) === entry && ['--sandbox-worker'
   try {
     const chunks = [];
     for await (const chunk of process.stdin) chunks.push(chunk);
-    const { executable, prompt, reportOnly, timeoutMs } = JSON.parse(Buffer.concat(chunks).toString());
+    const { executable, prompt, reportOnly, timeoutMs, workerEnvironment } = JSON.parse(Buffer.concat(chunks).toString());
+    if (!nativeTask && process.platform === 'win32') Object.assign(process.env, workerEnvironment);
     const log = text => emit('log', text);
     const result = nativeTask
       ? await runOpenCodeAgent(process.cwd(), prompt, { env: process.env, executable, reportOnly, timeoutMs, log })

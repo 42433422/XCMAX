@@ -1,5 +1,5 @@
 {
-  "lines": 2528719,
+  "lines": 2528772,
   "updated": "2026-11-20",
-  "note": "复用 Sandbox Runtime 实施 OpenCode 工作区隔离，验证权限回应及只读分支差异"
+  "note": "复用 Sandbox Runtime 原生 Windows 启动接口并授权 Ubuntu 读取固定版本的 seccomp 辅助程序，保持进程隔离"
 }
