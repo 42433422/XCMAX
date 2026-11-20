@@ -532,10 +532,23 @@ def prepare_dolt_ticket_payload(
     if contract and contract["role"] in {"scout", "verify", "escalation_review"}:
         mode = MODE_REPORT_ONLY
     ticket_no = re.sub(r"[^A-Za-z0-9_\-]", "", str(fields.get("ticket_no") or ""))[:64] or "-"
+    marker = control_marker(fields, req)
+    if retort:
+        if not contract:
+            raise DoltIncidentContractError("feedback_contract_missing")
+        workspace = contract["source"].get("github_workspace") or {}
+        request_id, attempt = str(workspace.get("request_id") or ""), str(
+            raw.get("attempt_id") or ""
+        )
+        if not request_id or not re.fullmatch(r"[0-9a-f]{32}", attempt):
+            raise DoltIncidentContractError("feedback_publication_identity_missing")
+        marker = f"[xcmax:{hashlib.sha256(request_id.encode()).hexdigest()[:32]}:{attempt}]"
+        if not str(payload.get("title") or "").startswith(marker):
+            raise DoltIncidentContractError("feedback_publication_marker_mismatch")
     # dot 不合并、不用 MODstore 本机工作区：去掉自动合并和本地路径。
     out = {k: v for k, v in payload.items() if k not in {"auto_merge", "workspace_path"}}
     out.update(
-        title=f"{control_marker(fields, req)} [dot:{mode}] 客服工单 {ticket_no}"[:240],
+        title=f"{marker} [dot:{mode}] 客服工单 {ticket_no}"[:240],
         prompt=build_dolt_prompt(fields, req, mode)
         + ("\n" + _incident_prompt(contract, req) if contract else ""),
         subtask_title=f"{mode}: 客服工单 {ticket_no}"[:240],

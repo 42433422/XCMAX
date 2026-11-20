@@ -500,7 +500,7 @@ def test_feedback_selection_scans_past_already_used_candidates(setup, monkeypatc
         assert [item["ticket_id"] for item in selected.values()] == [tickets[0].id]
 
 
-@pytest.mark.parametrize("customer_decision", ["resolved", "reopen"])
+@pytest.mark.parametrize("customer_decision", ["resolved", "reopen", "resolved_then_reopen"])
 def test_feedback_run_binds_original_customer_and_production_release(
     setup, monkeypatch, customer_decision
 ):
@@ -551,6 +551,15 @@ def test_feedback_run_binds_original_customer_and_production_release(
         "surface": "shared_web",
         "goal": "验证首次导入反馈并恢复正确路径",
     }
+    if customer_decision == "resolved_then_reopen":
+        from modstore_server import retort_feedback_measurements
+
+        templates["restore"]["customer_feedback"]["growthbook"] = {"project": "prod"}
+        monkeypatch.setattr(
+            retort_feedback_measurements,
+            "experiment_measurement",
+            lambda *_: {"status": "running"},
+        )
     with open(os.environ["MODSTORE_RETORT_PROTOCOLS"], "w", encoding="utf-8") as fh:
         json.dump(templates, fh)
 
@@ -670,7 +679,9 @@ def test_feedback_run_binds_original_customer_and_production_release(
 
     decision_path = f"/api/customer-service/issues/{ticket_id}/decision"
     decision = {
-        "decision": customer_decision,
+        "decision": (
+            "resolved" if customer_decision == "resolved_then_reopen" else customer_decision
+        ),
         "note": "已按原业务路径复测成功",
         "idempotency_key": str(uuid4()),
     }
@@ -679,7 +690,14 @@ def test_feedback_run_binds_original_customer_and_production_release(
     app.dependency_overrides[get_current_user] = lambda: customer
     result = client.post(decision_path, json=decision)
     assert result.status_code == 200, result.text
-    if customer_decision == "reopen":
+    if customer_decision == "resolved_then_reopen":
+        assert resume()["status"] == "waiting_customer_impact"
+        reopened = client.post(
+            decision_path,
+            json={"decision": "reopen", "note": "原问题再次出现", "idempotency_key": str(uuid4())},
+        )
+        assert reopened.status_code == 200, reopened.text
+    if customer_decision in {"reopen", "resolved_then_reopen"}:
         with get_session_factory()() as db:
             ticket = db.get(CustomerServiceTicket, ticket_id)
             evidence = json_loads(ticket.evidence_json, {})
@@ -687,7 +705,7 @@ def test_feedback_run_binds_original_customer_and_production_release(
             ticket.evidence_json = json_dumps(evidence)
             db.commit()
     final = resume()
-    if customer_decision == "reopen":
+    if customer_decision in {"reopen", "resolved_then_reopen"}:
         assert final["status"] == "customer_impact_rejected"
         assert final["snapshot"]["impact"]["release_sha"] == "c" * 40
         return

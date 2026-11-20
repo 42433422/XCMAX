@@ -428,14 +428,23 @@ def decide_product_issue(
                 _wake_owner_intake(ticket.id, "customer_reopen")
         return {"success": True, "replayed": True, "issue": _issue_row(ticket)}
     resolution = issue_resolution(ticket, evidence)
-    retort_delivery = (
-        evidence.get("retort_delivery")
-        if ticket.status == "awaiting_customer"
+    binding = evidence.get("retort_delivery")
+    current_result = (
+        ticket.status == "awaiting_customer"
         and resolution.get("state") == "awaiting_customer_verification"
         and resolution.get("verification_mode") == "customer_decision"
         and not resolution.get("release_target")
-        else None
     )
+    reopening_confirmed = (
+        body.decision == "reopen"
+        and ticket.status == "resolved"
+        and resolution.get("state") == "resolved"
+        and bool(decisions)
+        and decisions[-1].get("decision") == "resolved"
+        and decisions[-1].get("user_id") == int(user.id)
+        and decisions[-1].get("retort_delivery") == binding
+    )
+    retort_delivery = binding if binding and (current_result or reopening_confirmed) else None
     closed = ticket.status in _CLOSED
     now = datetime.now(UTC)
     event_id = ""

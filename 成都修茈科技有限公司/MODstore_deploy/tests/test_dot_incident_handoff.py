@@ -1,5 +1,6 @@
 """Dot preserves trusted role evidence without reopening the raw-prompt boundary."""
 
+import hashlib
 import json
 from types import SimpleNamespace
 
@@ -24,7 +25,7 @@ from tests.test_incident_team_escalation import incident as incident
 def test_retort_feedback_uses_private_dot_route_and_blocks_other_tools(monkeypatch):
     contract = {
         "role": "scout",
-        "source": {"summary": "公开的通用目标"},
+        "source": {"summary": "公开的通用目标", "github_workspace": {"request_id": "run-1"}},
         "handoffs": [],
         "review": {},
         "customer_feedback": {"reproduction": ["导入指定文件时报错"], "intent": "product_issue"},
@@ -34,21 +35,36 @@ def test_retort_feedback_uses_private_dot_route_and_blocks_other_tools(monkeypat
         "raw_input": {
             "event_type": "ops.retort.evolution",
             "_trusted_incident_team_execution": True,
+            "attempt_id": "a" * 32,
         }
     }
-    result = dot.prepare_dolt_ticket_payload(req, {"prompt": "通用目标"}, "dolt")
+    from modstore_server.para_delegate_task_payloads import build_request
+
+    marker = f"[xcmax:{hashlib.sha256(b'run-1').hexdigest()[:32]}:{'a' * 32}]"
+    payload = build_request(
+        task="通用目标",
+        input_data={**req["raw_input"], "role": "fix", "github_workspace": {"request_id": "run-1"}},
+        employee_id="developer",
+        workspace_root="",
+        mode="code_fix",
+        report_only=False,
+    )
+    result = dot.prepare_dolt_ticket_payload(req, payload, "dolt")
+    assert result["title"].startswith(marker)
+    with pytest.raises(dot.DoltIncidentContractError, match="marker_mismatch"):
+        dot.prepare_dolt_ticket_payload(req, {"title": "unbound"}, "dolt")
     assert "导入指定文件时报错" in result["prompt"]
     assert result["report_only"] is True
     contract["role"] = "fix"
-    assert dot.prepare_dolt_ticket_payload(req, {}, "dolt")["report_only"] is False
+    assert dot.prepare_dolt_ticket_payload(req, payload, "dolt")["report_only"] is False
     contract["source"]["summary"] = "登录密码异常"
-    assert dot.prepare_dolt_ticket_payload(req, {}, "dolt")["report_only"] is True
+    assert dot.prepare_dolt_ticket_payload(req, payload, "dolt")["report_only"] is True
     contract["source"]["summary"] = "公开的通用目标"
     contract["customer_feedback"]["reproduction"] = ["登录密码异常"]
-    assert dot.prepare_dolt_ticket_payload(req, {}, "dolt")["report_only"] is True
+    assert dot.prepare_dolt_ticket_payload(req, payload, "dolt")["report_only"] is True
     contract["customer_feedback"]["reproduction"] = ["导入指定文件时报错"]
     req["report_only"] = True
-    assert dot.prepare_dolt_ticket_payload(req, {}, "dolt")["report_only"] is True
+    assert dot.prepare_dolt_ticket_payload(req, payload, "dolt")["report_only"] is True
     with pytest.raises(dot.DoltIncidentContractError, match="private_executor_required"):
         dot.prepare_dolt_ticket_payload(req, {"prompt": "通用目标"}, "other")
 
