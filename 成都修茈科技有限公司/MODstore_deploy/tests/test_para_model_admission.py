@@ -24,13 +24,13 @@ ROUTES = {
         "provider": "a",
         "resource": "coding",
         "capabilities": sorted(BASE_CAPABILITIES),
-        "benchmark_id": "a-model",
+        "benchmark_ids": {"livebench_coding": "a-model", "deepswe": "a-config"},
     },
     "para-b": {
         "provider": "b",
         "resource": "coding",
         "capabilities": sorted(BASE_CAPABILITIES),
-        "benchmark_id": "b-model",
+        "benchmark_ids": {"livebench_coding": "b-model", "deepswe": "b-config"},
     },
 }
 
@@ -55,7 +55,7 @@ def test_invalid_active_policy_leaves_task_waiting(monkeypatch):
 
 
 def test_capability_and_reserve_filter_before_benchmark():
-    def must_not_fetch():
+    def must_not_fetch(_source):
         raise AssertionError("blocked or single candidate must not query leaderboard")
 
     result = select_route(
@@ -75,21 +75,34 @@ def test_capability_and_reserve_filter_before_benchmark():
     assert result["model"] == "para-b"
 
 
-def test_uses_current_benchmark_only_for_comparable_tied_routes():
+def test_uses_each_comparable_board_and_records_actual_release():
     quota = [provider("a", 92), provider("b", 92)]
-    decision = select_route(
-        quota,
-        ROUTES,
-        80,
-        leaderboard=lambda: ("20261106", {"a-model": 40, "b-model": 90}),
-    )
+    snapshots = {
+        "livebench_coding": ("20261106", {"a-model": 40, "b-model": 90}),
+        "deepswe": ("2026-09-22", {"a-config": 12, "b-config": 24}),
+    }
+    decision = select_route(quota, ROUTES, 80, leaderboard=snapshots.get)
     assert decision["model"] == "para-b"
-    assert decision["benchmark_release"] == "20261106"
-    assert decision["coding_score"] == 90
-    for benchmark in [None, ("20261106", {"b-model": 90})]:
-        decision = select_route(quota, ROUTES, 80, leaderboard=lambda: benchmark)
-        assert decision["model"] == "para-a"
-        assert decision["selection"] == "quota_then_config_order"
+    assert decision["approved_models"] == ["para-b", "para-a"]
+    assert decision["benchmarks"] == [
+        {"source": "livebench_coding", "release": "20261106", "score": 90},
+        {"source": "deepswe", "release": "2026-09-22", "score": 24},
+    ]
+    snapshots["deepswe"] = ("2026-09-22", {"a-config": 98, "b-config": 20})
+    assert select_route(quota, ROUTES, 80, leaderboard=snapshots.get)["model"] == "para-a"
+    snapshots.pop("deepswe")
+    snapshots["livebench_coding"] = ("20261106", {"b-model": 90})
+    decision = select_route(quota, ROUTES, 80, leaderboard=snapshots.get)
+    assert decision["model"] == "para-a"
+    assert decision["selection"] == "quota_then_config_order"
+
+
+def test_exhausted_or_unverified_models_never_enter_fallbacks():
+    quota = [provider("a", 79), provider("b", 98)]
+    decision = select_route(quota, ROUTES, 80)
+    assert decision["approved_models"] == ["para-b"]
+    quota[1]["visibility"] = "usage_only"
+    assert "approved_models" not in select_route(quota, ROUTES, 80)
 
 
 def test_sync_admission_uses_isolated_http_on_each_loop(monkeypatch):

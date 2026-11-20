@@ -25,7 +25,7 @@ const MODEL_UNAVAILABLE_PATTERNS = [
   /unknown model/i,
 ];
 const QUOTA_PATTERNS = [
-  /insufficient_quota/i,
+  /insufficient_quota|budget_exceeded|ExceededTokenBudget|ExceededBudget/i,
   /exceeded your current quota/i,
   /usage limit (reached|exceeded)/i,
   /you'?ve hit your usage limit/i,

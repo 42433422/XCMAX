@@ -9,6 +9,7 @@ from collections.abc import Callable
 from typing import Any
 
 from modstore_server.llm_quota_monitor import platform_quota_snapshot
+from modstore_server.para_coding_leaderboard import SOURCES, current_coding_scores
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.runtime_async import run_coro_sync
 
@@ -24,7 +25,7 @@ def select_route(
     reserve: int,
     *,
     required: frozenset[str] = BASE_CAPABILITIES,
-    leaderboard: Callable[[], tuple[str, dict[str, float]] | None] | None = None,
+    leaderboard: Callable[[str], tuple[str, dict[str, float]] | None] | None = None,
 ) -> dict[str, Any]:
     """Filter by verified capabilities and quota, then compare eligible models."""
     by_provider = {row["provider"]: row for row in providers}
@@ -81,28 +82,47 @@ def select_route(
         )
     if not eligible:
         return decision
-    best_headroom = max(row["headroom_percent"] for row in eligible)
-    finalists = [row for row in eligible if row["headroom_percent"] == best_headroom]
-    benchmark_ids = [routes[row["model"]].get("benchmark_id") for row in finalists]
-    if (
-        leaderboard
-        and len(finalists) > 1
-        and all(isinstance(key, str) and key for key in benchmark_ids)
-    ):
-        snapshot = leaderboard()
-        if snapshot:
-            release, scores = snapshot
-            if all(key in scores for key in benchmark_ids):
-                ranked = zip(finalists, benchmark_ids, strict=True)
-                selected, model_id = max(ranked, key=lambda pair: scores[pair[1]])
-                return {
-                    **selected,
-                    "selection": "coding_benchmark",
-                    "benchmark_source": "livebench_coding",
-                    "benchmark_release": release,
-                    "coding_score": scores[model_id],
-                }
-    return {**finalists[0], "selection": "quota_then_config_order"}
+    eligible.sort(key=lambda row: row["headroom_percent"], reverse=True)
+    finalists = [
+        row for row in eligible if row["headroom_percent"] == eligible[0]["headroom_percent"]
+    ]
+    references, points = _benchmark_preferences(finalists, routes, leaderboard)
+    ranked = sorted(range(len(finalists)), key=points.__getitem__, reverse=True)
+    winner = ranked[0]
+    chosen = finalists[winner]
+    return {
+        **chosen,
+        "selection": "coding_benchmarks" if references[winner] else "quota_then_config_order",
+        "benchmarks": references[winner],
+        "approved_models": [
+            *(finalists[index]["model"] for index in ranked),
+            *(row["model"] for row in eligible[len(finalists) :]),
+        ],
+    }
+
+
+def _benchmark_preferences(finalists, routes, leaderboard):
+    """Compare ranks only within a release that covers every tied candidate."""
+    refs = [[] for _ in finalists]
+    points = [0 for _ in finalists]
+    if not leaderboard or len(finalists) < 2:
+        return refs, points
+    for source in SOURCES:
+        mappings = [routes[row["model"]].get("benchmark_ids", {}) for row in finalists]
+        ids = [mapping.get(source) if isinstance(mapping, dict) else None for mapping in mappings]
+        if not all(isinstance(model_id, str) and model_id for model_id in ids):
+            continue
+        snapshot = leaderboard(source)
+        if not snapshot:
+            continue
+        release, scores = snapshot
+        if not all(model_id in scores for model_id in ids):
+            continue
+        cohort = [scores[model_id] for model_id in ids]
+        for index, score in enumerate(cohort):
+            points[index] += sum(score > other for other in cohort)
+            refs[index].append({"source": source, "release": release, "score": score})
+    return refs, points
 
 
 def platform_model_admission(profile: str = "repair") -> dict[str, Any] | None:
@@ -143,8 +163,6 @@ def platform_model_admission(profile: str = "repair") -> dict[str, Any] | None:
         )
     except RECOVERABLE_ERRORS:
         return {"status": "waiting", "reason": "platform_quota_unavailable"}
-    from modstore_server.para_coding_leaderboard import current_coding_scores
-
     decision = select_route(
         snapshot.get("providers", []),
         routes,

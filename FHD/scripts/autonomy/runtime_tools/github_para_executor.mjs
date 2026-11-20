@@ -40,16 +40,39 @@ export async function runGithubExecutor({ env = process.env, fetchStatus = fetch
   delete agentEnv.PARA_CODEX_AUTH_JSON;
   delete agentEnv.PARA_CODEX_CONFIG_TOML;
   const allocation = accepted.model_allocation;
+  delete agentEnv.PARA_PLATFORM_MODEL;
+  delete agentEnv.PARA_PLATFORM_MODEL_CANDIDATES;
+  delete agentEnv.PARA_PLATFORM_APPROVED_KEYRING;
+  delete agentEnv.PARA_PLATFORM_GATEWAY_KEYS_JSON;
   if (env.PARA_PLATFORM_POOL === '1' || allocation) {
+    const approved = allocation?.approved_models ?? [allocation?.model];
     if (env.PARA_PLATFORM_POOL !== '1' || allocation?.status !== 'admitted'
-        || !/^[a-zA-Z0-9][a-zA-Z0-9._:/-]{0,127}$/.test(allocation.model || '')
-        || !env.PARA_PLATFORM_GATEWAY_KEY?.trim()) {
+        || !Array.isArray(approved) || !approved.length || approved[0] !== allocation.model
+        || approved.some(model => typeof model !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._:/-]{0,127}$/.test(model))
+        || new Set(approved).size !== approved.length) {
       throw new Error('platform_model_allocation_or_gateway_missing');
     }
-    agentEnv.CODEX_API_KEY = env.PARA_PLATFORM_GATEWAY_KEY;
+    let keys;
+    try {
+      keys = env.PARA_PLATFORM_GATEWAY_KEYS_JSON?.trim()
+        ? JSON.parse(env.PARA_PLATFORM_GATEWAY_KEYS_JSON)
+        : Object.fromEntries(approved.map(model => [model, env.PARA_PLATFORM_GATEWAY_KEY]));
+    } catch {
+      throw new Error('invalid_platform_model_keyring');
+    }
+    if (!keys || typeof keys !== 'object' || Array.isArray(keys)
+        || approved.some(model => !Object.hasOwn(keys, model)
+          || typeof keys[model] !== 'string' || !/^\S+$/.test(keys[model]))) {
+      throw new Error('platform_model_allocation_or_gateway_missing');
+    }
+    agentEnv.CODEX_API_KEY = keys[allocation.model];
+    agentEnv.PARA_PLATFORM_APPROVED_KEYRING = JSON.stringify(
+      Object.fromEntries(approved.map(model => [model, keys[model]])),
+    );
     delete agentEnv.OPENAI_API_KEY;
     delete agentEnv.DEVFLEET_CODEX_API_KEY_ENV;
     agentEnv.PARA_PLATFORM_MODEL = allocation.model;
+    agentEnv.PARA_PLATFORM_MODEL_CANDIDATES = approved.join(',');
   }
   delete agentEnv.PARA_PLATFORM_GATEWAY_KEY;
   const agent = spawnWorker(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), 'para_e2e_agent.mjs')], {

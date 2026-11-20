@@ -149,6 +149,7 @@ test('模型错误分类：400 不支持 / 不存在 / 额度；普通失败不�
   assert.equal(classifyModelError('The model `gpt-5.6-luna` does not exist'), 'model_unsupported');
   assert.equal(classifyModelError("You've hit your usage limit."), 'quota');
   assert.equal(classifyModelError('insufficient_quota'), 'quota');
+  assert.equal(classifyModelError('LiteLLM ExceededTokenBudget'), 'quota');
   assert.equal(classifyModelError('[codex exit=1]\npatch failed to apply'), '');
   assert.equal(classifyModelError(''), '');
 });

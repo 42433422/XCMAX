@@ -16,7 +16,8 @@ if os.environ.get('PARA_PLATFORM_POOL') == '1':
     url = urlsplit(base_url)
     if (url.scheme != 'https' or not url.hostname or url.username or url.password
             or url.query or url.fragment or not url.path.endswith('/v1')
-            or not os.environ.get('PARA_PLATFORM_GATEWAY_KEY', '').strip()):
+            or not (os.environ.get('PARA_PLATFORM_GATEWAY_KEY', '').strip()
+                    or os.environ.get('PARA_PLATFORM_GATEWAY_KEYS_JSON', '').strip())):
         raise SystemExit('Para platform Responses endpoint or virtual key is not configured')
     target = root / 'config.toml'
     target.write_text(

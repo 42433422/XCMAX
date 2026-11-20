@@ -367,7 +367,20 @@ async function runCodexAgent(taskDir, prompt, log = () => {}) {
   });
   if (process.env.PARA_PLATFORM_MODEL) {
     if (!codexEnv.CODEX_API_KEY) throw new Error('platform_model_credential_not_granted');
-    return invoke(process.env.PARA_PLATFORM_MODEL, codexEnv);
+    const candidates = (process.env.PARA_PLATFORM_MODEL_CANDIDATES || process.env.PARA_PLATFORM_MODEL).split(',');
+    const keyring = JSON.parse(process.env.PARA_PLATFORM_APPROVED_KEYRING || '{}');
+    const modelEnv = model => ({ ...codexEnv, CODEX_API_KEY: keyring[model] || codexEnv.CODEX_API_KEY });
+    if (candidates.length === 1) return invoke(candidates[0], modelEnv(candidates[0]));
+    // Only retry a read-only probe. Once the real task starts, preserve its effects for reconciliation.
+    const preflight = await runWithModelFallback({
+      candidates,
+      availability: codexModelAvailability,
+      runAttempt: model => probeCodexModel(model, modelEnv(model)),
+      log,
+    });
+    codexModelAttemptsByTaskDir.set(taskDir, formatModelsTried(preflight.attempts));
+    if (!preflight.ok) return preflight.output;
+    return invoke(preflight.model, modelEnv(preflight.model));
   }
   if (!modelGatewayEnabled()) {
     // Disabling fallback does not erase an explicit role's selected model.
