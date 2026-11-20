@@ -692,6 +692,113 @@ async def test_recovery_from_im_log_uses_original_turn_and_replies_once(cs_db, m
 
 
 @pytest.mark.asyncio
+async def test_deferred_ticket_waits_for_authenticated_session_without_advancing(
+    cs_db, monkeypatch
+):
+    from app.application import client_product_issue_intake, enterprise_cs_automation
+    from app.fastapi_app import enterprise_cs_scheduler
+
+    svc, cs_id, cid = _conversation(cs_db)
+    msg = svc.send_message(cid, 7, "请提交故障工单：Windows500卡死", origin="customer")["message"]
+    engine = cs_db.get_bind()
+    monkeypatch.setattr(enterprise_cs_automation, "get_host_engine", lambda: engine)
+    monkeypatch.setattr(enterprise_cs_automation, "HostSessionLocal", sessionmaker(bind=engine))
+    monkeypatch.setattr(enterprise_cs_scheduler, "HostSessionLocal", sessionmaker(bind=engine))
+    calls = []
+
+    async def receive(token, report, fields, **kwargs):
+        calls.append((token, report, kwargs))
+        return {"state": "RECEIVED", "owner_ticket_no": "010066"}
+
+    monkeypatch.setattr(client_product_issue_intake, "receive_pending_report", receive)
+    result = await enterprise_cs_automation.process_enterprise_cs_customer_message(
+        cid, 7, msg["id"], "", defer_missing_credential=True
+    )
+    assert result["reason"] == "customer_session_required"
+    cs_db.expire_all()
+    state = cs_db.get(ImCustomerServiceAutomationState, cid)
+    assert state.last_customer_message_id == 0
+    assert state.status == "ai_waiting_session"
+    await enterprise_cs_scheduler.recover_enterprise_cs_messages()
+    assert calls == []
+    result = await enterprise_cs_automation.process_enterprise_cs_customer_message(
+        cid, 7, msg["id"], "", market_token="owner-token"
+    )
+    assert result["action"] == "issue_intake"
+    assert len(calls) == 1 and calls[0][0] == "owner-token"
+    assert "010066" in svc.list_messages(cid, cs_id)[-1]["body"]
+
+
+@pytest.mark.asyncio
+async def test_authenticated_ticket_follows_a_retrying_turn(cs_db, monkeypatch):
+    from datetime import timedelta
+
+    from app.application import client_product_issue_intake
+    from app.application import enterprise_cs_automation as module
+    from app.utils.time import utc_now_naive
+
+    svc, _, cid = _conversation(cs_db)
+    first = svc.send_message(cid, 7, "如何使用行业模块？", origin="customer")["message"]
+    later = svc.send_message(cid, 7, "请提交故障工单：Windows500卡死", origin="customer")["message"]
+    engine = cs_db.get_bind()
+    monkeypatch.setattr(module, "get_host_engine", lambda: engine)
+    monkeypatch.setattr(module, "HostSessionLocal", sessionmaker(bind=engine))
+    attempts = 0
+
+    async def provider(*_args, **_kwargs):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise TimeoutError
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "action": "clarify",
+                                "reply": "请描述使用步骤",
+                                "confidence": 0.95,
+                                "risk_level": "low",
+                            }
+                        )
+                    }
+                }
+            ]
+        }
+
+    calls = []
+
+    async def receive(token, report, fields, **kwargs):
+        calls.append(token)
+        return {"state": "RECEIVED", "owner_ticket_no": "010066"}
+
+    monkeypatch.setattr("app.infrastructure.llm.invoke.chat_completion_openai_format", provider)
+    monkeypatch.setattr(client_product_issue_intake, "receive_pending_report", receive)
+    await module.process_enterprise_cs_customer_message(cid, 7, first["id"], "")
+    deferred = await module.process_enterprise_cs_customer_message(
+        cid, 7, later["id"], "", market_token="owner-token"
+    )
+    assert deferred["reason"] == "earlier_message_pending"
+    cs_db.expire_all()
+    state = cs_db.get(ImCustomerServiceAutomationState, cid)
+    state.updated_at = utc_now_naive() - timedelta(minutes=1)
+    cs_db.commit()
+    await module.process_enterprise_cs_customer_message(
+        cid, 7, first["id"], "", defer_missing_credential=True
+    )
+    waiting = await module.process_enterprise_cs_customer_message(
+        cid, 7, later["id"], "", defer_missing_credential=True
+    )
+    assert waiting["reason"] == "customer_session_required"
+    result = await module.process_enterprise_cs_customer_message(
+        cid, 7, later["id"], "", market_token="owner-token"
+    )
+    assert result["action"] == "issue_intake"
+    assert calls == ["owner-token"]
+
+
+@pytest.mark.asyncio
 async def test_ticket_intake_restart_reads_receipt_without_second_write(cs_db, monkeypatch):
     from app.application import client_product_issue_intake
 
@@ -718,6 +825,11 @@ async def test_ticket_intake_restart_reads_receipt_without_second_write(cs_db, m
     with pytest.raises(ConnectionError):
         await EnterpriseCsAutomationService(cs_db).handle_customer_message(**kwargs)
     assert cs_db.get(ImCustomerServiceAutomationState, cid).status == "ai_intake_pending"
+    waiting = await EnterpriseCsAutomationService(cs_db).handle_customer_message(
+        **{**kwargs, "market_token": "", "defer_missing_credential": True}
+    )
+    assert waiting["reason"] == "customer_session_required"
+    assert cs_db.get(ImCustomerServiceAutomationState, cid).status == "ai_intake_waiting_session"
     result = await EnterpriseCsAutomationService(cs_db).handle_customer_message(**kwargs)
     assert calls == [False, True]
     assert result["action"] == "issue_intake"

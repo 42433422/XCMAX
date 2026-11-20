@@ -203,6 +203,7 @@ export function useConversationList(params: UseConversationListParams) {
       if (conversation.cs_status === 'human_pending') return '人工已介入'
       if (conversation.cs_status === 'human_active') return '人工处理中'
       if (conversation.cs_status === 'ai_retrying') return '系统自动重试中'
+      if (conversation.cs_status === 'ai_waiting_session') return '等待账号连接后继续'
       if (conversation.cs_status === 'ai_unresolved') return '暂未解决'
       if (conversation.cs_status === 'ai_processing') return 'AI 正在处理'
       return conversation.cs_summary ? `AI接待 · ${conversation.cs_summary}` : 'AI自动接待中'

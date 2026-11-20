@@ -57,6 +57,7 @@ const emit = defineEmits<{
 
 function csStatusLabel(status?: ImConversationSummary['cs_status']): string {
   if (status === 'ai_retrying') return '系统自动重试中'
+  if (status === 'ai_waiting_session') return '等待账号连接后继续'
   if (status === 'ai_unresolved') return '暂未解决'
   if (status === 'ai_processing') return 'AI处理中'
   if (status === 'human_pending') return '人工已介入'

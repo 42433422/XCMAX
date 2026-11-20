@@ -189,6 +189,8 @@ class EnterpriseCsAutomationService:
             "cs_mode": str(row.mode if row and not legacy_pending else "ai"),
             "cs_status": "ai_unresolved"
             if legacy_pending
+            else "ai_waiting_session"
+            if row and row.status == "ai_intake_waiting_session"
             else str(row.status if row else "ai_active"),
             "cs_transfer_reason": str(row.transfer_reason if row else ""),
             "cs_summary": str(row.summary if row else ""),
@@ -339,6 +341,16 @@ class EnterpriseCsAutomationService:
         self._db.commit()
         return {"handled": True, "action": "retry", **self.public_state(row.conversation_id)}
 
+    def _wait_for_customer_session(self, row: ImCustomerServiceAutomationState) -> dict[str, Any]:
+        if row.mode == "ai":
+            row.status = (
+                "ai_intake_waiting_session"
+                if row.status in {"ai_intake_pending", "ai_intake_waiting_session"}
+                else "ai_waiting_session"
+            )
+            self._db.commit()
+        return {"handled": False, "reason": "customer_session_required"}
+
     async def _receive_explicit_issue(
         self,
         conversation_id: int,
@@ -350,6 +362,7 @@ class EnterpriseCsAutomationService:
         readback_only: bool = False,
         processed_through: int = 0,
         state: ImCustomerServiceAutomationState | None = None,
+        defer_missing_credential: bool = False,
     ) -> dict[str, Any] | None:
         from app.application.client_product_issue_intake import (
             _PLAIN_INTAKE_RE,
@@ -423,6 +436,13 @@ class EnterpriseCsAutomationService:
         if not report:
             reply = _ISSUE_DESCRIPTION_PROMPT
         else:
+            if (
+                market_owner_id
+                and not market_token
+                and state is not None
+                and defer_missing_credential
+            ):
+                return self._wait_for_customer_session(state)
             if market_owner_id and market_token:
                 # Preserve the authenticated intake lane's write fence.
                 # A retry after an uncertain POST only looks up the receipt.
@@ -491,6 +511,7 @@ class EnterpriseCsAutomationService:
         message_id: int,
         body: str,
         market_token: str = "",
+        defer_missing_credential: bool = False,
     ) -> dict[str, Any]:
         from app.application.im_app_service import ImApplicationService
 
@@ -523,9 +544,10 @@ class EnterpriseCsAutomationService:
             message_id,
             body,
             market_token,
-            readback_only=row.status == "ai_intake_pending",
+            readback_only=row.status in {"ai_intake_pending", "ai_intake_waiting_session"},
             processed_through=processed_through,
             state=row,
+            defer_missing_credential=defer_missing_credential,
         )
         if intake is not None:
             return intake
@@ -544,7 +566,10 @@ class EnterpriseCsAutomationService:
             row.consecutive_failures = 0
             self._db.commit()
 
-        from app.application.client_product_issue_intake import reply_to_ticket_status_request
+        from app.application.client_product_issue_intake import (
+            TICKET_AUTH_REQUIRED,
+            reply_to_ticket_status_request,
+        )
 
         text = body.strip()
         owner = self._db.get(User, customer_user_id)
@@ -553,6 +578,13 @@ class EnterpriseCsAutomationService:
             market_user_id=int(getattr(owner, "market_user_id", 0) or 0),
             market_token=market_token,
         )
+        if (
+            ticket_reply == TICKET_AUTH_REQUIRED
+            and defer_missing_credential
+            and owner
+            and owner.market_user_id
+        ):
+            return self._wait_for_customer_session(row)
         if ticket_reply is not None:
             return self._finish(row, message_id, ticket_reply, action="ticket_status")
 
@@ -700,6 +732,7 @@ async def process_enterprise_cs_customer_message(
     body: str,
     *,
     market_token: str = "",
+    defer_missing_credential: bool = False,
 ):
     # Reject excessive queued work before allocating further model calls. The
     # IM row remains durable and can be recovered after capacity is released.
@@ -731,7 +764,10 @@ async def process_enterprise_cs_customer_message(
                     if (
                         row
                         and row.status == "ai_retrying"
-                        and (row.updated_at > utc_now_naive() - timedelta(seconds=RETRY_DELAY_SECONDS))
+                        and (
+                            row.updated_at
+                            > utc_now_naive() - timedelta(seconds=RETRY_DELAY_SECONDS)
+                        )
                     ):
                         return {"handled": False, "reason": "retry_scheduled"}
                 return await EnterpriseCsAutomationService(db).handle_customer_message(
@@ -740,6 +776,7 @@ async def process_enterprise_cs_customer_message(
                     message_id=message_id,
                     body=body,
                     market_token=market_token,
+                    defer_missing_credential=defer_missing_credential,
                 )
     finally:
         pending = _turn_pending[conversation_id] - 1

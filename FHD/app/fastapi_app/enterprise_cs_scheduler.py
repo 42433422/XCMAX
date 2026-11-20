@@ -34,7 +34,14 @@ async def recover_enterprise_cs_messages() -> None:
                 ImMessage.id > func.coalesce(CsState.last_customer_message_id, 0),
                 or_(
                     CsState.status.is_(None),
-                    CsState.status.not_in(("human_active", "ai_retrying")),
+                    CsState.status.not_in(
+                        (
+                            "human_active",
+                            "ai_retrying",
+                            "ai_waiting_session",
+                            "ai_intake_waiting_session",
+                        )
+                    ),
                     (CsState.status == "ai_retrying")
                     & (CsState.updated_at <= now - timedelta(seconds=RETRY_DELAY_SECONDS)),
                 ),
@@ -52,7 +59,9 @@ async def recover_enterprise_cs_messages() -> None:
         try:
             # Recovery jobs carry only message identity. A ticket write still
             # requires a fresh account-bound credential from the request.
-            await process_enterprise_cs_customer_message(conversation_id, user_id, message_id, "")
+            await process_enterprise_cs_customer_message(
+                conversation_id, user_id, message_id, "", defer_missing_credential=True
+            )
         except BOUNDARY_ERRORS:
             logger.exception("Enterprise CS recovery failed for message %s", message_id)
 

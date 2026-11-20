@@ -549,6 +549,7 @@ _TICKET_NUMBER = re.compile(
     re.I | re.ASCII,
 )
 _LIFECYCLE_LABELS = frozenset({"已收到", "处理中", "有结果", "待补充", "待客户确认", "已完成"})
+TICKET_AUTH_REQUIRED = "当前无法验证企业账号身份，请重新登录企业账号后查询工单。"
 _TERMINAL_LABELS = {
     "closed": "已关闭",
     "rejected": "已拒绝",
@@ -585,7 +586,7 @@ async def reply_to_ticket_status_request(
     elif not number.isdigit():
         number = number.upper()
     if not market_token or market_user_id <= 0:
-        return "当前无法验证企业账号身份，请重新登录企业账号后查询工单。"
+        return TICKET_AUTH_REQUIRED
 
     params = urlencode({"search": number, "account_id": market_user_id, "limit": 10})
     try:

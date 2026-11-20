@@ -40,7 +40,9 @@ async def test_ticket_status_reads_exact_account_and_number(monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("body", ["010066", "010066号工单解决了吗？", "工单 010066", "工单编号：010066"])
+@pytest.mark.parametrize(
+    "body", ["010066", "010066号工单解决了吗？", "工单 010066", "工单编号：010066"]
+)
 async def test_ticket_status_does_not_report_an_expired_ticket_as_completed(monkeypatch, body):
     remote = AsyncMock(
         return_value={
