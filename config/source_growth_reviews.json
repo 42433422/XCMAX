@@ -232,12 +232,12 @@
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_api_merged.py": {
       "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_api_merged.py",
       "base_blob": "a15c70e7ebfefdea8ac022652cce75a8dedc694c",
-      "head_blob": "49f3d560a4a66c8628d2bafffee9bec62729a03d",
+      "head_blob": "7dedfb923a4272932b8af0b8ae54b10faf208f6c",
       "before_lines": 1372,
-      "after_lines": 1417,
-      "reason": "Extend the existing model endpoint for capability routing and settlement recovery.",
-      "boundary": "Keep account credential and billing checks; uncertain settlement requires existing wallet reconciliation.",
-      "validation": "Model routing and billing regression suites passed locally; new-head CI and live wallet readback remain required.",
+      "after_lines": 1452,
+      "reason": "Extend the existing model endpoints for capability routing, request receipts and settlement recovery.",
+      "boundary": "Keep account credentials and billing checks; uncertain settlement requires existing wallet reconciliation.",
+      "validation": "Branch reports 400 backend regressions and 1 skip; exact-head CI and live wallet readback remain required.",
       "follow_up": "Architecture review of the legacy endpoint and production settlement verification remain outstanding.",
       "review_owner": "@42433422"
     },
@@ -460,13 +460,13 @@
     "FHD/frontend/src/views/ChatView.vue": {
       "base_file": "FHD/frontend/src/views/ChatView.vue",
       "base_blob": "bb02182431e151888eb1344758a0218703ecd21c",
-      "head_blob": "60d0f01cef9a06f7301286367f5e88e2addd3567",
+      "head_blob": "a9548bd0438bc2d368a121ba3dab6e3eb26442c3",
       "before_lines": 1010,
-      "after_lines": 1068,
-      "reason": "Add image generation and per-session display with a stable request key to the existing chat composer.",
-      "boundary": "Display is scoped to the active session; definitive errors clear the key and uncertain outcomes preserve it.",
-      "validation": "Existing chat UI regressions and frontend type checking were run by the branch; new-head CI remains required.",
-      "follow_up": "Architecture review and installed desktop verification remain outstanding.",
+      "after_lines": 1072,
+      "reason": "Add image generation to the existing chat composer and persist unresolved request keys across restarts.",
+      "boundary": "Keys are bound to the authenticated owner, Mod, conversation and prompt digest; only confirmed outcomes remove them.",
+      "validation": "111 chat and storage tests plus frontend type checking passed; exact-head CI and production wallet readback remain required.",
+      "follow_up": "Architecture review and installed desktop restart and billing verification remain outstanding.",
       "review_owner": "@42433422"
     },
     "FHD/mods/attendance-industry/backend/attendance_engine/convert.py": {
