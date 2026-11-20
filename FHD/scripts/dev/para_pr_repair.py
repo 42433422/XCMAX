@@ -69,6 +69,19 @@ def _get(get, path: str) -> dict:
     return data
 
 
+def authorized_pr(pr: dict, authors: list[str]) -> bool:
+    labels = _labels(pr)
+    risks = {name.removeprefix("risk:") for name in labels if name.startswith("risk:")}
+    return (
+        pr.get("state") == "open"
+        and pr.get("draft") is False
+        and not labels.intersection({HOLD_MERGE_LABEL, NEEDS_HUMAN_LABEL})
+        and len(risks) <= 1
+        and risks <= AUTO_MERGE_RISK_LEVELS
+        and (pr.get("user") or {}).get("login") in authors
+    )
+
+
 def open_pr(
     repo: str, target: Target, expected_sha: str | None, get, *, authorize: bool = True
 ) -> dict:
@@ -84,18 +97,7 @@ def open_pr(
         or (expected_sha is not None and head.get("sha") != expected_sha)
     ):
         raise ValueError("original PR identity or HEAD changed")
-    if not authorize:
-        return pr
-    labels = _labels(pr)
-    risks = {name.removeprefix("risk:") for name in labels if name.startswith("risk:")}
-    if (
-        pr.get("state") != "open"
-        or pr.get("draft") is not False
-        or labels & {HOLD_MERGE_LABEL, NEEDS_HUMAN_LABEL}
-        or len(risks) > 1
-        or risks - AUTO_MERGE_RISK_LEVELS
-        or (pr.get("user") or {}).get("login") not in load_trusted_authors()
-    ):
+    if authorize and not authorized_pr(pr, load_trusted_authors()):
         raise ValueError("original PR lacks automatic repair authorization")
     return pr
 
@@ -160,6 +162,7 @@ def prior_intent(repo: str, number: int, branch: str, comments: list[dict]):
             target = Target(**data["target"])
             head = data["new_sha"]
             control_task_id, para_task_id = data["control_task_id"], data["para_task_id"]
+            github_run_id = data.get("github_run_id", 0)
             if (
                 data["repository"] != repo
                 or data["issue_number"] != number
@@ -172,13 +175,15 @@ def prior_intent(repo: str, number: int, branch: str, comments: list[dict]):
                 or head == target.old_sha
                 or target.workflow_path not in freshness.CODE_CI_PATHS
                 or min(target.number, target.run_id, target.workflow_id) < 1
+                or type(github_run_id) is not int
+                or github_run_id < 0
                 or any(
                     not isinstance(value, str) or not value
                     for value in (control_task_id, para_task_id)
                 )
             ):
                 raise ValueError("original PR write intent identity mismatch")
-            intents.append((target, head, control_task_id, para_task_id))
+            intents.append((target, head, control_task_id, para_task_id, github_run_id))
     if len(intents) > 1:
         raise ValueError("ambiguous original PR write intent")
     return intents[0] if intents else None
@@ -192,6 +197,7 @@ def intent_body(
     *,
     control_task_id: str,
     para_task_id: str,
+    github_run_id: int = 0,
 ) -> str:
     return (
         INTENT_MARKER
@@ -203,6 +209,7 @@ def intent_body(
                 "new_sha": new_sha,
                 "control_task_id": control_task_id,
                 "para_task_id": para_task_id,
+                "github_run_id": github_run_id,
             },
             sort_keys=True,
         )
@@ -240,6 +247,9 @@ def _check_diff(git, old: str, new: str) -> int:
                     *FORBIDDEN_PATH_PREFIXES,
                     "scripts/ci/",
                     "scripts/dev/para_",
+                    "scripts/dev/ai_issue_implement.py",
+                    "scripts/autonomy/publish_para_candidate.py",
+                    "scripts/autonomy/runtime_tools/",
                     "config/auto-implement-allowlist",
                 )
             )

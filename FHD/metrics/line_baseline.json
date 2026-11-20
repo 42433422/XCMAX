@@ -1,5 +1,5 @@
 {
-  "lines": 2527604,
+  "lines": 2528352,
   "updated": "2026-11-20",
-  "note": "用户 42433422 授权：定时扫描未解决 PR，按当前 HEAD 失败进入既有 Para 修复和原 PR 回写；补入仅限 pull_request 的 Release gate CI 白名单以闭环真实 PR #3383，含安全过滤及回归，净增 223 行。"
+  "note": "用户要求真实原 PR 走 GitHub 云端 Para 并实际合入。复用现有 MODstore 派工账本、Para GitHub Worker、Git bundle 独立发布器与 GitHub 检查；增加原 PR 云端接线和回归，本轮计量净增 748 行。"
 }

@@ -140,6 +140,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install pinned GitHub adapter dependencies
+        id: dependencies
         working-directory: FHD
         run: pip install -r scripts/ci/requirements-self-heal.txt
       - name: Reconcile durable incident receipts
@@ -160,7 +161,7 @@ jobs:
           path: FHD/test_reports/self_heal_reconciliation.json
           if-no-files-found: error
       - name: Discover unresolved authorized PR failures and dispatch Para
-        if: github.event_name == 'schedule'
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' && github.event_name == 'schedule' }}
         working-directory: FHD
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

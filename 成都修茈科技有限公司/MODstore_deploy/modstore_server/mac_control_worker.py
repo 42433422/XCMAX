@@ -198,6 +198,9 @@ def run_mac_control_sync():
 
 
 def _sync(factory):
+    from modstore_server.para_github_repair import REPAIR_ACTOR, sync
+
+    sync(factory)
     try:
         client = ParaClient()
     except ParaUnavailable as exc:
@@ -216,6 +219,7 @@ def _sync(factory):
                 r.id
                 for r in db.query(MacControlTask)
                 .filter(
+                    MacControlTask.actor != REPAIR_ACTOR,
                     MacControlTask.state.notin_(TERMINAL),
                 )
                 .order_by(MacControlTask.updated_at)

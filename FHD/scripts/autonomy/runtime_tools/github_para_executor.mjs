@@ -28,7 +28,18 @@ export async function runGithubExecutor({ env = process.env, fetchStatus = fetch
           && value.benchmark_protocol.source_sha !== env.GITHUB_SHA)) throw new Error('management_dispatch_mismatch');
     return value;
   }
-  const accepted = await state();
+  let accepted = await state();
+  const repair = accepted.kind === 'original_pr_repair';
+  if (repair) {
+    for (let attempt = 0; !accepted.finished && !accepted.run_id && attempt < 18; attempt += 1) {
+      await sleep(10000);
+      accepted = await state();
+    }
+    if (accepted.kind !== 'original_pr_repair' || String(accepted.run_id) !== run
+        || !/^[0-9a-f]{40}$/.test(accepted.source_sha || '')
+        || !Number.isSafeInteger(accepted.pull_request) || accepted.pull_request < 1
+        || stage !== 'execute') throw new Error('original_pr_dispatch_mismatch');
+  }
   if (accepted.finished) {
     if (stage !== 'resume') throw new Error('management_dispatch_already_finished');
     mkdirSync(directory, { recursive: true });
@@ -36,6 +47,8 @@ export async function runGithubExecutor({ env = process.env, fetchStatus = fetch
     return accepted.conclusion === 'success' ? 0 : 1;
   }
   const agentEnv = { ...env, PARA_GITHUB_ISSUE_NUMBER: String(accepted.issue_number) };
+  delete agentEnv.PARA_GITHUB_SOURCE_SHA;
+  if (repair) agentEnv.PARA_GITHUB_SOURCE_SHA = accepted.source_sha;
   delete agentEnv.MODSTORE_PARA_DISPATCH_TOKEN;
   delete agentEnv.PARA_CODEX_AUTH_JSON;
   delete agentEnv.PARA_CODEX_CONFIG_TOML;
@@ -53,6 +66,10 @@ export async function runGithubExecutor({ env = process.env, fetchStatus = fetch
     while (now() < deadline) {
       if (ended) throw new Error('Para exited before its original receipt was acknowledged');
       const current = await state();
+      if (repair && (current.kind !== accepted.kind || current.source_sha !== accepted.source_sha
+          || current.pull_request !== accepted.pull_request || String(current.run_id) !== run)) {
+        throw new Error('original_pr_dispatch_changed');
+      }
       const path = join(env.PARA_GITHUB_CANDIDATE_DIR || directory, 'manifest.json');
       if (stage === 'execute' && existsSync(path) && current.publication_candidate) {
         const manifest = JSON.parse(readFileSync(path, 'utf8'));

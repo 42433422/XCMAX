@@ -231,6 +231,8 @@ def test_ci_incident_pushes_back_to_original_pr_and_reconciles_a_retry(issue, mo
                 "id": "ctl1",
                 "state": "execution_completed",
                 "para_task_id": "p1",
+                "executor": mod.GITHUB_REPAIR,
+                "github_run_id": 502,
                 "execution": {
                     "id": "p1",
                     "subtasks": [{"branch_name": "devfleet/fix"}],
@@ -295,8 +297,14 @@ def test_ci_incident_pushes_back_to_original_pr_and_reconciles_a_retry(issue, mo
             71,
         )
         assert (saved["control_task_id"], saved["para_task_id"]) == ("ctl1", "p1")
+        assert saved["github_run_id"] == 502
     assert pushes == [new]
-    assert len(sent) == 1 and sent[0]["source_sha"] == old
+    assert len(sent) == 1
+    assert (sent[0]["source_sha"], sent[0]["pull_request"], sent[0]["source_run_id"]) == (
+        old,
+        42,
+        70,
+    )
 
 
 @pytest.mark.parametrize("move_during_push", [False, True])

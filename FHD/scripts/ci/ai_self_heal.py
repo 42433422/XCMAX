@@ -1236,6 +1236,7 @@ def scan_open_prs(token: str, repo: str, *, dry_run: bool = False) -> int:
     from scripts.dev import para_pr_repair
 
     get = _github_getter(token, repo)
+    authors = para_pr_repair.load_trusted_authors()
     failures: list[tuple[dict[str, Any], dict[str, Any]]] = []
     try:
         prs = freshness.pages(
@@ -1252,22 +1253,15 @@ def scan_open_prs(token: str, repo: str, *, dry_run: bool = False) -> int:
             )
             if (
                 type(number) is not int
-                or pr.get("state") != "open"
-                or pr.get("draft") is not False
+                or not para_pr_repair.authorized_pr(pr, authors)
+                or not para_pr_repair.BRANCH.fullmatch(branch)
+                or ".." in branch
+                or branch == "main"
+                or is_autonomy_branch(branch)
                 or base.get("ref") != "main"
                 or (base.get("repo") or {}).get("full_name", "").casefold() != repo.casefold()
                 or (head.get("repo") or {}).get("full_name", "").casefold() != repo.casefold()
                 or not re.fullmatch(r"[0-9a-f]{40}", sha)
-                or pr.get("user", {}).get("login") not in para_pr_repair.load_trusted_authors()
-            ):
-                continue
-
-            labels = para_pr_repair._labels(pr)
-            risks = {name.removeprefix("risk:") for name in labels if name.startswith("risk:")}
-            if (
-                labels & {para_pr_repair.HOLD_MERGE_LABEL, para_pr_repair.NEEDS_HUMAN_LABEL}
-                or len(risks) > 1
-                or risks - para_pr_repair.AUTO_MERGE_RISK_LEVELS
             ):
                 continue
 
@@ -1277,27 +1271,31 @@ def scan_open_prs(token: str, repo: str, *, dry_run: bool = False) -> int:
                 {"head_sha": sha, "event": "pull_request", "per_page": 100},
                 key="workflow_runs",
             )
+            latest = {}
+            for run in runs:
+                path = run.get("path")
+                if (
+                    path not in freshness.CODE_CI_PATHS
+                    or run.get("head_sha") != sha
+                    or run.get("head_branch") != branch
+                    or run.get("event") != "pull_request"
+                    or (
+                        run.get("pull_requests")
+                        and [item.get("number") for item in run["pull_requests"]] != [number]
+                    )
+                ):
+                    continue
+                current = latest.get(path)
+                if current is None or _run_order(run) > _run_order(current):
+                    latest[path] = run
             eligible = [
                 run
-                for run in runs
-                if run.get("head_sha") == sha
-                and run.get("event") == "pull_request"
-                and run.get("status") == "completed"
-                and run.get("conclusion") == "failure"
-                and run.get("path") in freshness.CODE_CI_PATHS
-                and (
-                    not run.get("pull_requests")
-                    or any(
-                        item.get("number") == number
-                        for item in run.get("pull_requests", [])
-                        if isinstance(item, dict)
-                    )
-                )
+                for run in latest.values()
+                if run.get("status") == "completed" and run.get("conclusion") == "failure"
             ]
             if not eligible:
                 continue
-            eligible.sort(key=lambda row: str(row.get("created_at") or ""), reverse=True)
-            run = eligible[0]
+            run = max(eligible, key=_run_order)
             workflow_id = int(run.get("workflow_id") or 0)
             path = str(run.get("path") or "")
             if workflow_id < 1:
@@ -1305,7 +1303,11 @@ def scan_open_prs(token: str, repo: str, *, dry_run: bool = False) -> int:
             target = para_pr_repair.Target(number, branch, sha, int(run["id"]), workflow_id, path)
             # Reuse the original-PR authorization contract; discovery alone never
             # grants write permission or weakens the implementation workflow gate.
-            para_pr_repair.open_pr(repo, target, sha, get)
+            try:
+                para_pr_repair.open_pr(repo, target, sha, get)
+            except ValueError:
+                print(f"::notice::[scan] PR #{number} could not be reauthorized")
+                continue
             failures.append((pr, run))
     except (
         freshness.LookupFailed,
@@ -1341,6 +1343,10 @@ def scan_open_prs(token: str, repo: str, *, dry_run: bool = False) -> int:
         if code:
             result = code
     return result
+
+
+def _run_order(run: dict) -> tuple[str, int, int]:
+    return str(run.get("created_at") or ""), int(run["id"]), int(run.get("run_attempt") or 0)
 
 
 def _run_id_from_env() -> int | None:

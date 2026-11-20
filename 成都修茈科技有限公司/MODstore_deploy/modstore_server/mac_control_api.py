@@ -99,7 +99,11 @@ def task_detail(
         .all()
     )
     payload = view(task)
-    if task.para_task_id and task.state in TERMINAL:
+    if (
+        task.para_task_id
+        and task.state in TERMINAL
+        and payload["request"].get("target") != "github"
+    ):
         from modstore_server.mac_control_transport import (
             ParaClient,
             ParaUnavailable,

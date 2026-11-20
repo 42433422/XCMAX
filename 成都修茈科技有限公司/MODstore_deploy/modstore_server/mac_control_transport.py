@@ -26,20 +26,26 @@ def stale_window() -> int:
 
 
 class ParaClient:
-    def __init__(self):
-        self.base = os.environ.get("MODSTORE_PARA_API_BASE", "").rstrip("/")
-        token = get_credential(
-            "MODSTORE_PARA_CONTROL_TOKEN",
-            task_id="mac-control",
-            purpose="para_control_api",
-        )
-        if not self.base or not token:
-            raise ParaUnavailable("service_identity_not_configured")
+    def __init__(self, *, github_worker: bool = False):
+        if github_worker:
+            from modstore_server.para_github_runner import api_base, auth_headers
+
+            self.base, headers, self.prefix = api_base(), auth_headers(), "/api/"
+        else:
+            self.base = os.environ.get("MODSTORE_PARA_API_BASE", "").rstrip("/")
+            token = get_credential(
+                "MODSTORE_PARA_CONTROL_TOKEN",
+                task_id="mac-control",
+                purpose="para_control_api",
+            )
+            if not self.base or not token:
+                raise ParaUnavailable("service_identity_not_configured")
+            headers, self.prefix = {"Authorization": f"Bearer {token}"}, "/api/control/"
         self.client = httpx.Client(
             base_url=self.base,
             timeout=10,
             trust_env=False,
-            headers={"Authorization": f"Bearer {token}"},
+            headers=headers,
         )
 
     def close(self):
@@ -47,7 +53,7 @@ class ParaClient:
 
     def request(self, method: str, path: str, body: dict | None = None) -> dict:
         try:
-            path = "/api/control/" + path.removeprefix("/api/")
+            path = self.prefix + path.removeprefix("/api/")
             response = self.client.request(method, path, json=body)
             response.raise_for_status()
             result = response.json()

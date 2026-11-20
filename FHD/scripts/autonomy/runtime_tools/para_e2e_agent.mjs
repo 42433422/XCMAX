@@ -29,7 +29,7 @@ import {
 import { createCredentialVault, parseCredentialGrant } from './credential_vault.mjs';
 import { createReceiptOutbox, createParaReportOutbox, requestManagedParaSession } from './control_receipt_outbox.mjs';
 import { sourceIdentity } from './control_git_handoff.mjs';
-import { candidateMode, exportCandidate, githubReadEnv } from './github_para_candidate.mjs';
+import { candidateBaseSha, candidateMode, exportCandidate, githubReadEnv } from './github_para_candidate.mjs';
 import {
   describeCodexFailure,
   describeTraeFailure,
@@ -946,8 +946,14 @@ const defaultCapabilities = () => ({
 });
 
 async function prepareWorkspace(task) {
-  // The isolated execution job starts from its trusted workflow commit, never moving main.
-  if (candidateMode()) task = { ...task, base_branch: process.env.GITHUB_SHA };
+  // A hosted fix starts from the immutable commit authorized by management.
+  if (candidateMode()) {
+    const base = candidateBaseSha();
+    if (process.env.PARA_GITHUB_SOURCE_SHA && task.base_branch !== base) {
+      throw new Error('original_pr_commit_mismatch');
+    }
+    task = { ...task, base_branch: base };
+  }
   const repoUrl = (task.repo_url || '').trim();
   const root = paraReports.handles(task) ? join(homedir(), 'XCMAX-runtime', 'control-workspaces') : workspaceRoot;
   const taskDir = join(root, safeTaskDirName(task));

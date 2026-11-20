@@ -137,7 +137,24 @@ def _claim_worker_slot(db, row, *, owner_key=None):
     requested_owner = owner_key or str(row.id)
     if owner == requested_owner:
         return True
-    if owner.startswith("retort:"):
+    if owner.startswith("repair:"):
+        from modstore_server.db.mac_control import MacControlTask
+        from modstore_server.mac_control_store import TERMINAL
+
+        repair = db.get(MacControlTask, owner.removeprefix("repair:"))
+        if not repair or repair.state not in TERMINAL:
+            return False
+        snapshot = json_loads(repair.snapshot_json, {})
+        if snapshot.get("runner_intent"):
+            repo = json_loads(repair.request_json, {})["repository"]
+            run_id = snapshot.get("run_id")
+            if (
+                not run_id
+                or github("GET", f"/repos/{repo}/actions/runs/{run_id}").get("status")
+                != "completed"
+            ):
+                return False
+    elif owner.startswith("retort:"):
         from modstore_server.retort_github_workspace import slot_finished
 
         if not slot_finished(owner.removeprefix("retort:")):
@@ -277,8 +294,15 @@ def _ensure_runner(db, payload):
 
 def run_status(db, request_id):
     from modstore_server.customer_ticket_github import RUN_ACTION, _execution, _inbox
+    from modstore_server.db.mac_control import MacControlTask
     from modstore_server.models import IncidentEvent
     from modstore_server.para_github_publication import publication_candidate
+    from modstore_server.para_github_repair import REPAIR_ACTOR
+    from modstore_server.para_github_repair import run_status as repair_status
+
+    repair = db.get(MacControlTask, request_id.hex)
+    if repair and repair.actor == REPAIR_ACTOR:
+        return repair_status(repair)
 
     # The service sees only the opaque dispatch and execution state, never customer facts.
     rows = (

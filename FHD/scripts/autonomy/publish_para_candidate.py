@@ -15,10 +15,12 @@ import subprocess
 import tempfile
 import zipfile
 from pathlib import Path
+from urllib.parse import urlencode
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 SCHEMA = "para-github-candidate/v1"
 MAX_BUNDLE = 64 * 1024 * 1024
+ORIGINAL_PR_REPAIR = "original_pr_repair"
 
 
 class NoRedirect(HTTPRedirectHandler):
@@ -69,6 +71,8 @@ def validate_binding(manifest, state, run, env):
         env["PARA_GITHUB_REQUEST_ID"],
     )
     branch = manifest.get("branch", "")
+    repair = state.get("kind") == ORIGINAL_PR_REPAIR
+    base_sha = state.get("source_sha") if repair else env["GITHUB_SHA"]
     if (
         env.get("GITHUB_ACTIONS") != "true"
         or env.get("GITHUB_RUN_ATTEMPT") != "1"
@@ -83,7 +87,8 @@ def validate_binding(manifest, state, run, env):
         or manifest.get("request_id") != request
         or manifest.get("run_id") != run_id
         or manifest.get("repository") != repo
-        or manifest.get("base_sha") != env["GITHUB_SHA"]
+        or (repair and not re.fullmatch(r"[0-9a-f]{40}", base_sha or ""))
+        or manifest.get("base_sha") != base_sha
         or manifest.get("pushed") is not False
         or manifest.get("publication") != "artifact_pending"
         or not re.fullmatch(r"[0-9a-f]{40}", manifest.get("commit_sha", ""))
@@ -167,6 +172,47 @@ def import_candidate(directory, manifest, bundle, *, env, command=run_command):
     return call, remote
 
 
+def authorized_original_pr(state, repo, get):
+    from scripts.dev import para_pr_repair
+
+    _, issue = get(f"/repos/{repo}/issues/{state['issue_number']}", {})
+    if issue.get("state") != "open" or not para_pr_repair.is_repair_incident(issue):
+        raise ValueError("original_pr_repair_incident_closed_or_changed")
+    if "ai-implement" not in {label.get("name") for label in issue.get("labels", [])}:
+        raise ValueError("original_pr_repair_incident_revoked")
+    branch = para_pr_repair.freshness.incident_fields(issue.get("body") or "").get("Branch", "")
+    target = para_pr_repair.select_target(repo, issue, branch, get)
+    if (
+        not target
+        or target.number != state.get("pull_request")
+        or target.old_sha != state.get("source_sha")
+        or target.run_id != state.get("source_run_id")
+    ):
+        raise ValueError("original_pr_repair_target_changed")
+    return target
+
+
+def _publication_receipt(env, artifact, branch, target, pr_url, *, original_pr):
+    receipt = {
+        "schema": SCHEMA,
+        "request_id": env["PARA_GITHUB_REQUEST_ID"],
+        "run_id": env["GITHUB_RUN_ID"],
+        "artifact_id": artifact["id"],
+        "artifact_digest": artifact["digest"],
+        "commit_sha": target,
+        "branch": branch,
+        "pull_request_url": pr_url,
+        "status": "awaiting_original_pr_update" if original_pr else "published_for_review",
+        "delivered": False,
+    }
+    path = Path(env["RUNNER_TEMP"]) / "para-publication.json"
+    path.write_text(json.dumps(receipt) + "\n")
+    if env.get("GITHUB_OUTPUT"):
+        with open(env["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+            output.write(f"original_pr={'true' if original_pr else 'false'}\n")
+    return receipt
+
+
 def publish(env=os.environ, *, command=run_command, opener=read_management):
     if not env.get("GH_TOKEN") or any(
         env.get(k) for k in ("CODEX_API_KEY", "DEVFLEET_DEVICE_TOKEN")
@@ -187,6 +233,9 @@ def publish(env=os.environ, *, command=run_command, opener=read_management):
 
     def api(path):
         return json.loads(gh("api", path))
+
+    def get(path, params):
+        return 200, api(path + ("?" + urlencode(params) if params else ""))
 
     state_request = Request(
         f"https://xiu-ci.com/api/service/mac-control/github-runs/{request}",
@@ -212,10 +261,24 @@ def publish(env=os.environ, *, command=run_command, opener=read_management):
     manifest, bundle = safe_artifact(data, artifact.get("digest"))
     validate_binding(manifest, state, run, env)
     branch, target = manifest["branch"], manifest["commit_sha"]
+    original = None
+    if state.get("kind") == ORIGINAL_PR_REPAIR:
+        original = authorized_original_pr(state, repo, get)
     with tempfile.TemporaryDirectory(prefix="para-publisher-") as temporary:
         git, remote = import_candidate(
             Path(temporary), manifest, bundle, env=execution_env, command=command
         )
+        if original:
+            from scripts.dev.para_pr_repair import _check_diff
+
+            if branch == original.branch:
+                raise ValueError("original_pr_candidate_is_not_isolated")
+            _check_diff(git, original.old_sha, target)
+            with opener(state_request, timeout=30) as response:
+                latest = json.load(response)
+            validate_binding(manifest, latest, run, env)
+            if authorized_original_pr(latest, repo, get) != original:
+                raise ValueError("original_pr_repair_target_changed")
         existing = git("ls-remote", "--heads", remote, f"refs/heads/{branch}").strip()
         if existing and existing != f"{target}\trefs/heads/{branch}":
             raise ValueError("publication_branch_already_diverged")
@@ -227,6 +290,15 @@ def publish(env=os.environ, *, command=run_command, opener=read_management):
             != f"{target}\trefs/heads/{branch}"
         ):
             raise ValueError("publication_push_unconfirmed")
+        if original:
+            return _publication_receipt(
+                env,
+                artifact,
+                branch,
+                target,
+                f"https://github.com/{repo}/pull/{original.number}",
+                original_pr=True,
+            )
         pulls = json.loads(
             gh(
                 "pr",
@@ -303,21 +375,7 @@ process.stdout.write(JSON.stringify(result));"""
             or not re.search(rf"(?m)^Refs #{state['issue_number']}\s*$", pr["body"])
         ):
             raise ValueError("publication_pr_readback_mismatch")
-    receipt = {
-        "schema": SCHEMA,
-        "request_id": request,
-        "run_id": run_id,
-        "artifact_id": artifact["id"],
-        "artifact_digest": artifact["digest"],
-        "commit_sha": target,
-        "branch": branch,
-        "pull_request_url": pr["url"],
-        "status": "published_for_review",
-        "delivered": False,
-    }
-    path = Path(env["RUNNER_TEMP"]) / "para-publication.json"
-    path.write_text(json.dumps(receipt) + "\n")
-    return receipt
+    return _publication_receipt(env, artifact, branch, target, pr["url"], original_pr=False)
 
 
 if __name__ == "__main__":

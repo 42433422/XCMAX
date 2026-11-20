@@ -51,20 +51,29 @@ def _scan_pr(*, labels: list[str] | None = None, run_sha: str = OLD) -> tuple[di
 
 
 @pytest.mark.parametrize(
-    ("labels", "run_sha", "expected"),
-    [([], OLD, [7]), (["hold-merge"], OLD, []), ([], NEW, [])],
+    ("labels", "run_sha", "latest_retry", "expected"),
+    [
+        ([], OLD, None, [7]),
+        (["hold-merge"], OLD, None, []),
+        ([], NEW, None, []),
+        ([], OLD, "in_progress", []),
+        ([], OLD, "completed", []),
+    ],
 )
 def test_scheduled_pr_scan_only_dispatches_authorized_exact_head_failures(
-    monkeypatch, capsys, labels: list[str], run_sha: str, expected: list[int]
+    monkeypatch, capsys, labels: list[str], run_sha: str, latest_retry, expected: list[int]
 ) -> None:
     pr, run = _scan_pr(labels=labels, run_sha=run_sha)
     calls: list[str] = []
+    runs = [run]
+    if latest_retry:
+        runs.append({**run, "id": 8, "status": latest_retry, "conclusion": "success"})
 
     def get(path: str, params: dict) -> tuple[int, object]:
         if path.endswith("/pulls"):
             return 200, [pr]
         if path.endswith("/actions/runs"):
-            return 200, {"workflow_runs": [run]}
+            return 200, {"workflow_runs": runs}
         if path.endswith("/pulls/5"):
             return 200, pr
         raise AssertionError(f"unexpected GitHub read: {path}")
@@ -258,7 +267,6 @@ def test_event_api_mismatch_and_incomplete_run_block() -> None:
         ("Deploy MODstore Production", "push"),
         ("fhd-deploy", "workflow_dispatch"),
         ("cvm-autonomy-watcher", "schedule"),
-        ("Release gate CI", "push"),
         ("CI/CD Pipeline", "push"),
         ("CI/CD Pipeline", "workflow_dispatch"),
         ("CI/CD Pipeline", "schedule"),
