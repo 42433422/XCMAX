@@ -1998,7 +1998,7 @@
       }
     },
     "elt_import": {
-      "description": "通过数据对接中心（ELT）导入 Excel；preview 传 run_id 时只读查看已有预演/回执，execute 按用户核对的预演编号和版本确认入库。",
+      "description": "通过数据对接中心（ELT）导入 Excel。逐份预演或读取既有回执，按已经核对的预演编号和版本确认写入。",
       "availability": "shared",
       "actions": {
         "preview": {
@@ -2022,7 +2022,8 @@
           "required_any": [
             [
               "run_id",
-              "run_ids"
+              "run_ids",
+              "file_paths"
             ]
           ],
           "availability": "shared",

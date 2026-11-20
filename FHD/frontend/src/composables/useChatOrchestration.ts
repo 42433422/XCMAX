@@ -3,9 +3,10 @@
  * 实现按关注点拆分至 chat-orchestration/ 子模块（自动动作 / 任务执行 / 打印链路 / Excel 分析任务 / 远程对话轮次），
  * 对外入口签名与返回对象字段与拆分前保持完全一致（行为零变更）。
  */
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, reactive, watch, onMounted, onBeforeUnmount, onDeactivated } from 'vue'
 import { useTutorialStore } from '@/stores/tutorial'
 import { useModsStore } from '@/stores/mods'
+import { useProductsStore } from '@/stores/products'
 import {
   readPersistedExcelAnalysisContext,
   persistExcelAnalysisContext,
@@ -13,7 +14,7 @@ import {
   useChatTaskPanelPersistence,
 } from './useChatPersistence'
 import { useChatTaskList } from './useChatTaskList'
-import { useChatMessages } from './useChatMessages'
+import { useChatMessages, type ChatMessage } from './useChatMessages'
 import { useShipmentTask, type ShipmentTask } from './useShipmentTask'
 import { usePrintService } from './usePrintService'
 import { FHD_DB_WRITE_UNLOCKED_EVENT } from '@/fhd/dbTokenHeaders'
@@ -31,13 +32,14 @@ import { useCanonicalChatTaskBridge } from './useCanonicalChatTaskBridge'
 import type { UseChatViewOptions } from './useChatView'
 import { createBusinessHarnessId } from '@/utils/businessHarnessIds'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
+import { getAuthSessionEpoch } from '@/utils/authSessionCache'
 import { resolveChatIdentity } from '@/utils/chatStorageKeys'
 import { isStartPrintMessage } from '../utils/textParser'
 import { generateSessionId, normalizeServerContentToHtml, type ChatLocalScope } from './chat-orchestration/chatOrchestrationShared'
 import { useChatOrchestrationAutoActions } from './chat-orchestration/useChatOrchestrationAutoActions'
 import { useChatOrchestrationTaskExecution } from './chat-orchestration/useChatOrchestrationTaskExecution'
 import { useChatOrchestrationPrintFlow } from './chat-orchestration/useChatOrchestrationPrintFlow'
-import { useChatOrchestrationExcelTasks } from './chat-orchestration/useChatOrchestrationExcelTasks'
+import { useChatAttachmentPicker } from './useChatAttachmentPicker'
 import { useChatOrchestrationRemoteRound } from './chat-orchestration/useChatOrchestrationRemoteRound'
 import { useOnboardingFirstOrderRun } from './useOnboardingFirstOrderRun'
 import { APPROVAL_GRANT_MISSING_MESSAGE, approveRunWithFreshGrant } from '@/api/agentRunApproval'
@@ -46,14 +48,35 @@ import { approvalCardId, parseApprovalCardFromPayload } from '@/utils/chatApprov
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
 import { approvalApi } from '@/api/approval'
 import chatApi from '@/api/chat'
+import { ApiError } from '@/api/core'
 import { getRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
 import { lastChatModelRoute } from '@/utils/chatModelRoute'
 import { plainTextFromChatHtml } from '@/utils/sanitizeHtml'
+import { chatExecutionOutcome, readChatExecution } from '@/components/chat/chatFailureRecovery'
+import { activeChatTurnMessage, activeChatTurnStatus, droppedRoundFromHistory, readActiveChatTurn, type ActiveChatTurn } from '@/utils/droppedRoundPresentation'
+import { useAiSdkChatRound } from './chat-orchestration/useAiSdkChatRound'
+import { stepsFromAiParts } from '@/utils/agentStepChain'
+import { activeRunIdOfTask } from '@/utils/agentTaskWorkspaceModel'
+import { requiresTurnReconciliation } from './chat-orchestration/chatOrchestrationShared'
+
+function durableRecallMessageId(message: ChatMessage): number | undefined {
+  if (message.persistence?.status !== 'saved') return undefined
+  const id = message.serverMessageId ?? Number(/^server:(\d+)$/.exec(message.persistence?.id || '')?.[1])
+  return Number.isSafeInteger(id) && id > 0 ? id : undefined
+}
 
 export function useChatOrchestration(options: UseChatViewOptions) {
   const tutorialStore = useTutorialStore()
   const modsStore = useModsStore()
+  const productsStore = useProductsStore()
   const { sessionId } = options
+  const chatIdentity = () =>
+    `${getAuthSessionEpoch()}:${productReadAccountEpoch.value}:${resolveChatIdentity(String(modsStore.activeModId || ''))}`
+  const chatSessionActivity = useChatSessionActivity(sessionId, chatIdentity)
+  const { isLoading, isStreamingReply, isSessionBusy, statuses } = chatSessionActivity
+  const recalling = reactive(new Set<string>())
+  const recallKey = computed(() => JSON.stringify([chatIdentity(), String(sessionId.value || '').trim() || 'default']))
+  const isRecalling = computed(() => recalling.has(recallKey.value))
   const {
     messages,
     messagesHaveEarlier, earlierMessagesLoading, earlierMessagesError, loadEarlierMessages,
@@ -65,6 +88,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     saveMessage,
     pushStreamingAiShell,
     applyPlainTextToMessageIndex,
+    retainConversationMessages,
     flushMessagesCache,
     clearMessages,
     loadMessages,
@@ -92,8 +116,6 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   }
   const currentTask = ref<ShipmentTask | null>(null)
   const orderNumberFetching = ref(false)
-  const chatSessionActivity = useChatSessionActivity(sessionId)
-  const { isLoading, isStreamingReply } = chatSessionActivity
   let localViewRevision = 0
   watch(sessionId, () => { localViewRevision++ }, { flush: 'sync' })
   function captureLocalScope(): ChatLocalScope {
@@ -174,8 +196,6 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     multimodalStaging,
     artifactStaging,
     unsupportedStaging,
-    stageArtifactFiles,
-    noteUnsupportedFiles,
     removeArtifactFile,
     removeMultimodalFile,
     dismissUnsupportedFile,
@@ -183,7 +203,6 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     resolveExcelAnalysisContextForRequest,
     injectExcelContextPayload,
     consumeMultimodalIntoPlannerContext,
-    onMultimodalFileChange,
     bindExcelSheetToChat,
     bindAllExcelSheetsToChat,
   } = excelCtx
@@ -223,6 +242,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     lastRequestContextSummary,
     plannerWriteUnlockResumeDraft,
     resolveChatDbTokensForPayload: dbGate.resolveChatDbTokensForPayload,
+    captureArtifacts: excelCtx.captureChatArtifacts,
     injectExcelContextPayload,
     consumeMultimodalIntoPlannerContext,
   })
@@ -256,16 +276,13 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     clearPersistedTaskPanelState,
     generateSessionId,
     normalizeServerContentToHtml,
+    isSessionBusy,
+    captureRound: chatSessionActivity.captureGeneration,
+    onConversation: observeConversation,
     onIdentityChange: () => {
       pendingDbWriteChatRetryMessages.value = null
       plannerWriteUnlockResumeDraft.value = ''
       chatRequest.cancelPendingChatBatch()
-      // 身份刷新会短暂让 owner 缺失；此时取消会让后端已经成功的一轮在前端显示成失败
-      // （network error / 回复丢失）。仍有进行中的轮次时交给 requestScope.isCurrent 自然收尾。
-      if (chatSessionActivity.runningIds.value.size || chatSessionActivity.streamingIds.value.size) return
-      chatSessionActivity.cancelAll()
-      chatSessionActivity.runningIds.value.clear()
-      chatSessionActivity.streamingIds.value.clear()
       clearVoiceQueue()
     },
   })
@@ -277,6 +294,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     historyHasMore,
     historyLoadingMore,
     loadMoreHistorySessions,
+    refreshLocalHistorySessions,
     refreshHistorySessions,
     restoreLatestOwnedSession,
     showHistoryPanel,
@@ -299,6 +317,128 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     toggleExpanded: toggleTaskExpanded,
     clearLocalHistory: clearLocalTaskHistory,
   })
+  let observedTurn: { turn: ActiveChatTurn; controller: AbortController; message: ChatMessage; checkingReceipt: boolean } | undefined
+
+  function stopTurnObservation() {
+    observedTurn?.controller.abort()
+    observedTurn = undefined
+  }
+
+  function observeConversation(data: unknown) {
+    const turn = readActiveChatTurn(data)
+    if (turn) observeActiveTurn(turn)
+  }
+
+  function observeActiveTurn(turn: ActiveChatTurn) {
+    let message = messages.value.find(row => row.role === 'ai' && row.turnId === turn.turnId)
+    if (message && observedTurn?.message === message && observedTurn.turn.runId === turn.runId
+      && message.workflowAction === turn.status) return
+    stopTurnObservation()
+    const text = activeChatTurnMessage(turn)
+    if (!message) {
+      addMessage(text, 'ai', { turnId: turn.turnId })
+      message = messages.value.find(row => row.role === 'ai' && row.turnId === turn.turnId)
+    }
+    if (!message) return
+    applyPlainTextToMessageIndex(messages.value.indexOf(message), text)
+    message.workflowAction = turn.status
+    message.toolProgressLabel = text
+    if (turn.taskId) message.recoveryTaskId = turn.taskId
+    if (turn.status === 'blocked') return
+    const controller = new AbortController()
+    const observation = { turn, controller, message, checkingReceipt: false }
+    observedTurn = observation
+    const isCurrent = () => observedTurn === observation && messages.value.includes(message)
+    let receipt: unknown
+    let awaitingAuthorization = false
+    const stream = useAiSdkChatRound({
+      onEvent: event => {
+        if (!isCurrent()) return
+        if (event.type === 'tool_progress' || event.type === 'tool_call') {
+          const label = event.type === 'tool_progress' ? event.label || event.text : event.label
+          if (label) message.toolProgressLabel = label
+        }
+        if (event.type === 'done') receipt = event.result
+        if (event.type === 'requires_token') awaitingAuthorization = true
+      },
+      onMessage: reply => {
+        if (isCurrent()) message.liveSteps = stepsFromAiParts(reply.parts)
+      },
+    })
+    void stream.resume(turn.turnId, controller.signal).then(result => {
+      if (!isCurrent() || result.error || readActiveChatTurn(receipt)) return
+      if (awaitingAuthorization) { message.workflowAction = 'waiting_approval'; stopTurnObservation(); return }
+      const payload = asRecord(receipt)
+      const response = asString(payload.response || payload.message || result.text).trim()
+      if (!response || typeof payload.success !== 'boolean') return
+      const action = requiresTurnReconciliation(payload) ? 'unknown'
+        : parseApprovalCardFromPayload(payload)?.status === 'pending' ? 'waiting_approval'
+          : payload.success ? 'completed' : 'failed'
+      finishObservedTurn(observation, action, response, payload)
+    })
+    // The workspace already consumes task updates and polls when its stream is unavailable.
+    void agentTaskRuntime.refreshTasks().catch(() => undefined)
+  }
+
+  function finishObservedTurn(observation: NonNullable<typeof observedTurn>, action: string, text: string, payload?: Record<string, unknown>) {
+    const { message } = observation
+    const index = messages.value.indexOf(message)
+    if (observedTurn !== observation || index < 0) return
+    const execution = payload ? readChatExecution(payload) : undefined
+    const card = payload ? parseApprovalCardFromPayload(payload) : undefined
+    applyPlainTextToMessageIndex(index, text, { workflowAction: action, ...(execution ? { execution } : {}), ...(card ? { approvalCard: card } : {}) })
+    delete message.toolProgressLabel
+    stopTurnObservation()
+    flushMessagesCache()
+  }
+
+  watch(taskList, async tasks => {
+    const observation = observedTurn
+    if (!observation || observation.checkingReceipt || agentTaskRuntime.taskSyncState.value.stale) return
+    const task = tasks.find(item => activeRunIdOfTask(item) === observation.turn.runId)
+    if (!task) return
+    const fields = asRecord(task.payload)
+    const taskId = asString(fields.taskId).trim()
+    if (taskId) observation.message.recoveryTaskId = taskId
+    const status = activeChatTurnStatus(asString(fields.rawRunStatus))
+    if (status) {
+      observation.message.toolProgressLabel = task.stage || activeChatTurnMessage(observation.turn)
+      if (observation.message.workflowAction !== status) {
+        applyPlainTextToMessageIndex(messages.value.indexOf(observation.message), activeChatTurnMessage({
+          ...observation.turn, status, message: '',
+        }))
+      }
+      observation.message.workflowAction = status
+      if (status === 'blocked') stopTurnObservation()
+      return
+    }
+    const sid = sessionId.value
+    observation.checkingReceipt = true
+    try {
+      const data = await chatApi.getConversation(sid, { turn_id: observation.turn.turnId })
+      if (observedTurn !== observation) return
+      const receipt = droppedRoundFromHistory(data, observation.turn.turnId)
+      if (receipt.activeTurn) {
+        if (receipt.activeTurn.status === 'blocked') observeActiveTurn(receipt.activeTurn)
+        return
+      }
+      if (['completed', 'failed', 'interrupted', 'waiting_approval'].includes(receipt.status)) {
+        finishObservedTurn(observation, receipt.workflowAction, receipt.text)
+        return
+      }
+    } catch {
+      // Keep the most recent task state while the conversation receipt is unavailable.
+    } finally {
+      observation.checkingReceipt = false
+    }
+    if (observedTurn !== observation) return
+    if (['success', 'failed', 'cancelled'].includes(task.status)) {
+      finishObservedTurn(observation, 'unknown', '已读取原任务的结束状态，业务结果请在原任务中核对。')
+    }
+  }, { flush: 'post' })
+  watch([sessionId, chatIdentity], stopTurnObservation, { flush: 'sync' })
+  onDeactivated(stopTurnObservation)
+  onBeforeUnmount(stopTurnObservation)
   const canonicalTaskBridge = useCanonicalChatTaskBridge({
     sessionId,
     createTaskId,
@@ -399,31 +539,9 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     startPrintFromTaskCard,
   } = printFlow
 
-  // Excel 分析任务回调
-  const excelTasks = useChatOrchestrationExcelTasks({
-    sessionId,
-    captureLocalScope,
-    addMessage,
-    saveMessage,
-    lastExcelAnalysisContext,
-    linkedExcelAllSheets,
-    linkedExcelSheet,
-    onMultimodalFileChange,
-    stageArtifactFiles,
-    noteUnsupportedFiles,
-    taskList,
-    createTaskId,
-    upsertTask,
-    finishTask,
-    failTask,
-    getLastAiMessageRef,
-  })
-  const {
-    excelAnalyzeUploading,
-    excelAnalyzeInputRef,
-    triggerUpload,
-    onExcelAnalyzeFileChange,
-  } = excelTasks
+  const { attachmentUploading, onAttachmentFileChange } = useChatAttachmentPicker(
+    excelCtx, () => captureLocalScope().isCurrent,
+  )
 
   // 远程对话轮次（快路径 / SSE 流式 / JSON 与批量）
   const remoteRound = useChatOrchestrationRemoteRound({
@@ -434,6 +552,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     queueVoice,
     pushStreamingAiShell,
     applyPlainTextToMessageIndex,
+    retainConversationMessages,
     flushMessagesCache,
     ttsEnabled,
     chatSessionActivity,
@@ -454,6 +573,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     attachAgentRunTraceToLastAiMessage,
     attachContextSummaryToLastAiMessage,
     syncAgentRunFromPayload,
+    observeActiveTurn,
     showTaskConfirm,
     maybeCloseAssistantFloatForShipmentTask,
     emitAssistantPush,
@@ -470,7 +590,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   watch(
     [messages, isLoading],
     ([list, loading]) => {
-      if (loading || !approvalModeState.enabled || approvalModeState.mode !== 'auto') return
+      if (loading || isRecalling.value || !approvalModeState.enabled || approvalModeState.mode !== 'auto') return
       const card = list.find(msg => msg.role === 'ai' && msg.approvalCard?.status === 'pending'
         && !msg.approvalCard.submitting && !msg.approvalCard.error
         && !msg.approvalCard.approval_path && !msg.approvalCard.approval_request_ids?.length)?.approvalCard
@@ -487,7 +607,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   function stopReply(options?: { supersede?: boolean }) {
     localViewRevision++
     const stopped = chatSessionActivity.cancelSession()
-    chatRequest.cancelPendingChatBatch()
+    chatRequest.cancelPendingChatBatch(sessionId.value)
     chatRequest.stopLoadingProgress()
     clearVoiceQueue()
     pendingDbWriteChatRetryMessages.value = null
@@ -507,17 +627,26 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   }
 
   async function sendMessage(message: string, turn?: { retryOf?: string; idempotencyKey?: string; destructiveConfirmed?: boolean }) {
+    if (isRecalling.value) return
     const taskSessionId = String(sessionId.value || '').trim() || 'default'
     if (isLoading.value) stopReply({ supersede: true })
     const generation = chatSessionActivity.beginRound(taskSessionId)
     generation.setLoading(true)
     const turnId = createBusinessHarnessId('turn')
     addMessage(message, 'user', { turnId })
+    refreshLocalHistorySessions?.()
+    const origin = retainConversationMessages?.(taskSessionId)
+    const originalMessages = origin?.messages ?? messages
+    const localScope = captureLocalScope()
     // 本轮若因视图/身份已过期而没有真正发出请求，要撤回刚插入的用户消息，
     // 否则会留下一条永远没有回复、并在每次同步时被追加到末尾的“幽灵提问”。
     const rollbackUnsentUser = () => {
-      const index = messages.value.findIndex(item => item.role === 'user' && item.turnId === turnId)
-      if (index >= 0) messages.value.splice(index, 1)
+      if (!localScope.isOwnerCurrent()) return
+      const index = originalMessages.value.findIndex(item => item.role === 'user' && item.turnId === turnId)
+      if (index < 0) return
+      originalMessages.value.splice(index, 1)
+      origin?.persist()
+      refreshLocalHistorySessions?.()
     }
     const requestScope = {
       identity: resolveChatIdentity(String(modsStore.activeModId || '')),
@@ -528,7 +657,6 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       turnId,
       taskId: createBusinessHarnessId('task'),
     }
-    const localScope = captureLocalScope()
     let queued = false
     try {
       if (await onboardingFirstOrderRun.tryStart(message, localScope)) {
@@ -554,7 +682,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       }
 
       const debounceMs = getChatBatchDebounceMs()
-      if (debounceMs <= 0) {
+      if (debounceMs <= 0 || multimodalPendingCount.value > 0 || resolveExcelAnalysisContextForRequest()) {
         try {
           await executeRemoteChatRound([message], turn, requestScope)
         } finally {
@@ -568,8 +696,9 @@ export function useChatOrchestration(options: UseChatViewOptions) {
           if (localScope.isCurrent()) await syncFromServer()
           await refreshHistorySessions()
         })
-      })
+      }, taskSessionId)
     } finally {
+      origin?.release()
       if (!queued) {
         generation.setLoading(false)
         if (localScope.isCurrent()) await syncFromServer()
@@ -605,7 +734,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   }
 
   async function controlWorkflowFromCard(cardId: string, action: 'confirm' | 'cancel') {
-    if (!cardId || isLoading.value) return
+    if (!cardId || isLoading.value || isRecalling.value) return
     const card = messages.value.find(msg => msg.role === 'ai' && msg.approvalCard
       && approvalCardId(msg.approvalCard) === cardId)?.approvalCard
     if (!card || card.status !== 'pending' || card.submitting || card.approval_path || card.approval_request_ids?.length) return
@@ -678,31 +807,58 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   /** 撤回一条用户消息及其之后的回复，供「撤回编辑」使用。 */
   async function recallUserMessage(index: number): Promise<{ ok: boolean; text: string; message?: string }> {
     const scope = captureLocalScope()
-    let remoteChanged = false
     const message = messages.value[index]
     if (!message || message.role !== 'user') return { ok: false, text: '', message: '只能撤回自己发送的消息。' }
-    if (isLoading.value || isExecuting.value) return { ok: false, text: '', message: '当前对话正在处理，请稍后再撤回。' }
+    if (isLoading.value || isExecuting.value || isRecalling.value) {
+      return { ok: false, text: '', message: '当前对话正在处理，请稍后再撤回。' }
+    }
     const text = plainTextFromChatHtml(message.content).trim()
-    const persistenceId = String(message.persistence?.id || '')
-    if (persistenceId.startsWith('server:')) {
-      const messageId = Number(persistenceId.slice('server:'.length))
-      if (Number.isSafeInteger(messageId) && messageId > 0) {
-        try {
-          const result = await chatApi.deleteMessagesFrom(String(sessionId.value || ''), messageId)
-          if (!result?.success) return { ok: false, text, message: String(result?.message || '撤回服务端消息失败。') }
-          remoteChanged = true
-        } catch {
-          return { ok: false, text, message: '撤回服务端消息失败，请稍后重试。' }
+    const messageId = durableRecallMessageId(message)
+    const suffix = messages.value.slice(index)
+    if (suffix.some(row => !durableRecallMessageId(row) && (
+      row.turnId || row.persistence?.status === 'saved' || row.persistence?.request ||
+      row.businessResult || row.execution || row.agentRunTrace || row.approvalCard || row.workflowAction || row.nodeResults?.length
+    )) || (!messageId && suffix.some(durableRecallMessageId))) {
+      return { ok: false, text, message: '这段对话含未同步的服务端记录，请先同步会话或核对原任务。' }
+    }
+    if (!messageId) {
+      messages.value = messages.value.slice(0, index)
+      return { ok: true, text }
+    }
+    const key = recallKey.value
+    const identity = chatIdentity()
+    const isCurrent = () => chatIdentity() === identity && scope.isCurrent()
+    const origin = retainConversationMessages?.(scope.sessionId)
+    const productScope = productsStore.captureProductsScope()
+    recalling.add(key)
+    try {
+      const result = await chatApi.recallMessage(scope.sessionId, messageId)
+      if (!result?.success) return isCurrent()
+        ? { ok: false, text, message: result?.message || '撤回服务端消息失败。' }
+        : { ok: false, text }
+      const target = origin?.messages ?? messages
+      if (result.rolled_back && chatIdentity() === identity) productsStore.invalidateProducts(productScope)
+      if (chatIdentity() === identity && (origin || isCurrent())) {
+        const position = target.value.findIndex(row => durableRecallMessageId(row) === messageId)
+        if (position >= 0) {
+          target.value = target.value.slice(0, position)
+          origin?.persist()
         }
       }
+      if (!isCurrent()) return { ok: false, text }
+      let notice = result.rolled_back ? '已撤回相关业务操作。' : ''
+      try { await syncFromServer({ required: true, isCurrent }) }
+      catch { notice = '撤回已完成，历史同步尚未确认，请刷新会话。' }
+      return isCurrent() ? { ok: true, text, ...(notice ? { message: notice } : {}) } : { ok: false, text }
+    } catch (error) {
+      if (!isCurrent()) return { ok: false, text }
+      const detail = error instanceof ApiError && error.status > 0
+        ? error.message : '撤回结果未确认，请先核对对话和业务记录。'
+      return { ok: false, text, message: detail }
+    } finally {
+      recalling.delete(key)
+      origin?.release()
     }
-    if (!scope.isCurrent()) return { ok: false, text, message: '会话已切换，请重新查看历史。' }
-    messages.value = messages.value.slice(0, index)
-    if (remoteChanged) {
-      try { await syncFromServer({ required: true, isCurrent: scope.isCurrent }) }
-      catch { return { ok: true, text, message: '撤回已完成，历史同步尚未确认，请刷新会话。' } }
-    }
-    return { ok: true, text }
   }
 
   /** 失败卡片：按本轮幂等键向后端核对，确认这轮到底有没有写入。 */
@@ -710,6 +866,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     const message = messages.value[index]
     const turnId = String(message?.turnId || '').trim()
     if (!message || !turnId) return { ok: false, message: '缺少本轮编号，无法核对。' }
+    const scope = captureLocalScope()
     try {
       const result = (await chatApi.reconcileTurn(turnId)) as {
         success?: boolean
@@ -719,11 +876,18 @@ export function useChatOrchestration(options: UseChatViewOptions) {
           intent?: string
           effect?: string
           committed?: boolean
+          records?: number
         }
       } | null
+      if (!scope.isCurrent() || messages.value[index] !== message) return { ok: false }
       const execution = result?.execution
       if (!result?.success || !execution) {
         return { ok: false, message: String(result?.message || '核对失败，请稍后重试。') }
+      }
+      const recordedOutcome = message.execution && chatExecutionOutcome(message.execution)
+      if ((execution.records === 0 || execution.effect === 'none')
+        && (recordedOutcome === 'partial' || recordedOutcome === 'unknown' || ['unknown', 'blocked'].includes(message.workflowAction || ''))) {
+        return { ok: false, message: '本轮幂等记录不足以确认业务结果，请在原任务中核对。' }
       }
       messages.value[index] = {
         ...message,
@@ -736,7 +900,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       }
       return { ok: true }
     } catch {
-      return { ok: false, message: '核对失败，请稍后重试。' }
+      return { ok: false, ...(scope.isCurrent() ? { message: '核对失败，请稍后重试。' } : {}) }
     }
   }
 
@@ -746,7 +910,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       return
     }
     const scope = captureLocalScope()
-    await syncFromServer(options)
+    await syncFromServer({ ...options, onConversation: observeConversation })
     if (!scope.isCurrent() || options.isCurrent?.() === false) return
     applyPersistedTaskPanelStateForSession(scope.sessionId)
     // Tasks have their own stale/error recovery and are not required to read the current conversation.
@@ -804,7 +968,9 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     expandedTaskIds,
     taskFilter,
     showHistory,
-    historySessions,
+    historySessions: computed(() => historySessions.value.map(session => ({
+      ...session, activity: statuses.value[session.session_id],
+    }))),
     historyLoading,
     historyError,
     historyHasMore,
@@ -815,8 +981,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     chatMessagesRef,
     pushCopied,
     loadingProgressText,
-    excelAnalyzeUploading,
-    excelAnalyzeInputRef,
+    attachmentUploading,
     multimodalPendingCount,
     multimodalStaging,
     artifactStaging,
@@ -837,6 +1002,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     retryModelOnly: (message: string, turnId: string) => sendMessage(message, { retryOf: turnId, idempotencyKey: turnId }),
     confirmDestructive: (message: string, idempotencyKey: string) => sendMessage(message, { destructiveConfirmed: true, idempotencyKey }),
     stopReply,
+    isRecalling,
     recallUserMessage,
     reconcileTurnMessage,
     confirmWorkflowFromCard,
@@ -846,8 +1012,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     setCustomOrderNumber,
     cancelTask,
     showTaskConfirm,
-    triggerUpload,
-    onExcelAnalyzeFileChange,
+    onAttachmentFileChange,
     showHistoryPanel,
     clearHistorySessions,
     renameSession,

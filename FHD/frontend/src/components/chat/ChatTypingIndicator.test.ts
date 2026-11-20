@@ -48,17 +48,22 @@ describe('ChatTypingIndicator', () => {
     expect(wrapper.find('.chat-typing-indicator').attributes('aria-live')).toBe('polite')
   })
 
-  it('shows elapsed time ticking when showElapsed is true', async () => {
+  it('continues timing from the original start after the indicator remounts', async () => {
     vi.useFakeTimers()
-    const wrapper = mount(ChatTypingIndicator, { props: { label: '正在思考…', showElapsed: true } })
+    const props = { label: '正在思考…', startedAt: Date.now() }
+    const wrapper = mount(ChatTypingIndicator, { props })
     expect(wrapper.text()).toContain('0s')
     await vi.advanceTimersByTimeAsync(3000)
     expect(wrapper.text()).toContain('3s')
     wrapper.unmount()
+    await vi.advanceTimersByTimeAsync(5000)
+    const resumed = mount(ChatTypingIndicator, { props })
+    expect(resumed.text()).toContain('8s')
+    resumed.unmount()
     vi.useRealTimers()
   })
 
-  it('does not show elapsed time when showElapsed is absent', () => {
+  it('displays only the label before a start time is available', () => {
     const wrapper = mount(ChatTypingIndicator, { props: { label: '正在思考…' } })
     expect(wrapper.text()).not.toContain('0s')
     expect(wrapper.text()).toBe('正在思考…')

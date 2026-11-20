@@ -14,7 +14,7 @@ from modstore_server.customer_issue_delivery_contract import (
 )
 from modstore_server.customer_service_tools import json_loads
 from modstore_server.customer_ticket_reader import _reader_text
-from modstore_server.models import IncidentEvent, User
+from modstore_server.models import IncidentClaim, IncidentEvent, User
 from modstore_server.models_cs import CustomerServiceAction
 
 
@@ -26,30 +26,111 @@ def _rows(value: Any) -> list[dict]:
     return [row for row in value if isinstance(row, dict)] if isinstance(value, list) else []
 
 
+def _ticket_events(db, ticket):
+    return db.query(IncidentEvent).filter(
+        IncidentEvent.event_type == "ops.intake.customer_ticket",
+        or_(
+            IncidentEvent.payload_json.contains(f'"ticket_id":{ticket.id}'),
+            IncidentEvent.payload_json.contains(f'"ticket_id": {ticket.id}'),
+        ),
+    )
+
+
+def _ticket_event_payload(event, ticket):
+    payload = _object(json_loads(event.payload_json, {}))
+    if (
+        payload.get("ticket_id") == ticket.id
+        and payload.get("user_id") == ticket.user_id
+        and (payload.get("tenant_id") or payload.get("user_id")) == ticket.user_id
+    ):
+        return payload
+    return {}
+
+
+def ticket_dispatch_stop(db, ticket, *, reason="ticket_disposed") -> dict[str, Any]:
+    """Snapshot exact existing activity before committing the ticket's dispatch fence."""
+    unsettled = []
+    terminal = {"completed", "failed", "cancelled", "rejected"}
+    for event, state in (
+        _ticket_events(db, ticket)
+        .outerjoin(IncidentClaim, IncidentClaim.event_id == IncidentEvent.id)
+        .add_columns(IncidentClaim.dispatch_state)
+        .order_by(IncidentEvent.id)
+    ):
+        payload = _ticket_event_payload(event, ticket)
+        if not payload:
+            continue
+        claim = _object(payload.get("_team_claim"))
+        receipts = [
+            receipt
+            for receipt in _receipts(claim)
+            if receipt.get("requires_reconciliation") or receipt.get("state") not in terminal
+        ]
+        rows = _rows(claim.get("team"))
+        attempts = [
+            str(row["attempt_id"])
+            for row in rows
+            if row.get("attempt_id")
+            and (row.get("status") not in terminal or row.get("outcome") == "unknown")
+        ]
+        if (
+            receipts
+            or attempts
+            or state in {"dispatching", "unknown"}
+            or (not rows and event.dispatched_count)
+        ):
+            unsettled.append(
+                {
+                    "incident_event_id": event.id,
+                    "dispatch_state": state,
+                    "attempt_ids": attempts,
+                    "task_ids": sorted({str(r["task_id"]) for r in receipts if r.get("task_id")}),
+                }
+            )
+    action_ids = [
+        row.id
+        for row in db.query(CustomerServiceAction).filter(
+            CustomerServiceAction.ticket_id == ticket.id,
+            CustomerServiceAction.status.in_(
+                ("pending_execution", "running", "dispatching", "requested", "unknown")
+            ),
+        )
+    ]
+    from modstore_server.mac_control_delegate import stop_ticket_employee_tasks
+    from modstore_server.para_github_runner import stop_queued_ticket_runner
+
+    blocked_jobs, unresolved_jobs = stop_queued_ticket_runner(db, ticket, reason=reason)
+    action_ids.extend(unresolved_jobs)
+    mac_tasks = stop_ticket_employee_tasks(db, ticket)
+    stop_unconfirmed = (
+        unsettled
+        or action_ids
+        or any(task["state"] in {"cancel_requested", "stop_pending_lease"} for task in mac_tasks)
+    )
+    return {
+        "state": "stop_unconfirmed" if stop_unconfirmed else "dispatch_blocked",
+        "new_dispatch_blocked": True,
+        "unsettled_incidents": unsettled,
+        "unsettled_action_ids": action_ids,
+        "blocked_action_ids": blocked_jobs,
+        "mac_control_tasks": mac_tasks,
+    }
+
+
 def _current_claim(db, ticket, resolution):
     event_id = resolution.get("incident_event_id")
     events = (
         [db.get(IncidentEvent, event_id)]
         if isinstance(event_id, int) and event_id > 0
-        else db.query(IncidentEvent)
-        .filter(
-            IncidentEvent.event_type == "ops.intake.customer_ticket",
-            or_(
-                IncidentEvent.payload_json.contains(f'"ticket_id":{ticket.id}'),
-                IncidentEvent.payload_json.contains(f'"ticket_id": {ticket.id}'),
-            ),
-        )
-        .order_by(IncidentEvent.id.desc())
-        .limit(20)
+        else _ticket_events(db, ticket).order_by(IncidentEvent.id.desc()).limit(20)
     )
     for event in events:
         if event is None or event.event_type != "ops.intake.customer_ticket":
             continue
-        payload = _object(json_loads(event.payload_json, {}))
+        payload = _ticket_event_payload(event, ticket)
         original = _object(payload.get("resolution"))
         if (
-            payload.get("ticket_id") == ticket.id
-            and payload.get("user_id") == ticket.user_id
+            payload
             and original.get("reopened_at") == resolution.get("reopened_at")
             and resolution.get("incident_event_id") in (None, event.id)
         ):
@@ -132,14 +213,24 @@ def _work_order(db, ticket, evidence):
     )
 
 
-def _next_step(ticket, resolution, rows, receipts, *, claim_verified=False):
+def _next_step(ticket, resolution, rows, receipts, *, claim_verified=False, dispatch_revoked=False):
+    if ticket.status == "rejected":
+        return "none", "原单已记录处置结论，已停止继续派单", "none"
     if ticket.status in {"resolved", "closed", "expired"}:
         return "none", "原单已结束；如问题复现，由客户从原单重开", "none"
     if any(
         row.get("requires_reconciliation") or row.get("state") in {"unknown", "dispatching"}
         for row in receipts
     ):
-        return "reconcile_task", "查询已有任务回执，确认结果后继续", "task_receipt"
+        return (
+            "reconcile_task",
+            (
+                "核对原任务回执，后续派发已撤销"
+                if dispatch_revoked
+                else "查询已有任务回执，确认结果后继续"
+            ),
+            "task_receipt",
+        )
     if any(
         row.get("kind") == "escalation" and row.get("accepted") and not row.get("completed")
         for row in receipts
@@ -161,6 +252,8 @@ def _next_step(ticket, resolution, rows, receipts, *, claim_verified=False):
             "核验包含本单修复的正式发布并绑定客户目标",
             "release_binding",
         )
+    if dispatch_revoked:
+        return "manual_review", "派发已撤销，管理员可继续处理原单", "dispatch_revoked"
     current_waiting = (
         claim_verified
         and len(rows) == 3
@@ -223,6 +316,7 @@ def _last_progress(resolution, actions, receipts):
 def ticket_execution_overview(db, ticket) -> dict:
     """Derive status from current evidence without writing another lifecycle ledger."""
     evidence = _object(json_loads(ticket.evidence_json, {}))
+    revocation = _object(evidence.get("dispatch_revocation"))
     resolution = _object(evidence.get("resolution"))
     event_id, claim = _current_claim(db, ticket, resolution)
     claim_rows = _rows(claim.get("team"))
@@ -241,6 +335,7 @@ def ticket_execution_overview(db, ticket) -> dict:
         rows,
         receipts,
         claim_verified=event_id is not None and bool(claim_rows),
+        dispatch_revoked=bool(revocation),
     )
     current = next((row for row in rows if row.get("ok") is not True), {})
     assignee = db.get(User, ticket.assigned_admin_id) if ticket.assigned_admin_id else None
@@ -262,7 +357,7 @@ def ticket_execution_overview(db, ticket) -> dict:
             "label": accepted_review["employee_id"],
             "id": None,
         }
-    elif current.get("employee_id"):
+    elif current.get("employee_id") and (not revocation or code != "manual_review"):
         responsible = {
             "kind": "employee",
             "label": _reader_text(current["employee_id"]),
@@ -277,7 +372,7 @@ def ticket_execution_overview(db, ticket) -> dict:
         }
     else:
         responsible = {"kind": "unassigned", "label": "暂无当前责任人记录", "id": None}
-    return {
+    result = {
         "customer_ticket": {"id": ticket.id, "status": ticket.status},
         "work_order": _work_order(db, ticket, evidence),
         "incident_event_id": event_id,
@@ -295,3 +390,12 @@ def ticket_execution_overview(db, ticket) -> dict:
             and ticket.status == "resolved",
         },
     }
+    if revocation:
+        from modstore_server.mac_control_delegate import ticket_employee_task_receipts
+
+        issued = _object(revocation.get("execution_stop"))
+        task_ids = [
+            str(row["id"]) for row in _rows(issued.get("mac_control_tasks")) if row.get("id")
+        ]
+        result["revocation_task_receipts"] = ticket_employee_task_receipts(db, ticket, task_ids)
+    return result

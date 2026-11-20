@@ -11,6 +11,7 @@ from app.application.dataset_rag.models import DatasetAccessContext
 from app.application.dataset_rag.retrieval_policy import mmr_rerank, resolve_mmr_lambda
 from app.application.dataset_rag_app_service import DatasetRagApplicationService
 from app.fastapi_routes.knowledge.schemas import DatasetQueryRequest
+from app.infrastructure.llm.embedding_service import EmbeddingService
 from app.infrastructure.rag import RetrievedChunk
 
 
@@ -23,7 +24,15 @@ def _ctx() -> DatasetAccessContext:
     )
 
 
-def _service(tmp_path) -> DatasetRagApplicationService:
+@pytest.fixture(params=("bm25", "hash"))
+def mmr_service(tmp_path, monkeypatch, request) -> DatasetRagApplicationService:
+    embedder = EmbeddingService(mode="hash").embed_query if request.param == "hash" else None
+    monkeypatch.setattr(
+        "app.application.dataset_rag_app_service.get_default_embedder", lambda: embedder
+    )
+    monkeypatch.setattr(
+        "app.application.dataset_rag.retrieval._auto_rerank_available", lambda: False
+    )
     return DatasetRagApplicationService(
         storage_path=tmp_path / "datasets.json",
         embedder=None,
@@ -79,12 +88,9 @@ def test_schema_rejects_out_of_range_lambda() -> None:
 
 
 def test_query_returns_diverse_documents_when_enabled(
-    tmp_path, monkeypatch: pytest.MonkeyPatch
+    mmr_service: DatasetRagApplicationService,
 ) -> None:
-    monkeypatch.setattr(
-        "app.application.dataset_rag.retrieval._auto_rerank_available", lambda: False
-    )
-    service = _service(tmp_path)
+    service = mmr_service
     service.ingest_document(
         dataset_id="kb",
         source="退款.md",
@@ -122,11 +128,8 @@ def test_query_returns_diverse_documents_when_enabled(
     }
 
 
-def test_multi_query_mmr_spans_datasets(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "app.application.dataset_rag.retrieval._auto_rerank_available", lambda: False
-    )
-    service = _service(tmp_path)
+def test_multi_query_mmr_spans_datasets(mmr_service: DatasetRagApplicationService) -> None:
+    service = mmr_service
     for key in ("kb1", "kb2"):
         service.ingest_document(
             dataset_id=key,

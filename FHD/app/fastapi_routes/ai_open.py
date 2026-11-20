@@ -24,7 +24,16 @@ import time
 from typing import Annotated, Any
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, Body, Depends, Header, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi import (
+    APIRouter,
+    Body,
+    Depends,
+    Header,
+    Query,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from app.application.agent_orchestrator.chat_trace import (
@@ -67,6 +76,7 @@ from app.application.aiopen.service import (
 from app.domain.aiopen.principal import ScreenPrincipal
 from app.fastapi_routes.aiopen_access_dependency import bind_aiopen_principal
 from app.fastapi_routes.aiopen_route_support import (
+    create_client_router,
     handle_mcp_message,
     safe_control_payload,
     trace_control_result,
@@ -85,7 +95,11 @@ from app.fastapi_routes.aiopen_route_support import (
     wrap_mcp_json as _wrap_mcp_json,
 )
 from app.infrastructure.aiopen.cursor_hub import aiopen_cursor_hub
-from app.infrastructure.auth.dependencies import require_admin_user, resolve_session_user
+from app.infrastructure.auth.dependencies import (
+    get_logged_in_user,
+    require_admin_user,
+    resolve_session_user,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -173,6 +187,9 @@ def _trace_aiopen_control_result(
 # ---------------------------------------------------------------------------
 # 公开：manifest
 # ---------------------------------------------------------------------------
+
+
+router.include_router(create_client_router(_trace_aiopen_control_result, get_logged_in_user))
 
 
 @router.get("/api/aiopen/manifest")

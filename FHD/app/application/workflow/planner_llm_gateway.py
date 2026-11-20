@@ -174,7 +174,7 @@ async def _prepare_model_messages(provider, context, messages, max_tokens, extra
         context=state,
         user_id=str((context or {}).get("local_user_id") or ""),
         reserved_tokens=max_tokens + schema_tokens,
-        model=model_for_budget(provider, extra.get("model")),
+        model=await model_for_budget(provider, extra.get("model"), extra.get("provider")),
     )
     if context is not None and result.summary_llm_call is not None:
         save_conversation_summary(
@@ -252,8 +252,6 @@ def request_planner_completion(
         from app.application.agent_orchestrator.context_window_manager import ContextWindowExceeded
 
         if isinstance(exc, ContextWindowExceeded):
-            if context is not None:
-                context["planning_failure_reason"] = str(exc)
             raise
         from .retry_policy import retry_manages_transport_error
         from .tool_calling import unsupported_tool_parameter

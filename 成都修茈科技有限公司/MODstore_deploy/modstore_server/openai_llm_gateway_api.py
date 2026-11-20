@@ -25,10 +25,12 @@ Billing / wallet preauthorize-settle mirrors ``POST /api/llm/chat``.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import time
 import uuid
+from collections.abc import Iterable
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
@@ -41,8 +43,11 @@ from modstore_server.auth_service import PAT_PREFIX, resolve_pat_identity
 from modstore_server.infrastructure.db import get_db
 from modstore_server.llm_api import resolve_default_llm_route, run_billed_llm_chat
 from modstore_server.llm_billing import merge_catalog_pricing
-from modstore_server.llm_catalog import get_models_for_provider
-from modstore_server.llm_key_resolver import KNOWN_PROVIDERS
+from modstore_server.llm_key_resolver import (
+    KNOWN_PROVIDERS,
+    resolve_chat_route_snapshot,
+    resolve_credentials,
+)
 from modstore_server.llm_model_gates import merge_catalog_capabilities
 from modstore_server.llm_model_taxonomy import CATEGORY_ORDER, category_labels_zh
 from modstore_server.models import User
@@ -182,22 +187,22 @@ def _oai_model_entry(
     return entry
 
 
-async def _build_catalog_model_entries(db: Session, user_id: int) -> List[Dict[str, Any]]:
+async def _build_catalog_model_entries(
+    db: Session,
+    user_id: int,
+    providers: Iterable[str] = KNOWN_PROVIDERS,
+) -> List[Dict[str, Any]]:
     """从完整平台目录展开 ``provider/model``，保留 category / pricing / selectable。"""
-    providers_out: List[Dict[str, Any]] = []
-    for provider in KNOWN_PROVIDERS:
-        try:
-            block = await get_models_for_provider(db, user_id, provider, force_refresh=False)
-        except BOUNDARY_ERRORS:  # noqa: BLE001
-            logger.exception("gateway /v1/models catalog fetch failed for %s", provider)
-            block = {"models": [], "models_detailed": []}
-        providers_out.append(
-            {
-                "provider": provider,
-                "models": list(block.get("models") or []),
-                "models_detailed": list(block.get("models_detailed") or []),
-            }
+    import asyncio
+
+    from modstore_server.llm_api import _fetch_catalog_provider_block
+
+    providers_out = await asyncio.gather(
+        *(
+            _fetch_catalog_provider_block(user_id, provider, force_refresh=False)
+            for provider in providers
         )
+    )
     try:
         merge_catalog_capabilities(db, providers_out)
     except BOUNDARY_ERRORS:  # noqa: BLE001
@@ -263,6 +268,54 @@ async def _build_catalog_model_entries(db: Session, user_id: int) -> List[Dict[s
     return data
 
 
+def _pool_aliases() -> dict[str, str]:
+    try:
+        aliases = json.loads(os.environ.get("MODSTORE_LLM_POOL_ALIASES", "{}"))
+    except ValueError:
+        logger.error("Invalid MODSTORE_LLM_POOL_ALIASES JSON")
+        return {}
+    if not isinstance(aliases, dict):
+        return {}
+    return {
+        alias: target
+        for alias, target in aliases.items()
+        if alias.startswith("xcmax-")
+        and alias == alias.strip()
+        and "/" not in alias
+        and len(alias) <= 256
+        and isinstance(target, str)
+        and target == target.strip()
+        and "/" in target
+        and target.split("/", 1)[0] in KNOWN_PROVIDERS
+        and target.split("/", 1)[1]
+    }
+
+
+def _selectable_pool_targets(
+    db: Session,
+    user_id: int,
+    rows: List[Dict[str, Any]],
+    targets: Iterable[str],
+) -> dict[str, Dict[str, Any]]:
+    wanted = set(targets)
+    candidates = {
+        row["id"]: row
+        for row in rows
+        if row["id"] in wanted
+        and row.get("runtime_selectable") is True
+        and row.get("chat_compatible") is True
+        and (row.get("pricing") or {}).get("platform_billing_ok") is True
+    }
+    available = set()
+    for provider in {target.split("/", 1)[0] for target in candidates}:
+        key, _, source = resolve_credentials(db, user_id, provider)
+        if key and source == "platform":
+            available.add(provider)
+    return {
+        target: row for target, row in candidates.items() if target.split("/", 1)[0] in available
+    }
+
+
 @router.get("/models")
 async def openai_list_models(
     db: Session = Depends(get_db),
@@ -292,6 +345,13 @@ async def openai_list_models(
     try:
         catalog_rows = await _build_catalog_model_entries(db, int(user.id))
         data.extend(catalog_rows)
+        aliases = _pool_aliases()
+        selectable = _selectable_pool_targets(db, int(user.id), catalog_rows, aliases.values())
+        data.extend(
+            {**selectable[target], "id": alias, "resolved_model": target}
+            for alias, target in aliases.items()
+            if target in selectable
+        )
     except BOUNDARY_ERRORS:  # noqa: BLE001
         logger.exception("gateway /v1/models full catalog failed; returning virtual models only")
     return {
@@ -317,28 +377,60 @@ async def openai_chat_completions(
             501,
             "stream=true 暂未在本网关实现；请使用 stream=false 或调用 POST /api/llm/chat/stream",
         )
-    prov, mid = _parse_requested_model(body.model)
-    if not prov:
-        resolved = await resolve_default_llm_route(db, int(user.id))
-        prov = str(resolved["provider"])
-        mid = str(resolved["model"])
+    from modstore_server.multimodal_llm import messages_have_multimodal_images
 
     msgs = [{"role": m.role, "content": m.content} for m in body.messages]
-    out = await run_billed_llm_chat(
-        request,
-        db,
-        user,
-        provider=prov,
-        model=mid,
-        messages=msgs,
-        max_tokens=body.max_tokens,
-        conversation_id=None,
-    )
+    operation = "vision" if messages_have_multimodal_images(msgs) else "chat"
+    from modstore_server.llm_billing_recovery import existing_chat_receipt
+
+    user_id = int(user.id)
+    request_key = request.headers.get("Idempotency-Key")
+    original_request = {"operation": "openai_gateway_chat", "request": body.model_dump()}
+    out = await existing_chat_receipt(db, user_id, request_key, original_request, request)
+    prov, mid, target = "", "", None
+    route_snapshot = None
+    if out is None:
+        requested_model = body.model.strip()
+        target = _pool_aliases().get(requested_model)
+        prov, mid = _parse_requested_model(target or requested_model)
+    if out is None and target is not None:
+        # Release the receipt read without refreshing an expired ORM user before the await.
+        db.commit()
+        rows = await _build_catalog_model_entries(db, user_id, (prov,))
+        if target not in _selectable_pool_targets(db, user_id, rows, (target,)):
+            raise HTTPException(404, "当前账户无法调用此模型")
+        route_snapshot = resolve_chat_route_snapshot(db, user_id, prov, mid)
+        if route_snapshot.key_source != "platform" or route_snapshot.model != mid:
+            raise HTTPException(404, "当前账户无法调用此模型")
+    if out is None and not prov:
+        resolved = await resolve_default_llm_route(db, user_id, operation=operation)
+        prov = str(resolved["provider"])
+        mid = str(resolved["model"])
+        if operation == "vision":
+            from modstore_server.llm_operation_routes import bind_resolved_chat_route
+
+            route_snapshot = bind_resolved_chat_route(db, user_id, resolved)
+
+    if out is None:
+        out = await run_billed_llm_chat(
+            request,
+            db,
+            user,
+            provider=prov,
+            model=mid,
+            messages=msgs,
+            max_tokens=body.max_tokens,
+            conversation_id=None,
+            route_snapshot=route_snapshot,
+            client_request_id=request_key,
+            client_request_payload=original_request,
+        )
     usage = out.get("usage") or {}
     if not isinstance(usage, dict):
         usage = {}
     cid = f"chatcmpl-{uuid.uuid4().hex[:24]}"
     created = int(time.time())
+    prov, mid = str(out.get("provider") or prov), str(out.get("model") or mid)
     resp_model = f"{prov}/{mid}"
     billed = bool(out.get("billed"))
     charge = out.get("charge_amount") or 0
@@ -368,6 +460,8 @@ async def openai_chat_completions(
             "request_id": request_id,
             "billed": billed,
             "charge_amount_cny": charge,
+            "pricing": out.get("pricing"),
+            "usage_details": out.get("usage_details", {}),
             "key_source": out.get("key_source"),
             "hold_no": out.get("hold_no"),
             "category": "llm",

@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { createHmac } from 'node:crypto'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const state = vi.hoisted(() => ({
@@ -38,9 +39,10 @@ vi.mock('./rollback', () => ({
 }))
 vi.mock('./desktop-resilience', () => ({ createForceUpgradeHandler: vi.fn() }))
 
-import { desktopBackendEnv } from './backend-env'
-import { startBackend, runBackendMigrationWithRollback } from './backend-process'
-import { desktopRuntime } from './runtime-state'
+import { desktopBackendChallenge, desktopBackendEnv, desktopWorkspaceToken } from './backend-env'
+import { startBackend, stopBackend, waitForBackendPing, startBackendHealthWatchdog, stopBackendHealthWatchdog, setBackendHealthNotifier, runBackendMigrationWithRollback } from './backend-process'
+import { desktopRuntime, hasVerifiedDesktopBackend } from './runtime-state'
+import * as loopback from './backend-loopback-http'
 import { markPreparedRollbackRecoveryRequired, clearPreparedRollbackRecoveryRequired } from './rollback'
 
 describe('packaged backend build identity resource handoff', () => {
@@ -72,6 +74,7 @@ describe('packaged backend build identity resource handoff', () => {
     state.spawn.mockImplementation((_command: string, args: string[]) => {
       const child = Object.assign(new EventEmitter(), {
         stdout: new EventEmitter(), stderr: new EventEmitter(), kill: vi.fn(),
+        pid: 123, exitCode: null, signalCode: null,
       })
       if (args.includes('--migrate-only')) {
         state.lifecycle.push('spawn')
@@ -82,7 +85,12 @@ describe('packaged backend build identity resource handoff', () => {
   })
 
   afterEach(async () => {
+    stopBackendHealthWatchdog()
+    setBackendHealthNotifier(null)
     desktopRuntime.backendProcess = null
+    desktopRuntime.verifiedBackendProcess = null
+    await stopBackend()
+    vi.useRealTimers()
     const stream = desktopRuntime.backendLogStream
     desktopRuntime.backendLogStream = null
     if (stream) {
@@ -94,6 +102,132 @@ describe('packaged backend build identity resource handoff', () => {
     else Reflect.deleteProperty(process, 'defaultApp')
     vi.unstubAllEnvs()
     fs.rmSync(root, { recursive: true, force: true })
+  })
+
+  function provenResponse(url: string) {
+    const nonce = new URL(url).searchParams.get('desktop_challenge') || ''
+    const proof = createHmac('sha256', desktopWorkspaceToken)
+      .update(`xcagi-desktop-backend-v1:${nonce}`).digest('hex')
+    return { ok: true, getHeader: (name: string) => name === 'server' ? 'uvicorn' : proof,
+      json: async () => ({ pong: true }) }
+  }
+
+  it('requires the exact fresh nonce and a strict 64-character lowercase proof', () => {
+    const first = desktopBackendChallenge()
+    const second = desktopBackendChallenge()
+    expect(first.nonce).toMatch(/^[0-9a-f]{64}$/)
+    expect(second.nonce).not.toBe(first.nonce)
+    const proof = provenResponse(`http://127.0.0.1/api/ping?desktop_challenge=${first.nonce}`).getHeader('x-xcagi-desktop-proof')
+    expect(first.verify(proof)).toBe(true)
+    expect(second.verify(proof)).toBe(false)
+    for (const invalid of ['', '0'.repeat(64), proof.toUpperCase(), `${proof}\n`, ` ${proof}`, 'Ａ'.repeat(64)]) {
+      expect(first.verify(invalid)).toBe(false)
+    }
+  })
+
+  it('re-authenticates an automatic exit restart through the existing health tick without a manual readiness wait', async () => {
+    vi.useFakeTimers()
+    const requests: string[] = []
+    vi.spyOn(loopback, 'loopbackHttpGet').mockImplementation(async url => {
+      requests.push(url)
+      return provenResponse(url)
+    })
+    const notify = vi.fn()
+    setBackendHealthNotifier(notify)
+    await startBackend()
+    startBackendHealthWatchdog()
+    await vi.advanceTimersByTimeAsync(20_000)
+    const first = desktopRuntime.backendProcess!
+    expect(hasVerifiedDesktopBackend()).toBe(true)
+    Object.assign(first, { exitCode: 1 })
+    first.emit('exit', 1)
+    expect(hasVerifiedDesktopBackend()).toBe(false)
+    await vi.advanceTimersByTimeAsync(1500)
+    const replacement = desktopRuntime.backendProcess!
+    expect(replacement).not.toBe(first)
+    expect(hasVerifiedDesktopBackend()).toBe(false)
+    await vi.advanceTimersByTimeAsync(18_500)
+    expect(desktopRuntime.verifiedBackendProcess).toBe(replacement)
+    expect(hasVerifiedDesktopBackend()).toBe(true)
+    expect(notify).toHaveBeenLastCalledWith('ready')
+    expect(new Set(requests).size).toBe(requests.length)
+    expect(requests.some(url => url.includes(desktopWorkspaceToken))).toBe(false)
+    const firstVerifiedAt = desktopRuntime.startupMarks.backendHealthMs
+    await vi.advanceTimersByTimeAsync(20_000)
+    expect(desktopRuntime.startupMarks.backendHealthMs).toBe(firstVerifiedAt)
+  })
+
+  it('keeps the watchdog armed when a restarted backend remains unresponsive', async () => {
+    vi.useFakeTimers()
+    let responsive = true
+    vi.spyOn(loopback, 'loopbackHttpGet').mockImplementation(async url => {
+      if (!responsive) throw new Error('backend has stopped answering ping')
+      return provenResponse(url)
+    })
+    state.spawn.mockImplementation(() => {
+      const child = Object.assign(new EventEmitter(), {
+        stdout: new EventEmitter(), stderr: new EventEmitter(),
+        kill: vi.fn(), pid: 123, exitCode: null as number | null, signalCode: null,
+      })
+      child.kill.mockImplementation(() => {
+        queueMicrotask(() => { child.exitCode = 0; child.emit('exit', 0, null) })
+        return true
+      })
+      return child
+    })
+    await startBackend()
+    startBackendHealthWatchdog()
+    await vi.advanceTimersByTimeAsync(20_000)
+    expect(hasVerifiedDesktopBackend()).toBe(true)
+    responsive = false
+    // 3 failures trigger the first restart; the replacement then fails the
+    // 90-second readiness wait. The watchdog must still attempt another one.
+    await vi.advanceTimersByTimeAsync(320_000)
+    expect(state.spawn.mock.calls.length).toBeGreaterThanOrEqual(3)
+  })
+
+  it('does not let a late proof from the old child authorize or revoke its replacement', async () => {
+    vi.useFakeTimers()
+    let resolveOld!: (value: ReturnType<typeof provenResponse>) => void
+    let oldUrl = ''
+    vi.spyOn(loopback, 'loopbackHttpGet').mockImplementation(async url => {
+      if (!oldUrl) { oldUrl = url; return new Promise(resolve => { resolveOld = resolve }) }
+      return provenResponse(url)
+    })
+    await startBackend()
+    const oldWait = waitForBackendPing(17500, 250).then(() => null, error => error)
+    desktopRuntime.backendProcess = null
+    await startBackend()
+    const replacement = desktopRuntime.backendProcess!
+    await waitForBackendPing(17500, 250)
+    expect(desktopRuntime.verifiedBackendProcess).toBe(replacement)
+    await vi.advanceTimersByTimeAsync(300)
+    resolveOld(provenResponse(oldUrl))
+    await vi.advanceTimersByTimeAsync(150)
+    expect(await oldWait).toBeInstanceOf(Error)
+    expect(desktopRuntime.verifiedBackendProcess).toBe(replacement)
+  })
+
+  it('revokes ownership on stop and ignores an in-flight successful proof after stopping', async () => {
+    vi.useFakeTimers()
+    let resolveProof!: (value: ReturnType<typeof provenResponse>) => void
+    let requestUrl = ''
+    vi.spyOn(loopback, 'loopbackHttpGet').mockImplementation(async url => {
+      requestUrl = url
+      return new Promise(resolve => { resolveProof = resolve })
+    })
+    await startBackend()
+    const child = desktopRuntime.backendProcess!
+    desktopRuntime.verifiedBackendProcess = child
+    const waiting = waitForBackendPing(17500, 250).then(() => null, error => error)
+    Object.assign(child, { exitCode: 0 })
+    await stopBackend()
+    expect(hasVerifiedDesktopBackend()).toBe(false)
+    await vi.advanceTimersByTimeAsync(300)
+    resolveProof(provenResponse(requestUrl))
+    await vi.advanceTimersByTimeAsync(150)
+    expect(await waiting).toBeInstanceOf(Error)
+    expect(desktopRuntime.verifiedBackendProcess).toBeNull()
   })
 
   it('uses the real package resources and preserves explicit identity env without mutating input', () => {

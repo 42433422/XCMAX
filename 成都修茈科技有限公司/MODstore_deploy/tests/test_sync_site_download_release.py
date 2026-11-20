@@ -198,6 +198,8 @@ def _assert_public_switch(tmp_path: Path, rollback: bool, stale: bool, *, wait: 
             b'{"version":"1.0.0.5"}' if stale and not wait and name == "prepared" else original
         )
         (target / "download-release.json").write_bytes(content)
+        (target / "site/data").mkdir(parents=True)
+        (target / "site/data/corp-download-deployment.json").write_text("old deployment proof")
     current.symlink_to(tmp_path / "active")
     site.symlink_to(current / "site")
     lock, attempted, protected = (tmp_path / name for name in ("lock", "attempted", "protected"))
@@ -210,6 +212,7 @@ def _assert_public_switch(tmp_path: Path, rollback: bool, stale: bool, *, wait: 
     )
     flock.chmod(0o755)
     acquire = re.search(r"acquire_publication_lock\(\) \{.*?^}", script, re.M | re.S).group()
+    clear_marker = re.search(r"clear_corp_download_marker\(\) \{.*?^}", script, re.M | re.S).group()
     verify = re.search(r"verify_public_pointers\(\) \{.*?^}", script, re.M | re.S).group()
     verify = verify.replace(
         '"/var/www/update/releases/stable/enterprise/download-windows-hotfix.json"',
@@ -249,6 +252,8 @@ def _assert_public_switch(tmp_path: Path, rollback: bool, stale: bool, *, wait: 
         + acquire
         + "\n"
         + verify
+        + "\n"
+        + clear_marker
         + "\n"
         + body
         + "\n"
@@ -292,6 +297,7 @@ def _assert_public_switch(tmp_path: Path, rollback: bool, stale: bool, *, wait: 
     assert current.resolve() == tmp_path / ("active" if stale else "prepared")
     expected = b'{"version":"1.0.0.7"}' if stale and wait else original
     assert (site / "download-release.json").read_bytes() == expected
+    assert (site / "site/data/corp-download-deployment.json").exists() is stale
     assert protected.exists() is not stale
 
 
@@ -309,6 +315,8 @@ def test_all_site_writers_share_one_lock_without_nested_acquisition() -> None:
     assert "exec 8>&-" not in script[activation:]
     assert updater.count("flock -w 60 8") == 1
     assert updater.index("flock -w 60 8") < updater.index("REPO_CHANGED=false")
-    assert "restart_app_services\n)" in updater
+    assert updater.index("\nrestart_app_services\n") < updater.index(
+        "\n  sync_nginx_corp_root\nfi\n)"
+    )
     assert workflow.index("flock -w 60 8") < workflow.index('LIVE_SITE="$(readlink')
     assert workflow.index("exec 8>&-") > workflow.index("[ok] live site chrome published")

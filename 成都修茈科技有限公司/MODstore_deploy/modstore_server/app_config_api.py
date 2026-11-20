@@ -228,8 +228,10 @@ def api_app_config(
         "ok": True,
         "platform": platform,
         "sku": sku,
-        "privacy_url": f"{base}/legal/privacy",
-        "terms_url": f"{base}/legal/terms",
+        "privacy_url": (
+            f"{base}/privacy.html" if sku_norm == "enterprise" else f"{base}/legal/privacy"
+        ),
+        "terms_url": f"{base}/privacy.html" if sku_norm == "enterprise" else f"{base}/legal/terms",
         "legal_version": _LEGAL_VERSION,
         "icp_number": _ICP_NUMBER,
         "app_filing_approved": _APP_FILING_APPROVED,

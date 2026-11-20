@@ -33,6 +33,8 @@ async def llm_http_response(
     stream: bool = False,
     method: str = "POST",
 ):
+    if method not in {"GET", "POST"}:
+        raise ValueError("unsupported provider request method")
     managed = isinstance(api_key, PlatformApiKey) and api_key.managed
     options: dict[str, Any] = {"follow_redirects": False, "trust_env": False} if managed else {}
     async with httpx.AsyncClient(timeout=timeout, limits=limits, **options) as client:
@@ -77,7 +79,10 @@ async def llm_http_response(
             finally:
                 await upstream.aclose()
         elif stream:
-            async with client.stream("POST", url, headers=headers, json=body) as response:
+            request_body = {"json": body} if method != "GET" else {}
+            async with client.stream(method, url, headers=headers, **request_body) as response:
                 yield response
+        elif method == "GET":
+            yield await client.get(url, headers=headers)
         else:
             yield await client.post(url, headers=headers, json=body)

@@ -1,3 +1,4 @@
+import { webcrypto } from 'node:crypto'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
@@ -6,12 +7,14 @@ import { defineComponent, h, KeepAlive, nextTick, ref } from 'vue'
 import { setRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
 import { invalidateTenantStorageScopeCache } from '@/utils/tenantStorageScope'
 import { writeAiSessionIdToStorage } from '@/utils/chatStorageKeys'
+import { ApiError } from '@/api/core'
 import { voiceChatBridge } from '@/composables/voiceCallHost'
 
 // ===== 模块级 mock =====
 
-const { getActiveConversation, approveRunWithFreshGrant, showAppToast } = vi.hoisted(() => ({
+const { getActiveConversation, generateImage, approveRunWithFreshGrant, showAppToast } = vi.hoisted(() => ({
   getActiveConversation: vi.fn(),
+  generateImage: vi.fn(),
   approveRunWithFreshGrant: vi.fn(async () => ({ status: 'running' })),
   showAppToast: vi.fn(),
 }))
@@ -21,7 +24,7 @@ vi.mock('pinia', async () => {
   return { ...actual, storeToRefs: (store: any) => store }
 })
 
-vi.mock('@/api/chat', () => ({ default: { getActiveConversation } }))
+vi.mock('@/api/chat', () => ({ default: { getActiveConversation, generateImage } }))
 
 vi.mock('@/api/agentRunApproval', () => ({
   APPROVAL_GRANT_REJECTED_MESSAGE: '审批凭证已被使用，请刷新后重试',
@@ -58,6 +61,7 @@ const mockChatViewApi = {
   currentTask: currentTaskRef,
   orderNumberFetching: ref(false),
   isLoading: isLoadingRef,
+  isRecalling: ref(false),
   isStreamingReply: ref(false),
   isExecuting: ref(false),
   latestAssistantPush: latestAssistantPushRef,
@@ -78,7 +82,7 @@ const mockChatViewApi = {
   loadMoreHistorySessions: vi.fn(),
   pushCopied: ref(false),
   loadingProgressText: ref(''),
-  excelAnalyzeUploading: ref(false),
+  attachmentUploading: ref(false),
   multimodalPendingCount: ref(0),
   multimodalStaging: multimodalStagingRef,
   artifactStaging: artifactStagingRef,
@@ -102,7 +106,7 @@ const mockChatViewApi = {
   refetchTaskOrderNumber: vi.fn(),
   setCustomOrderNumber: vi.fn(),
   cancelTask: vi.fn(),
-  onExcelAnalyzeFileChange: vi.fn(async () => undefined),
+  onAttachmentFileChange: vi.fn(async () => undefined),
   bindExcelSheetToChat: vi.fn(async () => undefined),
   bindAllExcelSheetsToChat: vi.fn(async () => undefined),
   toggleTaskExpanded: vi.fn(),
@@ -137,7 +141,6 @@ const mockChatViewApi = {
   ttsEnabled: ttsEnabledRef,
   setTtsEnabled: vi.fn(),
   chatMessagesRef: ref(null),
-  excelAnalyzeInputRef: ref(null),
 }
 
 vi.mock('@/composables/useChatView', () => ({ useChatView: () => mockChatViewApi }))
@@ -341,16 +344,16 @@ const ChatInputToolbarStub = defineComponent({
   props: {
     proactiveSuggestionsEnabled: { type: Boolean, default: false },
     ttsEnabled: { type: Boolean, default: false },
-    excelAnalyzeUploading: { type: Boolean, default: false },
+    attachmentUploading: { type: Boolean, default: false },
     multimodalPendingCount: { type: Number, default: 0 },
     officeDockingProcessing: { type: Boolean, default: false },
   },
-  emits: ['new-conversation', 'trigger-office-docking', 'excel-file-change', 'proactive-suggestions-change', 'toggle-tts'],
+  emits: ['new-conversation', 'trigger-office-docking', 'attachment-file-change', 'proactive-suggestions-change', 'toggle-tts'],
   setup(_props, { emit }) {
     return () => h('div', { class: 'input-toolbar' }, [
       button('stub-new-conversation', '新对话', () => emit('new-conversation')),
       button('stub-office-docking', '办公对接', () => emit('trigger-office-docking')),
-      button('stub-excel-change', '上传 Excel', () => emit('excel-file-change', { target: { files: [] } })),
+      button('stub-excel-change', '上传 Excel', () => emit('attachment-file-change', { target: { files: [] } })),
       button('stub-proactive-toggle', '主动意识', () => emit('proactive-suggestions-change', true)),
       button('stub-tts-toggle', '朗读', () => emit('toggle-tts', true)),
     ])
@@ -559,6 +562,7 @@ describe('ChatView interactions', () => {
 
   afterEach(() => {
     while (mounted.length) mounted.pop()?.unmount()
+    vi.unstubAllGlobals()
     document.body.replaceChildren()
     setRuntimeTenantStorageScopeInput(null)
     invalidateTenantStorageScopeCache()
@@ -671,6 +675,7 @@ describe('ChatView interactions', () => {
     await wrapper.get('.stub-recall').trigger('click')
     await flushPromises()
     expect(mockChatViewApi.recallUserMessage).toHaveBeenCalledWith(0)
+    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('撤销可核实的业务操作'))
     expect((wrapper.vm as any).messageInput).toBe('重新整理发货单')
     expect(document.activeElement?.id).toBe('messageInput')
     confirmSpy.mockRestore()
@@ -832,8 +837,8 @@ describe('ChatView interactions', () => {
     const wrapper = await mountChatView()
     const file = new File(['a'], '发货明细.xlsx')
     await dropFiles(wrapper, { items: [], files: [file] })
-    expect(mockChatViewApi.onExcelAnalyzeFileChange).toHaveBeenCalledTimes(1)
-    const event = mockChatViewApi.onExcelAnalyzeFileChange.mock.calls[0][0] as any
+    expect(mockChatViewApi.onAttachmentFileChange).toHaveBeenCalledTimes(1)
+    const event = mockChatViewApi.onAttachmentFileChange.mock.calls[0][0] as any
     expect(event.target.files.map((item: File) => item.name)).toEqual(['发货明细.xlsx'])
     expect(event.target.value).toBe('')
   })
@@ -841,7 +846,7 @@ describe('ChatView interactions', () => {
   it('拖入不支持的文件时给出提示而不上传', async () => {
     const wrapper = await mountChatView()
     await dropFiles(wrapper, { items: [], files: [new File(['a'], 'setup.exe')] })
-    expect(mockChatViewApi.onExcelAnalyzeFileChange).not.toHaveBeenCalled()
+    expect(mockChatViewApi.onAttachmentFileChange).not.toHaveBeenCalled()
     expect(mockChatViewApi.addAndSaveMessage).toHaveBeenCalledWith(
       '[附件] 不支持的文件类型，请拖入 Excel、图片、PDF 或包含它们的文件夹', 'ai')
   })
@@ -856,14 +861,14 @@ describe('ChatView interactions', () => {
       items: [{ kind: 'file', webkitGetAsEntry: () => root }],
       files: [new File(['a'], 'ignored.txt')],
     })
-    const event = mockChatViewApi.onExcelAnalyzeFileChange.mock.calls[0][0] as any
+    const event = mockChatViewApi.onAttachmentFileChange.mock.calls[0][0] as any
     expect(event.target.files.map((item: File) => item.name)).toEqual(['发货明细.xlsx', '现场照片.png'])
   })
 
   it('按 MIME 接受无扩展名的图片文件', async () => {
     const wrapper = await mountChatView()
     await dropFiles(wrapper, { items: [], files: [new File(['a'], 'paste', { type: 'image/png' })] })
-    expect(mockChatViewApi.onExcelAnalyzeFileChange).toHaveBeenCalledTimes(1)
+    expect(mockChatViewApi.onAttachmentFileChange).toHaveBeenCalledTimes(1)
   })
 
   it('文件夹扫描失败时回退到普通文件列表', async () => {
@@ -876,7 +881,7 @@ describe('ChatView interactions', () => {
       ],
       files: [new File(['a'], '发货明细.xlsx')],
     })
-    const event = mockChatViewApi.onExcelAnalyzeFileChange.mock.calls[0][0] as any
+    const event = mockChatViewApi.onAttachmentFileChange.mock.calls[0][0] as any
     expect(event.target.files.map((item: File) => item.name)).toEqual(['发货明细.xlsx'])
   })
 
@@ -884,7 +889,7 @@ describe('ChatView interactions', () => {
     const wrapper = await mountChatView()
     await dropFiles(wrapper, { items: [], files: [] })
     await dropFiles(wrapper, null)
-    expect(mockChatViewApi.onExcelAnalyzeFileChange).not.toHaveBeenCalled()
+    expect(mockChatViewApi.onAttachmentFileChange).not.toHaveBeenCalled()
     expect(mockChatViewApi.addAndSaveMessage).not.toHaveBeenCalled()
   })
 
@@ -892,7 +897,7 @@ describe('ChatView interactions', () => {
     isLoadingRef.value = true
     const wrapper = await mountChatView()
     await dropFiles(wrapper, { items: [], files: [new File(['a'], '发货明细.xlsx')] })
-    expect(mockChatViewApi.onExcelAnalyzeFileChange).not.toHaveBeenCalled()
+    expect(mockChatViewApi.onAttachmentFileChange).not.toHaveBeenCalled()
   })
 
   it('拖拽进入时显示覆盖层，离开后移除', async () => {
@@ -988,7 +993,7 @@ describe('ChatView interactions', () => {
     await wrapper.get('.stub-tts-toggle').trigger('click')
     expect(mockChatViewApi.newConversation).toHaveBeenCalled()
     expect(officeDocking.triggerOfficeDocking).toHaveBeenCalled()
-    expect(mockChatViewApi.onExcelAnalyzeFileChange).toHaveBeenCalledWith({ target: { files: [] } })
+    expect(mockChatViewApi.onAttachmentFileChange).toHaveBeenCalledWith({ target: { files: [] } })
     expect(mockChatViewApi.setTtsEnabled).toHaveBeenCalledWith(true)
   })
 
@@ -1157,6 +1162,91 @@ describe('ChatView interactions', () => {
     window.dispatchEvent(new CustomEvent('xcagi:assistant-push', { detail: { title: '任务完成', description: '发货单已生成' } }))
     await nextTick()
     expect(latestAssistantPushRef.value).toEqual({ title: '任务完成', description: '发货单已生成' })
+  })
+
+  it('生图使用独立请求并显示钱包结算', async () => {
+    vi.stubGlobal('crypto', webcrypto)
+    setRuntimeTenantStorageScopeInput({ tenantId: 1, localUserId: 1 })
+    generateImage.mockResolvedValueOnce({
+      images: ['data:image/png;base64,AA=='], model: 'gpt-image-2', billed: true, charge_amount: '1.28',
+    })
+    const wrapper = await mountChatView()
+    await wrapper.get('#messageInput').setValue('生成一个红色方块')
+    await wrapper.get('[data-testid="generate-chat-image"]').trigger('click')
+    await flushPromises()
+    await vi.waitFor(() => expect(generateImage).toHaveBeenCalledWith('生成一个红色方块', expect.any(String)))
+    expect(wrapper.get('img[alt="AI 生成图片"]').attributes('src')).toBe('data:image/png;base64,AA==')
+    expect(wrapper.text()).toContain('本次扣费 ¥1.28')
+    expect(mockChatViewApi.sendMessage).not.toHaveBeenCalled()
+  })
+
+  it('生图结果不明时重新打开会话复用原请求键', async () => {
+    vi.stubGlobal('crypto', webcrypto)
+    setRuntimeTenantStorageScopeInput({ tenantId: 1, localUserId: 1 })
+    generateImage.mockRejectedValueOnce(new ApiError('结果待核对', 409, null))
+    generateImage.mockResolvedValueOnce({
+      images: ['data:image/png;base64,AA=='], model: 'gpt-image-2', billed: true, charge_amount: '1.28',
+    })
+    const first = await mountChatView({ workspaceConversationId: 'stable-chat' })
+    await first.get('#messageInput').setValue('生成红色方块')
+    await first.get('[data-testid="generate-chat-image"]').trigger('click')
+    await vi.waitFor(() => expect(generateImage).toHaveBeenCalledTimes(1))
+    await flushPromises()
+    const original = generateImage.mock.calls[0][1]
+    first.unmount()
+    const reopened = await mountChatView({ workspaceConversationId: 'stable-chat' })
+    await reopened.get('#messageInput').setValue('生成红色方块')
+    await reopened.get('[data-testid="generate-chat-image"]').trigger('click')
+    await vi.waitFor(() => expect(generateImage).toHaveBeenCalledTimes(2))
+    expect(generateImage.mock.calls[1][1]).toBe(original)
+  })
+
+  it('离开会话后收到成功结果，返回时仍可读取原收费回执', async () => {
+    vi.stubGlobal('crypto', webcrypto)
+    setRuntimeTenantStorageScopeInput({ tenantId: 1, localUserId: 1 })
+    let resolveFirst!: (value: unknown) => void
+    generateImage.mockImplementationOnce(() => new Promise(resolve => { resolveFirst = resolve }))
+    const result = { images: ['data:image/png;base64,AA=='], model: 'gpt-image-2', billed: true, charge_amount: '1.28' }
+    generateImage.mockResolvedValueOnce(result)
+    const first = await mountChatView({ workspaceConversationId: 'stable-chat' })
+    await first.get('#messageInput').setValue('生成红色方块')
+    await first.get('[data-testid="generate-chat-image"]').trigger('click')
+    await vi.waitFor(() => expect(generateImage).toHaveBeenCalledTimes(1))
+    const original = generateImage.mock.calls[0][1]
+    first.unmount()
+    resolveFirst(result)
+    await flushPromises()
+    const reopened = await mountChatView({ workspaceConversationId: 'stable-chat' })
+    await reopened.get('#messageInput').setValue('生成红色方块')
+    await reopened.get('[data-testid="generate-chat-image"]').trigger('click')
+    await vi.waitFor(() => expect(generateImage).toHaveBeenCalledTimes(2))
+    expect(generateImage.mock.calls[1][1]).toBe(original)
+    await flushPromises()
+    expect(reopened.get('img[alt="AI 生成图片"]').attributes('src')).toBe('data:image/png;base64,AA==')
+  })
+
+  it('切换会话后收到结果，不清除原会话的回执', async () => {
+    vi.stubGlobal('crypto', webcrypto)
+    setRuntimeTenantStorageScopeInput({ tenantId: 1, localUserId: 1 })
+    let resolveFirst!: (value: unknown) => void
+    generateImage.mockImplementationOnce(() => new Promise(resolve => { resolveFirst = resolve }))
+    const result = { images: ['data:image/png;base64,AA=='], model: 'gpt-image-2', billed: true, charge_amount: '1.28' }
+    generateImage.mockResolvedValueOnce(result)
+    const wrapper = await mountChatView({ workspaceConversationId: 'stable-chat' })
+    await wrapper.get('#messageInput').setValue('生成红色方块')
+    await wrapper.get('[data-testid="generate-chat-image"]').trigger('click')
+    await vi.waitFor(() => expect(generateImage).toHaveBeenCalledTimes(1))
+    const original = generateImage.mock.calls[0][1]
+    ;(wrapper.vm as any).currentSessionId = 'another-chat'
+    await nextTick()
+    resolveFirst(result)
+    await flushPromises()
+    ;(wrapper.vm as any).currentSessionId = 'stable-chat'
+    await nextTick()
+    await wrapper.get('#messageInput').setValue('生成红色方块')
+    await wrapper.get('[data-testid="generate-chat-image"]').trigger('click')
+    await vi.waitFor(() => expect(generateImage).toHaveBeenCalledTimes(2))
+    expect(generateImage.mock.calls[1][1]).toBe(original)
   })
 
   it('回车发送与输入内容联动', async () => {

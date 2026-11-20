@@ -48,7 +48,7 @@ from app.application.dataset_rag.retrieval_policy import (
 )
 from app.application.dataset_rag.vector_index import VectorIndexService
 from app.domain.app_pure.dataset_synonyms import expand_query, normalize_synonyms
-from app.infrastructure.rag import RetrievedChunk
+from app.infrastructure.rag import HybridRetriever, RetrievedChunk
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
@@ -64,6 +64,8 @@ class RetrieverFactory(Protocol):
         *,
         embedder: Callable[[str], list[float]] | None,
         top_k: int,
+        top_k_vector: int = HybridRetriever.DEFAULT_TOP_K_VECTOR,
+        top_k_bm25: int = HybridRetriever.DEFAULT_TOP_K_BM25,
         mode: str = "hybrid",
         vector_weight: float = 1.0,
         keyword_weight: float = 1.0,
@@ -343,8 +345,14 @@ class DatasetRetrieval:
         # 精排与 MMR 都需要更大的候选池，否则没有可选空间
         retrieve_k = max(final_k * 4, 20) if effective_rerank else final_k
         if lambda_value > 0:
-            retrieve_k = max(retrieve_k, final_k * 3, 15)
+            retrieve_k = max(retrieve_k, final_k * 3, 20)
         factory_kwargs: dict[str, Any] = {"embedder": self._vector.embedder, "top_k": retrieve_k}
+        # A bigger fusion pool cannot recover hits already clipped by either lane.
+        # This also applies to per-dataset pools queried by multi_query.
+        if retrieve_k > HybridRetriever.DEFAULT_TOP_K_VECTOR:
+            factory_kwargs["top_k_vector"] = retrieve_k
+        if retrieve_k > HybridRetriever.DEFAULT_TOP_K_BM25:
+            factory_kwargs["top_k_bm25"] = retrieve_k
         if vector_candidates is not None:
             factory_kwargs["vector_candidates"] = vector_candidates
         if mode != "hybrid":

@@ -68,8 +68,6 @@ vi.mock('@/utils/aiopenMcpInstall', async (importOriginal) => {
         installLabel: '一键安装',
       },
     ]),
-    buildAiAssistantSetupPrompt: vi.fn(() => 'AI assistant prompt text'),
-    buildAiopenOneLiner: vi.fn(() => '一句话配置 http://localhost:5100/api/aiopen/mcp'),
     resolveAiopenBackendBase: vi.fn((origin: string) => origin || 'http://localhost:5100'),
     readAiopenInstalledClients: vi.fn(() => []),
     markAiopenClientInstalled: vi.fn(),
@@ -210,27 +208,31 @@ describe('AIOpenPanel functions', () => {
     expect(mockSetCursorEnabled).toHaveBeenCalledWith(false)
   })
 
-  // --- copyOneLiner ---
-
-  it('copyOneLiner copies text to clipboard', async () => {
+  it('copies the instruction, MCP JSON and account key in one click', async () => {
+    const nativeClipboard = vi.fn().mockResolvedValue({ ok: true })
+    vi.stubGlobal('xcagiDesktop', { clipboardWriteText: nativeClipboard })
     const wrapper = await mountPanel()
-    // Find the "复制一句话" button
-    const btn = wrapper.find('.aiopen-oneline-btn:not(.aiopen-oneline-btn--ghost)')
-    expect(btn.exists()).toBe(true)
+    mockSafeJsonRequest.mockResolvedValueOnce({
+      ok: true, data: { success: true, key: 'scoped-test-key', expires_at: Date.now() / 1000 + 60 },
+    })
+    const btn = wrapper.get('.aiopen-oneline-btn')
     await btn.trigger('click')
     await flushPromises()
-    expect(mockClipboardWriteText).toHaveBeenCalled()
-  })
-
-  // --- copyAiAssistantPrompt ---
-
-  it('copyAiAssistantPrompt copies prompt to clipboard', async () => {
-    const wrapper = await mountPanel()
-    const btn = wrapper.find('.aiopen-oneline-btn--ghost')
-    expect(btn.exists()).toBe(true)
     await btn.trigger('click')
     await flushPromises()
-    expect(mockClipboardWriteText).toHaveBeenCalled()
+    const keyRequests = mockSafeJsonRequest.mock.calls.filter(([url]) => url.includes('/client/key'))
+    expect(keyRequests).toEqual([['/api/aiopen/client/key?keep_existing=true', { method: 'POST' }]])
+    vi.unstubAllGlobals()
+    expect(nativeClipboard).toHaveBeenCalledTimes(2)
+    expect(mockClipboardWriteText).not.toHaveBeenCalled()
+    const payload = nativeClipboard.mock.calls[0][0]
+    expect(payload).toContain('tools/call ui_sessions')
+    const [, config] = payload.split('```json\n')
+    expect(JSON.parse(config.replace(/\n```$/, '')).mcpServers['xcagi-aiopen']).toEqual({
+      url: 'http://localhost:5100/api/aiopen/mcp',
+      headers: { 'X-AIOPEN-Key': 'scoped-test-key' },
+    })
+    expect(wrapper.text()).not.toContain('scoped-test-key')
   })
 
   // --- handleClientClick / installForClient (copy mode) ---
@@ -346,31 +348,6 @@ describe('AIOpenPanel functions', () => {
       await flushPromises()
       const chatCalls = mockSafeJsonRequest.mock.calls.filter((c) => String(c[0]).includes('/openclaw/chat'))
       expect(chatCalls.length).toBeGreaterThan(0)
-    }
-  })
-
-  // --- copyClientConfig ---
-
-  it('copyClientConfig copies MCP JSON', async () => {
-    const wrapper = await mountPanel()
-    mockSafeJsonRequest.mockResolvedValue({ ok: true, data: { success: true } })
-    const copyJsonBtn = wrapper.findAll('button').find((b) => b.text().includes('复制 MCP JSON'))
-    if (copyJsonBtn) {
-      await copyJsonBtn.trigger('click')
-      await flushPromises()
-      expect(mockClipboardWriteText).toHaveBeenCalled()
-    }
-  })
-
-  // --- copyGuideUrl ---
-
-  it('copyGuideUrl copies guide URL', async () => {
-    const wrapper = await mountPanel()
-    const copyGuideBtn = wrapper.findAll('button').find((b) => b.text().includes('复制说明链接'))
-    if (copyGuideBtn) {
-      await copyGuideBtn.trigger('click')
-      await flushPromises()
-      expect(mockClipboardWriteText).toHaveBeenCalled()
     }
   })
 
@@ -541,11 +518,13 @@ describe('AIOpenPanel functions', () => {
   it('copyText handles clipboard failure gracefully', async () => {
     mockClipboardWriteText.mockRejectedValue(new Error('clipboard denied'))
     const wrapper = await mountPanel()
-    const btn = wrapper.find('.aiopen-oneline-btn:not(.aiopen-oneline-btn--ghost)')
+    mockSafeJsonRequest.mockResolvedValueOnce({
+      ok: true, data: { success: true, key: 'scoped-test-key', expires_at: Date.now() / 1000 + 60 },
+    })
+    const btn = wrapper.get('.aiopen-oneline-btn')
     await btn.trigger('click')
     await flushPromises()
-    // Should show error toast
-    expect(wrapper.find('.aiopen-toast').exists()).toBe(true)
+    expect(wrapper.get('.aiopen-toast').text()).toContain('剪贴板失败')
   })
 
   // --- readyStatus computed ---

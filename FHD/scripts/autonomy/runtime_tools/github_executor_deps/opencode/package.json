@@ -1,0 +1,9 @@
+{
+  "name": "xcmax-para-github-opencode-deps",
+  "private": true,
+  "dependencies": {
+    "@anthropic-ai/sandbox-runtime": "0.0.83",
+    "opencode-linux-x64-baseline": "1.19.6",
+    "ws": "8.18.0"
+  }
+}

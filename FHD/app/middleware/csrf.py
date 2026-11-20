@@ -118,6 +118,8 @@ def _csrf_exempt_knowledge_public(scope: Scope) -> bool:
 def _csrf_exempt_aiopen(scope: Scope) -> bool:
     """AIOPEN 对外 MCP/API 面：外部 Agent（Cursor/Claude）无 CSRF Cookie，安全由 X-AIOPEN-Key + LAN 承担。"""
     path = (scope.get("path") or "").rstrip("/")
+    if path == "/api/aiopen/client/key":
+        return False
     return path.startswith("/api/aiopen") or path.startswith("/api/ai/qclaw")
 
 

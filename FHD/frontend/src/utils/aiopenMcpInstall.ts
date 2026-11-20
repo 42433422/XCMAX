@@ -23,16 +23,7 @@ export type AiMcpClientInstall = {
   hint: string
   transport: 'url' | 'mcp_remote' | 'stdio'
   mcpJson: string
-  /** 一键安装：deeplink / web / vscode */
-  installUrl?: string
-  installFallbackUrl?: string
-  installMode: 'deeplink' | 'vscode' | 'copy'
   installLabel: string
-}
-
-function toBase64Json(obj: unknown): string {
-  const json = JSON.stringify(obj)
-  return btoa(unescape(encodeURIComponent(json)))
 }
 
 export function buildMcpUrlConfig(baseUrl: string, apiKey = ''): McpUrlConfig {
@@ -66,23 +57,7 @@ function wrapMcpJson(serverConfig: McpUrlConfig | McpCommandConfig): string {
   return JSON.stringify({ mcpServers: { [AIOPEN_MCP_SERVER_NAME]: serverConfig } }, null, 2)
 }
 
-export function buildCursorDeeplink(serverName: string, serverConfig: McpUrlConfig | McpCommandConfig): string {
-  const configB64 = toBase64Json(serverConfig)
-  return `cursor://anysphere.cursor-deeplink/mcp/install?name=${encodeURIComponent(serverName)}&config=${encodeURIComponent(configB64)}`
-}
-
-export function buildCursorWebInstallUrl(serverName: string, serverConfig: McpUrlConfig | McpCommandConfig): string {
-  const configB64 = toBase64Json(serverConfig)
-  return `https://cursor.com/en/install-mcp?name=${encodeURIComponent(serverName)}&config=${encodeURIComponent(configB64)}`
-}
-
-/** VS Code MCP 扩展一键安装 */
-export function buildVsCodeInstallUrl(serverName: string, serverConfig: McpCommandConfig): string {
-  const payload = JSON.stringify({ name: serverName, ...serverConfig })
-  return `vscode://mcp/install?${encodeURIComponent(payload)}`
-}
-
-export function buildAiopenClientInstalls(baseUrl: string, apiKey = '', _options: { stdioScriptPath?: string } = {}): AiMcpClientInstall[] {
+export function buildAiopenClientInstalls(baseUrl: string, apiKey = ''): AiMcpClientInstall[] {
   const urlCfg = buildMcpUrlConfig(baseUrl, apiKey)
   const remoteCfg = buildMcpRemoteConfig(baseUrl, apiKey)
 
@@ -92,13 +67,10 @@ export function buildAiopenClientInstalls(baseUrl: string, apiKey = '', _options
       name: 'Cursor',
       icon: '◆',
       configPath: '~/.cursor/mcp.json',
-      hint: '点一下自动写入 MCP 配置',
+      hint: '复制后粘贴到 ~/.cursor/mcp.json',
       transport: 'url',
       mcpJson: wrapMcpJson(urlCfg),
-      installUrl: buildCursorDeeplink(AIOPEN_MCP_SERVER_NAME, urlCfg),
-      installFallbackUrl: buildCursorWebInstallUrl(AIOPEN_MCP_SERVER_NAME, urlCfg),
-      installMode: 'deeplink',
-      installLabel: '一键安装',
+      installLabel: '复制配置',
     },
     {
       id: 'claude',
@@ -108,7 +80,6 @@ export function buildAiopenClientInstalls(baseUrl: string, apiKey = '', _options
       hint: '复制后粘贴到 Claude Desktop → 设置 → MCP',
       transport: 'mcp_remote',
       mcpJson: wrapMcpJson(remoteCfg),
-      installMode: 'copy',
       installLabel: '复制配置',
     },
     {
@@ -116,12 +87,10 @@ export function buildAiopenClientInstalls(baseUrl: string, apiKey = '', _options
       name: 'VS Code',
       icon: '▣',
       configPath: 'MCP 扩展 · 用户 settings',
-      hint: '需安装 MCP 扩展；也可复制 JSON 手动添加',
+      hint: '复制后粘贴到 VS Code 的 MCP 配置',
       transport: 'mcp_remote',
       mcpJson: wrapMcpJson(remoteCfg),
-      installUrl: buildVsCodeInstallUrl(AIOPEN_MCP_SERVER_NAME, remoteCfg),
-      installMode: 'vscode',
-      installLabel: '一键安装',
+      installLabel: '复制配置',
     },
     {
       id: 'windsurf',
@@ -131,7 +100,6 @@ export function buildAiopenClientInstalls(baseUrl: string, apiKey = '', _options
       hint: '与 Cursor 相同 url 格式，复制后写入配置文件',
       transport: 'url',
       mcpJson: wrapMcpJson(urlCfg),
-      installMode: 'copy',
       installLabel: '复制配置',
     },
     {
@@ -142,7 +110,6 @@ export function buildAiopenClientInstalls(baseUrl: string, apiKey = '', _options
       hint: '字节 Trae IDE，粘贴 mcpServers JSON',
       transport: 'url',
       mcpJson: wrapMcpJson(urlCfg),
-      installMode: 'copy',
       installLabel: '复制配置',
     },
     {
@@ -153,7 +120,6 @@ export function buildAiopenClientInstalls(baseUrl: string, apiKey = '', _options
       hint: 'Cherry Studio / Chatbox / Open WebUI 等通用 JSON',
       transport: 'mcp_remote',
       mcpJson: wrapMcpJson(remoteCfg),
-      installMode: 'copy',
       installLabel: '复制配置',
     },
   ]
@@ -209,58 +175,19 @@ export function resolveAiopenBackendBase(pageOrigin: string, options: { envApiBa
   return String(pageOrigin || '').replace(/\/$/, '')
 }
 
-/** 一句话话术（粘贴给 ChatGPT / Claude 网页版等） */
+/** 单次复制给本地 AI 助手的接入说明及 HTTP 配置。 */
 export function buildAiopenOneLiner(
   backendBase: string,
+  consoleUrl = '',
   apiKey = '',
-  consoleUrl = ''
 ): string {
   const base = resolveAiopenBackendBase('', { envApiBase: backendBase })
   const guide = `${base}/api/aiopen/guide?format=markdown`
-  const keyHint = apiKey.trim() ? `连接口令是 ${apiKey.trim()}，` : ''
   // 管理端与主前端入口不同，空屏提示必须给到用户当前所在端的地址
   const screenHint = consoleUrl.trim()
     ? `如果 ui_sessions 为空，请提示我在 ${consoleUrl.trim()} 登录并保持页面打开。`
     : '如果 ui_sessions 为空，请提示我先登录 XCAGI 并保持页面打开。'
-  return (
-    `请打开 ${guide} 阅读 XCAGI AIOPEN 接入说明，${keyHint}帮我写好 MCP 配置并验证连通：` +
-    '依次调用 initialize、tools/list（应为 18 个工具）、tools/call ui_sessions。' +
-    `${screenHint}最后告诉我：MCP 是否连通、工具数量、是否有可操控的屏幕。`
-  )
-}
-
-/** 生成可粘贴给任意 AI 助手（ChatGPT / Claude / Kimi 等）的配置提示语 */
-export function buildAiAssistantSetupPrompt(options: {
-  backendBase: string
-  apiKey?: string
-  clientId?: AiMcpClientId
-  guideUrl?: string
-}): string {
-  const base = resolveAiopenBackendBase('', { envApiBase: options.backendBase })
-  const guide = options.guideUrl || `${base}/api/aiopen/guide?format=markdown`
-  const clients = buildAiopenClientInstalls(base, options.apiKey || '')
-  const client = clients.find((c) => c.id === (options.clientId || 'generic')) || clients[clients.length - 1]
-  const keyLine = options.apiKey?.trim() ? `- 连接口令（请求头 X-AIOPEN-Key）：${options.apiKey.trim()}` : '- 连接口令：开发模式可留空'
-
-  return `请帮我接入 XCAGI AIOPEN（MCP 开放平台），完成后告诉我是否配置成功。
-
-## 请你执行
-1. 打开并阅读接入说明：${guide}
-2. 将下方 JSON 写入我的 **${client.name}**（${client.configPath}）
-3. 验证 MCP：initialize → tools/list（应有 9 个工具）→ tools/call name=ui_sessions
-
-## MCP 配置（${client.name}）
-\`\`\`json
-${client.mcpJson}
-\`\`\`
-
-## 服务端信息
-- MCP 端点：${base}/api/aiopen/mcp
-- REST 调用：${base}/api/aiopen/invoke
-${keyLine}
-
-## 完成后请告诉我
-- MCP 是否连通、tools/list 工具数量
-- 是否检测到 ui_sessions（我已在浏览器打开 AIOPEN 并开启待命）
-- 我可以说「帮我查订单 / 打开产品页」让你通过虚拟光标操控软件`
+  const request = `请用下方 JSON 本地配置 XCAGI AIOPEN MCP（说明 ${guide}），` +
+    '依次调用 initialize、tools/list、tools/call ui_sessions，报告连通状态、工具数量和是否有可操控的屏幕。' + screenHint
+  return `${request}\n\n\`\`\`json\n${wrapMcpJson(buildMcpUrlConfig(base, apiKey))}\n\`\`\``
 }

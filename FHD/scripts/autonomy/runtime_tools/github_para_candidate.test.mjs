@@ -43,5 +43,10 @@ test('real Git candidate is an exact commit bundle, remains unpublished and cann
     await assert.rejects(exportCandidate({ ...task, work_branch: 'main' }, root, base, env), /identity_mismatch/);
     await assert.rejects(exportCandidate(task, root, base, { ...env, GITHUB_SHA: 'f'.repeat(40) }), /identity_mismatch/);
     await assert.rejects(exportCandidate(task, root, base, { ...env, PARA_GITHUB_STAGE: 'resume' }), /identity_mismatch/);
+    const repair = await exportCandidate(task, root, base, {
+      ...env, GITHUB_SHA: 'f'.repeat(40), PARA_GITHUB_SOURCE_SHA: base,
+      PARA_GITHUB_CANDIDATE_DIR: join(root, '.git', 'original-pr-candidate'),
+    });
+    assert.equal(repair.base_sha, base);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

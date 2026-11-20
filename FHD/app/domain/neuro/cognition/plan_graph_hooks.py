@@ -146,6 +146,7 @@ def finalize_planned_graph(
             "planning_rejected": True,
             "planning_unavailable": failure_kind == "model_unavailable",
             "planning_failure_kind": failure_kind,
+            "planning_failure_code": context.get("_planning_failure_code"),
             **({"goal_coverage_rejected": True} if coverage_rejected else {}),
             **(
                 {"plan_repair": context["plan_repair_trace"]}

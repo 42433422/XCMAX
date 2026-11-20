@@ -61,14 +61,17 @@ const salesPreview = computed(() => salesApprovalPreview(selectedRequest.value))
           <h4>{{ salesPreview.operation }}参数</h4>
           <p>客户：{{ salesPreview.customer }}</p>
           <table>
-            <thead><tr><th>商品</th><th>型号</th><th>数量</th><th>单价</th></tr></thead>
+            <thead><tr><th>商品</th><th>型号</th><th>订购数量</th><th v-if="salesPreview.deliveryQuantities">本次交付</th><th>单价</th></tr></thead>
             <tbody><tr v-for="(item, index) in salesPreview.items" :key="index">
               <td>{{ item.product_name || item.product_id || '未填写' }}</td>
               <td>{{ item.model_number || '未填写' }}</td>
-              <td>{{ item.quantity ?? '未填写' }}</td><td>{{ item.unit_price ?? '未填写' }}</td>
+              <td>{{ item.quantity ?? '未填写' }}</td>
+              <td v-if="salesPreview.deliveryQuantities">{{ salesPreview.deliveryQuantities[index] ?? '未填写' }}</td>
+              <td>{{ item.unit_price ?? '未填写' }}</td>
             </tr></tbody>
           </table>
           <p data-testid="sales-approval-total">总金额（参数合计）：{{ salesPreview.amount ?? '金额待确认' }} {{ salesPreview.amount ? salesPreview.currency : '' }}</p>
+          <p v-if="salesPreview.receiptAmount" data-testid="sales-approval-receipt">本次登记收款：{{ salesPreview.receiptAmount }} {{ salesPreview.currency }}</p>
           <details><summary>原始参数</summary><pre>{{ selectedRequest.description }}</pre></details>
         </div>
 

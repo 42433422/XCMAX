@@ -1,5 +1,6 @@
 """Dot preserves trusted role evidence without reopening the raw-prompt boundary."""
 
+import hashlib
 import json
 from types import SimpleNamespace
 
@@ -19,6 +20,53 @@ from tests.test_dot_ticket_dispatch import (
 from tests.test_incident_team_escalation import _mutate_event
 from tests.test_incident_team_escalation import _payload as event_payload
 from tests.test_incident_team_escalation import incident as incident
+
+
+@pytest.mark.parametrize("tool", ["dolt", "codex", "opencode"])
+@pytest.mark.parametrize("role", ["scout", "fix", "verify", "escalation_review"])
+def test_retort_feedback_blocks_model_execution_after_identity_checks(monkeypatch, tool, role):
+    from modstore_server.retort_customer_feedback import CREDENTIAL_BLOCK
+
+    contract = {
+        "role": role,
+        "source": {"summary": "公开的通用目标", "github_workspace": {"request_id": "run-1"}},
+        "handoffs": [],
+        "review": {},
+        "customer_feedback": {"reproduction": ["导入指定文件时报错"], "intent": "product_issue"},
+    }
+    monkeypatch.setattr(dot, "_incident_contract", lambda req: contract)
+    req = {
+        "raw_input": {
+            "event_type": "ops.retort.evolution",
+            "_trusted_incident_team_execution": True,
+            "attempt_id": "a" * 32,
+            "allow_code_fix": True,
+        }
+    }
+    from modstore_server.para_delegate_task_payloads import build_request
+
+    marker = f"[xcmax:{hashlib.sha256(b'run-1').hexdigest()[:32]}:{'a' * 32}]"
+    payload = build_request(
+        task="通用目标",
+        input_data={**req["raw_input"], "role": "fix", "github_workspace": {"request_id": "run-1"}},
+        employee_id="developer",
+        workspace_root="",
+        mode="code_fix",
+        report_only=False,
+    )
+    assert payload["title"].startswith(marker)
+    before = json.dumps(payload, sort_keys=True)
+    with pytest.raises(dot.DoltIncidentContractError, match=f"^{CREDENTIAL_BLOCK}$"):
+        dot.prepare_dolt_ticket_payload(req, payload, tool)
+    assert json.dumps(payload, sort_keys=True) == before
+    assert "导入指定文件时报错" not in payload["prompt"]
+    with pytest.raises(dot.DoltIncidentContractError, match="marker_mismatch"):
+        dot.prepare_dolt_ticket_payload(req, {"title": "unbound"}, tool)
+    req["report_only"] = True
+    with pytest.raises(dot.DoltIncidentContractError, match=f"^{CREDENTIAL_BLOCK}$"):
+        dot.prepare_dolt_ticket_payload(req, payload, tool)
+    with pytest.raises(dot.DoltIncidentContractError, match="private_executor_required"):
+        dot.prepare_dolt_ticket_payload(req, {"prompt": "通用目标"}, "other")
 
 
 def runtime(event_id, role, monkeypatch):

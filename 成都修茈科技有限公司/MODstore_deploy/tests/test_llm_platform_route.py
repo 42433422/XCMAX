@@ -145,7 +145,8 @@ def test_platform_only_rejects_explicit_selection(chat_client, selection):
 def test_chat_default_openapi_exposes_optional_platform_only(chat_client):
     operation = chat_client.app.openapi()["paths"]["/api/llm/resolve-chat-default"]["get"]
     query = {p["name"]: p for p in operation["parameters"] if p["in"] == "query"}
-    assert set(query) == {"provider", "model", "platform_only"}
+    assert set(query) == {"provider", "model", "platform_only", "operation"}
+    assert query["operation"]["schema"]["default"] == "chat"
     assert query["platform_only"]["required"] is False
     assert query["platform_only"]["schema"] == {
         "type": "boolean",

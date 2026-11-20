@@ -325,7 +325,9 @@ async def test_chat_default_rotation_and_tool_round_snapshot(database, monkeypat
     assert first["model"] == "mimo-v2.6-flash" and second["model"] == "mimo-v2.6-pro"
     assert first["config_revision"] != second["config_revision"]
     body = llm_api.LlmChatDTO(**{**first, "messages": [{"role": "user", "content": "hi"}]})
-    snapshot = _requested_chat_snapshot(database, SimpleNamespace(id=1), body)
+    snapshot = await _requested_chat_snapshot(
+        database, SimpleNamespace(id=1), body, [{"role": "user", "content": "hi"}]
+    )
     assert snapshot.api_key == KEY and snapshot.model == first["model"]
     assert snapshot.api_key.configuration["revision"] == first["config_revision"]
     assert KEY not in repr(snapshot) and KEY not in json.dumps(first)
@@ -551,7 +553,8 @@ async def test_managed_asr_catalog_has_no_chat_default(database):
     assert error.value.detail["recovery"] is None
 
 
-def test_revision_guard_without_master_key_rejects_rotation(database, monkeypatch):
+@pytest.mark.asyncio
+async def test_revision_guard_without_master_key_rejects_rotation(database, monkeypatch):
     from modstore_server.llm_api import LlmChatDTO
     from modstore_server.llm_api_merged import _requested_chat_snapshot
 
@@ -562,7 +565,7 @@ def test_revision_guard_without_master_key_rejects_rotation(database, monkeypatc
     monkeypatch.setenv("OPENAI_API_KEY", "environment-test-beta")
     body = LlmChatDTO(**first.public_metadata(), messages=[])
     with pytest.raises(HTTPException) as error:
-        _requested_chat_snapshot(database, SimpleNamespace(id=1), body)
+        await _requested_chat_snapshot(database, SimpleNamespace(id=1), body, [])
     assert error.value.detail["code"] == "CHAT_ROUTE_CHANGED"
 
 

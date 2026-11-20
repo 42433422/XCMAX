@@ -10,7 +10,7 @@
           <button
             type="button"
             class="btn btn-secondary btn-sm history-modal-btn history-modal-btn-danger"
-            :disabled="historyLoading || historySessions.length === 0"
+            :disabled="historyLoading || historySessions.length === 0 || historySessions.some(session => isChatConversationBusy(session.activity))"
             @click="$emit('clear')"
           >
             {{ $t('chat.clear') }}
@@ -27,7 +27,7 @@
         </div>
       </div>
       <div class="modal-body history-modal-body">
-        <div v-if="historyLoading" class="empty-state">{{ $t('chat.historyLoading') }}</div>
+        <div v-if="historyLoading && !historySessions.length" class="empty-state">{{ $t('chat.historyLoading') }}</div>
         <div v-if="historyError" class="history-error-wrap">
           <div class="history-error-text">{{ historyError }}</div>
           <button type="button" class="btn btn-secondary btn-sm" @click="$emit('refresh')">
@@ -38,14 +38,13 @@
           {{ $t('chat.historyEmpty') }}
           <div class="history-empty-tip">{{ $t('chat.historyEmptyTip') }}</div>
         </div>
-        <template v-if="!historyLoading && historySessions.length">
+        <template v-if="historySessions.length">
           <button
             v-for="session in historySessions"
             :key="session.session_id"
             type="button"
             class="task-card history-session-item"
             :class="{ 'history-session-item-active': session.session_id === currentSessionId }"
-            :disabled="historyLoading"
             @click="$emit('load-session', session.session_id)"
           >
             <div class="task-header history-session-title">
@@ -54,6 +53,9 @@
             </div>
             <div class="history-session-meta">
               <span>{{ $t('chat.messageCount', { count: session.message_count || 0 }) }}</span>
+              <span v-if="session.activity" :data-status="session.activity" aria-live="polite">
+                {{ $t(`chat.conversationStatus.${session.activity}`) }}
+              </span>
               <span v-if="session.last_message_at">
                 {{ formatHistoryTime(session.last_message_at) }}
               </span>
@@ -71,18 +73,14 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import { formatHistoryTime } from '@/utils/chatTaskLabels'
+import type { HistorySessionItem } from '@/composables/useChatSessionHistory'
+import { isChatConversationBusy } from '@/composables/useChatSessionActivity'
 
 useI18n()
 
 defineProps<{
   show: boolean
-  historySessions: Array<{
-    session_id: string
-    title?: string
-    message_count?: number
-    last_message_at?: string
-    is_local_only?: boolean
-  }>
+  historySessions: HistorySessionItem[]
   historyLoading: boolean
   historyHasMore?: boolean
   historyLoadingMore?: boolean
@@ -176,11 +174,6 @@ defineEmits<{
   text-align: left;
   cursor: pointer;
   margin-bottom: 8px;
-}
-
-.history-session-item:disabled {
-  opacity: 0.65;
-  cursor: not-allowed;
 }
 
 .history-session-item-active {

@@ -816,9 +816,24 @@ jobs:
           v="${v#FHD/}"
           v="${v#v}"
           v="${v#V}"
-          dmg="$(find "release/xcagi-v${v}/enterprise" -name '*.dmg' -print -quit)"
-          test -n "${dmg}"
-          bash scripts/package/verify-macos-release-dmg.sh "${dmg}" "${v}" "${XCAGI_BUILD_SHA}"
+          shopt -s nullglob
+          dmgs=("release/xcagi-v${v}/enterprise"/*.dmg)
+          (( ${#dmgs[@]} > 0 ))
+          for dmg in "${dmgs[@]}"; do
+            bash scripts/package/verify-macos-release-dmg.sh "$dmg" "$v" "$XCAGI_BUILD_SHA"
+            jq -cn --arg filename "${dmg##*/}" \
+              --arg sha256 "$(shasum -a 256 "$dmg" | cut -d ' ' -f 1)" \
+              --argjson size "$(stat -f '%z' "$dmg")" \
+              --arg version "$v" --arg git_sha "$XCAGI_BUILD_SHA" \
+              --arg build_workflow_run_id "$GITHUB_RUN_ID" \
+              '{$filename,$sha256,$size,$version,$git_sha,$build_workflow_run_id,verifier:"codesign_stapler"}' \
+              >> "$RUNNER_TEMP/mac-signatures.jsonl"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xcagi-mac-release-signatures
+          path: ${{ runner.temp }}/mac-signatures.jsonl
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
           name: xcagi-desktop-macos-enterprise
@@ -944,6 +959,37 @@ jobs:
           path: |
             ${{ runner.temp }}/manifest.json
             ${{ runner.temp }}/download-release.json
+      - name: Download this release's production deployment identity
+        uses: actions/download-artifact@v8
+        with:
+          name: xcagi-production-deployment-identity
+          path: ${{ runner.temp }}/production-identity
+          run-id: ${{ inputs.frontend_run_id }}
+          github-token: ${{ github.token }}
+      - name: Require the same production artifacts before changing public download paths
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ORCHESTRATOR_RUN: ${{ inputs.frontend_run_id }}
+          PRODUCT_VERSION: ${{ inputs.version }}
+          ADMIN_TOKEN: ${{ secrets.RELEASE_CONVERGENCE_ADMIN_TOKEN }}
+          ENDPOINT: ${{ vars.RELEASE_CONVERGENCE_URL || 'https://xiu-ci.com/api/admin/release-convergence' }}
+        run: |
+          set -euo pipefail
+          : "${ADMIN_TOKEN:?missing production readback credential}"
+          [[ "$ORCHESTRATOR_RUN" =~ ^[1-9][0-9]*$ ]]
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${ORCHESTRATOR_RUN}" \
+            | jq -e --arg sha "$XCAGI_BUILD_SHA" '
+                .head_sha == $sha and .head_branch == "main" and .event == "workflow_dispatch" and
+                .path == ".github/workflows/fhd-release-orchestrator.yml" and .status == "in_progress"
+              ' >/dev/null
+          proof="$RUNNER_TEMP/production-identity"
+          curl --proto '=https' -fsS --retry 3 --connect-timeout 15 --max-time 60 \
+            -H "Authorization: Bearer ${ADMIN_TOKEN}" -H 'Cache-Control: no-cache' \
+            "$ENDPOINT" -o "$proof/release-convergence.json"
+          python3 scripts/release/verify_formal_release_identity.py --capture-production \
+            --evidence "$proof" --sha "$XCAGI_BUILD_SHA" --version "$PRODUCT_VERSION" \
+            --orchestrator-run "$ORCHESTRATOR_RUN" > "$proof/current-production.json"
+          cmp "$proof/production-deployment.json" "$proof/current-production.json"
       - name: Progress linked work orders to released (mainline merged/released)
         # 主线闭环：本次发布合并的工单沿状态机真实推进 merged → released，
         # 让验收回执在 verifying 窗口判定关闭/重开。失败不阻断发布。
@@ -1307,7 +1353,10 @@ jobs:
             throw "Invalid public desktop version: $version"
           }
 
-          $manifestUrl = "https://xiu-ci.com/xcagi-v$version/manifest.json"
+          if ($env:XCAGI_BUILD_SHA -cnotmatch '^[0-9a-f]{40}$') {
+            throw "Full release Git SHA is required"
+          }
+          $manifestUrl = "https://xiu-ci.com/releases/builds/$version/$env:XCAGI_BUILD_SHA/manifest.json"
           $manifestPath = Join-Path $env:RUNNER_TEMP 'xcagi-public-manifest.json'
           Invoke-WebRequest `
             -UseBasicParsing `
@@ -1315,8 +1364,13 @@ jobs:
             -Uri $manifestUrl `
             -OutFile $manifestPath
           $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+          if ($manifest.version -cne $version -or $manifest.git_sha -cne $env:XCAGI_BUILD_SHA -or
+              $manifest.release_id -cne "xcagi-$version-$env:XCAGI_BUILD_SHA") {
+            throw "Public Windows manifest belongs to another release"
+          }
           $entry = $manifest.channels.official_download.enterprise.win
-          if (-not $entry.url -or -not $entry.sha256 -or -not $entry.size) {
+          if (-not $entry.url -or -not $entry.sha256 -or -not $entry.size -or
+              $entry.filename -cnotmatch '^[A-Za-z0-9][A-Za-z0-9._-]*\.exe$') {
             throw "Public manifest is missing the enterprise Windows artifact: $manifestUrl"
           }
 
@@ -1350,6 +1404,17 @@ jobs:
           scripts/package/verify-windows-signature.ps1 `
             -Path $installer `
             -ExpectedPublisher $env:XCAGI_WINDOWS_PUBLISHER_NAME
+          @{
+            filename = [string]$entry.filename; sha256 = $actualSha; size = $actualSize
+            verifier = 'authenticode'; version = $version; git_sha = $env:XCAGI_BUILD_SHA
+            build_workflow_run_id = $env:GITHUB_RUN_ID
+          } | ConvertTo-Json -Compress | Set-Content -Encoding utf8NoBOM `
+            -LiteralPath (Join-Path $env:RUNNER_TEMP 'windows-signature.json')
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xcagi-windows-release-signature
+          path: ${{ runner.temp }}/windows-signature.json
+          if-no-files-found: error
 
   publish-website-pointer:
     needs: [generate-manifest, cross-platform-parity, verify-download, verify-public-windows-signature]
@@ -1449,20 +1514,25 @@ jobs:
           curl -fsSL --retry 4 --retry-all-errors --connect-timeout 15 --max-time 90 \
             "https://xiu-ci.com/xcagi-v${version}/manifest.json?release-run=${GITHUB_RUN_ID}" \
             -o "$tmpdir/manifest.json"
-          expected_sha="$(jq -er '.git_sha' "$tmpdir/manifest.json")"
+          expected_sha="${XCAGI_BUILD_SHA,,}"
+          test "$(jq -er '.git_sha' "$tmpdir/manifest.json")" = "$expected_sha"
+          manifest_url="https://xiu-ci.com/releases/builds/${version}/${expected_sha}/manifest.json"
+          curl -fsS --retry 3 --connect-timeout 15 --max-time 60 \
+            "$manifest_url" -o "$tmpdir/immutable-manifest.json"
+          cmp "$tmpdir/manifest.json" "$tmpdir/immutable-manifest.json"
 
           pointer_ok=0
           for attempt in $(seq 1 12); do
             curl -fsSL --retry 3 --retry-all-errors --connect-timeout 15 --max-time 60 \
               "https://xiu-ci.com/download-release.json?release-run=${GITHUB_RUN_ID}-${attempt}" \
               -o "$tmpdir/download-release.json"
-            if jq -e --arg version "$version" --arg sha "$expected_sha" '
+            if jq -e --arg version "$version" --arg sha "$expected_sha" --arg url "$manifest_url" '
               .schema == "xcagi.download_release.public/v1"
               and .release_ready == true
               and .version_lock == $version
               and .download_version == $version
               and .git_sha == $sha
-              and .manifest_url == ("https://xiu-ci.com/xcagi-v" + $version + "/manifest.json")
+              and .manifest_url == $url
               and .release_history[0].version == $version
               and (.release_history[0].date | type == "string" and length > 0)
               and (.release_history[0].title | type == "string" and length > 0)
@@ -1591,6 +1661,13 @@ jobs:
             --pointer artifacts/xcagi-download-manifest/download-release.json \
             --version "$PRODUCT_VERSION" --sha "$RELEASE_SHA" \
             --output artifacts/github-release-notes.md
+          python FHD/scripts/release/verify_formal_release_identity.py \
+            --inventory-dir artifacts > "$RUNNER_TEMP/asset-inventory.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xcagi-github-release-asset-inventory
+          path: ${{ runner.temp }}/asset-inventory.json
+          if-no-files-found: error
       - name: Guard against overwriting an unrelated tag or already-published release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -1600,10 +1677,11 @@ jobs:
         run: |
           set -euo pipefail
           tag="FHD/v${PRODUCT_VERSION}"
-          existing="$(gh api "repos/${GH_REPO}/releases/tags/${tag}" 2>/dev/null || true)"
-          if [ -n "$existing" ]; then
-            jq -e --arg sha "$RELEASE_SHA" '.draft == true and .target_commitish == $sha' <<<"$existing" >/dev/null
-          fi
+          gh api --paginate --slurp "repos/${GH_REPO}/releases?per_page=100" \
+            | jq -e --arg tag "$tag" --arg sha "$RELEASE_SHA" '
+                [.[][] | select(.tag_name == $tag)]
+                | length == 0 or (length == 1 and .[0].draft == true and .[0].target_commitish == $sha)
+              ' >/dev/null
           ref_sha="$(gh api "repos/${GH_REPO}/git/ref/tags/${tag}" --jq '.object.sha' 2>/dev/null || true)"
           if [ -n "$ref_sha" ] && [ "$ref_sha" != "$RELEASE_SHA" ]; then
             echo "::error::Git tag already points to a different commit"
@@ -1616,6 +1694,7 @@ jobs:
           name: XCAGI ${{ inputs.version }}
           body_path: artifacts/github-release-notes.md
           draft: true
+          prerelease: false
           files: |
             artifacts/**/*.exe
             artifacts/**/*.exe.blockmap

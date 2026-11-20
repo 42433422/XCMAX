@@ -252,6 +252,14 @@ describe('customerService API', () => {
     expect(mReq).toHaveBeenCalledWith('/api/customer-service/chat', expect.objectContaining({ method: 'POST' }))
   })
 
+  it('posts a customer decision to the original issue with the complete request', async () => {
+    const body = { decision: 'resolved', note: '已复测原链接。', idempotency_key: 'decision-77' } as const
+    await customerService.customerServiceIssueDecision(77, body)
+    expect(mReq).toHaveBeenCalledWith('/api/customer-service/issues/77/decision', expect.objectContaining({
+      method: 'POST', body: JSON.stringify(body),
+    }))
+  })
+
   it('customerServiceSessions', async () => {
     await customerService.customerServiceSessions()
     expect(mReq).toHaveBeenCalledWith('/api/customer-service/sessions', expect.objectContaining({ timeoutMs: 15_000 }))
@@ -270,6 +278,24 @@ describe('customerService API', () => {
   it('customerServiceTicketDetail', async () => {
     await customerService.customerServiceTicketDetail(1)
     expect(mReq).toHaveBeenCalledWith('/api/customer-service/tickets/1', expect.objectContaining({ timeoutMs: 15_000 }))
+  })
+
+  it('customerServiceTicketTranscript', async () => {
+    await customerService.customerServiceTicketTranscript(1)
+    expect(mReq).toHaveBeenCalledWith('/api/customer-service/tickets/1?include_transcript=true', { timeoutMs: 15_000 })
+  })
+
+  it('reads an older transcript page and a separately authenticated screenshot', async () => {
+    const { signal } = new AbortController()
+    await customerService.customerServiceTicketTranscript(1, 31, signal)
+    await customerService.customerServiceTicketTranscriptImage(1, 24, signal)
+    expect(mReq).toHaveBeenCalledWith(
+      '/api/customer-service/tickets/1?include_transcript=true&transcript_before_id=31',
+      { timeoutMs: 15_000, signal },
+    )
+    expect(mBlob).toHaveBeenCalledWith(
+      '/api/customer-service/tickets/1?transcript_image_message_id=24', { method: 'GET', signal },
+    )
   })
 
   it('customerServiceActions', async () => {

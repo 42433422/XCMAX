@@ -1,7 +1,6 @@
 import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useTpTemplateList } from './useTpTemplateList'
-import { useTpGridTool } from './useTpGridTool'
 import { useTpCreateFlow } from './useTpCreateFlow'
 import { useTpTemplateActions } from './useTpTemplateActions'
 import { buildScopeOptions, buildScopeTabs, getRequiredTermsByScope, getScopeIconClass } from './tpScopeRules'
@@ -42,8 +41,6 @@ export function assembleTemplatePreview() {
     templates: list.templates,
     exportScopedTemplates: list.exportScopedTemplates,
   })
-
-  const gridTool = useTpGridTool()
 
   const scopeTabs = computed(() => buildScopeTabs())
   const scopeOptions = computed(() => buildScopeOptions())
@@ -132,7 +129,6 @@ export function assembleTemplatePreview() {
     ...list,
     ...create,
     ...actions,
-    ...gridTool,
     scopeTabs,
     scopeOptions,
     // 无状态纯函数直出，供子组件模板使用

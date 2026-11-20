@@ -133,6 +133,7 @@ class _AgreementRow extends StatelessWidget {
         children: [
           GestureDetector(
             behavior: HitTestBehavior.opaque,
+            key: const ValueKey('auth-legal-consent-checkbox'),
             onTap: onToggle,
             child: _CheckBoxMark(checked: agreed, size: 20, radius: 4),
           ),
@@ -148,7 +149,7 @@ class _AgreementRow extends StatelessWidget {
           ),
           _AgreementLink(
             label: '服务协议',
-            url: _termsUrl,
+            url: mobileTermsUrl,
             openExternalUrl: openExternalUrl,
           ),
           Text(
@@ -162,7 +163,7 @@ class _AgreementRow extends StatelessWidget {
           ),
           _AgreementLink(
             label: '隐私政策',
-            url: _privacyUrl,
+            url: mobilePrivacyUrl,
             openExternalUrl: openExternalUrl,
           ),
         ],

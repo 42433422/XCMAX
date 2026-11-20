@@ -85,7 +85,14 @@ def _decode_response(
     return (
         raw,
         "",
-        {"model": model, "voice": voice, "format": fmt, "mime": mime, "provider": "mimo"},
+        {
+            "model": model,
+            "voice": voice,
+            "format": fmt,
+            "mime": mime,
+            "provider": "mimo",
+            "provider_usage": data.get("usage") if isinstance(data, dict) else None,
+        },
     )
 
 

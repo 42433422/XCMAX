@@ -318,6 +318,16 @@ def _dispatch_incident(event_id: int) -> None:
                     "unknown",
                     "completed",
                 }
+                if not reconcile:
+                    event = session.get(IncidentEvent, int(event_id))
+                    if event is not None and event.event_type == "ops.intake.customer_ticket":
+                        from modstore_server.incident_team_escalation_contract import active_context
+
+                        _, blocked = active_context(session, event)
+                        if blocked:
+                            row.dispatch_state, row.last_error = "completed", blocked
+                            session.commit()
+                            return
                 if str(row.dispatch_state) in {"dispatching", "unknown"}:
                     row.dispatch_state = "unknown"
                     row.last_error = (

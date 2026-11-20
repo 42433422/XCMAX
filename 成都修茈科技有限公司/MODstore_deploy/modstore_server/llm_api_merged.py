@@ -27,6 +27,7 @@ async def resolve_default_llm_route(
     provider: str = "",
     model: str = "",
     platform_only: bool = False,
+    operation: str = "chat",
 ) -> dict[str, _facade().Any]:
     """Resolve a chat-capable route and bind its credentials before any catalog await."""
     import asyncio
@@ -38,6 +39,7 @@ async def resolve_default_llm_route(
         resolve_credentials,
     )
     from modstore_server.llm_model_taxonomy import classify_model
+    from modstore_server.llm_operation_routes import select_operation_model
     from modstore_server.models import User as UserModel, get_session_factory
     from modstore_server.platform_model_config import read_state
 
@@ -78,6 +80,7 @@ async def resolve_default_llm_route(
             }
         return prefs, credentials, state
 
+    db.commit()
     prefs, credentials, state = await asyncio.to_thread(load)
     explicit_query = bool(provider or model)
     mode = "explicit" if explicit_query else str(prefs.get("mode") or "")
@@ -96,7 +99,15 @@ async def resolve_default_llm_route(
             key_source = "platform" if key else "none"
         if not key:
             return None
-        if m:
+        if operation == "vision":
+            try:
+                async with asyncio.timeout(4):
+                    m = await select_operation_model(uid, p, operation, key, base, model=m)
+            except TimeoutError:
+                return None
+            if not m:
+                return None
+        elif m:
             if classify_model(p, m) not in {"llm", "vlm"}:
                 if platform_only:
                     invalid(
@@ -127,6 +138,7 @@ async def resolve_default_llm_route(
             "ok": True,
             **snapshot.public_metadata(),
             "source": source,
+            "operation": operation,
             "route_token": chat_route_token(snapshot, uid),
         }
 
@@ -136,6 +148,8 @@ async def resolve_default_llm_route(
         if mode == "byok" and credentials[pref_p][2] != "user_override":
             invalid("所选 BYOK 不可用，未切换到收费平台", "NO_BYOK_CHAT_MODEL")
         selected = await select(pref_p, pref_m, "explicit" if provider else "preference")
+        if not selected and operation == "vision" and not explicit_query and pref_m:
+            selected = await select(pref_p, "", "operation_preference")
         if selected:
             return selected
         invalid("账户所选供应商没有可用聊天模型或密钥，请重新选择；未切换到收费平台")
@@ -259,11 +273,17 @@ async def resolve_chat_default(
     provider: str = "",
     model: str = "",
     platform_only: bool = False,
+    operation: str = _facade().Query("chat", pattern="^(chat|vision)$"),
 ):
     """Resolve account selection (or an explicit route) with a short-lived tool-round snapshot."""
     response.headers["Cache-Control"] = "no-store"
     return await _facade().resolve_default_llm_route(
-        db, int(user.id), provider=provider, model=model, platform_only=platform_only
+        db,
+        int(user.id),
+        provider=provider,
+        model=model,
+        platform_only=platform_only,
+        operation=operation,
     )
 
 
@@ -308,6 +328,7 @@ async def _fetch_catalog_provider_block(
                 api_key=api_key,
                 base_url=base_url,
                 force_refresh=force_refresh,
+                discover_operations=True,
             )
         mids: _facade().List[str] = list(block.get("models") or [])
         detailed = list(block.get("models_detailed") or [])
@@ -438,6 +459,25 @@ async def get_platform_runtime_route_catalog(
     if not result.get("ok"):
         raise _facade().HTTPException(400, str(result.get("error") or "catalog failed"))
     return result
+
+
+class LlmOperationProbeDTO(_facade().BaseModel):
+    provider: str = Field(..., min_length=1, max_length=64)
+    model: str = Field(..., min_length=1, max_length=256)
+    operation: str = Field(
+        ..., pattern="^(chat|vision|image_generation|speech_to_text|text_to_speech)$"
+    )
+
+
+@_facade().router.post("/admin/runtime-route/probe-operation")
+async def probe_llm_operation(
+    body: LlmOperationProbeDTO,
+    db: _facade().Session = _facade().Depends(_facade().get_db),
+    admin: _facade().User = _facade().Depends(_facade()._require_admin),
+):
+    from modstore_server.llm_operation_routes import probe_operation
+
+    return await probe_operation(db, admin.id, body.provider, body.model, body.operation)
 
 
 @_facade().router.get("/admin/runtime-route/quota")
@@ -1114,8 +1154,8 @@ class ChatMessageDTO(_facade().BaseModel):
 
 
 class LlmChatDTO(_facade().BaseModel):
-    provider: str
-    model: str
+    provider: str = ""
+    model: str = "auto"
     route_token: str | None = Field(None, max_length=20000, repr=False)
     config_revision: str | None = Field(None, max_length=128)
     key_source: str | None = None
@@ -1138,16 +1178,18 @@ class LlmChatDTO(_facade().BaseModel):
 
 
 class LlmImageDTO(_facade().BaseModel):
-    provider: str
-    model: str = "gpt-image-1"
+    provider: str = ""
+    model: str = ""
+    client_request_id: str | None = Field(None, pattern=r"^[A-Za-z0-9_.:-]{8,128}$")
     prompt: str = _facade().Field(..., min_length=1, max_length=4000)
     size: str = _facade().Field("1024x1024", max_length=32)
     n: int = _facade().Field(1, ge=1, le=4)
 
 
 class LlmVideoDTO(_facade().BaseModel):
-    provider: str
-    model: str
+    provider: str = _facade().Field(..., max_length=64)
+    model: str = _facade().Field(..., max_length=200)
+    client_request_id: str | None = Field(None, pattern=r"^[A-Za-z0-9_.:-]{8,128}$")
     prompt: str = _facade().Field(..., min_length=1, max_length=4000)
     size: str = _facade().Field("1280x720", max_length=32)
     seconds: int = _facade().Field(5, ge=1, le=30)
@@ -1159,7 +1201,20 @@ class LlmPptxDTO(_facade().BaseModel):
     filename: str = _facade().Field("ai-presentation.pptx", max_length=160)
 
 
-def _requested_chat_snapshot(db, user, body):
+async def _requested_chat_snapshot(db, user, body, messages):
+    if body.model.strip() == "auto":
+        from modstore_server.llm_operation_routes import bind_resolved_chat_route
+        from modstore_server.multimodal_llm import messages_have_multimodal_images
+
+        if body.route_token or body.config_revision is not None or body.key_source is not None:
+            raise HTTPException(400, "自动选模不能同时绑定模型快照")
+        result = await _facade().resolve_default_llm_route(
+            db,
+            int(user.id),
+            provider=body.provider,
+            operation="vision" if messages_have_multimodal_images(messages) else "chat",
+        )
+        return bind_resolved_chat_route(db, int(user.id), result)
     from modstore_server.llm_key_resolver import read_chat_route_token, resolve_chat_route_snapshot
 
     if not body.route_token and body.config_revision is None:
@@ -1193,25 +1248,41 @@ async def llm_chat(
     user: _facade().User = _facade().Depends(_facade()._get_current_user),
 ):
     msgs = [{"role": m.role, "content": m.content} for m in body.messages]
-    snapshot = _requested_chat_snapshot(db, user, body)
-    out = await _facade().run_billed_llm_chat(
-        request,
-        db,
-        user,
-        provider=body.provider,
-        model=body.model.strip(),
-        messages=msgs,
-        max_tokens=body.max_tokens,
-        conversation_id=body.conversation_id,
-        allow_failover=bool(body.allow_failover),
-        route_snapshot=snapshot,
-    )
+    original = None
+    out = None
+    if body.model.strip() == "auto" and body.client_request_id:
+        from modstore_server.llm_billing_recovery import existing_chat_receipt
+
+        original = {"operation": "native_auto_chat", "request": body.model_dump()}
+        out = await existing_chat_receipt(
+            db, int(user.id), body.client_request_id, original, request
+        )
+    if out is None:
+        snapshot = await _requested_chat_snapshot(db, user, body, msgs)
+        options = {"client_request_payload": original} if original is not None else {}
+        out = await _facade().run_billed_llm_chat(
+            request,
+            db,
+            user,
+            provider=snapshot.provider if snapshot else body.provider,
+            model=snapshot.model if snapshot else body.model.strip(),
+            messages=msgs,
+            max_tokens=body.max_tokens,
+            conversation_id=body.conversation_id,
+            allow_failover=bool(body.allow_failover),
+            route_snapshot=snapshot,
+            client_request_id=body.client_request_id,
+            **options,
+        )
     payload = {
         "ok": out["ok"],
         "content": out["content"],
         "conversation_id": out["conversation_id"],
         "usage": out["usage"],
+        "usage_details": out.get("usage_details", {}),
         "charge_amount": out["charge_amount"],
+        "pricing": out.get("pricing"),
+        "request_id": out.get("request_id"),
         "hold_no": out["hold_no"],
         "key_source": out["key_source"],
         "billed": out["billed"],
@@ -1240,13 +1311,25 @@ async def llm_chat_stream(
     ),
 ):
     msgs = [m.model_dump(exclude_none=True) for m in body.messages]
-    snapshot = _requested_chat_snapshot(db, user, body)
+    options = {}
+    if body.model.strip() == "auto" and body.client_request_id:
+        from modstore_server.llm_billed_chat import _replay, _stream_response
+        from modstore_server.llm_billing_recovery import existing_chat_receipt
+
+        original = {"operation": "native_auto_chat_stream", "request": body.model_dump()}
+        receipt = await existing_chat_receipt(
+            db, int(user.id), body.client_request_id, original, request
+        )
+        if receipt is not None:
+            return _stream_response(_replay(receipt))
+        options["client_request_payload"] = original
+    snapshot = await _requested_chat_snapshot(db, user, body, msgs)
     return await _chat_endpoint_facade.stream_billed_llm_chat(
         request,
         db,
         user,
-        provider=body.provider,
-        model=body.model.strip(),
+        provider=snapshot.provider if snapshot else body.provider,
+        model=snapshot.model if snapshot else body.model.strip(),
         messages=msgs,
         max_tokens=body.max_tokens,
         conversation_id=body.conversation_id,
@@ -1255,11 +1338,13 @@ async def llm_chat_stream(
         tool_choice=body.tool_choice,
         route_snapshot=snapshot,
         client_request_id=body.client_request_id,
+        **options,
     )
 
 
 @_chat_endpoint_facade.router.get("/chat/requests/{client_request_id}")
-def llm_chat_request_state(
+async def llm_chat_request_state(
+    request: _chat_endpoint_facade.Request,
     client_request_id: str,
     db: _chat_endpoint_facade.Session = _chat_endpoint_facade.Depends(_chat_endpoint_facade.get_db),
     user: _chat_endpoint_facade.User = _chat_endpoint_facade.Depends(
@@ -1273,43 +1358,50 @@ def llm_chat_request_state(
     if not ledger.KEY_PATTERN.fullmatch(client_request_id):
         raise _chat_endpoint_facade.HTTPException(400, "请求键无效")
     state = ledger.lookup(db, int(user.id), client_request_id, _chat_total_deadline_s())
+    if state == "settling":
+        from modstore_server.llm_billing_recovery import recover_receipt
+
+        recovered = await recover_receipt(
+            db,
+            int(user.id),
+            client_request_id,
+            _facade().authorization_header(request),
+            request=request,
+        )
+        if recovered is not None:
+            state = "completed"
     return {"client_request_id": client_request_id, "state": state}
 
 
 @_facade().router.post("/image")
 async def llm_image(
+    request: _facade().Request,
     body: LlmImageDTO,
     db: _facade().Session = _facade().Depends(_facade().get_db),
     user: _facade().User = _facade().Depends(_facade()._get_current_user),
 ):
-    if body.provider not in _facade().KNOWN_PROVIDERS:
-        raise _facade().HTTPException(400, "unknown provider")
-    api_key, key_source = _facade().resolve_api_key(db, user.id, body.provider)
-    if not api_key:
-        raise _facade().HTTPException(400, f"供应商「{body.provider}」未配置可用 API Key。")
-    base = (
-        _facade().resolve_base_url(db, user.id, body.provider)
-        if body.provider in _facade().OAI_COMPAT_OPENAI_STYLE_PROVIDERS
-        else None
-    )
-    result = await _facade().image_dispatch(
-        body.provider,
-        api_key=api_key,
-        base_url=base,
-        model=body.model.strip() or "gpt-image-1",
+    from modstore_server.llm_billed_image import run_billed_image
+
+    receipt = await run_billed_image(
+        request,
+        db,
+        int(user.id),
+        provider=body.provider.strip().lower(),
+        model=body.model.strip(),
         prompt=body.prompt.strip(),
         size=body.size.strip() or "1024x1024",
-        n=body.n,
+        count=body.n,
+        client_request_id=body.client_request_id,
     )
-    if not result.get("ok"):
-        raise _facade().HTTPException(502, result.get("error") or "image upstream error")
-    return {
-        "ok": True,
-        "images": result.get("images") or [],
-        "provider": body.provider,
-        "model": body.model,
-        "key_source": key_source,
-    }
+    if not receipt["ok"]:
+        raise HTTPException(
+            receipt["status"],
+            {
+                "message": receipt["message"],
+                "request_id": receipt["request_id"],
+            },
+        )
+    return receipt
 
 
 @_facade().router.post("/video")
@@ -1318,36 +1410,100 @@ async def llm_video(
     db: _facade().Session = _facade().Depends(_facade().get_db),
     user: _facade().User = _facade().Depends(_facade()._get_current_user),
 ):
-    if body.provider not in _facade().KNOWN_PROVIDERS:
-        raise _facade().HTTPException(400, "unknown provider")
-    api_key, key_source = _facade().resolve_api_key(db, user.id, body.provider)
+    from modstore_server import llm_client_requests as ledger
+    from modstore_server.llm_billing_values import media_usage_receipt
+    from modstore_server.llm_key_resolver import resolve_credentials
+
+    provider = body.provider
+    model = body.model.strip()
+    prompt = body.prompt.strip()
+    size = body.size.strip() or "1280x720"
+    if provider not in _facade().KNOWN_PROVIDERS or not model or not prompt:
+        raise HTTPException(400, "有效的供应商、模型和提示词必填")
+    api_key, base, key_source = resolve_credentials(db, int(user.id), provider)
     if not api_key:
-        raise _facade().HTTPException(400, f"供应商「{body.provider}」未配置可用 API Key。")
-    base = (
-        _facade().resolve_base_url(db, user.id, body.provider)
-        if body.provider in _facade().OAI_COMPAT_OPENAI_STYLE_PROVIDERS
-        else None
-    )
-    result = await _facade().video_dispatch(
-        body.provider,
-        api_key=api_key,
-        base_url=base,
-        model=body.model.strip(),
-        prompt=body.prompt.strip(),
-        size=body.size.strip() or "1280x720",
-        seconds=body.seconds,
-    )
+        raise HTTPException(400, f"供应商「{provider}」未配置可用 API Key。")
+    row = None
+    request_id = None
+    if key := body.client_request_id:
+        digest = ledger.request_digest(
+            {
+                "operation": "video_generation",
+                "provider": provider,
+                "model": model,
+                "prompt": prompt,
+                "size": size,
+                "seconds": body.seconds,
+            }
+        )
+        outcome, value = ledger.begin(db, int(user.id), key, digest, 180)
+        if outcome == "replay":
+            if not value["ok"]:
+                raise HTTPException(502, "视频供应商已拒绝原请求")
+            return value
+        if outcome != "run":
+            raise HTTPException(409, {"message": "视频提交状态待核对", "state": outcome})
+        row = value
+        request_id = ledger.attempt_request_id(int(user.id), key, row.attempts)
+        ledger.mark_settling(db, row)
+    try:
+        result = await _facade().video_dispatch(
+            provider,
+            api_key=api_key,
+            base_url=base,
+            model=model,
+            prompt=prompt,
+            size=size,
+            seconds=body.seconds,
+        )
+    except RECOVERABLE_ERRORS as exc:
+        if row is not None:
+            raise HTTPException(
+                409, {"message": "视频提交状态待核对", "request_id": request_id}
+            ) from exc
+        raise
     if not result.get("ok"):
-        raise _facade().HTTPException(502, result.get("error") or "video upstream error")
-    return {
+        if row is not None and result.get("status") not in {400, 401, 403, 404, 422, 429}:
+            raise HTTPException(409, {"message": "视频提交状态待核对", "request_id": request_id})
+        if row is not None:
+            ledger.finish(db, row, {"ok": False})
+        raise HTTPException(502, result.get("error") or "video upstream error")
+    from modstore_server.llm_media_proxy import validated_video_fields
+
+    fields = validated_video_fields(result)
+    if fields is None:
+        raise HTTPException(
+            409 if row is not None else 502,
+            {"message": "视频供应商回执无法核对", "request_id": request_id},
+        )
+    job_id, status, preview = fields
+    if row is not None and not job_id and not preview:
+        raise HTTPException(
+            409, {"message": "视频供应商未返回可核对的任务号", "request_id": request_id}
+        )
+    raw = result.get("raw")
+    receipt = {
         "ok": True,
-        "provider": body.provider,
+        "provider": provider,
         "model": body.model,
         "key_source": key_source,
-        "job_id": result.get("job_id") or "",
-        "status": result.get("status") or "pending",
-        "preview_url": result.get("preview_url") or "",
+        "job_id": job_id,
+        "status": status,
+        "preview_url": preview,
+        "request_id": request_id,
+        "billing": media_usage_receipt(
+            "video_generation",
+            provider,
+            model,
+            key_source,
+            raw.get("usage") if isinstance(raw, dict) else None,
+            pending=status.lower()
+            not in {"completed", "succeeded", "success", "failed", "cancelled", "canceled"},
+        ),
     }
+    if row is not None:
+        ledger.finish(db, row, receipt)
+    return receipt
 
 
 @_facade().router.post("/pptx")

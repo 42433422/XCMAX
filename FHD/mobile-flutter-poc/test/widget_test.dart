@@ -2575,96 +2575,39 @@ void main() {
     expect(find.text('稍后'), findsNothing);
   });
 
-  testWidgets('legal consent page matches Flutter first-run agreement shell', (
-    WidgetTester tester,
-  ) async {
-    var accepted = false;
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.light(),
-        home: LegalConsentScreen(onAccepted: () => accepted = true),
+  testWidgets('combined legal document must be readable before consent',
+      (tester) async {
+    final opened = <Uri>[];
+    var readable = false;
+    var saves = 0;
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.light(),
+      home: LegalConsentScreen(
+        onAccepted: () async {
+          saves++;
+        },
+        openDocument: (_, __, uri) async {
+          opened.add(uri);
+          return readable;
+        },
       ),
-    );
-
-    expect(find.text('XCAGI'), findsOneWidget);
-    expect(find.image(const AssetImage(appLauncherIconAsset)), findsOneWidget);
-    expect(find.text('AI 工作平台'), findsOneWidget);
-    expect(find.text('我已阅读并同意'), findsOneWidget);
-    expect(find.text('《用户协议》'), findsOneWidget);
-    expect(find.text('《隐私政策》'), findsOneWidget);
-    expect(find.text('请先同意协议'), findsOneWidget);
-    expect(find.byTooltip('关于'), findsNothing);
-
-    await tester.tap(find.text('我已阅读并同意'));
-    await tester.pump();
-    await tester.tap(find.text('进入 XCAGI'));
+    ));
+    FilledButton agree() => tester.widget(find.widgetWithText(
+          FilledButton,
+          '同意并继续',
+        ));
+    expect(agree().onPressed, isNull);
+    await tester.tap(find.text('《用户协议与隐私政策》'));
     await tester.pumpAndSettle();
-    expect(accepted, isTrue);
-  });
-
-  testWidgets('legal consent page follows Flutter dark theme tokens', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.light(),
-        darkTheme: AppTheme.dark(),
-        themeMode: ThemeMode.dark,
-        home: const LegalConsentScreen(),
-      ),
-    );
-
-    final colors = AppTheme.colors(
-      tester.element(find.byType(LegalConsentScreen)),
-    );
-    final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
-    final title = tester.widget<Text>(find.text('XCAGI'));
-    final terms = tester.widget<Text>(find.text('《用户协议》'));
-
-    expect(scaffold.backgroundColor, colors.brand);
-    expect(title.style?.color, colors.chatUserBubbleText);
-    expect(terms.style?.color, colors.chatUserBubbleText);
-    expect(terms.style?.decorationColor, colors.chatUserBubbleText);
-  });
-
-  testWidgets('legal consent persists Flutter accepted version', (
-    WidgetTester tester,
-  ) async {
-    final api = _FakeLegalApi();
-    var accepted = false;
-
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.light(),
-        home: LegalConsentScreen(
-          api: api,
-          legalVersion: 'legal-2026',
-          onAccepted: () => accepted = true,
-        ),
-      ),
-    );
-
-    await tester.tap(find.text('我已阅读并同意'));
+    expect(agree().onPressed, isNull);
+    expect(saves, 0);
+    readable = true;
+    await tester.tap(find.text('《用户协议与隐私政策》'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('进入 XCAGI'));
+    await tester.tap(find.text('同意并继续'));
     await tester.pumpAndSettle();
-
-    expect(api.acceptedVersions, ['legal-2026']);
-    expect(accepted, isTrue);
-  });
-
-  testWidgets('legal agreement row toggles without opening webview', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(theme: AppTheme.light(), home: const LegalConsentScreen()),
-    );
-
-    await tester.tap(find.text('《用户协议》'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('进入 XCAGI'), findsOneWidget);
-    expect(find.byType(DesktopToolWebViewScreen), findsNothing);
+    expect(saves, 1);
+    expect(opened.map((uri) => uri.path), ['/privacy.html', '/privacy.html']);
   });
 
   testWidgets(
@@ -2785,6 +2728,19 @@ void main() {
     expect(find.text('记住密码'), findsOneWidget);
     expect(find.text('免登录'), findsOneWidget);
 
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, '进入企业工作台'),
+          )
+          .onPressed,
+      isNull,
+    );
+    await tester.ensureVisible(
+        find.byKey(const ValueKey('auth-legal-consent-checkbox')));
+    await tester.tap(find.byKey(const ValueKey('auth-legal-consent-checkbox')));
+    await tester.pump();
+    await tester.ensureVisible(find.widgetWithText(FilledButton, '进入企业工作台'));
     await tester.tap(find.widgetWithText(FilledButton, '进入企业工作台'));
     await tester.pumpAndSettle();
 
@@ -2824,6 +2780,19 @@ void main() {
           repository: _FakeAuthRepository(api), onDone: () => completed = true),
     ));
     await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, '进入企业工作台'),
+          )
+          .onPressed,
+      isNull,
+    );
+    await tester.ensureVisible(
+        find.byKey(const ValueKey('auth-legal-consent-checkbox')));
+    await tester.tap(find.byKey(const ValueKey('auth-legal-consent-checkbox')));
+    await tester.pump();
+    await tester.ensureVisible(find.widgetWithText(FilledButton, '进入企业工作台'));
     await tester.tap(find.widgetWithText(FilledButton, '进入企业工作台'));
     await tester.pumpAndSettle();
     expect(completed, isTrue);
@@ -2861,8 +2830,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(opened, [
-      Uri.parse('https://xiu-ci.com/legal/terms'),
-      Uri.parse('https://xiu-ci.com/legal/privacy'),
+      Uri.parse('https://xiu-ci.com/privacy.html'),
+      Uri.parse('https://xiu-ci.com/privacy.html'),
     ]);
     expect(find.byType(DesktopToolWebViewScreen), findsNothing);
   });
@@ -6409,15 +6378,6 @@ class _FakeAuthRepository extends MobileRepository {
       rememberPassword: rememberPass,
       autoLogin: autoLogin,
     );
-  }
-}
-
-class _FakeLegalApi extends MobileApiClient {
-  final List<String> acceptedVersions = [];
-
-  @override
-  Future<void> saveLegalAcceptedVersion(String version) async {
-    acceptedVersions.add(version.trim());
   }
 }
 

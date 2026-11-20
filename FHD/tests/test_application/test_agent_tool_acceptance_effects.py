@@ -6,7 +6,6 @@ import os
 import sqlite3
 import threading
 import time
-from contextlib import contextmanager
 
 import jwt
 import pytest
@@ -34,7 +33,6 @@ from app.application.agent_orchestrator.tool_permission import (
     register_tenant_tool,
 )
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
-from app.utils.operational_errors import BOUNDARY_ERRORS
 from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 _TRACE_FIELDS = {
@@ -87,19 +85,6 @@ def business(tmp_path, monkeypatch, trusted_actor):
         permissions=["business_db.read", "customer.view", "business_db.write", "tool.ocr.request"],
     )
 
-    @contextmanager
-    def get_db():
-        session = actor.factory()
-        try:
-            yield session
-            session.commit()
-        except BOUNDARY_ERRORS:
-            session.rollback()
-            raise
-        finally:
-            session.close()
-
-    monkeypatch.setattr("app.db.session.get_db", get_db)
     monkeypatch.setattr("app.application.customer_app_service.get_customers_session", actor.factory)
     repo = InMemoryAgentRunRepository()
     monkeypatch.setattr(
@@ -653,7 +638,7 @@ def test_errors_are_not_reported_as_success(business, local_tools, monkeypatch):
     def fail_db():
         raise OperationalError("select", {}, Exception("connection reset"))
 
-    monkeypatch.setattr("app.db.session.get_db", fail_db)
+    monkeypatch.setattr("app.db.session.SessionLocal", fail_db)
     failed = _execute(
         AgentStep(
             node_id="db",

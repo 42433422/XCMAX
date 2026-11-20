@@ -93,7 +93,11 @@ def recovery_plan(
             status = re.search(r"处理结果：`([^`]+)`", body)
             status_value = status.group(1) if status else "observing"
             run = re.search(
-                re.escape(f"https://github.com/{repo}/actions/runs/") + r"(\d+)\b", body
+                r"^- 工作流："
+                + re.escape(f"https://github.com/{repo}/actions/runs/")
+                + r"(\d+)\s*$",
+                body,
+                re.M,
             )
             plan = {
                 "state": "unresolved",
@@ -116,6 +120,68 @@ def recovery_plan(
             comments,
         )
     return plan
+
+
+def original_repair_result(source, repo, number, get):
+    if source.workflow_path not in freshness.CODE_CI_PATHS or source.head_branch == "main":
+        return None
+    comments = list(freshness.pages(get, f"/repos/{repo}/issues/{number}/comments"))
+    intent = para.repair.prior_intent(repo, number, source.head_branch, comments)
+    if not intent:
+        return None
+    target, repaired_sha, control_task, para_task, worker_run = intent
+    result = {
+        "state": "observing",
+        "reason": "original_pr_awaiting_merge",
+        "pull_request": target.number,
+        "repaired_sha": repaired_sha,
+        "control_task_id": control_task,
+        "para_task_id": para_task,
+        "github_worker_run_id": worker_run,
+    }
+    if worker_run < 1:
+        return {**result, "state": "unresolved", "reason": "original_pr_cloud_receipt_missing"}
+    if (target.run_id, target.old_sha, target.workflow_id, target.workflow_path) != (
+        source.run_id,
+        source.source_sha,
+        source.workflow_id,
+        source.workflow_path,
+    ):
+        return {**result, "state": "unresolved", "reason": "original_pr_source_receipt_mismatch"}
+    pr = para.repair.open_pr(repo, target, None, get, authorize=False)
+    if pr.get("merged") is not True:
+        return result
+    head, merged = pr["head"]["sha"], pr.get("merge_commit_sha")
+    if not para.repair.SHA.fullmatch(str(merged or "")):
+        return {**result, "reason": "original_pr_merge_commit_missing"}
+    if head != repaired_sha:
+        lineage = freshness._get(get, f"/repos/{repo}/compare/{repaired_sha}...{head}")
+        if lineage.get("merge_base_commit", {}).get("sha") != repaired_sha:
+            return {**result, "reason": "original_pr_repair_not_in_merged_head"}
+    ci_run_id = para.repair.new_ci_run(repo, target, head, get)
+    if not ci_run_id:
+        return {**result, "reason": "original_pr_merge_ci_missing"}
+    run = freshness._get(get, f"/repos/{repo}/actions/runs/{ci_run_id}")
+    if (
+        run.get("id") != ci_run_id
+        or run.get("head_sha") != head
+        or run.get("workflow_id") != target.workflow_id
+        or run.get("path") != target.workflow_path
+        or run.get("status") != "completed"
+        or run.get("conclusion") != "success"
+    ):
+        return {**result, "reason": "original_pr_merge_ci_unconfirmed"}
+    comparison = freshness._get(get, f"/repos/{repo}/compare/{merged}...main")
+    if comparison.get("merge_base_commit", {}).get("sha") != merged:
+        return {**result, "reason": "original_pr_merge_not_on_main"}
+    return {
+        **result,
+        "state": "recovered",
+        "reason": "original_pr_merged_and_read_back",
+        "merged_head_sha": head,
+        "merge_commit_sha": merged,
+        "ci_run_id": ci_run_id,
+    }
 
 
 def reconcile_one(issue: dict[str, Any], *, repo: str, get, write, dispatch, dry_run: bool) -> dict:
@@ -148,6 +214,11 @@ def reconcile_one(issue: dict[str, Any], *, repo: str, get, write, dispatch, dry
         return result
     if source.action == freshness.SKIP:
         result["state"] = source.disposition
+        original = original_repair_result(source, repo, number, get)
+        if original:
+            result.update(original)
+            if result["state"] != "recovered":
+                return result
         if dry_run:
             return result
         fresh = freshness.reconcile_source(issue, repo, get)
@@ -159,10 +230,16 @@ def reconcile_one(issue: dict[str, Any], *, repo: str, get, write, dispatch, dry
             }
         body = (
             f"<!-- self-heal-reconcile:v1 {json.dumps(result, sort_keys=True)} -->\n"
-            f"原 CI 事件 `{source.run_id}/{source.run_attempt}` 对账：`{source.disposition}`。"
-            f"依据：`{source.reason}`；source `{source.source_sha}`，current `{source.current_sha}`。"
-            "\n替代表示旧来源不再需要派单，不表示修复或发布验收通过。"
+            f"原 CI 事件 `{source.run_id}/{source.run_attempt}` 对账：`{result['state']}`。"
+            f"依据：`{result['reason']}`；source `{source.source_sha}`，current `{source.current_sha}`。"
         )
+        if original:
+            body += (
+                f"\n原 PR #{original['pull_request']} 已合入 main，提交 `{original['merge_commit_sha']}`。"
+                f"\nCI：https://github.com/{repo}/actions/runs/{original['ci_run_id']}"
+            )
+        elif source.disposition == "superseded":
+            body += "\n旧来源无需继续派单，修复及发布状态须另行核验。"
         status, _ = write("POST", f"/repos/{repo}/issues/{number}/comments", {"body": body})
         if status != 201:
             return {**result, "state": "unresolved", "reason": "closure_receipt_failed"}
@@ -171,9 +248,7 @@ def reconcile_one(issue: dict[str, Any], *, repo: str, get, write, dispatch, dry
             f"/repos/{repo}/issues/{number}",
             {
                 "state": "closed",
-                "state_reason": (
-                    "completed" if source.disposition == "recovered" else "not_planned"
-                ),
+                "state_reason": ("completed" if result["state"] == "recovered" else "not_planned"),
             },
         )
         return (

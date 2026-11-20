@@ -29,6 +29,8 @@
 
 ## 2. 第一版做不到、需要后续的部分
 
+- **自动修复安全暂停（2026-11-21）**：`original_pr_repair` 与持久客户反馈来源的 `customer_feedback_repair` 不再启动模型、发布新候选或将旧候选推回原分支；已完成执行、已应用写入准备记录及已存在的匹配 PR 只回读核对。客户反馈流程保留原任务并显示 `waiting_credential_isolation`，新派工在创建 issue、workflow 和执行任务前暂停，旧 incident 不再把私有复现交给模型。API key 环境白名单、登录文件权限、同用户本地代理和提示词中的“仅当数据”声明都不构成不可导出的任务凭据隔离。恢复前必须接入独立受信执行边界，让 PR 或客户内容控制的工具无法读取或导出真实模型凭据；当前没有环境开关或管理员审批可以解除暂停。普通非 repair 任务继续沿用既有流程。
+- 可信候选发布器使用仓库既有的 [Gitleaks 8.18.4（MIT）](https://github.com/gitleaks/gitleaks/releases/tag/v8.18.4)，发布前扫描 `base..candidate` 的全部新增提交、合并解冲突内容及提交消息。规则和空忽略表来自可信发布环境，不接受候选配置、忽略文件或 `gitleaks:allow` 注释；扫描器缺失、版本错误或扫描失败一律拒绝发布。扫描只识别已知秘密形态，不能替代上述隔离，也不能保证识别任意编码后的凭据。
 - Para 云端不在本仓库，无法新增「凭授权换凭据」接口；授权目前只在 MODstore 与 Mac 代理两端校验和审计，签名供下一版兑换接口使用。
 - `MODSTORE_CREDENTIAL_GRANT_SIGNING_KEY` 未配置时，签名用进程内随机钥，只在本进程内可校验。
 - Mac 子进程「只给作用域内密钥」默认关闭（`XCMAX_CREDENTIAL_SCOPED_CHILD_ENV=1` 开启），需先在 Mac 上确认 Codex 只依赖作用域内变量或 `~/.codex` 登录态。

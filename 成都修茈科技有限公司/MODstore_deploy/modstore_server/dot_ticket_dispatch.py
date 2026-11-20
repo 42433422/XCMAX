@@ -212,7 +212,8 @@ def ticket_mode(req: Dict[str, Any], fields: Dict[str, Any]) -> str:
 
     triage = triage_result(req, fields)
     text = " ".join(
-        str(fields.get(key) or "") for key in ("title", "summary", "intent", "issue_domain")
+        str(fields.get(key) or "")
+        for key in ("title", "summary", "intent", "issue_domain", "_retort_risk_context")
     )
     if (
         bool(req.get("report_only"))
@@ -315,11 +316,17 @@ def _incident_contract(req: Dict[str, Any]) -> Dict[str, Any] | None:
                 ):
                     raise DoltIncidentContractError("retry_handoff_missing")
                 handoffs.append(previous_fix)
+            feedback = None
+            if source.get("retort_run_id"):
+                from modstore_server.retort_customer_feedback import private_execution_context
+
+                feedback = private_execution_context(db, event_id, source)
             return {
                 "role": role,
                 "source": source,
                 "handoffs": handoffs,
                 "review": actions,
+                "customer_feedback": feedback,
             }
     except DoltIncidentContractError:
         raise
@@ -329,8 +336,14 @@ def _incident_contract(req: Dict[str, Any]) -> Dict[str, Any] | None:
         ) from exc
 
 
-def _incident_prompt(contract: Dict[str, Any], req: Dict[str, Any]) -> str:
+def _incident_prompt(
+    contract: Dict[str, Any], req: Dict[str, Any], tool_name: str = DOLT_TOOL
+) -> str:
     """Project only bounded handoff fields through the existing PII redactor."""
+    if contract.get("customer_feedback"):
+        from modstore_server.retort_customer_feedback import CREDENTIAL_BLOCK
+
+        raise DoltIncidentContractError(CREDENTIAL_BLOCK)
     sensitive = _sensitive_values(contract["source"])
 
     def clean(value: Any, limit: int = 1000) -> str:
@@ -441,8 +454,8 @@ def _incident_prompt(contract: Dict[str, Any], req: Dict[str, Any]) -> str:
                         )
                         if key in budget
                     },
-                    "executor": "dolt",
-                    "codex_controls": "unsupported",
+                    "executor": tool_name,
+                    "codex_controls": "requested" if tool_name == "codex" else "unsupported",
                     "output_limit_enforced": False,
                 },
                 ensure_ascii=False,
@@ -494,24 +507,54 @@ def prepare_dolt_ticket_payload(
 ) -> Dict[str, Any]:
     """派给 dolt 的客服工单：加控制标记、选模式、只带脱敏内容；其余载荷原样返回。"""
 
-    if tool_name != DOLT_TOOL or not is_customer_ticket(req):
+    raw = _raw(req)
+    retort = (
+        raw.get("event_type") == "ops.retort.evolution"
+        and raw.get("_trusted_incident_team_execution") is True
+    )
+    if retort:
+        contract = _incident_contract(req)
+        if not contract or not contract.get("customer_feedback"):
+            return payload
+        if tool_name not in {DOLT_TOOL, "codex", "opencode"}:
+            raise DoltIncidentContractError("feedback_private_executor_required")
+    elif tool_name == DOLT_TOOL and is_customer_ticket(req):
+        contract = _incident_contract(req)
+    else:
         return payload
     fields = ticket_fields(req)
-    contract = _incident_contract(req)
     if contract:
         fields = {**fields, **contract["source"], "role": contract["role"]}
+        feedback = contract.get("customer_feedback") if retort else None
+        if feedback:
+            fields["intent"] = feedback.get("intent", "")
+            fields["_retort_risk_context"] = " ".join(feedback.get("reproduction") or [])
     mode = ticket_mode(req, fields)
     if contract and contract["role"] in {"scout", "verify", "escalation_review"}:
         mode = MODE_REPORT_ONLY
     ticket_no = re.sub(r"[^A-Za-z0-9_\-]", "", str(fields.get("ticket_no") or ""))[:64] or "-"
+    marker = control_marker(fields, req)
+    if retort:
+        if not contract:
+            raise DoltIncidentContractError("feedback_contract_missing")
+        workspace = contract["source"].get("github_workspace") or {}
+        request_id, attempt = str(workspace.get("request_id") or ""), str(
+            raw.get("attempt_id") or ""
+        )
+        if not request_id or not re.fullmatch(r"[0-9a-f]{32}", attempt):
+            raise DoltIncidentContractError("feedback_publication_identity_missing")
+        marker = f"[xcmax:{hashlib.sha256(request_id.encode()).hexdigest()[:32]}:{attempt}]"
+        if not str(payload.get("title") or "").startswith(marker):
+            raise DoltIncidentContractError("feedback_publication_marker_mismatch")
     # dot 不合并、不用 MODstore 本机工作区：去掉自动合并和本地路径。
     out = {k: v for k, v in payload.items() if k not in {"auto_merge", "workspace_path"}}
+    executor_label = "dot" if tool_name == DOLT_TOOL else tool_name
     out.update(
-        title=f"{control_marker(fields, req)} [dot:{mode}] 客服工单 {ticket_no}"[:240],
+        title=f"{marker} [{executor_label}:{mode}] 客服工单 {ticket_no}"[:240],
         prompt=build_dolt_prompt(fields, req, mode)
-        + ("\n" + _incident_prompt(contract, req) if contract else ""),
+        + ("\n" + _incident_prompt(contract, req, tool_name) if contract else ""),
         subtask_title=f"{mode}: 客服工单 {ticket_no}"[:240],
         report_only=mode == MODE_REPORT_ONLY,
-        tool_name=DOLT_TOOL,
+        tool_name=tool_name,
     )
     return out

@@ -128,6 +128,10 @@
   gap: 10px;
 }
 
+.cs-transcript-more {
+  align-self: center;
+}
+
 .cs-message {
   display: flex;
 }
@@ -232,6 +236,12 @@
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--cs-accent) 16%, transparent);
 }
 
+.cs-decision-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .cs-composer__footer {
   margin-top: 8px;
 }
@@ -305,6 +315,12 @@
   background: transparent;
   color: var(--wb-text-primary, #1d1d1f);
   border: 1px solid var(--cs-border);
+}
+
+.cs-bubble__confirmation {
+  margin-top: 8px;
+  text-align: left;
+  white-space: normal;
 }
 
 .cs-link {

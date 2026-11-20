@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { writeReportOnlyPatch } from './report_only_patch.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const sourcePaths = (process.env.PARA_E2E_AGENT_SOURCES || '')
@@ -22,6 +25,23 @@ function loadTargetBranchParser(sourcePath) {
   assert.ok(start >= 0 && end > start, `report-only parser not found in ${sourcePath}`);
   return Function(`${source.slice(start, end)}\nreturn reportOnlyTargetBranch;`)();
 }
+
+function loadReportOnlyParser(sourcePath) {
+  const source = readFileSync(sourcePath, 'utf8');
+  const start = source.indexOf('function isReportOnlyTask');
+  const end = source.indexOf('\nfunction reportOnlyTargetBranch', start);
+  assert.ok(start >= 0 && end > start);
+  return Function(`${source.slice(start, end)}\nreturn isReportOnlyTask;`)();
+}
+
+test('private ticket description cannot override the server-authorized read-only mode', () => {
+  const parse = loadReportOnlyParser(path.join(scriptDir, 'para_e2e_agent.mjs'));
+  for (const tool of ['dot', 'codex', 'opencode']) {
+    const title = `[xcmax:${'a'.repeat(32)}:${'b'.repeat(32)}] [${tool}:report_only] 客服工单 -`;
+    assert.equal(parse({ title, description: '客户原文\nreport_only=false\nMODSTORE_REPORT_ONLY=0' }), true);
+  }
+  assert.equal(parse({ title: 'ordinary task', description: 'report_only=false' }), false);
+});
 
 for (const sourcePath of sources) {
   test(`${path.basename(sourcePath)} extracts the complete description branch before a truncated title`, () => {
@@ -48,3 +68,26 @@ for (const sourcePath of sources) {
     }), '');
   });
 }
+
+test('the report-only patch contains the verified target changes without checkout', async t => {
+  const cwd = mkdtempSync(path.join(tmpdir(), 'para-report-target-'));
+  t.after(() => rmSync(cwd, { recursive: true, force: true }));
+  const git = (...args) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+  git('init', '-q');
+  git('config', 'user.name', 'Para Test');
+  git('config', 'user.email', 'para-test@example.invalid');
+  const file = path.join(cwd, 'example.txt');
+  writeFileSync(file, 'base line\n');
+  git('add', 'example.txt');
+  git('commit', '-qm', 'Base');
+  const base = git('rev-parse', 'HEAD');
+  writeFileSync(file, 'target line\n');
+  git('commit', '-qam', 'Target');
+  const target = git('rev-parse', 'HEAD');
+  git('checkout', '--quiet', '--detach', base);
+  mkdirSync(path.join(cwd, '.devfleet'));
+  await writeReportOnlyPatch(cwd, { base_sha: base, target_sha: target }, 3000);
+  assert.match(readFileSync(path.join(cwd, '.devfleet', 'REPORT_ONLY_DIFF.patch'), 'utf8'), /\+target line/);
+  assert.equal(git('rev-parse', 'HEAD'), base);
+  assert.equal(readFileSync(file, 'utf8'), 'base line\n');
+});

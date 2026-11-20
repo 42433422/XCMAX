@@ -1,13 +1,13 @@
 <template>
   <div class="conv-panel">
     <div class="conv-panel-toolbar">
-      <button type="button" class="btn btn-primary btn-sm" :disabled="loading" @click="$emit('new')">
+      <button type="button" class="btn btn-primary btn-sm" @click="$emit('new')">
         <i class="fa fa-plus" aria-hidden="true"></i> {{ $t('chat.newConversation') }}
       </button>
       <button
         type="button"
         class="btn btn-secondary btn-sm"
-        :disabled="loading || sessions.length === 0"
+        :disabled="loading || sessions.length === 0 || sessions.some(session => isChatConversationBusy(session.activity))"
         @click="$emit('clear')"
       >
         {{ $t('chat.clear') }}
@@ -15,7 +15,7 @@
     </div>
 
     <div class="conv-panel-body">
-      <div v-if="loading" class="conv-empty">{{ $t('chat.historyLoading') }}</div>
+      <div v-if="loading && !sessions.length" class="conv-empty">{{ $t('chat.historyLoading') }}</div>
       <div v-if="error" class="conv-error">
         <span class="conv-error-text">{{ error }}</span>
         <button type="button" class="btn btn-secondary btn-sm" @click="$emit('refresh')">{{ $t('chat.retry') }}</button>
@@ -24,7 +24,7 @@
         {{ $t('chat.historyEmpty') }}
         <div class="conv-empty-tip">{{ $t('chat.historyEmptyTip') }}</div>
       </div>
-      <template v-if="!loading && sessions.length">
+      <template v-if="sessions.length">
         <div v-for="group in groupedSessions" :key="group.key" class="conv-group">
           <div class="conv-group-label">{{ group.label }}</div>
           <ul class="conv-list">
@@ -42,6 +42,9 @@
                 <span class="conv-item-title">{{ session.title || $t('chat.newSession') }}</span>
                 <span class="conv-item-meta">
                   <span>{{ $t('chat.messageCount', { count: session.message_count || 0 }) }}</span>
+                  <span v-if="session.activity" class="conv-item-status" :data-status="session.activity" aria-live="polite">
+                    {{ $t(`chat.conversationStatus.${session.activity}`) }}
+                  </span>
                   <span v-if="session.is_local_only" class="conv-item-local">{{ $t('chat.localOnly') }}</span>
                 </span>
               </button>
@@ -57,6 +60,7 @@
                 <button
                   type="button"
                   class="conv-action-btn conv-action-btn--danger"
+                  :disabled="isChatConversationBusy(session.activity)"
                   :title="$t('chat.deleteSession')"
                   @click.stop="confirmDelete(session)"
                 >
@@ -97,6 +101,7 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { HistorySessionItem } from '@/composables/useChatSessionHistory'
+import { isChatConversationBusy } from '@/composables/useChatSessionActivity'
 
 useI18n()
 
@@ -295,10 +300,23 @@ function confirmDelete(session: HistorySessionItem) {
 
 .conv-item-meta {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   font-size: 12px;
   color: var(--app-text-muted, #86909c);
+}
+
+.conv-item-status {
+  white-space: nowrap;
+}
+
+.conv-item-status:is([data-status="submitted"], [data-status="streaming"]) {
+  color: var(--app-interactive, #0052d9);
+}
+
+.conv-item-status:is([data-status="error"], [data-status="review"], [data-status="waiting"]) {
+  color: #a04a0b;
 }
 
 .conv-item-local {

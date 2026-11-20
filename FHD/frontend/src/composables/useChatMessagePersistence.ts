@@ -51,6 +51,7 @@ export function useChatMessagePersistence(deps: {
     state.error = ''
     deps.persist(list, sessionId)
     const save = (async () => {
+      let serverMessageId: number | undefined
       try {
         const response = await (request.turn_id
           ? chatApi.retryTurnPersistence(sessionId, request.turn_id, request.expected_revision ?? 0)
@@ -59,16 +60,18 @@ export function useChatMessagePersistence(deps: {
           user_id: 'default',
           client_message_id: state.id,
           ...request,
-        })) as { success?: boolean; saved?: boolean; durable?: boolean; message_ids?: number[] }
+        })) as { success?: boolean; saved?: boolean; durable?: boolean; message_id?: number; message_ids?: number[] }
         if (deps.scope() !== scope) return
         if (response?.success !== true || response.saved !== true) throw new Error('save not acknowledged')
         state.status = response.durable === true ? 'saved' : 'local'
         state.error = response.durable === true ? '' : '服务端未确认持久保存，当前仅保留本机副本。'
         if (state.status === 'saved') {
+          const ids = response.message_ids
+          serverMessageId = message.role === 'user' ? ids?.[0] : ids?.at(-1)
+          serverMessageId ??= response.message_id
           delete state.request
-          if (request.turn_id && response.message_ids?.length) {
+          if (request.turn_id && ids?.length) {
             for (const row of list) if (row.turnId === request.turn_id && row !== message) {
-              const ids = response.message_ids
               row.persistence = { id: `server:${row.role === 'user' ? ids[0] : ids[ids.length - 1]}`, status: 'saved' }
             }
           }
@@ -85,6 +88,7 @@ export function useChatMessagePersistence(deps: {
           // A deleted message/session must not be recreated by a late save receipt.
           if (currentMessage) {
             currentMessage.persistence = { ...state }
+            if (serverMessageId !== undefined) currentMessage.serverMessageId = serverMessageId
             deps.persist(current, sessionId)
           }
         }

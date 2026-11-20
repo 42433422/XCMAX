@@ -2,6 +2,15 @@ import { describe, expect, it } from 'vitest'
 import { droppedRoundFromHistory, droppedRoundPresentation } from './droppedRoundPresentation'
 
 describe('droppedRoundPresentation', () => {
+  it('uses the original task receipt before a saved queued acknowledgement', () => {
+    const conversation = { success: true, turn_receipt: {
+      turn_id: 'turn-1', run_id: 'run-1', status: 'failed', message: '原导入任务未完成。',
+    }, messages: [{ role: 'assistant', content: '已排队', metadata: {
+      summary: { turn_id: 'turn-1', success: true, status: 'queued' },
+    } }] }
+    expect(droppedRoundFromHistory(conversation, 'turn-1')).toMatchObject({ status: 'failed' })
+    expect(droppedRoundFromHistory(conversation, 'turn-2').status).toBe('unknown')
+  })
   it('shows a completed server reply and nothing else as success', () => {
     expect(droppedRoundPresentation({ reachable: true, serverStatus: 'completed', serverText: '已经写入。' })).toMatchObject({
       status: 'completed', text: '已经写入。',
@@ -36,6 +45,7 @@ describe('droppedRoundPresentation', () => {
     [{ summary: { success: false, status: 'completed' } }, 'failed'],
     [{ summary: { success: true, status: 'running' } }, 'running'],
     [{ summary: { success: true, status: 'unknown' } }, 'unknown'],
+    [{ summary: { success: false, status: 'unknown' } }, 'unknown'],
     [{ ui: { workflowAction: 'completed' } }, 'unknown'],
     [{}, 'unknown'],
   ])('requires a server outcome rather than text or a client completion label', (metadata, status) => {

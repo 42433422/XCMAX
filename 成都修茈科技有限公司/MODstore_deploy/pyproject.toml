@@ -69,7 +69,7 @@ aliyun-tts = [
 # 多渠道路由/重试/冷却/fallback 统一交给 LiteLLM Router（可选依赖）：
 # 未安装时 llm_litellm_router 自动降级到原有 provider 适配链路。
 llm-router = [
-    "litellm>=1.109,<1.110",
+    "litellm==1.109.3",
 ]
 vibe = [
     # vibe-coding 接入：NL → 代码 → 沙盒 → 自愈 + 仓库级 patch / heal。

@@ -20,7 +20,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 
 ISSUER = "modstore-llm-auth"
 AUDIENCE = "modstore-llm-wallet"
-OPERATIONS = frozenset({"preauthorize", "settle", "release"})
+OPERATIONS = frozenset({"preauthorize", "settle", "release", "read"})
 MAX_LIFETIME_SECONDS = 60
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 

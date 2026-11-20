@@ -17,9 +17,10 @@ from modstore_server.llm_billing_values import WalletHold, money, money_str
 
 
 class JavaWalletClient:
-    def __init__(self, request: Request | None = None):
+    def __init__(self, request: Request | None = None, *, verify_receipt: bool = False):
         self.gateway = PaymentGatewayService()
         self.request = request
+        self.verify_receipt = verify_receipt
 
     def _is_pat(self) -> bool:
         return (
@@ -75,7 +76,7 @@ class JavaWalletClient:
             },
         )
         hold = data.get("hold") or {}
-        if self._is_pat():
+        if self._is_pat() or self.verify_receipt:
             try:
                 received = Decimal(str(hold.get("amount"))) if isinstance(hold, dict) else None
                 if (
@@ -119,7 +120,7 @@ class JavaWalletClient:
                 authorization,
                 body,
             )
-            if self._is_pat():
+            if self._is_pat() or self.verify_receipt:
                 try:
                     result = data.get("hold")
                     actual = (
@@ -158,7 +159,7 @@ class JavaWalletClient:
                 authorization,
                 body,
             )
-            if self._is_pat():
+            if self._is_pat() or self.verify_receipt:
                 result = data.get("hold")
                 if (
                     not isinstance(result, dict)
@@ -166,6 +167,51 @@ class JavaWalletClient:
                     or result.get("status") != "released"
                 ):
                     raise HTTPException(502, "模型释放响应无效")
+
+    async def read_hold(
+        self, authorization: str, hold_no: str, *, request_id: str = ""
+    ) -> dict[str, Any] | None:
+        """Independently read a wallet reservation bound to the current account."""
+        from urllib.parse import quote
+
+        from modstore_server.infrastructure.http_clients import get_java_client
+
+        if not self.enabled or not authorization:
+            return None
+        if self._is_pat():
+            if not request_id:
+                return None
+            try:
+                self.validate_pat(authorization)
+                payload = await self._post(
+                    "/api/wallet/ai/read",
+                    authorization,
+                    {
+                        "hold_no": hold_no,
+                        "request_id": request_id,
+                        "idempotency_key": f"{request_id}:read",
+                    },
+                )
+                hold = payload.get("hold") if payload.get("ok") is True else None
+                return hold if isinstance(hold, dict) else None
+            except HTTPException:
+                return None
+        path = f"/api/wallet/ai/holds/{quote(hold_no, safe='')}"
+        try:
+            response = await get_java_client().get(
+                f"{self.gateway.target_base_url()}{path}",
+                headers={"Authorization": authorization},
+                timeout=5.0,
+            )
+            if response.status_code != 200:
+                return None
+            payload = response.json()
+        except (httpx.HTTPError, ValueError):
+            return None
+        hold = (
+            payload.get("hold") if isinstance(payload, dict) and payload.get("ok") is True else None
+        )
+        return hold if isinstance(hold, dict) else None
 
     async def _post(self, path: str, authorization: str, body: Dict[str, Any]) -> Dict[str, Any]:
         if not authorization:
@@ -218,10 +264,10 @@ class JavaWalletClient:
         try:
             data = response.json()
         except ValueError as error:
-            if self._is_pat():
+            if self._is_pat() or self.verify_receipt:
                 raise HTTPException(502, "模型计费响应无效") from error
             raise
-        if self._is_pat() and not isinstance(data, dict):
+        if (self._is_pat() or self.verify_receipt) and not isinstance(data, dict):
             raise HTTPException(502, "模型计费响应无效")
         if data.get("ok") is False:
             message = str(data.get("message") or "钱包扣费失败")

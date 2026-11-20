@@ -54,7 +54,8 @@ def test_owned_multimodal_planning_preserves_effects_and_approval(tmp_path, task
     assert result["passed"], result["failed_checks"]
     run = result["details"]["run"]
     if task["model_response"]["mode"] == "workflow":
-        assert run["metadata"]["plan"]["metadata"]["goal_coverage"] == task["goal_review"]
+        expected_review = {"clarification_question": None, **task["goal_review"]}
+        assert run["metadata"]["plan"]["metadata"]["goal_coverage"] == expected_review
     source = run["artifacts"][0]
     assert source["source"] == "plan.metadata"
     assert source["metadata"]["parser_used"] == "owned_upload"

@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import http.server
 import json
+import re
 import subprocess
 import sys
 import threading
@@ -318,7 +319,14 @@ def test_release_workflow_hard_checks_packaged_git_sha_and_version() -> None:
     workflow = RELEASE_WORKFLOW.read_text()
     verify_script = VERIFY_MACOS_DMG.read_text()
 
-    assert 'verify-macos-release-dmg.sh "${dmg}" "${v}" "${XCAGI_BUILD_SHA}"' in workflow
+    # Both shell variable forms must bind the same quoted artifact identity.
+    assert re.search(
+        r"^\s*bash scripts/package/verify-macos-release-dmg\.sh\s+"
+        r'"\$(?:\{dmg\}|dmg)"\s+"\$(?:\{v\}|v)"\s+'
+        r'"\$(?:\{XCAGI_BUILD_SHA\}|XCAGI_BUILD_SHA)"\s*$',
+        workflow,
+        re.MULTILINE,
+    )
     assert 'assert identity.get("gitSha") == sys.argv[3]' in verify_script
     assert 'assert identity.get("version") == sys.argv[2]' in verify_script
 

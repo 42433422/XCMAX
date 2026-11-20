@@ -12,6 +12,10 @@ import pytest
 
 from app.application.agent_orchestrator import tool_process
 from app.application.agent_orchestrator.run_models import AgentStep
+from app.application.agent_orchestrator.tool_executor import (
+    AgentToolExecutor,
+    execute_with_tool_deadline,
+)
 from app.infrastructure.chat_stream_lifetime import (
     StreamLifetime,
     StreamReceiptPersistenceError,
@@ -55,6 +59,8 @@ class StreamingExecutor:
             while not (folder / "observed").exists():
                 time.sleep(0.01)
         (folder / "effect").write_text("committed once")
+        if step.action == "exit_without_receipt":
+            os._exit(7)
         try:
             publish_stream_tool_record(
                 {
@@ -70,6 +76,18 @@ class StreamingExecutor:
             if step.action != "oversized":
                 raise
         return {"success": True, "pid": os.getpid(), "tenant_id": runtime_context["tenant_id"]}
+
+
+class FileDeadlineExecutor(AgentToolExecutor):
+    def execute(self, step, *, runtime_context):
+        from app.application.tool_execution_deadline import remaining_invocation_seconds
+
+        renew = runtime_context["_renew_elt_file_deadline"]
+        renew(step.params.get("phase", "preview"))
+        time.sleep(step.params["preview_delay"])
+        assert remaining_invocation_seconds(1000) > 60
+        renew("execute")
+        return {"success": True}
 
 
 @pytest.fixture(autouse=True)
@@ -211,6 +229,65 @@ def test_eof_without_completion_marker_is_not_a_confirmed_receipt():
     sender.close()
     tool_process._relay_stream(receiver, lifetime, drained, failed, stopped)
     assert drained.is_set() and failed.is_set()
+
+
+def test_worker_exit_without_final_receipt_is_detected_before_deadline(tmp_path):
+    before = {child.pid for child in multiprocessing.active_children()}
+    started = time.monotonic()
+    result = run_tool(tmp_path, StreamLifetime(), "exit_without_receipt", seconds=15)
+    assert time.monotonic() - started < 12
+    assert (tmp_path / "effect").read_text() == "committed once"
+    assert result["outcome"] == "unknown" and result["retryable"] is False
+    assert result["error_code"] == "tool_worker_exited"
+    assert {child.pid for child in multiprocessing.active_children()} <= before
+
+
+def test_worker_exit_does_not_discard_buffered_acknowledgement():
+    from multiprocessing.connection import wait
+
+    ctx = multiprocessing.get_context("spawn")
+    receiver, sender = ctx.Pipe(duplex=False)
+    process = ctx.Process(target=sender.send_bytes, args=(b"d",))
+    process.start()
+    sender.close()
+    try:
+        assert wait((process.sentinel,), timeout=8)
+        assert tool_process._worker_acknowledged(receiver, process, b"d", time.monotonic() + 1) == (
+            True,
+            True,
+        )
+    finally:
+        receiver.close()
+        process.join(timeout=2)
+        if process.is_alive():
+            process.kill()
+            process.join(timeout=2)
+        process.close()
+
+
+@pytest.mark.parametrize("stage_stalls", [False, True])
+@pytest.mark.parametrize(("stage", "marker"), [("preview", b"p"), ("linked_preview", b"l")])
+def test_elt_file_deadline_supersedes_startup_and_still_bounds_stalled_stage(
+    monkeypatch, stage_stalls, stage, marker
+):
+    from app.application.agent_orchestrator.tool_timeouts import ELT_FILE_WATCHDOG_SECONDS
+
+    if stage_stalls:
+        monkeypatch.setitem(ELT_FILE_WATCHDOG_SECONDS, marker, 0.2)
+    step = AgentStep(
+        "batch",
+        "elt_import",
+        "execute",
+        params={"run_id": "child-preview", "preview_delay": 3.1, "phase": stage},
+    )
+    result = execute_with_tool_deadline(
+        FileDeadlineExecutor(), step, runtime_context={}, timeout_seconds=3
+    )
+    if stage_stalls:
+        assert result["outcome"] == "unknown"
+        assert result["reconciliation_evidence"]["error_code"] == "tool_worker_incomplete"
+    else:
+        assert result == {"success": True}
 
 
 def test_spawned_deltas_keep_whitespace_through_sse_queue_and_final_deduplication(tmp_path):

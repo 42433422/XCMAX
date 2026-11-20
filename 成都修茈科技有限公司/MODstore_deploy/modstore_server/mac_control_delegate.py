@@ -1,10 +1,61 @@
 """Employee dispatch uses the same durable acceptance as management commands."""
 
+import time
 from typing import Any
 
+from sqlalchemy.orm import Session
+
+from modstore_server.customer_service_tools import begin_immediate_write, json_loads
 from modstore_server.db.db_base import get_session_factory
-from modstore_server.mac_control_store import accept, digest, view
+from modstore_server.db.mac_control import MacControlTask
+from modstore_server.mac_control_store import TERMINAL, accept, digest, request_cancellation, view
 from modstore_server.models_cs import CustomerServiceTicket
+
+
+def _ticket_employee_task_matches(task: MacControlTask, ticket: CustomerServiceTicket) -> bool:
+    request = json_loads(task.request_json, {})
+    return (
+        task.actor.startswith("employee:")
+        and isinstance(request, dict)
+        and (request.get("source"), request.get("ticket_id"), request.get("customer_id"))
+        == ("employee", ticket.id, ticket.user_id)
+    )
+
+
+def ticket_employee_task_receipts(
+    db: Session, ticket: CustomerServiceTicket, task_ids: list[str]
+) -> list[dict[str, Any]]:
+    if not task_ids:
+        return []
+    return [
+        {"id": task.id, "para_task_id": task.para_task_id, "state": task.state}
+        for task in db.query(MacControlTask).filter(MacControlTask.id.in_(task_ids))
+        if _ticket_employee_task_matches(task, ticket)
+    ]
+
+
+def stop_ticket_employee_tasks(db: Session, ticket: CustomerServiceTicket) -> list[dict[str, Any]]:
+    rows = (
+        db.query(MacControlTask)
+        .filter(
+            MacControlTask.actor.startswith("employee:"),
+            MacControlTask.request_json.contains(f'"ticket_id":{ticket.id}'),
+            MacControlTask.state.notin_(TERMINAL),
+        )
+        .all()
+    )
+    for_task = []
+    for task in rows:
+        if not _ticket_employee_task_matches(task, ticket):
+            continue
+        db.refresh(task, with_for_update=True)
+        state = (
+            "stop_pending_lease"
+            if task.lease_until > time.time() and task.state not in TERMINAL
+            else request_cancellation(db, task, commit=False)
+        )
+        for_task.append({"id": task.id, "para_task_id": task.para_task_id, "state": state})
+    return for_task
 
 
 def accept_employee(task: str, input_data: dict, employee_id: str) -> dict:
@@ -40,11 +91,14 @@ def accept_employee(task: str, input_data: dict, employee_id: str) -> dict:
     }
     with get_session_factory()() as db:
         if input_data.get("ticket_id"):
+            from modstore_server.customer_ticket_intake_review import intake_dispatch_block_reason
+
+            begin_immediate_write(db)
             try:
                 ticket_id = int(input_data["ticket_id"])
             except (ValueError, TypeError):
                 ticket_id = 0
-            ticket = db.get(CustomerServiceTicket, ticket_id)
+            ticket = db.get(CustomerServiceTicket, ticket_id, with_for_update=True)
             if ticket is None or (
                 input_data.get("customer_id")
                 and str(input_data["customer_id"]) != str(ticket.user_id)
@@ -55,6 +109,8 @@ def accept_employee(task: str, input_data: dict, employee_id: str) -> dict:
                     "queued": False,
                     "status": "blocked_invalid_ticket_identity",
                 }
+            if reason := intake_dispatch_block_reason(ticket):
+                return {"handler": "para_delegate", "ok": False, "queued": False, "status": reason}
             request.update(ticket_id=ticket.id, customer_id=ticket.user_id)
         row = accept(
             db,

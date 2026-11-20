@@ -14,6 +14,7 @@ COMMANDS = {
     "claude_code": "claude",
     "cursor": "agent",
     "trae": "trae-cli",
+    "opencode": "opencode",
 }
 
 

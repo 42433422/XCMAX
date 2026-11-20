@@ -264,7 +264,10 @@ class AIChatWorkflowResponseMixin:
                 else:
                     lines.append(f"- {step.node_id}: {step.status}（{_PUBLIC_WORKFLOW_FAILURE}）")
 
-        from app.domain.task_lifecycle.results import execution_result_outcome_unknown
+        from app.domain.task_lifecycle.results import (
+            execution_result_envelopes,
+            execution_result_outcome_unknown,
+        )
 
         recovery = (agent_run.metadata or {}).get("recovery")
         uncertain = (
@@ -383,23 +386,32 @@ class AIChatWorkflowResponseMixin:
             )
             payload["data"].update(text=text, requires_reconciliation=True)
         write_actions = {"write", "create", "update", "delete", "batch_delete", "clear_dataset"}
-        wrote = any(step.status == "completed" and step.action in write_actions for step in steps)
-        if not success and not uncertain and not wrote:
+        wrote = any(
+            step.status == "completed"
+            and step.action in write_actions
+            or (step.tool_id, step.action) == ("elt_import", "execute")
+            and (
+                step.status == "completed"
+                or isinstance(step.output, dict)
+                and any(
+                    type(result.get("executed_rows")) is int and result["executed_rows"] > 0
+                    for result in execution_result_envelopes(
+                        {
+                            "output": step.output,
+                            "result": step.output.get("reconciliation_evidence"),
+                        }
+                    )
+                )
+            )
+            for step in steps
+        )
+        if not success:
             payload["execution"] = {
                 "idempotency_key": "",
                 "intent": str(getattr(plan, "intent", "") or ""),
-                "committed": False,
-                "effect": "none",
-                "outcome": "not_executed",
-            }
-        elif not success and not uncertain and wrote:
-            # 部分步骤已写入、其余失败：既不能声称未写入，也不能说完全成功。
-            payload["execution"] = {
-                "idempotency_key": "",
-                "intent": str(getattr(plan, "intent", "") or ""),
-                "committed": True,
-                "effect": "partial",
-                "outcome": "partial",
+                "committed": wrote,
+                "effect": "unknown" if uncertain else "partial" if wrote else "none",
+                "outcome": "unknown" if uncertain else "partial" if wrote else "not_executed",
             }
         if success and any(
             step.status == "completed" and step.tool_id == "products" and step.action == "query"

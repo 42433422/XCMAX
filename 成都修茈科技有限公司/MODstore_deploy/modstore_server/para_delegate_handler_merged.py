@@ -779,6 +779,11 @@ def _tool_candidates(req: _facade().Dict[str, _facade().Any]) -> list[str]:
     explicit = _facade()._normalize_tool_name(
         str(req.get("tool_name") or raw.get("tool_name") or raw.get("dev_tool") or "")
     )
+    if _facade().os.environ.get("DEVFLEET_FORCE_OPENCODE") == "1" and explicit not in {
+        "grok_bot",
+        "dolt",
+    }:
+        return [] if "opencode" in _facade()._excluded_tools(req) else ["opencode"]
     preferred = explicit if explicit in _facade()._VALID_DEV_TOOLS else _facade()._dev_tool()
     order = _facade()._fallback_order_tools()
     if not _facade()._tool_fallback_allowed(req):
@@ -877,7 +882,7 @@ def _device_eligible(item: _facade().Any, tool_name: str) -> bool:
     if item.get("executorReady") is False:
         return False
     tool = _facade()._device_tool_entry(item, tool_name)
-    if tool and str(tool.get("status") or "") == "not_installed":
+    if tool and str(tool.get("status") or "") in {"not_installed", "disabled"}:
         return False
     if tool and str(tool.get("status") or "") == "running" and tool.get("currentTask"):
         return False
@@ -1290,6 +1295,11 @@ def _post_para_api_once(
             if payload_group.blocked is not None:
                 return payload_group.blocked
             # All scopes and final prompts are validated before the first child POST.
+            from modstore_server.incident_team_escalation_contract import (
+                claimed_ticket_dispatch_block_reason,
+            )
+
+            blocked = ""
             for device, unit, selected_tool, payload in payload_group.payloads:
                 device_id = str(device["id"])
                 if task_id:
@@ -1302,6 +1312,9 @@ def _post_para_api_once(
                 claim = current_claim()
                 if claim:
                     assert_incident_claim(int(claim["event_id"]))
+                if blocked := claimed_ticket_dispatch_block_reason():
+                    dispatch_failures.append({"device_id": device_id, "error": blocked})
+                    break
                 submission_started = True
                 resp = client.post(
                     f"{base}/api/tasks",
@@ -1411,6 +1424,15 @@ def _post_para_api_once(
                     from modstore_server.cred_vault import revoke_task_grants
 
                     revoke_task_grants(grant.task_id, reason="para_no_subtask_created")
+                if blocked and not submission_started:
+                    return {
+                        "handler": "para_delegate",
+                        "ok": False,
+                        "accepted": False,
+                        "status": "ticket_dispatch_blocked",
+                        "error": blocked,
+                        "retryable": False,
+                    }
                 return _facade()._outbox_response(
                     {**req, "para_payload": payload_group.first_payload},
                     status="para_api_no_subtask_created",
@@ -1555,6 +1577,19 @@ def _post_webhook(
         if hops:
             return _facade()._post_ticket_route(req, hops)
         return _facade()._post_para_api(req)
+    from modstore_server.incident_team_escalation_contract import (
+        claimed_ticket_dispatch_block_reason,
+    )
+
+    if blocked := claimed_ticket_dispatch_block_reason():
+        return {
+            "handler": "para_delegate",
+            "ok": False,
+            "accepted": False,
+            "status": "ticket_dispatch_blocked",
+            "error": blocked,
+            "retryable": False,
+        }
     try:
         resp = _facade().httpx.post(
             url,

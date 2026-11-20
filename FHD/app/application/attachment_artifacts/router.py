@@ -13,7 +13,7 @@ from app.application.attachment_artifacts.attachment_parser import (
     UnsupportedDocument,
     parse_file,
 )
-from app.application.attachment_artifacts.models import ArtifactScope
+from app.application.attachment_artifacts.models import ELT_WORKBOOK_SUFFIXES, ArtifactScope
 from app.application.attachment_artifacts.store import ArtifactStore
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
@@ -22,8 +22,6 @@ router = APIRouter(prefix="/api/attachments", tags=["attachments"])
 MAX_FILE_BYTES = 50 * 1024 * 1024
 MAX_BATCH_FILES = 200
 _CHUNK_BYTES = 1024 * 1024
-# 只有这些后缀同时登记成 ELT 上传，供数据对接中心的批量导入直接使用。
-_ELT_SUFFIXES = frozenset({".xlsx", ".xlsm", ".xls"})
 
 
 class _TooLarge(Exception):
@@ -85,7 +83,11 @@ def _register_elt_upload(
     target: Path, name: str, content_type: str | None, identity: tuple[int | None, int] | None
 ) -> str:
     """把电子表格同时登记成 ELT 上传，数据对接中心可直接按文件名导入。"""
-    if identity is None or identity[0] is None or Path(name).suffix.lower() not in _ELT_SUFFIXES:
+    if (
+        identity is None
+        or identity[0] is None
+        or Path(name).suffix.lower() not in ELT_WORKBOOK_SUFFIXES
+    ):
         return ""
     tenant, owner = identity
     try:

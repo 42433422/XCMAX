@@ -2,7 +2,6 @@
   --art-fg: #374151;
   --art-muted: #9ca3af;
   --art-border: #e5e7eb;
-  --art-subtle: #f8fafc;
   --art-blue: #2563eb;
   --art-green: #16a36a;
   --art-red: #dc3b3b;
@@ -218,10 +217,6 @@
   flex-direction: column;
   gap: 6px;
   margin: 4px 0 6px 20px;
-  padding: 8px 10px;
-  border: 1px solid var(--art-border);
-  border-radius: 8px;
-  background: var(--art-subtle);
   font-family: var(--art-mono);
   font-size: 10.5px;
 }
@@ -364,7 +359,6 @@
     --art-fg: #e8edf5;
     --art-muted: #9da8b8;
     --art-border: #3a4351;
-    --art-subtle: #252c37;
   }
   .art-step-title,
   .art-detail-section pre,

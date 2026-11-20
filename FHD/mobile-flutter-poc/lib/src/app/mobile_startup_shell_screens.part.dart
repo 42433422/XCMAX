@@ -72,26 +72,12 @@ class _DeepLinkedAiEmployeeProfileScreen extends StatelessWidget {
 }
 
 class _StartupLoadingScreen extends StatelessWidget {
-  const _StartupLoadingScreen({this.openLocalWorkspace});
-
-  final VoidCallback? openLocalWorkspace;
+  const _StartupLoadingScreen();
 
   @override
   Widget build(BuildContext context) {
-    final colors = AppTheme.colors(context);
     return Scaffold(
-      backgroundColor: colors.surface,
-      bottomNavigationBar: openLocalWorkspace == null
-          ? null
-          : SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: TextButton(
-                  onPressed: openLocalWorkspace,
-                  child: const Text('打开本地工作台'),
-                ),
-              ),
-            ),
+      backgroundColor: AppTheme.colors(context).surface,
       body: const Center(
         child: SizedBox(
           width: 28,

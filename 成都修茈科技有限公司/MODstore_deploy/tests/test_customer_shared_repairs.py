@@ -44,7 +44,11 @@ def pair(client, monkeypatch, tmp_path):
         for tid in (source_id, target_id):
             ticket = db.get(CustomerServiceTicket, tid)
             evidence = json_loads(ticket.evidence_json, {})
-            evidence.update(git_sha="1" * 40, product_version="1.0.0")
+            evidence.update(
+                git_sha="1" * 40,
+                product_version="1.0.0",
+                intake_review={"disposition": "actionable"},
+            )
             ticket.evidence_json = json_dumps(evidence)
         seed_repair(db, db.get(CustomerServiceTicket, source_id))
     admin = _make_user("reuse_admin", admin=True)

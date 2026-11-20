@@ -15,6 +15,7 @@ from app.application.elt.operation_owner import (
     claim_operation,
     fail_operation,
     finish_operation,
+    keep_preview_lease,
     unbind_owner,
 )
 from app.application.elt.preview_confirmation import publish_preview
@@ -73,8 +74,9 @@ class PreviewWorkerMixin:
             reset_elt_llm_owner,
         )
 
+        facade = _facade()
         llm_owner_token = bind_elt_llm_owner(owner_user_id)
-        db = _facade().new_session()
+        db = facade.new_session()
         started_at = time.monotonic()
         operation = None
         dataset = None
@@ -113,13 +115,16 @@ class PreviewWorkerMixin:
                     status_code=409,
                 )
             if dataset is None:
-                upload = self._owned_upload(db, run.upload_id, owner_user_id)
-                dataset = _facade().parse_file(
-                    upload.storage_path,
-                    target_type=run.target_type,
-                    compatibility_preset_id=compatibility_preset_id or None,
-                    source_file_name=upload.file_name,
-                )
+                source_path = self._owned_upload(db, run.upload_id, owner_user_id).storage_path
+                target_type = run.target_type
+                db.commit()
+                with keep_preview_lease(operation, facade.new_session):
+                    dataset = facade.parse_file(
+                        source_path,
+                        target_type=target_type,
+                        compatibility_preset_id=compatibility_preset_id or None,
+                        source_file_name=upload.file_name,
+                    )
                 run.stage = "loading"
                 self._persist_source_snapshot(db, run, dataset)
                 dataset.close()
@@ -149,14 +154,12 @@ class PreviewWorkerMixin:
                     source_features["shipment_template_candidates"] = candidates
                     source_features["shipment_template_candidate"] = dict(candidates[0])
             if not draft.get("field_mappings"):
-                deterministic_mappings = self._suggest_mappings(
-                    dataset, _facade().get_adapter(run.target_type)
-                )
-                draft["field_mappings"], llm_mapping = _facade().enhance_mappings_with_llm(
-                    dataset,
-                    _facade().get_adapter(run.target_type),
-                    deterministic_mappings,
-                )
+                adapter = facade.get_adapter(run.target_type)
+                db.commit()
+                with keep_preview_lease(operation, facade.new_session):
+                    draft["field_mappings"], llm_mapping = facade.enhance_mappings_with_llm(
+                        dataset, adapter, self._suggest_mappings(dataset, adapter)
+                    )
                 source_features["llm_mapping"] = llm_mapping
                 run.draft_json = dump_json(draft)
             run.total_rows = len(dataset.rows)

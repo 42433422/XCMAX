@@ -22,6 +22,8 @@ from modstore_server.customer_issue_delivery_contract import (
     team_succeeded,
 )
 
+pytestmark = pytest.mark.usefixtures("approved_support_assessment")
+
 
 def test_fix_failure_or_missing_roles_blocks_team():
     assert not team_succeeded([{"role": r, "ok": r != "fix"} for r in ("scout", "fix", "verify")])

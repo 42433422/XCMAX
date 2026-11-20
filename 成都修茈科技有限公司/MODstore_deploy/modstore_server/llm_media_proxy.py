@@ -3,9 +3,43 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any, Dict, List, Optional
 
+import httpx
+
 from modstore_server.platform_model_transport import llm_http_response, redact_key
+
+_MAX_IMAGE_RESPONSE_BYTES = 24 * 1024 * 1024
+_MAX_VIDEO_RESPONSE_BYTES = 1024 * 1024
+
+
+def validated_video_fields(result: dict) -> tuple[str, str, str] | None:
+    """Bound durable provider references without truncating their identity."""
+    from urllib.parse import urlsplit
+
+    job = result.get("job_id") or ""
+    status = result.get("status") or "pending"
+    preview = result.get("preview_url") or ""
+    if not all(isinstance(value, str) for value in (job, status, preview)):
+        return None
+    if len(job) > 256 or len(status) > 32 or len(preview) > 2048:
+        return None
+    if any(ord(char) < 32 or ord(char) == 127 for char in job + status + preview):
+        return None
+    if preview:
+        try:
+            parsed = urlsplit(preview)
+            if (
+                parsed.scheme not in {"http", "https"}
+                or not parsed.hostname
+                or parsed.username
+                or parsed.password
+            ):
+                return None
+        except ValueError:
+            return None
+    return job, status, preview
 
 
 def _facade() -> Any:
@@ -38,14 +72,23 @@ async def image_openai_compatible(
         body,
         timeout=_facade()._LLM_TIMEOUT,
         limits=_facade()._LLM_LIMITS,
+        stream=True,
     ) as r:
-        data = redact_key(r.json(), api_key) if r.status_code < 300 else None
-    if r.status_code >= 300:
-        return {"ok": False, "status": r.status_code, "error": "模型供应商请求失败"}
+        if r.status_code >= 300:
+            return {"ok": False, "status": r.status_code, "error": "模型供应商请求失败"}
+        content = bytearray()
+        async for chunk in r.aiter_bytes():
+            if len(content) + len(chunk) > _MAX_IMAGE_RESPONSE_BYTES:
+                raise httpx.RequestError("生图供应商响应超过允许大小")
+            content.extend(chunk)
+        data = redact_key(json.loads(content), api_key)
     if not isinstance(data, dict):
         return {"ok": False, "error": "模型供应商未返回有效的媒体响应"}
+    items = data.get("data")
+    if not isinstance(items, list) or len(items) > body["n"]:
+        return {"ok": False, "error": "模型供应商返回的图片数量无效"}
     images: List[str] = []
-    for item in data.get("data") or []:
+    for item in items:
         if not isinstance(item, dict):
             continue
         if item.get("url"):
@@ -139,10 +182,16 @@ async def video_openai_compatible(
         body,
         timeout=_facade()._LLM_TIMEOUT,
         limits=_facade()._LLM_LIMITS,
+        stream=True,
     ) as r:
-        data = redact_key(r.json(), api_key) if r.status_code < 300 else None
-    if r.status_code >= 300:
-        return {"ok": False, "status": r.status_code, "error": "模型供应商请求失败"}
+        if r.status_code >= 300:
+            return {"ok": False, "status": r.status_code, "error": "模型供应商请求失败"}
+        content = bytearray()
+        async for chunk in r.aiter_bytes():
+            if len(content) + len(chunk) > _MAX_VIDEO_RESPONSE_BYTES:
+                raise httpx.RequestError("视频供应商响应超过允许大小")
+            content.extend(chunk)
+        data = redact_key(json.loads(content), api_key)
     if not isinstance(data, dict):
         return {"ok": False, "error": "模型供应商未返回有效的媒体响应"}
     job_id = data.get("id") or data.get("job_id") or data.get("task_id") or ""

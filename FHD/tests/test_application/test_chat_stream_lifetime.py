@@ -71,7 +71,7 @@ def bridge(factory):
             "_xcagi_planner_stream_bytes": factory,
             "_sse_event_line": lambda value: json.dumps(value).encode(),
         },
-    )(None, None, ai_tier="synthetic")
+    )(None, NS(context={}), ai_tier="synthetic")
 
 
 async def wait(event):
@@ -382,6 +382,7 @@ def test_nested_and_concurrent_owned_reads_all_close_once(lifetime):
 async def test_real_modstore_generator_http_response_interrupts_blocked_mocktransport(monkeypatch):
     import httpx
 
+    from app.application.market_llm.protocols import ChatInput, Connection
     from app.domain.shared_services.conversation.modstore_adapter import _ModstoreOpenAICompletions
 
     entered, closed, finished = (threading.Event() for _ in range(3))
@@ -419,8 +420,10 @@ async def test_real_modstore_generator_http_response_interrupts_blocked_mocktran
         status_code=lambda response, default: response.status_code,
         sync_payloads=lambda response: response.iter_lines(),
     )
-    connection = NS(platform_url="https://synthetic.invalid", timeout=1, headers=lambda: {})
-    request = NS(messages=[], extra={}, payload=lambda *a, **k: {})
+    connection = Connection(
+        platform_url="https://synthetic.invalid", auth_token="", user_id=None, timeout=1
+    )
+    request = ChatInput(messages=[])
     adapter = NS(
         chat_completion_sync=lambda **k: pytest.fail("must not replay completion"),
         stream_chat_completion_sync=lambda **k: native(

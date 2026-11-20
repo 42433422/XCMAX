@@ -20,7 +20,7 @@ async function listen(server: http.Server): Promise<number> {
   return (server.address() as { port: number }).port
 }
 
-async function launch(): Promise<void> {
+async function launch(waitForUi = true): Promise<void> {
   app = await electron.launch({
     args: ['-r', path.join(__dirname, 'patch-backend.cjs'), '.'],
     cwd: path.resolve(__dirname, '..'),
@@ -31,7 +31,7 @@ async function launch(): Promise<void> {
     },
   })
   page = await app.firstWindow()
-  await page.waitForURL(`http://127.0.0.1:${backendPort}/?shell=1`)
+  if (waitForUi) await page.waitForURL(`http://127.0.0.1:${backendPort}/?shell=1`)
 }
 
 async function status(target: Page): Promise<number> {
@@ -125,19 +125,75 @@ test('Chromium removes the capability on a redirected next hop and on direct non
 
 test('backend restart retains the capability; restarting the main process rotates it', async () => {
   const before = await fingerprint()
-  await app.evaluate(async ({ app }, port) => {
+  await app.evaluate(async ({ app }) => {
     const requireFromApp = process.getBuiltinModule('module').createRequire(
       process.getBuiltinModule('path').join(app.getAppPath(), 'package.json'),
     )
     const backend = requireFromApp('./dist/backend-process.js')
     await backend.stopBackend()
     await backend.startBackend()
-    await backend.waitForBackendPing(port, 10_000)
-  }, backendPort)
-  expect(await status(page)).toBe(200)
+  })
+  // The existing health watchdog authenticates a replacement on its 20s cycle.
+  await expect.poll(() => status(page).catch(() => 0), { timeout: 45_000 }).toBe(200)
   expect(await fingerprint()).toBe(before)
   await app.close()
   await launch()
   expect(await status(page)).toBe(200)
   expect(await fingerprint()).not.toBe(before)
+})
+
+test('a preoccupied loopback port never supplies the application page before owned startup', async () => {
+  await app.close()
+  // This is the final test. The guarded process must exit; the suite's
+  // afterAll must not attempt to close or relaunch that dead Electron process.
+  app = undefined!
+  let unownedPages = 0
+  const occupant = http.createServer((request, response) => {
+    response.setHeader('Server', 'uvicorn')
+    response.setHeader('Content-Type', 'application/json')
+    if (request.url?.startsWith('/api/ping')) response.end('{"pong":true}')
+    else if (request.url === '/api/desktop/status') response.end('{"appRoutesReady":true,"readyForUi":true}')
+    else if (request.url === '/api/health') response.end('{"status":"healthy"}')
+    else { unownedPages += 1; response.end('{"unowned":true}') }
+  })
+  await new Promise<void>((resolve, reject) => {
+    occupant.once('error', reject)
+    occupant.listen(backendPort, '127.0.0.1', resolve)
+  })
+  try {
+    // A correctly guarded Electron main process can exit before Playwright
+    // attaches its debugger. Both an early launch rejection and a later close
+    // are expected fail-closed outcomes for a preoccupied backend port.
+    let exitedBeforeAttach = false
+    try {
+      await launch(false)
+    } catch (error) {
+      if (!(error instanceof Error) || !/Target page, context or browser has been closed/.test(error.message)) {
+        throw error
+      }
+      exitedBeforeAttach = true
+    }
+    if (!exitedBeforeAttach) {
+      // On some macOS runners a safe splash remains alive rather than closing.
+      // Verify the whole original 15-second startup window and never accept an
+      // unowned backend page, even when Electron does not emit close.
+      const closed = await app.waitForEvent('close', { timeout: 15_000 }).then(
+        () => true,
+        error => {
+          if (!(error instanceof Error) || !/Timeout/i.test(error.message)) throw error
+          return false
+        },
+      )
+      if (!closed) {
+        expect(app.windows().every(window => !window.url().startsWith(`http://127.0.0.1:${backendPort}/`))).toBe(true)
+        await app.close()
+      }
+    }
+    expect(unownedPages).toBe(0)
+  } finally {
+    occupant.closeAllConnections()
+    await new Promise<void>(resolve => occupant.close(() => resolve()))
+    // No backend process may persist across the last fail-closed test.
+    app = undefined!
+  }
 })

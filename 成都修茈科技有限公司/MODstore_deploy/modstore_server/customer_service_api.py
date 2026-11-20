@@ -10,11 +10,11 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import logging
 import threading
 from datetime import datetime
-from typing import Any, Dict, Literal, Optional
+from typing import Annotated, Any, Dict, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import func, or_
+from sqlalchemy import case, func, or_
 from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import get_current_user, get_db, require_admin
@@ -41,7 +41,22 @@ from modstore_server.customer_service_api_helpers import (
     visible_ticket_or_404 as _visible_ticket_or_404,
 )
 from modstore_server import customer_service_customer_view as customer_view
-from modstore_server.customer_service_tools import json_dumps, json_loads
+from modstore_server.customer_service_transcript import (
+    MAX_MESSAGE_METADATA_LENGTH,
+    conversation_messages,
+    read_message_page,
+    read_message_screenshot,
+)
+from modstore_server.customer_service_tools import json_dumps
+from modstore_server.customer_service_orchestrator_merged import (
+    InactiveTicketConversation,
+    intake_report_for_message,
+)
+from modstore_server.customer_ticket_intake_review import (
+    NegativeIntakeConfirmation,
+    intake_dispatch_block_reason,
+    review_report_async,
+)
 from modstore_server.customer_service_triage import (
     TICKET_DOMAINS,
     TICKET_SOURCES,
@@ -107,8 +122,11 @@ class CustomerServiceChatBody(BaseModel):
     message: str = Field(default="", max_length=8000)
     session_id: Optional[int] = None
     context: Dict[str, Any] = Field(default_factory=dict)
+    intake_confirmation: NegativeIntakeConfirmation | None = None
     # data:image/...;base64,... 压缩后截图，用于补充材料
-    image_data_url: Optional[str] = Field(default=None, max_length=4_500_000)
+    image_data_url: Optional[str] = Field(
+        default=None, max_length=customer_view.MAX_SCREENSHOT_DATA_LENGTH
+    )
 
 
 class CustomerTicketEtaBody(BaseModel):
@@ -151,36 +169,68 @@ async def customer_service_chat(
         image = str((body.context or {}).get("image_data_url") or "").strip()
     if not message and not image:
         raise HTTPException(status_code=400, detail="请输入文字或上传图片")
-    if image and not image.startswith("data:image/"):
-        raise HTTPException(status_code=400, detail="图片格式无效，请上传 png/jpg/webp 等")
-    if len(image) > 4_500_000:
+    if len(image) > customer_view.MAX_SCREENSHOT_DATA_LENGTH:
         raise HTTPException(status_code=400, detail="图片过大，请压缩后再传")
+    if image and customer_view.decode_screenshot(image) is None:
+        raise HTTPException(status_code=400, detail="图片格式无效，请上传 png/jpg/webp 等")
     ctx = dict(body.context or {})
+    ctx.pop("image_data_url", None)
+    if len(json_dumps(ctx)) > MAX_MESSAGE_METADATA_LENGTH // 2:
+        raise HTTPException(413, "会话附加信息过大，请减少附加信息")
     if image:
         ctx["image_data_url"] = image
         ctx["has_image"] = True
-    result = handle_customer_message(
-        db,
-        user=user,
-        message=message or "[用户补充了图片资料]",
-        session_id=body.session_id,
-        context=ctx,
-    )
+    target_ticket_id = ctx.pop("ticket_id", None)
+    if target_ticket_id is not None and (
+        type(target_ticket_id) is not int or target_ticket_id <= 0 or not body.session_id
+    ):
+        raise HTTPException(status_code=422, detail="原工单和会话编号无效")
+    report = review = None
+    if body.intake_confirmation is None:
+        report, review = intake_report_for_message(
+            db,
+            user=user,
+            message=message,
+            session_id=body.session_id,
+            target_ticket_id=target_ticket_id,
+        )
+        if review is None and report is not None:
+            review = await review_report_async(report)
+    try:
+        result = handle_customer_message(
+            db,
+            user=user,
+            message=message or "[用户补充了图片资料]",
+            session_id=body.session_id,
+            context=ctx,
+            reviewed_report=report,
+            intake_review=review,
+            target_ticket_id=target_ticket_id,
+            intake_confirmation=body.intake_confirmation,
+        )
+    except InactiveTicketConversation as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     t = result.get("ticket") if isinstance(result.get("ticket"), dict) else {}
-    if t:
+    skip_dispatch = result.pop("_skip_issue_dispatch", False)
+    dispatch_event = ""
+    if t and not skip_dispatch:
+        from modstore_server.customer_corp_download_case import bind_submitted_corp_download_report
         from modstore_server.customer_issue_intake import enqueue_issue
 
         ticket = db.get(CustomerServiceTicket, int(t.get("id") or 0))
-        if ticket is not None:
+        if ticket is not None and not intake_dispatch_block_reason(ticket):
+            bind_submitted_corp_download_report(
+                db, ticket, owner_id=int(user.id), submitted_text=message, reviewed_report=report
+            )
             import hashlib
 
             revision = hashlib.sha256(
                 json_dumps({"message": message, "evidence": t.get("evidence")}).encode()
             ).hexdigest()[:24]
-            enqueue_issue(db, ticket, revision=revision)
+            dispatch_event = enqueue_issue(db, ticket, revision=revision)
             result["ticket"] = ticket_payload(ticket)
     db.commit()
-    if t:
+    if dispatch_event:
         _schedule_customer_ticket_incident({"ticket_id": int(t.get("id") or 0)})
     return result if user.is_admin else customer_view.customer_chat_result(result)
 
@@ -192,7 +242,23 @@ async def list_sessions(
     user: User = Depends(_get_current_user),
 ):
     rows = (
-        db.query(CustomerServiceSession)
+        db.query(
+            CustomerServiceSession.id,
+            CustomerServiceSession.user_id,
+            CustomerServiceSession.channel,
+            CustomerServiceSession.status,
+            CustomerServiceSession.title,
+            CustomerServiceSession.intent,
+            case(
+                (
+                    func.length(CustomerServiceSession.context_json) <= MAX_MESSAGE_METADATA_LENGTH,
+                    CustomerServiceSession.context_json,
+                )
+            ).label("context_json"),
+            CustomerServiceSession.last_message,
+            CustomerServiceSession.created_at,
+            CustomerServiceSession.updated_at,
+        )
         .filter(CustomerServiceSession.user_id == user.id)
         .order_by(CustomerServiceSession.updated_at.desc(), CustomerServiceSession.id.desc())
         .limit(limit)
@@ -206,28 +272,24 @@ async def session_detail(
     session_id: int,
     db: Session = Depends(get_db),
     user: User = Depends(_get_current_user),
+    transcript_before_id: Annotated[int | None, Query(gt=0, le=2_147_483_647)] = None,
+    transcript_image_message_id: Annotated[int | None, Query(gt=0, le=2_147_483_647)] = None,
 ):
+    if isinstance(user, TicketReader):
+        raise HTTPException(403, "工单读取授权不包含会话内容")
     session = _own_session_or_404(db, user, session_id)
-    messages = (
-        db.query(CustomerServiceMessage)
-        .filter(CustomerServiceMessage.session_id == session.id)
-        .order_by(CustomerServiceMessage.id.asc())
-        .all()
-    )
-    rows = [
-        {
-            "id": m.id,
-            "ticket_id": m.ticket_id,
-            "role": m.role,
-            "content": m.content,
-            "payload": json_loads(m.payload_json, {}),
-            "created_at": m.created_at.isoformat() if m.created_at else "",
-        }
-        for m in messages
-    ]
-    if not user.is_admin:
-        rows = [customer_view.customer_message(m) for m in rows]
-    return {"session": session_payload(session), "messages": rows}
+    messages = conversation_messages(db, session.id, session.user_id)
+    if transcript_image_message_id is not None:
+        return read_message_screenshot(messages, transcript_image_message_id)
+    return {
+        "session": session_payload(session),
+        **read_message_page(
+            messages,
+            transcript_before_id,
+            customer_visible=not user.is_admin,
+            inline_small_images=True,
+        ),
+    }
 
 
 @router.get("/tickets")
@@ -447,13 +509,53 @@ async def close_ticket_as_admin(
     return close_ticket_with_evidence(db, user, ticket_id, body.model_dump())
 
 
+def _ticket_transcript(
+    db: Session,
+    user: User,
+    ticket: CustomerServiceTicket,
+    before_id: int | None,
+    image_message_id: int | None,
+):
+    session_id = (
+        db.query(CustomerServiceSession.id)
+        .filter_by(id=ticket.session_id, user_id=ticket.user_id)
+        .scalar()
+    )
+    if session_id is None:
+        raise HTTPException(404, "原客服会话不存在")
+    is_owner = user.id == ticket.user_id
+    selected = CustomerServiceMessage.ticket_id == ticket.id
+    # Only the session owner can see context that predates a ticket.
+    if is_owner:
+        selected = or_(selected, CustomerServiceMessage.ticket_id.is_(None))
+    messages = conversation_messages(db, session_id, ticket.user_id).filter(selected)
+    if image_message_id is not None:
+        return read_message_screenshot(messages, image_message_id)
+    return {
+        "ticket": customer_view.customer_ticket_row(ticket, include_acceptance=is_owner),
+        "session_id": session_id,
+        "can_reply": is_owner,
+        **read_message_page(messages, before_id, customer_visible=True),
+    }
+
+
 @router.get("/tickets/{ticket_id}")
 async def ticket_detail(
     ticket_id: int,
     db: Session = Depends(get_db),
     user: User = Depends(_get_current_user),
+    include_transcript: bool = False,
+    transcript_before_id: Annotated[int | None, Query(gt=0, le=2_147_483_647)] = None,
+    transcript_image_message_id: Annotated[int | None, Query(gt=0, le=2_147_483_647)] = None,
 ):
+    transcript_requested = include_transcript or transcript_image_message_id is not None
+    if transcript_requested and isinstance(user, TicketReader):
+        raise HTTPException(403, "工单读取授权不包含会话内容")
     ticket = _visible_ticket_or_404(db, user, ticket_id)
+    if transcript_requested:
+        return _ticket_transcript(
+            db, user, ticket, transcript_before_id, transcript_image_message_id
+        )
     if isinstance(user, TicketReader):
         return reader_detail(db, ticket, user)
 

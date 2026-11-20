@@ -165,26 +165,38 @@ def test_customer_ticket_proxy_preserves_search_and_market_identity(
         service.validate_session.assert_called_with("current-session")
 
 
-def test_customer_ticket_close_uses_only_current_admin_market_identity(
-    client, customer_ticket_identity
+@pytest.mark.parametrize(
+    ("operation", "disposition", "status"),
+    [
+        ("close", "resolved", "resolved"),
+        ("disposition", "out_of_scope", "rejected"),
+        ("dispatch-revoke", None, "processing"),
+    ],
+)
+def test_customer_ticket_processing_uses_only_current_admin_market_identity(
+    client, customer_ticket_identity, operation, disposition, status
 ):
     body = {
         "request_id": "123e4567-e89b-12d3-a456-426614174000",
-        "note": "验收通过并关闭",
-        "verification": "目标版本页面按原复现步骤通过。",
+        "note": "保留原单的人工处理结论",
     }
+    if disposition:
+        body.update(
+            verification="按客户在原客服会话中的问题文字、场景和支持范围逐项核对。",
+            disposition=disposition,
+        )
     with patch(
         "app.fastapi_routes.market_account._proxy_json",
         new_callable=AsyncMock,
-        return_value={"ticket": {"id": 42, "status": "resolved"}},
+        return_value={"ticket": {"id": 42, "status": status}},
     ) as proxy:
         response = client.post(
-            "/api/xcmax/admin/customer-service/tickets/42/close",
+            f"/api/xcmax/admin/customer-service/tickets/42/{operation}",
             json=body,
             headers={"X-Session-ID": "current-session", "Authorization": "Bearer unrelated"},
         )
     assert response.status_code == 200
-    assert proxy.await_args.args == ("POST", "/api/customer-service/tickets/42/close")
+    assert proxy.await_args.args == ("POST", f"/api/customer-service/tickets/42/{operation}")
     assert proxy.await_args.kwargs["json_body"] == body
     assert proxy.await_args.kwargs["authorization"] == "Bearer test-bound-market-identity"
 

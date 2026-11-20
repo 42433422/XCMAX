@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import importlib
+import os
+from datetime import UTC
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
@@ -25,6 +27,21 @@ def _register_scheduler_phase_04():
         coalesce=True,
         max_instances=1,
     )
+    if os.environ.get("MODSTORE_RETORT_FEEDBACK_ACTOR_ID") and os.environ.get(
+        "MODSTORE_RETORT_FEEDBACK_TEMPLATE"
+    ):
+        from apscheduler.triggers.cron import CronTrigger
+
+        from modstore_server.retort_customer_feedback import scheduled_create
+
+        _scheduler.add_job(
+            lambda: _run_tracked_scheduler_job("retort_customer_feedback", scheduled_create),
+            CronTrigger(hour=2, minute=20, timezone=UTC),
+            id="retort_customer_feedback",
+            replace_existing=True,
+            coalesce=True,
+            max_instances=1,
+        )
     try:
         from modstore_server.duty_workforce_burnin import (
             burn_in_execution_enabled,

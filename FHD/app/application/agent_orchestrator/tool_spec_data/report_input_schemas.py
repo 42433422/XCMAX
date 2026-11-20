@@ -26,6 +26,20 @@ REPORT_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "expected_totals": {"type": "object", "additionalProperties": {"type": "number"}},
         },
     },
+    ("sales", "execute_closed_loop"): {
+        "type": "object",
+        "required": ["payload"],
+        "properties": {
+            "payload": {
+                "description": (
+                    "销售闭环包含 order、fulfillment、invoice、payment_allocation。"
+                    "部分交付按 order.items 顺序在 fulfillment.line_quantities 提供各行正数交付量，"
+                    "fulfillment.quantity 为交付总量，invoice 和 payment_allocation 的 requested 均为 false。"
+                    "整单交付并开票时，payment_allocation.amount 仅填写明确的实收金额，可低于开票总额。"
+                ),
+            },
+        },
+    },
     ("sales", "query"): {
         "type": "object",
         "additionalProperties": False,

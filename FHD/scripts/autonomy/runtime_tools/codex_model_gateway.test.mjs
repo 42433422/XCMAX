@@ -4,20 +4,66 @@ import test from 'node:test';
 import {
   DEFAULT_CODEX_MODEL_CANDIDATES,
   checkIncidentExecutionBudget,
+  classifyAgentPlanError,
   classifyModelError,
   codexExecutionConfig,
   codexModelCandidates,
   createModelAvailability,
   insertBeforeLoopContext,
   modelCandidatesFromPrompt,
+  probeAgentPlan,
   probeModels,
   resolveCodexAuth,
   runCodexBudgetedAttempt,
   runWithModelFallback,
 } from './codex_model_gateway.mjs';
+
+test('read-only incident roles receive a read-only Codex sandbox', () => {
+  const readonlyArgs = codexExecutionConfig({ env: {}, reportOnly: true }).args;
+  assert.equal(readonlyArgs[readonlyArgs.indexOf('--sandbox') + 1], 'read-only');
+  const fixArgs = codexExecutionConfig({ env: {}, reportOnly: false }).args;
+  assert.equal(fixArgs[fixArgs.indexOf('--sandbox') + 1], 'workspace-write');
+});
 import { describeCodexFailure } from './trae_failover.mjs';
 
 const UNSUPPORTED = "[codex exit=1]\nERROR: {\"detail\":\"The 'gpt-6.1-sol' model is not supported when using Codex with a ChatGPT account.\"} (HTTP 400)";
+
+test('Agent Plan switches only when Ark reports that the subscription quota is exhausted', async () => {
+  const candidates = ['ark-code-latest', 'approved-backup'];
+  assert.equal(classifyAgentPlanError('QuotaExceeded: You have exceeded the 5-hour usage quota.'), 'quota');
+  for (const [code, expected] of [
+    ['QuotaExceeded.AgentPlanQuotaExceeded', 'approved-backup'],
+    ['AccountRateLimitExceeded', 'ark-code-latest'],
+  ]) {
+    const result = await runWithModelFallback({
+      candidates,
+      classify: classifyAgentPlanError,
+      runAttempt: async model => {
+        if (model === candidates[1]) return { ok: true, output: 'OK' };
+        return probeAgentPlan({
+          key: 'fixture-ark-key',
+          requestUpstream: async (url, request) => {
+            assert.match(url, /\.volces\.com\/api\/plan\/v3\/responses$/);
+            assert.equal(request.headers.Authorization, 'Bearer fixture-ark-key');
+            for await (const chunk of request.body) assert.ok(chunk.length);
+            return Response.json({ error: { code } }, { status: 429 });
+          },
+          runProbe: async (url, token) => {
+            const response = await fetch(url + '/responses', {
+              method: 'POST', headers: { Authorization: 'Bearer ' + token }, body: '{}',
+            });
+            assert.equal(response.status, 429);
+            await response.text();
+            return { ok: false, output: 'exceeded retry limit, last status: 429 Too Many Requests' };
+          },
+        });
+      },
+    });
+    assert.equal(result.model, expected);
+    assert.equal(result.ok, expected === candidates[1]);
+    assert.equal(result.attempts.length, expected === candidates[1] ? 2 : 1);
+  }
+});
 
 test('默认候选顺序 sol > terra > luna，可由 env 和派单提示覆盖', () => {
   assert.deepEqual(DEFAULT_CODEX_MODEL_CANDIDATES, ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna']);
@@ -149,6 +195,7 @@ test('模型错误分类：400 不支持 / 不存在 / 额度；普通失败不�
   assert.equal(classifyModelError('The model `gpt-5.6-luna` does not exist'), 'model_unsupported');
   assert.equal(classifyModelError("You've hit your usage limit."), 'quota');
   assert.equal(classifyModelError('insufficient_quota'), 'quota');
+  assert.equal(classifyModelError('LiteLLM ExceededTokenBudget'), 'quota');
   assert.equal(classifyModelError('[codex exit=1]\npatch failed to apply'), '');
   assert.equal(classifyModelError(''), '');
 });

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -141,6 +142,151 @@ def test_completed_task_opens_pr(issue, monkeypatch):
     pulls = [b for u, b in issue if u.endswith("/pulls")]
     assert pulls and pulls[0]["head"] == "devfleet/fix"
     assert "Refs #5" in pulls[0]["body"] and "Closes #" not in pulls[0]["body"]
+
+
+@pytest.mark.parametrize(
+    "scenario",
+    ["fresh", "intent_unapplied", "held", "applied", "applied_ci_pending", "unrelated"],
+)
+def test_original_pr_repair_only_observes_already_applied_intents(issue, monkeypatch, scenario):
+    repo, branch, old, new = "o/r", "fix/ci", "a" * 40, "d" * 40
+    workflow_path = ".github/workflows/fhd-ci-cd.yml"
+    bot = {"login": "github-actions[bot]", "type": "Bot"}
+    incident = {
+        "state": "open",
+        "title": "CI repair",
+        "user": bot,
+        "body": (
+            "- Workflow: `CI/CD Pipeline`\n- Run ID: `70`\n- Branch: `fix/ci`\n"
+            "- Head Repository: `o/r`\n- Self-Heal-Run: `70/1`\n"
+            f"- Self-Heal-Workflow: `99@{workflow_path}`\n"
+        ),
+        "labels": [{"name": "ai-implement"}, {"name": "auto-incident"}],
+    }
+    applied = scenario.startswith("applied")
+    head = new if applied else ("e" * 40 if scenario == "unrelated" else old)
+    pr = {
+        "number": 42,
+        "state": "open",
+        "draft": False,
+        "labels": [{"name": "hold-merge"}] if applied or scenario == "held" else [],
+        "user": {"login": "maintainer"},
+        "head": {"ref": branch, "sha": head, "repo": {"full_name": repo}},
+        "base": {"ref": "main", "repo": {"full_name": repo}},
+    }
+    run = {
+        "id": 70,
+        "workflow_id": 99,
+        "path": workflow_path,
+        "run_attempt": 1,
+        "event": "pull_request",
+        "head_sha": old,
+        "head_branch": branch,
+        "head_repository": {"full_name": repo},
+        "pull_requests": [{"number": 42}],
+        "name": "CI/CD Pipeline",
+        "conclusion": "failure",
+        "status": "completed",
+        "created_at": "2026-11-20T01:00:00Z",
+    }
+    comments, writes = [], []
+    if scenario not in {"fresh", "held"}:
+        target = mod.repair.Target(42, branch, old, 70, 99, workflow_path)
+        comments.append(
+            {
+                "user": bot,
+                "body": mod.repair.intent_body(
+                    repo,
+                    5,
+                    target,
+                    new,
+                    control_task_id="ctl1",
+                    para_task_id="p1",
+                    github_run_id=502,
+                ),
+            }
+        )
+
+    def get(path, params):
+        if path.endswith("/issues/5/comments"):
+            return 200, comments
+        if path.endswith("/pulls/42"):
+            return 200, pr
+        if path.endswith("/actions/runs/70"):
+            return 200, run
+        if path.endswith("/actions/workflows/99/runs"):
+            return 200, {
+                "workflow_runs": (
+                    [{**run, "id": 71, "head_sha": new, "status": "queued", "conclusion": None}]
+                    if scenario == "applied" and params.get("head_sha") == new
+                    else []
+                )
+            }
+        pytest.fail(f"unexpected GitHub read: {path}")
+
+    def post(url, token, payload):
+        # A blocked request may explain its pause, but cannot add labels or write intent.
+        assert url.endswith("/issues/5/comments")
+        assert not payload["body"].startswith(mod.repair.INTENT_MARKER)
+        writes.append(payload)
+        return {"id": 1}
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("suspended repairs cannot dispatch or promote a candidate")
+
+    for key, value in {
+        "MODSTORE_PARA_DISPATCH_TOKEN": "dispatch",
+        "PR_CREATE_TOKEN": "independent-token",
+        "GITHUB_ACTIONS": "true",
+        "GITHUB_REF": "refs/heads/main",
+        "GITHUB_REPOSITORY": repo,
+    }.items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.setattr(mod, "_read_github", lambda _: get)
+    monkeypatch.setattr(mod.impl, "_fetch_issue", lambda *args: incident)
+    monkeypatch.setattr(mod.impl, "_gh_post", post)
+    monkeypatch.setattr(mod.repair, "load_trusted_authors", lambda: ["maintainer"])
+    monkeypatch.setattr(mod.repair, "advance", forbidden)
+    monkeypatch.setattr(mod, "DispatchClient", forbidden)
+    monkeypatch.setattr(mod.time, "sleep", lambda _: None)
+
+    for _ in range(2):
+        with pytest.raises(SystemExit) as exc:
+            mod.run(_args(base_branch=branch))
+        assert exc.value.code == (0 if scenario == "applied" else 6)
+        saved = json.loads((mod.REPORT_DIR / "para_issue_dispatch_5.json").read_text())
+        if applied or scenario == "unrelated":
+            assert not writes
+            assert (saved["control_task_id"], saved["para_task_id"], saved["github_run_id"]) == (
+                "ctl1",
+                "p1",
+                502,
+            )
+            assert saved["head_sha"] == new
+            expected = {
+                "applied": "pr_updated_ci_observed",
+                "applied_ci_pending": "pr_updated_ci_pending",
+                "unrelated": "pr_update_unconfirmed",
+            }
+            assert saved["status"] == expected[scenario]
+        else:
+            assert saved["status"] == "pr_repair_blocked"
+    assert pr["head"]["sha"] == head
+
+
+def test_repair_advance_rejects_previously_published_candidates_without_writes(monkeypatch):
+    target = mod.repair.Target(42, "fix/ci", "a" * 40, 70, 99, ".github/workflows/fhd-ci-cd.yml")
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("suspended repair cannot fetch, run hooks or push")
+
+    monkeypatch.setattr(subprocess, "run", forbidden)
+    with pytest.raises(
+        ValueError, match="original_pr_repair_requires_non_exportable_model_credentials"
+    ):
+        mod.repair.advance(
+            "https://github.com/o/r.git", target, "d" * 40, "fixture", before_write=forbidden
+        )
 
 
 @pytest.mark.parametrize("reason", ["private connection details", ""])

@@ -71,7 +71,7 @@ def validate_arithmetic(payload: dict[str, Any]) -> dict[str, Any] | None:
         return invalid_payload("order.items 缺失或为空")
     eps = Decimal("0.01")
     total = Decimal("0")
-    total_qty = Decimal("0")
+    ordered_quantities = []
     units = set()
     for idx, item in enumerate(items):
         if not isinstance(item, dict):
@@ -90,7 +90,7 @@ def validate_arithmetic(payload: dict[str, Any]) -> dict[str, Any] | None:
         if abs(line_total - qty * price) > eps:
             return invalid_payload(f"order.items[{idx}] line_total 与 数量*单价 不一致")
         total += line_total
-        total_qty += qty
+        ordered_quantities.append(qty)
         if not item.get("product_id") and (
             not (item.get("product_name") and item.get("product_resolution"))
         ):
@@ -113,20 +113,28 @@ def validate_arithmetic(payload: dict[str, Any]) -> dict[str, Any] | None:
         return invalid_payload("fulfillment.requested 必须为 bool")
     if f_req is not True:
         return invalid_payload("fulfillment.requested 必须为 True（履行是契约必需）")
+    shipped_quantities = ordered_quantities
+    if "line_quantities" in fulfillment:
+        lines = fulfillment["line_quantities"]
+        if not isinstance(lines, list) or len(lines) != len(items):
+            return invalid_payload("fulfillment.line_quantities 必须按订单行提供每行交付数量")
+        shipped_quantities = []
+        for raw, ordered in zip(lines, ordered_quantities, strict=True):
+            quantity = finite_decimal(raw)
+            if quantity is None or not 0 < quantity <= ordered:
+                return invalid_payload("每行交付数量必须为正且不能超过该行订购量")
+            shipped_quantities.append(quantity)
     f_qty = finite_decimal(fulfillment.get("quantity"))
-    if f_qty is None:
-        return invalid_payload("fulfillment.quantity 非法")
-    if f_qty <= 0:
-        return invalid_payload("fulfillment.quantity 必须为正")
-    if abs(f_qty - total_qty) > eps:
-        return invalid_payload("fulfillment.quantity 与订购总量不一致")
-    f_unit = fulfillment.get("unit")
-    if f_unit not in units:
+    if f_qty is None or f_qty <= 0 or abs(f_qty - sum(shipped_quantities)) > eps:
+        return invalid_payload("fulfillment.quantity 与交付明细合计不一致")
+    if fulfillment.get("unit") not in units:
         return invalid_payload("fulfillment.unit 与明细单位不一致")
     invoice = payload["invoice"]
     inv_req = invoice.get("requested")
     if not isinstance(inv_req, bool):
         return invalid_payload("invoice.requested 必须为 bool")
+    if inv_req and shipped_quantities != ordered_quantities:
+        return invalid_payload("部分交付须先完成履约，当前闭环仅支持全额开票")
     if inv_req:
         inv_amt = finite_decimal(invoice.get("amount"))
         if inv_amt is None:
@@ -145,10 +153,8 @@ def validate_arithmetic(payload: dict[str, Any]) -> dict[str, Any] | None:
         pay_amt = finite_decimal(pa.get("amount"))
         if pay_amt is None:
             return invalid_payload("payment_allocation.amount 非法")
-        if pay_amt <= 0:
-            return invalid_payload("payment_allocation.amount 必须为正")
-        if abs(pay_amt - order_total) > eps:
-            return invalid_payload("payment_allocation.amount 与订单总额不一致")
+        if not 0 < pay_amt <= order_total:
+            return invalid_payload("payment_allocation.amount 必须为正且不能超过已开票订单总额")
         if pa.get("currency") != currency:
             return invalid_payload("payment_allocation.currency 与订单币种不一致")
     if inv_req is False and pa_req is True:

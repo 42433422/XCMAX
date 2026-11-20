@@ -70,6 +70,27 @@ def _load_litellm() -> Any:
     return _LITELLM_MODULE
 
 
+def model_registry_entry(provider: str, model: str) -> dict[str, Any]:
+    """Read the pinned LiteLLM registry for the matching provider."""
+    module = _load_litellm()
+    if module is None:
+        return {}
+    namespace = {"google": "gemini", "xiaomi": "xiaomi_mimo", "together": "together_ai"}.get(
+        provider, provider
+    )
+    info = module.model_cost.get(f"{namespace}/{model}") or module.model_cost.get(model) or {}
+    return info if info.get("litellm_provider") == namespace else {}
+
+
+def model_limits(provider: str, model: str) -> dict[str, int]:
+    info = model_registry_entry(provider, model)
+    return {
+        key: value
+        for key in ("max_input_tokens", "max_output_tokens")
+        if type(value := info.get(key)) is int and value > 0
+    }
+
+
 def available() -> bool:
     """LiteLLM 已安装且管理端/环境开关打开。"""
 

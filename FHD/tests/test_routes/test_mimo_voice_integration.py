@@ -4,18 +4,19 @@ import asyncio
 import base64
 import io
 import wave
-from contextlib import nullcontext
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, create_autospec, patch
 
 import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
 pytest.importorskip("modstore_server")
 
 from modstore_server import llm_key_resolver, mimo_tts_service, models
+from modstore_server import llm_operation_routes as routes
 from modstore_server.workbench import speech_api
 from modstore_server.workbench.schemas import WorkbenchUnifiedTtsBody
 
@@ -23,21 +24,56 @@ from app.fastapi_routes import ai_assistant_tts
 from app.fastapi_routes.voice_routes import router
 
 
-def test_recording_reaches_mimo_with_current_account_without_retry(monkeypatch):
+@pytest.fixture
+def account_route(monkeypatch):
+    state = {"default_provider": "xiaomi"}
+    credentials = create_autospec(
+        llm_key_resolver.resolve_credentials,
+        return_value=("test-key", "https://provider.invalid/v1", "user_override"),
+    )
+    catalog = AsyncMock(
+        return_value={
+            "models_detailed": [
+                {
+                    "id": model,
+                    "category": "audio",
+                    "capabilities": {"operations": [operation]},
+                }
+                for operation, model in routes.SPEECH_MODELS.items()
+            ]
+        }
+    )
+    # Patch where the real operation resolver looks up dependencies. Patching
+    # their definitions while this module is lazily imported leaks stale aliases.
+    monkeypatch.setattr(routes, "resolve_credentials", credentials)
+    monkeypatch.setattr(routes, "read_state", lambda: state)
+    monkeypatch.setattr(routes, "get_models_for_credentials", catalog)
+    with Session() as session:
+        monkeypatch.setattr(models, "get_session_factory", lambda: lambda: session)
+        yield
+        credentials.assert_called_once_with(session, 42, "xiaomi", platform_state=state)
+        catalog.assert_awaited_once_with(
+            42,
+            "xiaomi",
+            api_key="test-key",
+            base_url="https://provider.invalid/v1",
+            discover_operations=True,
+        )
+
+
+def test_recording_reaches_mimo_with_current_account_without_retry(monkeypatch, account_route):
     monkeypatch.setenv("XCAGI_CHAT_ASR_PROVIDER", "mimo")
     monkeypatch.setenv("MODSTORE_MIMO_ASR_ENABLED", "1")
     monkeypatch.setenv("MODSTORE_MIMO_ASR_USER_IDS", "42")
     monkeypatch.setattr(
-        "app.fastapi_routes.ai_assistant_tts._session_market_token", lambda _: "session-token"
+        "app.fastapi_routes.ai_assistant_tts._session_market_token",
+        lambda _: "session-token",
     )
-    monkeypatch.setattr(models, "get_session_factory", lambda: lambda: nullcontext("session"))
+    monkeypatch.setattr(
+        "app.fastapi_routes.voice_routes._platform_funasr_transcribe",
+        AsyncMock(side_effect=AssertionError("MiMo must complete without fallback")),
+    )
     calls = []
-
-    def credentials(session, user_id, provider):
-        assert (session, user_id, provider) == ("session", 42, "xiaomi")
-        return "test-key", "https://provider.invalid/v1", "user_override"
-
-    monkeypatch.setattr(llm_key_resolver, "resolve_credentials", credentials)
 
     class Client:
         def __init__(self, **kwargs):
@@ -89,15 +125,9 @@ def test_recording_reaches_mimo_with_current_account_without_retry(monkeypatch):
     assert len(calls) == 2
 
 
-def test_tts_platform_audio_and_chinese_voice_reach_desktop(monkeypatch):
+def test_tts_platform_audio_and_chinese_voice_reach_desktop(monkeypatch, account_route):
     monkeypatch.setattr(ai_assistant_tts, "_session_market_token", lambda _: "session-token")
     monkeypatch.setattr(ai_assistant_tts, "_trace", lambda payload, **_: payload)
-    monkeypatch.setattr(models, "get_session_factory", lambda: lambda: nullcontext("session"))
-    monkeypatch.setattr(
-        llm_key_resolver,
-        "resolve_credentials",
-        lambda session, uid, provider: ("test-key", "https://provider.invalid/v1", "user_override"),
-    )
     synth = AsyncMock(return_value=(b"RIFFaudio", "", {"mime": "audio/wav", "voice": "冰糖"}))
     monkeypatch.setattr(mimo_tts_service, "synthesize_mimo_tts_async", synth)
 
@@ -133,4 +163,8 @@ def test_tts_platform_audio_and_chinese_voice_reach_desktop(monkeypatch):
     data = response.json()["data"]
     assert data["voice"] == "冰糖" and data["provider"] == "mimo"
     assert base64.b64decode(data["audioBase64"].split(",", 1)[1]) == b"RIFFaudio"
-    assert synth.await_args.kwargs["credentials"] == ("test-key", "https://provider.invalid/v1")
+    assert synth.await_args.kwargs["credentials"] == (
+        "test-key",
+        "https://provider.invalid/v1",
+    )
+    assert synth.await_args.kwargs["model"] == routes.MIMO_TTS_MODEL

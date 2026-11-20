@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 from modstore_server.api.deps import get_db
 from modstore_server.db.mac_control import MacControlTask
 from modstore_server.mac_control_store import TERMINAL, accept, transition, view
+from modstore_server.para_github_repair import REPAIR_ACTOR, REPAIR_KIND
 
 router = APIRouter(prefix="/api/service/mac-control", tags=["mac-control-dispatch"])
 
@@ -79,9 +80,18 @@ def github_run_status(
 class DispatchRequest(BaseModel):
     request_key: str = Field(min_length=8, max_length=128)
     message: str = Field(min_length=1, max_length=12000)
-    tool: str = Field(default="cursor", pattern=r"^(cursor|codex|claude_code|trae)$")
+    tool: str = Field(default="cursor", pattern=r"^(cursor|codex|claude_code|trae|opencode)$")
     source_sha: str = Field(default="", pattern=r"^(?:[0-9a-f]{40})?$")
     github_issue: int | None = Field(default=None, gt=0)
+
+
+class PullRequestDispatchRequest(BaseModel):
+    request_key: str = Field(min_length=8, max_length=128)
+    message: str = Field(min_length=1, max_length=12000)
+    source_sha: str = Field(pattern=r"^[0-9a-f]{40}$")
+    github_issue: int = Field(gt=0)
+    pull_request: int = Field(gt=0)
+    source_run_id: int = Field(gt=0)
 
 
 def _service_view(task: MacControlTask) -> dict:
@@ -96,9 +106,50 @@ def _service_view(task: MacControlTask) -> dict:
         "created_at",
         "updated_at",
     )
-    return {key: payload[key] for key in (*keys, "execution")} | {
+    result = {key: payload[key] for key in (*keys, "execution")} | {
         "terminal": task.state in TERMINAL
     }
+    if task.actor == REPAIR_ACTOR:
+        result.update(executor=REPAIR_KIND, github_run_id=payload["execution"].get("run_id"))
+    return result
+
+
+def _require_control_enabled():
+    if os.environ.get("MODSTORE_MAC_CONTROL_ENABLED") != "1":
+        raise HTTPException(503, "Mac 主控尚未启用，原有入口不受影响")
+    if not os.environ.get("XCMAX_FACTORY_CAPABILITY_TOKEN"):
+        raise HTTPException(503, "工厂执行能力尚未配置")
+
+
+def _accept_task(db, *, actor, key, request):
+    try:
+        task = accept(db, actor=actor, key=key, request=request)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from None
+    return {"success": True, "task": _service_view(task), "accepted": True}
+
+
+@router.post("/github-pr-tasks", status_code=202)
+def create_github_pr_task(
+    body: PullRequestDispatchRequest,
+    _actor: str = Depends(require_dispatch_service),
+    db: Session = Depends(get_db),
+):
+    from modstore_server.customer_ticket_github import configuration
+
+    _require_control_enabled()
+    config = configuration()
+    if not config["configured"] or not config["para_configured"]:
+        raise HTTPException(503, "Para 云端派工尚未配置")
+    request = {
+        **body.model_dump(exclude={"request_key"}),
+        "source": REPAIR_KIND,
+        "repository": config["repository"],
+        "target": "github",
+        "tool": "codex",
+        "mode": "code",
+    }
+    return _accept_task(db, actor=REPAIR_ACTOR, key=body.request_key, request=request)
 
 
 @router.post("/tasks", status_code=202)
@@ -107,10 +158,7 @@ def create_code_task(
     actor: str = Depends(require_dispatch_service),
     db: Session = Depends(get_db),
 ):
-    if os.environ.get("MODSTORE_MAC_CONTROL_ENABLED") != "1":
-        raise HTTPException(503, "Mac 主控尚未启用，原有入口不受影响")
-    if not os.environ.get("XCMAX_FACTORY_CAPABILITY_TOKEN"):
-        raise HTTPException(503, "工厂执行能力尚未配置")
+    _require_control_enabled()
     request: dict = {
         "message": body.message,
         "target": "mac",
@@ -123,11 +171,7 @@ def create_code_task(
     }
     if body.github_issue:
         request["github_issue"] = body.github_issue
-    try:
-        task = accept(db, actor=actor, key=body.request_key, request=request)
-    except ValueError as exc:
-        raise HTTPException(409, str(exc)) from None
-    return {"success": True, "task": _service_view(task), "accepted": True}
+    return _accept_task(db, actor=actor, key=body.request_key, request=request)
 
 
 @router.get("/tasks/{task_id}")
@@ -138,9 +182,9 @@ def get_code_task(
 ):
     task = db.get(MacControlTask, task_id)
     # Tasks created by admins or other identities are invisible to this token.
-    if task is None or task.actor != actor:
+    if task is None or task.actor not in {actor, REPAIR_ACTOR}:
         raise HTTPException(404, "任务不存在")
-    if task.para_task_id and task.state in TERMINAL:
+    if task.actor == actor and task.para_task_id and task.state in TERMINAL:
         from modstore_server.mac_control_transport import (
             ParaClient,
             ParaUnavailable,

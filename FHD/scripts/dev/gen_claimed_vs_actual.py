@@ -23,6 +23,7 @@ import argparse
 import datetime
 import glob
 import json
+import math
 import re
 import sys
 from pathlib import Path
@@ -305,6 +306,26 @@ def build_rows() -> tuple[list[list[str]], list[list[str]]]:
                 ST_GREEN if ev and ev > 0 else ST_YELLOW,
             ]
         )
+        mttr = dora.get("mean_time_to_restore_hours")
+        samples = dora.get("mean_time_to_restore_sample_count")
+        valid_count = type(samples) is int and samples >= 0
+        measured = (
+            valid_count
+            and samples > 0
+            and type(mttr) in (int, float)
+            and math.isfinite(mttr)
+            and mttr >= 0
+        )
+        duration = f"{mttr:g} 小时" if measured else "未知"
+        rows.append(
+            [
+                "DORA 平均恢复时长",
+                "仅以明确恢复回执计量",
+                f"{duration} / 有效恢复样本 {samples if valid_count else '未知'}",
+                dora_path.name if dora_path else "dora-YYYYMMDD.json",
+                ST_GREEN if measured else ST_YELLOW,
+            ]
+        )
 
     # --- E2E spec 数 ---
     e2e_specs = sorted(glob.glob(str(FHD_ROOT / "frontend" / "e2e" / "*.spec.ts")))
@@ -375,7 +396,7 @@ def render_doc() -> str:
     parts.append(_md_table(["维度", "声称", "实测", "数据源", "状态"], rows))
     parts.append("")
     parts.append(
-        "**状态图例**：🟢 实测 ≥ 目标 · 🟡 floor ≤ 实测 < 目标 · 🔴 实测 < floor 或 声称≠实测 · ⛔ 已退役口径"
+        "**状态图例**：🟢 实测 ≥ 目标或证据已核验 · 🟡 floor ≤ 实测 < 目标或证据不足 · 🔴 实测 < floor 或 声称≠实测 · ⛔ 已退役口径"
     )
     parts.append("")
     parts.append("## 已退役口径（黑名单，禁止对外引用）")

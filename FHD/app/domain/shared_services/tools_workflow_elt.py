@@ -11,9 +11,11 @@ import hashlib
 import io
 import os
 import time
-from datetime import timedelta
+from collections.abc import Callable
+from functools import partial
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, TypedDict
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 from sqlalchemy import or_
 
@@ -31,8 +33,14 @@ from app.db.session import get_db
 from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 from app.utils.time import utc_now_naive
 
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
+
+    from app.application.elt.service import EltService
+
 PREVIEW_PENDING = {"queued", "previewing"}
 EXECUTION_PENDING = {"queued", "executing", "persisting"}
+EXECUTION_UNCERTAIN = EXECUTION_PENDING | {"outcome_unknown"}
 PREVIEW_TIMEOUT_SECONDS = 120
 EXECUTION_TIMEOUT_SECONDS = 240
 POLL_INTERVAL_SECONDS = 0.5
@@ -82,33 +90,8 @@ def _owned_upload(file_path: str, context: dict[str, Any]) -> dict[str, str]:
             "storage_path": str(row.storage_path or ""),
             "suffix": str(row.suffix or ""),
             "file_name": str(row.file_name or ""),
+            "sha256": str(row.sha256 or ""),
         }
-
-
-_IMPORT_WINDOW_MINUTES = 30
-
-
-def _recent_upload_ids(runtime_context: dict[str, Any]) -> list[str]:
-    """本轮（最近一段时间）上传的 ELT 文件；用户说「导入」时用它替代模型枚举。"""
-    try:
-        actor = _bound_actor(runtime_context)
-        cutoff = utc_now_naive() - timedelta(minutes=_IMPORT_WINDOW_MINUTES)
-        with get_db() as db:
-            rows = (
-                db.query(EltUpload.id)
-                .filter(
-                    EltUpload.owner_user_id == actor.id,
-                    EltUpload.tenant_id == tenant_id_for_write(),
-                    EltUpload.created_at >= cutoff,
-                    EltUpload.expires_at > utc_now_naive(),
-                )
-                .order_by(EltUpload.created_at.asc())
-                .limit(_MAX_BATCH_IMPORTS)
-                .all()
-            )
-    except RECOVERABLE_ERRORS:
-        return []
-    return [str(row[0]) for row in rows]
 
 
 def _publish_note(text: str) -> None:
@@ -124,6 +107,9 @@ def _publish_file_stage(
     success: bool | None = None,
     output: str = "",
     error: str = "",
+    deferred: bool = False,
+    committed: bool = False,
+    requires_reconciliation: bool = False,
 ) -> None:
     """把「正在处理哪个文件 / 哪个文件已完成」推进执行链。
 
@@ -138,21 +124,18 @@ def _publish_file_stage(
     if phase == "finished":
         record["success"] = bool(success)
         record["output_preview"] = str(output or "")[:200]
+        if deferred:
+            record["deferred"] = True
+        if committed:
+            record["committed"] = True
+        if requires_reconciliation:
+            record["requires_reconciliation"] = True
         if error:
             record["error"] = str(error)[:200]
     try:
         publish_stream_tool_record(record)
     except BOUNDARY_ERRORS:
         pass
-
-
-def _upload_label(path: str, runtime_context: dict[str, Any]) -> str:
-    """批次进度里用的可读文件名；查不到时退回路径名。"""
-    try:
-        name = str(_owned_upload(path, runtime_context).get("file_name") or "").strip()
-    except RECOVERABLE_ERRORS:
-        name = ""
-    return name or Path(str(path)).name or str(path)
 
 
 def _run_label(run_id: str, runtime_context: dict[str, Any]) -> str:
@@ -190,6 +173,33 @@ def _remaining_budget(runtime_context: dict[str, Any]) -> float | None:
     return None
 
 
+def _has_stage_budget(runtime_context: dict[str, Any]) -> bool:
+    remaining = _remaining_budget(runtime_context)
+    return remaining is None or remaining > _MIN_WAIT_SECONDS
+
+
+def _can_start_file_stage(runtime_context: dict[str, Any]) -> bool:
+    return callable(runtime_context.get("_renew_elt_file_deadline")) or _has_stage_budget(
+        runtime_context
+    )
+
+
+def _renew_file_stage(runtime_context: dict[str, Any], stage: str) -> None:
+    renew = runtime_context.get("_renew_elt_file_deadline")
+    if callable(renew):
+        runtime_context["deadline_monotonic"] = renew(stage)
+        runtime_context["_elt_file_phase"] = stage
+
+
+def _linked_preview_cap(runtime_context: dict[str, Any]) -> float:
+    from app.application.agent_orchestrator.tool_timeouts import ELT_LINKED_PREVIEW_TIMEOUT_SECONDS
+
+    if runtime_context.get("_elt_linked_preview_used") is not True:
+        _renew_file_stage(runtime_context, "linked_preview")
+        runtime_context["_elt_linked_preview_used"] = True
+    return ELT_LINKED_PREVIEW_TIMEOUT_SECONDS
+
+
 def _wait_timeout(params: dict[str, Any], runtime_context: dict[str, Any], cap: float) -> float:
     declared = params.get("_wait_timeout")
     limit = float(declared) if isinstance(declared, (int, float)) and declared > 0 else cap
@@ -203,6 +213,10 @@ def _batch_result_text(action: str, label: str, out: dict[str, Any]) -> str:
     """单个文件的收口说明；预演/执行共用，供进度提示与执行链复用。"""
     raw_data = out.get("data")
     data = raw_data if isinstance(raw_data, dict) else {}
+    if out.get("outcome") == "unknown":
+        return f"「{label}」{action}待核对：{out.get('message') or '结果待确认'}"
+    if out.get("deferred") or out.get("error_code") == "elt_companion_incomplete":
+        return f"「{label}」{out['message']}"
     if not out.get("success"):
         return f"「{label}」{action}失败：{out.get('message') or '未知原因'}"
     if action == "预演":
@@ -211,6 +225,8 @@ def _batch_result_text(action: str, label: str, out: dict[str, Any]) -> str:
             f"新增 {data.get('new_rows', 0)}、更新 {data.get('update_rows', 0)}、"
             f"跳过 {data.get('skip_rows', 0)}、错误 {data.get('error_rows', 0)}"
         )
+    if out.get("message"):
+        return f"「{label}」{out['message']}"
     text = f"「{label}」导入完成：写入 {data.get('executed_rows', 0)} 行"
     if data.get("skip_rows"):
         text += f"，重复跳过 {data.get('skip_rows')} 行"
@@ -219,6 +235,40 @@ def _batch_result_text(action: str, label: str, out: dict[str, Any]) -> str:
 
 def _batch_result_note(action: str, label: str, out: dict[str, Any]) -> None:
     _publish_note(_batch_result_text(action, label, out))
+
+
+def _run_file_stage(
+    action: str,
+    index: int,
+    total: int,
+    label: str,
+    operation: Callable[[], dict],
+    runtime_context: dict[str, Any],
+) -> dict:
+    stage = "preview" if action == "预演" else "execute"
+    runtime_context.pop("_elt_linked_preview_used", None)
+    _renew_file_stage(runtime_context, stage)
+    node_id = f"elt-{stage}-{index}"
+    stage_action = f"{action} {index}/{total}：{label}"
+    _publish_file_stage(node_id=node_id, action=stage_action, phase="started")
+    _batch_progress_note(action, index, total, label)
+    try:
+        out = operation()
+    except PermissionError as err:
+        out = {"success": False, "error_code": "spreadsheet_access_denied", "message": str(err)}
+    _batch_result_note(action, label, out)
+    _publish_file_stage(
+        node_id=node_id,
+        action=stage_action,
+        phase="finished",
+        success=bool(out.get("success")),
+        output=_batch_result_text(action, label, out),
+        error="" if out.get("success") else str(out.get("message") or ""),
+        deferred=out.get("deferred") is True,
+        committed=_confirmed_written_rows(out) > 0,
+        requires_reconciliation=out.get("outcome") == "unknown",
+    )
+    return out
 
 
 def _progress_record(data: dict, runtime_context: dict[str, Any]) -> dict[str, Any]:
@@ -315,7 +365,10 @@ def _execution_message(summary: dict, notes: str) -> str:
     """导入回执必须说清「写了多少 / 跳过多少」，否则全量重复时会误报导入成功。"""
     executed = int(summary.get("executed_rows") or 0)
     skipped = int(summary.get("skip_rows") or 0)
-    message = f"ELT 导入完成：写入 {executed} 行，失败 {summary['error_rows']} 行"
+    label = (
+        "出货记录写入完成" if summary.get("target_type") == "shipment_records" else "ELT 导入完成"
+    )
+    message = f"{label}：写入 {executed} 行，失败 {summary['error_rows']} 行"
     if skipped:
         message += f"，重复跳过 {skipped} 行"
         if executed == 0:
@@ -1095,11 +1148,19 @@ def _create_ai_import_template(
     }
 
 
-def _preview(params: dict, runtime_context: dict) -> dict:
+def _preview(
+    params: dict,
+    runtime_context: dict,
+    *,
+    upload: dict[str, str] | None = None,
+    checkpoint_id: str = "",
+    checkpoint: dict | None = None,
+) -> dict:
     from app.application.elt.errors import EltError
     from app.application.elt.service import get_elt_service
 
-    upload = _owned_upload(str(params.get("file_path") or ""), runtime_context)
+    if upload is None:
+        upload = _owned_upload(str(params.get("file_path") or ""), runtime_context)
     if not upload:
         return {
             "success": False,
@@ -1108,21 +1169,26 @@ def _preview(params: dict, runtime_context: dict) -> dict:
         }
     service = get_elt_service()
     actor = _bound_actor(runtime_context)
-    target_type, template = _resolve_template(upload, actor.id)
-    # 模型识别出的非送货单目标显式传入，避免 ELT 再按旧规则改判；送货单保留关联预演。
-    resolved_target = "auto"
-    if template and target_type not in {"auto", "abnormal", "shipment_records"}:
-        resolved_target = target_type
     try:
-        with get_db() as db:
-            created = service.create_preview(
-                db,
-                owner_user_id=actor.id,
-                upload_id=upload["id"],
-                # 送货单仍交给 ELT 自动识别，多工作表会同时生成关联预演。
-                target_type=resolved_target,
-                template_id=str(template.get("id") or "") or None,
-            )
+        if checkpoint:
+            created = checkpoint
+            target_type = str(created.get("target_type") or "auto")
+            template = {"id": created.get("template_id")}
+            _resume_checkpoint_previews(service, actor.id, created)
+        else:
+            target_type, template = _resolve_template(upload, actor.id)
+            resolved_target = "auto"
+            if template and target_type not in {"auto", "abnormal", "shipment_records"}:
+                resolved_target = target_type
+            with get_db() as db:
+                created = service.create_preview(
+                    db,
+                    owner_user_id=actor.id,
+                    upload_id=upload["id"],
+                    target_type=resolved_target,
+                    template_id=str(template.get("id") or "") or None,
+                    checkpoint_run_id=checkpoint_id or None,
+                )
     except EltError as exc:
         return {"success": False, "error_code": exc.code, "message": exc.message}
     run_id = str(created.get("id") or "")
@@ -1142,6 +1208,15 @@ def _preview(params: dict, runtime_context: dict) -> dict:
     summary["template_name"] = str(template.get("name") or "")
     summary["template_source"] = str(template.get("matched_by") or "")
     summary["template_confidence"] = template.get("match_confidence")
+    primary_ready = data.get("status") == "preview_ready"
+    companion = (
+        _companion_summary(_wait_linked_preview(service, actor.id, data, runtime_context))
+        if primary_ready
+        else {}
+    )
+    if companion:
+        summary["customer_products"] = companion
+    companion_ready = _companion_preview_ready(companion)
     pending_mappings = [
         str(item.get("target") or item.get("source") or "字段") for item in _pending_mappings(data)
     ]
@@ -1155,18 +1230,22 @@ def _preview(params: dict, runtime_context: dict) -> dict:
     accept_suggested = params.get("accept_suggested") is True
     blocked_by_errors = bool(error_rows) and not accept_valid_rows
     # 有错误行或映射待确认时，ELT 会阻断整批执行；提前告知调用方，避免执行阶段才失败。
-    summary["executable"] = not blocked_by_errors and (not pending_mappings or accept_suggested)
+    ok = primary_ready and companion_ready
+    summary["executable"] = (
+        ok and not blocked_by_errors and (not pending_mappings or accept_suggested)
+    )
     # 只剩映射置信度不足时，用户可以一次性接受 AI 建议直接执行。
-    summary["executable_with_suggestions"] = not blocked_by_errors
-    ok = data.get("status") == "preview_ready"
+    summary["executable_with_suggestions"] = ok and not blocked_by_errors
     template_note = ""
     if summary["template_name"]:
         ai_note = (
             "（AI 识别）" if summary["template_source"] in {"ai", "ai_created", "ai_rank"} else ""
         )
         template_note = f"，已套用导入模板{ai_note}「{summary['template_name']}」"
-    if not ok:
+    if not primary_ready:
         message = f"预演未完成：{data.get('error') or data.get('stage')}"
+    elif not companion_ready:
+        message = f"运单预演已完成{_companion_note(companion)}。业务写入未提交。"
     else:
         message = (
             f"预演完成：目标「{summary['target_type']}」，共 {summary['total_rows']} 行，"
@@ -1201,24 +1280,11 @@ def _preview(params: dict, runtime_context: dict) -> dict:
         resume_params["valid_rows_only"] = True
     if requires_decision and pending_mappings and not blocked_by_errors:
         resume_params["accept_suggested"] = True
-    # 自动审批档：预演通过后直接入库，避免计划只排了预演就停在 preview_ready，
-    # 导致「导入成功但模板库/知识库空白」。
-    if (
-        ok
-        and summary["executable"]
-        and str(runtime_context.get("chat_approval_mode") or "") == "auto"
-    ):
-        executed = _execute({"run_id": run_id}, runtime_context)
-        if executed.get("success"):
-            raw_data = executed.get("data")
-            data = raw_data if isinstance(raw_data, dict) else {}
-            data["preview"] = summary
-            executed["data"] = data
-            executed["preview"] = True
-            return executed
     return {
         "success": ok,
         "preview": True,
+        "deferred": data.get("status") in PREVIEW_PENDING
+        or (not companion_ready and _companion_is_deferred(companion)),
         "error_code": None if ok else "elt_preview_not_ready",
         "message": message,
         "requires_user_decision": requires_decision,
@@ -1282,10 +1348,7 @@ def _parallel_receipts(
 def _finalize_import(
     data: dict[str, Any], owner_id: int
 ) -> tuple[dict[str, Any], dict[str, Any], str]:
-    """一次导入的唯一收口：并行写知识库与模板库，并生成如实回执。
-
-    预演自动入库、正常执行、「已完成」补登三条路径都只调用它，不再各写一份。
-    """
+    """执行后并行登记知识库与模板库，汇总两份回执。"""
     knowledge, template = _parallel_receipts(data, owner_id)
     return knowledge, template, _receipt_notes(knowledge, template)
 
@@ -1322,6 +1385,7 @@ def _receipt_notes(knowledge: dict[str, Any], template: dict[str, Any]) -> str:
 
 
 def _execute(params: dict, runtime_context: dict) -> dict:
+    from app.application.agent_orchestrator.business_write_guard import worker_write_guard
     from app.application.elt.errors import EltError
     from app.application.elt.service import get_elt_service
 
@@ -1334,36 +1398,83 @@ def _execute(params: dict, runtime_context: dict) -> dict:
         }
     service = get_elt_service()
     actor = _bound_actor(runtime_context)
+    resumed = False
+    write_requested = False
     try:
         with get_db() as db:
-            # 执行必须绑定本次预演内容的修订号，否则 ELT 会拒绝（防止预演后被改动）。
             current = service.get_run(db, run_id=run_id, owner_user_id=actor.id)
-            status = str(current.get("status") or "")
-            if status in PREVIEW_PENDING:
-                # 计划可能把执行排到预演还没跑完的时候：先等预演结束，再按结果执行，
-                # 不能直接报「请先完成预演再执行」把整条导入判失败。
-                _wait(
+            if _resumable_linked_preview(current) and _has_stage_budget(runtime_context):
+                current = _resume_linked_preview(service, db, actor.id, current)
+                resumed = True
+        status = str(current.get("status") or "")
+        if status in PREVIEW_PENDING:
+            wait_cap = (
+                _linked_preview_cap(runtime_context)
+                if _linked_shipment_id(current)
+                else PREVIEW_TIMEOUT_SECONDS
+            )
+            current = _wait(
+                service,
+                run_id,
+                actor.id,
+                pending=PREVIEW_PENDING,
+                timeout=_wait_timeout(params, runtime_context, wait_cap),
+                runtime_context=runtime_context,
+            )
+            if (
+                not resumed
+                and _interrupted_linked_preview(current)
+                and _has_stage_budget(runtime_context)
+            ):
+                with get_db() as db:
+                    _resume_linked_preview(service, db, actor.id, current)
+                current = _wait(
                     service,
                     run_id,
                     actor.id,
                     pending=PREVIEW_PENDING,
-                    timeout=_wait_timeout(params, runtime_context, PREVIEW_TIMEOUT_SECONDS),
+                    timeout=_wait_timeout(params, runtime_context, wait_cap),
                     runtime_context=runtime_context,
                 )
-                with get_db() as wait_db:
-                    current = service.get_run(wait_db, run_id=run_id, owner_user_id=actor.id)
-                status = str(current.get("status") or "")
-            revision = str(current.get("preview_revision") or "")
-            # 自动审批档下预演可能已经触发入库（executing/completed）：
-            # 计划里的执行步骤只需等待或收口，重复调用 execute 会报「请先完成预演再执行」。
-            if status not in ("executing", "completed"):
+            status = str(current.get("status") or "")
+        if status in PREVIEW_PENDING or _interrupted_linked_preview(current):
+            return {
+                "success": False,
+                "preview": True,
+                "deferred": True,
+                "error_code": "elt_preview_not_ready",
+                "message": f"预演 {run_id} 尚未就绪，业务写入未提交。",
+                "data": {**_summary(current), "run_id": run_id},
+            }
+        if status == "preview_ready":
+            companion = _companion_summary(
+                _wait_linked_preview(service, actor.id, current, runtime_context)
+            )
+            if not _companion_preview_ready(companion):
+                summary = {**_summary(current), "customer_products": companion}
+                if companion["status"] in EXECUTION_UNCERTAIN - PREVIEW_PENDING:
+                    return _unknown_execution(companion["run_id"], summary)
+                return {
+                    "success": False,
+                    "deferred": _companion_is_deferred(companion),
+                    "error_code": "elt_companion_incomplete",
+                    "message": f"运单预演已完成{_companion_note(companion)}。运单写入未提交。",
+                    "data": summary,
+                }
+            if runtime_context.get("_elt_file_phase") == "linked_preview":
+                _renew_file_stage(runtime_context, "execute")
+        if status not in EXECUTION_UNCERTAIN | {"completed", "partial"}:
+            with get_db() as db, worker_write_guard(db):
+                revision = str(current.get("preview_revision") or "")
                 revisions = params.get("preview_revisions")
                 confirmed_revision = str(
                     (revisions.get(run_id) if isinstance(revisions, dict) else None)
                     or params.get("preview_revision")
                     or ""
                 )
-                linked = (current.get("draft") or {}).get("linked_preview")
+                linked = (current.get("draft") or {}).get("linked_preview") or _linked_shipment_id(
+                    current
+                )
                 if (linked and not confirmed_revision) or (
                     confirmed_revision and confirmed_revision != revision
                 ):
@@ -1372,6 +1483,23 @@ def _execute(params: dict, runtime_context: dict) -> dict:
                         "请单独核对当前预演的目标、行数及映射，并确认对应 preview_revision 后执行。"
                         f"可发送新消息：查看导入预演，run_id={run_id}",
                     )
+                if status == "preview_ready" and _linked_shipment_id(current):
+                    _verified_companion_source(service, db, actor.id, current)
+                    if current.get("total_rows") == 0:
+                        return {
+                            "success": True,
+                            "message": "关联附表预演已完成，未识别到可入库的客户及产品。",
+                            "data": _summary(current),
+                        }
+                if not _has_stage_budget(runtime_context):
+                    return {
+                        "success": False,
+                        "deferred": True,
+                        "error_code": "elt_preview_not_ready",
+                        "message": f"预演 {run_id} 已就绪，本轮尚未提交写入。",
+                        "data": _summary(current),
+                    }
+                write_requested = True
                 service.execute(
                     db,
                     run_id=run_id,
@@ -1380,35 +1508,241 @@ def _execute(params: dict, runtime_context: dict) -> dict:
                     valid_rows_only=bool(params.get("valid_rows_only") is True),
                     preview_revision=revision or None,
                     accept_suggested=bool(params.get("accept_suggested") is True),
+                    chat_context=runtime_context,
                 )
     except EltError as exc:
+        if write_requested and exc.code == "ELT_RUN_BUSY":
+            return _unknown_execution(run_id, {"run_id": run_id})
+        if exc.code == "ELT_RUN_BUSY":
+            return {
+                "success": False,
+                "deferred": True,
+                "error_code": "elt_preview_not_ready",
+                "message": f"预演 {run_id} 正在处理，业务写入未提交。",
+                "data": {"run_id": run_id},
+            }
         return {"success": False, "error_code": exc.code, "message": exc.message}
-    data = _wait(
-        service,
-        run_id,
-        actor.id,
-        pending=EXECUTION_PENDING,
-        timeout=_wait_timeout(params, runtime_context, EXECUTION_TIMEOUT_SECONDS),
-        runtime_context=runtime_context,
-    )
+    try:
+        data = _wait(
+            service,
+            run_id,
+            actor.id,
+            pending=EXECUTION_PENDING,
+            timeout=_wait_timeout(params, runtime_context, EXECUTION_TIMEOUT_SECONDS),
+            runtime_context=runtime_context,
+        )
+    except RECOVERABLE_ERRORS:
+        data = current if status in {"completed", "partial"} else {}
     summary = _summary(data)
-    ok = data.get("status") == "completed"
-    summary["customer_products"] = _read_linked_companion(service, actor, data)
-    # 业务数据已入库；知识库与模板库并行写，一个慢或失败不影响另一个。
-    knowledge, template, notes = _finalize_import(data, actor.id) if ok else ({}, {}, "")
+    summary["run_id"] = summary.get("run_id") or run_id
+    status = str(summary.get("status") or "")
+    ok = status == "completed"
+    companion = _read_linked_companion(service, actor, data)
+    if companion:
+        summary["customer_products"] = companion
+    if not status or status in EXECUTION_UNCERTAIN:
+        return _unknown_execution(run_id, summary)
+    knowledge, template, notes = (
+        _finalize_import(data, actor.id)
+        if ok
+        and write_requested
+        and not _linked_shipment_id(data)
+        and _has_stage_budget(runtime_context)
+        else ({}, {}, "")
+    )
     summary["knowledge"] = knowledge
     summary["template"] = template
-    message = (
-        _execution_message(summary, notes + _companion_note(summary["customer_products"]))
-        if ok
-        else f"ELT 导入未完成：{summary.get('error') or data.get('stage')}"
-    )
+    companion_note = _companion_note(companion)
+    if ok and not write_requested and summary.get("target_type") == "shipment_records":
+        message = (
+            f"原出货回执记录写入 {int(summary.get('executed_rows') or 0)} 行{companion_note}。"
+        )
+    elif ok:
+        message = _execution_message(summary, companion_note + notes)
+    else:
+        message = f"ELT 导入未完成：{summary.get('error') or data.get('stage')}"
     return {
         "success": ok,
-        "error_code": None if ok else f"elt_execute_{data.get('status')}",
+        "committed": _confirmed_written_rows({"data": summary}) > 0,
+        "error_code": None if ok else f"elt_execute_{status}",
         "message": message,
         "data": summary,
     }
+
+
+def _unknown_execution(run_id: str, summary: dict) -> dict:
+    return {
+        "success": False,
+        "error_code": "tool_timeout_unknown",
+        "outcome": "unknown",
+        "committed": _confirmed_written_rows({"data": summary, "outcome": "unknown"}) > 0,
+        "reconciliation_required": True,
+        "retryable": False,
+        "message": f"请在数据对接中心核对原回执 {run_id}，勿重复提交。",
+        "data": summary,
+    }
+
+
+def _confirmed_written_rows(result: dict) -> int:
+    data = result.get("data") or {}
+    rows = 0
+    if data.get("receipt_verified") is not False and (
+        result.get("outcome") != "unknown" or data.get("status") == "completed"
+    ):
+        rows = int(data.get("executed_rows") or 0)
+    companion = data.get("customer_products") or {}
+    if companion.get("receipt_verified") is not False and companion.get("status") in {
+        "completed",
+        "partial",
+    }:
+        rows += int(companion.get("executed_rows") or 0)
+    return rows
+
+
+def _interrupted_linked_preview(run: dict) -> bool:
+    return run.get("status") != "queued" and _resumable_linked_preview(run)
+
+
+def _linked_shipment_id(run: dict) -> str:
+    if run.get("target_type") != "customer_products":
+        return ""
+    details = run.get("details") or {}
+    return str(details.get("linked_from_shipment_preview") or "")
+
+
+def _resumable_linked_preview(run: dict) -> bool:
+    status = run.get("status")
+    return (
+        bool(_linked_shipment_id(run))
+        and (
+            status == "queued"
+            or status in {"failed", "interrupted"}
+            and (run.get("error") or {}).get("code")
+            in {"ELT_EXECUTION_INTERRUPTED", "ELT_OPERATION_LEASE_LOST"}
+        )
+        and "confirmed_at" in run
+        and run["confirmed_at"] is None
+        and "executed_at" in run
+        and run["executed_at"] is None
+        and (run.get("summary") or {}).get("executed") == 0
+    )
+
+
+def _verified_companion_source(
+    service, db, owner_id: int, current: dict, *, context: dict | None = None
+):
+    from app.application.elt.batch_continuation import (
+        shipment_parent_writes_present,
+        unchanged_source_upload,
+    )
+    from app.application.elt.errors import EltConflict
+    from app.application.elt.service_support import load_json
+
+    child = service._owned_run(db, current["id"], owner_id)
+    parent_id = _linked_shipment_id(current)
+    parent = service._owned_run(db, parent_id, owner_id)
+    link = load_json(parent.summary_json, {}).get("linked_customer_products_preview") or {}
+    # A same-task checkpoint may prove that the parent completed entirely as duplicates.
+    same_zero_write = bool(
+        context
+        and context.get("durable_elt_batch") is True
+        and parent.executed_rows == 0
+        and _batch_checkpoint_ids([parent.upload_id], context).get(parent.upload_id) == parent.id
+        and _checkpoint_receipt_present(db, parent, service.run_dict(parent))
+    )
+    if (
+        parent.status != "completed"
+        or parent.target_type != "shipment_records"
+        or parent.executed_at is None
+        or parent.rollback_status is not None
+        or parent.tenant_id != child.tenant_id
+        or parent.upload_id != child.upload_id
+        or parent.file_sha256 != child.file_sha256
+        or link.get("run_id") != child.id
+        or child.confirmed_at is not None
+        or child.executed_at is not None
+        or child.executed_rows != 0
+        or not (same_zero_write or shipment_parent_writes_present(db, parent))
+        or not unchanged_source_upload(db, child)
+    ):
+        raise EltConflict(
+            "elt_companion_incomplete", "原出货回执或附件无法核对，客户及产品恢复未提交。"
+        )
+    return child
+
+
+def _resume_linked_preview(service: EltService, db: Session, owner_id: int, current: dict) -> dict:
+    child = _verified_companion_source(service, db, owner_id, current)
+    if child.status == "queued":
+        # The previous tool may have exited before its preview worker claimed the row.
+        service._submit_preview(child.id, child.tenant_id, owner_id)
+        return current
+    return service.retry(db, run_id=child.id, owner_user_id=owner_id)
+
+
+def _wait_linked_preview(service, owner_id: int, data: dict, context: dict) -> dict:
+    from app.application.elt.errors import EltError
+
+    link = (data.get("details") or {}).get("linked_customer_products_preview")
+    run_id = str(link.get("run_id") or "") if isinstance(link, dict) else ""
+    if not run_id:
+        return {}
+    try:
+        can_renew = callable(context.get("_renew_elt_file_deadline"))
+        current = _wait(
+            service,
+            run_id,
+            owner_id,
+            pending=PREVIEW_PENDING,
+            timeout=0.0 if can_renew else _wait_timeout({}, context, PREVIEW_TIMEOUT_SECONDS),
+            runtime_context=context,
+        )
+        if can_renew and current.get("status") in PREVIEW_PENDING:
+            cap = _linked_preview_cap(context)
+            current = _wait(
+                service,
+                run_id,
+                owner_id,
+                pending=PREVIEW_PENDING,
+                timeout=_wait_timeout({}, context, cap),
+                runtime_context=context,
+            )
+    except EltError as exc:
+        current = {"status": "failed", "error": {"code": exc.code}}
+    return {**(current or {"status": "outcome_unknown"}), "id": run_id}
+
+
+def _companion_summary(run: dict) -> dict:
+    if not run:
+        return {}
+    summary = _review_summary(run)
+    if summary["status"] == "preview_ready" and summary["total_rows"] == 0:
+        summary["empty_preview"] = True
+    if _interrupted_linked_preview(run):
+        summary["preview_interrupted"] = True
+    return summary
+
+
+def _companion_is_empty(companion: dict) -> bool:
+    return (
+        companion.get("empty_preview") is True
+        or (companion.get("error") or {}).get("code") == "ELT_PREVIEW_EMPTY"
+    )
+
+
+def _companion_preview_ready(companion: dict) -> bool:
+    return (
+        not companion
+        or companion.get("status") in {"completed", "preview_ready"}
+        or _companion_is_empty(companion)
+    )
+
+
+def _companion_is_deferred(companion: dict) -> bool:
+    return not _companion_is_empty(companion) and (
+        companion.get("status") in PREVIEW_PENDING | {"preview_ready"}
+        or companion.get("preview_interrupted") is True
+    )
 
 
 def _linked_companion_preview(data: dict) -> dict[str, Any]:
@@ -1446,7 +1780,7 @@ def _read_linked_companion(service, actor, data: dict) -> dict[str, Any]:
             child.get("draft", {}).get("linked_preview") or {}
         ).get("parent_run_id") != data.get("id"):
             return {"run_id": link["run_id"], "status": "unavailable"}
-        return _review_summary(child)
+        return _companion_summary(child)
     except EltError:
         return {"run_id": link["run_id"], "status": "unavailable"}
 
@@ -1490,29 +1824,43 @@ def _review_existing(run_id: str, runtime_context: dict) -> dict:
 def _companion_note(companion: dict) -> str:
     if not companion:
         return ""
+    if _companion_is_empty(companion):
+        return "；未识别到可入库的客户及产品"
     status = companion.get("status")
-    if status == "completed":
-        return f"；客户及产品已写入 {int(companion.get('executed_rows') or 0)} 行，跳过 {int(companion.get('skip_rows') or 0)} 行"
-    if status != "preview_ready":
-        return (
-            f"；附表客户及产品的独立处理状态：{status}。可发送新消息只读核对："
-            f"查看导入预演，run_id={companion['run_id']}"
+    if status in EXECUTION_UNCERTAIN - PREVIEW_PENDING:
+        return f"；客户及产品结果待核对（回执 {companion['run_id']}）"
+    if status not in {"completed", "partial"}:
+        if status != "preview_ready":
+            return (
+                f"；附表客户及产品的独立处理状态：{status}。可发送新消息只读核对："
+                f"查看导入预演，run_id={companion['run_id']}"
+            )
+        note = (
+            f"；附表客户及产品仅预演，共 {int(companion.get('total_rows') or 0)} 行，"
+            f"拟写入 {int(companion.get('new_rows') or 0) + int(companion.get('update_rows') or 0)} 行，"
+            f"重复跳过 {int(companion.get('skip_rows') or 0)} 行，错误 {int(companion.get('error_rows') or 0)} 行，"
+            "未随本次出货写入，需单独确认"
         )
-    note = (
-        f"；附表客户及产品仅预演，共 {int(companion.get('total_rows') or 0)} 行，"
-        f"拟写入 {int(companion.get('new_rows') or 0) + int(companion.get('update_rows') or 0)} 行，"
-        f"重复跳过 {int(companion.get('skip_rows') or 0)} 行，错误 {int(companion.get('error_rows') or 0)} 行，"
-        "未随本次出货写入，需单独确认"
-    )
-    revision = companion.get("preview_revision")
-    if revision:
-        mappings = companion.get("mapping_pending") or []
-        mapping_note = f"，接受建议映射（{'、'.join(mappings)}）" if mappings else ""
-        note += (
-            "。核对后可发送新消息：确认导入附表客户及产品，"
-            f"run_id={companion['run_id']}，preview_revision={revision}，"
-            f"仅写入校验通过的行{mapping_note}"
-        )
+        revision = companion.get("preview_revision")
+        if revision:
+            mappings = companion.get("mapping_pending") or []
+            mapping_note = f"，接受建议映射（{'、'.join(mappings)}）" if mappings else ""
+            note += (
+                "。核对后可发送新消息：确认导入附表客户及产品，"
+                f"run_id={companion['run_id']}，preview_revision={revision}，"
+                f"仅写入校验通过的行{mapping_note}"
+            )
+        return note
+    executed = int(companion.get("executed_rows") or 0)
+    skipped = int(companion.get("skip_rows") or 0)
+    errors = int(companion.get("error_rows") or 0)
+    note = f"；客户及产品已写入 {executed} 行"
+    if status == "partial":
+        note += "，部分行写入失败"
+    if skipped:
+        note += f"，重复跳过 {skipped} 行"
+    if errors:
+        note += f"，{errors} 行校验未通过，未写入"
     return note
 
 
@@ -1531,20 +1879,7 @@ def _registered_router_elt_import(
         if run_id := str(payload.get("run_id") or "").strip():
             return _review_existing(run_id, runtime_context)
         paths = _split_paths(payload.get("file_paths"))
-        if not paths and not str(payload.get("file_path") or "").strip():
-            # 用户说「导入」但模型只看到被截断的附件清单时，按本轮上传的全部文件预演，
-            # 不让模型枚举决定导入范围。
-            recent = _recent_upload_ids(runtime_context)
-            if len(recent) > 1:
-                return _preview_batch(recent, payload, runtime_context)
         if paths:
-            # 模型只看到被截断的附件清单时，会少传文件；用户没有点名具体文件时按本轮全部上传预演。
-            if runtime_context.get("chat_approval_mode") == "auto" and not _mentions_file(
-                user_message, paths
-            ):
-                recent = _recent_upload_ids(runtime_context)
-                if len(recent) > len(paths):
-                    paths = recent
             return _preview_batch(paths, payload, runtime_context)
         if not str(payload.get("file_path") or "").strip():
             return {
@@ -1553,20 +1888,17 @@ def _registered_router_elt_import(
                 "message": "请提供 file_path（单个文件）或 file_paths（整批文件）后再预演。",
             }
         try:
-            label = _upload_label(str(payload.get("file_path") or ""), runtime_context)
-            node_id = "elt-preview-1"
-            stage_action = f"预演 1/1：{label}"
-            _publish_file_stage(node_id=node_id, action=stage_action, phase="started")
-            out = _preview(payload, runtime_context)
-            _publish_file_stage(
-                node_id=node_id,
-                action=stage_action,
-                phase="finished",
-                success=bool(out.get("success")),
-                output=_batch_result_text("预演", label, out),
-                error="" if out.get("success") else str(out.get("message") or ""),
+            path = str(payload["file_path"])
+            upload = _owned_upload(path, runtime_context)
+            label = upload.get("file_name") or Path(path).name or path
+            return _run_file_stage(
+                "预演",
+                1,
+                1,
+                label,
+                partial(_preview, payload, runtime_context, upload=upload),
+                runtime_context,
             )
-            return out
         except PermissionError as err:
             return {
                 "success": False,
@@ -1575,44 +1907,31 @@ def _registered_router_elt_import(
             }
     if action == "execute":
         ids = _split_run_ids(payload.get("run_ids")) or _split_run_ids(payload.get("run_id"))
+        paths = _split_paths(payload.get("file_paths"))
+        if paths:
+            if ids:
+                return {"success": False, "message": "请选择文件列表或预演编号作为导入范围。"}
+            return _preview_batch(paths, payload, runtime_context, write=True)
         if len(ids) > 1:
             return _execute_batch(ids, payload, runtime_context)
         if ids:
-            label = _run_label(ids[0], runtime_context)
-            node_id = "elt-execute-1"
-            stage_action = f"导入 1/1：{label}"
-            _publish_file_stage(node_id=node_id, action=stage_action, phase="started")
-            out = _execute({**payload, "run_id": ids[0]}, runtime_context)
-            _publish_file_stage(
-                node_id=node_id,
-                action=stage_action,
-                phase="finished",
-                success=bool(out.get("success")),
-                output=_batch_result_text("导入", label, out),
-                error="" if out.get("success") else str(out.get("message") or ""),
+            return _run_file_stage(
+                "导入",
+                1,
+                1,
+                _run_label(ids[0], runtime_context),
+                partial(_execute, {**payload, "run_id": ids[0]}, runtime_context),
+                runtime_context,
             )
-            return out
         return _execute(payload, runtime_context)
     return {"success": False, "message": f"未知的 ELT 导入操作：{action}"}
 
 
-def _mentions_file(message: str, paths: list[str]) -> bool:
-    """用户是否在消息里点名了某个文件；没点名时按本轮全部上传处理。"""
-    text = str(message or "")
-    return any(
-        Path(str(path)).stem.strip() and Path(str(path)).stem.strip() in text for path in paths
-    )
-
-
 def _split_paths(value: object) -> list[str]:
-    """file_paths 可能是数组，也可能是被包成数组的逗号分隔文件名串。"""
-    import re
-
-    raw = [str(item) for item in value] if isinstance(value, (list, tuple)) else []
-    parts: list[str] = []
-    for item in raw:
-        parts.extend(re.split(r"[,;，；\n]+", item))
-    return [part.strip() for part in parts if part.strip()]
+    # An array element is a single path. Separators are valid in filenames.
+    if not isinstance(value, (list, tuple)):
+        return []
+    return [item.strip() for item in value if isinstance(item, str) and item.strip()]
 
 
 def _split_run_ids(value: object) -> list[str]:
@@ -1626,7 +1945,7 @@ def _split_run_ids(value: object) -> list[str]:
     parts: list[str] = []
     for item in raw:
         parts.extend(re.split(r"[,;，；\s]+", item))
-    return [part.strip() for part in parts if part.strip()]
+    return list(dict.fromkeys(part.strip() for part in parts if part.strip()))
 
 
 _MAX_BATCH_IMPORTS = 50
@@ -1658,7 +1977,7 @@ def _expand_directory_paths(
                     names.append(entry.name)
         except OSError:
             names = []
-        matched = [name for name in names if _owned_upload(name, runtime_context)]
+        matched = [name for name in sorted(names) if _owned_upload(name, runtime_context)]
         if matched:
             expanded.extend(matched)
             continue
@@ -1682,87 +2001,354 @@ def _single_params(payload: dict) -> dict:
     return {key: value for key, value in payload.items() if key not in {"file_paths", "run_ids"}}
 
 
-def _preview_batch(paths: list[str], payload: dict, runtime_context: dict) -> dict:
-    """整批预演：每个文件独立出结果，单个失败不影响其余。"""
-    targets = paths[:_MAX_BATCH_IMPORTS]
-    base = _single_params(payload)
-    targets, unresolved = _expand_directory_paths(targets, runtime_context)
-    items: list[dict] = list(unresolved)
-    total = len(targets) + len(unresolved)
-    processed = len(unresolved)
-    for index, path in enumerate(targets, start=1):
-        remaining = _remaining_budget(runtime_context)
-        if remaining is not None and remaining <= _MIN_WAIT_SECONDS:
-            # 本轮预算不足：保留已完成结果，剩余文件下一轮继续，不能报成未知超时。
-            deferred = total - index + 1
-            _publish_note(f"本轮时间不足，剩余 {deferred} 个文件将在下一轮继续导入")
-            break
-        label = _upload_label(path, runtime_context)
-        node_id = f"elt-preview-{index}"
-        action = f"预演 {index}/{total}：{label}"
-        _publish_file_stage(node_id=node_id, action=action, phase="started")
-        _batch_progress_note("预演", index, total, label)
-        try:
-            out = _preview({**base, "file_path": path}, runtime_context)
-        except PermissionError as err:
-            out = {"success": False, "error_code": "spreadsheet_access_denied", "message": str(err)}
-        _batch_result_note("预演", label, out)
-        _publish_file_stage(
-            node_id=node_id,
-            action=action,
-            phase="finished",
-            success=bool(out.get("success")),
-            output=_batch_result_text("预演", label, out),
-            error="" if out.get("success") else str(out.get("message") or ""),
+def _batch_checkpoint_ids(paths: list[str], context: dict) -> dict[str, str]:
+    from app.application.agent_orchestrator.business_write_guard import capture_worker_claim
+
+    if context.get("durable_elt_batch") is not True:
+        return {}
+    claim = capture_worker_claim()
+    step_id = str(context.get("step_id") or "")
+    if claim is None or claim[0] != context.get("run_id") or not step_id:
+        raise PermissionError("导入批次缺少原任务与步骤的执行绑定。")
+    return durable_elt_checkpoint_ids(claim[0], step_id, paths)
+
+
+def durable_elt_checkpoint_ids(run_id: str, step_id: str, upload_ids: list[str]) -> dict[str, str]:
+    """Locate native ELT receipts for a previously authorized task and step."""
+    try:
+        if not all(
+            isinstance(upload_id, str) and str(UUID(upload_id)) == upload_id
+            for upload_id in upload_ids
+        ):
+            raise ValueError
+    except ValueError as exc:
+        raise PermissionError("导入批次需要原审批绑定的上传编号。") from exc
+    return {
+        upload_id: str(uuid5(NAMESPACE_URL, f"xcagi:elt:{run_id}:{step_id}:{upload_id}"))
+        for upload_id in upload_ids
+    }
+
+
+def _checkpoint_submitted(run: dict) -> bool:
+    return bool(
+        run.get("confirmed_at")
+        or run.get("executed_at")
+        or run.get("receipt")
+        or run.get("status") in (EXECUTION_UNCERTAIN - PREVIEW_PENDING) | {"completed", "partial"}
+        or (run.get("summary") or {}).get("executed")
+    )
+
+
+def _checkpoint_companion(service: EltService, db: Session, owner_id: int, run: dict) -> dict:
+    details = run.get("details") or {}
+    link = details.get("linked_customer_products_preview") or {}
+    if not link.get("run_id"):
+        return {}
+    child: dict[str, Any] = service.get_run(db, run_id=link["run_id"], owner_user_id=owner_id)
+    if (
+        _linked_shipment_id(child) != run.get("id")
+        or child.get("upload_id") != run.get("upload_id")
+        or child.get("file_sha256") != run.get("file_sha256")
+    ):
+        raise PermissionError("原出货与客户产品预演的来源无法核对。")
+    return child
+
+
+def _resume_checkpoint_previews(service, owner_id: int, parent: dict) -> None:
+    with get_db() as db:
+        child = _checkpoint_companion(service, db, owner_id, parent)
+        for run in (parent, child):
+            if not run or _checkpoint_submitted(run):
+                continue
+            if run.get("status") == "queued":
+                service._submit_preview(run["id"], tenant_id_for_write(), owner_id)
+            elif run.get("status") in {"failed", "interrupted"} and (run.get("error") or {}).get(
+                "code"
+            ) in {
+                "ELT_EXECUTION_INTERRUPTED",
+                "ELT_OPERATION_LEASE_LOST",
+            }:
+                service.retry(db, run_id=run["id"], owner_user_id=owner_id)
+
+
+def _checkpoint_receipt_present(db, row, run: dict) -> bool:
+    from app.application.elt.batch_continuation import shipment_parent_writes_present
+
+    receipt = run.get("receipt") or {}
+    rows = (run.get("summary") or {}).get("executed")
+    return (
+        row is not None
+        and run.get("status") == "completed"
+        and bool(run.get("confirmed_at") and run.get("executed_at"))
+        and not (row.rolled_back_at or row.rollback_status)
+        and receipt.get("run_id") == run.get("id")
+        and receipt.get("target_type") == run.get("target_type")
+        and type(rows) is int
+        and rows >= 0
+        and receipt.get("executed_rows") == rows
+        and (
+            run.get("target_type") != "shipment_records"
+            or rows == 0
+            or shipment_parent_writes_present(db, row)
         )
-        processed += 1
+    )
+
+
+def _load_checkpoint_batch(checkpoint_ids: dict[str, str], context: dict) -> tuple[dict, dict]:
+    from app.application.elt.errors import EltError
+    from app.application.elt.service import get_elt_service
+    from app.db.models.elt import EltRun
+
+    stored: dict[str, dict[str, Any]] = {}
+    receipts: dict[str, dict[str, Any]] = {}
+    if not checkpoint_ids:
+        return stored, receipts
+    service = get_elt_service()
+    owner_id = _bound_actor(context).id
+    tenant_id = tenant_id_for_write()
+    with get_db() as db:
+        for upload_id, checkpoint_id in checkpoint_ids.items():
+            row = db.get(EltRun, checkpoint_id)
+            if row is None:
+                continue
+            if (row.tenant_id, row.owner_user_id, row.upload_id) != (
+                tenant_id,
+                owner_id,
+                upload_id,
+            ):
+                raise PermissionError("原任务的导入回执与已批准的文件范围不一致。")
+            parent: dict[str, Any] = {}
+            summary: dict[str, Any]
+            try:
+                parent = service.get_run(db, run_id=checkpoint_id, owner_user_id=owner_id)
+                child = _checkpoint_companion(service, db, owner_id, parent)
+            except (EltError, PermissionError):
+                summary = (
+                    _summary(parent)
+                    if _checkpoint_receipt_present(db, row, parent)
+                    else {"run_id": checkpoint_id}
+                )
+                receipts[upload_id] = _unknown_execution(checkpoint_id, summary)
+                continue
+            stored[upload_id] = parent
+            if not (_checkpoint_submitted(parent) or _checkpoint_submitted(child)):
+                continue
+            summary = _summary(parent)
+            if child:
+                summary["customer_products"] = _companion_summary(child)
+            if not _checkpoint_receipt_present(db, row, parent):
+                summary["receipt_verified"] = False
+                if child:
+                    summary["customer_products"]["receipt_verified"] = False
+                receipts[upload_id] = _unknown_execution(checkpoint_id, summary)
+            elif _checkpoint_submitted(child) and not _checkpoint_receipt_present(
+                db, db.get(EltRun, child["id"]), child
+            ):
+                summary["customer_products"]["receipt_verified"] = False
+                receipts[upload_id] = _unknown_execution(child["id"], summary)
+            elif (
+                not _checkpoint_submitted(child)
+                or child.get("status") == "completed"
+                or _companion_is_empty(summary["customer_products"])
+            ):
+                receipts[upload_id] = {
+                    "success": True,
+                    "message": "已核对原导入回执。",
+                    "data": summary,
+                }
+    return stored, receipts
+
+
+class _PreviewCheckpoint(TypedDict, total=False):
+    checkpoint_id: str
+    checkpoint: dict[str, Any]
+
+
+def _preview_batch(
+    paths: list[str], payload: dict, runtime_context: dict, *, write: bool = False
+) -> dict:
+    """逐份预演。只有正式执行动作可以继续提交通过校验的文件。"""
+    base = _single_params(payload)
+    paths = list(dict.fromkeys(paths))
+    try:
+        checkpoint_ids = _batch_checkpoint_ids(paths, runtime_context) if write else {}
+        checkpoints, receipts = _load_checkpoint_batch(checkpoint_ids, runtime_context)
+    except PermissionError as exc:
+        return {"success": False, "error_code": "spreadsheet_access_denied", "message": str(exc)}
+    expanded, unresolved = (
+        (paths, [])
+        if checkpoint_ids
+        else _expand_directory_paths(paths[:_MAX_BATCH_IMPORTS], runtime_context)
+    )
+    targets = list(dict.fromkeys(expanded))[:_MAX_BATCH_IMPORTS]
+    truncated = len(paths) > _MAX_BATCH_IMPORTS or len(set(expanded)) > _MAX_BATCH_IMPORTS
+    items: list[dict] = list(unresolved)
+    seen: set[tuple[str, ...]] = set()
+    total = len(targets)
+    deferred_count = 0
+    if any(receipt.get("outcome") == "unknown" for receipt in receipts.values()):
+        # An earlier unresolved write must fence the whole recovered task before
+        # a missing slot is treated as work the dispatcher can submit.
+        items = [
+            {
+                "file_path": path,
+                "file_name": checkpoints.get(path, {}).get("file_name") or path,
+                **receipt,
+            }
+            for path, receipt in receipts.items()
+        ]
+        return _execution_batch_result(
+            items, deferred_count=max(0, total - len(items)), truncated=truncated
+        )
+    for index, path in enumerate(targets, start=1):
+        if not _can_start_file_stage(runtime_context):
+            deferred_count = total - index + 1
+            _publish_note(f"本轮预演时间不足，剩余 {deferred_count} 个文件未开始预演")
+            break
+        checkpoint = checkpoints.get(path) or {}
+        label = checkpoint.get("file_name") or Path(path).name or path
+        if path in receipts:
+            out = _run_file_stage(
+                "导入", index, total, label, lambda: receipts[path], runtime_context
+            )
+            items.append({"file_path": path, "file_name": label, **out})
+            if checkpoint.get("file_sha256"):
+                seen.add((label, Path(label).suffix.lower(), checkpoint["file_sha256"]))
+            continue
+        try:
+            upload = _owned_upload(path, runtime_context)
+            if checkpoint_ids and upload and upload.get("id") != path:
+                raise PermissionError("原任务仅允许读取已批准的上传记录。")
+            if checkpoint and upload and upload.get("sha256") != checkpoint.get("file_sha256"):
+                raise PermissionError("原任务上传的文件内容已改变。")
+        except PermissionError as err:
+            items.append(
+                {
+                    "file_path": path,
+                    "file_name": label,
+                    "success": False,
+                    "error_code": "spreadsheet_access_denied",
+                    "message": str(err),
+                }
+            )
+            continue
+        if upload:
+            label = upload.get("file_name") or label
+            # Filename can influence recognition and the resulting import, even for identical bytes.
+            fingerprint = upload.get("sha256")
+            identity = (
+                (label, upload.get("suffix", ""), fingerprint) if fingerprint else (upload["id"],)
+            )
+            # Frozen plans need a native receipt for every approved upload ID.
+            # Row-level deduplication records skips without losing that checkpoint.
+            if identity in seen and not checkpoint_ids:
+                continue
+            seen.add(identity)
+        already_submitted = bool(checkpoint and _checkpoint_submitted(checkpoint))
+        if already_submitted:
+            from app.application.elt.service import get_elt_service
+
+            _resume_checkpoint_previews(
+                get_elt_service(), _bound_actor(runtime_context).id, checkpoint
+            )
+            out = _run_file_stage(
+                "导入",
+                index,
+                total,
+                label,
+                partial(_execute, {**base, "run_id": checkpoint["id"]}, runtime_context),
+                runtime_context,
+            )
+        else:
+            checkpoint_args: _PreviewCheckpoint = {}
+            if checkpoint_ids:
+                checkpoint_args = {"checkpoint_id": checkpoint_ids[path], "checkpoint": checkpoint}
+            out = _run_file_stage(
+                "预演",
+                index,
+                total,
+                label,
+                partial(
+                    _preview,
+                    {**base, "file_path": path},
+                    runtime_context,
+                    upload=upload,
+                    **checkpoint_args,
+                ),
+                runtime_context,
+            )
+        if write and out.get("success") and not already_submitted:
+            preview = out["data"]
+            run_id = preview.get("run_id")
+            if (
+                run_id
+                and preview.get("executable") is True
+                and _can_start_file_stage(runtime_context)
+            ):
+                out = _run_file_stage(
+                    "导入",
+                    index,
+                    total,
+                    label,
+                    partial(_execute, {**base, "run_id": run_id}, runtime_context),
+                    runtime_context,
+                )
+            else:
+                out = {
+                    **out,
+                    "success": False,
+                    "deferred": preview.get("executable") is True,
+                    "message": f"{out['message']} 请在数据对接中心继续处理该预演。",
+                }
         items.append({"file_path": path, "file_name": label, **out})
+        if write and out.get("outcome") == "unknown":
+            deferred_count = total - index
+            break
+    if write:
+        return _execution_batch_result(items, deferred_count=deferred_count, truncated=truncated)
     ready = [item for item in items if item.get("success")]
     needs_decision = [item for item in items if item.get("requires_user_decision")]
     run_ids = [str((item.get("data") or {}).get("run_id") or "") for item in ready]
-    run_ids = [run_id for run_id in run_ids if run_id]
-    truncated = len(paths) > len(targets)
+    complete = (
+        bool(run_ids)
+        and all(run_ids)
+        and len(ready) == len(items)
+        and not (deferred_count or truncated)
+    )
+    executable = complete and not needs_decision
+    run_ids = run_ids if executable else []
     message = (
         f"批量预演：{len(items)} 个文件，预演完成 {len(ready)}，"
         f"需人工确认 {len(needs_decision)}，未完成 {len(items) - len(ready)}"
     )
     if truncated:
         message += f"（一次最多 {_MAX_BATCH_IMPORTS} 个，其余请分批）"
-    deferred_count = total - processed
     if deferred_count:
-        message += f"；剩余 {deferred_count} 个文件超出本轮时间预算，请回复「继续导入」"
-    # 对话自动审批模式下，预演已可执行的批次直接入库，避免「只预演却回复导入完成」。
-    executable_ids = [
-        str((item.get("data") or {}).get("run_id") or "")
-        for item in ready
-        if (item.get("data") or {}).get("executable") is True
-    ]
-    executable_ids = [run_id for run_id in executable_ids if run_id]
-    execution: dict[str, Any] = {}
-    if (
-        executable_ids
-        and runtime_context.get("chat_approval_mode") == "auto"
-        and payload.get("auto_execute") is not False
-    ):
-        execution = _execute_batch(
-            executable_ids,
-            {**base, "accept_suggested": True},
-            runtime_context,
-        )
-        message += f"；已自动入库 {execution.get('done_count', 0)} 个"
+        message += f"；剩余 {deferred_count} 个文件未开始预演"
+    if not complete:
+        message += "；本批未进入业务写入"
+    requires_decision = complete and bool(needs_decision)
     message += "".join(
         _companion_note((item.get("data") or {}).get("customer_products") or {}) for item in ready
     )
     return {
-        "success": bool(ready),
+        "success": complete,
+        "error_code": None if complete else "elt_preview_not_ready",
         "batch": True,
         "file_count": len(items),
         "ready_count": len(ready),
         "needs_decision_count": len(needs_decision),
+        "deferred_count": deferred_count,
         "truncated": truncated,
         "message": message,
         "run_ids": run_ids,
-        "execution": execution,
+        "requires_user_decision": requires_decision,
+        "question": message if requires_decision else "",
+        "resume_params": {
+            key: value
+            for item in needs_decision
+            for key, value in item.get("resume_params", {}).items()
+        },
         # 与单文件预演保持同一形状：编排引用 {{preview.data.run_id}} 也能取到值。
         "data": {
             "run_id": ",".join(run_ids),
@@ -1770,8 +2356,7 @@ def _preview_batch(paths: list[str], payload: dict, runtime_context: dict) -> di
             "file_count": len(items),
             "ready_count": len(ready),
             "needs_decision_count": len(needs_decision),
-            "executable": bool(run_ids) and not needs_decision,
-            "executed_count": int(execution.get("done_count") or 0),
+            "executable": executable,
         },
         "results": items,
     }
@@ -1783,54 +2368,78 @@ def _execute_batch(run_ids: list[str], payload: dict, runtime_context: dict) -> 
     base = _single_params(payload)
     items: list[dict] = []
     total = len(targets)
-    processed = 0
     for index, run_id in enumerate(targets, start=1):
-        remaining = _remaining_budget(runtime_context)
-        if remaining is not None and remaining <= _MIN_WAIT_SECONDS:
-            deferred = total - index + 1
-            _publish_note(f"本轮时间不足，剩余 {deferred} 个文件将在下一轮继续导入")
+        if not _can_start_file_stage(runtime_context):
             break
         label = _run_label(run_id, runtime_context)
-        node_id = f"elt-execute-{index}"
-        action = f"导入 {index}/{total}：{label}"
-        _publish_file_stage(node_id=node_id, action=action, phase="started")
-        _batch_progress_note("导入", index, total, label)
-        out = _execute({**base, "run_id": run_id}, runtime_context)
-        _batch_result_note("导入", label, out)
-        _publish_file_stage(
-            node_id=node_id,
-            action=action,
-            phase="finished",
-            success=bool(out.get("success")),
-            output=_batch_result_text("导入", label, out),
-            error="" if out.get("success") else str(out.get("message") or ""),
+        out = _run_file_stage(
+            "导入",
+            index,
+            total,
+            label,
+            partial(_execute, {**base, "run_id": run_id}, runtime_context),
+            runtime_context,
         )
-        processed += 1
         items.append({"run_id": run_id, "file_name": label, **out})
+        if out.get("outcome") == "unknown":
+            break
+    deferred = run_ids[len(items) :]
+    out = _execution_batch_result(
+        items, deferred_count=len(deferred), truncated=len(run_ids) > total
+    )
+    return {**out, "deferred_run_ids": deferred}
+
+
+def _execution_batch_result(items: list[dict], *, deferred_count: int, truncated: bool) -> dict:
     done = [item for item in items if item.get("success")]
-    written = sum(int((item.get("data") or {}).get("executed_rows") or 0) for item in done)
+    uncertain = [item for item in items if item.get("outcome") == "unknown"]
+    written = sum(_confirmed_written_rows(item) for item in items)
     skipped = sum(int((item.get("data") or {}).get("skip_rows") or 0) for item in done)
+    pending_count = sum(item.get("deferred") is True for item in items)
+    needs_review = sum(bool(item.get("requires_user_decision")) for item in items)
+    failed_count = len(items) - len(done) - pending_count - needs_review - len(uncertain)
+    complete = bool(done) and len(done) == len(items) and not (deferred_count or truncated)
     message = (
-        f"批量导入：{len(items)} 个预演，完成 {len(done)}，"
-        f"失败 {len(items) - len(done)}，写入 {written} 行"
+        f"批量导入：已处理 {len(items)} 份，完成 {len(done)} 份，"
+        f"失败 {failed_count} 份，已确认写入 {written} 行"
     )
     if skipped:
         message += f"（重复跳过 {skipped} 行）"
-        if written == 0:
+        if complete and written == 0:
             message += "；本次没有新增业务记录"
-    if len(run_ids) > len(targets):
+    if truncated:
         message += f"（一次最多 {_MAX_BATCH_IMPORTS} 个，其余请分批）"
-    deferred_count = total - processed
+    if uncertain:
+        message += "；" + "；".join(item["message"] for item in uncertain)
+    if needs_review:
+        message += f"；{needs_review} 份待确认，请在数据对接中心核对对应预演"
+    if pending_count:
+        message += f"；{pending_count} 份已有回执，剩余步骤待继续"
     if deferred_count:
-        message += f"；剩余 {deferred_count} 个预演超出本轮时间预算，请回复「继续导入」"
+        message += f"；剩余 {deferred_count} 份未提交执行"
     message += "".join(
         _companion_note((item.get("data") or {}).get("customer_products") or {}) for item in done
     )
+    error_code = None if complete else "elt_execute_batch_incomplete"
+    if uncertain:
+        error_code = "tool_timeout_unknown"
     return {
-        "success": bool(done),
+        "success": complete,
+        "error_code": error_code,
+        **(
+            {"outcome": "unknown", "reconciliation_required": True, "retryable": False}
+            if uncertain
+            else {}
+        ),
         "batch": True,
         "run_count": len(items),
         "done_count": len(done),
+        "pending_count": pending_count,
+        "deferred_count": deferred_count,
+        "deferred": not (uncertain or failed_count or needs_review)
+        and bool(pending_count or deferred_count),
+        "committed": written > 0,
+        "data": {"executed_rows": written},
         "message": message,
         "results": items,
     }

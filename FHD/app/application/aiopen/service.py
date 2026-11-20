@@ -222,6 +222,25 @@ def authorize_api_key(provided: str | None, tool: str = "") -> dict[str, Any]:
     return _keys.authorize(provided, tool)
 
 
+def issue_client_key(principal: ScreenPrincipal, *, keep_existing: bool = False) -> dict[str, Any]:
+    return _keys.generate(
+        "客户端开放智控",
+        principal=principal,
+        scopes=["ui_sessions", *_UI_ACTIONS],
+        expires_at=time.time() + 86400,
+        client_key=True,
+        keep_existing=keep_existing,
+    )
+
+
+def has_active_client_key(principal: ScreenPrincipal) -> bool:
+    return _keys.has_active_client_key(principal)
+
+
+def revoke_client_key(principal: ScreenPrincipal) -> bool:
+    return _keys.revoke_client_key(principal)
+
+
 def required_operation_scope(app: ASGIApp, tool: str, args: dict[str, Any]) -> str:
     """写操作的 scope 由目标 operation 决定，供路由层做 Key 鉴权。"""
     return _required_scope(app, tool, args)

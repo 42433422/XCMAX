@@ -24,6 +24,7 @@ from modstore_server.models import (
     RiskEvent,
 )
 from modstore_server.multimodal_llm import (
+    first_user_text_preview,
     flatten_message_content_for_risk,
     redact_message_content_for_storage,
 )
@@ -214,13 +215,25 @@ def merge_catalog_pricing(session: Session, providers_out: List[Dict[str, Any]])
             )
 
 
-def calculate_charge(session: Session, provider: str, model: str, usage: UsageMeter) -> Decimal:
+def rate_usage(
+    session: Session, provider: str, model: str, usage: UsageMeter
+) -> tuple[Decimal, dict[str, str]]:
     in_price, out_price, min_charge = model_price(session, provider, model)
-    base_amount = (Decimal(usage.prompt_tokens) / Decimal(1000) * in_price) + (
-        Decimal(usage.completion_tokens) / Decimal(1000) * out_price
-    )
-    amount = base_amount * service_fee_multiplier(session)
-    return money(max(amount, min_charge))
+    multiplier = service_fee_multiplier(session)
+    base_amount = (
+        Decimal(usage.prompt_tokens) * in_price + Decimal(usage.completion_tokens) * out_price
+    ) / Decimal(1000)
+    return money(max(base_amount * multiplier, min_charge)), {
+        "currency": "CNY",
+        "input_per_1k": str(in_price),
+        "output_per_1k": str(out_price),
+        "multiplier": str(multiplier),
+        "minimum": str(min_charge),
+    }
+
+
+def calculate_charge(session: Session, provider: str, model: str, usage: UsageMeter) -> Decimal:
+    return rate_usage(session, provider, model, usage)[0]
 
 
 def estimate_preauthorization(
@@ -387,6 +400,7 @@ def save_success_log(
     charge: Decimal,
     hold_no: str,
     conversation_id: int | None = None,
+    commit: bool = True,
 ) -> int:
     conversation = None
     if conversation_id:
@@ -399,13 +413,7 @@ def save_success_log(
             .first()
         )
     if not conversation:
-        title = (
-            next(
-                (m.get("content", "").strip() for m in messages if m.get("role") == "user"),
-                "",
-            )[:80]
-            or "新对话"
-        )
+        title = first_user_text_preview(messages) or "新对话"
         conversation = ChatConversation(
             user_id=user_id, title=title, provider=provider, model=model
         )
@@ -453,7 +461,8 @@ def save_success_log(
             hold_no=hold_no,
         )
     )
-    session.commit()
+    if commit:
+        session.commit()
     return int(conversation.id)
 
 

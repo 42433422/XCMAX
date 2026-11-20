@@ -56,6 +56,9 @@ def test_pure_account_help_chats_without_ticket(client, monkeypatch):
 def test_defect_with_account_word_and_escalation_creates_ticket(client, monkeypatch):
     from modstore_server import customer_service_api
     from modstore_server.app import app
+    from modstore_server.customer_service_tools import json_loads
+    from modstore_server.models import get_session_factory
+    from modstore_server.models_cs import CustomerServiceTicket
 
     monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
     scheduled = []
@@ -68,7 +71,11 @@ def test_defect_with_account_word_and_escalation_creates_ticket(client, monkeypa
     assert data["intent"]["triage_lane"] == "product_defect"
     assert data["ticket"] is not None and data["ticket"]["intent"] == "product_issue"
     tid = data["ticket"]["id"]
-    assert scheduled == [{"ticket_id": tid}]
+    assert scheduled == []
+    with get_session_factory()() as db:
+        held = db.get(CustomerServiceTicket, tid)
+        assert held.status == "open"
+        assert json_loads(held.evidence_json, {})["intake_review"]["disposition"] == "needs_review"
     try:
         app.dependency_overrides[customer_service_api._get_current_user] = lambda: owner
         body = client.get(f"{BASE}/tickets/{tid}").json()

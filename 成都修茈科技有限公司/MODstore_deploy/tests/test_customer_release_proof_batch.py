@@ -11,7 +11,9 @@ from tests.test_customer_issue_delivery_pipeline import (
 )
 
 
-def test_pending_batch_fetches_each_proof_once_and_binds_each_case(client, monkeypatch, tmp_path):
+def test_pending_batch_fetches_each_proof_once_and_binds_each_case(
+    client, monkeypatch, tmp_path, approved_support_assessment
+):
     from modstore_server import customer_issue_shared_release as shared
     from modstore_server.models import get_session_factory, init_db
     from modstore_server.models_cs import CustomerServiceTicket

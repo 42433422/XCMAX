@@ -6,6 +6,7 @@ import importlib.util
 import io
 import json
 import os
+import shutil
 import stat
 import subprocess
 import zipfile
@@ -323,6 +324,8 @@ def test_real_git_bundle_import_never_executes_or_publishes_actions_controls(
 
     def command(args, **kwargs):
         calls.append(args)
+        if args[0] == "gitleaks":
+            return "8.18.4\n" if args[1] == "version" else ""
         args = [source.as_uri() if a == "https://github.com/owner/repo.git" else a for a in args]
         return publisher.run_command(args, **kwargs)
 
@@ -361,6 +364,142 @@ def test_real_git_bundle_import_never_executes_or_publishes_actions_controls(
         )
 
 
+@pytest.mark.skipif(not shutil.which("gitleaks"), reason="requires pinned Gitleaks 8.18.4")
+@pytest.mark.parametrize(
+    "location",
+    [
+        "clean",
+        "added",
+        "candidate_ignores",
+        "removed_later",
+        "message",
+        "merge",
+        "removed_base",
+        "attributes",
+        "binary",
+    ],
+)
+def test_real_gitleaks_scans_full_candidate_history_with_trusted_policy(tmp_path, location):
+    source = tmp_path / "source"
+    source.mkdir()
+
+    def git(*args):
+        return subprocess.check_output(["git", *args], cwd=source, stderr=subprocess.PIPE).strip()
+
+    # Synthetic recognizable fixture, assembled so this test itself contains no token.
+    secret = "ghp_" + "ABCDefgh0123456789" * 2
+    git("init", "-b", "main")
+    git("config", "user.email", "test@example.test")
+    git("config", "user.name", "Test")
+    app = source / "app.py"
+    app.write_text(f"token = '{secret}'\n" if location == "removed_base" else "answer = 0\n")
+    git("add", ".")
+    git("commit", "-m", "trusted base")
+    base = git("rev-parse", "HEAD").decode()
+    git("checkout", "-b", "devfleet/codex/sub-test")
+    app.write_text("answer = 1\n")
+    if location in {"added", "candidate_ignores", "removed_later", "attributes"}:
+        app.write_text(f"token = '{secret}'  # gitleaks:allow\n")
+    if location == "attributes":
+        (source / ".gitattributes").write_text("app.py -diff\n")
+    elif location == "binary":
+        app.write_bytes(b"\0token = '" + secret.encode() + b"'\n")
+    message = f"candidate token = {secret}" if location == "message" else "candidate"
+    git("add", ".")
+    git("commit", "-m", message)
+    if location == "candidate_ignores":
+        leak_commit = git("rev-parse", "HEAD").decode()
+        (source / ".gitleaks.toml").write_text("[allowlist]\nregexes = ['.*']\n")
+        (source / ".gitleaksignore").write_text(f"{leak_commit}:app.py:github-pat:1\n")
+        (source / ".gitconfig").write_text("[diff]\n external = /must-not-run\n")
+        git("add", ".")
+        git("commit", "-m", "candidate attempts to suppress scanning")
+    elif location == "removed_later":
+        app.write_text("answer = 1\n")
+        git("add", ".")
+        git("commit", "-m", "remove earlier secret")
+    elif location == "merge":
+        git("checkout", "-b", "side", base)
+        (source / "side.py").write_text("answer = 2\n")
+        git("add", ".")
+        git("commit", "-m", "side branch")
+        git("checkout", "devfleet/codex/sub-test")
+        git("merge", "--no-ff", "--no-commit", "side")
+        app.write_text(f"token = '{secret}'\n")
+        git("add", ".")
+        git("commit", "-m", "merge resolution introduces a secret")
+    target = git("rev-parse", "HEAD").decode()
+    archive = subprocess.check_output(["git", "archive", "--format=tar", target], cwd=source)
+    bundle = tmp_path / "candidate.bundle"
+    git("bundle", "create", str(bundle), f"{base}..devfleet/codex/sub-test")
+    value = {
+        **manifest(),
+        "base_sha": base,
+        "commit_sha": target,
+        "archive_sha256": hashlib.sha256(archive).hexdigest(),
+    }
+    calls = []
+
+    def command(args, **kwargs):
+        calls.append(args)
+        if args[0] == "gitleaks":
+            assert set(kwargs["env"]) == {
+                "PATH",
+                "HOME",
+                "GIT_CONFIG_NOSYSTEM",
+                "GIT_CONFIG_GLOBAL",
+                "GIT_TERMINAL_PROMPT",
+            }
+        args = [source.as_uri() if a == "https://github.com/owner/repo.git" else a for a in args]
+        return publisher.run_command(args, **kwargs)
+
+    destination = tmp_path / "publisher"
+    destination.mkdir()
+    env = publisher.clean_git_env(
+        {
+            **os.environ,
+            "GH_TOKEN": "fixture-publisher-only",
+            "GITLEAKS_CONFIG": str(source / ".gitleaks.toml"),
+        }
+    )
+    if location in {"clean", "removed_base"}:
+        publisher.import_candidate(
+            destination, value, bundle.read_bytes(), env=env, command=command
+        )
+        assert any("--pipe" in c for c in calls)
+    else:
+        with pytest.raises(
+            ValueError, match="candidate_secret_scan_unavailable_or_rejected"
+        ) as error:
+            publisher.import_candidate(
+                destination, value, bundle.read_bytes(), env=env, command=command
+            )
+        assert secret not in str(error.value)
+    assert not any("push" in c or "checkout" in c for c in calls)
+
+
+@pytest.mark.parametrize(
+    "failure", ["missing", "wrong_version", "scan_failed", "message_scan_failed"]
+)
+def test_secret_scan_fails_closed_without_echoing_scanner_output(tmp_path, failure):
+    def command(args, **kwargs):
+        if args[0] == "gitleaks":
+            if failure == "missing":
+                raise FileNotFoundError("fixture-private-key")
+            if args[1] == "version":
+                return "8.18.3" if failure == "wrong_version" else "8.18.4"
+            if failure == "scan_failed" or (failure == "message_scan_failed" and "--pipe" in args):
+                raise subprocess.CalledProcessError(1, args, output="fixture-private-key")
+            return ""
+        return "clean commit message"
+
+    with pytest.raises(
+        ValueError, match="^candidate_secret_scan_unavailable_or_rejected$"
+    ) as error:
+        publisher.scan_candidate(tmp_path, "a" * 40, "b" * 40, env={}, command=command)
+    assert "fixture-private-key" not in str(error.value)
+
+
 def test_staged_receipt_waits_for_exact_remote_branch_and_pr(monkeypatch):
     from modstore_server import customer_ticket_github as bridge
     from modstore_server import para_github_runner
@@ -390,12 +529,36 @@ def test_staged_receipt_waits_for_exact_remote_branch_and_pr(monkeypatch):
         verified_code_identity(snapshot(), workspace=WORKSPACE, attempt_id=ATTEMPT)
 
 
+@pytest.mark.parametrize("kind", [None, "original_pr_repair", "customer_feedback_repair"])
 def test_publisher_reuses_same_remote_sha_and_pr_and_retains_pending_delivery(
-    tmp_path, monkeypatch
+    tmp_path,
+    monkeypatch,
+    kind,
 ):
+    original_pr = kind == "original_pr_repair"
+    customer_repair = kind == "customer_feedback_repair"
     value = manifest()
+    if original_pr:
+        from types import SimpleNamespace
+
+        monkeypatch.syspath_prepend(str(ROOT / "FHD"))
+        from scripts.dev import para_pr_repair
+
+        value["base_sha"] = "a" * 40
+        chosen = SimpleNamespace(number=42, branch="fix/original", old_sha=value["base_sha"])
+        monkeypatch.setattr(publisher, "authorized_original_pr", lambda *a: chosen)
+
+        def checked_diff(git, old, new):
+            assert (old, new) == (value["base_sha"], value["commit_sha"])
+            return 1
+
+        monkeypatch.setattr(para_pr_repair, "_check_diff", checked_diff)
     data, digest = artifact(value)
     state = {**WORKSPACE, "publication_candidate": value, "finished": False}
+    if kind:
+        state["kind"] = kind
+    if original_pr:
+        state.update(kind="original_pr_repair", source_sha=value["base_sha"], pull_request=42)
     run = {
         "id": 123,
         "head_sha": "b" * 40,
@@ -478,13 +641,41 @@ def test_publisher_reuses_same_remote_sha_and_pr_and_retains_pending_delivery(
             return json.dumps(run)
         pytest.fail(f"unexpected command: {args}")
 
-    opener = lambda *a, **kw: io.BytesIO(json.dumps(state).encode())
+    def opener(*args, **kwargs):
+        return io.BytesIO(json.dumps(state).encode())
+
+    if original_pr or customer_repair:
+        with pytest.raises(ValueError, match="requires_non_exportable_model_credentials"):
+            publisher.publish(env, command=command, opener=opener)
+        assert not any(c[0] in {"push", "node"} for c in calls)
+        # Already-published results can still be read back without another write.
+        remote["exists"] = True
+    if customer_repair:
+        with pytest.raises(
+            ValueError, match="customer_feedback_requires_non_exportable_model_credentials"
+        ):
+            publisher.publish(env, command=command, opener=opener)
+        assert not any(c[0] in {"push", "node"} for c in calls)
+        pull.append(
+            {
+                "number": 42,
+                "url": "https://github.com/owner/repo/pull/42",
+                "headRefOid": value["commit_sha"],
+                "headRefName": value["branch"],
+                "baseRefName": "main",
+                "body": "Refs #42",
+                "state": "OPEN",
+            }
+        )
     first = publisher.publish(env, command=command, opener=opener)
     second = publisher.publish(env, command=command, opener=opener)
     assert first == second and first["delivered"] is False
-    assert first["status"] == "published_for_review"
-    assert sum(c[0] == "push" for c in calls) == 1
-    assert sum(c[0] == "node" for c in calls) == 1
+    assert first["status"] == (
+        "awaiting_original_pr_update" if original_pr else "published_for_review"
+    )
+    assert first["pull_request_url"] == "https://github.com/owner/repo/pull/42"
+    assert sum(c[0] == "push" for c in calls) == (0 if kind else 1)
+    assert sum(c[0] == "node" for c in calls) == (0 if kind else 1)
     assert not any("--force" in c or "merge" in c for c in calls)
     with pytest.raises(ValueError, match="redirect_rejected"):
         publisher.NoRedirect().redirect_request(None, None, None, None, None, None)

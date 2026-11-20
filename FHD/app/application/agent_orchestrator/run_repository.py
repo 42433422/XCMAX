@@ -4,10 +4,12 @@ import copy
 import logging
 import os
 import threading
+from collections.abc import Callable
 from typing import Protocol, cast
 
 from app.application.agent_orchestrator.run_models import (
     AgentRun,
+    RunContextScope,
     RunEvent,
     utc_now_iso,
 )
@@ -48,9 +50,13 @@ class AgentRunRepository(Protocol):
         limit: int = 50,
         tenant_id: str | None = None,
         mod_id: str | None = None,
+        matches: Callable[[AgentRun], bool] | None = None,
+        runtime_scope: RunContextScope | None = None,
     ) -> list[AgentRun]: ...
 
     def list_task_runs(self, *, user_id: str, task_id: str) -> list[AgentRun]: ...
+
+    def list_task_runs_for_user(self, *, user_id: str) -> list[AgentRun]: ...
 
     def list_run_scopes(self, *, user_id: str) -> dict[str, list[tuple[str, str, str]]]: ...
 
@@ -198,6 +204,8 @@ class InMemoryAgentRunRepository:
         limit: int = 50,
         tenant_id: str | None = None,
         mod_id: str | None = None,
+        matches: Callable[[AgentRun], bool] | None = None,
+        runtime_scope: RunContextScope | None = None,
     ) -> list[AgentRun]:
         with self._lock:
             runs = list(self._runs.values())
@@ -207,6 +215,10 @@ class InMemoryAgentRunRepository:
             runs = [run for run in runs if tenant_id_of_run(run) == tenant_id]
         if mod_id is not None:
             runs = [run for run in runs if mod_id_of_run(run) == mod_id]
+        if runtime_scope is not None:
+            runs = [run for run in runs if runtime_scope.matches(run)]
+        if matches is not None:
+            runs = [run for run in runs if matches(run)]
         runs.sort(key=lambda run: run.updated_at, reverse=True)
         return [copy.deepcopy(run) for run in runs[: max(0, int(limit))]]
 
@@ -223,6 +235,11 @@ class InMemoryAgentRunRepository:
             ]
         runs.sort(key=lambda run: (run.created_at, run.run_id))
         return runs
+
+    def list_task_runs_for_user(self, *, user_id: str) -> list[AgentRun]:
+        wanted_user = str(user_id or "")
+        with self._lock:
+            return [copy.deepcopy(run) for run in self._runs.values() if run.user_id == wanted_user]
 
     def list_run_scopes(self, *, user_id: str) -> dict[str, list[tuple[str, str, str]]]:
         """One pass over the principal's runs for list filtering (no full run hydration)."""

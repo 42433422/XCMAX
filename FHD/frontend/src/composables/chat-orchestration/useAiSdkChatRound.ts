@@ -50,8 +50,8 @@ export function useAiSdkChatRound(options: AiSdkChatRoundOptions) {
     },
   })
 
-  async function send(
-    body: Record<string, unknown>,
+  async function read(
+    fetchStream: () => ReturnType<typeof transport.sendMessages>,
     signal?: AbortSignal,
   ): Promise<AiSdkChatRoundResult> {
     streamError = null
@@ -59,7 +59,7 @@ export function useAiSdkChatRound(options: AiSdkChatRoundOptions) {
     text.value = ''
     let finalText = ''
     try {
-      const stream = await transport.sendMessages({ body, abortSignal: signal })
+      const stream = await fetchStream()
       for await (const message of readUIMessageStream<XcagiUIMessage>({
         stream,
         onError: (error) => {
@@ -79,5 +79,11 @@ export function useAiSdkChatRound(options: AiSdkChatRoundOptions) {
     return { text: finalText, lastSeq, error: streamError, aborted: Boolean(signal?.aborted) }
   }
 
-  return { send, text }
+  return {
+    send: (body: Record<string, unknown>, signal?: AbortSignal) =>
+      read(() => transport.sendMessages({ body, abortSignal: signal }), signal),
+    resume: (turnId: string, signal?: AbortSignal) =>
+      read(() => transport.reconnectToStream(turnId, signal), signal),
+    text,
+  }
 }

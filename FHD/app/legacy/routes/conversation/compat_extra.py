@@ -461,6 +461,7 @@ def conversations_delete(
 
 
 @router.delete("/conversations/{conversation_id}/messages/{message_id}", response_model=None)
+@router.post("/conversations/{conversation_id}/messages/{message_id}/recall", response_model=None)
 def conversations_delete_message(
     request: Request,
     conversation_id: str,
@@ -468,7 +469,12 @@ def conversations_delete_message(
     user_id: str = Query(default="default"),
     mod_id: str = Query(default=""),
 ) -> dict | JSONResponse:
-    """撤回一条用户消息及其之后的所有回复（撤回编辑）。"""
+    """撤回一段对话，并撤销该范围内已核实的可逆业务操作。"""
+    from app.application.chat_recall import recall_messages
+    from app.application.elt.errors import EltError
+    from app.infrastructure.auth.agent_principal import require_agent_principal
+    from app.infrastructure.auth.dependencies import require_permission
+
     cid = str(conversation_id or "").strip()
     scope = _xcagi_resolve_session_scope(_xcagi_request_user_id(request, user_id), mod_id)
     numeric_user_id = durable_user_id(scope[0])
@@ -476,18 +482,38 @@ def conversations_delete_message(
         return JSONResponse(
             {"success": False, "message": "请先登录后再访问会话。"}, status_code=401
         )
+    principal = require_agent_principal(request, x_user_id=None)
+    if principal.user_id != str(numeric_user_id):
+        raise HTTPException(status_code=403, detail="会话归属与登录用户不一致")
+
+    def authorize_rollback() -> None:
+        actor = require_permission("elt.rollback")(request)
+        if getattr(actor, "id", None) != numeric_user_id:
+            raise PermissionError("业务撤回权限与会话用户不一致")
+
     try:
-        deleted = task_conversation_store.delete_messages_from(
+        return recall_messages(
             session_id=cid,
             user_id=numeric_user_id,
             message_id=int(message_id),
+            tenant_id=str(principal.tenant_id or ""),
+            mod_id=scope[1],
+            business_confirmed=request.method == "POST",
+            require_rollback_permission=authorize_rollback,
         )
     except PermissionError:
         return JSONResponse({"success": False, "message": "无权撤回该消息。"}, status_code=403)
+    except ConversationRevisionError as exc:
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=409)
+    except EltError as exc:
+        logger.info("conversation business rollback: %s", exc.code)
+        return JSONResponse(
+            {"success": False, "message": f"{exc.message.rstrip('。')}。会话记录已保留。"},
+            status_code=exc.status_code,
+        )
     except RECOVERABLE_ERRORS as exc:
         logger.error("conversations delete message: %s", exc)
         return JSONResponse({"success": False, "message": "撤回消息失败"}, status_code=500)
-    return {"success": True, "deleted": deleted}
 
 
 @router.get("/conversations/turns/{turn_id}/reconcile")

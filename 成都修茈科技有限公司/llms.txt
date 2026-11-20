@@ -24,7 +24,7 @@
 - [首页](https://xiu-ci.com/)：XCAGI 官网首页，产品总览与公开工作轨迹。
 - [关于修茈](https://xiu-ci.com/about.html)：公司介绍、产品结构与统一宿主理念。
 - [解决方案](https://xiu-ci.com/solutions.html)：面向具体业务场景的自动化方案。
-- [客户案例](https://xiu-ci.com/cases.html)：制造业、教育、园区等公开案例说明与证据边界。
+- [客户案例](https://xiu-ci.com/cases.html)：当前没有通过公开授权和证据核验的客户案例可展示。案例材料只会在授权、脱敏和结果复核完成后发布。
 - [价格](https://xiu-ci.com/pricing.html)：XCAGI 企业方案价格与交付范围。
 - [产品下载](https://xiu-ci.com/download)：各平台支持状态、可用版本与安装包信息。
 - [验证中心](https://xiu-ci.com/verify.html)：实机验证记录与完整技术证据。

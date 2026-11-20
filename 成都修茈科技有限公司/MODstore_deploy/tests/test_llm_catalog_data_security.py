@@ -13,3 +13,5 @@ def test_cache_key_is_stable_and_does_not_expose_api_key() -> None:
     assert first.startswith("openai:")
     assert secret not in first
     assert llm_catalog_data.cache_key(8, "openai", secret) != first
+    assert llm_catalog_data.cache_key(7, "anthropic", secret) != first
+    assert llm_catalog_data.cache_key(7, "openai", secret + "-rotated") != first

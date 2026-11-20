@@ -69,6 +69,189 @@ def test_delete_messages_from_withdraws_user_turn_and_later_replies(
         store.delete_messages_from(session_id="recall-1", user_id=41, message_id=999)
 
 
+@pytest.mark.parametrize("backend", ["memory", "sqlite"])
+def test_history_reads_terminal_import_receipt_only_for_matching_scope(store, monkeypatch, backend):
+    from types import SimpleNamespace
+
+    from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
+    from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+    from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    store.save_message(session_id="receipt-session", user_id=41, role="user", content="导入")
+    revision = store.get_conversation(session_id="receipt-session", user_id=41)["session"][
+        "revision"
+    ]
+    step = AgentStep(
+        node_id="import",
+        tool_id="elt_import",
+        action="execute",
+        status="failed",
+        params={"file_paths": ["upload-1"]},
+        output={"success": False},
+    )
+    run = AgentRun(
+        user_id="41",
+        message="导入",
+        status="failed",
+        steps=[step],
+        metadata={
+            "runtime_context": {
+                "tenant_id": "12",
+                "session_id": "receipt-session",
+                "turn_id": "turn-1",
+                "_conversation_revision": revision,
+            },
+        },
+    )
+    repository = (
+        InMemoryAgentRunRepository()
+        if backend == "memory"
+        else SQLAlchemyAgentRunRepository(
+            session_factory=sessionmaker(bind=create_engine("sqlite://"))
+        )
+    )
+    repository.save(run)
+    for index in range(51):
+        repository.save(AgentRun(user_id="41", message=f"unrelated-{index}"))
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.AgentOrchestrator",
+        lambda: SimpleNamespace(list_runs=repository.list_recent),
+    )
+    with tenant_scope(12):
+        result = store.get_history(session_id="receipt-session", user_id=41, turn_id="turn-1")
+        assert result["turn_receipt"]["status"] == "failed"
+        assert "active_turn" not in result
+        assert "turn_receipt" not in store.get_history(
+            session_id="receipt-session", user_id=41, turn_id="other-turn"
+        )
+    with tenant_scope(13):
+        assert "turn_receipt" not in store.get_history(
+            session_id="receipt-session", user_id=41, turn_id="turn-1"
+        )
+
+
+@pytest.mark.parametrize(
+    "scenario", ["ok", "unsupported", "old_client", "new_message", "forged", "live"]
+)
+def test_business_recall_uses_owned_turn_and_waits_for_rollback(
+    store: TaskConversationStore,
+    monkeypatch,
+    tmp_path,
+    scenario: str,
+) -> None:
+    from contextlib import nullcontext
+
+    from app.application import chat_recall
+    from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
+    from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+    from app.application.ai_chat import dialogue_memory
+    from app.application.ai_chat.conversation_history import persist_chat_turn
+    from app.application.elt import chat_recall as import_recall
+    from app.domain.shared_services.conversation_service import ConversationService
+
+    session_id = "business-recall"
+    monkeypatch.setenv("XCAGI_DIALOGUE_MEMORY_DIR", str(tmp_path))
+    scope = {"session_id": session_id, "user_id": 41}
+    repository = InMemoryAgentRunRepository()
+    step = AgentStep(
+        node_id="step",
+        tool_id="elt_import" if scenario != "unsupported" else "products",
+        action="execute" if scenario != "unsupported" else "delete",
+        status="completed",
+        output={"success": True},
+    )
+    run = AgentRun(
+        user_id="41",
+        message="导入 Excel",
+        status="completed",
+        steps=[step],
+        metadata={
+            "runtime_context": {
+                "tenant_id": "12",
+                "conversation_id": session_id,
+                "turn_id": "import-turn",
+            }
+        },
+    )
+    repository.save(run)
+    monkeypatch.setattr(chat_recall, "get_agent_run_repository", lambda: repository)
+    monkeypatch.setattr(chat_recall, "task_conversation_store", store)
+    monkeypatch.setattr(chat_recall, "get_db", nullcontext)
+    if scenario == "live":
+        monkeypatch.setattr(
+            dialogue_memory,
+            "_read",
+            lambda *_: {
+                "turns": [{"role": "user", "turn_id": "new-in-flight-turn"}],
+            },
+        )
+        monkeypatch.setattr(dialogue_memory, "_turn_is_live", lambda *_: True)
+    if scenario == "forged":
+        message_id = store.save_message(
+            **scope,
+            role="user",
+            content="导入 Excel",
+            metadata=json.dumps(
+                {
+                    "business_harness": {
+                        "conversation_id": session_id,
+                        "turn_id": "import-turn",
+                        "run_id": run.run_id,
+                        "recall_bound": True,
+                    }
+                }
+            ),
+        )
+    else:
+        message_id, _ = persist_chat_turn(
+            "41",
+            "导入 Excel",
+            {"session_id": session_id, "local_user_id": 41, "turn_id": "import-turn"},
+            {"success": True, "response": "导入完成", "run_id": run.run_id},
+            store=ConversationService(),
+        )["message_ids"]
+
+    effects = []
+
+    def prepare(_db, *, candidates, **_scope):
+        assert candidates[0][0]["run_id"] == run.run_id
+        assert candidates[0][0]["step_id"] == step.step_id
+        effects.append("plan")
+        return candidates
+
+    def rollback(_db, _plan, **_scope):
+        assert store.get_history(**scope)["messages"]
+        effects.append("rollback")
+        if scenario == "new_message":
+            store.save_message(**scope, role="user", content="新消息")
+        return 1
+
+    monkeypatch.setattr(import_recall, "prepare_import_rollback", prepare)
+    monkeypatch.setattr(import_recall, "rollback_imports", rollback)
+
+    def recall():
+        return chat_recall.recall_messages(
+            **scope,
+            message_id=message_id,
+            tenant_id="12",
+            mod_id="",
+            business_confirmed=scenario != "old_client",
+            require_rollback_permission=lambda: effects.append("permission"),
+        )
+
+    if scenario == "ok":
+        assert recall() == {"success": True, "deleted": 2, "rolled_back": 1}
+        assert store.get_history(**scope)["messages"] == []
+    else:
+        with pytest.raises(chat_recall.ConversationRevisionError):
+            recall()
+        assert store.get_history(**scope)["messages"]
+    assert effects == (
+        ["permission", "plan", "rollback"] if scenario in {"ok", "new_message"} else []
+    )
+
+
 def test_durable_user_id_only_accepts_positive_numeric_actors() -> None:
     assert durable_user_id("41") == 41
     assert durable_user_id(42) == 42

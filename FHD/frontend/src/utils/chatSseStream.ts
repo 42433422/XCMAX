@@ -19,6 +19,9 @@ export type PlannerSseEvent =
       action?: string
       params?: Record<string, unknown>
       success?: boolean
+      deferred?: boolean
+      committed?: boolean
+      requires_reconciliation?: boolean
       duration_ms?: number
       output_preview?: string
       error?: string
@@ -30,7 +33,7 @@ export type PlannerSseEvent =
       total_rows?: number
     }
   | { type: 'done'; result?: unknown }
-  | { type: 'error'; result?: unknown; message?: string; status_code?: number; run_id?: string; route_metadata?: unknown; execution_outcome?: string; requires_reconciliation?: boolean }
+  | { type: 'error'; result?: unknown; code?: string; message?: string; status_code?: number; run_id?: string; route_metadata?: unknown; execution_outcome?: string; requires_reconciliation?: boolean }
   | { type: 'requires_token'; token_name?: string; token_description?: string; run_id?: string }
 
 export class IncompletePlannerSseError extends Error {

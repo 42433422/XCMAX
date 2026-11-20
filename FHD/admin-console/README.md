@@ -19,6 +19,7 @@
 | 来源 | 版本/身份 | 许可证 | 用途 |
 |------|-----------|--------|------|
 | [Ludi-Herry/desktop-agent-ui](https://github.com/Ludi-Herry/desktop-agent-ui) | `main@3ef90c4e`（2026-11-17 引入） | MIT | 设计规范：骨架屏 105° 扫光、按钮六态、0.5px 描边、同心圆角、等宽数字、减弱动效守卫 |
+| [Vue Core](https://github.com/vuejs/core/tree/v3.5.45) | 3.5.45，前端锁文件 | [MIT](https://github.com/vuejs/core/blob/v3.5.45/LICENSE) | 原单处置表单、会话文本转义与回执渲染 |
 | Element Plus | `package.json` 已锁定 | MIT | `el-skeleton` 骨架屏；按钮/表格/标签沿用既有组件语义 |
 | 原生 CSS / View Transitions API | Chromium 115+，渐进增强 | - | 分区切换视图过渡、层级阴影与缓动令牌；不支持的浏览器直接切换 |
 

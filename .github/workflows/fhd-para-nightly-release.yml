@@ -1,0 +1,129 @@
+# CI SSOT: generated from FHD/.github/workflows/para-nightly-release.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
+name: Para 06:00 Release Preparation
+
+on:
+  schedule:
+    - cron: '0 22 * * *' # 06:00 Asia/Shanghai
+  workflow_dispatch: # Readiness only. Publication is never a diagnostic dispatch.
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+
+concurrency:
+  group: para-nightly-release
+  cancel-in-progress: false
+
+
+defaults:
+  run:
+    working-directory: FHD
+
+jobs:
+  verify-integration:
+    if: github.ref == 'refs/heads/main' && github.repository == '42433422/XCMAX'
+    runs-on: ubuntu-latest
+    outputs:
+      source: ${{ steps.batch.outputs.source }}
+      branch: ${{ steps.batch.outputs.branch }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Read the ordered batch and its protected main merge receipts
+        id: batch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          XCMAX_MAIN_MERGE_QUEUE: ${{ vars.XCMAX_MAIN_MERGE_QUEUE }}
+        run: python scripts/release/para_nightly_release.py
+
+  prepare-version:
+    if: github.event_name == 'schedule' && needs.verify-integration.outputs.source != ''
+    needs: verify-integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ needs.verify-integration.outputs.source }}
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Check the source is current and this batch has no version proposal
+        id: once
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE: ${{ needs.verify-integration.outputs.source }}
+          BRANCH: ${{ needs.verify-integration.outputs.branch }}
+        run: |
+          set -euo pipefail
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)" = "$SOURCE"
+          found=$(gh pr list --repo "$GITHUB_REPOSITORY" --state all --base main --head "$BRANCH" \
+            --json isCrossRepository --jq '[.[] | select(.isCrossRepository == false)] | length')
+          pending=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --base main --limit 100 \
+            --json headRefName,isCrossRepository --jq '[.[] | select(.isCrossRepository == false and (.headRefName | startswith("automation/para-release-")))] | length')
+          if [ "$found" = 0 ] && [ "$pending" = 0 ]; then
+            echo 'prepare=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'A version proposal already exists for this batch or another proposal is still open.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Prepare version anchors and candidate metadata
+        if: steps.once.outputs.prepare == 'true'
+        id: version
+        env:
+          SOURCE: ${{ needs.verify-integration.outputs.source }}
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check PyYAML==6.0.3
+          python scripts/release/para_nightly_release.py --prepare "$SOURCE"
+          python scripts/dev/product_lines_status.py generate
+          python ../scripts/dev/publish_ci_workflows_to_root.py --apply
+          python scripts/dev/ssot_cli.py check version product-lines
+          version=$(python -c 'from scripts.dev.verify_version_anchors import canonical_version; print(canonical_version())')
+          reason="Para 候选 $version（集成 main $SOURCE）：新增本轮发布记录、版本选项及派生视图"
+          python scripts/dev/check_net_deletion.py --update --force --reason "$reason"
+          printf 'baseline_reason=%s\n' "$reason" >> "$GITHUB_OUTPUT"
+      - name: Open the version proposal for ordered approval
+        if: steps.once.outputs.prepare == 'true'
+        id: propose
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ secrets.CI_COMMIT_TOKEN }}
+          SOURCE: ${{ needs.verify-integration.outputs.source }}
+          BRANCH: ${{ needs.verify-integration.outputs.branch }}
+          VERSION: ${{ steps.version.outputs.version }}
+          BASELINE_REASON: ${{ steps.version.outputs.baseline_reason }}
+        run: |
+          set -euo pipefail
+          : "${GH_TOKEN:?CI_COMMIT_TOKEN required to trigger PR CI}"
+          : "${BASELINE_REASON:?candidate baseline reason required}"
+          [[ "$BRANCH" =~ ^automation/para-release-[0-9-]+-[0-9a-f]{16}$ ]]
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)" = "$SOURCE"
+          git switch -c "$BRANCH"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -u
+          git commit -m "chore(release): prepare Para candidate $VERSION"
+          # The same required preflight as interactive fixes; commit generated pages before retrying.
+          for attempt in 1 2 3; do
+            if (cd FHD && python scripts/dev/push_preflight.py --fix --base "$SOURCE"); then break; fi
+            git diff --quiet && exit 1
+            git add -u
+            git commit -m "chore(release): refresh generated candidate metadata"
+          done
+          (cd FHD && python scripts/dev/push_preflight.py --fix --base "$SOURCE")
+          head=$(git rev-parse HEAD)
+          gh auth setup-git --hostname github.com
+          git push origin "HEAD:refs/heads/$BRANCH"
+          printf 'Para 集成批次来源 `%s`。候选提交 `%s`。请由有权维护者审核后按批准顺序登记 XCMAX_MAIN_MERGE_QUEUE；合入后沿既有正式发布流程构建和验收。\n\n维护行数基线调整原因：%s。\n' "$SOURCE" "$head" "$BASELINE_REASON" > "$RUNNER_TEMP/para-release-pr.md"
+          pr=$(gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$BRANCH" \
+            --title "chore(release): prepare $VERSION" --label hold-merge --body-file "$RUNNER_TEMP/para-release-pr.md")
+          printf 'Version proposal %s\n' "$pr" >> "$GITHUB_STEP_SUMMARY"
+          printf 'Awaiting reviewed queue authorization for %s at %s\n' "$pr" "$head" >> "$GITHUB_STEP_SUMMARY"

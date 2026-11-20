@@ -376,7 +376,7 @@ describe('useChatRequest', () => {
 describe('useChatRequest page cache', () => {
   afterEach(() => { vi.useRealTimers() })
 
-  it('stops the wait ticker while the chat page is cached and resumes it on return', async () => {
+  it('preserves elapsed wait on return and retires requests finished while cached', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-11-06T04:00:00Z'))
     const visible = ref(true)
@@ -411,8 +411,16 @@ describe('useChatRequest page cache', () => {
     expect(request.loadingProgressText.value).toBe(whileVisible)
     visible.value = true
     await wrapper.vm.$nextTick()
+    expect(request.loadingProgressText.value).toContain('6s')
     await vi.advanceTimersByTimeAsync(2000)
-    expect(request.loadingProgressText.value).toContain('2s')
+    expect(request.loadingProgressText.value).toContain('8s')
+    visible.value = false
+    await wrapper.vm.$nextTick()
+    request.stopLoadingProgress()
+    visible.value = true
+    await wrapper.vm.$nextTick()
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(request.loadingProgressText.value).toBe('处理中...')
     wrapper.unmount()
   })
 })

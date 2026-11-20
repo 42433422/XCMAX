@@ -15,6 +15,36 @@ def _facade():
     return importlib.import_module("modstore_server.llm_catalog")
 
 
+def _catalog_client(api_key):
+    """Keep managed provider discovery on the pinned outbound transport."""
+    from modstore_server.platform_model_config import PlatformApiKey
+
+    if not isinstance(api_key, PlatformApiKey) or not api_key.managed:
+        from modstore_server.infrastructure.http_clients import get_external_client
+
+        return get_external_client()
+
+    class ManagedClient:
+        async def get(self, url, *, headers=None, params=None, timeout=30.0):
+            import httpx
+
+            from modstore_server.platform_model_transport import llm_http_response
+
+            target = str(httpx.URL(url).copy_merge_params(params)) if params else url
+            async with llm_http_response(
+                target,
+                api_key,
+                headers or {},
+                {},
+                timeout=timeout,
+                limits=httpx.Limits(),
+                method="GET",
+            ) as response:
+                return response
+
+    return ManagedClient()
+
+
 def clear_all_catalog_cache() -> None:
     """BYOK 变更后丢弃进程内模型列表缓存。"""
     _facade()._cache.clear()
@@ -28,10 +58,8 @@ async def _fetch_openai_compatible_records(
     base_url: str, api_key: str, *, provider: str = "", httpx_timeout: float = 30.0
 ) -> _facade().Tuple[_facade().List[_facade().Dict[str, _facade().Any]], _facade().Optional[str]]:
     url = f"{base_url.rstrip('/')}/models"
-    from modstore_server.infrastructure.http_clients import get_external_client
-
     try:
-        client = get_external_client()
+        client = _catalog_client(api_key)
         params = {"output_modalities": "all"} if provider == "openrouter" else None
         r = await client.get(
             url,
@@ -150,10 +178,8 @@ async def _fetch_anthropic_compatible_records(
     api_key: str, *, base_url: str, provider_label: str, httpx_timeout: float = 30.0
 ) -> _facade().Tuple[_facade().List[_facade().Dict[str, _facade().Any]], _facade().Optional[str]]:
     url = f"{base_url.rstrip('/')}/v1/models"
-    from modstore_server.infrastructure.http_clients import get_external_client
-
     try:
-        client = get_external_client()
+        client = _catalog_client(api_key)
         r = await client.get(
             url,
             headers={"x-api-key": api_key, "anthropic-version": "2023-06-01"},
@@ -221,10 +247,8 @@ async def _fetch_google_records(
     api_key: str, *, httpx_timeout: float = 30.0
 ) -> _facade().Tuple[_facade().List[_facade().Dict[str, _facade().Any]], _facade().Optional[str]]:
     url = "https://generativelanguage.googleapis.com/v1beta/models"
-    from modstore_server.infrastructure.http_clients import get_external_client
-
     try:
-        client = get_external_client()
+        client = _catalog_client(api_key)
         r = await client.get(url, params={"key": api_key}, timeout=httpx_timeout)
         if r.status_code >= 400:
             return ([], f"http {r.status_code}")
@@ -305,13 +329,19 @@ def resolve_catalog_credentials(session, user_id: int, provider: str):
 
 
 async def get_models_for_credentials(
-    user_id: int, provider: str, *, api_key, base_url, force_refresh: bool = False
+    user_id: int,
+    provider: str,
+    *,
+    api_key,
+    base_url,
+    force_refresh: bool = False,
+    discover_operations: bool = False,
 ) -> _facade().Dict[str, _facade().Any]:
     """Fetch a catalog after the caller has released its credential connection."""
     from modstore_server.platform_model_config import configured_model
 
     configured = configured_model(provider, api_key, base_url)
-    if configured:
+    if configured and not discover_operations:
         model = configured["model"]
         detailed = _facade().build_models_detailed(provider, [model])
         detailed[0]["display_name"] = configured["display_name"]
@@ -336,7 +366,8 @@ async def get_models_for_credentials(
             "error": "no_api_key",
             "from_cache": False,
         }
-    ck = _facade()._cache_key(user_id, provider, api_key)
+    cache_token = f"{base_url or ''}\0{api_key}" if discover_operations else api_key
+    ck = _facade()._cache_key(user_id, provider, cache_token)
     now = _facade().time.monotonic()
     if force_refresh:
         last = _facade()._last_force_refresh.get(user_id, 0.0)
@@ -400,6 +431,8 @@ async def get_models_for_credentials(
         }
     )
     merged = _facade()._merge_fallback(provider, remote)
+    if configured and configured["model"] not in merged:
+        merged = [configured["model"], *merged]
     detailed = _facade()._models_detailed(provider, merged, remote_records)
     runtime_models = _facade()._runtime_model_ids(detailed)
     fb = _facade()._load_fallback().get(provider) or []

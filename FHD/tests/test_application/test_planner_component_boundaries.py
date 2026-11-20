@@ -4,6 +4,8 @@ import json
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+import pytest
+
 from app.application.ai_chat.planned_workflow_dispatch import PlannedWorkflowDispatch
 from app.application.workflow.llm_plan_generation import LlmPlanGeneration
 from app.application.workflow.planning_graph_policy import validate_required_params
@@ -130,6 +132,7 @@ def test_rejected_model_plan_never_enters_agent_run(monkeypatch):
     planner.plan.return_value = PlanGraph(
         plan_id="rejected-plan",
         intent="plan_rejected",
+        nodes=[WorkflowNode("plan_rejected_clarification", "clarify", "ask")],
         metadata={"planning_rejected": True, "rejection_reason": "unsupported action"},
     )
     risk_gate = Mock()
@@ -138,6 +141,8 @@ def test_rejected_model_plan_never_enters_agent_run(monkeypatch):
         "app.application.facades.tools_facade.get_workflow_tool_registry",
         lambda: {},
     )
+    note = Mock()
+    monkeypatch.setattr("app.infrastructure.chat_stream_lifetime.publish_stream_note", note)
     dispatch = PlannedWorkflowDispatch({}, callbacks, planner, risk_gate, approval)
 
     result = dispatch.handle("owner", "删除全部客户", "pro", {}, "删除全部客户")
@@ -145,16 +150,25 @@ def test_rejected_model_plan_never_enters_agent_run(monkeypatch):
     assert result["success"] is False
     assert result["data"]["execution_started"] is False
     assert result["data"]["error_code"] == "workflow_plan_rejected"
+    assert all("已生成" not in call.args[0] for call in note.call_args_list)
     risk_gate.evaluate.assert_not_called()
 
 
-def test_missing_model_result_is_not_reported_as_invalid_business_plan(monkeypatch):
+@pytest.mark.parametrize(
+    ("kind", "code", "message"),
+    [
+        ("model_unavailable", "workflow_plan_unavailable", "检查模型连接"),
+        ("plan_repair_failed", "workflow_plan_rejected", "计划校验和自动修复均未成功"),
+        ("plan_format_invalid", "workflow_plan_rejected", "规划输出未通过格式校验"),
+    ],
+)
+def test_planning_failure_reports_its_actual_stage(monkeypatch, kind, code, message):
     from app.domain.neuro.cognition.plan_graph_hooks import finalize_planned_graph
 
     plan = finalize_planned_graph(
         None,
         plan_id="missing",
-        context={},
+        context={} if kind == "model_unavailable" else {"planning_failure_kind": kind},
         validate=lambda _: None,
         warn=lambda _: None,
         plan_type=PlanGraph,
@@ -171,8 +185,40 @@ def test_missing_model_result_is_not_reported_as_invalid_business_plan(monkeypat
     result = PlannedWorkflowDispatch({}, callbacks, planner, risk_gate, Mock()).handle(
         "owner", "你好", "pro", {}, "你好"
     )
-    assert result["data"]["error_code"] == "workflow_plan_unavailable"
-    assert "模型连接" in result["response"]
+    assert result["data"]["error_code"] == code
+    assert result["data"]["planning_failure_kind"] == kind
+    assert message in result["response"]
+    assert ("检查模型连接" in result["response"]) == (kind == "model_unavailable")
+    assert result["data"]["execution_started"] is False
+    risk_gate.evaluate.assert_not_called()
+
+
+def test_context_budget_failure_is_visible_without_entering_execution(monkeypatch):
+    from app.domain.neuro.cognition.plan_graph_hooks import finalize_planned_graph
+
+    reason = "系统指令和工具定义超过模型的上下文预算。"
+    plan = finalize_planned_graph(
+        None,
+        plan_id="over-budget",
+        context={"planning_failure_kind": "planner_error", "planning_failure_reason": reason},
+        validate=lambda _: None,
+        warn=lambda _: None,
+        plan_type=PlanGraph,
+        node_type=WorkflowNode,
+    )
+    callbacks = Mock()
+    callbacks._resume_pending_dynamic_workflow.return_value = (False, None)
+    planner = Mock()
+    planner.plan.return_value = plan
+    risk_gate = Mock()
+    monkeypatch.setattr(
+        "app.application.facades.tools_facade.get_workflow_tool_registry", lambda: {}
+    )
+    result = PlannedWorkflowDispatch({}, callbacks, planner, risk_gate, Mock()).handle(
+        "owner", "请查询", "pro", {}, "请查询"
+    )
+    assert result["success"] is False
+    assert result["response"] == reason + "本次没有执行任何业务操作。"
     assert result["data"]["execution_started"] is False
     risk_gate.evaluate.assert_not_called()
 

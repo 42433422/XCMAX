@@ -59,11 +59,19 @@ describe('Retort native approval console', () => {
     expect(mocks.get).toHaveBeenLastCalledWith('/api/xcmax/admin/retort-evolution', { offset: 8, limit: 8 })
   })
   it('previews the public issue and binds approval to the displayed evidence', async () => {
+    const detail = run()
+    const feedback = { ...detail, snapshot: { ...detail.snapshot, plan: {
+      public_body: detail.snapshot.plan.public_body,
+      private_customer_feedback: { reproduction: ['首次导入未成功 <script>untrusted()</script>'] },
+    } } }
+    mocks.get.mockImplementation((url: string) => Promise.resolve(url.endsWith('run-1') ? feedback : overview()))
     render()
     await flushPromises()
     await wrapper.get('.el-table__body button').trigger('click')
     await flushPromises()
     expect(document.body.textContent).toContain('将公开的任务内容')
+    expect(document.body.textContent).toContain('首次导入未成功 <script>untrusted()</script>')
+    expect(document.body.querySelector('script')).toBeNull()
     expect(document.body.textContent).toContain('未评级')
     const approve = [...document.body.querySelectorAll('button')].find((b) => b.textContent?.includes('批准并派工'))!
     approve.click()
@@ -96,6 +104,23 @@ describe('Retort native approval console', () => {
     ;[...document.body.querySelectorAll('button')].find((b) => b.textContent?.includes('确认验收'))!.click()
     await flushPromises()
     expect(mocks.post).toHaveBeenCalledWith('/api/xcmax/admin/retort-evolution/run-1/decision', { digest: 'c'.repeat(64), approved: true })
+  })
+  it('shows the credential pause without offering approval as an execution bypass', async () => {
+    const detail = {
+      ...run(), status: 'waiting_credential_isolation',
+      snapshot: { pending: [{ kind: 'execution' }], execution: {
+        reason: 'customer_feedback_requires_non_exportable_model_credentials',
+      } },
+    }
+    mocks.get.mockImplementation((url: string) => Promise.resolve(url.endsWith('run-1') ? detail : overview()))
+    render()
+    await flushPromises()
+    await wrapper.get('.el-table__body button').trigger('click')
+    await flushPromises()
+    expect(document.body.textContent).toContain('等待凭据隔离')
+    expect(document.body.textContent).toContain('客户反馈修复已暂停')
+    expect([...document.body.querySelectorAll('button')].some((b) => b.textContent?.includes('批准并派工'))).toBe(false)
+    expect(mocks.post).not.toHaveBeenCalled()
   })
   it('shows the merged repair and verified running release as distinct revisions', async () => {
     const merge = 'c'.repeat(40)

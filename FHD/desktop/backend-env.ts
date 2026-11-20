@@ -1,8 +1,17 @@
 import path from 'node:path'
-import { randomBytes } from 'node:crypto'
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 
 /** Main-process memory only; backend restarts share it, a new app process does not. */
 export const desktopWorkspaceToken = randomBytes(32).toString('hex')
+
+/** A public nonce proves the listener owns the child-only secret without sending it. */
+export function desktopBackendChallenge(): { nonce: string; verify: (proof: string) => boolean } {
+  const nonce = randomBytes(32).toString('hex')
+  const expected = createHmac('sha256', Buffer.from(desktopWorkspaceToken, 'ascii'))
+    .update(`xcagi-desktop-backend-v1:${nonce}`, 'ascii').digest()
+  return { nonce, verify: proof => proof.length === 64 && /^[0-9a-f]{64}$/.test(proof)
+    && timingSafeEqual(expected, Buffer.from(proof, 'hex')) }
+}
 
 /** 桌面后端只允许使用 userData SQLite，不能继承 IDE/代理的 DATABASE_URL。 */
 export function desktopBackendEnv(

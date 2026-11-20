@@ -158,6 +158,7 @@ def _task_envelope(
     *,
     include_runs: bool = True,
     executions: dict[str, Any] | None = None,
+    viewer: AgentPrincipal | None = None,
 ) -> dict[str, Any]:
     if include_runs:
         runs = [
@@ -178,7 +179,7 @@ def _task_envelope(
         runs = []
     payload = task.to_dict()
     if active is not None:
-        payload["progress"] = task_progress_snapshot(active)
+        payload["progress"] = task_progress_snapshot(active, viewer=viewer)
     payload["runs"] = [public_run_dict(run) for run in runs]
     payload["active_run"] = public_run_dict(active) if active is not None else None
     payload["capabilities"] = task_capabilities(active) if active is not None else {}
@@ -263,6 +264,7 @@ def list_agent_tasks(
                     task,
                     include_runs=False,
                     executions=executions,
+                    viewer=principal,
                 )
                 for task in tasks
             ],
@@ -525,7 +527,7 @@ def get_agent_task(
                 )
                 or task
             )
-        return success(_task_envelope(orchestrator, task))
+        return success(_task_envelope(orchestrator, task, viewer=principal))
     except RECOVERABLE_ERRORS:
         return internal_error_response("get agent task")
 
@@ -549,7 +551,7 @@ def mark_agent_task_read(
             task.attention_state = ""
             task.metadata = {**dict(task.metadata or {}), "read_at": utc_now_iso()}
             task = orchestrator.save_task(task)
-        return success(_task_envelope(orchestrator, task, include_runs=False))
+        return success(_task_envelope(orchestrator, task, include_runs=False, viewer=principal))
     except RECOVERABLE_ERRORS:
         return internal_error_response("mark agent task read")
 

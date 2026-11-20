@@ -3,6 +3,8 @@ import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { ARK_AGENT_PLAN_MODEL } from './codex_model_gateway.mjs';
+import { openCodePlatformConfig } from './opencode_agent.mjs';
 
 export async function runGithubExecutor({ env = process.env, fetchStatus = fetch, spawnWorker = spawn,
   sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), now = Date.now } = {}) {
@@ -28,17 +30,101 @@ export async function runGithubExecutor({ env = process.env, fetchStatus = fetch
           && value.benchmark_protocol.source_sha !== env.GITHUB_SHA)) throw new Error('management_dispatch_mismatch');
     return value;
   }
-  const accepted = await state();
+  let accepted = await state();
+  const repair = accepted.kind === 'original_pr_repair';
+  const customerRepair = accepted.kind === 'customer_feedback_repair';
+  if (repair) {
+    for (let attempt = 0; !accepted.finished && !accepted.run_id && attempt < 18; attempt += 1) {
+      await sleep(10000);
+      accepted = await state();
+    }
+    if (accepted.kind !== 'original_pr_repair' || String(accepted.run_id) !== run
+        || !/^[0-9a-f]{40}$/.test(accepted.source_sha || '')
+        || !Number.isSafeInteger(accepted.pull_request) || accepted.pull_request < 1
+        || (!accepted.finished && stage !== 'execute')) throw new Error('original_pr_dispatch_mismatch');
+  }
   if (accepted.finished) {
-    if (stage !== 'resume') throw new Error('management_dispatch_already_finished');
+    if (stage !== 'resume' && !repair && !customerRepair) throw new Error('management_dispatch_already_finished');
     mkdirSync(directory, { recursive: true });
     writeFileSync(join(directory, 'execution.json'), JSON.stringify(accepted) + '\n');
     return accepted.conclusion === 'success' ? 0 : 1;
   }
+  if (repair || customerRepair) {
+    // Scoped environment grants and a same-user proxy cannot keep PR-controlled
+    // tools from exporting API keys or HOME login material. No safe executor exists yet.
+    const reason = customerRepair ? 'customer_feedback_requires_non_exportable_model_credentials'
+      : 'original_pr_repair_requires_non_exportable_model_credentials';
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(join(directory, 'execution.json'), JSON.stringify({
+      request_id: request, run_id: run, finished: true, conclusion: 'failure', status: 'blocked', reason,
+    }) + '\n');
+    throw new Error(reason);
+  }
   const agentEnv = { ...env, PARA_GITHUB_ISSUE_NUMBER: String(accepted.issue_number) };
+  delete agentEnv.PARA_GITHUB_SOURCE_SHA;
   delete agentEnv.MODSTORE_PARA_DISPATCH_TOKEN;
   delete agentEnv.PARA_CODEX_AUTH_JSON;
   delete agentEnv.PARA_CODEX_CONFIG_TOML;
+  const allocation = accepted.model_allocation;
+  delete agentEnv.PARA_PLATFORM_MODEL;
+  delete agentEnv.PARA_PLATFORM_MODEL_CANDIDATES;
+  delete agentEnv.PARA_PLATFORM_APPROVED_KEYRING;
+  delete agentEnv.PARA_PLATFORM_GATEWAY_KEYS_JSON;
+  delete agentEnv.PARA_PLATFORM_AGENT_PLAN_FIRST;
+  const openCode = env.DEVFLEET_FORCE_OPENCODE === '1';
+  if (openCode && env.PARA_PLATFORM_POOL !== '1') throw new Error('opencode_requires_platform_admission');
+  delete agentEnv.OPENCODE_API_KEY;
+  delete agentEnv.PARA_OPENCODE_MODEL;
+  if (env.PARA_PLATFORM_POOL === '1' || allocation) {
+    const approved = allocation?.approved_models ?? [allocation?.model];
+    if (env.PARA_PLATFORM_POOL !== '1' || allocation?.status !== 'admitted'
+        || !Array.isArray(approved) || !approved.length || approved[0] !== allocation.model
+        || approved.some(model => typeof model !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._:/-]{0,127}$/.test(model))
+        || new Set(approved).size !== approved.length) {
+      throw new Error('platform_model_allocation_or_gateway_missing');
+    }
+    if (openCode && (allocation.agent_plan_first === true || allocation.model === ARK_AGENT_PLAN_MODEL
+        || allocation.provider === 'ark_agent_plan')) throw new Error('opencode_agent_plan_not_supported');
+    let keys;
+    try {
+      keys = env.PARA_PLATFORM_GATEWAY_KEYS_JSON?.trim()
+        ? JSON.parse(env.PARA_PLATFORM_GATEWAY_KEYS_JSON)
+        : Object.fromEntries(approved.map(model => [model, env.PARA_PLATFORM_GATEWAY_KEY]));
+    } catch {
+      throw new Error('invalid_platform_model_keyring');
+    }
+    if (!keys || typeof keys !== 'object' || Array.isArray(keys)) {
+      throw new Error('invalid_platform_model_keyring');
+    }
+    if (allocation.agent_plan_first === true) {
+      if (allocation.model !== ARK_AGENT_PLAN_MODEL || env.DEVFLEET_CODEX_MODEL_CANDIDATES !== ARK_AGENT_PLAN_MODEL) {
+        throw new Error('agent_plan_primary_not_configured');
+      }
+      keys[ARK_AGENT_PLAN_MODEL] = env.CODEX_API_KEY;
+      agentEnv.PARA_PLATFORM_AGENT_PLAN_FIRST = '1';
+    }
+    if (approved.some(model => !Object.hasOwn(keys, model)
+          || typeof keys[model] !== 'string' || !/^\S+$/.test(keys[model]))) {
+      throw new Error('platform_model_allocation_or_gateway_missing');
+    }
+    agentEnv.CODEX_API_KEY = keys[allocation.model];
+    agentEnv.PARA_PLATFORM_APPROVED_KEYRING = JSON.stringify(
+      Object.fromEntries(approved.map(model => [model, keys[model]])),
+    );
+    delete agentEnv.OPENAI_API_KEY;
+    delete agentEnv.DEVFLEET_CODEX_API_KEY_ENV;
+    agentEnv.PARA_PLATFORM_MODEL = allocation.model;
+    agentEnv.PARA_PLATFORM_MODEL_CANDIDATES = approved.join(',');
+    if (openCode) {
+      agentEnv.PARA_OPENCODE_MODEL = allocation.model;
+      agentEnv.OPENCODE_API_KEY = keys[allocation.model];
+      const config = openCodePlatformConfig(agentEnv);
+      agentEnv.PARA_PLATFORM_GATEWAY_URL = config.provider.xcmax.options.baseURL;
+      delete agentEnv.CODEX_API_KEY;
+      delete agentEnv.PARA_PLATFORM_APPROVED_KEYRING;
+    }
+  }
+  delete agentEnv.PARA_PLATFORM_GATEWAY_KEY;
   const agent = spawnWorker(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), 'para_e2e_agent.mjs')], {
     env: agentEnv, stdio: ['ignore', 'inherit', 'inherit'],
   });
@@ -53,6 +139,10 @@ export async function runGithubExecutor({ env = process.env, fetchStatus = fetch
     while (now() < deadline) {
       if (ended) throw new Error('Para exited before its original receipt was acknowledged');
       const current = await state();
+      if (repair && (current.kind !== accepted.kind || current.source_sha !== accepted.source_sha
+          || current.pull_request !== accepted.pull_request || String(current.run_id) !== run)) {
+        throw new Error('original_pr_dispatch_changed');
+      }
       const path = join(env.PARA_GITHUB_CANDIDATE_DIR || directory, 'manifest.json');
       if (stage === 'execute' && existsSync(path) && current.publication_candidate) {
         const manifest = JSON.parse(readFileSync(path, 'utf8'));

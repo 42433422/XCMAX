@@ -193,6 +193,113 @@ def snapshot(store, run_id, owner=7):
         return result
 
 
+@pytest.mark.parametrize("state", ["fresh", "resume", "unreadable"])
+def test_durable_identical_uploads_keep_each_approved_checkpoint(preview_store, monkeypatch, state):
+    from pathlib import Path
+
+    from app import db as app_db
+    from app.application.agent_orchestrator import business_write_guard
+    from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
+    from app.application.agent_orchestrator.task_progress import task_progress_snapshot
+    from app.application.elt import service as elt_service
+    from app.application.elt import target_detection
+    from app.application.tools import workflow_spreadsheet_scope
+    from app.db.models.elt import EltUpload
+    from app.domain.shared_services import tools_workflow_elt as elt
+    from app.infrastructure.auth.agent_principal import AgentPrincipal
+
+    store = preview_store
+    install_provider(store, monkeypatch)
+    monkeypatch.setattr(elt_service, "get_elt_service", lambda: store.service)
+    monkeypatch.setattr(app_db, "SessionLocal", store.factory)
+    for module in (elt, workflow_spreadsheet_scope):
+        monkeypatch.setattr(module, "_bound_actor", lambda _context: SimpleNamespace(id=7))
+    monkeypatch.setattr(elt, "_resolve_template", lambda *_: ("auto", {}))
+    monkeypatch.setattr(
+        target_detection, "detect_elt_target", lambda *_, **__: {"target_type": "customers"}
+    )
+    monkeypatch.setattr(elt, "_finalize_import", lambda *_: ({}, {}, ""))
+    paths = []
+    with store.factory() as db:
+        for _ in range(2):
+            upload = store.service.save_upload(
+                db,
+                owner_user_id=7,
+                file_name="customers.csv",
+                content_type="text/csv",
+                stream=BytesIO(CSV),
+            )
+            paths.append(upload["upload_id"])
+        db.commit()
+        assert len(set(paths)) == 2
+        assert len({db.get(EltUpload, path).sha256 for path in paths}) == 1
+        if state == "unreadable":
+            Path(db.get(EltUpload, paths[1]).storage_path).unlink()
+    step = AgentStep(
+        node_id="import",
+        tool_id="elt_import",
+        action="execute",
+        params={"file_paths": paths},
+        status="running",
+    )
+    run = AgentRun(user_id="7", message="导入两份已批准附件", status="running", steps=[step])
+    context = {
+        "user_id": 7,
+        "tenant_id": 1,
+        "run_id": run.run_id,
+        "step_id": step.step_id,
+        "durable_elt_batch": True,
+    }
+    run.metadata.update(runtime_context=context, plan={"metadata": {"durable_elt_batch": True}})
+    monkeypatch.setattr(
+        business_write_guard, "capture_worker_claim", lambda: (run.run_id, "worker", 1)
+    )
+    slots = elt.durable_elt_checkpoint_ids(run.run_id, step.step_id, paths)
+    if state == "resume":
+        can_start = elt._can_start_file_stage
+
+        def budget_until_first_file_completes(_context):
+            with store.factory() as db:
+                first = db.get(EltRun, slots[paths[0]])
+                return first is None or first.status != "completed"
+
+        monkeypatch.setattr(elt, "_can_start_file_stage", budget_until_first_file_completes)
+        partial = elt._preview_batch(paths, {}, context, write=True)
+        assert partial["success"] is False and partial["deferred_count"] == 1
+        assert partial["done_count"] == 1
+        monkeypatch.setattr(elt, "_can_start_file_stage", can_start)
+    result = elt._preview_batch(paths, {}, context, write=True)
+    assert result["run_count"] == 2
+    assert [item["file_path"] for item in result["results"]] == paths
+    complete = state != "unreadable"
+    assert result["success"] is complete
+    assert result["done_count"] == (2 if complete else 1)
+    assert result["data"]["executed_rows"] == 2
+    with store.factory() as db:
+        assert db.query(PurchaseUnit).count() == 2
+    run.status = step.status = "completed" if complete else "failed"
+    step.output = result
+    progress = task_progress_snapshot(run, viewer=AgentPrincipal(user_id="7", tenant_id="1"))
+    assert progress["total_units"] == 2
+    assert progress["completed_units"] == (2 if complete else 1)
+    assert progress["percent"] == (100 if complete else 50)
+    assert step.params == {"file_paths": paths}, "the approved plan must retain both upload IDs"
+    if complete:
+        second = snapshot(store, slots[paths[1]])
+        assert second["status"] == "completed"
+        assert second["summary"]["executed"] == 0 and second["summary"]["skip"] == 2
+        assert second["receipt"]["run_id"] == slots[paths[1]]
+        assert second["receipt"]["executed_rows"] == 0
+        assert all(row["action"] == "skip" for row in second["persisted_rows"])
+        submitted = len(store.executor.futures)
+        recovered = elt._preview_batch(paths, {}, context, write=True)
+        assert recovered["success"] is True and recovered["done_count"] == 2
+        assert len(store.executor.futures) == submitted
+        with store.factory() as db:
+            assert db.query(EltRun).count() == 2
+            assert db.query(PurchaseUnit).count() == 2
+
+
 @pytest.mark.parametrize("outcome", ["success", "missing_route", "invalid_json", "type_error"])
 def test_real_csv_preview_preserves_owner_and_deterministic_rows(
     preview_store, monkeypatch, outcome
@@ -302,6 +409,12 @@ def test_customer_products_csv_preview_and_confirmed_execution_persist_aggregate
     store.executor.futures[-1].result(timeout=10)
     preview = snapshot(store, run_id)
     assert preview["status"] == "preview_ready" and preview["summary"]["new"] == 2
+    chat_context = {
+        "conversation_id": "conversation-1",
+        "turn_id": "turn-1",
+        "run_id": "agent-run-1",
+        "step_id": "step-1",
+    }
     with store.factory() as db:
         assert db.query(PurchaseUnit).count() == db.query(Product).count() == 0
         store.service.execute(
@@ -311,12 +424,27 @@ def test_customer_products_csv_preview_and_confirmed_execution_persist_aggregate
             confirmed=True,
             valid_rows_only=False,
             preview_revision=preview["preview_revision"],
+            chat_context=chat_context,
         )
     store.executor.futures[-1].result(timeout=10)
     result = snapshot(store, run_id)
     assert result["status"] == "completed" and result["summary"]["executed"] == 2
     assert result["lease"] == (None, None, None)
     with store.factory() as db:
+        with pytest.raises(EltConflict, match="请先完成预演再执行"):
+            store.service.execute(
+                db,
+                run_id=run_id,
+                owner_user_id=7,
+                confirmed=True,
+                valid_rows_only=False,
+                preview_revision=preview["preview_revision"],
+                chat_context={**chat_context, "turn_id": "other-turn"},
+            )
+        assert load_json(db.get(EltRun, run_id).summary_json, {})["chat_import_origin"] == {
+            **chat_context,
+            "mod_id": "",
+        }
         customer = db.query(PurchaseUnit).one()
         assert customer.unit_name == "隔离联合客户"
         products = db.query(Product).order_by(Product.model_number).all()

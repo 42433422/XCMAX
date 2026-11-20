@@ -65,7 +65,7 @@ class ConversationLlmMixin:
                 provider=provider,
                 context=context,
                 reserved_tokens=max_tokens + schema_tokens,
-                model=model_for_budget(provider, kwargs.get("model")),
+                model=await model_for_budget(provider, kwargs.get("model"), kwargs.get("provider")),
             )
             result = await provider.chat_completion(
                 messages=compression.messages,

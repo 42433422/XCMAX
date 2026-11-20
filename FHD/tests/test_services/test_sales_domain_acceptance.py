@@ -754,6 +754,63 @@ class TestRealSqliteAtomicClosedLoop:
             "alloc": 0,
         }
 
+    def test_partial_delivery_uses_approved_quantities_and_replays_once(self, _e2e_db, monkeypatch):
+        from app.application.sales.verification import verify_closed_loop
+
+        _patch_sessionlocal(monkeypatch, _e2e_db)
+        seed = _seed_tenant(_e2e_db, 1, "WH-T1")
+        with tenant_scope(1), _e2e_db.begin() as db:
+            product = Product(name="B 产品", unit="个")
+            db.add(product)
+            db.flush()
+            second_product_id = product.id
+            db.add(
+                InventoryLedger(
+                    product_id=second_product_id,
+                    warehouse_id=seed["warehouse_id"],
+                    quantity=100,
+                    available_quantity=100,
+                    reserved_quantity=0,
+                    unit="个",
+                    in_date=datetime.now().date(),
+                    created_at=datetime.now(),
+                    updated_at=datetime.now(),
+                )
+            )
+        payload = _payload_with_key("partial-delivery")
+        items = payload["order"]["items"]
+        items.append(dict(items[0], product_name="B 产品"))
+        payload["order"]["total_amount"] = 2000
+        payload["fulfillment"].update(quantity=13, line_quantities=[3, 10])
+        with tenant_scope(1):
+            service = SalesAppService()
+            premature = service.execute_closed_loop(payload)
+            assert premature["failed_step"] == "validation"
+            assert _count_table(_e2e_db, SalesOrder, 1) == 0
+            for section in ("invoice", "payment_allocation"):
+                payload[section]["requested"] = False
+
+            result = service.execute_closed_loop(payload)
+            assert result["success"] is True, result
+            verified = verify_closed_loop(payload)
+            assert verified["success"] is True, verified
+            replay = service.execute_closed_loop(payload)
+            assert replay["success"] and replay["replayed"], replay
+            payload["fulfillment"]["line_quantities"] = [10, 3]
+            conflict = service.execute_closed_loop(payload)
+            assert conflict["failed_step"] == "idempotency", conflict
+            assert verify_closed_loop(payload)["success"] is False
+        assert result["data"]["postconditions"]["fulfillment"] == "partial"
+        assert _ledger_available(_e2e_db, 1, seed["product_id"]) == 97
+        assert _ledger_available(_e2e_db, 1, second_product_id) == 90
+        assert _count_business_rows(_e2e_db, 1) == {
+            "orders": 2,
+            "items": 3,
+            "inv_tx": 2,
+            "journal": 0,
+            "alloc": 0,
+        }
+
     def test_unrelated_second_line_not_treated_as_replay(self, _e2e_db, monkeypatch):
         """复合命名空间边界：标记后紧跟换行的无关第二行绝不被当作幂等重放候选。
 

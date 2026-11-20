@@ -25,18 +25,20 @@ import argparse
 import json
 import logging
 import os
-import re
+import sys
 import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "release"))
+from verify_formal_release_identity import published_pointer_errors
+
 logger = logging.getLogger(__name__)
 
 LABEL_FAILED = "acceptance-failed"
 LABEL_ACCEPTED = "customer-accepted"
-_SHA = re.compile(r"^[0-9a-f]{40}$")
 
 
 def _fetch_published_release(market_base: str) -> dict[str, Any]:
@@ -235,16 +237,9 @@ def run(args: argparse.Namespace) -> int:
     version = str(config.get("download_version") or "").strip()
     build_sha = str(config.get("git_sha") or "").strip()
     issues = config.get("linked_issues")
-    if (
-        config.get("schema") != "xcagi.download_release.public/v1"
-        or config.get("release_ready") is not True
-        or not version
-        or (args.version and args.version != version)
-        or config.get("version_lock") != version
-        or not _SHA.fullmatch(build_sha)
-        or config.get("release_id") != f"xcagi-{version}-{build_sha}"
-    ):
-        logger.error("published release identity is missing, unready or inconsistent")
+    errors = published_pointer_errors(config, args.version or version, build_sha)
+    if errors:
+        logger.error("published release identity blocked: %s", ", ".join(errors))
         return 1
     if (
         not isinstance(issues, list)

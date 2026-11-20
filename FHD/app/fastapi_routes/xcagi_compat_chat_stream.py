@@ -27,6 +27,10 @@ def _facade():
 def _client_issue_reply(receipt: dict | None) -> str:
     if not receipt:
         return ""
+    from app.application.client_product_issue_intake import market_ticket_followup_reply
+
+    if followup := market_ticket_followup_reply(receipt):
+        return followup
     if "issue_description" in (receipt.get("missing_evidence") or []):
         return "你要登记哪个软件功能或使用反馈？请说说想改的内容或遇到的情况，我会据此受理，不用固定格式。"
     shots = receipt.get("screenshots") or {}

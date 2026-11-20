@@ -8,7 +8,10 @@ export function readChatExecution(payload: unknown): ChatExecutionRecord | undef
   const data = asRecord(row.data)
   const nested = asRecord(data.data)
   const raw = asRecord(row.execution || data.execution || nested.execution)
-  if (typeof raw.committed !== 'boolean') {
+  const uncertain = [row, data, nested, raw].some(value =>
+    value.outcome === 'unknown' || value.execution_state === 'unknown'
+    || value.requires_reconciliation === true || value.reconciliation_required === true)
+  if (!uncertain && typeof raw.committed !== 'boolean') {
     // 模型/规划阶段就失败时，后端会明确标记尚未开始执行：本回合没有任何业务写入。
     const started = row.execution_started ?? data.execution_started ?? nested.execution_started
     if (started === false) {
@@ -16,13 +19,13 @@ export function readChatExecution(payload: unknown): ChatExecutionRecord | undef
     }
     return undefined
   }
-  const effect = String(raw.effect || 'none')
   return {
     idempotencyKey: String(raw.idempotency_key || raw.idempotencyKey || ''),
     intent: String(raw.intent || ''),
-    committed: raw.committed,
-    effect,
-    outcome: String(raw.outcome || ''),
+    committed: raw.committed === true,
+    ...(typeof raw.confirmable === 'boolean' ? { confirmable: raw.confirmable } : {}),
+    effect: uncertain ? 'unknown' : String(raw.effect || 'none'),
+    outcome: uncertain ? 'unknown' : String(raw.outcome || ''),
     tenantId: String(raw.tenant_id || raw.tenantId || ''),
     customerCount: typeof raw.customer_count === 'number' ? raw.customer_count : typeof raw.customerCount === 'number' ? raw.customerCount : null,
     productCount: typeof raw.product_count === 'number' ? raw.product_count : typeof raw.productCount === 'number' ? raw.productCount : null,
@@ -39,9 +42,9 @@ type ChatExecutionLike = { committed?: boolean; effect?: string; outcome?: strin
  */
 export function chatExecutionOutcome(execution: ChatExecutionLike): ChatExecutionOutcome {
   const raw = String(execution?.outcome || '').toLowerCase()
+  if (raw === 'unknown' || execution?.effect === 'unknown') return 'unknown'
   if (raw === 'not_executed' || raw === 'none') return 'not_executed'
   if (raw === 'partial') return 'partial'
-  if (raw === 'unknown') return 'unknown'
   if (execution?.effect === 'partial') return 'partial'
   if (execution?.committed === true) return 'succeeded'
   if (execution?.committed === false || execution?.effect === 'none' || execution?.effect === 'preview') return 'not_executed'

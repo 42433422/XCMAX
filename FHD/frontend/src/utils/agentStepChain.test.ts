@@ -1,12 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
-  buildLiveStep,
   chainDurationMs,
   chainState,
   hasStepDetails,
   isDocumentTemplateChange,
   stepsFromNodeResults,
-  withLiveStep,
 } from './agentStepChain'
 
 describe('stepsFromNodeResults', () => {
@@ -47,36 +45,6 @@ describe('stepsFromNodeResults', () => {
   it('空输入返回空数组', () => {
     expect(stepsFromNodeResults(undefined)).toEqual([])
     expect(stepsFromNodeResults([])).toEqual([])
-  })
-})
-
-describe('buildLiveStep', () => {
-  it('去掉「正在调用工具」前缀作为标题', () => {
-    expect(buildLiveStep('正在调用工具：搜索')).toMatchObject({ title: '搜索', state: 'running', live: true })
-  })
-
-  it('空文案返回 null', () => {
-    expect(buildLiveStep('   ')).toBeNull()
-  })
-})
-
-describe('withLiveStep', () => {
-  it('没有真实步骤时用占位步骤撑起链路', () => {
-    const live = buildLiveStep('正在执行任务')
-    expect(withLiveStep([], live)).toHaveLength(1)
-  })
-
-  it('已有进行中的真实步骤时不再追加占位', () => {
-    const steps = stepsFromNodeResults([{ node_id: 'n', success: false, tool_id: 'x', action: 'y' }]).map((s) => ({
-      ...s,
-      state: 'running' as const,
-    }))
-    expect(withLiveStep(steps, buildLiveStep('正在执行任务'))).toHaveLength(1)
-  })
-
-  it('已有终态步骤时追加新的进行中步骤', () => {
-    const steps = stepsFromNodeResults([{ node_id: 'n', success: true, tool_id: 'x', action: 'y' }])
-    expect(withLiveStep(steps, buildLiveStep('正在执行任务'))).toHaveLength(2)
   })
 })
 

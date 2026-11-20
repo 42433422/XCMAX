@@ -108,9 +108,7 @@ const rows = computed(() =>
   padding: 3px 0;
 }
 .chat-turn-trace__detail {
-  padding: 6px 8px;
-  border-radius: 6px;
-  background: var(--app-surface-muted, #f8fafc);
+  margin: 2px 0 6px 20px;
 }
 .chat-turn-trace__args {
   margin: 4px 0 0;
