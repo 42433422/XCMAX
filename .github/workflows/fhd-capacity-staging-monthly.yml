@@ -19,18 +19,17 @@ defaults:
 
 jobs:
   k6-load:
+    # 未配置 STAGING_BASE_URL 时整个 job 直接跳过（GitHub 显示 skipped），
+    # 而不是跑一个什么都不做的绿勾，避免「每月都成功但其实从未压测」。
+    if: ${{ vars.STAGING_BASE_URL != '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Run load.js against staging (optional)
+      - name: Run load.js against staging
         env:
           STAGING_BASE_URL: ${{ vars.STAGING_BASE_URL }}
         run: |
-          if [ -z "${STAGING_BASE_URL}" ]; then
-            echo "STAGING_BASE_URL not set — skip remote k6 (set repo variable to enable)"
-            exit 0
-          fi
           curl -sL https://github.com/grafana/k6/releases/download/v0.54.0/k6-v0.54.0-linux-amd64.tar.gz | tar xz
           sudo mv k6-*/k6 /usr/local/bin/
           k6 run -e BASE_URL="${STAGING_BASE_URL}" scripts/loadtest/load.js \
