@@ -19,7 +19,7 @@ def commands(tmp_path):
     runner.write_text(
         f"#!{sys.executable}\n"
         + r"""
-import json, os, sys
+import hashlib, json, os, sys
 from pathlib import Path
 args = sys.argv[1:]
 with open(os.environ['CLI_LOG'], 'a') as log:
@@ -28,7 +28,14 @@ if Path(sys.argv[0]).name == 'coscmd':
     if 'list' in args:
         print('manifests/20261121-000000.json')
     else:
-        Path(args[-1]).write_text(json.dumps({'modstore': {'dump':'present', 'row_counts':{'tickets':10}}}) if args[-1].endswith('.json') else 'fixture dump')
+        data = {'dump': 'present', 'sha256': hashlib.sha256(b'fixture dump').hexdigest(),
+                'row_counts': {'tickets': int(os.environ.get('EXPECTED_ROWS', '10'))},
+                'row_count_evidence': {'status': 'verified', 'method': 'pg_export_snapshot_count_v1',
+                    'snapshot_id': '00000003-00000004-1', 'schema': 'public',
+                    'requested_tables': ['tickets'], 'missing_tables': []}}
+        if os.environ.get('LEGACY_MANIFEST'): data.pop('row_count_evidence')
+        if os.environ.get('WRONG_DUMP'): data['sha256'] = 'a' * 64
+        Path(args[-1]).write_text(json.dumps({'modstore': data}) if args[-1].endswith('.json') else 'fixture dump')
 elif 'pg_restore' in args:
     sys.stdin.buffer.read()
     if '--list' not in args and os.environ.get('FAIL_OPERATION') == 'restore':
@@ -89,7 +96,31 @@ def test_restore_command_failure_cannot_be_hidden_by_valid_row_counts(commands):
 def test_successful_restore_requires_cleanup(commands, failure, success):
     result = execute("fhd-restore-drill.sh", {**commands, "FAIL_OPERATION": failure})
     assert (result.returncode == 0) is success, result.stderr
-    assert any("SELECT count(*) FROM tickets" in row[-1] for row in calls(commands))
+    assert any('SELECT count(*) FROM public."tickets"' in row[-1] for row in calls(commands))
+
+
+@pytest.mark.parametrize(
+    "extra,code,message",
+    [
+        ({"LEGACY_MANIFEST": "1"}, 2, "UNVERIFIED"),
+        ({"WRONG_DUMP": "1"}, 1, "SHA256"),
+        ({"EXPECTED_ROWS": "11", "FHD_DRILL_ROW_TOLERANCE": "99"}, 1, "精确行数不匹配"),
+    ],
+)
+def test_restore_requires_bound_exact_evidence(commands, extra, code, message):
+    result = execute("fhd-restore-drill.sh", {**commands, **extra})
+    assert result.returncode == code
+    assert message in result.stdout + result.stderr
+    assert "恢复演练完成" not in result.stdout
+    if "EXPECTED_ROWS" not in extra:
+        assert not any("CREATE DATABASE" in row[-1] for row in calls(commands))
+
+
+def test_dry_run_does_not_claim_a_completed_restore(commands):
+    result = execute("fhd-restore-drill.sh", commands, "--dry-run")
+    assert result.returncode == 0, result.stderr
+    assert "实际恢复和行数比对未执行" in result.stdout
+    assert "恢复演练完成" not in result.stdout
 
 
 @pytest.mark.parametrize("failure,args", [("delete", ()), ("count", ("--dry-run",))])

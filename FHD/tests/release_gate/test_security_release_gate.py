@@ -507,7 +507,7 @@ def test_full_scan_collects_and_uploads_evidence_after_individual_scanner_failur
         in workflow
     )
     assert "Normalize all scanner reports\n        if: always()" in workflow
-    assert "Enforce all-source zero critical/high gate\n        if: always()" in workflow
+    assert "Check scheduled trend or enforce release clearance\n        if: always()" in workflow
     assert (
         "Upload auditable security evidence even when gate fails\n        if: always()" in workflow
     )

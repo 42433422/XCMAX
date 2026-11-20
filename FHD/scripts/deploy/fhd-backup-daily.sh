@@ -77,6 +77,7 @@ log "  主库 xcagi + ${#MOD_DBS[@]} 个 MOD 库"
 # ========== 1b. MODstore 主库（独立 compose） ==========
 MODSTORE_DUMPED=0
 MODSTORE_COUNTS="{}"
+MODSTORE_COUNT_EVIDENCE='{"status":"unverified","reason":"no_modstore_dump"}'
 if [[ -z "$MODSTORE_PG_CONTAINER" ]]; then
   _candidates="$(docker ps --format '{{.Names}}' | grep -Ei 'modstore.*postgres|postgres.*modstore' || true)"
   if [[ -n "$_candidates" && "$(printf '%s\n' "$_candidates" | wc -l | tr -d ' ')" == "1" ]]; then
@@ -85,22 +86,79 @@ if [[ -z "$MODSTORE_PG_CONTAINER" ]]; then
 fi
 if [[ -n "$MODSTORE_PG_CONTAINER" ]] && docker ps --format '{{.Names}}' | grep -qx "$MODSTORE_PG_CONTAINER"; then
   log "  备份 MODstore 库 $MODSTORE_DB（容器 $MODSTORE_PG_CONTAINER）..."
-  docker exec "$MODSTORE_PG_CONTAINER" pg_dump -U "$MODSTORE_PG_USER" -Fc "$MODSTORE_DB" > modstore.dump
+  # PostgreSQL 16: keep the exporting transaction open while pg_dump imports its
+  # snapshot. psql's shell output is the archive; SQL evidence goes to stderr.
+  # https://www.postgresql.org/docs/16/app-pgdump.html (--snapshot)
+  if ! docker exec -i "$MODSTORE_PG_CONTAINER" psql -X -qAt -w \
+    -U "$MODSTORE_PG_USER" -d "$MODSTORE_DB" -v ON_ERROR_STOP=1 \
+    -v "tables=$ROWCOUNT_TABLES" > modstore.dump 2>modstore-counts.log <<'SQL'
+\o /dev/stderr
+BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;
+SET LOCAL row_security = off;
+SELECT pg_export_snapshot() AS backup_snapshot \gset
+\setenv PGDATABASE :DBNAME
+\setenv PGUSER :USER
+\setenv PGHOST :HOST
+\setenv PGPORT :PORT
+\setenv FHD_DUMP_SNAPSHOT :backup_snapshot
+\! pg_dump -w -Fc --snapshot="$FHD_DUMP_SNAPSHOT"
+\if :SHELL_ERROR
+  \warn pg_dump failed; snapshot evidence is unverified
+  SELECT 1 / 0;
+\endif
+SELECT 'FHD_COUNT_META:' || json_build_object(
+  'snapshot_id', :'backup_snapshot', 'schema', 'public',
+  'requested_tables', string_to_array(:'tables', ','),
+  'server_version_num', current_setting('server_version_num'))::text;
+SELECT format(
+  'SELECT %L || json_build_object(''table'', %L, ''count'', count(*))::text FROM %I.%I',
+  'FHD_COUNT_ROW:', c.relname, n.nspname, c.relname)
+FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p')
+  AND c.relname IN (SELECT btrim(t) FROM unnest(string_to_array(:'tables', ',')) AS t)
+ORDER BY c.relname
+\gexec
+COMMIT;
+SQL
+  then
+    cat modstore-counts.log >&2
+    log "ERROR: 同快照备份或精确行数取证失败；未核验，不发布 manifest"
+    exit 1
+  fi
   docker exec -i "$MODSTORE_PG_CONTAINER" pg_restore --list < modstore.dump > /dev/null || {
     log "ERROR: modstore.dump 不可读"
     exit 1
   }
   MODSTORE_DUMPED=1
-  _tables_sql=""
-  IFS=',' read -ra _tables <<< "$ROWCOUNT_TABLES"
-  for _t in "${_tables[@]}"; do
-    [[ "$_t" =~ ^[a-z_][a-z0-9_]*$ ]] || continue
-    _tables_sql+="${_tables_sql:+,}'$_t'"
-  done
-  if [[ -n "$_tables_sql" ]]; then
-    MODSTORE_COUNTS="$(docker exec "$MODSTORE_PG_CONTAINER" psql -U "$MODSTORE_PG_USER" -d "$MODSTORE_DB" -Atc \
-      "SELECT json_object_agg(relname, n_live_tup) FROM pg_stat_user_tables WHERE relname IN ($_tables_sql)" 2>/dev/null || echo '{}')"
-    [[ -z "$MODSTORE_COUNTS" || "$MODSTORE_COUNTS" == "null" ]] && MODSTORE_COUNTS="{}"
+  _count_report="$(python3 - modstore-counts.log <<'PY'
+import json, re, sys
+meta, counts = [], {}
+for line in open(sys.argv[1]):
+    if line.startswith('FHD_COUNT_META:'):
+        meta.append(json.loads(line.split(':', 1)[1]))
+    elif line.startswith('FHD_COUNT_ROW:'):
+        row = json.loads(line.split(':', 1)[1])
+        name, count = row['table'], row['count']
+        if name in counts or type(count) is not int or count < 0:
+            raise SystemExit('invalid or duplicate exact row count')
+        counts[name] = count
+if len(meta) != 1 or not meta[0].get('snapshot_id'):
+    raise SystemExit('snapshot evidence missing; row counts unverified')
+evidence = meta[0]
+requested = sorted(set(t.strip() for t in evidence['requested_tables']))
+evidence.update(method='pg_export_snapshot_count_v1', requested_tables=requested)
+missing = sorted(set(requested) - counts.keys())
+valid = bool(requested) and all(re.fullmatch(r'[a-z_][a-z0-9_]{0,62}', t) for t in requested)
+evidence.update(status='verified' if valid and not missing else 'unverified', missing_tables=missing)
+print(json.dumps(counts))
+print(json.dumps(evidence))
+PY
+  )"
+  mapfile -t _count_parts <<< "$_count_report"
+  MODSTORE_COUNTS="${_count_parts[0]}"
+  MODSTORE_COUNT_EVIDENCE="${_count_parts[1]}"
+  if [[ "$MODSTORE_COUNT_EVIDENCE" == *'"unverified"'* ]]; then
+    log "WARN: 行数取证未核验（配置表缺失或名称无效）；dump 保留，不能判定恢复演练通过"
   fi
 else
   if [[ "$MODSTORE_REQUIRED" == "1" ]]; then
@@ -208,7 +266,8 @@ cat > manifest.json <<EOF
     "container": "$MODSTORE_PG_CONTAINER",
     "dump": $( [[ "$MODSTORE_DUMPED" == "1" ]] && printf '"modstore.dump"' || printf 'null' ),
     "sha256": $( [[ -n "$MODSTORE_SHA" ]] && printf '"%s"' "$MODSTORE_SHA" || printf 'null' ),
-    "row_counts": ${MODSTORE_COUNTS}
+    "row_counts": ${MODSTORE_COUNTS},
+    "row_count_evidence": ${MODSTORE_COUNT_EVIDENCE}
   },
   "sha256": {
     "xcagi.dump": "$(sha256sum xcagi.dump | awk '{print $1}')",

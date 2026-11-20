@@ -14,14 +14,13 @@
 #   FHD_COS_REGION              默认 ap-shanghai
 #   FHD_MODSTORE_PG_CONTAINER   留空自动探测 modstore 的 postgres 容器
 #   FHD_MODSTORE_PG_USER        默认 modstore
-#   FHD_DRILL_ROW_TOLERANCE     行数容差，默认 0.05（5%，pg_stat 估算会有轻微偏差）
+# 同快照精确计数必须完全相等；旧估算清单或缺失证据以未核验（退出码 2）结束。
 set -euo pipefail
 
 COS_BUCKET="${FHD_COS_BUCKET:-xcagi-cvm-backup-sh}"
 COS_REGION="${FHD_COS_REGION:-ap-shanghai}"
 PG_CONTAINER="${FHD_MODSTORE_PG_CONTAINER:-}"
 PG_USER="${FHD_MODSTORE_PG_USER:-modstore}"
-TOLERANCE="${FHD_DRILL_ROW_TOLERANCE:-0.05}"
 MODE="full"
 [[ "${1:-}" == "--dry-run" ]] && MODE="dry"
 
@@ -77,6 +76,49 @@ DUMP_PATH="postgres/daily/modstore-$LATEST_MANIFEST.dump"
 coscmd -r "$COS_REGION" -b "$COS_BUCKET" download "$DUMP_PATH" "$WORK/modstore.dump" >/dev/null \
   || fail "下载 dump 失败: $DUMP_PATH"
 
+if python3 - "$WORK/manifest.json" "$WORK/modstore.dump" > "$WORK/counts.txt" <<'PY'
+import hashlib, json, re, sys
+from pathlib import Path
+
+def unverified(reason):
+    print('UNVERIFIED: ' + reason, file=sys.stderr)
+    raise SystemExit(2)
+
+data = json.loads(Path(sys.argv[1]).read_text()).get('modstore') or {}
+expected_sha = data.get('sha256')
+if not isinstance(expected_sha, str) or not re.fullmatch('[a-fA-F0-9]{64}', expected_sha):
+    unverified('缺少有效的 dump SHA256，无法绑定备份证据')
+with open(sys.argv[2], 'rb') as archive:
+    digest = hashlib.sha256()
+    for chunk in iter(lambda: archive.read(1024 * 1024), b''):
+        digest.update(chunk)
+    actual_sha = digest.hexdigest()
+if actual_sha != expected_sha.lower():
+    raise SystemExit('ERROR: modstore.dump SHA256 不匹配，拒绝恢复')
+evidence = data.get('row_count_evidence') or {}
+counts = data.get('row_counts')
+if (not isinstance(evidence, dict) or evidence.get('status') != 'verified'
+        or evidence.get('method') != 'pg_export_snapshot_count_v1'
+        or not isinstance(evidence.get('snapshot_id'), str) or not evidence['snapshot_id']
+        or evidence.get('schema') != 'public' or evidence.get('missing_tables') != []):
+    unverified('缺少同 dump 快照的精确行数证据；不使用旧统计估算做断言')
+requested = evidence.get('requested_tables')
+if (not isinstance(counts, dict) or not counts or not isinstance(requested, list)
+        or any(not isinstance(t, str) for t in requested) or set(requested) != set(counts)
+        or any(not re.fullmatch(r'[a-z_][a-z0-9_]{0,62}', t)
+               or type(n) is not int or n < 0 for t, n in counts.items())):
+    unverified('精确行数清单不完整或无效')
+for table, count in counts.items():
+    print(table, count)
+PY
+then
+  log "dump SHA256 与同快照精确行数证据校验通过"
+else
+  status=$?
+  [[ "$status" == "2" ]] && { log "UNVERIFIED: 恢复演练未核验"; exit 2; }
+  fail "备份证据校验失败"
+fi
+
 if [[ -z "$PG_CONTAINER" ]]; then
   CANDIDATES="$(docker ps --format '{{.Names}}' | grep -Ei 'modstore.*postgres|postgres.*modstore' || true)"
   if [[ -n "$CANDIDATES" && "$(printf '%s\n' "$CANDIDATES" | wc -l | tr -d ' ')" == "1" ]]; then
@@ -89,8 +131,7 @@ docker exec -i "$PG_CONTAINER" pg_restore --list < "$WORK/modstore.dump" >/dev/n
   || fail "dump 不可读"
 
 if [[ "$MODE" == "dry" ]]; then
-  log "dry-run 通过：manifest 与 dump 均可读"
-  log "===== 恢复演练完成 ====="
+  log "dry-run 校验通过：dump SHA256 与可读性通过；实际恢复和行数比对未执行"
   exit 0
 fi
 
@@ -115,26 +156,15 @@ TABLE_COUNT=$(docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$DRILL_DB" -v O
 
 log "恢复后表数量: $TABLE_COUNT"
 
-python3 - "$WORK/manifest.json" > "$WORK/counts.txt" <<'PY'
-import json, sys
-m = json.load(open(sys.argv[1]))
-for k, v in ((m.get("modstore") or {}).get("row_counts") or {}).items():
-    print(k, int(v))
-PY
-
 ASSERTED=0
 while read -r TABLE EXPECTED; do
   [[ -n "${TABLE:-}" ]] || continue
   [[ "$TABLE" =~ ^[a-z_][a-z0-9_]*$ ]] || continue
   ACTUAL=$(docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$DRILL_DB" -v ON_ERROR_STOP=1 -Atc \
-    "SELECT count(*) FROM $TABLE") || fail "恢复库表行数查询失败: $TABLE"
+    "SELECT count(*) FROM public.\"$TABLE\"") || fail "恢复库表行数查询失败: $TABLE"
   [[ "$ACTUAL" =~ ^[0-9]+$ ]] || fail "恢复库表行数无效: $TABLE"
-  if ! awk -v e="$EXPECTED" -v a="$ACTUAL" -v t="$TOLERANCE" 'BEGIN{
-      if (e == 0) exit (a == 0 ? 0 : 1);
-      d = a - e; if (d < 0) d = -d;
-      exit ((d / e) <= t ? 0 : 1)
-    }'; then
-    fail "行数超出容差: $TABLE 备份=$EXPECTED 恢复=$ACTUAL 容差=$TOLERANCE"
+  if [[ "$ACTUAL" != "$EXPECTED" ]]; then
+    fail "同快照精确行数不匹配: $TABLE 备份=$EXPECTED 恢复=$ACTUAL"
   fi
   log "  断言通过: $TABLE 备份=$EXPECTED 恢复=$ACTUAL"
   ASSERTED=$((ASSERTED + 1))

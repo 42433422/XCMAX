@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   scan-and-gate:
-    name: security-release-gate
+    name: ${{ github.event_name == 'schedule' && 'security-trend-check' || 'security-release-gate' }}
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 90
@@ -231,22 +231,35 @@ jobs:
           normalize credential-rotation credential-incidents ".github/security/credential-incidents.json"
           normalize production-host dnf-updateinfo "${RUNNER_TEMP}/security-native/production-host.json"
 
-      - name: Enforce all-source zero critical/high gate
+      - name: Check scheduled trend or enforce release clearance
         if: always() && steps.scan-source.outcome == 'success'
         id: release-gate
         continue-on-error: true
-        run: >-
-          python FHD/scripts/security/security_release_gate.py
-          --reports-dir "${RUNNER_TEMP}/security-reports"
-          --release-sha "${{ steps.scan-source.outputs.sha }}"
-          --baseline FHD/config/security_baseline.json
-          --output "${RUNNER_TEMP}/security-release-gate.json"
+        env:
+          RELEASE_SHA: ${{ steps.scan-source.outputs.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = schedule ]; then
+            python FHD/scripts/security/security_release_gate.py \
+              --reports-dir "${RUNNER_TEMP}/security-reports" \
+              --release-sha "$RELEASE_SHA" \
+              --baseline FHD/config/security_baseline.json \
+              --output "${RUNNER_TEMP}/security-release-gate.json"
+          elif [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            python FHD/scripts/security/verify_security_scan_pair.py \
+              --current-dir "${RUNNER_TEMP}/security-reports" \
+              --release-sha "$RELEASE_SHA" \
+              --output "${RUNNER_TEMP}/security-release-gate.json"
+          else
+            echo '::error::Unsupported security scan event'
+            exit 1
+          fi
 
       - name: Upload auditable security evidence even when gate fails
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: xcagi-security-release-reports
+          name: ${{ github.event_name == 'schedule' && 'xcagi-security-trend-reports' || 'xcagi-security-release-reports' }}
           path: ${{ runner.temp }}/security-reports/*.json
           retention-days: 120
           if-no-files-found: error
@@ -255,7 +268,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: xcagi-security-release-native
+          name: ${{ github.event_name == 'schedule' && 'xcagi-security-trend-native' || 'xcagi-security-release-native' }}
           path: |
             ${{ runner.temp }}/security-native/*
             ${{ runner.temp }}/security-release-gate.json
@@ -273,7 +286,7 @@ jobs:
         run: |
           set +e
           title="[security] 全量安全检查未通过"
-          body="$(printf '安全检查门禁未通过。\n\n- SHA: `%s`\n- 运行记录: %s\n- 证据: artifact `xcagi-security-release-reports` / `xcagi-security-release-native`\n\n处置方式：修复代码，或按 expires 规则登记误报抑制，然后手动重跑本 workflow（release_sha 留空即扫 main 当前 HEAD）。\n' "$SHA" "$RUN_URL")"
+          body="$(printf '安全检查门禁未通过。\n\n- SHA: `%s`\n- 运行记录: %s\n- 证据: 该运行的 security reports / native artifacts\n\n定时趋势检查不构成发布验收；历史风险 baseline 仅用于趋势检查。正式发布须修复风险或取得有效独立误报复核后，以目标 release_sha 手动重跑并通过与部署相同的严格判定。\n' "$SHA" "$RUN_URL")"
           number="$(gh issue list --repo "$REPO" --state open --limit 100 \
             --json number,title --jq ".[] | select(.title == \"$title\") | .number" | head -1)"
           assignee="${{ vars.SECURITY_ISSUE_ASSIGNEE }}"

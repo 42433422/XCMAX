@@ -51,7 +51,7 @@ python -m pip install -e packages/retort_engine -e packages/xcagi_common \
 | [APScheduler](https://github.com/agronholm/apscheduler/tree/3.11.3) | `3.11.3` / MIT | 复用现有独立调度进程，推进批准组合、实验和恢复读回 |
 | [systemd](https://github.com/systemd/systemd/tree/v249) | 既有主机组件，接口基线 `v249` / LGPL-2.1-or-later | 复用 transient service，在独立服务进程中执行冻结的回滚请求；不修改服务 KillMode 或授予额外权限 |
 
-SQLAlchemy 和 PostgreSQL 继续承载事务、并发 CAS 与持久结果；已批准的模型费率用于计提，
+SQLAlchemy 和 PostgreSQL 继续承载事务、并发 CAS 与持久结果；备份复用既有 PostgreSQL 16 的 [导出快照](https://www.postgresql.org/docs/16/functions-admin.html#FUNCTIONS-SNAPSHOT-SYNCHRONIZATION)与 `pg_dump --snapshot`（PostgreSQL License），不另建快照引擎。已批准的模型费率用于计提，
 真实 usage、支付与客户确认来自原台账。旧 JSONL 赌注保留只读兼容。
 源码适配集中在 `strategic_portfolio*`、`retort_feedback_*` 和既有发布脚本；
 候选生成、优化求解、实验分流、检查点、TLS 代理均使用上述现成实现。

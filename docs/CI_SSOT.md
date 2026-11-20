@@ -484,6 +484,9 @@ bash /opt/fhd-full/scripts/deploy/fhd-apply-release-compose.sh
 | 静态代码（广） | `security-scan`（bandit `-lll --skip B101,B601,B110 --exit-zero`） | **Advisory** |
 | 静态代码（SQL 注入） | `security-scan`（bandit `-lll -s B608`，无 `--exit-zero`） | **硬门禁** |
 
+全量安全扫描的定时任务只作趋势检查，历史风险 baseline 仅在此模式使用，制品命名为 `xcagi-security-trend-*`。
+手动发布扫描直接运行部署端同一个 `verify_security_scan_pair.py`，核对同 SHA、扫描器完整性、新鲜度、同 UTC 日及零适用高危；保留 `xcagi-security-release-*` 制品名称，趋势制品不能作为发布准入。
+
 > 把 safety / bandit-broad 设为 advisory 是有意为之（传递依赖 CVE 常需评估、不宜直接红）；真正的供应链信任在 **Phase 1** 由 SBOM + cosign 签名 + SLSA provenance + 部署前 `cosign verify` 补强。
 
 ## 供应链信任（Phase 1 · SBOM + 签名 + Provenance）
