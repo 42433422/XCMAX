@@ -158,9 +158,21 @@ test('a preoccupied loopback port never supplies the application page before own
     occupant.listen(backendPort, '127.0.0.1', resolve)
   })
   try {
-    await launch(false)
-    // Observe the real occupied-port startup failure, not an arbitrary sleep.
-    await app.waitForEvent('close', { timeout: 15_000 })
+    // A correctly guarded Electron main process can exit before Playwright
+    // attaches its debugger. Both an early launch rejection and a later close
+    // are expected fail-closed outcomes for a preoccupied backend port.
+    let exitedBeforeAttach = false
+    try {
+      await launch(false)
+    } catch (error) {
+      if (!(error instanceof Error) || !/Target page, context or browser has been closed/.test(error.message)) {
+        throw error
+      }
+      exitedBeforeAttach = true
+    }
+    if (!exitedBeforeAttach) {
+      await app.waitForEvent('close', { timeout: 15_000 })
+    }
     expect(unownedPages).toBe(0)
   } finally {
     occupant.closeAllConnections()
