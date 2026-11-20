@@ -57,3 +57,6 @@ fi
 
 echo "Watching $workflow run $run_id ($expected_title)"
 gh run watch "$run_id" --repo "$GH_REPO" --exit-status --interval 30
+if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
+  printf 'run_id=%s\n' "$run_id" >> "$GITHUB_OUTPUT"
+fi

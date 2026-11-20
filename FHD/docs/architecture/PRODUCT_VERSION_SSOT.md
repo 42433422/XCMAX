@@ -36,7 +36,7 @@
 | 官网历史 / 下载 | `product_lines_status.py::generated_views` 对目录复用公开脱敏策略；HTML 读 `/data/release-history.json`。下载仍核对既有指针与原包 manifest/hotfix，不以历史决定可用性。`generate-download-manifest.py::load_release_history` 已读取同目录。 |
 | 发布说明 | 官网 notes 同源；`generate-update-metadata.mjs` 仍读 `XCAGI_RELEASE_NOTES` 或通用 fallback，CHANGELOG 是独立贡献记录/历史证据，尚未自动投影到 OTA。 |
 | 客户端更新 | 桌面 `SKU_UPDATE_URL` 交给 electron-updater。自定义 provider 验证同一份频道清单的 Ed25519 签名，上游按清单选择、校验和安装制品。Windows 未签名候选走临时手动下载。Android 官网 APK 由系统下载安装。iOS 通过已发布的 App Store 版本更新。 |
-| GitHub Release | `release-desktop.yml::github-release` 在 tag 与双平台/签名/下载中心门禁通过后上传同 manifest/pointer/assets；尚未配置同源 body，不能据此证明官网全部历史已登记 GitHub。 |
+| GitHub Release | 桌面构建读取官网同源的发布说明并建立 draft。正式晋级核对完整 Git SHA、版本、构建运行号、Mac 与 Windows 验签回执、安装器 SHA-256、官网与 stable 清单及生产部署前后读回。 |
 
 旧 market 下载页已由 `ca8bd212e` 迁出；本次退役无生产消费者的 `xcagiDownloadLinks` 静态猜 URL 工具、专属测试及构建参数/v8上传脚本，现役入口只使用经校验的官网数据。
 
@@ -47,4 +47,5 @@
 - 修改版本、发布脚本、下载 UI、客户端更新或历史说明时，先核对本目录与原制品证据；只改源，重生成视图，不维护第二份版本表。仓库不保留旧公共指针副本；离线站点聚合只展示发布意图，不能代替线上读回。历史 kind / publication_state 是历史分类，不是当前平台可下载状态。
 - 普通服务器/静态部署只能原字节保留已公开桌面指针；缺源则阻断/显示不可用，禁止用服务器 SHA、最大版本、mtime、候选目录或单平台 PASS 重建指针。
 - 桌面授权发布先验收原包，再按 product/platform/arch/channel 晋级并读回各视图；GitHub 与官网不一致必须登记差异，不能任选一边覆盖历史。
+- 新正式下载指针使用按版本和完整 SHA 固定的 `/releases/builds/<version>/<sha>/manifest.json`。验签记录绑定原安装器摘要，生产部署记录分别绑定 MODstore 和 FHD 运行制品摘要。最终晋级对照同一次编排的原构建、官网读回、GitHub 资产与生产回执。
 - 执行 `python scripts/dev/ssot_cli.py check version product-lines`；后者校验历史身份/别名、逐制品身份与分状态证据、签名门禁及生成漂移。运行对应生成器/回归及 pre-push 门禁。无完整证据的发布保持 open，不能用文档通过代替客户交付。

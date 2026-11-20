@@ -25,7 +25,7 @@ def test_release_convergence_requires_every_source_and_device(tmp_path, monkeypa
     monkeypatch.setenv("XCMAX_FHD_HEALTH_URL", "https://fhd.invalid/health")
     monkeypatch.setattr(
         "modstore_server.release_convergence.health_payload",
-        lambda: {"git_sha": sha, "release_id": release_id},
+        lambda: {"git_sha": sha, "release_id": release_id, "artifact_sha256": "c" * 64},
     )
     monkeypatch.setattr(
         "modstore_server.release_convergence._purchased_plan_rows",
@@ -55,6 +55,12 @@ def test_release_convergence_requires_every_source_and_device(tmp_path, monkeypa
         def json_fetcher(url: str):
             if "github" in url:
                 return {"sha": sha}
+            if url == "https://fhd.invalid/health":
+                return {
+                    "git_sha": sha,
+                    "release_id": release_id,
+                    "build": {"artifact_sha256": "d" * 64},
+                }
             return {"git_sha": sha, "release_id": release_id}
 
         feed = f"productVersion: 1.0.0.1\nbuildSha: {sha}\nreleaseId: {release_id}\n"
@@ -68,6 +74,9 @@ def test_release_convergence_requires_every_source_and_device(tmp_path, monkeypa
     assert result["converged"] is True
     assert result["blockers"] == []
     assert result["active_purchased_accounts"] == 1
+    assert {
+        row["name"]: row["artifact_sha256"] for row in result["sources"] if "artifact_sha256" in row
+    } == {"modstore_production": "c" * 64, "fhd_production": "d" * 64}
     device = next(row for row in result["sources"] if row["name"].startswith("device-"))
     assert device["status"] == "matched"
     assert "customer-device-0001" not in str(result)
