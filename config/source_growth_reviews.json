@@ -292,9 +292,9 @@
     "FHD/app/application/ai_chat/workflow_session.py": {
       "base_file": "FHD/app/application/ai_chat/workflow_session.py",
       "base_blob": "165a3abec3f175d125a57584071a0a6ec0a9ef93",
-      "head_blob": "c6791751887072198475b6279cc97d86fb123b80",
+      "head_blob": "53e15f5c94918bf2706341545b4eb9e790a69f66",
       "before_lines": 1420,
-      "after_lines": 1477,
+      "after_lines": 1478,
       "reason": "在聊天自动审批之后区分后台导入排队、部分写入、未执行和结果待核对，避免把已提交的任务误报成空操作或成功。",
       "boundary": "读取已归属的同一执行回执并检查 ELT 步骤结果。返回等待状态不会执行导入，不把部分或未知回执提升为完成。",
       "validation": "验证范围包括自动审批接续、原任务回执、未写入标记和部分完成聚合。待远端 CI 和实际后台导入验收。 本地整合后端回归 721 项通过及 37 项可选跳过。 类型修正后 102 项 ELT 专项测试通过。",
