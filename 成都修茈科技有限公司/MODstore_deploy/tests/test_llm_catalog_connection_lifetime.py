@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 
 import pytest
 from sqlalchemy import create_engine, text
@@ -185,3 +186,54 @@ async def test_managed_openrouter_catalog_pins_each_discovery_request(monkeypatc
     assert error is None
     assert {row["id"] for row in records} == {"model-a", "video-b"}
     assert len(calls) == 2 and all(call[1] is key and call[2] == "GET" for call in calls)
+
+
+@pytest.mark.asyncio
+async def test_managed_catalog_warm_hits_avoid_kdf_and_preserve_cache_boundaries(monkeypatch):
+    from modstore_server.platform_model_config import PlatformApiKey
+
+    calls = []
+
+    async def remote(base_url, key, **_kwargs):
+        calls.append((base_url, key))
+        return [{"id": f"remote-model-{len(calls)}"}], None
+
+    async def read(user_id=7, secret="fixture-managed-key", base_url="https://models.example/v1"):
+        key = PlatformApiKey(
+            secret,
+            {
+                "provider": "openai",
+                "base_url": base_url,
+                "model": "model-a",
+                "display_name": "Model A",
+                "revision": 1,
+                "source": "stored",
+            },
+        )
+        return await llm_catalog.get_models_for_credentials(
+            user_id, "openai", api_key=key, base_url=base_url, discover_operations=True
+        )
+
+    monkeypatch.setattr(llm_catalog, "_cache", {})
+    monkeypatch.setattr(llm_catalog, "_fetch_openai_compatible_records", remote)
+    initial = await read()
+    assert not initial["from_cache"]
+
+    def blocking_kdf(*_args, **_kwargs):
+        pytest.fail("catalog cache lookups must not run a blocking password KDF")
+
+    monkeypatch.setattr(hashlib, "scrypt", blocking_kdf)
+    for _ in range(60):
+        cached = await read()
+        assert cached["from_cache"] and cached["models"] == initial["models"]
+    assert len(calls) == 1
+    for changed in (
+        {"user_id": 8},
+        {"secret": "fixture-rotated-key"},
+        {"base_url": "https://rotated.example/v1"},
+    ):
+        result = await read(**changed)
+        assert not result["from_cache"]
+        assert (await read(**changed))["from_cache"]
+    assert len(calls) == len(llm_catalog._cache) == 4
+    assert all("fixture-" not in cache_id for cache_id in llm_catalog._cache)

@@ -41,17 +41,12 @@ jobs:
           PARA_CODEX_VERSION: ${{ vars.PARA_CODEX_VERSION }}
           PARA_PLATFORM_POOL: ${{ vars.PARA_PLATFORM_POOL }}
           PARA_PLATFORM_GATEWAY_URL: ${{ vars.PARA_PLATFORM_GATEWAY_URL }}
-          PARA_PLATFORM_GATEWAY_KEY: ${{ secrets.PARA_PLATFORM_GATEWAY_KEY }}
-          PARA_PLATFORM_GATEWAY_KEYS_JSON: ${{ secrets.PARA_PLATFORM_GATEWAY_KEYS_JSON }}
-          PARA_CODEX_AUTH_JSON: ${{ secrets.PARA_CODEX_AUTH_JSON }}
-          PARA_CODEX_CONFIG_TOML: ${{ secrets.PARA_CODEX_CONFIG_TOML }}
-          PARA_CODEX_API_KEY: ${{ secrets.PARA_CODEX_API_KEY || (vars.PARA_PLATFORM_POOL != '1' && !secrets.PARA_CODEX_AUTH_JSON && !secrets.PARA_CODEX_CONFIG_TOML && secrets.OPENAI_API_KEY) || '' }}
         run: bash scripts/autonomy/runtime_tools/prepare_github_executor.sh
       - name: Run original Para tasks without publication credentials
         env:
           DEVFLEET_FORCE_OPENCODE: ${{ vars.DEVFLEET_FORCE_OPENCODE == '1' && '1' || '0' }}
           PARA_PLATFORM_GATEWAY_URL: ${{ vars.PARA_PLATFORM_GATEWAY_URL }}
-          DEVFLEET_OPENCODE_AGENT: ${{ runner.temp }}/para-worker/node_modules/.bin/opencode
+          DEVFLEET_OPENCODE_AGENT: ${{ runner.temp }}/para-worker/node_modules/opencode-linux-x64-baseline/bin/opencode
           PARA_GITHUB_STAGE: execute
           PARA_GITHUB_REQUEST_ID: ${{ inputs.request_id }}
           PARA_GITHUB_CANDIDATE_DIR: ${{ runner.temp }}/para-candidate
@@ -65,10 +60,14 @@ jobs:
           PARA_PLATFORM_POOL: ${{ vars.PARA_PLATFORM_POOL }}
           PARA_PLATFORM_GATEWAY_KEY: ${{ secrets.PARA_PLATFORM_GATEWAY_KEY }}
           PARA_PLATFORM_GATEWAY_KEYS_JSON: ${{ secrets.PARA_PLATFORM_GATEWAY_KEYS_JSON }}
+          PARA_CODEX_AUTH_JSON: ${{ vars.DEVFLEET_FORCE_OPENCODE != '1' && secrets.PARA_CODEX_AUTH_JSON || '' }}
+          PARA_CODEX_CONFIG_TOML: ${{ vars.DEVFLEET_FORCE_OPENCODE != '1' && secrets.PARA_CODEX_CONFIG_TOML || '' }}
           CODEX_API_KEY: ${{ vars.DEVFLEET_FORCE_OPENCODE != '1' && (secrets.PARA_CODEX_API_KEY || (vars.PARA_PLATFORM_POOL != '1' && !secrets.PARA_CODEX_AUTH_JSON && !secrets.PARA_CODEX_CONFIG_TOML && secrets.OPENAI_API_KEY)) || '' }}
           MODSTORE_PARA_DISPATCH_TOKEN: ${{ secrets.MODSTORE_PARA_DISPATCH_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }} # job permissions are contents:read only
-        run: node "$RUNNER_TEMP/para-worker/github_para_executor.mjs"
+        run: |
+          bash scripts/autonomy/runtime_tools/prepare_github_executor.sh configure
+          node "$RUNNER_TEMP/para-worker/github_para_executor.mjs"
       - name: Hand off immutable candidate data
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -160,17 +159,12 @@ jobs:
           PARA_CODEX_VERSION: ${{ vars.PARA_CODEX_VERSION }}
           PARA_PLATFORM_POOL: ${{ vars.PARA_PLATFORM_POOL }}
           PARA_PLATFORM_GATEWAY_URL: ${{ vars.PARA_PLATFORM_GATEWAY_URL }}
-          PARA_PLATFORM_GATEWAY_KEY: ${{ secrets.PARA_PLATFORM_GATEWAY_KEY }}
-          PARA_PLATFORM_GATEWAY_KEYS_JSON: ${{ secrets.PARA_PLATFORM_GATEWAY_KEYS_JSON }}
-          PARA_CODEX_AUTH_JSON: ${{ secrets.PARA_CODEX_AUTH_JSON }}
-          PARA_CODEX_CONFIG_TOML: ${{ secrets.PARA_CODEX_CONFIG_TOML }}
-          PARA_CODEX_API_KEY: ${{ secrets.PARA_CODEX_API_KEY || (vars.PARA_PLATFORM_POOL != '1' && !secrets.PARA_CODEX_AUTH_JSON && !secrets.PARA_CODEX_CONFIG_TOML && secrets.OPENAI_API_KEY) || '' }}
         run: bash scripts/autonomy/runtime_tools/prepare_github_executor.sh
       - name: Run original Para tasks without publication credentials
         env:
           DEVFLEET_FORCE_OPENCODE: ${{ vars.DEVFLEET_FORCE_OPENCODE == '1' && '1' || '0' }}
           PARA_PLATFORM_GATEWAY_URL: ${{ vars.PARA_PLATFORM_GATEWAY_URL }}
-          DEVFLEET_OPENCODE_AGENT: ${{ runner.temp }}/para-worker/node_modules/.bin/opencode
+          DEVFLEET_OPENCODE_AGENT: ${{ runner.temp }}/para-worker/node_modules/opencode-linux-x64-baseline/bin/opencode
           PARA_GITHUB_STAGE: resume
           PARA_GITHUB_REQUEST_ID: ${{ inputs.request_id }}
           PARA_GITHUB_CANDIDATE_DIR: ${{ runner.temp }}/para-candidate
@@ -184,10 +178,14 @@ jobs:
           PARA_PLATFORM_POOL: ${{ vars.PARA_PLATFORM_POOL }}
           PARA_PLATFORM_GATEWAY_KEY: ${{ secrets.PARA_PLATFORM_GATEWAY_KEY }}
           PARA_PLATFORM_GATEWAY_KEYS_JSON: ${{ secrets.PARA_PLATFORM_GATEWAY_KEYS_JSON }}
+          PARA_CODEX_AUTH_JSON: ${{ vars.DEVFLEET_FORCE_OPENCODE != '1' && secrets.PARA_CODEX_AUTH_JSON || '' }}
+          PARA_CODEX_CONFIG_TOML: ${{ vars.DEVFLEET_FORCE_OPENCODE != '1' && secrets.PARA_CODEX_CONFIG_TOML || '' }}
           CODEX_API_KEY: ${{ vars.DEVFLEET_FORCE_OPENCODE != '1' && (secrets.PARA_CODEX_API_KEY || (vars.PARA_PLATFORM_POOL != '1' && !secrets.PARA_CODEX_AUTH_JSON && !secrets.PARA_CODEX_CONFIG_TOML && secrets.OPENAI_API_KEY)) || '' }}
           MODSTORE_PARA_DISPATCH_TOKEN: ${{ secrets.MODSTORE_PARA_DISPATCH_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }} # job permissions are contents:read only
-        run: node "$RUNNER_TEMP/para-worker/github_para_executor.mjs"
+        run: |
+          bash scripts/autonomy/runtime_tools/prepare_github_executor.sh configure
+          node "$RUNNER_TEMP/para-worker/github_para_executor.mjs"
       - name: Retain original team receipt
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

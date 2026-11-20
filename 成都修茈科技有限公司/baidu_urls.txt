@@ -14,5 +14,4 @@ https://xiu-ci.com/download
 https://xiu-ci.com/download/releases
 https://xiu-ci.com/visualization
 https://xiu-ci.com/verify.html
-https://xiu-ci.com/services.html
 https://xiu-ci.com/excel-to-ai.html

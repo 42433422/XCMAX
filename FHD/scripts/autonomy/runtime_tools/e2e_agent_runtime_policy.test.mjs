@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 import {
   effectiveToolName,
@@ -18,6 +19,120 @@ import {
   withFailureCleanup,
 } from './e2e_agent_runtime_policy.mjs';
 import { openCodePlatformConfig, runOpenCodeLive } from './opencode_agent.mjs';
+
+test('GitHub dependency preparation never receives execution credentials', () => {
+  const workflow = readFileSync(new URL('../../../.github/workflows/para-github-worker.yml', import.meta.url), 'utf8');
+  const preparations = [...workflow.matchAll(/^      - name: Prepare existing Para executor\n.*?(?=^      - )/gms)];
+  const executions = [...workflow.matchAll(/^      - name: Run original Para tasks without publication credentials\n.*?(?=^      - )/gms)];
+  assert.equal(preparations.length, 2);
+  assert.equal(executions.length, 2);
+  for (const [step] of preparations) assert.doesNotMatch(step, /secrets\.|github\.token|AUTH_JSON|CONFIG_TOML|API_KEY|GATEWAY_KEY/);
+  for (const [step] of executions) {
+    assert.match(step, /PARA_CODEX_AUTH_JSON:.*secrets\.PARA_CODEX_AUTH_JSON/);
+    assert.match(step, /PARA_CODEX_CONFIG_TOML:.*secrets\.PARA_CODEX_CONFIG_TOML/);
+    assert.match(step, /prepare_github_executor\.sh configure\s+node /);
+  }
+});
+
+function githubPreparation(t) {
+  const root = mkdtempSync(join(tmpdir(), 'para-install-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const bin = join(root, 'bin'), home = join(root, 'home'), runtime = join(root, 'runtime');
+  for (const directory of [bin, home, runtime]) mkdirSync(directory);
+  writeFileSync(join(bin, 'npm'), '#!/bin/sh\ntouch "$RUNNER_TEMP/npm-called"\nexit 42\n', { mode: 0o700 });
+  for (const command of ['bwrap', 'socat', 'rg']) writeFileSync(join(bin, command), '#!/bin/sh\nexit 0\n', { mode: 0o700 });
+  const env = { PATH: bin + ':' + process.env.PATH, HOME: home, RUNNER_TEMP: runtime,
+    PARA_CODEX_VERSION: '0.153.4', PARA_PLATFORM_POOL: '1',
+    PARA_PLATFORM_GATEWAY_URL: 'https://gateway.example.test/v1' };
+  const run = (mode, extra = {}) => spawnSync('bash', [
+    fileURLToPath(new URL('./prepare_github_executor.sh', import.meta.url)), mode,
+  ], { cwd: fileURLToPath(new URL('../../../', import.meta.url)), env: { ...env, ...extra }, encoding: 'utf8' });
+  return { run, home, runtime, root, env };
+}
+
+test('dependency installation refuses credentials before starting package code', { skip: process.platform === 'win32' }, t => {
+  const { run, runtime } = githubPreparation(t);
+  for (const key of ['PARA_PLATFORM_GATEWAY_KEY', 'PARA_PLATFORM_GATEWAY_KEYS_JSON', 'PARA_CODEX_AUTH_JSON',
+    'PARA_CODEX_CONFIG_TOML', 'CODEX_API_KEY', 'OPENCODE_API_KEY', 'GITHUB_TOKEN', 'MODSTORE_PARA_DISPATCH_TOKEN',
+    'PARA_PLATFORM_APPROVED_KEYRING', 'GITHUB_PERSONAL_ACCESS_TOKEN']) {
+    const result = run('install', { DEVFLEET_FORCE_OPENCODE: '1', [key]: 'fixture-install-secret' });
+    assert.notEqual(result.status, 0, key);
+    assert.match(result.stdout + result.stderr, /credential-free/);
+    assert.doesNotMatch(result.stdout + result.stderr, /fixture-install-secret/);
+    assert.equal(existsSync(join(runtime, 'npm-called')), false, key);
+  }
+});
+
+test('runtime authorization writes Codex config without running dependency installers', { skip: process.platform === 'win32' }, t => {
+  const { run, home, runtime } = githubPreparation(t);
+  let result = run('configure', { PARA_PLATFORM_GATEWAY_KEY: 'fixture-gateway-key' });
+  assert.equal(result.status, 0, result.stderr);
+  const config = join(home, '.codex', 'config.toml');
+  assert.match(readFileSync(config, 'utf8'), /base_url = "https:\/\/gateway.example.test\/v1"/);
+  assert.match(readFileSync(config, 'utf8'), /env_key = "CODEX_API_KEY"/);
+  assert.doesNotMatch(readFileSync(config, 'utf8'), /fixture-gateway-key/);
+  assert.equal(statSync(config).mode & 0o777, 0o600);
+  const auth = JSON.stringify({ tokens: { access_token: 'fixture-login-token' } });
+  result = run('configure', { PARA_PLATFORM_POOL: '0', PARA_CODEX_AUTH_JSON: auth,
+    PARA_CODEX_CONFIG_TOML: 'model = "configured-model"\n' });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(readFileSync(join(home, '.codex', 'auth.json'), 'utf8'), auth);
+  assert.equal(statSync(join(home, '.codex', 'auth.json')).mode & 0o777, 0o600);
+  assert.equal(readFileSync(config, 'utf8'), 'model = "configured-model"\n');
+  result = run('configure', { DEVFLEET_FORCE_OPENCODE: '1', PARA_PLATFORM_GATEWAY_KEY: 'fixture-opencode-key' });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(existsSync(join(runtime, 'npm-called')), false);
+});
+
+test('locked npm installation disables real lifecycle scripts and rejects changed integrity or CLI pins', { skip: process.platform === 'win32' }, t => {
+  const { root, home, runtime, env: fixtureEnv } = githubPreparation(t);
+  const env = { ...fixtureEnv, PATH: process.env.PATH, npm_config_offline: 'true' };
+  const packageRoot = join(root, 'package'), source = join(root, 'source');
+  const tools = join(source, 'scripts', 'autonomy', 'runtime_tools');
+  const dependencies = join(tools, 'github_executor_deps', 'codex');
+  mkdirSync(packageRoot);
+  mkdirSync(dependencies, { recursive: true });
+  writeFileSync(join(tools, 'fixture.mjs'), '// Copied by the real installer.\n');
+  writeFileSync(join(packageRoot, 'package.json'), JSON.stringify({
+    name: '@openai/codex', version: '0.153.4', bin: { codex: 'codex.js' },
+    scripts: { postinstall: 'node postinstall.cjs' },
+  }));
+  writeFileSync(join(packageRoot, 'codex.js'), '#!/usr/bin/env node\nconsole.log("codex-cli 0.153.4");\n', { mode: 0o700 });
+  writeFileSync(join(packageRoot, 'postinstall.cjs'),
+    'require("node:fs").writeFileSync(process.env.RUNNER_TEMP + "/lifecycle-ran", "unsafe installer ran");\n');
+  const packed = JSON.parse(execFileSync('npm', ['pack', '--ignore-scripts', '--offline', '--json', '--pack-destination', root],
+    { cwd: packageRoot, env, encoding: 'utf8' }))[0];
+  const manifest = { name: 'para-installer-fixture', dependencies: { '@openai/codex': '0.153.4' } };
+  const lock = { name: manifest.name, lockfileVersion: 3, packages: {
+    '': manifest,
+    'node_modules/@openai/codex': { version: '0.153.4', resolved: 'file:' + join(root, packed.filename),
+      integrity: packed.integrity, hasInstallScript: true, bin: { codex: 'codex.js' } },
+  } };
+  writeFileSync(join(dependencies, 'package.json'), JSON.stringify(manifest));
+  const lockPath = join(dependencies, 'package-lock.json');
+  writeFileSync(lockPath, JSON.stringify(lock));
+  const install = (extra = {}) => spawnSync('bash', [
+    fileURLToPath(new URL('./prepare_github_executor.sh', import.meta.url)), 'install',
+  ], { cwd: source, env: { ...env, ...extra }, encoding: 'utf8' });
+  let result = install();
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(existsSync(join(runtime, 'lifecycle-ran')), false);
+  assert.equal(existsSync(join(home, '.codex')), false);
+  // Positive control: the exact same local package really contains a runnable hook.
+  execFileSync('npm', ['ci', '--prefix', join(runtime, 'para-worker'), '--ignore-scripts=false', '--offline', '--no-audit', '--no-fund'],
+    { env, stdio: 'pipe' });
+  assert.equal(existsSync(join(runtime, 'lifecycle-ran')), true);
+  rmSync(join(runtime, 'lifecycle-ran'));
+  result = install({ PARA_CODEX_VERSION: '0.153.5' });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stdout + result.stderr, /must match the reviewed dependency lock/);
+  lock.packages['node_modules/@openai/codex'].integrity = 'sha512-' + Buffer.alloc(64).toString('base64');
+  writeFileSync(lockPath, JSON.stringify(lock));
+  result = install();
+  assert.notEqual(result.status, 0);
+  assert.match(result.stdout + result.stderr, /EINTEGRITY/);
+  assert.equal(existsSync(join(runtime, 'lifecycle-ran')), false);
+});
 
 test('OpenCode-only policy pauses the other CLIs and scopes native config to the XCMAX gateway', () => {
   const env = { DEVFLEET_FORCE_OPENCODE: '1', DEVFLEET_FORCE_CODEX: '1',

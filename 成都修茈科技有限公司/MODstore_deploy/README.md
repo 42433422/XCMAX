@@ -42,6 +42,8 @@ python -m pip install -e packages/retort_engine -e packages/xcagi_common \
 
 使用 [anomalyco/opencode v1.19.6](https://github.com/anomalyco/opencode/releases/tag/v1.19.6)（MIT）和 [anthropics/sandbox-runtime v0.0.83](https://github.com/anthropics/sandbox-runtime/tree/v0.0.83)（Apache-2.0）。工作设备可用 `npm install -g opencode-ai@1.19.6` 安装 CLI，也可用 `DEVFLEET_OPENCODE_AGENT` 指定原生可执行文件；在设备代理所在目录执行 `npm install --prefix <代理目录> @anthropic-ai/sandbox-runtime@0.0.83`，或用 `DEVFLEET_OPENCODE_SANDBOX_ENTRY` 指定该固定版本的 `dist/cli.js`。需 Node 22.12+；Linux 还需 bubblewrap、socat、ripgrep 和可用的用户命名空间，macOS 需原生 sandbox-exec 与 ripgrep。GitHub 安装器准备同一组固定依赖。缺少沙箱时工具不就绪，执行失败不会降级到无沙箱进程。
 
+GitHub 安装步骤不接收模型、网关、设备或 GitHub 凭据；使用 `runtime_tools/github_executor_deps` 中的完整性锁执行 `npm ci --ignore-scripts --include=optional`，禁止依赖生命周期脚本留下同用户后台进程。Ubuntu x64 直接启动官方 `opencode-linux-x64-baseline@1.19.6` 的原生入口，不运行 npm 包的 postinstall stub；安装后无凭据核对 CLI 版本、固定沙箱及 seccomp、bubblewrap、socat、ripgrep。原 Codex 路径锁定当前已配置的 [openai/codex 0.153.4](https://github.com/openai/codex)（Apache-2.0）；`PARA_CODEX_VERSION` 改动须同时评审并更新对应 manifest 与 lock，版本不符会停止。只有随后的执行步骤注入授权并写入 Codex 配置，OpenCode 仍按获批分配选取凭据。
+
 每个任务使用独立配置、缓存和临时目录，只允许任务目录内的授权写入，网络限于受信网关和 npm 依赖源。只读任务不能写任务目录；原生会话权限拒绝未知工具，交互授权请求自动拒绝。Windows 的固定版沙箱尚不能保持本适配器的模型配置传递与原生会话校验合同，因此设备明确报告 OpenCode 不就绪；不会改走绕过校验的 CLI 路径。这些限制不构成模型凭据不可导出的保证，原 PR 自动修复仍按[凭据迁移边界](../../FHD/docs/autonomy/CREDENTIAL_VAULT_MIGRATION.md)暂停。
 
 `DEVFLEET_FORCE_OPENCODE` 默认关闭；须先部署支持 OpenCode 的 DevFleet 协调服务（配套 `devfleet-private#17`）与工作设备，确认设备工具就绪后，再由运维在 MODstore、设备和 GitHub 仓库变量中显式设置为 `1`。未升级的设备保持等待，不将任务转给其他工具。首次派工遵循该可信策略，既有请求与 attempt 继续按原身份核对回执。
