@@ -15,6 +15,11 @@ permissions:
   pull-requests: write
   issues: write
 
+
+defaults:
+  run:
+    working-directory: FHD
+
 jobs:
   train:
     runs-on: ubuntu-latest
