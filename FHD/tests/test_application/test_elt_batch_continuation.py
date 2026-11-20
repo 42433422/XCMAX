@@ -6,8 +6,13 @@ from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import create_engine
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
+from app.application.agent_orchestrator import (
+    AgentOrchestrator,
+    InMemoryAgentRunRepository,
+    SQLAlchemyAgentRunRepository,
+)
 from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
 from app.application.elt import batch_continuation
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, plan_to_dict
@@ -15,10 +20,24 @@ from app.db.models.elt import EltRun, EltRunRow, EltTemplate, EltTemplateVersion
 from app.db.models.shipment import ShipmentRecord
 
 
+@pytest.fixture(params=["memory", "sqlite"])
+def continuation_repository(request, tmp_path):
+    if request.param == "memory":
+        yield InMemoryAgentRunRepository()
+        return
+    engine = create_engine(f"sqlite:///{tmp_path / 'continuation.db'}")
+    try:
+        yield SQLAlchemyAgentRunRepository(session_factory=sessionmaker(bind=engine))
+    finally:
+        engine.dispose()
+
+
 @pytest.mark.parametrize(
     "case", ["ready", "waiting_linked_preview", "unknown", "foreign", "already_committed"]
 )
-def test_continue_batch_preserves_approved_scope_and_excludes_written_files(monkeypatch, case):
+def test_continue_batch_preserves_approved_scope_and_excludes_written_files(
+    monkeypatch, case, continuation_repository
+):
     scope = {
         "_actor_authorization": {"test": True},
         "tenant_id": 1,
@@ -80,9 +99,28 @@ def test_continue_batch_preserves_approved_scope_and_excludes_written_files(monk
         confirmed_at=True if case == "already_committed" else None,
         executed_at=None,
     )
+    continuation_repository.save(run)
+    foreign_scopes = (
+        {"tenant_id": 9},
+        {"session_id": "other-session"},
+        {"mod_id": "other-mod"},
+        {"_conversation_revision": 4},
+    )
+    # More than one recent-history window must not hide the approved batch.
+    for index in range(64):
+        other = AgentRun(user_id="2", message=f"unrelated-{index}", steps=[step])
+        other.metadata["runtime_context"] = {**scope, **foreign_scopes[index % 4]}
+        continuation_repository.save(other)
+    outsider = AgentRun(user_id="9", message="same scope, other owner", steps=[step])
+    outsider.metadata["runtime_context"] = scope
+    continuation_repository.save(outsider)
+    assert run.run_id not in {
+        item.run_id for item in continuation_repository.list_recent(user_id="2", limit=50)
+    }
+    orchestrator = AgentOrchestrator(repository=continuation_repository)
     monkeypatch.setattr(
         "app.application.agent_orchestrator.AgentOrchestrator",
-        lambda: SimpleNamespace(list_runs=lambda **_: [run]),
+        lambda: orchestrator,
     )
     monkeypatch.setattr(batch_continuation, "_bound_actor", lambda _: SimpleNamespace(id=2))
     monkeypatch.setattr(

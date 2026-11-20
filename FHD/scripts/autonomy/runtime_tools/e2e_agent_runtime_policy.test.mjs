@@ -30,6 +30,8 @@ test('GitHub dependency preparation never receives execution credentials', () =>
   for (const [step] of executions) {
     assert.match(step, /PARA_CODEX_AUTH_JSON:.*secrets\.PARA_CODEX_AUTH_JSON/);
     assert.match(step, /PARA_CODEX_CONFIG_TOML:.*secrets\.PARA_CODEX_CONFIG_TOML/);
+    assert.match(step, /CODEX_API_KEY: \$\{\{ vars\.DEVFLEET_FORCE_OPENCODE != '1' && secrets\.PARA_CODEX_API_KEY \|\| '' \}\}/);
+    assert.doesNotMatch(step, /secrets\.OPENAI_API_KEY/);
     assert.match(step, /prepare_github_executor\.sh configure\s+node /);
   }
   for (const name of ['employee-workspace', 'resume-verification']) {
@@ -106,6 +108,24 @@ test('runtime authorization writes Codex config without running dependency insta
   try { assertOpenCodeHost(); } catch (error) { hostError = error; }
   assert.equal(result.status, hostError ? 1 : 0, result.stderr);
   if (hostError) assert.ok(result.stderr.includes(hostError.message));
+  assert.equal(existsSync(join(runtime, 'npm-called')), false);
+});
+
+test('Codex configuration requires dedicated authorization and never accepts a shared key', { skip: process.platform === 'win32' }, t => {
+  const { run, home, runtime } = githubPreparation(t);
+  const config = 'model = "dedicated-model"\n';
+  for (const extra of [{}, { OPENAI_API_KEY: 'fixture-shared-key' },
+    { OPENAI_API_KEY: 'fixture-shared-key', PARA_CODEX_CONFIG_TOML: config }]) {
+    const result = run('configure', { PARA_PLATFORM_POOL: '0', ...extra });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stdout + result.stderr, /Para Codex authorization is not configured/);
+    assert.doesNotMatch(result.stdout + result.stderr, /fixture-shared-key/);
+    for (const file of ['auth.json', 'config.toml']) assert.equal(existsSync(join(home, '.codex', file)), false);
+  }
+  const result = run('configure', { PARA_PLATFORM_POOL: '0', CODEX_API_KEY: 'fixture-dedicated-key',
+    PARA_CODEX_CONFIG_TOML: config });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(readFileSync(join(home, '.codex', 'config.toml'), 'utf8'), config);
   assert.equal(existsSync(join(runtime, 'npm-called')), false);
 });
 

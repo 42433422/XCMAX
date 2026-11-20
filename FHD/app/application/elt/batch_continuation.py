@@ -404,19 +404,21 @@ def build_batch_continuation(context: dict[str, Any]) -> tuple[PlanGraph, dict[s
     except AgentModAuthorizationError:
         raise BatchContinuationBlocked("原任务的账号授权已失效，请重新登录后续接。") from None
     scope = ArtifactScope(owner, tenant, mod, session)
-    previous = None
-    for run in AgentOrchestrator().list_runs(user_id=owner, limit=50):
+
+    def matches(run: AgentRun) -> bool:
         saved = run.metadata.get("runtime_context") or {}
-        if (
-            run.steps
+        return (
+            bool(run.steps)
             and run.user_id == owner
             and str(saved.get("tenant_id")) == tenant
             and str(saved.get("session_id") or saved.get("conversation_id") or "") == session
             and str(saved.get("mod_id") or saved.get("active_mod_id") or "") == mod
             and saved.get("_conversation_revision") == revision
-        ):
-            previous = run
-            break
+        )
+
+    previous = next(
+        iter(AgentOrchestrator().list_runs(user_id=owner, limit=1, matches=matches)), None
+    )
     if previous is None:
         return None
     original = plan_from_dict(previous.metadata.get("plan"))

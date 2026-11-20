@@ -495,6 +495,117 @@ async def test_gateway_recovers_settlement_before_resolving_changed_route(db, mo
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("state", ["completed", "settling"])
+@pytest.mark.parametrize("mapping", [{}, {"xcmax-reviewed": "xiaomi/mimo-v2.6-flash"}])
+async def test_gateway_recovers_alias_before_reading_changed_configuration(
+    db, monkeypatch, state, mapping
+):
+    from fastapi import Request
+
+    from modstore_server import llm_billing_recovery as recovery
+    from modstore_server import openai_llm_gateway_api as gateway
+    from modstore_server.db.llm_chat import LlmCallLog
+
+    body = gateway.OAIChatCompletionRequest(
+        model="xcmax-reviewed", messages=[{"role": "user", "content": "hello"}]
+    )
+    original = {"operation": "openai_gateway_chat", "request": body.model_dump()}
+    _, row = ledger.begin(db, 7, KEY, ledger.request_digest(original), 90)
+    receipt = {
+        "operation": "chat",
+        "provider": "openai",
+        "model": "gpt-4o-mini",
+        "content": "paid answer",
+        "billed": True,
+        "charge_amount": "0.42",
+        "hold_no": "AIH-alias",
+        "request_id": "paid-alias",
+        "usage": {"prompt_tokens": 2, "completion_tokens": 3, "total_tokens": 5},
+        "conversation_id": None,
+        "_history": original["request"]["messages"],
+    }
+    if state == "settling":
+        ledger.prepare_settlement(db, row, receipt)
+    else:
+        ledger.finish(db, row, receipt)
+    hold = {key: receipt[key] for key in ("hold_no", "request_id", "provider", "model")}
+    read = AsyncMock(return_value={**hold, "status": "settled", "settled_amount": "0.42"})
+    monkeypatch.setattr(recovery, "JavaWalletClient", lambda: SimpleNamespace(read_hold=read))
+    monkeypatch.setenv("MODSTORE_LLM_POOL_ALIASES", json.dumps(mapping))
+    aliases = Mock(wraps=gateway._pool_aliases)
+    monkeypatch.setattr(gateway, "_pool_aliases", aliases)
+    for name in (
+        "_build_catalog_model_entries",
+        "run_billed_llm_chat",
+        "resolve_default_llm_route",
+    ):
+        monkeypatch.setattr(gateway, name, AsyncMock(side_effect=AssertionError("new execution")))
+    for name in ("resolve_credentials", "resolve_chat_route_snapshot"):
+        monkeypatch.setattr(gateway, name, Mock(side_effect=AssertionError("new credential read")))
+    request = Request(
+        {
+            "type": "http",
+            "headers": [(b"idempotency-key", KEY.encode()), (b"authorization", b"Bearer owner")],
+        }
+    )
+    for _ in range(2):
+        response = await gateway.openai_chat_completions(request, body, db, SimpleNamespace(id=7))
+        result = json.loads(response.body)
+        assert result["model"] == "openai/gpt-4o-mini"
+        assert result["choices"][0]["message"]["content"] == "paid answer"
+        assert result["xcagi"]["billed"] is True
+    with pytest.raises(HTTPException) as mismatch:
+        await gateway.openai_chat_completions(
+            request, body.model_copy(update={"max_tokens": 10}), db, SimpleNamespace(id=7)
+        )
+    assert mismatch.value.status_code == 409
+    assert read.await_count == (1 if state == "settling" else 0)
+    assert db.query(LlmCallLog).count() == (1 if state == "settling" else 0)
+    aliases.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_gateway_alias_ends_receipt_read_before_catalog_await(db, monkeypatch):
+    from fastapi import Request
+    from sqlalchemy import inspect
+
+    from modstore_server import openai_llm_gateway_api as gateway
+    from modstore_server.models import User
+
+    user = db.get(User, 7)
+    monkeypatch.setenv("MODSTORE_LLM_POOL_ALIASES", '{"xcmax-reviewed":"openai/gpt-4o-mini"}')
+
+    async def catalog(session, user_id, providers):
+        assert session is db and user_id == 7 and providers == ("openai",)
+        assert not db.in_transaction()
+        assert inspect(user).expired
+        return [
+            {
+                "id": "openai/gpt-4o-mini",
+                "runtime_selectable": True,
+                "chat_compatible": True,
+                "pricing": {"platform_billing_ok": True},
+            }
+        ]
+
+    route = ChatRouteSnapshot("openai", "gpt-4o-mini", "explicit", "platform", "r1", "key", None)
+    monkeypatch.setattr(gateway, "_build_catalog_model_entries", catalog)
+    monkeypatch.setattr(gateway, "resolve_credentials", lambda *args: ("key", None, "platform"))
+    monkeypatch.setattr(gateway, "resolve_chat_route_snapshot", lambda *args: route)
+    billed = AsyncMock(return_value={"provider": route.provider, "model": route.model})
+    monkeypatch.setattr(gateway, "run_billed_llm_chat", billed)
+    request = Request({"type": "http", "headers": [(b"idempotency-key", KEY.encode())]})
+    body = gateway.OAIChatCompletionRequest(
+        model="xcmax-reviewed", messages=[{"role": "user", "content": "hello"}]
+    )
+    await gateway.openai_chat_completions(request, body, db, user)
+    assert billed.await_args.kwargs["route_snapshot"] is route
+    assert (
+        billed.await_args.kwargs["client_request_payload"]["request"]["model"] == "xcmax-reviewed"
+    )
+
+
+@pytest.mark.asyncio
 async def test_gateway_does_not_reexecute_an_old_unmatched_receipt(db, monkeypatch):
     from modstore_server import openai_llm_gateway_api as gateway
 

@@ -78,7 +78,10 @@ jobs:
           python scripts/dev/product_lines_status.py generate
           python ../scripts/dev/publish_ci_workflows_to_root.py --apply
           python scripts/dev/ssot_cli.py check version product-lines
-          python scripts/dev/check_net_deletion.py --update --force --reason '自动生成本轮候选版本、发布记录及派生视图'
+          version=$(python -c 'from scripts.dev.verify_version_anchors import canonical_version; print(canonical_version())')
+          reason="Para 候选 $version（集成 main $SOURCE）：新增本轮发布记录、版本选项及派生视图"
+          python scripts/dev/check_net_deletion.py --update --force --reason "$reason"
+          printf 'baseline_reason=%s\n' "$reason" >> "$GITHUB_OUTPUT"
       - name: Open the version proposal for ordered approval
         if: steps.once.outputs.prepare == 'true'
         id: propose
@@ -88,9 +91,11 @@ jobs:
           SOURCE: ${{ needs.verify-integration.outputs.source }}
           BRANCH: ${{ needs.verify-integration.outputs.branch }}
           VERSION: ${{ steps.version.outputs.version }}
+          BASELINE_REASON: ${{ steps.version.outputs.baseline_reason }}
         run: |
           set -euo pipefail
           : "${GH_TOKEN:?CI_COMMIT_TOKEN required to trigger PR CI}"
+          : "${BASELINE_REASON:?candidate baseline reason required}"
           [[ "$BRANCH" =~ ^automation/para-release-[0-9-]+-[0-9a-f]{16}$ ]]
           [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]
           test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)" = "$SOURCE"
@@ -101,16 +106,16 @@ jobs:
           git commit -m "chore(release): prepare Para candidate $VERSION"
           # The same required preflight as interactive fixes; commit generated pages before retrying.
           for attempt in 1 2 3; do
-            if (cd FHD && python scripts/dev/push_preflight.py --fix); then break; fi
+            if (cd FHD && python scripts/dev/push_preflight.py --fix --base "$SOURCE"); then break; fi
             git diff --quiet && exit 1
             git add -u
             git commit -m "chore(release): refresh generated candidate metadata"
           done
-          (cd FHD && python scripts/dev/push_preflight.py --fix)
+          (cd FHD && python scripts/dev/push_preflight.py --fix --base "$SOURCE")
           head=$(git rev-parse HEAD)
           gh auth setup-git --hostname github.com
           git push origin "HEAD:refs/heads/$BRANCH"
-          printf 'Para 集成批次来源 `%s`。候选提交 `%s`。请由有权维护者审核后按批准顺序登记 XCMAX_MAIN_MERGE_QUEUE；合入后沿既有正式发布流程构建和验收。\n' "$SOURCE" "$head" > "$RUNNER_TEMP/para-release-pr.md"
+          printf 'Para 集成批次来源 `%s`。候选提交 `%s`。请由有权维护者审核后按批准顺序登记 XCMAX_MAIN_MERGE_QUEUE；合入后沿既有正式发布流程构建和验收。\n\n维护行数基线调整原因：%s。\n' "$SOURCE" "$head" "$BASELINE_REASON" > "$RUNNER_TEMP/para-release-pr.md"
           pr=$(gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$BRANCH" \
             --title "chore(release): prepare $VERSION" --label hold-merge --body-file "$RUNNER_TEMP/para-release-pr.md")
           printf 'Version proposal %s\n' "$pr" >> "$GITHUB_STEP_SUMMARY"

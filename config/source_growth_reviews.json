@@ -736,12 +736,12 @@
     "FHD/app/application/elt/batch_continuation.py": {
       "base_file": null,
       "base_blob": null,
-      "head_blob": "ee744348f7758e6c7904ce13f122730bc00c7d8c",
+      "head_blob": "66044e2ffe157180d248d300e771daf987bcf06e",
       "before_lines": 0,
-      "after_lines": 818,
+      "after_lines": 820,
       "reason": "将批量导入在原会话内继续执行，并在审批冻结前合并同名、同格式、同内容的重复附件；本次最新源修复使文件跨过建议尺寸，提交精确源码增长审查请求。",
       "boundary": "只使用同租户、同所有人且可核验的上传回执。审批前规范化保留首个来源；已有冻结计划保持原附件集合，每个批准 ID 必须具有真实执行或行级跳过回执，无法读取和未知写入均保持未完成。",
-      "validation": "131 项 ELT、checkpoint、batch 与进度回归通过，包含审批前规范化及真实 CSV/SQLite 的 fresh、resume、unreadable 三种重复附件场景。最终远端 CI 与人工架构审查仍需完成；此登记不是批准。 最终 CI 类型修复保留既有装饰器、仓库及附件身份契约；在同 CI Python 3.11.18 / mypy 2.4.1 与依赖版本环境中，全量 app 类型检查和 186 项相关回归通过。",
+      "validation": "131 项 ELT、checkpoint、batch 与进度回归通过，包含审批前规范化及真实 CSV/SQLite 的 fresh、resume、unreadable 三种重复附件场景。最终远端 CI 与人工架构审查仍需完成；此登记不是批准。 最终 CI 类型修复保留既有装饰器、仓库及附件身份契约；在同 CI Python 3.11.18 / mypy 2.4.1 与依赖版本环境中，全量 app 类型检查和 186 项相关回归通过。 历史评审补修：续接复用仓库 matches 在 limit 前筛选完整授权范围；真实内存与文件 SQLite 各加入64条跨范围记录及外部账号，旧8失败/2通过，修复后续接与仓库56项通过，定点mypy及Ruff通过。",
       "follow_up": "评审后沿既有批次入口拆分上传来源核对与续接计划构造，保留冻结审批和真实回执契约。",
       "review_owner": "@42433422"
     }
