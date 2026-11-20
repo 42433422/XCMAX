@@ -417,6 +417,7 @@ def run(args: argparse.Namespace) -> None:
     if not authorized:
         finish("waiting_confirmation", auth_reason, 2)
     target = None
+    intent = None
     if repair.is_repair_incident(issue):
         try:
             if (
@@ -437,8 +438,13 @@ def run(args: argparse.Namespace) -> None:
                 result.head_sha = head
                 result.pr_number = target.number
                 result.pr_url = f"https://github.com/{repo}/pull/{target.number}"
-                _finish_update(result, target, head, args.token, get)
-            target = repair.select_target(repo, issue, args.base_branch, get)
+                current = repair.open_pr(repo, target, None, get, authorize=False)
+                if current["head"]["sha"] != target.old_sha:
+                    _finish_update(result, target, head, args.token, get)
+            selected = repair.select_target(repo, issue, args.base_branch, get)
+            if intent and selected != target:
+                raise ValueError("original PR source changed after the write intent")
+            target = selected
             if target:
                 result.tool = "codex"
                 result.original_sha = target.old_sha
@@ -460,9 +466,12 @@ def run(args: argparse.Namespace) -> None:
         ) as exc:
             finish("pr_repair_blocked", f"原 PR 更新身份未确认：{type(exc).__name__}", 6)
     try:
-        result.control_task_id = _validated_resume(
+        requested_task = _validated_resume(
             args, comments, source_sha=target.old_sha if target else ""
         )
+        if result.control_task_id and requested_task and requested_task != result.control_task_id:
+            raise ValueError("resume task differs from the durable original PR write intent")
+        result.control_task_id = result.control_task_id or requested_task
     except ValueError as exc:
         finish("invalid_resume", str(exc), 6)
     estimate = impl._estimate_files(str(issue.get("title") or ""), str(issue.get("body") or ""))
@@ -533,6 +542,12 @@ def run(args: argparse.Namespace) -> None:
             task = client.get(result.control_task_id)
             if target and task.get("executor") != GITHUB_REPAIR:
                 finish("pr_repair_blocked", "原任务没有 GitHub 云端修复授权回执", 6)
+            if intent and (
+                task.get("id") != intent[2]
+                or task.get("para_task_id") != intent[3]
+                or task.get("github_run_id") != intent[4]
+            ):
+                finish("pr_repair_blocked", "原任务身份与持久更新准备记录不一致", 6)
             state = str(task.get("state") or "")
             result.para_task_id = str(task.get("para_task_id") or result.para_task_id)
             if target and type(task.get("github_run_id")) is int:
@@ -586,6 +601,7 @@ def run(args: argparse.Namespace) -> None:
                 or result.github_run_id < 1
                 or str(execution.get("id") or "") != result.para_task_id
                 or not repair.candidate_belongs_to_task(branch, execution, target)
+                or (intent and remote_head != intent[1])
             ):
                 finish("pr_repair_blocked", "修复分支与原任务回执不一致", 6)
 
@@ -603,23 +619,43 @@ def run(args: argparse.Namespace) -> None:
                     or repair.select_target(repo, current, args.base_branch, get) != target
                 ):
                     raise ValueError("original PR source changed during repair")
-                response = impl._gh_post(
-                    f"https://api.github.com/repos/{repo}/issues/{number}/comments",
+                if not intent:
+                    response = impl._gh_post(
+                        f"https://api.github.com/repos/{repo}/issues/{number}/comments",
+                        args.token,
+                        {
+                            "body": repair.intent_body(
+                                repo,
+                                number,
+                                target,
+                                remote_head,
+                                control_task_id=result.control_task_id,
+                                para_task_id=result.para_task_id,
+                                github_run_id=result.github_run_id,
+                            )
+                        },
+                    )
+                    if type(response.get("id")) is not int or response.get("_error"):
+                        raise ValueError("durable original PR update intent not confirmed")
+                # The candidate publisher's human-review boundary follows its code
+                # onto the original PR before the head can change. Never remove a hold.
+                impl._gh_post(
+                    f"https://api.github.com/repos/{repo}/issues/{target.number}/labels",
                     args.token,
-                    {
-                        "body": repair.intent_body(
-                            repo,
-                            number,
-                            target,
-                            remote_head,
-                            control_task_id=result.control_task_id,
-                            para_task_id=result.para_task_id,
-                            github_run_id=result.github_run_id,
-                        )
-                    },
+                    {"labels": [repair.HOLD_MERGE_LABEL, "ai-generated"]},
                 )
-                if type(response.get("id")) is not int or response.get("_error"):
-                    raise ValueError("durable original PR update intent not confirmed")
+                held = repair.open_pr(repo, target, target.old_sha, get, authorize=False)
+                labels = {row["name"] for row in held.get("labels", [])}
+                if not {repair.HOLD_MERGE_LABEL, "ai-generated"} <= labels:
+                    raise ValueError("original PR human-review hold not confirmed")
+                recheck = {
+                    **held,
+                    "labels": [
+                        row for row in held["labels"] if row["name"] != repair.HOLD_MERGE_LABEL
+                    ],
+                }
+                if not repair.authorized_pr(recheck, repair.load_trusted_authors()):
+                    raise ValueError("original PR authorization changed before promotion")
 
             try:
                 repair.advance(

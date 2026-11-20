@@ -144,8 +144,13 @@ def test_completed_task_opens_pr(issue, monkeypatch):
     assert "Refs #5" in pulls[0]["body"] and "Closes #" not in pulls[0]["body"]
 
 
-@pytest.mark.parametrize("held", [False, True])
-def test_ci_incident_pushes_back_to_original_pr_and_reconciles_a_retry(issue, monkeypatch, held):
+@pytest.mark.parametrize(
+    ("held", "fault"),
+    [(False, ""), (False, "intent"), (False, "label"), (False, "push"), (True, "")],
+)
+def test_ci_incident_pushes_back_to_original_pr_and_reconciles_a_retry(
+    issue, monkeypatch, held, fault
+):
     repo, branch, old, new = "o/r", "fix/ci", "a" * 40, "d" * 40
     workflow_path = ".github/workflows/fhd-ci-cd.yml"
     bot = {"login": "github-actions[bot]", "type": "Bot"}
@@ -185,6 +190,7 @@ def test_ci_incident_pushes_back_to_original_pr_and_reconciles_a_retry(issue, mo
         "created_at": "2026-11-20T01:00:00Z",
     }
     comments, sent, pushes = [], [], []
+    interrupted = False
 
     def get(path, params):
         if path.endswith("/issues/5/comments"):
@@ -212,9 +218,23 @@ def test_ci_incident_pushes_back_to_original_pr_and_reconciles_a_retry(issue, mo
         pytest.fail(f"unexpected GitHub read: {path}")
 
     def post(url, token, payload):
+        nonlocal interrupted
         assert token == "gh"
+        if url.endswith("/issues/42/labels"):
+            assert payload["labels"] == ["hold-merge", "ai-generated"]
+            if fault == "label":
+                return {"_error": 403}
+            pr["labels"] = [{"name": label} for label in payload["labels"]]
+            return pr["labels"]
         assert url.endswith("/issues/5/comments")
         comments.append({"user": bot, **payload})
+        if (
+            fault == "intent"
+            and not interrupted
+            and payload["body"].startswith(mod.repair.INTENT_MARKER)
+        ):
+            interrupted = True
+            raise OSError("workflow stopped after durable intent")
         return {"id": len(comments)}
 
     class Client:
@@ -249,6 +269,7 @@ def test_ci_incident_pushes_back_to_original_pr_and_reconciles_a_retry(issue, mo
             }
 
     def push(remote, target, head, token, *, before_write):
+        nonlocal interrupted
         assert (remote, target.number, target.branch, target.old_sha, head, token) == (
             "https://github.com/o/r.git",
             42,
@@ -259,6 +280,10 @@ def test_ci_incident_pushes_back_to_original_pr_and_reconciles_a_retry(issue, mo
         )
         before_write(1)
         assert any(c["body"].startswith(mod.repair.INTENT_MARKER) for c in comments)
+        assert {"hold-merge", "ai-generated"} <= {row["name"] for row in pr["labels"]}
+        if fault == "push" and not interrupted:
+            interrupted = True
+            raise subprocess.CalledProcessError(1, ["git", "push"])
         pr["head"]["sha"] = head
         pushes.append(head)
         return 1
@@ -278,6 +303,7 @@ def test_ci_incident_pushes_back_to_original_pr_and_reconciles_a_retry(issue, mo
     monkeypatch.setattr(mod.repair, "advance", push)
     monkeypatch.setattr(mod, "DispatchClient", Client)
     monkeypatch.setattr(mod, "_branch_head", lambda *args: new)
+    monkeypatch.setattr(mod.time, "sleep", lambda _: None)
 
     if held:
         with pytest.raises(SystemExit) as exc:
@@ -285,6 +311,21 @@ def test_ci_incident_pushes_back_to_original_pr_and_reconciles_a_retry(issue, mo
         assert exc.value.code == 6
         assert not sent and not pushes
         return
+
+    if fault:
+        with pytest.raises(SystemExit) as exc:
+            mod.run(_args(base_branch=branch))
+        assert exc.value.code == 6
+        assert not pushes and len(sent) == 1
+        assert sum(c["body"].startswith(mod.repair.INTENT_MARKER) for c in comments) == 1
+        if fault == "label":
+            return
+        if fault == "push":
+            with pytest.raises(SystemExit) as exc:
+                mod.run(_args(base_branch=branch))
+            assert exc.value.code == 6  # A human-review hold is never cleared by recovery.
+            assert not pushes and len(sent) == 1
+            pr["labels"] = [{"name": "ai-generated"}]  # Maintainer authorizes retry.
 
     for _ in range(2):
         with pytest.raises(SystemExit) as exc:
@@ -299,6 +340,7 @@ def test_ci_incident_pushes_back_to_original_pr_and_reconciles_a_retry(issue, mo
         assert (saved["control_task_id"], saved["para_task_id"]) == ("ctl1", "p1")
         assert saved["github_run_id"] == 502
     assert pushes == [new]
+    assert sum(c["body"].startswith(mod.repair.INTENT_MARKER) for c in comments) == 1
     assert len(sent) == 1
     assert (sent[0]["source_sha"], sent[0]["pull_request"], sent[0]["source_run_id"]) == (
         old,
