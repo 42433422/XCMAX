@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -88,6 +89,7 @@ def _candidates(db, domain, used):
             ),
             "created_at": ticket.created_at.isoformat() if ticket.created_at else None,
             "summary": _safe_summary(ticket, evidence),
+            "context_sha256": _reproduction_digest(_raw_reproduction(db, ticket)),
         }
         if len(candidates) == 20:
             break
@@ -101,6 +103,28 @@ def _safe_summary(ticket, evidence):
     # frozen template goal and never the customer text or ticket identity.
     values = (evidence.get("contact_name"), evidence.get("company_name"), ticket.ticket_no)
     return redact_ticket_text(ticket.summary or ticket.title, (v for v in values if v))[:300]
+
+
+def _raw_reproduction(db, ticket):
+    messages = db.scalars(
+        select(CustomerServiceMessage)
+        .where(
+            CustomerServiceMessage.ticket_id == ticket.id,
+            CustomerServiceMessage.user_id == ticket.user_id,
+            CustomerServiceMessage.role == "user",
+        )
+        .order_by(CustomerServiceMessage.id.desc())
+        .limit(5)
+    ).all()
+    return [
+        str(value)[:2000]
+        for value in [ticket.summary or ticket.title, *(m.content for m in reversed(messages))]
+        if value
+    ]
+
+
+def _reproduction_digest(values):
+    return hashlib.sha256(json_dumps(values).encode("utf-8")).hexdigest()
 
 
 def _choose(goal, candidates, reflect):
@@ -241,6 +265,47 @@ def _bound_ticket(db, run):
     ):
         return source, None
     return source, ticket
+
+
+def private_execution_context(db, event_id, payload):
+    """Load only the selected customer's redacted reproduction for an authorized worker."""
+    from modstore_server.dot_ticket_dispatch import redact_ticket_text
+    from modstore_server.retort_github_workspace import authorized_incident
+
+    run_id = payload.get("retort_run_id")
+    run = db.get(RetortEvolutionRun, run_id) if run_id else None
+    source = json_loads(run.effects_json, {}).get("customer_feedback") if run else None
+    if not source:
+        return None
+    if not authorized_incident(db, payload, event_id):
+        raise ValueError("feedback_execution_not_authorized")
+    source, ticket = _bound_ticket(db, run)
+    if ticket is None or not _eligible(db, ticket, source["domain"]):
+        raise ValueError("feedback_execution_ticket_unavailable")
+    evidence, resolution, _ = _ticket_scope(ticket)
+    if (resolution.get("reopened_at") or "") != source["revision"]:
+        raise ValueError("feedback_execution_revision_changed")
+    owner = db.get(User, ticket.user_id)
+    sensitive = [
+        ticket.ticket_no,
+        ticket.subject_id,
+        evidence.get("contact_name"),
+        evidence.get("company_name"),
+        getattr(owner, "username", None),
+        getattr(owner, "email", None),
+        getattr(owner, "phone", None),
+    ]
+    values = _raw_reproduction(db, ticket)
+    if source.get("context_sha256") != _reproduction_digest(values):
+        raise ValueError("feedback_execution_context_changed")
+    clean = [
+        redact_ticket_text(value, (str(v) for v in sensitive if v))[:2000]
+        for value in values
+        if value
+    ]
+    if not clean:
+        raise ValueError("feedback_execution_context_missing")
+    return {"reproduction": clean}
 
 
 def check_dispatch(request_id):

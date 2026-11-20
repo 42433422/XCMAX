@@ -571,6 +571,55 @@ def test_feedback_run_binds_original_customer_and_production_release(
     assert selected["effects"]["customer_feedback"]["allocated_worker_slots"] == 1
     assert ticket_no not in selected["snapshot"]["plan"]["public_body"]
 
+    from modstore_server import retort_customer_feedback as feedback
+    from modstore_server.dot_ticket_dispatch import _incident_prompt
+
+    with get_session_factory()() as db:
+        run = db.get(RetortEvolutionRun, request_id)
+        protocol = json_loads(run.protocol_json, {})
+        effects = json_loads(run.effects_json, {})
+        event = IncidentEvent(
+            event_type="ops.retort.evolution",
+            source="retort",
+            fingerprint=str(uuid4()),
+            payload_json="{}",
+        )
+        db.add(event)
+        db.flush()
+        run.event_id, run.status = event.id, "waiting_execution"
+        effects.update(authorization={"approved": True}, run_id=100, issue_number=20)
+        run.effects_json = json_dumps(effects)
+        payload = {
+            "retort_run_id": request_id,
+            "user_id": run.user_id,
+            "github_workspace": {
+                "retort_run_id": request_id,
+                "request_id": request_id,
+                "repository": protocol["repository"],
+                "source_sha": protocol["source_sha"],
+                "run_id": 100,
+                "issue_number": 20,
+            },
+        }
+        db.flush()
+        private = feedback.private_execution_context(db, event.id, payload)
+        with pytest.raises(ValueError, match="not_authorized"):
+            feedback.private_execution_context(db, event.id + 1, payload)
+        ticket = db.get(CustomerServiceTicket, ticket_id)
+        ticket.summary = "选题之后被替换的内容"
+        db.flush()
+        with pytest.raises(ValueError, match="context_changed"):
+            feedback.private_execution_context(db, event.id, payload)
+        db.rollback()
+    assert "首次导入未成功" in private["reproduction"][0]
+    assert "test-private@example.com" not in json.dumps(private, ensure_ascii=False)
+    assert ticket_no not in json.dumps(private, ensure_ascii=False)
+    prompt = _incident_prompt(
+        {"role": "scout", "source": {}, "handoffs": [], "review": {}, "customer_feedback": private},
+        {},
+    )
+    assert "首次导入未成功" in prompt and "test-private@example.com" not in prompt
+
     monkeypatch.setattr(service.ComponentPorts, "collect", lambda _self, _: {"status": "completed"})
     monkeypatch.setattr(
         service.ComponentPorts,

@@ -21,6 +21,27 @@ from tests.test_incident_team_escalation import _payload as event_payload
 from tests.test_incident_team_escalation import incident as incident
 
 
+def test_retort_feedback_uses_private_dot_route_and_blocks_other_tools(monkeypatch):
+    contract = {
+        "role": "scout",
+        "source": {"summary": "公开的通用目标"},
+        "handoffs": [],
+        "review": {},
+        "customer_feedback": {"reproduction": ["导入指定文件时报错"]},
+    }
+    monkeypatch.setattr(dot, "_incident_contract", lambda req: contract)
+    req = {
+        "raw_input": {
+            "event_type": "ops.retort.evolution",
+            "_trusted_incident_team_execution": True,
+        }
+    }
+    result = dot.prepare_dolt_ticket_payload(req, {"prompt": "通用目标"}, "dolt")
+    assert "导入指定文件时报错" in result["prompt"]
+    with pytest.raises(dot.DoltIncidentContractError, match="private_executor_required"):
+        dot.prepare_dolt_ticket_payload(req, {"prompt": "通用目标"}, "other")
+
+
 def runtime(event_id, role, monkeypatch):
     from importlib import import_module
 
