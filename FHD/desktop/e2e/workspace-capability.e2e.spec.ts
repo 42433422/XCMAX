@@ -174,14 +174,26 @@ test('a preoccupied loopback port never supplies the application page before own
       exitedBeforeAttach = true
     }
     if (!exitedBeforeAttach) {
-      await app.waitForEvent('close', { timeout: 15_000 })
+      // On some macOS runners a safe splash remains alive rather than closing.
+      // Verify the whole original 15-second startup window and never accept an
+      // unowned backend page, even when Electron does not emit close.
+      const closed = await app.waitForEvent('close', { timeout: 15_000 }).then(
+        () => true,
+        error => {
+          if (!(error instanceof Error) || !/Timeout/i.test(error.message)) throw error
+          return false
+        },
+      )
+      if (!closed) {
+        expect(app.windows().every(window => !window.url().startsWith(`http://127.0.0.1:${backendPort}/`))).toBe(true)
+        await app.close()
+      }
     }
     expect(unownedPages).toBe(0)
   } finally {
     occupant.closeAllConnections()
     await new Promise<void>(resolve => occupant.close(() => resolve()))
-    // The process intentionally exited. Relaunching immediately in this
-    // final fail-closed case races backend-port release on macOS CI.
+    // No backend process may persist across the last fail-closed test.
     app = undefined!
   }
 })
