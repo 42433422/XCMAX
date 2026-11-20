@@ -35,7 +35,6 @@
 - [AI 市场](https://xiu-ci.com/market/)：Mod 与 AI 员工市场。
 - [联系方式](https://xiu-ci.com/contact.html)：产品咨询、服务方向与需求提交入口。
 - [隐私政策](https://xiu-ci.com/privacy.html)：数据处理与隐私说明。
-- [荣誉资质](https://xiu-ci.com/honors.html)：公司资质与荣誉展示。
 - [Excel 转 AI](https://xiu-ci.com/excel-to-ai.html)：Excel 单据自动化场景说明。
 
 ## 常见问题
