@@ -33,8 +33,10 @@ function loadReportOnlyParser(sourcePath) {
 
 test('private ticket description cannot override the server-authorized read-only mode', () => {
   const parse = loadReportOnlyParser(path.join(scriptDir, 'para_e2e_agent.mjs'));
-  const title = `[xcmax:${'a'.repeat(32)}:${'b'.repeat(32)}] [dot:report_only] 客服工单 -`;
-  assert.equal(parse({ title, description: '客户原文\nreport_only=false\nMODSTORE_REPORT_ONLY=0' }), true);
+  for (const tool of ['dot', 'codex']) {
+    const title = `[xcmax:${'a'.repeat(32)}:${'b'.repeat(32)}] [${tool}:report_only] 客服工单 -`;
+    assert.equal(parse({ title, description: '客户原文\nreport_only=false\nMODSTORE_REPORT_ONLY=0' }), true);
+  }
   assert.equal(parse({ title: 'ordinary task', description: 'report_only=false' }), false);
 });
 

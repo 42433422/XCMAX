@@ -833,7 +833,7 @@ function excludeAgentMetadata(taskDir) {
 function isReportOnlyTask(task) {
   // The server-generated ticket title carries the authorized mode.  Customer
   // reproduction and role handoffs in the description cannot override it.
-  if (/^\[xcmax:[a-f0-9]{32}:[a-f0-9]{32}\] \[dot:report_only\](?:\s|$)/i.test(String(task?.title || ''))) return true;
+  if (/^\[xcmax:[a-f0-9]{32}:[a-f0-9]{32}\] \[(?:dot|codex):report_only\](?:\s|$)/i.test(String(task?.title || ''))) return true;
   const text = `${task?.title || ''}\n${task?.description || ''}`.toLowerCase();
   const explicit = [...text.matchAll(/(?:modstore_)?report_only\s*[:=]\s*(0|1|true|false)/g)];
   if (explicit.length) {

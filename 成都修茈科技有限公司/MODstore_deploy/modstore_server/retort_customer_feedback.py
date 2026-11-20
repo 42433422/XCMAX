@@ -267,19 +267,13 @@ def _bound_ticket(db, run):
     return source, ticket
 
 
-def private_execution_context(db, event_id, payload):
-    """Load only the selected customer's redacted reproduction for an authorized worker."""
+def _selected_execution_context(db, run):
+    """Read the frozen scenario for private approval and subsequent execution."""
     from modstore_server.dot_ticket_dispatch import redact_ticket_text
-    from modstore_server.retort_github_workspace import authorized_incident
 
-    run_id = payload.get("retort_run_id")
-    run = db.get(RetortEvolutionRun, run_id) if run_id else None
-    source = json_loads(run.effects_json, {}).get("customer_feedback") if run else None
+    source, ticket = _bound_ticket(db, run)
     if not source:
         return None
-    if not authorized_incident(db, payload, event_id):
-        raise ValueError("feedback_execution_not_authorized")
-    source, ticket = _bound_ticket(db, run)
     if ticket is None or not _eligible(db, ticket, source["domain"]):
         raise ValueError("feedback_execution_ticket_unavailable")
     evidence, resolution, _ = _ticket_scope(ticket)
@@ -305,19 +299,61 @@ def private_execution_context(db, event_id, payload):
     ]
     if not clean:
         raise ValueError("feedback_execution_context_missing")
-    return {"reproduction": clean, "intent": ticket.intent}
+    return {
+        "reproduction": clean,
+        "intent": ticket.intent,
+        "context_sha256": source["context_sha256"],
+    }
 
 
-def check_dispatch(request_id):
+def private_approval_context(request_id):
     with get_session_factory()() as db:
-        run = db.get(RetortEvolutionRun, request_id)
-        source, ticket = _bound_ticket(db, run)
-        if source and (
-            ticket is None
-            or not _eligible(db, ticket, source["domain"])
-            or (_ticket_scope(ticket)[1].get("reopened_at") or "") != source["revision"]
-        ):
-            raise ValueError("原工单已分派或状态变化，请核对后重新规划")
+        return _selected_execution_context(db, db.get(RetortEvolutionRun, request_id))
+
+
+def _check_approved_context(context, state):
+    if context is None:
+        return
+    from modstore_server.integrations.repository_packages import load_repository_module
+
+    contract = load_repository_module("retort_engine.evolution_contract")
+    plan = state.get("plan") or {}
+    approval = state.get("approval") or {}
+    if (
+        plan.get("private_customer_feedback") != context
+        or approval.get("approved") is not True
+        or approval.get("digest")
+        != contract.digest({key: state.get(key) for key in ("protocol", "plan", "optimization")})
+    ):
+        raise ValueError("feedback_execution_context_not_approved")
+
+
+def check_dispatch(request_id, state):
+    _check_approved_context(private_approval_context(request_id), state)
+
+
+def private_execution_context(db, event_id, payload):
+    """Deliver the exact privately reviewed scenario only to its authorized task."""
+    from modstore_server.retort_github_workspace import authorized_incident
+
+    run_id = payload.get("retort_run_id")
+    run = db.get(RetortEvolutionRun, run_id) if run_id else None
+    context = _selected_execution_context(db, run)
+    if context is None:
+        return None
+    if not authorized_incident(db, payload, event_id):
+        raise ValueError("feedback_execution_not_authorized")
+    effects = json_loads(run.effects_json, {})
+    _check_approved_context(
+        context,
+        {
+            "protocol": json_loads(run.protocol_json, {}),
+            "plan": effects.get("plan"),
+            "optimization": effects.get("optimization"),
+            "approval": effects.get("authorization"),
+        },
+    )
+    return context
 
 
 def _bind_online_result(db, ticket, source, evidence, resolution, binding):

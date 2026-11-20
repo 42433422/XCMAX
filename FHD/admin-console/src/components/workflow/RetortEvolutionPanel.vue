@@ -48,7 +48,7 @@
     };
     snapshot: {
       pending?: { kind: string; digest?: string }[];
-      plan?: { public_body: string };
+      plan?: { public_body: string; private_customer_feedback?: { reproduction: string[] } };
       optimization?: { status: string; candidate?: { plan?: string } };
       verification?: {
         url?: string;
@@ -503,6 +503,12 @@
         <template v-if="pending?.kind === 'dispatch_approval'">
           <h4>将发布到 GitHub 的任务</h4>
           <pre class="retort-preview">{{ detail.snapshot.plan?.public_body }}</pre>
+          <template v-if="detail.snapshot.plan?.private_customer_feedback">
+            <h4>本次批准的客户复现场景（仅交给授权执行任务）</h4>
+            <pre class="retort-preview">{{
+              detail.snapshot.plan.private_customer_feedback.reproduction.join('\n\n')
+            }}</pre>
+          </template>
           <template v-if="detail.snapshot.optimization?.status === 'proposed'">
             <h4>经独立试验选出的辅助方案</h4>
             <pre class="retort-preview">{{ detail.snapshot.optimization.candidate?.plan }}</pre>

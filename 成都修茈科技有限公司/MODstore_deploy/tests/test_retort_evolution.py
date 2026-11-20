@@ -581,6 +581,9 @@ def test_feedback_run_binds_original_customer_and_production_release(
     assert selected["effects"]["customer_feedback"]["ticket_id"] == ticket_id
     assert selected["effects"]["customer_feedback"]["allocated_worker_slots"] == 1
     assert ticket_no not in selected["snapshot"]["plan"]["public_body"]
+    approval_context = selected["snapshot"]["plan"]["private_customer_feedback"]
+    assert "首次导入未成功" in approval_context["reproduction"][0]
+    assert "test-private@example.com" not in json.dumps(approval_context)
 
     from modstore_server import retort_customer_feedback as feedback
     from modstore_server.dot_ticket_dispatch import _incident_prompt
@@ -598,7 +601,16 @@ def test_feedback_run_binds_original_customer_and_production_release(
         db.add(event)
         db.flush()
         run.event_id, run.status = event.id, "waiting_execution"
-        effects.update(authorization={"approved": True}, run_id=100, issue_number=20)
+        effects.update(
+            authorization={
+                "approved": True,
+                "digest": selected["snapshot"]["pending"][0]["digest"],
+            },
+            plan=selected["snapshot"]["plan"],
+            optimization=selected["snapshot"]["optimization"],
+            run_id=100,
+            issue_number=20,
+        )
         run.effects_json = json_dumps(effects)
         payload = {
             "retort_run_id": request_id,
@@ -614,6 +626,12 @@ def test_feedback_run_binds_original_customer_and_production_release(
         }
         db.flush()
         private = feedback.private_execution_context(db, event.id, payload)
+        effects["plan"]["private_customer_feedback"]["reproduction"] = ["not approved"]
+        run.effects_json = json_dumps(effects)
+        with pytest.raises(ValueError, match="not_approved"):
+            feedback.private_execution_context(db, event.id, payload)
+        effects["plan"]["private_customer_feedback"] = private
+        run.effects_json = json_dumps(effects)
         with pytest.raises(ValueError, match="not_authorized"):
             feedback.private_execution_context(db, event.id + 1, payload)
         ticket = db.get(CustomerServiceTicket, ticket_id)

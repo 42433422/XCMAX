@@ -336,7 +336,9 @@ def _incident_contract(req: Dict[str, Any]) -> Dict[str, Any] | None:
         ) from exc
 
 
-def _incident_prompt(contract: Dict[str, Any], req: Dict[str, Any]) -> str:
+def _incident_prompt(
+    contract: Dict[str, Any], req: Dict[str, Any], tool_name: str = DOLT_TOOL
+) -> str:
     """Project only bounded handoff fields through the existing PII redactor."""
     sensitive = _sensitive_values(contract["source"])
 
@@ -453,8 +455,8 @@ def _incident_prompt(contract: Dict[str, Any], req: Dict[str, Any]) -> str:
                         )
                         if key in budget
                     },
-                    "executor": "dolt",
-                    "codex_controls": "unsupported",
+                    "executor": tool_name,
+                    "codex_controls": "requested" if tool_name == "codex" else "unsupported",
                     "output_limit_enforced": False,
                 },
                 ensure_ascii=False,
@@ -515,7 +517,7 @@ def prepare_dolt_ticket_payload(
         contract = _incident_contract(req)
         if not contract or not contract.get("customer_feedback"):
             return payload
-        if tool_name != DOLT_TOOL:
+        if tool_name not in {DOLT_TOOL, "codex"}:
             raise DoltIncidentContractError("feedback_private_executor_required")
     elif tool_name == DOLT_TOOL and is_customer_ticket(req):
         contract = _incident_contract(req)
@@ -547,12 +549,13 @@ def prepare_dolt_ticket_payload(
             raise DoltIncidentContractError("feedback_publication_marker_mismatch")
     # dot 不合并、不用 MODstore 本机工作区：去掉自动合并和本地路径。
     out = {k: v for k, v in payload.items() if k not in {"auto_merge", "workspace_path"}}
+    executor_label = "codex" if tool_name == "codex" else "dot"
     out.update(
-        title=f"{marker} [dot:{mode}] 客服工单 {ticket_no}"[:240],
+        title=f"{marker} [{executor_label}:{mode}] 客服工单 {ticket_no}"[:240],
         prompt=build_dolt_prompt(fields, req, mode)
-        + ("\n" + _incident_prompt(contract, req) if contract else ""),
+        + ("\n" + _incident_prompt(contract, req, tool_name) if contract else ""),
         subtask_title=f"{mode}: 客服工单 {ticket_no}"[:240],
         report_only=mode == MODE_REPORT_ONLY,
-        tool_name=DOLT_TOOL,
+        tool_name=tool_name,
     )
     return out

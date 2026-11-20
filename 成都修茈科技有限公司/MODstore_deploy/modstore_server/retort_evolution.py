@@ -121,6 +121,8 @@ class ComponentPorts:
         self.request_id = request_id
 
     def plan(self, protocol):
+        from modstore_server.retort_customer_feedback import private_approval_context
+
         module = load_repository_module("retort_engine.models")
         tasks = [
             module.ImprovementTask(
@@ -136,7 +138,9 @@ class ComponentPorts:
             for item in protocol["criteria"]
         ]
         sources = protocol["references"]
+        feedback = private_approval_context(self.request_id)
         return {
+            **({"private_customer_feedback": feedback} if feedback else {}),
             "tasks": tasks,
             "sources": sources,
             "public_title": protocol["title"],
@@ -176,7 +180,7 @@ class ComponentPorts:
         from modstore_server.retort_customer_feedback import check_dispatch
         from modstore_server.retort_github_workspace import begin_dispatch
 
-        check_dispatch(self.request_id)
+        check_dispatch(self.request_id, state)
         return begin_dispatch(self.request_id, state)
 
     def collect(self, state):

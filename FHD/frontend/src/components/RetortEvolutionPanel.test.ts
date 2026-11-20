@@ -59,11 +59,19 @@ describe('Retort native approval console', () => {
     expect(mocks.get).toHaveBeenLastCalledWith('/api/xcmax/admin/retort-evolution', { offset: 8, limit: 8 })
   })
   it('previews the public issue and binds approval to the displayed evidence', async () => {
+    const detail = run()
+    const feedback = { ...detail, snapshot: { ...detail.snapshot, plan: {
+      public_body: detail.snapshot.plan.public_body,
+      private_customer_feedback: { reproduction: ['首次导入未成功 <script>untrusted()</script>'] },
+    } } }
+    mocks.get.mockImplementation((url: string) => Promise.resolve(url.endsWith('run-1') ? feedback : overview()))
     render()
     await flushPromises()
     await wrapper.get('.el-table__body button').trigger('click')
     await flushPromises()
     expect(document.body.textContent).toContain('将公开的任务内容')
+    expect(document.body.textContent).toContain('首次导入未成功 <script>untrusted()</script>')
+    expect(document.body.querySelector('script')).toBeNull()
     expect(document.body.textContent).toContain('未评级')
     const approve = [...document.body.querySelectorAll('button')].find((b) => b.textContent?.includes('批准并派工'))!
     approve.click()
