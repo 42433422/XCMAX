@@ -50,7 +50,6 @@ WORKFLOW_RENAMES = {
     "release-android.yml": "fhd-release-android.yml",
     "release-orchestrator.yml": "fhd-release-orchestrator.yml",
     "performance-smoke.yml": "fhd-performance-smoke.yml",
-    "neuro_migration_check.yml": "fhd-neuro-migration-check.yml",
     "modstore-tests.yml": "fhd-modstore-tests.yml",
     "intent-benchmark.yml": "fhd-intent-benchmark.yml",
     "slo-metrics-collect.yml": "fhd-slo-metrics-collect.yml",
