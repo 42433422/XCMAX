@@ -127,6 +127,8 @@ cd XCMAX/FHD
 
 任务恢复接入已有 LangGraph 1.2.10 / checkpoint 4.3.0 / SQLite 3.1.2 / Postgres 3.1.1+xcagi.1 原生 saver（MIT，源码与许可见 `packages/xcagi_langgraph_*`），线程绑定任务与授权作用域。启动恢复和“重试”在原 run 内对账续跑安全余步，保留原计划、审批和幂等键；取消任务、未知写结果、未批准写入及缺失持久计划均需核对或新建业务任务。产品自有代码仅负责权限、版本 fencing、业务回执与 UI 适配。
 
+企业专属客服复用 [APScheduler 3.11.3](https://github.com/agronholm/apscheduler/tree/3.11.3)（MIT，版本见 `uv.lock`）触发 IM 待处理消息恢复，沿用现有数据库记录和 MODstore 账号授权。产品知识复用 BM25S 0.3.16（MIT）与现有引用组件，内置公开指南。扩展资料使用专用只读密钥 `XCAGI_ENTERPRISE_CS_KB_KEY` 及公开元数据过滤。
+
 主动提醒的外发适配复用 [Apprise 1.13.1](https://github.com/caronc/apprise/tree/v1.13.1)（BSD-2-Clause，确切版本见 `uv.lock` 的可选 `proactive-push` 依赖），记录与渠道结果复用 SQLite 事务及既有跨进程锁。当前交付仅为服务和 `scripts/ops/publish_proactive_event.py`：必须指定租户；本地事件记录不等于站内通知已送达，业务事件生产、站内 UI 与真实渠道验收尚未完成。已成功渠道不重复投递，失败渠道可重试；进程中断留下的未知投递结果需人工核对，不能宣称外发恰好一次。
 
 [Apache-2.0](LICENSE)；商业约定见 [COMMERCIAL_LICENSE](COMMERCIAL_LICENSE.md) 与 [LICENSING](docs/guides/LICENSING.md)。安全反馈和配置规则见 [SECURITY](SECURITY.md)。
