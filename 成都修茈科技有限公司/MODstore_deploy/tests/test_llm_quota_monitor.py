@@ -213,6 +213,9 @@ def test_xiaomi_token_plan_validates_period_and_exact_credits():
     payload["quota"]["remaining_credits"] = 999
     with pytest.raises(ValueError, match="inconsistent"):
         parse_xiaomi_token_plan_quota(payload, now=datetime(2026, 11, 20, tzinfo=UTC))
+    payload["quota"] = {"total_credits": True, "used_credits": 0, "remaining_credits": 1}
+    with pytest.raises(ValueError, match="inconsistent"):
+        parse_xiaomi_token_plan_quota(payload, now=datetime(2026, 11, 20, tzinfo=UTC))
 
 
 @pytest.mark.asyncio
@@ -229,3 +232,47 @@ async def test_xiaomi_quota_does_not_send_key_to_custom_platform_url(monkeypatch
     )
     assert result["visibility"] == "usage_only"
     assert result["remaining_percent"] is None
+
+
+@pytest.mark.asyncio
+async def test_environment_xiaomi_quota_uses_get_without_request_body(monkeypatch):
+    import httpx
+
+    from modstore_server import platform_model_transport
+    from modstore_server.platform_model_config import PlatformApiKey
+
+    captured = []
+    real_client = httpx.AsyncClient
+
+    def respond(request):
+        captured.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "object": "token_plan",
+                "period": {"start_at": "2000-01-01 00:00:00", "end_at": "2100-01-01 00:00:00"},
+                "quota": {"total_credits": 1000, "used_credits": 100, "remaining_credits": 900},
+            },
+        )
+
+    monkeypatch.setattr(
+        platform_model_transport.httpx,
+        "AsyncClient",
+        lambda **kwargs: real_client(transport=httpx.MockTransport(respond), **kwargs),
+    )
+    key = PlatformApiKey(
+        "tp-fixture",
+        {
+            "provider": "xiaomi",
+            "base_url": "https://token-plan-cn.xiaomimimo.com/v1",
+            "model": "mimo",
+            "display_name": "MiMo",
+            "revision": 1,
+            "source": "environment",
+        },
+    )
+    result = await llm_quota_monitor.fetch_xiaomi_token_plan_quota(
+        key, base_url="https://token-plan-cn.xiaomimimo.com/v1"
+    )
+    assert result["remaining_percent"] == 90
+    assert len(captured) == 1 and captured[0].method == "GET" and captured[0].content == b""

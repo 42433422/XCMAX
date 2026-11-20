@@ -118,9 +118,7 @@ def parse_minimax_token_plan_remains(payload: Any) -> dict[str, Any]:
     base_resp = (
         envelope.get("base_resp")
         if isinstance(envelope.get("base_resp"), dict)
-        else data.get("base_resp")
-        if isinstance(data.get("base_resp"), dict)
-        else {}
+        else data.get("base_resp") if isinstance(data.get("base_resp"), dict) else {}
     )
     status_code = _safe_int(base_resp.get("status_code"))
     if status_code:
@@ -270,11 +268,15 @@ def parse_xiaomi_token_plan_quota(payload: Any, *, now: datetime | None = None) 
         quota.get(field) for field in ("total_credits", "used_credits", "remaining_credits")
     )
     if (
-        any(type(value) is not int for value in (total, used, left))
-        or total <= 0
-        or used < 0
-        or left != max(0, total - used)
+        not isinstance(total, int)
+        or isinstance(total, bool)
+        or not isinstance(used, int)
+        or isinstance(used, bool)
+        or not isinstance(left, int)
+        or isinstance(left, bool)
     ):
+        raise ValueError("inconsistent Xiaomi credits")
+    if total <= 0 or used < 0 or left != max(0, total - used):
         raise ValueError("inconsistent Xiaomi credits")
     start = datetime.strptime(period["start_at"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=UTC)
     end = datetime.strptime(period["end_at"], "%Y-%m-%d %H:%M:%S").replace(tzinfo=UTC)
@@ -303,7 +305,7 @@ def parse_xiaomi_token_plan_quota(payload: Any, *, now: datetime | None = None) 
 
 async def fetch_xiaomi_token_plan_quota(api_key: str, *, base_url: str) -> dict[str, Any]:
     """Send a MiMo plan key only to Xiaomi's documented HTTPS quota endpoint."""
-    unavailable = {
+    unavailable: dict[str, Any] = {
         "state": "unknown",
         "visibility": "usage_only",
         "remaining_percent": None,
