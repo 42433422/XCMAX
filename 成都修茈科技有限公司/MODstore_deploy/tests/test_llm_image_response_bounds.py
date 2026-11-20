@@ -54,3 +54,27 @@ async def test_image_response_rejects_extra_images_and_accepts_requested_count(m
         "https://example.test", "secret", "model", "prompt", n=2
     )
     assert accepted["images"] == ["data:image/png;base64,AA=="] * 2
+
+
+@pytest.mark.asyncio
+async def test_video_response_is_limited_before_json_decoding(monkeypatch):
+    consumed = []
+
+    class Response:
+        status_code = 200
+
+        async def aiter_bytes(self):
+            for chunk in (b"a" * 8, b"b" * 8, b"c" * 8):
+                consumed.append(chunk)
+                yield chunk
+
+    @asynccontextmanager
+    async def response(*args, **kwargs):
+        assert kwargs["stream"] is True
+        yield Response()
+
+    monkeypatch.setattr(media, "llm_http_response", response)
+    monkeypatch.setattr(media, "_MAX_VIDEO_RESPONSE_BYTES", 12)
+    with pytest.raises(httpx.RequestError, match="超过允许大小"):
+        await media.video_openai_compatible("https://example.test", "secret", "model", "prompt")
+    assert consumed == [b"a" * 8, b"b" * 8]

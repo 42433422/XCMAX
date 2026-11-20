@@ -1186,8 +1186,8 @@ class LlmImageDTO(_facade().BaseModel):
 
 
 class LlmVideoDTO(_facade().BaseModel):
-    provider: str
-    model: str
+    provider: str = _facade().Field(..., max_length=64)
+    model: str = _facade().Field(..., max_length=200)
     client_request_id: str | None = Field(None, pattern=r"^[A-Za-z0-9_.:-]{8,128}$")
     prompt: str = _facade().Field(..., min_length=1, max_length=4000)
     size: str = _facade().Field("1280x720", max_length=32)
@@ -1442,9 +1442,15 @@ async def llm_video(
         if row is not None:
             ledger.finish(db, row, {"ok": False})
         raise HTTPException(502, result.get("error") or "video upstream error")
-    status = str(result.get("status") or "pending")
-    job_id = result.get("job_id") or ""
-    preview = result.get("preview_url") or ""
+    from modstore_server.llm_media_proxy import validated_video_fields
+
+    fields = validated_video_fields(result)
+    if fields is None:
+        raise HTTPException(
+            409 if row is not None else 502,
+            {"message": "视频供应商回执无法核对", "request_id": request_id},
+        )
+    job_id, status, preview = fields
     if row is not None and not job_id and not preview:
         raise HTTPException(
             409, {"message": "视频供应商未返回可核对的任务号", "request_id": request_id}

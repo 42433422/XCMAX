@@ -59,6 +59,7 @@ def completed_receipt(db: Session, user_id: int, client_request_id: str, digest:
     row = (
         db.query(LlmClientRequest)
         .filter_by(user_id=user_id, client_request_id=client_request_id)
+        .populate_existing()
         .one_or_none()
     )
     if row is None or row.state != "completed":
@@ -66,6 +67,18 @@ def completed_receipt(db: Session, user_id: int, client_request_id: str, digest:
     if row.request_sha256 != digest:
         return "conflict", None
     return "replay", json.loads(row.done_json or "{}")
+
+
+def existing_state(db: Session, user_id: int, client_request_id: str, digest: str) -> str:
+    row = (
+        db.query(LlmClientRequest)
+        .filter_by(user_id=user_id, client_request_id=client_request_id)
+        .populate_existing()
+        .one_or_none()
+    )
+    if row is None:
+        return "not_found"
+    return str(row.state) if row.request_sha256 == digest else "conflict"
 
 
 def begin(

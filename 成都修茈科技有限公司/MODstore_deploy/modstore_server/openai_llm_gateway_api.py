@@ -317,8 +317,45 @@ async def openai_chat_completions(
     msgs = [{"role": m.role, "content": m.content} for m in body.messages]
     operation = "vision" if messages_have_multimodal_images(msgs) else "chat"
     prov, mid = _parse_requested_model(body.model)
+    from modstore_server import llm_client_requests as ledger
+
+    request_key = request.headers.get("Idempotency-Key")
+    original_request = {"operation": "openai_gateway_chat", "request": body.model_dump()}
+    out = None
+    if request_key:
+        if not ledger.KEY_PATTERN.fullmatch(request_key):
+            raise HTTPException(422, "模型请求键无效")
+        digest = ledger.request_digest(original_request)
+        replay = ledger.completed_receipt(db, int(user.id), request_key, digest)
+        if replay and replay[0] == "conflict":
+            raise HTTPException(409, {"message": "同一请求键内容不同", "state": "conflict"})
+        if replay and replay[0] == "replay":
+            out = replay[1]
+        if out is None:
+            state = ledger.existing_state(db, int(user.id), request_key, digest)
+            if state == "conflict":
+                raise HTTPException(409, {"message": "同一请求键内容不同", "state": state})
+            if state == "completed":
+                replay = ledger.completed_receipt(db, int(user.id), request_key, digest)
+                if not replay or replay[0] != "replay":
+                    raise HTTPException(409, {"message": "原请求回执待核对", "state": state})
+                out = replay[1]
+            elif state == "settling":
+                from modstore_server.llm_billing import authorization_header
+                from modstore_server.llm_billing_recovery import recover_receipt
+
+                out = await recover_receipt(
+                    db,
+                    int(user.id),
+                    request_key,
+                    authorization_header(request),
+                    operation="chat",
+                    request=request,
+                )
+                if out is None:
+                    raise HTTPException(409, {"message": "原请求结算状态待核对", "state": state})
     route_snapshot = None
-    if not prov:
+    if out is None and not prov:
         resolved = await resolve_default_llm_route(db, int(user.id), operation=operation)
         prov = str(resolved["provider"])
         mid = str(resolved["model"])
@@ -327,18 +364,20 @@ async def openai_chat_completions(
 
             route_snapshot = bind_resolved_chat_route(db, int(user.id), resolved)
 
-    out = await run_billed_llm_chat(
-        request,
-        db,
-        user,
-        provider=prov,
-        model=mid,
-        messages=msgs,
-        max_tokens=body.max_tokens,
-        conversation_id=None,
-        route_snapshot=route_snapshot,
-        client_request_id=request.headers.get("Idempotency-Key"),
-    )
+    if out is None:
+        out = await run_billed_llm_chat(
+            request,
+            db,
+            user,
+            provider=prov,
+            model=mid,
+            messages=msgs,
+            max_tokens=body.max_tokens,
+            conversation_id=None,
+            route_snapshot=route_snapshot,
+            client_request_id=request_key,
+            client_request_payload=original_request,
+        )
     usage = out.get("usage") or {}
     if not isinstance(usage, dict):
         usage = {}

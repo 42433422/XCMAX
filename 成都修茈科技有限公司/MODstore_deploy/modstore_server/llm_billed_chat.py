@@ -19,7 +19,9 @@ from modstore_server.db.llm_chat import LlmClientRequest
 from modstore_server.llm_billed_once import (
     failed_chat_route_detail,
 )
-from modstore_server.llm_billed_once import run_billed_llm_chat_once as _run_billed_llm_chat_once
+from modstore_server.llm_billed_once import (
+    run_billed_llm_chat_once as _run_billed_llm_chat_once,
+)
 from modstore_server.llm_billing import (
     JavaWalletClient,
     WalletHold,
@@ -139,13 +141,16 @@ async def run_billed_llm_chat(
     allow_failover: bool = True,
     route_snapshot: ChatRouteSnapshot | None = None,
     client_request_id: str | None = None,
+    client_request_payload: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     row = None
     if client_request_id:
         if not ledger.KEY_PATTERN.fullmatch(client_request_id):
             raise HTTPException(422, "模型请求键无效")
         digest = ledger.request_digest(
-            {
+            client_request_payload
+            if client_request_payload is not None
+            else {
                 "operation": "sync_chat",
                 "provider": provider,
                 "model": model,

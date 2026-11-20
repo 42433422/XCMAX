@@ -324,6 +324,101 @@ async def test_video_request_replays_same_supplier_job_id(db, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_gateway_replays_auto_route_before_current_config_lookup(db, monkeypatch):
+    from modstore_server import openai_llm_gateway_api as gateway
+
+    resolve = AsyncMock(return_value={"provider": "openai", "model": "model-a"})
+    attempt = AsyncMock(
+        return_value={"content": "saved answer", "provider": "openai", "model": "model-a"}
+    )
+    monkeypatch.setattr(gateway, "resolve_default_llm_route", resolve)
+    monkeypatch.setattr(llm_billed_chat, "_run_sync_attempts", attempt)
+    body = gateway.OAIChatCompletionRequest(
+        model="xcauto-account", messages=[{"role": "user", "content": "hello"}]
+    )
+    request = SimpleNamespace(headers={"Idempotency-Key": KEY})
+    first = await gateway.openai_chat_completions(request, body, db, SimpleNamespace(id=7))
+    assert json.loads(first.body)["choices"][0]["message"]["content"] == "saved answer"
+    resolve.side_effect = HTTPException(503, "current route unavailable")
+    replay = await gateway.openai_chat_completions(request, body, db, SimpleNamespace(id=7))
+    assert json.loads(replay.body)["choices"][0]["message"]["content"] == "saved answer"
+    assert resolve.await_count == 1
+    assert attempt.await_count == 1
+    changed = body.model_copy(update={"max_tokens": 10})
+    with pytest.raises(HTTPException) as exc:
+        await gateway.openai_chat_completions(request, changed, db, SimpleNamespace(id=7))
+    assert exc.value.status_code == 409
+    assert resolve.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_gateway_recovers_settlement_before_resolving_changed_route(db, monkeypatch):
+    from modstore_server import llm_billing_recovery
+    from modstore_server import openai_llm_gateway_api as gateway
+
+    body = gateway.OAIChatCompletionRequest(
+        model="xcauto-account", messages=[{"role": "user", "content": "hello"}]
+    )
+    digest = ledger.request_digest(
+        {"operation": "openai_gateway_chat", "request": body.model_dump()}
+    )
+    _, row = ledger.begin(db, 7, KEY, digest, 90)
+    ledger.mark_settling(db, row)
+    recover = AsyncMock(
+        return_value={"content": "settled", "provider": "openai", "model": "saved-model"}
+    )
+    resolve = AsyncMock(side_effect=AssertionError("must not resolve current route"))
+    monkeypatch.setattr(llm_billing_recovery, "recover_receipt", recover)
+    monkeypatch.setattr(gateway, "resolve_default_llm_route", resolve)
+    request = SimpleNamespace(headers={"Idempotency-Key": KEY, "authorization": "Bearer token"})
+    result = await gateway.openai_chat_completions(request, body, db, SimpleNamespace(id=7))
+    assert json.loads(result.body)["choices"][0]["message"]["content"] == "settled"
+    recover.assert_awaited_once_with(db, 7, KEY, "Bearer token", operation="chat", request=request)
+    resolve.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_gateway_does_not_reexecute_an_old_unmatched_receipt(db, monkeypatch):
+    from modstore_server import openai_llm_gateway_api as gateway
+
+    _, row = ledger.begin(db, 7, KEY, "legacy-route-digest", 90)
+    ledger.finish(db, row, {"content": "prior paid answer"})
+    resolve = AsyncMock(side_effect=AssertionError("must not issue a new request"))
+    monkeypatch.setattr(gateway, "resolve_default_llm_route", resolve)
+    body = gateway.OAIChatCompletionRequest(
+        model="xcauto-account", messages=[{"role": "user", "content": "hello"}]
+    )
+    with pytest.raises(HTTPException) as exc:
+        await gateway.openai_chat_completions(
+            SimpleNamespace(headers={"Idempotency-Key": KEY}), body, db, SimpleNamespace(id=7)
+        )
+    assert exc.value.status_code == 409
+    resolve.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("overlong", ["job_id", "status", "preview_url"])
+async def test_video_rejects_unbounded_provider_receipt_without_retry(db, monkeypatch, overlong):
+    from modstore_server import llm_api, llm_key_resolver
+
+    response = {"ok": True, "job_id": "video-id", "status": "pending", "preview_url": ""}
+    response[overlong] = "x" * 3000
+    send = AsyncMock(return_value=response)
+    monkeypatch.setattr(llm_api, "video_dispatch", send)
+    monkeypatch.setattr(
+        llm_key_resolver, "resolve_credentials", lambda *args: ("key", None, "platform")
+    )
+    body = llm_api.LlmVideoDTO(
+        provider="openai", model="video-model", prompt="test", client_request_id=KEY
+    )
+    for _ in range(2):
+        with pytest.raises(HTTPException) as exc:
+            await llm_api.llm_video(body, db, SimpleNamespace(id=7))
+        assert exc.value.status_code == 409
+    send.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_voice_turn_replays_text_only_without_second_debit(db, monkeypatch):
     from modstore_server import voice_s2s_ws as voice
 
