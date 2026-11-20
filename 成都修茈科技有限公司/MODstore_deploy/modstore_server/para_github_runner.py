@@ -202,13 +202,24 @@ def _ensure_runner(db, payload):
         if not capability["available"]:
             _save(db, row, "blocked", reason=capability["reason"])
             return None
+        from modstore_server.para_model_admission import platform_model_admission
+
+        allocation = platform_model_admission()
+        if allocation:
+            result = {"result_json": json_dumps({
+                **json_loads(row.result_json, {}),
+                "model_allocation": allocation,
+            })}
+        else:
+            result = {}
+        pending = db.query(CustomerServiceAction).filter_by(id=row.id, status="queued")
+        if allocation and allocation["status"] != "admitted":
+            pending.update(result, synchronize_session=False)
+            db.commit()
+            return False
         if not _claim_worker_slot(db, row):
             return False
-        claimed = (
-            db.query(CustomerServiceAction)
-            .filter_by(id=row.id, status="queued")
-            .update({"status": "dispatching"}, synchronize_session=False)
-        )
+        claimed = pending.update({**result, "status": "dispatching"}, synchronize_session=False)
         db.commit()  # Persist uncertainty before an external workflow dispatch.
         if claimed:
             try:
@@ -315,6 +326,7 @@ def run_status(db, request_id):
         "jobs": jobs,
         "receipts": execution.get("receipts", []),
         "publication_candidate": publication_candidate(db, event),
+        "model_allocation": json_loads(row.result_json, {}).get("model_allocation"),
     }
 
 

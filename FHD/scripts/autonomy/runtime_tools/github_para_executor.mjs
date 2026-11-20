@@ -39,6 +39,19 @@ export async function runGithubExecutor({ env = process.env, fetchStatus = fetch
   delete agentEnv.MODSTORE_PARA_DISPATCH_TOKEN;
   delete agentEnv.PARA_CODEX_AUTH_JSON;
   delete agentEnv.PARA_CODEX_CONFIG_TOML;
+  const allocation = accepted.model_allocation;
+  if (env.PARA_PLATFORM_POOL === '1' || allocation) {
+    if (env.PARA_PLATFORM_POOL !== '1' || allocation?.status !== 'admitted'
+        || !/^[a-zA-Z0-9][a-zA-Z0-9._:/-]{0,127}$/.test(allocation.model || '')
+        || !env.PARA_PLATFORM_GATEWAY_KEY?.trim()) {
+      throw new Error('platform_model_allocation_or_gateway_missing');
+    }
+    agentEnv.CODEX_API_KEY = env.PARA_PLATFORM_GATEWAY_KEY;
+    delete agentEnv.OPENAI_API_KEY;
+    delete agentEnv.DEVFLEET_CODEX_API_KEY_ENV;
+    agentEnv.PARA_PLATFORM_MODEL = allocation.model;
+  }
+  delete agentEnv.PARA_PLATFORM_GATEWAY_KEY;
   const agent = spawnWorker(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), 'para_e2e_agent.mjs')], {
     env: agentEnv, stdio: ['ignore', 'inherit', 'inherit'],
   });

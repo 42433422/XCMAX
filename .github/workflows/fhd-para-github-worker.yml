@@ -45,6 +45,9 @@ jobs:
       - name: Prepare existing Para executor
         env:
           PARA_CODEX_VERSION: ${{ vars.PARA_CODEX_VERSION }}
+          PARA_PLATFORM_POOL: ${{ vars.PARA_PLATFORM_POOL }}
+          PARA_PLATFORM_GATEWAY_URL: ${{ vars.PARA_PLATFORM_GATEWAY_URL }}
+          PARA_PLATFORM_GATEWAY_KEY: ${{ secrets.PARA_PLATFORM_GATEWAY_KEY }}
           PARA_CODEX_AUTH_JSON: ${{ secrets.PARA_CODEX_AUTH_JSON }}
           PARA_CODEX_CONFIG_TOML: ${{ secrets.PARA_CODEX_CONFIG_TOML }}
           PARA_CODEX_API_KEY: ${{ secrets.PARA_CODEX_API_KEY }}
@@ -61,6 +64,8 @@ jobs:
           DEVFLEET_WORKSPACE_ROOT: ${{ runner.temp }}/para-workspaces
           XCMAX_CONTROL_REPORTS_ENABLED: "1"
           DEVFLEET_CODEX_MODEL_CANDIDATES: ${{ vars.PARA_CODEX_MODEL_CANDIDATES }}
+          PARA_PLATFORM_POOL: ${{ vars.PARA_PLATFORM_POOL }}
+          PARA_PLATFORM_GATEWAY_KEY: ${{ secrets.PARA_PLATFORM_GATEWAY_KEY }}
           CODEX_API_KEY: ${{ secrets.PARA_CODEX_API_KEY }}
           MODSTORE_PARA_DISPATCH_TOKEN: ${{ secrets.MODSTORE_PARA_DISPATCH_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }} # job permissions are contents:read only
@@ -137,6 +142,9 @@ jobs:
       - name: Prepare existing Para executor
         env:
           PARA_CODEX_VERSION: ${{ vars.PARA_CODEX_VERSION }}
+          PARA_PLATFORM_POOL: ${{ vars.PARA_PLATFORM_POOL }}
+          PARA_PLATFORM_GATEWAY_URL: ${{ vars.PARA_PLATFORM_GATEWAY_URL }}
+          PARA_PLATFORM_GATEWAY_KEY: ${{ secrets.PARA_PLATFORM_GATEWAY_KEY }}
           PARA_CODEX_AUTH_JSON: ${{ secrets.PARA_CODEX_AUTH_JSON }}
           PARA_CODEX_CONFIG_TOML: ${{ secrets.PARA_CODEX_CONFIG_TOML }}
           PARA_CODEX_API_KEY: ${{ secrets.PARA_CODEX_API_KEY }}
@@ -153,6 +161,8 @@ jobs:
           DEVFLEET_WORKSPACE_ROOT: ${{ runner.temp }}/para-workspaces
           XCMAX_CONTROL_REPORTS_ENABLED: "1"
           DEVFLEET_CODEX_MODEL_CANDIDATES: ${{ vars.PARA_CODEX_MODEL_CANDIDATES }}
+          PARA_PLATFORM_POOL: ${{ vars.PARA_PLATFORM_POOL }}
+          PARA_PLATFORM_GATEWAY_KEY: ${{ secrets.PARA_PLATFORM_GATEWAY_KEY }}
           CODEX_API_KEY: ${{ secrets.PARA_CODEX_API_KEY }}
           MODSTORE_PARA_DISPATCH_TOKEN: ${{ secrets.MODSTORE_PARA_DISPATCH_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }} # job permissions are contents:read only

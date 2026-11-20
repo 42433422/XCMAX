@@ -40,3 +40,27 @@ test('resume waits for the original team and returns failure for failed verifica
     }
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test('platform execution uses the admitted route and limited gateway credential', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'para-platform-'));
+  try {
+    const env = { ...environment(root, 'resume'), PARA_PLATFORM_POOL: '1',
+      PARA_PLATFORM_GATEWAY_KEY: 'fixture-platform-key', CODEX_API_KEY: 'fixture-legacy-key' };
+    const stub = (data) => async () => ({ ok: true, json: async () => data });
+    await assert.rejects(runGithubExecutor({ env, fetchStatus: stub(identity),
+      spawnWorker: () => assert.fail('must not start without model admission') }), /platform_model_allocation/);
+    let reads = 0;
+    const model_allocation = { status: 'admitted', model: 'coding-route' };
+    const agent = new EventEmitter(); agent.kill = () => {};
+    const result = await runGithubExecutor({ env,
+      fetchStatus: () => stub({ ...identity, finished: ++reads > 1, conclusion: 'success', model_allocation })(),
+      spawnWorker: (_exe, _args, { env: child }) => {
+        assert.equal(child.CODEX_API_KEY, 'fixture-platform-key');
+        assert.equal(child.PARA_PLATFORM_GATEWAY_KEY, undefined);
+        assert.equal(child.PARA_PLATFORM_MODEL, 'coding-route');
+        return agent;
+      },
+    });
+    assert.equal(result, 0);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});

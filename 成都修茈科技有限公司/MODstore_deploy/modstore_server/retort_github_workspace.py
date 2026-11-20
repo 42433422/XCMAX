@@ -104,12 +104,16 @@ def _ensure_runner(request_id, protocol, effects):
     if not effects.get("run_id"):
         if not effects.get("runner_intent"):
             from modstore_server.para_github_runner import _claim_worker_slot
+            from modstore_server.para_model_admission import platform_model_admission
 
+            allocation = platform_model_admission()
+            if allocation and allocation["status"] != "admitted":
+                return {**effects, "model_allocation": allocation}
             with get_session_factory()() as db:
                 row = db.get(RetortEvolutionRun, request_id)
                 if not _claim_worker_slot(db, row, owner_key=f"retort:{request_id}"):
                     return effects
-            _save(request_id, runner_intent=True)
+            _save(request_id, runner_intent=True, model_allocation=allocation)
             github(
                 "POST",
                 f"/repos/{repo}/actions/workflows/{WORKFLOW}/dispatches",
@@ -151,7 +155,8 @@ def collect_execution(request_id):
         return {"status": "failed", "reason": "frozen_source_changed"}
     run = effects.get("worker", {})
     if not run:
-        return {"status": "waiting", "reason": "runner_response_unconfirmed"}
+        allocation = effects.get("model_allocation") or {}
+        return {"status": "waiting", "reason": allocation.get("reason", "runner_response_unconfirmed")}
     if run.get("status") == "completed":
         if run.get("conclusion") != "success":
             return {
@@ -302,6 +307,7 @@ def worker_status(request_id):
         "target_sha": target,
         "benchmark_protocol": protocol,
         "publication_candidate": candidate,
+        "model_allocation": effects.get("model_allocation"),
     }
 
 

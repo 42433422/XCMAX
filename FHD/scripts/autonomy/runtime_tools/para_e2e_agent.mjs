@@ -365,6 +365,10 @@ async function runCodexAgent(taskDir, prompt, log = () => {}) {
     execution, model, log,
     run: (args) => spawnCodexOnce(taskDir, prompt, { args, env }),
   });
+  if (process.env.PARA_PLATFORM_MODEL) {
+    if (!codexEnv.CODEX_API_KEY) throw new Error('platform_model_credential_not_granted');
+    return invoke(process.env.PARA_PLATFORM_MODEL, codexEnv);
+  }
   if (!modelGatewayEnabled()) {
     // Disabling fallback does not erase an explicit role's selected model.
     const model = modelCandidatesFromPrompt(prompt)[0]
