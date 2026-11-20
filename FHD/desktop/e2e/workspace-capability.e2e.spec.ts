@@ -144,6 +144,9 @@ test('backend restart retains the capability; restarting the main process rotate
 
 test('a preoccupied loopback port never supplies the application page before owned startup', async () => {
   await app.close()
+  // This is the final test. The guarded process must exit; the suite's
+  // afterAll must not attempt to close or relaunch that dead Electron process.
+  app = undefined!
   let unownedPages = 0
   const occupant = http.createServer((request, response) => {
     response.setHeader('Server', 'uvicorn')
@@ -177,7 +180,8 @@ test('a preoccupied loopback port never supplies the application page before own
   } finally {
     occupant.closeAllConnections()
     await new Promise<void>(resolve => occupant.close(() => resolve()))
-    await launch()
+    // The process intentionally exited. Relaunching immediately in this
+    // final fail-closed case races backend-port release on macOS CI.
+    app = undefined!
   }
-  expect(await status(page)).toBe(200)
 })
