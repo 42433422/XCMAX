@@ -47,7 +47,7 @@ jobs:
           PARA_CODEX_VERSION: ${{ vars.PARA_CODEX_VERSION }}
           PARA_CODEX_AUTH_JSON: ${{ secrets.PARA_CODEX_AUTH_JSON }}
           PARA_CODEX_CONFIG_TOML: ${{ secrets.PARA_CODEX_CONFIG_TOML }}
-          PARA_CODEX_API_KEY: ${{ secrets.PARA_CODEX_API_KEY }}
+          PARA_CODEX_API_KEY: ${{ secrets.PARA_CODEX_API_KEY || (!secrets.PARA_CODEX_AUTH_JSON && !secrets.PARA_CODEX_CONFIG_TOML && secrets.OPENAI_API_KEY) || '' }}
         run: bash scripts/autonomy/runtime_tools/prepare_github_executor.sh
       - name: Run original Para tasks without publication credentials
         env:
@@ -61,7 +61,7 @@ jobs:
           DEVFLEET_WORKSPACE_ROOT: ${{ runner.temp }}/para-workspaces
           XCMAX_CONTROL_REPORTS_ENABLED: "1"
           DEVFLEET_CODEX_MODEL_CANDIDATES: ${{ vars.PARA_CODEX_MODEL_CANDIDATES }}
-          CODEX_API_KEY: ${{ secrets.PARA_CODEX_API_KEY }}
+          CODEX_API_KEY: ${{ secrets.PARA_CODEX_API_KEY || (!secrets.PARA_CODEX_AUTH_JSON && !secrets.PARA_CODEX_CONFIG_TOML && secrets.OPENAI_API_KEY) || '' }}
           MODSTORE_PARA_DISPATCH_TOKEN: ${{ secrets.MODSTORE_PARA_DISPATCH_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }} # job permissions are contents:read only
         run: node "$RUNNER_TEMP/para-worker/github_para_executor.mjs"
@@ -139,7 +139,7 @@ jobs:
           PARA_CODEX_VERSION: ${{ vars.PARA_CODEX_VERSION }}
           PARA_CODEX_AUTH_JSON: ${{ secrets.PARA_CODEX_AUTH_JSON }}
           PARA_CODEX_CONFIG_TOML: ${{ secrets.PARA_CODEX_CONFIG_TOML }}
-          PARA_CODEX_API_KEY: ${{ secrets.PARA_CODEX_API_KEY }}
+          PARA_CODEX_API_KEY: ${{ secrets.PARA_CODEX_API_KEY || (!secrets.PARA_CODEX_AUTH_JSON && !secrets.PARA_CODEX_CONFIG_TOML && secrets.OPENAI_API_KEY) || '' }}
         run: bash scripts/autonomy/runtime_tools/prepare_github_executor.sh
       - name: Run original Para tasks without publication credentials
         env:
@@ -153,7 +153,7 @@ jobs:
           DEVFLEET_WORKSPACE_ROOT: ${{ runner.temp }}/para-workspaces
           XCMAX_CONTROL_REPORTS_ENABLED: "1"
           DEVFLEET_CODEX_MODEL_CANDIDATES: ${{ vars.PARA_CODEX_MODEL_CANDIDATES }}
-          CODEX_API_KEY: ${{ secrets.PARA_CODEX_API_KEY }}
+          CODEX_API_KEY: ${{ secrets.PARA_CODEX_API_KEY || (!secrets.PARA_CODEX_AUTH_JSON && !secrets.PARA_CODEX_CONFIG_TOML && secrets.OPENAI_API_KEY) || '' }}
           MODSTORE_PARA_DISPATCH_TOKEN: ${{ secrets.MODSTORE_PARA_DISPATCH_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }} # job permissions are contents:read only
         run: node "$RUNNER_TEMP/para-worker/github_para_executor.mjs"
