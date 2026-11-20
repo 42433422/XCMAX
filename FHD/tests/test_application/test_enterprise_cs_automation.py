@@ -728,6 +728,7 @@ async def test_ticket_intake_restart_reads_receipt_without_second_write(cs_db, m
 async def test_independent_conversations_do_not_share_customer_turn_lock(monkeypatch):
     import asyncio
     from contextlib import contextmanager
+
     from app.application import enterprise_cs_automation as module
 
     class DummyDb:
@@ -774,6 +775,7 @@ async def test_independent_conversations_do_not_share_customer_turn_lock(monkeyp
 async def test_customer_turn_queue_is_bounded_and_released(monkeypatch):
     import asyncio
     from contextlib import contextmanager
+
     from app.application import enterprise_cs_automation as module
 
     class DummyDb:
