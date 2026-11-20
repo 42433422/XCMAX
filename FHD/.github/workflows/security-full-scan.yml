@@ -238,6 +238,7 @@ jobs:
           python FHD/scripts/security/security_release_gate.py
           --reports-dir "${RUNNER_TEMP}/security-reports"
           --release-sha "${{ steps.scan-source.outputs.sha }}"
+          --baseline FHD/config/security_baseline.json
           --output "${RUNNER_TEMP}/security-release-gate.json"
 
       - name: Upload auditable security evidence even when gate fails
@@ -274,8 +275,14 @@ jobs:
           body="$(printf '安全检查门禁未通过。\n\n- SHA: `%s`\n- 运行记录: %s\n- 证据: artifact `xcagi-security-release-reports` / `xcagi-security-release-native`\n\n处置方式：修复代码，或按 expires 规则登记误报抑制，然后手动重跑本 workflow（release_sha 留空即扫 main 当前 HEAD）。\n' "$SHA" "$RUN_URL")"
           number="$(gh issue list --repo "$REPO" --state open --limit 100 \
             --json number,title --jq ".[] | select(.title == \"$title\") | .number" | head -1)"
+          assignee="${{ vars.SECURITY_ISSUE_ASSIGNEE }}"
+          if [ -z "$assignee" ] && [ -f .github/CODEOWNERS ]; then
+            assignee="$(grep -m1 '^/.github/' .github/CODEOWNERS | awk '{print $1}' | tr -d '@')"
+          fi
           if [ -n "$number" ]; then
             gh issue comment "$number" --repo "$REPO" --body "$body"
+          elif [ -n "$assignee" ]; then
+            gh issue create --repo "$REPO" --title "$title" --body "$body" --assignee "$assignee"
           else
             gh issue create --repo "$REPO" --title "$title" --body "$body"
           fi
