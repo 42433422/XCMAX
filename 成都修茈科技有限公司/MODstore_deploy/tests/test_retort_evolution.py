@@ -471,7 +471,6 @@ def test_feedback_selection_scans_past_already_used_candidates(setup, monkeypatc
     from modstore_server import retort_customer_feedback as feedback
     from modstore_server.models_cs import CustomerServiceSession, CustomerServiceTicket
 
-    monkeypatch.setattr(feedback, "_eligible", lambda *_: True)
     with get_session_factory()() as db:
         customer = User(username=uuid4().hex, password_hash="test-only", is_admin=False)
         db.add(customer)
@@ -494,6 +493,9 @@ def test_feedback_selection_scans_past_already_used_candidates(setup, monkeypatc
         ]
         db.add_all(tickets)
         db.flush()
+        monkeypatch.setattr(
+            feedback, "_eligible", lambda _db, item, _domain: item.user_id == customer.id
+        )
         selected = feedback._candidates(db, "platform", {(item.id, "") for item in tickets[1:]})
         assert [item["ticket_id"] for item in selected.values()] == [tickets[0].id]
 
