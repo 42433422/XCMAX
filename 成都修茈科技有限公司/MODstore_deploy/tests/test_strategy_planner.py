@@ -54,6 +54,37 @@ def test_fit_envelope_stops_at_capacity():
     assert all(row["budget"]["proposals"] >= 1 for row in kept)
 
 
+def test_fallback_picks_real_domain_gap(monkeypatch):
+    from modstore_server import strategy_bets
+
+    monkeypatch.setattr(
+        strategy_bets, "read_metric", lambda metric: 0.0 if metric == strategy_bets.DOMAIN_METRIC else None
+    )
+    context = {
+        "assets": {"status": "unknown"},
+        "repo": {"status": "ok"},
+        "domains": {"status": "ok"},
+    }
+    rows = strategy_planner.fallback_candidates(context)
+    assert len(rows) == 1
+    assert rows[0]["metric_id"] == strategy_bets.DOMAIN_METRIC
+    assert rows[0]["window_days"] == 30
+
+
+def test_fallback_returns_empty_when_targets_met(monkeypatch):
+    from modstore_server import strategy_bets
+
+    monkeypatch.setattr(
+        strategy_bets,
+        "read_metric",
+        lambda metric: 1.0 if metric == strategy_bets.DOMAIN_METRIC else None,
+    )
+    rows = strategy_planner.fallback_candidates(
+        {"assets": {"status": "unknown"}, "repo": {"status": "ok"}, "domains": {"status": "ok"}}
+    )
+    assert rows == []
+
+
 def test_new_bet_id_is_deterministic_and_valid():
     first = strategy_planner._new_bet_id("意图准确率提升")
     second = strategy_planner._new_bet_id("意图准确率提升")

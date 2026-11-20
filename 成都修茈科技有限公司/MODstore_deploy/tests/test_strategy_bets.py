@@ -69,8 +69,8 @@ def test_review_due_reads_report_and_records_hit(tmp_path, monkeypatch):
     assert reviewed[0]["value"] == pytest.approx(0.91)
 
 
-def test_review_due_without_evidence_is_inconclusive(monkeypatch):
-    monkeypatch.delenv("MODSTORE_INTENT_REPORT_PATH", raising=False)
+def test_review_due_without_evidence_is_inconclusive(tmp_path, monkeypatch):
+    monkeypatch.setenv("MODSTORE_INTENT_REPORT_PATH", str(tmp_path / "missing.json"))
     _register()
 
     future = datetime.now(timezone.utc) + timedelta(days=15)
@@ -91,6 +91,35 @@ def test_audit_flags_mismatch_after_evidence_changes(tmp_path, monkeypatch):
 
     report.write_text(json.dumps({"accuracy": 0.10}), encoding="utf-8")
     assert strategy_bets.audit_outcomes() == {"verified": 0, "mismatched": 1}
+
+
+def test_read_intent_accuracy_from_rule_counts(tmp_path, monkeypatch):
+    report = tmp_path / "intent.json"
+    report.write_text(
+        json.dumps(
+            {
+                "rule": {
+                    "counts": {
+                        "core": {"correct": 24, "total": 24},
+                        "semantic": {"correct": 60, "total": 73},
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("MODSTORE_INTENT_REPORT_PATH", str(report))
+    assert strategy_bets.read_metric("intent_accuracy") == pytest.approx(84 / 97)
+
+
+def test_read_domain_rated_ratio(tmp_path, monkeypatch):
+    audit = tmp_path / "domains.json"
+    audit.write_text(
+        json.dumps({"domains": [{"status": "RATED"}, {"status": "UNRATED"}]}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("MODSTORE_DOMAIN_AUDIT_PATH", str(audit))
+    assert strategy_bets.read_metric(strategy_bets.DOMAIN_METRIC) == pytest.approx(0.5)
 
 
 def test_expired_or_exhausted_bet_is_not_active():

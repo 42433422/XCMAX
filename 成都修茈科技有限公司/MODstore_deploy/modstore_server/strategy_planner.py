@@ -56,6 +56,7 @@ def _digest(payload: Any) -> str:
 
 
 def collect_context() -> Dict[str, Any]:
+    strategy_bets.apply_evidence_defaults()
     return {
         "assets": _model_assets(),
         "repo": _repo_signals(),
@@ -156,7 +157,7 @@ def build_prompt(context: Dict[str, Any]) -> str:
         "你是产品战略负责人。根据下面的证据，提出 1-3 个可结算的产品赌注。\n"
         "规则：\n"
         "1) 只能使用 metric_id ∈ "
-        f"{sorted(list(strategy_bets.METRIC_SOURCES) + [strategy_bets.REVENUE_METRIC])}\n"
+        f"{sorted(list(strategy_bets.METRIC_SOURCES) + [strategy_bets.REVENUE_METRIC, strategy_bets.DOMAIN_METRIC])}\n"
         "2) 每个赌注必须有可证伪的假设、明确阈值、窗口 1-365 天、至少一条 kill 条件\n"
         "3) direction 只能是 max（越高越好）或 min（越低越好）\n"
         "4) expected_value 和 effort 各取 1-5 的整数\n"
@@ -189,9 +190,11 @@ def validate_candidate(candidate: Dict[str, Any]) -> Optional[str]:
     for field in _REQUIRED_FIELDS:
         if field not in candidate:
             return f"missing_{field}"
-    if candidate["metric_id"] not in strategy_bets.METRIC_SOURCES and (
-        candidate["metric_id"] != strategy_bets.REVENUE_METRIC
-    ):
+    supported = set(strategy_bets.METRIC_SOURCES) | {
+        strategy_bets.REVENUE_METRIC,
+        strategy_bets.DOMAIN_METRIC,
+    }
+    if candidate["metric_id"] not in supported:
         return "unsupported_metric"
     if candidate.get("direction") not in strategy_bets.DIRECTIONS:
         return "invalid_direction"
@@ -245,13 +248,59 @@ def _new_bet_id(title: str) -> str:
     return f"bet-{slug or 'plan'}-{suffix}-{date}"
 
 
+FALLBACK_TARGETS = (
+    (strategy_bets.DOMAIN_METRIC, 0.5, "max", "18 域证据评级覆盖率"),
+    ("intent_accuracy", 0.85, "max", "意图识别准确率"),
+    ("slo_availability", 0.99, "max", "SLO 可用性"),
+    ("slo_error_rate", 0.01, "min", "SLO 错误率"),
+    ("legacy_ratio", 0.25, "min", "遗留功能使用占比"),
+)
+
+
+def fallback_candidates(context: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """无 LLM 时按真实缺口规则生成候选；没有缺口就返回空，不硬凑。"""
+    rows: List[Dict[str, Any]] = []
+    for metric_id, threshold, direction, label in FALLBACK_TARGETS:
+        value = strategy_bets.read_metric(metric_id)
+        if value is None:
+            continue
+        if direction == "max":
+            gap = (threshold - value) / max(threshold, 1e-9)
+        else:
+            gap = (value - threshold) / max(threshold, 1e-9)
+        if gap <= 0.02:
+            continue
+        window = 30 if metric_id == strategy_bets.DOMAIN_METRIC else 14
+        rows.append(
+            {
+                "title": f"提升{label}",
+                "hypothesis": f"{label} 当前 {value:.4f}，目标 {threshold}，缺口可被本轮改造收敛",
+                "metric_id": metric_id,
+                "threshold": threshold,
+                "direction": direction,
+                "window_days": window,
+                "kill_criteria": [f"{window} 天内{label}没有改善就停止投入"],
+                "expected_value": min(5, 3 + int(round(gap * 4))),
+                "effort": 3,
+                "rationale": f"规则触发：归一化缺口 {gap:.4f}；证据状态 "
+                f"assets={context['assets'].get('status')} "
+                f"repo={context['repo'].get('status')} "
+                f"domains={context['domains'].get('status')}",
+            }
+        )
+    return rows
+
+
 def plan_strategy(*, dry_run: bool = False) -> Dict[str, Any]:
     context = collect_context()
     context_sha = _digest(context)
 
-    from modstore_server.employee_pack_proposal import _call_llm
+    try:
+        from modstore_server.employee_pack_proposal import _call_llm
 
-    raw = _call_llm(build_prompt(context))
+        raw = _call_llm(build_prompt(context))
+    except Exception:
+        raw = {}
     text = ""
     if isinstance(raw, dict):
         text = str(raw.get("text") or raw.get("content") or "")
@@ -259,6 +308,10 @@ def plan_strategy(*, dry_run: bool = False) -> Dict[str, Any]:
             message = raw["choices"][0].get("message") or {}
             text = str(message.get("content") or "")
     candidates = parse_plan(text)
+    source = "llm"
+    if not candidates:
+        candidates = fallback_candidates(context)
+        source = "deterministic_fallback"
 
     ranked = rank_candidates(candidates)
     kept = fit_envelope(ranked, context["envelope"], [])
@@ -296,7 +349,8 @@ def plan_strategy(*, dry_run: bool = False) -> Dict[str, Any]:
             }
         )
     return {
-        "ok": bool(text),
+        "ok": True,
+        "source": source,
         "dry_run": dry_run,
         "context_sha256": context_sha,
         "candidates": len(candidates),

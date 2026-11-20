@@ -31,14 +31,16 @@ DEFAULT_BUDGET: Dict[str, int] = {
 }
 DIRECTIONS = {"max", "min"}
 
-# metric_id -> (环境变量, JSON 字段)。只读已有报告，不新增采集。
-METRIC_SOURCES: Dict[str, tuple] = {
-    "slo_availability": ("MODSTORE_SLO_REPORT_PATH", "availability"),
-    "slo_error_rate": ("MODSTORE_SLO_REPORT_PATH", "error_rate"),
-    "intent_accuracy": ("MODSTORE_INTENT_REPORT_PATH", "accuracy"),
-    "legacy_ratio": ("MODSTORE_LEGACY_REPORT_PATH", "legacy_ratio"),
+# 只读已有报告，不新增采集；具体取值见 ``read_metric``。
+METRIC_SOURCES: Dict[str, str] = {
+    "slo_availability": "SLO-API-01",
+    "slo_error_rate": "SLO-API-03",
+    "intent_accuracy": "FHD/metrics/intent_benchmark_latest.json",
+    "legacy_ratio": "FHD/metrics/legacy-usage-168h.json",
 }
 REVENUE_METRIC = "revenue_monthly"
+DOMAIN_METRIC = "domain_rated_ratio"
+DEFAULT_DOMAIN_AUDIT = "FHD/config/domain_audit.json"
 
 REGISTERED = "strategy_bet_registered"
 SPEND = "strategy_bet_spend"
@@ -98,7 +100,7 @@ def register_bet(
     """登记一个赌注（幂等）。返回账本里的预注册记录。"""
     if not BET_ID_RE.match(bet_id or ""):
         raise ValueError("bet_id 必须为 3-64 位小写字母/数字/._-")
-    if metric_id not in METRIC_SOURCES and metric_id != REVENUE_METRIC:
+    if metric_id not in METRIC_SOURCES and metric_id not in {REVENUE_METRIC, DOMAIN_METRIC}:
         raise ValueError(f"未支持的 metric_id: {metric_id}")
     if direction not in DIRECTIONS:
         raise ValueError("direction 只能是 max 或 min")
@@ -222,6 +224,26 @@ def record_spend(
     return bet_state(bet_id)
 
 
+def repo_root() -> Path:
+    return Path(__file__).resolve().parents[3]
+
+
+def apply_evidence_defaults() -> None:
+    """缺环境变量时回落到仓库内已有的报告；显式配置仍然优先。"""
+    root = repo_root()
+    metrics = root / "FHD" / "metrics"
+    slo_candidates = sorted(metrics.glob("slo-measured-*.json"))
+    defaults = {
+        "MODSTORE_SLO_REPORT_PATH": slo_candidates[-1] if slo_candidates else None,
+        "MODSTORE_INTENT_REPORT_PATH": metrics / "intent_benchmark_latest.json",
+        "MODSTORE_LEGACY_REPORT_PATH": metrics / "legacy-usage-168h.json",
+        "MODSTORE_DOMAIN_AUDIT_PATH": root / DEFAULT_DOMAIN_AUDIT,
+    }
+    for key, value in defaults.items():
+        if value is not None and not os.environ.get(key):
+            os.environ[key] = str(value)
+
+
 def _read_json_report(env_var: str) -> Optional[Dict[str, Any]]:
     raw = os.environ.get(env_var, "")
     if not raw:
@@ -234,6 +256,12 @@ def _read_json_report(env_var: str) -> Optional[Dict[str, Any]]:
     except (OSError, UnicodeError, json.JSONDecodeError):
         return None
     return data if isinstance(data, dict) else None
+
+
+def _number(value: Any) -> Optional[float]:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value)
 
 
 def _revenue_monthly() -> Optional[float]:
@@ -255,18 +283,41 @@ def _revenue_monthly() -> Optional[float]:
 
 
 def read_metric(metric_id: str) -> Optional[float]:
+    apply_evidence_defaults()
     if metric_id == REVENUE_METRIC:
         return _revenue_monthly()
-    source = METRIC_SOURCES.get(metric_id)
-    if not source:
-        return None
-    report = _read_json_report(source[0])
-    if not report:
-        return None
-    value = report.get(source[1])
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return None
-    return float(value)
+    if metric_id in {"slo_availability", "slo_error_rate"}:
+        report = _read_json_report("MODSTORE_SLO_REPORT_PATH")
+        if not report:
+            return None
+        reading = (report.get("readings") or {}).get(METRIC_SOURCES[metric_id]) or {}
+        return _number(reading.get("reading_numeric"))
+    if metric_id == "intent_accuracy":
+        report = _read_json_report("MODSTORE_INTENT_REPORT_PATH")
+        if not report:
+            return None
+        direct = _number(report.get("accuracy"))
+        if direct is not None:
+            return direct
+        counts = ((report.get("rule") or {}).get("counts") or {})
+        correct = sum(int((row or {}).get("correct") or 0) for row in counts.values())
+        total = sum(int((row or {}).get("total") or 0) for row in counts.values())
+        return correct / total if total else None
+    if metric_id == "legacy_ratio":
+        report = _read_json_report("MODSTORE_LEGACY_REPORT_PATH")
+        return _number((report or {}).get("legacy_ratio"))
+    if metric_id == DOMAIN_METRIC:
+        report = _read_json_report("MODSTORE_DOMAIN_AUDIT_PATH")
+        domains = (report or {}).get("domains") or []
+        if not isinstance(domains, list) or not domains:
+            return None
+        rated = [
+            row
+            for row in domains
+            if isinstance(row, dict) and str(row.get("status") or "").upper() != "UNRATED"
+        ]
+        return len(rated) / len(domains)
+    return None
 
 
 def judge(metric_id: str, value: Optional[float], threshold: float, direction: str) -> str:
