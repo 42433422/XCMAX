@@ -177,6 +177,36 @@ def test_missing_model_result_is_not_reported_as_invalid_business_plan(monkeypat
     risk_gate.evaluate.assert_not_called()
 
 
+def test_context_budget_failure_is_visible_without_entering_execution(monkeypatch):
+    from app.domain.neuro.cognition.plan_graph_hooks import finalize_planned_graph
+
+    reason = "系统指令和工具定义超过模型的上下文预算。"
+    plan = finalize_planned_graph(
+        None,
+        plan_id="over-budget",
+        context={"planning_failure_kind": "planner_error", "planning_failure_reason": reason},
+        validate=lambda _: None,
+        warn=lambda _: None,
+        plan_type=PlanGraph,
+        node_type=WorkflowNode,
+    )
+    callbacks = Mock()
+    callbacks._resume_pending_dynamic_workflow.return_value = (False, None)
+    planner = Mock()
+    planner.plan.return_value = plan
+    risk_gate = Mock()
+    monkeypatch.setattr(
+        "app.application.facades.tools_facade.get_workflow_tool_registry", lambda: {}
+    )
+    result = PlannedWorkflowDispatch({}, callbacks, planner, risk_gate, Mock()).handle(
+        "owner", "请查询", "pro", {}, "请查询"
+    )
+    assert result["success"] is False
+    assert result["response"] == reason + "本次没有执行任何业务操作。"
+    assert result["data"]["execution_started"] is False
+    risk_gate.evaluate.assert_not_called()
+
+
 def test_repair_failure_message_is_not_model_connection_error(monkeypatch):
     callbacks = Mock()
     callbacks._resume_pending_dynamic_workflow.return_value = (False, None)

@@ -11,7 +11,6 @@ import type { useChatSessionActivity } from '../useChatSessionActivity'
 import type { ShipmentTask } from '../useShipmentTask'
 import type { ChatPlannerPayload } from '@/types/chat'
 import chatApi from '@/api/chat'
-import agentRunsApi from '@/api/agentRuns'
 import { useAiSdkChatRound } from './useAiSdkChatRound'
 import productsApi from '@/api/products'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
@@ -25,7 +24,7 @@ import { extractLikelyProductQueryKeyword } from '../useChatPersistence'
 import { persistDetachedPlannerResult, recordProductFastPathTask } from '../useChatSessionActivity'
 import { asPlannerPayload, errorMessage, requiresTurnReconciliation } from './chatOrchestrationShared'
 import { classifyRawError } from '@/utils/networkStability'
-import { droppedRoundFromHistory, droppedRoundPresentation } from '@/utils/droppedRoundPresentation'
+import { droppedRoundFromHistory, readDroppedRoundOutcome } from '@/utils/droppedRoundPresentation'
 import { aiModBriefFromChat, generateAndInstallAiMod } from '@/utils/aiModDeliveryApi'
 import type { UiChatMessageExtras } from '@/types/chat-ui'
 import { readChatModelRoute, recordChatModelRoute } from '@/utils/chatModelRoute'
@@ -673,7 +672,8 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
               replayController.signal,
             )
             if (result.text) streamPlain = result.text
-            resumed = !result.error && !sseError && receivedDone && isOwnerCurrent()
+            // The replayed terminal receipt is authoritative even if the socket closes afterward.
+            resumed = !sseError && receivedDone && !awaitingAuthorization && isOwnerCurrent()
           } catch {
             resumed = false
           } finally {
@@ -690,24 +690,9 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         }
 
         if (dropped && round.isActive()) {
-          let presentation = droppedRoundPresentation({ reachable: false })
-          try {
-            const convo = await chatApi.getConversation(String(requestScope.sessionId || ''), { turn_id: requestScope.turnId })
-            presentation = droppedRoundFromHistory(convo, String(requestScope.turnId || ''))
-          } catch {
-            presentation = droppedRoundPresentation({ reachable: false })
-          }
-          if (presentation.status === 'unknown' && streamRunId && round.isActive()) {
-            try {
-              const receipt = await agentRunsApi.getRun(streamRunId)
-              const run = receipt.data
-              if (receipt.success && run?.run_id === streamRunId && run.status === 'failed') {
-                presentation = droppedRoundPresentation({ reachable: true, serverStatus: run.status, serverText: run.error })
-              }
-            } catch {
-              // Keep the unknown state if the authoritative run cannot be read.
-            }
-          }
+          const presentation = await readDroppedRoundOutcome(
+            String(requestScope.sessionId || ''), requestScope.turnId, streamRunId, () => round.isActive(),
+          )
           if (!round.isActive()) return
           const pendingText = err instanceof IncompletePlannerSseError
             ? `${streamPlain.trim()}${streamPlain.trim() ? '\n\n' : ''}[回复未完成] `

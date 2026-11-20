@@ -1,3 +1,5 @@
+import agentRunsApi from '@/api/agentRuns'
+import chatApi from '@/api/chat'
 import { asArray, asRecord, asString } from './typeGuards'
 
 export type DroppedRoundStatus =
@@ -73,4 +75,31 @@ export function droppedRoundFromHistory(conversation: unknown, turnId: string) {
     }
   }
   return droppedRoundPresentation({ reachable: true })
+}
+
+/** Read the persisted turn first; only an exact failed run may fill a missing receipt. */
+export async function readDroppedRoundOutcome(
+  sessionId: string,
+  turnId: string | undefined,
+  runId: string,
+  isActive: () => boolean,
+): Promise<ReturnType<typeof droppedRoundPresentation>> {
+  let presentation = droppedRoundPresentation({ reachable: false })
+  try {
+    const convo = await chatApi.getConversation(sessionId, { turn_id: turnId })
+    presentation = droppedRoundFromHistory(convo, turnId || '')
+  } catch {
+    // The original conversation may not be available after disconnecting.
+  }
+  if (presentation.status !== 'unknown' || !runId || !isActive()) return presentation
+  try {
+    const receipt = await agentRunsApi.getRun(runId)
+    const run = receipt.data
+    if (receipt.success && run?.run_id === runId && run.status === 'failed') {
+      return droppedRoundPresentation({ reachable: true, serverStatus: run.status, serverText: run.error })
+    }
+  } catch {
+    // Keep the unknown state if the authoritative run cannot be read.
+  }
+  return presentation
 }

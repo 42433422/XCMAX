@@ -338,6 +338,24 @@ describe('useChatOrchestration stream', () => {
     expect(getConversation).not.toHaveBeenCalled()
   })
 
+  it('keeps a replayed terminal failure when that connection also closes after the receipt', async () => {
+    const error = '规划请求超过上下文预算。本次没有执行任何业务操作。'
+    readPlannerSseResponse.mockImplementationOnce(async (_response, onEvent) => {
+      onEvent({ type: 'tool_progress', run_id: 'run-budget' })
+      throw new TypeError('Failed to fetch')
+    }).mockImplementationOnce(async (_response, onEvent) => {
+      onEvent({ type: 'done', result: { success: false, response: error } })
+      throw new TypeError('Failed to fetch')
+    })
+    const api = useChatOrchestration({ sessionId: ref('planning-failure') })
+    api.messages.value = [{ role: 'ai', content: '', time: '', streamingShell: true }]
+    await api.sendMessage('hello')
+    expect(applyPlainTextToMessageIndex).toHaveBeenLastCalledWith(0, error, { workflowAction: 'failed' })
+    expect(api.messages.value[0].workflowAction).toBe('failed')
+    expect(getConversation).not.toHaveBeenCalled()
+    expect(getRun).not.toHaveBeenCalled()
+  })
+
   it('reads the original run failure when the stream and history lack a receipt', async () => {
     const error = '系统指令和工具定义超过模型的上下文预算。'
     const api = useChatOrchestration({ sessionId: ref('planning-failure') })

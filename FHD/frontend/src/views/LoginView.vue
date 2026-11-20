@@ -3,6 +3,7 @@ import { onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { authApi } from '@/api/auth'
+import { hasLocalWorkspace } from '@/api/localWorkspace'
 import { loginPageTitle } from '@/constants/loginBranding'
 import { fetchProductSku } from '@/utils/productSku'
 import { isDesktopShell } from '@/utils/desktopShell'
@@ -142,6 +143,10 @@ onUnmounted(() => {
 
       <div class="login-panel-inner">
         <h1 id="login-heading" class="login-heading">{{ loginHeading }}</h1>
+        <router-link v-if="hasLocalWorkspace()" :to="{ name: 'local-workspace' }" class="login-help-link">
+          打开本地工作区
+        </router-link>
+
         <div v-if="accountKind === 'enterprise'" class="login-mode-tabs" role="tablist">
           <button type="button" role="tab" :class="{ active: loginMode === 'password' }" @click="switchLoginMode('password')">
             {{ $t('login.tabPassword') }}

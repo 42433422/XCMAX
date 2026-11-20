@@ -323,6 +323,35 @@ describe('router/index enhanced', () => {
     expect(router.currentRoute.value.name).toBe('login')
   })
 
+  it('opens the desktop local workspace with cloud authentication unavailable', async () => {
+    mockIsDesktopShell.mockReturnValue(true)
+    mockFetchProductSku.mockRejectedValueOnce(new Error('offline'))
+    mockAccountProfileStore.loaded = false
+    mockAccountProfileStore.refreshFromServer.mockRejectedValueOnce(new Error('offline'))
+
+    const validations = mockValidateEnterpriseSession.mock.calls.length
+    const profileRefreshes = mockAccountProfileStore.refreshFromServer.mock.calls.length
+    const skuReads = mockFetchProductSku.mock.calls.length
+    try {
+      await router.replace('/local-workspace')
+      expect(router.currentRoute.value.name).toBe('local-workspace')
+      expect(router.currentRoute.value.meta.hideChrome).toBe(true)
+      expect(mockValidateEnterpriseSession).toHaveBeenCalledTimes(validations)
+      expect(mockAccountProfileStore.refreshFromServer).toHaveBeenCalledTimes(profileRefreshes)
+      expect(mockFetchProductSku).toHaveBeenCalledTimes(skuReads)
+    } finally {
+      mockFetchProductSku.mockReset().mockResolvedValue('generic')
+      mockAccountProfileStore.refreshFromServer.mockReset().mockResolvedValue(undefined)
+    }
+  })
+
+  it('keeps the local workspace out of the web shell', async () => {
+    mockIsDesktopShell.mockReturnValue(false)
+    await router.push('/login')
+    await router.push('/local-workspace')
+    expect(router.currentRoute.value.name).toBe('login')
+  })
+
   it('allows navigation to chat home', async () => {
     await router.push('/')
     expect(router.currentRoute.value.name).toBe('chat')

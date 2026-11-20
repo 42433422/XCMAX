@@ -1,6 +1,6 @@
 import type { RouteRecordRaw } from 'vue-router'
 
-/** 基础入口路由：index.html 重定向 / 登录系列 / 对话 / 知识库 / 局域网授权 */
+/** 基础入口路由：index.html 重定向 / 登录系列 / 对话 / 独立工作区 / 知识库 / 局域网授权 */
 export const CORE_ROUTES: RouteRecordRaw[] = [
   {
     path: '/index.html',
@@ -11,6 +11,12 @@ export const CORE_ROUTES: RouteRecordRaw[] = [
     name: 'login',
     component: () => import('../../views/LoginView.vue'),
     meta: { title: '登录', publicAccess: true, hideChrome: true },
+  },
+  {
+    path: '/local-workspace',
+    name: 'local-workspace',
+    component: () => import('../../views/LocalWorkspaceView.vue'),
+    meta: { title: '本地工作区', publicAccess: true, hideChrome: true },
   },
   {
     path: '/login/help',
