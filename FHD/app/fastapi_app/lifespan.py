@@ -192,6 +192,14 @@ async def lifespan(app: FastAPI):
 
     _start_agent_tasks(app)
 
+    from app.mod_sdk.product_plane import is_enterprise_client_plane
+
+    cs_scheduler = None
+    if not passive_node_enabled() and not is_enterprise_client_plane():
+        from app.application.enterprise_cs_scheduler import start_enterprise_cs_scheduler
+
+        cs_scheduler = start_enterprise_cs_scheduler()
+
     if not passive_node_enabled():
         try:
             from app.application.dataset_rag.auto_sync_scheduler import (
@@ -281,6 +289,8 @@ async def lifespan(app: FastAPI):
 
         await asyncio.to_thread(wait_for_background_mod_load, app)
         _stop_agent_tasks(app)
+        if cs_scheduler is not None:
+            cs_scheduler.shutdown(wait=False)
         if elt_watchdog_started:
             try:
                 from app.application.elt.stale_watchdog import stop_stale_watchdog

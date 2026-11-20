@@ -61,7 +61,7 @@ export function useCsInboxBridge(options: Options) {
         await nextTick()
         if (current()) restoreScroll()
       }
-      return conversationUpdate.changed || messageUpdate.changed || active?.cs_status === 'ai_processing'
+      return conversationUpdate.changed || messageUpdate.changed || (active?.cs_status === 'ai_processing' || active?.cs_status === 'ai_retrying')
     } catch {
       return false
     } finally {
