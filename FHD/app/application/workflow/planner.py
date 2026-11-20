@@ -247,10 +247,6 @@ class LLMWorkflowPlanner:
                 and plan_fingerprint(candidate) != reviewed_fingerprint
             ):
                 return "目标核对后的计划发生变化，必须重新核对"
-            if len(batch_files) > 1 and not _bind_attachment_batch(candidate, batch_files):
-                return (
-                    "本轮批量导入须用一个 elt_import.execute 节点，file_paths 按附件清单逐项列出。"
-                )
             if (candidate.metadata or {}).get("response_mode") == "reply":
                 reply_nodes = [
                     node
@@ -265,6 +261,12 @@ class LLMWorkflowPlanner:
                 ):
                     return "普通回复计划必须是唯一的内部 conversation.reply 节点"
                 return validate_plan_graph(candidate)
+            if _standalone_question(candidate):
+                return validate_plan_graph(candidate)
+            if len(batch_files) > 1 and not _bind_attachment_batch(candidate, batch_files):
+                return (
+                    "本轮批量导入须用一个 elt_import.execute 节点，file_paths 按附件清单逐项列出。"
+                )
             for node in candidate.nodes or []:
                 if node.tool_id == "clarify" and node.action == "ask":
                     node.risk, node.idempotent = "low", True

@@ -31,6 +31,30 @@ def _make_planner(completion=None) -> LLMWorkflowPlanner:
         return LLMWorkflowPlanner(completion=completion)
 
 
+@pytest.mark.parametrize("kind", ["reply", "clarify"])
+def test_batch_import_can_ask_for_clarification_before_planning_writes(monkeypatch, kind):
+    question = "请确认这两份文件分别导入什么数据？"
+    if kind == "reply":
+        node = WorkflowNode("reply", "conversation", "reply", params={"response": question})
+        metadata = {"response_mode": "reply", "reply": question, "planning_tier": "light"}
+    else:
+        node = WorkflowNode("question", "clarify", "ask", params={"question": question})
+        metadata = {}
+    planner = _make_planner()
+    monkeypatch.setattr(planner, "_plan_with_llm", lambda *args: PlanGraph(
+        plan_id="p", intent="clarification", nodes=[node], metadata=metadata,
+    ))
+    files = [{"id": "one", "name": "one.xlsx", "suffix": ".xlsx"},
+             {"id": "two", "name": "two.xlsx", "suffix": ".xlsx"}]
+    result = planner.plan("1", "导入", {"elt_import": {"actions": {"execute": {}}}}, {
+        "artifact_ids": ["one", "two"], "file_context": {"attachment_manifest": files},
+    })
+    assert not result.metadata.get("planning_rejected")
+    assert len(result.nodes) == 1
+    assert (result.nodes[0].tool_id, result.nodes[0].action) == ("conversation", "reply")
+    assert result.nodes[0].params["response"] == question
+
+
 def _ambiguous_delete_plan(plan_id: str = "p_delete") -> PlanGraph:
     delete_node = WorkflowNode(
         node_id="delete_customer",
