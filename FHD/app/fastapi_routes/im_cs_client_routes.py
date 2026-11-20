@@ -31,6 +31,7 @@ from app.application.im_app_service import (
     ensure_im_tables,
 )
 from app.db import HostSessionLocal, get_host_engine
+from app.db.models.im import ImCustomerServiceAutomationState, ImMessage
 from app.db.models.user import User
 from app.infrastructure.auth.dependencies import (
     CurrentUser,
@@ -205,6 +206,7 @@ def _canonical_thread(db: Any, customer: User, *, limit: int) -> dict[str, Any]:
 @router.get(_REMOTE_PATH)
 async def remote_enterprise_cs_messages(
     request: Request,
+    background_tasks: BackgroundTasks,
     limit: int = Query(default=100, ge=1, le=100),
 ):
     """Production SSOT read endpoint; identity comes only from a verified market JWT."""
@@ -213,7 +215,31 @@ async def remote_enterprise_cs_messages(
     db = HostSessionLocal()
     try:
         customer = _resolve_canonical_customer(db, identity)
-        return _canonical_thread(db, customer, limit=limit)
+        result = _canonical_thread(db, customer, limit=limit)
+        conversation_id = int(result["conversation"]["id"])
+        state = db.get(ImCustomerServiceAutomationState, conversation_id)
+        watermark = int(state.last_customer_message_id or 0) if state else 0
+        pending = db.scalar(
+            select(ImMessage.id)
+            .where(
+                ImMessage.conversation_id == conversation_id,
+                ImMessage.sender_user_id == int(customer.id),
+                ImMessage.origin == "customer",
+                ImMessage.id > watermark,
+            )
+            .order_by(ImMessage.id.asc())
+            .limit(1)
+        )
+        if pending is not None:
+            background_tasks.add_task(
+                process_enterprise_cs_customer_message,
+                conversation_id,
+                int(customer.id),
+                int(pending),
+                "",
+                market_token=_bearer_token(request),
+            )
+        return result
     except HTTPException:
         raise
     except RECOVERABLE_ERRORS:
