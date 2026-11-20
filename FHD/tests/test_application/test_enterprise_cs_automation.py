@@ -403,6 +403,8 @@ async def test_explicit_issue_uses_authenticated_idempotent_intake_without_model
     )
     assert result["action"] == "issue_intake"
     assert result["cs_mode"] == mode
+    if mode == "human":
+        assert result["cs_status"] == "human_active"
     assert calls[0][0] == "fixture-customer-token"
     payload = calls[0][2]["payload"]
     assert "Windows版聊天思考过久会断连、报500" in payload["description"]
@@ -431,6 +433,8 @@ async def test_explicit_issue_uses_authenticated_idempotent_intake_without_model
         market_token="fixture-customer-token",
     )
     assert resumed["intake"]["owner_ticket_no"] == "CS-fixture"
+    if mode == "human":
+        assert resumed["cs_status"] == "human_active"
     assert len([call for call in calls if call[2].get("method") == "POST"]) == 1
 
 
@@ -718,3 +722,96 @@ async def test_ticket_intake_restart_reads_receipt_without_second_write(cs_db, m
     assert calls == [False, True]
     assert result["action"] == "issue_intake"
     assert "010087" in svc.list_messages(cid, cs_id)[-1]["body"]
+
+
+@pytest.mark.asyncio
+async def test_independent_conversations_do_not_share_customer_turn_lock(monkeypatch):
+    import asyncio
+    from contextlib import contextmanager
+    from app.application import enterprise_cs_automation as module
+
+    class DummyDb:
+        def get(self, *_args, **_kwargs):
+            return None
+
+        def scalar(self, *_args, **_kwargs):
+            return None
+
+    @contextmanager
+    def fake_session(_conversation_id):
+        yield DummyDb()
+
+    entered: set[int] = set()
+    both_entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def fake_handle(self, *, conversation_id, **_kwargs):
+        entered.add(conversation_id)
+        if len(entered) == 2:
+            both_entered.set()
+        await release.wait()
+        return {"handled": True}
+
+    monkeypatch.setattr(module, "_turn_session", fake_session)
+    monkeypatch.setattr(EnterpriseCsAutomationService, "handle_customer_message", fake_handle)
+    # The original four-shard lock serialized conversations 1 and 5.
+    tasks = [
+        asyncio.create_task(module.process_enterprise_cs_customer_message(cid, 7, cid, "hello"))
+        for cid in (1, 5)
+    ]
+    try:
+        await asyncio.wait_for(both_entered.wait(), timeout=2)
+    finally:
+        release.set()
+        await asyncio.gather(*tasks)
+    assert entered == {1, 5}
+    assert not module._turn_locks
+    assert not module._turn_pending
+    assert not module._customer_pending
+
+
+@pytest.mark.asyncio
+async def test_customer_turn_queue_is_bounded_and_released(monkeypatch):
+    import asyncio
+    from contextlib import contextmanager
+    from app.application import enterprise_cs_automation as module
+
+    class DummyDb:
+        def get(self, *_args, **_kwargs):
+            return None
+
+        def scalar(self, *_args, **_kwargs):
+            return None
+
+    @contextmanager
+    def fake_session(_conversation_id):
+        yield DummyDb()
+
+    entered = asyncio.Event()
+    release = asyncio.Event()
+    completed: set[int] = set()
+
+    async def fake_handle(self, *, conversation_id, **_kwargs):
+        completed.add(conversation_id)
+        if len(completed) == module._MAX_CUSTOMER_PENDING:
+            entered.set()
+        await release.wait()
+        return {"handled": True}
+
+    monkeypatch.setattr(module, "_turn_session", fake_session)
+    monkeypatch.setattr(EnterpriseCsAutomationService, "handle_customer_message", fake_handle)
+    tasks = [
+        asyncio.create_task(module.process_enterprise_cs_customer_message(cid, 7, cid, "hello"))
+        for cid in range(100, 100 + module._MAX_CUSTOMER_PENDING)
+    ]
+    try:
+        await asyncio.wait_for(entered.wait(), timeout=2)
+        blocked = await module.process_enterprise_cs_customer_message(200, 7, 200, "hello")
+        assert blocked == {"handled": False, "reason": "busy"}
+    finally:
+        release.set()
+        await asyncio.gather(*tasks)
+    assert len(completed) == module._MAX_CUSTOMER_PENDING
+    assert not module._turn_locks
+    assert not module._turn_pending
+    assert not module._customer_pending
