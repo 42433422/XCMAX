@@ -282,10 +282,21 @@ TIMELINE_NODES = ("ASM", "P", "M", "PPTX", "SW", "SS", "SA", "V")
 
 
 def sync_version_ssot(version: str) -> _facade().Dict[str, _facade().Any]:
-    """把 release_train 的新版本写进 VERSION.md 并同步 25 个锚点（SSOT 唯一更新入口）。"""
+    """把 release_train 的新版本写进 VERSION.md 并同步 25 个锚点（SSOT 唯一更新入口）。
+
+    默认 ``ci``：服务器只产出状态，由 ``version-ssot-sync`` workflow 读状态后
+    在 main 上执行同步并提交，服务器不持有仓库写权限。``local`` 仅用于离线环境。
+    """
     import subprocess
     import sys
 
+    mode = (
+        (_facade().os.environ.get("MODSTORE_RELEASE_TRAIN_SSOT_SYNC", "ci") or "")
+        .strip()
+        .lower()
+    )
+    if mode != "local":
+        return {"ok": True, "deferred": True, "owner": "ci", "version": version}
     root = _facade().ssot_path().parent.parent
     script = root / "scripts" / "dev" / "version_sync.py"
     if not script.is_file():

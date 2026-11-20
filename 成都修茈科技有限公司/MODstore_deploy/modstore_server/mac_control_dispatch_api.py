@@ -65,6 +65,16 @@ def require_dispatch_service(authorization: str = Header(default="")) -> str:
     return SERVICE_ACTOR
 
 
+@router.get("/release-train/state")
+def release_train_state(actor: str = Depends(require_dispatch_service)):
+    """只读版本状态，供 CI 的 version-ssot-sync 对齐 VERSION.md 与锚点。"""
+    from modstore_server.release_train import snapshot_public
+
+    state = dict(snapshot_public())
+    state.pop("ssot_path", None)
+    return {"success": True, "state": state}
+
+
 @router.get("/github-runs/{request_id}")
 def github_run_status(
     request_id: uuid.UUID,
