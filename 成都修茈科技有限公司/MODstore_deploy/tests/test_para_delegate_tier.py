@@ -80,9 +80,9 @@ def test_eligible_online_with_capability():
 def test_opencode_only_preserves_cloud_supervisors_and_pauses_other_device_clis(monkeypatch):
     monkeypatch.setenv("DEVFLEET_FORCE_OPENCODE", "1")
     assert h._tool_candidates({"tool_name": "codex"}) == ["opencode"]
-    assert h._tool_candidates({"tool_name": "dolt", "raw_input": {"allow_tool_fallback": False}}) == [
-        "dolt"
-    ]
+    assert h._tool_candidates(
+        {"tool_name": "dolt", "raw_input": {"allow_tool_fallback": False}}
+    ) == ["dolt"]
     device = {"status": "online", "tools": [{"toolName": "codex", "status": "disabled"}]}
     assert not h._device_eligible(device, "codex")
 
