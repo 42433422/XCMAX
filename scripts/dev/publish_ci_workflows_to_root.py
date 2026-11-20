@@ -63,6 +63,10 @@ FHD_NO_DEFAULTS = {
     # This release scan intentionally covers the monorepo and already uses
     # explicit FHD/ paths where component-local access is required.
     "security-full-scan.yml",
+    # These two address files through repo-root-relative paths (FHD/VERSION.md,
+    # gh api, git).  Injecting FHD/ as the working directory would break them.
+    "pr-hygiene.yml",
+    "version-ssot-sync.yml",
 }
 MOD_NO_DEFAULTS = {"prod-deploy-receipt.yml", "prod-deploy.yml"}
 

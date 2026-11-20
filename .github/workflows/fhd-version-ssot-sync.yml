@@ -1,3 +1,5 @@
+# CI SSOT: generated from FHD/.github/workflows/version-ssot-sync.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
 name: version-ssot-sync
 
 # release_train 在服务器上只负责「当日时间线闭环后应该是什么版本」，
