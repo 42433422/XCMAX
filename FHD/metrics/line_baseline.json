@@ -1,5 +1,5 @@
 {
-  "lines": 2528352,
+  "lines": 2528487,
   "updated": "2026-11-20",
-  "note": "用户要求真实原 PR 走 GitHub 云端 Para 并实际合入。复用现有 MODstore 派工账本、Para GitHub Worker、Git bundle 独立发布器与 GitHub 检查；增加原 PR 云端接线和回归，本轮计量净增 748 行。"
+  "note": "用户要求验证 Para 修复原 PR 并实际合入。复用现有 MODstore 派工账本、Para GitHub Worker、Git bundle 独立发布器与 GitHub 检查；实现云端接线、原 PR 合入回读和回归，本轮计量净增 883 行。"
 }

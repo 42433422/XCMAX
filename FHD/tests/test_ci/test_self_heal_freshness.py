@@ -722,6 +722,66 @@ def test_verified_recovery_and_supersession_close_with_different_meaning(
     assert state in writes[0][2]["body"]
 
 
+@pytest.mark.parametrize(
+    ("merged", "ci", "on_main", "closed"),
+    [
+        (False, "success", False, False),
+        (True, "failure", True, False),
+        (True, "success", False, False),
+        (True, "success", True, True),
+    ],
+)
+def test_para_update_closes_incident_only_after_ci_and_main_receipt(merged, ci, on_main, closed):
+    repair = heal.recovery.para.repair
+    target = repair.Target(5, "feat/x", OLD, 7, 99, WF_PATH)
+    merge_sha = "c" * 40
+    intent = repair.intent_body(
+        REPO,
+        1,
+        target,
+        NEW,
+        control_task_id="ctl1",
+        para_task_id="para1",
+        github_run_id=50,
+    )
+    run = {
+        **FakeGitHub().run,
+        "id": 8,
+        "head_sha": NEW,
+        "head_repository": {"full_name": REPO},
+        "conclusion": ci,
+    }
+
+    class GitHub(RecoveryGitHub):
+        def __call__(self, path, params):
+            if path.endswith("/pulls/5"):
+                return 200, {
+                    "number": 5,
+                    "state": "closed" if merged else "open",
+                    "merged": merged,
+                    "merge_commit_sha": merge_sha if merged else None,
+                    "head": {"ref": target.branch, "sha": NEW, "repo": {"full_name": REPO}},
+                    "base": {"ref": "main", "repo": {"full_name": REPO}},
+                }
+            if path.endswith("/runs/8"):
+                return 200, run
+            if path.endswith("/runs") and params.get("head_sha") == NEW:
+                return 200, {"workflow_runs": [run]}
+            if path.endswith("/compare/" + merge_sha + "...main"):
+                return 200, {"merge_base_commit": {"sha": merge_sha if on_main else OLD}}
+            return super().__call__(path, params)
+
+    result, writes, dispatches = _recover(GitHub(comments=[{"user": BOT, "body": intent}]))
+    assert not dispatches
+    assert bool(writes) is closed
+    if closed:
+        assert result["state"] == "recovered"
+        assert result["merge_commit_sha"] == merge_sha and result["ci_run_id"] == 8
+        assert writes[-1][2] == {"state": "closed", "state_reason": "completed"}
+    else:
+        assert result["state"] == "observing"
+
+
 @pytest.mark.parametrize("missing", ["/actions/runs/7", "/pulls/5", "/runs"])
 def test_missing_evidence_cannot_close_or_dispatch(missing) -> None:
     result, writes, dispatches = _recover(RecoveryGitHub(fail=missing))
