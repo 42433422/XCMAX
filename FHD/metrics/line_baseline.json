@@ -1,5 +1,5 @@
 {
-  "lines": 2527147,
+  "lines": 2528420,
   "updated": "2026-11-20",
-  "note": "将桌面配对恢复与启动身份验证分支同步到最新主线，合并已有企业客服改动后依实际工作树重算，保留原集成祖先。"
+  "note": "Sync latest main after #3364 without reverting release protection. Preserve the existing #3347 desktop listener and startup identity code and regressions; remeasure its branch scope against the current main baseline."
 }
