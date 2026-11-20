@@ -961,6 +961,37 @@ jobs:
           path: |
             ${{ runner.temp }}/manifest.json
             ${{ runner.temp }}/download-release.json
+      - name: Download this release's production deployment identity
+        uses: actions/download-artifact@v8
+        with:
+          name: xcagi-production-deployment-identity
+          path: ${{ runner.temp }}/production-identity
+          run-id: ${{ inputs.frontend_run_id }}
+          github-token: ${{ github.token }}
+      - name: Require the same production artifacts before changing public download paths
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ORCHESTRATOR_RUN: ${{ inputs.frontend_run_id }}
+          PRODUCT_VERSION: ${{ inputs.version }}
+          ADMIN_TOKEN: ${{ secrets.RELEASE_CONVERGENCE_ADMIN_TOKEN }}
+          ENDPOINT: ${{ vars.RELEASE_CONVERGENCE_URL || 'https://xiu-ci.com/api/admin/release-convergence' }}
+        run: |
+          set -euo pipefail
+          : "${ADMIN_TOKEN:?missing production readback credential}"
+          [[ "$ORCHESTRATOR_RUN" =~ ^[1-9][0-9]*$ ]]
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${ORCHESTRATOR_RUN}" \
+            | jq -e --arg sha "$XCAGI_BUILD_SHA" '
+                .head_sha == $sha and .head_branch == "main" and .event == "workflow_dispatch" and
+                .path == ".github/workflows/fhd-release-orchestrator.yml" and .status == "in_progress"
+              ' >/dev/null
+          proof="$RUNNER_TEMP/production-identity"
+          curl --proto '=https' -fsS --retry 3 --connect-timeout 15 --max-time 60 \
+            -H "Authorization: Bearer ${ADMIN_TOKEN}" -H 'Cache-Control: no-cache' \
+            "$ENDPOINT" -o "$proof/release-convergence.json"
+          python3 scripts/release/verify_formal_release_identity.py --capture-production \
+            --evidence "$proof" --sha "$XCAGI_BUILD_SHA" --version "$PRODUCT_VERSION" \
+            --orchestrator-run "$ORCHESTRATOR_RUN" > "$proof/current-production.json"
+          cmp "$proof/production-deployment.json" "$proof/current-production.json"
       - name: Progress linked work orders to released (mainline merged/released)
         # 主线闭环：本次发布合并的工单沿状态机真实推进 merged → released，
         # 让验收回执在 verifying 窗口判定关闭/重开。失败不阻断发布。

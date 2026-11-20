@@ -74,6 +74,9 @@ def test_release_is_draft_until_orchestrator_convergence():
     assert "publish-converged-github-release:" in orchestrator
     assert "needs: [verify-full-convergence]" in orchestrator
     assert "verify_formal_release_identity.py" in orchestrator
+    assert desktop.index('cmp "$proof/production-deployment.json"') < desktop.index(
+        "Publish unified Windows + macOS release"
+    )
     assert (
         'gh api --method PATCH "repos/${GH_REPO}/releases/${github_release_id}" -F draft=false'
         in orchestrator
