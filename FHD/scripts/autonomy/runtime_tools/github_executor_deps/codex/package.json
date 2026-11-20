@@ -3,6 +3,6 @@
   "private": true,
   "dependencies": {
     "@openai/codex": "0.153.4",
-    "ws": "8.18.0"
+    "ws": "8.21.0"
   }
 }
