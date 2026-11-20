@@ -362,25 +362,43 @@ def ingest_suggestion_event_payload(
 def approve_suggestion(
     suggestion_id: int, *, approved_by_user_id: int, dispatch_now: bool = True
 ) -> _facade().Dict[str, _facade().Any]:
+    from modstore_server.models import User
+
     sid = int(suggestion_id or 0)
     if sid <= 0:
         return {"ok": False, "error": "invalid suggestion id"}
     sf = _facade().get_session_factory()
     with sf() as session:
-        row = session.get(_facade().EmployeeSuggestion, sid)
+        row = session.get(_facade().EmployeeSuggestion, sid, with_for_update=True)
         if not row:
             return {"ok": False, "error": "not found"}
         if (row.status or "") == "rejected":
             return {"ok": False, "error": "already rejected"}
-        row.status = "approved"
-        row.approved_by_user_id = int(approved_by_user_id or 0) or None
-        row.approved_at = _facade().datetime.now(_facade().timezone.utc)
-        session.commit()
-    _facade()._publish_event(
-        "employee.suggestion.approved",
-        {"suggestion_id": sid, "approved_by_user_id": int(approved_by_user_id or 0)},
-        source="admin",
-    )
+        already_approved = False
+        if row.kind == "employee_evolution":
+            reviewer = session.get(User, int(approved_by_user_id or 0))
+            if reviewer is None or not reviewer.is_admin or reviewer.deleted_at is not None:
+                return {"ok": False, "error": "curator_approval_required"}
+            if row.status == "done":
+                from modstore_server.employee_evolution_dispatch import completed_curator_receipt
+
+                return completed_curator_receipt(session, row)
+            already_approved = (
+                row.status in {"approved", "dispatched"}
+                and row.approved_by_user_id is not None
+                and row.approved_at is not None
+            )
+        if not already_approved:
+            row.status = "approved"
+            row.approved_by_user_id = int(approved_by_user_id or 0) or None
+            row.approved_at = _facade().datetime.now(_facade().timezone.utc)
+            session.commit()
+    if not already_approved:
+        _facade()._publish_event(
+            "employee.suggestion.approved",
+            {"suggestion_id": sid, "approved_by_user_id": int(approved_by_user_id or 0)},
+            source="admin",
+        )
     if dispatch_now:
         return _facade().dispatch_suggestion(sid, approved_by_user_id=approved_by_user_id)
     return {"ok": True, "suggestion_id": sid}
@@ -449,6 +467,11 @@ def dispatch_suggestion(
         row = session.get(_facade().EmployeeSuggestion, sid)
         if not row:
             return {"ok": False, "error": "not found"}
+        if row.kind == "employee_evolution":
+            from modstore_server.employee_evolution_dispatch import execute_approved_evolution
+
+            session.close()
+            return execute_approved_evolution(sid)
         status = str(row.status or "")
         if status == "rejected":
             return {"ok": False, "error": "suggestion rejected"}
@@ -539,17 +562,26 @@ def dispatch_suggestion(
 
 @_facade().platform_llm_scoped
 def dispatch_pending_suggestions(limit: int = 20) -> _facade().Dict[str, _facade().Any]:
+    from modstore_server.models import EmployeeSuggestion
+
     lim = max(1, min(int(limit or 20), 100))
     sf = _facade().get_session_factory()
     with sf() as session:
         rows = (
-            session.query(_facade().EmployeeSuggestion)
+            session.query(EmployeeSuggestion)
             .filter(
-                (_facade().EmployeeSuggestion.status == "approved")
-                | (_facade().EmployeeSuggestion.status == "pending")
-                & (_facade().EmployeeSuggestion.risk_level == "low")
+                (EmployeeSuggestion.status == "approved")
+                | (EmployeeSuggestion.status == "pending")
+                & (EmployeeSuggestion.risk_level == "low")
+                | (
+                    (EmployeeSuggestion.status == "dispatched")
+                    & (EmployeeSuggestion.kind == "employee_evolution")
+                    & (EmployeeSuggestion.approved_at.is_not(None))
+                    & (EmployeeSuggestion.approved_by_user_id.is_not(None))
+                    & (EmployeeSuggestion.created_task_ids_json == '["employee-pack-curator"]')
+                )
             )
-            .order_by(_facade().EmployeeSuggestion.id.asc())
+            .order_by(EmployeeSuggestion.id.asc())
             .limit(lim)
             .all()
         )
