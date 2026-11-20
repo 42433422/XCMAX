@@ -178,17 +178,14 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     pyproject = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
 
     assert "XCMAX_TARGET_SHA must be a full 40-character commit SHA" in script
-    assert (
-        'git -C "$SOURCE_ROOT" -c tar.umask=0002 archive --format=tar "$TARGET_SHA"'
-        in script
-    )
+    assert 'git -C "$SOURCE_ROOT" -c tar.umask=0002 archive --format=tar "$TARGET_SHA"' in script
     assert 'git get-tar-commit-id < "$SOURCE_ARCHIVE"' in script
-    assert script.index(
-        'fail "release archive differs from the signed artifact"'
-    ) < script.index('tar -xf "$SOURCE_ARCHIVE"')
-    assert script.index(
-        'fail "prepared release differs from the signed artifact"'
-    ) < script.index("applying database migrations")
+    assert script.index('fail "release archive differs from the signed artifact"') < script.index(
+        'tar -xf "$SOURCE_ARCHIVE"'
+    )
+    assert script.index('fail "prepared release differs from the signed artifact"') < script.index(
+        "applying database migrations"
+    )
     assert 'PRODUCT_VERSION="$PREVIOUS_VERSION"' in script
     assert '"$PREVIOUS_RELEASE_ID" && return 0' in script
     assert 'FINAL_ROOT="${RELEASES_DIR}/${TARGET_SHA}"' in script
@@ -496,9 +493,7 @@ def test_production_workflow_requires_manually_orchestrated_exact_sha() -> None:
         assert "actions/upload-artifact@v4" in rendered
         assert "actions/download-artifact@v8" in rendered
         assert "XCMAX_SIGNED_ARTIFACT_SHA256" in rendered
-        assert rendered.index("--finalize") < rendered.index(
-            "modstore-deployment-correlation"
-        )
+        assert rendered.index("--finalize") < rendered.index("modstore-deployment-correlation")
         assert (
             "modstore-release-admission-${{ needs.admission.outputs.signed_run_attempt }}"
             in rendered
