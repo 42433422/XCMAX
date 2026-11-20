@@ -17,7 +17,7 @@ import {
   toolFallbackOrder,
   withFailureCleanup,
 } from './e2e_agent_runtime_policy.mjs';
-import { openCodePlatformConfig, runOpenCodeAgent } from './opencode_agent.mjs';
+import { openCodePlatformConfig, runOpenCodeLive } from './opencode_agent.mjs';
 
 test('OpenCode-only policy pauses the other CLIs and scopes native config to the XCMAX gateway', () => {
   const env = { DEVFLEET_FORCE_OPENCODE: '1', DEVFLEET_FORCE_CODEX: '1',
@@ -40,8 +40,10 @@ test('OpenCode-only policy pauses the other CLIs and scopes native config to the
 
 test('OpenCode report-only sessions deny unknown tools even when no log callback is supplied', async () => {
   const root = mkdtempSync(join(tmpdir(), 'opencode-native-api-'));
-  const executable = join(root, 'opencode');
-  writeFileSync(executable, `#!${process.execPath}\n` + String.raw`
+  const executable = process.execPath;
+  // The adapter launches `serve` in the task directory; Node runs this fixture
+  // through its native executable on every platform, without a POSIX shebang.
+  writeFileSync(join(root, 'serve'), String.raw`
 const http = require('node:http');
 let session;
 const server = http.createServer(async (req, res) => {
@@ -65,14 +67,16 @@ const server = http.createServer(async (req, res) => {
   res.end(JSON.stringify({info:{tokens:{input:1,output:2}},parts:[{type:'text',text:JSON.stringify({session,message})}]}));
 });
 server.listen(0, '127.0.0.1', () => console.log('http://127.0.0.1:' + server.address().port));
-`, { mode: 0o700 });
+`);
   try {
     const env = { DEVFLEET_FORCE_OPENCODE: '1', PARA_PLATFORM_POOL: '1',
       PARA_OPENCODE_MODEL: 'vendor/model:variant', PARA_PLATFORM_MODEL: 'vendor/model:variant',
       PARA_PLATFORM_GATEWAY_URL: 'https://gateway.example.test/v1', OPENCODE_API_KEY: 'fixture-granted-key' };
+    const platform = openCodePlatformConfig(env);
+    env.OPENCODE_CONFIG_CONTENT = JSON.stringify(platform);
     for (const log of [() => {}, undefined]) {
-      const output = JSON.parse(await runOpenCodeAgent(root, 'Review the existing files', {
-        executable, env, timeoutMs: 5000, reportOnly: true, log,
+      const output = JSON.parse(await runOpenCodeLive(executable, root, 'Review the existing files', env, {
+        platform, timeoutMs: 5000, reportOnly: true, log,
       }));
       assert.equal(output.message.agent, 'plan');
       assert.equal(output.message.parts[0].text, 'Review the existing files');
@@ -83,9 +87,9 @@ server.listen(0, '127.0.0.1', () => console.log('http://127.0.0.1:' + server.add
       ]);
     }
     for (const override of ['headers', 'endpoint', 'key', 'model']) {
-      await assert.rejects(runOpenCodeAgent(root, 'Do not launch a model', {
-        executable, env: { ...env, FIXTURE_CONFIG_OVERRIDE: override }, timeoutMs: 5000, reportOnly: false,
-      }), /opencode_platform_binding_mismatch/);
+      await assert.rejects(runOpenCodeLive(executable, root, 'Do not launch a model',
+        { ...env, FIXTURE_CONFIG_OVERRIDE: override }, { platform, timeoutMs: 5000, reportOnly: false }),
+      /opencode_platform_binding_mismatch/);
     }
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

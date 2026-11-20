@@ -21,6 +21,8 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 SCHEMA = "para-github-candidate/v1"
 MAX_BUNDLE = 64 * 1024 * 1024
 ORIGINAL_PR_REPAIR = "original_pr_repair"
+REPAIR_CREDENTIAL_BLOCK = "original_pr_repair_requires_non_exportable_model_credentials"
+GITLEAKS_VERSION = "8.18.4"
 
 
 class NoRedirect(HTTPRedirectHandler):
@@ -115,10 +117,71 @@ def clean_git_env(env):
     return result
 
 
-def run_command(args, *, cwd=None, env=None, binary=False):
+def run_command(args, *, cwd=None, env=None, binary=False, input_data=None):
     return subprocess.run(
-        args, cwd=cwd, env=env, check=True, capture_output=True, text=not binary, timeout=180
+        args,
+        cwd=cwd,
+        env=env,
+        input=input_data,
+        check=True,
+        capture_output=True,
+        text=not binary,
+        timeout=180,
     ).stdout
+
+
+def scan_candidate(repository, base, target, *, env, command=run_command):
+    """Scan every added commit, including merge resolutions and commit messages.
+
+    Pinned Gitleaks (MIT) runs outside the candidate with its built-in rules. This
+    detects known secret forms; it does not make model credentials non-exportable.
+    """
+    with tempfile.TemporaryDirectory(prefix="para-secret-scan-") as temporary:
+        root = Path(temporary)
+        config, ignore = root / "gitleaks.toml", root / ".gitleaksignore"
+        config.write_text("[extend]\nuseDefault = true\n", encoding="utf-8")
+        ignore.touch()
+        # The scanner receives neither publisher credentials nor candidate/global
+        # config. Explicit flags also disable inline allow comments and ignore files.
+        scan_env = clean_git_env({"PATH": env.get("PATH", os.defpath), "HOME": temporary})
+        options = [
+            "gitleaks",
+            "detect",
+            "--config",
+            str(config),
+            "--gitleaks-ignore-path",
+            str(ignore),
+            "--ignore-gitleaks-allow",
+            "--redact=100",
+            "--no-banner",
+            "--exit-code=1",
+        ]
+        commits = f"{base}..{target}"
+        try:
+            if command(["gitleaks", "version"], cwd=root, env=scan_env).strip() != GITLEAKS_VERSION:
+                raise ValueError("candidate_secret_scan_unavailable_or_rejected")
+            # A NUL byte must not hide otherwise recognizable secrets as a binary diff.
+            command(
+                options
+                + [
+                    "--source",
+                    str(repository),
+                    "--log-opts",
+                    f"{commits} --full-history --diff-merges=first-parent --no-renames "
+                    "--no-ext-diff --no-textconv --text",
+                ],
+                cwd=root,
+                env=scan_env,
+            )
+            messages = command(
+                ["git", "-C", str(repository), "log", "--format=%B", commits],
+                cwd=root,
+                env=scan_env,
+            )
+            command(options + ["--pipe"], cwd=root, env=scan_env, input_data=messages)
+        except (OSError, subprocess.SubprocessError, UnicodeError):
+            # Subprocess diagnostics may contain secret material. Never echo them.
+            raise ValueError("candidate_secret_scan_unavailable_or_rejected") from None
 
 
 def import_candidate(directory, manifest, bundle, *, env, command=run_command):
@@ -169,6 +232,7 @@ def import_candidate(directory, manifest, bundle, *, env, command=run_command):
     source = call("archive", "--format=tar", actual, binary=True)
     if hashlib.sha256(source).hexdigest() != manifest["archive_sha256"]:
         raise ValueError("candidate_archive_digest_mismatch")
+    scan_candidate(repository, manifest["base_sha"], actual, env=env, command=command)
     return call, remote
 
 
@@ -283,6 +347,8 @@ def publish(env=os.environ, *, command=run_command, opener=read_management):
         if existing and existing != f"{target}\trefs/heads/{branch}":
             raise ValueError("publication_branch_already_diverged")
         if not existing:
+            if original:
+                raise ValueError(REPAIR_CREDENTIAL_BLOCK)
             # No force update, no main branch writes. Ambiguous responses are reconciled by exact ref.
             git("push", remote, f"{target}:refs/heads/{branch}")
         if (

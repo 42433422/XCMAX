@@ -352,12 +352,12 @@
     "FHD/app/domain/shared_services/tools_workflow_elt.py": {
       "base_file": "FHD/app/domain/shared_services/tools_workflow_elt.py",
       "base_blob": "7dc7d19fa8f33f63fe1d15fc5b5e6edb31dc7111",
-      "head_blob": "dbcf002cdc8e9bcc65a840e6162c33a95b9f92f0",
+      "head_blob": "16fde19f0c0a41722bb0fd012b0ebe51b8d04556",
       "before_lines": 1836,
-      "after_lines": 2443,
+      "after_lines": 2445,
       "reason": "将逐文件预演、批量提交和待继续回执接入现有 ELT 调度。已确认的父出货和附表结果可按原有凭据恢复，避免批量任务卡住或重复写入。",
-      "boundary": "只恢复同租户、同所有人和同任务的原预演。执行仍核对源内容、预演版本和审批。写入结果未知时停止恢复并保留待核对状态。",
-      "validation": "验证范围包括逐文件写入、等待超时、租约接管、重复写入、过期预演拒绝和父子预演确认的现有 ELT 回归。待远端 CI 和真实业务场景核验。 本地整合后端回归 721 项通过及 37 项可选跳过。 类型修正后 102 项 ELT 专项测试通过。",
+      "boundary": "只恢复同租户、同所有人和同任务的原预演。执行仍核对源内容、预演版本和审批。写入结果未知时停止恢复并保留待核对状态。 Durable batches preserve each approved upload ID and record actual native row-level duplicate skips; unreadable uploads remain failed.",
+      "validation": "验证范围包括逐文件写入、等待超时、租约接管、重复写入、过期预演拒绝和父子预演确认的现有 ELT 回归。待远端 CI 和真实业务场景核验。 本地整合后端回归 721 项通过及 37 项可选跳过。 类型修正后 102 项 ELT 专项测试通过。 Final review regression: 131 ELT, batch and progress tests pass, including three real CSV/SQLite cases for identical uploads, receipt recovery and unreadable duplicates; no fabricated completion receipt.",
       "follow_up": "待原场景通过后，抽取文件阶段和回执复用逻辑，保持批量导入入口及既有审批契约不变。",
       "review_owner": "@42433422"
     },
@@ -731,6 +731,18 @@
       "boundary": "沿用现有派发入口和执行回执，检查仅作用于可核验的客户工单派发。 OpenCode 默认关闭；云端主管、原请求身份、私有合同和已有尝试的回执恢复保持原边界。",
       "validation": "同工单、跨租户任务以及已有执行凭证均有回归，扩展任务派发与事件链路 179 项通过。 整合后专项 197 项 MODstore 与 54 项 Node 回归通过，包含原工具、OpenCode、额度等待、原单派发回包丢失和私有只读反馈。",
       "follow_up": "待 Para 提供可核验的任务停止回执后，通过现有执行状态读回核对已递交任务。",
+      "review_owner": "@42433422"
+    },
+    "FHD/app/application/elt/batch_continuation.py": {
+      "base_file": null,
+      "base_blob": null,
+      "head_blob": "80d646add167b725271a53d9f5091658a6ec0e12",
+      "before_lines": 0,
+      "after_lines": 818,
+      "reason": "将批量导入在原会话内继续执行，并在审批冻结前合并同名、同格式、同内容的重复附件；本次最新源修复使文件跨过建议尺寸，提交精确源码增长审查请求。",
+      "boundary": "只使用同租户、同所有人且可核验的上传回执。审批前规范化保留首个来源；已有冻结计划保持原附件集合，每个批准 ID 必须具有真实执行或行级跳过回执，无法读取和未知写入均保持未完成。",
+      "validation": "131 项 ELT、checkpoint、batch 与进度回归通过，包含审批前规范化及真实 CSV/SQLite 的 fresh、resume、unreadable 三种重复附件场景。最终远端 CI 与人工架构审查仍需完成；此登记不是批准。",
+      "follow_up": "评审后沿既有批次入口拆分上传来源核对与续接计划构造，保留冻结审批和真实回执契约。",
       "review_owner": "@42433422"
     }
   }

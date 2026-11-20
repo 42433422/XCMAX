@@ -1,16 +1,12 @@
-"""Promote a Para repair to its original PR using an ordinary, leased Git push."""
+"""Verify original PR repair receipts; new repairs await non-exportable credentials."""
 
 from __future__ import annotations
 
 import json
-import os
 import re
-import subprocess
-import tempfile
 from dataclasses import asdict, dataclass
-from pathlib import Path
 
-from scripts.autonomy.publish_para_candidate import clean_git_env, run_command
+from scripts.autonomy.publish_para_candidate import REPAIR_CREDENTIAL_BLOCK
 from scripts.ci import self_heal_freshness as freshness
 from scripts.ci.ai_self_heal_sla import (
     AUTO_MERGE_RISK_LEVELS,
@@ -22,7 +18,6 @@ from scripts.ci.ai_self_heal_sla import (
 )
 
 INTENT_MARKER = "<!-- para-pr-update:v1 "
-GIT_ERRORS = (subprocess.CalledProcessError, subprocess.TimeoutExpired)
 SHA = re.compile(r"[0-9a-f]{40}")
 BRANCH = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_./-]{0,199}")
 TASK_BRANCH = re.compile(r"devfleet/[A-Za-z0-9_./-]{1,160}")
@@ -264,57 +259,12 @@ def _check_diff(git, old: str, new: str) -> int:
 
 
 def advance(remote: str, target: Target, candidate: str, token: str, *, before_write) -> int:
-    """Git checks ancestry and the hook checks the advertised old value before transfer."""
-    if not SHA.fullmatch(candidate) or candidate == target.old_sha:
-        raise ValueError("invalid repair commit")
-    with tempfile.TemporaryDirectory(prefix="para-pr-fast-forward-") as temporary:
-        root = Path(temporary)
-        hooks = root / "hooks"
-        hooks.mkdir()
-        env = clean_git_env({**os.environ, "GH_TOKEN": token})
-        options = [
-            "git",
-            "-c",
-            f"core.hooksPath={hooks}",
-            "-c",
-            "protocol.ext.allow=never",
-            "-c",
-            "credential.helper=",
-            "-c",
-            "credential.helper=!gh auth git-credential",
-            "-c",
-            "http.followRedirects=false",
-        ]
+    """Reject even previously published candidates; their credentials were exportable.
 
-        def git(*args):
-            return run_command([*options, *args], cwd=root, env=env)
-
-        git("init", "--bare", "--template=")
-        ref = f"refs/heads/{target.branch}"
-        git("check-ref-format", ref)
-        git("fetch", "--no-tags", "--no-recurse-submodules", "--depth=1", remote, target.old_sha)
-        git("update-ref", "refs/para/original", target.old_sha)
-        git("fetch", "--no-tags", "--no-recurse-submodules", remote, candidate)
-        git("merge-base", "--is-ancestor", target.old_sha, candidate)
-        count = _check_diff(git, target.old_sha, candidate)
-        hook = hooks / "pre-push"
-        hook.write_text(
-            "#!/bin/sh\n"
-            "IFS=' ' read -r source actual destination previous || exit 1\n"
-            '[ "$actual" = "$PARA_REPAIR_NEW" ] && [ "$destination" = "$PARA_REPAIR_REF" ] && '
-            '[ "$previous" = "$PARA_REPAIR_OLD" ] || exit 1\n'
-            "if read -r unexpected; then exit 1; fi\n",
-            encoding="utf-8",
-        )
-        hook.chmod(0o700)
-        env.update(
-            PARA_REPAIR_NEW=candidate,
-            PARA_REPAIR_REF=ref,
-            PARA_REPAIR_OLD=target.old_sha,
-        )
-        before_write(count)
-        git("push", "--porcelain", remote, f"{candidate}:{ref}")
-        return count
+    Already-applied intents are reconciled by read-only HEAD/CI checks in the
+    dispatcher. No configuration switch can authorize another branch write.
+    """
+    raise ValueError(REPAIR_CREDENTIAL_BLOCK)
 
 
 def new_ci_run(repo: str, target: Target, head: str, get) -> int:

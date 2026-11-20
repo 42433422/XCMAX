@@ -40,13 +40,13 @@ python -m pip install -e packages/retort_engine -e packages/xcagi_common \
 
 ## Para 的 OpenCode 工作设备
 
-使用 [anomalyco/opencode v1.19.6](https://github.com/anomalyco/opencode/releases/tag/v1.19.6)（MIT）。工作设备可用 `npm install -g opencode-ai@1.19.6` 安装，也可用 `DEVFLEET_OPENCODE_AGENT` 指定原生可执行文件。设备上报 `opencode_cli` 后即可选择 `opencode` 派工。
+使用 [anomalyco/opencode v1.19.6](https://github.com/anomalyco/opencode/releases/tag/v1.19.6)（MIT）和 [anthropics/sandbox-runtime v0.0.83](https://github.com/anthropics/sandbox-runtime/tree/v0.0.83)（Apache-2.0）。工作设备可用 `npm install -g opencode-ai@1.19.6` 安装 CLI，也可用 `DEVFLEET_OPENCODE_AGENT` 指定原生可执行文件；在设备代理所在目录执行 `npm install --prefix <代理目录> @anthropic-ai/sandbox-runtime@0.0.83`，或用 `DEVFLEET_OPENCODE_SANDBOX_ENTRY` 指定该固定版本的 `dist/cli.js`。需 Node 22.12+；Linux 还需 bubblewrap、socat、ripgrep 和可用的用户命名空间，macOS 需原生 sandbox-exec 与 ripgrep。GitHub 安装器准备同一组固定依赖。缺少沙箱时工具不就绪，执行失败不会降级到无沙箱进程。
 
-Zen 免费模型由 OpenCode CLI 原生调用。用 `opencode models opencode` 查看工作设备的可用模型，并通过受控的 `OPENCODE_CONFIG` 文件选择 `model`。如果设备使用 `OPENCODE_API_KEY` 且启用了任务凭据授权，通过现有 `MODSTORE_CREDENTIAL_GRANT_SCOPES` 配置该权限。[Zen 模型](https://opencode.ai/docs/console/models/)
+每个任务使用独立配置、缓存和临时目录，只允许任务目录内的授权写入，网络限于受信网关和 npm 依赖源。只读任务不能写任务目录；原生会话权限拒绝未知工具，交互授权请求自动拒绝。Windows 的固定版沙箱尚不能保持本适配器的模型配置传递与原生会话校验合同，因此设备明确报告 OpenCode 不就绪；不会改走绕过校验的 CLI 路径。这些限制不构成模型凭据不可导出的保证，原 PR 自动修复仍按[凭据迁移边界](../../FHD/docs/autonomy/CREDENTIAL_VAULT_MIGRATION.md)暂停。
 
 `DEVFLEET_FORCE_OPENCODE` 默认关闭；须先部署支持 OpenCode 的 DevFleet 协调服务（配套 `devfleet-private#17`）与工作设备，确认设备工具就绪后，再由运维在 MODstore、设备和 GitHub 仓库变量中显式设置为 `1`。未升级的设备保持等待，不将任务转给其他工具。首次派工遵循该可信策略，既有请求与 attempt 继续按原身份核对回执。
 
-GitHub Worker 还须启用下文的云端平台模型准入。原 PR 修复、客服与 Retort 都先持久化同一次额度分配，再启动工作流；OpenCode 使用该分配的模型、受信 `PARA_PLATFORM_GATEWAY_URL` 和对应的专用 key，不使用独立的全局模型别名。它只接收本次选中模型的密钥；`MODSTORE_PARA_ARK_PLAN_FIRST=1` 的专用计划组合暂不兼容，明确等待，不交换凭据或改用其他模型。本地非池设备仍可显式配置网关、`PARA_OPENCODE_MODEL` 和 `OPENCODE_API_KEY`。平台请求沿用原生 `/v1/responses`，执行前回读有效模型、网关和认证配置；原生会话权限让只读任务默认拒绝未知工具。增量文字、工具活动与实际 token 用量经现有任务 WebSocket 回传。
+GitHub Worker 还须启用下文的云端平台模型准入。客服与 Retort 先持久化同一次额度分配，再启动工作流；OpenCode 使用该分配的模型、受信 `PARA_PLATFORM_GATEWAY_URL` 和对应的专用 key，不使用独立的全局模型别名。它只接收本次选中模型的密钥；`MODSTORE_PARA_ARK_PLAN_FIRST=1` 的专用计划组合暂不兼容，明确等待，不交换凭据或改用其他模型。本地非池设备仍可显式配置网关、`PARA_OPENCODE_MODEL` 和 `OPENCODE_API_KEY`，并通过 `MODSTORE_CREDENTIAL_GRANT_SCOPES` 授予该模型凭据。平台请求沿用原生 `/v1/responses`，执行前回读有效模型、网关和认证配置。增量文字、工具活动与实际 token 用量经现有任务 WebSocket 回传。
 
 ## 管理端小 C
 

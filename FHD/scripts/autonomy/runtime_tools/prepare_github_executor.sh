@@ -5,7 +5,11 @@ cp scripts/autonomy/runtime_tools/*.mjs "$RUNNER_TEMP/para-worker/"
 if [[ "${DEVFLEET_FORCE_OPENCODE:-0}" == 1 ]]; then
   [[ "${PARA_PLATFORM_POOL:-0}" == 1 ]] || { echo 'OpenCode GitHub execution requires platform model admission'; exit 1; }
   node --input-type=module -e "import { openCodeGatewayUrl } from './scripts/autonomy/runtime_tools/opencode_agent.mjs'; openCodeGatewayUrl(process.env)"
-  npm install --prefix "$RUNNER_TEMP/para-worker" --package-lock=false "ws@8.18.0" "opencode-ai@1.19.6"
+  if ! command -v bwrap >/dev/null || ! command -v socat >/dev/null || ! command -v rg >/dev/null; then
+    sudo apt-get update -qq
+    sudo apt-get install -y --no-install-recommends bubblewrap socat ripgrep
+  fi
+  npm install --prefix "$RUNNER_TEMP/para-worker" --package-lock=false "ws@8.18.0" "opencode-ai@1.19.6" "@anthropic-ai/sandbox-runtime@0.0.83"
   exit 0
 fi
 [[ "$PARA_CODEX_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Pin the Para Codex CLI version first'; exit 1; }

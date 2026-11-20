@@ -2239,7 +2239,9 @@ def _preview_batch(
             identity = (
                 (label, upload.get("suffix", ""), fingerprint) if fingerprint else (upload["id"],)
             )
-            if identity in seen:
+            # Frozen plans need a native receipt for every approved upload ID.
+            # Row-level deduplication records skips without losing that checkpoint.
+            if identity in seen and not checkpoint_ids:
                 continue
             seen.add(identity)
         already_submitted = bool(checkpoint and _checkpoint_submitted(checkpoint))

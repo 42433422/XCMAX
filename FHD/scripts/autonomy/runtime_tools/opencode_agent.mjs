@@ -1,14 +1,33 @@
-import { execFile, spawn } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { accessSync, constants, statSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { delimiter, join, resolve } from 'node:path';
+import { accessSync, constants, existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { homedir, tmpdir } from 'node:os';
+import { delimiter, dirname, join, resolve, sep } from 'node:path';
 import { createInterface } from 'node:readline';
 import { Readable } from 'node:stream';
-import { promisify } from 'node:util';
-import { streamCliOutput } from './cli_output_stream.mjs';
+import { fileURLToPath } from 'node:url';
 
-const execute = promisify(execFile);
+const entry = fileURLToPath(import.meta.url);
+
+export function openCodeSandboxEntry(env = process.env) {
+  const [major, minor] = process.versions.node.split('.').map(Number);
+  // The pinned Windows sandbox does not forward this worker's model environment.
+  // Do not replace the native configuration/session checks with its CLI fallback.
+  if (!['linux', 'darwin'].includes(process.platform)
+      || major < 22 || (major === 22 && minor < 12)) {
+    return undefined;
+  }
+  const installed = join(dirname(entry), 'node_modules', '@anthropic-ai', 'sandbox-runtime', 'dist', 'cli.js');
+  const configured = env.DEVFLEET_OPENCODE_SANDBOX_ENTRY?.trim() || installed;
+  try {
+    const cli = realpathSync(configured);
+    const manifest = JSON.parse(readFileSync(join(dirname(cli), '..', 'package.json'), 'utf8'));
+    return manifest.name === '@anthropic-ai/sandbox-runtime' && manifest.version === '0.0.83' ? cli : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 export function openCodeGatewayUrl(env) {
   const gateway = new URL(env.PARA_PLATFORM_GATEWAY_URL || '');
@@ -52,15 +71,22 @@ export function openCodeExecutable(env = process.env) {
   });
 }
 
+export function isOpenCodeReady(env = process.env) {
+  if (!openCodeExecutable(env) || !openCodeSandboxEntry(env)) return false;
+  try { openCodePlatformConfig(env); return true; } catch { return false; }
+}
+
 function events(stdout = '') {
   return stdout.split(/\r?\n/).flatMap(line => {
     try { return [JSON.parse(line)]; } catch { return []; }
   });
 }
 
-async function runOpenCodeLive(executable, cwd, prompt, env, options) {
+export async function runOpenCodeLive(executable, cwd, prompt, env, options) {
+  options = { ...options, log: options.log || (() => {}) };
   const password = randomUUID();
-  const signal = AbortSignal.timeout(options.timeoutMs);
+  const eventAbort = new AbortController();
+  const signal = AbortSignal.any([AbortSignal.timeout(options.timeoutMs), eventAbort.signal]);
   const server = spawn(executable, ['serve', '--hostname', '127.0.0.1', '--port', '0'], {
     cwd, env: { ...env, OPENCODE_SERVER_PASSWORD: password }, stdio: ['ignore', 'pipe', 'ignore'],
   });
@@ -85,9 +111,9 @@ async function runOpenCodeLive(executable, cwd, prompt, env, options) {
         if (url) resolve(url);
       });
     });
-    const request = async (route, body) => {
+    const request = async (route, body, requestSignal = signal) => {
       const result = await fetch(base + route, {
-        signal, headers: { ...headers, 'content-type': 'application/json' },
+        signal: requestSignal, headers: { ...headers, 'content-type': 'application/json' },
         ...(body ? { method: 'POST', body: JSON.stringify(body) } : {}),
       });
       if (!result.ok) throw new Error('OpenCode HTTP ' + result.status + ' ' + (await result.text()).slice(0, 700));
@@ -116,6 +142,7 @@ async function runOpenCodeLive(executable, cwd, prompt, env, options) {
       ] } : {}),
     })).json();
     const textParts = new Set();
+    const handledPermissions = new Set();
     stream = Readable.fromWeb((await request('/event')).body);
     stream.on('error', () => {}); // Request/timeout reports the final status.
     const lines = createInterface({ input: stream });
@@ -124,6 +151,16 @@ async function runOpenCodeLive(executable, cwd, prompt, env, options) {
       const event = events(line.slice(5).trim())[0];
       const fields = event?.properties;
       if (!fields || (fields.sessionID || fields.part?.sessionID) !== session.id) return;
+      if (event.type === 'permission.asked') {
+        if (!fields.id || handledPermissions.has(fields.id)) return;
+        handledPermissions.add(fields.id);
+        flush();
+        options.log('[OpenCode] 已拒绝需要交互批准的工具请求');
+        const replySignal = AbortSignal.any([signal, AbortSignal.timeout(5000)]);
+        request('/permission/' + encodeURIComponent(fields.id) + '/reply', { reply: 'reject' }, replySignal)
+          .catch(() => eventAbort.abort(new Error('OpenCode 未确认权限拒绝')));
+        return;
+      }
       if (event.type === 'message.part.updated' && fields.part?.type === 'text') {
         textParts.add(fields.part.id);
       }
@@ -152,6 +189,7 @@ async function runOpenCodeLive(executable, cwd, prompt, env, options) {
     }
     return (response.parts || []).filter(part => part.type === 'text').map(part => part.text).join('\n').trim();
   } catch (error) {
+    if (eventAbort.signal.aborted) error = eventAbort.signal.reason;
     throw Object.assign(error, { stderr: error.message });
   } finally {
     flush();
@@ -165,41 +203,140 @@ async function runOpenCodeLive(executable, cwd, prompt, env, options) {
   }
 }
 
-export async function runOpenCodeAgent(cwd, prompt, { env, timeoutMs, reportOnly, log, executable = openCodeExecutable() }) {
-  if (!executable) {
-    const reason = 'OpenCode CLI is not installed';
+function runtimeReadPath(executable) {
+  const marker = sep + 'node_modules' + sep;
+  const moduleRoot = executable.indexOf(marker);
+  return moduleRoot < 0 ? executable : executable.slice(0, moduleRoot + marker.length - 1);
+}
+
+export function sandboxSettings(cwd, temp, executable, node, gateway, reportOnly, runtime) {
+  const applySeccomp = process.platform === 'linux'
+    ? join(dirname(runtime), '..', 'vendor', 'seccomp', process.arch, 'apply-seccomp')
+    : undefined;
+  if (applySeccomp) accessSync(applySeccomp, constants.X_OK);
+  const systemPaths = process.platform === 'darwin'
+    ? ['/System', '/usr/lib', '/usr/share', '/usr/bin', '/bin', '/private/etc/ssl',
+      '/private/etc/hosts', '/private/var/db/timezone', '/Library/Preferences/SystemConfiguration']
+    : ['/usr', '/lib', '/lib64', '/bin', '/dev/null', '/dev/urandom', '/etc/ssl',
+      '/etc/hosts', '/etc/resolv.conf', '/etc/nsswitch.conf', '/etc/ld.so.cache'];
+  return {
+    ...(applySeccomp ? { seccomp: { applyPath: applySeccomp } } : {}),
+    network: {
+      allowedDomains: [`${gateway.hostname}:${gateway.port || 443}`, 'registry.npmjs.org:443'],
+      deniedDomains: [],
+      // Linux gives the two processes a private loopback namespace.
+      allowLocalBinding: process.platform === 'darwin',
+    },
+    filesystem: {
+      denyRead: ['/'],
+      allowRead: [...systemPaths.filter(path => existsSync(path)), cwd, temp, entry,
+        node, runtimeReadPath(executable), ...(applySeccomp ? [applySeccomp] : [])],
+      allowWrite: reportOnly ? [temp] : [cwd, temp],
+      denyWrite: [join(cwd, '.git'), join(cwd, '.devfleet'), '/tmp/claude', '/private/tmp/claude'],
+    },
+  };
+}
+
+function agentEnvironment(env, temp, platform, reportOnly) {
+  return {
+    PATH: env.PATH,
+    XDG_CONFIG_HOME: join(temp, 'config'),
+    XDG_CACHE_HOME: join(temp, 'cache'),
+    XDG_DATA_HOME: join(temp, 'data'),
+    XDG_STATE_HOME: join(temp, 'state'),
+    TMPDIR: temp,
+    CLAUDE_CODE_TMPDIR: temp,
+    OPENCODE_CONFIG_CONTENT: JSON.stringify(platform),
+    OPENCODE_API_KEY: env.OPENCODE_API_KEY,
+    PARA_OPENCODE_MODEL: env.PARA_OPENCODE_MODEL,
+    OPENCODE_DISABLE_PROJECT_CONFIG: 'true',
+    OPENCODE_DISABLE_AUTOUPDATE: 'true',
+    OPENCODE_DISABLE_MODELS_FETCH: 'true',
+    OPENCODE_PERMISSION: JSON.stringify({
+      '*': 'deny', read: 'allow', glob: 'allow', grep: 'allow', list: 'allow',
+      todoread: 'allow', todowrite: 'allow', edit: reportOnly ? 'deny' : 'allow',
+      bash: 'deny', task: 'deny', external_directory: 'deny',
+    }),
+  };
+}
+
+export async function runOpenCodeAgent(cwd, prompt, {
+  env, timeoutMs, reportOnly, log, executable = openCodeExecutable(env),
+}) {
+  const sandbox = openCodeSandboxEntry(env);
+  if (!executable || !sandbox) {
+    const reason = 'OpenCode 需要 Linux/macOS 文件系统沙箱、Node 22.12+ 和已安装的 CLI';
     throw Object.assign(new Error(reason), { code: 'ENOENT', stderr: reason });
   }
-  const args = ['run', '--format', 'json'];
-  let platform;
-  if (env.DEVFLEET_FORCE_OPENCODE === '1' || env.PARA_PLATFORM_POOL === '1') {
-    try { platform = openCodePlatformConfig(env); } catch {
-      const reason = 'OpenCode 缺少有效的 XCMAX 网关地址、模型别名或专用密钥';
-      throw Object.assign(new Error(reason), { stderr: reason });
-    }
-    args.push('--model', platform.model);
+  const platform = openCodePlatformConfig(env);
+  const gateway = new URL(env.PARA_PLATFORM_GATEWAY_URL);
+  const workspace = realpathSync(cwd);
+  const cli = realpathSync(executable);
+  const node = realpathSync(process.execPath);
+  const systemTemp = realpathSync(tmpdir());
+  const scratchRoot = /^\/(?:private\/)?tmp\/claude(?:\/|$)/.test(systemTemp)
+    ? realpathSync('/tmp')
+    : systemTemp;
+  const temp = await mkdtemp(join(scratchRoot, 'para-opencode-'));
+  const policy = join(temp, 'sandbox.json');
+  try {
+    await writeFile(policy, JSON.stringify(sandboxSettings(workspace, temp, cli, node, gateway, reportOnly, sandbox)), {
+      mode: 0o600,
+    });
     log?.('OpenCode 平台模型 ' + platform.model);
+    return await new Promise((resolve, reject) => {
+      const child = spawn(node, [sandbox, '--settings', policy, '--', node, entry, '--sandbox-worker'], {
+        cwd: workspace,
+        env: agentEnvironment(env, temp, platform, reportOnly),
+        stdio: ['pipe', 'pipe', 'pipe'],
+        signal: AbortSignal.timeout(timeoutMs + 5000),
+      });
+      let result;
+      let error = '';
+      const lines = createInterface({ input: child.stdout });
+      child.stderr.setEncoding('utf8').on('data', chunk => { error = (error + chunk).slice(-1000); });
+      lines.on('line', line => {
+        const event = events(line)[0];
+        if (event?.type === 'log') log?.(event.text);
+        if (event?.type === 'result') result = event.text;
+        if (event?.type === 'error') error = event.text;
+      });
+      child.once('error', reject);
+      child.once('close', code => {
+        if (code === 0 && typeof result === 'string') resolve(result);
+        else {
+          const reason = error.trim() || `OpenCode 沙箱执行退出 (${code})`;
+          reject(Object.assign(new Error(reason), { stderr: reason }));
+        }
+      });
+      child.stdin.on('error', () => {}); // The child exit carries sandbox setup failures.
+      child.stdin.end(JSON.stringify({ executable: cli, prompt, reportOnly, timeoutMs }));
+    });
+  } finally {
+    await rm(temp, { recursive: true, force: true });
   }
-  const childEnv = {
-      ...env,
-      OPENCODE_DISABLE_PROJECT_CONFIG: 'true',
-      OPENCODE_DISABLE_AUTOUPDATE: 'true',
-      ...(platform ? { OPENCODE_CONFIG_CONTENT: JSON.stringify(platform) } : {}),
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === entry && ['--sandbox-worker', '--task'].includes(process.argv[2])) {
+  const nativeTask = process.argv[2] === '--task';
+  const emit = (type, text) => {
+    const event = nativeTask && type === 'log' ? { type: 'text', part: { text } }
+      : nativeTask && type === 'error' ? { type, error: { data: { message: text } } } : { type, text };
+    process.stdout.write(JSON.stringify(event) + '\n');
   };
-  if (log || reportOnly || platform) return runOpenCodeLive(executable, cwd, prompt, childEnv, {
-    log: log || (() => {}), reportOnly, platform, timeoutMs,
-  });
-  const run = execute(executable, args, {
-    cwd, timeout: timeoutMs, maxBuffer: 10 * 1024 * 1024, windowsHide: true, env: childEnv,
-  });
-  streamCliOutput(run.child, 'opencode', log);
-  run.child.stdin?.on('error', () => {}); // The process outcome carries early exits.
-  run.child.stdin?.end(prompt);
-  const { stdout } = await run.catch(error => {
-    const event = events(error.stdout).findLast(item => item?.type === 'error');
-    error.stdout = event?.error?.data?.message || '';
-    throw error;
-  });
-  return events(stdout).filter(event => event?.type === 'text' && typeof event.part?.text === 'string')
-    .map(event => event.part.text).join('\n').trim();
+  try {
+    const chunks = [];
+    for await (const chunk of process.stdin) chunks.push(chunk);
+    const { executable, prompt, reportOnly, timeoutMs } = JSON.parse(Buffer.concat(chunks).toString());
+    const log = text => emit('log', text);
+    const result = nativeTask
+      ? await runOpenCodeAgent(process.cwd(), prompt, { env: process.env, executable, reportOnly, timeoutMs, log })
+      : await runOpenCodeLive(executable, process.cwd(), prompt, process.env, {
+        reportOnly, timeoutMs, platform: JSON.parse(process.env.OPENCODE_CONFIG_CONTENT), log,
+      });
+    emit('result', result);
+  } catch (error) {
+    emit('error', error.message);
+    process.exitCode = 1;
+  }
 }

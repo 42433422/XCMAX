@@ -157,7 +157,12 @@ def _original_uploads(paths: list[str], previous: AgentRun, scope: ArtifactScope
 
 
 def _resolve_uploads(
-    paths: list[str], context: dict, scope: ArtifactScope, created_at: datetime
+    paths: list[str],
+    context: dict,
+    scope: ArtifactScope,
+    created_at: datetime,
+    *,
+    canonicalize_batch: bool = False,
 ) -> list[str]:
     manifest = (context.get("file_context") or {}).get("attachment_manifest") or []
     artifact_ids = {item.get("name"): item.get("id") for item in manifest if isinstance(item, dict)}
@@ -210,6 +215,19 @@ def _resolve_uploads(
                 raise BatchContinuationBlocked(
                     "原任务的剩余附件已过期或无法核对，请在原会话补传对应文件。"
                 )
+        if canonicalize_batch:
+            if len(set(selected)) != len(selected):
+                raise BatchContinuationBlocked("附件清单中存在重复上传记录，任务尚未提交。")
+            by_identity = {}
+            for upload_id in selected:
+                upload = ids[upload_id]
+                identity = (
+                    (upload.file_name, upload.suffix, upload.sha256)
+                    if upload.file_name and upload.sha256
+                    else (upload_id,)
+                )
+                by_identity.setdefault(identity, upload_id)
+            return list(by_identity.values())
         return selected
 
 
@@ -227,11 +245,11 @@ def bind_durable_batch(plan: PlanGraph, context: dict) -> None:
     try:
         if str(_bound_actor(context).id) != scope.owner_user_id:
             raise AgentModAuthorizationError("actor scope mismatch")
-        uploads = _resolve_uploads(paths, context, scope, utc_now_naive())
+        uploads = _resolve_uploads(paths, context, scope, utc_now_naive(), canonicalize_batch=True)
+    except BatchContinuationBlocked:
+        raise
     except (AgentModAuthorizationError, TypeError, ValueError) as exc:
         raise BatchContinuationBlocked("导入附件无法按本轮上传回执核对，任务尚未提交。") from exc
-    if len(set(uploads)) != len(paths):
-        raise BatchContinuationBlocked("附件清单中存在重复上传记录，任务尚未提交。")
     node.params["file_paths"] = uploads
     plan.metadata["durable_elt_batch"] = True
 

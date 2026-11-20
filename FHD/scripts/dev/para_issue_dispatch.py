@@ -359,9 +359,7 @@ def _observe_update(result: DispatchResult, target: repair.Target, head: str, ge
     return False
 
 
-def _finish_update(
-    result: DispatchResult, target: repair.Target, head: str, token: str, get
-) -> NoReturn:
+def _finish_update(result: DispatchResult, target: repair.Target, head: str, get) -> NoReturn:
     try:
         observed = _observe_update(result, target, head, get)
     except (OSError, ValueError, TypeError, freshness.LookupFailed):
@@ -370,11 +368,10 @@ def _finish_update(
             "pr_update_unconfirmed",
             "原 PR 更新或 CI 回读未确认，保留回执以供恢复",
             6,
-            token,
         )
     if observed:
-        _finish(result, "pr_updated_ci_observed", "已回读原 PR 新 HEAD 与 CI 运行", 0, token)
-    _finish(result, "pr_updated_ci_pending", "原 PR 新 HEAD 已确认，暂未读到 CI 运行", 6, token)
+        _finish(result, "pr_updated_ci_observed", "已回读原 PR 新 HEAD 与 CI 运行", 0)
+    _finish(result, "pr_updated_ci_pending", "原 PR 新 HEAD 已确认，暂未读到 CI 运行", 6)
 
 
 def run(args: argparse.Namespace) -> None:
@@ -440,7 +437,7 @@ def run(args: argparse.Namespace) -> None:
                 result.pr_url = f"https://github.com/{repo}/pull/{target.number}"
                 current = repair.open_pr(repo, target, None, get, authorize=False)
                 if current["head"]["sha"] != target.old_sha:
-                    _finish_update(result, target, head, args.token, get)
+                    _finish_update(result, target, head, get)
             selected = repair.select_target(repo, issue, args.base_branch, get)
             if intent and selected != target:
                 raise ValueError("original PR source changed after the write intent")
@@ -450,13 +447,11 @@ def run(args: argparse.Namespace) -> None:
                 result.original_sha = target.old_sha
                 result.pr_number = target.number
                 result.pr_url = f"https://github.com/{repo}/pull/{target.number}"
-                write_token = os.environ.get("PR_CREATE_TOKEN", "").strip()
-                if not write_token or write_token == args.token:
-                    finish(
-                        "pr_repair_blocked",
-                        "缺独立 GitHub 写入凭据，无法触发原 PR 必需 CI",
-                        6,
-                    )
+                finish(
+                    "pr_repair_blocked",
+                    "原 PR 自动修复暂停：尚无不可导出的任务模型凭据；仅可回读已应用结果",
+                    6,
+                )
         except (
             OSError,
             ValueError,
@@ -595,81 +590,7 @@ def run(args: argparse.Namespace) -> None:
         if reported_head and reported_head != remote_head:
             finish("head_mismatch", "回报提交与远端分支不一致，拒绝创建 PR", 6)
         if target:
-            if (
-                task.get("id") != result.control_task_id
-                or not result.para_task_id
-                or result.github_run_id < 1
-                or str(execution.get("id") or "") != result.para_task_id
-                or not repair.candidate_belongs_to_task(branch, execution, target)
-                or (intent and remote_head != intent[1])
-            ):
-                finish("pr_repair_blocked", "修复分支与原任务回执不一致", 6)
-
-            def before_write(changed_files):
-                result.changed_files = changed_files
-                current = impl._fetch_issue(repo, number, args.token)
-                latest_comments = list(
-                    freshness.pages(get, f"/repos/{repo}/issues/{number}/comments")
-                )
-                if (
-                    current.get("state") != "open"
-                    or not impl._has_aimplement_label(current)
-                    or not repair.is_repair_incident(current)
-                    or not impl._is_authorized(current, latest_comments, repo)[0]
-                    or repair.select_target(repo, current, args.base_branch, get) != target
-                ):
-                    raise ValueError("original PR source changed during repair")
-                if not intent:
-                    response = impl._gh_post(
-                        f"https://api.github.com/repos/{repo}/issues/{number}/comments",
-                        args.token,
-                        {
-                            "body": repair.intent_body(
-                                repo,
-                                number,
-                                target,
-                                remote_head,
-                                control_task_id=result.control_task_id,
-                                para_task_id=result.para_task_id,
-                                github_run_id=result.github_run_id,
-                            )
-                        },
-                    )
-                    if type(response.get("id")) is not int or response.get("_error"):
-                        raise ValueError("durable original PR update intent not confirmed")
-                # The candidate publisher's human-review boundary follows its code
-                # onto the original PR before the head can change. Never remove a hold.
-                impl._gh_post(
-                    f"https://api.github.com/repos/{repo}/issues/{target.number}/labels",
-                    args.token,
-                    {"labels": [repair.HOLD_MERGE_LABEL, "ai-generated"]},
-                )
-                held = repair.open_pr(repo, target, target.old_sha, get, authorize=False)
-                labels = {row["name"] for row in held.get("labels", [])}
-                if not {repair.HOLD_MERGE_LABEL, "ai-generated"} <= labels:
-                    raise ValueError("original PR human-review hold not confirmed")
-                recheck = {
-                    **held,
-                    "labels": [
-                        row for row in held["labels"] if row["name"] != repair.HOLD_MERGE_LABEL
-                    ],
-                }
-                if not repair.authorized_pr(recheck, repair.load_trusted_authors()):
-                    raise ValueError("original PR authorization changed before promotion")
-
-            try:
-                repair.advance(
-                    f"https://github.com/{repo}.git",
-                    target,
-                    remote_head,
-                    write_token,
-                    before_write=before_write,
-                )
-            except repair.GIT_ERRORS:
-                # A failed response does not establish whether GitHub applied the update.
-                # Read the exact ref before considering this attempt complete.
-                pass
-            _finish_update(result, target, remote_head, args.token, get)
+            finish("pr_repair_blocked", repair.REPAIR_CREDENTIAL_BLOCK, 6)
         result.changed_files = _checked_diff(repo, args.base_branch, remote_head, args.token)
         if result.changed_files > impl.MAX_CHANGED_FILES:
             finish(

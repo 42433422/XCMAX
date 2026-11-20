@@ -40,17 +40,26 @@ export async function runGithubExecutor({ env = process.env, fetchStatus = fetch
     if (accepted.kind !== 'original_pr_repair' || String(accepted.run_id) !== run
         || !/^[0-9a-f]{40}$/.test(accepted.source_sha || '')
         || !Number.isSafeInteger(accepted.pull_request) || accepted.pull_request < 1
-        || stage !== 'execute') throw new Error('original_pr_dispatch_mismatch');
+        || (!accepted.finished && stage !== 'execute')) throw new Error('original_pr_dispatch_mismatch');
   }
   if (accepted.finished) {
-    if (stage !== 'resume') throw new Error('management_dispatch_already_finished');
+    if (stage !== 'resume' && !repair) throw new Error('management_dispatch_already_finished');
     mkdirSync(directory, { recursive: true });
     writeFileSync(join(directory, 'execution.json'), JSON.stringify(accepted) + '\n');
     return accepted.conclusion === 'success' ? 0 : 1;
   }
+  if (repair) {
+    // Scoped environment grants and a same-user proxy cannot keep PR-controlled
+    // tools from exporting API keys or HOME login material. No safe executor exists yet.
+    const reason = 'original_pr_repair_requires_non_exportable_model_credentials';
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(join(directory, 'execution.json'), JSON.stringify({
+      request_id: request, run_id: run, finished: true, conclusion: 'failure', status: 'blocked', reason,
+    }) + '\n');
+    throw new Error(reason);
+  }
   const agentEnv = { ...env, PARA_GITHUB_ISSUE_NUMBER: String(accepted.issue_number) };
   delete agentEnv.PARA_GITHUB_SOURCE_SHA;
-  if (repair) agentEnv.PARA_GITHUB_SOURCE_SHA = accepted.source_sha;
   delete agentEnv.MODSTORE_PARA_DISPATCH_TOKEN;
   delete agentEnv.PARA_CODEX_AUTH_JSON;
   delete agentEnv.PARA_CODEX_CONFIG_TOML;

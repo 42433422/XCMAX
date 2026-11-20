@@ -11,7 +11,8 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { createRequire } from 'node:module';
 import { createCredentialVault, parseCredentialGrant } from './credential_vault.mjs';
-import { openCodeExecutable, runOpenCodeAgent } from './opencode_agent.mjs';
+import { isOpenCodeReady, openCodeExecutable, runOpenCodeAgent } from './opencode_agent.mjs';
+import { reportOnlyPatchInstruction, writeReportOnlyPatch, writeTaskMetadata } from './report_only_patch.mjs';
 import { cliResult, streamCliOutput } from './cli_output_stream.mjs';
 import {
   describeTraeFailure,
@@ -720,6 +721,7 @@ function reportOnlyRefEvidencePrompt(evidence) {
     'E2E_REPORT_ONLY_REF_EVIDENCE_JSON:',
     JSON.stringify(evidence),
     'The e2e-agent fetched and verified both refs with git cat-file immediately before invoking you.',
+    reportOnlyPatchInstruction,
     'Use the exact base_ref and target_ref above. If a lookup disagrees, retry the exact refs once before reporting target_branch_unavailable.',
   ].join('\n');
 }
@@ -1027,14 +1029,15 @@ async function handleTask(ws, task) {
     : null;
   mkdirSync(join(taskDir, '.devfleet'), { recursive: true });
   if (reportOnlyRefEvidence) {
-    writeFileSync(
-      join(taskDir, '.devfleet', 'REPORT_ONLY_REFS.json'),
+    await writeReportOnlyPatch(taskDir, reportOnlyRefEvidence, gitCommandTimeoutMs);
+    await writeTaskMetadata(
+      taskDir, 'REPORT_ONLY_REFS.json',
       `${JSON.stringify(reportOnlyRefEvidence, null, 2)}\n`,
     );
   }
   const executionPrompt = `${task.description}${reportOnlyRefEvidencePrompt(reportOnlyRefEvidence)}`;
-  writeFileSync(
-    join(taskDir, '.devfleet', 'TASK.md'),
+  await writeTaskMetadata(
+    taskDir, 'TASK.md',
     `# DevFleet 任务\n\n## 标题\n${task.title}\n\n## 要求\n${executionPrompt}\n\n## 工作分支\n${task.work_branch}\n`,
   );
   excludeAgentMetadata(taskDir);
@@ -1483,6 +1486,7 @@ function publishToolStatus(ws) {
   const cursorInstalled = cursorAgentAvailable();
   const claudeInstalled = claudeAgentAvailable();
   const openCodeInstalled = Boolean(openCodeExecutable());
+  const openCodeReady = isOpenCodeReady();
   send(ws, {
     type: 'tool_status',
     tools: [
@@ -1490,7 +1494,7 @@ function publishToolStatus(ws) {
       { tool_name: 'codex', status: toolExecutionStatus('codex', codexInstalled) },
       { tool_name: 'cursor', status: toolExecutionStatus('cursor', cursorInstalled) },
       { tool_name: 'claude_code', status: toolExecutionStatus('claude_code', claudeInstalled) },
-      { tool_name: 'opencode', status: toolExecutionStatus('opencode', openCodeInstalled) },
+      { tool_name: 'opencode', status: openCodeInstalled && !openCodeReady ? 'disabled' : toolExecutionStatus('opencode', openCodeReady) },
     ],
     capabilities: {
       ...defaultCapabilities(),
@@ -1499,7 +1503,7 @@ function publishToolStatus(ws) {
       cursor_agent_cli: cursorInstalled,
       codex_cli: codexInstalled,
       claude_cli: claudeInstalled,
-      opencode_cli: openCodeInstalled,
+      opencode_cli: openCodeReady,
     },
   });
 }

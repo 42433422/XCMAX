@@ -14,6 +14,34 @@ function environment(root, stage = 'execute') {
     GITHUB_REPOSITORY: 'owner/repo', PARA_GITHUB_STAGE: stage, PARA_GITHUB_REQUEST_ID: identity.request_id,
     PARA_GITHUB_CANDIDATE_DIR: join(root, 'candidate'), PARA_GITHUB_EVIDENCE_DIR: join(root, 'evidence'), MODSTORE_PARA_DISPATCH_TOKEN: 'management' };
 }
+test('PR-controlled repairs cannot launch a credential-bearing model, including login and OpenCode', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'para-repair-credentials-'));
+  try {
+    mkdirSync(join(root, '.codex'));
+    writeFileSync(join(root, '.codex', 'auth.json'), JSON.stringify({ access_token: 'fixture-login-only' }));
+    const accepted = { ...identity, kind: 'original_pr_repair', pull_request: 7, source_sha: 'b'.repeat(40) };
+    for (const credentials of [
+      { CODEX_API_KEY: 'fixture-codex-only' },
+      { OPENAI_API_KEY: 'fixture-openai-only' },
+      { HOME: root, CODEX_HOME: join(root, '.codex') },
+      { DEVFLEET_FORCE_OPENCODE: '1', OPENCODE_API_KEY: 'fixture-opencode-only' },
+    ]) {
+      await assert.rejects(runGithubExecutor({ env: { ...environment(root), ...credentials },
+        fetchStatus: async () => ({ ok: true, json: async () => accepted }),
+        spawnWorker: () => assert.fail('the untrusted repair must never receive a model process'),
+      }), /original_pr_repair_requires_non_exportable_model_credentials/);
+      const evidence = readFileSync(join(root, 'evidence', 'execution.json'), 'utf8');
+      assert.equal(JSON.parse(evidence).status, 'blocked');
+      assert.doesNotMatch(evidence, /fixture-(?:codex|openai|login|opencode)-only/);
+    }
+    for (const stage of ['execute', 'resume']) {
+      assert.equal(await runGithubExecutor({ env: environment(root, stage),
+        fetchStatus: async () => ({ ok: true, json: async () => ({ ...accepted, finished: true, conclusion: 'success' }) }),
+        spawnWorker: () => assert.fail('completed repair readback is read-only'),
+      }), 0);
+    }
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
 test('execution only hands off the original acknowledged candidate and keeps delivery unfinished', async () => {
   const root = mkdtempSync(join(tmpdir(), 'para-executor-'));
   try {

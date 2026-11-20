@@ -53,7 +53,7 @@ for (const sourcePath of sources) {
     const updater = path.join(root, 'updater');
     const taskDir = path.join(root, 'task');
     try {
-      await git(root, ['init', '--bare', remote]);
+      await git(root, ['init', '--bare', '-b', 'main', remote]);
       await git(root, ['init', '-b', 'main', source]);
       await git(source, ['config', 'user.name', 'test']);
       await git(source, ['config', 'user.email', 'test@example.invalid']);
