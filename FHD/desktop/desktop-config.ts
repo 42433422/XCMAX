@@ -54,14 +54,19 @@ export async function isPortAvailable(port: number, bindHost = DESKTOP_BACKEND_B
     })
     if (occupied) return false
   }
-  return new Promise(resolve => {
+  const availableOn = (host: string): Promise<boolean> => new Promise(resolve => {
     const tester = net.createServer()
     tester.once('error', () => resolve(false))
     tester.once('listening', () => {
       tester.close(() => resolve(true))
     })
-    tester.listen(port, process.platform === 'win32' ? '127.0.0.1' : bindHost)
+    tester.listen(port, host)
   })
+  // macOS can permit a wildcard bind alongside a specific loopback listener.
+  // The UI always connects over loopback, so check that endpoint explicitly.
+  if (!await availableOn('127.0.0.1')) return false
+  if (process.platform === 'win32' || bindHost === '127.0.0.1' || port === 0) return true
+  return availableOn(bindHost)
 }
 
 /** 端口被占时给用户的引导文案。 */
