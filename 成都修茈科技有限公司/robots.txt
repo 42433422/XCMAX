@@ -1,45 +1,13 @@
 # robots.txt — 成都修茈科技有限公司 / XCAGI 官网
 # 目的：让搜索引擎与 AI 检索引擎（GEO）抓取官网公开内容，便于用户搜索到公司官网。
 
+# 通用规则适用于搜索、AI 问答和训练爬虫；不按爬虫名称放宽排除路径。
 User-agent: *
-Allow: /
-Allow: /llms.txt
 Allow: /assets/xiu-ci-logo.png
 Allow: /assets/brand-logo.jpg
-Allow: /assets/screenshots/
 Disallow: /assets/
 Disallow: /uploads/
 Disallow: /.trae/
 Disallow: /test_image.jpg
-
-# 搜索引擎
-User-agent: Googlebot
-User-agent: Googlebot-Image
-User-agent: Bingbot
-User-agent: Baiduspider
-User-agent: Baiduspider-render
-User-agent: Sogou web spider
-User-agent: 360Spider
-User-agent: YandexBot
-Allow: /
-
-# AI 检索与问答爬虫：显式放开，确保公司官网可被 AI 搜索引用
-User-agent: GPTBot
-User-agent: OAI-SearchBot
-User-agent: ChatGPT-User
-User-agent: ClaudeBot
-User-agent: Claude-User
-User-agent: Claude-SearchBot
-User-agent: PerplexityBot
-User-agent: Perplexity-User
-User-agent: Google-Extended
-User-agent: Applebot-Extended
-User-agent: Bytespider
-User-agent: CCBot
-User-agent: meta-externalagent
-User-agent: cohere-ai
-User-agent: DuckAssistBot
-User-agent: MistralAI-User
-Allow: /
 
 Sitemap: https://xiu-ci.com/sitemap.xml
