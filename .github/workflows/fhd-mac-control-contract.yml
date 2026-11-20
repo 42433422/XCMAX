@@ -34,11 +34,14 @@ jobs:
     needs: classify
     if: needs.classify.outputs.run != 'false'
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-2022, macos-15]
+        os: [ubuntu-22.04, ubuntu-26.04, windows-2022, macos-15]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v7
         with:
           node-version: '22'
@@ -73,28 +76,37 @@ jobs:
           SECRET_KEY: isolated-elt-output-contract-not-production
           DATABASE_URL: sqlite://
       - run: node --test scripts/autonomy/runtime_tools/control_receipt_outbox.test.mjs scripts/autonomy/runtime_tools/control_git_handoff.test.mjs scripts/autonomy/runtime_tools/e2e_agent_runtime_policy.test.mjs scripts/autonomy/runtime_tools/pushed_branch_pr.test.mjs scripts/autonomy/runtime_tools/codex_model_gateway.test.mjs
-      - name: Verify OpenCode filesystem and permission isolation
+      - name: Verify OpenCode host admission and native isolation
         if: matrix.os != 'windows-2022'
+        env:
+          PARA_TEST_OPENCODE_HOST: ${{ matrix.os == 'ubuntu-26.04' && 'unsupported' || 'supported' }}
         run: |
-          if [[ "${RUNNER_OS}" == Linux ]]; then
-            sudo apt-get update -qq
-            sudo apt-get install -y --no-install-recommends bubblewrap socat ripgrep
-          elif ! command -v rg >/dev/null; then
-            brew install ripgrep
+          if [[ "${RUNNER_OS}" == Linux && "$PARA_TEST_OPENCODE_HOST" == supported ]]; then
+            # Exercise the real secret-free worker installer and native CLI on 22.04.
+            DEVFLEET_FORCE_OPENCODE=1 PARA_PLATFORM_POOL=1 PARA_PLATFORM_GATEWAY_URL=https://example.invalid/v1 \
+              bash scripts/autonomy/runtime_tools/prepare_github_executor.sh
+            sandbox_root="$RUNNER_TEMP/para-worker"
+          else
+            if [[ "${RUNNER_OS}" == Linux ]]; then
+              sudo apt-get update -qq
+              sudo apt-get install -y --no-install-recommends bubblewrap socat ripgrep
+            elif ! command -v rg >/dev/null; then
+              brew install ripgrep
+            fi
+            sandbox_root="$RUNNER_TEMP/para-opencode-contract"
+            npm install --prefix "$sandbox_root" --no-audit --no-fund "@anthropic-ai/sandbox-runtime@0.0.83"
           fi
-          sandbox_root="$RUNNER_TEMP/para-opencode-contract"
-          npm install --prefix "$sandbox_root" --no-audit --no-fund "@anthropic-ai/sandbox-runtime@0.0.83"
           PARA_TEST_SANDBOX_ENTRY="$sandbox_root/node_modules/@anthropic-ai/sandbox-runtime/dist/cli.js" \
             node --test scripts/autonomy/runtime_tools/opencode_agent.test.mjs scripts/autonomy/runtime_tools/report_only_target_branch.test.mjs
       - uses: actions/checkout@v4
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-26.04'
         with:
           repository: 42433422/devfleet
           ref: b2c99fd999016a673b0eadeadf1e3e3ae2d47f24
           path: para-test-deps
       - run: npm ci --prefix ../para-test-deps
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-26.04'
       - run: node --test scripts/autonomy/runtime_tools/provision_para_control.test.mjs scripts/autonomy/runtime_tools/merge_worker.test.mjs
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-26.04'
         env:
           PARA_TEST_PACKAGE_ROOT: ${{ github.workspace }}/para-test-deps

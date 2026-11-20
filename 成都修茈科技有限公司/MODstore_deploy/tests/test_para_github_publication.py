@@ -529,12 +529,14 @@ def test_staged_receipt_waits_for_exact_remote_branch_and_pr(monkeypatch):
         verified_code_identity(snapshot(), workspace=WORKSPACE, attempt_id=ATTEMPT)
 
 
-@pytest.mark.parametrize("original_pr", [False, True])
+@pytest.mark.parametrize("kind", [None, "original_pr_repair", "customer_feedback_repair"])
 def test_publisher_reuses_same_remote_sha_and_pr_and_retains_pending_delivery(
     tmp_path,
     monkeypatch,
-    original_pr,
+    kind,
 ):
+    original_pr = kind == "original_pr_repair"
+    customer_repair = kind == "customer_feedback_repair"
     value = manifest()
     if original_pr:
         from types import SimpleNamespace
@@ -553,6 +555,8 @@ def test_publisher_reuses_same_remote_sha_and_pr_and_retains_pending_delivery(
         monkeypatch.setattr(para_pr_repair, "_check_diff", checked_diff)
     data, digest = artifact(value)
     state = {**WORKSPACE, "publication_candidate": value, "finished": False}
+    if kind:
+        state["kind"] = kind
     if original_pr:
         state.update(kind="original_pr_repair", source_sha=value["base_sha"], pull_request=42)
     run = {
@@ -640,14 +644,29 @@ def test_publisher_reuses_same_remote_sha_and_pr_and_retains_pending_delivery(
     def opener(*args, **kwargs):
         return io.BytesIO(json.dumps(state).encode())
 
-    if original_pr:
-        with pytest.raises(
-            ValueError, match="original_pr_repair_requires_non_exportable_model_credentials"
-        ):
+    if original_pr or customer_repair:
+        with pytest.raises(ValueError, match="requires_non_exportable_model_credentials"):
             publisher.publish(env, command=command, opener=opener)
         assert not any(c[0] in {"push", "node"} for c in calls)
         # Already-published results can still be read back without another write.
         remote["exists"] = True
+    if customer_repair:
+        with pytest.raises(
+            ValueError, match="customer_feedback_requires_non_exportable_model_credentials"
+        ):
+            publisher.publish(env, command=command, opener=opener)
+        assert not any(c[0] in {"push", "node"} for c in calls)
+        pull.append(
+            {
+                "number": 42,
+                "url": "https://github.com/owner/repo/pull/42",
+                "headRefOid": value["commit_sha"],
+                "headRefName": value["branch"],
+                "baseRefName": "main",
+                "body": "Refs #42",
+                "state": "OPEN",
+            }
+        )
     first = publisher.publish(env, command=command, opener=opener)
     second = publisher.publish(env, command=command, opener=opener)
     assert first == second and first["delivered"] is False
@@ -655,8 +674,8 @@ def test_publisher_reuses_same_remote_sha_and_pr_and_retains_pending_delivery(
         "awaiting_original_pr_update" if original_pr else "published_for_review"
     )
     assert first["pull_request_url"] == "https://github.com/owner/repo/pull/42"
-    assert sum(c[0] == "push" for c in calls) == (0 if original_pr else 1)
-    assert sum(c[0] == "node" for c in calls) == (0 if original_pr else 1)
+    assert sum(c[0] == "push" for c in calls) == (0 if kind else 1)
+    assert sum(c[0] == "node" for c in calls) == (0 if kind else 1)
     assert not any("--force" in c or "merge" in c for c in calls)
     with pytest.raises(ValueError, match="redirect_rejected"):
         publisher.NoRedirect().redirect_request(None, None, None, None, None, None)

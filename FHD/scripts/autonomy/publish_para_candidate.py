@@ -22,6 +22,8 @@ SCHEMA = "para-github-candidate/v1"
 MAX_BUNDLE = 64 * 1024 * 1024
 ORIGINAL_PR_REPAIR = "original_pr_repair"
 REPAIR_CREDENTIAL_BLOCK = "original_pr_repair_requires_non_exportable_model_credentials"
+CUSTOMER_FEEDBACK_REPAIR = "customer_feedback_repair"
+CUSTOMER_CREDENTIAL_BLOCK = "customer_feedback_requires_non_exportable_model_credentials"
 GITLEAKS_VERSION = "8.18.4"
 
 
@@ -325,6 +327,7 @@ def publish(env=os.environ, *, command=run_command, opener=read_management):
     manifest, bundle = safe_artifact(data, artifact.get("digest"))
     validate_binding(manifest, state, run, env)
     branch, target = manifest["branch"], manifest["commit_sha"]
+    customer_repair = state.get("kind") == CUSTOMER_FEEDBACK_REPAIR
     original = None
     if state.get("kind") == ORIGINAL_PR_REPAIR:
         original = authorized_original_pr(state, repo, get)
@@ -347,8 +350,10 @@ def publish(env=os.environ, *, command=run_command, opener=read_management):
         if existing and existing != f"{target}\trefs/heads/{branch}":
             raise ValueError("publication_branch_already_diverged")
         if not existing:
-            if original:
-                raise ValueError(REPAIR_CREDENTIAL_BLOCK)
+            if original or customer_repair:
+                raise ValueError(
+                    CUSTOMER_CREDENTIAL_BLOCK if customer_repair else REPAIR_CREDENTIAL_BLOCK
+                )
             # No force update, no main branch writes. Ambiguous responses are reconciled by exact ref.
             git("push", remote, f"{target}:refs/heads/{branch}")
         if (
@@ -392,6 +397,8 @@ def publish(env=os.environ, *, command=run_command, opener=read_management):
                 raise ValueError("publication_existing_pr_mismatch")
             pr = pulls[0]
         else:
+            if customer_repair:
+                raise ValueError(CUSTOMER_CREDENTIAL_BLOCK)
             # Import only the helper checked out at the trusted workflow SHA; never artifact code.
             helper = Path(__file__).resolve().parent / "runtime_tools" / "pushed_branch_pr.mjs"
             script = """import {execFileSync} from 'node:child_process';

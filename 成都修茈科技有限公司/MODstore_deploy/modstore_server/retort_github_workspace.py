@@ -27,6 +27,7 @@ from modstore_server.para_github_runner import (
     auth_headers,
     device_matches,
 )
+from modstore_server.retort_customer_feedback import CREDENTIAL_BLOCK, REPAIR_KIND
 
 
 def _load(request_id):
@@ -55,6 +56,8 @@ def begin_dispatch(request_id, state):
             optimization=state["optimization"],
             authorization=state["approval"],
         )
+    if "customer_feedback" in effects:
+        return {"status": "blocked", "reason": CREDENTIAL_BLOCK}
     _ensure_issue(request_id, protocol, effects)
     return {"request_id": request_id, "executor": "github_para", "status": "requested"}
 
@@ -146,6 +149,12 @@ def _ensure_runner(request_id, protocol, effects):
 
 def collect_execution(request_id):
     protocol, effects = _load(request_id)
+    customer_feedback = "customer_feedback" in effects
+    blocked = {"status": "blocked", "reason": CREDENTIAL_BLOCK}
+    # Retain historical readback, but never create an issue, runner, or model task
+    # from a customer-controlled reproduction while credentials remain exportable.
+    if customer_feedback and (not effects.get("issue_number") or not effects.get("run_id")):
+        return blocked
     effects = _ensure_issue(request_id, protocol, effects)
     if not effects.get("issue_number"):
         return {"status": "unknown", "reason": "issue_response_unconfirmed"}
@@ -188,6 +197,8 @@ def collect_execution(request_id):
             )
         ]
         if len(matching) != 1:
+            if customer_feedback:
+                return blocked
             return {
                 "status": "waiting",
                 "reason": "awaiting_pull_request",
@@ -202,6 +213,8 @@ def collect_execution(request_id):
             "url": run["html_url"],
             "pull_request_number": matching[0]["number"],
         }
+    if customer_feedback:
+        return blocked
     workspace = {
         "request_id": request_id,
         "run_id": run["id"],
@@ -250,16 +263,23 @@ def collect_execution(request_id):
     return {"status": "waiting", "run_id": str(run["id"]), "event_id": event_id}
 
 
-def authorized_incident(db, payload, event_id):
+def authorized_incident(db, payload, event_id, *, read_only=False):
     workspace = payload.get("github_workspace") or {}
     request_id = workspace.get("retort_run_id")
     row = db.get(RetortEvolutionRun, request_id) if request_id else None
-    if row is None or row.event_id != event_id or row.status != "waiting_execution":
+    statuses = (
+        {"waiting_execution", "waiting_credential_isolation"}
+        if read_only
+        else {"waiting_execution"}
+    )
+    if row is None or row.event_id != event_id or row.status not in statuses:
         return False
     protocol, effects = (
         json_loads(row.protocol_json, {}),
         json_loads(row.effects_json, {}),
     )
+    if "customer_feedback" in effects and not read_only:
+        return False
     return bool(
         effects.get("authorization", {}).get("approved") is True
         and payload.get("retort_run_id") == row.id
@@ -297,6 +317,7 @@ def worker_status(request_id):
     if target and not re.fullmatch(r"[0-9a-f]{40}", target):
         raise ValueError("员工代码回执缺少确切提交")
     return {
+        **({"kind": REPAIR_KIND} if "customer_feedback" in effects else {}),
         "request_id": request_id,
         "run_id": effects.get("run_id"),
         "repository": protocol["repository"],

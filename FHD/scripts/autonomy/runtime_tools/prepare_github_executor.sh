@@ -2,7 +2,10 @@
 set -euo pipefail
 # Credentials are written only by the execution step, after every installer exits.
 if [[ "${1:-install}" == configure ]]; then
-  [[ "${DEVFLEET_FORCE_OPENCODE:-0}" == 1 ]] && exit 0
+  if [[ "${DEVFLEET_FORCE_OPENCODE:-0}" == 1 ]]; then
+    node --input-type=module -e "import { assertOpenCodeHost } from './scripts/autonomy/runtime_tools/opencode_agent.mjs'; assertOpenCodeHost();"
+    exit 0
+  fi
   python - <<'PY'
 import json, os
 from pathlib import Path
@@ -63,10 +66,11 @@ dependencies=scripts/autonomy/runtime_tools/github_executor_deps/codex
 if [[ "${DEVFLEET_FORCE_OPENCODE:-0}" == 1 ]]; then
   [[ "${PARA_PLATFORM_POOL:-0}" == 1 ]] || { echo 'OpenCode GitHub execution requires platform model admission'; exit 1; }
   node --input-type=module - <<'JS'
-import { openCodeGatewayUrl } from './scripts/autonomy/runtime_tools/opencode_agent.mjs';
+import { assertOpenCodeHost, openCodeGatewayUrl } from './scripts/autonomy/runtime_tools/opencode_agent.mjs';
+assertOpenCodeHost();
 openCodeGatewayUrl(process.env);
 if (process.platform !== 'linux' || process.arch !== 'x64' || !process.report.getReport().header.glibcVersionRuntime) {
-  throw new Error('The GitHub OpenCode lock requires the Ubuntu x64 runner');
+  throw new Error('The GitHub OpenCode lock requires the Ubuntu 22.04 x64 runner');
 }
 JS
   if ! command -v bwrap >/dev/null || ! command -v socat >/dev/null || ! command -v rg >/dev/null; then

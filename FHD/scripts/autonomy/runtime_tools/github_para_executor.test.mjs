@@ -14,12 +14,17 @@ function environment(root, stage = 'execute') {
     GITHUB_REPOSITORY: 'owner/repo', PARA_GITHUB_STAGE: stage, PARA_GITHUB_REQUEST_ID: identity.request_id,
     PARA_GITHUB_CANDIDATE_DIR: join(root, 'candidate'), PARA_GITHUB_EVIDENCE_DIR: join(root, 'evidence'), MODSTORE_PARA_DISPATCH_TOKEN: 'management' };
 }
-test('PR-controlled repairs cannot launch a credential-bearing model, including login and OpenCode', async () => {
+for (const kind of ['original_pr_repair', 'customer_feedback_repair']) {
+test(`${kind} cannot launch a credential-bearing model, including login and OpenCode`, async () => {
   const root = mkdtempSync(join(tmpdir(), 'para-repair-credentials-'));
   try {
     mkdirSync(join(root, '.codex'));
     writeFileSync(join(root, '.codex', 'auth.json'), JSON.stringify({ access_token: 'fixture-login-only' }));
-    const accepted = { ...identity, kind: 'original_pr_repair', pull_request: 7, source_sha: 'b'.repeat(40) };
+    const accepted = { ...identity, kind,
+      ...(kind === 'original_pr_repair' ? { pull_request: 7, source_sha: 'b'.repeat(40) } : {}) };
+    const reason = kind === 'customer_feedback_repair'
+      ? 'customer_feedback_requires_non_exportable_model_credentials'
+      : 'original_pr_repair_requires_non_exportable_model_credentials';
     for (const credentials of [
       { CODEX_API_KEY: 'fixture-codex-only' },
       { OPENAI_API_KEY: 'fixture-openai-only' },
@@ -29,19 +34,29 @@ test('PR-controlled repairs cannot launch a credential-bearing model, including 
       await assert.rejects(runGithubExecutor({ env: { ...environment(root), ...credentials },
         fetchStatus: async () => ({ ok: true, json: async () => accepted }),
         spawnWorker: () => assert.fail('the untrusted repair must never receive a model process'),
-      }), /original_pr_repair_requires_non_exportable_model_credentials/);
+      }), { message: reason });
       const evidence = readFileSync(join(root, 'evidence', 'execution.json'), 'utf8');
       assert.equal(JSON.parse(evidence).status, 'blocked');
+      assert.equal(JSON.parse(evidence).reason, reason);
       assert.doesNotMatch(evidence, /fixture-(?:codex|openai|login|opencode)-only/);
     }
+    if (kind === 'customer_feedback_repair') {
+      await assert.rejects(runGithubExecutor({ env: environment(root, 'resume'),
+        fetchStatus: async () => ({ ok: true, json: async () => accepted }),
+        spawnWorker: () => assert.fail('resuming a customer task cannot bypass the credential boundary'),
+      }), /customer_feedback_requires_non_exportable_model_credentials/);
+    }
     for (const stage of ['execute', 'resume']) {
-      assert.equal(await runGithubExecutor({ env: environment(root, stage),
-        fetchStatus: async () => ({ ok: true, json: async () => ({ ...accepted, finished: true, conclusion: 'success' }) }),
-        spawnWorker: () => assert.fail('completed repair readback is read-only'),
-      }), 0);
+      for (const conclusion of ['success', 'failure']) {
+        assert.equal(await runGithubExecutor({ env: environment(root, stage),
+          fetchStatus: async () => ({ ok: true, json: async () => ({ ...accepted, finished: true, conclusion }) }),
+          spawnWorker: () => assert.fail('completed repair readback is read-only'),
+        }), conclusion === 'success' ? 0 : 1);
+      }
     }
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+}
 test('execution only hands off the original acknowledged candidate and keeps delivery unfinished', async () => {
   const root = mkdtempSync(join(tmpdir(), 'para-executor-'));
   try {

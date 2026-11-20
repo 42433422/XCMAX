@@ -18,7 +18,7 @@ import {
   toolFallbackOrder,
   withFailureCleanup,
 } from './e2e_agent_runtime_policy.mjs';
-import { openCodePlatformConfig, runOpenCodeLive } from './opencode_agent.mjs';
+import { assertOpenCodeHost, openCodePlatformConfig, runOpenCodeLive } from './opencode_agent.mjs';
 
 test('GitHub dependency preparation never receives execution credentials', () => {
   const workflow = readFileSync(new URL('../../../.github/workflows/para-github-worker.yml', import.meta.url), 'utf8');
@@ -32,6 +32,13 @@ test('GitHub dependency preparation never receives execution credentials', () =>
     assert.match(step, /PARA_CODEX_CONFIG_TOML:.*secrets\.PARA_CODEX_CONFIG_TOML/);
     assert.match(step, /prepare_github_executor\.sh configure\s+node /);
   }
+  for (const name of ['employee-workspace', 'resume-verification']) {
+    const job = workflow.match(new RegExp('^  ' + name + ':\\n.*?(?=^  [a-z-]+:|$(?![\\s\\S]))', 'ms'))?.[0];
+    assert.match(job, /runs-on: \$\{\{ vars\.DEVFLEET_FORCE_OPENCODE == '1' && 'ubuntu-22\.04' \|\| 'ubuntu-24\.04' \}\}/);
+  }
+  assert.match(workflow, /publish-candidate:\n[\s\S]*?runs-on: ubuntu-24\.04/);
+  const contract = readFileSync(new URL('../../../.github/workflows/mac-control-contract.yml', import.meta.url), 'utf8');
+  assert.match(contract, /runtime-contract:\n[\s\S]*?steps:\n      - uses: actions\/checkout@v4\n        with:\n          persist-credentials: false/);
 });
 
 function githubPreparation(t) {
@@ -63,6 +70,21 @@ test('dependency installation refuses credentials before starting package code',
   }
 });
 
+test('unsupported Linux hosts stop OpenCode preparation before installers or authorization', {
+  skip: process.platform !== 'linux' || /^VERSION_ID="22\.04"$/m.test(readFileSync('/etc/os-release', 'utf8')),
+}, t => {
+  const { run, home, runtime } = githubPreparation(t);
+  for (const mode of ['install', 'configure']) {
+    const result = run(mode, { DEVFLEET_FORCE_OPENCODE: '1',
+      ...(mode === 'configure' ? { PARA_PLATFORM_GATEWAY_KEY: 'fixture-must-not-be-used' } : {}) });
+    assert.notEqual(result.status, 0, mode);
+    assert.match(result.stdout + result.stderr, /opencode_linux_host_requires_ubuntu_22_04/);
+    assert.doesNotMatch(result.stdout + result.stderr, /fixture-must-not-be-used/);
+    assert.equal(existsSync(join(runtime, 'npm-called')), false);
+    assert.equal(existsSync(join(home, '.codex')), false);
+  }
+});
+
 test('runtime authorization writes Codex config without running dependency installers', { skip: process.platform === 'win32' }, t => {
   const { run, home, runtime } = githubPreparation(t);
   let result = run('configure', { PARA_PLATFORM_GATEWAY_KEY: 'fixture-gateway-key' });
@@ -80,7 +102,10 @@ test('runtime authorization writes Codex config without running dependency insta
   assert.equal(statSync(join(home, '.codex', 'auth.json')).mode & 0o777, 0o600);
   assert.equal(readFileSync(config, 'utf8'), 'model = "configured-model"\n');
   result = run('configure', { DEVFLEET_FORCE_OPENCODE: '1', PARA_PLATFORM_GATEWAY_KEY: 'fixture-opencode-key' });
-  assert.equal(result.status, 0, result.stderr);
+  let hostError;
+  try { assertOpenCodeHost(); } catch (error) { hostError = error; }
+  assert.equal(result.status, hostError ? 1 : 0, result.stderr);
+  if (hostError) assert.ok(result.stderr.includes(hostError.message));
   assert.equal(existsSync(join(runtime, 'npm-called')), false);
 });
 

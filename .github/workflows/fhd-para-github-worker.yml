@@ -26,7 +26,7 @@ defaults:
 jobs:
   employee-workspace:
     if: github.ref == 'refs/heads/main' && github.run_attempt == 1
-    runs-on: ubuntu-24.04
+    runs-on: ${{ vars.DEVFLEET_FORCE_OPENCODE == '1' && 'ubuntu-22.04' || 'ubuntu-24.04' }}
     timeout-minutes: 120
     permissions:
       contents: read
@@ -144,7 +144,7 @@ jobs:
   resume-verification:
     needs: publish-candidate
     if: needs.publish-candidate.outputs.original_pr != 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ${{ vars.DEVFLEET_FORCE_OPENCODE == '1' && 'ubuntu-22.04' || 'ubuntu-24.04' }}
     timeout-minutes: 120
     permissions:
       contents: read

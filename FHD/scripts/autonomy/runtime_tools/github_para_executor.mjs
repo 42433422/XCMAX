@@ -32,6 +32,7 @@ export async function runGithubExecutor({ env = process.env, fetchStatus = fetch
   }
   let accepted = await state();
   const repair = accepted.kind === 'original_pr_repair';
+  const customerRepair = accepted.kind === 'customer_feedback_repair';
   if (repair) {
     for (let attempt = 0; !accepted.finished && !accepted.run_id && attempt < 18; attempt += 1) {
       await sleep(10000);
@@ -43,15 +44,16 @@ export async function runGithubExecutor({ env = process.env, fetchStatus = fetch
         || (!accepted.finished && stage !== 'execute')) throw new Error('original_pr_dispatch_mismatch');
   }
   if (accepted.finished) {
-    if (stage !== 'resume' && !repair) throw new Error('management_dispatch_already_finished');
+    if (stage !== 'resume' && !repair && !customerRepair) throw new Error('management_dispatch_already_finished');
     mkdirSync(directory, { recursive: true });
     writeFileSync(join(directory, 'execution.json'), JSON.stringify(accepted) + '\n');
     return accepted.conclusion === 'success' ? 0 : 1;
   }
-  if (repair) {
+  if (repair || customerRepair) {
     // Scoped environment grants and a same-user proxy cannot keep PR-controlled
     // tools from exporting API keys or HOME login material. No safe executor exists yet.
-    const reason = 'original_pr_repair_requires_non_exportable_model_credentials';
+    const reason = customerRepair ? 'customer_feedback_requires_non_exportable_model_credentials'
+      : 'original_pr_repair_requires_non_exportable_model_credentials';
     mkdirSync(directory, { recursive: true });
     writeFileSync(join(directory, 'execution.json'), JSON.stringify({
       request_id: request, run_id: run, finished: true, conclusion: 'failure', status: 'blocked', reason,

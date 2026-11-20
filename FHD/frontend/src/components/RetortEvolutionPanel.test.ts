@@ -105,6 +105,23 @@ describe('Retort native approval console', () => {
     await flushPromises()
     expect(mocks.post).toHaveBeenCalledWith('/api/xcmax/admin/retort-evolution/run-1/decision', { digest: 'c'.repeat(64), approved: true })
   })
+  it('shows the credential pause without offering approval as an execution bypass', async () => {
+    const detail = {
+      ...run(), status: 'waiting_credential_isolation',
+      snapshot: { pending: [{ kind: 'execution' }], execution: {
+        reason: 'customer_feedback_requires_non_exportable_model_credentials',
+      } },
+    }
+    mocks.get.mockImplementation((url: string) => Promise.resolve(url.endsWith('run-1') ? detail : overview()))
+    render()
+    await flushPromises()
+    await wrapper.get('.el-table__body button').trigger('click')
+    await flushPromises()
+    expect(document.body.textContent).toContain('等待凭据隔离')
+    expect(document.body.textContent).toContain('客户反馈修复已暂停')
+    expect([...document.body.querySelectorAll('button')].some((b) => b.textContent?.includes('批准并派工'))).toBe(false)
+    expect(mocks.post).not.toHaveBeenCalled()
+  })
   it('shows the merged repair and verified running release as distinct revisions', async () => {
     const merge = 'c'.repeat(40)
     const release = 'd'.repeat(40)

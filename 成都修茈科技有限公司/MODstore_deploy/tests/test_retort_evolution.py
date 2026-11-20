@@ -304,10 +304,16 @@ def test_artifact_download_checks_digest_paths_and_credential_boundary(
     assert "authorization" not in observed[1].headers
 
 
-def test_completion_requires_issue_linked_pr_at_the_verified_commit(setup, monkeypatch):
+@pytest.mark.parametrize("customer_feedback", [False, True])
+def test_completion_requires_issue_linked_pr_at_the_verified_commit(
+    setup, monkeypatch, customer_feedback
+):
     request_id = create(setup)
     assert decision(setup["client"], request_id).status_code == 200
     workspace._save(request_id, run_id=42)
+    if customer_feedback:
+        # Existing executions created before the credential pause retain readback.
+        workspace._save(request_id, customer_feedback={"ticket_id": 1})
     pulls = []
 
     def github(method, path, body=None):
@@ -331,7 +337,12 @@ def test_completion_requires_issue_linked_pr_at_the_verified_commit(setup, monke
         "worker_status",
         lambda _: {"finished": True, "conclusion": "success", "target_sha": "d" * 40},
     )
-    assert workspace.collect_execution(request_id)["reason"] == "awaiting_pull_request"
+    missing = (
+        "customer_feedback_requires_non_exportable_model_credentials"
+        if customer_feedback
+        else "awaiting_pull_request"
+    )
+    assert workspace.collect_execution(request_id)["reason"] == missing
     pulls.append(
         {
             "number": 456,
@@ -340,10 +351,54 @@ def test_completion_requires_issue_linked_pr_at_the_verified_commit(setup, monke
             "base": {"ref": "main", "repo": {"full_name": "example/product"}},
         }
     )
-    assert workspace.collect_execution(request_id)["reason"] == "awaiting_pull_request"
+    assert workspace.collect_execution(request_id)["reason"] == missing
     pulls[0]["head"]["sha"] = "d" * 40
     result = workspace.collect_execution(request_id)
     assert result["status"] == "completed" and result["pull_request_number"] == 456
+
+
+@pytest.mark.parametrize(
+    "existing",
+    [
+        {},
+        {"issue_number": 123},
+        {"issue_number": 123, "runner_intent": True},
+        {"issue_number": 123, "run_id": 42},
+    ],
+)
+def test_customer_feedback_resume_never_starts_or_redispatches_a_model(
+    setup, monkeypatch, existing
+):
+    from modstore_server.retort_customer_feedback import CREDENTIAL_BLOCK
+
+    request_id = create(setup)
+    workspace._save(request_id, customer_feedback={"ticket_id": 1}, **existing)
+    calls = []
+
+    def github(method, path, body=None):
+        calls.append((method, path))
+        assert method == "GET" and path.endswith("/actions/runs/42")
+        return {
+            "id": 42,
+            "head_branch": "main",
+            "head_sha": "a" * 40,
+            "run_attempt": 1,
+            "path": ".github/workflows/fhd-para-github-worker.yml",
+            "status": "in_progress",
+        }
+
+    monkeypatch.setattr(workspace, "github", github)
+    monkeypatch.setattr(
+        workspace.httpx, "Client", lambda **kw: pytest.fail("no device or model dispatch")
+    )
+    for _ in range(2):
+        assert workspace.collect_execution(request_id) == {
+            "status": "blocked",
+            "reason": CREDENTIAL_BLOCK,
+        }
+    assert len(calls) == (2 if existing.get("run_id") else 0)
+    with get_session_factory()() as db:
+        assert db.get(RetortEvolutionRun, request_id).event_id is None
 
 
 def test_verified_logs_are_retained_with_existing_retort_encryption(tmp_path, monkeypatch):
@@ -586,7 +641,7 @@ def test_feedback_run_binds_original_customer_and_production_release(
     assert "test-private@example.com" not in json.dumps(approval_context)
 
     from modstore_server import retort_customer_feedback as feedback
-    from modstore_server.dot_ticket_dispatch import _incident_prompt
+    from modstore_server.dot_ticket_dispatch import DoltIncidentContractError, _incident_prompt
 
     with get_session_factory()() as db:
         run = db.get(RetortEvolutionRun, request_id)
@@ -626,6 +681,9 @@ def test_feedback_run_binds_original_customer_and_production_release(
         }
         db.flush()
         private = feedback.private_execution_context(db, event.id, payload)
+        assert not workspace.authorized_incident(db, payload, event.id)
+        run.status = "waiting_credential_isolation"
+        assert workspace.authorized_incident(db, payload, event.id, read_only=True)
         effects["plan"]["private_customer_feedback"]["reproduction"] = ["not approved"]
         run.effects_json = json_dumps(effects)
         with pytest.raises(ValueError, match="not_approved"):
@@ -644,12 +702,42 @@ def test_feedback_run_binds_original_customer_and_production_release(
     assert "首次导入未成功" in private["reproduction"][0]
     assert "test-private@example.com" not in json.dumps(private, ensure_ascii=False)
     assert ticket_no not in json.dumps(private, ensure_ascii=False)
-    prompt = _incident_prompt(
-        {"role": "scout", "source": {}, "handoffs": [], "review": {}, "customer_feedback": private},
-        {},
-    )
-    assert "首次导入未成功" in prompt and "test-private@example.com" not in prompt
+    for tool in ("dolt", "codex", "opencode"):
+        for role in ("scout", "fix", "verify", "escalation_review"):
+            with pytest.raises(DoltIncidentContractError, match=feedback.CREDENTIAL_BLOCK):
+                _incident_prompt(
+                    {
+                        "role": role,
+                        "source": {},
+                        "handoffs": [],
+                        "review": {},
+                        "customer_feedback": private,
+                    },
+                    {},
+                    tool,
+                )
 
+    assert (
+        client.post(
+            f"{base}/{request_id}/decision",
+            json={"digest": selected["snapshot"]["pending"][0]["digest"], "approved": True},
+        ).status_code
+        == 200
+    )
+    assert read(client, request_id)["status"] == "waiting_credential_isolation"
+    for _ in range(2):
+        service.tick()
+        paused = read(client, request_id)
+        assert paused["status"] == "waiting_credential_isolation"
+        assert paused["snapshot"]["execution"]["reason"] == feedback.CREDENTIAL_BLOCK
+        assert paused["snapshot"]["pending"] == [{"kind": "execution", "request_id": request_id}]
+    assert not [call for call in setup["calls"] if call[0] == "POST"]
+    status = workspace.worker_status(request_id)
+    assert status["kind"] == feedback.REPAIR_KIND and status["finished"] is False
+    assert status["conclusion"] == "unknown"
+
+    # Only already-completed historical executions may continue to release readback.
+    workspace._save(request_id, run_id=100, issue_number=20)
     monkeypatch.setattr(service.ComponentPorts, "collect", lambda _self, _: {"status": "completed"})
     monkeypatch.setattr(
         service.ComponentPorts,
@@ -673,7 +761,6 @@ def test_feedback_run_binds_original_customer_and_production_release(
         assert result.status_code == 200, result.text
         return read(client, request_id)
 
-    approve()
     assert resume()["status"] == "awaiting_acceptance"
     approve()
     assert resume()["status"] == "waiting_delivery"

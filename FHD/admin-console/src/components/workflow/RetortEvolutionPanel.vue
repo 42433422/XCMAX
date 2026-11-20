@@ -105,6 +105,7 @@
     awaiting_dispatch_approval: '待派工审批',
     authorized: '已批准',
     waiting_execution: '云端执行中',
+    waiting_credential_isolation: '等待凭据隔离',
     verifying: '独立验证中',
     awaiting_acceptance: '待验收',
     accepted: '已验收',
@@ -131,6 +132,7 @@
     '知识回流',
   ];
   const reasons: Record<string, string> = {
+    customer_feedback_requires_non_exportable_model_credentials: '客户反馈修复已暂停，等待不可导出的执行凭据；现有结果仍可核对',
     frozen_source_changed: '执行版本与已批准方案不一致，请按当前版本重新建单',
     awaiting_pull_request: '等待关联任务的代码 PR',
     waiting_cloud_device: '等待云端员工上线',
@@ -166,6 +168,7 @@
     awaiting_dispatch_approval: 3,
     authorized: 4,
     waiting_execution: 4,
+    waiting_credential_isolation: 4,
     verifying: 5,
     awaiting_acceptance: 6,
     accepted: 7,

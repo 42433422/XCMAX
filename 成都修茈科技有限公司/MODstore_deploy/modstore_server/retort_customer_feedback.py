@@ -16,6 +16,9 @@ from modstore_server.customer_service_triage import ticket_taxonomy
 from modstore_server.models import RetortEvolutionRun, User, get_session_factory
 from modstore_server.models_cs import CustomerServiceMessage, CustomerServiceTicket
 
+REPAIR_KIND = "customer_feedback_repair"
+CREDENTIAL_BLOCK = "customer_feedback_requires_non_exportable_model_credentials"
+
 
 def feedback_templates(templates):
     return {
@@ -333,7 +336,7 @@ def check_dispatch(request_id, state):
 
 
 def private_execution_context(db, event_id, payload):
-    """Deliver the exact privately reviewed scenario only to its authorized task."""
+    """Read the privately approved scenario; this does not authorize model execution."""
     from modstore_server.retort_github_workspace import authorized_incident
 
     run_id = payload.get("retort_run_id")
@@ -341,7 +344,7 @@ def private_execution_context(db, event_id, payload):
     context = _selected_execution_context(db, run)
     if context is None:
         return None
-    if not authorized_incident(db, payload, event_id):
+    if not authorized_incident(db, payload, event_id, read_only=True):
         raise ValueError("feedback_execution_not_authorized")
     effects = json_loads(run.effects_json, {})
     _check_approved_context(
