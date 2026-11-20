@@ -5,6 +5,28 @@ from __future__ import annotations
 from pathlib import Path
 
 
+def test_registry_only_employee_preserves_digest(tmp_path, monkeypatch):
+    monkeypatch.setenv("MODSTORE_DB_PATH", str(tmp_path / "modstore.db"))
+    monkeypatch.setenv("MODSTORE_CATALOG_DIR", str(tmp_path / "catalog"))
+    from modstore_server import models
+    from modstore_server.employee_runtime import load_employee_pack
+
+    models._engine = None
+    models._SessionFactory = None
+    models.init_db()
+    monkeypatch.setattr(
+        "modstore_server.employee_runtime.is_planned_duty_employee_pack", lambda *_: True
+    )
+    monkeypatch.setattr(
+        "modstore_server.employee_runtime.get_duty_employee_record",
+        lambda _: {"id": "duty-only", "version": "1.0.0", "sha256": "a" * 64},
+    )
+    with models.get_session_factory()() as db:
+        pack = load_employee_pack(db, "duty-only")
+    assert pack["pack_id"] == "duty-only"
+    assert pack["sha256"] == "a" * 64
+
+
 def test_load_employee_pack_prefers_catalog_row_over_duty_registry(tmp_path, monkeypatch):
     monkeypatch.setenv("MODSTORE_CATALOG_DIR", str(tmp_path / "catalog"))
     monkeypatch.setenv("MODSTORE_DB_PATH", str(tmp_path / "modstore.db"))

@@ -4,6 +4,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -48,7 +49,78 @@ def verify(approval, sha, version, runs):
             )
 
 
+def verify_running_release(
+    admission,
+    health,
+    digest,
+    *,
+    controller_sha,
+    workflow_run_id,
+    signed_attempt,
+    workflow_attempt,
+):
+    """Finalize acceptance only after a signed artifact and public runtime agree."""
+    sha = admission.get("git_sha", "")
+    version = admission.get("product_version", "")
+    if (
+        not re.fullmatch(r"[0-9a-f]{40}", sha)
+        or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:\.[0-9]+)?", version)
+        or not re.fullmatch(r"[0-9a-f]{64}", digest)
+        or not re.fullmatch(r"[0-9a-f]{40}", controller_sha)
+        or not re.fullmatch(r"[1-9][0-9]*", workflow_run_id)
+        or not re.fullmatch(r"[1-9][0-9]*", signed_attempt)
+        or not re.fullmatch(r"[1-9][0-9]*", workflow_attempt)
+        or int(signed_attempt) > int(workflow_attempt)
+        or admission.get("merge_sha") != sha
+        or admission.get("controller_sha") != controller_sha
+        or admission.get("workflow_run_id") != workflow_run_id
+        or admission.get("signed_run_attempt") != signed_attempt
+        or admission.get("environment") != "production"
+        or admission.get("artifact_sha256") != digest
+        or admission.get("signature_verified") is not True
+        or admission.get("signature_verifier") != "github-artifact-attestations"
+        or not re.fullmatch(r"[1-9][0-9]*", admission.get("attestation_id", ""))
+    ):
+        raise ValueError(
+            "release admission is not bound to the verified signature and workflow"
+        )
+    release_id = f"xcagi-{version}-{sha}"
+    if (
+        health.get("ok") is not True
+        or health.get("deploy_tier") != "production"
+        or health.get("git_sha") != sha
+        or health.get("artifact_sha256") != digest
+        or health.get("release_id") != release_id
+    ):
+        raise ValueError(
+            "public runtime differs from the signed artifact, version, or release SHA"
+        )
+    return {
+        **admission,
+        "release_id": release_id,
+        "workflow_run_attempt": workflow_attempt,
+        "runtime_release_id": health["release_id"],
+        "runtime_git_sha": health["git_sha"],
+        "runtime_artifact_sha256": health["artifact_sha256"],
+    }
+
+
 def main():
+    if sys.argv[1:] == ["--finalize"]:
+        root = Path(os.environ["RUNNER_TEMP"])
+        receipt = verify_running_release(
+            json.loads((root / "modstore-release-admission.json").read_text()),
+            json.loads((root / "modstore-release-health.json").read_text()),
+            os.environ["APPROVED_ARTIFACT_SHA256"],
+            controller_sha=os.environ["GITHUB_SHA"],
+            workflow_run_id=os.environ["GITHUB_RUN_ID"],
+            signed_attempt=os.environ["SIGNED_RUN_ATTEMPT"],
+            workflow_attempt=os.environ["GITHUB_RUN_ATTEMPT"],
+        )
+        (root / "modstore-deployment-correlation.json").write_text(json.dumps(receipt))
+        return
+    if sys.argv[1:]:
+        raise SystemExit("Unexpected release verifier arguments")
     sha = os.environ["REQUESTED_SHA"]
     if not re.fullmatch(r"[0-9a-f]{40}", sha):
         raise ValueError("full release SHA required")

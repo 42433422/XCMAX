@@ -1,5 +1,5 @@
 {
-  "lines": 2526757,
+  "lines": 2528358,
   "updated": "2026-11-20",
-  "note": "按用户要求新增 OpenCode 第五个 CLI，复用官方 v1.19.6，保留派工、凭据隔离和回归，净增 94 行"
+  "note": "按用户要求新增第 5 个 CLI，复用 OpenCode v1.19.6 原生 SSE 和既有 WebSocket，接入平台 Responses 并实现可逆停用策略"
 }

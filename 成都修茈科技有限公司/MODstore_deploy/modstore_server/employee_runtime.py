@@ -201,6 +201,7 @@ def load_employee_pack(session, pack_id: str) -> Dict[str, Any]:
         name = str(row.name or pkg_id)
         version = str(row.version or "")
         stored_filename = str(row.stored_filename or "")
+        sha256 = str(row.sha256 or "")
     else:
         duty_rec = (
             get_duty_employee_record(requested_id)
@@ -212,6 +213,7 @@ def load_employee_pack(session, pack_id: str) -> Dict[str, Any]:
             name = str(duty_rec.get("name") or pkg_id)
             version = str(duty_rec.get("version") or "")
             stored_filename = str(duty_rec.get("stored_filename") or "")
+            sha256 = str(duty_rec.get("sha256") or "")
         else:
             rec = employee_pack_records_from_store().get(requested_id)
             if not isinstance(rec, dict):
@@ -220,6 +222,7 @@ def load_employee_pack(session, pack_id: str) -> Dict[str, Any]:
             name = (str(rec.get("name") or pkg_id).strip() or pkg_id)[:256]
             version = str(rec.get("version") or "1.0.0").strip() or "1.0.0"
             stored_filename = str(rec.get("stored_filename") or "").strip()
+            sha256 = str(rec.get("sha256") or "")
 
     manifest: Dict[str, Any] = {"id": pkg_id, "name": name, "version": version}
     fn = (stored_filename or "").strip()
@@ -255,6 +258,7 @@ def load_employee_pack(session, pack_id: str) -> Dict[str, Any]:
         "name": name,
         "version": version,
         "stored_filename": stored_filename,
+        "sha256": sha256,
         "archive_mtime": archive_mtime,
         "manifest": manifest,
         **employee_partition_meta(pkg_id, "employee_pack"),
