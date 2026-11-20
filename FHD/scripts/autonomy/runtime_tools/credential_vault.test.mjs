@@ -20,6 +20,19 @@ const tmp = () => { const dir = mkdtempSync(path.join(tmpdir(), 'cred-vault-'));
 after(() => temporaryDirectories.forEach((dir) => rmSync(dir, { recursive: true })));
 const rows = (file) => readFileSync(file, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
 
+test('OpenCode receives only its own model credential under a task grant', () => {
+  const env = { OPENCODE_CONFIG: '/trusted/opencode.json', OPENCODE_API_KEY: fresh('open'),
+    CODEX_API_KEY: fresh('codex'), DEVFLEET_DEVICE_TOKEN: fresh('device') };
+  const vault = createCredentialVault({ env, now: () => 0, auditPath: path.join(tmp(), 'audit.jsonl') });
+  const grant = { grant_id: 'g', expires_at: 60, scopes: ['OPENCODE_API_KEY', 'CODEX_API_KEY'] };
+  assert.deepEqual(vault.childEnv(env, grant, { tool: 'opencode' }), {
+    OPENCODE_CONFIG: env.OPENCODE_CONFIG, OPENCODE_API_KEY: env.OPENCODE_API_KEY,
+  });
+  assert.deepEqual(vault.childEnv(env, { ...grant, expires_at: 0 }, { tool: 'opencode' }), {
+    OPENCODE_CONFIG: env.OPENCODE_CONFIG,
+  });
+});
+
 test('getCredential audits who/when/task/purpose and never the value', () => {
   const auditPath = path.join(tmp(), 'audit.jsonl');
   const value = fresh('v');

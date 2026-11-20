@@ -28,7 +28,7 @@ class TaskRequest(BaseModel):
     request_key: str = Field(min_length=8, max_length=128)
     message: str = Field(min_length=1, max_length=12000)
     target: Literal["mac", "windows"] = "mac"
-    tool: Literal["codex", "claude_code", "cursor", "trae"] = "codex"
+    tool: Literal["codex", "claude_code", "cursor", "trae", "opencode"] = "codex"
     mode: Literal["review", "code"] = "review"
     source_sha: str = Field(default="", pattern=r"^(?:[0-9a-f]{40})?$")
     ticket_id: int | None = Field(default=None, gt=0)

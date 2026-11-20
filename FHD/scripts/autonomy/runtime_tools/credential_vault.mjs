@@ -27,10 +27,12 @@ const MODEL_AUTH = {
   cursor: ['CURSOR_API_KEY'],
   claude_code: ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN'],
   trae: ['TRAE_API_KEY'],
+  opencode: ['OPENCODE_API_KEY'],
 };
 const MODEL_CONFIG = {
   codex: ['CODEX_HOME', 'OPENAI_BASE_URL', 'OPENAI_ORG_ID', 'OPENAI_PROJECT_ID', 'DEVFLEET_CODEX_API_KEY_ENV'],
   claude_code: ['CLAUDE_CONFIG_DIR', 'ANTHROPIC_BASE_URL'],
+  opencode: ['OPENCODE_CONFIG', 'XDG_DATA_HOME', 'XDG_CACHE_HOME'],
 };
 
 /** Prompt text cannot confer authority: only narrow the built-in model-auth set. */

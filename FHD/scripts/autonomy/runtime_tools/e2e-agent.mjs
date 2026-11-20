@@ -10,6 +10,8 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { createRequire } from 'node:module';
+import { createCredentialVault, parseCredentialGrant } from './credential_vault.mjs';
+import { openCodeExecutable, runOpenCodeAgent } from './opencode_agent.mjs';
 import {
   describeTraeFailure,
   isTraeProviderFailoverEligible,
@@ -27,6 +29,7 @@ const require = createRequire(import.meta.url);
 const WebSocket = require('ws');
 
 const execFileAsync = promisify(execFile);
+const credentialVault = createCredentialVault({ actor: 'e2e-agent' });
 
 const token = process.env.DEVFLEET_DEVICE_TOKEN || resolveDeviceToken();
 const apiBase = (process.env.DEVFLEET_API_URL || 'http://localhost:3001').replace(/\/$/, '');
@@ -1147,6 +1150,19 @@ async function handleTask(ws, task) {
     }
   }
 
+  if (devTool === 'opencode') {
+    try {
+      const env = credentialVault.childEnv(process.env, parseCredentialGrant(executionPrompt), { tool: 'opencode' });
+      toolOutput = credentialVault.redact(await runOpenCodeAgent(taskDir, executionPrompt, {
+        env, timeoutMs: toolCommandTimeoutMs, reportOnly,
+      }));
+    } catch (error) {
+      const reason = error.stderr || error.stdout || error.code || error.message;
+      await failTask(ws, task, credentialVault.redact('OpenCode CLI 失败: ' + String(reason).slice(0, 800)));
+      return;
+    }
+  }
+
   if (useClaude) {
     send(ws, {
       type: 'task_log',
@@ -1325,7 +1341,7 @@ async function handleTask(ws, task) {
     return;
   }
 
-  const waitMs = useTrae || useClaude || useCursor || useCodex ? 120_000 : 900_000;
+  const waitMs = useTrae || useClaude || useCursor || useCodex || devTool === 'opencode' ? 120_000 : 900_000;
   if (!(await waitForMeaningfulChanges(taskDir, waitMs, baseHead))) {
     await failTask(
       ws,
@@ -1441,6 +1457,7 @@ function publishToolStatus(ws) {
   const codexInstalled = codexAgentAvailable();
   const cursorInstalled = cursorAgentAvailable();
   const claudeInstalled = claudeAgentAvailable();
+  const openCodeInstalled = Boolean(openCodeExecutable());
   send(ws, {
     type: 'tool_status',
     tools: [
@@ -1448,6 +1465,7 @@ function publishToolStatus(ws) {
       { tool_name: 'codex', status: toolExecutionStatus('codex', codexInstalled) },
       { tool_name: 'cursor', status: toolExecutionStatus('cursor', cursorInstalled) },
       { tool_name: 'claude_code', status: toolExecutionStatus('claude_code', claudeInstalled) },
+      { tool_name: 'opencode', status: toolExecutionStatus('opencode', openCodeInstalled) },
     ],
     capabilities: {
       ...defaultCapabilities(),
@@ -1456,6 +1474,7 @@ function publishToolStatus(ws) {
       cursor_agent_cli: cursorInstalled,
       codex_cli: codexInstalled,
       claude_cli: claudeInstalled,
+      opencode_cli: openCodeInstalled,
     },
   });
 }

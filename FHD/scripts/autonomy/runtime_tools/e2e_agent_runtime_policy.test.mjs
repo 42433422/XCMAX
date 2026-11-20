@@ -37,6 +37,7 @@ test('task assignment wins over device config when no force policy is active', (
     'trae',
   );
   assert.equal(requestedToolName({}, { devTool: 'cursor' }), 'cursor');
+  assert.equal(effectiveToolName({ task: { tool_name: 'opencode' }, env: {} }), 'opencode');
 });
 
 test('queue callers can choose a supported fallback tool', () => {
@@ -92,6 +93,7 @@ test('no fallback order keeps the legacy single-tool path', () => {
 
 test('requested tool runs first, then the rest of the chain in order without repeats', () => {
   assert.deepEqual(toolAttemptPlan({ task: { tool: 'cursor' }, env: CHAIN }), ['cursor', 'codex', 'claude_code', 'trae']);
+  assert.deepEqual(toolAttemptPlan({ task: { tool: 'opencode' }, env: CHAIN }), ['opencode', 'codex', 'cursor', 'claude_code', 'trae']);
   assert.deepEqual(toolAttemptPlan({ task: {}, env: CHAIN }), ['codex', 'cursor', 'claude_code', 'trae']);
   assert.deepEqual(toolAttemptPlan({ task: { tool: 'codex' }, env: CHAIN }), ['codex', 'cursor', 'claude_code', 'trae']);
 });

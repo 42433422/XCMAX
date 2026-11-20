@@ -30,6 +30,7 @@ import { createCredentialVault, parseCredentialGrant } from './credential_vault.
 import { createReceiptOutbox, createParaReportOutbox, requestManagedParaSession } from './control_receipt_outbox.mjs';
 import { sourceIdentity } from './control_git_handoff.mjs';
 import { candidateMode, exportCandidate, githubReadEnv } from './github_para_candidate.mjs';
+import { openCodeExecutable, runOpenCodeAgent } from './opencode_agent.mjs';
 import {
   describeCodexFailure,
   describeTraeFailure,
@@ -484,6 +485,7 @@ async function runClaudeAgent(taskDir, prompt) {
 }
 
 function toolAvailable(tool) {
+  if (tool === 'opencode') return Boolean(openCodeExecutable());
   if (tool === 'trae') return traeAgentAvailable();
   if (tool === 'claude_code') return claudeAgentAvailable();
   if (tool === 'cursor') return process.env.DEVFLEET_E2E_CURSOR !== '0' && cursorAgentAvailable();
@@ -491,7 +493,10 @@ function toolAvailable(tool) {
   return false;
 }
 
-function runToolOnce(tool, taskDir, prompt, log) {
+function runToolOnce(tool, taskDir, prompt, log, reportOnly) {
+  if (tool === 'opencode') return runOpenCodeAgent(taskDir, prompt, {
+    env: toolEnv(prompt, tool), timeoutMs: toolCommandTimeoutMs, reportOnly,
+  });
   if (tool === 'trae') return runTraeAgent(taskDir, prompt);
   if (tool === 'claude_code') return runClaudeAgent(taskDir, prompt);
   if (tool === 'cursor') return runCursorAgent(taskDir, prompt);
@@ -543,7 +548,7 @@ async function runToolFallbackChain({ ws, task, taskDir, prompt, plan, requested
     let failure = null;
     let output = '';
     try {
-      output = String(await runToolOnce(tool, taskDir, prompt, log) || '');
+      output = String(await runToolOnce(tool, taskDir, prompt, log, reportOnly) || '');
       if (tool === 'codex' && output.startsWith('[codex exit=')) {
         const dirty = await gitMaybe(taskDir, ['status', '--porcelain', '--', '.']);
         if (!dirty && !(await headMovedFromBase(taskDir, baseHead))) failure = describeCodexFailure(output);
@@ -1336,7 +1341,8 @@ async function handleTask(ws, task) {
   let toolError = '';
   let toolOutput = '';
   // DEVFLEET_TOOL_FALLBACK_ORDER 已配置且无 FORCE 覆盖时走回退链，否则下面旧路径原样不变。
-  const fallbackPlan = toolAttemptPlan({ task, agentConfig, isAvailable: toolAvailable });
+  const fallbackPlan = toolAttemptPlan({ task, agentConfig, isAvailable: toolAvailable })
+    ?? (devTool === 'opencode' ? ['opencode'] : null);
   const useChain = Array.isArray(fallbackPlan);
   const useTrae = !useChain && devTool === 'trae' && traeAgentAvailable();
   const useClaude =
@@ -1379,6 +1385,10 @@ async function handleTask(ws, task) {
       baseHead,
       reportOnly,
     }));
+    if (toolError && (devTool === 'opencode' || fallbackPlan.includes('opencode'))) {
+      await failTask(ws, task, toolError);
+      return;
+    }
   }
 
   if (useTrae) {
@@ -1802,44 +1812,24 @@ let preflightPending = false;
 function publishToolStatus(ws) {
   void controlReceipts.drain();
   void paraReports.drain();
+  const openCodeBin = openCodeExecutable();
   if (!preflightPending) {
     preflightPending = true;
     probeTools({ codex: resolveCodexAgentBin(), cursor: resolveCursorAgentBin(),
-      trae: resolveTraeAgentBin(), claude_code: resolveClaudeAgentBin() })
+      trae: resolveTraeAgentBin(), claude_code: resolveClaudeAgentBin(),
+      ...(openCodeBin ? { opencode: openCodeBin } : {}) })
       .then((result) => { preflight = result; })
       .finally(() => { preflightPending = false; });
   }
-  const traeInstalled = traeAgentAvailable();
-  const codexInstalled = codexAgentAvailable();
-  const cursorInstalled = cursorAgentAvailable();
-  const claudeInstalled = claudeAgentAvailable();
+  const installed = { trae: traeAgentAvailable(), codex: codexAgentAvailable(),
+    cursor: cursorAgentAvailable(), claude_code: claudeAgentAvailable(), opencode: Boolean(openCodeBin) };
   send(ws, {
     type: 'tool_status',
-    tools: [
-      {
-        tool_name: 'trae',
-        status: toolExecutionStatus('trae', traeInstalled),
-        current_task: activeTaskId(runningTaskIdsByTool.get('trae'), taskQueuesByTool.get('trae')),
-      },
-      {
-        tool_name: 'codex',
-        status: toolExecutionStatus('codex', codexInstalled),
-        current_task: activeTaskId(runningTaskIdsByTool.get('codex'), taskQueuesByTool.get('codex')),
-      },
-      {
-        tool_name: 'cursor',
-        status: toolExecutionStatus('cursor', cursorInstalled),
-        current_task: activeTaskId(runningTaskIdsByTool.get('cursor'), taskQueuesByTool.get('cursor')),
-      },
-      {
-        tool_name: 'claude_code',
-        status: toolExecutionStatus('claude_code', claudeInstalled),
-        current_task: activeTaskId(
-          runningTaskIdsByTool.get('claude_code'),
-          taskQueuesByTool.get('claude_code'),
-        ),
-      },
-    ],
+    tools: supportedToolNames.map(tool => ({
+      tool_name: tool,
+      status: toolExecutionStatus(tool, installed[tool]),
+      current_task: activeTaskId(runningTaskIdsByTool.get(tool), taskQueuesByTool.get(tool)),
+    })),
     capabilities: {
       ...defaultCapabilities(),
       e2e_agent: true,
@@ -1854,10 +1844,11 @@ function publishToolStatus(ws) {
       tool_preflight: preflight,
       control_reports: process.env.XCMAX_CONTROL_REPORTS_ENABLED === '1',
       supports_exact_commit: true,
-      trae_cli: traeInstalled,
-      cursor_agent_cli: cursorInstalled,
-      codex_cli: codexInstalled,
-      claude_cli: claudeInstalled,
+      trae_cli: installed.trae,
+      cursor_agent_cli: installed.cursor,
+      codex_cli: installed.codex,
+      claude_cli: installed.claude_code,
+      opencode_cli: installed.opencode,
     },
   });
 }

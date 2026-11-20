@@ -490,7 +490,7 @@ def main() -> None:
     parser.add_argument("--token", default=os.environ.get("GITHUB_TOKEN", ""))
     parser.add_argument("--base-branch", default="main")
     parser.add_argument(
-        "--tool", default="cursor", choices=["cursor", "codex", "claude_code", "trae"]
+        "--tool", default="cursor", choices=["cursor", "codex", "claude_code", "trae", "opencode"]
     )
     parser.add_argument(
         "--dispatch-base",

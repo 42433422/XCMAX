@@ -12,7 +12,7 @@ HELPER_TARGET="$TARGET_DIR/trae_failover.mjs"
 QUEUE_POLICY_TARGET="$TARGET_DIR/para_queue_policy.mjs"
 RUNTIME_POLICY_TARGET="$TARGET_DIR/e2e_agent_runtime_policy.mjs"
 WATCHDOG_TARGET="$TARGET_DIR/run-watchdog.sh"
-CONTROL_HELPERS=(tool_preflight.mjs control_receipt_outbox.mjs control_git_handoff.mjs github_para_candidate.mjs credential_vault.mjs codex_model_gateway.mjs pushed_branch_pr.mjs)
+CONTROL_HELPERS=(tool_preflight.mjs control_receipt_outbox.mjs control_git_handoff.mjs github_para_candidate.mjs credential_vault.mjs codex_model_gateway.mjs pushed_branch_pr.mjs opencode_agent.mjs)
 LAUNCH_LABEL="${DEVFLEET_PARA_MAIN_AGENT_LABEL:-com.xcmax.para-main-agent.watchdog}"
 BACKUP_SUFFIX="$(date -u +%Y%m%dT%H%M%SZ)-$$"
 

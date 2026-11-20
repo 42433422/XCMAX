@@ -38,6 +38,12 @@ python -m pip install -e packages/retort_engine -e packages/xcagi_common \
 
 `XCAGI-Full-Pipeline.html` → `#s-gaps` / `#s-roadmap` 由 `docs/xcagi-dashboard/emp-wf-action-items.js` 拉取本栈 `:8788` API 动态渲染。
 
+## Para 的 OpenCode 工作设备
+
+使用 [anomalyco/opencode v1.19.6](https://github.com/anomalyco/opencode/releases/tag/v1.19.6)（MIT）。工作设备可用 `npm install -g opencode-ai@1.19.6` 安装，也可用 `DEVFLEET_OPENCODE_AGENT` 指定原生可执行文件。设备上报 `opencode_cli` 后即可选择 `opencode` 派工。
+
+Zen 免费模型由 OpenCode CLI 原生调用。用 `opencode models opencode` 查看工作设备的可用模型，并通过受控的 `OPENCODE_CONFIG` 文件选择 `model`。如果设备使用 `OPENCODE_API_KEY` 且启用了任务凭据授权，通过现有 `MODSTORE_CREDENTIAL_GRANT_SCOPES` 配置该权限。[Zen 模型](https://opencode.ai/docs/console/models/)
+
 ## 管理端小 C
 
 工作动态复用 [Element Plus Timeline 2.14.8](https://github.com/element-plus/element-plus/tree/2.14.8)（MIT）呈现工单回执。交付跟进沿用现有客服工单的员工路由、恢复和显式审批；站内提醒由 [APScheduler 3.11.3](https://github.com/agronholm/apscheduler/tree/3.11.3)（MIT）在 MODstore 调度进程运行。只有显式关注的交付工单进入提醒，截止时间来自工单字段。

@@ -71,11 +71,12 @@ def test_unconfigured_token_fails_closed(setup, monkeypatch):
     assert response.status_code == 503
 
 
-def test_creates_code_task_only_for_mac_with_service_actor(setup):
+@pytest.mark.parametrize("tool", ["cursor", "opencode"])
+def test_creates_code_task_only_for_mac_with_service_actor(setup, tool):
     client, factory = setup
     response = client.post(
         "/api/service/mac-control/tasks",
-        json=body(github_issue=2234, mode="review", target="windows"),
+        json=body(github_issue=2234, mode="review", target="windows", tool=tool),
         headers=auth(),
     )
     assert response.status_code == 202, response.text
@@ -86,7 +87,7 @@ def test_creates_code_task_only_for_mac_with_service_actor(setup):
     assert task.actor == SERVICE_ACTOR
     assert request["mode"] == "code"
     assert request["target"] == "mac"
-    assert request["tool"] == "cursor"
+    assert request["tool"] == tool
     assert request["github_issue"] == 2234
     assert request["ticket_id"] is None and request["customer_id"] is None
 
