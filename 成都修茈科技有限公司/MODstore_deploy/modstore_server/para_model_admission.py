@@ -170,7 +170,7 @@ def platform_model_admission(profile: str = "repair") -> dict[str, Any] | None:
         )
     except RECOVERABLE_ERRORS:
         snapshot = {}
-        decision = {"status": "waiting", "reason": "platform_quota_unavailable"}
+        decision: dict[str, Any] = {"status": "waiting", "reason": "platform_quota_unavailable"}
     else:
         decision = select_route(
             snapshot.get("providers", []),
