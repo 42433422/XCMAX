@@ -68,7 +68,7 @@ def experiment_measurement(spec, request_id, delivery):
 def _snapshot(payload, spec, request_id, delivery):
     experiment, result = payload["experiment"], payload["result"]
     launch, measured = parse_datetime(result["dateStart"]), parse_datetime(result["dateUpdated"])
-    deployed = parse_datetime(delivery["verified_at"])
+    deployed = parse_datetime(delivery.get("deployment_completed_at"))
     if (
         experiment["id"] != spec["id"]
         or result["experimentId"] != spec["id"]
@@ -123,7 +123,7 @@ def commercial_measurement(owner_id, delivery):
 
     identity = delivery.get("identity") or {}
     artifact = identity.get("artifact_sha256", "")
-    deployed = parse_datetime(delivery.get("verified_at"))
+    deployed = parse_datetime(delivery.get("deployment_completed_at"))
     if not isinstance(artifact, str) or not re.fullmatch(r"[0-9a-f]{64}", artifact) or not deployed:
         return {"status": "release_artifact_unavailable"}
     ledger = build_customer_value_evidence(

@@ -700,7 +700,11 @@ def test_growthbook_requires_same_run_production_exposure_and_valid_sample():
 
     sha = "c" * 40
     spec = {"id": "exp_feedback", "project": "prod", "metric": "first_import", "minimum_users": 100}
-    delivery = {"merge_sha": sha, "verified_at": "2026-01-01T00:00:00Z"}
+    delivery = {
+        "merge_sha": sha,
+        "deployment_completed_at": "2026-01-01T00:00:00Z",
+        "verified_at": "2026-01-04T00:00:00Z",
+    }
     result = {
         "experiment": {
             "id": spec["id"],
@@ -739,8 +743,43 @@ def test_growthbook_requires_same_run_production_exposure_and_valid_sample():
         },
     }
     observed = _snapshot(result, spec, "run", delivery)
+    assert (
+        _snapshot(result, spec, "run", {"merge_sha": sha, "verified_at": "2026-01-01T00:00:00Z"})[
+            "status"
+        ]
+        == "unbound"
+    )
     assert observed["status"] == "measured"
     assert observed["lift"] == 0.12
     assert _snapshot(result, spec, "other-run", delivery)["status"] == "unbound"
     result["result"]["results"][0]["checks"]["srm"] = 0.0001
     assert _snapshot(result, spec, "run", delivery)["status"] == "sample_unverified"
+
+
+def test_commercial_evidence_uses_successful_job_bound_not_poll_time(monkeypatch):
+    from datetime import UTC, datetime
+
+    from modstore_server import customer_value_evidence
+    from modstore_server.retort_feedback_measurements import commercial_measurement
+
+    observed = []
+
+    def ledger(**kwargs):
+        observed.append(kwargs["delivery_scope"])
+        return {
+            "value_ledger_ready": True,
+            "paid_acceptance_count": 1,
+            "verified_paid_amount_cents": 500,
+        }
+
+    monkeypatch.setattr(customer_value_evidence, "build_customer_value_evidence", ledger)
+    delivery = {
+        "identity": {"artifact_sha256": "a" * 64},
+        "deployment_completed_at": "2026-01-01T00:00:00Z",
+        "verified_at": "2026-01-04T00:00:00Z",
+    }
+    assert commercial_measurement(17, delivery)["status"] == "verified"
+    assert observed == [(17, "a" * 64, datetime(2026, 1, 1, tzinfo=UTC))]
+    del delivery["deployment_completed_at"]
+    assert commercial_measurement(17, delivery)["status"] == "release_artifact_unavailable"
+    assert len(observed) == 1

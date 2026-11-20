@@ -26,6 +26,7 @@ def evidence(monkeypatch, tmp_path):
     }
     run = {
         "id": 50,
+        "run_attempt": 1,
         "display_title": f"Deploy MODstore {SHA}",
         "path": ".github/workflows/modstore-prod-deploy.yml",
         "head_sha": CONTROLLER,
@@ -34,6 +35,13 @@ def evidence(monkeypatch, tmp_path):
         "status": "completed",
         "conclusion": "success",
         "html_url": f"https://github.com/{REPO}/actions/runs/50",
+    }
+    job = {
+        "name": "deploy",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-19T00:10:00Z",
+        "completed_at": "2026-11-19T00:20:00Z",
     }
     receipt = {
         "merge_sha": SHA,
@@ -95,6 +103,8 @@ def evidence(monkeypatch, tmp_path):
                     }
                 ]
             }
+        if "/attempts/1/jobs?" in path:
+            return {"jobs": [job]}
         if "/workflows/" in path:
             return {"workflow_runs": [run]}
         return checks[path.rsplit("/", 1)[-1]]
@@ -123,6 +133,7 @@ def evidence(monkeypatch, tmp_path):
         },
         "pr": pr,
         "run": run,
+        "job": job,
         "checks": checks,
         "receipt": receipt,
         "health": health,
@@ -142,6 +153,7 @@ def test_exact_production_receipt_and_public_identity_complete_delivery(evidence
     result = delivery.collect_delivery(evidence["state"])
     assert result["status"] == "deployment_verified"
     assert result["merge_sha"] == SHA and result["candidate_sha"] == HEAD
+    assert result["deployment_completed_at"] == "2026-11-19T00:20:00+00:00"
     assert result["receipt"]["security_scan_run_id"] == 41
     assert result["identity"]["artifact_sha256"] == "d" * 64
 
@@ -215,3 +227,10 @@ def test_pagination_limit_never_promotes_partial_evidence(monkeypatch):
     monkeypatch.setattr(delivery, "github", lambda *_: {"workflow_runs": [{}] * 100})
     with pytest.raises(ValueError, match="pagination is incomplete"):
         list(delivery._rows("/runs", "workflow_runs"))
+
+
+def test_missing_or_untrusted_job_time_never_establishes_exposure(evidence):
+    evidence["job"]["completed_at"] = "2026-11-18T00:20:00Z"
+    assert delivery.collect_delivery(evidence["state"])["deployment_completed_at"] is None
+    evidence["job"]["completed_at"] = None
+    assert delivery.collect_delivery(evidence["state"])["deployment_completed_at"] is None
