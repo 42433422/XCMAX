@@ -6,7 +6,8 @@ on:
   push:
     branches: [main]
   schedule:
-    - cron: '15 1 * * *'
+    # 每周一 01:15 UTC（09:15 北京时间）；主路径由 push 到 main 触发
+    - cron: '15 1 * * 1'
   workflow_dispatch:
 
 permissions:

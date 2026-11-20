@@ -149,7 +149,7 @@ def _register_scheduler_phase_04():
 
     _facade()._scheduler.add_job(
         _auto_fix_loop_job,
-        _facade().IntervalTrigger(hours=1),
+        _facade().CronTrigger(hour=9, minute=30),
         id="auto_fix_event_bindings_refresh",
         replace_existing=True,
     )

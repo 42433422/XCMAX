@@ -126,7 +126,7 @@ def _register_scheduler_phase_03():
             _facade().logger.exception("inbox poll job failed")
 
     try:
-        poll_secs = int(_facade().os.environ.get("MODSTORE_INBOX_POLL_SECONDS", "120"))
+        poll_secs = int(_facade().os.environ.get("MODSTORE_INBOX_POLL_SECONDS", "300"))
     except ValueError:
         poll_secs = 120
     poll_secs = max(60, poll_secs)
@@ -154,7 +154,7 @@ def _register_scheduler_phase_03():
             _facade().logger.exception("email intake poll job failed")
 
     try:
-        intake_secs = int(_facade().os.environ.get("MODSTORE_EMAIL_INTAKE_POLL_SECONDS", "120"))
+        intake_secs = int(_facade().os.environ.get("MODSTORE_EMAIL_INTAKE_POLL_SECONDS", "300"))
     except ValueError:
         intake_secs = 120
     _facade()._scheduler.add_job(
@@ -203,7 +203,7 @@ def _register_scheduler_phase_03():
 
     try:
         loop_seconds = int(
-            _facade().os.environ.get("MODSTORE_EMPLOYEE_AUTONOMY_LOOP_SECONDS", "120")
+            _facade().os.environ.get("MODSTORE_EMPLOYEE_AUTONOMY_LOOP_SECONDS", "300")
         )
     except ValueError:
         loop_seconds = 120

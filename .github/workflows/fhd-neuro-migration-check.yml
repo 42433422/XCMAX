@@ -11,8 +11,8 @@ on:
   pull_request:
     branches: [ main, develop ]
   schedule:
-    # 每天凌晨 2 点运行
-    - cron: '0 2 * * *'
+    # 每周一 02:00 UTC（10:00 北京时间）运行；push/PR 触发保留
+    - cron: '0 2 * * 1'
 
 # Candidate tests never inherit repository-wide write permissions.
 permissions:
