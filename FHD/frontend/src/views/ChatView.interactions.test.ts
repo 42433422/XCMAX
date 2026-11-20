@@ -1200,6 +1200,54 @@ describe('ChatView interactions', () => {
     expect(generateImage.mock.calls[1][1]).toBe(original)
   })
 
+  it('离开会话后收到成功结果，返回时仍可读取原收费回执', async () => {
+    vi.stubGlobal('crypto', webcrypto)
+    setRuntimeTenantStorageScopeInput({ tenantId: 1, localUserId: 1 })
+    let resolveFirst!: (value: unknown) => void
+    generateImage.mockImplementationOnce(() => new Promise(resolve => { resolveFirst = resolve }))
+    const result = { images: ['data:image/png;base64,AA=='], model: 'gpt-image-2', billed: true, charge_amount: '1.28' }
+    generateImage.mockResolvedValueOnce(result)
+    const first = await mountChatView({ workspaceConversationId: 'stable-chat' })
+    await first.get('#messageInput').setValue('生成红色方块')
+    await first.get('[data-testid="generate-chat-image"]').trigger('click')
+    await vi.waitFor(() => expect(generateImage).toHaveBeenCalledTimes(1))
+    const original = generateImage.mock.calls[0][1]
+    first.unmount()
+    resolveFirst(result)
+    await flushPromises()
+    const reopened = await mountChatView({ workspaceConversationId: 'stable-chat' })
+    await reopened.get('#messageInput').setValue('生成红色方块')
+    await reopened.get('[data-testid="generate-chat-image"]').trigger('click')
+    await vi.waitFor(() => expect(generateImage).toHaveBeenCalledTimes(2))
+    expect(generateImage.mock.calls[1][1]).toBe(original)
+    await flushPromises()
+    expect(reopened.get('img[alt="AI 生成图片"]').attributes('src')).toBe('data:image/png;base64,AA==')
+  })
+
+  it('切换会话后收到结果，不清除原会话的回执', async () => {
+    vi.stubGlobal('crypto', webcrypto)
+    setRuntimeTenantStorageScopeInput({ tenantId: 1, localUserId: 1 })
+    let resolveFirst!: (value: unknown) => void
+    generateImage.mockImplementationOnce(() => new Promise(resolve => { resolveFirst = resolve }))
+    const result = { images: ['data:image/png;base64,AA=='], model: 'gpt-image-2', billed: true, charge_amount: '1.28' }
+    generateImage.mockResolvedValueOnce(result)
+    const wrapper = await mountChatView({ workspaceConversationId: 'stable-chat' })
+    await wrapper.get('#messageInput').setValue('生成红色方块')
+    await wrapper.get('[data-testid="generate-chat-image"]').trigger('click')
+    await vi.waitFor(() => expect(generateImage).toHaveBeenCalledTimes(1))
+    const original = generateImage.mock.calls[0][1]
+    ;(wrapper.vm as any).currentSessionId = 'another-chat'
+    await nextTick()
+    resolveFirst(result)
+    await flushPromises()
+    ;(wrapper.vm as any).currentSessionId = 'stable-chat'
+    await nextTick()
+    await wrapper.get('#messageInput').setValue('生成红色方块')
+    await wrapper.get('[data-testid="generate-chat-image"]').trigger('click')
+    await vi.waitFor(() => expect(generateImage).toHaveBeenCalledTimes(2))
+    expect(generateImage.mock.calls[1][1]).toBe(original)
+  })
+
   it('回车发送与输入内容联动', async () => {
     const wrapper = await mountChatView()
     await wrapper.get('#messageInput').setValue('补发这批订单')

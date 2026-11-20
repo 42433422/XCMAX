@@ -825,6 +825,8 @@ const composerStatusText = computed(() => {
 
 const imagePending = ref(false)
 const chatImage = ref<{ scope: string; images: string[]; model: string; charge: string } | null>(null)
+let imageViewMounted = true
+onBeforeUnmount(() => { imageViewMounted = false })
 
 async function generateChatImage() {
   const prompt = messageInput.value.trim()
@@ -840,8 +842,7 @@ async function generateChatImage() {
     pending = await reserveImageRequest(identity, sessionId, modId, prompt)
     if (!isOwnerCurrent() || messageSessionKey.value !== scope || resolveChatStorageScope() !== identity) return
     const result = await chatApi.generateImage(prompt, pending.requestId)
-    finishImageRequest(pending.key, pending.requestId)
-    if (messageSessionKey.value !== scope) return
+    if (!imageViewMounted || !isOwnerCurrent() || messageSessionKey.value !== scope || resolveChatStorageScope() !== identity) return
     const images = result.images.filter(url =>
       /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(url) || url.startsWith('https://'),
     )
@@ -855,6 +856,9 @@ async function generateChatImage() {
       model: result.model,
       charge: result.billed ? `本次扣费 ¥${result.charge_amount}` : '自带密钥',
     }
+    await nextTick()
+    if (!imageViewMounted || !isOwnerCurrent() || messageSessionKey.value !== scope || resolveChatStorageScope() !== identity) return
+    finishImageRequest(pending.key, pending.requestId)
     if (messageInput.value.trim() === prompt) messageInput.value = ''
   } catch (error: unknown) {
     if (error instanceof ApiError && [400, 401, 402, 403, 404, 422, 429].includes(error.status)) {
