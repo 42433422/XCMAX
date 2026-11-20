@@ -86,6 +86,24 @@ def github_run_status(
     return run_status(db, request_id)
 
 
+@router.get("/training/failures")
+def training_failures(
+    days: int = 14,
+    min_count: int = 2,
+    actor: str = Depends(require_dispatch_service),
+):
+    """只返回聚簇后的失败原因，不回传任务正文或客户事实。"""
+    from modstore_server.capability_trainer import mine
+    from modstore_server.maintenance_loop.store import ledger_path
+
+    clusters = mine(
+        ledger_path(),
+        days=max(1, min(90, days)),
+        min_count=max(1, min(50, min_count)),
+    )
+    return {"success": True, "clusters": clusters}
+
+
 class DispatchRequest(BaseModel):
     request_key: str = Field(min_length=8, max_length=128)
     message: str = Field(min_length=1, max_length=12000)

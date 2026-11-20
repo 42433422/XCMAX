@@ -291,6 +291,75 @@ def fallback_candidates(context: Dict[str, Any]) -> List[Dict[str, Any]]:
     return rows
 
 
+def _bet_body(bet: Dict[str, Any]) -> str:
+    return (
+        f"## 战略赌注 `{bet['bet_id']}`\n\n"
+        f"**假设**：{bet['hypothesis']}\n\n"
+        f"**成功标准**：指标 `{bet['metric_id']}` {bet['direction']} {bet['threshold']}，"
+        f"观测至 {bet['review_at']}\n\n"
+        f"**预算**：{json.dumps(bet['budget'], ensure_ascii=False)}\n\n"
+        f"**kill 条件**：\n{chr(10).join('- ' + str(c) for c in bet['kill_criteria'])}\n\n"
+        "此 issue 由战略规划器自动创建；到期回读指标判定 hit / miss / inconclusive。"
+    )
+
+
+def dispatch_bet(bet: Dict[str, Any]) -> Dict[str, Any]:
+    """把赌注变成可执行 issue；复用 ai-implement 既有链路，不新建执行器。"""
+    import shutil
+    import subprocess
+
+    repo = os.environ.get("GITHUB_REPO", "").strip()
+    if not repo:
+        return {"status": "skipped", "reason": "no_github_repo"}
+    if shutil.which("gh") is None:
+        return {"status": "skipped", "reason": "no_gh_cli"}
+    proc = subprocess.run(
+        [
+            "gh",
+            "issue",
+            "create",
+            "--repo",
+            repo,
+            "--title",
+            f"[strategy-bet] {bet['title']} ({bet['bet_id']})",
+            "--body",
+            _bet_body(bet),
+            "--label",
+            "ai-implement",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        return {"status": "failed", "error": (proc.stderr or "")[-300:]}
+    url = (proc.stdout or "").strip()
+    evolution_ledger.append_event(
+        {
+            "event_type": "bet_dispatched",
+            "bet_id": bet["bet_id"],
+            "issue_url": url,
+            "final_status": "success",
+        }
+    )
+    return {"status": "opened", "issue_url": url}
+
+
+def dispatch_open_bets() -> List[Dict[str, Any]]:
+    """派发尚未派发过的活跃赌注，按 bet_id 幂等。"""
+    dispatched = {
+        event.get("bet_id")
+        for event in evolution_ledger.list_events(since_days=60)
+        if event.get("event_type") == "bet_dispatched"
+    }
+    results: List[Dict[str, Any]] = []
+    for bet in strategy_bets.active_bets():
+        if bet["bet_id"] in dispatched:
+            continue
+        results.append({"bet_id": bet["bet_id"], **dispatch_bet(bet)})
+    return results
+
+
 def plan_strategy(*, dry_run: bool = False) -> Dict[str, Any]:
     context = collect_context()
     context_sha = _digest(context)
@@ -318,6 +387,7 @@ def plan_strategy(*, dry_run: bool = False) -> Dict[str, Any]:
     chosen = kept[: max(1, int(os.environ.get("MODSTORE_STRATEGY_MAX_NEW_BETS", MAX_NEW_BETS)))]
 
     registered: List[str] = []
+    dispatched: List[Dict[str, Any]] = []
     rejected = [
         {"title": row.get("title", ""), "reason": validate_candidate(row)}
         for row in candidates
@@ -348,6 +418,7 @@ def plan_strategy(*, dry_run: bool = False) -> Dict[str, Any]:
                 "final_status": "success" if registered else "needs_human",
             }
         )
+        dispatched = dispatch_open_bets()
     return {
         "ok": True,
         "source": source,
@@ -356,6 +427,7 @@ def plan_strategy(*, dry_run: bool = False) -> Dict[str, Any]:
         "candidates": len(candidates),
         "kept": [row.get("title", "") for row in kept],
         "registered": registered,
+        "dispatched": dispatched,
         "rejected": rejected,
         "evidence": {
             "assets": context["assets"].get("status"),
