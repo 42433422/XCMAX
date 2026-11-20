@@ -88,6 +88,7 @@ def auth_headers() -> dict[str, str]:
 
 def device_matches(device, workspace):
     caps = device.get("capabilities") or {}
+    tool_name = "opencode" if os.environ.get("DEVFLEET_FORCE_OPENCODE") == "1" else "codex"
     return bool(
         device.get("id") == os.environ.get("MODSTORE_PARA_GITHUB_DEVICE_ID")
         and device.get("status") == "online"
@@ -99,7 +100,7 @@ def device_matches(device, workspace):
         and (not workspace.get("stage") or caps.get("github_stage") == workspace["stage"])
         and not caps.get("server_bridge")
         and any(
-            t.get("toolName") == "codex" and t.get("status") in {"idle", "running"}
+            t.get("toolName") == tool_name and t.get("status") in {"idle", "running"}
             for t in device.get("tools", [])
         )
     )

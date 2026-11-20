@@ -31,6 +31,7 @@ import { createReceiptOutbox, createParaReportOutbox, requestManagedParaSession 
 import { sourceIdentity } from './control_git_handoff.mjs';
 import { candidateMode, exportCandidate, githubReadEnv } from './github_para_candidate.mjs';
 import { openCodeExecutable, runOpenCodeAgent } from './opencode_agent.mjs';
+import { cliResult, streamCliOutput } from './cli_output_stream.mjs';
 import {
   describeCodexFailure,
   describeTraeFailure,
@@ -45,6 +46,7 @@ import {
 } from './para_queue_policy.mjs';
 import {
   effectiveToolName,
+  pausedByOpenCodePolicy,
   isToolFallbackEligible,
   removeOwnWorkspace,
   requestedToolName,
@@ -232,11 +234,11 @@ function codexAgentAvailable() {
   return true;
 }
 
-async function runCursorAgent(taskDir, prompt) {
+async function runCursorAgent(taskDir, prompt, log) {
   const agentBin = resolveCursorAgentBin();
-  const { stdout, stderr } = await execFileAsync(
+  const run = execFileAsync(
     agentBin,
-    ['-p', '--force', '--trust', '--output-format', 'text', prompt],
+    ['-p', '--force', '--trust', '--output-format', 'stream-json', '--stream-partial-output', '--', prompt],
     {
       cwd: taskDir,
       maxBuffer: 10 * 1024 * 1024,
@@ -244,10 +246,12 @@ async function runCursorAgent(taskDir, prompt) {
       env: toolEnv(prompt, 'cursor'),
     },
   );
-  return (stdout || stderr || '').trim();
+  streamCliOutput(run.child, 'cursor', log);
+  const { stdout, stderr } = await run;
+  return cliResult(stdout) || stderr.trim();
 }
 
-async function runTraeAgent(taskDir, prompt) {
+async function runTraeAgent(taskDir, prompt, log) {
   const traeBin = resolveTraeAgentBin();
   const permMode = process.env.DEVFLEET_TRAE_PERMISSION_MODE?.trim() || 'bypass_permissions';
   const args = [
@@ -259,7 +263,7 @@ async function runTraeAgent(taskDir, prompt) {
   ];
   if (process.env.DEVFLEET_TRAE_YOLO !== '0') args.push('--yolo');
   args.push(prompt);
-  const { stdout, stderr } = await execFileAsync(
+  const run = execFileAsync(
     traeBin,
     args,
     {
@@ -269,6 +273,8 @@ async function runTraeAgent(taskDir, prompt) {
       env: toolEnv(prompt, 'trae'),
     },
   );
+  streamCliOutput(run.child, 'trae', log);
+  const { stdout, stderr } = await run;
   const combined = (stdout || stderr || '').trim();
   const structured = parseTraeStream(stdout);
   if (structured.error) {
@@ -292,12 +298,12 @@ function positiveIntEnv(name, fallback) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function spawnCodexOnce(cwd, prompt, { args, env, timeoutMs = toolCommandTimeoutMs }) {
+function spawnCodexOnce(cwd, prompt, { args, env, log, timeoutMs = toolCommandTimeoutMs }) {
   const codexBin = resolveCodexAgentBin();
   return new Promise((resolve, reject) => {
     const child = spawn(
       codexBin,
-      args,
+      log ? [...args.slice(0, 1), '--json', ...args.slice(1)] : args,
       {
         cwd,
         env,
@@ -315,11 +321,11 @@ function spawnCodexOnce(cwd, prompt, { args, env, timeoutMs = toolCommandTimeout
       }, 3000).unref();
     }, timeoutMs);
 
-    child.stdout.on('data', (chunk) => {
-      stdout = (stdout + chunk.toString()).slice(-10 * 1024 * 1024);
+    child.stdout.setEncoding('utf8').on('data', (chunk) => {
+      stdout = (stdout + chunk).slice(-10 * 1024 * 1024);
     });
-    child.stderr.on('data', (chunk) => {
-      stderr = (stderr + chunk.toString()).slice(-10 * 1024 * 1024);
+    child.stderr.setEncoding('utf8').on('data', (chunk) => {
+      stderr = (stderr + chunk).slice(-10 * 1024 * 1024);
     });
     child.on('error', (err) => {
       clearTimeout(timer);
@@ -339,8 +345,9 @@ function spawnCodexOnce(cwd, prompt, { args, env, timeoutMs = toolCommandTimeout
         resolve(formatCodexNonZeroOutput({ code, signal, stdout, stderr }));
         return;
       }
-      resolve(output);
+      resolve(log ? cliResult(stdout) || stderr.trim() : output);
     });
+    streamCliOutput(child, 'codex', log);
     child.stdin.end(prompt);
   });
 }
@@ -364,7 +371,7 @@ async function runCodexAgent(taskDir, prompt, log = () => {}) {
   const codexEnv = toolEnv(prompt, 'codex');
   const invoke = (model, env) => runCodexBudgetedAttempt({
     execution, model, log,
-    run: (args) => spawnCodexOnce(taskDir, prompt, { args, env }),
+    run: (args) => spawnCodexOnce(taskDir, prompt, { args, env, log }),
   });
   if (!modelGatewayEnabled()) {
     // Disabling fallback does not erase an explicit role's selected model.
@@ -404,7 +411,7 @@ async function runCodexAgent(taskDir, prompt, log = () => {}) {
   return result.output;
 }
 
-function codexTaskLog(ws, task) {
+function taskOutputLog(ws, task) {
   return (content, level = 'info') => send(ws, {
     type: 'task_log',
     task_id: task.task_id,
@@ -443,13 +450,13 @@ function claudeAgentAvailable() {
 // 用本地 Claude Code CLI 在工作区自动改码（headless，自动接受文件编辑）。
 // 必须显式关 stdin：claude -p 默认 wait for stdin 3s 后 proceed without it，
 // 但 execFile 留着 pipe 开着 claude 会一直挂起；用 spawn + stdin.end() 立刻解锁。
-async function runClaudeAgent(taskDir, prompt) {
+async function runClaudeAgent(taskDir, prompt, log) {
   const claudeBin = resolveClaudeAgentBin();
   const permMode = process.env.DEVFLEET_CLAUDE_PERMISSION_MODE?.trim() || 'acceptEdits';
   return new Promise((resolve, reject) => {
     const child = spawn(
       claudeBin,
-      ['-p', prompt, '--output-format', 'text', '--permission-mode', permMode],
+      ['-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages', '--permission-mode', permMode, '--', prompt],
       { cwd: taskDir, env: toolEnv(prompt, 'claude_code'), stdio: ['pipe', 'pipe', 'pipe'] },
     );
     let stdout = '';
@@ -460,16 +467,16 @@ async function runClaudeAgent(taskDir, prompt) {
       child.kill('SIGTERM');
       setTimeout(() => { if (!child.killed) child.kill('SIGKILL'); }, 3000).unref();
     }, toolCommandTimeoutMs);
-    child.stdout.on('data', (chunk) => {
-      stdout = (stdout + chunk.toString()).slice(-10 * 1024 * 1024);
+    child.stdout.setEncoding('utf8').on('data', (chunk) => {
+      stdout = (stdout + chunk).slice(-10 * 1024 * 1024);
     });
-    child.stderr.on('data', (chunk) => {
-      stderr = (stderr + chunk.toString()).slice(-10 * 1024 * 1024);
+    child.stderr.setEncoding('utf8').on('data', (chunk) => {
+      stderr = (stderr + chunk).slice(-10 * 1024 * 1024);
     });
     child.on('error', (err) => { clearTimeout(timer); reject(err); });
     child.on('close', (code, signal) => {
       clearTimeout(timer);
-      const output = (stdout || stderr || '').trim();
+      const output = cliResult(stdout) || stderr.trim();
       if (timedOut) {
         reject(new Error(`Claude CLI timeout after ${toolCommandTimeoutMs}ms${output ? `: ${output.slice(-1000)}` : ''}`));
         return;
@@ -480,6 +487,7 @@ async function runClaudeAgent(taskDir, prompt) {
       }
       resolve(output);
     });
+    streamCliOutput(child, 'claude_code', log);
     child.stdin.end();
   });
 }
@@ -495,11 +503,11 @@ function toolAvailable(tool) {
 
 function runToolOnce(tool, taskDir, prompt, log, reportOnly) {
   if (tool === 'opencode') return runOpenCodeAgent(taskDir, prompt, {
-    env: toolEnv(prompt, tool), timeoutMs: toolCommandTimeoutMs, reportOnly,
+    env: toolEnv(prompt, tool), timeoutMs: toolCommandTimeoutMs, reportOnly, log,
   });
-  if (tool === 'trae') return runTraeAgent(taskDir, prompt);
-  if (tool === 'claude_code') return runClaudeAgent(taskDir, prompt);
-  if (tool === 'cursor') return runCursorAgent(taskDir, prompt);
+  if (tool === 'trae') return runTraeAgent(taskDir, prompt, log);
+  if (tool === 'claude_code') return runClaudeAgent(taskDir, prompt, log);
+  if (tool === 'cursor') return runCursorAgent(taskDir, prompt, log);
   return runCodexAgent(taskDir, prompt, log);
 }
 
@@ -698,11 +706,19 @@ const paraReports = createParaReportOutbox({
   url: `${apiBase}/api/devices/me/control-report`, token,
   enabled: process.env.XCMAX_CONTROL_REPORTS_ENABLED === '1',
 });
+let activeSocket;
+const pendingTaskLogs = [];
 const send = (ws, rawPayload) => {
   const payload = credentialVault.redactPayload(rawPayload);
   controlReceipts.record(payload);
   if (payload.type === 'task_progress' && paraReports.record(payload, payload)) return;
-  if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload));
+  const socket = activeSocket?.readyState === WebSocket.OPEN ? activeSocket : ws;
+  if (socket.readyState === WebSocket.OPEN) {
+    socket.send(JSON.stringify(payload));
+  } else if (payload.type === 'task_log') {
+    if (pendingTaskLogs.length >= 512) pendingTaskLogs.shift();
+    pendingTaskLogs.push(payload);
+  }
 };
 
 const safeDir = (value) => value.replace(/[^a-zA-Z0-9._-]+/g, '-');
@@ -1281,7 +1297,7 @@ async function handleTask(ws, task) {
     const receipt = checkIncidentExecutionBudget(task.description, {
       reservedChars: reservedEvidence ? [...reservedEvidence].length + 2 : 0,
     });
-    if (receipt) codexTaskLog(ws, task)(
+    if (receipt) taskOutputLog(ws, task)(
       `incident_execution_budget_receipt=${JSON.stringify({ ...receipt, status: 'validated' })}`,
     );
   } catch (error) {
@@ -1400,7 +1416,7 @@ async function handleTask(ws, task) {
       level: 'info',
     });
     try {
-      const output = await runTraeAgent(taskDir, executionPrompt);
+      const output = await runTraeAgent(taskDir, executionPrompt, taskOutputLog(ws, task));
       if (output) toolOutput = `${toolOutput}\n${output}`.trim();
       if (output) {
         send(ws, {
@@ -1437,7 +1453,7 @@ async function handleTask(ws, task) {
           level: 'warn',
         });
         try {
-          const output = await runCodexAgent(taskDir, executionPrompt, codexTaskLog(ws, task));
+          const output = await runCodexAgent(taskDir, executionPrompt, taskOutputLog(ws, task));
           const codexNonZero = String(output || '').startsWith('[codex exit=');
           if (output) toolOutput = `${toolOutput}\n${output}`.trim();
           if (output) {
@@ -1476,7 +1492,7 @@ async function handleTask(ws, task) {
       level: 'info',
     });
     try {
-      const output = await runClaudeAgent(taskDir, executionPrompt);
+      const output = await runClaudeAgent(taskDir, executionPrompt, taskOutputLog(ws, task));
       if (output) toolOutput = `${toolOutput}\n${output}`.trim();
       if (output) {
         send(ws, {
@@ -1508,7 +1524,7 @@ async function handleTask(ws, task) {
       level: 'info',
     });
     try {
-      const output = await runCursorAgent(taskDir, executionPrompt);
+      const output = await runCursorAgent(taskDir, executionPrompt, taskOutputLog(ws, task));
       if (output) toolOutput = `${toolOutput}\n${output}`.trim();
       if (output) {
         send(ws, {
@@ -1540,7 +1556,7 @@ async function handleTask(ws, task) {
       level: 'info',
     });
     try {
-      let output = await runCodexAgent(taskDir, executionPrompt, codexTaskLog(ws, task));
+      let output = await runCodexAgent(taskDir, executionPrompt, taskOutputLog(ws, task));
       let codexNonZero = String(output || '').startsWith('[codex exit=');
       if (output) {
         send(ws, {
@@ -1567,7 +1583,7 @@ async function handleTask(ws, task) {
             level: 'warn',
           });
           try {
-            output = await runTraeAgent(taskDir, executionPrompt);
+            output = await runTraeAgent(taskDir, executionPrompt, taskOutputLog(ws, task));
             codexNonZero = false;
             toolError = '';
             if (output) {
@@ -1723,6 +1739,11 @@ function enqueueTask(ws, task) {
       return false;
     }
   }
+  const assignedTool = requestedToolName(task);
+  if (pausedByOpenCodePolicy(assignedTool)) {
+    void failTask(ws, task, assignedTool + ' 已暂停派工，请使用 OpenCode');
+    return false;
+  }
   const subtaskId = String(task?.subtask_id || '').trim();
   if (subtaskId && knownSubtasks.has(subtaskId)) return false;
   if (subtaskId) knownSubtasks.add(subtaskId);
@@ -1802,6 +1823,7 @@ function drainToolQueue(tool) {
 }
 
 function toolExecutionStatus(tool, installed) {
+  if (pausedByOpenCodePolicy(tool)) return 'disabled';
   if (!installed) return 'not_installed';
   const queued = (taskQueuesByTool.get(tool) || []).length > 0;
   return runningTools.has(tool) || queued ? 'running' : 'idle';
@@ -1809,16 +1831,15 @@ function toolExecutionStatus(tool, installed) {
 
 let preflight = {};
 let preflightPending = false;
-function publishToolStatus(ws) {
+function publishToolStatus(ws, refresh = true) {
   void controlReceipts.drain();
   void paraReports.drain();
   const openCodeBin = openCodeExecutable();
-  if (!preflightPending) {
+  if (refresh && !preflightPending) {
     preflightPending = true;
     probeTools({ codex: resolveCodexAgentBin(), cursor: resolveCursorAgentBin(),
-      trae: resolveTraeAgentBin(), claude_code: resolveClaudeAgentBin(),
-      ...(openCodeBin ? { opencode: openCodeBin } : {}) })
-      .then((result) => { preflight = result; })
+      trae: resolveTraeAgentBin(), claude_code: resolveClaudeAgentBin(), opencode: openCodeBin })
+      .then((result) => { preflight = result; publishToolStatus(ws, false); })
       .finally(() => { preflightPending = false; });
   }
   const installed = { trae: traeAgentAvailable(), codex: codexAgentAvailable(),
@@ -1827,7 +1848,7 @@ function publishToolStatus(ws) {
     type: 'tool_status',
     tools: supportedToolNames.map(tool => ({
       tool_name: tool,
-      status: toolExecutionStatus(tool, installed[tool]),
+      status: toolExecutionStatus(tool, preflight[tool]?.ok ?? installed[tool]),
       current_task: activeTaskId(runningTaskIdsByTool.get(tool), taskQueuesByTool.get(tool)),
     })),
     capabilities: {
@@ -1856,6 +1877,8 @@ function publishToolStatus(ws) {
 function connect() {
   const ws = new WebSocket(wsUrl);
   ws.on('open', () => {
+    activeSocket = ws;
+    for (const payload of pendingTaskLogs.splice(0)) ws.send(JSON.stringify(payload));
     console.log('[e2e-agent] online');
     publishToolStatus(ws);
     recoverPendingTask(ws);
@@ -1873,6 +1896,7 @@ function connect() {
     }
   });
   ws.on('close', () => {
+    if (activeSocket === ws) activeSocket = undefined;
     console.log('[e2e-agent] disconnected, retry in 3s');
     setTimeout(connect, 3000);
   });

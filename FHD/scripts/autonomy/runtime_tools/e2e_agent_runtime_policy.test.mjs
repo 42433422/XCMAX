@@ -8,6 +8,7 @@ import test from 'node:test';
 import {
   effectiveToolName,
   isToolFallbackEligible,
+  pausedByOpenCodePolicy,
   removeOwnWorkspace,
   requestedToolName,
   resetWorkspaceForNextTool,
@@ -16,6 +17,22 @@ import {
   toolFallbackOrder,
   withFailureCleanup,
 } from './e2e_agent_runtime_policy.mjs';
+import { openCodePlatformConfig } from './opencode_agent.mjs';
+
+test('OpenCode-only policy pauses the other CLIs and scopes native config to the XCMAX gateway', () => {
+  const env = { DEVFLEET_FORCE_OPENCODE: '1', DEVFLEET_FORCE_CODEX: '1',
+    PARA_PLATFORM_GATEWAY_URL: 'https://xiu-ci.com/v1', PARA_OPENCODE_MODEL: 'xcmax-para-coding',
+    OPENCODE_API_KEY: 'test-only-placeholder' };
+  assert.equal(effectiveToolName({ env, fallback: 'codex' }), 'opencode');
+  assert.equal(pausedByOpenCodePolicy('codex', env), true);
+  assert.equal(pausedByOpenCodePolicy('opencode', env), false);
+  const config = openCodePlatformConfig(env);
+  assert.equal(config.provider.xcmax.npm, '@ai-sdk/openai');
+  assert.equal(config.model, 'xcmax/xcmax-para-coding');
+  assert.deepEqual(config.enabled_providers, ['xcmax']);
+  assert.ok(!JSON.stringify(config).includes(env.OPENCODE_API_KEY));
+  assert.throws(() => openCodePlatformConfig({ ...env, OPENCODE_API_KEY: '' }), /专用密钥/);
+});
 
 test('forced Codex overrides an explicit Cursor task assignment', () => {
   assert.equal(

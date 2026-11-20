@@ -9,12 +9,16 @@ const SUPPORTED_TOOLS = new Set(['trae', 'codex', 'cursor', 'claude_code', 'open
 // 想要"先试首选、失败自动换"请改用 DEVFLEET_TOOL_FALLBACK_ORDER（见下方），
 // 它取代 Mac 上 10-11 起的 DEVFLEET_FORCE_CURSOR=1；两者同时设置时 FORCE 优先、回退链不生效。
 export function forcedToolName(env = process.env) {
+  if (env.DEVFLEET_FORCE_OPENCODE === '1') return 'opencode';
   if (env.DEVFLEET_FORCE_TRAE === '1') return 'trae';
   if (env.DEVFLEET_FORCE_CODEX === '1') return 'codex';
   if (env.DEVFLEET_FORCE_CLAUDE === '1') return 'claude_code';
   if (env.DEVFLEET_FORCE_CURSOR === '1') return 'cursor';
-  if (env.DEVFLEET_FORCE_OPENCODE === '1') return 'opencode';
   return '';
+}
+
+export function pausedByOpenCodePolicy(tool, env = process.env) {
+  return env.DEVFLEET_FORCE_OPENCODE === '1' && SUPPORTED_TOOLS.has(tool) && tool !== 'opencode';
 }
 
 export function requestedToolName(task = {}, agentConfig = null) {

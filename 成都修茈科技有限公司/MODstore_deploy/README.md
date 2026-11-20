@@ -44,6 +44,8 @@ python -m pip install -e packages/retort_engine -e packages/xcagi_common \
 
 Zen 免费模型由 OpenCode CLI 原生调用。用 `opencode models opencode` 查看工作设备的可用模型，并通过受控的 `OPENCODE_CONFIG` 文件选择 `model`。如果设备使用 `OPENCODE_API_KEY` 且启用了任务凭据授权，通过现有 `MODSTORE_CREDENTIAL_GRANT_SCOPES` 配置该权限。[Zen 模型](https://opencode.ai/docs/console/models/)
 
+Para 使用 XCMAX 平台模型时，在 MODstore、工作设备和 GitHub Worker 配置 `DEVFLEET_FORCE_OPENCODE=1`。工作设备使用 `PARA_PLATFORM_GATEWAY_URL`、`PARA_OPENCODE_MODEL` 和专用 `OPENCODE_API_KEY`，GitHub Worker 从 `PARA_PLATFORM_GATEWAY_KEY` 读取密钥。平台模型使用 `/v1/responses`。OpenCode 用本机事件接口转发增量文字和实际 token 用量，Para 通过任务 WebSocket 发送到任务页。
+
 ## 管理端小 C
 
 工作动态复用 [Element Plus Timeline 2.14.8](https://github.com/element-plus/element-plus/tree/2.14.8)（MIT）呈现工单回执。交付跟进沿用现有客服工单的员工路由、恢复和显式审批；站内提醒由 [APScheduler 3.11.3](https://github.com/agronholm/apscheduler/tree/3.11.3)（MIT）在 MODstore 调度进程运行。只有显式关注的交付工单进入提醒，截止时间来自工单字段。

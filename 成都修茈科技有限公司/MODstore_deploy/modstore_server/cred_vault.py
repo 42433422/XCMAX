@@ -301,7 +301,12 @@ def _ttl(ttl_seconds: Optional[int]) -> int:
 
 
 def default_grant_scopes() -> Tuple[str, ...]:
-    raw = os.environ.get("MODSTORE_CREDENTIAL_GRANT_SCOPES", "OPENAI_API_KEY,CODEX_API_KEY")
+    default = (
+        "OPENCODE_API_KEY"
+        if os.environ.get("DEVFLEET_FORCE_OPENCODE") == "1"
+        else "OPENAI_API_KEY,CODEX_API_KEY"
+    )
+    raw = os.environ.get("MODSTORE_CREDENTIAL_GRANT_SCOPES", default)
     return tuple(s.strip() for s in raw.split(",") if _NAME_RE.match(s.strip()))
 
 

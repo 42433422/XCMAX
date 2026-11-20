@@ -37,6 +37,10 @@ jobs:
           python-version: "3.12"
       - name: Prepare existing Para executor
         env:
+          DEVFLEET_FORCE_OPENCODE: ${{ vars.DEVFLEET_FORCE_OPENCODE }}
+          PARA_PLATFORM_GATEWAY_URL: ${{ vars.PARA_PLATFORM_GATEWAY_URL }}
+          PARA_OPENCODE_MODEL: ${{ vars.PARA_OPENCODE_MODEL }}
+          OPENCODE_API_KEY: ${{ vars.DEVFLEET_FORCE_OPENCODE == '1' && secrets.PARA_PLATFORM_GATEWAY_KEY || '' }}
           PARA_CODEX_VERSION: ${{ vars.PARA_CODEX_VERSION }}
           PARA_CODEX_AUTH_JSON: ${{ secrets.PARA_CODEX_AUTH_JSON }}
           PARA_CODEX_CONFIG_TOML: ${{ secrets.PARA_CODEX_CONFIG_TOML }}
@@ -44,6 +48,11 @@ jobs:
         run: bash scripts/autonomy/runtime_tools/prepare_github_executor.sh
       - name: Run original Para tasks without publication credentials
         env:
+          DEVFLEET_FORCE_OPENCODE: ${{ vars.DEVFLEET_FORCE_OPENCODE }}
+          PARA_PLATFORM_GATEWAY_URL: ${{ vars.PARA_PLATFORM_GATEWAY_URL }}
+          PARA_OPENCODE_MODEL: ${{ vars.PARA_OPENCODE_MODEL }}
+          OPENCODE_API_KEY: ${{ vars.DEVFLEET_FORCE_OPENCODE == '1' && secrets.PARA_PLATFORM_GATEWAY_KEY || '' }}
+          DEVFLEET_OPENCODE_AGENT: ${{ runner.temp }}/para-worker/node_modules/.bin/opencode
           PARA_GITHUB_STAGE: execute
           PARA_GITHUB_REQUEST_ID: ${{ inputs.request_id }}
           PARA_GITHUB_CANDIDATE_DIR: ${{ runner.temp }}/para-candidate
@@ -54,7 +63,7 @@ jobs:
           DEVFLEET_WORKSPACE_ROOT: ${{ runner.temp }}/para-workspaces
           XCMAX_CONTROL_REPORTS_ENABLED: "1"
           DEVFLEET_CODEX_MODEL_CANDIDATES: ${{ vars.PARA_CODEX_MODEL_CANDIDATES }}
-          CODEX_API_KEY: ${{ secrets.PARA_CODEX_API_KEY }}
+          CODEX_API_KEY: ${{ vars.DEVFLEET_FORCE_OPENCODE != '1' && secrets.PARA_CODEX_API_KEY || '' }}
           MODSTORE_PARA_DISPATCH_TOKEN: ${{ secrets.MODSTORE_PARA_DISPATCH_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }} # job permissions are contents:read only
         run: node "$RUNNER_TEMP/para-worker/github_para_executor.mjs"
@@ -129,6 +138,10 @@ jobs:
           python-version: "3.12"
       - name: Prepare existing Para executor
         env:
+          DEVFLEET_FORCE_OPENCODE: ${{ vars.DEVFLEET_FORCE_OPENCODE }}
+          PARA_PLATFORM_GATEWAY_URL: ${{ vars.PARA_PLATFORM_GATEWAY_URL }}
+          PARA_OPENCODE_MODEL: ${{ vars.PARA_OPENCODE_MODEL }}
+          OPENCODE_API_KEY: ${{ vars.DEVFLEET_FORCE_OPENCODE == '1' && secrets.PARA_PLATFORM_GATEWAY_KEY || '' }}
           PARA_CODEX_VERSION: ${{ vars.PARA_CODEX_VERSION }}
           PARA_CODEX_AUTH_JSON: ${{ secrets.PARA_CODEX_AUTH_JSON }}
           PARA_CODEX_CONFIG_TOML: ${{ secrets.PARA_CODEX_CONFIG_TOML }}
@@ -136,6 +149,11 @@ jobs:
         run: bash scripts/autonomy/runtime_tools/prepare_github_executor.sh
       - name: Run original Para tasks without publication credentials
         env:
+          DEVFLEET_FORCE_OPENCODE: ${{ vars.DEVFLEET_FORCE_OPENCODE }}
+          PARA_PLATFORM_GATEWAY_URL: ${{ vars.PARA_PLATFORM_GATEWAY_URL }}
+          PARA_OPENCODE_MODEL: ${{ vars.PARA_OPENCODE_MODEL }}
+          OPENCODE_API_KEY: ${{ vars.DEVFLEET_FORCE_OPENCODE == '1' && secrets.PARA_PLATFORM_GATEWAY_KEY || '' }}
+          DEVFLEET_OPENCODE_AGENT: ${{ runner.temp }}/para-worker/node_modules/.bin/opencode
           PARA_GITHUB_STAGE: resume
           PARA_GITHUB_REQUEST_ID: ${{ inputs.request_id }}
           PARA_GITHUB_CANDIDATE_DIR: ${{ runner.temp }}/para-candidate
@@ -146,7 +164,7 @@ jobs:
           DEVFLEET_WORKSPACE_ROOT: ${{ runner.temp }}/para-workspaces
           XCMAX_CONTROL_REPORTS_ENABLED: "1"
           DEVFLEET_CODEX_MODEL_CANDIDATES: ${{ vars.PARA_CODEX_MODEL_CANDIDATES }}
-          CODEX_API_KEY: ${{ secrets.PARA_CODEX_API_KEY }}
+          CODEX_API_KEY: ${{ vars.DEVFLEET_FORCE_OPENCODE != '1' && secrets.PARA_CODEX_API_KEY || '' }}
           MODSTORE_PARA_DISPATCH_TOKEN: ${{ secrets.MODSTORE_PARA_DISPATCH_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }} # job permissions are contents:read only
         run: node "$RUNNER_TEMP/para-worker/github_para_executor.mjs"

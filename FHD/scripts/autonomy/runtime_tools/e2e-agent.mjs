@@ -12,6 +12,7 @@ import { promisify } from 'node:util';
 import { createRequire } from 'node:module';
 import { createCredentialVault, parseCredentialGrant } from './credential_vault.mjs';
 import { openCodeExecutable, runOpenCodeAgent } from './opencode_agent.mjs';
+import { cliResult, streamCliOutput } from './cli_output_stream.mjs';
 import {
   describeTraeFailure,
   isTraeProviderFailoverEligible,
@@ -19,6 +20,7 @@ import {
 } from './trae_failover.mjs';
 import {
   effectiveToolName,
+  pausedByOpenCodePolicy,
   removeOwnWorkspace,
   requestedToolName,
   supportedToolNames,
@@ -190,11 +192,11 @@ function codexAgentAvailable() {
   return true;
 }
 
-async function runCursorAgent(taskDir, prompt) {
+async function runCursorAgent(taskDir, prompt, log) {
   const agentBin = resolveCursorAgentBin();
-  const { stdout, stderr } = await execFileAsync(
+  const run = execFileAsync(
     agentBin,
-    ['-p', '--force', '--trust', '--output-format', 'text', prompt],
+    ['-p', '--force', '--trust', '--output-format', 'stream-json', '--stream-partial-output', '--', prompt],
     {
       cwd: taskDir,
       maxBuffer: 10 * 1024 * 1024,
@@ -202,10 +204,12 @@ async function runCursorAgent(taskDir, prompt) {
       env: process.env,
     },
   );
-  return (stdout || stderr || '').trim();
+  streamCliOutput(run.child, 'cursor', log);
+  const { stdout, stderr } = await run;
+  return cliResult(stdout) || stderr.trim();
 }
 
-async function runTraeAgent(taskDir, prompt) {
+async function runTraeAgent(taskDir, prompt, log) {
   // Large self-maintenance prompts blow up argv. Persist full prompt to disk.
   const promptDir = join(taskDir, '.devfleet');
   mkdirSync(promptDir, { recursive: true });
@@ -227,7 +231,7 @@ async function runTraeAgent(taskDir, prompt) {
   ];
   if (process.env.DEVFLEET_TRAE_YOLO !== '0') args.push('--yolo');
   args.push(shortPrompt);
-  const { stdout, stderr } = await execFileAsync(
+  const run = execFileAsync(
     traeBin,
     args,
     {
@@ -237,6 +241,8 @@ async function runTraeAgent(taskDir, prompt) {
       env: process.env,
     },
   );
+  streamCliOutput(run.child, 'trae', log);
+  const { stdout, stderr } = await run;
   const combined = (stdout || stderr || '').trim();
   const structured = parseTraeStream(stdout);
   if (structured.error) {
@@ -248,13 +254,13 @@ async function runTraeAgent(taskDir, prompt) {
   return structured.output || combined;
 }
 
-async function runCodexAgent(taskDir, prompt) {
+async function runCodexAgent(taskDir, prompt, log) {
   const codexBin = resolveCodexAgentBin();
   // Speed lever: report-only (review/QA) tasks may use a faster model and/or
   // lower reasoning effort, leaving the code step untouched. Env-driven; both
   // unset => identical to previous behavior (zero regression).
   const isReportOnly = String(prompt || '').toLowerCase().includes('modstore_report_only=1');
-  const codexArgs = ['exec', '--sandbox', 'workspace-write', '--ephemeral'];
+  const codexArgs = ['exec', '--json', '--sandbox', 'workspace-write', '--ephemeral'];
   if (isReportOnly) {
     const roModel = process.env.DEVFLEET_CODEX_REVIEW_MODEL?.trim();
     const roEffort = process.env.DEVFLEET_CODEX_REVIEW_EFFORT?.trim();
@@ -307,8 +313,9 @@ async function runCodexAgent(taskDir, prompt) {
         resolve(`[codex exit=${code}${signal ? ` signal=${signal}` : ''}]\n${output}`);
         return;
       }
-      resolve(output);
+      resolve(cliResult(stdout) || stderr.trim());
     });
+    streamCliOutput(child, 'codex', log);
     child.stdin.end(prompt);
   });
 }
@@ -336,13 +343,13 @@ function claudeAgentAvailable() {
 // 用本地 Claude Code CLI 在工作区自动改码（headless，自动接受文件编辑）。
 // 必须显式关 stdin：claude -p 默认 wait for stdin 3s 后 proceed without it，
 // 但 execFile 留着 pipe 开着 claude 会一直挂起；用 spawn + stdin.end() 立刻解锁。
-async function runClaudeAgent(taskDir, prompt) {
+async function runClaudeAgent(taskDir, prompt, log) {
   const claudeBin = resolveClaudeAgentBin();
   const permMode = process.env.DEVFLEET_CLAUDE_PERMISSION_MODE?.trim() || 'acceptEdits';
   return new Promise((resolve, reject) => {
     const child = spawn(
       claudeBin,
-      ['-p', prompt, '--output-format', 'text', '--permission-mode', permMode],
+      ['-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages', '--permission-mode', permMode, '--', prompt],
       { cwd: taskDir, env: process.env, stdio: ['pipe', 'pipe', 'pipe'] },
     );
     let stdout = '';
@@ -371,8 +378,9 @@ async function runClaudeAgent(taskDir, prompt) {
         reject(new Error(`Claude CLI exited with code ${code}${signal ? ` signal ${signal}` : ''}: ${(stdout || stderr || '').slice(-2000)}`));
         return;
       }
-      resolve(output);
+      resolve(cliResult(stdout) || stderr.trim());
     });
+    streamCliOutput(child, 'claude_code', log);
     child.stdin.end();
   });
 }
@@ -478,8 +486,15 @@ async function requestMergeOnComplete(task, taskDir) {
   }
 }
 
+let activeSocket;
+const pendingTaskLogs = [];
 const send = (ws, payload) => {
-  if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload));
+  const socket = activeSocket?.readyState === WebSocket.OPEN ? activeSocket : ws;
+  if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(payload));
+  else if (payload.type === 'task_log') {
+    if (pendingTaskLogs.length >= 512) pendingTaskLogs.shift();
+    pendingTaskLogs.push(payload);
+  }
 };
 
 const safeDir = (value) => value.replace(/[^a-zA-Z0-9._-]+/g, '-');
@@ -1044,6 +1059,10 @@ async function handleTask(ws, task) {
   const agentConfig = resolveAgentConfig();
   const requestedTool = requestedToolName(task, agentConfig);
   const devTool = effectiveToolName({ task, agentConfig });
+  const liveLog = (content, level) => send(ws, {
+    type: 'task_log', task_id: task.task_id, subtask_id: task.subtask_id,
+    content: credentialVault.redact(content), level,
+  });
   let toolError = '';
   let toolOutput = '';
   const useTrae = devTool === 'trae' && traeAgentAvailable();
@@ -1082,7 +1101,7 @@ async function handleTask(ws, task) {
       level: 'info',
     });
     try {
-      const output = await runTraeAgent(taskDir, executionPrompt);
+      const output = await runTraeAgent(taskDir, executionPrompt, liveLog);
       if (output) toolOutput = `${toolOutput}\n${output}`.trim();
       if (output) {
         send(ws, {
@@ -1120,7 +1139,7 @@ async function handleTask(ws, task) {
           level: 'warn',
         });
         try {
-          const output = await runCodexAgent(taskDir, executionPrompt);
+          const output = await runCodexAgent(taskDir, executionPrompt, liveLog);
           const codexNonZero = String(output || '').startsWith('[codex exit=');
           if (output) toolOutput = `${toolOutput}\n${output}`.trim();
           if (output) {
@@ -1154,7 +1173,7 @@ async function handleTask(ws, task) {
     try {
       const env = credentialVault.childEnv(process.env, parseCredentialGrant(executionPrompt), { tool: 'opencode' });
       toolOutput = credentialVault.redact(await runOpenCodeAgent(taskDir, executionPrompt, {
-        env, timeoutMs: toolCommandTimeoutMs, reportOnly,
+        env, timeoutMs: toolCommandTimeoutMs, reportOnly, log: liveLog,
       }));
     } catch (error) {
       const reason = error.stderr || error.stdout || error.code || error.message;
@@ -1172,7 +1191,7 @@ async function handleTask(ws, task) {
       level: 'info',
     });
     try {
-      const output = await runClaudeAgent(taskDir, executionPrompt);
+      const output = await runClaudeAgent(taskDir, executionPrompt, liveLog);
       if (output) toolOutput = `${toolOutput}\n${output}`.trim();
       if (output) {
         send(ws, {
@@ -1204,7 +1223,7 @@ async function handleTask(ws, task) {
       level: 'info',
     });
     try {
-      const output = await runCursorAgent(taskDir, executionPrompt);
+      const output = await runCursorAgent(taskDir, executionPrompt, liveLog);
       if (output) toolOutput = `${toolOutput}\n${output}`.trim();
       if (output) {
         send(ws, {
@@ -1236,7 +1255,7 @@ async function handleTask(ws, task) {
       level: 'info',
     });
     try {
-      const output = await runCodexAgent(taskDir, executionPrompt);
+      const output = await runCodexAgent(taskDir, executionPrompt, liveLog);
       const codexNonZero = String(output || '').startsWith('[codex exit=');
       if (output) toolOutput = `${toolOutput}\n${output}`.trim();
       if (output) {
@@ -1377,6 +1396,11 @@ function isSelfMaintenanceTask(task) {
 }
 
 function enqueueTask(ws, task) {
+  const assignedTool = requestedToolName(task);
+  if (pausedByOpenCodePolicy(assignedTool)) {
+    void failTask(ws, task, assignedTool + ' 已暂停派工，请使用 OpenCode');
+    return false;
+  }
   const subtaskId = String(task?.subtask_id || '').trim();
   if (subtaskId && knownSubtasks.has(subtaskId)) return false;
   if (subtaskId) knownSubtasks.add(subtaskId);
@@ -1447,6 +1471,7 @@ function drainToolQueue(tool) {
 }
 
 function toolExecutionStatus(tool, installed) {
+  if (pausedByOpenCodePolicy(tool)) return 'disabled';
   if (!installed) return 'not_installed';
   const queued = (taskQueuesByTool.get(tool) || []).length > 0;
   return runningTools.has(tool) || queued ? 'running' : 'idle';
@@ -1482,6 +1507,8 @@ function publishToolStatus(ws) {
 function connect() {
   const ws = new WebSocket(wsUrl);
   ws.on('open', () => {
+    activeSocket = ws;
+    for (const payload of pendingTaskLogs.splice(0)) ws.send(JSON.stringify(payload));
     console.log('[e2e-agent] online');
     publishToolStatus(ws);
     recoverPendingTask(ws);
@@ -1497,6 +1524,7 @@ function connect() {
     }
   });
   ws.on('close', () => {
+    if (activeSocket === ws) activeSocket = undefined;
     console.log('[e2e-agent] disconnected, retry in 3s');
     setTimeout(connect, 3000);
   });
