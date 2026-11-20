@@ -1,5 +1,5 @@
 {
-  "lines": 2527306,
+  "lines": 2527344,
   "updated": "2026-11-20",
-  "note": "正式发布身份与部署摘要双端校验及回归，覆盖下载发布前和正式晋级前，含同步 CI 生成副本。"
+  "note": "Restore formal client dispatch from the exact validated main checkout and test fail-closed ordering in both workflow copies"
 }

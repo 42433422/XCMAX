@@ -307,6 +307,22 @@ jobs:
           - fhd-release-web.yml
           - fhd-release-android.yml
     steps:
+      - name: Require exact current main before checking out dispatch helper
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF" != refs/heads/main ]] || ! printf '%s' "$XCAGI_RELEASE_SHA" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "::error::Client dispatch requires main and a full release SHA."
+            exit 1
+          fi
+          main_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq .object.sha)"
+          test "$main_sha" = "$XCAGI_RELEASE_SHA"
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha }}
+          persist-credentials: false
       - name: Trigger ${{ matrix.workflow }}
         working-directory: .
         env:
@@ -314,6 +330,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$XCAGI_RELEASE_SHA"
           raw="${XCAGI_PRODUCT_VERSION}"
           raw="${raw#FHD/}"
           raw="${raw#v}"

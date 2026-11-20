@@ -83,6 +83,25 @@ def test_release_is_draft_until_orchestrator_convergence():
     )
 
 
+@pytest.mark.parametrize(
+    "workflow",
+    ["FHD/.github/workflows/release-orchestrator.yml", ".github/workflows/fhd-release-orchestrator.yml"],
+)
+def test_client_dispatch_loads_only_the_validated_main_helper(workflow):
+    text = (ROOT / workflow).read_text()
+    job = text.split("  dispatch-client-releases:", 1)[1].split("  verify-full-convergence:", 1)[0]
+    assert "needs: [verify-version-anchors, build-frontend, deploy-servers-in-order]" in job
+    verify_ref = job.index('if [[ "$GITHUB_REF" != refs/heads/main ]]')
+    verify_sha = job.index('git/ref/heads/main')
+    checkout = job.index("uses: actions/checkout@v4")
+    assert job.index("working-directory: .") < checkout
+    assert verify_ref < verify_sha < checkout
+    assert "ref: ${{ inputs.release_sha }}\n          persist-credentials: false" in job
+    assert checkout < job.index('test "$(git rev-parse HEAD)"') < job.index(
+        "FHD/scripts/release/dispatch_workflow_and_wait.sh"
+    )
+
+
 @pytest.fixture
 def formal():
     release_id = f"xcagi-{VERSION}-{SHA}"
