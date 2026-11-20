@@ -562,9 +562,12 @@ async def reply_to_ticket_status_request(
 ) -> str | None:
     """Return the current customer-visible status for an explicit ticket enquiry."""
     text = text.strip()
-    if "工单" not in text or not _STATUS_REQUEST.search(text) or _FEATURE_REFERENCE.search(text):
+    if _TICKET_NUMBER.fullmatch(text) and (not text.isdigit() or len(text) >= 6):
+        numbers = [text]
+    elif "工单" in text and _STATUS_REQUEST.search(text) and not _FEATURE_REFERENCE.search(text):
+        numbers = list(dict.fromkeys(_TICKET_NUMBER.findall(text)))
+    else:
         return None
-    numbers = list(dict.fromkeys(_TICKET_NUMBER.findall(text)))
     if len(numbers) != 1:
         if numbers or _NUMBERLESS_QUERY.search(text):
             return "请发送要查询的一个完整工单编号，我会核对后台状态。"

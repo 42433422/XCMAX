@@ -40,7 +40,8 @@ async def test_ticket_status_reads_exact_account_and_number(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_ticket_status_does_not_report_an_expired_ticket_as_completed(monkeypatch):
+@pytest.mark.parametrize("body", ["010066", "010066号工单解决了吗？"])
+async def test_ticket_status_does_not_report_an_expired_ticket_as_completed(monkeypatch, body):
     remote = AsyncMock(
         return_value={
             "items": [
@@ -56,7 +57,7 @@ async def test_ticket_status_does_not_report_an_expired_ticket_as_completed(monk
     monkeypatch.setattr(ticket_status, "custom_delivery_remote_json", remote)
 
     reply = await ticket_status.reply_to_ticket_status_request(
-        "010066号工单解决了吗？", market_user_id=501, market_token="owner-token"
+        body, market_user_id=501, market_token="owner-token"
     )
 
     assert reply and "已过期不再处理" in reply and "已完成" not in reply
