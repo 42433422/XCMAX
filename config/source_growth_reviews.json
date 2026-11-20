@@ -232,9 +232,9 @@
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_api_merged.py": {
       "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_api_merged.py",
       "base_blob": "a15c70e7ebfefdea8ac022652cce75a8dedc694c",
-      "head_blob": "fe61f49e1bed245157bb04d5e0e6eb01e987e44b",
+      "head_blob": "a601cc9197d34727793bb4fe2235b165856ddb0c",
       "before_lines": 1372,
-      "after_lines": 1502,
+      "after_lines": 1514,
       "reason": "Extend the existing model endpoints for capability routing, request receipts and settlement recovery, passing authenticated PAT identity for signed wallet readback.",
       "boundary": "Keep account credentials and billing checks; uncertain settlement requires existing wallet reconciliation and signed service ownership checks.",
       "validation": "183 Python regressions and PostgreSQL Java wallet tests passed locally; exact-head CI and production wallet readback remain required.",
