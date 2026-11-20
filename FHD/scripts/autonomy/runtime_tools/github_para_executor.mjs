@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { ARK_AGENT_PLAN_MODEL } from './codex_model_gateway.mjs';
+import { openCodePlatformConfig } from './opencode_agent.mjs';
 
 export async function runGithubExecutor({ env = process.env, fetchStatus = fetch, spawnWorker = spawn,
   sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), now = Date.now } = {}) {
@@ -59,6 +60,10 @@ export async function runGithubExecutor({ env = process.env, fetchStatus = fetch
   delete agentEnv.PARA_PLATFORM_APPROVED_KEYRING;
   delete agentEnv.PARA_PLATFORM_GATEWAY_KEYS_JSON;
   delete agentEnv.PARA_PLATFORM_AGENT_PLAN_FIRST;
+  const openCode = env.DEVFLEET_FORCE_OPENCODE === '1';
+  if (openCode && env.PARA_PLATFORM_POOL !== '1') throw new Error('opencode_requires_platform_admission');
+  delete agentEnv.OPENCODE_API_KEY;
+  delete agentEnv.PARA_OPENCODE_MODEL;
   if (env.PARA_PLATFORM_POOL === '1' || allocation) {
     const approved = allocation?.approved_models ?? [allocation?.model];
     if (env.PARA_PLATFORM_POOL !== '1' || allocation?.status !== 'admitted'
@@ -67,6 +72,8 @@ export async function runGithubExecutor({ env = process.env, fetchStatus = fetch
         || new Set(approved).size !== approved.length) {
       throw new Error('platform_model_allocation_or_gateway_missing');
     }
+    if (openCode && (allocation.agent_plan_first === true || allocation.model === ARK_AGENT_PLAN_MODEL
+        || allocation.provider === 'ark_agent_plan')) throw new Error('opencode_agent_plan_not_supported');
     let keys;
     try {
       keys = env.PARA_PLATFORM_GATEWAY_KEYS_JSON?.trim()
@@ -97,6 +104,14 @@ export async function runGithubExecutor({ env = process.env, fetchStatus = fetch
     delete agentEnv.DEVFLEET_CODEX_API_KEY_ENV;
     agentEnv.PARA_PLATFORM_MODEL = allocation.model;
     agentEnv.PARA_PLATFORM_MODEL_CANDIDATES = approved.join(',');
+    if (openCode) {
+      agentEnv.PARA_OPENCODE_MODEL = allocation.model;
+      agentEnv.OPENCODE_API_KEY = keys[allocation.model];
+      const config = openCodePlatformConfig(agentEnv);
+      agentEnv.PARA_PLATFORM_GATEWAY_URL = config.provider.xcmax.options.baseURL;
+      delete agentEnv.CODEX_API_KEY;
+      delete agentEnv.PARA_PLATFORM_APPROVED_KEYRING;
+    }
   }
   delete agentEnv.PARA_PLATFORM_GATEWAY_KEY;
   const agent = spawnWorker(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), 'para_e2e_agent.mjs')], {

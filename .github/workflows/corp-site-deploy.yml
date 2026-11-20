@@ -266,6 +266,8 @@ jobs:
             SYNC_STAGE=public-verification
             echo "[verify] public corp/download/market surfaces:"
             xc_curl https://xiu-ci.com/ >/dev/null
+            xc_curl -o /tmp/xc-llms.txt https://xiu-ci.com/llms.txt
+            cmp "${GIT_SITE}/llms.txt" /tmp/xc-llms.txt
             xc_curl https://xiu-ci.com/developer.html >/dev/null
             xc_curl https://xiu-ci.com/download >/dev/null
             xc_curl https://xiu-ci.com/download/releases >/dev/null

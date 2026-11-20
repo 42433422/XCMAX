@@ -5,7 +5,7 @@ Para 收单后、分类/派发前后：
 2. 若 payload 或 evidence 带 ``triage_intervention``，立即应用（改分类、改 tool/device）；
 3. **不阻塞等人**：无介入则自动分诊继续；有介入则用其决定；
 4. 账号类 / 不确定意图默认进终极员工通道（grok_bot / dolt），**不静默丢弃**，
-   且不得误派到代码修复工具（codex / cursor / claude_code / trae）。
+   且不得误派到代码修复工具。
 
 运维快修执行器（ops_fast_fix）仍预留，本模块不实现。
 """
@@ -18,7 +18,7 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 # 与 customer_service_orchestrator.TRIAGE_LANES 对齐；此处再声明以免循环导入。
 ULTIMATE_TOOLS = frozenset({"grok_bot", "dolt"})
-CODE_FIX_TOOLS = frozenset({"codex", "claude_code", "cursor", "trae"})
+CODE_FIX_TOOLS = frozenset({"codex", "claude_code", "cursor", "trae", "opencode"})
 _ACCOUNT_OR_UNCERTAIN = frozenset({"account_support", "general", "greeting"})
 
 

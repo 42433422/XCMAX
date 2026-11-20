@@ -109,7 +109,7 @@ DEFAULT_PARA_WAIT_TIMEOUT_SEC = 1800.0
 _SUBTASK_LABELS = ("需求定位与方案", "核心实现", "验证与收尾")
 
 
-_VALID_DEV_TOOLS = ("codex", "claude_code", "cursor", "trae", "grok_bot", "dolt")
+_VALID_DEV_TOOLS = ("codex", "claude_code", "cursor", "trae", "opencode", "grok_bot", "dolt")
 _TOOL_INPUT_ALIASES = {
     "claude": "claude_code",
     "claude-code": "claude_code",
@@ -125,6 +125,7 @@ _TOOL_CAP_ALIASES: Dict[str, tuple[str, ...]] = {
     "cursor": ("cursor_cli", "cursor_agent_cli", "cursor-agent_cli"),
     "claude_code": ("claude_code_cli", "claude_cli", "claude-code_cli"),
     "trae": ("trae_cli",),
+    "opencode": ("opencode_cli",),
     "grok_bot": ("grok_bot_cloud",),
     "dolt": ("dolt_cloud",),
 }
@@ -133,6 +134,7 @@ _TOOL_NAME_ALIASES: Dict[str, tuple[str, ...]] = {
     "cursor": ("cursor", "cursor_agent", "cursor-agent"),
     "claude_code": ("claude_code", "claude", "claude-code"),
     "trae": ("trae",),
+    "opencode": ("opencode",),
     "grok_bot": ("grok_bot",),
     "dolt": ("dolt",),
 }

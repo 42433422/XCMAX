@@ -22,7 +22,7 @@ from tests.test_incident_team_escalation import _payload as event_payload
 from tests.test_incident_team_escalation import incident as incident
 
 
-@pytest.mark.parametrize("tool", ["dolt", "codex"])
+@pytest.mark.parametrize("tool", ["dolt", "codex", "opencode"])
 def test_retort_feedback_preserves_private_context_and_authorized_executor(monkeypatch, tool):
     contract = {
         "role": "scout",

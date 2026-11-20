@@ -11,7 +11,7 @@ from fastapi import HTTPException
 
 from modstore_server.db.mac_control import MacControlTask
 from modstore_server.mac_control_store import TERMINAL, acquire, transition
-from modstore_server.mac_control_transport import ParaClient, ParaUnavailable
+from modstore_server.mac_control_transport import ParaClient, ParaUnavailable, execution_tool
 from modstore_server.para_github_runner import WORKFLOW, _claim_worker_slot, device_matches
 
 REPAIR_KIND = "original_pr_repair"
@@ -191,7 +191,7 @@ def _dispatch_para(db, task, request, state, request_id, client, github):
     raw = client.submit(
         {
             "device_id": task.device_id,
-            "tool_name": "codex",
+            "tool_name": execution_tool(),
             "title": _marker(request_id, task.attempt_id) + f"Repair PR #{request['pull_request']}",
             "prompt": request["message"],
             "repo_url": f"https://github.com/{request['repository']}.git",
@@ -214,9 +214,16 @@ def _process(db, task, github):
         if task.state == "cancel_requested" or not _current_source(github, request):
             transition(db, task, "cancelled", "no_current_authorized_pr_failure")
             return
+        from modstore_server.para_model_admission import platform_model_admission
+
+        allocation = platform_model_admission()
+        state["model_allocation"] = allocation
+        if allocation and allocation.get("status") != "admitted":
+            transition(db, task, "waiting_device", "platform_model_capacity", snapshot=state)
+            return
         if not _claim_worker_slot(db, task, owner_key=f"repair:{task.id}"):
             return
-        state = {"runner_intent": True}
+        state["runner_intent"] = True
         transition(db, task, "dispatching", "github_dispatch_intent_recorded", snapshot=state)
         result = github(
             "POST",
@@ -292,4 +299,5 @@ def run_status(task):
         "finished": task.state in TERMINAL or task.state == "cancel_requested",
         "conclusion": "success" if task.state == "execution_completed" else "unknown",
         "publication_candidate": state.get("candidate"),
+        "model_allocation": state.get("model_allocation"),
     }

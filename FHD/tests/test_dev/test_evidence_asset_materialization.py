@@ -211,6 +211,37 @@ def _git(root, *args):
     )
 
 
+@pytest.mark.parametrize("response", ["matching", "stale", "<html>homepage</html>", "unavailable"])
+def test_crawler_summary_https_readback_requires_the_deployed_bytes(tmp_path, response):
+    workflow = (ROOT / ".github/workflows/corp-site-deploy.yml").read_text()
+    start = workflow.index("            xc_curl -o /tmp/xc-llms.txt")
+    block = "\n".join(line[12:] for line in workflow[start:].splitlines()[:2])
+    block = block.replace("/tmp/xc-llms.txt", str(tmp_path / "response.txt"))
+    summary = "# 经核验的官网摘要\n"
+    (tmp_path / "llms.txt").write_text(summary, encoding="utf-8")
+    run = subprocess.run(
+        [
+            "bash",
+            "-c",
+            "set -eu\nxc_curl() {\n"
+            '  test "$1" = -o\n'
+            '  test "$3" = https://xiu-ci.com/llms.txt\n'
+            '  if [ "$SUMMARY_RESPONSE" = unavailable ]; then return 22; fi\n'
+            '  printf %s "$SUMMARY_RESPONSE" > "$2"\n'
+            "}\n" + block + "\necho VERIFIED\n",
+        ],
+        env={
+            **os.environ,
+            "GIT_SITE": str(tmp_path),
+            "SUMMARY_RESPONSE": summary if response == "matching" else response,
+        },
+        capture_output=True,
+        text=True,
+    )
+    assert (run.returncode == 0) == (response == "matching"), run.stderr
+    assert ("VERIFIED" in run.stdout) == (response == "matching")
+
+
 def test_guard_rejects_new_duplicate_media_but_allows_removing_legacy_copies(repository):
     root, original, _, _ = repository
     _git(root, "init", "-q")

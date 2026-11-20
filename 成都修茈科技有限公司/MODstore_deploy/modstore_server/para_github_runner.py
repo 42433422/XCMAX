@@ -13,7 +13,7 @@ from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 
 from modstore_server.customer_service_tools import json_dumps, json_loads
-from modstore_server.mac_control_transport import age_seconds
+from modstore_server.mac_control_transport import age_seconds, execution_tool
 from modstore_server.models_cs import CustomerServiceAction
 
 WORKFLOW = "fhd-para-github-worker.yml"
@@ -89,6 +89,7 @@ def auth_headers() -> dict[str, str]:
 
 def device_matches(device, workspace):
     caps = device.get("capabilities") or {}
+    tool_name = execution_tool()
     return bool(
         device.get("id") == os.environ.get("MODSTORE_PARA_GITHUB_DEVICE_ID")
         and device.get("status") == "online"
@@ -100,7 +101,7 @@ def device_matches(device, workspace):
         and (not workspace.get("stage") or caps.get("github_stage") == workspace["stage"])
         and not caps.get("server_bridge")
         and any(
-            t.get("toolName") == "codex" and t.get("status") in {"idle", "running"}
+            t.get("toolName") == tool_name and t.get("status") in {"idle", "running"}
             for t in device.get("tools", [])
         )
     )

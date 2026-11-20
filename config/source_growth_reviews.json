@@ -724,12 +724,12 @@
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/para_delegate_handler_merged.py": {
       "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/para_delegate_handler_merged.py",
       "base_blob": "08281cf6f5557c4e2af7d4d943648c593d2405c2",
-      "head_blob": "664eb0f293bbdb0bc99bdf7a98202bbb17ec79b3",
+      "head_blob": "899aa9c40bbd23705fd94306d2496ed75e3219dd",
       "before_lines": 1665,
-      "after_lines": 1695,
-      "reason": "自动派单交给执行器前核对已保存的工单状态，保证原单处置后仍排队的动作无法开始。",
-      "boundary": "沿用现有派发入口和执行回执，检查仅作用于可核验的客户工单派发。",
-      "validation": "同工单、跨租户任务以及已有执行凭证均有回归，扩展任务派发与事件链路 179 项通过。",
+      "after_lines": 1700,
+      "reason": "自动派单交给执行器前核对已保存的工单状态，保证原单处置后仍排队的动作无法开始。 同一入口复用显式 OpenCode 首派策略，并排除已暂停的设备工具。",
+      "boundary": "沿用现有派发入口和执行回执，检查仅作用于可核验的客户工单派发。 OpenCode 默认关闭；云端主管、原请求身份、私有合同和已有尝试的回执恢复保持原边界。",
+      "validation": "同工单、跨租户任务以及已有执行凭证均有回归，扩展任务派发与事件链路 179 项通过。 整合后专项 197 项 MODstore 与 54 项 Node 回归通过，包含原工具、OpenCode、额度等待、原单派发回包丢失和私有只读反馈。",
       "follow_up": "待 Para 提供可核验的任务停止回执后，通过现有执行状态读回核对已递交任务。",
       "review_owner": "@42433422"
     }

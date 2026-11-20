@@ -8,6 +8,7 @@ import test from 'node:test';
 import {
   effectiveToolName,
   isToolFallbackEligible,
+  pausedByOpenCodePolicy,
   removeOwnWorkspace,
   requestedToolName,
   resetWorkspaceForNextTool,
@@ -16,6 +17,78 @@ import {
   toolFallbackOrder,
   withFailureCleanup,
 } from './e2e_agent_runtime_policy.mjs';
+import { openCodePlatformConfig, runOpenCodeAgent } from './opencode_agent.mjs';
+
+test('OpenCode-only policy pauses the other CLIs and scopes native config to the XCMAX gateway', () => {
+  const env = { DEVFLEET_FORCE_OPENCODE: '1', DEVFLEET_FORCE_CODEX: '1',
+    PARA_PLATFORM_GATEWAY_URL: 'https://xiu-ci.com/v1', PARA_OPENCODE_MODEL: 'xcmax-para-coding',
+    OPENCODE_API_KEY: 'test-only-placeholder' };
+  assert.equal(effectiveToolName({ env, fallback: 'codex' }), 'opencode');
+  assert.equal(pausedByOpenCodePolicy('codex', env), true);
+  assert.equal(pausedByOpenCodePolicy('opencode', env), false);
+  const config = openCodePlatformConfig(env);
+  assert.equal(config.provider.xcmax.npm, '@ai-sdk/openai');
+  assert.equal(config.model, 'xcmax/xcmax-para-coding');
+  assert.equal(config.provider.xcmax.models['xcmax-para-coding'].id, 'xcmax-para-coding');
+  assert.deepEqual(config.provider.xcmax.whitelist, ['xcmax-para-coding']);
+  assert.deepEqual(config.enabled_providers, ['xcmax']);
+  assert.ok(!JSON.stringify(config).includes(env.OPENCODE_API_KEY));
+  assert.throws(() => openCodePlatformConfig({ ...env, OPENCODE_API_KEY: '' }), /专用密钥/);
+  assert.equal(openCodePlatformConfig({ ...env, PARA_OPENCODE_MODEL: 'vendor/model:variant' }).model, 'xcmax/vendor/model:variant');
+  assert.throws(() => openCodePlatformConfig({ ...env, PARA_PLATFORM_POOL: '1', PARA_PLATFORM_MODEL: 'other' }), /专用密钥/);
+});
+
+test('OpenCode report-only sessions deny unknown tools even when no log callback is supplied', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'opencode-native-api-'));
+  const executable = join(root, 'opencode');
+  writeFileSync(executable, `#!${process.execPath}\n` + String.raw`
+const http = require('node:http');
+let session;
+const server = http.createServer(async (req, res) => {
+  if (req.headers.authorization !== 'Basic ' + Buffer.from('opencode:' + process.env.OPENCODE_SERVER_PASSWORD).toString('base64')) {
+    res.writeHead(401).end(); return;
+  }
+  let raw = ''; for await (const chunk of req) raw += chunk;
+  if (req.url === '/event') { res.writeHead(200, {'content-type': 'text/event-stream'}); res.flushHeaders(); return; }
+  res.setHeader('content-type', 'application/json');
+  if (req.url === '/config') {
+    const config = JSON.parse(process.env.OPENCODE_CONFIG_CONTENT);
+    config.provider.xcmax.options.apiKey = process.env.OPENCODE_API_KEY;
+    if (process.env.FIXTURE_CONFIG_OVERRIDE === 'headers') config.provider.xcmax.models['vendor/model:variant'].headers = {aUtHoRiZaTiOn:'fixture-other-key'};
+    if (process.env.FIXTURE_CONFIG_OVERRIDE === 'endpoint') config.provider.xcmax.options.baseURL = 'https://other.example.test/v1';
+    if (process.env.FIXTURE_CONFIG_OVERRIDE === 'key') config.provider.xcmax.options.apiKey = 'fixture-other-key';
+    if (process.env.FIXTURE_CONFIG_OVERRIDE === 'model') config.provider.xcmax.models['vendor/model:variant'].id = 'other';
+    res.end(JSON.stringify(config)); return;
+  }
+  if (req.url === '/session') { session = JSON.parse(raw); res.end(JSON.stringify({id:'fixture-session'})); return; }
+  const message = JSON.parse(raw);
+  res.end(JSON.stringify({info:{tokens:{input:1,output:2}},parts:[{type:'text',text:JSON.stringify({session,message})}]}));
+});
+server.listen(0, '127.0.0.1', () => console.log('http://127.0.0.1:' + server.address().port));
+`, { mode: 0o700 });
+  try {
+    const env = { DEVFLEET_FORCE_OPENCODE: '1', PARA_PLATFORM_POOL: '1',
+      PARA_OPENCODE_MODEL: 'vendor/model:variant', PARA_PLATFORM_MODEL: 'vendor/model:variant',
+      PARA_PLATFORM_GATEWAY_URL: 'https://gateway.example.test/v1', OPENCODE_API_KEY: 'fixture-granted-key' };
+    for (const log of [() => {}, undefined]) {
+      const output = JSON.parse(await runOpenCodeAgent(root, 'Review the existing files', {
+        executable, env, timeoutMs: 5000, reportOnly: true, log,
+      }));
+      assert.equal(output.message.agent, 'plan');
+      assert.equal(output.message.parts[0].text, 'Review the existing files');
+      assert.deepEqual(output.message.model, { providerID: 'xcmax', modelID: 'vendor/model:variant' });
+      assert.deepEqual(output.session.permission, [
+        { permission: '*', pattern: '*', action: 'deny' },
+        ...['read', 'glob', 'grep', 'list'].map(permission => ({ permission, pattern: '*', action: 'allow' })),
+      ]);
+    }
+    for (const override of ['headers', 'endpoint', 'key', 'model']) {
+      await assert.rejects(runOpenCodeAgent(root, 'Do not launch a model', {
+        executable, env: { ...env, FIXTURE_CONFIG_OVERRIDE: override }, timeoutMs: 5000, reportOnly: false,
+      }), /opencode_platform_binding_mismatch/);
+    }
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
 
 test('forced Codex overrides an explicit Cursor task assignment', () => {
   assert.equal(
@@ -37,6 +110,7 @@ test('task assignment wins over device config when no force policy is active', (
     'trae',
   );
   assert.equal(requestedToolName({}, { devTool: 'cursor' }), 'cursor');
+  assert.equal(effectiveToolName({ task: { tool_name: 'opencode' }, env: {} }), 'opencode');
 });
 
 test('queue callers can choose a supported fallback tool', () => {
@@ -92,6 +166,7 @@ test('no fallback order keeps the legacy single-tool path', () => {
 
 test('requested tool runs first, then the rest of the chain in order without repeats', () => {
   assert.deepEqual(toolAttemptPlan({ task: { tool: 'cursor' }, env: CHAIN }), ['cursor', 'codex', 'claude_code', 'trae']);
+  assert.deepEqual(toolAttemptPlan({ task: { tool: 'opencode' }, env: CHAIN }), ['opencode', 'codex', 'cursor', 'claude_code', 'trae']);
   assert.deepEqual(toolAttemptPlan({ task: {}, env: CHAIN }), ['codex', 'cursor', 'claude_code', 'trae']);
   assert.deepEqual(toolAttemptPlan({ task: { tool: 'codex' }, env: CHAIN }), ['codex', 'cursor', 'claude_code', 'trae']);
 });

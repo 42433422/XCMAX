@@ -160,6 +160,59 @@ def test_offline_preserves_queued_task(factory, para):
         assert db.get(MacControlTask, task_id).state == "running"
 
 
+def test_opencode_policy_applies_to_mac_control_before_first_dispatch(factory, para, monkeypatch):
+    monkeypatch.setenv("DEVFLEET_FORCE_OPENCODE", "1")
+    row = device()
+    row["capabilities"]["tool_preflight"]["opencode"] = {
+        "ok": True,
+        "checked_at": datetime.now(UTC).isoformat(),
+    }
+    row["tools"] = [
+        {"toolName": "codex", "status": "disabled"},
+        {"toolName": "opencode", "status": "idle"},
+    ]
+    monkeypatch.setattr(para, "devices", lambda: [row])
+    submit = para.submit
+    submitted_tools = []
+
+    def capture(body):
+        submitted_tools.append(body["tool_name"])
+        return submit(body)
+
+    monkeypatch.setattr(para, "submit", capture)
+    original = {**request(), "tool": "codex"}
+    with factory() as db:
+        task_id = accept(db, actor="a", key="stable-key", request=original).id
+    worker.run_mac_control_sync()
+    worker.run_mac_control_sync()
+    assert submitted_tools == ["opencode"]
+    with factory() as db:
+        assert accept(db, actor="a", key="stable-key", request=original).id == task_id
+
+
+def test_opencode_policy_waits_for_compatible_device_without_replaying_accepted_work(
+    factory, para, monkeypatch
+):
+    with factory() as db:
+        task_id = accept(db, actor="a", key="stable-key", request=request()).id
+    monkeypatch.setenv("DEVFLEET_FORCE_OPENCODE", "1")
+    worker.run_mac_control_sync()
+    assert para.submitted == 0
+    with factory() as db:
+        assert db.get(MacControlTask, task_id).state == "waiting_device"
+    monkeypatch.setenv("DEVFLEET_FORCE_OPENCODE", "0")
+    para.lose_response = True
+    worker.run_mac_control_sync()
+    with factory() as db:
+        original_attempt = db.get(MacControlTask, task_id).attempt_id
+    monkeypatch.setenv("DEVFLEET_FORCE_OPENCODE", "1")
+    worker.run_mac_control_sync()
+    assert para.submitted == 1
+    with factory() as db:
+        task = db.get(MacControlTask, task_id)
+        assert task.attempt_id == original_attempt and task.para_task_id == "para-1"
+
+
 def test_unknown_preflight_and_busy_device_are_rejected():
     assert choose_device([device(capabilities={})], request(), time.time())[0] is None
     assert choose_device([device(status="offline")], request(), time.time())[0] is None

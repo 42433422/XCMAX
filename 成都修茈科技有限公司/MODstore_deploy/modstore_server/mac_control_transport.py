@@ -15,6 +15,10 @@ class ParaUnavailable(RuntimeError):
     pass
 
 
+def execution_tool(requested: str = "codex") -> str:
+    return "opencode" if os.environ.get("DEVFLEET_FORCE_OPENCODE") == "1" else requested
+
+
 def stale_window() -> int:
     try:
         return max(

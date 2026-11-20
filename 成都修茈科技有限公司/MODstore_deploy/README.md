@@ -38,6 +38,16 @@ python -m pip install -e packages/retort_engine -e packages/xcagi_common \
 
 `XCAGI-Full-Pipeline.html` → `#s-gaps` / `#s-roadmap` 由 `docs/xcagi-dashboard/emp-wf-action-items.js` 拉取本栈 `:8788` API 动态渲染。
 
+## Para 的 OpenCode 工作设备
+
+使用 [anomalyco/opencode v1.19.6](https://github.com/anomalyco/opencode/releases/tag/v1.19.6)（MIT）。工作设备可用 `npm install -g opencode-ai@1.19.6` 安装，也可用 `DEVFLEET_OPENCODE_AGENT` 指定原生可执行文件。设备上报 `opencode_cli` 后即可选择 `opencode` 派工。
+
+Zen 免费模型由 OpenCode CLI 原生调用。用 `opencode models opencode` 查看工作设备的可用模型，并通过受控的 `OPENCODE_CONFIG` 文件选择 `model`。如果设备使用 `OPENCODE_API_KEY` 且启用了任务凭据授权，通过现有 `MODSTORE_CREDENTIAL_GRANT_SCOPES` 配置该权限。[Zen 模型](https://opencode.ai/docs/console/models/)
+
+`DEVFLEET_FORCE_OPENCODE` 默认关闭；须先部署支持 OpenCode 的 DevFleet 协调服务（配套 `devfleet-private#17`）与工作设备，确认设备工具就绪后，再由运维在 MODstore、设备和 GitHub 仓库变量中显式设置为 `1`。未升级的设备保持等待，不将任务转给其他工具。首次派工遵循该可信策略，既有请求与 attempt 继续按原身份核对回执。
+
+GitHub Worker 还须启用下文的云端平台模型准入。原 PR 修复、客服与 Retort 都先持久化同一次额度分配，再启动工作流；OpenCode 使用该分配的模型、受信 `PARA_PLATFORM_GATEWAY_URL` 和对应的专用 key，不使用独立的全局模型别名。它只接收本次选中模型的密钥；`MODSTORE_PARA_ARK_PLAN_FIRST=1` 的专用计划组合暂不兼容，明确等待，不交换凭据或改用其他模型。本地非池设备仍可显式配置网关、`PARA_OPENCODE_MODEL` 和 `OPENCODE_API_KEY`。平台请求沿用原生 `/v1/responses`，执行前回读有效模型、网关和认证配置；原生会话权限让只读任务默认拒绝未知工具。增量文字、工具活动与实际 token 用量经现有任务 WebSocket 回传。
+
 ## 管理端小 C
 
 工作动态复用 [Element Plus Timeline 2.14.8](https://github.com/element-plus/element-plus/tree/2.14.8)（MIT）呈现工单回执。交付跟进沿用现有客服工单的员工路由、恢复和显式审批；站内提醒由 [APScheduler 3.11.3](https://github.com/agronholm/apscheduler/tree/3.11.3)（MIT）在 MODstore 调度进程运行。只有显式关注的交付工单进入提醒，截止时间来自工单字段。

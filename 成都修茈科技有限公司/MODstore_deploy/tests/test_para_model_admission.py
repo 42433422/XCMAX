@@ -54,6 +54,17 @@ def test_invalid_active_policy_leaves_task_waiting(monkeypatch):
     assert platform_model_admission()["reason"] == "invalid_platform_policy"
 
 
+def test_opencode_requires_platform_admission_without_changing_legacy_opt_out(monkeypatch):
+    monkeypatch.delenv("MODSTORE_PARA_PLATFORM_POOL", raising=False)
+    monkeypatch.delenv("DEVFLEET_FORCE_OPENCODE", raising=False)
+    assert platform_model_admission() is None
+    monkeypatch.setenv("DEVFLEET_FORCE_OPENCODE", "1")
+    assert platform_model_admission() == {
+        "status": "waiting",
+        "reason": "opencode_requires_platform_admission",
+    }
+
+
 def test_capability_and_reserve_filter_before_benchmark():
     def must_not_fetch(_source):
         raise AssertionError("blocked or single candidate must not query leaderboard")
@@ -181,3 +192,9 @@ def test_sync_admission_uses_isolated_http_on_each_loop(monkeypatch):
     assert decision["status"] == "admitted"
     assert decision["approved_models"] == ["ark-code-latest"]
     assert decision["platform_fallback"]["status"] == "waiting"
+
+    monkeypatch.setenv("DEVFLEET_FORCE_OPENCODE", "1")
+    assert platform_model_admission() == {
+        "status": "waiting",
+        "reason": "opencode_agent_plan_not_supported",
+    }

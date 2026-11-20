@@ -779,6 +779,11 @@ def _tool_candidates(req: _facade().Dict[str, _facade().Any]) -> list[str]:
     explicit = _facade()._normalize_tool_name(
         str(req.get("tool_name") or raw.get("tool_name") or raw.get("dev_tool") or "")
     )
+    if _facade().os.environ.get("DEVFLEET_FORCE_OPENCODE") == "1" and explicit not in {
+        "grok_bot",
+        "dolt",
+    }:
+        return [] if "opencode" in _facade()._excluded_tools(req) else ["opencode"]
     preferred = explicit if explicit in _facade()._VALID_DEV_TOOLS else _facade()._dev_tool()
     order = _facade()._fallback_order_tools()
     if not _facade()._tool_fallback_allowed(req):
@@ -877,7 +882,7 @@ def _device_eligible(item: _facade().Any, tool_name: str) -> bool:
     if item.get("executorReady") is False:
         return False
     tool = _facade()._device_tool_entry(item, tool_name)
-    if tool and str(tool.get("status") or "") == "not_installed":
+    if tool and str(tool.get("status") or "") in {"not_installed", "disabled"}:
         return False
     if tool and str(tool.get("status") or "") == "running" and tool.get("currentTask"):
         return False

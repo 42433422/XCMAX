@@ -5,6 +5,8 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runGithubExecutor } from './github_para_executor.mjs';
+import { modelChildEnv } from './credential_vault.mjs';
+import { openCodePlatformConfig } from './opencode_agent.mjs';
 
 const identity = { request_id: '11111111-2222-4333-8444-555555555555', run_id: '123', repository: 'owner/repo', issue_number: 42, finished: false };
 function environment(root, stage = 'execute') {
@@ -87,5 +89,45 @@ test('platform execution uses the admitted route and limited gateway credential'
       },
     });
     assert.equal(withPlan, 0);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('OpenCode binds the admitted model, gateway and only that model credential', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'para-opencode-'));
+  try {
+    const env = { ...environment(root, 'resume'), DEVFLEET_FORCE_OPENCODE: '1', PARA_PLATFORM_POOL: '1',
+      PARA_PLATFORM_GATEWAY_URL: 'https://gateway.example.test/v1/',
+      PARA_PLATFORM_GATEWAY_KEYS_JSON: JSON.stringify({ 'coding-route': 'fixture-admitted-key', 'backup-route': 'fixture-backup-key' }),
+      PARA_OPENCODE_MODEL: 'unapproved-alias', OPENCODE_API_KEY: 'fixture-unapproved-key',
+      CODEX_API_KEY: 'fixture-other-cli-key', OPENAI_API_KEY: 'fixture-other-provider-key' };
+    const model_allocation = { status: 'admitted', model: 'coding-route', approved_models: ['coding-route', 'backup-route'] };
+    let reads = 0, launches = 0;
+    const result = await runGithubExecutor({ env,
+      fetchStatus: async () => ({ ok: true, json: async () => ({ ...identity, model_allocation, finished: ++reads > 1, conclusion: 'success' }) }),
+      spawnWorker: (_exe, _args, { env: child }) => {
+        launches += 1;
+        assert.equal(child.PARA_OPENCODE_MODEL, model_allocation.model);
+        assert.equal(child.OPENCODE_API_KEY, 'fixture-admitted-key');
+        for (const key of ['CODEX_API_KEY', 'OPENAI_API_KEY', 'PARA_PLATFORM_GATEWAY_KEY', 'PARA_PLATFORM_GATEWAY_KEYS_JSON', 'PARA_PLATFORM_APPROVED_KEYRING']) {
+          assert.equal(child[key], undefined, key);
+        }
+        const config = openCodePlatformConfig(modelChildEnv(child, { tool: 'opencode' }));
+        assert.equal(config.model, 'xcmax/coding-route');
+        assert.equal(config.provider.xcmax.options.baseURL, 'https://gateway.example.test/v1');
+        const agent = new EventEmitter(); agent.kill = () => {}; return agent;
+      },
+    });
+    assert.equal(result, 0); assert.equal(launches, 1);
+    const denied = (overrides, allocation = model_allocation) => runGithubExecutor({ env: { ...env, ...overrides },
+      fetchStatus: async () => ({ ok: true, json: async () => ({ ...identity, model_allocation: allocation }) }),
+      spawnWorker: () => assert.fail('an incompatible allocation must not start a model'),
+    });
+    await assert.rejects(denied({ PARA_PLATFORM_POOL: '0' }, undefined), /opencode_requires_platform_admission/);
+    await assert.rejects(denied({}, { ...model_allocation, status: 'waiting' }), /platform_model_allocation/);
+    await assert.rejects(denied({}, { ...model_allocation, approved_models: ['unapproved-alias'] }), /platform_model_allocation/);
+    await assert.rejects(denied({ PARA_PLATFORM_GATEWAY_KEYS_JSON: '{}' }), /platform_model_allocation/);
+    await assert.rejects(denied({ PARA_PLATFORM_GATEWAY_URL: 'http://gateway.example.test/v1' }), /OpenCode/);
+    await assert.rejects(denied({}, { status: 'admitted', model: 'ark-code-latest', agent_plan_first: true,
+      approved_models: ['ark-code-latest', 'coding-route'] }), /opencode_agent_plan_not_supported/);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

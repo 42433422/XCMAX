@@ -517,7 +517,7 @@ def prepare_dolt_ticket_payload(
         contract = _incident_contract(req)
         if not contract or not contract.get("customer_feedback"):
             return payload
-        if tool_name not in {DOLT_TOOL, "codex"}:
+        if tool_name not in {DOLT_TOOL, "codex", "opencode"}:
             raise DoltIncidentContractError("feedback_private_executor_required")
     elif tool_name == DOLT_TOOL and is_customer_ticket(req):
         contract = _incident_contract(req)
@@ -549,7 +549,7 @@ def prepare_dolt_ticket_payload(
             raise DoltIncidentContractError("feedback_publication_marker_mismatch")
     # dot 不合并、不用 MODstore 本机工作区：去掉自动合并和本地路径。
     out = {k: v for k, v in payload.items() if k not in {"auto_merge", "workspace_path"}}
-    executor_label = "codex" if tool_name == "codex" else "dot"
+    executor_label = "dot" if tool_name == DOLT_TOOL else tool_name
     out.update(
         title=f"{marker} [{executor_label}:{mode}] 客服工单 {ticket_no}"[:240],
         prompt=build_dolt_prompt(fields, req, mode)

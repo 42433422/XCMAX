@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
-[[ "$PARA_CODEX_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Pin the Para Codex CLI version first'; exit 1; }
 mkdir -p "$RUNNER_TEMP/para-worker"
 cp scripts/autonomy/runtime_tools/*.mjs "$RUNNER_TEMP/para-worker/"
+if [[ "${DEVFLEET_FORCE_OPENCODE:-0}" == 1 ]]; then
+  [[ "${PARA_PLATFORM_POOL:-0}" == 1 ]] || { echo 'OpenCode GitHub execution requires platform model admission'; exit 1; }
+  node --input-type=module -e "import { openCodeGatewayUrl } from './scripts/autonomy/runtime_tools/opencode_agent.mjs'; openCodeGatewayUrl(process.env)"
+  npm install --prefix "$RUNNER_TEMP/para-worker" --package-lock=false "ws@8.18.0" "opencode-ai@1.19.6"
+  exit 0
+fi
+[[ "$PARA_CODEX_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Pin the Para Codex CLI version first'; exit 1; }
 npm install --prefix "$RUNNER_TEMP/para-worker" --package-lock=false "ws@8.18.0" "@openai/codex@$PARA_CODEX_VERSION"
 python - <<'PY'
 import json, os

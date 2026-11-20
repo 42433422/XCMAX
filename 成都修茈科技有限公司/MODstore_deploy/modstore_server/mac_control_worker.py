@@ -27,6 +27,7 @@ from modstore_server.mac_control_transport import (
     ParaUnavailable,
     choose_device,
     device_view,
+    execution_tool,
     execution_view,
 )
 
@@ -131,6 +132,7 @@ def process(db, task, client, devices):
     if task.state == "cancel_requested":
         transition(db, task, "cancelled", "cancelled_before_dispatch")
         return
+    request["tool"] = execution_tool(request.get("tool", "codex"))
     from modstore_server.mac_control_facts import context_facts
     from modstore_server.mac_control_preflight import prepare_windows_probe
 

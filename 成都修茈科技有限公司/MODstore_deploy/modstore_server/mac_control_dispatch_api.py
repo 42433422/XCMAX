@@ -80,7 +80,7 @@ def github_run_status(
 class DispatchRequest(BaseModel):
     request_key: str = Field(min_length=8, max_length=128)
     message: str = Field(min_length=1, max_length=12000)
-    tool: str = Field(default="cursor", pattern=r"^(cursor|codex|claude_code|trae)$")
+    tool: str = Field(default="cursor", pattern=r"^(cursor|codex|claude_code|trae|opencode)$")
     source_sha: str = Field(default="", pattern=r"^(?:[0-9a-f]{40})?$")
     github_issue: int | None = Field(default=None, gt=0)
 

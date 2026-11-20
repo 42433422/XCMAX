@@ -129,6 +129,8 @@ def _benchmark_preferences(finalists, routes, leaderboard):
 def platform_model_admission(profile: str = "repair") -> dict[str, Any] | None:
     """Return None for existing deployments that have not opted in."""
     if os.environ.get("MODSTORE_PARA_PLATFORM_POOL") != "1":
+        if os.environ.get("DEVFLEET_FORCE_OPENCODE") == "1":
+            return {"status": "waiting", "reason": "opencode_requires_platform_admission"}
         return None
     try:
         routes = json.loads(os.environ.get("MODSTORE_PARA_PLATFORM_ROUTES", "{}"))
@@ -146,6 +148,8 @@ def platform_model_admission(profile: str = "repair") -> dict[str, Any] | None:
     agent_plan_first = os.environ.get("MODSTORE_PARA_ARK_PLAN_FIRST") == "1" and not (
         set(extra) - BASE_CAPABILITIES
     )
+    if agent_plan_first and os.environ.get("DEVFLEET_FORCE_OPENCODE") == "1":
+        return {"status": "waiting", "reason": "opencode_agent_plan_not_supported"}
     if agent_plan_first:
         routes.pop(ARK_AGENT_PLAN_MODEL, None)
     try:

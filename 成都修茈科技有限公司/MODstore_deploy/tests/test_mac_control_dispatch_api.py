@@ -73,11 +73,12 @@ def test_unconfigured_token_fails_closed(setup, monkeypatch):
     assert response.status_code == 503
 
 
-def test_creates_code_task_only_for_mac_with_service_actor(setup):
+@pytest.mark.parametrize("tool", ["cursor", "opencode"])
+def test_creates_code_task_only_for_mac_with_service_actor(setup, tool):
     client, factory = setup
     response = client.post(
         "/api/service/mac-control/tasks",
-        json=body(github_issue=2234, mode="review", target="windows"),
+        json=body(github_issue=2234, mode="review", target="windows", tool=tool),
         headers=auth(),
     )
     assert response.status_code == 202, response.text
@@ -88,7 +89,7 @@ def test_creates_code_task_only_for_mac_with_service_actor(setup):
     assert task.actor == SERVICE_ACTOR
     assert request["mode"] == "code"
     assert request["target"] == "mac"
-    assert request["tool"] == "cursor"
+    assert request["tool"] == tool
     assert request["github_issue"] == 2234
     assert request["ticket_id"] is None and request["customer_id"] is None
 
@@ -158,13 +159,24 @@ def test_service_token_is_not_an_admin_credential(setup):
 
 
 @pytest.mark.parametrize("lost_dispatch_response", [False, True])
+@pytest.mark.parametrize("pool,tool", [(False, "codex"), (True, "codex"), (True, "opencode")])
 def test_original_pr_uses_hosted_worker_and_reads_back_publication(
     setup,
     monkeypatch,
     lost_dispatch_response,
+    pool,
+    tool,
 ):
     from modstore_server import customer_ticket_github as bridge
     from modstore_server import para_github_repair as repair
+    from modstore_server import para_model_admission as admission
+
+    monkeypatch.setenv("DEVFLEET_FORCE_OPENCODE", "1" if tool == "opencode" else "0")
+    monkeypatch.setenv("MODSTORE_PARA_PLATFORM_POOL", "1" if pool else "0")
+    waiting = {"status": "waiting", "reason": "no_verified_headroom"}
+    allocated = {"status": "admitted", "model": "coding-route", "approved_models": ["coding-route"]}
+    decision = [waiting if pool else None]
+    monkeypatch.setattr(admission, "platform_model_admission", lambda: decision[0])
 
     client, factory = setup
     repo, old, new = "owner/repo", "a" * 40, "b" * 40
@@ -253,7 +265,7 @@ def test_original_pr_uses_hosted_worker_and_reads_back_publication(
                     "id": device,
                     "status": "online",
                     "lastSeen": datetime.now(UTC).isoformat(),
-                    "tools": [{"toolName": "codex", "status": "idle"}],
+                    "tools": [{"toolName": tool, "status": "idle"}],
                     "capabilities": {
                         "github_actions": True,
                         "github_request_id": request_id,
@@ -267,6 +279,7 @@ def test_original_pr_uses_hosted_worker_and_reads_back_publication(
 
         def submit(self, data):
             assert data["branch"] == old and data["auto_merge"] is False
+            assert data["tool_name"] == tool
             submitted.append(data["title"])
             return {"id": "para1"}
 
@@ -308,9 +321,23 @@ def test_original_pr_uses_hosted_worker_and_reads_back_publication(
     submitted = []
     monkeypatch.setattr(bridge, "github", github)
     monkeypatch.setattr(repair, "ParaClient", CloudClient)
+    if pool:
+        repair.sync(factory)
+        assert posted == [] and submitted == []
+        assert client.get(status_url, headers=auth()).json()["model_allocation"] == waiting
+        decision[0] = allocated
     repair.sync(factory)
+    if pool:
+        assert client.get(status_url, headers=auth()).json()["model_allocation"] == allocated
+    monkeypatch.setattr(
+        admission,
+        "platform_model_admission",
+        lambda: pytest.fail("an accepted workflow must retain its original allocation"),
+    )
     initial_run["status"] = "in_progress"
     repair.sync(factory)
+    # Changing the policy after acceptance cannot replace the original attempt.
+    monkeypatch.setenv("DEVFLEET_FORCE_OPENCODE", "0" if tool == "opencode" else "1")
     repair.sync(factory)
     status = client.get(status_url, headers=auth()).json()
     assert status["run_id"] == 33 and status["source_sha"] == old
