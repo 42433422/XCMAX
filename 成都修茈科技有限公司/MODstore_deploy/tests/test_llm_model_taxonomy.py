@@ -124,6 +124,31 @@ def test_tts_capability_is_preserved_but_not_runtime_selectable() -> None:
     assert row["capability_source"] in {"litellm_registry", "model_id_inference"}
 
 
+@pytest.mark.parametrize(
+    "mode, expected_operations, expected_source",
+    [
+        ("audio_transcription", ["speech_to_text"], "litellm_registry"),
+        ("audio_speech", ["text_to_speech"], "litellm_registry"),
+        ({"type": "chat"}, ["chat"], "model_id_inference"),
+        (None, ["chat"], "model_id_inference"),
+    ],
+)
+def test_registry_mode_is_used_only_when_text(
+    monkeypatch: pytest.MonkeyPatch,
+    mode: object,
+    expected_operations: list[str],
+    expected_source: str,
+) -> None:
+    monkeypatch.setattr(
+        "modstore_server.llm_litellm_router.model_registry_entry",
+        lambda _provider, _model_id: {"mode": mode},
+    )
+    profile = discover_model_capabilities("openai", "unknown-fixture-model")
+
+    assert profile["operations"] == expected_operations
+    assert profile["source"] == expected_source
+
+
 def test_mimo_audio_variants_are_not_chat_runtime_models() -> None:
     rows = build_models_detailed(
         "xiaomi",

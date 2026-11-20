@@ -343,10 +343,13 @@ def discover_model_capabilities(
         from modstore_server.llm_litellm_router import model_registry_entry
 
         entry = model_registry_entry(provider, model_id)
-        type_name = {
-            "audio_transcription": "speech-to-text",
-            "audio_speech": "text-to-speech",
-        }.get(entry.get("mode"), entry.get("mode"))
+        mode = entry.get("mode")
+        type_name: str | None = None
+        if isinstance(mode, str):
+            type_name = {
+                "audio_transcription": "speech-to-text",
+                "audio_speech": "text-to-speech",
+            }.get(mode, mode)
         flags = {
             "vision": entry.get("supports_vision") is True,
             "audio-input": entry.get("supports_audio_input") is True,
