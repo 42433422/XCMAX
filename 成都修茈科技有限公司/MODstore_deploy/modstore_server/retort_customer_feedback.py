@@ -55,7 +55,7 @@ def _eligible(db, ticket, domain):
     return not claim.get("team") and not claim.get("escalations")
 
 
-def _candidates(db, domain):
+def _candidates(db, domain, used):
     cutoff = datetime.now(UTC) - timedelta(days=90)
     rows = db.scalars(
         select(CustomerServiceTicket)
@@ -68,13 +68,14 @@ def _candidates(db, domain):
             User.is_admin.is_(False),
         )
         .order_by(CustomerServiceTicket.updated_at.desc(), CustomerServiceTicket.id.desc())
-        .limit(100)
-    )
+    ).yield_per(100)
     candidates = {}
     for ticket in rows:
         if not _eligible(db, ticket, domain):
             continue
         evidence, resolution, _taxonomy = _ticket_scope(ticket)
+        if (ticket.id, resolution.get("reopened_at") or "") in used:
+            continue
         candidates[len(candidates) + 1] = {
             "ticket_id": int(ticket.id),
             "ticket_no": str(ticket.ticket_no),
@@ -169,11 +170,7 @@ def select_run(request_id, actor_id, template_id, template, github):
                 if (feedback := json_loads(record, {}).get("customer_feedback"))
             }
             policy = template["customer_feedback"]
-            candidates = {
-                key: value
-                for key, value in _candidates(db, policy["domain"]).items()
-                if (value["ticket_id"], value["revision"]) not in used
-            }
+            candidates = _candidates(db, policy["domain"], used)
         if not candidates:
             return None
         goal = policy["goal"].strip()
@@ -378,7 +375,6 @@ def read_impact(request_id, production_delivery):
             latest.get("user_id") == ticket.user_id
             and latest.get("retort_delivery") == binding
             and latest.get("decision") == "reopen"
-            and resolution.get("state") == "reopened"
         ):
             return {
                 **common,

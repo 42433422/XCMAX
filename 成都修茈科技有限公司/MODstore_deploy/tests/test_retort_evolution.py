@@ -467,7 +467,41 @@ def test_advance_only_projects_operational_errors(setup, monkeypatch, failure):
     assert not [call for call in setup["calls"] if call[0] == "POST"]
 
 
-def test_feedback_run_binds_original_customer_and_production_release(setup, monkeypatch):
+def test_feedback_selection_scans_past_already_used_candidates(setup, monkeypatch):
+    from modstore_server import retort_customer_feedback as feedback
+    from modstore_server.models_cs import CustomerServiceSession, CustomerServiceTicket
+
+    monkeypatch.setattr(feedback, "_eligible", lambda *_: True)
+    with get_session_factory()() as db:
+        customer = User(username=uuid4().hex, password_hash="test-only", is_admin=False)
+        db.add(customer)
+        db.flush()
+        session = CustomerServiceSession(user_id=customer.id)
+        db.add(session)
+        db.flush()
+        tickets = [
+            CustomerServiceTicket(
+                user_id=customer.id,
+                session_id=session.id,
+                ticket_no=f"{uuid4()}",
+                submitter_type="customer",
+                intent="product_issue",
+                status="open",
+                summary="真实问题",
+                evidence_json="{}",
+            )
+            for _ in range(21)
+        ]
+        db.add_all(tickets)
+        db.flush()
+        selected = feedback._candidates(db, "platform", {(item.id, "") for item in tickets[1:]})
+        assert [item["ticket_id"] for item in selected.values()] == [tickets[0].id]
+
+
+@pytest.mark.parametrize("customer_decision", ["resolved", "reopen"])
+def test_feedback_run_binds_original_customer_and_production_release(
+    setup, monkeypatch, customer_decision
+):
     from datetime import UTC, datetime
 
     from modstore_server.api.deps import get_current_user
@@ -477,6 +511,7 @@ def test_feedback_run_binds_original_customer_and_production_release(setup, monk
         CustomerServiceTicket,
     )
 
+    ticket_no = f"isolated-feedback-{uuid4()}"
     with get_session_factory()() as db:
         customer = User(username=uuid4().hex, password_hash="test-only", is_admin=False)
         db.add(customer)
@@ -488,7 +523,7 @@ def test_feedback_run_binds_original_customer_and_production_release(setup, monk
             CustomerServiceTicket(
                 user_id=customer.id,
                 session_id=session.id,
-                ticket_no="isolated-feedback-original",
+                ticket_no=ticket_no,
                 submitter_type="customer",
                 intent="product_issue",
                 status="open",
@@ -502,9 +537,7 @@ def test_feedback_run_binds_original_customer_and_production_release(setup, monk
             )
         )
         db.commit()
-        ticket = (
-            db.query(CustomerServiceTicket).filter_by(ticket_no="isolated-feedback-original").one()
-        )
+        ticket = db.query(CustomerServiceTicket).filter_by(ticket_no=ticket_no).one()
         ticket_id = ticket.id
         db.refresh(customer)
         db.expunge(customer)
@@ -522,7 +555,7 @@ def test_feedback_run_binds_original_customer_and_production_release(setup, monk
     def model(messages, **kwargs):
         assert "首次导入未成功" in messages[1]["content"]
         assert "test-private@example.com" not in messages[1]["content"]
-        assert "isolated-feedback-original" not in messages[1]["content"]
+        assert ticket_no not in messages[1]["content"]
         return {"ok": True, "content": '{"candidate": 1}'}
 
     monkeypatch.setattr(service, "reflect", model)
@@ -536,7 +569,7 @@ def test_feedback_run_binds_original_customer_and_production_release(setup, monk
     assert selected["status"] == "awaiting_dispatch_approval"
     assert selected["effects"]["customer_feedback"]["ticket_id"] == ticket_id
     assert selected["effects"]["customer_feedback"]["allocated_worker_slots"] == 1
-    assert "isolated-feedback-original" not in selected["snapshot"]["plan"]["public_body"]
+    assert ticket_no not in selected["snapshot"]["plan"]["public_body"]
 
     monkeypatch.setattr(service.ComponentPorts, "collect", lambda _self, _: {"status": "completed"})
     monkeypatch.setattr(
@@ -584,7 +617,7 @@ def test_feedback_run_binds_original_customer_and_production_release(setup, monk
 
     decision_path = f"/api/customer-service/issues/{ticket_id}/decision"
     decision = {
-        "decision": "resolved",
+        "decision": customer_decision,
         "note": "已按原业务路径复测成功",
         "idempotency_key": str(uuid4()),
     }
@@ -593,7 +626,18 @@ def test_feedback_run_binds_original_customer_and_production_release(setup, monk
     app.dependency_overrides[get_current_user] = lambda: customer
     result = client.post(decision_path, json=decision)
     assert result.status_code == 200, result.text
+    if customer_decision == "reopen":
+        with get_session_factory()() as db:
+            ticket = db.get(CustomerServiceTicket, ticket_id)
+            evidence = json_loads(ticket.evidence_json, {})
+            evidence["resolution"]["state"] = "processing"
+            ticket.evidence_json = json_dumps(evidence)
+            db.commit()
     final = resume()
+    if customer_decision == "reopen":
+        assert final["status"] == "customer_impact_rejected"
+        assert final["snapshot"]["impact"]["release_sha"] == "c" * 40
+        return
     assert final["status"] == "completed"
     assert final["snapshot"]["impact"]["release_sha"] == "c" * 40
     assert final["snapshot"]["impact"]["status"] == "customer_impact_verified"
