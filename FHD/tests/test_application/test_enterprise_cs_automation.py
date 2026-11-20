@@ -67,9 +67,10 @@ async def test_low_risk_message_gets_ai_reply_in_same_conversation(
 ) -> None:
     svc, cs_id, conversation_id = _conversation(cs_db)
     customer_message = svc.send_message(
-        conversation_id, 7, "安装后怎么首次登录？", origin="customer"
+        conversation_id, 7, "如何下载安装 XCAGI？", origin="customer"
     )["message"]
 
+    monkeypatch.delenv("XCAGI_ENTERPRISE_CS_KB_KEY", raising=False)
     observed: dict[str, object] = {}
 
     async def fake_completion(messages, **kwargs):
@@ -83,8 +84,8 @@ async def test_low_risk_message_gets_ai_reply_in_same_conversation(
                         "content": json.dumps(
                             {
                                 "action": "reply",
-                                "reply": "请打开已安装客户端并使用购买账号完成首次登录。",
-                                "summary": "客户咨询首次登录",
+                                "reply": "请在官方下载页选择对应平台的安装包。 [1]",
+                                "summary": "客户咨询下载安装",
                                 "confidence": 0.92,
                                 "risk_level": "low",
                                 "transfer_reason": "",
@@ -109,20 +110,17 @@ async def test_low_risk_message_gets_ai_reply_in_same_conversation(
     assert result["action"] == "reply"
     messages = svc.list_messages(conversation_id, cs_id, limit=20)
     assert [item["origin"] for item in messages] == ["customer", "ai"]
-    assert messages[-1]["body"] == "请打开已安装客户端并使用购买账号完成首次登录。"
+    assert messages[-1]["body"].endswith("https://xiu-ci.com/download")
     state = cs_db.get(ImCustomerServiceAutomationState, conversation_id)
     assert state is not None
     assert state.mode == "ai"
     assert state.status == "ai_active"
-    assert state.summary == "客户咨询首次登录"
+    assert state.summary == "客户咨询下载安装"
     llm_messages = observed["messages"]
     assert isinstance(llm_messages, list)
-    assert "只针对 latest_customer_message" in llm_messages[0]["content"]
+    assert "必须有产品知识依据" in llm_messages[0]["content"]
     prompt = json.loads(llm_messages[1]["content"])
-    assert prompt["latest_customer_message"] == {
-        "id": int(customer_message["id"]),
-        "body": "安装后怎么首次登录？",
-    }
+    assert prompt["latest_customer_message"] == "如何下载安装 XCAGI？"
     assert observed["kwargs"] == {
         "temperature": 0.2,
         "max_tokens": 700,
@@ -132,7 +130,7 @@ async def test_low_risk_message_gets_ai_reply_in_same_conversation(
 
 
 @pytest.mark.asyncio
-async def test_explicit_transfer_skips_llm_and_enters_existing_human_inbox(
+async def test_handoff_request_returns_autonomous_options_without_llm(
     cs_db, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     svc, cs_id, conversation_id = _conversation(cs_db)
@@ -154,16 +152,16 @@ async def test_explicit_transfer_skips_llm_and_enters_existing_human_inbox(
         body=customer_message["body"],
     )
 
-    assert result["action"] == "transfer"
-    assert result["cs_status"] == "human_pending"
-    assert result["cs_transfer_reason"] == "客户主动要求转人工"
+    assert result["action"] == "unresolved"
+    assert result["cs_status"] == "ai_unresolved"
+    assert result["cs_mode"] == "ai"
     messages = svc.list_messages(conversation_id, cs_id, limit=20)
     assert [item["origin"] for item in messages] == ["customer", "system"]
-    assert "转接人工客服" in messages[-1]["body"]
+    assert "提供工单号查询进度" in messages[-1]["body"]
 
 
 @pytest.mark.asyncio
-async def test_high_risk_request_fails_closed_to_human(cs_db) -> None:
+async def test_high_risk_request_does_not_execute_or_wait_for_an_operator(cs_db) -> None:
     svc, _cs_id, conversation_id = _conversation(cs_db)
     customer_message = svc.send_message(
         conversation_id, 7, "我要退款并修改永久套餐权益", origin="customer"
@@ -175,13 +173,15 @@ async def test_high_risk_request_fails_closed_to_human(cs_db) -> None:
         body=customer_message["body"],
     )
 
-    assert result["action"] == "transfer"
-    assert result["cs_mode"] == "human"
-    assert "高风险" in result["cs_transfer_reason"]
+    assert result["action"] == "unresolved"
+    assert result["cs_mode"] == "ai"
+    assert "无法办理" in result["message"]["body"]
 
 
 @pytest.mark.asyncio
-async def test_ai_failure_fails_closed_to_human(cs_db, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_model_failure_retains_the_turn_for_retry(
+    cs_db, monkeypatch: pytest.MonkeyPatch
+) -> None:
     svc, _cs_id, conversation_id = _conversation(cs_db)
     customer_message = svc.send_message(
         conversation_id, 7, "安装后在哪里登录？", origin="customer"
@@ -201,13 +201,16 @@ async def test_ai_failure_fails_closed_to_human(cs_db, monkeypatch: pytest.Monke
         body=customer_message["body"],
     )
 
-    assert result["action"] == "transfer"
-    assert result["cs_status"] == "human_pending"
-    assert result["cs_transfer_reason"] == "AI服务暂时不可用"
+    assert result["action"] == "retry"
+    assert result["cs_status"] == "ai_retrying"
+    assert result["cs_mode"] == "ai"
+    state = cs_db.get(ImCustomerServiceAutomationState, conversation_id)
+    assert state.last_customer_message_id == 0
+    assert state.consecutive_failures == 1
 
 
 @pytest.mark.asyncio
-async def test_two_unsolved_turns_transfer_without_third_ai_reply(
+async def test_two_unsolved_turns_continue_automatic_clarification(
     cs_db, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     svc, _cs_id, conversation_id = _conversation(cs_db)
@@ -222,7 +225,7 @@ async def test_two_unsolved_turns_transfer_without_third_ai_reply(
                     "message": {
                         "content": json.dumps(
                             {
-                                "action": "reply",
+                                "action": "clarify",
                                 "reply": "我再帮您确认一个信息：当前看到的报错是什么？",
                                 "summary": "客户反馈问题未解决",
                                 "confidence": 0.9,
@@ -250,7 +253,7 @@ async def test_two_unsolved_turns_transfer_without_third_ai_reply(
         message_id=int(first["id"]),
         body=first["body"],
     )
-    assert first_result["action"] == "reply"
+    assert first_result["action"] == "clarify"
 
     second = svc.send_message(conversation_id, 7, "还是不行，没解决", origin="customer")["message"]
     second_result = await automation.handle_customer_message(
@@ -260,9 +263,9 @@ async def test_two_unsolved_turns_transfer_without_third_ai_reply(
         body=second["body"],
     )
 
-    assert second_result["action"] == "transfer"
-    assert second_result["cs_transfer_reason"] == "客户连续反馈AI未解决问题"
-    assert calls == 1
+    assert second_result["action"] == "clarify"
+    assert second_result["cs_mode"] == "ai"
+    assert calls == 2
 
 
 @pytest.mark.asyncio
@@ -327,7 +330,7 @@ async def test_unsupported_model_retains_message_and_records_safe_failure(cs_db,
         message_id=int(message["id"]),
         body=message["body"],
     )
-    assert result["action"] == "transfer"
+    assert result["action"] == "retry"
     originals = [
         row
         for row in svc.list_messages(conversation_id, cs_id, limit=20)
@@ -416,6 +419,8 @@ async def test_explicit_issue_uses_authenticated_idempotent_intake_without_model
     )
     assert result["action"] == "issue_intake"
     assert result["cs_mode"] == mode
+    if mode == "human":
+        assert result["cs_status"] == "human_active"
     assert calls[0][0] == "fixture-customer-token"
     payload = calls[0][2]["payload"]
     assert "Windows版聊天思考过久会断连、报500" in payload["description"]
@@ -448,6 +453,8 @@ async def test_explicit_issue_uses_authenticated_idempotent_intake_without_model
         market_token="fixture-customer-token",
     )
     assert resumed["intake"]["owner_ticket_no"] == "CS-fixture"
+    if mode == "human":
+        assert resumed["cs_status"] == "human_active"
     assert len([call for call in calls if call[2].get("method") == "POST"]) == 1
 
 
@@ -535,7 +542,7 @@ async def test_issue_description_answers_pending_clarification(
                     "message": {
                         "content": json.dumps(
                             {
-                                "action": "reply",
+                                "action": "clarify",
                                 "reply": "已了解您的当前要求。",
                                 "confidence": 0.9,
                                 "risk_level": "low",
@@ -559,7 +566,10 @@ async def test_issue_description_answers_pending_clarification(
             body=text,
             market_token="fixture-token",
         )
-        assert result["action"] == ("issue_intake" if text != clarification or submit else "reply")
+        expected = "issue_intake"
+        if text == clarification and not submit:
+            expected = "ticket_status" if text.endswith("工单的处理进度") else "clarify"
+        assert result["action"] == expected
         assert result["message"] is not None
     assert calls == (
         [("fixture-token", clarification.removeprefix("请提交工单").removeprefix("："))]
@@ -640,3 +650,349 @@ async def test_same_report_is_owner_scoped_and_rejects_other_customers_message(c
     )
     assert rejected["reason"] == "invalid_customer_message"
     assert len(calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_recovery_from_im_log_uses_original_turn_and_replies_once(cs_db, monkeypatch):
+    from datetime import timedelta
+
+    from app.application import enterprise_cs_automation
+    from app.fastapi_app import enterprise_cs_scheduler
+    from app.utils.time import utc_now_naive
+
+    svc, cs_id, cid = _conversation(cs_db)
+    first = svc.send_message(cid, 7, "怎么选择适合自己的行业模块？", origin="customer")["message"]
+    cs_db.get(ImMessage, first["id"]).created_at = utc_now_naive() - timedelta(minutes=1)
+    cs_db.commit()
+    engine = cs_db.get_bind()
+    monkeypatch.setattr(enterprise_cs_automation, "get_host_engine", lambda: engine)
+    monkeypatch.setattr(enterprise_cs_automation, "HostSessionLocal", sessionmaker(bind=engine))
+    monkeypatch.setattr(enterprise_cs_scheduler, "HostSessionLocal", sessionmaker(bind=engine))
+
+    attempts = 0
+
+    async def provider(*_args, **_kwargs):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise TimeoutError
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "action": "clarify",
+                                "reply": "您目前处在安装还是行业初始化步骤？",
+                                "confidence": 0.95,
+                                "risk_level": "low",
+                            }
+                        )
+                    }
+                }
+            ]
+        }
+
+    monkeypatch.setattr("app.infrastructure.llm.invoke.chat_completion_openai_format", provider)
+    await enterprise_cs_scheduler.recover_enterprise_cs_messages()
+    cs_db.expire_all()
+    state = cs_db.get(ImCustomerServiceAutomationState, cid)
+    assert (state.status, state.last_customer_message_id) == ("ai_retrying", 0)
+    assert len(svc.list_messages(cid, cs_id)) == 1
+    await enterprise_cs_scheduler.recover_enterprise_cs_messages()
+    assert attempts == 1
+    state.updated_at = utc_now_naive() - timedelta(minutes=1)
+    cs_db.commit()
+    await enterprise_cs_scheduler.recover_enterprise_cs_messages()
+    await enterprise_cs_scheduler.recover_enterprise_cs_messages()
+    cs_db.expire_all()
+    assert attempts == 2
+    assert [item["origin"] for item in svc.list_messages(cid, cs_id)] == ["customer", "ai"]
+    assert state.last_customer_message_id == first["id"]
+
+
+@pytest.mark.asyncio
+async def test_deferred_ticket_waits_for_authenticated_session_without_advancing(
+    cs_db, monkeypatch
+):
+    from app.application import client_product_issue_intake, enterprise_cs_automation
+    from app.fastapi_app import enterprise_cs_scheduler
+
+    svc, cs_id, cid = _conversation(cs_db)
+    msg = svc.send_message(cid, 7, "请提交故障工单：Windows500卡死", origin="customer")["message"]
+    engine = cs_db.get_bind()
+    monkeypatch.setattr(enterprise_cs_automation, "get_host_engine", lambda: engine)
+    monkeypatch.setattr(enterprise_cs_automation, "HostSessionLocal", sessionmaker(bind=engine))
+    monkeypatch.setattr(enterprise_cs_scheduler, "HostSessionLocal", sessionmaker(bind=engine))
+    calls = []
+
+    async def receive(token, report, fields, **kwargs):
+        calls.append((token, report, kwargs))
+        return {"state": "RECEIVED", "owner_ticket_no": "010066"}
+
+    monkeypatch.setattr(client_product_issue_intake, "receive_pending_report", receive)
+    result = await enterprise_cs_automation.process_enterprise_cs_customer_message(
+        cid, 7, msg["id"], "", defer_missing_credential=True
+    )
+    assert result["reason"] == "customer_session_required"
+    cs_db.expire_all()
+    state = cs_db.get(ImCustomerServiceAutomationState, cid)
+    assert state.last_customer_message_id == 0
+    assert state.status == "ai_waiting_session"
+    await enterprise_cs_scheduler.recover_enterprise_cs_messages()
+    assert calls == []
+    result = await enterprise_cs_automation.process_enterprise_cs_customer_message(
+        cid, 7, msg["id"], "", market_token="owner-token"
+    )
+    assert result["action"] == "issue_intake"
+    assert len(calls) == 1 and calls[0][0] == "owner-token"
+    assert "010066" in svc.list_messages(cid, cs_id)[-1]["body"]
+
+
+@pytest.mark.asyncio
+async def test_authenticated_ticket_follows_a_retrying_turn(cs_db, monkeypatch):
+    from datetime import timedelta
+
+    from app.application import client_product_issue_intake
+    from app.application import enterprise_cs_automation as module
+    from app.utils.time import utc_now_naive
+
+    svc, _, cid = _conversation(cs_db)
+    first = svc.send_message(cid, 7, "如何使用行业模块？", origin="customer")["message"]
+    later = svc.send_message(cid, 7, "请提交故障工单：Windows500卡死", origin="customer")["message"]
+    engine = cs_db.get_bind()
+    monkeypatch.setattr(module, "get_host_engine", lambda: engine)
+    monkeypatch.setattr(module, "HostSessionLocal", sessionmaker(bind=engine))
+    attempts = 0
+
+    async def provider(*_args, **_kwargs):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise TimeoutError
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "action": "clarify",
+                                "reply": "请描述使用步骤",
+                                "confidence": 0.95,
+                                "risk_level": "low",
+                            }
+                        )
+                    }
+                }
+            ]
+        }
+
+    calls = []
+
+    async def receive(token, report, fields, **kwargs):
+        calls.append(token)
+        return {"state": "RECEIVED", "owner_ticket_no": "010066"}
+
+    monkeypatch.setattr("app.infrastructure.llm.invoke.chat_completion_openai_format", provider)
+    monkeypatch.setattr(client_product_issue_intake, "receive_pending_report", receive)
+    await module.process_enterprise_cs_customer_message(cid, 7, first["id"], "")
+    deferred = await module.process_enterprise_cs_customer_message(
+        cid, 7, later["id"], "", market_token="owner-token"
+    )
+    assert deferred["reason"] == "earlier_message_pending"
+    cs_db.expire_all()
+    state = cs_db.get(ImCustomerServiceAutomationState, cid)
+    state.updated_at = utc_now_naive() - timedelta(minutes=1)
+    cs_db.commit()
+    await module.process_enterprise_cs_customer_message(
+        cid, 7, first["id"], "", defer_missing_credential=True
+    )
+    waiting = await module.process_enterprise_cs_customer_message(
+        cid, 7, later["id"], "", defer_missing_credential=True
+    )
+    assert waiting["reason"] == "customer_session_required"
+    result = await module.process_enterprise_cs_customer_message(
+        cid, 7, later["id"], "", market_token="owner-token"
+    )
+    assert result["action"] == "issue_intake"
+    assert calls == ["owner-token"]
+
+
+@pytest.mark.asyncio
+async def test_ticket_intake_restart_reads_receipt_without_second_write(cs_db, monkeypatch):
+    from app.application import client_product_issue_intake
+
+    svc, cs_id, cid = _conversation(cs_db)
+    message = svc.send_message(cid, 7, "请提交故障工单：Windows500卡死", origin="customer")[
+        "message"
+    ]
+    calls = []
+
+    async def intake(*_args, **kwargs):
+        calls.append(kwargs["readback_only"])
+        if len(calls) == 1:
+            raise ConnectionError("worker interrupted after submitting upstream")
+        return {"state": "RECEIVED", "owner_ticket_no": "010087"}
+
+    monkeypatch.setattr(client_product_issue_intake, "receive_pending_report", intake)
+    kwargs = {
+        "conversation_id": cid,
+        "customer_user_id": 7,
+        "message_id": message["id"],
+        "body": message["body"],
+        "market_token": "fixture-token",
+    }
+    with pytest.raises(ConnectionError):
+        await EnterpriseCsAutomationService(cs_db).handle_customer_message(**kwargs)
+    assert cs_db.get(ImCustomerServiceAutomationState, cid).status == "ai_intake_pending"
+    waiting = await EnterpriseCsAutomationService(cs_db).handle_customer_message(
+        **{**kwargs, "market_token": "", "defer_missing_credential": True}
+    )
+    assert waiting["reason"] == "customer_session_required"
+    assert cs_db.get(ImCustomerServiceAutomationState, cid).status == "ai_intake_waiting_session"
+    result = await EnterpriseCsAutomationService(cs_db).handle_customer_message(**kwargs)
+    assert calls == [False, True]
+    assert result["action"] == "issue_intake"
+    assert "010087" in svc.list_messages(cid, cs_id)[-1]["body"]
+
+
+@pytest.mark.asyncio
+async def test_capacity_rejects_excess_turns_before_database_checkout(monkeypatch):
+    import asyncio
+    from contextlib import contextmanager
+
+    from app.application import enterprise_cs_automation as module
+
+    class DummyDb:
+        def get(self, *_args, **_kwargs):
+            return None
+
+        def scalar(self, *_args, **_kwargs):
+            return None
+
+    checked_out = []
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    @contextmanager
+    def session(cid):
+        checked_out.append(cid)
+        yield DummyDb()
+
+    async def handle(self, **_kwargs):
+        if len(checked_out) == 8:
+            entered.set()
+        await release.wait()
+        return {"handled": True}
+
+    monkeypatch.setattr(module, "_turn_session", session)
+    monkeypatch.setattr(EnterpriseCsAutomationService, "handle_customer_message", handle)
+    tasks = [
+        asyncio.create_task(module.process_enterprise_cs_customer_message(cid, cid, cid, "hello"))
+        for cid in range(1, 9)
+    ]
+    try:
+        await asyncio.wait_for(entered.wait(), timeout=2)
+        excess = await asyncio.wait_for(
+            module.process_enterprise_cs_customer_message(9, 9, 9, "hello"), timeout=1
+        )
+        assert excess == {"handled": False, "reason": "busy"}
+        assert checked_out == list(range(1, 9))
+    finally:
+        release.set()
+        await asyncio.gather(*tasks)
+
+
+@pytest.mark.asyncio
+async def test_independent_conversations_do_not_share_customer_turn_lock(monkeypatch):
+    import asyncio
+    from contextlib import contextmanager
+
+    from app.application import enterprise_cs_automation as module
+
+    class DummyDb:
+        def get(self, *_args, **_kwargs):
+            return None
+
+        def scalar(self, *_args, **_kwargs):
+            return None
+
+    @contextmanager
+    def fake_session(_conversation_id):
+        yield DummyDb()
+
+    entered: set[int] = set()
+    both_entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def fake_handle(self, *, conversation_id, **_kwargs):
+        entered.add(conversation_id)
+        if len(entered) == 2:
+            both_entered.set()
+        await release.wait()
+        return {"handled": True}
+
+    monkeypatch.setattr(module, "_turn_session", fake_session)
+    monkeypatch.setattr(EnterpriseCsAutomationService, "handle_customer_message", fake_handle)
+    # The original four-shard lock serialized conversations 1 and 5.
+    tasks = [
+        asyncio.create_task(module.process_enterprise_cs_customer_message(cid, 7, cid, "hello"))
+        for cid in (1, 5)
+    ]
+    try:
+        await asyncio.wait_for(both_entered.wait(), timeout=2)
+    finally:
+        release.set()
+        await asyncio.gather(*tasks)
+    assert entered == {1, 5}
+    assert not module._turn_locks
+    assert not module._turn_pending
+    assert not module._customer_pending
+
+
+@pytest.mark.asyncio
+async def test_customer_turn_queue_is_bounded_and_released(monkeypatch):
+    import asyncio
+    from contextlib import contextmanager
+
+    from app.application import enterprise_cs_automation as module
+
+    class DummyDb:
+        def get(self, *_args, **_kwargs):
+            return None
+
+        def scalar(self, *_args, **_kwargs):
+            return None
+
+    @contextmanager
+    def fake_session(_conversation_id):
+        yield DummyDb()
+
+    entered = asyncio.Event()
+    release = asyncio.Event()
+    completed: set[int] = set()
+
+    async def fake_handle(self, *, conversation_id, **_kwargs):
+        completed.add(conversation_id)
+        if len(completed) == module._MAX_CUSTOMER_PENDING:
+            entered.set()
+        await release.wait()
+        return {"handled": True}
+
+    monkeypatch.setattr(module, "_turn_session", fake_session)
+    monkeypatch.setattr(EnterpriseCsAutomationService, "handle_customer_message", fake_handle)
+    tasks = [
+        asyncio.create_task(module.process_enterprise_cs_customer_message(cid, 7, cid, "hello"))
+        for cid in range(100, 100 + module._MAX_CUSTOMER_PENDING)
+    ]
+    try:
+        await asyncio.wait_for(entered.wait(), timeout=2)
+        blocked = await module.process_enterprise_cs_customer_message(200, 7, 200, "hello")
+        assert blocked == {"handled": False, "reason": "busy"}
+    finally:
+        release.set()
+        await asyncio.gather(*tasks)
+    assert len(completed) == module._MAX_CUSTOMER_PENDING
+    assert not module._turn_locks
+    assert not module._turn_pending
+    assert not module._customer_pending

@@ -1,6 +1,18 @@
 {
   "schema_version": 1,
   "reviews": {
+    "FHD/app/application/enterprise_cs_automation.py": {
+      "base_file": "FHD/app/application/enterprise_cs_automation.py",
+      "base_blob": "ba19a83412934664c3e0d208ae8db3717ef8d8a7",
+      "head_blob": "89061457c6840a0beed26e5ea791abf54ee08612",
+      "before_lines": 800,
+      "after_lines": 803,
+      "reason": "Preserve truthful owned Market ticket receipts for pending-review, terminal, and withdrawn cases.",
+      "boundary": "Reuse existing scope and receipt lookup. Keep mainline authorization, credential waits, write fence, and no-duplicate fallback unchanged.",
+      "validation": "122 focused tests pass for enterprise automation and native issue receipt. CI and architecture review remain required.",
+      "follow_up": "Verify customer receipt and fallback on the exact merge candidate without replaying production tickets.",
+      "review_owner": "@42433422"
+    },
     "FHD/app/application/agent_orchestrator/catalog_product_edit.py": {
       "base_file": "FHD/app/application/agent_orchestrator/catalog_product_edit.py",
       "base_blob": "65b106cd2bd2cbd21d2129bfbba002f0607caaf0",
