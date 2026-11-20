@@ -143,7 +143,9 @@ def test_desktop_production_dispatch_is_not_the_default_candidate_lane(workflow_
     assert "windows_interim_release" in check
     assert jobs["deploy-servers-in-order"]["needs"] == "verify-version-anchors"
     steps = jobs["dispatch-client-releases"]["steps"]
-    dispatch_steps = [step for step in steps if step.get("name") == "Trigger ${{ matrix.workflow }}"]
+    dispatch_steps = [
+        step for step in steps if step.get("name") == "Trigger ${{ matrix.workflow }}"
+    ]
     (step,) = dispatch_steps
     run = step["run"]
     for flag in ("windows_installer_only=false", "candidate_only=false", "verify_only=false"):

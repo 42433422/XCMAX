@@ -19,6 +19,7 @@ SCHEDULER_ENV_FILE="${MODSTORE_SCHEDULER_ENV_FILE:-${ENV_DIR}/modstore-scheduler
 TARGET_SHA="${XCMAX_TARGET_SHA:-${1:-}}"
 PRODUCT_VERSION="${XCMAX_PRODUCT_VERSION:-1.0.0.1}"
 RELEASE_ID="xcagi-${PRODUCT_VERSION}-${TARGET_SHA}"
+SIGNED_ARTIFACT_SHA256="${XCMAX_SIGNED_ARTIFACT_SHA256:-}"
 GITHUB_REPOSITORY_SLUG="${XCMAX_GITHUB_REPOSITORY:-}"
 SITE_SUBDIR="成都修茈科技有限公司"
 MODSTORE_SUBDIR="${SITE_SUBDIR}/MODstore_deploy"
@@ -150,6 +151,8 @@ JS
 }
 
 [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "XCMAX_TARGET_SHA must be a full 40-character commit SHA"
+[[ -z "$SIGNED_ARTIFACT_SHA256" || "$SIGNED_ARTIFACT_SHA256" =~ ^[0-9a-f]{64}$ ]] \
+  || fail "XCMAX_SIGNED_ARTIFACT_SHA256 must be a full SHA-256 digest"
 case "${XCMAX_PRESERVE_RELEASE_HISTORY:-0}" in 0|1) ;; *) fail "XCMAX_PRESERVE_RELEASE_HISTORY must be 0 or 1" ;; esac
 [[ "$PRODUCT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]] \
   || fail "XCMAX_PRODUCT_VERSION must be a numeric product version"
@@ -434,8 +437,12 @@ else
   cleanup_build() { rm -rf -- "$BUILD_ROOT"; rm -f -- "$SOURCE_ARCHIVE"; }
   trap cleanup_build EXIT
   log "extracting exact Git archive $TARGET_SHA"
-  git -C "$SOURCE_ROOT" archive --format=tar "$TARGET_SHA" > "$SOURCE_ARCHIVE"
+  git -C "$SOURCE_ROOT" -c tar.umask=0002 archive --format=tar "$TARGET_SHA" > "$SOURCE_ARCHIVE"
+  [[ "$(git get-tar-commit-id < "$SOURCE_ARCHIVE")" == "$TARGET_SHA" ]] \
+    || fail "release archive does not identify the exact Git commit"
   ARTIFACT_SHA="$(sha256sum "$SOURCE_ARCHIVE" | awk '{print $1}')"
+  [[ -z "$SIGNED_ARTIFACT_SHA256" || "$ARTIFACT_SHA" == "$SIGNED_ARTIFACT_SHA256" ]] \
+    || fail "release archive differs from the signed artifact"
   tar -xf "$SOURCE_ARCHIVE" -C "$BUILD_ROOT"
   rm -f -- "$SOURCE_ARCHIVE"
   DEPLOY_DIR="$BUILD_ROOT/$MODSTORE_SUBDIR"
@@ -573,6 +580,17 @@ verify_runtime_mod_compiler "$FINAL_ROOT" "$RUNTIME_NODE_BIN" \
   || fail "private Mod compiler verification failed before promotion"
 EXPECTED_ARTIFACT_SHA="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["artifact_sha256"])' "$FINAL_ROOT/.xcmax-release.json")"
 [[ "$EXPECTED_ARTIFACT_SHA" =~ ^[0-9a-f]{64}$ ]] || fail "release artifact SHA256 is invalid"
+[[ -z "$SIGNED_ARTIFACT_SHA256" || "$EXPECTED_ARTIFACT_SHA" == "$SIGNED_ARTIFACT_SHA256" ]] \
+  || fail "prepared release differs from the signed artifact"
+python3 - "$FINAL_ROOT/.xcmax-release.json" "$PRODUCT_VERSION" "$RELEASE_ID" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    manifest = json.load(handle)
+if (manifest.get("product_version"), manifest.get("release_id")) != tuple(sys.argv[2:]):
+    raise SystemExit("prepared release version or release id differs from the approval")
+PY
 
 # Migrate schema before symlink switch; failure leaves currently served release untouched.
 verify_fixed_release_approval
@@ -803,10 +821,11 @@ verify_health_identity() {
   local url="$1"
   local expected_sha="$2"
   local expected_artifact="$3"
+  local expected_release_id="${4:-xcagi-${PRODUCT_VERSION}-${expected_sha}}"
   local payload
   payload="$(curl --noproxy '*' -fsS --max-time 10 "$url")" || return 1
   HEALTH_PAYLOAD="$payload" EXPECTED_SHA="$expected_sha" \
-    EXPECTED_RELEASE_ID="xcagi-${PRODUCT_VERSION}-${expected_sha}" \
+    EXPECTED_RELEASE_ID="$expected_release_id" \
     EXPECTED_ARTIFACT="$expected_artifact" python3 - <<'PY'
 import json
 import os
@@ -867,12 +886,17 @@ PY
 
 PREVIOUS_SHA=""
 PREVIOUS_ARTIFACT_SHA=""
+PREVIOUS_VERSION="$PRODUCT_VERSION"
+PREVIOUS_RELEASE_ID=""
 if [[ -f "$PREVIOUS_ROOT/.xcmax-release.json" ]]; then
   PREVIOUS_SHA="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("git_sha", ""))' "$PREVIOUS_ROOT/.xcmax-release.json")"
   PREVIOUS_ARTIFACT_SHA="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("artifact_sha256", ""))' "$PREVIOUS_ROOT/.xcmax-release.json")"
+  PREVIOUS_VERSION="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("product_version") or sys.argv[2])' "$PREVIOUS_ROOT/.xcmax-release.json" "$PRODUCT_VERSION")"
+  PREVIOUS_RELEASE_ID="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("release_id", ""))' "$PREVIOUS_ROOT/.xcmax-release.json")"
 elif [[ -d "$PREVIOUS_ROOT/.git" ]]; then
   PREVIOUS_SHA="$(git -C "$PREVIOUS_ROOT" rev-parse HEAD 2>/dev/null || true)"
 fi
+PREVIOUS_RELEASE_ID="${PREVIOUS_RELEASE_ID:-xcagi-${PREVIOUS_VERSION}-${PREVIOUS_SHA}}"
 [[ -z "$PREVIOUS_SHA" || "$PREVIOUS_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "previous runtime Git SHA is invalid"
 PREVIOUS_LIBRARY_DIR="$(python3 - "${PREVIOUS_ROOT}/${MODSTORE_SUBDIR}" "$(systemctl show modstore.service -p MainPID --value)" <<'PY'
 import json
@@ -913,14 +937,16 @@ rollback() {
     mv -Tf "${SITE_LINK}.rollback" "$SITE_LINK"
   fi
   if [[ "$PREVIOUS_SHA" =~ ^[0-9a-f]{40}$ ]]; then
-    TARGET_SHA="$PREVIOUS_SHA" LIBRARY_DIR="$PREVIOUS_LIBRARY_DIR" write_service_units
+    TARGET_SHA="$PREVIOUS_SHA" PRODUCT_VERSION="$PREVIOUS_VERSION" \
+      LIBRARY_DIR="$PREVIOUS_LIBRARY_DIR" write_service_units
   fi
   systemctl daemon-reload
   systemctl restart modstore-payment.service 2>/dev/null || true
   systemctl restart modstore.service modstore-scheduler.service || true
   if [[ "$PREVIOUS_ARTIFACT_SHA" =~ ^[0-9a-f]{64}$ ]]; then
     for _ in $(seq 1 30); do
-      verify_health_identity "$HEALTH_URL" "$PREVIOUS_SHA" "$PREVIOUS_ARTIFACT_SHA" && return 0
+      verify_health_identity "$HEALTH_URL" "$PREVIOUS_SHA" "$PREVIOUS_ARTIFACT_SHA" \
+        "$PREVIOUS_RELEASE_ID" && return 0
       sleep 2
     done
     log "ERROR: rollback exact identity verification failed" >&2
