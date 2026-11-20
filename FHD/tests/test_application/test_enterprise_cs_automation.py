@@ -837,6 +837,53 @@ async def test_ticket_intake_restart_reads_receipt_without_second_write(cs_db, m
 
 
 @pytest.mark.asyncio
+async def test_capacity_rejects_excess_turns_before_database_checkout(monkeypatch):
+    import asyncio
+    from contextlib import contextmanager
+
+    from app.application import enterprise_cs_automation as module
+
+    class DummyDb:
+        def get(self, *_args, **_kwargs):
+            return None
+
+        def scalar(self, *_args, **_kwargs):
+            return None
+
+    checked_out = []
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    @contextmanager
+    def session(cid):
+        checked_out.append(cid)
+        yield DummyDb()
+
+    async def handle(self, **_kwargs):
+        if len(checked_out) == 8:
+            entered.set()
+        await release.wait()
+        return {"handled": True}
+
+    monkeypatch.setattr(module, "_turn_session", session)
+    monkeypatch.setattr(EnterpriseCsAutomationService, "handle_customer_message", handle)
+    tasks = [
+        asyncio.create_task(module.process_enterprise_cs_customer_message(cid, cid, cid, "hello"))
+        for cid in range(1, 9)
+    ]
+    try:
+        await asyncio.wait_for(entered.wait(), timeout=2)
+        excess = await asyncio.wait_for(
+            module.process_enterprise_cs_customer_message(9, 9, 9, "hello"), timeout=1
+        )
+        assert excess == {"handled": False, "reason": "busy"}
+        assert checked_out == list(range(1, 9))
+    finally:
+        release.set()
+        await asyncio.gather(*tasks)
+
+
+@pytest.mark.asyncio
 async def test_independent_conversations_do_not_share_customer_turn_lock(monkeypatch):
     import asyncio
     from contextlib import contextmanager

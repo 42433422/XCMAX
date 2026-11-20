@@ -694,6 +694,7 @@ _turn_pending: dict[int, int] = {}
 _customer_pending: dict[int, int] = {}
 _MAX_CONVERSATION_PENDING = 4
 _MAX_CUSTOMER_PENDING = 6
+_turn_capacity = asyncio.BoundedSemaphore(8)
 
 
 @contextmanager
@@ -744,8 +745,13 @@ async def process_enterprise_cs_customer_message(
     lock = _turn_locks.setdefault(conversation_id, asyncio.Lock())
     _turn_pending[conversation_id] = _turn_pending.get(conversation_id, 0) + 1
     _customer_pending[customer_user_id] = _customer_pending.get(customer_user_id, 0) + 1
+    admitted = False
     try:
         async with lock:
+            if _turn_capacity.locked():
+                return {"handled": False, "reason": "busy"}
+            await _turn_capacity.acquire()
+            admitted = True
             with _turn_session(conversation_id) as db:
                 if db is None:
                     return {"handled": False, "reason": "busy"}
@@ -779,6 +785,8 @@ async def process_enterprise_cs_customer_message(
                     defer_missing_credential=defer_missing_credential,
                 )
     finally:
+        if admitted:
+            _turn_capacity.release()
         pending = _turn_pending[conversation_id] - 1
         if pending:
             _turn_pending[conversation_id] = pending
