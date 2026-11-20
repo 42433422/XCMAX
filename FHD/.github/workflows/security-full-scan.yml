@@ -218,6 +218,7 @@ jobs:
             --provenance-input "${RUNNER_TEMP}/security-native/codeql-analyses.json" \
             --required-codeql-category /language:python \
             --required-codeql-category /language:javascript-typescript \
+            ${{ github.event_name == 'schedule' && '--allow-ancestor-codeql' || '' }} \
             --release-sha "${{ steps.scan-source.outputs.sha }}" \
             --output "${RUNNER_TEMP}/security-reports/codeql.json"
           normalize dependabot dependabot "${RUNNER_TEMP}/security-native/dependabot.json"

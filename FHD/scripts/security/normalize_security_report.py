@@ -207,6 +207,7 @@ def _validate_codeql_provenance(
     release_sha: str,
     required_categories: list[str],
     now: datetime | None = None,
+    allow_ancestor: bool = False,
 ) -> tuple[str, str]:
     """Prove that CodeQL findings cover the frozen release commit.
 
@@ -214,9 +215,9 @@ def _validate_codeql_provenance(
     scan can accidentally export findings from the previous main commit and
     relabel them with the requested release SHA.
 
-    CodeQL 由 push 异步触发,分析提交通常落后 main HEAD。要求「同一 SHA」会把
-    门禁长期锁红,因此接受最新分析是目标 SHA 的祖先(24 小时内),并返回
-    ``ancestor`` 覆盖标记,让下游门禁与报告能如实展示覆盖范围。
+    CodeQL 由 push 异步触发,分析提交通常落后 main HEAD。每日体检允许接受目标
+    SHA 的祖先分析(24 小时内)并标记 ``ancestor``;发布门禁保持 ``exact`` 严格
+    模式,未开启 ``allow_ancestor`` 时只接受同一提交的分析。
     """
 
     rows = [row for row in _flatten_pages(data) if isinstance(row, dict)]
@@ -255,7 +256,7 @@ def _validate_codeql_provenance(
         if chosen is None:
             for row in candidates:
                 commit_sha = str(row.get("commit_sha") or "").strip().lower()
-                if _is_ancestor(commit_sha, expected):
+                if allow_ancestor and _is_ancestor(commit_sha, expected):
                     chosen, coverage = row, "ancestor"
                     break
         if chosen is None:
@@ -588,6 +589,11 @@ def main() -> int:
     parser.add_argument("--release-sha", required=True)
     parser.add_argument("--provenance-input", type=Path)
     parser.add_argument("--required-codeql-category", action="append", default=[])
+    parser.add_argument(
+        "--allow-ancestor-codeql",
+        action="store_true",
+        help="接受目标 SHA 祖先提交的 CodeQL 分析(仅每日体检使用;发布门禁保持严格)",
+    )
     args = parser.parse_args()
     available = args.input.is_file()
     findings: list[dict[str, Any]] = []
@@ -605,6 +611,7 @@ def main() -> int:
                     _load(args.provenance_input),
                     release_sha=args.release_sha,
                     required_categories=args.required_codeql_category,
+                    allow_ancestor=args.allow_ancestor_codeql,
                 )
             findings = normalize(args.kind, native_payload)
             if args.scanner == "gitleaks":

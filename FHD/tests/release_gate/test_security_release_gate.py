@@ -439,7 +439,31 @@ def test_codeql_provenance_accepts_ancestor_analysis(monkeypatch) -> None:
         release_sha=sha,
         required_categories=["/language:python", "/language:javascript-typescript"],
         now=now,
+        allow_ancestor=True,
     ) == (sha, "ancestor")
+
+
+def test_codeql_provenance_rejects_ancestor_by_default(monkeypatch) -> None:
+    normalizer = _normalizer_module()
+    now = datetime(2026, 9, 5, tzinfo=UTC)
+    sha = "a" * 40
+    ancestor = "b" * 40
+    monkeypatch.setattr(normalizer, "_is_ancestor", lambda a, d: True)
+    analyses = [
+        {
+            "category": "/language:python",
+            "commit_sha": ancestor,
+            "created_at": (now - timedelta(hours=1)).isoformat(),
+        }
+    ]
+
+    with pytest.raises(ValueError, match="SHA mismatch"):
+        normalizer._validate_codeql_provenance(
+            analyses,
+            release_sha=sha,
+            required_categories=["/language:python"],
+            now=now,
+        )
 
 
 def test_release_gate_rejects_relabelled_scanner_evidence(tmp_path: Path) -> None:
