@@ -43,8 +43,10 @@ async function render(page, files = {}, userAgent = '') {
   const sandbox = createContext(context)
   new Script(shared).runInContext(sandbox)
   const html = read(page + '.html')
-  for (const match of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)) {
-    if (match[1].trim()) new Script(match[1]).runInContext(sandbox)
+  for (const [, attrs, source] of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)) {
+    if (!source.trim()) continue
+    if (/\btype\s*=\s*["']application\/ld\+json["']/i.test(attrs)) JSON.parse(source)
+    else new Script(source).runInContext(sandbox)
   }
   await new Promise(setImmediate)
   return { node: (id) => nodes.get(id), calls, api: context.XCReleaseData }

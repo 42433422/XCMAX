@@ -1,7 +1,7 @@
 # SSOT 索引（唯一真相源登记表）
 
 > **本文件为 SSOT 索引的 SSOT**。任何文档声称 SSOT 必须在此登记。
-> 最后更新：2026-11-11
+> 最后更新：2026-11-20
 
 ## 登记规则
 
@@ -21,6 +21,7 @@
 | mod（Mod 开发） | [guides/MOD_AUTHORING_GUIDE.md](guides/MOD_AUTHORING_GUIDE.md) | Mod 开发规范、mods/ 为唯一编辑源 |
 | version（产品版本） | [VERSION.md](../VERSION.md) | 产品版本与工具链映射唯一数字来源（`verify_version_anchors.py` 校验） |
 | release-changelog（用户更新记录） | [../CHANGELOG.md](../CHANGELOG.md) | 产品 PR 强制更新的用户修复记录 |
+| public-site（官网公开信息） | [../config/public_cases.json](../config/public_cases.json) | [官网 AI 摘要](../../成都修茈科技有限公司/llms.txt) 为人工编排的公开派生文档；案例、发布状态和价格分别沿用本域、`download_release.json` 和 `saas_plans.json`，摘要不得覆盖原始事实。 |
 | route（路由） | [reports/WAVE2_ROUTE_SSOT.md](reports/WAVE2_ROUTE_SSOT.md) | RouteRegistry + mounts/* 路由 SSOT |
 | git（Git 仓库） | [../.gitattributes](../.gitattributes) | 根仓 XCMAX/ 为 Git SSOT；行尾与归档策略见 `.gitattributes` / `ARCHIVE_POINTER.md` |
 | mypy（类型检查） | [../pyproject.toml](../pyproject.toml) | [tool.mypy] 配置 |

@@ -7,8 +7,11 @@ https://xiu-ci.com/case-edu.html
 https://xiu-ci.com/case-park.html
 https://xiu-ci.com/news.html
 https://xiu-ci.com/capabilities/
+https://xiu-ci.com/capabilities/catalog.html
 https://xiu-ci.com/contact.html
 https://xiu-ci.com/developer.html
 https://xiu-ci.com/download
 https://xiu-ci.com/download/releases
 https://xiu-ci.com/visualization
+https://xiu-ci.com/verify.html
+https://xiu-ci.com/excel-to-ai.html
