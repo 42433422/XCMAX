@@ -281,6 +281,26 @@ def test_ci_cd_pipeline_pr_is_filtered() -> None:
     assert d.reason == "stale_head"
 
 
+def test_release_gate_failure_is_repairable_only_for_current_pull_request() -> None:
+    path = ".github/workflows/fhd-release-gate-ci.yml"
+    d = _eval(
+        FakeGitHub(
+            run={"name": "Release gate CI", "path": path},
+            pr_head=OLD,
+        ),
+        workflow="Release gate CI",
+        event=_event(name="Release gate CI", path=path),
+    )
+    assert (d.action, d.disposition, d.workflow_path) == (fr.PROCEED, "current", path)
+
+    push = _eval(
+        FakeGitHub(run={"name": "Release gate CI", "path": path, "event": "push"}),
+        workflow="Release gate CI",
+        event=_event(name="Release gate CI", path=path, event="push"),
+    )
+    assert (push.action, push.disposition) == (fr.PROCEED, "unfiltered")
+
+
 def test_event_payload_reader(tmp_path: Path) -> None:
     p = tmp_path / "event.json"
     p.write_text(json.dumps({"workflow_run": _event()}), encoding="utf-8")
