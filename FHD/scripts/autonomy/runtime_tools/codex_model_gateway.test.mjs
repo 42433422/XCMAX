@@ -15,6 +15,13 @@ import {
   runCodexBudgetedAttempt,
   runWithModelFallback,
 } from './codex_model_gateway.mjs';
+
+test('read-only incident roles receive a read-only Codex sandbox', () => {
+  const readonlyArgs = codexExecutionConfig({ env: {}, reportOnly: true }).args;
+  assert.equal(readonlyArgs[readonlyArgs.indexOf('--sandbox') + 1], 'read-only');
+  const fixArgs = codexExecutionConfig({ env: {}, reportOnly: false }).args;
+  assert.equal(fixArgs[fixArgs.indexOf('--sandbox') + 1], 'workspace-write');
+});
 import { describeCodexFailure } from './trae_failover.mjs';
 
 const UNSUPPORTED = "[codex exit=1]\nERROR: {\"detail\":\"The 'gpt-6.1-sol' model is not supported when using Codex with a ChatGPT account.\"} (HTTP 400)";

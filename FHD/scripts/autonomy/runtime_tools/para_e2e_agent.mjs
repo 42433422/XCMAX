@@ -357,8 +357,8 @@ async function probeCodexModel(model, env) {
   return { ok: !String(output || '').startsWith('[codex exit='), output };
 }
 
-async function runCodexAgent(taskDir, prompt, log = () => {}) {
-  const isReportOnly = String(prompt || '').toLowerCase().includes('modstore_report_only=1');
+async function runCodexAgent(taskDir, prompt, log = () => {}, reportOnly = false) {
+  const isReportOnly = reportOnly || String(prompt || '').toLowerCase().includes('modstore_report_only=1');
   const execution = codexExecutionConfig({ prompt, reportOnly: isReportOnly });
   const codexEnv = toolEnv(prompt, 'codex');
   const invoke = (model, env) => runCodexBudgetedAttempt({
@@ -491,11 +491,11 @@ function toolAvailable(tool) {
   return false;
 }
 
-function runToolOnce(tool, taskDir, prompt, log) {
+function runToolOnce(tool, taskDir, prompt, log, reportOnly) {
   if (tool === 'trae') return runTraeAgent(taskDir, prompt);
   if (tool === 'claude_code') return runClaudeAgent(taskDir, prompt);
   if (tool === 'cursor') return runCursorAgent(taskDir, prompt);
-  return runCodexAgent(taskDir, prompt, log);
+  return runCodexAgent(taskDir, prompt, log, reportOnly);
 }
 
 // 失败摘要只取工具自己的 stdout/stderr 尾部，不取 err.message（execFile 会把整段 prompt 拼进去）。
@@ -543,7 +543,7 @@ async function runToolFallbackChain({ ws, task, taskDir, prompt, plan, requested
     let failure = null;
     let output = '';
     try {
-      output = String(await runToolOnce(tool, taskDir, prompt, log) || '');
+      output = String(await runToolOnce(tool, taskDir, prompt, log, reportOnly) || '');
       if (tool === 'codex' && output.startsWith('[codex exit=')) {
         const dirty = await gitMaybe(taskDir, ['status', '--porcelain', '--', '.']);
         if (!dirty && !(await headMovedFromBase(taskDir, baseHead))) failure = describeCodexFailure(output);
@@ -831,6 +831,9 @@ function excludeAgentMetadata(taskDir) {
 }
 
 function isReportOnlyTask(task) {
+  // The server-generated ticket title carries the authorized mode.  Customer
+  // reproduction and role handoffs in the description cannot override it.
+  if (/^\[xcmax:[a-f0-9]{32}:[a-f0-9]{32}\] \[dot:report_only\](?:\s|$)/i.test(String(task?.title || ''))) return true;
   const text = `${task?.title || ''}\n${task?.description || ''}`.toLowerCase();
   const explicit = [...text.matchAll(/(?:modstore_)?report_only\s*[:=]\s*(0|1|true|false)/g)];
   if (explicit.length) {
@@ -1427,7 +1430,7 @@ async function handleTask(ws, task) {
           level: 'warn',
         });
         try {
-          const output = await runCodexAgent(taskDir, executionPrompt, codexTaskLog(ws, task));
+          const output = await runCodexAgent(taskDir, executionPrompt, codexTaskLog(ws, task), reportOnly);
           const codexNonZero = String(output || '').startsWith('[codex exit=');
           if (output) toolOutput = `${toolOutput}\n${output}`.trim();
           if (output) {
@@ -1530,7 +1533,7 @@ async function handleTask(ws, task) {
       level: 'info',
     });
     try {
-      let output = await runCodexAgent(taskDir, executionPrompt, codexTaskLog(ws, task));
+      let output = await runCodexAgent(taskDir, executionPrompt, codexTaskLog(ws, task), reportOnly);
       let codexNonZero = String(output || '').startsWith('[codex exit=');
       if (output) {
         send(ws, {

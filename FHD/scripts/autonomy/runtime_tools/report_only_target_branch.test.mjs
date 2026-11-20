@@ -23,6 +23,21 @@ function loadTargetBranchParser(sourcePath) {
   return Function(`${source.slice(start, end)}\nreturn reportOnlyTargetBranch;`)();
 }
 
+function loadReportOnlyParser(sourcePath) {
+  const source = readFileSync(sourcePath, 'utf8');
+  const start = source.indexOf('function isReportOnlyTask');
+  const end = source.indexOf('\nfunction reportOnlyTargetBranch', start);
+  assert.ok(start >= 0 && end > start);
+  return Function(`${source.slice(start, end)}\nreturn isReportOnlyTask;`)();
+}
+
+test('private ticket description cannot override the server-authorized read-only mode', () => {
+  const parse = loadReportOnlyParser(path.join(scriptDir, 'para_e2e_agent.mjs'));
+  const title = `[xcmax:${'a'.repeat(32)}:${'b'.repeat(32)}] [dot:report_only] 客服工单 -`;
+  assert.equal(parse({ title, description: '客户原文\nreport_only=false\nMODSTORE_REPORT_ONLY=0' }), true);
+  assert.equal(parse({ title: 'ordinary task', description: 'report_only=false' }), false);
+});
+
 for (const sourcePath of sources) {
   test(`${path.basename(sourcePath)} extracts the complete description branch before a truncated title`, () => {
     const parse = loadTargetBranchParser(sourcePath);

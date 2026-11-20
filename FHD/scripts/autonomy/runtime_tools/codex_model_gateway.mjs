@@ -139,7 +139,7 @@ export function codexExecutionConfig({ prompt = '', env = process.env, reportOnl
   return {
     receipt,
     effort,
-    args: ['exec', '--sandbox', 'workspace-write', '--ephemeral',
+    args: ['exec', '--sandbox', reportOnly ? 'read-only' : 'workspace-write', '--ephemeral',
       ...(effort ? ['-c', `model_reasoning_effort="${effort}"`] : [])],
   };
 }
