@@ -329,6 +329,7 @@ async def stream_billed_llm_chat(
     tool_choice: Any = None,
     route_snapshot: ChatRouteSnapshot | None = None,
     client_request_id: str | None = None,
+    client_request_payload: dict[str, Any] | None = None,
 ) -> StreamingResponse:
     primary = route_snapshot or resolve_chat_route_snapshot(db, user.id, provider, model)
     primary_provider, primary_model = primary.provider, primary.model
@@ -367,7 +368,9 @@ async def stream_billed_llm_chat(
     ledger_row = None
     if client_request_id:
         digest = ledger.request_digest(
-            {
+            client_request_payload
+            if client_request_payload is not None
+            else {
                 "provider": primary_provider,
                 "model": primary_model,
                 "messages": msgs,

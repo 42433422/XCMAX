@@ -18,7 +18,7 @@ export type ImConversationSummary = {
   /** CS 收件箱会话对应的企业客户 user_id(用于运营者视角判定气泡我方/对方)。 */
   customer_user_id?: number
   cs_mode?: 'ai' | 'human'
-  cs_status?: 'ai_active' | 'ai_processing' | 'human_pending' | 'human_active'
+  cs_status?: 'ai_active' | 'ai_processing' | 'ai_retrying' | 'ai_waiting_session' | 'ai_unresolved' | 'human_pending' | 'human_active'
   cs_transfer_reason?: string
   cs_summary?: string
   cs_last_operator_user_id?: number | null
@@ -240,7 +240,7 @@ export async function fetchCsInbox(): Promise<ImConversationSummary[]> {
       unread_count: number
       last_message_at: string | null
       cs_mode?: 'ai' | 'human'
-      cs_status?: 'ai_active' | 'ai_processing' | 'human_pending' | 'human_active'
+      cs_status?: 'ai_active' | 'ai_processing' | 'ai_retrying' | 'ai_waiting_session' | 'ai_unresolved' | 'human_pending' | 'human_active'
       cs_transfer_reason?: string
       cs_summary?: string
       cs_last_operator_user_id?: number | null
