@@ -122,6 +122,7 @@ jobs:
       cancel-in-progress: false
     permissions:
       contents: read
+      pull-requests: read
       issues: write
       actions: write
     steps:
@@ -151,3 +152,10 @@ jobs:
           name: self-heal-reconciliation-${{ github.run_id }}
           path: FHD/test_reports/self_heal_reconciliation.json
           if-no-files-found: error
+      - name: Discover unresolved authorized PR failures and dispatch Para
+        if: github.event_name == 'schedule'
+        working-directory: FHD
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: python scripts/ci/ai_self_heal.py --scan-open-prs

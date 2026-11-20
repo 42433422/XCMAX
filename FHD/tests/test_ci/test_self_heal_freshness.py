@@ -23,6 +23,67 @@ WF_PATH = ".github/workflows/modstore-ci-backend-python.yml"
 CI_PATH = ".github/workflows/fhd-ci-cd.yml"
 
 
+def _scan_pr(*, labels: list[str] | None = None, run_sha: str = OLD) -> tuple[dict, dict]:
+    pr = {
+        "number": 5,
+        "state": "open",
+        "draft": False,
+        "user": {"login": "42433422"},
+        "labels": [{"name": name} for name in (labels or [])],
+        "head": {"ref": "feat/x", "sha": OLD, "repo": {"full_name": REPO}},
+        "base": {"ref": "main", "repo": {"full_name": REPO}},
+    }
+    run = {
+        "id": 7,
+        "name": WF,
+        "workflow_id": 99,
+        "path": WF_PATH,
+        "head_sha": run_sha,
+        "head_branch": "feat/x",
+        "event": "pull_request",
+        "run_attempt": 1,
+        "conclusion": "failure",
+        "status": "completed",
+        "created_at": "2026-10-10T10:00:00Z",
+        "pull_requests": [{"number": 5}],
+    }
+    return pr, run
+
+
+@pytest.mark.parametrize(
+    ("labels", "run_sha", "expected"),
+    [([], OLD, [7]), (["hold-merge"], OLD, []), ([], NEW, [])],
+)
+def test_scheduled_pr_scan_only_dispatches_authorized_exact_head_failures(
+    monkeypatch, capsys, labels: list[str], run_sha: str, expected: list[int]
+) -> None:
+    pr, run = _scan_pr(labels=labels, run_sha=run_sha)
+    calls: list[str] = []
+
+    def get(path: str, params: dict) -> tuple[int, object]:
+        if path.endswith("/pulls"):
+            return 200, [pr]
+        if path.endswith("/actions/runs"):
+            return 200, {"workflow_runs": [run]}
+        if path.endswith("/pulls/5"):
+            return 200, pr
+        raise AssertionError(f"unexpected GitHub read: {path}")
+
+    monkeypatch.setattr(heal, "_github_getter", lambda token, repo: get)
+    monkeypatch.setattr(
+        heal,
+        "check_freshness",
+        lambda workflow, run_id, token, repo: (
+            calls.append(str(run_id))
+            or fr.Decision(fr.SKIP, "already_dispositioned", run_id=run_id)
+        ),
+    )
+    monkeypatch.setenv("GITHUB_REPOSITORY", REPO)
+    assert heal.scan_open_prs("token", REPO) == 0
+    assert calls == [str(item) for item in expected]
+    assert f"eligible exact-HEAD PR failures={len(expected)}" in capsys.readouterr().out
+
+
 class FakeGitHub:
     """按 path 返回预置响应；记录调用。value 为 Exception 时抛出（模拟网络故障）。"""
 
