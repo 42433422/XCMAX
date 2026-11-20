@@ -426,7 +426,7 @@ class EnterpriseCsAutomationService:
             if market_owner_id and market_token:
                 # Preserve the authenticated intake lane's write fence.
                 # A retry after an uncertain POST only looks up the receipt.
-                if state is not None and not readback_only:
+                if state is not None and state.mode == "ai" and not readback_only:
                     state.status = "ai_intake_pending"
                     self._db.commit()
                 digest = hashlib.sha256(report.encode()).hexdigest()
@@ -655,7 +655,13 @@ class EnterpriseCsAutomationService:
 
 
 _CS_LOCK_NAMESPACE = 28414672
-_turn_locks = [asyncio.Lock() for _ in range(4)]
+# Lock only a single conversation, rather than every fourth customer.
+# Counts include waiters and are removed when the final turn exits.
+_turn_locks: dict[int, asyncio.Lock] = {}
+_turn_pending: dict[int, int] = {}
+_customer_pending: dict[int, int] = {}
+_MAX_CONVERSATION_PENDING = 4
+_MAX_CUSTOMER_PENDING = 6
 
 
 @contextmanager
@@ -695,32 +701,55 @@ async def process_enterprise_cs_customer_message(
     *,
     market_token: str = "",
 ):
-    async with _turn_locks[conversation_id % len(_turn_locks)]:
-        with _turn_session(conversation_id) as db:
-            if db is None:
-                return {"handled": False, "reason": "busy"}
-            row = db.get(ImCustomerServiceAutomationState, conversation_id)
-            watermark = row.last_customer_message_id if row else 0
-            if message_id > watermark:
-                oldest = db.scalar(
-                    select(func.min(ImMessage.id)).where(
-                        ImMessage.conversation_id == conversation_id,
-                        ImMessage.origin == "customer",
-                        ImMessage.id > watermark,
+    # Reject excessive queued work before allocating further model calls. The
+    # IM row remains durable and can be recovered after capacity is released.
+    if (
+        _turn_pending.get(conversation_id, 0) >= _MAX_CONVERSATION_PENDING
+        or _customer_pending.get(customer_user_id, 0) >= _MAX_CUSTOMER_PENDING
+    ):
+        return {"handled": False, "reason": "busy"}
+    lock = _turn_locks.setdefault(conversation_id, asyncio.Lock())
+    _turn_pending[conversation_id] = _turn_pending.get(conversation_id, 0) + 1
+    _customer_pending[customer_user_id] = _customer_pending.get(customer_user_id, 0) + 1
+    try:
+        async with lock:
+            with _turn_session(conversation_id) as db:
+                if db is None:
+                    return {"handled": False, "reason": "busy"}
+                row = db.get(ImCustomerServiceAutomationState, conversation_id)
+                watermark = row.last_customer_message_id if row else 0
+                if message_id > watermark:
+                    oldest = db.scalar(
+                        select(func.min(ImMessage.id)).where(
+                            ImMessage.conversation_id == conversation_id,
+                            ImMessage.origin == "customer",
+                            ImMessage.id > watermark,
+                        )
                     )
+                    if oldest is not None and oldest != message_id:
+                        return {"handled": False, "reason": "earlier_message_pending"}
+                    if (
+                        row
+                        and row.status == "ai_retrying"
+                        and (row.updated_at > utc_now_naive() - timedelta(seconds=RETRY_DELAY_SECONDS))
+                    ):
+                        return {"handled": False, "reason": "retry_scheduled"}
+                return await EnterpriseCsAutomationService(db).handle_customer_message(
+                    conversation_id=conversation_id,
+                    customer_user_id=customer_user_id,
+                    message_id=message_id,
+                    body=body,
+                    market_token=market_token,
                 )
-                if oldest is not None and oldest != message_id:
-                    return {"handled": False, "reason": "earlier_message_pending"}
-                if (
-                    row
-                    and row.status == "ai_retrying"
-                    and (row.updated_at > utc_now_naive() - timedelta(seconds=RETRY_DELAY_SECONDS))
-                ):
-                    return {"handled": False, "reason": "retry_scheduled"}
-            return await EnterpriseCsAutomationService(db).handle_customer_message(
-                conversation_id=conversation_id,
-                customer_user_id=customer_user_id,
-                message_id=message_id,
-                body=body,
-                market_token=market_token,
-            )
+    finally:
+        pending = _turn_pending[conversation_id] - 1
+        if pending:
+            _turn_pending[conversation_id] = pending
+        else:
+            _turn_pending.pop(conversation_id, None)
+            _turn_locks.pop(conversation_id, None)
+        customer_pending = _customer_pending[customer_user_id] - 1
+        if customer_pending:
+            _customer_pending[customer_user_id] = customer_pending
+        else:
+            _customer_pending.pop(customer_user_id, None)
