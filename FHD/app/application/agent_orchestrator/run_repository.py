@@ -4,6 +4,7 @@ import copy
 import logging
 import os
 import threading
+from collections.abc import Callable
 from typing import Protocol, cast
 
 from app.application.agent_orchestrator.run_models import (
@@ -48,6 +49,7 @@ class AgentRunRepository(Protocol):
         limit: int = 50,
         tenant_id: str | None = None,
         mod_id: str | None = None,
+        matches: Callable[[AgentRun], bool] | None = None,
     ) -> list[AgentRun]: ...
 
     def list_task_runs(self, *, user_id: str, task_id: str) -> list[AgentRun]: ...
@@ -200,6 +202,7 @@ class InMemoryAgentRunRepository:
         limit: int = 50,
         tenant_id: str | None = None,
         mod_id: str | None = None,
+        matches: Callable[[AgentRun], bool] | None = None,
     ) -> list[AgentRun]:
         with self._lock:
             runs = list(self._runs.values())
@@ -209,6 +212,8 @@ class InMemoryAgentRunRepository:
             runs = [run for run in runs if tenant_id_of_run(run) == tenant_id]
         if mod_id is not None:
             runs = [run for run in runs if mod_id_of_run(run) == mod_id]
+        if matches is not None:
+            runs = [run for run in runs if matches(run)]
         runs.sort(key=lambda run: run.updated_at, reverse=True)
         return [copy.deepcopy(run) for run in runs[: max(0, int(limit))]]
 

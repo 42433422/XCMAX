@@ -16,12 +16,12 @@
     "FHD/app/application/agent_orchestrator/orchestrator.py": {
       "base_file": "FHD/app/application/agent_orchestrator/orchestrator.py",
       "base_blob": "4a510433178b40587be19cd16b7307cf7c7cedda",
-      "head_blob": "a592fde518c35e829304f305c183c219186bbda9",
+      "head_blob": "1ebc0ebc5c581b8c85ca727eed5e079842f8cd99",
       "before_lines": 1651,
-      "after_lines": 1694,
+      "after_lines": 1703,
       "reason": "将通过持久审批的 ELT 批量执行交给现有后台队列，保留原任务及文件范围，避免在聊天请求内长时间执行。",
       "boundary": "只在原步骤、计划摘要和持久审批都匹配时排队。限制上传标识和 SQL 仓储，并按原运行版本事务登记队列项。",
-      "validation": "验证范围包括已批准任务入队、无凭据拒绝、计划篡改拒绝和后台任务恢复。待远端 CI 与原审批工作台验收。 本地整合后端回归 721 项通过及 37 项可选跳过。 类型修正后 102 项 ELT 专项测试通过。",
+      "validation": "验证范围包括已批准任务入队、无凭据拒绝、计划篡改拒绝和后台任务恢复。待远端 CI 与原审批工作台验收。 本地整合后端回归 721 项通过及 37 项可选跳过。 类型修正后 102 项 ELT 专项测试通过。 The exact-turn history lookup regression is also verified against in-memory and SQLite repositories after 51 unrelated runs.",
       "follow_up": "继续由现有审批事务和任务调度持有入队逻辑，评审后收敛编排器的转发代码。",
       "review_owner": "@42433422"
     },
@@ -208,12 +208,12 @@
     "FHD/app/application/agent_orchestrator/run_sql_repository.py": {
       "base_file": "FHD/app/application/agent_orchestrator/run_sql_repository.py",
       "base_blob": "7af42d9ae33da3996938096c43a5096d7fa9b52a",
-      "head_blob": "ce2f49d71b3d3d420b73f27797aeea1694761b96",
+      "head_blob": "744ae58e1df0100ddf62ac1356d4bb471ba7d987",
       "before_lines": 1014,
-      "after_lines": 1017,
+      "after_lines": 1019,
       "reason": "将已有 AgentRun 比较并保存逻辑暴露给审批事务，使租约条件校验、任务状态和队列提交可在同一次数据库事务内处理。",
       "boundary": "保留原有版本和序列化负载的比较，旧版本及不存在的任务均拒绝更新。调用方仍提供受授权的 SQLAlchemy 会话。",
-      "validation": "验证范围包括同事务审批入队、并发更新拒绝、数据库回滚和原运行回执。待远端 CI 和真实持久队列复核。 本地整合后端回归 721 项通过及 37 项可选跳过。 类型修正后 102 项 ELT 专项测试通过。",
+      "validation": "验证范围包括同事务审批入队、并发更新拒绝、数据库回滚和原运行回执。待远端 CI 和真实持久队列复核。 本地整合后端回归 721 项通过及 37 项可选跳过。 类型修正后 102 项 ELT 专项测试通过。 The exact-turn history lookup regression is also verified against in-memory and SQLite repositories after 51 unrelated runs.",
       "follow_up": "归并同类 SQL 外部事务接口，保持多个持久化步骤共用 CAS 条件。",
       "review_owner": "@42433422"
     },

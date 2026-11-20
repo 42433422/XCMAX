@@ -69,10 +69,13 @@ def test_delete_messages_from_withdraws_user_turn_and_later_replies(
         store.delete_messages_from(session_id="recall-1", user_id=41, message_id=999)
 
 
-def test_history_reads_terminal_import_receipt_only_for_matching_scope(store, monkeypatch):
+@pytest.mark.parametrize("backend", ["memory", "sqlite"])
+def test_history_reads_terminal_import_receipt_only_for_matching_scope(store, monkeypatch, backend):
     from types import SimpleNamespace
 
     from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
+    from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+    from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
     from app.infrastructure.tenant_scope import tenant_scope
 
     store.save_message(session_id="receipt-session", user_id=41, role="user", content="导入")
@@ -83,8 +86,18 @@ def test_history_reads_terminal_import_receipt_only_for_matching_scope(store, mo
         "runtime_context": {"tenant_id": "12", "session_id": "receipt-session",
                             "turn_id": "turn-1", "_conversation_revision": revision},
     })
-    monkeypatch.setattr("app.application.agent_orchestrator.AgentOrchestrator",
-                        lambda: SimpleNamespace(list_runs=lambda **kwargs: [run]))
+    repository = (
+        InMemoryAgentRunRepository()
+        if backend == "memory"
+        else SQLAlchemyAgentRunRepository(session_factory=sessionmaker(bind=create_engine("sqlite://")))
+    )
+    repository.save(run)
+    for index in range(51):
+        repository.save(AgentRun(user_id="41", message=f"unrelated-{index}"))
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.AgentOrchestrator",
+        lambda: SimpleNamespace(list_runs=repository.list_recent),
+    )
     with tenant_scope(12):
         result = store.get_history(session_id="receipt-session", user_id=41, turn_id="turn-1")
         assert result["turn_receipt"]["status"] == "failed"

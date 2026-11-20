@@ -289,23 +289,24 @@ def active_batch_turn(
 
     if not (owner and tenant and session):
         return None
-    superseded: set[str] = set()
-    for run in AgentOrchestrator().list_runs(user_id=owner, limit=50):
+    def matches(run: AgentRun) -> bool:
         saved = run.metadata.get("runtime_context") or {}
-        if (
+        return (
             run.user_id == owner
             and str(saved.get("tenant_id") or "") == tenant
             and str(saved.get("mod_id") or saved.get("active_mod_id") or "") == mod
             and str(saved.get("session_id") or saved.get("conversation_id") or "") == session
             and saved.get("_conversation_revision") == revision
-        ):
-            if parent := task_context_of(run).get("parent_run_id"):
-                superseded.add(str(parent))
-            if (
-                run.run_id not in superseded
-                and (not turn_id or saved.get("turn_id") == turn_id)
-                and (view := batch_turn_view(run, include_terminal=include_terminal and bool(turn_id)))
-            ):
+            and (not turn_id or saved.get("turn_id") == turn_id)
+        )
+
+    superseded: set[str] = set()
+    for run in AgentOrchestrator().list_runs(user_id=owner, limit=50, matches=matches):
+        if parent := task_context_of(run).get("parent_run_id"):
+            superseded.add(str(parent))
+        if run.run_id not in superseded:
+            view = batch_turn_view(run, include_terminal=include_terminal and bool(turn_id))
+            if view:
                 return view
     return None
 

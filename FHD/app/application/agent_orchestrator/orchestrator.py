@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import logging
+from collections.abc import Callable
 from typing import Any, cast
 from uuid import UUID
 
@@ -824,8 +825,16 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         self._repo.save(parent)
         return True
 
-    def list_runs(self, *, user_id: str | None = None, limit: int = 50) -> list[AgentRun]:
-        return cast("list[AgentRun]", self._repo.list_recent(user_id=user_id, limit=limit))
+    def list_runs(
+        self,
+        *,
+        user_id: str | None = None,
+        limit: int = 50,
+        matches: Callable[[AgentRun], bool] | None = None,
+    ) -> list[AgentRun]:
+        if matches is None:
+            return self._repo.list_recent(user_id=user_id, limit=limit)
+        return self._repo.list_recent(user_id=user_id, limit=limit, matches=matches)
 
     def list_events(self, run_id: str, *, after_event_id: str | None = None) -> list[RunEvent]:
         return cast("list[RunEvent]", self._repo.list_events(run_id, after_event_id=after_event_id))
