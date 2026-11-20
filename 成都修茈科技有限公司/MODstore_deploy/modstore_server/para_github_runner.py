@@ -215,7 +215,9 @@ def _ensure_runner(db, payload):
                 )
             }
         else:
-            result = {}
+            saved = json_loads(row.result_json, {})
+            saved.pop("model_allocation", None)
+            result = {"result_json": json_dumps(saved)}
         pending = db.query(CustomerServiceAction).filter_by(id=row.id, status="queued")
         if allocation and allocation["status"] != "admitted":
             pending.update(result, synchronize_session=False)

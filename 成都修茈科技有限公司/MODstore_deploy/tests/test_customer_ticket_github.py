@@ -740,3 +740,40 @@ def test_existing_queued_dispatch_becomes_durable_block_without_external_calls(
         assert status["finished"] is True
         assert status["status"] == "blocked"
         assert status["reason"] == "blocked_isolated_publisher_required"
+
+
+def test_disabling_platform_pool_clears_waiting_allocation_before_dispatch(
+    client, ticket, monkeypatch
+):
+    from modstore_server import para_github_runner as runner
+    from modstore_server import para_model_admission
+    from modstore_server.customer_service_tools import json_dumps, json_loads
+    from modstore_server.eventing import db_outbox
+
+    request_id = str(uuid.uuid4())
+    monkeypatch.setattr(bridge, "github", lambda *args: {"number": 123, "state": "open"})
+    monkeypatch.setattr(runner, "publisher_capability", lambda: {"available": True})
+    path = f"/api/customer-service/tickets/{ticket}/github"
+    assert client.post(path, json=DRAFT).status_code == 200
+    assert client.post(path + "/start", json={"request_id": request_id}).status_code == 200
+    payload = next(
+        r.payload
+        for r in db_outbox.fetch_pending(limit=100)
+        if r.payload.get("ticket_id") == ticket
+    )
+    monkeypatch.setattr(runner, "_claim_worker_slot", lambda *args: True)
+    monkeypatch.setattr(
+        para_model_admission, "platform_model_admission", lambda: {"status": "waiting"}
+    )
+    with get_session_factory()() as db:
+        row = db.get(CustomerServiceAction, payload["github_workspace"]["action_id"])
+        row.result_json = json_dumps({"existing": "preserved"})
+        db.commit()
+        assert runner.ensure_runner(db, payload) is False
+        db.refresh(row)
+        assert json_loads(row.result_json, {})["model_allocation"]["status"] == "waiting"
+        monkeypatch.setattr(para_model_admission, "platform_model_admission", lambda: None)
+        assert runner.ensure_runner(db, payload) is False
+        db.refresh(row)
+        assert row.status == "requested"
+        assert json_loads(row.result_json, {}) == {"existing": "preserved"}

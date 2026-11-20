@@ -183,6 +183,7 @@ async def fetch_minimax_token_plan_quota(
     *,
     base_url: Optional[str] = None,
     timeout: float = 20.0,
+    isolated_http: bool = False,
 ) -> dict[str, Any]:
     from modstore_server.infrastructure.http_clients import get_external_client
 
@@ -222,6 +223,11 @@ async def fetch_minimax_token_plan_quota(
                 method="GET",
             ) as response:
                 pass
+        elif isolated_http:
+            import httpx
+
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, headers=headers, timeout=timeout)
         else:
             response = await get_external_client().get(url, headers=headers, timeout=timeout)
         if response.status_code >= 400:
@@ -297,6 +303,7 @@ async def platform_quota_snapshot(
     *,
     live_probe: bool = False,
     catalog: Optional[dict[str, Any]] = None,
+    isolated_http: bool = False,
 ) -> dict[str, Any]:
     """Return exact provider quota when available, otherwise explicit inference."""
 
@@ -320,10 +327,10 @@ async def platform_quota_snapshot(
         key = platform_api_key(provider) or ""
         quota: dict[str, Any]
         if provider == "minimax" and is_minimax_token_plan_key(key):
-            quota = await fetch_minimax_token_plan_quota(
-                key,
-                base_url=platform_base_url(provider),
-            )
+            options: dict[str, Any] = {"base_url": platform_base_url(provider)}
+            if isolated_http:
+                options["isolated_http"] = True
+            quota = await fetch_minimax_token_plan_quota(key, **options)
         else:
             quota = {
                 "state": "unknown",

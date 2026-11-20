@@ -76,3 +76,5 @@ route, allow/deny and response status; retain INFO logs in the server audit sink
 XCMAX 读取现有平台额度快照。启用 `MODSTORE_PARA_PLATFORM_POOL=1` 后，新派工只选有精确额度且高于平台保留线的路由，按可用余量排序。设置 `MODSTORE_PARA_PLATFORM_ROUTES` 为 JSON 对象，例如 `{"coding":{"provider":"minimax","resource":"general"}}`，其中键是 LiteLLM 模型别名，值对应同一上游配额池及额度资源。只登记已通过 Codex 流式工具调用验收、能返回供应商 token 用量的模型。`MODSTORE_PARA_PLATFORM_RESERVE_PERCENT` 默认 80，可提高到 100 暂停新派工。
 
 GitHub 配置 `PARA_PLATFORM_POOL=1`、`PARA_PLATFORM_GATEWAY_URL=https://…/v1` 和 Secret `PARA_PLATFORM_GATEWAY_KEY`。使用 [LiteLLM Proxy 的 Codex Responses 接入](https://docs.litellm.ai/docs/proxy/client_setup/codex_cli) 和有限额的虚拟密钥。启用前在网关配置 Para 的模型白名单、预算及 RPM/TPM，按需要在供应商侧划分硬配额。派工检查只控制新任务准入，运行中金额和速率由网关限制。缺少可核验额度时任务等待。
+
+网关验收目标固定为 [BerriAI/litellm v1.108.6 LTS](https://github.com/BerriAI/litellm/releases/tag/v1.108.6)，镜像 `ghcr.io/berriai/litellm:v1.108.6`；使用上游该版本发布页指定的固定公钥验证 cosign 签名后再部署。上游非 enterprise 目录使用 [MIT 许可证](https://github.com/BerriAI/litellm/blob/v1.108.6/LICENSE)，enterprise 目录适用其独立许可证。此记录不代表网关已部署或生产验收通过；实际镜像摘要、签名、配置和端到端计费仍需核对。

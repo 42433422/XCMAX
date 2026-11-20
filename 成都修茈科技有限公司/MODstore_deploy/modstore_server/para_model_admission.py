@@ -62,7 +62,24 @@ def platform_model_admission() -> dict[str, Any] | None:
     except ValueError:
         return {"status": "waiting", "reason": "invalid_platform_policy"}
     try:
-        snapshot = run_coro_sync(platform_quota_snapshot(live_probe=False))
+        # Admission needs quota, not remote model discovery. Avoid opening the
+        # process-wide catalog client's connections on this short-lived loop.
+        from modstore_server.llm_key_resolver import platform_api_key
+
+        providers = {
+            route.get("provider")
+            for route in routes.values()
+            if isinstance(route, dict) and isinstance(route.get("provider"), str)
+        }
+        catalog = {
+            "providers": [
+                {"provider": provider, "configured": bool(platform_api_key(provider))}
+                for provider in sorted(providers)
+            ]
+        }
+        snapshot = run_coro_sync(
+            platform_quota_snapshot(live_probe=False, catalog=catalog, isolated_http=True)
+        )
     except RECOVERABLE_ERRORS:
         return {"status": "waiting", "reason": "platform_quota_unavailable"}
     decision = select_route(snapshot.get("providers", []), routes, reserve)
