@@ -46,7 +46,14 @@
         reason?: string;
       };
       execution?: { reason?: string };
-      delivery?: { reason?: string; merge_sha?: string; url?: string };
+      delivery?: {
+        status?: string;
+        reason?: string;
+        merge_sha?: string;
+        release_sha?: string;
+        url?: string;
+        identity?: { product_version?: string };
+      };
       knowledge?: { recorded?: boolean };
     };
     effects: { issue_number?: number; run_id?: number; pull_request_number?: number };
@@ -108,6 +115,14 @@
     awaiting_authorized_production_release: '等待正式发布审批与部署',
     production_release_not_successful: '发布尚未成功，继续核对原发布任务',
     production_receipt_unavailable: '发布证据待核对',
+    active_release_does_not_contain_merge: '等待包含本次修复的正式发布',
+    active_release_not_present_on_main: '当前发布提交待在主干核实',
+    production_release_manifest_unconfirmed: '正式发布清单待核对',
+    production_release_acceptance_incomplete: '发布签名和运行验收证据待补齐',
+    production_release_evidence_mismatch: '制品或签名与正式发布记录未对齐',
+    delivery_evidence_unavailable: '暂时无法读取交付证据',
+    delivery_repository_unconfirmed: '发布证据的仓库待核对',
+    health_release_id_mismatch: '线上运行版本与正式发布清单未对齐',
     health_sha_mismatch: '线上运行版本尚未与本次交付对齐',
     health_artifact_digest_mismatch: '线上程序与发布制品尚未匹配',
     accepted_pull_request_identity_changed: '验收后的代码已变化，需要重新验证',
@@ -366,13 +381,19 @@
           <el-descriptions-item label="代码版本">{{
             detail.snapshot.verification?.target_sha || detail.protocol.source_sha
           }}</el-descriptions-item>
+          <template v-if="detail.snapshot.delivery?.status === 'deployment_verified'">
+            <el-descriptions-item label="合入提交">{{ detail.snapshot.delivery.merge_sha }}</el-descriptions-item>
+            <el-descriptions-item label="正式发布">{{ detail.snapshot.delivery.identity?.product_version }}
+              {{ detail.snapshot.delivery.release_sha || detail.snapshot.delivery.merge_sha }}
+            </el-descriptions-item>
+          </template>
           <el-descriptions-item label="执行证据">
             <a
               v-if="detail.snapshot.delivery?.url"
               :href="detail.snapshot.delivery.url"
               target="_blank"
               rel="noopener noreferrer"
-              >正式发布记录</a
+              >{{ detail.snapshot.delivery.status === 'deployment_verified' ? '正式发布验收记录' : '发布工作流' }}</a
             >
             <a
               v-if="detail.effects.pull_request_number"
