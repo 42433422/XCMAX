@@ -1516,7 +1516,7 @@ async function checkExistingPR(workspace, branch, baseBranch, repoFull) {
       '--head', branch,
       '--base', baseBranch,
       '--state', 'all',
-      '--json', scheduled ? `${fields},isCrossRepository` : fields,
+      '--json', scheduled ? `${fields},isCrossRepository,mergeable` : fields,
       '--limit', '5',
     ];
     if (repoFull) args.push('--repo', repoFull);
@@ -1742,6 +1742,16 @@ async function processTask(token, task, state) {
           }
 
           if (scheduled) {
+            if (branches.length === 1 && existingPR?.mergeable === 'CONFLICTING'
+                && withinMainIntegrationWindow()) {
+              const reason = `PR #${prNumber} merge conflict with ${baseBranch}`;
+              const result = await reportMergeConflict(token, task, reason);
+              if (!result.ok) throw new Error(`merge-conflict-report-http-${result.status}`);
+              state[task.id] = { status: 'conflict', at: new Date().toISOString(), reason };
+              saveProcessed(state);
+              log(`task ${task.id} 已将主线冲突回传原 Para 任务`);
+              return;
+            }
             // The GitHub bot reads the reviewed order and owns the merge.
             // Reusing a PR here must not change its reviewed head or remove a hold.
             results.push({ branch, prNumber, prUrl, merged: false, pendingIntegration: true });
