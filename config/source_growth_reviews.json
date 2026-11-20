@@ -460,12 +460,12 @@
     "FHD/frontend/src/views/ChatView.vue": {
       "base_file": "FHD/frontend/src/views/ChatView.vue",
       "base_blob": "bb02182431e151888eb1344758a0218703ecd21c",
-      "head_blob": "a9548bd0438bc2d368a121ba3dab6e3eb26442c3",
+      "head_blob": "3746c8ba24ca4c7c743860c0fc431bb43940cefe",
       "before_lines": 1010,
-      "after_lines": 1072,
+      "after_lines": 1076,
       "reason": "Add image generation to the existing chat composer and persist unresolved request keys across restarts.",
       "boundary": "Keys are bound to the authenticated owner, Mod, conversation and prompt digest; only confirmed outcomes remove them.",
-      "validation": "111 chat and storage tests plus frontend type checking passed; exact-head CI and production wallet readback remain required.",
+      "validation": "Chat and storage tests cover scope changes and reopening; frontend type checking passed. Exact-head CI and production wallet readback remain required.",
       "follow_up": "Architecture review and installed desktop restart and billing verification remain outstanding.",
       "review_owner": "@42433422"
     },
