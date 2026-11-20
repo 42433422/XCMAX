@@ -6,15 +6,15 @@
   "stats": {
     "total": 157,
     "by_status": {
-      "verified": 104,
+      "verified": 103,
       "partial": 15,
       "implemented": 3,
-      "planned": 35
+      "planned": 36
     },
     "cancelled_count": 0,
     "domains": 10,
     "modules": 28,
-    "verified_total": 104,
+    "verified_total": 103,
     "last_verified_at": "2026-09-30",
     "platform_counts": {
       "windows": 98,
@@ -60,7 +60,7 @@
         "last_verified_at": null
       }
     },
-    "completion": 74
+    "completion": 73
   },
   "product_version": "1.0.0.7",
   "release_ready": false,
@@ -4452,7 +4452,7 @@
             {
               "id": "ops-version-evolution",
               "name": "版本演进与自驱迭代",
-              "status": "verified",
+              "status": "planned",
               "platforms": [
                 "web"
               ],
