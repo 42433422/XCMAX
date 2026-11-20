@@ -467,6 +467,32 @@ def test_auto_approval_reports_partial_elt_writes_from_the_saved_run():
     }
 
 
+def test_approved_background_import_is_not_persisted_as_completed():
+    from contextlib import nullcontext
+
+    from app.application.agent_orchestrator.trace_payloads import _payload_status
+
+    session = WorkflowSession({}, Mock(spec=SessionCallbacks))
+    run = AgentRun(user_id="7", message="导入", status="queued", metadata={
+        "runtime_context": {"turn_id": "turn-1"},
+    })
+    run.steps = [AgentStep(node_id="import", tool_id="elt_import", action="execute", params={
+        "file_paths": ["upload-1"],
+    })]
+    approval = {"success": True, "accepted": True, "data": {"workflow_execution": {"success": True}}}
+    with (
+        patch("app.db.session.get_db", lambda: nullcontext(Mock())),
+        patch("app.application.approval_workspace_app_service._approve_ai_workflow_request_without_node", return_value=approval),
+        patch("app.application.agent_orchestrator.AgentOrchestrator.get_run", return_value=run),
+    ):
+        reply = session._auto_approve_waiting_request(
+            request_id="req-elt", user_id="7", runtime_context={"actor_id": 7},
+            plan=_plan(), agent_run=run,
+        )
+    assert reply["active_turn"]["status"] == "queued"
+    assert _payload_status(reply) == "queued"
+
+
 def test_auto_approval_reply_includes_generated_file_download_url():
     from contextlib import contextmanager
 

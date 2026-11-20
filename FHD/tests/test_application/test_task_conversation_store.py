@@ -69,6 +69,35 @@ def test_delete_messages_from_withdraws_user_turn_and_later_replies(
         store.delete_messages_from(session_id="recall-1", user_id=41, message_id=999)
 
 
+def test_history_reads_terminal_import_receipt_only_for_matching_scope(store, monkeypatch):
+    from types import SimpleNamespace
+
+    from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    store.save_message(session_id="receipt-session", user_id=41, role="user", content="导入")
+    revision = store.get_conversation(session_id="receipt-session", user_id=41)["session"]["revision"]
+    step = AgentStep(node_id="import", tool_id="elt_import", action="execute", status="failed",
+                     params={"file_paths": ["upload-1"]}, output={"success": False})
+    run = AgentRun(user_id="41", message="导入", status="failed", steps=[step], metadata={
+        "runtime_context": {"tenant_id": "12", "session_id": "receipt-session",
+                            "turn_id": "turn-1", "_conversation_revision": revision},
+    })
+    monkeypatch.setattr("app.application.agent_orchestrator.AgentOrchestrator",
+                        lambda: SimpleNamespace(list_runs=lambda **kwargs: [run]))
+    with tenant_scope(12):
+        result = store.get_history(session_id="receipt-session", user_id=41, turn_id="turn-1")
+        assert result["turn_receipt"]["status"] == "failed"
+        assert "active_turn" not in result
+        assert "turn_receipt" not in store.get_history(
+            session_id="receipt-session", user_id=41, turn_id="other-turn"
+        )
+    with tenant_scope(13):
+        assert "turn_receipt" not in store.get_history(
+            session_id="receipt-session", user_id=41, turn_id="turn-1"
+        )
+
+
 @pytest.mark.parametrize("scenario", ["ok", "unsupported", "old_client", "new_message", "forged", "live"])
 def test_business_recall_uses_owned_turn_and_waits_for_rollback(
     store: TaskConversationStore, monkeypatch, tmp_path, scenario: str,

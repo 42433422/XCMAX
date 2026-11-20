@@ -681,3 +681,19 @@ def test_legacy_exit_requires_approved_contiguous_native_prefix(monkeypatch, cas
                 batch_continuation.build_legacy_batch_continuation(run, context)
     finally:
         engine.dispose()
+def test_terminal_batch_receipt_requires_actual_step_success():
+    from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
+    from app.application.elt.batch_continuation import batch_turn_view
+
+    step = AgentStep(node_id="import", tool_id="elt_import", action="execute", status="completed",
+                     params={"file_paths": ["upload-1"]}, output={"success": True})
+    run = AgentRun(user_id="1", message="import", status="completed", steps=[step],
+                   metadata={"runtime_context": {"turn_id": "turn-1"}})
+    assert batch_turn_view(run) is None
+    assert batch_turn_view(run, include_terminal=True)["status"] == "completed"
+    step.output = {"success": True, "requires_reconciliation": True}
+    assert batch_turn_view(run, include_terminal=True)["status"] == "unknown"
+    run.status = "failed"
+    assert batch_turn_view(run, include_terminal=True)["status"] == "failed"
+    run.status = "cancelled"
+    assert batch_turn_view(run, include_terminal=True)["status"] == "interrupted"

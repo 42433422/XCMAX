@@ -723,6 +723,7 @@ class WorkflowSession:
                     **reply,
                     "run_id": run_id,
                     "agent_run_id": run_id,
+                    "status": active_turn["status"],
                     "active_turn": active_turn,
                 }
         partial = ""

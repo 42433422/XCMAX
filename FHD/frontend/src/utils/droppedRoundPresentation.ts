@@ -97,6 +97,12 @@ export function droppedRoundFromHistory(conversation: unknown, turnId: string): 
     const status = activeTurn.status === 'blocked' ? 'unknown' : activeTurn.status === 'paused' ? 'waiting_approval' : activeTurn.status
     return { status, workflowAction: activeTurn.status, text: activeChatTurnMessage(activeTurn), activeTurn }
   }
+  const receipt = asRecord(body.turn_receipt)
+  if (turnId && asString(receipt.turn_id) === turnId && asString(receipt.run_id)) {
+    return droppedRoundPresentation({
+      reachable: true, serverStatus: asString(receipt.status), serverText: asString(receipt.message),
+    })
+  }
   const rows = asArray(body.messages ?? asRecord(body.data).messages)
   if (turnId && body.success !== false) {
     for (const raw of [...rows].reverse()) {

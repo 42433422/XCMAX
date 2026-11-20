@@ -217,6 +217,7 @@ class PlannedWorkflowDispatch:
                         "message": text,
                         "response": text,
                         "run_id": current["run_id"],
+                        "status": current["status"],
                         "active_turn": current,
                         "data": {"action": "workflow_waiting", "execution_started": False},
                     }
@@ -229,6 +230,7 @@ class PlannedWorkflowDispatch:
                         "message": str(exc),
                         "response": str(exc),
                         "run_id": current["run_id"],
+                        "status": current["status"],
                         "active_turn": current,
                         "data": {"action": "workflow_waiting", "execution_started": False},
                     }

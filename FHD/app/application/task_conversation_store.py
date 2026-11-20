@@ -274,18 +274,26 @@ class TaskConversationStore:
         page = self.get_conversation(session_id=session_id, user_id=user_id, **pagination)
         session = page.pop("session")
         active_turn = None
+        turn_receipt = None
         if isinstance(session, dict) and type(session.get("revision")) is int:
             from app.application.elt.batch_continuation import active_batch_turn
             from app.infrastructure.tenant_scope import current_tenant_id
 
-            active_turn = active_batch_turn(
+            selected_turn = active_batch_turn(
                 owner=str(user_id),
                 tenant=str(current_tenant_id() or ""),
                 mod=mod_id,
                 session=session_id,
                 revision=session["revision"],
                 turn_id=pagination.get("turn_id"),
+                include_terminal=bool(pagination.get("turn_id")),
             )
+            if selected_turn and selected_turn["status"] in {
+                "completed", "failed", "interrupted", "unknown"
+            }:
+                turn_receipt = selected_turn
+            else:
+                active_turn = selected_turn
         return {
             "success": True,
             "id": session_id,
@@ -294,6 +302,7 @@ class TaskConversationStore:
             "mod_id": mod_id,
             **page,
             **({"active_turn": active_turn} if active_turn else {}),
+            **({"turn_receipt": turn_receipt} if turn_receipt else {}),
             "metadata": {},
             "durable": True,
         }

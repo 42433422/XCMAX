@@ -239,12 +239,12 @@ def bind_durable_batch(plan: PlanGraph, context: dict) -> None:
 _OBSERVABLE_STATES = {"queued", "running", "retrying", "waiting_user", "paused", "blocked"}
 
 
-def batch_turn_view(run: AgentRun) -> dict[str, str] | None:
+def batch_turn_view(run: AgentRun, *, include_terminal: bool = False) -> dict[str, str] | None:
     context = run.metadata.get("runtime_context") or {}
     turn_id = str(context.get("turn_id") or "")
     if (
         not turn_id
-        or run.status not in _OBSERVABLE_STATES
+        or (run.status not in _OBSERVABLE_STATES and not include_terminal)
         or not any(
             (step.tool_id, step.action) == ("elt_import", "execute")
             and step.params.get("file_paths")
@@ -252,16 +252,38 @@ def batch_turn_view(run: AgentRun) -> dict[str, str] | None:
         )
     ):
         return None
+    status: str = run.status
+    message = ""
+    if status not in _OBSERVABLE_STATES:
+        from app.domain.task_lifecycle.results import execution_result_error
+
+        steps = [step for step in run.steps if (step.tool_id, step.action) == ("elt_import", "execute")]
+        if status == "completed" and steps and all(
+            step.status == "completed"
+            and isinstance(step.output, dict)
+            and step.output.get("success") is True
+            and not execution_result_error(step.output)
+            for step in steps
+        ):
+            message = "原导入任务已完成，请查看任务回执。"
+        elif status in {"failed", "cancelled", "rejected"}:
+            status = "failed" if status == "failed" else "interrupted"
+            message = "原导入任务未完成，请查看任务回执。"
+        else:
+            status = "unknown"
+            message = "原导入任务结果尚待核对。"
     return {
         "turn_id": turn_id,
         "run_id": run.run_id,
-        "status": run.status,
+        "status": status,
         "task_id": str(task_context_of(run).get("task_id") or run.run_id),
+        **({"message": message} if message else {}),
     }
 
 
 def active_batch_turn(
-    *, owner: str, tenant: str, mod: str, session: str, revision: int, turn_id: str | None = None
+    *, owner: str, tenant: str, mod: str, session: str, revision: int, turn_id: str | None = None,
+    include_terminal: bool = False,
 ) -> dict[str, str] | None:
     from app.application.agent_orchestrator import AgentOrchestrator
 
@@ -282,7 +304,7 @@ def active_batch_turn(
             if (
                 run.run_id not in superseded
                 and (not turn_id or saved.get("turn_id") == turn_id)
-                and (view := batch_turn_view(run))
+                and (view := batch_turn_view(run, include_terminal=include_terminal and bool(turn_id)))
             ):
                 return view
     return None
