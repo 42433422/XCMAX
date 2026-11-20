@@ -1,10 +1,94 @@
+# robots.txt — 成都修茈科技有限公司 / XCAGI 官网
+# 目的：让搜索引擎与 AI 检索引擎（Generative Engine Optimization）都能抓取官网公开内容，
+# 便于用户搜索到公司官网。
+
 User-agent: *
 Allow: /
 Allow: /assets/xiu-ci-logo.png
+Allow: /assets/brand-logo.jpg
+Allow: /assets/screenshots/
+Allow: /llms.txt
 
 Disallow: /assets/
 Disallow: /uploads/
 Disallow: /.trae/
 Disallow: /test_image.jpg
+
+# AI 检索与训练爬虫：显式放开，确保公司官网能被 AI 搜索/问答引擎引用。
+User-agent: GPTBot
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Claude-User
+Allow: /
+
+User-agent: Claude-SearchBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Perplexity-User
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+User-agent: Bytespider
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
+User-agent: meta-externalagent
+Allow: /
+
+User-agent: cohere-ai
+Allow: /
+
+User-agent: DuckAssistBot
+Allow: /
+
+User-agent: MistralAI-User
+Allow: /
+
+User-agent: Blexbot
+Allow: /
+
+User-agent: YandexBot
+Allow: /
+
+# 中文搜索与本地搜索
+User-agent: Baiduspider
+Allow: /
+
+User-agent: Baiduspider-render
+Allow: /
+
+User-agent: Sogou web spider
+Allow: /
+
+User-agent: 360Spider
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: Googlebot
+Allow: /
+
+User-agent: Googlebot-Image
+Allow: /
 
 Sitemap: https://xiu-ci.com/sitemap.xml

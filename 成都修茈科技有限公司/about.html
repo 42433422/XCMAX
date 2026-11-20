@@ -21,7 +21,8 @@
             "@type": "Organization",
             "@id": "https://xiu-ci.com/#organization",
             "name": "成都修茈科技有限公司",
-            "alternateName": ["修茈科技", "XCAGI Automation"],
+            "alternateName": ["修茈科技", "成都修茈科技", "XCAGI", "XCAGI Automation"],
+            "legalName": "成都修茈科技有限公司",
             "url": "https://xiu-ci.com/",
             "logo": {
               "@type": "ImageObject",
@@ -29,9 +30,15 @@
               "width": 1024,
               "height": 1024
             },
+            "image": "https://xiu-ci.com/assets/brand-logo.jpg",
             "description": "成都修茈科技有限公司建设 XCAGI AI 员工桌面平台，以统一宿主承载行业 Mod、AI 员工与企业数据。",
             "foundingDate": "2024",
-            "areaServed": "CN",
+            "email": "970882904@qq.com",
+            "areaServed": {
+              "@type": "Country",
+              "name": "中国"
+            },
+            "knowsLanguage": "zh-CN",
             "knowsAbout": [
               "AI 员工桌面平台",
               "企业流程自动化",
@@ -39,15 +46,40 @@
               "AI 员工协作",
               "企业数据读写",
               "任务过程留痕",
-              "可复核成果交付"
+              "可复核成果交付",
+              "考勤自动化",
+              "销售自动化",
+              "客服自动化",
+              "ERP 数据读写",
+              "Excel 单据处理"
             ],
-            "sameAs": ["https://xiu-ci.com/about.html", "https://xiu-ci.com/market/"]
+            "contactPoint": [
+              {
+                "@type": "ContactPoint",
+                "contactType": "产品咨询",
+                "email": "970882904@qq.com",
+                "availableLanguage": ["zh-CN"],
+                "url": "https://xiu-ci.com/contact.html"
+              }
+            ],
+            "hasCredential": {
+              "@type": "EducationalOccupationalCredential",
+              "name": "蜀ICP备2026014056号-3A",
+              "url": "https://beian.miit.gov.cn/"
+            },
+            "sameAs": [
+              "https://xiu-ci.com/about.html",
+              "https://xiu-ci.com/market/",
+              "https://xiu-ci.com/developer.html"
+            ]
           },
           {
             "@type": "WebSite",
             "@id": "https://xiu-ci.com/#website",
             "url": "https://xiu-ci.com/",
             "name": "成都修茈科技有限公司",
+            "alternateName": "XCAGI 官网",
+            "description": "成都修茈科技有限公司官方站点，提供 XCAGI 产品、解决方案、案例、验证证据、下载与联系方式。",
             "publisher": {
               "@id": "https://xiu-ci.com/#organization"
             },
@@ -106,6 +138,7 @@
     <meta property="og:url" content="https://xiu-ci.com/about.html" />
     <meta property="og:image" content="https://xiu-ci.com/assets/brand-logo.jpg" />
     <meta name="twitter:card" content="summary_large_image" />
+    <link rel="alternate" type="text/plain" href="https://xiu-ci.com/llms.txt" title="XCAGI 官网内容摘要（LLM/GEO）" />
     <link rel="canonical" href="https://xiu-ci.com/about.html" />
     <link rel="icon" href="/assets/xiu-ci-logo.png" type="image/png" />
   </head>
