@@ -55,7 +55,14 @@ def test_production_deploy_uses_preprovisioned_auto_publish_secret() -> None:
         ROOT / "成都修茈科技有限公司/MODstore_deploy/scripts/xcmax-immutable-release.sh"
     ).read_text(encoding="utf-8")
     assert "AUTO_PUBLISH_TOKEN" not in workflow
-    assert "envs: TARGET_SHA,STRICT_KEY" in workflow
+    parsed = yaml.safe_load(workflow)
+    deploy = next(
+        step for step in parsed["jobs"]["deploy"]["steps"]
+        if step.get("name") == "Deploy immutable release and verify exact runtime identity"
+    )
+    forwarded = {value.strip() for value in deploy["with"]["envs"].split(",")}
+    assert {"TARGET_SHA", "STRICT_KEY", "SIGNED_ARTIFACT_SHA256"} <= forwarded
+    assert "AUTO_PUBLISH_TOKEN" not in forwarded
     assert "upsert_protected_env_value" not in release
     assert (
         'BUILD_AUTO_PUBLISH_TOKEN="$(read_env_value "$ENV_FILE" MODSTORE_AUTO_PUBLISH_TOKEN)"'
