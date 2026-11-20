@@ -72,7 +72,37 @@ def usage_from_response(
     )
     total = int(usage.get("total_tokens") or usage.get("totalTokenCount") or 0)
     if prompt or completion or total:
-        return UsageMeter(prompt, completion, total or prompt + completion, estimated=False)
-    prompt = sum(estimate_tokens_from_message_content(row.get("content")) for row in messages)
+        return UsageMeter(
+            prompt, completion, total or prompt + completion, estimated=False
+        )
+    prompt = sum(
+        estimate_tokens_from_message_content(row.get("content")) for row in messages
+    )
     completion = estimate_tokens_from_text(content)
     return UsageMeter(prompt, completion, prompt + completion, estimated=True)
+
+
+def reported_token_dimensions(raw: Any) -> dict[str, int]:
+    """Project LiteLLM/OpenAI usage details without trusting arbitrary provider fields."""
+    if not isinstance(raw, dict):
+        return {}
+    prompt = raw.get("prompt_tokens_details") or raw.get("input_tokens_details") or {}
+    completion = (
+        raw.get("completion_tokens_details") or raw.get("output_tokens_details") or {}
+    )
+    if not isinstance(prompt, dict) or not isinstance(completion, dict):
+        return {}
+    values = {
+        "cache_read_input_tokens": prompt.get(
+            "cached_tokens", raw.get("cache_read_input_tokens")
+        ),
+        "cache_write_input_tokens": raw.get("cache_creation_input_tokens"),
+        "image_input_tokens": prompt.get("image_tokens"),
+        "audio_input_tokens": prompt.get("audio_tokens"),
+        "reasoning_output_tokens": completion.get("reasoning_tokens"),
+        "image_output_tokens": completion.get("image_tokens"),
+        "audio_output_tokens": completion.get("audio_tokens"),
+    }
+    return {
+        key: value for key, value in values.items() if type(value) is int and value >= 0
+    }

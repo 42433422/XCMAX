@@ -22,6 +22,7 @@ from modstore_server.llm_billing import (
     save_success_log,
     usage_from_response,
 )
+from modstore_server.llm_billing_values import reported_token_dimensions
 from modstore_server.llm_chat_proxy import chat_dispatch
 from modstore_server.llm_key_resolver import (
     OAI_COMPAT_OPENAI_STYLE_PROVIDERS,
@@ -159,6 +160,7 @@ async def _execute_billed_chat(
             raise
     charge = Decimal("0")
     upstream_started = False
+    settlement_started = False
     try:
         remaining_percent = await personal_provider_quota(route)
         upstream_started = True
@@ -195,6 +197,7 @@ async def _execute_billed_chat(
             charge = Decimal("0")
         else:
             charge = calculate_charge(db, provider, model, usage)
+            settlement_started = hold.enabled
             await wallet.settle(authorization_header(request), hold, charge, request_id)
         conversation_row_id = save_success_log(
             db,
@@ -209,7 +212,9 @@ async def _execute_billed_chat(
             conversation_id=conversation_id,
         )
     except HTTPException as exc:
-        if upstream_started and getattr(request.state, "llm_pat_user_id", None) is not None:
+        if settlement_started or (
+            upstream_started and getattr(request.state, "llm_pat_user_id", None) is not None
+        ):
             logger.error(
                 "LLM settlement needs reconciliation request_id=%s hold=%s",
                 request_id,
@@ -229,7 +234,9 @@ async def _execute_billed_chat(
             logger.exception("failed to release LLM wallet hold")
         raise
     except RECOVERABLE_ERRORS as exc:
-        if upstream_started and getattr(request.state, "llm_pat_user_id", None) is not None:
+        if settlement_started or (
+            upstream_started and getattr(request.state, "llm_pat_user_id", None) is not None
+        ):
             logger.error(
                 "LLM settlement needs reconciliation request_id=%s hold=%s",
                 request_id,
@@ -261,6 +268,7 @@ async def _execute_billed_chat(
         "content": content,
         "conversation_id": conversation_row_id,
         "usage": usage.__dict__,
+        "usage_details": reported_token_dimensions(result.get("usage")),
         "charge_amount": float(charge),
         "hold_no": hold.hold_no,
         **route.public_metadata(),

@@ -1258,7 +1258,10 @@ async def llm_chat(
         "content": out["content"],
         "conversation_id": out["conversation_id"],
         "usage": out["usage"],
+        "usage_details": out.get("usage_details", {}),
         "charge_amount": out["charge_amount"],
+        "pricing": out.get("pricing"),
+        "request_id": out.get("request_id"),
         "hold_no": out["hold_no"],
         "key_source": out["key_source"],
         "billed": out["billed"],
@@ -1306,7 +1309,8 @@ async def llm_chat_stream(
 
 
 @_chat_endpoint_facade.router.get("/chat/requests/{client_request_id}")
-def llm_chat_request_state(
+async def llm_chat_request_state(
+    request: _chat_endpoint_facade.Request,
     client_request_id: str,
     db: _chat_endpoint_facade.Session = _chat_endpoint_facade.Depends(_chat_endpoint_facade.get_db),
     user: _chat_endpoint_facade.User = _chat_endpoint_facade.Depends(
@@ -1320,6 +1324,14 @@ def llm_chat_request_state(
     if not ledger.KEY_PATTERN.fullmatch(client_request_id):
         raise _chat_endpoint_facade.HTTPException(400, "请求键无效")
     state = ledger.lookup(db, int(user.id), client_request_id, _chat_total_deadline_s())
+    if state == "settling":
+        from modstore_server.llm_billing_recovery import recover_receipt
+
+        recovered = await recover_receipt(
+            db, int(user.id), client_request_id, _facade().authorization_header(request)
+        )
+        if recovered is not None:
+            state = "completed"
     return {"client_request_id": client_request_id, "state": state}
 
 

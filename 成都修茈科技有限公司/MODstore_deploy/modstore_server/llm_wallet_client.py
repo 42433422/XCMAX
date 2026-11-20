@@ -168,6 +168,29 @@ class JavaWalletClient:
                 ):
                     raise HTTPException(502, "模型释放响应无效")
 
+    async def read_hold(self, authorization: str, hold_no: str) -> dict[str, Any] | None:
+        """Independently read a wallet reservation bound to the current account."""
+        from urllib.parse import quote
+
+        from modstore_server.infrastructure.http_clients import get_java_client
+
+        if not self.enabled or not authorization or self._is_pat():
+            return None
+        path = f"/api/wallet/ai/holds/{quote(hold_no, safe='')}"
+        try:
+            response = await get_java_client().get(
+                f"{self.gateway.target_base_url()}{path}",
+                headers={"Authorization": authorization},
+                timeout=5.0,
+            )
+            if response.status_code != 200:
+                return None
+            payload = response.json()
+        except (httpx.HTTPError, ValueError):
+            return None
+        hold = payload.get("hold") if isinstance(payload, dict) and payload.get("ok") is True else None
+        return hold if isinstance(hold, dict) else None
+
     async def _post(self, path: str, authorization: str, body: Dict[str, Any]) -> Dict[str, Any]:
         if not authorization:
             raise HTTPException(401, "缺少登录令牌，无法完成钱包扣费")

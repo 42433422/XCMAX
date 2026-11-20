@@ -16,6 +16,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -173,6 +174,14 @@ public class WalletController {
             log.warn("AI 用量预授权失败: {}", e.getMessage());
             return Map.of("ok", false, "message", e.getMessage());
         }
+    }
+
+    @GetMapping("/ai/holds/{holdNo}")
+    public Map<String, Object> readAiHold(@PathVariable String holdNo) {
+        User user = currentUserService.requireCurrentUser();
+        WalletHold hold = walletService.findAiHoldForReadback(user, holdNo)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "预授权不存在"));
+        return Map.of("ok", true, "hold", holdToMap(hold));
     }
 
     @PostMapping("/ai/settle")

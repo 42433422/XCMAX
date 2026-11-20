@@ -19,10 +19,11 @@ from modstore_server.llm_billing import (
     money,
     service_fee_multiplier,
 )
+from modstore_server.llm_billing_values import reported_token_dimensions
 from modstore_server.llm_chat_proxy import image_dispatch
 from modstore_server.llm_model_gates import _get_priced_row
 from modstore_server.llm_operation_routes import OperationRoute, resolve_operation_route
-from modstore_server.models import LlmCallLog
+from modstore_server.llm_billing_recovery import complete_receipt, recover_receipt
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 _IMAGE_DEADLINE_SECONDS = 180
@@ -47,7 +48,9 @@ def image_token_tariff(db: Session, route: OperationRoute) -> tuple[Decimal, Dec
         return None
     input_price = Decimal(str(price.input_price_per_1k or 0))
     output_price = Decimal(str(price.output_price_per_1k or 0))
-    if not all(value.is_finite() and value > 0 for value in (input_price, output_price)):
+    if not all(
+        value.is_finite() and value > 0 for value in (input_price, output_price)
+    ):
         return None
     multiplier = service_fee_multiplier(db)
     return input_price * multiplier, output_price * multiplier
@@ -139,6 +142,12 @@ async def run_billed_image(
         )
         if outcome == "replay" and isinstance(value, dict):
             return value
+        if outcome == "processing":
+            recovered = await recover_receipt(
+                db, user_id, client_request_id, auth, operation="image_generation"
+            )
+            if recovered is not None:
+                return recovered
         if outcome != "run":
             raise HTTPException(
                 409, {"message": "生图请求已提交或请求内容发生变化", "state": outcome}
@@ -207,30 +216,6 @@ async def run_billed_image(
             charge = money(
                 (usage.prompt_tokens * tariff[0] + usage.completion_tokens * tariff[1]) / 1000
             )
-            try:
-                await wallet.settle(auth, hold, charge, request_id)
-            except HTTPException as exc:
-                raise HTTPException(
-                    409,
-                    {
-                        "message": "图像已生成，钱包结算状态待核对",
-                        "request_id": request_id,
-                    },
-                ) from exc
-            db.add(
-                LlmCallLog(
-                    user_id=user_id,
-                    provider=route.provider,
-                    model=route.model,
-                    status="success",
-                    prompt_tokens=usage.prompt_tokens,
-                    completion_tokens=usage.completion_tokens,
-                    total_tokens=usage.total_tokens,
-                    estimated=False,
-                    charge_amount=charge,
-                    hold_no=hold.hold_no,
-                )
-            )
         receipt = {
             "ok": True,
             "images": result["images"],
@@ -240,8 +225,40 @@ async def run_billed_image(
             "billed": hold is not None,
             "charge_amount": str(charge),
             "usage": vars(usage) if usage else None,
+            "usage_details": reported_token_dimensions(
+                result.get("raw", {}).get("usage") if isinstance(result.get("raw"), dict) else None
+            ),
             "request_id": request_id,
+            "operation": "image_generation",
         }
+        if hold and tariff:
+            assert row is not None
+            receipt.update(
+                hold_no=hold.hold_no,
+                pricing={
+                    "currency": "CNY",
+                    "effective_input_per_1k": str(tariff[0]),
+                    "effective_output_per_1k": str(tariff[1]),
+                },
+            )
+            ledger.prepare_settlement(db, row, receipt)
+            try:
+                await wallet.settle(auth, hold, charge, request_id)
+            except HTTPException as exc:
+                if client_request_id:
+                    recovered = await recover_receipt(
+                        db, user_id, client_request_id, auth, operation="image_generation"
+                    )
+                    if recovered is not None:
+                        return recovered
+                raise HTTPException(
+                    409,
+                    {
+                        "message": "图像已生成，钱包结算状态待核对",
+                        "request_id": request_id,
+                    },
+                ) from exc
+            return complete_receipt(db, row, receipt)
         if row is not None:
             ledger.finish(db, row, receipt)
         return receipt
