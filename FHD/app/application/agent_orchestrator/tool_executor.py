@@ -406,6 +406,10 @@ class AgentToolExecutor:
             if denied is not None:
                 return denied
         params["_runtime_context"] = dict(runtime_context or {})
+        from app.application.agent_orchestrator.business_write_guard import owns_elt_step
+
+        if not owns_elt_step(params["_runtime_context"]):
+            params["_runtime_context"].pop("durable_elt_batch", None)
         if (
             validation.tool_id,
             validation.action,
@@ -625,6 +629,11 @@ def execute_with_tool_deadline(
         return {"success": False, "error_code": "invalid_tool_timeout", "retryable": False}
     started = time.monotonic()
     deadline = started + timeout
+    from app.application.agent_orchestrator.tool_timeouts import uses_elt_file_deadlines
+
+    file_deadlines = isinstance(executor, AgentToolExecutor) and uses_elt_file_deadlines(
+        step.tool_id, step.action, step.params or {}
+    )
     context = dict(runtime_context)
     context.update(
         {
@@ -664,7 +673,7 @@ def execute_with_tool_deadline(
         with tool_execution_slot(
             f"{step.tool_id}.{step.action}", tenant_id=str(tenant_id)
         ) as record_result:
-            with invocation_deadline(deadline) as invocation:
+            with invocation_deadline(math.inf if file_deadlines else deadline) as invocation:
                 result = (
                     bounded(step, runtime_context=context, deadline_monotonic=deadline)
                     if callable(bounded)
@@ -699,7 +708,7 @@ def execute_with_tool_deadline(
         }
     else:
         if (
-            time.monotonic() <= deadline
+            (file_deadlines or time.monotonic() <= deadline)
             and isinstance(result, dict)
             and not invocation.uncertain
             and (
@@ -733,13 +742,18 @@ def execute_with_tool_deadline(
                     result,
                 )
             return result
+    worker_exited = isinstance(result, dict) and result.get("error_code") == "tool_worker_exited"
     return {
         "success": False,
-        "error_code": "tool_timeout_unknown",
+        "error_code": "tool_worker_exited" if worker_exited else "tool_timeout_unknown",
         "reconciliation_evidence": result if isinstance(result, dict) else {},
         "io_reconciliation": list(invocation.uncertain),
         "outcome": "unknown",
         "retryable": False,
         "reconciliation_required": True,
-        "message": "工具超时，业务结果未知；必须核对原调用，不可自动重试",
+        "message": (
+            "工具进程已退出且未返回最终回执，请核对原任务的业务结果，勿重复提交。"
+            if worker_exited
+            else "工具超时，业务结果未知；必须核对原调用，不可自动重试"
+        ),
     }

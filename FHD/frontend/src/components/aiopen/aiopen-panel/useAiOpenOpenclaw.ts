@@ -4,7 +4,7 @@ import type { AiOpenPanelState } from './useAiOpenPanelState'
 
 // AIOpenPanel 的 OpenClaw HTTP / WebSocket 通道逻辑（与拆分前逐字一致）
 export function useAiOpenOpenclaw(state: AiOpenPanelState) {
-  const { panelAvailable, openclawBase, openclawMessage, openclawSending, openclawResult } = state
+  const { panelAvailable, clientMode, openclawBase, openclawMessage, openclawSending, openclawResult } = state
 
   const openclawWsUrl = ref('ws://localhost:28789/ws')
   const openclawWsAuthMode = ref('token')
@@ -15,7 +15,7 @@ export function useAiOpenOpenclaw(state: AiOpenPanelState) {
   let wsClient: WebSocket | null = null
 
   const saveOpenclawBase = async () => {
-    if (!panelAvailable.value) return
+    if (!panelAvailable.value || clientMode.value) return
     const result = await safeJsonRequest('/api/aiopen/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -25,6 +25,7 @@ export function useAiOpenOpenclaw(state: AiOpenPanelState) {
   }
 
   const sendToOpenclaw = async () => {
+    if (!panelAvailable.value || clientMode.value) return
     openclawSending.value = true
     openclawResult.value = ''
     try {
@@ -43,7 +44,7 @@ export function useAiOpenOpenclaw(state: AiOpenPanelState) {
   }
 
   const connectOpenclawWs = () => {
-    if (wsConnected.value || wsConnecting.value) return
+    if (!panelAvailable.value || clientMode.value || wsConnected.value || wsConnecting.value) return
     wsConnecting.value = true
     try {
       wsClient = new WebSocket(String(openclawWsUrl.value || '').trim())

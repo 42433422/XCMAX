@@ -546,11 +546,9 @@ class ModstorePlatformAdapter:
                 self._account_default = (connection, route)
         return route
 
-    async def _resolve_provider_model_async(
-        self, provider: str | None, model: str | None, connection: Connection
+    async def resolve_chat_route(
+        self, provider: str | None, model: str | None, connection: Connection | None = None
     ) -> tuple[str, str]:
-        if self._use_account_default and not provider and not model:
-            return await asyncio.to_thread(self.resolve_default_route, connection)
         return await asyncio.to_thread(
             self._resolve_provider_model, provider, model, connection=connection
         )
@@ -662,7 +660,7 @@ class ModstorePlatformAdapter:
         """
         connection = self._connection()
         authentication.validate_demo_destination(connection)
-        route = await self._resolve_provider_model_async(provider, model, connection)
+        route = await self.resolve_chat_route(provider, model, connection)
         source = streaming.stream_async(
             connection,
             route,

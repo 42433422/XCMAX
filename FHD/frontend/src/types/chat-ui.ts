@@ -41,6 +41,9 @@ export interface UiChatMessage {
   time: string
   /** Request turn shared with server history; independent of local display text. */
   turnId?: string
+  /** Owned workspace link from an observed server turn. */
+  recoveryTaskId?: string
+  serverMessageId?: number
   routeMetadata?: ChatModelRoute
   persistence?: {
     id: string
@@ -69,6 +72,8 @@ export interface UiChatMessage {
   streamingShell?: boolean
   /** 请求生命周期独立于正文是否已经开始输出；仅当前会话使用，不落库。 */
   streamStatus?: ChatStatus
+  /** 本轮流式请求的开始时间（毫秒），随进行中的消息保留在内存中。 */
+  streamStartedAt?: number
   /** Heartbeat / idle copy while the shell is still waiting for visible text. */
   waitingHint?: string
   toolProgressLabel?: string
@@ -96,6 +101,7 @@ export interface UiChatMessage {
     idempotencyKey: string
     intent: string
     committed: boolean
+    confirmable?: boolean
     effect: 'none' | 'preview' | 'partial' | 'committed' | string
     /** 后端显式执行结论：未执行 / 部分成功 / 结果未知。 */
     outcome?: 'not_executed' | 'partial' | 'unknown' | 'succeeded' | string

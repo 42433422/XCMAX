@@ -68,6 +68,14 @@ def _message_row(message: AIConversation) -> dict[str, Any]:
     }
 
 
+def _message_suffix(db: Any, session_id: str, user_id: int, message_id: int):
+    return db.query(AIConversation).filter(
+        AIConversation.session_id == session_id,
+        AIConversation.user_id == str(user_id),
+        AIConversation.id >= message_id,
+    )
+
+
 class TaskConversationStore:
     """Persist task chat turns without allowing cross-user session access."""
 
@@ -83,6 +91,9 @@ class TaskConversationStore:
         client_message_id: str = "",
         expected_revision: int | None = None,
     ) -> int:
+        from app.application.ai_chat.conversation_history import strip_client_recall_binding
+
+        metadata = strip_client_recall_binding(metadata)
         now = datetime.now()
         with get_db() as db:
             begin_conversation_write(db)
@@ -262,6 +273,19 @@ class TaskConversationStore:
     ) -> dict[str, Any]:
         page = self.get_conversation(session_id=session_id, user_id=user_id, **pagination)
         session = page.pop("session")
+        active_turn = None
+        if isinstance(session, dict) and type(session.get("revision")) is int:
+            from app.application.elt.batch_continuation import active_batch_turn
+            from app.infrastructure.tenant_scope import current_tenant_id
+
+            active_turn = active_batch_turn(
+                owner=str(user_id),
+                tenant=str(current_tenant_id() or ""),
+                mod=mod_id,
+                session=session_id,
+                revision=session["revision"],
+                turn_id=pagination.get("turn_id"),
+            )
         return {
             "success": True,
             "id": session_id,
@@ -269,6 +293,7 @@ class TaskConversationStore:
             "revision": session.get("revision") if isinstance(session, dict) else None,
             "mod_id": mod_id,
             **page,
+            **({"active_turn": active_turn} if active_turn else {}),
             "metadata": {},
             "durable": True,
         }
@@ -394,32 +419,39 @@ class TaskConversationStore:
             db.commit()
             return previous is not None
 
-    def delete_messages_from(self, *, session_id: str, user_id: int, message_id: int) -> int:
+    def recall_snapshot(
+        self, *, session_id: str, user_id: int, message_id: int
+    ) -> tuple[int, list[dict[str, Any]]]:
+        with get_db() as db:
+            session = lock_conversation_session(db, session_id=session_id, user_id=user_id)
+            suffix = _message_suffix(db, session_id, user_id, message_id)
+            rows = suffix.order_by(AIConversation.id).limit(1001).all()
+            if not rows or rows[0].id != message_id or rows[0].role != "user":
+                raise PermissionError("只能撤回当前会话中自己发送的消息")
+            if len(rows) > 1000:
+                raise ConversationRevisionError("撤回范围过大，请从更近的消息开始")
+            return int(session.revision or 0), [_message_row(row) for row in rows]
+
+    def delete_messages_from(
+        self, *, session_id: str, user_id: int, message_id: int,
+        expected_revision: int | None = None, expected_ids: tuple[int, ...] | None = None,
+    ) -> int:
         """Withdraw a user turn and fence every completion based on the old transcript."""
         with get_db() as db:
             begin_conversation_write(db)
-            session = lock_conversation_session(db, session_id=session_id, user_id=user_id)
-            target = (
-                db.query(AIConversation)
-                .filter(
-                    AIConversation.id == message_id,
-                    AIConversation.session_id == session_id,
-                    AIConversation.user_id == str(user_id),
-                )
-                .first()
+            session = lock_conversation_session(
+                db, session_id=session_id, user_id=user_id, expected_revision=expected_revision,
             )
-            if target is None:
-                raise PermissionError("message does not belong to this conversation")
-            if target.role != "user":
+            suffix = _message_suffix(db, session_id, user_id, message_id)
+            target = suffix.filter(AIConversation.id == message_id).first()
+            if target is None or target.role != "user":
                 raise PermissionError("only user messages can be withdrawn")
-            deleted = (
-                db.query(AIConversation)
-                .filter(
-                    AIConversation.session_id == session_id,
-                    AIConversation.id >= int(message_id),
-                )
-                .delete(synchronize_session=False)
-            )
+            if expected_ids is not None:
+                current = tuple(row.id for row in suffix.with_entities(AIConversation.id)
+                                .order_by(AIConversation.id).limit(len(expected_ids) + 1))
+                if current != expected_ids:
+                    raise ConversationRevisionError("会话已有新消息，撤回范围已变更")
+            deleted = suffix.delete(synchronize_session=False)
             session.revision += 1
             session.message_count = (
                 db.query(AIConversation).filter(AIConversation.session_id == session_id).count()

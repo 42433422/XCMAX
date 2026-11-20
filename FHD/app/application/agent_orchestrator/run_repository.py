@@ -52,6 +52,8 @@ class AgentRunRepository(Protocol):
 
     def list_task_runs(self, *, user_id: str, task_id: str) -> list[AgentRun]: ...
 
+    def list_task_runs_for_user(self, *, user_id: str) -> list[AgentRun]: ...
+
     def list_run_scopes(self, *, user_id: str) -> dict[str, list[tuple[str, str, str]]]: ...
 
     def storage_identity(self) -> object: ...
@@ -223,6 +225,11 @@ class InMemoryAgentRunRepository:
             ]
         runs.sort(key=lambda run: (run.created_at, run.run_id))
         return runs
+
+    def list_task_runs_for_user(self, *, user_id: str) -> list[AgentRun]:
+        wanted_user = str(user_id or "")
+        with self._lock:
+            return [copy.deepcopy(run) for run in self._runs.values() if run.user_id == wanted_user]
 
     def list_run_scopes(self, *, user_id: str) -> dict[str, list[tuple[str, str, str]]]:
         """One pass over the principal's runs for list filtering (no full run hydration)."""

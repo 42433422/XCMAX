@@ -17,6 +17,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 from .llm_plan_generation import LlmPlanGeneration, PlannerCompletion, PlannerConversation
 from .model_response_metrics import model_response_scope, record_response_error
 from .planner_llm_gateway import planner_max_tokens, request_planner_completion
+from .planner_prompt_profile import attachment_import_manifest
 from .planning_graph_policy import apply_clarification, validate_required_params
 from .planning_graph_policy import (
     filter_registry_for_profile as _filter_tool_registry_for_profile,
@@ -26,6 +27,81 @@ from .workflow_types import PlanGraph, WorkflowNode, plan_fingerprint, validate_
 
 logger = logging.getLogger(__name__)
 _planner_http_client: httpx.Client | None = None
+
+
+def _standalone_question(plan: PlanGraph) -> str | None:
+    """Display the model's question without parking an unbound execution plan."""
+    if len(plan.nodes) != 1:
+        return None
+    node = plan.nodes[0]
+    question = node.params.get("question")
+    if (
+        (node.tool_id, node.action) != ("clarify", "ask")
+        or set(node.params) - {"question", "answer_key", "target_node_id"}
+        or node.params.get("target_node_id") not in (None, "")
+        or not isinstance(question, str)
+        or not 0 < len(question.strip()) <= 12_000
+        or node.depends_on
+        or node.next is not None
+        or node.branches
+    ):
+        return None
+    return question.strip()
+
+
+def _clarification_reply(plan_id: str, question: str) -> PlanGraph:
+    return PlanGraph(
+        plan_id=plan_id,
+        intent="conversation_reply",
+        nodes=[
+            WorkflowNode(
+                node_id="model_reply",
+                tool_id="conversation",
+                action="reply",
+                params={"response": question},
+                idempotent=True,
+            )
+        ],
+        metadata={"planner": "llm", "response_mode": "reply", "reply": question},
+    )
+
+
+def _bind_attachment_batch(plan: PlanGraph, files: list[str]) -> bool:
+    """Bind the model's import action to the current verified attachment selection."""
+    nodes = plan.nodes
+    scope = set(files)
+    selected: set[str] = set()
+    if not nodes or len(scope) != len(files):
+        return False
+    for node in nodes:
+        if (
+            (node.tool_id, node.action) != ("elt_import", "execute")
+            or node.depends_on
+            or node.next is not None
+            or node.branches
+            or set(node.params) - {"file_paths", "valid_rows_only", "accept_suggested"}
+        ):
+            return False
+        paths = node.params.get("file_paths")
+        if paths is None and len(nodes) == 1:
+            break
+        if not isinstance(paths, list) or not all(
+            isinstance(path, str) and path in scope for path in paths
+        ):
+            return False
+        selected.update(paths)
+    else:
+        if selected != scope:
+            return False
+    # This direct request supplies a file scope, without skipping invalid rows
+    # or accepting suggested mappings on the user's behalf.
+    node = nodes[0]
+    node.params = {"file_paths": files.copy()}
+    if len(nodes) > 1:
+        plan.nodes = [node]
+        node.description = "导入本轮全部附件"
+        plan.todo_steps = [node.description]
+    return True
 
 
 def _get_planner_http_client() -> httpx.Client:
@@ -81,6 +157,7 @@ class LLMWorkflowPlanner:
         from app.application.workflow.sql_execution_policy import rejected_sql_plan
 
         context = dict(context or {})
+        context.pop("_planning_failure_code", None)
         for key in (
             "planning_failure_reason",
             "planning_failure_kind",
@@ -88,6 +165,7 @@ class LLMWorkflowPlanner:
             "goal_coverage_rejected",
         ):
             context.pop(key, None)
+        context.pop("prior_conversation", None)
         session_key = str(context.get("session_id") or context.get("conversation_id") or "").strip()
         plan_id = (
             f"wp-{session_key}-{uuid.uuid4().hex[:8]}" if session_key else f"wp-{uuid.uuid4().hex}"
@@ -160,6 +238,7 @@ class LLMWorkflowPlanner:
         from app.application.workflow.workflow_types import normalize_workflow_risk
         from app.domain.neuro.cognition.plan_graph_hooks import finalize_planned_graph
 
+        batch_files = attachment_import_manifest(message, context) or []
         reviewed_fingerprint: str | None = None
 
         def validate_candidate(candidate: PlanGraph) -> str | None:
@@ -168,6 +247,10 @@ class LLMWorkflowPlanner:
                 and plan_fingerprint(candidate) != reviewed_fingerprint
             ):
                 return "目标核对后的计划发生变化，必须重新核对"
+            if len(batch_files) > 1 and not _bind_attachment_batch(candidate, batch_files):
+                return (
+                    "本轮批量导入须用一个 elt_import.execute 节点，file_paths 按附件清单逐项列出。"
+                )
             if (candidate.metadata or {}).get("response_mode") == "reply":
                 reply_nodes = [
                     node
@@ -248,15 +331,24 @@ class LLMWorkflowPlanner:
                     context["planning_failure_reason"] = str(errors[-1].get("message") or "")
                 logger.warning("计划修复未成功，本轮不执行: %s", repair_trace.get("errors"))
         if planned is not None and planned.metadata.get("planning_tier") != "light":
+            from app.application.ai_chat.dialogue_memory import recent_conversation_messages
+
             from .goal_coverage import review_goal_coverage
 
             # Review the final, repaired graph, never the planner's own claim of completeness.
             # One full replan is allowed before execution; the old graph is not resumed.
             for attempt in range(2):
+                if question := _standalone_question(planned):
+                    planned = _clarification_reply(plan_id, question)
+                    break
                 with model_rate_limit_scope(context), model_response_scope():
                     try:
+                        review_context = {
+                            **context,
+                            "prior_conversation": recent_conversation_messages(context, limit=12),
+                        }
                         review, error = review_goal_coverage(
-                            planned, message, context, self.complete_messages
+                            planned, message, review_context, self.complete_messages
                         )
                     except RECOVERABLE_ERRORS:
                         review, error = None, "目标覆盖核对暂不可用，本轮未执行任何操作"
@@ -264,6 +356,11 @@ class LLMWorkflowPlanner:
                 if error is None and review is not None:
                     planned.metadata["goal_coverage"] = review.model_dump()
                     context.pop("goal_coverage_rejected", None)
+                    break
+                if review is not None and review.violations and review.clarification_question:
+                    planned = _clarification_reply(plan_id, review.clarification_question)
+                    context.pop("goal_coverage_rejected", None)
+                    context.pop("planning_failure_reason", None)
                     break
                 context["planning_failure_reason"] = str(error or "目标核对未完成")
                 context["planning_failure_kind"] = "goal_coverage_rejected"

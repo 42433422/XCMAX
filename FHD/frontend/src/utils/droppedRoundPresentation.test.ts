@@ -36,6 +36,7 @@ describe('droppedRoundPresentation', () => {
     [{ summary: { success: false, status: 'completed' } }, 'failed'],
     [{ summary: { success: true, status: 'running' } }, 'running'],
     [{ summary: { success: true, status: 'unknown' } }, 'unknown'],
+    [{ summary: { success: false, status: 'unknown' } }, 'unknown'],
     [{ ui: { workflowAction: 'completed' } }, 'unknown'],
     [{}, 'unknown'],
   ])('requires a server outcome rather than text or a client completion label', (metadata, status) => {

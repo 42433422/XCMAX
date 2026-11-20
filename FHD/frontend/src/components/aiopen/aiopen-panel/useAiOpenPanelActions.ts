@@ -1,11 +1,14 @@
+import { watch } from 'vue'
 import { safeJsonRequest } from '@/utils/safeJsonRequest'
-import { AIOPEN_MCP_SERVER_NAME, markAiopenClientInstalled, readAiopenInstalledClients, unmarkAiopenClientInstalled } from '@/utils/aiopenMcpInstall'
+import { captureAuthSession, getAuthSessionEpoch } from '@/utils/authSessionCache'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
+import { AIOPEN_MCP_SERVER_NAME, buildAiopenOneLiner, markAiopenClientInstalled, readAiopenInstalledClients, unmarkAiopenClientInstalled } from '@/utils/aiopenMcpInstall'
 import type { AiMcpClientInstall } from '@/utils/aiopenMcpInstall'
 import type { AiOpenPanelState, AiopenInstallPayload, AiopenManifestPayload, AiopenPanelPayload, AiopenWhitelistRoute } from './useAiOpenPanelState'
 
 type PanelResult = AiopenPanelPayload & { success?: boolean }
 type ManifestProbePayload = { success?: boolean; server?: string; tool_count?: number }
-type KeyResultPayload = { success?: boolean; key?: string }
+type KeyResultPayload = { success?: boolean; key?: string; expires_at?: number }
 type SeedResultPayload = { routes?: AiopenWhitelistRoute[]; enabled_count?: number }
 type LoopVerifyPayload = { closed_loop?: boolean; success?: boolean; hint?: string }
 
@@ -14,7 +17,6 @@ type CheckEvent = Event | { target?: { checked?: boolean } | null }
 const eventChecked = (event: CheckEvent | undefined): boolean =>
   Boolean((event?.target as { checked?: boolean } | null)?.checked)
 
-// AIOpenPanel 的加载 / 拷贝 / 口令 / 开关 / 白名单逻辑（与拆分前逐字一致）
 export function useAiOpenPanelActions(state: AiOpenPanelState, options: { setCursorEnabled: (value: boolean) => void }) {
   const {
     TOOL_LABELS,
@@ -28,6 +30,9 @@ export function useAiOpenPanelActions(state: AiOpenPanelState, options: { setCur
     accessResult,
     panelError,
     panelAvailable,
+    clientMode,
+    hasActiveClientKey,
+    keyRunning,
     manifestTools,
     setupRunning,
     shutdownRunning,
@@ -40,27 +45,25 @@ export function useAiOpenPanelActions(state: AiOpenPanelState, options: { setCur
     installedClientIds,
     selectedClientId,
     stdioScriptPath,
-    oneLinerCopied,
     openclawBase,
-    guideUrl,
+    reachableOrigin,
+    consoleUrl,
     activeKey,
     hasConnectConfig,
-    aiAssistantPrompt,
-    oneLinerText,
     aiOpenActive,
     aiClients,
     selectedClient,
   } = state
   const { setCursorEnabled } = options
+  let copyCredential: { key: string; expiresAt: number } | undefined
 
   const refreshInstalledClients = () => {
     installedClientIds.value = readAiopenInstalledClients()
   }
 
   const loadInstallBundle = async () => {
-    const qs = activeKey.value ? `?key=${encodeURIComponent(activeKey.value)}` : ''
     try {
-      const result = await safeJsonRequest<AiopenInstallPayload>(`/api/aiopen/install${qs}`)
+      const result = await safeJsonRequest<AiopenInstallPayload>('/api/aiopen/install')
       if (result.ok && result.data?.success) {
         installBundle.value = result.data
         stdioScriptPath.value = String(result.data?.methods?.stdio?.script_path || '')
@@ -73,7 +76,6 @@ export function useAiOpenPanelActions(state: AiOpenPanelState, options: { setCur
       success: true,
       tool_count: manifestTools.value.length,
       server_name: AIOPEN_MCP_SERVER_NAME,
-      clients: aiClients.value,
     }
   }
 
@@ -127,83 +129,85 @@ export function useAiOpenPanelActions(state: AiOpenPanelState, options: { setCur
   }
 
   const installForClient = async (client: AiMcpClientInstall) => {
-    if (!client) return
-    if (!hasConnectConfig.value && panelAvailable.value) await createKey()
-    await loadInstallBundle()
+    if (!client || !await copyClientConfig(client.id)) return
     selectedClientId.value = client.id
-
-    if (client.installMode === 'deeplink' && client.installUrl) {
-      window.location.href = client.installUrl
-      window.setTimeout(() => {
-        if (document.visibilityState === 'visible' && client.installFallbackUrl) {
-          window.open(client.installFallbackUrl, '_blank', 'noopener,noreferrer')
-        }
-      }, 1200)
-      markAiopenClientInstalled(client.id)
-      refreshInstalledClients()
-      accessResult.value = `${client.name}：已打开安装链接；若未跳转请允许弹窗或复制 JSON`
-      return
-    }
-
-    if (client.installMode === 'vscode' && client.installUrl) {
-      window.location.href = client.installUrl
-      markAiopenClientInstalled(client.id)
-      refreshInstalledClients()
-      accessResult.value = `${client.name}：已打开 VS Code 安装；未跳转请复制 JSON 手动添加`
-      return
-    }
-
-    await copyText(client.mcpJson)
     markAiopenClientInstalled(client.id)
     refreshInstalledClients()
     accessResult.value = `${client.name} 配置已复制 · 粘贴到 ${client.configPath}`
   }
 
-  const copyClientConfig = (clientId: string) => {
+  const copyClientConfig = async (clientId: string) => {
+    if (!panelAvailable.value || keyRunning.value) return false
+    const isCurrent = captureAuthSession()
+    if (!activeKey.value) {
+      if (clientMode.value && hasActiveClientKey.value) {
+        accessResult.value = '当前口令无法再次显示。需要新配置时，请先点「重新生成口令」。'
+        return false
+      }
+      if (!await createKey() || !isCurrent()) return false
+    }
     const client = aiClients.value.find((c) => c.id === clientId) || selectedClient.value
-    if (client) copyText(client.mcpJson)
+    return client ? copyText(client.mcpJson) : false
   }
 
   const formatPanelError = (result: { status?: number; message?: string }) => {
+    if (result.status === 401) return '请登录 XCAGI 后刷新状态'
+    if (result.status === 403) return result.message || '当前账号无法使用 AIOPEN'
     if (result.status === 404) return '后端未就绪（路由未生效，请重启服务）'
     if (result.status === 502 || result.status === 500) {
-      return '后端未启动（:5100）· 下方 AI 配置仍可用，启动后点刷新'
+      return '后端未启动或暂不可用，请稍后刷新状态'
     }
     if (result.message?.includes('未返回JSON')) {
-      return '后端未启动（:5100）· 下方 AI 配置仍可用，启动后点刷新'
+      return '后端未启动或暂不可用，请稍后刷新状态'
     }
     return result.message || '无法连接后端'
   }
 
   const loadPanel = async () => {
+    const isCurrent = captureAuthSession()
     panelError.value = ''
     accessResult.value = ''
     try {
-      const result = await safeJsonRequest<PanelResult>('/api/aiopen/panel')
-      if (result.ok && result.data?.success) {
+      const admin = await safeJsonRequest<PanelResult>('/api/aiopen/panel')
+      const result = admin.status === 403 ? await safeJsonRequest<PanelResult>('/api/aiopen/client') : admin
+      if (!isCurrent()) return
+      if (result.ok && result.data?.success && (admin.status !== 403 || result.data.client_mode === true)) {
+        clientMode.value = result.data.client_mode === true
+        hasActiveClientKey.value = clientMode.value && result.data.has_active_key === true
+        if (clientMode.value && !hasActiveClientKey.value) {
+          copyCredential = undefined
+          newKey.value = ''
+        }
         panelAvailable.value = true
-        wechatOpen.value = Boolean(result.data.wechat_open)
-        routes.value = Array.isArray(result.data.routes) ? result.data.routes : []
+        wechatOpen.value = !clientMode.value && Boolean(result.data.wechat_open)
+        routes.value = !clientMode.value && Array.isArray(result.data.routes) ? result.data.routes : []
         openclawBase.value = String(result.data.openclaw_base || 'http://localhost:28789')
         remoteControlEnabled.value = Boolean(result.data.remote_control_enabled)
         keys.value = Array.isArray(result.data.keys) ? result.data.keys : []
       } else {
         panelAvailable.value = false
+        copyCredential = undefined
+        newKey.value = ''
         panelError.value = formatPanelError(result)
         routes.value = []
       }
     } catch {
+      if (!isCurrent()) return
       panelAvailable.value = false
-      panelError.value = '无法连接后端（:5100）· 下方 AI 配置仍可用'
+      copyCredential = undefined
+      newKey.value = ''
+      panelError.value = '无法连接后端，请稍后刷新状态'
       routes.value = []
     }
-    try {
+    usage.value = null
+    usageRecent.value = []
+    if (panelAvailable.value && !clientMode.value) try {
       const usageResult = await safeJsonRequest<{
         success?: boolean
         summary?: Record<string, unknown>
         recent?: Array<Record<string, unknown>>
       }>('/api/aiopen/usage?days=7&recent=10')
-      if (usageResult.ok && usageResult.data?.success) {
+      if (isCurrent() && usageResult.ok && usageResult.data?.success) {
         usage.value = usageResult.data.summary || null
         usageRecent.value = Array.isArray(usageResult.data.recent) ? usageResult.data.recent : []
       }
@@ -221,58 +225,118 @@ export function useAiOpenPanelActions(state: AiOpenPanelState, options: { setCur
         description: TOOL_LABELS[name].desc,
       }))
     }
-    await loadInstallBundle()
-    await probeMcpHealth()
+    if (isCurrent()) {
+      await loadInstallBundle()
+      await probeMcpHealth()
+    }
   }
+
+  watch([getAuthSessionEpoch, productReadAccountEpoch], () => {
+    copyCredential = undefined
+    newKey.value = ''
+    keys.value = []
+    hasActiveClientKey.value = false
+    panelAvailable.value = false
+    void loadPanel()
+  }, { flush: 'sync' })
 
   const copyText = async (text: string) => {
     try {
-      await navigator.clipboard.writeText(text)
+      if (window.xcagiDesktop?.clipboardWriteText) {
+        if (!(await window.xcagiDesktop.clipboardWriteText(text)).ok) throw new Error('copy failed')
+      } else {
+        await navigator.clipboard.writeText(text)
+      }
       accessResult.value = '已复制'
+      return true
     } catch {
-      accessResult.value = '复制失败，请手动复制'
+      accessResult.value = '写入剪贴板失败，请再点一次「复制一句话」'
+      return false
     }
   }
 
   const copyOneLiner = async () => {
-    // 面板里可能已有历史 Key，但拿不到明文；复制时若无本次生成的 Key 就补一个，
-    // 否则这句话交给 AI 后没有连接口令，接入会 401。
-    if (!activeKey.value && panelAvailable.value) await createKey()
-    await copyText(oneLinerText.value)
-    try { localStorage.setItem('aiopen_oneliner_copied', '1') } catch { /* ignore */ }
-    oneLinerCopied.value = true
-    markAiopenClientInstalled('generic')
-    refreshInstalledClients()
-    accessResult.value = '一句话已复制 · 粘贴到 ChatGPT / Claude / Kimi 对话框'
+    if (!panelAvailable.value || keyRunning.value) return
+    const isCurrent = captureAuthSession()
+    keyRunning.value = true
+    try {
+      if (!copyCredential || copyCredential.expiresAt <= Date.now() / 1000) {
+        const result = await safeJsonRequest<KeyResultPayload>('/api/aiopen/client/key?keep_existing=true', { method: 'POST' })
+        if (!isCurrent()) return
+        const key = result.data?.key?.trim()
+        const expiresAt = result.data?.expires_at
+        if (!result.ok || !result.data?.success || !key || !expiresAt) {
+          accessResult.value = result.message || '未取得连接口令，请刷新状态后重试'
+          return
+        }
+        copyCredential = { key, expiresAt }
+        hasActiveClientKey.value = true
+      }
+      const text = buildAiopenOneLiner(reachableOrigin.value, consoleUrl.value, copyCredential.key)
+      if (await copyText(text) && isCurrent()) {
+        accessResult.value = '一句话已复制 · 粘贴给本机 AI 助手即可接入'
+      }
+    } catch {
+      if (isCurrent()) accessResult.value = '生成连接口令失败，请刷新状态后重试'
+    } finally {
+      keyRunning.value = false
+    }
   }
-
-  const copyAiAssistantPrompt = async () => {
-    if (!activeKey.value && panelAvailable.value) await createKey()
-    await loadInstallBundle()
-    await copyText(aiAssistantPrompt.value)
-    accessResult.value = '已复制配置话术 · 粘贴到任意 AI 助手对话框'
-  }
-
-  const copyCursorConfig = () => copyClientConfig(selectedClientId.value)
-  const copyGuideUrl = () => copyText(guideUrl.value)
-  const copyGuidePrompt = () => copyAiAssistantPrompt()
 
   const createKey = async () => {
     if (!panelAvailable.value) {
-      accessResult.value = '开发模式可暂不配口令'
-      return
+      accessResult.value = panelError.value || '登录并刷新状态后可获取口令'
+      return false
     }
-    const result = await safeJsonRequest<KeyResultPayload>('/api/aiopen/keys', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ label: '面板' }),
-    })
-    if (result.ok && result.data?.success) {
-      newKey.value = String(result.data.key || '')
-      accessResult.value = '口令已生成，可选 AI 软件安装'
-      await loadPanel()
-    } else {
-      accessResult.value = result.message || '生成失败'
+    if (keyRunning.value) return false
+    const isCurrent = captureAuthSession()
+    const client = clientMode.value
+    keyRunning.value = true
+    try {
+      const result = await safeJsonRequest<KeyResultPayload>(client ? '/api/aiopen/client/key' : '/api/aiopen/keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(client ? {} : { label: '面板' }),
+      })
+      if (!isCurrent()) return false
+      const key = result.data?.key?.trim()
+      if (result.ok && result.data?.success && key) {
+        newKey.value = key
+        if (client) {
+          copyCredential = undefined
+          hasActiveClientKey.value = true
+        }
+        accessResult.value = '口令已生成，可以复制所选客户端的配置'
+        return true
+      }
+      accessResult.value = result.message || '未取得连接口令'
+    } catch {
+      if (isCurrent()) accessResult.value = '生成口令失败，请刷新状态'
+    } finally {
+      keyRunning.value = false
+    }
+    return false
+  }
+
+  const revokeClientKey = async () => {
+    if (!panelAvailable.value || keyRunning.value) return
+    const isCurrent = captureAuthSession()
+    keyRunning.value = true
+    try {
+      const result = await safeJsonRequest<KeyResultPayload>('/api/aiopen/client/key', { method: 'DELETE' })
+      if (!isCurrent()) return
+      if (result.ok && result.data?.success) {
+        copyCredential = undefined
+        if (clientMode.value) newKey.value = ''
+        hasActiveClientKey.value = false
+        accessResult.value = '本账号的连接口令已撤销'
+      } else {
+        accessResult.value = result.message || '撤销口令失败'
+      }
+    } catch {
+      if (isCurrent()) accessResult.value = '撤销口令失败，请刷新状态'
+    } finally {
+      keyRunning.value = false
     }
   }
 
@@ -281,19 +345,10 @@ export function useAiOpenPanelActions(state: AiOpenPanelState, options: { setCur
     setupRunning.value = true
     accessResult.value = ''
     try {
-      if (panelAvailable.value) {
-        const ctl = await safeJsonRequest('/api/aiopen/control', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ enabled: true }),
-        })
-        if (ctl.ok) remoteControlEnabled.value = true
-        if (!hasConnectConfig.value) await createKey()
-      } else {
-        remoteControlEnabled.value = true
-      }
+      if (!panelAvailable.value || (!clientMode.value && !await setRemoteControl(true))) return
       setCursorEnabled(true)
-      accessResult.value = '已开启！选择上方 AI 软件完成 MCP 配置'
+      const ready = clientMode.value || hasConnectConfig.value || await createKey()
+      if (ready) accessResult.value = clientMode.value ? '本页已开启待命' : '已开启智控，可选择 AI 软件配置 MCP'
     } finally {
       setupRunning.value = false
     }
@@ -303,16 +358,9 @@ export function useAiOpenPanelActions(state: AiOpenPanelState, options: { setCur
     shutdownRunning.value = true
     accessResult.value = ''
     try {
-      remoteControlEnabled.value = false
+      if (!panelAvailable.value || (!clientMode.value && !await setRemoteControl(false))) return
       setCursorEnabled(false)
-      if (panelAvailable.value) {
-        await safeJsonRequest('/api/aiopen/control', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ enabled: false }),
-        })
-      }
-      accessResult.value = '已关闭开放智控'
+      accessResult.value = clientMode.value ? '本页已关闭待命' : '已关闭开放智控'
     } finally {
       shutdownRunning.value = false
     }
@@ -327,9 +375,9 @@ export function useAiOpenPanelActions(state: AiOpenPanelState, options: { setCur
   }
 
   const toggleWhitelist = async (path: string, event: CheckEvent) => {
+    if (!panelAvailable.value || clientMode.value) return
     const enabled = eventChecked(event)
     routes.value = routes.value.map((item) => (item.path === path ? { ...item, enabled } : item))
-    if (!panelAvailable.value) return
     await safeJsonRequest('/api/aiopen/whitelist', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -338,7 +386,7 @@ export function useAiOpenPanelActions(state: AiOpenPanelState, options: { setCur
   }
 
   const seedFullWhitelist = async () => {
-    if (!panelAvailable.value) return
+    if (!panelAvailable.value || clientMode.value) return
     seedRunning.value = true
     loopResultText.value = ''
     try {
@@ -359,7 +407,7 @@ export function useAiOpenPanelActions(state: AiOpenPanelState, options: { setCur
   }
 
   const verifyCapabilityLoop = async () => {
-    if (!panelAvailable.value) return
+    if (!panelAvailable.value || clientMode.value) return
     loopRunning.value = true
     loopResultText.value = ''
     try {
@@ -382,8 +430,8 @@ export function useAiOpenPanelActions(state: AiOpenPanelState, options: { setCur
   }
 
   const toggleWechat = async (event: CheckEvent) => {
+    if (!panelAvailable.value || clientMode.value) return
     wechatOpen.value = eventChecked(event)
-    if (!panelAvailable.value) return
     await safeJsonRequest('/api/ai/qclaw/wechat-gateway', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -391,14 +439,31 @@ export function useAiOpenPanelActions(state: AiOpenPanelState, options: { setCur
     })
   }
 
+  const setRemoteControl = async (enabled: boolean) => {
+    if (!panelAvailable.value || clientMode.value) return false
+    const isCurrent = captureAuthSession()
+    try {
+      const result = await safeJsonRequest<KeyResultPayload>('/api/aiopen/control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled }),
+      })
+      if (!isCurrent()) return false
+      if (result.ok && result.data?.success !== false) {
+        remoteControlEnabled.value = enabled
+        return true
+      }
+      accessResult.value = result.message || '更新智控开关失败'
+    } catch {
+      if (isCurrent()) accessResult.value = '更新智控开关失败'
+    }
+    return false
+  }
+
   const toggleRemoteControl = async (event: CheckEvent) => {
-    remoteControlEnabled.value = eventChecked(event)
-    if (!panelAvailable.value) return
-    await safeJsonRequest('/api/aiopen/control', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ enabled: remoteControlEnabled.value }),
-    })
+    if (!await setRemoteControl(eventChecked(event)) && event.target instanceof HTMLInputElement) {
+      event.target.checked = remoteControlEnabled.value
+    }
   }
 
   const toggleScreenSession = (event: CheckEvent) => {
@@ -413,16 +478,11 @@ export function useAiOpenPanelActions(state: AiOpenPanelState, options: { setCur
     resetClientSelection,
     handleClientClick,
     installForClient,
-    copyClientConfig,
     formatPanelError,
     loadPanel,
-    copyText,
     copyOneLiner,
-    copyAiAssistantPrompt,
-    copyCursorConfig,
-    copyGuideUrl,
-    copyGuidePrompt,
     createKey,
+    revokeClientKey,
     quickSetup,
     shutdownAiOpen,
     handlePrimaryAction,

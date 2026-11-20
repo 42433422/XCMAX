@@ -425,6 +425,48 @@ def test_auto_approval_waits_for_user_decision_without_reporting_failure():
     assert "审批已取消" not in reply["response"]
 
 
+def test_auto_approval_reports_partial_elt_writes_from_the_saved_run():
+    from contextlib import nullcontext
+
+    session = WorkflowSession({}, Mock(spec=SessionCallbacks))
+    db = Mock()
+    run = AgentRun(user_id="7", message="导入")
+    step = AgentStep(node_id="import", tool_id="elt_import", action="execute")
+    run.steps = [step]
+    saved = SimpleNamespace(
+        steps=[
+            SimpleNamespace(
+                tool_id="elt_import",
+                action="execute",
+                status="failed",
+                output={"message": "完成 1 份，已确认写入 3 行", "data": {"executed_rows": 3}},
+            )
+        ]
+    )
+    with (
+        patch("app.db.session.get_db", lambda: nullcontext(db)),
+        patch(
+            "app.application.approval_workspace_app_service._approve_ai_workflow_request_without_node",
+            return_value={"success": False, "data": {"workflow_execution": {"nodes_executed": 0}}},
+        ),
+        patch("app.application.agent_orchestrator.AgentOrchestrator") as orchestrator,
+    ):
+        orchestrator.return_value.get_run.return_value = saved
+        reply = session._auto_approve_waiting_request(
+            request_id="req-elt",
+            user_id="7",
+            runtime_context={"actor_id": 7},
+            plan=_plan(),
+            agent_run=run,
+        )
+    assert "已确认写入 3 行" in reply["response"]
+    assert reply["data"]["data"]["execution"] == {
+        "committed": True,
+        "effect": "partial",
+        "outcome": "partial",
+    }
+
+
 def test_auto_approval_reply_includes_generated_file_download_url():
     from contextlib import contextmanager
 
@@ -547,11 +589,25 @@ def test_history_persists_summary_only_tool_business_result() -> None:
 
 
 @pytest.mark.parametrize("as_response", [False, True])
-def test_auto_approval_uses_authenticated_actor_and_executes_in_same_turn(as_response):
+@pytest.mark.parametrize(
+    ("tool_id", "action"),
+    [
+        ("products", "query"),
+        ("shipment_records", "clear"),
+        ("dataset_rag", "clear_dataset"),
+        ("document_template", "clear"),
+        ("materials", "batch_delete"),
+    ],
+)
+def test_auto_approval_uses_authenticated_actor_and_executes_in_same_turn(
+    as_response, tool_id, action
+):
     from contextlib import contextmanager
 
     callbacks = Mock(spec=SessionCallbacks)
     session = WorkflowSession({}, callbacks)
+    plan = _plan()
+    plan.nodes = [WorkflowNode(node_id="selected", tool_id=tool_id, action=action)]
     db = Mock()
     db.query.return_value.filter.return_value.first.return_value = Mock()
 
@@ -575,7 +631,7 @@ def test_auto_approval_uses_authenticated_actor_and_executes_in_same_turn(as_res
             request_id="req-auto",
             user_id="chat:scoped-conversation",
             runtime_context={"actor_id": 7, "user_id": "7"},
-            plan=_plan(),
+            plan=plan,
             agent_run=AgentRun(user_id="7", message="清理知识库"),
         )
 

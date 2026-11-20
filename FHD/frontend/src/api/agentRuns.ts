@@ -185,7 +185,7 @@ export interface AgentTaskProgress {
   status: string
   attempt: number
   indeterminate: boolean
-  basis: 'steps' | 'status'
+  basis: 'steps' | 'status' | 'files'
   updated_at?: string
 }
 

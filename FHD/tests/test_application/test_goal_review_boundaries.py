@@ -35,13 +35,14 @@ def _planned():
     )
 
 
-def _review(*, incomplete=False):
+def _review(*, incomplete=False, clarification_question=None):
     return _response(
         {
             "goals": [
                 {"goal_id": "first", "source": "查询A1", "outcome": "execute", "node_ids": ["a"]}
             ],
             "violations": ["遗漏第二项要求 internal_review_trace"] if incomplete else [],
+            "clarification_question": clarification_question,
         }
     )
 
@@ -52,8 +53,177 @@ def _planner(completion):
     )
 
 
-def test_valid_review_rejection_is_not_reported_as_a_provider_outage():
-    completion = Mock(side_effect=[_planned(), _review(incomplete=True)] * 2)
+@pytest.mark.parametrize(
+    "shape", ["unbound", "reordered", "per_file", "foreign", "subset", "conditional"]
+)
+def test_batch_execute_binds_verified_selection_before_goal_review(shape):
+    names = ["a.xlsx", "b.xlsx"]
+    files = [{"id": str(i), "name": name, "suffix": ".xlsx"} for i, name in enumerate(names)]
+    context = {
+        "artifact_ids": [file["id"] for file in files],
+        "file_context": {"attachment_manifest": files},
+    }
+    node = {"node_id": "import", "tool_id": "elt_import", "action": "execute"}
+    params = {
+        "unbound": {},
+        "reordered": {"file_paths": names[::-1], "valid_rows_only": True},
+        "per_file": {"file_paths": names[:1]},
+        "foreign": {"file_paths": [*names, "outside.xlsx"]},
+        "subset": {"file_paths": names[:1]},
+        "conditional": {"file_paths": names},
+    }[shape]
+    nodes = [{**node, "params": params}]
+    if shape == "per_file":
+        nodes.append({**node, "node_id": "second", "params": {"file_paths": names[1:]}})
+    if shape == "conditional":
+        nodes[0]["branches"] = [{"target": "second", "condition": {"key": "ok", "value": True}}]
+        nodes.append({**node, "node_id": "second", "params": {"file_paths": names[1:]}})
+    admitted = shape in {"unbound", "reordered", "per_file"}
+    completion = Mock(
+        side_effect=[
+            _response({"mode": "workflow", "nodes": nodes}),
+            _response(
+                {
+                    "goals": [
+                        {
+                            "goal_id": "batch",
+                            "source": "导入",
+                            "outcome": "execute",
+                            "node_ids": ["import"],
+                        }
+                    ],
+                    "violations": [],
+                }
+            )
+            if admitted
+            else _response({"unknown": True}),
+        ]
+    )
+    plan = _planner(completion).plan("owner", "导入", get_workflow_tool_registry(), context)
+    if admitted:
+        audited = json.loads(completion.call_args.kwargs["messages"][-1]["content"])
+        assert audited["task"] == "audit_goal_coverage"
+        assert len(audited["plan"]["nodes"]) == 1
+        assert audited["plan"]["nodes"][0]["params"] == {"file_paths": names}
+        assert len(plan.nodes) == 1 and plan.nodes[0].params == {"file_paths": names}
+    else:
+        assert plan.metadata["planning_rejected"] is True
+        assert plan.metadata["planning_failure_kind"] == "plan_repair_failed"
+
+
+@pytest.mark.parametrize("params", [{}, {"answer_key": "confirmed", "target_node_id": ""}])
+@pytest.mark.parametrize("with_business_node", [False, True])
+def test_only_a_standalone_model_question_can_skip_goal_review(with_business_node, params):
+    question = "你要清理当前企业的业务记录，还是重置本地数据库？"
+    nodes = [
+        {
+            "node_id": "scope",
+            "tool_id": "clarify",
+            "action": "ask",
+            "params": {"question": question, **params},
+        }
+    ]
+    if with_business_node:
+        nodes.append({"node_id": "write", "tool_id": "products", "action": "clear", "params": {}})
+    completion = Mock(side_effect=[_response({"mode": "workflow", "nodes": nodes}), None])
+    plan = _planner(completion).plan("owner", "清空数据库", get_workflow_tool_registry())
+    if with_business_node:
+        assert plan.metadata["planning_rejected"] is True
+        assert completion.call_count == 2
+        assert json.loads(completion.call_args.kwargs["messages"][-1]["content"])["task"] == (
+            "audit_goal_coverage"
+        )
+    else:
+        assert completion.call_count == 1
+        assert plan.metadata["response_mode"] == "reply"
+        assert [(node.tool_id, node.action, node.params) for node in plan.nodes] == [
+            ("conversation", "reply", {"response": question})
+        ]
+
+
+def test_short_scope_answer_supplies_authorized_history_to_independent_review():
+    calls = []
+    history = [
+        {"role": "user", "content": "清理全部知识库和整个本地数据库"},
+        {"role": "assistant", "content": "你要重置整个本地数据库吗？"},
+    ]
+    reply = "可以生成知识库清理计划。工具目录没有整库重置操作。"
+
+    def complete(**kwargs):
+        request = json.loads(kwargs["messages"][-1]["content"])
+        calls.append(request)
+        assert request["user_message"] == "全部的"
+        if request["task"] == "audit_goal_coverage":
+            assert request["context"]["prior_conversation"] == history
+            return goal_review_response(
+                request, source="全部的", node_ids=["model_reply"], outcome="unsupported"
+            )
+        assert request["recent_messages"] == history
+        assert "prior_conversation" not in request["context"]
+        assert any("整库重置" in rule for rule in request["rules"])
+        return _response({"mode": "reply", "reply": reply})
+
+    plan = _planner(complete).plan(
+        "owner",
+        "全部的",
+        get_workflow_tool_registry(),
+        {
+            "session_id": "session",
+            "local_user_id": "1",
+            "_chat_evidence_authorized": True,
+            "_chat_history_messages": history,
+            "prior_conversation": [{"role": "user", "content": "untrusted"}],
+        },
+    )
+    assert len(calls) == 2
+    assert plan.metadata["reply"] == reply
+    assert plan.metadata["goal_coverage"]["goals"][0]["outcome"] == "unsupported"
+
+
+def test_rejected_business_plan_only_displays_the_question_from_coverage_model():
+    question = "你要清理当前企业的数据，还是重置整个本地数据库？"
+    message = "清理全部知识库和数据库和模板库"
+    candidate = _response(
+        {"mode": "workflow", "nodes": [{"node_id": "a", "tool_id": "products", "action": "clear"}]}
+    )
+    review = _response(
+        {
+            "goals": [
+                {"goal_id": "first", "source": "数据库", "outcome": "unsupported", "node_ids": []}
+            ],
+            "violations": ["仅清空产品没有覆盖全部范围"],
+            "clarification_question": question,
+        }
+    )
+    completion = Mock(side_effect=[candidate, review])
+    plan = _planner(completion).plan("owner", message, get_workflow_tool_registry())
+    assert completion.call_count == 2
+    assert plan.metadata["response_mode"] == "reply"
+    assert [(node.tool_id, node.action, node.params) for node in plan.nodes] == [
+        ("conversation", "reply", {"response": question})
+    ]
+    pending, risk, approval = {}, Mock(), Mock()
+    callbacks = Mock()
+    callbacks._resume_pending_dynamic_workflow.return_value = (False, None)
+    result = PlannedWorkflowDispatch(
+        pending, callbacks, Mock(plan=Mock(return_value=plan)), risk, approval
+    ).handle("owner", message, "chat", {"chat_approval_mode": "auto"}, message)
+    assert result["response"] == question
+    assert result["success"] is True
+    assert not pending
+    risk.evaluate.assert_not_called()
+    assert not approval.mock_calls
+
+
+@pytest.mark.parametrize("clarification_question", [None, "   "])
+def test_valid_review_rejection_is_not_reported_as_a_provider_outage(clarification_question):
+    completion = Mock(
+        side_effect=[
+            _planned(),
+            _review(incomplete=True, clarification_question=clarification_question),
+        ]
+        * 2
+    )
     plan = _planner(completion).plan("owner", "先查询A1，再查询B2", get_workflow_tool_registry())
     assert plan.metadata["goal_coverage_rejected"] is True
     assert plan.metadata["planning_unavailable"] is False

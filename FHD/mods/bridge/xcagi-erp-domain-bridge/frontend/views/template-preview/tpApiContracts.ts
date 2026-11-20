@@ -1,4 +1,4 @@
-import type { TplRecord, TplPreviewData } from './tpTemplateMeta'
+import type { TplRecord } from './tpTemplateMeta'
 
 /**
  * 模板 API 宽松响应契约：后端历史字段较杂，
@@ -27,12 +27,4 @@ export interface TplDecomposeResponse extends TplApiResponse {
     sample_rows?: Record<string, unknown>[]
     [key: string]: unknown
   } | null
-}
-
-/** POST /api/templates/extract-grid 返回（Excel 网格提取工具） */
-export interface ExtractGridResponse extends TplApiResponse {
-  template_name?: string
-  fields?: TplRecord['fields']
-  preview_data?: TplPreviewData
-  [key: string]: unknown
 }

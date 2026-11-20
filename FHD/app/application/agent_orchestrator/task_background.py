@@ -260,18 +260,21 @@ class BackgroundTaskExecutionMixin:
     def _prepare_expired_execution_recovery(self, run: AgentRun) -> bool:
         if requires_retry_reconciliation(run):
             return False
+        from app.application.agent_orchestrator.elt_checkpoint_recovery import checkpoint_step
         from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
 
         running_steps = [step for step in run.steps if step.status == "running"]
         if not running_steps:
             run.add_event("task.worker_recovered", "任务执行租约已恢复", {})
             return True
-        for step in running_steps:
+        approved_elt = checkpoint_step(run)
+        other_steps = [step for step in running_steps if step is not approved_elt]
+        for step in other_steps:
             current_spec = get_tool_action_spec(step.tool_id, step.action)
             # Old persisted plans may carry a superseded replay-safety claim.
             # Never upgrade an unsafe historical step based on a newer registry.
             step.idempotent = bool(step.idempotent and current_spec and current_spec.idempotent)
-        if any(not step.idempotent for step in running_steps):
+        if any(not step.idempotent for step in other_steps):
             run.status = "blocked"
             run.error = _NON_IDEMPOTENT_RECOVERY_BLOCKED
             run.metadata["non_retryable"] = True
@@ -303,7 +306,7 @@ class BackgroundTaskExecutionMixin:
         run.error = ""
         run.add_event(
             "task.worker_recovered",
-            "幂等任务从过期执行租约恢复",
+            "已重新领取原导入任务，核对文件回执" if approved_elt else "幂等任务从过期执行租约恢复",
             {
                 "error_code": _WORKER_LEASE_EXPIRED,
                 "step_ids": [step.step_id for step in running_steps],

@@ -1,4 +1,4 @@
-import { ref, computed, customRef, watch, getCurrentScope, onScopeDispose, type Ref } from 'vue'
+import { ref, computed, shallowRef, watch, getCurrentScope, onScopeDispose, type Ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import chatApi from '../api/chat'
 import { localMessagePersistence, samePersistedMessage, useChatMessagePersistence } from './useChatMessagePersistence'
@@ -106,8 +106,18 @@ export function chatMessageExtrasFromServerRow(raw: unknown): ChatMessageExtras 
   if (route && row.role !== 'user' && ui.role !== 'user') extras.routeMetadata = route
   const turnId = asString(ui.turnId || asRecord(metadata.business_harness).turn_id || asRecord(metadata.summary).turn_id).trim()
   if (turnId) extras.turnId = turnId
-  if (row.role !== 'user' && asRecord(metadata.summary).success === false) extras.workflowAction = 'failed'
+  const summary = asRecord(metadata.summary)
+  const serverStatus = asString(summary.status)
+  const observationStatus = ['unknown', 'outcome_unknown'].includes(serverStatus) ? 'unknown'
+    : ['running', 'queued', 'waiting_approval', 'paused'].includes(serverStatus) ? serverStatus : ''
+  if (row.role !== 'user' && (observationStatus || summary.success === false)) {
+    extras.workflowAction = observationStatus || 'failed'
+  }
   const savedId = asString(metadata.client_message_id || row.client_message_id).trim()
+  const serverMessageId = row.id ?? ui.serverMessageId
+  if (typeof serverMessageId === 'number' && Number.isSafeInteger(serverMessageId) && serverMessageId > 0) {
+    extras.serverMessageId = serverMessageId
+  }
   const persisted = asRecord(ui.persistence)
   const localId = asString(persisted.id).trim()
   if (row.id != null || savedId) {
@@ -133,7 +143,9 @@ export function chatMessageExtrasFromServerRow(raw: unknown): ChatMessageExtras 
   const downloadUrl = asString(ui.downloadUrl).trim()
   const shipmentDownloadUrl = asString(ui.shipmentDownloadUrl).trim()
   if (thinkingSteps) extras.thinkingSteps = thinkingSteps
-  if (workflowAction) extras.workflowAction = workflowAction
+  if (workflowAction && !observationStatus) extras.workflowAction = workflowAction
+  const recoveryTaskId = asString(ui.recoveryTaskId).trim()
+  if (recoveryTaskId) extras.recoveryTaskId = recoveryTaskId
   if (contextSummary) extras.contextSummary = contextSummary
   if (downloadUrl) extras.downloadUrl = downloadUrl
   if (shipmentDownloadUrl) extras.shipmentDownloadUrl = shipmentDownloadUrl
@@ -253,7 +265,10 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
       const older = fromServerRows(asArray(page.messages)).filter(row =>
         !messages.value.some(existing => samePersistedMessage(existing, row, toPlainText)))
       setHistoryPage(page)
-      loadMessages([...older, ...messages.value])
+      messages.value = [...older, ...messages.value]
+      reconcileApprovalCards(messages.value)
+      restoreModelRoute()
+      persistMessagesCache()
     } catch (error) {
       if (currentOwner() && scope === storageKey.value && epoch === historyEpoch)
         earlierMessagesError.value = error instanceof Error ? error.message : '加载更早消息失败'
@@ -273,9 +288,9 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
     ]
   }
 
-  function readCachedMessages(): ChatMessage[] {
+  function readCachedMessages(key = storageKey.value): ChatMessage[] {
     try {
-      const raw = localStorage.getItem(storageKey.value)
+      const raw = localStorage.getItem(key)
       if (!raw) return getDefaultWelcome()
       const parsed = JSON.parse(raw)
       if (!Array.isArray(parsed) || !parsed.length) return getDefaultWelcome()
@@ -319,20 +334,17 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
   if (getCurrentScope()) onScopeDispose(flushMessagesCache)
 
   let activeStoreKey = storageKey.value
-  let activeStore = acquireChatMessageStore(activeStoreKey, readCachedMessages)
-  const messages = customRef<ChatMessage[]>((track, trigger) => ({
-    get() { track(); return activeStore.messages.value },
-    set(next) { activeStore.messages.value = next; trigger() },
-  }))
-  const cacheError = customRef<string>((track, trigger) => ({
-    get() { track(); return activeStore.cacheError.value },
-    set(next) { activeStore.cacheError.value = next; trigger() },
-  }))
+  const activeStore = shallowRef(acquireChatMessageStore(activeStoreKey, readCachedMessages))
+  const messages = computed({
+    get: () => activeStore.value.messages.value,
+    set: next => { activeStore.value.messages.value = next },
+  })
+  const cacheError = computed(() => activeStore.value.cacheError.value)
 
   if (getCurrentScope()) {
     onScopeDispose(() => {
       flushMessagesCache()
-      releaseChatMessageStore(activeStoreKey, activeStore)
+      releaseChatMessageStore(activeStoreKey, activeStore.value)
     })
   }
 
@@ -341,15 +353,17 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
     const nextKey = storageKey.value
     if (nextKey === activeStoreKey) return
     flushMessagesCache()
-    releaseChatMessageStore(activeStoreKey, activeStore)
+    releaseChatMessageStore(activeStoreKey, activeStore.value)
     activeStoreKey = nextKey
-    activeStore = acquireChatMessageStore(activeStoreKey, readCachedMessages)
+    activeStore.value = acquireChatMessageStore(activeStoreKey, readCachedMessages)
   }
 
   function persistMessagesCache(list = messages.value, key = storageKey.value, metaKey = sessionMetaKey.value, sid = sessionId.value): void {
-    clearTimeout(cacheTimer)
-    cacheTimer = undefined
-    pendingCacheWrite = undefined
+    if (key === activeStoreKey) {
+      clearTimeout(cacheTimer)
+      cacheTimer = undefined
+      pendingCacheWrite = undefined
+    }
     try {
       for (const message of list) if (message.persistence) message.persistence.localSaved = true
       const sanitized = sanitizeMessagesList(list)
@@ -358,10 +372,10 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
       }
       localStorage.setItem(key, JSON.stringify(sanitized))
       persistSessionMeta(sanitized, metaKey, sid)
-      if (key === storageKey.value) cacheError.value = ''
+      if (key === activeStoreKey) activeStore.value.cacheError.value = ''
     } catch (_e) {
       for (const message of list) if (message.persistence) message.persistence.localSaved = false
-      if (key === storageKey.value) cacheError.value = '本机保存失败。服务端未确认的消息请勿关闭页面，可重试本机保存或复制消息。'
+      if (key === activeStoreKey) activeStore.value.cacheError.value = '本机保存失败。服务端未确认的消息请勿关闭页面，可重试本机保存或复制消息。'
     }
   }
 
@@ -565,7 +579,10 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
     scope: () => `${buildChatMessagesKey('scope', String(activeModId.value || ''))}:${productReadAccountEpoch.value}`,
     read: (sid) => {
       if (sid === sessionId.value) return messages.value
-      try { return sanitizeMessagesList(JSON.parse(localStorage.getItem(buildChatMessagesKey(sid, String(activeModId.value || ''))) || '[]')) }
+      const key = buildChatMessagesKey(sid, String(activeModId.value || ''))
+      const store = chatMessageStores.get(key)
+      if (store) return store.messages.value
+      try { return sanitizeMessagesList(JSON.parse(localStorage.getItem(key) || '[]')) }
       catch { return [] }
     },
     persist: (list, sid) => persistMessagesCache(list, buildChatMessagesKey(sid, String(activeModId.value || '')), buildChatSessionMetaKey(sid, String(activeModId.value || '')), sid),
@@ -585,23 +602,24 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
   }
 
   /** 流式回复：先占位一条 AI 消息，返回其在 messages 中的下标 */
-  function pushStreamingAiShell(): number {
+  function pushStreamingAiShell(list = messages.value, persist = persistMessagesCache): number {
     const time = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-    messages.value.push({
+    list.push({
       role: 'ai',
       content: '',
       time,
       streamingShell: true,
       persistence: localMessagePersistence(),
     })
-    persistMessagesCache()
-    return messages.value.length - 1
+    persist()
+    return list.length - 1
   }
 
   /** 将纯文本安全转为气泡 HTML 并写入指定下标（用于 SSE token 追加） */
-  function applyPlainTextToMessageIndex(index: number, plain: string, extras?: ChatMessageExtras) {
+  function applyPlainTextToMessageIndex(index: number, plain: string, extras?: ChatMessageExtras,
+    list = messages.value, schedule = scheduleMessagesCache) {
     const safe = escapeHtml(stripModelToolProtocol(plain)).replace(/\n/g, '<br>')
-    const row = messages.value[index]
+    const row = list[index]
     if (!row) return
     row.content = safe
     if (extras) Object.assign(row, extras)
@@ -610,7 +628,26 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
     } else {
       row.streamingShell = true
     }
-    scheduleMessagesCache()
+    schedule()
+  }
+
+  // Keep the original store alive while the view is displaying another session.
+  function retainConversationMessages(sid = sessionId.value) {
+    const modId = String(activeModId.value || '')
+    const key = buildChatMessagesKey(sid, modId)
+    const metaKey = buildChatSessionMetaKey(sid, modId)
+    const store = acquireChatMessageStore(key, () => readCachedMessages(key))
+    const persist = () => persistMessagesCache(store.messages.value, key, metaKey, sid)
+    return {
+      messages: store.messages,
+      pushStreamingAiShell: () => pushStreamingAiShell(store.messages.value, persist),
+      applyPlainTextToMessageIndex: (index: number, plain: string, extras?: ChatMessageExtras) =>
+        applyPlainTextToMessageIndex(index, plain, extras, store.messages.value, () => {
+          if (key === activeStoreKey) scheduleMessagesCache()
+        }),
+      persist,
+      release: () => releaseChatMessageStore(key, store),
+    }
   }
 
   function clearMessages() {
@@ -628,7 +665,7 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
     persistMessagesCache()
   }
 
-  async function syncFromServer(options: { required?: boolean; isCurrent?: () => boolean } = {}): Promise<boolean> {
+  async function syncFromServer(options: { required?: boolean; isCurrent?: () => boolean; onConversation?: (data: unknown) => void } = {}): Promise<boolean> {
     try {
       const sid = String(sessionId.value || '').trim()
       if (!sid) { if (options.required) throw new Error('当前会话未就绪'); return false }
@@ -652,6 +689,7 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
       const serverMessages = asArray(dataRow.messages)
       if (!serverMessages.length) {
         if (dataRow.durable === true && dataRow.revision === null) loadMessages([])
+        options.onConversation?.(dataRow)
         return options.required === true
       }
 
@@ -697,6 +735,7 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
       const unchanged = next.length === localList.length && next.every((message, index) => message === localList[index])
       if (!unchanged) loadMessages(next)
       else persistMessagesCache()
+      options.onConversation?.(dataRow)
       return true
     } catch (_e) {
       if (options.required) throw _e
@@ -709,7 +748,7 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
     () => {
       switchActiveStore()
       resetHistoryPage()
-      cacheError.value = ''
+      activeStore.value.cacheError.value = ''
       restoreModelRoute()
     },
     { flush: 'sync' },
@@ -724,7 +763,7 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
       // 直接切到新键自己的缓存，不把临时欢迎语复制过去。
       switchActiveStore()
       resetHistoryPage()
-      cacheError.value = ''
+      activeStore.value.cacheError.value = ''
       restoreModelRoute()
     },
     { flush: 'sync' },
@@ -767,6 +806,7 @@ export function useChatMessages(sessionId: Ref<string>, options: { isBusy?: () =
     addAndSaveMessage,
     pushStreamingAiShell,
     applyPlainTextToMessageIndex,
+    retainConversationMessages,
     flushMessagesCache,
     clearMessages,
     loadMessages,

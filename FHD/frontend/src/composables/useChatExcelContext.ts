@@ -8,7 +8,7 @@ import {
   type LinkedExcelSheet,
 } from './useChatPersistence'
 import { filesToMultimodalRows, type MultimodalAttachmentRow } from '@/utils/multimodalAttachments'
-import { removeChatArtifactId, uploadChatArtifactsDetailed } from '@/utils/chatArtifactContext'
+import { createChatArtifactContext, uploadChatArtifactsDetailed } from '@/utils/chatArtifactContext'
 import { resolveChatIdentity } from '@/utils/chatStorageKeys'
 
 export interface UseChatExcelContextDeps {
@@ -21,6 +21,7 @@ export interface UseChatExcelContextDeps {
 
 export function useChatExcelContext(deps: UseChatExcelContextDeps) {
   const { sessionId, addAndSaveMessage } = deps
+  const artifacts = createChatArtifactContext()
 
   const lastExcelAnalysisContext = ref<Record<string, unknown> | null>(null)
   const linkedExcelSheet = ref<LinkedExcelSheet | null>(null)
@@ -40,6 +41,7 @@ export function useChatExcelContext(deps: UseChatExcelContextDeps) {
     if (next === activeScope) return
     activeScope = next
     revision += 1
+    artifacts.clearChatArtifactIds()
     lastExcelAnalysisContext.value = readPersistedExcelAnalysisContext(String(sessionId.value || '').trim() || 'default')
     linkedExcelSheet.value = null
     linkedExcelAllSheets.value = false
@@ -124,12 +126,19 @@ export function useChatExcelContext(deps: UseChatExcelContextDeps) {
     multimodalStaging.value = []
   }
 
-  /** 整批 Excel 等文件：上传成后端工件，并在输入框逐个显示可移除的芯片。 */
+  function captureAttachmentScope() {
+    syncScope()
+    const capturedScope = activeScope, capturedRevision = revision
+    const isCurrent = deps.captureIsCurrent?.() || (() => true)
+    return () => capturedRevision === revision && capturedScope === scopeKey() && isCurrent()
+  }
+
+  /** 上传工作簿为后端工件，并在输入框逐个显示可移除的附件。 */
   async function stageArtifactFiles(list: File[]): Promise<number> {
     if (!list.length) return 0
-    syncScope()
-    const uploaded = await uploadChatArtifactsDetailed(list)
-    if (!uploaded.length) return 0
+    const isCurrent = captureAttachmentScope()
+    const uploaded = await uploadChatArtifactsDetailed(list, isCurrent, artifacts.addChatArtifactIds)
+    if (!uploaded.length || !isCurrent()) return 0
     artifactStaging.value = [
       ...artifactStaging.value,
       ...uploaded.map((row) => ({ filename: row.name, artifact_id: row.id })),
@@ -138,7 +147,7 @@ export function useChatExcelContext(deps: UseChatExcelContextDeps) {
   }
 
   function removeArtifactFile(artifactId: string) {
-    removeChatArtifactId(artifactId)
+    artifacts.removeChatArtifactId(artifactId)
     artifactStaging.value = artifactStaging.value.filter((row) => row.artifact_id !== artifactId)
   }
 
@@ -162,13 +171,11 @@ export function useChatExcelContext(deps: UseChatExcelContextDeps) {
 
   async function stageMultimodalFiles(list: File[]) {
     if (!list.length) return
-    syncScope()
+    const isCurrent = captureAttachmentScope()
     // 额外登记后端工件（失败静默）：对话侧可用 artifact_id 取数，不影响现有解析与摘要。
-    void uploadChatArtifactsDetailed(list)
-    const capturedScope = activeScope, capturedRevision = revision
-    const isCurrent = deps.captureIsCurrent?.() || (() => true)
+    void uploadChatArtifactsDetailed(list, isCurrent, artifacts.addChatArtifactIds)
     const res = await filesToMultimodalRows(list, { skipUnsupported: list.length > 1 })
-    if (capturedRevision !== revision || capturedScope !== scopeKey() || !isCurrent()) return
+    if (!isCurrent()) return
     if (!res.ok) {
       await addAndSaveMessage(`[附件] ${res.error}`, 'ai')
       return
@@ -250,6 +257,7 @@ export function useChatExcelContext(deps: UseChatExcelContextDeps) {
   }
 
   return {
+    captureChatArtifacts: artifacts.captureChatArtifacts,
     lastExcelAnalysisContext,
     linkedExcelSheet,
     linkedExcelAllSheets,

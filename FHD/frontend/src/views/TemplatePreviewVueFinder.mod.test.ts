@@ -115,10 +115,11 @@ it('offers visible recovery from an empty handed-off filter and preserves other 
   ] })
   const router = createRouter({ history: createMemoryHistory(), routes: [
     { path: '/templates', component: { template: '<div />' } },
+    { path: '/business-docking', component: { template: '<div />' } },
   ] })
   await router.push('/templates?scope=orders&keyword=missing&keep=yes')
   const wrapper = mount(TemplatePreviewView, { global: { plugins: [router], stubs: {
-    TpCreateModal: true, TpGridToolModal: true, TpPreviewModal: true, TpEditModal: true, TpReplaceModal: true,
+    TpCreateModal: true, TpPreviewModal: true, TpEditModal: true, TpReplaceModal: true,
   } } })
   try {
     await flushPromises()
@@ -132,5 +133,11 @@ it('offers visible recovery from an empty handed-off filter and preserves other 
     expect(wrapper.find('[data-testid="reset-template-filters"]').exists()).toBe(false)
     expect(wrapper.text()).toContain('Alpha 出货')
     expect(wrapper.text()).toContain('Beta 产品')
+    expect(wrapper.find('.grid-tool-card').exists()).toBe(false)
+    const mapping = wrapper.get('a[href="/business-docking"]')
+    expect(mapping.text()).toBe('AI 识别与映射')
+    await mapping.trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe('/business-docking')
   } finally { wrapper.unmount() }
 })

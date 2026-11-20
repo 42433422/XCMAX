@@ -122,6 +122,8 @@ class ConversationService(NeuroEventPublisherMixin):
         idempotency_key: str = "",
         expected_revision: int | None = None,
     ) -> int:
+        from app.application.ai_chat.conversation_history import strip_client_recall_binding
+
         return self.save_turn(
             session_id=session_id,
             user_id=user_id,
@@ -131,7 +133,7 @@ class ConversationService(NeuroEventPublisherMixin):
                     "role": role,
                     "content": content,
                     "intent": intent,
-                    "metadata": metadata,
+                    "metadata": strip_client_recall_binding(metadata),
                     "idempotency_key": idempotency_key,
                 }
             ],

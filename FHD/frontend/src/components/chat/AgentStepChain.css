@@ -1,7 +1,6 @@
 /* Product styling for the pinned shadcn-vue Trace components. */
 .asc-chain {
   --asc-border: var(--app-border-subtle, #e5e7eb);
-  --asc-subtle: var(--app-surface-muted, #f8fafc);
   --asc-blue: #2563eb;
   --asc-green: #16a36a;
   --asc-red: #dc3b3b;
@@ -45,6 +44,8 @@
 }
 .asc-pill.is-waiting,
 .asc-pill.is-unknown,
+.asc-pill.is-deferred,
+.asc-pill.is-partial,
 .asc-badge {
   background: #fdf3e3;
   color: var(--asc-amber);
@@ -89,6 +90,8 @@
   color: var(--asc-red);
 }
 .asc-step.is-waiting .asc-step-status,
+.asc-step.is-deferred .asc-step-status,
+.asc-step.is-partial .asc-step-status,
 .asc-step.is-unknown .asc-step-status {
   color: var(--asc-amber);
 }
@@ -116,9 +119,6 @@
 }
 .asc-step-body {
   margin: 2px 0 6px 18px;
-  padding: 6px 8px;
-  border-radius: 6px;
-  background: var(--asc-subtle);
 }
 .asc-section + .asc-section {
   margin-top: 6px;

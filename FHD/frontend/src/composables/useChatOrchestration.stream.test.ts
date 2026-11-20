@@ -13,6 +13,7 @@ const {
   saveMessage,
   sendChatStream,
   getConversation,
+  reconcileTurn,
   readPlannerSseResponse,
   requestChatByModeWithTimeout,
   refreshHistorySessions,
@@ -29,6 +30,7 @@ const {
   saveMessage: vi.fn().mockResolvedValue(undefined),
   sendChatStream: vi.fn(),
   getConversation: vi.fn(),
+  reconcileTurn: vi.fn(),
   readPlannerSseResponse: vi.fn(),
   requestChatByModeWithTimeout: vi.fn(),
   refreshHistorySessions: vi.fn().mockResolvedValue(undefined),
@@ -97,23 +99,6 @@ vi.mock('./useChatPersistence', () => ({
     applyPersistedTaskPanelStateForSession: vi.fn(),
   }),
 }))
-vi.mock('./useExcelAnalysis', async () => {
-  const { ref } = await import('vue')
-  return {
-    useExcelAnalysis: () => ({
-      excelAnalyzeUploading: ref(false),
-      excelAnalyzeInputRef: ref(null),
-      triggerUpload: vi.fn(),
-      onExcelAnalyzeFileChange: vi.fn(),
-      setOnMultimodalFileChangeCallback: vi.fn(),
-      lastExcelAnalysisContext: ref(null),
-      excelSheetOptions: ref([]),
-      linkedExcelSheet: ref(''),
-      linkedExcelAllSheets: ref(false),
-      multimodalPendingCount: ref(0),
-    }),
-  }
-})
 vi.mock('./useShipmentTask', async importOriginal => {
   const actual = await importOriginal<typeof import('./useShipmentTask')>()
   const { ref } = await import('vue')
@@ -231,7 +216,7 @@ vi.mock('@/stores/mods', () => ({
   useModsStore: () => modState,
 }))
 vi.mock('@/api/chat', () => ({
-  default: { sendChatStream, getConversation },
+  default: { sendChatStream, getConversation, reconcileTurn },
   parseChatStreamErrorResponse: vi.fn().mockResolvedValue('流式接口错误'),
 }))
 vi.mock('@/api/shipment', () => ({ shipmentApi: { getProductMetaForPreview: previewMeta, fetchNextOrderNumber: vi.fn() } }))
@@ -343,6 +328,30 @@ describe('useChatOrchestration stream', () => {
     } }] })
     await pending
     expect(applyPlainTextToMessageIndex).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    { workflowAction: 'unknown' },
+    { execution: { idempotencyKey: 'workflow', intent: 'import', committed: false, effect: 'unknown' } },
+    { execution: { idempotencyKey: 'workflow', intent: 'import', committed: true, effect: 'committed', outcome: 'partial' } },
+  ])('preserves recorded workflow effects if a legacy lookup has no matching receipt %#', async recorded => {
+    const api = useChatOrchestration({ sessionId: ref('import-session') })
+    const message = { role: 'ai' as const, content: '请核对原任务', time: '', turnId: 'turn_import', ...recorded }
+    api.messages.value = [message]
+    reconcileTurn.mockResolvedValueOnce({ success: true, execution: { committed: false, effect: 'none', records: 0 } })
+
+    expect(await api.reconcileTurnMessage(0)).toEqual({ ok: false, message: '本轮幂等记录不足以确认业务结果，请在原任务中核对。' })
+    expect(reconcileTurn).toHaveBeenCalledWith('turn_import')
+    expect(api.messages.value[0]).toEqual(message)
+  })
+
+  it('can confirm no writes on a failed turn without a recorded uncertain workflow effect', async () => {
+    const api = useChatOrchestration({ sessionId: ref('failed-session') })
+    api.messages.value = [{ role: 'ai', content: '请求失败', time: '', turnId: 'turn_failed', workflowAction: 'failed' }]
+    reconcileTurn.mockResolvedValueOnce({ success: true, execution: { committed: false, effect: 'none', records: 1 } })
+
+    expect(await api.reconcileTurnMessage(0)).toEqual({ ok: true })
+    expect(api.messages.value[0].execution).toMatchObject({ committed: false, effect: 'none' })
   })
 
   it('never speaks typed progress or split legacy tool markers, but speaks the full answer once', async () => {

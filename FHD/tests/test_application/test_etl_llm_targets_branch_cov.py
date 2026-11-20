@@ -2930,7 +2930,7 @@ def test_business_units_have_separate_bounded_deadlines(monkeypatch):
     monkeypatch.setattr(llm_assist, "elt_llm_timeout_seconds", lambda **kwargs: 5.0)
     monkeypatch.setattr(llm_assist, "business_units", lambda source: ["first", "second"])
 
-    def unit(source):
+    def unit(source, **_kwargs):
         calls.append(source)
         clock[0] += 5.0
         return llm_assist.LlmAssistResult(

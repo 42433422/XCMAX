@@ -142,15 +142,15 @@ def _workbook_lines(workbook) -> str:
     worksheet row the model must cite; this function does not choose or drop a row.
     Model lanes bound their own inputs without truncating this archive text.
     """
-    lines: list[str] = []
+    lines = []
     for worksheet in workbook.worksheets:
-        if getattr(worksheet, "sheet_state", "visible") in {"hidden", "veryHidden"}:
+        if getattr(worksheet, "sheet_state", "visible") != "visible":
             continue
         lines.append(f"# sheet:{worksheet.title}")
-        for index, row in enumerate(worksheet.iter_rows(values_only=True)):
+        for index, row in enumerate(worksheet.iter_rows(values_only=True), start=1):
             cells = [str(cell).strip() for cell in row if cell not in (None, "")]
             if cells:
-                lines.append(f"R{index + 1} | " + " | ".join(cells))
+                lines.append(f"R{index} | " + " | ".join(cells))
     return "\n".join(lines)
 
 

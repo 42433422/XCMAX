@@ -239,6 +239,10 @@ class StepExecution:
                 "action": step.action,
             }
         else:
+            from app.application.agent_orchestrator.elt_checkpoint_recovery import (
+                EltCheckpointWorkerExited,
+            )
+
             if not step.idempotent:
                 from app.application.agent_orchestrator.task_dispatcher import note_open_effect
 
@@ -268,6 +272,8 @@ class StepExecution:
                             float(getattr(spec, "timeout_seconds", 0) or 0),
                         ),
                     )
+            except EltCheckpointWorkerExited:
+                raise
             except RECOVERABLE_ERRORS:
                 logger.exception("agent tool execution failed")
                 output = {

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from types import SimpleNamespace
 
 import pytest
 
@@ -10,10 +11,15 @@ from app.application.tools import workflow_spreadsheet_scope
 from app.domain.shared_services import tools_workflow_elt
 
 
+@pytest.fixture(autouse=True)
+def _stub_upload_lookup(monkeypatch):
+    monkeypatch.setattr(tools_workflow_elt, "_owned_upload", lambda *_args: {})
+
+
 def test_preview_batch_reports_each_file(monkeypatch):
     calls: list[str] = []
 
-    def fake_preview(params, _context):
+    def fake_preview(params, _context, **_kwargs):
         calls.append(params["file_path"])
         if params["file_path"].endswith("bad.xlsx"):
             return {"success": False, "error_code": "elt_preview_not_ready", "message": "坏文件"}
@@ -35,7 +41,10 @@ def test_preview_batch_collects_run_ids(monkeypatch):
     monkeypatch.setattr(
         tools_workflow_elt,
         "_preview",
-        lambda params, _context: {"success": True, "data": {"run_id": f"r-{params['file_path']}"}},
+        lambda params, _context, **_kwargs: {
+            "success": True,
+            "data": {"run_id": f"r-{params['file_path']}"},
+        },
     )
     out = tools_workflow_elt._preview_batch(["a.xlsx", "b.xlsx"], {}, {})
     assert out["run_ids"] == ["r-a.xlsx", "r-b.xlsx"]
@@ -47,7 +56,10 @@ def test_batch_preview_exposes_data_for_workflow_references(monkeypatch):
     monkeypatch.setattr(
         tools_workflow_elt,
         "_preview",
-        lambda params, _context: {"success": True, "data": {"run_id": f"r-{params['file_path']}"}},
+        lambda params, _context, **_kwargs: {
+            "success": True,
+            "data": {"run_id": f"r-{params['file_path']}"},
+        },
     )
     out = tools_workflow_elt._preview_batch(["a.xlsx", "b.xlsx"], {}, {})
     assert out["data"]["run_ids"] == ["r-a.xlsx", "r-b.xlsx"]
@@ -68,7 +80,7 @@ def test_preview_batch_publishes_per_file_stage(monkeypatch):
     monkeypatch.setattr(
         tools_workflow_elt,
         "_preview",
-        lambda params, _context: {"success": True, "data": {"total_rows": 1}},
+        lambda params, _context, **_kwargs: {"success": True, "data": {"total_rows": 1}},
     )
     tools_workflow_elt._preview_batch(["a.xlsx", "b.xlsx"], {}, {})
 
@@ -107,8 +119,11 @@ def test_execute_route_flattens_wrapped_run_ids(monkeypatch):
     assert executed == ["a-1", "b-2"]
 
 
-def test_split_paths_flattens_single_wrapped_joined_string():
-    assert tools_workflow_elt._split_paths(["a.xlsx,b.xlsx"]) == ["a.xlsx", "b.xlsx"]
+def test_split_paths_preserves_explicit_punctuation():
+    assert tools_workflow_elt._split_paths(["a.xlsx,b.xlsx", "c.xlsx"]) == [
+        "a.xlsx,b.xlsx",
+        "c.xlsx",
+    ]
     assert tools_workflow_elt._split_paths(["a.xlsx"]) == ["a.xlsx"]
     assert tools_workflow_elt._split_paths("a.xlsx") == []
 
@@ -121,7 +136,10 @@ def test_reference_resolution_feeds_array_validation(monkeypatch):
     monkeypatch.setattr(
         tools_workflow_elt,
         "_preview",
-        lambda params, _context: {"success": True, "data": {"run_id": f"r-{params['file_path']}"}},
+        lambda params, _context, **_kwargs: {
+            "success": True,
+            "data": {"run_id": f"r-{params['file_path']}"},
+        },
     )
     out = tools_workflow_elt._preview_batch(["a.xlsx", "b.xlsx"], {}, {})
     problems: list[str] = []
@@ -136,60 +154,68 @@ def test_reference_resolution_feeds_array_validation(monkeypatch):
     assert params["run_ids"] == ["r-a.xlsx", "r-b.xlsx"]
 
 
-def test_preview_batch_auto_executes_executable_items(monkeypatch):
+@pytest.mark.parametrize("mode", ["auto", "manual"])
+def test_preview_batch_does_not_execute(monkeypatch, mode):
     monkeypatch.setattr(
         tools_workflow_elt,
         "_preview",
-        lambda params, _context: {
-            "success": True,
-            "data": {"run_id": f"r-{params['file_path']}", "executable": True},
-        },
-    )
-    executed: list[list[str]] = []
-
-    def fake_execute(run_ids, payload, _context):
-        executed.append(list(run_ids))
-        assert payload["accept_suggested"] is True
-        return {"success": True, "done_count": len(run_ids)}
-
-    monkeypatch.setattr(tools_workflow_elt, "_execute_batch", fake_execute)
-    out = tools_workflow_elt._preview_batch(
-        ["a.xlsx", "b.xlsx"], {}, {"chat_approval_mode": "auto"}
-    )
-    assert executed == [["r-a.xlsx", "r-b.xlsx"]]
-    assert out["data"]["executed_count"] == 2
-    assert "已自动入库 2 个" in out["message"]
-
-
-def test_preview_batch_skips_auto_execute_without_auto_approval(monkeypatch):
-    monkeypatch.setattr(
-        tools_workflow_elt,
-        "_preview",
-        lambda params, _context: {
+        lambda params, _context, **_kwargs: {
             "success": True,
             "data": {"run_id": f"r-{params['file_path']}", "executable": True},
         },
     )
     monkeypatch.setattr(
         tools_workflow_elt,
-        "_execute_batch",
+        "_execute",
         lambda *args, **kwargs: pytest.fail("不应自动执行"),
     )
-    out = tools_workflow_elt._preview_batch(["a.xlsx"], {}, {})
-    assert out["data"]["executed_count"] == 0
-
-
-def test_mentions_file_only_when_user_names_it():
-    assert tools_workflow_elt._mentions_file("导入温总.xlsx", ["温总.xlsx"]) is True
-    assert tools_workflow_elt._mentions_file("导入", ["温总.xlsx"]) is False
+    out = tools_workflow_elt._preview_batch(["a.xlsx"], {}, {"chat_approval_mode": mode})
+    assert out["data"]["executable"] is True
+    assert out["run_ids"] == ["r-a.xlsx"]
 
 
 def test_preview_batch_caps_at_fifty(monkeypatch):
-    monkeypatch.setattr(tools_workflow_elt, "_preview", lambda params, _context: {"success": True})
+    monkeypatch.setattr(tools_workflow_elt, "_preview", lambda *_args, **_kwargs: {"success": True})
     out = tools_workflow_elt._preview_batch([f"f{i}.xlsx" for i in range(60)], {}, {})
     assert out["file_count"] == 50
     assert out["truncated"] is True
+    assert out["success"] is False
+    assert out["data"]["executable"] is False
     assert "一次最多 50 个" in out["message"]
+
+
+def test_preview_deduplicates_owned_content_with_same_file_name(monkeypatch):
+    calls: list[str] = []
+
+    def upload(path, _context):
+        name = "其他订单.xlsx" if path == "different-name" else "订单.xlsx"
+        return {"id": path, "file_name": name, "suffix": ".xlsx", "sha256": "same-content"}
+
+    def preview(_params, _context, *, upload):
+        calls.append(upload["id"])
+        return {"success": True, "data": {"run_id": upload["id"]}}
+
+    monkeypatch.setattr(tools_workflow_elt, "_owned_upload", upload)
+    monkeypatch.setattr(tools_workflow_elt, "_preview", preview)
+    out = tools_workflow_elt._preview_batch(["first", "duplicate", "different-name"], {}, {})
+    assert calls == out["run_ids"] == ["first", "different-name"]
+
+
+def test_preview_budget_preserves_receipts_without_unlocking_execute(monkeypatch):
+    budget = iter([20, 0])
+    monkeypatch.setattr(tools_workflow_elt, "_remaining_budget", lambda _context: next(budget))
+    monkeypatch.setattr(
+        tools_workflow_elt,
+        "_preview",
+        lambda *_args, **_kwargs: {
+            "success": True,
+            "data": {"run_id": "run-a", "executable": True},
+        },
+    )
+    out = tools_workflow_elt._preview_batch(["a.xlsx", "b.xlsx"], {}, {})
+    assert out["success"] is False and out["data"]["executable"] is False
+    assert out["deferred_count"] == 1 and out["data"]["run_ids"] == []
+    assert out["results"][0]["data"]["run_id"] == "run-a"
 
 
 def test_execute_batch_reports_each_run(monkeypatch):
@@ -205,7 +231,133 @@ def test_execute_batch_reports_each_run(monkeypatch):
     out = tools_workflow_elt._execute_batch(["ok-1", "bad-2"], {}, {})
     assert out["run_count"] == 2
     assert out["done_count"] == 1
+    assert out["success"] is False
     assert out["results"][0]["run_id"] == "ok-1"
+
+
+@pytest.mark.parametrize(
+    "action,selection,stages",
+    [
+        ("preview", "file_paths", ["preview"]),
+        ("execute", "file_paths", ["preview", "execute"]),
+        ("execute", "run_ids", ["execute"]),
+    ],
+)
+def test_elt_batch_renews_deadline_per_stage_beyond_300_seconds(
+    monkeypatch, action, selection, stages
+):
+    clock = 0.0
+    renewed = []
+    budgets = {"preview": 120, "execute": 240}
+
+    def renew(stage):
+        renewed.append(stage)
+        return clock + budgets[stage]
+
+    def work(stage, context):
+        nonlocal clock
+        limit = budgets[stage]
+        assert context["deadline_monotonic"] == clock + limit
+        usable = tools_workflow_elt._wait_timeout({}, context, limit)
+        assert usable == limit - tools_workflow_elt._RESERVED_SECONDS
+        clock += usable - 1  # The old stage has only one usable second left.
+
+    def preview(params, context, **_kwargs):
+        work("preview", context)
+        return {"success": True, "data": {"run_id": params["file_path"], "executable": True}}
+
+    def execute(_params, context):
+        work("execute", context)
+        return {"success": True, "data": {"executed_rows": 1}}
+
+    monkeypatch.setattr(tools_workflow_elt, "time", SimpleNamespace(monotonic=lambda: clock))
+    monkeypatch.setattr(tools_workflow_elt, "_elt_enabled", lambda: True)
+    monkeypatch.setattr(tools_workflow_elt, "_run_label", lambda run, _context: run)
+    monkeypatch.setattr(tools_workflow_elt, "_preview", preview)
+    monkeypatch.setattr(tools_workflow_elt, "_execute", execute)
+    context = {"deadline_monotonic": 300, "_renew_elt_file_deadline": renew}
+    params = {selection: [f"file-{index}.xlsx" for index in range(22)]}
+    out = tools_workflow_elt._registered_router_elt_import(
+        action, params, context, "normal", "导入"
+    )
+
+    assert clock > 300
+    assert renewed == stages * 22
+    assert out["success"] is True and out["deferred_count"] == 0
+    assert len(out["results"]) == 22
+
+
+@pytest.mark.parametrize("rolling_deadline", [False, True])
+def test_execute_batch_stops_on_unknown_and_keeps_completed_receipts(monkeypatch, rolling_deadline):
+    calls: list[str] = []
+
+    def execute(params, _context):
+        calls.append(params["run_id"])
+        if params["run_id"] == "first":
+            return {"success": True, "data": {"run_id": "first", "executed_rows": 3}}
+        return {"success": False, "outcome": "unknown", "message": "核对 second"}
+
+    monkeypatch.setattr(tools_workflow_elt, "_execute", execute)
+    monkeypatch.setattr(tools_workflow_elt, "_run_label", lambda run, _context: run)
+    context = (
+        {"_renew_elt_file_deadline": lambda _stage: tools_workflow_elt.time.monotonic() + 240}
+        if rolling_deadline
+        else {}
+    )
+    out = tools_workflow_elt._execute_batch(["first", "second", "third"], {}, context)
+    assert calls == ["first", "second"]
+    assert out["success"] is False and out["retryable"] is False
+    assert out["outcome"] == "unknown" and out["reconciliation_required"] is True
+    assert out["deferred_run_ids"] == ["third"]
+    assert out["data"]["executed_rows"] == 3 and out["results"][0]["run_id"] == "first"
+
+
+@pytest.mark.parametrize(("stop", "written"), [(None, 9), ("unknown", 3), ("budget", 6)])
+def test_import_by_file_writes_each_ready_file_before_previewing_the_next(monkeypatch, stop, written):
+    from app.application.agent_orchestrator.tool_spec import validate_tool_call
+
+    calls = []
+
+    def preview(params, _context, **_kwargs):
+        name = params["file_path"]
+        calls.append(("preview", name))
+        review = name == "review.xlsx"
+        return {
+            "success": True,
+            "message": "预演完成",
+            "requires_user_decision": review,
+            "data": {"run_id": name, "executable": not review},
+        }
+
+    def execute(params, _context):
+        name = params["run_id"]
+        calls.append(("execute", name))
+        if name == "last.xlsx" and stop == "unknown":
+            return {"success": False, "outcome": "unknown", "message": "核对原回执"}
+        return {"success": True, "data": {"executed_rows": 3}}
+
+    monkeypatch.setattr(tools_workflow_elt, "_elt_enabled", lambda: True)
+    monkeypatch.setattr(tools_workflow_elt, "_preview", preview)
+    monkeypatch.setattr(tools_workflow_elt, "_execute", execute)
+    if stop == "budget":
+        monkeypatch.setattr(
+            tools_workflow_elt, "_remaining_budget", lambda _context: 0 if len(calls) >= 5 else None
+        )
+    params = {"file_paths": ["first.xlsx", "review.xlsx", "last.xlsx", "next.xlsx"]}
+    assert validate_tool_call("elt_import", "execute", params).ok
+    out = tools_workflow_elt._registered_router_elt_import("execute", params, {}, "normal", "导入")
+    assert calls[:5] == [
+        ("preview", "first.xlsx"),
+        ("execute", "first.xlsx"),
+        ("preview", "review.xlsx"),
+        ("preview", "last.xlsx"),
+        ("execute", "last.xlsx"),
+    ]
+    assert out["success"] is False and "1 份待确认" in out["message"]
+    assert out["data"]["executed_rows"] == written
+    assert out["deferred_count"] == int(stop is not None)
+    if stop == "unknown":
+        assert len(calls) == 5 and out["reconciliation_required"] is True
 
 
 def test_fresh_upload_cutoff_honours_env(monkeypatch):
@@ -246,7 +398,9 @@ def test_preview_batch_expands_uploaded_directory(tmp_path, monkeypatch):
     monkeypatch.setattr(
         tools_workflow_elt,
         "_preview",
-        lambda params, _context: calls.append(params["file_path"]) or {"success": True, "data": {}},
+        lambda params, _context, **_kwargs: (
+            calls.append(params["file_path"]) or {"success": True, "data": {}}
+        ),
     )
 
     out = tools_workflow_elt._preview_batch([str(folder)], {}, {})

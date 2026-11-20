@@ -24,7 +24,17 @@ import time
 from typing import Annotated, Any
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, Body, Depends, Header, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi import (
+    APIRouter,
+    Body,
+    Depends,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from app.application.agent_orchestrator.chat_trace import (
@@ -42,6 +52,7 @@ from app.application.aiopen.resources import (
     list_resources,
     read_resource,
 )
+from app.application.aiopen.runtime import ClientKeyLimitReached
 from app.application.aiopen.service import (
     AIOPEN_STATE,
     MCP_DEFAULT_PROTOCOL_VERSION,
@@ -54,13 +65,16 @@ from app.application.aiopen.service import (
     build_mcp_install_bundle,
     format_tool_result_text,
     generate_api_key,
+    has_active_client_key,
     invoke_tool,
     is_path_whitelisted,
+    issue_client_key,
     list_api_keys,
     openclaw_chat_proxy,
     record_api_key_use,
     required_operation_scope,
     revoke_api_key,
+    revoke_client_key,
     seed_capability_whitelist,
     verify_api_key,
 )
@@ -85,7 +99,11 @@ from app.fastapi_routes.aiopen_route_support import (
     wrap_mcp_json as _wrap_mcp_json,
 )
 from app.infrastructure.aiopen.cursor_hub import aiopen_cursor_hub
-from app.infrastructure.auth.dependencies import require_admin_user, resolve_session_user
+from app.infrastructure.auth.dependencies import (
+    get_logged_in_user,
+    require_admin_user,
+    resolve_session_user,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -531,6 +549,57 @@ def aiopen_coverage(request: Request, x_aiopen_key: AiOpenKeyHeader = None):
 # ---------------------------------------------------------------------------
 # API Key 管理（面板）
 # ---------------------------------------------------------------------------
+
+
+def _client_principal(user: Any = Depends(get_logged_in_user)) -> ScreenPrincipal:
+    principal = ScreenPrincipal.from_user(user)
+    if principal is None:
+        raise HTTPException(status_code=403, detail="当前账号没有有效的租户归属")
+    return principal
+
+
+@router.get("/api/aiopen/client")
+def aiopen_client_panel(principal: ScreenPrincipal = Depends(_client_principal)):
+    return {
+        "success": True,
+        "client_mode": True,
+        "has_active_key": has_active_client_key(principal),
+        "keys": [],
+        "remote_control_enabled": bool(AIOPEN_STATE.get("remote_control_enabled")),
+    }
+
+
+@router.post("/api/aiopen/client/key")
+def aiopen_client_key_create(
+    principal: ScreenPrincipal = Depends(_client_principal), keep_existing: bool = False
+):
+    try:
+        issued = issue_client_key(principal, keep_existing=keep_existing)
+    except ClientKeyLimitReached as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(status_code=503, detail="口令存储暂不可用") from exc
+    result = _trace_aiopen_control_result(
+        {"success": True, "key": issued["key"], "expires_at": issued["expires_at"]},
+        route="/api/aiopen/client/key",
+        action="client_key_create",
+        user_id=principal.principal_id,
+    )
+    return JSONResponse(result, headers={"Cache-Control": "no-store"})
+
+
+@router.delete("/api/aiopen/client/key")
+def aiopen_client_key_revoke(principal: ScreenPrincipal = Depends(_client_principal)):
+    try:
+        revoked = revoke_client_key(principal)
+    except OSError as exc:
+        raise HTTPException(status_code=503, detail="口令撤销尚未保存") from exc
+    return _trace_aiopen_control_result(
+        {"success": True, "revoked": revoked},
+        route="/api/aiopen/client/key",
+        action="client_key_revoke",
+        user_id=principal.principal_id,
+    )
 
 
 @router.get("/api/aiopen/keys")

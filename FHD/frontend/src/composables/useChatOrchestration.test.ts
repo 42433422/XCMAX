@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ref } from 'vue'
 import { setActivePinia, createPinia } from 'pinia'
 
+const { syncFromServer, resumeChatStream } = vi.hoisted(() => ({ syncFromServer: vi.fn(), resumeChatStream: vi.fn() }))
+
 vi.mock('./useChatMessages', async () => {
   const { ref } = await import('vue')
   return {
@@ -14,7 +16,7 @@ vi.mock('./useChatMessages', async () => {
       applyPlainTextToMessageIndex: vi.fn(),
       clearMessages: vi.fn(),
       loadMessages: vi.fn(),
-      syncFromServer: vi.fn().mockResolvedValue(undefined),
+      syncFromServer,
       queueVoice: vi.fn(),
       clearVoiceQueue: vi.fn(),
     }),
@@ -60,23 +62,6 @@ vi.mock('./useChatPersistence', () => ({
   }),
 }))
 
-vi.mock('./useExcelAnalysis', async () => {
-  const { ref } = await import('vue')
-  return {
-    useExcelAnalysis: () => ({
-      excelAnalyzeUploading: ref(false),
-      excelAnalyzeInputRef: ref(null),
-      triggerUpload: vi.fn(),
-      onExcelAnalyzeFileChange: vi.fn(),
-      setOnMultimodalFileChangeCallback: vi.fn(),
-      lastExcelAnalysisContext: ref(null),
-      excelSheetOptions: ref([]),
-      linkedExcelSheet: ref(''),
-      linkedExcelAllSheets: ref(false),
-      multimodalPendingCount: ref(0),
-    }),
-  }
-})
 vi.mock('./useShipmentTask', async () => {
   const { ref } = await import('vue')
   return {
@@ -161,7 +146,8 @@ vi.mock('@/stores/mods', () => ({
     setActiveModId: vi.fn(),
   }),
 }))
-vi.mock('@/api/chat', () => ({ default: {}, parseChatStreamErrorResponse: vi.fn() }))
+const { recallMessage } = vi.hoisted(() => ({ recallMessage: vi.fn() }))
+vi.mock('@/api/chat', () => ({ default: { recallMessage, resumeChatStream }, parseChatStreamErrorResponse: vi.fn() }))
 vi.mock('@/api/products', () => ({ default: {} }))
 vi.mock('@/utils/chatSseStream', () => ({
   readPlannerSseResponse: vi.fn(),
@@ -179,11 +165,34 @@ vi.mock('@/constants/coreWorkflowMod', () => ({
 }))
 
 import { useChatOrchestration } from './useChatOrchestration'
+import { ApiError } from '@/api/core'
+import { useProductsStore } from '@/stores/products'
 
 describe('useChatOrchestration', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     localStorage.clear()
+    recallMessage.mockReset()
+    syncFromServer.mockReset().mockResolvedValue(undefined)
+    resumeChatStream.mockReset()
+  })
+
+  it('reopens a blocked original turn in place without replaying the later continuation turn', async () => {
+    const api = useChatOrchestration({ sessionId: ref('session-1') } as Parameters<typeof useChatOrchestration>[0])
+    api.messages.value = [
+      { role: 'ai', turnId: 'original-turn', content: '旧观察超时', time: '10:00', workflowAction: 'failed' },
+      { role: 'ai', turnId: 'later-turn', content: '继续', time: '10:01' },
+    ]
+    syncFromServer.mockImplementationOnce(async options => options.onConversation({
+      active_turn: { turn_id: 'original-turn', run_id: 'original-run', task_id: 'original-task', status: 'blocked' },
+    }))
+
+    await api.syncSessionMessages({ required: true })
+
+    expect(api.messages.value).toHaveLength(2)
+    expect(api.messages.value[0]).toMatchObject({ workflowAction: 'blocked', recoveryTaskId: 'original-task' })
+    expect(api.messages.value[1].workflowAction).toBeUndefined()
+    expect(resumeChatStream).not.toHaveBeenCalled()
   })
 
   it('returns core chat API surface', () => {
@@ -227,5 +236,50 @@ describe('useChatOrchestration', () => {
     })
     api.setTaskFilter('running')
     expect(api.taskFilter).toBeDefined()
+  })
+
+  it('keeps a saved turn until the server acknowledges its rollback and blocks sends during recall', async () => {
+    const api = useChatOrchestration({ sessionId: ref('recall-session') })
+    const products = useProductsStore()
+    const previousVersion = products.invalidationVersion
+    api.messages.value = [
+      { role: 'user', time: '', content: '导入数据', turnId: 'original', serverMessageId: 15, persistence: { id: 'client-id', status: 'saved' } },
+      { role: 'ai', time: '', content: '导入完成', persistence: { id: 'server:16', status: 'saved' } },
+    ]
+    let acknowledge!: (value: unknown) => void
+    recallMessage.mockReturnValueOnce(new Promise(resolve => { acknowledge = resolve }))
+    const pending = api.recallUserMessage(0)
+    expect(recallMessage).toHaveBeenCalledWith('recall-session', 15)
+    expect(api.isRecalling.value).toBe(true)
+    await api.sendMessage('并发追加')
+    expect(api.messages.value).toHaveLength(2)
+    expect(products.invalidationVersion).toBe(previousVersion)
+    acknowledge({ success: true, rolled_back: 1 })
+    await expect(pending).resolves.toEqual({ ok: true, text: '导入数据', message: '已撤回相关业务操作。' })
+    expect(api.messages.value).toHaveLength(0)
+    expect(products.invalidationVersion).toBe(previousVersion + 1)
+    expect(api.isRecalling.value).toBe(false)
+  })
+
+  it('keeps the transcript and exposes the server rollback conflict', async () => {
+    const api = useChatOrchestration({ sessionId: ref('conflict-session') })
+    api.messages.value = [{ role: 'user', time: '', content: '导入数据', persistence: { id: 'server:15', status: 'saved' } }]
+    recallMessage.mockRejectedValueOnce(new ApiError('导入后有新操作，需先核对', 409, null))
+    await expect(api.recallUserMessage(0)).resolves.toMatchObject({ ok: false, message: '导入后有新操作，需先核对' })
+    expect(api.messages.value).toHaveLength(1)
+  })
+
+  it('prevents recall over unsynced turns and allows an unsent local message', async () => {
+    const api = useChatOrchestration({ sessionId: ref('local-session') })
+    api.messages.value = [
+      { role: 'user', time: '', content: '原消息', persistence: { id: 'server:15', status: 'saved' } },
+      { role: 'user', time: '', content: '后续消息', turnId: 'unverified' },
+    ]
+    await expect(api.recallUserMessage(0)).resolves.toMatchObject({ ok: false })
+    await expect(api.recallUserMessage(1)).resolves.toMatchObject({ ok: false })
+    expect(api.messages.value).toHaveLength(2)
+    api.messages.value = [{ role: 'user', time: '', content: '本机草稿' }]
+    await expect(api.recallUserMessage(0)).resolves.toEqual({ ok: true, text: '本机草稿' })
+    expect(recallMessage).not.toHaveBeenCalled()
   })
 })

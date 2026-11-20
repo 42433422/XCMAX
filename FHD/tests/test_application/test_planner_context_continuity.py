@@ -63,6 +63,36 @@ def long_history(count=180):
     ]
 
 
+def test_batch_attachment_import_fits_default_budget_with_every_file(monkeypatch, model_boundary):
+    provider, _ = model_boundary
+    monkeypatch.setattr(windows, "get_context_window_manager", windows.ContextWindowManager)
+    monkeypatch.setenv("XCAGI_PLANNER_MAX_TOKENS", "4096")
+    files = [{"id": str(i), "name": f"表格{i}.xlsx", "suffix": ".xlsx"} for i in range(22)]
+    context = {
+        "artifact_ids": [file["id"] for file in files],
+        "file_context": {"attachment_manifest": files},
+        "available_employees": ["员工介绍" * 50] * 80,
+    }
+    registry = {
+        "elt_import": {"actions": {"preview": {}, "execute": {}}},
+        "unrelated": {"description": "业务说明" * 8000, "actions": {"query": {}}},
+    }
+    planner = generation.LlmPlanGeneration(
+        SimpleNamespace(get_context=lambda _: None),
+        gateway.request_planner_completion,
+        lambda: None,
+    )
+    assert planner.generate("p", "1", "导入", registry, context) is not None
+    prompt = json.loads(provider.requests[-1]["messages"][-1]["content"])
+    assert [tool["tool_id"] for tool in prompt["tool_registry"]] == ["elt_import"]
+    actions = prompt["tool_registry"][0]["actions"]
+    assert [item["action"] for item in actions] == ["execute"]
+    assert "file_paths" in actions[0]["input_schema"]["properties"]
+    assert prompt["context"] == {
+        "file_context": {"attachment_manifest": [file["name"] for file in files]}
+    }
+
+
 @pytest.mark.parametrize("field", ["file_context", "file_analysis"])
 def test_short_attachment_followup_preserves_evidence_in_real_provider_request(
     model_boundary, field

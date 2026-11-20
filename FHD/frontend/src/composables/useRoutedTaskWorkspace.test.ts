@@ -1,5 +1,6 @@
 import { effectScope, nextTick, reactive, ref } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { AgentTaskSummary } from '@/api/agentRuns'
 import { resolveWorkspaceSessionId, useRoutedTaskWorkspace, useTaskApprovalFeedback } from './useRoutedTaskWorkspace'
 
 const apiMock = vi.hoisted(() => ({ markTaskRead: vi.fn(), getRun: vi.fn(), continueRun: vi.fn() }))
@@ -48,7 +49,7 @@ describe('useRoutedTaskWorkspace', () => {
       currentSessionId.value = conversationId
     })
     const markTaskRead = vi.fn(async () => undefined)
-    const taskSummaries = ref([
+    const taskSummaries = ref<AgentTaskSummary[]>([
       {
         task_id: 'task-approval',
         user_id: 'owner',
@@ -109,6 +110,14 @@ describe('useRoutedTaskWorkspace', () => {
       runCount: 3,
     })
     expect(loadSession).not.toHaveBeenCalled()
+
+    taskSummaries.value[0].progress = {
+      ...taskSummaries.value[0].progress!, basis: 'files', percent: 62,
+      stage: '结果待核对', detail: '13/21 份已完成 · 已确认写入 141 行',
+    }
+    expect(workspace.workspaceHeader.value).toMatchObject({
+      stage: '结果待核对', progress: 62, detail: '13/21 份已完成 · 已确认写入 141 行',
+    })
 
     props.workspaceTaskId = 'task-result'
     props.workspaceConversationId = 'chat-result'

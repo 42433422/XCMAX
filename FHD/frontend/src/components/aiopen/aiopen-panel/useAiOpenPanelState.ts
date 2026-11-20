@@ -2,12 +2,10 @@ import { computed, ref } from 'vue'
 import type { Ref } from 'vue'
 import { getApiBase } from '@/utils/apiBase'
 import {
-  buildAiAssistantSetupPrompt,
   buildAiopenClientInstalls,
-  buildAiopenOneLiner,
   resolveAiopenBackendBase,
 } from '@/utils/aiopenMcpInstall'
-import type { AiMcpClientInstall, AiMcpClientId } from '@/utils/aiopenMcpInstall'
+import type { AiMcpClientInstall } from '@/utils/aiopenMcpInstall'
 
 /** 白名单路由行（后端载荷宽松子集） */
 export interface AiopenWhitelistRoute {
@@ -28,6 +26,8 @@ export interface AiopenPanelPayload {
   openclaw_base?: string
   remote_control_enabled?: boolean
   keys?: Array<Record<string, unknown>>
+  client_mode?: boolean
+  has_active_key?: boolean
 }
 
 /** /api/aiopen/manifest 载荷（宽松子集） */
@@ -51,10 +51,6 @@ export interface AiopenInstallPayload {
   clients?: AiMcpClientInstall[]
 }
 
-/**
- * AIOpenPanel 的全部响应式状态与纯展示逻辑（与拆分前逐项对应）。
- * 行为 composable 共享同一组 ref，保证与拆分前同一实例。
- */
 export function useAiOpenPanelState(options: { cursorEnabled: Ref<boolean>; cursorConnected: Ref<boolean> }) {
   const { cursorEnabled, cursorConnected } = options
 
@@ -80,7 +76,10 @@ export function useAiOpenPanelState(options: { cursorEnabled: Ref<boolean>; curs
   const newKey = ref('')
   const accessResult = ref('')
   const panelError = ref('')
-  const panelAvailable = ref(true)
+  const panelAvailable = ref(false)
+  const clientMode = ref(false)
+  const hasActiveClientKey = ref(false)
+  const keyRunning = ref(false)
   const manifestTools = ref<AiopenManifestTool[]>([])
   const setupRunning = ref(false)
   const shutdownRunning = ref(false)
@@ -93,7 +92,6 @@ export function useAiOpenPanelState(options: { cursorEnabled: Ref<boolean>; curs
   const installedClientIds = ref<string[]>([])
   const selectedClientId = ref('cursor')
   const stdioScriptPath = ref('')
-  const oneLinerCopied = ref(false)
 
   const openclawBase = ref('http://localhost:28789')
   const openclawMessage = ref('你好')
@@ -136,20 +134,8 @@ export function useAiOpenPanelState(options: { cursorEnabled: Ref<boolean>; curs
     return base
   })
 
-  const mcpUrl = computed(() => `${reachableOrigin.value}/api/aiopen/mcp`)
-  const guideUrl = computed(() => `${reachableOrigin.value}/api/aiopen/guide?format=markdown`)
-
   const activeKey = computed(() => newKey.value || '')
   const hasConnectConfig = computed(() => Boolean(activeKey.value) || keys.value.length > 0)
-
-  const aiAssistantPrompt = computed(() =>
-    buildAiAssistantSetupPrompt({
-      backendBase: backendOrigin.value,
-      apiKey: activeKey.value,
-      clientId: selectedClientId.value as AiMcpClientId,
-      guideUrl: guideUrl.value,
-    })
-  )
 
   // 当前用户所在端的入口：管理端与主前端不同，用于「ui_sessions 为空」时的提示
   const consoleUrl = computed(() => {
@@ -158,20 +144,14 @@ export function useAiOpenPanelState(options: { cursorEnabled: Ref<boolean>; curs
     return `${window.location.origin}${isAdminConsole ? '/admin' : '/ai-ecosystem'}`
   })
 
-  const oneLinerText = computed(() =>
-    buildAiopenOneLiner(reachableOrigin.value, activeKey.value, consoleUrl.value)
-  )
-
-  // 展示完整句子：截断到 72 字会停在 URL 或「AIO…」中间，让人误以为复制内容被截断。
-  const oneLinerPreview = computed(() => oneLinerText.value)
-
   const readyStatus = computed(() => {
+    if (clientMode.value && !cursorEnabled.value) return 'off'
     if (remoteControlEnabled.value && cursorConnected.value) return 'ready'
     if (remoteControlEnabled.value || cursorEnabled.value) return 'partial'
     return 'off'
   })
 
-  const aiOpenActive = computed(() => remoteControlEnabled.value || cursorEnabled.value)
+  const aiOpenActive = computed(() => cursorEnabled.value || (!clientMode.value && remoteControlEnabled.value))
 
   const featureIntro = [
     { icon: '◎', title: '虚拟光标', desc: 'AI 看见页面，帮你点击和输入' },
@@ -184,19 +164,21 @@ export function useAiOpenPanelState(options: { cursorEnabled: Ref<boolean>; curs
   const anyClientInstalled = computed(() => installedClientIds.value.length > 0)
 
   const flowDone = computed(() => [
-    remoteControlEnabled.value || cursorEnabled.value,
-    anyClientInstalled.value || hasConnectConfig.value || oneLinerCopied.value,
+    aiOpenActive.value,
+    anyClientInstalled.value || hasConnectConfig.value || hasActiveClientKey.value,
     readyStatus.value === 'ready',
   ])
 
   const statusText = computed(() => {
     if (readyStatus.value === 'ready') return '已就绪 · 默认静默待命，Agent 操作时才出现光标'
+    if (clientMode.value && cursorEnabled.value && !remoteControlEnabled.value) return '本页已待命 · 服务端智控尚未开启'
     if (readyStatus.value === 'partial') return '正在连接 · 请保持本页打开'
     return '已关闭 · 可在「更多设置」中重新开启'
   })
 
   const primaryBtnLabel = computed(() => {
     if (setupRunning.value) return '开启中…'
+    if (clientMode.value) return aiOpenActive.value ? '关闭本页待命' : '开启本页待命'
     if (remoteControlEnabled.value) return '关闭智控'
     return '一键开启'
   })
@@ -210,9 +192,7 @@ export function useAiOpenPanelState(options: { cursorEnabled: Ref<boolean>; curs
   )
 
   const aiClients = computed<AiMcpClientInstall[]>(() =>
-    buildAiopenClientInstalls(backendOrigin.value, activeKey.value, {
-      stdioScriptPath: stdioScriptPath.value || undefined,
-    })
+    buildAiopenClientInstalls(reachableOrigin.value, activeKey.value)
   )
 
   const selectedClient = computed(() => aiClients.value.find((c) => c.id === selectedClientId.value) || aiClients.value[0])
@@ -231,6 +211,9 @@ export function useAiOpenPanelState(options: { cursorEnabled: Ref<boolean>; curs
     accessResult,
     panelError,
     panelAvailable,
+    clientMode,
+    hasActiveClientKey,
+    keyRunning,
     manifestTools,
     setupRunning,
     shutdownRunning,
@@ -243,20 +226,16 @@ export function useAiOpenPanelState(options: { cursorEnabled: Ref<boolean>; curs
     installedClientIds,
     selectedClientId,
     stdioScriptPath,
-    oneLinerCopied,
     openclawBase,
     openclawMessage,
     openclawSending,
     openclawResult,
     apiOrigin,
     backendOrigin,
-    mcpUrl,
-    guideUrl,
+    reachableOrigin,
+    consoleUrl,
     activeKey,
     hasConnectConfig,
-    aiAssistantPrompt,
-    oneLinerText,
-    oneLinerPreview,
     readyStatus,
     aiOpenActive,
     featureIntro,

@@ -43,6 +43,7 @@ const mockChatViewApi = {
   currentTask: currentTaskRef,
   orderNumberFetching: { value: false },
   isLoading: isLoadingRef,
+  isRecalling: { value: false },
   isStreamingReply: { value: false },
   isExecuting: { value: false },
   latestAssistantPush: { value: null },
@@ -57,7 +58,7 @@ const mockChatViewApi = {
   historyError: { value: '' },
   pushCopied: { value: false },
   loadingProgressText: { value: '' },
-  excelAnalyzeUploading: { value: false },
+  attachmentUploading: { value: false },
   multimodalPendingCount: { value: 0 },
   multimodalStaging: { value: [] },
   artifactStaging: { value: [] },
@@ -85,8 +86,7 @@ const mockChatViewApi = {
   setCustomOrderNumber: vi.fn(),
   cancelTask: vi.fn(),
   showTaskConfirm: vi.fn(),
-  triggerUpload: vi.fn(),
-  onExcelAnalyzeFileChange: vi.fn(),
+  onAttachmentFileChange: vi.fn(),
   bindExcelSheetToChat: vi.fn(),
   bindAllExcelSheetsToChat: vi.fn(),
   toggleTaskExpanded: vi.fn(),
@@ -110,7 +110,6 @@ const mockChatViewApi = {
   ttsEnabled: { value: false },
   setTtsEnabled: vi.fn(),
   chatMessagesRef: { value: null },
-  excelAnalyzeInputRef: { value: null },
 }
 
 vi.mock('@/composables/useChatView', () => ({

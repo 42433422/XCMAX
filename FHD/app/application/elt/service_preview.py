@@ -74,6 +74,7 @@ class PreviewServiceMixin(SourceServiceMixin, PreviewWorkerMixin):
         target_config_id: str | None = None,
         source_dataset: ParsedDataset | None = None,
         dynamic_schema: dict[str, Any] | None = None,
+        checkpoint_run_id: str | None = None,
     ) -> dict[str, Any]:
         upload = self._owned_upload(db, upload_id, owner_user_id)
         target_detection: dict[str, Any] | None = None
@@ -162,7 +163,7 @@ class PreviewServiceMixin(SourceServiceMixin, PreviewWorkerMixin):
             )
             draft["compatibility_preset_id"] = requested_preset_id
         run = EltRun(
-            id=new_id(),
+            id=checkpoint_run_id or new_id(),
             tenant_id=tenant_id_for_write(),
             owner_user_id=owner_user_id,
             upload_id=upload.id,

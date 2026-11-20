@@ -9,6 +9,7 @@ describe('TaskWorkspaceContextBar', () => {
         title: '客户B销售开票',
         status: 'waiting_user',
         stage: '等待审批',
+        detail: '13/21 份已完成 · 已确认写入 141 行',
         progress: 45,
         unreadCount: 1,
         approvalRequired: true,
@@ -20,6 +21,7 @@ describe('TaskWorkspaceContextBar', () => {
 
     expect(wrapper.text()).toContain('客户B销售开票')
     expect(wrapper.text()).toContain('等待审批')
+    expect(wrapper.text()).toContain('13/21 份已完成 · 已确认写入 141 行')
     expect(wrapper.text()).toContain('待审批')
     expect(wrapper.text()).toContain('1 未读')
     expect(wrapper.text()).toContain('第 2 次尝试 · 3 次运行')

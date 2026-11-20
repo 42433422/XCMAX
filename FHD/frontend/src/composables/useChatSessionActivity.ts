@@ -1,64 +1,79 @@
-import { computed, ref, type Ref } from 'vue'
+import type { ChatStatus } from 'ai'
+import { computed, reactive, type Ref } from 'vue'
 import agentRunsApi from '@/api/agentRuns'
 import type { ChatPlannerPayload } from '@/types/chat'
 
-function updateIds(ids: Ref<Set<string>>, sessionId: string, active: boolean): void {
-  const next = new Set(ids.value)
-  if (active) next.add(sessionId)
-  else next.delete(sessionId)
-  ids.value = next
-}
+export type ChatConversationStatus = ChatStatus | 'waiting' | 'review' | 'stopped'
 
-export function useChatSessionActivity(activeSessionId: Ref<string>) {
-  const runningIds = ref<Set<string>>(new Set())
-  const streamingIds = ref<Set<string>>(new Set())
-  const isLoading = computed(() => runningIds.value.has(activeSessionId.value))
-  const isStreamingReply = computed(() => streamingIds.value.has(activeSessionId.value))
+export const isChatConversationBusy = (status?: ChatConversationStatus) => status === 'submitted' || status === 'streaming'
+const normalizeId = (id: string) => String(id || '').trim() || 'default'
+
+export function useChatSessionActivity(activeSessionId: Ref<string>, getIdentity = () => '') {
+  const activity = reactive(new Map<string, { sessionId: string; identity: string; status: ChatConversationStatus }>())
+  const keyOf = (sessionId: string) => JSON.stringify([getIdentity(), normalizeId(sessionId)])
+  const statuses = computed(() => Object.fromEntries([...activity.values()]
+    .filter(entry => entry.identity === getIdentity())
+    .map(entry => [entry.sessionId, entry.status])))
+  const isSessionBusy = (sessionId: string) => isChatConversationBusy(activity.get(keyOf(sessionId))?.status)
+  const isLoading = computed(() => isSessionBusy(activeSessionId.value))
+  const isStreamingReply = computed(() => activity.get(keyOf(activeSessionId.value))?.status === 'streaming')
 
   const generations = new Map<string, AbortController>()
   function cancelSession(sessionId = activeSessionId.value): boolean {
-    const id = String(sessionId || '').trim() || 'default'
-    const wasRunning = runningIds.value.has(id)
-    generations.get(id)?.abort()
-    generations.delete(id)
-    updateIds(runningIds, id, false)
-    updateIds(streamingIds, id, false)
-    return wasRunning
+    const key = keyOf(sessionId)
+    const wasBusy = isSessionBusy(sessionId)
+    generations.get(key)?.abort()
+    generations.delete(key)
+    if (wasBusy) forSession(sessionId).setStatus('stopped')
+    return wasBusy
   }
   function cancelAll() {
-    for (const id of generations.keys()) cancelSession(id)
+    generations.forEach(controller => controller.abort())
+    generations.clear()
+    activity.clear()
   }
   function beginRound(sessionId = activeSessionId.value) {
-    const id = String(sessionId || '').trim() || 'default'
-    cancelSession(id)
+    const key = keyOf(sessionId)
+    cancelSession(sessionId)
     const controller = new AbortController()
-    generations.set(id, controller)
-    const isCurrent = () => generations.get(id) === controller && !controller.signal.aborted
-    const activity = forSession(id)
+    generations.set(key, controller)
+    const isCurrent = () => generations.get(key) === controller && !controller.signal.aborted
+    const room = forSession(sessionId)
     return {
       signal: controller.signal,
       isCurrent,
-      setLoading: (value: boolean) => { if (isCurrent()) activity.setLoading(value) },
+      setLoading: (value: boolean) => { if (isCurrent()) room.setLoading(value) },
     }
   }
 
   function captureGeneration(sessionId = activeSessionId.value) {
-    const id = String(sessionId || '').trim() || 'default'
-    const generation = generations.get(id)
-    return () => generations.get(id) === generation && !generation?.signal.aborted
+    const key = keyOf(sessionId)
+    const generation = generations.get(key)
+    return () => generations.get(key) === generation && !generation?.signal.aborted
   }
 
   function forSession(sessionId = activeSessionId.value) {
-    const id = String(sessionId || '').trim() || 'default'
+    const id = normalizeId(sessionId)
+    const identity = getIdentity()
+    const key = keyOf(id)
+    const setStatus = (status: ChatConversationStatus) => activity.set(key, { sessionId: id, identity, status })
     return {
       sessionId: id,
-      isActive: () => activeSessionId.value === id,
-      setLoading: (active: boolean) => updateIds(runningIds, id, active),
-      setStreaming: (active: boolean) => updateIds(streamingIds, id, active),
+      isActive: () => normalizeId(activeSessionId.value) === id && getIdentity() === identity,
+      setStatus,
+      setLoading(active: boolean) {
+        const status = activity.get(key)?.status
+        if (active && !isChatConversationBusy(status)) setStatus('submitted')
+        if (!active && isChatConversationBusy(status)) setStatus('ready')
+      },
+      setStreaming(active: boolean) {
+        if (active) setStatus('streaming')
+        else if (activity.get(key)?.status === 'streaming') setStatus('submitted')
+      },
     }
   }
 
-  return { isLoading, isStreamingReply, forSession, captureGeneration, beginRound, cancelSession, cancelAll, runningIds, streamingIds }
+  return { isLoading, isStreamingReply, isSessionBusy, statuses, forSession, captureGeneration, beginRound, cancelSession, cancelAll }
 }
 
 export async function persistDetachedPlannerResult(

@@ -312,6 +312,43 @@ def test_customer_reply_does_not_echo_internal_memory_or_plan():
     assert plan.metadata["user_memory_rag_summary"] == "private-memory-marker"
 
 
+@pytest.mark.parametrize(
+    ("output", "expected", "committed"),
+    [
+        ({"outcome": "unknown", "requires_reconciliation": True}, "unknown", False),
+        (
+            {"outcome": "unknown", "reconciliation_evidence": {"data": {"executed_rows": 4}}},
+            "unknown",
+            True,
+        ),
+        ({"data": {"executed_rows": 4}}, "partial", True),
+        ({"data": {"executed_rows": 0}}, "not_executed", False),
+    ],
+)
+def test_workflow_failure_preserves_import_commit_evidence(output, expected, committed):
+    from types import SimpleNamespace
+
+    from app.application.ai_chat.workflow_response_builder import AIChatWorkflowResponseMixin
+
+    step = SimpleNamespace(
+        status="failed",
+        tool_id="elt_import",
+        action="execute",
+        node_id="import",
+        output={"success": False, **output},
+        duration_ms=1,
+    )
+    plan = SimpleNamespace(intent="import", plan_id="plan", nodes=[], todo_steps=[])
+    run = SimpleNamespace(status="failed", run_id="original-run", steps=[step], metadata={})
+    reply = AIChatWorkflowResponseMixin()._format_agent_run_response(plan, run)
+
+    assert reply["execution"]["outcome"] == expected
+    assert reply["execution"]["committed"] is committed
+    if expected == "unknown":
+        assert reply["requires_reconciliation"] is True
+        assert reply["retryable"] is False
+
+
 def test_customer_query_denies_without_view_permission(trusted_actor, dispatch_calls):
     actor = trusted_actor(role="no-customer", permissions=[])
     result = execute(actor, tool="customers", action="query")

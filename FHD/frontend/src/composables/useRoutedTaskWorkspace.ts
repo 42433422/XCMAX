@@ -59,6 +59,7 @@ export function useRoutedTaskWorkspace(options: RoutedTaskWorkspaceOptions) {
       status: rawStatus,
       stage: String(summary?.progress?.stage || localTask?.stage || taskStatusLabel(rawStatus)),
       progress: summaryProgress ?? localTask?.progress,
+      ...(summary?.progress?.basis === 'files' ? { detail: summary.progress.detail } : {}),
       unreadCount: taskUnreadCount(summary),
       approvalRequired: taskNeedsApproval(summary),
       attempt: Number(summary?.attempt || payload.attempt || 1),

@@ -47,10 +47,10 @@
       data-tutorial-id="toolbar-excel-analyze"
       :title="$t('chat.uploadTitle')"
       @click="triggerUpload"
-      :disabled="excelAnalyzeUploading"
+      :disabled="attachmentUploading"
     >
       <i class="fa fa-upload" aria-hidden="true"></i>
-      {{ excelAnalyzeUploading ? $t('shell.uploadAnalyzing') : $t('chat.uploadAttachment') }}
+      {{ attachmentUploading ? $t('shell.uploadingAttachment') : $t('chat.uploadAttachment') }}
       {{ multimodalPendingCount ? `(${multimodalPendingCount})` : '' }}
     </button>
     <button
@@ -110,7 +110,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, type Ref } from 'vue'
+import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useApprovalMode } from '@/composables/useApprovalMode'
 import { intakeAcceptAttribute } from '@/utils/documentIntake'
@@ -119,22 +119,20 @@ useI18n()
 
 const approvalMode = useApprovalMode()
 
-const props = defineProps<{
-  excelAnalyzeUploading: boolean
+defineProps<{
+  attachmentUploading: boolean
   multimodalPendingCount: number
   /** @deprecated kept optional for older callers; chat toolbar no longer binds WeChat star refresh */
   autoRefreshStarredWechat?: boolean
   proactiveSuggestionsEnabled: boolean
   ttsEnabled: boolean
   officeDockingProcessing?: boolean
-  excelAnalyzeInputRef?: Ref<HTMLInputElement | null>
 }>()
 
 const emit = defineEmits<{
   'new-conversation': []
   'trigger-office-docking': []
-  'register-excel-input': [input: HTMLInputElement | null]
-  'excel-file-change': [event: Event]
+  'attachment-file-change': [event: Event]
   'proactive-suggestions-change': [enabled: boolean]
   'toggle-tts': [enabled: boolean]
 }>()
@@ -145,25 +143,12 @@ function toggleApproval() {
   approvalMode.setEnabled(!approvalMode.state.enabled)
 }
 
-watch(
-  fileInputRef,
-  (el) => {
-    if (props.excelAnalyzeInputRef) {
-      // Parent-owned ref bridge for Excel upload input
-      // eslint-disable-next-line vue/no-mutating-props -- intentional ref forwarding
-      props.excelAnalyzeInputRef.value = el
-    }
-    emit('register-excel-input', el)
-  },
-  { immediate: true },
-)
-
 function triggerUpload() {
   fileInputRef.value?.click()
 }
 
 function onFileChange(event: Event) {
-  emit('excel-file-change', event)
+  emit('attachment-file-change', event)
 }
 
 function onProactiveChange(event: Event) {

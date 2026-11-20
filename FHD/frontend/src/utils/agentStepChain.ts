@@ -9,7 +9,7 @@ import type { PlannerSseEvent } from '@/utils/chatSseStream'
 import { asRecord } from '@/utils/typeGuards'
 import { actionDisplayName, toolDisplayName } from '@/utils/toolLabels'
 
-export type AgentStepState = 'pending' | 'running' | 'success' | 'failed' | 'waiting' | 'blocked' | 'unknown'
+export type AgentStepState = 'pending' | 'running' | 'success' | 'failed' | 'waiting' | 'blocked' | 'unknown' | 'deferred' | 'partial'
 
 export interface ChatNodeResultLike {
   node_id: string
@@ -25,7 +25,7 @@ export interface ChatNodeResultLike {
 }
 
 export interface AgentStepView {
-  /** 稳定 key：优先 node_id，流式占位用 live-step */
+  /** 稳定 key：优先使用 node_id */
   id: string
   toolId: string
   action: string
@@ -52,6 +52,8 @@ const STATE_LABELS: Record<AgentStepState, string> = {
   waiting: '待确认',
   blocked: '已阻断',
   unknown: '待核对',
+  deferred: '待处理',
+  partial: '部分完成',
 }
 
 const STATE_ICONS: Record<AgentStepState, string> = {
@@ -62,6 +64,8 @@ const STATE_ICONS: Record<AgentStepState, string> = {
   waiting: 'fa-pause-circle',
   blocked: 'fa-ban',
   unknown: 'fa-question-circle',
+  deferred: 'fa-clock-o',
+  partial: 'fa-adjust',
 }
 
 export function stepStateLabel(state: AgentStepState): string {
@@ -100,35 +104,6 @@ export function stepsFromNodeResults(rows: ChatNodeResultLike[] | undefined): Ag
   return steps
 }
 
-/** 流式阶段：用进度文案生成一个「当前正在执行」的占位步骤。 */
-export function buildLiveStep(hint: string | undefined): AgentStepView | null {
-  const text = String(hint || '').replace(/\s+/g, ' ').trim()
-  if (!text) return null
-  // 「正在调用工具: 搜索」这类文案去掉前缀，只留动作本身作为标题。
-  const title = text.replace(/^正在(调用工具|执行|处理|查询|读取|写入|生成)[：:，,\s]*/u, '') || text
-  return {
-    id: 'live-step',
-    toolId: '',
-    action: '',
-    title,
-    subtitle: '',
-    state: 'running',
-    retries: 0,
-    live: true,
-  }
-}
-
-/**
- * 合并真实步骤与流式占位步骤。
- * 已有真实步骤时不再显示占位步骤，避免同一次执行出现两行。
- */
-export function withLiveStep(steps: AgentStepView[], live: AgentStepView | null): AgentStepView[] {
-  if (!steps.length) return live ? [live] : []
-  if (!live) return steps
-  const hasRunning = steps.some((step) => step.state === 'running' || step.state === 'waiting')
-  return hasRunning ? steps : [...steps, live]
-}
-
 export type ToolCallEventLike = Omit<Extract<PlannerSseEvent, { type: 'tool_call' }>, 'type'>
 
 /** 原生 SDK parts 的纯展示投影：不再维护第二套工具状态机。 */
@@ -142,19 +117,27 @@ export function stepsFromAiParts(parts: UIMessage['parts']): AgentStepView[] {
     const separator = name.lastIndexOf('.')
     const toolId = String(detail.tool_id || (separator < 0 ? name : name.slice(0, separator)))
     const action = String(detail.action || (separator < 0 ? '' : name.slice(separator + 1)))
-    const state: AgentStepState = part.state === 'output-available' ? 'success'
+    let state: AgentStepState = part.state === 'output-available' ? 'success'
       : part.state === 'output-error' ? 'failed'
         : part.state === 'output-denied' ? 'blocked'
           : part.state === 'approval-requested' ? 'waiting'
             : part.state === 'approval-responded' && !part.approval.approved ? 'blocked' : 'running'
+    if (state === 'success' || state === 'failed') {
+      if (detail.requires_reconciliation === true) state = 'unknown'
+      else if (detail.deferred === true) state = detail.committed === true ? 'partial' : 'deferred'
+      else if (state === 'failed' && detail.committed === true) state = 'partial'
+    }
+    const error = part.state === 'output-error' ? part.errorText : undefined
+    const preview = (state === 'partial' || state === 'unknown') && typeof detail.output_preview === 'string'
+      ? detail.output_preview : undefined
     const percent = detail.progress
     const count = (value: unknown) => typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined
     return {
       id: part.toolCallId, toolId, action,
       title: toolDisplayName(toolId), subtitle: actionDisplayName(action), state,
       durationMs: count(detail.duration_ms),
-      output: typeof part.output === 'string' ? part.output : undefined,
-      error: part.state === 'output-error' ? part.errorText : undefined,
+      output: typeof part.output === 'string' ? part.output : preview !== error ? preview : undefined,
+      error,
       hint: String((state === 'running' ? detail.label : detail.recovery_hint) || '') || undefined,
       retries: count(detail.retries) || 0,
       progress: typeof percent === 'number' && Number.isFinite(percent) ? Math.max(0, Math.min(100, percent)) : undefined,
@@ -174,11 +157,13 @@ export function isDocumentTemplateChange(ev: ToolCallEventLike | undefined): boo
 
 export function chainState(steps: AgentStepView[]): AgentStepState {
   if (!steps.length) return 'pending'
-  if (steps.some((step) => step.state === 'failed')) return 'failed'
   if (steps.some((step) => step.state === 'unknown')) return 'unknown'
+  if (steps.some((step) => step.state === 'failed')) return 'failed'
   if (steps.some((step) => step.state === 'blocked')) return 'blocked'
   if (steps.some((step) => step.state === 'waiting')) return 'waiting'
   if (steps.some((step) => step.state === 'running' || step.state === 'pending')) return 'running'
+  if (steps.some((step) => step.state === 'partial')) return 'partial'
+  if (steps.some((step) => step.state === 'deferred')) return 'deferred'
   return 'success'
 }
 

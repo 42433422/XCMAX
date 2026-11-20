@@ -58,6 +58,7 @@ const mockChatViewApi = {
   currentTask: currentTaskRef,
   orderNumberFetching: ref(false),
   isLoading: isLoadingRef,
+  isRecalling: ref(false),
   isStreamingReply: ref(false),
   isExecuting: ref(false),
   latestAssistantPush: latestAssistantPushRef,
@@ -78,7 +79,7 @@ const mockChatViewApi = {
   loadMoreHistorySessions: vi.fn(),
   pushCopied: ref(false),
   loadingProgressText: ref(''),
-  excelAnalyzeUploading: ref(false),
+  attachmentUploading: ref(false),
   multimodalPendingCount: ref(0),
   multimodalStaging: multimodalStagingRef,
   artifactStaging: artifactStagingRef,
@@ -102,7 +103,7 @@ const mockChatViewApi = {
   refetchTaskOrderNumber: vi.fn(),
   setCustomOrderNumber: vi.fn(),
   cancelTask: vi.fn(),
-  onExcelAnalyzeFileChange: vi.fn(async () => undefined),
+  onAttachmentFileChange: vi.fn(async () => undefined),
   bindExcelSheetToChat: vi.fn(async () => undefined),
   bindAllExcelSheetsToChat: vi.fn(async () => undefined),
   toggleTaskExpanded: vi.fn(),
@@ -137,7 +138,6 @@ const mockChatViewApi = {
   ttsEnabled: ttsEnabledRef,
   setTtsEnabled: vi.fn(),
   chatMessagesRef: ref(null),
-  excelAnalyzeInputRef: ref(null),
 }
 
 vi.mock('@/composables/useChatView', () => ({ useChatView: () => mockChatViewApi }))
@@ -341,16 +341,16 @@ const ChatInputToolbarStub = defineComponent({
   props: {
     proactiveSuggestionsEnabled: { type: Boolean, default: false },
     ttsEnabled: { type: Boolean, default: false },
-    excelAnalyzeUploading: { type: Boolean, default: false },
+    attachmentUploading: { type: Boolean, default: false },
     multimodalPendingCount: { type: Number, default: 0 },
     officeDockingProcessing: { type: Boolean, default: false },
   },
-  emits: ['new-conversation', 'trigger-office-docking', 'excel-file-change', 'proactive-suggestions-change', 'toggle-tts'],
+  emits: ['new-conversation', 'trigger-office-docking', 'attachment-file-change', 'proactive-suggestions-change', 'toggle-tts'],
   setup(_props, { emit }) {
     return () => h('div', { class: 'input-toolbar' }, [
       button('stub-new-conversation', '新对话', () => emit('new-conversation')),
       button('stub-office-docking', '办公对接', () => emit('trigger-office-docking')),
-      button('stub-excel-change', '上传 Excel', () => emit('excel-file-change', { target: { files: [] } })),
+      button('stub-excel-change', '上传 Excel', () => emit('attachment-file-change', { target: { files: [] } })),
       button('stub-proactive-toggle', '主动意识', () => emit('proactive-suggestions-change', true)),
       button('stub-tts-toggle', '朗读', () => emit('toggle-tts', true)),
     ])
@@ -671,6 +671,7 @@ describe('ChatView interactions', () => {
     await wrapper.get('.stub-recall').trigger('click')
     await flushPromises()
     expect(mockChatViewApi.recallUserMessage).toHaveBeenCalledWith(0)
+    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('撤销可核实的业务操作'))
     expect((wrapper.vm as any).messageInput).toBe('重新整理发货单')
     expect(document.activeElement?.id).toBe('messageInput')
     confirmSpy.mockRestore()
@@ -832,8 +833,8 @@ describe('ChatView interactions', () => {
     const wrapper = await mountChatView()
     const file = new File(['a'], '发货明细.xlsx')
     await dropFiles(wrapper, { items: [], files: [file] })
-    expect(mockChatViewApi.onExcelAnalyzeFileChange).toHaveBeenCalledTimes(1)
-    const event = mockChatViewApi.onExcelAnalyzeFileChange.mock.calls[0][0] as any
+    expect(mockChatViewApi.onAttachmentFileChange).toHaveBeenCalledTimes(1)
+    const event = mockChatViewApi.onAttachmentFileChange.mock.calls[0][0] as any
     expect(event.target.files.map((item: File) => item.name)).toEqual(['发货明细.xlsx'])
     expect(event.target.value).toBe('')
   })
@@ -841,7 +842,7 @@ describe('ChatView interactions', () => {
   it('拖入不支持的文件时给出提示而不上传', async () => {
     const wrapper = await mountChatView()
     await dropFiles(wrapper, { items: [], files: [new File(['a'], 'setup.exe')] })
-    expect(mockChatViewApi.onExcelAnalyzeFileChange).not.toHaveBeenCalled()
+    expect(mockChatViewApi.onAttachmentFileChange).not.toHaveBeenCalled()
     expect(mockChatViewApi.addAndSaveMessage).toHaveBeenCalledWith(
       '[附件] 不支持的文件类型，请拖入 Excel、图片、PDF 或包含它们的文件夹', 'ai')
   })
@@ -856,14 +857,14 @@ describe('ChatView interactions', () => {
       items: [{ kind: 'file', webkitGetAsEntry: () => root }],
       files: [new File(['a'], 'ignored.txt')],
     })
-    const event = mockChatViewApi.onExcelAnalyzeFileChange.mock.calls[0][0] as any
+    const event = mockChatViewApi.onAttachmentFileChange.mock.calls[0][0] as any
     expect(event.target.files.map((item: File) => item.name)).toEqual(['发货明细.xlsx', '现场照片.png'])
   })
 
   it('按 MIME 接受无扩展名的图片文件', async () => {
     const wrapper = await mountChatView()
     await dropFiles(wrapper, { items: [], files: [new File(['a'], 'paste', { type: 'image/png' })] })
-    expect(mockChatViewApi.onExcelAnalyzeFileChange).toHaveBeenCalledTimes(1)
+    expect(mockChatViewApi.onAttachmentFileChange).toHaveBeenCalledTimes(1)
   })
 
   it('文件夹扫描失败时回退到普通文件列表', async () => {
@@ -876,7 +877,7 @@ describe('ChatView interactions', () => {
       ],
       files: [new File(['a'], '发货明细.xlsx')],
     })
-    const event = mockChatViewApi.onExcelAnalyzeFileChange.mock.calls[0][0] as any
+    const event = mockChatViewApi.onAttachmentFileChange.mock.calls[0][0] as any
     expect(event.target.files.map((item: File) => item.name)).toEqual(['发货明细.xlsx'])
   })
 
@@ -884,7 +885,7 @@ describe('ChatView interactions', () => {
     const wrapper = await mountChatView()
     await dropFiles(wrapper, { items: [], files: [] })
     await dropFiles(wrapper, null)
-    expect(mockChatViewApi.onExcelAnalyzeFileChange).not.toHaveBeenCalled()
+    expect(mockChatViewApi.onAttachmentFileChange).not.toHaveBeenCalled()
     expect(mockChatViewApi.addAndSaveMessage).not.toHaveBeenCalled()
   })
 
@@ -892,7 +893,7 @@ describe('ChatView interactions', () => {
     isLoadingRef.value = true
     const wrapper = await mountChatView()
     await dropFiles(wrapper, { items: [], files: [new File(['a'], '发货明细.xlsx')] })
-    expect(mockChatViewApi.onExcelAnalyzeFileChange).not.toHaveBeenCalled()
+    expect(mockChatViewApi.onAttachmentFileChange).not.toHaveBeenCalled()
   })
 
   it('拖拽进入时显示覆盖层，离开后移除', async () => {
@@ -988,7 +989,7 @@ describe('ChatView interactions', () => {
     await wrapper.get('.stub-tts-toggle').trigger('click')
     expect(mockChatViewApi.newConversation).toHaveBeenCalled()
     expect(officeDocking.triggerOfficeDocking).toHaveBeenCalled()
-    expect(mockChatViewApi.onExcelAnalyzeFileChange).toHaveBeenCalledWith({ target: { files: [] } })
+    expect(mockChatViewApi.onAttachmentFileChange).toHaveBeenCalledWith({ target: { files: [] } })
     expect(mockChatViewApi.setTtsEnabled).toHaveBeenCalledWith(true)
   })
 

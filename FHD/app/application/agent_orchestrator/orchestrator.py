@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import logging
 from typing import Any, cast
+from uuid import UUID
 
 from app.application.agent_orchestrator.artifact_ingestion import ingest_artifact_to_dataset
 from app.application.agent_orchestrator.budget import (
@@ -401,9 +402,9 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         approval_request_id: str = "",
         runtime_context: dict[str, Any] | None = None,
     ) -> AgentRun | None:
-        run = self._repo.get(run_id)
+        run: AgentRun | None = self._repo.get(run_id)
         if run is None or run.status == "cancelled":
-            return cast("AgentRun | None", run)
+            return run
         waiting_step = self._find_waiting_step(run, approved_step_id=approved_step_id)
         if waiting_step is None:
             run.add_event(
@@ -517,6 +518,48 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
             "approval_request_id": str(approval_request_id or ""),
             "plan_sha256": approval_plan_sha256,
         }
+        if plan.metadata.get("durable_elt_batch") is True and (
+            waiting_step.tool_id,
+            waiting_step.action,
+        ) == ("elt_import", "execute"):
+            from app.application.agent_orchestrator.approval_transaction import (
+                enqueue_claimed_workspace_approval,
+            )
+            from app.application.agent_orchestrator.task_dispatcher import (
+                notify_agent_task_dispatcher,
+            )
+            from app.application.agent_orchestrator.task_execution_repository import (
+                get_task_execution_repository,
+            )
+            from app.application.agent_orchestrator.task_execution_sql_repository import (
+                SQLAlchemyTaskExecutionRepository,
+            )
+
+            paths = waiting_step.params.get("file_paths")
+            if not approval_plan_sha256 or not isinstance(paths, list) or not paths:
+                return None
+            try:
+                if any(not isinstance(path, str) or str(UUID(path)) != path for path in paths):
+                    return None
+            except ValueError:
+                return None
+            queue = get_task_execution_repository()
+            if not isinstance(self._repo, SQLAlchemyAgentRunRepository) or not isinstance(
+                queue, SQLAlchemyTaskExecutionRepository
+            ):
+                return None
+            if not enqueue_claimed_workspace_approval(
+                self._repo,
+                queue,
+                run=run,
+                previous=previous,
+                step=waiting_step,
+                approved_by=approved_by,
+                runtime_context=context,
+            ):
+                return None
+            notify_agent_task_dispatcher()
+            return run
         run.add_event(
             "step.approved",
             f"步骤 {waiting_step.node_id} 已确认继续",

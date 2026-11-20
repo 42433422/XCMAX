@@ -19,11 +19,27 @@ def test_known_model_uses_catalog_window():
     assert windows.context_window_for("deepseek-chat") == 131072
     assert windows.context_window_for("gpt-4o") == 128000
     assert windows.context_window_for("claude-sonnet-4-6") == 1000000
+    assert windows.context_window_for("Xiaomi/MiMo-V2.6-Flash") == 1000000
 
 
 def test_unknown_model_falls_back_to_default_window():
     assert windows.context_window_for("not-a-real-model") == 16384
     assert windows.context_window_for("claude-3-5-sonnet") == 16384
+    assert windows.context_window_for("gateway/not-a-real-model") == 16384
+
+
+@pytest.mark.asyncio
+async def test_market_budget_follows_resolved_account_model():
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, call
+
+    resolve = AsyncMock(return_value=("xiaomi", "mimo-v2.6-flash"))
+    adapter = SimpleNamespace(model_name="fallback", resolve_chat_route=resolve)
+    provider = SimpleNamespace(_inner=SimpleNamespace(provider_id="modstore", _adapter=adapter))
+
+    assert windows.resolve_token_budget(await windows.model_for_budget(provider)) == 32000
+    assert await windows.model_for_budget(provider, "account-alias") == "xiaomi/mimo-v2.6-flash"
+    assert resolve.await_args_list == [call(None, None), call(None, "account-alias")]
 
 
 def test_budget_is_half_the_window_with_floor_and_ceiling():

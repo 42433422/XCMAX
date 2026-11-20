@@ -3,7 +3,7 @@
   "_source": "https://github.com/BerriAI/litellm/blob/736b05716593347fa51b92afa9526a2397af312c/model_prices_and_context_window.json",
   "_revision": "736b05716593347fa51b92afa9526a2397af312c",
   "_license": "MIT",
-  "_doc": "各模型可用的输入上下文窗口（tokens）。数据取自 LiteLLM 公开目录，运行时不做联网查询；新增模型在此登记，未登记的模型使用 default_window。",
+  "_doc": "各模型可用的上下文窗口（tokens）。默认来源为 LiteLLM 公开目录，运行时不联网。MiMo V2.6 Flash 来源：https://mimo.mi.com/models/en-US/mimo-v2.6-flash",
   "default_window": 16384,
   "policy": {
     "reserve_ratio": 0.5,
@@ -16,6 +16,7 @@
     "gpt-4o": 128000,
     "gpt-4o-mini": 128000,
     "claude-sonnet-4-5": 200000,
-    "claude-sonnet-4-6": 1000000
+    "claude-sonnet-4-6": 1000000,
+    "mimo-v2.6-flash": 1000000
   }
 }

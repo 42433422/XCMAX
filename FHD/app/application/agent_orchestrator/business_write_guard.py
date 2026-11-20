@@ -10,6 +10,7 @@ from app.application.agent_orchestrator.worker_repository import (
 from app.application.agent_orchestrator.worker_repository import lock_execution_claim
 
 _claim = ContextVar("agent_business_write_claim", default=None)
+_elt_step = ContextVar("agent_elt_checkpoint_step", default="")
 
 
 @contextmanager
@@ -58,8 +59,53 @@ def capture_worker_claim():
     return (execution.run_id, owner_id, execution.execution_count)
 
 
+def capture_elt_worker_claim(step, context):
+    """Capture the approved stored step from the host, never a client marker."""
+    claim = _claim.get()
+    if claim is None or (step.tool_id, step.action) != ("elt_import", "execute"):
+        return None
+    repository, execution, _ = claim
+    run = repository.get(execution.run_id)
+    from app.application.agent_orchestrator.elt_checkpoint_recovery import (
+        ELT_CHECKPOINT_PROTOCOL,
+        checkpoint_step,
+    )
+    from app.application.agent_orchestrator.task_background import task_execution_context
+
+    dispatch = run.metadata.get("dispatch") if run else None
+    if (
+        not isinstance(dispatch, dict)
+        or dispatch.get("elt_checkpoint_protocol") != ELT_CHECKPOINT_PROTOCOL
+    ):
+        return None
+    approved = checkpoint_step(run)
+    if (
+        approved is None
+        or (step.step_id, step.node_id, step.params)
+        != (approved.step_id, approved.node_id, approved.params)
+        or approved.step_id != context.get("step_id")
+        or str(context.get("run_id") or "") != execution.run_id
+        or str(context.get("tenant_id") or "") != str(execution.tenant_id or "")
+        or context.get("idempotency_key")
+        != task_execution_context(run, approved)["idempotency_key"]
+    ):
+        raise WorkerLeaseLost("ELT checkpoint scope does not match the current approved claim")
+    recheck_worker_claim()
+    return capture_worker_claim()
+
+
+def owns_elt_step(context):
+    claim = capture_worker_claim()
+    return bool(
+        _elt_step.get()
+        and _elt_step.get() == context.get("step_id")
+        and claim
+        and claim[0] == context.get("run_id")
+    )
+
+
 @contextmanager
-def restore_worker_claim(reference):
+def restore_worker_claim(reference, *, elt_step_id=""):
     if reference is None:
         yield
         return
@@ -73,7 +119,13 @@ def restore_worker_claim(reference):
     run_id, owner_id, count = reference
     execution = AgentTaskExecution(run_id=run_id, task_id="", user_id="", execution_count=count)
     with worker_claim_scope(SQLAlchemyAgentRunRepository(), execution, owner_id):
-        yield
+        token = _elt_step.set(elt_step_id)
+        try:
+            if elt_step_id:
+                recheck_worker_claim()
+            yield
+        finally:
+            _elt_step.reset(token)
 
 
 @contextmanager

@@ -200,7 +200,7 @@ def test_business_import_covers_every_unit_and_merges_by_coordinate(monkeypatch)
     source = "# sheet:明细\nR1 | 货品 | 数量\n" + "\n".join(rows)
     seen: list[str] = []
 
-    def unit(text):
+    def unit(text, **_kwargs):
         seen.append(text)
         cited = [line.split(" ", 1)[0][1:] for line in text.splitlines() if line.startswith("R")]
         return LlmAssistResult(

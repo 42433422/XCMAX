@@ -4,7 +4,7 @@ import { chatFailureRecoveryText, readChatExecution } from './chatFailureRecover
 describe('chat failure recovery', () => {
   it('separates not-executed, unknown and partial outcomes without claiming a kept write', () => {
     expect(chatFailureRecoveryText(undefined)).toContain('结果未知')
-    expect(chatFailureRecoveryText({ effect: 'unknown', committed: false })).toContain('本轮未提交写入')
+    expect(chatFailureRecoveryText({ effect: 'unknown', committed: false })).toContain('结果未知')
     expect(chatFailureRecoveryText({ effect: 'preview', committed: false })).toContain('本轮未提交写入')
     expect(chatFailureRecoveryText({ effect: 'partial', committed: true })).toContain('部分步骤已写入')
     expect(chatFailureRecoveryText({ outcome: 'not_executed', committed: false })).toContain('本轮未提交写入')
@@ -41,5 +41,15 @@ describe('chat failure recovery', () => {
   it('keeps an unknown outcome when the server never marked execution as started', () => {
     expect(readChatExecution({ success: false, data: { action: 'workflow_planning_failed' } })).toBeUndefined()
     expect(chatFailureRecoveryText(undefined)).toContain('结果未知')
+  })
+
+  it('reconciliation overrides a stale pre-execution hint', () => {
+    const record = readChatExecution({
+      execution_state: 'unknown',
+      requires_reconciliation: true,
+      execution: { committed: false, outcome: 'not_executed', effect: 'none' },
+    })
+    expect(record).toMatchObject({ outcome: 'unknown', effect: 'unknown' })
+    expect(chatFailureRecoveryText(record)).toContain('不要重复提交')
   })
 })

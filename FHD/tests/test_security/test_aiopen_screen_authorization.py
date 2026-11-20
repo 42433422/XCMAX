@@ -4,22 +4,26 @@ from __future__ import annotations
 
 import asyncio
 import json
+import secrets
+import time
 from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.testclient import TestClient
 
 from app.application.aiopen import service
 from app.application.aiopen.runtime import ApiKeyRegistry, RuntimeState
 from app.domain.aiopen.principal import ScreenPrincipal
 from app.fastapi_routes import ai_open, aiopen_access_dependency
+from app.fastapi_routes.ai_qclaw import router as legacy_router
 from app.infrastructure.aiopen.cursor_hub import AiOpenCursorHub
 from app.infrastructure.aiopen.principal_context import (
     current_screen_principal,
     screen_principal_scope,
 )
+from app.middleware.csrf import CSRFMiddleware
 
 ALICE = ScreenPrincipal("alice", "tenant-a")
 BOB = ScreenPrincipal("bob", "tenant-a")
@@ -221,3 +225,140 @@ def test_unbound_keys_cannot_inherit_browser_authority(client, monkeypatch, key)
     )
     assert response.status_code == 403
     assert response.json()["code"] == "SCREEN_PRINCIPAL_REQUIRED"
+
+
+def test_client_key_is_session_owned_revocable_and_scope_limited(monkeypatch, tmp_path):
+    hub = AiOpenCursorHub()
+    asyncio.run(seed(hub))
+    storage = tmp_path / "keys.json"
+    registry = ApiKeyRegistry(
+        RuntimeState({}), lambda: "", secrets.token_urlsafe, time.time, lambda: storage
+    )
+    monkeypatch.setattr(service, "_keys", registry)
+    monkeypatch.setattr(service, "aiopen_cursor_hub", hub)
+    monkeypatch.setattr(aiopen_access_dependency, "resolve_session_user", lambda req: None)
+    monkeypatch.setattr(
+        ai_open, "create_chat_trace_run", Mock(return_value=SimpleNamespace(run_id="client-test"))
+    )
+    monkeypatch.setitem(service.AIOPEN_STATE, "remote_control_enabled", True)
+    app = FastAPI()
+    app.add_middleware(CSRFMiddleware)
+    app.include_router(ai_open.router)
+    app.include_router(legacy_router)
+    accounts = {p: owner for p, owner in (("a", ALICE), ("b", BOB), ("other", OTHER_TENANT))}
+
+    def logged_in(request: Request):
+        owner = accounts.get(request.cookies.get("session"))
+        if owner is None:
+            raise HTTPException(status_code=401)
+        return SimpleNamespace(
+            id=owner.principal_id, tenant_id=owner.tenant_id, tier="enterprise", is_active=True
+        )
+
+    app.dependency_overrides[ai_open.get_logged_in_user] = logged_in
+    key_path = "/api/aiopen/client/key"
+    copy_path = f"{key_path}?keep_existing=true"
+    with TestClient(app) as http:
+        assert http.get("/api/aiopen/client").status_code == 401
+        csrf = {"X-CSRF-Token": http.cookies["csrf_token"]}
+        assert http.post(key_path, headers=csrf).status_code == 401
+        http.cookies.set("session", "a")
+        assert http.post(key_path).status_code == 403
+        assert http.delete(key_path).status_code == 403
+        created = http.post(
+            key_path,
+            headers=csrf,
+            json={"principal_id": "bob", "tenant_id": "tenant-b", "scopes": ["*"]},
+        )
+        assert created.status_code == 200 and created.headers["cache-control"] == "no-store"
+        key = created.json()["key"]
+        assert key not in storage.read_text()
+        restarted = ApiKeyRegistry(
+            RuntimeState({}), lambda: "", secrets.token_urlsafe, time.time, lambda: storage
+        )
+        assert restarted.resolve_principal(key) == ALICE
+        assert not restarted.verify(key)
+        inspected = http.get("/api/aiopen/client").json()
+        assert inspected["client_mode"] and inspected["has_active_key"]
+        assert key not in json.dumps(inspected)
+
+        headers = {"X-AIOPEN-Key": key}
+        for index, method, params in (
+            (1, "initialize", {"protocolVersion": "2025-06-18"}),
+            (2, "tools/list", {}),
+            (3, "tools/call", {"name": "ui_sessions"}),
+        ):
+            payload = {"jsonrpc": "2.0", "id": index, "method": method, "params": params}
+            result = http.post("/api/aiopen/mcp", headers=headers, json=payload).json()["result"]
+            if index == 1:
+                assert result["serverInfo"]["name"] == "AIOPEN"
+            elif index == 2:
+                assert len(result["tools"]) == 18
+            else:
+                show = result["content"][0]["text"]
+                assert "alice" in show and "bob" not in show and "other-tenant" not in show
+        forbidden = {"tool": "chat", "args": {"message": "blocked"}}
+        assert http.post("/api/aiopen/invoke", headers=headers, json=forbidden).status_code == 403
+        for path in (
+            "/api/aiopen/loop/verify",
+            "/api/aiopen/openclaw/chat",
+            "/api/ai/qclaw/openclaw/chat",
+        ):
+            assert http.post(path, headers=headers, json={"message": "blocked"}).status_code == 401
+        for account in ("b", "other"):
+            http.cookies.set("session", account)
+            assert not http.get("/api/aiopen/client").json()["has_active_key"]
+            assert http.delete(key_path, headers=csrf).json()["revoked"] is False
+        assert registry.authorize(key, "ui_sessions")["ok"]
+        http.cookies.set("session", "a")
+        with monkeypatch.context() as broken:
+            broken.setattr(registry, "_persist", lambda: False)
+            assert http.post(key_path, headers=csrf).status_code == 503
+            assert http.post(copy_path, headers=csrf).status_code == 503
+            assert http.delete(key_path, headers=csrf).status_code == 503
+            assert registry.authorize(key, "ui_sessions")["ok"]
+
+        assert http.post(copy_path).status_code == 403
+        alice_keys = [key]
+        for _ in range(7):
+            copy = http.post(copy_path, headers=csrf)
+            assert copy.status_code == 200 and copy.headers["cache-control"] == "no-store"
+            alice_keys.append(copy.json()["key"])
+        assert len(set(alice_keys)) == 8
+        assert http.post(copy_path, headers=csrf).status_code == 409
+        assert all(registry.authorize(secret, "ui_sessions")["ok"] for secret in alice_keys)
+
+        http.cookies.set("session", "other")
+        other_key = http.post(copy_path, headers=csrf).json()["key"]
+        assert registry.resolve_principal(other_key) == OTHER_TENANT
+
+        http.cookies.set("session", "a")
+        rotated = http.post(key_path, headers=csrf).json()["key"]
+        assert all(not registry.authorize(secret)["ok"] for secret in alice_keys)
+        copied = http.post(copy_path, headers=csrf).json()["key"]
+        assert http.delete(key_path, headers=csrf).json()["revoked"] is True
+        assert not registry.authorize(rotated)["ok"] and not registry.authorize(copied)["ok"]
+        assert registry.authorize(other_key, "ui_sessions")["ok"]
+        assert http.post("/api/aiopen/mcp", headers=headers, json={}).status_code == 401
+
+
+def test_client_key_copy_prunes_only_expired_keys_for_owner(tmp_path):
+    now = 100.0
+    storage = tmp_path / "keys.json"
+    registry = ApiKeyRegistry(
+        RuntimeState({}), lambda: "", secrets.token_urlsafe, lambda: now, lambda: storage
+    )
+    client_options = {"scopes": ["ui_sessions"], "client_key": True, "keep_existing": True}
+    expired = registry.generate(principal=ALICE, expires_at=100.25, **client_options)["key"]
+    active = registry.generate(principal=ALICE, expires_at=100.75, **client_options)["key"]
+    other = registry.generate(principal=OTHER_TENANT, expires_at=100.25, **client_options)["key"]
+    service_key = registry.generate(principal=ALICE, expires_at=100.25)["key"]
+
+    now = 100.5
+    copied = registry.generate(principal=ALICE, expires_at=200, **client_options)["key"]
+    restarted = ApiKeyRegistry(
+        RuntimeState({}), lambda: "", secrets.token_urlsafe, lambda: now, lambda: storage
+    )
+    assert restarted.resolve_principal(expired) is None
+    for key, owner in ((active, ALICE), (copied, ALICE), (other, OTHER_TENANT), (service_key, ALICE)):
+        assert restarted.resolve_principal(key) == owner

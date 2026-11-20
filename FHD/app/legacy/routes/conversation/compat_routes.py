@@ -171,7 +171,10 @@ async def _follow_replay(
         try:
             rows = chat_stream_replay.events_after(turn_id, cursor, owner=owner, tenant=tenant)
             for row in rows:
-                cursor = row.get("seq") or cursor
+                seq = row.get("seq")
+                if seq and seq != cursor:
+                    cursor = seq
+                    deadline = time.monotonic() + idle_timeout
                 yield _replay_line(row)
             if chat_stream_replay.finish_status(turn_id, owner=owner, tenant=tenant):
                 for row in chat_stream_replay.events_after(

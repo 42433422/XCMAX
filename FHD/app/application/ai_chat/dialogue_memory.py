@@ -10,7 +10,8 @@ import os
 import re
 import time
 import uuid
-from collections.abc import Mapping, MutableMapping, Sequence
+from collections.abc import Iterator, Mapping, MutableMapping, Sequence
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -55,6 +56,24 @@ def conversation_key(context: Mapping[str, Any] | None) -> str:
         return ""
     scope = [str(owner), str(context.get("tenant_id") or ""), str(context.get("mod_id") or ""), raw]
     return hashlib.sha256(json.dumps(scope, ensure_ascii=False).encode()).hexdigest()
+
+
+@contextmanager
+def chat_recall_guard(context: Mapping[str, Any]) -> Iterator[None]:
+    """Share the chat admission lock and reject live turns before compensating."""
+    key = conversation_key(context)
+    try:
+        with _lock(key).acquire(timeout=0):
+            data = _read(key, context)
+            if any(
+                item.get("role") == "user" and item.get("turn_id")
+                and _turn_is_live(key, str(item["turn_id"]))
+                for item in data["turns"]
+            ):
+                raise ConversationRevisionError("当前会话仍有任务在执行，请等本轮结束再撤回。")
+            yield
+    except Timeout as exc:
+        raise ConversationRevisionError("该会话正在处理另一项操作，请稍后再撤回。") from exc
 
 
 def bind_chat_turn_context(message: str, context: MutableMapping[str, Any]) -> None:
