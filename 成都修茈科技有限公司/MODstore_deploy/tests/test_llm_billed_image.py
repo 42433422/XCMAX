@@ -40,7 +40,11 @@ def paid(monkeypatch):
     monkeypatch.setattr(image.ledger, "mark_settling", Mock())
     monkeypatch.setattr(image.ledger, "lock_request", Mock(return_value=row))
     monkeypatch.setattr(image.ledger, "finish", Mock())
-    return wallet, upstream, Mock()
+    db = Mock()
+    db.query.return_value.filter.return_value.all.return_value = [
+        SimpleNamespace(model="gpt-image-2", input_price_per_1k=1, output_price_per_1k=3)
+    ]
+    return wallet, upstream, db
 
 
 def run_image(db):
@@ -135,3 +139,26 @@ def test_rejects_fabricated_usage_and_nonofficial_endpoint():
         )
         is None
     )
+
+
+@pytest.mark.asyncio
+async def test_image_catalog_discovery_releases_credential_and_pricing_connection(
+    paid, monkeypatch
+):
+    from modstore_server import llm_operation_routes as routes
+
+    _, _, db = paid
+    monkeypatch.setattr(image, "resolve_operation_route", routes.resolve_operation_route)
+    monkeypatch.setattr(routes, "KNOWN_PROVIDERS", ("openai",))
+    monkeypatch.setattr(routes, "read_state", lambda: {})
+    monkeypatch.setattr(routes, "resolve_credentials", lambda *a, **k: ("secret", None, "platform"))
+    monkeypatch.setattr(routes, "supports_operation", lambda *a: True)
+
+    async def catalog(*args, **kwargs):
+        db.close.assert_called_once()
+        return {"models_detailed": [{"id": "gpt-image-2"}]}
+
+    monkeypatch.setattr(routes, "get_models_for_credentials", catalog)
+    result = await run_image(db)
+    assert result["model"] == "gpt-image-2"
+    db.close.assert_called_once()

@@ -19,11 +19,12 @@ from modstore_server.llm_billing import (
     money,
     service_fee_multiplier,
 )
+from modstore_server.llm_billing_recovery import complete_receipt, recover_receipt
 from modstore_server.llm_billing_values import reported_token_dimensions
 from modstore_server.llm_chat_proxy import image_dispatch
 from modstore_server.llm_model_gates import _get_priced_row
 from modstore_server.llm_operation_routes import OperationRoute, resolve_operation_route
-from modstore_server.llm_billing_recovery import complete_receipt, recover_receipt
+from modstore_server.models import AiModelPrice
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 _IMAGE_DEADLINE_SECONDS = 180
@@ -48,9 +49,7 @@ def image_token_tariff(db: Session, route: OperationRoute) -> tuple[Decimal, Dec
         return None
     input_price = Decimal(str(price.input_price_per_1k or 0))
     output_price = Decimal(str(price.output_price_per_1k or 0))
-    if not all(
-        value.is_finite() and value > 0 for value in (input_price, output_price)
-    ):
+    if not all(value.is_finite() and value > 0 for value in (input_price, output_price)):
         return None
     multiplier = service_fee_multiplier(db)
     return input_price * multiplier, output_price * multiplier
@@ -111,8 +110,32 @@ async def run_billed_image(
                 409, {"message": "生图请求已提交或请求内容发生变化", "state": outcome}
             )
 
+    # Materialize only price eligibility before releasing the request connection.
+    # Re-read the chosen tariff after discovery before reserving or charging.
+    priced_models = {
+        row.model
+        for row in db.query(AiModelPrice)
+        .filter(AiModelPrice.provider == "openai", AiModelPrice.enabled.is_(True))
+        .all()
+        if all(
+            (value := Decimal(str(raw or 0))).is_finite() and value > 0
+            for raw in (row.input_price_per_1k, row.output_price_per_1k)
+        )
+    }
+
     def eligible(route: OperationRoute) -> bool:
-        return route.key_source == "user_override" or image_token_tariff(db, route) is not None
+        if route.key_source == "user_override":
+            return True
+        base = urlsplit(route.base_url or "https://api.openai.com/v1")
+        return (
+            route.provider == "openai"
+            and base.scheme == "https"
+            and base.netloc == "api.openai.com"
+            and base.path.rstrip("/") in {"", "/v1"}
+            and (route.model.startswith("gpt-image-") or route.model == "chatgpt-image-latest")
+            and route.model != "gpt-image-1"
+            and route.model in priced_models
+        )
 
     route = await resolve_operation_route(
         db,
@@ -120,7 +143,8 @@ async def run_billed_image(
         "image_generation",
         provider=provider,
         model=model,
-        route_filter=eligible,
+        detached_route_filter=eligible,
+        release_before_discovery=True,
     )
     tariff = image_token_tariff(db, route) if route.key_source == "platform" else None
     wallet = JavaWalletClient(verify_receipt=True)

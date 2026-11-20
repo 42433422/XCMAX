@@ -85,8 +85,13 @@ async def resolve_operation_route(
     seed="",
     route_filter=None,
     release_before_discovery=False,
+    detached_route_filter=None,
 ):
     """Honor an explicit provider and keep automatic BYOK routes in the BYOK pool."""
+    if detached_route_filter is not None:
+        if route_filter is not None or not release_before_discovery:
+            raise ValueError("detached filter requires released discovery session")
+        route_filter = detached_route_filter
     if provider and provider not in KNOWN_PROVIDERS:
         raise HTTPException(400, "unknown provider")
     state = read_state()
@@ -103,7 +108,7 @@ async def resolve_operation_route(
         if key and (not has_byok or source == "user_override")
     ]
     if release_before_discovery:
-        if route_filter is not None:
+        if route_filter is not None and detached_route_filter is None:
             raise ValueError("cannot release session with a session-bound route filter")
         session.close()
 
