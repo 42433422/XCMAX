@@ -30,7 +30,8 @@ import { createCredentialVault, parseCredentialGrant } from './credential_vault.
 import { createReceiptOutbox, createParaReportOutbox, requestManagedParaSession } from './control_receipt_outbox.mjs';
 import { sourceIdentity } from './control_git_handoff.mjs';
 import { candidateMode, exportCandidate, githubReadEnv } from './github_para_candidate.mjs';
-import { openCodeExecutable, runOpenCodeAgent } from './opencode_agent.mjs';
+import { openCodeExecutable, openCodeSandboxEntry, runOpenCodeAgent } from './opencode_agent.mjs';
+import { reportOnlyPatchInstruction, writeReportOnlyPatch, writeTaskMetadata } from './report_only_patch.mjs';
 import { cliResult, streamCliOutput } from './cli_output_stream.mjs';
 import {
   describeCodexFailure,
@@ -493,7 +494,7 @@ async function runClaudeAgent(taskDir, prompt, log) {
 }
 
 function toolAvailable(tool) {
-  if (tool === 'opencode') return Boolean(openCodeExecutable());
+  if (tool === 'opencode') return Boolean(openCodeExecutable() && openCodeSandboxEntry());
   if (tool === 'trae') return traeAgentAvailable();
   if (tool === 'claude_code') return claudeAgentAvailable();
   if (tool === 'cursor') return process.env.DEVFLEET_E2E_CURSOR !== '0' && cursorAgentAvailable();
@@ -944,6 +945,7 @@ function reportOnlyRefEvidencePrompt(evidence) {
     'E2E_REPORT_ONLY_REF_EVIDENCE_JSON:',
     JSON.stringify(evidence),
     'The e2e-agent fetched and verified both refs with git cat-file immediately before invoking you.',
+    reportOnlyPatchInstruction,
     'Use the exact base_ref and target_ref above. If a lookup disagrees, retry the exact refs once before reporting target_branch_unavailable.',
   ].join('\n');
 }
@@ -1319,8 +1321,9 @@ async function handleTask(ws, task) {
     : null;
   mkdirSync(join(taskDir, '.devfleet'), { recursive: true });
   if (reportOnlyRefEvidence) {
-    writeFileSync(
-      join(taskDir, '.devfleet', 'REPORT_ONLY_REFS.json'),
+    await writeReportOnlyPatch(taskDir, reportOnlyRefEvidence, gitCommandTimeoutMs);
+    await writeTaskMetadata(
+      taskDir, 'REPORT_ONLY_REFS.json',
       `${JSON.stringify(reportOnlyRefEvidence, null, 2)}\n`,
     );
   }
@@ -1328,8 +1331,8 @@ async function handleTask(ws, task) {
     task.description, reportOnlyRefEvidencePrompt(reportOnlyRefEvidence),
   );
   checkIncidentExecutionBudget(executionPrompt);
-  writeFileSync(
-    join(taskDir, '.devfleet', 'TASK.md'),
+  await writeTaskMetadata(
+    taskDir, 'TASK.md',
     `# DevFleet 任务\n\n## 标题\n${task.title}\n\n## 要求\n${executionPrompt}\n\n## 工作分支\n${task.work_branch}\n`,
   );
   excludeAgentMetadata(taskDir);
@@ -1835,20 +1838,23 @@ function publishToolStatus(ws, refresh = true) {
   void controlReceipts.drain();
   void paraReports.drain();
   const openCodeBin = openCodeExecutable();
+  const openCodeReady = Boolean(openCodeBin && openCodeSandboxEntry());
   if (refresh && !preflightPending) {
     preflightPending = true;
     probeTools({ codex: resolveCodexAgentBin(), cursor: resolveCursorAgentBin(),
-      trae: resolveTraeAgentBin(), claude_code: resolveClaudeAgentBin(), opencode: openCodeBin })
+      trae: resolveTraeAgentBin(), claude_code: resolveClaudeAgentBin(), opencode: openCodeReady ? openCodeBin : undefined })
       .then((result) => { preflight = result; publishToolStatus(ws, false); })
       .finally(() => { preflightPending = false; });
   }
   const installed = { trae: traeAgentAvailable(), codex: codexAgentAvailable(),
-    cursor: cursorAgentAvailable(), claude_code: claudeAgentAvailable(), opencode: Boolean(openCodeBin) };
+    cursor: cursorAgentAvailable(), claude_code: claudeAgentAvailable(), opencode: openCodeReady };
   send(ws, {
     type: 'tool_status',
     tools: supportedToolNames.map(tool => ({
       tool_name: tool,
-      status: toolExecutionStatus(tool, preflight[tool]?.ok ?? installed[tool]),
+      status: tool === 'opencode' && openCodeBin && !openCodeReady
+        ? 'disabled'
+        : toolExecutionStatus(tool, preflight[tool]?.ok ?? installed[tool]),
       current_task: activeTaskId(runningTaskIdsByTool.get(tool), taskQueuesByTool.get(tool)),
     })),
     capabilities: {
