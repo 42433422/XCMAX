@@ -156,7 +156,10 @@ def collect_execution(request_id):
     run = effects.get("worker", {})
     if not run:
         allocation = effects.get("model_allocation") or {}
-        return {"status": "waiting", "reason": allocation.get("reason", "runner_response_unconfirmed")}
+        return {
+            "status": "waiting",
+            "reason": allocation.get("reason", "runner_response_unconfirmed"),
+        }
     if run.get("status") == "completed":
         if run.get("conclusion") != "success":
             return {

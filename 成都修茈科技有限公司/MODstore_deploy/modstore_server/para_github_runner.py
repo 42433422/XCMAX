@@ -206,10 +206,14 @@ def _ensure_runner(db, payload):
 
         allocation = platform_model_admission()
         if allocation:
-            result = {"result_json": json_dumps({
-                **json_loads(row.result_json, {}),
-                "model_allocation": allocation,
-            })}
+            result = {
+                "result_json": json_dumps(
+                    {
+                        **json_loads(row.result_json, {}),
+                        "model_allocation": allocation,
+                    }
+                )
+            }
         else:
             result = {}
         pending = db.query(CustomerServiceAction).filter_by(id=row.id, status="queued")

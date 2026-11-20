@@ -26,7 +26,9 @@ def test_uses_both_model_and_provider_limits_when_allocating():
 
 
 def test_waits_if_no_route_is_above_reserve_with_verified_quota():
-    result = select_route([provider("a", 80), provider("b", 100, visibility="usage_only")], ROUTES, 80)
+    result = select_route(
+        [provider("a", 80), provider("b", 100, visibility="usage_only")], ROUTES, 80
+    )
     assert result["status"] == "waiting"
 
 
