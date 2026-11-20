@@ -10,7 +10,7 @@ import os
 import tempfile
 import zipfile
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from uuid import NAMESPACE_URL, uuid5
 
 from modman.archive_import import MAX_FILES, MAX_MANIFEST_BYTES
@@ -137,7 +137,7 @@ def completed_curator_receipt(db, suggestion: EmployeeSuggestion) -> dict[str, A
     from modstore_server.infrastructure.private_asset_storage import require_private_directory
     from modstore_server.integrations.repository_packages import load_repository_module
 
-    payload = json_loads(suggestion.payload_json, {})
+    payload = json_loads(cast(str | None, suggestion.payload_json), {})
     receipt = payload.get("curator_execution") if isinstance(payload, dict) else None
     unverified = {"ok": False, "error": "curator_receipt_unverified"}
     if not isinstance(receipt, dict):
@@ -145,7 +145,7 @@ def completed_curator_receipt(db, suggestion: EmployeeSuggestion) -> dict[str, A
     metric_id, digest = receipt.get("metric_id"), receipt.get("candidate_sha256")
     if (
         type(metric_id) is not int
-        or json_loads(suggestion.created_task_ids_json, []) != [metric_id]
+        or json_loads(cast(str | None, suggestion.created_task_ids_json), []) != [metric_id]
         or not isinstance(digest, str)
         or len(digest) != 64
         or any(c not in "0123456789abcdef" for c in digest)
@@ -161,7 +161,7 @@ def completed_curator_receipt(db, suggestion: EmployeeSuggestion) -> dict[str, A
         or metric.task != f"employee-evolution:{suggestion.id}"
     ):
         return unverified
-    path = f"retort-evidence/{_receipt_id(suggestion.id)}/{digest}.json"
+    path = f"retort-evidence/{_receipt_id(cast(int, suggestion.id))}/{digest}.json"
     runtime = os.environ.get("MODSTORE_RUNTIME_DIR")
     if not runtime or receipt.get("artifact_ref") != path:
         return unverified
@@ -210,7 +210,7 @@ def execute_approved_evolution(suggestion_id: int) -> dict[str, Any]:
             suggestion is None
             or suggestion.kind != "employee_evolution"
             or suggestion.source_employee_id != "evolution-engine"
-            or json_loads(suggestion.target_employee_ids_json, []) != [_CURATOR]
+            or json_loads(cast(str | None, suggestion.target_employee_ids_json), []) != [_CURATOR]
             or suggestion.approved_at is None
             or actor is None
             or not actor.is_admin
@@ -225,7 +225,7 @@ def execute_approved_evolution(suggestion_id: int) -> dict[str, Any]:
             .filter(EmployeeEvolutionRecord.created_suggestion_id == suggestion_id)
             .one_or_none()
         )
-        payload = json_loads(suggestion.payload_json, {})
+        payload = json_loads(cast(str | None, suggestion.payload_json), {})
         if (
             record is None
             or not isinstance(payload, dict)
