@@ -46,6 +46,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PACKAGE_SOURCE_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.package_source_sha || '' }}
           SOURCE_WORKFLOW_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.source_deploy_run_id || github.event.workflow_run.id }}
+          SOURCE_WORKFLOW_ATTEMPT: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.run_attempt || '' }}
         run: |
           set -euo pipefail
           [[ "$SOURCE_WORKFLOW_ID" =~ ^[0-9]+$ ]] || {
@@ -82,6 +83,13 @@ jobs:
               echo "::error::source run is not the successful exact deployment"
               exit 1
             }
+          if jq -e 'has("workflow_run_attempt") or .signature_verified == true' "$correlation" >/dev/null; then
+            current_attempt="$(jq -er '.run_attempt | tostring | select(test("^[1-9][0-9]*$"))' <<<"$source_run")"
+            test "${SOURCE_WORKFLOW_ATTEMPT:-$current_attempt}" = "$current_attempt"
+            jq -e --arg run "$SOURCE_WORKFLOW_ID" --arg attempt "$current_attempt" \
+              '.workflow_run_id == $run and .workflow_run_attempt == $attempt and .signature_verified == true' \
+              "$correlation" >/dev/null
+          fi
           if [ "$controller_sha" != "$merge_sha" ]; then
             jq -e --arg sha "$merge_sha" \
               '.git_sha == $sha and .environment == "production" and (.approval_reference | strings | length > 0)' \

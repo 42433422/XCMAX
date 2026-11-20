@@ -33,10 +33,9 @@ def test_private_delivery_migration_uses_persistent_library_and_stopped_window()
     final_verify = script.rindex("verify_fixed_release_approval", 0, stop)
     assert preflight < final_verify < stop < copied < promote
     assert "verify_fixed_release_approval" not in script[stop:promote]
-    assert (
-        'TARGET_SHA="$PREVIOUS_SHA" LIBRARY_DIR="$PREVIOUS_LIBRARY_DIR" write_service_units'
-        in script
-    )
+    rollback = script[script.index("rollback() {") :]
+    assert 'TARGET_SHA="$PREVIOUS_SHA" PRODUCT_VERSION="$PREVIOUS_VERSION"' in rollback
+    assert 'LIBRARY_DIR="$PREVIOUS_LIBRARY_DIR" write_service_units' in rollback
     assert 'if [[ "$status" != 0 && "$CATALOG_SERVICES_STOPPED" == 1 ]]' in script
     helper = script[script.index("migrate_delivery_state() {") : preflight]
     assert "systemctl stop" not in helper
@@ -179,7 +178,16 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     pyproject = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
 
     assert "XCMAX_TARGET_SHA must be a full 40-character commit SHA" in script
-    assert 'git -C "$SOURCE_ROOT" archive --format=tar "$TARGET_SHA"' in script
+    assert 'git -C "$SOURCE_ROOT" -c tar.umask=0002 archive --format=tar "$TARGET_SHA"' in script
+    assert 'git get-tar-commit-id < "$SOURCE_ARCHIVE"' in script
+    assert script.index('fail "release archive differs from the signed artifact"') < script.index(
+        'tar -xf "$SOURCE_ARCHIVE"'
+    )
+    assert script.index('fail "prepared release differs from the signed artifact"') < script.index(
+        "applying database migrations"
+    )
+    assert 'PRODUCT_VERSION="$PREVIOUS_VERSION"' in script
+    assert '"$PREVIOUS_RELEASE_ID" && return 0' in script
     assert 'FINAL_ROOT="${RELEASES_DIR}/${TARGET_SHA}"' in script
     assert 'chmod 0555 "$FINAL_ROOT"' in script
     assert script.index('chmod 0555 "$FINAL_ROOT"') < script.index(
@@ -462,6 +470,17 @@ def test_production_workflow_requires_manually_orchestrated_exact_sha() -> None:
             is True
         )
         deploy = workflow["jobs"]["deploy"]
+        admission = workflow["jobs"]["admission"]
+        assert deploy["needs"] == "admission"
+        assert admission["permissions"]["id-token"] == "write"
+        assert "id-token" not in workflow["permissions"]
+        assert "id-token" not in deploy.get("permissions", {})
+        signed = str(admission)
+        assert "git get-tar-commit-id" in signed
+        assert "gh attestation verify" in signed
+        assert '--source-digest "$GITHUB_SHA"' in signed
+        assert '--signer-digest "$GITHUB_SHA"' in signed
+        assert "verify_security_scan_pair.py" in signed
         rendered = str(deploy)
         assert "TARGET_SHA" in rendered
         assert "REPOSITORY_SLUG" in rendered
@@ -472,8 +491,21 @@ def test_production_workflow_requires_manually_orchestrated_exact_sha() -> None:
         assert "${CONTROLLER_SHA}:ops/dr/$file" in rendered
         assert "modstore-deployment-correlation" in rendered
         assert "actions/upload-artifact@v4" in rendered
-        assert "verify_security_scan_pair.py" in rendered
         assert "actions/download-artifact@v8" in rendered
+        assert "XCMAX_SIGNED_ARTIFACT_SHA256" in rendered
+        assert rendered.index("--finalize") < rendered.index("modstore-deployment-correlation")
+        assert (
+            "modstore-release-admission-${{ needs.admission.outputs.signed_run_attempt }}"
+            in rendered
+        )
+        assert (
+            next(
+                step
+                for step in deploy["steps"]
+                if step.get("name") == "Upload formal deployment acceptance"
+            )["with"]["overwrite"]
+            is True
+        )
         assert "reset --hard" not in rendered
 
 
@@ -507,6 +539,7 @@ def test_receipt_source_attestation_executes_strict_identity_checks(
         event="workflow_dispatch",
         status="completed",
         conclusion="success",
+        run_attempt=2,
         repository={"full_name": "owner/repo"},
         name=f"Deploy MODstore {product}",
     )
@@ -527,6 +560,9 @@ def test_receipt_source_attestation_executes_strict_identity_checks(
     (tmp_path / "workflow.json").write_text(json.dumps(canonical))
     for field, value in [
         (None, None),
+        ("signed", None),
+        ("stale-receipt-attempt", None),
+        ("stale-event-attempt", None),
         ("legacy", None),
         ("id", 35),
         ("workflow_id", 13),
@@ -546,6 +582,12 @@ def test_receipt_source_attestation_executes_strict_identity_checks(
         if field == "legacy":
             corr.pop("controller_sha")
             run["head_sha"] = product
+        elif field in {"signed", "stale-receipt-attempt", "stale-event-attempt"}:
+            corr.update(
+                signature_verified=True,
+                workflow_run_id="34",
+                workflow_run_attempt="1" if field == "stale-receipt-attempt" else "2",
+            )
         elif field == "ancestry":
             comparison["merge_base_commit"]["sha"] = value
         elif field in corr:
@@ -571,9 +613,10 @@ def test_receipt_source_attestation_executes_strict_identity_checks(
                 "GITHUB_OUTPUT": str(output),
                 "GITHUB_REPOSITORY": "owner/repo",
                 "SOURCE_WORKFLOW_ID": "34",
+                "SOURCE_WORKFLOW_ATTEMPT": "1" if field == "stale-event-attempt" else "2",
             },
         )
-        assert (result.returncode == 0) == (field in (None, "legacy")), (
+        assert (result.returncode == 0) == (field in (None, "signed", "legacy")), (
             field,
             result.stderr,
         )
