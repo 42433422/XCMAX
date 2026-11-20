@@ -44,7 +44,7 @@ def test_queue_id_comes_from_approved_window_receipts():
     ("key", "value", "expected"),
     [
         ("merged", False, "missing_exact_merge_receipt"),
-        ("merged_at", None, "yesterday_prs_unresolved"),
+        ("merged_at", None, "missing_exact_merge_receipt"),
         ("head", {"sha": "d" * 40}, "missing_exact_merge_receipt"),
         ("merged_at", "2026-11-19T18:15:00Z", "no_new_merge_in_current_window"),
         ("merged_at", "2026-11-20T21:00:00Z", "no_new_merge_in_current_window"),
@@ -65,15 +65,25 @@ def test_github_clock_and_read_only_diagnostic():
     )
     assert workflow["on"]["schedule"] == [{"cron": "0 22 * * *"}]
     assert "github.event_name == 'schedule'" in workflow["jobs"]["prepare-version"]["if"]
-    assert workflow["jobs"]["build-private-candidates"]["needs"] == "prepare-version"
+    proposal = workflow["jobs"]["prepare-version"]["steps"][-1]["run"]
+    assert proposal.index("git commit") < proposal.index("push_preflight.py --fix")
+    assert proposal.index("push_preflight.py --fix") < proposal.index("git push")
+    assert "--label hold-merge" in proposal
+    assert "gh pr merge" not in proposal
+    assert "XCMAX_MAIN_MERGE_QUEUE" in proposal
+    assert "build-private-candidates" not in workflow["jobs"]
 
 
-def test_pr_omitted_from_the_merge_order_still_blocks_release():
+@pytest.mark.parametrize("state", ["open", "closed"])
+def test_unapproved_pr_does_not_veto_the_approved_release_batch(state):
     data = ready_fixtures()
     data["pulls?state=all&sort=created&direction=desc&per_page=100&page=1"].insert(
-        0, {**data["pulls/41"], "number": 42, "merged_at": None, "state": "closed"}
+        0, {**data["pulls/41"], "number": 42, "merged_at": None, "state": state}
     )
-    assert release.completed_batch({41: REVIEWED}, CHECK_TIME, data.__getitem__) == {
-        "reason": "yesterday_prs_unresolved",
-        "prs": [42],
+    assert release.completed_batch({41: REVIEWED}, CHECK_TIME, data.__getitem__)["source"] == SOURCE
+
+
+def test_empty_approved_queue_never_promotes_inventory_to_release_authorization():
+    assert release.completed_batch({}, CHECK_TIME, ready_fixtures().__getitem__) == {
+        "reason": "empty_integration_queue"
     }

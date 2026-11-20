@@ -16,6 +16,7 @@ import {
   INITIAL_PR_LABELS,
   TASK_CONCURRENCY,
   automaticProductionDeploymentDecision,
+  awaitingMainIntegration,
   botMergeCheckArgs,
   botMergeWatchdogDecision,
   buildMergeConflictPayload,
@@ -38,6 +39,7 @@ import {
   parseReviewVerdict,
   requiredLabelsPresent,
   requestParaSession,
+  readIntegratedMainSha,
   reviewDiffInChunks,
   resolveReviewWithFallback,
   runTaskQueueFairly,
@@ -48,6 +50,47 @@ import {
   usesOrderedMainIntegration,
   withinMainIntegrationWindow,
 } from './merge_worker.mjs';
+
+test('ordered task failures take precedence over pending sibling integration', () => {
+  const merged = { merged: true, sha: 'a'.repeat(40) };
+  const pending = { merged: false, pendingIntegration: true };
+  assert.equal(awaitingMainIntegration([merged, pending]), true);
+  for (const failure of [
+    { merged: false, vetoed: true, reason: 'pr-closed-without-merge' },
+    { merged: false, conflict: true, reason: 'merge conflict' },
+    { error: 'GitHub read failed' },
+  ]) {
+    assert.equal(awaitingMainIntegration([merged, pending, failure]), false);
+  }
+});
+
+test('the final main receipt contains every PR even when subtask order differs', async () => {
+  const first = 'a'.repeat(40), last = 'b'.repeat(40), current = 'c'.repeat(40);
+  const reads = [];
+  const read = async (path) => {
+    reads.push(path);
+    if (path === 'git/ref/heads/main') return { object: { sha: current } };
+    return { status: 'ahead' };
+  };
+  const result = await readIntegratedMainSha('42433422/XCMAX', [
+    { prNumber: 2, sha: last }, { prNumber: 1, sha: first },
+  ], read);
+  assert.equal(result, current);
+  assert.deepEqual(reads, [
+    'git/ref/heads/main', `compare/${last}...${current}`, `compare/${first}...${current}`,
+  ]);
+});
+
+test('a missing merge ancestor or malformed main never produces a completion receipt', async () => {
+  const sha = 'a'.repeat(40);
+  for (const status of ['behind', 'diverged', undefined]) {
+    await assert.rejects(readIntegratedMainSha('42433422/XCMAX', [{ prNumber: 1, sha }],
+      async (path) => path === 'git/ref/heads/main' ? { object: { sha } } : { status }),
+    /merge-not-on-main/);
+  }
+  await assert.rejects(readIntegratedMainSha('42433422/XCMAX', [{ prNumber: 1, sha }],
+    async () => ({ object: { sha: 'invalid' } })), /invalid-integrated-main-receipt/);
+});
 
 test('Para uses the Shanghai integration window for the canonical XCMAX main only', () => {
   assert.equal(usesOrderedMainIntegration('42433422/XCMAX'), true);

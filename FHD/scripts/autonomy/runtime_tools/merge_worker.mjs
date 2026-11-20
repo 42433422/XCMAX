@@ -568,6 +568,32 @@ export function withinMainIntegrationWindow(nowMs = Date.now()) {
   return hour >= 2 && hour < 5;
 }
 
+export function awaitingMainIntegration(results) {
+  return results.some((result) => result.pendingIntegration)
+    && results.every((result) => result.merged || result.pendingIntegration);
+}
+
+export async function readIntegratedMainSha(repoFull, receipts, read = async (path) => {
+  const { stdout } = await execFileAsync('gh', ['api', `repos/${repoFull}/${path}`], {
+    timeout: 30_000, maxBuffer: 10 * 1024 * 1024,
+  });
+  return JSON.parse(stdout);
+}) {
+  const sha = (await read('git/ref/heads/main'))?.object?.sha || '';
+  if (!/^[0-9a-f]{40}$/.test(sha) || receipts.length === 0) {
+    throw new Error('invalid-integrated-main-receipt');
+  }
+  for (const receipt of receipts) {
+    if (!/^[0-9a-f]{40}$/.test(receipt.sha || '')
+        || !['ahead', 'identical'].includes(
+          (await read(`compare/${receipt.sha}...${sha}`))?.status,
+        )) {
+      throw new Error(`merge-not-on-main: PR #${receipt.prNumber}`);
+    }
+  }
+  return sha;
+}
+
 async function maybeRecoverStaleBotMergeWorkflow(nowMs = Date.now()) {
   if (!BOT_MERGE_WORKFLOW || !BOT_MERGE_WATCHDOG_REPOSITORY) return;
   const scheduled = usesOrderedMainIntegration(BOT_MERGE_WATCHDOG_REPOSITORY);
@@ -1742,15 +1768,11 @@ async function processTask(token, task, state) {
           }
 
           if (scheduled) {
-            if (branches.length === 1 && existingPR?.mergeable === 'CONFLICTING'
+            if (existingPR?.mergeable === 'CONFLICTING'
                 && withinMainIntegrationWindow()) {
-              const reason = `PR #${prNumber} merge conflict with ${baseBranch}`;
-              const result = await reportMergeConflict(token, task, reason);
-              if (!result.ok) throw new Error(`merge-conflict-report-http-${result.status}`);
-              state[task.id] = { status: 'conflict', at: new Date().toISOString(), reason };
-              saveProcessed(state);
-              log(`task ${task.id} 已将主线冲突回传原 Para 任务`);
-              return;
+              results.push({ branch, prNumber, prUrl, merged: false, conflict: true,
+                reason: `PR #${prNumber} merge conflict with ${baseBranch}` });
+              continue;
             }
             // The GitHub bot reads the reviewed order and owns the merge.
             // Reusing a PR here must not change its reviewed head or remove a hold.
@@ -1853,21 +1875,28 @@ async function processTask(token, task, state) {
       }
 
       const merged = results.filter((r) => r.merged);
-      const failed = results.filter((r) => !r.merged);
+      const failed = results.filter((r) => !r.merged && !r.pendingIntegration);
+      const receipts = results.map((r) => ({ branch: r.branch, number: r.prNumber,
+        url: r.prUrl, merged: r.merged, sha: r.sha }));
+      state[task.id] = { ...state[task.id], prs: receipts };
+      saveProcessed(state);
 
-      if (scheduled && results.some((result) => result.pendingIntegration)) {
+      if (scheduled && awaitingMainIntegration(results)) {
         state[task.id] = {
           status: 'awaiting_integration',
           at: new Date().toISOString(),
           next_retry_at: new Date(Date.now() + BOT_MERGE_WATCHDOG_CHECK_MS).toISOString(),
           attempts: Number(previousState?.attempts || 0),
+          prs: receipts,
         };
         saveProcessed(state);
         log(`task ${task.id} 等待主线集成回执 (${merged.length}/${branches.length})`);
         return;
       }
       if (merged.length > 0 && (!scheduled || failed.length === 0)) {
-        const finalSha = merged[merged.length - 1].sha;
+        const finalSha = scheduled
+          ? await readIntegratedMainSha(repoFull, merged)
+          : merged[merged.length - 1].sha;
         const { ok, status, body } = await reportMerged(token, task, finalSha);
         if (ok) {
           state[task.id] = {
@@ -1876,7 +1905,7 @@ async function processTask(token, task, state) {
             sha: finalSha,
             run_id: extractSelfMaintenanceRunId(task),
             deployment: { status: 'pending', at: new Date().toISOString() },
-            prs: results.map((r) => ({ branch: r.branch, number: r.prNumber, url: r.prUrl, merged: r.merged })),
+            prs: receipts,
           };
           saveProcessed(state);
           log(`task ${task.id} → ai_reviewed_merged (${merged.length}/${results.length} PR merged)`);
@@ -1892,6 +1921,7 @@ async function processTask(token, task, state) {
         let terminalAttempts = Number(state[task.id]?.attempts || 0);
         if (retryable) {
           const retry = nextMergeRetryState(state[task.id], reason);
+          retry.prs = receipts;
           if (!retry.exhausted) {
             state[task.id] = retry;
             saveProcessed(state);
@@ -1903,12 +1933,14 @@ async function processTask(token, task, state) {
         const conflictSource = failed.some((result) => result.vetoed)
           ? 'ai-review-veto'
           : 'merge-worker';
-        await reportMergeConflict(token, task, reason, conflictSource);
+        const report = await reportMergeConflict(token, task, reason, conflictSource);
+        if (!report.ok) throw new Error(`merge-conflict-report-http-${report.status}`);
         state[task.id] = {
-          status: retryable ? 'conflict' : 'ai_rejected',
+          status: retryable || failed.some((r) => r.conflict) ? 'conflict' : 'ai_rejected',
           at: new Date().toISOString(),
           reason,
           attempts: terminalAttempts,
+          prs: receipts,
         };
         saveProcessed(state);
         log(`task ${task.id} → ${state[task.id].status}`);
@@ -1936,6 +1968,7 @@ async function processTask(token, task, state) {
     let terminalAttempts = Number(state[task.id]?.attempts || 0);
     if (isTransientMergeFailure(reason)) {
       const retry = nextMergeRetryState(state[task.id], reason);
+      retry.prs = state[task.id]?.prs;
       if (!retry.exhausted) {
         state[task.id] = retry;
         saveProcessed(state);
@@ -1950,6 +1983,7 @@ async function processTask(token, task, state) {
       at: new Date().toISOString(),
       reason: reason.slice(0, 2000),
       attempts: terminalAttempts,
+      prs: state[task.id]?.prs,
     };
     saveProcessed(state);
   }

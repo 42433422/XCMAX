@@ -15,13 +15,7 @@ from pathlib import Path
 FHD = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(FHD))
 
-from scripts.ci.para_pr_integration import (
-    REPOSITORY,
-    SHANGHAI,
-    github,
-    integration_queue,
-    yesterday_main_pulls,
-)
+from scripts.ci.para_pr_integration import REPOSITORY, SHANGHAI, github, integration_queue
 from scripts.dev.verify_version_anchors import canonical_version
 from scripts.dev.version_sync import sync
 
@@ -30,20 +24,14 @@ CATALOG = FHD / "config/download_release.json"
 
 def completed_batch(queue: dict[int, str], now: datetime, read=github) -> dict:
     day = now.astimezone(SHANGHAI).date()
-    yesterday = yesterday_main_pulls(now, read)
-    unfinished = sorted(number for number, pull in yesterday.items() if not pull.get("merged_at"))
-    if unfinished:
-        return {"reason": "yesterday_prs_unresolved", "prs": unfinished}
-    batch = {number: pull["head"]["sha"] for number, pull in sorted(yesterday.items())}
-    batch.update(queue)
-    if not batch:
+    if not queue:
         return {"reason": "empty_integration_queue"}
     source = read("git/ref/heads/main")["object"]["sha"]
     if not re.fullmatch(r"[0-9a-f]{40}", source):
         raise ValueError("invalid main SHA from GitHub")
     receipts = []
     current_window = False
-    for number, expected_head in batch.items():
+    for number, expected_head in queue.items():
         pull = read(f"pulls/{number}")
         base = pull.get("base") or {}
         merge = pull.get("merge_commit_sha") or ""
@@ -57,7 +45,10 @@ def completed_batch(queue: dict[int, str], now: datetime, read=github) -> dict:
             or not pull.get("merged_at")
         ):
             return {"reason": "missing_exact_merge_receipt", "pr": number}
-        if read(f"compare/{merge}...{source}").get("status") not in {"ahead", "identical"}:
+        if read(f"compare/{merge}...{source}").get("status") not in {
+            "ahead",
+            "identical",
+        }:
             return {"reason": "merge_not_on_main", "pr": number}
         merged_at = datetime.fromisoformat(pull["merged_at"].replace("Z", "+00:00"))
         local = merged_at.astimezone(SHANGHAI)
@@ -152,7 +143,9 @@ def prepare_candidate(source: str, day: str) -> str:
     lines = changelog.read_text(encoding="utf-8")
     changelog.write_text(
         lines.replace(
-            "## Unreleased\n\n", f"## Unreleased\n\n- Para 集成批次候选版本 {version}。\n\n", 1
+            "## Unreleased\n\n",
+            f"## Unreleased\n\n- Para 集成批次候选版本 {version}。\n\n",
+            1,
         ),
         encoding="utf-8",
     )
