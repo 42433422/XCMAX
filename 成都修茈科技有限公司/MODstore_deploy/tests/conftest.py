@@ -7,6 +7,7 @@ import os
 import shutil
 import tempfile
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -94,7 +95,7 @@ def isolated_modstore(tmp_path, monkeypatch):
     init_db()
 
     return {
-        "client": TestClient(app),
+        "client": TestClient(app, client=(f"pytest-{uuid4().hex}", 50000)),
         "library": library,
         "project_home": project_home,
         "cfg_holder": cfg_holder,
