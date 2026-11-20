@@ -119,6 +119,26 @@ async def run_billed_image(
             raise HTTPException(
                 409, {"message": "生图请求已提交或请求内容发生变化", "state": outcome}
             )
+        state = ledger.existing_state(db, user_id, client_request_id, digest)
+        if state == "conflict":
+            raise HTTPException(409, {"message": "同一生图请求键内容不同", "state": state})
+        if state in {"settling", "completed"}:
+            if state == "completed":
+                # Another handler may have completed between the two reads.
+                replay = ledger.completed_receipt(db, user_id, client_request_id, digest)
+                recovered = replay[1] if replay and replay[0] == "replay" else None
+            else:
+                recovered = await recover_receipt(
+                    db,
+                    user_id,
+                    client_request_id,
+                    authorization_header(request),
+                    operation="image_generation",
+                    request=request,
+                )
+            if isinstance(recovered, dict):
+                return response(recovered)
+            raise HTTPException(409, {"message": "原生图结算状态待核对", "state": state})
 
     # Materialize only price eligibility before releasing the request connection.
     # Re-read the chosen tariff after discovery before reserving or charging.

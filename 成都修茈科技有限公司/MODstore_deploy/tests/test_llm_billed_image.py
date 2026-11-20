@@ -62,6 +62,7 @@ def paid(monkeypatch, image_store):
     )
     monkeypatch.setattr(image.ledger, "begin", Mock(return_value=("run", row)))
     monkeypatch.setattr(image.ledger, "completed_receipt", Mock(return_value=None))
+    monkeypatch.setattr(image.ledger, "existing_state", Mock(return_value="not_found"))
     monkeypatch.setattr(image.ledger, "mark_settling", Mock())
     monkeypatch.setattr(image.ledger, "lock_request", Mock(return_value=row))
     monkeypatch.setattr(image.ledger, "finish", Mock())
@@ -72,14 +73,14 @@ def paid(monkeypatch, image_store):
     return wallet, upstream, db
 
 
-def run_image(db):
+def run_image(db, *, prompt="red square"):
     return image.run_billed_image(
         SimpleNamespace(state=SimpleNamespace(), headers={"authorization": "Bearer test"}),
         db,
         7,
         provider="",
         model="",
-        prompt="red square",
+        prompt=prompt,
         size="1024x1024",
         count=1,
         client_request_id="image-test-key",
@@ -277,8 +278,9 @@ def test_image_storage_rejects_large_object_and_releases_unwritten_reservation(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("confirm_immediately", [True, False])
 async def test_real_image_journal_recovers_paid_receipt_without_storing_image_blob(
-    image_store, monkeypatch
+    image_store, monkeypatch, confirm_immediately
 ):
     import json
 
@@ -306,7 +308,11 @@ async def test_real_image_journal_recovers_paid_receipt_without_storing_image_bl
     )
     monkeypatch.setattr(image, "image_dispatch", upstream)
 
+    confirmed = confirm_immediately
+
     async def read_hold(*args):
+        if not confirmed:
+            return None
         return {
             "hold_no": "hold-test",
             "request_id": wallet.preauthorize.await_args.args[4],
@@ -316,10 +322,27 @@ async def test_real_image_journal_recovers_paid_receipt_without_storing_image_bl
             "settled_amount": "1.28",
         }
 
-    monkeypatch.setattr(
-        recovery, "JavaWalletClient", lambda **_: SimpleNamespace(read_hold=read_hold)
-    )
+    read = AsyncMock(side_effect=read_hold)
+    monkeypatch.setattr(recovery, "JavaWalletClient", lambda **_: SimpleNamespace(read_hold=read))
     with image_store() as db:
+        if not confirm_immediately:
+            with pytest.raises(HTTPException) as exc:
+                await run_image(db)
+            assert exc.value.status_code == 409
+            assert db.query(LlmClientRequest).one().state == "settling"
+            assert db.query(LlmCallLog).count() == 0
+            image.resolve_operation_route.side_effect = HTTPException(503, "removed provider")
+            with pytest.raises(HTTPException) as exc:
+                await run_image(db)
+            assert exc.value.status_code == 409
+            assert read.await_count == 2
+            assert db.query(LlmClientRequest).one().state == "settling"
+            with pytest.raises(HTTPException) as exc:
+                await run_image(db, prompt="different request")
+            assert exc.value.status_code == 409
+            assert read.await_count == 2
+            assert db.query(LlmClientRequest).one().state == "settling"
+            confirmed = True
         result = await run_image(db)
         stored = json.loads(db.query(LlmClientRequest).one().done_json)
         assert "images" not in stored and "image_asset" in stored
@@ -327,5 +350,7 @@ async def test_real_image_journal_recovers_paid_receipt_without_storing_image_bl
         image.resolve_operation_route.side_effect = HTTPException(503, "removed provider")
         assert await run_image(db) == result
         assert db.query(LlmCallLog).count() == 1
+    image.resolve_operation_route.assert_awaited_once()
+    image.enforce_risk_limits.assert_called_once()
     upstream.assert_awaited_once()
     wallet.settle.assert_awaited_once()
