@@ -362,6 +362,7 @@ import { workflowTaskDotStatusClassForTask, workflowTaskDotTitleForTask } from '
 import { formatTaskTime, formatTaskSourceLabel } from '@/utils/chatTaskLabels'
 import { buildChatMessagesKey, buildChatScopedKey, readAiSessionIdFromStorage, resolveChatStorageScope, writeAiSessionIdToStorage } from '@/utils/chatStorageKeys'
 import { captureAuthSession } from '@/utils/authSessionCache'
+import { reserveImageRequest, finishImageRequest } from '@/utils/pendingImageRequest'
 import { plainTextFromChatHtml } from '@/utils/sanitizeHtml'
 import chatApi from '@/api/chat'
 import { ApiError } from '@/api/core'
@@ -824,19 +825,22 @@ const composerStatusText = computed(() => {
 
 const imagePending = ref(false)
 const chatImage = ref<{ scope: string; images: string[]; model: string; charge: string } | null>(null)
-const pendingImageRequests = new Map<string, string>()
 
 async function generateChatImage() {
   const prompt = messageInput.value.trim()
   if (!prompt || isLoading.value || imagePending.value || multimodalPendingCount.value || artifactStaging.value.length || unsupportedStaging.value.length) return
   const scope = messageSessionKey.value
-  const draft = JSON.stringify([scope, prompt])
-  const requestId = pendingImageRequests.get(draft) || crypto.randomUUID()
-  pendingImageRequests.set(draft, requestId)
+  const identity = resolveChatStorageScope()
+  const sessionId = currentSessionId.value
+  const modId = modsStore.activeModId
+  const isOwnerCurrent = captureAuthSession()
+  let pending: Awaited<ReturnType<typeof reserveImageRequest>> | undefined
   imagePending.value = true
   try {
-    const result = await chatApi.generateImage(prompt, requestId)
-    pendingImageRequests.delete(draft)
+    pending = await reserveImageRequest(identity, sessionId, modId, prompt)
+    if (!isOwnerCurrent() || messageSessionKey.value !== scope || resolveChatStorageScope() !== identity) return
+    const result = await chatApi.generateImage(prompt, pending.requestId)
+    finishImageRequest(pending.key, pending.requestId)
     if (messageSessionKey.value !== scope) return
     const images = result.images.filter(url =>
       /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(url) || url.startsWith('https://'),
@@ -854,7 +858,7 @@ async function generateChatImage() {
     if (messageInput.value.trim() === prompt) messageInput.value = ''
   } catch (error: unknown) {
     if (error instanceof ApiError && [400, 401, 402, 403, 404, 422, 429].includes(error.status)) {
-      pendingImageRequests.delete(draft)
+      if (pending) finishImageRequest(pending.key, pending.requestId)
     }
     if (messageSessionKey.value === scope) {
       showAppToast(error instanceof Error ? error.message : '生图失败，请核对模型和计费状态。')

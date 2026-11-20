@@ -1,3 +1,4 @@
+import { webcrypto } from 'node:crypto'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
@@ -6,6 +7,7 @@ import { defineComponent, h, KeepAlive, nextTick, ref } from 'vue'
 import { setRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
 import { invalidateTenantStorageScopeCache } from '@/utils/tenantStorageScope'
 import { writeAiSessionIdToStorage } from '@/utils/chatStorageKeys'
+import { ApiError } from '@/api/core'
 import { voiceChatBridge } from '@/composables/voiceCallHost'
 
 // ===== 模块级 mock =====
@@ -560,6 +562,7 @@ describe('ChatView interactions', () => {
 
   afterEach(() => {
     while (mounted.length) mounted.pop()?.unmount()
+    vi.unstubAllGlobals()
     document.body.replaceChildren()
     setRuntimeTenantStorageScopeInput(null)
     invalidateTenantStorageScopeCache()
@@ -1161,6 +1164,8 @@ describe('ChatView interactions', () => {
   })
 
   it('生图使用独立请求并显示钱包结算', async () => {
+    vi.stubGlobal('crypto', webcrypto)
+    setRuntimeTenantStorageScopeInput({ tenantId: 1, localUserId: 1 })
     generateImage.mockResolvedValueOnce({
       images: ['data:image/png;base64,AA=='], model: 'gpt-image-2', billed: true, charge_amount: '1.28',
     })
@@ -1168,10 +1173,31 @@ describe('ChatView interactions', () => {
     await wrapper.get('#messageInput').setValue('生成一个红色方块')
     await wrapper.get('[data-testid="generate-chat-image"]').trigger('click')
     await flushPromises()
-    expect(generateImage).toHaveBeenCalledWith('生成一个红色方块', expect.any(String))
+    await vi.waitFor(() => expect(generateImage).toHaveBeenCalledWith('生成一个红色方块', expect.any(String)))
     expect(wrapper.get('img[alt="AI 生成图片"]').attributes('src')).toBe('data:image/png;base64,AA==')
     expect(wrapper.text()).toContain('本次扣费 ¥1.28')
     expect(mockChatViewApi.sendMessage).not.toHaveBeenCalled()
+  })
+
+  it('生图结果不明时重新打开会话复用原请求键', async () => {
+    vi.stubGlobal('crypto', webcrypto)
+    setRuntimeTenantStorageScopeInput({ tenantId: 1, localUserId: 1 })
+    generateImage.mockRejectedValueOnce(new ApiError('结果待核对', 409, null))
+    generateImage.mockResolvedValueOnce({
+      images: ['data:image/png;base64,AA=='], model: 'gpt-image-2', billed: true, charge_amount: '1.28',
+    })
+    const first = await mountChatView({ workspaceConversationId: 'stable-chat' })
+    await first.get('#messageInput').setValue('生成红色方块')
+    await first.get('[data-testid="generate-chat-image"]').trigger('click')
+    await vi.waitFor(() => expect(generateImage).toHaveBeenCalledTimes(1))
+    await flushPromises()
+    const original = generateImage.mock.calls[0][1]
+    first.unmount()
+    const reopened = await mountChatView({ workspaceConversationId: 'stable-chat' })
+    await reopened.get('#messageInput').setValue('生成红色方块')
+    await reopened.get('[data-testid="generate-chat-image"]').trigger('click')
+    await vi.waitFor(() => expect(generateImage).toHaveBeenCalledTimes(2))
+    expect(generateImage.mock.calls[1][1]).toBe(original)
   })
 
   it('回车发送与输入内容联动', async () => {
