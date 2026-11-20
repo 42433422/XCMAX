@@ -520,13 +520,13 @@
     "FHD/app/fastapi_routes/ai_open.py": {
       "base_file": "FHD/app/fastapi_routes/ai_open.py",
       "base_blob": "f96ea7050209b48e9e327a368d5c925188a1bbea",
-      "head_blob": "3c4ccecd72920c920c910cf7ca3755b7c7693e6c",
+      "head_blob": "748b94eafe166409c3fceb0bb308f9c3f036e55a",
       "before_lines": 850,
-      "after_lines": 919,
-      "reason": "给登录用户提供自己的 AIOpen 客户端口令状态、创建与撤销入口，避免将管理员口令操作或全部口令列表暴露给普通客户端。",
-      "boundary": "以服务端登录用户建立租户归属。创建和撤销仅作用于该用户。口令明文仅在创建时返回并禁止缓存，管理员路由保留独立鉴权。",
-      "validation": "验证范围 包括AIOpen 登录和租户授权、创建返回头、旧口令撤销和无权限拒绝。待远端 CI 与实际登录设备核验。 本地整合后端回归 721 项通过及 37 项可选跳过。 类型修正后 76 项 AIOpen 和销售专项测试通过。",
-      "follow_up": "稳定后将客户端口令路由归入现有 AIOpen 路由模块的职责边界，并复用相同鉴权依赖。",
+      "after_lines": 867,
+      "reason": "Register authenticated client key endpoints through the existing route support module and preserve the current AI Open interfaces.",
+      "boundary": "Client endpoints keep login, tenant principal, CSRF and no-store protections; administrator and MCP routes remain unchanged.",
+      "validation": "AI Open authorization and route tests plus conversation and rollback regressions: 109 passed, 11 skipped. Exact-head CI remains required.",
+      "follow_up": "Architecture review of retained large router and installed client verification remain outstanding.",
       "review_owner": "@42433422"
     },
     "FHD/frontend/src/composables/useAiOpenCursor.ts": {
