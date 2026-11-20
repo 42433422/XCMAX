@@ -1194,3 +1194,35 @@ def test_tool_specs_register_elt_import():
     # 批量执行接受 run_id 或 run_ids（required_any 由 clarification 覆盖），因此不再固定必填 run_id。
     assert execute.required_params == []
     assert preview.required_params == []
+
+
+def test_existing_durable_plan_does_not_claim_success_for_missing_duplicate_slot(
+    elt_tools, monkeypatch
+):
+    elt, _service = elt_tools
+    monkeypatch.setattr(elt, "_batch_checkpoint_ids", lambda *_: {"a": "run-a", "b": "run-b"})
+    monkeypatch.setattr(elt, "_load_checkpoint_batch", lambda *_: ({}, {}))
+    monkeypatch.setattr(
+        elt,
+        "_owned_upload",
+        lambda path, _ctx: {
+            "id": path,
+            "file_name": "same.xlsx",
+            "sha256": "same",
+            "suffix": ".xlsx",
+        },
+    )
+    preview = MagicMock(
+        return_value={"success": True, "data": {"run_id": "run-a", "executable": True}}
+    )
+    execute = MagicMock(return_value={"success": True, "data": {"executed_rows": 1}})
+    monkeypatch.setattr(elt, "_preview", preview)
+    monkeypatch.setattr(elt, "_execute", execute)
+
+    result = elt._preview_batch(["a", "b"], {}, {}, write=True)
+
+    assert not result["success"]
+    assert result["done_count"] == 1 and result["data"]["executed_rows"] == 1
+    assert result["results"][1]["error_code"] == "elt_duplicate_approved_upload"
+    preview.assert_called_once()
+    execute.assert_called_once()

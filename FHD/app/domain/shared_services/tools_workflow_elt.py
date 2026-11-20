@@ -2240,6 +2240,18 @@ def _preview_batch(
                 (label, upload.get("suffix", ""), fingerprint) if fingerprint else (upload["id"],)
             )
             if identity in seen:
+                if checkpoint_ids:
+                    # Already-approved plans are immutable; never count a missing
+                    # checkpoint as success or import a duplicate to fill the slot.
+                    items.append(
+                        {
+                            "file_path": path,
+                            "file_name": label,
+                            "success": False,
+                            "error_code": "elt_duplicate_approved_upload",
+                            "message": "已批准附件中存在重复内容；该附件未重复入库，请核对原回执。",
+                        }
+                    )
                 continue
             seen.add(identity)
         already_submitted = bool(checkpoint and _checkpoint_submitted(checkpoint))

@@ -1,5 +1,5 @@
 {
-  "lines": 2533943,
+  "lines": 2534059,
   "updated": "2026-11-20",
-  "note": "Re-measure existing workspace integration and regression fixes against main after the Retort integration; retain both independently scoped code paths"
+  "note": "Add focused ELT receipt regressions and reject ambiguous duplicate uploads before any import write or terminal success"
 }

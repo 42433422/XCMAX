@@ -697,3 +697,57 @@ def test_terminal_batch_receipt_requires_actual_step_success():
     assert batch_turn_view(run, include_terminal=True)["status"] == "failed"
     run.status = "cancelled"
     assert batch_turn_view(run, include_terminal=True)["status"] == "interrupted"
+
+
+def test_durable_plan_canonicalizes_content_before_freezing_approval(monkeypatch):
+    now = datetime.now(UTC).replace(tzinfo=None)
+    engine = create_engine("sqlite://")
+    EltUpload.__table__.create(engine)
+    with Session(engine) as db:
+        for upload_id, name, suffix, sha in (
+            ("a", "same.xlsx", ".xlsx", "1"),
+            ("b", "same.xlsx", ".xlsx", "1"),
+            ("c", "other.xlsx", ".xlsx", "1"),
+            ("d", "same.xlsx", ".xlsx", "2"),
+        ):
+            db.add(
+                EltUpload(
+                    id=upload_id,
+                    owner_user_id=2,
+                    tenant_id=1,
+                    file_name=name,
+                    suffix=suffix,
+                    storage_path=f"uploads/{upload_id}",
+                    sha256=sha,
+                    size_bytes=1,
+                    created_at=now,
+                    expires_at=now + timedelta(hours=1),
+                )
+            )
+        db.commit()
+        monkeypatch.setattr(batch_continuation, "get_db", lambda: nullcontext(db))
+        monkeypatch.setattr(batch_continuation, "tenant_scope", lambda _: nullcontext())
+        monkeypatch.setattr(batch_continuation, "_bound_actor", lambda _: SimpleNamespace(id=2))
+        monkeypatch.setattr(
+            batch_continuation,
+            "artifact_scope_from_context",
+            lambda _: SimpleNamespace(owner_user_id="2", tenant_id="1", conversation_id="chat"),
+        )
+
+        plan = PlanGraph(
+            "test",
+            "import",
+            nodes=[
+                WorkflowNode(
+                    "import", "elt_import", "execute", {"file_paths": ["b", "a", "c", "d"]}
+                )
+            ],
+        )
+        batch_continuation.bind_durable_batch(plan, {"_actor_authorization": {"bound": True}})
+
+        assert plan.metadata["durable_elt_batch"] is True
+        # Retain the first selected source and same bytes under a different name.
+        assert plan.nodes[0].params["file_paths"] == ["b", "c", "d"]
+        plan.nodes[0].params["file_paths"] = ["a", "a"]
+        with pytest.raises(batch_continuation.BatchContinuationBlocked, match="重复上传记录"):
+            batch_continuation.bind_durable_batch(plan, {"_actor_authorization": {"bound": True}})

@@ -33,7 +33,7 @@
       "after_lines": 1703,
       "reason": "将通过持久审批的 ELT 批量执行交给现有后台队列，保留原任务及文件范围，避免在聊天请求内长时间执行。",
       "boundary": "只在原步骤、计划摘要和持久审批都匹配时排队。限制上传标识和 SQL 仓储，并按原运行版本事务登记队列项。",
-      "validation": "验证范围包括已批准任务入队、无凭据拒绝、计划篡改拒绝和后台任务恢复。待远端 CI 与原审批工作台验收。 本地整合后端回归 721 项通过及 37 项可选跳过。 类型修正后 102 项 ELT 专项测试通过。 The exact-turn history lookup regression is also verified against in-memory and SQLite repositories after 51 unrelated runs.",
+      "validation": "验证范围包括已批准任务入队、无凭据拒绝、计划篡改拒绝和后台任务恢复。待远端 CI 与原审批工作台验收。 本地整合后端回归 721 项通过及 37 项可选跳过。 类型修正后 102 项 ELT 专项测试通过。 本轮新增同批附件稳定身份去重与未经证实的重复完成拒绝回归；独立评审及远端检查须另行确认。 The exact-turn history lookup regression is also verified against in-memory and SQLite repositories after 51 unrelated runs.",
       "follow_up": "继续由现有审批事务和任务调度持有入队逻辑，评审后收敛编排器的转发代码。",
       "review_owner": "@42433422"
     },
@@ -400,9 +400,9 @@
     "FHD/app/domain/shared_services/tools_workflow_elt.py": {
       "base_file": "FHD/app/domain/shared_services/tools_workflow_elt.py",
       "base_blob": "7dc7d19fa8f33f63fe1d15fc5b5e6edb31dc7111",
-      "head_blob": "dbcf002cdc8e9bcc65a840e6162c33a95b9f92f0",
+      "head_blob": "77a02564aa93c50be68cbd9cad5530d249c31386",
       "before_lines": 1836,
-      "after_lines": 2443,
+      "after_lines": 2455,
       "reason": "将逐文件预演、批量提交和待继续回执接入现有 ELT 调度。已确认的父出货和附表结果可按原有凭据恢复，避免批量任务卡住或重复写入。",
       "boundary": "只恢复同租户、同所有人和同任务的原预演。执行仍核对源内容、预演版本和审批。写入结果未知时停止恢复并保留待核对状态。",
       "validation": "验证范围包括逐文件写入、等待超时、租约接管、重复写入、过期预演拒绝和父子预演确认的现有 ELT 回归。待远端 CI 和真实业务场景核验。 本地整合后端回归 721 项通过及 37 项可选跳过。 类型修正后 102 项 ELT 专项测试通过。",
