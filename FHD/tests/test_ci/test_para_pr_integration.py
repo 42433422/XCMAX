@@ -25,9 +25,7 @@ def test_shanghai_time_boundary(utc, expected):
 
 def test_queue_binds_head_and_preserves_order():
     item = f'{{"pr":9,"head_sha":"{SHA}"}}'
-    assert list(
-        integration.integration_queue(f'[{item},{{"pr":2,"head_sha":"{SHA}"}}]')
-    ) == [9, 2]
+    assert list(integration.integration_queue(f'[{item},{{"pr":2,"head_sha":"{SHA}"}}]')) == [9, 2]
     assert integration.integration_queue("") == {}
     with pytest.raises(ValueError, match="duplicate"):
         integration.integration_queue(f"[{item},{item}]")
@@ -99,16 +97,22 @@ def test_integration_respects_unresolved_review_veto(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    ("window_open", "hold_first"), [(False, False), (True, False), (True, True)]
+    ("window_open", "hold_first", "behind_second", "merge_order"),
+    [
+        (False, False, False, []),
+        (True, False, False, [9, 1, 2]),
+        (True, True, False, []),
+        (True, False, True, [9]),
+    ],
 )
 def test_scheduled_workflow_uses_only_the_ordered_queue(
-    monkeypatch, window_open, hold_first
+    monkeypatch, window_open, hold_first, behind_second, merge_order
 ):
     monkeypatch.setenv("GITHUB_TOKEN", "fake")
     monkeypatch.setenv("GITHUB_REPOSITORY", integration.REPOSITORY)
     monkeypatch.setenv(
         integration.QUEUE_VARIABLE,
-        json.dumps([{"pr": number, "head_sha": SHA} for number in (9, 1)]),
+        json.dumps([{"pr": number, "head_sha": SHA} for number in (9, 1, 2)]),
     )
     monkeypatch.setattr(integration, "integration_window_open", lambda: window_open)
     monkeypatch.setattr(sla, "integration_window_open", lambda: window_open)
@@ -126,13 +130,20 @@ def test_scheduled_workflow_uses_only_the_ordered_queue(
     client.get_workflow_run_conclusion.return_value = (True, "ok")
     client.get_pr_check_runs.return_value = (True, "ok")
     client.check_integration_reviews.return_value = (True, "ok")
-    client.get_pr_mergeability.return_value = (True, "ok")
+    client.get_pr_mergeability.side_effect = lambda number: (
+        True,
+        "behind" if behind_second and number == 1 else "ok",
+    )
     client.check_merge_snapshot.return_value = (True, "ok")
     client.merge_pr.return_value = (True, "ok", "b" * 40)
+    client.update_pr_branch.return_value = (True, "ok")
     monkeypatch.setattr(sla, "GitHubClient", lambda *_: client)
 
     assert sla.main(["--scan-regular-prs"]) == 0
     client.list_regular_prs.assert_not_called()
     assert client.reconcile_delivery.call_args_list[0].args == (42,)
-    expected = [9, 1] if window_open and not hold_first else []
-    assert [call.args[0] for call in client.merge_pr.call_args_list] == expected
+    assert [call.args[0] for call in client.merge_pr.call_args_list] == merge_order
+    if behind_second:
+        client.update_pr_branch.assert_called_once_with(1, SHA)
+    else:
+        client.update_pr_branch.assert_not_called()

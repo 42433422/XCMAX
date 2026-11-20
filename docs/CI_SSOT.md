@@ -638,7 +638,8 @@ curl -sf https://xiu-ci.com/fhd-api/api/health
 Para 在窗口内可唤起既有 GitHub Actions 工作流。工作流按 `XCMAX_MAIN_MERGE_QUEUE`
 中的次序处理 `main` 的 PR。仓库维护者在所需评审完成后，按终极员工已确认的顺序登记 JSON 数组，
 每项包含 `pr` 和完整 `head_sha`。空数组等同于本轮没有待合入 PR。首个未合入的 PR 如有
-`hold-merge`、检查未通过、落后于 `main` 或提交变化，后续 PR 等待该项处理。
+`hold-merge`、检查未通过或提交变化，后续 PR 等待该项处理。分支落后于 `main` 时，发起
+GitHub 分支同步，评审和 CI 核对新提交后更新队列中的 `head_sha`，再继续集成。
 GitHub 上未解除的评审修改要求会暂停合入。源码增长评审在登记该提交前完成。
 每次请求合入前复核当前时刻，05:00 起仅处理已有回执及原 SLA 事项。
 

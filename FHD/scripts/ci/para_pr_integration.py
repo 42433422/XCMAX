@@ -31,9 +31,7 @@ def integration_queue(raw: str) -> dict[int, str]:
             raise ValueError(f"{QUEUE_VARIABLE} entries need pr and head_sha")
         number, sha = entry["pr"], entry["head_sha"]
         if type(number) is not int or number < 1 or number in queue:
-            raise ValueError(
-                f"{QUEUE_VARIABLE} contains an invalid or duplicate PR number"
-            )
+            raise ValueError(f"{QUEUE_VARIABLE} contains an invalid or duplicate PR number")
         if not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{40}", sha):
             raise ValueError(f"{QUEUE_VARIABLE} requires a full reviewed head SHA")
         queue[number] = sha
@@ -61,18 +59,14 @@ def process_integration_queue(
             != REPOSITORY.casefold()
             or (pr.get("head") or {}).get("sha") != head_sha
         ):
-            print(
-                f"[integration] PR #{number}: target or reviewed head changed; queue paused"
-            )
+            print(f"[integration] PR #{number}: target or reviewed head changed; queue paused")
             break
         if pr.get("merged") is True and re.fullmatch(
             r"[0-9a-f]{40}", str(pr.get("merge_commit_sha") or "")
         ):
             continue
         if pr.get("state") != "open":
-            print(
-                f"[integration] PR #{number}: closed without a merge receipt; queue paused"
-            )
+            print(f"[integration] PR #{number}: closed without a merge receipt; queue paused")
             break
         result = process(pr)
         print(f"[integration] PR #{number}: {result}")

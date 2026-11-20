@@ -1012,9 +1012,6 @@ def _try_auto_merge(
         return "skipped"
 
     if mreason == "behind":
-        if scheduled:
-            print("  skip: 主线已变化，需刷新分支并重新确认入队提交")
-            return "reviewed_head_behind_main"
         expected_head_sha = pr.head_sha or client.get_pr_head_sha(pr.number)
         if not expected_head_sha:
             print("  skip: behind 但缺少 expected_head_sha")
@@ -1029,12 +1026,14 @@ def _try_auto_merge(
                 }
             )
             return "skipped"
+        if scheduled and not integration_window_open():
+            return WINDOW_CLOSED
         updated, update_reason = client.update_pr_branch(pr.number, expected_head_sha)
         if updated:
-            print(
-                f"  branch update requested: head={expected_head_sha}; "
-                "等待新 head 的 AI Review + CI"
-            )
+            next_step = "等待新 head 的 AI Review + CI"
+            if scheduled:
+                next_step += "，评审后更新队列中的提交 SHA"
+            print(f"  branch update requested: head={expected_head_sha}; {next_step}")
             _append_stale(
                 {
                     "pr": pr.number,
