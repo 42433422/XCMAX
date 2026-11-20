@@ -632,6 +632,7 @@ curl -sf https://xiu-ci.com/fhd-api/api/health
 | `fhd-ai-self-heal.yml` | 失败运行 + 每小时 17/47 分已有事故对账 + 手动只读盘点 | `.github/workflows/fhd-ai-self-heal.yml` |
 | `fhd-ai-review.yml` | `pull_request` opened/synchronize | `.github/workflows/fhd-ai-review.yml` |
 | `fhd-ai-self-heal-auto-merge.yml` | 北京时间每天 02:00–05:00 串行集成已排定的主线 PR，持续核对已合入 PR 的主干 CI 回执 | `.github/workflows/fhd-ai-self-heal-auto-merge.yml` |
+| `fhd-para-nightly-release.yml` | GitHub Actions 每天北京时间 06:00 核对合入回执，自动提交版本候选并构建候选原包 | `.github/workflows/fhd-para-nightly-release.yml` |
 | `fhd-para-github-worker.yml` | 原派工 → 独立执行/发布/续验/验收 job | `.github/workflows/fhd-para-github-worker.yml` |
 | `fhd-cvm-autonomy-watcher.yml` | `schedule(*/10 * * * *)` + workflow_dispatch | `.github/workflows/fhd-cvm-autonomy-watcher.yml` |
 
@@ -642,6 +643,11 @@ Para 在窗口内可唤起既有 GitHub Actions 工作流。工作流按 `XCMAX_
 GitHub 分支同步，评审和 CI 核对新提交后更新队列中的 `head_sha`，再继续集成。
 GitHub 上未解除的评审修改要求会暂停合入。源码增长评审在登记该提交前完成。
 每次请求合入前复核当前时刻，05:00 起仅处理已有回执及原 SLA 事项。
+
+06:00 工作流核对本轮队列的精确 head SHA、GitHub 合入提交及其在 `main` 的归属。
+本轮有新增合入且队列已收口时，复用版本锚点生成候选版本 PR。GitHub 分支保护通过后，
+以版本 PR 的合入 SHA 启动 macOS 双架构和 Android 候选。该工作流的手动触发供只读核对。
+全域 OTA 晋级以 Para 复测、各渠道签名与发布回执为输入。
 
 ### 关键约束
 

@@ -1,0 +1,166 @@
+# CI SSOT: generated from FHD/.github/workflows/para-nightly-release.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
+name: Para 06:00 Release Preparation
+
+on:
+  schedule:
+    - cron: '0 22 * * *' # 06:00 Asia/Shanghai
+  workflow_dispatch: # Readiness only. Publication is never a diagnostic dispatch.
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+
+concurrency:
+  group: para-nightly-release
+  cancel-in-progress: false
+
+
+defaults:
+  run:
+    working-directory: FHD
+
+jobs:
+  verify-integration:
+    if: github.ref == 'refs/heads/main' && github.repository == '42433422/XCMAX'
+    runs-on: ubuntu-latest
+    outputs:
+      source: ${{ steps.batch.outputs.source }}
+      branch: ${{ steps.batch.outputs.branch }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Read the ordered batch and its protected main merge receipts
+        id: batch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          XCMAX_MAIN_MERGE_QUEUE: ${{ vars.XCMAX_MAIN_MERGE_QUEUE }}
+        run: python scripts/release/para_nightly_release.py
+
+  prepare-version:
+    if: github.event_name == 'schedule' && needs.verify-integration.outputs.source != ''
+    needs: verify-integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    outputs:
+      release_sha: ${{ steps.propose.outputs.release_sha }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ needs.verify-integration.outputs.source }}
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Check the source is current and this batch has no version proposal
+        id: once
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE: ${{ needs.verify-integration.outputs.source }}
+          BRANCH: ${{ needs.verify-integration.outputs.branch }}
+        run: |
+          set -euo pipefail
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)" = "$SOURCE"
+          found=$(gh pr list --repo "$GITHUB_REPOSITORY" --state all --base main --head "$BRANCH" \
+            --json isCrossRepository --jq '[.[] | select(.isCrossRepository == false)] | length')
+          pending=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --base main --limit 100 \
+            --json headRefName,isCrossRepository --jq '[.[] | select(.isCrossRepository == false and (.headRefName | startswith("automation/para-release-")))] | length')
+          if [ "$found" = 0 ] && [ "$pending" = 0 ]; then
+            echo 'prepare=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'A version proposal already exists for this batch or another proposal is still open.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Prepare version anchors and candidate metadata
+        if: steps.once.outputs.prepare == 'true'
+        id: version
+        env:
+          SOURCE: ${{ needs.verify-integration.outputs.source }}
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check PyYAML==6.0.3
+          python scripts/release/para_nightly_release.py --prepare "$SOURCE"
+          python scripts/dev/product_lines_status.py generate
+          python ../scripts/dev/publish_ci_workflows_to_root.py --apply
+          python scripts/dev/ssot_cli.py check version product-lines
+          python scripts/dev/check_net_deletion.py --update --force --reason '自动生成本轮候选版本、发布记录及派生视图'
+      - name: Open and merge the exact version proposal through protected CI
+        if: steps.once.outputs.prepare == 'true'
+        id: propose
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ secrets.CI_COMMIT_TOKEN }}
+          SOURCE: ${{ needs.verify-integration.outputs.source }}
+          BRANCH: ${{ needs.verify-integration.outputs.branch }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          : "${GH_TOKEN:?CI_COMMIT_TOKEN required to trigger PR CI}"
+          [[ "$BRANCH" =~ ^automation/para-release-[0-9-]+-[0-9a-f]{16}$ ]]
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)" = "$SOURCE"
+          git switch -c "$BRANCH"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -u
+          git commit -m "chore(release): prepare Para candidate $VERSION"
+          head=$(git rev-parse HEAD)
+          gh auth setup-git --hostname github.com
+          git push origin "HEAD:refs/heads/$BRANCH"
+          printf 'Para 凌晨集成批次已合入 `main`。来源 SHA `%s`。本变更登记候选版本。\n' "$SOURCE" > "$RUNNER_TEMP/para-release-pr.md"
+          pr=$(gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$BRANCH" \
+            --title "chore(release): prepare $VERSION" --body-file "$RUNNER_TEMP/para-release-pr.md")
+          printf 'Version proposal %s\n' "$pr" >> "$GITHUB_STEP_SUMMARY"
+          # Jobs may take a moment to appear. GitHub enforces the complete protected check set on merge.
+          sleep 30
+          gh pr checks "$pr" --repo "$GITHUB_REPOSITORY" --required --watch --interval 30
+          gh pr view "$pr" --repo "$GITHUB_REPOSITORY" --json labels,reviewDecision,headRefOid,baseRefName \
+            | jq -e --arg head "$head" '.headRefOid == $head and .baseRefName == "main" and
+                .reviewDecision != "CHANGES_REQUESTED" and ([.labels[].name] | index("hold-merge") | not)'
+          gh pr merge "$pr" --repo "$GITHUB_REPOSITORY" --squash --match-head-commit "$head"
+          release_sha=$(gh pr view "$pr" --repo "$GITHUB_REPOSITORY" --json state,mergeCommit \
+            --jq 'select(.state=="MERGED") | .mergeCommit.oid')
+          [[ "$release_sha" =~ ^[0-9a-f]{40}$ ]]
+          echo "release_sha=$release_sha" >> "$GITHUB_OUTPUT"
+
+  build-private-candidates:
+    if: needs.prepare-version.outputs.release_sha != ''
+    needs: prepare-version
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [mac-arm64, mac-x64, android]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ needs.prepare-version.outputs.release_sha }}
+          persist-credentials: false
+      - name: Start the existing private candidate workflows for the frozen source
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_SHA: ${{ needs.prepare-version.outputs.release_sha }}
+          VERSION: ${{ needs.prepare-version.outputs.version }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          test "$(gh api "repos/$GH_REPO/git/ref/heads/main" --jq .object.sha)" = "$RELEASE_SHA"
+          if [ "$TARGET" = android ]; then
+            FHD/scripts/release/dispatch_workflow_and_wait.sh fhd-release-android.yml "Release Android $RELEASE_SHA" \
+              -f "version=$VERSION" -f "release_sha=$RELEASE_SHA"
+          else
+            arch=${TARGET#mac-}
+            FHD/scripts/release/dispatch_workflow_and_wait.sh fhd-release-desktop-mac-ota.yml "macOS candidate $RELEASE_SHA $arch" \
+              -f "version=$VERSION" -f "release_sha=$RELEASE_SHA" -f "architecture=$arch" -f candidate_only=true
+          fi
+    permissions:
+      contents: read
+      actions: write
