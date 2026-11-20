@@ -12,7 +12,7 @@ from sqlalchemy import String, cast, or_
 from sqlalchemy.orm import Session
 
 from app.application.agent_orchestrator.run_lifecycle import requires_retry_reconciliation
-from app.application.agent_orchestrator.run_models import AgentRun
+from app.application.agent_orchestrator.run_models import AgentRun, RunContextScope
 from app.application.agent_orchestrator.task_context import task_context_of
 from app.application.attachment_artifacts.models import ArtifactScope, artifact_scope_from_context
 from app.application.attachment_artifacts.store import ArtifactStore
@@ -332,7 +332,12 @@ def active_batch_turn(
         )
 
     superseded: set[str] = set()
-    for run in AgentOrchestrator().list_runs(user_id=owner, limit=50, matches=matches):
+    for run in AgentOrchestrator().list_runs(
+        user_id=owner,
+        limit=50,
+        matches=matches,
+        runtime_scope=RunContextScope(tenant, mod, session, revision),
+    ):
         if parent := task_context_of(run).get("parent_run_id"):
             superseded.add(str(parent))
         if run.run_id not in superseded:
@@ -417,7 +422,15 @@ def build_batch_continuation(context: dict[str, Any]) -> tuple[PlanGraph, dict[s
         )
 
     previous = next(
-        iter(AgentOrchestrator().list_runs(user_id=owner, limit=1, matches=matches)), None
+        iter(
+            AgentOrchestrator().list_runs(
+                user_id=owner,
+                limit=1,
+                matches=matches,
+                runtime_scope=RunContextScope(tenant, mod, session, revision),
+            )
+        ),
+        None,
     )
     if previous is None:
         return None

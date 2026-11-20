@@ -32,6 +32,139 @@ def continuation_repository(request, tmp_path):
         engine.dispose()
 
 
+@pytest.mark.parametrize("entrypoint", ["continue", "active"])
+@pytest.mark.parametrize("present", [False, True])
+def test_batch_lookup_does_not_hydrate_unrelated_account_history(
+    monkeypatch, tmp_path, entrypoint, present
+):
+    engine = create_engine(f"sqlite:///{tmp_path / 'scoped-history.db'}")
+    _assert_batch_scope_lookup(monkeypatch, engine, entrypoint, present)
+
+
+def _assert_batch_scope_lookup(monkeypatch, engine, entrypoint, present):
+    """The same native query contract is exercised by the PostgreSQL CI suite."""
+    from app.application.agent_orchestrator.run_models import RunContextScope
+    from app.db.models.agent import AgentRunRecord
+
+    factory = sessionmaker(bind=engine)
+    repository = SQLAlchemyAgentRunRepository(session_factory=factory)
+    context = {
+        "_actor_authorization": {"test": True},
+        "tenant_id": 1,
+        "mod_id": "mod",
+        "session_id": "chat",
+        "_conversation_revision": 3,
+        "turn_id": "turn",
+    }
+    step = AgentStep("import", "elt_import", "execute", params={"file_paths": ["upload"]})
+    target = AgentRun("2", "original", status="running", steps=[step])
+    target.metadata["runtime_context"] = context
+    try:
+        if present:
+            repository.save(target)
+        # Each newer row differs in only one scope dimension. More than two
+        # streaming batches must neither be hydrated nor hide the original run.
+        mismatches = (
+            {"tenant_id": 9},
+            {"mod_id": "other"},
+            {"session_id": "other"},
+            {"_conversation_revision": 4},
+        )
+        repository._ensure_schema()
+        with factory.begin() as db:
+            for index in range(208):
+                other = AgentRun("2", f"other-{index}", status="running", steps=[step])
+                other.metadata["runtime_context"] = {**context, **mismatches[index % 4]}
+                repository.save_in_session(db, other)
+        decoded = []
+        mapper = repository._record_to_run
+
+        def record_decoding(record):
+            decoded.append(record.run_id)
+            return mapper(record)
+
+        monkeypatch.setattr(repository, "_record_to_run", record_decoding)
+        orchestrator = AgentOrchestrator(repository=repository)
+        monkeypatch.setattr(
+            "app.application.agent_orchestrator.AgentOrchestrator", lambda: orchestrator
+        )
+        monkeypatch.setattr(batch_continuation, "_bound_actor", lambda _: SimpleNamespace(id=2))
+        if entrypoint == "active":
+            result = batch_continuation.active_batch_turn(
+                owner="2", tenant="1", mod="mod", session="chat", revision=3
+            )
+            assert (result or {}).get("run_id") == (target.run_id if present else None)
+        elif present:
+            with pytest.raises(batch_continuation.BatchContinuationBlocked, match="正在执行"):
+                batch_continuation.build_batch_continuation(context)
+        else:
+            assert batch_continuation.build_batch_continuation(context) is None
+        assert decoded == ([target.run_id] if present else [])
+
+        monkeypatch.setattr(repository, "_record_to_run", mapper)
+        legacy_ids = set()
+        for nonstandard in (False, True):
+            legacy = AgentRun("2", "legacy scope", status="running", steps=[step])
+            legacy.metadata["runtime_context"] = {
+                "tenant_id": "1",
+                "mod_id": "",
+                "active_mod_id": "mod",
+                "session_id": None,
+                "conversation_id": "chat",
+                "_conversation_revision": 3.0,
+            }
+            if nonstandard:
+                legacy.final_output["legacy_value"] = float("nan")
+            repository.save(legacy)
+            legacy_ids.add(legacy.run_id)
+        broken = repository.save(AgentRun("2", "invalid legacy payload"))
+        with factory.begin() as db:
+            db.get(AgentRunRecord, broken.run_id).payload_json = "{"
+        assert {
+            run.run_id
+            for run in repository.list_recent(
+                user_id="2", runtime_scope=RunContextScope("1", "mod", "chat", 3)
+            )
+        } == legacy_ids | ({target.run_id} if present else set())
+        assert (
+            repository.list_recent(
+                user_id="2", runtime_scope=RunContextScope("1", "mod", "missing", 3)
+            )
+            == []
+        )
+        assert (
+            repository.list_recent(
+                user_id="2",
+                runtime_scope=RunContextScope("1", "mod", "chat", 3),
+                matches=lambda _: False,
+            )
+            == []
+        )
+        for old_tenant in (0, False, None):
+            old_context = {**context, "tenant_id": old_tenant, "session_id": "old-tenant"}
+            old_run = AgentRun("2", "legacy tenant", status="running", steps=[step])
+            old_run.metadata["runtime_context"] = old_context
+            repository.save(old_run)
+            # Continuation has always used str(value), while the active-view
+            # predicate uses str(value or ""). Keep both native entrypoints.
+            with pytest.raises(batch_continuation.BatchContinuationBlocked, match="正在执行"):
+                batch_continuation.build_batch_continuation(
+                    {**old_context, "tenant_id": str(old_tenant)}
+                )
+            assert (
+                batch_continuation.active_batch_turn(
+                    owner="2",
+                    tenant=str(old_tenant),
+                    mod="mod",
+                    session="old-tenant",
+                    revision=3,
+                )
+                is None
+            )
+    finally:
+        engine.dispose()
+
+
 @pytest.mark.parametrize(
     "case", ["ready", "waiting_linked_preview", "unknown", "foreign", "already_committed"]
 )

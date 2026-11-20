@@ -131,6 +131,7 @@ export async function runOpenCodeLive(executable, cwd, prompt, env, options) {
   const server = spawn(executable, ['serve', '--hostname', '127.0.0.1', '--port', '0'], {
     cwd, env: { ...env, OPENCODE_SERVER_PASSWORD: password }, stdio: ['ignore', 'pipe', 'ignore'],
   });
+  const closed = new Promise(resolve => server.once('close', resolve));
   const headers = { authorization: 'Basic ' + Buffer.from('opencode:' + password).toString('base64') };
   let stream;
   let deadline;
@@ -185,8 +186,8 @@ export async function runOpenCodeLive(executable, cwd, prompt, env, options) {
     const textParts = new Set();
     const handledPermissions = new Set();
     stream = Readable.fromWeb((await request('/event')).body);
-    stream.on('error', () => {}); // Request/timeout reports the final status.
     const lines = createInterface({ input: stream });
+    lines.on('error', error => eventAbort.abort(error));
     lines.on('line', line => {
       if (!line.startsWith('data:')) return;
       const event = events(line.slice(5).trim())[0];
@@ -235,12 +236,16 @@ export async function runOpenCodeLive(executable, cwd, prompt, env, options) {
   } finally {
     flush();
     stream?.destroy();
-    server.kill('SIGTERM');
     const stop = setTimeout(() => {
       if (server.exitCode === null && server.signalCode === null) server.kill('SIGKILL');
     }, 2000);
     stop.unref();
-    server.once('close', () => clearTimeout(stop));
+    try {
+      server.kill('SIGTERM');
+      await closed; // Callers may only remove the workspace after the child releases it.
+    } finally {
+      clearTimeout(stop);
+    }
   }
 }
 

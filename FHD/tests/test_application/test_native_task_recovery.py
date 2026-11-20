@@ -899,6 +899,35 @@ def test_unknown_checkpoint_version_fails_before_tool_dispatch(trusted_actor):
 @pytest.mark.skipif(
     not os.environ.get("XCAGI_TEST_AGENT_POSTGRES_URL"), reason="requires CI PostgreSQL service"
 )
+@pytest.mark.parametrize("entrypoint", ["continue", "active"])
+@pytest.mark.parametrize("present", [False, True])
+def test_postgres_batch_scope_filters_history_and_keeps_legacy_payloads(
+    monkeypatch, entrypoint, present
+):
+    import uuid
+
+    from sqlalchemy import create_engine
+
+    from tests.test_application.test_elt_batch_continuation import _assert_batch_scope_lookup
+
+    url = os.environ["XCAGI_TEST_AGENT_POSTGRES_URL"]
+    admin = create_engine(url)
+    schema = "batch_scope_" + uuid.uuid4().hex
+    with admin.begin() as db:
+        db.exec_driver_sql(f'CREATE SCHEMA "{schema}"')
+    engine = create_engine(url, connect_args={"options": f"-csearch_path={schema}"})
+    try:
+        _assert_batch_scope_lookup(monkeypatch, engine, entrypoint, present)
+    finally:
+        engine.dispose()
+        with admin.begin() as db:
+            db.exec_driver_sql(f'DROP SCHEMA "{schema}" CASCADE')
+        admin.dispose()
+
+
+@pytest.mark.skipif(
+    not os.environ.get("XCAGI_TEST_AGENT_POSTGRES_URL"), reason="requires CI PostgreSQL service"
+)
 def test_postgres_native_saver_concurrent_setup_and_reopen_preserves_host_schema():
     import uuid
 

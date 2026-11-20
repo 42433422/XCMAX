@@ -31,6 +31,7 @@ from app.application.agent_orchestrator.repair_advisor import (
 from app.application.agent_orchestrator.run_models import (
     AgentRun,
     AgentStep,
+    RunContextScope,
     RunEvent,
     ToolCall,
     utc_now_iso,
@@ -831,7 +832,12 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         user_id: str | None = None,
         limit: int = 50,
         matches: Callable[[AgentRun], bool] | None = None,
+        runtime_scope: RunContextScope | None = None,
     ) -> list[AgentRun]:
+        if runtime_scope is not None:
+            return self._repo.list_recent(
+                user_id=user_id, limit=limit, matches=matches, runtime_scope=runtime_scope
+            )
         if matches is None:
             return self._repo.list_recent(user_id=user_id, limit=limit)
         return self._repo.list_recent(user_id=user_id, limit=limit, matches=matches)

@@ -9,12 +9,14 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from typing import cast
 
-from sqlalchemy import Table, case, func, or_
+from sqlalchemy import JSON, String, Table, and_, case, func, literal, or_
+from sqlalchemy import cast as sql_cast
 from sqlalchemy.orm import Session
 
 from app.application.agent_orchestrator import run_terminal_metrics
 from app.application.agent_orchestrator.run_models import (
     AgentRun,
+    RunContextScope,
     RunEvent,
     utc_now_iso,
 )
@@ -61,6 +63,101 @@ def _sqlite_identity_candidates(column, path: str, expected: str):
         ),
         else_=True,
     )
+
+
+def _runtime_scope_candidates(column, scope: RunContextScope, dialect: str):
+    """Reject definite scope mismatches before transferring/hydrating full runs.
+
+    Keep nonstandard legacy payloads and ambiguous scalar conversions for the
+    ordinary mapper and Python predicates; no recent-history window is imposed.
+    PostgreSQL 16 is the supported server image in docker-compose.yml.
+    """
+    if dialect == "sqlite":
+        valid = func.json_valid(column) == 1
+        sqlite_payload = case((valid, column), else_="{}")
+
+        def field(key):
+            path = f"$.metadata.runtime_context.{key}"
+            value = func.json_extract(sqlite_payload, path)
+            kind = func.json_type(sqlite_payload, path)
+            kind = case(
+                (and_(kind == "integer", func.typeof(value) != "integer"), "real"),
+                else_=kind,
+            )
+            return value, kind
+
+        revision = field("_conversation_revision")[0] == scope.revision
+    elif dialect == "postgresql":
+        from sqlalchemy.dialects.postgresql import JSONB
+
+        valid = func.pg_input_is_valid(column, "jsonb")
+        # Guard the cast itself: SQL planners may reorder WHERE expressions.
+        postgres_payload = sql_cast(case((valid, column), else_="{}"), JSON)
+
+        def field(key):
+            path = ("metadata", "runtime_context", key)
+            value = func.json_extract_path_text(postgres_payload, *path)
+            kind = func.json_typeof(func.json_extract_path(postgres_payload, *path))
+            return value, case(
+                (kind == "string", "text"),
+                (
+                    and_(kind == "number", value.op("~")(r"^(0|-?[1-9][0-9]*)$")),
+                    "integer",
+                ),
+                (kind == "boolean", value),
+                else_=kind,
+            )
+
+        raw_revision = func.json_extract_path(
+            postgres_payload, "metadata", "runtime_context", "_conversation_revision"
+        )
+        revision = sql_cast(raw_revision, JSONB) == sql_cast(
+            literal(str(int(scope.revision))), JSONB
+        )
+        if scope.revision in (0, 1):
+            revision = or_(
+                revision,
+                sql_cast(raw_revision, JSONB)
+                == sql_cast(literal("true" if scope.revision else "false"), JSONB),
+            )
+    else:
+        return True
+
+    predicates = [revision]
+    for keys, expected in (
+        (("tenant_id",), scope.tenant_id),
+        (("mod_id", "active_mod_id"), scope.mod_id),
+        (("session_id", "conversation_id"), scope.session_id),
+    ):
+        fields = [field(key) for key in keys]
+        values = [
+            case(
+                (kind == "text", func.nullif(value, "")),
+                (kind == "integer", func.nullif(sql_cast(value, String), "0")),
+                (kind == "true", "True"),
+            )
+            for value, kind in fields
+        ]
+        if keys == ("tenant_id",):
+            # Continuation uses str(saved.get("tenant_id")), without the
+            # truthy fallback used by Mod/session aliases and active views.
+            value, kind = fields[0]
+            values = [
+                case(
+                    (kind == "text", value),
+                    (kind == "integer", sql_cast(value, String)),
+                    (kind == "true", "True"),
+                    (kind == "false", "False"),
+                    else_="None",
+                )
+            ]
+        predicates.append(
+            or_(
+                func.coalesce(*values, "") == expected,
+                *(kind.not_in(("text", "integer", "true", "false", "null")) for _, kind in fields),
+            )
+        )
+    return case((valid, and_(*predicates)), else_=True)
 
 
 def _explicit_task_id(run: AgentRun) -> str:
@@ -497,6 +594,7 @@ class SQLAlchemyAgentRunRepository:
         tenant_id: str | None = None,
         mod_id: str | None = None,
         matches: Callable[[AgentRun], bool] | None = None,
+        runtime_scope: RunContextScope | None = None,
     ) -> list[AgentRun]:
         self._ensure_schema()
         with self._session_scope(read_only=True) as db:
@@ -505,8 +603,14 @@ class SQLAlchemyAgentRunRepository:
             query = db.query(AgentRunRecord)
             if user_id is not None:
                 query = query.filter(AgentRunRecord.user_id == str(user_id))
+            if runtime_scope is not None:
+                query = query.filter(
+                    _runtime_scope_candidates(
+                        AgentRunRecord.payload_json, runtime_scope, db.get_bind().dialect.name
+                    )
+                )
             query = query.order_by(AgentRunRecord.updated_at.desc())
-            if tenant_id is None and mod_id is None and matches is None:
+            if tenant_id is None and mod_id is None and matches is None and runtime_scope is None:
                 records = query.limit(max(0, int(limit))).all()
                 return [
                     run for record in records if (run := self._record_to_run(record)) is not None
@@ -522,6 +626,7 @@ class SQLAlchemyAgentRunRepository:
                     run is not None
                     and (tenant_id is None or tenant_id_of_run(run) == tenant_id)
                     and (mod_id is None or mod_id_of_run(run) == mod_id)
+                    and (runtime_scope is None or runtime_scope.matches(run))
                     and (matches is None or matches(run))
                 ):
                     result.append(run)

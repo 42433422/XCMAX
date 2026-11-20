@@ -205,6 +205,11 @@ test('OpenCode report-only sessions deny unknown tools even when no log callback
   // through its native executable on every platform, without a POSIX shebang.
   writeFileSync(join(root, 'serve'), String.raw`
 const http = require('node:http');
+require('node:fs').writeFileSync('server.pid', String(process.pid));
+if (process.env.FIXTURE_LIFECYCLE === 'early-exit') process.exit(19);
+process.on('SIGTERM', () => {
+  if (process.env.FIXTURE_LIFECYCLE !== 'ignore-term') setTimeout(() => process.exit(0), 100);
+});
 let session;
 const server = http.createServer(async (req, res) => {
   if (req.headers.authorization !== 'Basic ' + Buffer.from('opencode:' + process.env.OPENCODE_SERVER_PASSWORD).toString('base64')) {
@@ -223,11 +228,16 @@ const server = http.createServer(async (req, res) => {
     res.end(JSON.stringify(config)); return;
   }
   if (req.url === '/session') { session = JSON.parse(raw); res.end(JSON.stringify({id:'fixture-session'})); return; }
+  if (process.env.FIXTURE_LIFECYCLE === 'timeout') return;
   const message = JSON.parse(raw);
   res.end(JSON.stringify({info:{tokens:{input:1,output:2}},parts:[{type:'text',text:JSON.stringify({session,message})}]}));
 });
 server.listen(0, '127.0.0.1', () => console.log('http://127.0.0.1:' + server.address().port));
 `);
+  const assertStopped = () => assert.throws(
+    () => process.kill(Number(readFileSync(join(root, 'server.pid'), 'utf8')), 0),
+    error => error.code === 'ESRCH', 'the service must exit before the caller can release its workspace',
+  );
   try {
     const env = { DEVFLEET_FORCE_OPENCODE: '1', PARA_PLATFORM_POOL: '1',
       PARA_OPENCODE_MODEL: 'vendor/model:variant', PARA_PLATFORM_MODEL: 'vendor/model:variant',
@@ -238,6 +248,7 @@ server.listen(0, '127.0.0.1', () => console.log('http://127.0.0.1:' + server.add
       const output = JSON.parse(await runOpenCodeLive(executable, root, 'Review the existing files', env, {
         platform, timeoutMs: 5000, reportOnly: true, log,
       }));
+      assertStopped();
       assert.equal(output.message.agent, 'plan');
       assert.equal(output.message.parts[0].text, 'Review the existing files');
       assert.deepEqual(output.message.model, { providerID: 'xcmax', modelID: 'vendor/model:variant' });
@@ -250,7 +261,19 @@ server.listen(0, '127.0.0.1', () => console.log('http://127.0.0.1:' + server.add
       await assert.rejects(runOpenCodeLive(executable, root, 'Do not launch a model',
         { ...env, FIXTURE_CONFIG_OVERRIDE: override }, { platform, timeoutMs: 5000, reportOnly: false }),
       /opencode_platform_binding_mismatch/);
+      assertStopped();
     }
+    for (const mode of ['early-exit', 'timeout']) {
+      await assert.rejects(runOpenCodeLive(executable, root, 'Must not finish',
+        { ...env, FIXTURE_LIFECYCLE: mode }, { platform, timeoutMs: 1000, reportOnly: true }),
+      mode === 'early-exit' ? /退出码 19/ : /timeout|aborted|超时/i);
+      assertStopped();
+    }
+    await runOpenCodeLive(executable, root, 'Force-stop the service',
+      { ...env, FIXTURE_LIFECYCLE: 'ignore-term' }, { platform, timeoutMs: 5000, reportOnly: true });
+    assertStopped();
+    await assert.rejects(runOpenCodeLive(join(root, 'missing-executable'), root, 'Never starts', env,
+      { platform, timeoutMs: 1000, reportOnly: true }), { code: 'ENOENT' });
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
