@@ -139,30 +139,6 @@ def _register_scheduler_phase_04():
     except RECOVERABLE_ERRORS:
         _facade().logger.exception("register self evolution metrics job failed")
 
-    def _auto_version_bump_job() -> None:
-        try:
-            from modstore_server.auto_version_bump import auto_version_bump
-            from modstore_server.integrations.ops_action_handlers import repo_root
-
-            root = str(repo_root())
-            out = auto_version_bump(root)
-            if out.get("ok") and (not out.get("skipped")):
-                _facade().logger.info(
-                    "auto version bump: %s → %s (anchors=%d)",
-                    out.get("old_version"),
-                    out.get("new_version"),
-                    out.get("anchors_synced"),
-                )
-        except RECOVERABLE_ERRORS:
-            _facade().logger.exception("auto version bump job failed")
-
-    _facade()._scheduler.add_job(
-        _auto_version_bump_job,
-        _facade().CronTrigger(hour=21, minute=30),
-        id="auto_version_bump_daily",
-        replace_existing=True,
-    )
-
     def _telemetry_backlog_scan_job() -> None:
         try:
             from modstore_server.telemetry_backlog_loop import run_telemetry_scan
