@@ -17,6 +17,8 @@ from modstore_server import employee_autonomy_service
 from modstore_server.admin_employee_autonomy_api import router
 from modstore_server.api.deps import require_admin
 from modstore_server.duty_workforce_contracts import load_reviewed_duty_manifest
+from modstore_server.employee_runtime import parse_employee_config_v2
+from modstore_server.employee_evolution_dispatch import CuratorCandidateDenied, _candidate_archive
 from modstore_server.integrations.repository_packages import load_repository_module
 from modstore_server.models import (
     CatalogItem,
@@ -29,9 +31,24 @@ from modstore_server.models import (
 )
 
 
+def test_candidate_rejects_changes_to_structured_prompt_prefix(tmp_path):
+    manifest = load_reviewed_duty_manifest("doc-knowledge-curator")
+    manifest["employee_config_v2"]["cognition"]["agent"]["role"] = {"name": "知识策展员"}
+    before = parse_employee_config_v2(manifest)["cognition"]["agent"]["system_prompt"].strip()
+    source = tmp_path / "employee.xcemp"
+    with zipfile.ZipFile(source, "w") as archive:
+        archive.writestr("doc-knowledge-curator/manifest.json", json.dumps(manifest))
+    record = EmployeeEvolutionRecord(
+        employee_id="doc-knowledge-curator", prompt_before=before, prompt_after="不同的角色约束"
+    )
+    with pytest.raises(CuratorCandidateDenied, match="employee_pack_structured_prompt_changed"):
+        _candidate_archive(source, hashlib.sha256(source.read_bytes()).hexdigest(), record)
+
+
 @pytest.mark.parametrize("legacy_dispatched", [False, True])
+@pytest.mark.parametrize("structured", [False, True])
 def test_operator_approval_executes_real_curator_and_reads_private_candidate(
-    tmp_path, monkeypatch, legacy_dispatched
+    tmp_path, monkeypatch, legacy_dispatched, structured
 ):
     repo = Path(__file__).resolve().parents[3]
     catalog = tmp_path / "catalog"
@@ -45,7 +62,12 @@ def test_operator_approval_executes_real_curator_and_reads_private_candidate(
     init_db()
     employee_id = "doc-knowledge-curator"
     manifest = load_reviewed_duty_manifest(employee_id)
-    before = manifest["employee_config_v2"]["cognition"]["agent"]["system_prompt"]
+    agent = manifest["employee_config_v2"]["cognition"]["agent"]
+    if structured:
+        agent["role"] = {"name": "知识策展员"}
+        agent["behavior_rules"] = ["核对来源"]
+        agent["few_shot_examples"] = [{"input": "问题", "output": "引用"}]
+    before = parse_employee_config_v2(manifest)["cognition"]["agent"]["system_prompt"].strip()
     after = before + "\n核对知识条目的引用出处。"
     artifact = catalog / "files" / "existing.xcemp"
     artifact.parent.mkdir(parents=True)
@@ -125,7 +147,14 @@ def test_operator_approval_executes_real_curator_and_reads_private_candidate(
     assert hashlib.sha256(candidate).hexdigest() == receipt["candidate_sha256"]
     with zipfile.ZipFile(io.BytesIO(candidate)) as staged:
         actual_manifest = json.loads(staged.read(f"{employee_id}/manifest.json"))
-        assert actual_manifest["employee_config_v2"]["cognition"]["agent"]["system_prompt"] == after
+        assert (
+            parse_employee_config_v2(actual_manifest)["cognition"]["agent"]["system_prompt"]
+            == after
+        )
+        if structured:
+            assert (
+                actual_manifest["employee_config_v2"]["cognition"]["agent"]["role"] == agent["role"]
+            )
         assert staged.read(f"{employee_id}/backend/employees/worker.py") == b"# retained runtime"
         assert "META-INF/signature.json" not in staged.namelist()
     audit = json.loads(base64.b64decode(evidence["files"]["receipt.json"]))["audit"]

@@ -38,6 +38,8 @@ class CuratorCandidateDenied(ValueError):
 def _candidate_archive(
     source: Path, expected_sha: str, record: EmployeeEvolutionRecord
 ) -> tuple[bytes, dict]:
+    from modstore_server.employee_runtime import parse_employee_config_v2
+
     with source.open("rb") as handle:
         original = handle.read(_MAX_ARTIFACT_BYTES + 1)
     if len(original) > _MAX_ARTIFACT_BYTES or hashlib.sha256(original).hexdigest() != expected_sha:
@@ -67,9 +69,31 @@ def _candidate_archive(
         before, after = str(record.prompt_before or ""), str(record.prompt_after or "")
         if not before or not after or before == after:
             raise CuratorCandidateDenied("invalid_prompt_change")
-        if str(agent.get("system_prompt") or "").strip()[:30000] != before:
+        normalized = str(
+            parse_employee_config_v2(manifest)
+            .get("cognition", {})
+            .get("agent", {})
+            .get("system_prompt")
+            or ""
+        ).strip()
+        if normalized[:30000] != before:
             raise CuratorCandidateDenied("employee_pack_baseline_changed")
-        agent["system_prompt"] = after
+        raw_prompt = str(agent.get("system_prompt") or "").strip()
+        if raw_prompt and not normalized.endswith(raw_prompt):
+            raise CuratorCandidateDenied("employee_pack_prompt_shape_unsupported")
+        prefix = normalized[: -len(raw_prompt)] if raw_prompt else ""
+        if prefix and not after.startswith(prefix):
+            raise CuratorCandidateDenied("employee_pack_structured_prompt_changed")
+        agent["system_prompt"] = after[len(prefix) :]
+        result_prompt = str(
+            parse_employee_config_v2(manifest)
+            .get("cognition", {})
+            .get("agent", {})
+            .get("system_prompt")
+            or ""
+        ).strip()
+        if result_prompt != after:
+            raise CuratorCandidateDenied("employee_pack_prompt_shape_unsupported")
         if validate_manifest_dict(manifest):
             raise CuratorCandidateDenied("invalid_candidate_manifest")
         buffer = io.BytesIO()
