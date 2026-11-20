@@ -17,8 +17,8 @@ from modstore_server import employee_autonomy_service
 from modstore_server.admin_employee_autonomy_api import router
 from modstore_server.api.deps import require_admin
 from modstore_server.duty_workforce_contracts import load_reviewed_duty_manifest
-from modstore_server.employee_runtime import parse_employee_config_v2
 from modstore_server.employee_evolution_dispatch import CuratorCandidateDenied, _candidate_archive
+from modstore_server.employee_runtime import parse_employee_config_v2
 from modstore_server.integrations.repository_packages import load_repository_module
 from modstore_server.models import (
     CatalogItem,
