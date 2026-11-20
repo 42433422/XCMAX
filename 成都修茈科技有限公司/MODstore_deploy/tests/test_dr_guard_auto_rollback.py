@@ -28,6 +28,7 @@ def test_backup_guard_skips_bump_until_cleared(
     )
     monkeypatch.setenv("MODSTORE_RELEASE_TRAIN_JSON", str(ssot))
     monkeypatch.setenv("MODSTORE_RELEASE_TRAIN_ENABLED", "1")
+    monkeypatch.setenv("MODSTORE_RELEASE_TRAIN_REQUIRE_TIMELINE_CLOSURE", "0")
     monkeypatch.delenv("MODSTORE_RELEASE_TRAIN_FORCE_BUMP", raising=False)
 
     set_backup_guard("daily backup failed: boom", day="2026-06-07")
@@ -102,6 +103,7 @@ def test_auto_rollback_closure_rolls_back_and_stages_review(
     monkeypatch.setenv("MODSTORE_DB_PATH", str(tmp_path / "ar.sqlite"))
     monkeypatch.setenv("MODSTORE_RELEASE_TRAIN_JSON", str(tmp_path / "rt.json"))
     monkeypatch.setenv("MODSTORE_RELEASE_TRAIN_ENABLED", "1")
+    monkeypatch.setenv("MODSTORE_RELEASE_TRAIN_REQUIRE_TIMELINE_CLOSURE", "0")
     monkeypatch.setenv("MODSTORE_AUTO_ROLLBACK_ENABLED", "1")
     monkeypatch.delenv("DATABASE_URL", raising=False)
     models.init_db()

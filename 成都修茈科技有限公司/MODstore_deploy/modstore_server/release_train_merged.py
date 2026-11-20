@@ -278,6 +278,44 @@ def mark_backup_guard_probe_escalated(
     return {"ok": True, "probe_escalated": True}
 
 
+TIMELINE_NODES = ("ASM", "P", "M", "PPTX", "SW", "SS", "SA", "V")
+
+
+def _record_day(value: _facade().Any) -> str:
+    """把节点 last_run（UTC ISO）折算成北京日历日。"""
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    try:
+        from zoneinfo import ZoneInfo
+
+        dt = _facade().datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=_facade().timezone.utc)
+        return dt.astimezone(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d")
+    except RECOVERABLE_ERRORS:
+        return raw[:10]
+
+
+def timeline_closure_gaps(day: str) -> list[_facade().Dict[str, _facade().Any]]:
+    """返回当日时间线未闭环的节点；空列表表示真实闭环。"""
+    from modstore_server.time_rail_runtime import all_node_records
+
+    records = all_node_records()
+    gaps: list[_facade().Dict[str, _facade().Any]] = []
+    for node_id in TIMELINE_NODES:
+        row = records.get(node_id) or {}
+        if not row:
+            gaps.append({"node": node_id, "reason": "missing"})
+        elif row.get("ok") is not True:
+            gaps.append({"node": node_id, "reason": "not_ok"})
+        elif _record_day(row.get("last_run")) != day:
+            gaps.append(
+                {"node": node_id, "reason": "stale", "last_run": row.get("last_run")}
+            )
+    return gaps
+
+
 def bump_release_train(
     *,
     record_id: _facade().Optional[int] = None,
@@ -311,6 +349,36 @@ def bump_release_train(
     force = bool(force) or _facade().os.environ.get(
         "MODSTORE_RELEASE_TRAIN_FORCE_BUMP", "0"
     ).strip().lower() in ("1", "true", "yes", "on")
+    require_closure = (
+        (_facade().os.environ.get("MODSTORE_RELEASE_TRAIN_REQUIRE_TIMELINE_CLOSURE", "1") or "")
+        .strip()
+        .lower()
+        not in ("0", "false", "no", "off")
+    )
+    if require_closure and (not force):
+        gaps = timeline_closure_gaps(day)
+        if gaps:
+            _facade().logger.warning(
+                "release_train bump skipped (timeline not closed): day=%s gaps=%s",
+                day,
+                gaps,
+            )
+            result = {
+                "ok": False,
+                "skipped": True,
+                "reason": "timeline_not_closed",
+                "gaps": gaps,
+                "before": before,
+                "after": before,
+                "kind": "daily",
+                "day_index": day_index,
+                "digest_day": day,
+                "push_installer": False,
+                "push_major": False,
+            }
+            if record_id and int(record_id) > 0:
+                _facade().attach_release_train_to_digest(int(record_id), result)
+            return result
     guard = _facade().active_backup_guard(day=day, state=st)
     if guard and (not force):
         _facade().logger.warning(
