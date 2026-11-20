@@ -4,7 +4,8 @@ import pytest
 
 from app.application import dataset_rag_app_service
 from app.application.dataset_rag.models import DatasetAccessContext
-from app.application.enterprise_cs_knowledge import cite_product_reply, retrieve_product_knowledge
+from app.application.enterprise_cs_automation import retrieve_product_knowledge
+from app.infrastructure.rag.enterprise_cs_knowledge import cite_product_reply
 
 
 @pytest.mark.asyncio

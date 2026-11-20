@@ -3,7 +3,7 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
-from app.application import enterprise_cs_ticket_status as ticket_status
+from app.application import client_product_issue_intake as ticket_status
 
 
 @pytest.mark.asyncio

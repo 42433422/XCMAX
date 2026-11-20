@@ -2,19 +2,12 @@
 
 from __future__ import annotations
 
-import asyncio
-import logging
-import os
 from functools import cache
 from urllib.parse import urlsplit
 
-from app.application.dataset_rag.models import _dict_to_retrieved_chunk
-from app.application.dataset_rag.retrieval_policy import evidence_grounding, resolve_min_relevance
 from app.infrastructure.rag.citation_tracker import CitationTracker
 from app.infrastructure.rag.hybrid_retriever import HybridRetriever, RetrievedChunk
-from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-logger = logging.getLogger(__name__)
 _PRODUCT_HOSTS = {"xiu-ci.com", "www.xiu-ci.com", "xcagi.com", "www.xcagi.com"}
 # Stable instructions from download.html and the product section of index.html.
 # Release values and availability stay on the official pages.
@@ -44,12 +37,7 @@ def _public_guide_retriever() -> HybridRetriever:
     return retriever
 
 
-def _grounded(query: str, chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:
-    threshold = resolve_min_relevance(None)
-    return [chunk for chunk in chunks if evidence_grounding(query, [chunk]) >= threshold]
-
-
-def _is_product_url(url: str) -> bool:
+def is_product_url(url: str) -> bool:
     try:
         parsed = urlsplit(url)
     except ValueError:
@@ -64,41 +52,8 @@ def _is_product_url(url: str) -> bool:
     )
 
 
-async def retrieve_product_knowledge(query: str) -> CitationTracker:
-    """Use a dedicated read-only key; never fall through to a tenant's private data."""
-    query = query.strip()[:2000]
-    if not query:
-        return CitationTracker([])
-    key = os.getenv("XCAGI_ENTERPRISE_CS_KB_KEY", "").strip()
-    evidence = await asyncio.to_thread(_published_dataset, key, query) if key else None
-    return evidence or CitationTracker(_grounded(query, _public_guide_retriever().retrieve(query)))
-
-
-def _published_dataset(key: str, query: str) -> CitationTracker | None:
-    from app.application.dataset_rag_app_service import get_dataset_rag_app_service
-
-    try:
-        result = get_dataset_rag_app_service().public_query(
-            api_key=key,
-            query=query,
-            top_k=3,
-            metadata_filter={"visibility": "public"},
-        )
-    except RECOVERABLE_ERRORS:
-        logger.warning("Enterprise CS product knowledge unavailable")
-        return None
-    if result.get("success") is not True or result.get("answer_grounded") is not True:
-        return None
-
-    chunks = [
-        _dict_to_retrieved_chunk(row)
-        for row in result["chunks"]
-        if row.get("text")
-        and (row.get("metadata") or {}).get("visibility") == "public"
-        and _is_product_url(str(row.get("source_url") or ""))
-    ]
-    grounded = _grounded(query, chunks)
-    return CitationTracker(grounded) if grounded else None
+def retrieve_public_product_guide(query: str) -> list[RetrievedChunk]:
+    return _public_guide_retriever().retrieve(query)
 
 
 def cite_product_reply(reply: str, evidence: CitationTracker) -> str:

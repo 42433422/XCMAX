@@ -67,19 +67,11 @@ async def test_low_risk_message_gets_ai_reply_in_same_conversation(
 ) -> None:
     svc, cs_id, conversation_id = _conversation(cs_db)
     customer_message = svc.send_message(
-        conversation_id, 7, "安装后怎么首次登录？", origin="customer"
+        conversation_id, 7, "如何下载安装 XCAGI？", origin="customer"
     )["message"]
 
-    from app.application import enterprise_cs_knowledge
-
+    monkeypatch.delenv("XCAGI_ENTERPRISE_CS_KB_KEY", raising=False)
     observed: dict[str, object] = {}
-    monkeypatch.setattr(
-        enterprise_cs_knowledge,
-        "cite_product_reply",
-        lambda reply, evidence: (
-            reply.replace(" [1]", "") + "\nhttps://www.xiu-ci.com/index.html#product"
-        ),
-    )
 
     async def fake_completion(messages, **kwargs):
         observed["messages"] = messages
@@ -92,8 +84,8 @@ async def test_low_risk_message_gets_ai_reply_in_same_conversation(
                         "content": json.dumps(
                             {
                                 "action": "reply",
-                                "reply": "请打开已安装客户端并使用购买账号完成首次登录。 [1]",
-                                "summary": "客户咨询首次登录",
+                                "reply": "请在官方下载页选择对应平台的安装包。 [1]",
+                                "summary": "客户咨询下载安装",
                                 "confidence": 0.92,
                                 "risk_level": "low",
                                 "transfer_reason": "",
@@ -118,17 +110,17 @@ async def test_low_risk_message_gets_ai_reply_in_same_conversation(
     assert result["action"] == "reply"
     messages = svc.list_messages(conversation_id, cs_id, limit=20)
     assert [item["origin"] for item in messages] == ["customer", "ai"]
-    assert messages[-1]["body"].endswith("https://www.xiu-ci.com/index.html#product")
+    assert messages[-1]["body"].endswith("https://xiu-ci.com/download")
     state = cs_db.get(ImCustomerServiceAutomationState, conversation_id)
     assert state is not None
     assert state.mode == "ai"
     assert state.status == "ai_active"
-    assert state.summary == "客户咨询首次登录"
+    assert state.summary == "客户咨询下载安装"
     llm_messages = observed["messages"]
     assert isinstance(llm_messages, list)
     assert "必须有产品知识依据" in llm_messages[0]["content"]
     prompt = json.loads(llm_messages[1]["content"])
-    assert prompt["latest_customer_message"] == "安装后怎么首次登录？"
+    assert prompt["latest_customer_message"] == "如何下载安装 XCAGI？"
     assert observed["kwargs"] == {
         "temperature": 0.2,
         "max_tokens": 700,
@@ -640,7 +632,8 @@ async def test_same_report_is_owner_scoped_and_rejects_other_customers_message(c
 async def test_recovery_from_im_log_uses_original_turn_and_replies_once(cs_db, monkeypatch):
     from datetime import timedelta
 
-    from app.application import enterprise_cs_scheduler
+    from app.application import enterprise_cs_automation
+    from app.fastapi_app import enterprise_cs_scheduler
     from app.utils.time import utc_now_naive
 
     svc, cs_id, cid = _conversation(cs_db)
@@ -648,7 +641,8 @@ async def test_recovery_from_im_log_uses_original_turn_and_replies_once(cs_db, m
     cs_db.get(ImMessage, first["id"]).created_at = utc_now_naive() - timedelta(minutes=1)
     cs_db.commit()
     engine = cs_db.get_bind()
-    monkeypatch.setattr(enterprise_cs_scheduler, "get_host_engine", lambda: engine)
+    monkeypatch.setattr(enterprise_cs_automation, "get_host_engine", lambda: engine)
+    monkeypatch.setattr(enterprise_cs_automation, "HostSessionLocal", sessionmaker(bind=engine))
     monkeypatch.setattr(enterprise_cs_scheduler, "HostSessionLocal", sessionmaker(bind=engine))
 
     attempts = 0

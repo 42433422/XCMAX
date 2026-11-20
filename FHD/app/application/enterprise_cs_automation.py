@@ -9,15 +9,15 @@ import logging
 import math
 import os
 import re
-from typing import Any
+from contextlib import contextmanager
+from datetime import timedelta
+from typing import TYPE_CHECKING, Any
 
 import httpx
-from sqlalchemy import select, true
+from sqlalchemy import func, select, text, true
 from sqlalchemy.orm import Session
 
-from app.application.enterprise_cs_scheduler import (
-    process_enterprise_cs_customer_message as process_enterprise_cs_customer_message,
-)
+from app.db import HostSessionLocal, get_host_engine
 from app.db.models.im import ImCustomerServiceAutomationState, ImMessage
 from app.db.models.user import User
 from app.domain.shared_services.kellai_copilot_llm import (
@@ -25,6 +25,11 @@ from app.domain.shared_services.kellai_copilot_llm import (
     parse_json_content,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.time import utc_now_naive
+
+if TYPE_CHECKING:
+    from app.infrastructure.rag.citation_tracker import CitationTracker
+    from app.infrastructure.rag.hybrid_retriever import RetrievedChunk
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +107,59 @@ def _audit(*, actor: int | str | None, action: str, payload: dict[str, Any]) -> 
         write_audit_event(actor=actor, action=action, payload=payload)
     except RECOVERABLE_ERRORS:
         logger.debug("enterprise CS audit unavailable", exc_info=True)
+
+
+def _grounded(query: str, chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:
+    from app.application.dataset_rag.retrieval_policy import (
+        evidence_grounding,
+        resolve_min_relevance,
+    )
+
+    threshold = resolve_min_relevance(None)
+    return [chunk for chunk in chunks if evidence_grounding(query, [chunk]) >= threshold]
+
+
+async def retrieve_product_knowledge(query: str) -> CitationTracker:
+    """Use a dedicated read-only key; never fall through to a tenant's private data."""
+    from app.infrastructure.rag.citation_tracker import CitationTracker
+    from app.infrastructure.rag.enterprise_cs_knowledge import retrieve_public_product_guide
+
+    query = query.strip()[:2000]
+    if not query:
+        return CitationTracker([])
+    key = os.getenv("XCAGI_ENTERPRISE_CS_KB_KEY", "").strip()
+    evidence = await asyncio.to_thread(_published_dataset, key, query) if key else None
+    return evidence or CitationTracker(_grounded(query, retrieve_public_product_guide(query)))
+
+
+def _published_dataset(key: str, query: str) -> CitationTracker | None:
+    from app.application.dataset_rag.models import _dict_to_retrieved_chunk
+    from app.application.dataset_rag_app_service import get_dataset_rag_app_service
+    from app.infrastructure.rag.citation_tracker import CitationTracker
+    from app.infrastructure.rag.enterprise_cs_knowledge import is_product_url
+
+    try:
+        result = get_dataset_rag_app_service().public_query(
+            api_key=key,
+            query=query,
+            top_k=3,
+            metadata_filter={"visibility": "public"},
+        )
+    except RECOVERABLE_ERRORS:
+        logger.warning("Enterprise CS product knowledge unavailable")
+        return None
+    if result.get("success") is not True or result.get("answer_grounded") is not True:
+        return None
+
+    chunks = [
+        _dict_to_retrieved_chunk(row)
+        for row in result["chunks"]
+        if row.get("text")
+        and (row.get("metadata") or {}).get("visibility") == "public"
+        and is_product_url(str(row.get("source_url") or ""))
+    ]
+    grounded = _grounded(query, chunks)
+    return CitationTracker(grounded) if grounded else None
 
 
 class EnterpriseCsAutomationService:
@@ -220,14 +278,15 @@ class EnterpriseCsAutomationService:
 
         # Lock and recheck after model I/O. The IM send commits the reply and
         # this watermark together, so replay cannot send a second reply.
-        row = self._db.scalar(
+        locked = self._db.scalar(
             select(ImCustomerServiceAutomationState)
             .where(ImCustomerServiceAutomationState.conversation_id == row.conversation_id)
             .with_for_update()
             .execution_options(populate_existing=True)
         )
-        if row is None or row.mode != "ai" or row.last_customer_message_id >= message_id:
+        if locked is None or locked.mode != "ai" or locked.last_customer_message_id >= message_id:
             return {"handled": False, "reason": "superseded"}
+        row = locked
         row.last_customer_message_id = message_id
         row.consecutive_failures = 0
         row.status = "ai_unresolved" if action == "unresolved" else "ai_active"
@@ -485,7 +544,7 @@ class EnterpriseCsAutomationService:
             row.consecutive_failures = 0
             self._db.commit()
 
-        from app.application.enterprise_cs_ticket_status import reply_to_ticket_status_request
+        from app.application.client_product_issue_intake import reply_to_ticket_status_request
 
         text = body.strip()
         owner = self._db.get(User, customer_user_id)
@@ -509,11 +568,8 @@ class EnterpriseCsAutomationService:
         if reason:
             return self._finish(row, message_id, reason + "。", action="unresolved", reason=reason)
 
-        from app.application.enterprise_cs_knowledge import (
-            cite_product_reply,
-            retrieve_product_knowledge,
-        )
         from app.infrastructure.llm.invoke import chat_completion_openai_format
+        from app.infrastructure.rag.enterprise_cs_knowledge import cite_product_reply
 
         cs_id = ImApplicationService(self._db).enterprise_cs_user_id()
         if cs_id is None:
@@ -596,3 +652,75 @@ class EnterpriseCsAutomationService:
             summary=summary,
             reason="资料不足或当前会话无法办理",
         )
+
+
+_CS_LOCK_NAMESPACE = 28414672
+_turn_locks = [asyncio.Lock() for _ in range(4)]
+
+
+@contextmanager
+def _turn_session(conversation_id: int):
+    engine = get_host_engine()
+    if engine.dialect.name != "postgresql":
+        with HostSessionLocal() as db:
+            yield db
+        return
+    # A session-level lock survives commit and is released if the worker dies.
+    with engine.connect() as connection:
+        keys = {"namespace": _CS_LOCK_NAMESPACE, "conversation": conversation_id}
+        claimed = connection.scalar(
+            text("SELECT pg_try_advisory_lock(:namespace, :conversation)"), keys
+        )
+        connection.commit()
+        try:
+            if not claimed:
+                yield None
+            else:
+                with Session(bind=connection, autoflush=False) as db:
+                    yield db
+        finally:
+            if claimed and not connection.invalidated:
+                connection.rollback()
+                connection.execute(
+                    text("SELECT pg_advisory_unlock(:namespace, :conversation)"), keys
+                )
+                connection.commit()
+
+
+async def process_enterprise_cs_customer_message(
+    conversation_id: int,
+    customer_user_id: int,
+    message_id: int,
+    body: str,
+    *,
+    market_token: str = "",
+):
+    async with _turn_locks[conversation_id % len(_turn_locks)]:
+        with _turn_session(conversation_id) as db:
+            if db is None:
+                return {"handled": False, "reason": "busy"}
+            row = db.get(ImCustomerServiceAutomationState, conversation_id)
+            watermark = row.last_customer_message_id if row else 0
+            if message_id > watermark:
+                oldest = db.scalar(
+                    select(func.min(ImMessage.id)).where(
+                        ImMessage.conversation_id == conversation_id,
+                        ImMessage.origin == "customer",
+                        ImMessage.id > watermark,
+                    )
+                )
+                if oldest is not None and oldest != message_id:
+                    return {"handled": False, "reason": "earlier_message_pending"}
+                if (
+                    row
+                    and row.status == "ai_retrying"
+                    and (row.updated_at > utc_now_naive() - timedelta(seconds=RETRY_DELAY_SECONDS))
+                ):
+                    return {"handled": False, "reason": "retry_scheduled"}
+            return await EnterpriseCsAutomationService(db).handle_customer_message(
+                conversation_id=conversation_id,
+                customer_user_id=customer_user_id,
+                message_id=message_id,
+                body=body,
+                market_token=market_token,
+            )

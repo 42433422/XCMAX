@@ -196,7 +196,7 @@ async def lifespan(app: FastAPI):
 
     cs_scheduler = None
     if not passive_node_enabled() and not is_enterprise_client_plane():
-        from app.application.enterprise_cs_scheduler import start_enterprise_cs_scheduler
+        from app.fastapi_app.enterprise_cs_scheduler import start_enterprise_cs_scheduler
 
         cs_scheduler = start_enterprise_cs_scheduler()
 
