@@ -367,6 +367,7 @@ def test_model_pat_bridge_revalidates_and_finishes_existing_hold(
         operation = url.rsplit("/", 1)[-1]
         assert "Authorization" not in headers
         data = json.loads(content)
+        assert isinstance(data, dict)
         claims = verify_assertion(
             headers["X-Llm-Wallet-Assertion"],
             {"synthetic": key.public_key()},
@@ -425,6 +426,65 @@ def test_model_pat_bridge_revalidates_and_finishes_existing_hold(
     )
     assert response.status_code == (401 if revoke_before_preauth else 200), response.text
     assert operations == ([] if revoke_before_preauth else [("preauthorize", "8"), ("settle", "8")])
+
+
+def test_model_pat_wallet_readback_signs_original_request(pat_case, monkeypatch, tmp_path):
+    import hashlib
+
+    import httpx
+
+    from modstore_server import openai_llm_gateway_api as gateway
+    from modstore_server.llm_wallet_assertion import verify_assertion
+    from modstore_server.llm_wallet_client import JavaWalletClient
+
+    client, sessions, _, _ = pat_case
+    key = _enable_synthetic_llm_pat(monkeypatch, tmp_path)
+    pat = _pat(sessions, ["llm:use"], uid=8)
+    calls = []
+
+    async def post(url, *, headers, content, timeout):
+        assert url.endswith("/api/internal/llm-wallet/read")
+        assert "Authorization" not in headers
+        claims = verify_assertion(
+            headers["X-Llm-Wallet-Assertion"],
+            {"synthetic": key.public_key()},
+            operation="read",
+            user_id=8,
+            request_digest=hashlib.sha256(content).hexdigest(),
+            server_max_amount_cents=100,
+        )
+        data = json.loads(content)
+        assert data == {
+            "hold_no": "synthetic-hold",
+            "request_id": "request-1",
+            "idempotency_key": "request-1:read",
+        }
+        assert claims["reservation_id"] == "synthetic-hold"
+        calls.append(data)
+        return httpx.Response(
+            200, json={"ok": True, "hold": {"hold_no": "synthetic-hold", "status": "settled"}}
+        )
+
+    monkeypatch.setattr(
+        "modstore_server.infrastructure.http_clients.get_java_client",
+        lambda: SimpleNamespace(post=post),
+    )
+
+    async def run(request, db, user, **kwargs):
+        hold = await JavaWalletClient(request=request).read_hold(
+            request.headers["authorization"], "synthetic-hold", request_id="request-1"
+        )
+        assert hold["status"] == "settled"
+        return {"content": "synthetic", "billed": True, "charge_amount": 0.02}
+
+    monkeypatch.setattr(gateway, "run_billed_llm_chat", AsyncMock(side_effect=run))
+    response = client.post(
+        "/v1/chat/completions",
+        headers={"Authorization": "Bearer " + pat},
+        json={"model": "openai/synthetic", "messages": [{"role": "user", "content": "synthetic"}]},
+    )
+    assert response.status_code == 200, response.text
+    assert len(calls) == 1
 
 
 @pytest.mark.parametrize(

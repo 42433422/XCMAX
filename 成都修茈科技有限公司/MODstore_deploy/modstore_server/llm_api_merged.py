@@ -277,7 +277,11 @@ async def resolve_chat_default(
     """Resolve account selection (or an explicit route) with a short-lived tool-round snapshot."""
     response.headers["Cache-Control"] = "no-store"
     return await _facade().resolve_default_llm_route(
-        db, int(user.id), provider=provider, model=model, platform_only=platform_only,
+        db,
+        int(user.id),
+        provider=provider,
+        model=model,
+        platform_only=platform_only,
         operation=operation,
     )
 
@@ -1204,7 +1208,9 @@ async def _requested_chat_snapshot(db, user, body, messages):
         if body.route_token or body.config_revision is not None or body.key_source is not None:
             raise HTTPException(400, "自动选模不能同时绑定模型快照")
         result = await _facade().resolve_default_llm_route(
-            db, int(user.id), provider=body.provider,
+            db,
+            int(user.id),
+            provider=body.provider,
             operation="vision" if messages_have_multimodal_images(messages) else "chat",
         )
         return bind_resolved_chat_route(db, int(user.id), result)
@@ -1330,7 +1336,11 @@ async def llm_chat_request_state(
         from modstore_server.llm_billing_recovery import recover_receipt
 
         recovered = await recover_receipt(
-            db, int(user.id), client_request_id, _facade().authorization_header(request)
+            db,
+            int(user.id),
+            client_request_id,
+            _facade().authorization_header(request),
+            request=request,
         )
         if recovered is not None:
             state = "completed"
@@ -1347,15 +1357,24 @@ async def llm_image(
     from modstore_server.llm_billed_image import run_billed_image
 
     receipt = await run_billed_image(
-        request, db, int(user.id), provider=body.provider.strip().lower(),
-        model=body.model.strip(), prompt=body.prompt.strip(),
-        size=body.size.strip() or "1024x1024", count=body.n,
+        request,
+        db,
+        int(user.id),
+        provider=body.provider.strip().lower(),
+        model=body.model.strip(),
+        prompt=body.prompt.strip(),
+        size=body.size.strip() or "1024x1024",
+        count=body.n,
         client_request_id=body.client_request_id,
     )
     if not receipt["ok"]:
-        raise HTTPException(receipt["status"], {
-            "message": receipt["message"], "request_id": receipt["request_id"],
-        })
+        raise HTTPException(
+            receipt["status"],
+            {
+                "message": receipt["message"],
+                "request_id": receipt["request_id"],
+            },
+        )
     return receipt
 
 
@@ -1381,10 +1400,16 @@ async def llm_video(
     row = None
     request_id = None
     if key := body.client_request_id:
-        digest = ledger.request_digest({
-            "operation": "video_generation", "provider": provider, "model": model,
-            "prompt": prompt, "size": size, "seconds": body.seconds,
-        })
+        digest = ledger.request_digest(
+            {
+                "operation": "video_generation",
+                "provider": provider,
+                "model": model,
+                "prompt": prompt,
+                "size": size,
+                "seconds": body.seconds,
+            }
+        )
         outcome, value = ledger.begin(db, int(user.id), key, digest, 180)
         if outcome == "replay":
             if not value["ok"]:
@@ -1397,12 +1422,19 @@ async def llm_video(
         ledger.mark_settling(db, row)
     try:
         result = await _facade().video_dispatch(
-            provider, api_key=api_key, base_url=base, model=model,
-            prompt=prompt, size=size, seconds=body.seconds,
+            provider,
+            api_key=api_key,
+            base_url=base,
+            model=model,
+            prompt=prompt,
+            size=size,
+            seconds=body.seconds,
         )
     except RECOVERABLE_ERRORS as exc:
         if row is not None:
-            raise HTTPException(409, {"message": "视频提交状态待核对", "request_id": request_id}) from exc
+            raise HTTPException(
+                409, {"message": "视频提交状态待核对", "request_id": request_id}
+            ) from exc
         raise
     if not result.get("ok"):
         if row is not None and result.get("status") not in {400, 401, 403, 404, 422, 429}:
@@ -1414,15 +1446,27 @@ async def llm_video(
     job_id = result.get("job_id") or ""
     preview = result.get("preview_url") or ""
     if row is not None and not job_id and not preview:
-        raise HTTPException(409, {"message": "视频供应商未返回可核对的任务号", "request_id": request_id})
+        raise HTTPException(
+            409, {"message": "视频供应商未返回可核对的任务号", "request_id": request_id}
+        )
     raw = result.get("raw")
     receipt = {
-        "ok": True, "provider": provider, "model": body.model, "key_source": key_source,
-        "job_id": job_id, "status": status, "preview_url": preview, "request_id": request_id,
+        "ok": True,
+        "provider": provider,
+        "model": body.model,
+        "key_source": key_source,
+        "job_id": job_id,
+        "status": status,
+        "preview_url": preview,
+        "request_id": request_id,
         "billing": media_usage_receipt(
-            "video_generation", provider, model, key_source,
+            "video_generation",
+            provider,
+            model,
+            key_source,
             raw.get("usage") if isinstance(raw, dict) else None,
-            pending=status.lower() not in {"completed", "succeeded", "success", "failed", "cancelled", "canceled"},
+            pending=status.lower()
+            not in {"completed", "succeeded", "success", "failed", "cancelled", "canceled"},
         ),
     }
     if row is not None:

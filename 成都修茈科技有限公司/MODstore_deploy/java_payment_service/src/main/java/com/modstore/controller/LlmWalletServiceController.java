@@ -65,7 +65,7 @@ public class LlmWalletServiceController {
     public Map<String, Object> execute(@PathVariable String operation,
             @RequestHeader(value = "X-Llm-Wallet-Assertion", required = false) String assertion,
             @RequestBody byte[] rawBody) {
-        if (!Set.of("preauthorize", "settle", "release").contains(operation)) throw denied();
+        if (!Set.of("preauthorize", "settle", "release", "read").contains(operation)) throw denied();
         if (keyId.isBlank() || publicKeyPem.isBlank() || maxCents <= 0) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "模型计费服务未配置");
         }
@@ -104,7 +104,9 @@ public class LlmWalletServiceController {
                     ? Set.of("amount", "provider", "model", "request_id", "idempotency_key")
                     : operation.equals("settle")
                         ? Set.of("hold_no", "actual_amount", "request_id", "idempotency_key")
-                        : Set.of("hold_no", "reason", "request_id", "idempotency_key");
+                        : operation.equals("read")
+                            ? Set.of("hold_no", "request_id", "idempotency_key")
+                            : Set.of("hold_no", "reason", "request_id", "idempotency_key");
             if (!body.keySet().equals(fields)) throw denied();
             String requestId = text(body, "request_id", 128);
             String idem = text(body, "idempotency_key", 128);
@@ -156,15 +158,16 @@ public class LlmWalletServiceController {
                 if (origins.size() != 1 || ((Number) origins.get(0).get("user_id")).longValue() != userId
                         || !holdNo.equals(origins.get(0).get("hold_no"))) throw denied();
                 WalletHold existing = holds.findByHoldNoForUpdate(holdNo).orElseThrow(LlmWalletServiceController::denied);
-                if (!existing.getUser().getId().equals(userId) || !requestId.equals(existing.getRequestId())) throw denied();
-                hold = operation.equals("settle")
+                if (!existing.getUser().getId().equals(userId) || !requestId.equals(existing.getRequestId())
+                        || !"llm-service".equals(existing.getBillingSource())) throw denied();
+                hold = operation.equals("read") ? existing : operation.equals("settle")
                         ? wallet.settleServiceAiUsage(user, holdNo, amount(body, "actual_amount", claimLimit, true), idem)
                         : wallet.releaseServiceAiUsage(user, holdNo, text(body, "reason", 256), idem);
                 if (operation.equals("release") && !"released".equals(hold.getStatus())) {
                     throw new ResponseStatusException(HttpStatus.CONFLICT, "预授权已终结");
                 }
             }
-            return Map.of("ok", true, "hold", Map.of("hold_no", hold.getHoldNo(), "amount", hold.getAmount(), "status", hold.getStatus(), "settled_amount", hold.getSettledAmount()));
+            return Map.of("ok", true, "hold", Map.of("hold_no", hold.getHoldNo(), "amount", hold.getAmount(), "status", hold.getStatus(), "settled_amount", hold.getSettledAmount(), "request_id", hold.getRequestId(), "provider", hold.getProvider(), "model", hold.getModel()));
         } catch (ResponseStatusException e) {
             throw e;
         } catch (DataAccessException e) {

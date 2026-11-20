@@ -134,7 +134,9 @@ async def _execute_billed_chat(
             "请更换 provider 或改发纯文本。",
         )
     from modstore_server.llm_operation_routes import (
-        enforce_vision_operation, model_runtime_messages, personal_provider_quota,
+        enforce_vision_operation,
+        model_runtime_messages,
+        personal_provider_quota,
     )
 
     await enforce_vision_operation(user.id, route, messages)
@@ -143,12 +145,14 @@ async def _execute_billed_chat(
         await assert_llm_chat_allowed(db, int(user.id), provider, model, is_byok=is_byok)
     request_id = (
         f"{ledger.attempt_request_id(int(user.id), billing_row.client_request_id, billing_row.attempts)}-{attempt_index}"
-        if billing_row is not None else new_request_id()
+        if billing_row is not None
+        else new_request_id()
     )
     enforce_risk_limits(db, user.id, provider, model, messages, request)
     wallet = (
         JavaWalletClient(request=request, verify_receipt=True)
-        if billing_row is not None else JavaWalletClient(request=request)
+        if billing_row is not None
+        else JavaWalletClient(request=request)
     )
     journaled = billing_row is not None and not is_byok and wallet.enabled
     auth = authorization_header(request)
@@ -158,7 +162,9 @@ async def _execute_billed_chat(
             wallet.validate_pat(authorization_header(request))
         hold = WalletHold(hold_no=f"byok-{request_id}", amount=Decimal("0"), enabled=False)
     else:
-        preauth_amount = estimate_preauthorization(db, provider, model, upstream_messages, max_tokens)
+        preauth_amount = estimate_preauthorization(
+            db, provider, model, upstream_messages, max_tokens
+        )
         if journaled and billing_row is not None:
             ledger.mark_settling(db, billing_row)
         try:
@@ -174,13 +180,24 @@ async def _execute_billed_chat(
                 if exc.status_code in {400, 401, 402, 403, 422, 429}:
                     ledger.confirmed_no_charge(db, billing_row)
                 else:
-                    raise HTTPException(409, {
-                        "message": "模型预授权状态待核对", "request_id": request_id,
-                    }) from exc
-            elif getattr(request.state, "llm_pat_user_id", None) is not None and exc.status_code >= 500:
-                raise HTTPException(409, {
-                    "message": "模型预授权状态待核对", "request_id": request_id,
-                }) from exc
+                    raise HTTPException(
+                        409,
+                        {
+                            "message": "模型预授权状态待核对",
+                            "request_id": request_id,
+                        },
+                    ) from exc
+            elif (
+                getattr(request.state, "llm_pat_user_id", None) is not None
+                and exc.status_code >= 500
+            ):
+                raise HTTPException(
+                    409,
+                    {
+                        "message": "模型预授权状态待核对",
+                        "request_id": request_id,
+                    },
+                ) from exc
             raise
     charge = Decimal("0")
     upstream_started = False
@@ -214,7 +231,11 @@ async def _execute_billed_chat(
                 error=str(error),
                 hold_no=hold.hold_no,
             )
-            if journaled and billing_row is not None and status_code in {400, 401, 403, 404, 422, 429}:
+            if (
+                journaled
+                and billing_row is not None
+                and status_code in {400, 401, 403, 404, 422, 429}
+            ):
                 await wallet.release(auth, hold, "model provider rejected request", request_id)
                 ledger.confirmed_no_charge(db, billing_row)
             raise HTTPException(status_code or 502, str(error))
@@ -227,16 +248,28 @@ async def _execute_billed_chat(
             else:
                 charge = calculate_charge(db, provider, model, usage)
         receipt = {
-            "ok": True, "content": content, "conversation_id": conversation_id,
-            "usage": usage.__dict__, "usage_details": reported_token_dimensions(result.get("usage")),
-            "charge_amount": float(charge), "pricing": pricing, "hold_no": hold.hold_no,
-            **route.public_metadata(), "route_state": "completed", "operation": "chat",
-            "billed": not is_byok, "request_id": request_id,
+            "ok": True,
+            "content": content,
+            "conversation_id": conversation_id,
+            "usage": usage.__dict__,
+            "usage_details": reported_token_dimensions(result.get("usage")),
+            "charge_amount": float(charge),
+            "pricing": pricing,
+            "hold_no": hold.hold_no,
+            **route.public_metadata(),
+            "route_state": "completed",
+            "operation": "chat",
+            "billed": not is_byok,
+            "request_id": request_id,
         }
         if journaled and billing_row is not None:
             receipt["_history"] = [
-                {"role": message.get("role"), "content": redact_message_content_for_storage(message.get("content"))}
-                for message in messages if message.get("role") in {"user", "assistant", "system"}
+                {
+                    "role": message.get("role"),
+                    "content": redact_message_content_for_storage(message.get("content")),
+                }
+                for message in messages
+                if message.get("role") in {"user", "assistant", "system"}
             ]
             ledger.prepare_settlement(db, billing_row, receipt)
         if not is_byok:
@@ -245,9 +278,16 @@ async def _execute_billed_chat(
         if journaled and billing_row is not None:
             return complete_receipt(db, billing_row, receipt, save_chat=save_success_log)
         receipt["conversation_id"] = save_success_log(
-            db, user_id=user.id, provider=provider, model=model,
-            messages=messages, content=content, usage=usage, charge=charge,
-            hold_no=hold.hold_no, conversation_id=conversation_id,
+            db,
+            user_id=user.id,
+            provider=provider,
+            model=model,
+            messages=messages,
+            content=content,
+            usage=usage,
+            charge=charge,
+            hold_no=hold.hold_no,
+            conversation_id=conversation_id,
         )
         return receipt
     except HTTPException as exc:
@@ -257,12 +297,19 @@ async def _execute_billed_chat(
             if settlement_started:
                 db.rollback()
                 recovered = await recover_receipt(
-                    db, int(user.id), billing_row.client_request_id, auth, operation="chat",
+                    db,
+                    int(user.id),
+                    billing_row.client_request_id,
+                    auth,
+                    operation="chat",
+                    request=request,
                 )
                 if recovered is not None:
                     return recovered
-        if settlement_started or journaled or (
-            upstream_started and getattr(request.state, "llm_pat_user_id", None) is not None
+        if (
+            settlement_started
+            or journaled
+            or (upstream_started and getattr(request.state, "llm_pat_user_id", None) is not None)
         ):
             logger.error(
                 "LLM settlement needs reconciliation request_id=%s hold=%s",
@@ -289,12 +336,19 @@ async def _execute_billed_chat(
             if settlement_started:
                 db.rollback()
                 recovered = await recover_receipt(
-                    db, int(user.id), billing_row.client_request_id, auth, operation="chat",
+                    db,
+                    int(user.id),
+                    billing_row.client_request_id,
+                    auth,
+                    operation="chat",
+                    request=request,
                 )
                 if recovered is not None:
                     return recovered
-        if settlement_started or journaled or (
-            upstream_started and getattr(request.state, "llm_pat_user_id", None) is not None
+        if (
+            settlement_started
+            or journaled
+            or (upstream_started and getattr(request.state, "llm_pat_user_id", None) is not None)
         ):
             logger.error(
                 "LLM settlement needs reconciliation request_id=%s hold=%s",

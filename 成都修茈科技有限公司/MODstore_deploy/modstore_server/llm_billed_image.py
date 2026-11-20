@@ -168,7 +168,7 @@ async def run_billed_image(
             return value
         if outcome == "processing":
             recovered = await recover_receipt(
-                db, user_id, client_request_id, auth, operation="image_generation"
+                db, user_id, client_request_id, auth, operation="image_generation", request=request
             )
             if recovered is not None:
                 return recovered
@@ -271,7 +271,12 @@ async def run_billed_image(
             except HTTPException as exc:
                 if client_request_id:
                     recovered = await recover_receipt(
-                        db, user_id, client_request_id, auth, operation="image_generation"
+                        db,
+                        user_id,
+                        client_request_id,
+                        auth,
+                        operation="image_generation",
+                        request=request,
                     )
                     if recovered is not None:
                         return recovered

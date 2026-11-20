@@ -168,14 +168,34 @@ class JavaWalletClient:
                 ):
                     raise HTTPException(502, "模型释放响应无效")
 
-    async def read_hold(self, authorization: str, hold_no: str) -> dict[str, Any] | None:
+    async def read_hold(
+        self, authorization: str, hold_no: str, *, request_id: str = ""
+    ) -> dict[str, Any] | None:
         """Independently read a wallet reservation bound to the current account."""
         from urllib.parse import quote
 
         from modstore_server.infrastructure.http_clients import get_java_client
 
-        if not self.enabled or not authorization or self._is_pat():
+        if not self.enabled or not authorization:
             return None
+        if self._is_pat():
+            if not request_id:
+                return None
+            try:
+                self.validate_pat(authorization)
+                payload = await self._post(
+                    "/api/wallet/ai/read",
+                    authorization,
+                    {
+                        "hold_no": hold_no,
+                        "request_id": request_id,
+                        "idempotency_key": f"{request_id}:read",
+                    },
+                )
+                hold = payload.get("hold") if payload.get("ok") is True else None
+                return hold if isinstance(hold, dict) else None
+            except HTTPException:
+                return None
         path = f"/api/wallet/ai/holds/{quote(hold_no, safe='')}"
         try:
             response = await get_java_client().get(
@@ -188,7 +208,9 @@ class JavaWalletClient:
             payload = response.json()
         except (httpx.HTTPError, ValueError):
             return None
-        hold = payload.get("hold") if isinstance(payload, dict) and payload.get("ok") is True else None
+        hold = (
+            payload.get("hold") if isinstance(payload, dict) and payload.get("ok") is True else None
+        )
         return hold if isinstance(hold, dict) else None
 
     async def _post(self, path: str, authorization: str, body: Dict[str, Any]) -> Dict[str, Any]:

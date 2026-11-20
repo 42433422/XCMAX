@@ -6,11 +6,12 @@ import json
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from fastapi import Request
 from sqlalchemy.orm import Session
 
 from modstore_server import llm_client_requests as ledger
-from modstore_server.llm_billing import UsageMeter, save_success_log
 from modstore_server.db.llm_chat import LlmCallLog, LlmClientRequest
+from modstore_server.llm_billing import UsageMeter, save_success_log
 from modstore_server.llm_wallet_client import JavaWalletClient
 
 
@@ -74,12 +75,11 @@ async def recover_receipt(
     authorization: str,
     *,
     operation: str | None = None,
+    request: Request | None = None,
 ) -> dict[str, Any] | None:
     row = (
         db.query(LlmClientRequest)
-        .filter_by(
-            user_id=user_id, client_request_id=client_request_id, state="settling"
-        )
+        .filter_by(user_id=user_id, client_request_id=client_request_id, state="settling")
         .one_or_none()
     )
     if row is None or not row.done_json:
@@ -93,7 +93,17 @@ async def recover_receipt(
         return None
     if operation is not None and receipt["operation"] != operation:
         return None
-    hold = await JavaWalletClient().read_hold(authorization, receipt["hold_no"])
+    pat_user_id = getattr(request.state, "llm_pat_user_id", None) if request is not None else None
+    is_pat = pat_user_id is not None
+    if is_pat and pat_user_id != user_id:
+        return None
+    wallet = JavaWalletClient(request=request) if is_pat else JavaWalletClient()
+    if is_pat:
+        hold = await wallet.read_hold(
+            authorization, receipt["hold_no"], request_id=receipt["request_id"]
+        )
+    else:
+        hold = await wallet.read_hold(authorization, receipt["hold_no"])
     if hold is None or hold.get("status") != "settled":
         return None
     if any(
