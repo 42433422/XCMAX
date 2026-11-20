@@ -30,9 +30,7 @@ _IMAGE_DEADLINE_SECONDS = 180
 _PREAUTH_OUTPUT_TOKENS_PER_IMAGE = 4096
 
 
-def image_token_tariff(
-    db: Session, route: OperationRoute
-) -> tuple[Decimal, Decimal] | None:
+def image_token_tariff(db: Session, route: OperationRoute) -> tuple[Decimal, Decimal] | None:
     """Only admit platform routes with a known usage contract and an active token price."""
     base = urlsplit(route.base_url or "https://api.openai.com/v1")
     if (
@@ -40,10 +38,7 @@ def image_token_tariff(
         or base.scheme != "https"
         or base.netloc != "api.openai.com"
         or base.path.rstrip("/") not in {"", "/v1"}
-        or not (
-            route.model.startswith("gpt-image-")
-            or route.model == "chatgpt-image-latest"
-        )
+        or not (route.model.startswith("gpt-image-") or route.model == "chatgpt-image-latest")
         or route.model == "gpt-image-1"
     ):
         return None
@@ -72,11 +67,7 @@ def exact_image_usage(raw: Any) -> UsageMeter | None:
         or any(isinstance(v, bool) for v in (input_tokens, output_tokens, total_tokens))
     ):
         return None
-    if (
-        input_tokens < 0
-        or output_tokens <= 0
-        or total_tokens != input_tokens + output_tokens
-    ):
+    if input_tokens < 0 or output_tokens <= 0 or total_tokens != input_tokens + output_tokens:
         return None
     return UsageMeter(input_tokens, output_tokens, total_tokens, estimated=False)
 
@@ -96,11 +87,29 @@ async def run_billed_image(
     if not prompt:
         raise HTTPException(422, "生图提示词不能为空")
 
-    def eligible(route: OperationRoute) -> bool:
-        return (
-            route.key_source == "user_override"
-            or image_token_tariff(db, route) is not None
+    digest = None
+    if client_request_id:
+        digest = ledger.request_digest(
+            {
+                "operation": "image_generation",
+                "provider": provider,
+                "model": model,
+                "prompt": prompt,
+                "size": size,
+                "n": count,
+            }
         )
+        completed = ledger.completed_receipt(db, user_id, client_request_id, digest)
+        if completed is not None:
+            outcome, value = completed
+            if outcome == "replay" and isinstance(value, dict):
+                return value
+            raise HTTPException(
+                409, {"message": "生图请求已提交或请求内容发生变化", "state": outcome}
+            )
+
+    def eligible(route: OperationRoute) -> bool:
+        return route.key_source == "user_override" or image_token_tariff(db, route) is not None
 
     route = await resolve_operation_route(
         db,
@@ -124,16 +133,7 @@ async def run_billed_image(
     request_id = ""
     auth = authorization_header(request)
     if client_request_id:
-        digest = ledger.request_digest(
-            {
-                "operation": "image_generation",
-                "provider": provider,
-                "model": model,
-                "prompt": prompt,
-                "size": size,
-                "n": count,
-            }
-        )
+        assert digest is not None
         outcome, value = ledger.begin(
             db, user_id, client_request_id, digest, _IMAGE_DEADLINE_SECONDS
         )
@@ -159,9 +159,7 @@ async def run_billed_image(
             _PREAUTH_OUTPUT_TOKENS_PER_IMAGE * count,
         )
         try:
-            hold = await wallet.preauthorize(
-                auth, amount, route.provider, route.model, request_id
-            )
+            hold = await wallet.preauthorize(auth, amount, route.provider, route.model, request_id)
         except HTTPException as exc:
             if exc.status_code in {400, 401, 402, 403, 422, 429}:
                 return finish_rejected_image(db, row, exc.status_code, request_id)
@@ -169,9 +167,7 @@ async def run_billed_image(
                 409, {"message": "生图预授权状态待核对", "request_id": request_id}
             ) from exc
         if not hold.enabled or not hold.hold_no:
-            raise HTTPException(
-                409, {"message": "生图预授权状态待核对", "request_id": request_id}
-            )
+            raise HTTPException(409, {"message": "生图预授权状态待核对", "request_id": request_id})
 
     try:
         result = await image_dispatch(
@@ -185,15 +181,12 @@ async def run_billed_image(
         )
         status = result.get("status")
         if not result.get("ok") or not result.get("images"):
-            if (
-                hold
-                and isinstance(status, int)
-                and status in {400, 401, 403, 404, 422, 429}
-            ):
-                await wallet.release(
-                    auth, hold, "image provider rejected request", request_id
-                )
-                return finish_rejected_image(db, row, status, request_id)
+            if isinstance(status, int) and status in {400, 401, 403, 404, 422, 429}:
+                if hold:
+                    await wallet.release(auth, hold, "image provider rejected request", request_id)
+                if row is not None:
+                    return finish_rejected_image(db, row, status, request_id)
+                raise HTTPException(status, "生图供应商拒绝请求")
             if row is not None:
                 raise HTTPException(
                     409,
@@ -212,8 +205,7 @@ async def run_billed_image(
                     },
                 )
             charge = money(
-                (usage.prompt_tokens * tariff[0] + usage.completion_tokens * tariff[1])
-                / 1000
+                (usage.prompt_tokens * tariff[0] + usage.completion_tokens * tariff[1]) / 1000
             )
             try:
                 await wallet.settle(auth, hold, charge, request_id)
@@ -267,9 +259,7 @@ async def run_billed_image(
         raise HTTPException(502, "生图供应商调用失败") from exc
 
 
-def finish_rejected_image(
-    db: Session, row, status: int, request_id: str
-) -> dict[str, Any]:
+def finish_rejected_image(db: Session, row, status: int, request_id: str) -> dict[str, Any]:
     receipt = {
         "ok": False,
         "status": status,

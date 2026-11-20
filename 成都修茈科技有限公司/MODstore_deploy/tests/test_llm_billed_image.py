@@ -15,9 +15,7 @@ def paid(monkeypatch):
     route = OperationRoute("openai", "gpt-image-2", "platform", "secret", None)
     wallet = SimpleNamespace(
         enabled=True,
-        preauthorize=AsyncMock(
-            return_value=WalletHold("hold-test", Decimal("1"), True)
-        ),
+        preauthorize=AsyncMock(return_value=WalletHold("hold-test", Decimal("1"), True)),
         settle=AsyncMock(),
         release=AsyncMock(),
     )
@@ -25,21 +23,18 @@ def paid(monkeypatch):
         return_value={
             "ok": True,
             "images": ["data:image/png;base64,AA=="],
-            "raw": {
-                "usage": {"input_tokens": 80, "output_tokens": 400, "total_tokens": 480}
-            },
+            "raw": {"usage": {"input_tokens": 80, "output_tokens": 400, "total_tokens": 480}},
         }
     )
     monkeypatch.setattr(image, "resolve_operation_route", AsyncMock(return_value=route))
-    monkeypatch.setattr(
-        image, "image_token_tariff", lambda *_: (Decimal("1"), Decimal("3"))
-    )
+    monkeypatch.setattr(image, "image_token_tariff", lambda *_: (Decimal("1"), Decimal("3")))
     monkeypatch.setattr(image, "JavaWalletClient", lambda **_: wallet)
     monkeypatch.setattr(image, "enforce_risk_limits", Mock())
     monkeypatch.setattr(image, "estimate_preauthorization", lambda *_: Decimal("1"))
     monkeypatch.setattr(image, "image_dispatch", upstream)
     row = SimpleNamespace(attempts=1)
     monkeypatch.setattr(image.ledger, "begin", Mock(return_value=("run", row)))
+    monkeypatch.setattr(image.ledger, "completed_receipt", Mock(return_value=None))
     monkeypatch.setattr(image.ledger, "mark_settling", Mock())
     monkeypatch.setattr(image.ledger, "finish", Mock())
     return wallet, upstream, Mock()
@@ -74,6 +69,18 @@ async def test_charges_only_exact_tokens_and_replays_without_redoing_image(paid)
 
 
 @pytest.mark.asyncio
+async def test_replays_completed_receipt_before_route_discovery(paid):
+    wallet, upstream, db = paid
+    receipt = {"ok": True, "images": ["data:image/png;base64,AA=="]}
+    image.ledger.completed_receipt.return_value = ("replay", receipt)
+    image.resolve_operation_route.side_effect = HTTPException(503, "catalog unavailable")
+    assert await run_image(db) == receipt
+    image.resolve_operation_route.assert_not_awaited()
+    upstream.assert_not_awaited()
+    wallet.preauthorize.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_missing_usage_leaves_hold_for_reconciliation(paid):
     wallet, upstream, db = paid
     upstream.return_value["raw"] = {}
@@ -84,6 +91,19 @@ async def test_missing_usage_leaves_hold_for_reconciliation(paid):
     wallet.settle.assert_not_awaited()
     wallet.release.assert_not_awaited()
     image.ledger.finish.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_byok_definitive_rejection_finalizes_without_wallet_hold(paid, monkeypatch):
+    wallet, upstream, db = paid
+    route = OperationRoute("openai", "gpt-image-2", "user_override", "secret", None)
+    monkeypatch.setattr(image, "resolve_operation_route", AsyncMock(return_value=route))
+    upstream.return_value = {"ok": False, "images": [], "status": 429}
+    result = await run_image(db)
+    assert result["ok"] is False and result["status"] == 429
+    assert image.ledger.finish.call_args.args[2] == result
+    wallet.preauthorize.assert_not_awaited()
+    wallet.release.assert_not_awaited()
 
 
 def test_rejects_fabricated_usage_and_nonofficial_endpoint():

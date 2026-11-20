@@ -72,6 +72,17 @@ def test_only_an_unsettled_attempt_may_run_again(db):
     assert ledger.begin(db, 7, KEY, "d1", 90) == ("processing", None)
 
 
+def test_completed_receipt_is_bound_to_user_key_and_digest(db):
+    _, row = ledger.begin(db, 7, KEY, "digest", 90)
+    ledger.finish(db, row, {"ok": True, "images": ["receipt"]})
+    assert ledger.completed_receipt(db, 7, KEY, "digest") == (
+        "replay",
+        {"ok": True, "images": ["receipt"]},
+    )
+    assert ledger.completed_receipt(db, 7, KEY, "different") == ("conflict", None)
+    assert ledger.completed_receipt(db, 8, KEY, "digest") is None
+
+
 def _frames(frames):
     out = []
     for frame in frames:

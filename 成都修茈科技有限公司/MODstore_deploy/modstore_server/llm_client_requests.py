@@ -54,6 +54,20 @@ def lookup(db: Session, user_id: int, client_request_id: str, deadline_s: float)
     return str(row.state)
 
 
+def completed_receipt(db: Session, user_id: int, client_request_id: str, digest: str):
+    """Read an already completed receipt without acquiring a new execution lease."""
+    row = (
+        db.query(LlmClientRequest)
+        .filter_by(user_id=user_id, client_request_id=client_request_id)
+        .one_or_none()
+    )
+    if row is None or row.state != "completed":
+        return None
+    if row.request_sha256 != digest:
+        return "conflict", None
+    return "replay", json.loads(row.done_json or "{}")
+
+
 def begin(
     db: Session, user_id: int, client_request_id: str, digest: str, deadline_s: float
 ) -> tuple[str, Any]:

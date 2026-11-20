@@ -66,7 +66,7 @@ async def select_operation_model(
     candidates = (model,) if model else (*rows, seed)
     for candidate in candidates:
         # A configured MiMo deployment may expose just its chat model in /models.
-        if not candidate or (candidate not in rows and candidate != seed):
+        if not candidate or (candidate not in rows and candidate != seed and candidate != model):
             continue
         if supports_operation(provider, candidate, operation, rows.get(candidate)) and (
             model_filter is None or model_filter(candidate)
@@ -76,7 +76,15 @@ async def select_operation_model(
 
 
 async def resolve_operation_route(
-    session, user_id, operation, *, provider="", model="", seed="", route_filter=None
+    session,
+    user_id,
+    operation,
+    *,
+    provider="",
+    model="",
+    seed="",
+    route_filter=None,
+    release_before_discovery=False,
 ):
     """Honor an explicit provider and keep automatic BYOK routes in the BYOK pool."""
     if provider and provider not in KNOWN_PROVIDERS:
@@ -85,22 +93,19 @@ async def resolve_operation_route(
     ids = (
         (provider,)
         if provider
-        else tuple(
-            dict.fromkeys(
-                p for p in (state.get("default_provider"), *KNOWN_PROVIDERS) if p
-            )
-        )
+        else tuple(dict.fromkeys(p for p in (state.get("default_provider"), *KNOWN_PROVIDERS) if p))
     )
-    keys = [
-        (p, *resolve_credentials(session, user_id, p, platform_state=state))
-        for p in ids
-    ]
+    keys = [(p, *resolve_credentials(session, user_id, p, platform_state=state)) for p in ids]
     has_byok = any(source == "user_override" for _, _, _, source in keys)
     eligible = [
         (p, key, base, source)
         for p, key, base, source in keys
         if key and (not has_byok or source == "user_override")
     ]
+    if release_before_discovery:
+        if route_filter is not None:
+            raise ValueError("cannot release session with a session-bound route filter")
+        session.close()
 
     async def resolve(p, key, base, source):
         try:
@@ -110,14 +115,12 @@ async def resolve_operation_route(
                     params["model_filter"] = lambda mid: route_filter(
                         OperationRoute(p, mid, source, key, base)
                     )
-                selected = await select_operation_model(
-                    user_id, p, operation, key, base, **params
-                )
+                selected = await select_operation_model(user_id, p, operation, key, base, **params)
         except TimeoutError:
             selected = (
-                seed
-                if seed and (not model or model == seed) and p == "xiaomi"
-                else None
+                model
+                if model and supports_operation(p, model, operation)
+                else seed if seed and not model and p == "xiaomi" else None
             )
         if not selected:
             return None
@@ -145,9 +148,7 @@ def bind_resolved_chat_route(session, user_id, resolved):
         resolved["config_revision"],
         resolved["key_source"],
     ):
-        raise HTTPException(
-            409, {"code": "CHAT_ROUTE_CHANGED", "message": "模型配置已变化"}
-        )
+        raise HTTPException(409, {"code": "CHAT_ROUTE_CHANGED", "message": "模型配置已变化"})
     return route
 
 
@@ -165,7 +166,7 @@ async def enforce_vision_operation(user_id, route, messages):
                 model=route.model,
             )
     except TimeoutError:
-        model = None
+        model = route.model if supports_operation(route.provider, route.model, "vision") else None
     if not model:
         raise HTTPException(
             400,
@@ -216,9 +217,7 @@ async def personal_provider_quota(route):
     return remaining if isinstance(remaining, int) and 0 <= remaining <= 100 else None
 
 
-def model_runtime_messages(
-    route, messages, max_tokens, hold=None, *, remaining_percent=None
-):
+def model_runtime_messages(route, messages, max_tokens, hold=None, *, remaining_percent=None):
     """Tell the executing model the limits for this attempt without exposing secrets."""
     from modstore_server.llm_litellm_router import model_limits
 

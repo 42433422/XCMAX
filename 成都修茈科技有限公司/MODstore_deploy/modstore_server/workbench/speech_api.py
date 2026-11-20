@@ -73,7 +73,12 @@ async def mimo_asr(audio: bytes, language: str, user_id: int) -> dict[str, str]:
 
     with get_session_factory()() as session:
         route = await resolve_operation_route(
-            session, user_id, "speech_to_text", provider="xiaomi", seed=MIMO_ASR_MODEL
+            session,
+            user_id,
+            "speech_to_text",
+            provider="xiaomi",
+            seed=MIMO_ASR_MODEL,
+            release_before_discovery=True,
         )
     return await _transcribe_mimo(audio, language, route.api_key, route.base_url, route.model)
 
@@ -226,8 +231,12 @@ async def workbench_unified_tts(
         try:
             with get_session_factory()() as session:
                 route = await resolve_operation_route(
-                    session, cast(int, _user.id), "text_to_speech",
-                    provider="xiaomi", seed=MIMO_TTS_MODEL,
+                    session,
+                    cast(int, _user.id),
+                    "text_to_speech",
+                    provider="xiaomi",
+                    seed=MIMO_TTS_MODEL,
+                    release_before_discovery=True,
                 )
         except HTTPException as exc:
             if exc.status_code != 503:

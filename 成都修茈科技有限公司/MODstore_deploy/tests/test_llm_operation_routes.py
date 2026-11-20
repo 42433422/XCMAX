@@ -7,8 +7,8 @@ from fastapi import HTTPException
 from modstore_server import (
     llm_chat_proxy,
     llm_litellm_router,
-    llm_operation_routes as routes,
 )
+from modstore_server import llm_operation_routes as routes
 
 
 @pytest.fixture
@@ -35,17 +35,31 @@ def catalog(monkeypatch):
 @pytest.mark.asyncio
 async def test_declared_capabilities_select_by_operation(catalog):
     assert (
-        await routes.select_operation_model(1, "openai", "vision", "key", None)
-        == "custom/vision"
+        await routes.select_operation_model(1, "openai", "vision", "key", None) == "custom/vision"
     )
     assert (
-        await routes.select_operation_model(
-            1, "openai", "image_generation", "key", None
-        )
+        await routes.select_operation_model(1, "openai", "image_generation", "key", None)
         == "custom/illustrator"
     )
     assert not await routes.select_operation_model(
         1, "openai", "image_generation", "key", None, model="text"
+    )
+
+
+@pytest.mark.asyncio
+async def test_explicit_known_model_does_not_require_catalog_membership(monkeypatch):
+    monkeypatch.setattr(
+        routes, "get_models_for_credentials", AsyncMock(return_value={"models_detailed": []})
+    )
+    assert (
+        await routes.select_operation_model(1, "openai", "vision", "key", None, model="gpt-4o")
+        == "gpt-4o"
+    )
+    assert (
+        await routes.select_operation_model(
+            1, "openai", "image_generation", "key", None, model="dall-e-3"
+        )
+        == "dall-e-3"
     )
 
 
@@ -71,9 +85,32 @@ async def test_byok_cannot_fall_through_to_paid_platform(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_vision_probe_uses_image_and_requires_expected_result(
-    monkeypatch, catalog
-):
+async def test_speech_releases_credential_session_before_catalog_wait(monkeypatch):
+    session = SimpleNamespace(closed=False)
+    session.close = lambda: setattr(session, "closed", True)
+    monkeypatch.setattr(routes, "read_state", lambda: {})
+    monkeypatch.setattr(
+        routes, "resolve_credentials", lambda *_args, **_kwargs: ("key", None, "platform")
+    )
+
+    async def select(*_args, **_kwargs):
+        assert session.closed
+        return routes.MIMO_ASR_MODEL
+
+    monkeypatch.setattr(routes, "select_operation_model", select)
+    route = await routes.resolve_operation_route(
+        session,
+        1,
+        "speech_to_text",
+        provider="xiaomi",
+        seed=routes.MIMO_ASR_MODEL,
+        release_before_discovery=True,
+    )
+    assert route.model == routes.MIMO_ASR_MODEL
+
+
+@pytest.mark.asyncio
+async def test_vision_probe_uses_image_and_requires_expected_result(monkeypatch, catalog):
     monkeypatch.setattr(routes, "read_state", lambda: {})
     monkeypatch.setattr(
         routes, "resolve_credentials", lambda *a, **kw: ("secret", None, "platform")
@@ -82,9 +119,9 @@ async def test_vision_probe_uses_image_and_requires_expected_result(
     monkeypatch.setattr(llm_chat_proxy, "chat_dispatch", chat)
     result = await routes.probe_operation(None, 1, "openai", "custom/vision", "vision")
     assert result["ok"] is False
-    assert chat.call_args.kwargs["messages"][0]["content"][1]["image_url"][
-        "url"
-    ].startswith("data:image/png;base64,")
+    assert chat.call_args.kwargs["messages"][0]["content"][1]["image_url"]["url"].startswith(
+        "data:image/png;base64,"
+    )
     chat.return_value["content"] = "Red."
     result = await routes.probe_operation(None, 1, "openai", "custom/vision", "vision")
     assert result["ok"] is True
@@ -92,12 +129,8 @@ async def test_vision_probe_uses_image_and_requires_expected_result(
 
 
 def test_model_context_names_request_budget_without_credentials(monkeypatch):
-    monkeypatch.setattr(
-        llm_litellm_router, "model_limits", lambda *a: {"max_output_tokens": 4096}
-    )
-    route = routes.OperationRoute(
-        "openai", "gpt-4o", "platform", "secret", "https://private"
-    )
+    monkeypatch.setattr(llm_litellm_router, "model_limits", lambda *a: {"max_output_tokens": 4096})
+    route = routes.OperationRoute("openai", "gpt-4o", "platform", "secret", "https://private")
     msgs = [{"role": "user", "content": "hello"}]
     upstream = routes.model_runtime_messages(
         route, msgs, 512, SimpleNamespace(enabled=True, amount="0.10")
