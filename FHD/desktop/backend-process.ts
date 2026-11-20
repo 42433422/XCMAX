@@ -428,7 +428,10 @@ export async function startBackend(): Promise<void> {
   writeBackendLog(`[spawn] ${executable.command} ${executable.args.join(' ')}\n`)
   writeBackendLog(`[cwd] ${executable.cwd}\n`)
   desktopRuntime.verifiedBackendProcess = null
-  healthEverReady = false
+  // Keep the watchdog armed once a backend has ever been verified. Clearing
+  // this bit on recovery starts permanently disables retries when the new
+  // process stays alive but never answers ping. The cold-start default and
+  // stopBackendHealthWatchdog() still reset it at the proper lifecycle boundary.
   healthFailures = 0
   const child = spawn(executable.command, executable.args, {
     cwd: executable.cwd,
