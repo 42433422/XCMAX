@@ -50,6 +50,7 @@ import 'package:xcagi_flutter_poc/src/features/webview/desktop_tool_webview_scre
 import 'package:xcagi_flutter_poc/src/policy/mobile_runtime_policy.dart';
 import 'package:xcagi_flutter_poc/src/policy/avatar_policy.dart';
 import 'package:xcagi_flutter_poc/src/policy/pinned_ids.dart';
+import 'package:xcagi_flutter_poc/src/theme/app_assets.dart';
 import 'package:xcagi_flutter_poc/src/theme/app_theme.dart';
 import 'package:xcagi_flutter_poc/src/widgets/app_avatar.dart';
 import 'package:xcagi_flutter_poc/src/widgets/group_grid_avatar.dart';
