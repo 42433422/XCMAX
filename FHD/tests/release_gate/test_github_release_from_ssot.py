@@ -3,10 +3,16 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+import os
+import subprocess
+import sys
+import textwrap
 from copy import deepcopy
 from pathlib import Path
 
 import pytest
+import yaml
 
 from scripts.release.verify_formal_release_identity import deployment_identity, verify
 
@@ -239,3 +245,194 @@ def test_formal_identity_drift_blocks_promotion(formal, path, value, message):
     target[path[-1]] = value
     with pytest.raises(ValueError, match=message):
         verify(**formal)
+
+
+@pytest.mark.parametrize(
+    "drift",
+    [
+        None,
+        "tag",
+        "missing_tag",
+        "sha",
+        "asset",
+        "published_at",
+        "public",
+        "production",
+        "main",
+        "orchestrator",
+    ],
+)
+def test_published_release_retry_only_reads_the_same_frozen_evidence(tmp_path, formal, drift):
+    """Run the real shell and identity verifier; only GitHub/HTTPS I/O is inert."""
+    sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+    data = json.loads(json.dumps(formal).replace(SHA, sha))
+    proof = tmp_path / "formal-release"
+    fixtures = tmp_path / "fixtures"
+    binary = tmp_path / "bin"
+    for directory in (proof, fixtures, binary):
+        directory.mkdir()
+
+    def save(name, value):
+        (fixtures / name).write_text(json.dumps(value), encoding="utf-8")
+
+    for name, key in (
+        ("public-pointer.json", "pointer"),
+        ("download-release.json", "pointer"),
+        ("manifest.json", "manifest"),
+        ("public-manifest.json", "public_manifest"),
+        ("stable-manifest.json", "stable_manifest"),
+        ("asset-inventory.json", "inventory"),
+        ("release-convergence.json", "convergence"),
+    ):
+        save(name, data[key])
+    for name, signature in zip(
+        ("windows-signature.json", "mac-signatures.jsonl"), data["signatures"], strict=True
+    ):
+        save(name, signature)
+    (proof / "production-deployment.json").write_text(json.dumps(data["deployment"]))
+    state_path = tmp_path / "state.json"
+    state_path.write_text(
+        json.dumps(
+            {
+                "release": {**data["github_release"], "id": 17},
+                "tag": None,
+                "writes": [],
+                "fail_readback": True,
+            }
+        )
+    )
+    boundary = "#!/usr/bin/env python3\n" + textwrap.dedent(
+        """\
+        import json, os, shutil, sys
+        from pathlib import Path
+        args = sys.argv[1:]
+        state_path = Path(os.environ['RELEASE_TEST_STATE'])
+        state = json.loads(state_path.read_text())
+        fixtures = Path(os.environ['RELEASE_TEST_FIXTURES'])
+        sha = os.environ['RELEASE_SHA']
+        def persist():
+            state_path.write_text(json.dumps(state))
+        if Path(sys.argv[0]).name == 'curl':
+            if not state['release']['draft'] and state['fail_readback']:
+                state['fail_readback'] = False
+                persist()
+                print('temporary public readback failure', file=sys.stderr)
+                sys.exit(22)
+            name = Path(args[args.index('-o') + 1]).name
+            shutil.copyfile(fixtures / name, args[args.index('-o') + 1])
+        elif args[:2] == ['run', 'download']:
+            names = {
+                'xcagi-download-manifest': ['manifest.json', 'download-release.json'],
+                'xcagi-mac-release-signatures': ['mac-signatures.jsonl'],
+                'xcagi-windows-release-signature': ['windows-signature.json'],
+                'xcagi-github-release-asset-inventory': ['asset-inventory.json'],
+                'xcagi-release-convergence': ['release-convergence.json'],
+            }[args[args.index('--name') + 1]]
+            for name in names:
+                shutil.copyfile(fixtures / name, Path(args[args.index('--dir') + 1]) / name)
+        elif args[0] == 'api':
+            path = next(arg for arg in args if arg.startswith('repos/'))
+            method = args[args.index('--method') + 1] if '--method' in args else 'GET'
+            if method == 'POST' and path.endswith('/git/refs'):
+                state['writes'].append('POST')
+                state['tag'] = next(arg[4:] for arg in args if arg.startswith('sha='))
+                persist()
+            elif method == 'PATCH' and path.endswith('/releases/17'):
+                assert 'draft=false' in args
+                state['writes'].append('PATCH')
+                state['release'].update(draft=False, published_at='2026-11-20T00:00:00Z')
+                persist()
+            elif path.endswith('/actions/runs/12'):
+                print(json.dumps({'head_sha': sha, 'head_branch': 'main',
+                    'event': 'workflow_dispatch', 'path': '.github/workflows/fhd-release-desktop.yml',
+                    'conclusion': 'success'}))
+            elif '/releases?' in path:
+                print(json.dumps([[state['release']]]))
+            elif path.endswith('/releases/17'):
+                print(json.dumps(state['release']))
+            elif path.endswith('/git/ref/heads/main'):
+                print(state.get('main_sha', sha))
+            elif '/git/ref/tags/' in path:
+                if state['tag'] is None: sys.exit(1)
+                print(state['tag'])
+            else:
+                raise AssertionError(args)
+        else:
+            raise AssertionError(args)
+        """
+    )
+    for name in ("gh", "curl"):
+        executable = binary / name
+        executable.write_text(boundary)
+        executable.chmod(0o755)
+    runs = []
+    for path in (
+        ROOT / "FHD/.github/workflows/release-orchestrator.yml",
+        ROOT / ".github/workflows/fhd-release-orchestrator.yml",
+    ):
+        job = yaml.safe_load(path.read_text())["jobs"]["publish-converged-github-release"]
+        runs.append(next(step["run"] for step in job["steps"] if "run" in step))
+    assert runs[0] == runs[1]
+    verifier_log = tmp_path / "verifier.log"
+    env = {
+        **os.environ,
+        "PATH": f"{binary}:{Path(sys.executable).parent}:{os.environ['PATH']}",
+        "RELEASE_TEST_STATE": str(state_path),
+        "RELEASE_TEST_FIXTURES": str(fixtures),
+        "RELEASE_SHA": sha,
+        "PRODUCT_VERSION": VERSION,
+        "CONVERGENCE_RUN": "44",
+        "GITHUB_RUN_ID": "33",
+        "GH_REPO": "fixture/release",
+        "RUNNER_TEMP": str(tmp_path),
+        "VERIFIER_LOG": str(verifier_log),
+    }
+    command = (
+        'python3() { printf "%s\\n" "$*" >> "$VERIFIER_LOG"; command python3 "$@"; }\n' + runs[0]
+    )
+
+    def run():
+        return subprocess.run(
+            ["bash", "-c", command],
+            cwd=ROOT / "FHD",
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    first = run()
+    assert first.returncode == 22, first.stdout + first.stderr
+    assert "temporary public readback failure" in first.stderr
+    state = json.loads(state_path.read_text())
+    assert state["writes"] == ["POST", "PATCH"] and state["release"]["draft"] is False
+    if drift == "tag":
+        state["tag"] = "b" * 40
+    elif drift == "missing_tag":
+        state["tag"] = None
+    elif drift == "sha":
+        state["release"]["target_commitish"] = "b" * 40
+    elif drift == "asset":
+        state["release"]["assets"][0]["digest"] = "sha256:" + "b" * 64
+    elif drift == "published_at":
+        state["release"].pop("published_at")
+    elif drift == "public":
+        save("public-pointer.json", {**data["pointer"], "git_sha": "b" * 40})
+    elif drift == "production":
+        data["convergence"]["data"]["sources"][2]["artifact_sha256"] = "b" * 64
+        save("release-convergence.json", data["convergence"])
+    elif drift == "main":
+        state["main_sha"] = "b" * 40
+    elif drift == "orchestrator":
+        env["GITHUB_RUN_ID"] = "34"
+    state_path.write_text(json.dumps(state))
+    before = verifier_log.read_text().splitlines()
+    second = run()
+    assert json.loads(state_path.read_text())["writes"] == ["POST", "PATCH"]
+    if drift is None:
+        assert second.returncode == 0, second.stdout + second.stderr
+        retried = verifier_log.read_text().splitlines()[len(before) :]
+        assert len(retried) == 1 and retried[0].endswith("--published")
+        assert json.loads(second.stdout)["git_sha"] == sha
+    else:
+        assert second.returncode != 0, "Published identity drift must still fail closed"

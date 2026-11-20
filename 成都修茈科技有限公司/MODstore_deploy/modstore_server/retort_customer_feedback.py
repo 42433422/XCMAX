@@ -41,12 +41,14 @@ def _ticket_scope(ticket):
 
 def _eligible(db, ticket, domain):
     from modstore_server.customer_ticket_execution import _current_claim
+    from modstore_server.customer_ticket_intake_review import intake_dispatch_block_reason
 
     evidence, resolution, taxonomy = _ticket_scope(ticket)
     if (
         ticket.submitter_type != "customer"
         or ticket.intent != "product_issue"
         or ticket.status not in {"open", "processing"}
+        or intake_dispatch_block_reason(ticket)
         or taxonomy["ticket_source"] != "customer_chat"
         or taxonomy["ticket_domain"] != domain
         or resolution.get("route") not in (None, "shared_core")

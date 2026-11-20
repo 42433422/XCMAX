@@ -6,6 +6,8 @@ import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
 from scripts.dev import gen_claimed_vs_actual
 from scripts.observability.collect_dora import compute_dora
 
@@ -18,13 +20,14 @@ def _event(
     status: str = "success",
     environment: str = "production",
     commit_at: str | None = None,
+    restored_at: str | None = None,
 ) -> dict:
     return {
         "deploy_id": deployed_at,
         "deployed_at": deployed_at,
         "commit_at": commit_at or deployed_at,
         "status": status,
-        "restored_at": None,
+        "restored_at": restored_at,
         "source_workflow": "test",
         "head_branch": "main",
         "environment": environment,
@@ -59,6 +62,73 @@ def test_compute_dora_filters_to_production_window() -> None:
     assert report["deployment_frequency_per_day"] == 0.1429
     assert report["lead_time_for_changes_hours"] == 2.0
     assert report["change_failure_rate"] == 0.5
+
+
+@pytest.mark.parametrize(
+    ("restored_at", "expected_hours", "sample_count"),
+    [
+        (None, None, 0),
+        ("2026-07-25T12:00:00Z", 0.0, 1),
+        ("2026-07-25T13:30:00Z", 1.5, 1),
+        ("2026-07-25T11:59:00Z", None, 0),
+        ("2026-07-27T12:00:00Z", None, 0),
+    ],
+)
+def test_mttr_requires_an_observed_restoration_receipt(
+    restored_at: str | None, expected_hours: float | None, sample_count: int
+) -> None:
+    events = [
+        _event("2026-07-25T12:00:00Z", status="failed", restored_at=restored_at),
+        # A later successful retry is not evidence of this incident's recovery time.
+        _event("2026-07-25T18:00:00Z"),
+        _event("2026-07-25T10:00:00Z", environment="staging", restored_at="2026-07-25T11:00:00Z"),
+        _event("2026-07-01T10:00:00Z", restored_at="2026-07-01T11:00:00Z"),
+    ]
+    report = compute_dora(
+        events, environment="production", now=datetime(2026, 7, 26, 12, tzinfo=UTC)
+    )
+    assert report["mean_time_to_restore_hours"] == expected_hours
+    assert report["mean_time_to_restore_sample_count"] == sample_count
+
+
+def test_mttr_averages_only_valid_explicit_restorations() -> None:
+    events = [
+        _event("2026-07-25T10:00:00Z", restored_at="2026-07-25T11:00:00Z"),
+        _event("2026-07-25T12:00:00Z", restored_at="2026-07-25T15:00:00Z"),
+        _event("2026-07-25T18:00:00Z", status="failed"),
+    ]
+    report = compute_dora(events, now=datetime(2026, 7, 26, 12, tzinfo=UTC))
+    assert report["mean_time_to_restore_hours"] == 2.0
+    assert report["mean_time_to_restore_sample_count"] == 2
+
+
+@pytest.mark.parametrize(
+    ("hours", "samples", "expected", "count_label", "status"),
+    [
+        (None, 0, "未知", "0", gen_claimed_vs_actual.ST_YELLOW),
+        (0.0, None, "未知", "未知", gen_claimed_vs_actual.ST_YELLOW),
+        (0.0, 0, "未知", "0", gen_claimed_vs_actual.ST_YELLOW),
+        (0.0, 1, "0 小时", "1", gen_claimed_vs_actual.ST_GREEN),
+        (2.0, 2, "2 小时", "2", gen_claimed_vs_actual.ST_GREEN),
+    ],
+)
+def test_claimed_actual_distinguishes_unknown_mttr_from_measured_zero(
+    tmp_path: Path, monkeypatch, hours, samples, expected, count_label, status
+) -> None:
+    snapshot = {"event_count": 4, "mean_time_to_restore_hours": hours}
+    if samples is not None:
+        snapshot["mean_time_to_restore_sample_count"] = samples
+    (tmp_path / "dora-20260726.json").write_text(json.dumps(snapshot), encoding="utf-8")
+    load_snapshot = gen_claimed_vs_actual._latest_dora_snapshot
+    monkeypatch.setattr(
+        gen_claimed_vs_actual, "_latest_dora_snapshot", lambda: load_snapshot(tmp_path)
+    )
+
+    rows, _ = gen_claimed_vs_actual.build_rows()
+    row = next(row for row in rows if row[0] == "DORA 平均恢复时长")
+    assert row[2] == f"{expected} / 有效恢复样本 {count_label}"
+    assert row[3] == "dora-20260726.json"
+    assert row[4] == status
 
 
 def test_dora_event_helper_persists_machine_readable_receipt(tmp_path: Path) -> None:

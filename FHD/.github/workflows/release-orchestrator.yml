@@ -439,8 +439,13 @@ jobs:
             > "$proof/github-release.json"
           args=(--evidence "$proof" --version "$PRODUCT_VERSION" --sha "$RELEASE_SHA"
                 --desktop-run "$desktop_run" --orchestrator-run "$GITHUB_RUN_ID")
-          python3 scripts/release/verify_formal_release_identity.py "${args[@]}" >/dev/null
           test "$(gh api "repos/${GH_REPO}/git/ref/heads/main" --jq .object.sha)" = "$RELEASE_SHA"
+          if jq -e '.draft == false' "$proof/github-release.json" >/dev/null; then
+            test "$(gh api "repos/${GH_REPO}/git/ref/tags/${tag}" --jq .object.sha)" = "$RELEASE_SHA"
+            python3 scripts/release/verify_formal_release_identity.py "${args[@]}" --published
+            exit 0
+          fi
+          python3 scripts/release/verify_formal_release_identity.py "${args[@]}" >/dev/null
           github_release_id="$(jq -er '.id | select(type == "number")' "$proof/github-release.json")"
           ref_sha="$(gh api "repos/${GH_REPO}/git/ref/tags/${tag}" --jq '.object.sha' 2>/dev/null || true)"
           if [ -n "$ref_sha" ]; then

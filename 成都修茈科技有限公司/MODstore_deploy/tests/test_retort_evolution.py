@@ -555,6 +555,106 @@ def test_feedback_selection_scans_past_already_used_candidates(setup, monkeypatc
         assert [item["ticket_id"] for item in selected.values()] == [tickets[0].id]
 
 
+@pytest.mark.parametrize("boundary", ["selection", "private_context", "release_readback"])
+@pytest.mark.parametrize(
+    "hold", ["revoked", "admin_revoked", "pending_classification", "needs_review"]
+)
+def test_feedback_respects_persisted_intake_hold_at_each_boundary(setup, boundary, hold):
+    from modstore_server import retort_customer_feedback as feedback
+    from modstore_server.customer_ticket_human_ops import (
+        accept_ticket,
+        assign_ticket,
+        revoke_ticket_dispatch,
+    )
+    from modstore_server.models_cs import (
+        CustomerServiceAuditLog,
+        CustomerServiceMessage,
+        CustomerServiceSession,
+        CustomerServiceTicket,
+    )
+
+    request_id = str(uuid4())
+    with get_session_factory()() as db:
+        customer = User(username=uuid4().hex, password_hash="test-only", is_admin=False)
+        db.add(customer)
+        db.flush()
+        session = CustomerServiceSession(user_id=customer.id)
+        db.add(session)
+        db.flush()
+        evidence = {"issue_domain": "platform", "resolution": {"state": "received"}}
+        ticket = CustomerServiceTicket(
+            user_id=customer.id,
+            session_id=session.id,
+            ticket_no=str(uuid4()),
+            submitter_type="customer",
+            intent="product_issue",
+            status="open",
+            summary="首次导入未成功",
+            evidence_json=json_dumps(evidence),
+        )
+        db.add(ticket)
+        db.flush()
+        source = {
+            "ticket_id": ticket.id,
+            "ticket_no": ticket.ticket_no,
+            "domain": "platform",
+            "revision": "",
+            "context_sha256": feedback._reproduction_digest(feedback._raw_reproduction(db, ticket)),
+        }
+        db.add(
+            RetortEvolutionRun(
+                id=request_id,
+                user_id=setup["user"].id,
+                status="delivered",
+                protocol_json="{}",
+                effects_json=json_dumps({"customer_feedback": source}),
+            )
+        )
+        db.commit()
+        assert feedback._eligible(db, ticket, "platform")
+        if hold == "admin_revoked":
+            admin = db.get(User, setup["user"].id)
+            assign_ticket(db, ticket, admin, admin.id, "人工核对原反馈")
+            accept_ticket(db, ticket, admin, "开始核对")
+            revoke_ticket_dispatch(
+                db, ticket, admin, request={"request_id": str(uuid4()), "note": "停止自动派发"}
+            )
+            assert ticket.status == "processing" and ticket.closed_at is None
+        else:
+            # Persisted holds also govern historical rows with no current assignee.
+            evidence.update(
+                {
+                    "revoked": {"dispatch_revocation": {"request_id": str(uuid4())}},
+                    "pending_classification": {"classification_status": "pending_verification"},
+                    "needs_review": {"intake_review": {"disposition": "needs_review"}},
+                }[hold]
+            )
+            ticket.evidence_json = json_dumps(evidence)
+            db.commit()
+        ticket_id = ticket.id
+        before = (ticket.status, ticket.evidence_json, ticket.lock_version)
+        audit_count = db.query(CustomerServiceAuditLog).filter_by(ticket_id=ticket_id).count()
+        if boundary == "selection":
+            candidates = feedback._candidates(db, "platform", set())
+            assert ticket_id not in {row["ticket_id"] for row in candidates.values()}
+        elif boundary == "private_context":
+            with pytest.raises(ValueError, match="feedback_execution_ticket_unavailable"):
+                feedback._selected_execution_context(db, db.get(RetortEvolutionRun, request_id))
+    if boundary == "release_readback":
+        impact = feedback.read_impact(
+            request_id,
+            {"status": "deployment_verified", "release_sha": "c" * 40, "deployment_run_id": 205},
+        )
+        assert impact["reason"] == "awaiting_ticket_release_binding"
+    with get_session_factory()() as db:
+        ticket = db.get(CustomerServiceTicket, ticket_id)
+        assert (ticket.status, ticket.evidence_json, ticket.lock_version) == before
+        assert db.query(CustomerServiceMessage).filter_by(ticket_id=ticket_id).count() == 0
+        assert (
+            db.query(CustomerServiceAuditLog).filter_by(ticket_id=ticket_id).count() == audit_count
+        )
+
+
 @pytest.mark.parametrize("customer_decision", ["resolved", "reopen", "resolved_then_reopen"])
 def test_feedback_run_binds_original_customer_and_production_release(
     setup, monkeypatch, customer_decision

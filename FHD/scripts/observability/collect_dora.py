@@ -49,9 +49,15 @@ def compute_dora(
         for e in successes
         if e.get("commit_at")
     ]
-    mttr_samples = [
-        _hours_between(e["deployed_at"], e["restored_at"]) for e in recent if e.get("restored_at")
-    ]
+    mttr_samples: list[float] = []
+    for event in recent:
+        if not event.get("restored_at"):
+            continue
+        deployed = _parse_ts(event["deployed_at"])
+        restored = _parse_ts(event["restored_at"])
+        # Only an explicit, already observed restoration is a sample; a retry is not.
+        if deployed <= restored <= now:
+            mttr_samples.append((restored - deployed).total_seconds() / 3600.0)
 
     total = len(recent)
     fail_rate = (len(failures) / total) if total else 0.0
@@ -66,9 +72,10 @@ def compute_dora(
         "lead_time_for_changes_hours": round(
             sorted(lead_times)[len(lead_times) // 2] if lead_times else 0.0, 4
         ),
-        "mean_time_to_restore_hours": round(
-            sum(mttr_samples) / len(mttr_samples) if mttr_samples else 0.0, 4
+        "mean_time_to_restore_hours": (
+            round(sum(mttr_samples) / len(mttr_samples), 4) if mttr_samples else None
         ),
+        "mean_time_to_restore_sample_count": len(mttr_samples),
         "change_failure_rate": round(fail_rate, 4),
         "successes": len(successes),
         "failures": len(failures),
