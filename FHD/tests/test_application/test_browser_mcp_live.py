@@ -348,10 +348,11 @@ def test_live_missing_evidence_and_lost_generation_fail_closed(browser_runtime, 
     assert missing["session_id"] == session_id
     assert runtime.close(0) >= 1
     resumed = _dispatch(runtime, 0, "browser_navigate", {"url": url})
-    assert resumed["success"] is False and resumed["error_code"] == "tool_timeout_unknown"
-    assert resumed["reconciliation_evidence"]["error_code"] == "mcp_session_lost"
+    assert resumed["success"] is False and resumed["error_code"] == "mcp_session_lost"
+    assert resumed["outcome"] == "unknown"
     assert resumed["reconciliation_required"] is True
     assert resumed["retryable"] is False
+    assert runtime.close(0) == 0  # The failed resume must not create a new browser worker.
     assert submissions == []
 
 
