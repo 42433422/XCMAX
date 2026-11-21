@@ -1,5 +1,5 @@
 {
-  "lines": 2555600,
+  "lines": 2555594,
   "updated": "2026-11-21",
-  "note": "MODstore 统一 LiteLLM 网关为平台模型调用 SSOT：后端 provider/目录/默认路由/只读保护、前端钱包与工作台网关识别、回归测试；净删除为负由所有者批准"
+  "note": "MODstore 统一 LiteLLM 网关为平台模型调用 SSOT：provider 解析、网关模型池目录、默认路由、管理只读保护、前端识别与回归测试；净删除为负由所有者批准"
 }
