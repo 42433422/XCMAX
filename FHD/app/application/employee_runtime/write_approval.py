@@ -143,14 +143,23 @@ def invoke_employee_gate(
     runtime_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Adapt legacy validation gates before invocation, never retry after a call."""
-    options: dict[str, Any] = {"runtime_context": runtime_context}
     try:
         signature = inspect.signature(gate)
-        try:
-            signature.bind(tool_name, args, **options)
-        except TypeError:
-            signature.bind(tool_name, args)
-            options = {}
+        context_param = signature.parameters.get("runtime_context")
+        accepts_context = (
+            context_param is not None
+            and context_param.kind in (
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                inspect.Parameter.KEYWORD_ONLY,
+            )
+        ) or any(
+            parameter.kind is inspect.Parameter.VAR_KEYWORD
+            for parameter in signature.parameters.values()
+        )
+        options: dict[str, Any] = (
+            {"runtime_context": runtime_context} if accepts_context else {}
+        )
+        signature.bind(tool_name, args, **options)
     except (TypeError, ValueError):
         return {"ok": False, "blocked": True, "reason": "工具授权接口无效，未调用"}
     try:
