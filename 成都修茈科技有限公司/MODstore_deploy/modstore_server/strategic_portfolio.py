@@ -339,6 +339,12 @@ def require_authorization(row: Any, proposal: dict[str, Any], state: dict[str, A
         raise PortfolioError("approved portfolio content changed")
     if state.get("halted"):
         raise PortfolioError(f"portfolio stopped: {state.get('stop_reason', 'guardrail')}")
+    from modstore_server.xiaoc_life_store import LifePolicyError, portfolio_life_guard
+
+    try:
+        portfolio_life_guard(row.decision_id, proposal, state)
+    except LifePolicyError as exc:
+        raise PortfolioError(str(exc)) from exc
 
 
 def plan_portfolio(decision_id: str, *, owner_user_id: int | None = None) -> dict[str, Any]:

@@ -30,6 +30,10 @@ from modstore_server.llm_key_resolver import (
 from modstore_server.llm_quota_monitor import scrub_llm_error
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.platform_model_config import PlatformApiKey
+from modstore_server.xiaoc_life_chat import (
+    manual_life_scope_active,
+    require_manual_life_capability,
+)
 
 try:
     from openai import OpenAIError
@@ -472,8 +476,11 @@ async def chat(
     from modstore_server.strategic_portfolio_usage import require_call_reservation, scope_active
 
     budgeted = scope_active()
+    require_manual_life_capability()
+    single_attempt = budgeted or manual_life_scope_active()
     if budgeted:
         require_call_reservation(provider=provider, model=model)
+    if single_attempt:
         fallbacks = []
 
     specs = _build_specs(provider, model, api_key, base_url, fallbacks)
@@ -493,7 +500,11 @@ async def chat(
             messages=messages,
             max_tokens=max_tokens,
             response_format=response_format,
-            **({"num_retries": 0, "max_retries": 0, "disable_fallbacks": True} if budgeted else {}),
+            **(
+                {"num_retries": 0, "max_retries": 0, "disable_fallbacks": True}
+                if single_attempt
+                else {}
+            ),
             **({"timeout": float(primary_timeout_s)} if primary_timeout_s else {}),
         )
         response = await asyncio.wait_for(call, timeout=float(timeout_s))
@@ -607,8 +618,11 @@ async def _stream_impl(
     from modstore_server.strategic_portfolio_usage import require_call_reservation, scope_active
 
     budgeted = scope_active()
+    require_manual_life_capability()
+    single_attempt = budgeted or manual_life_scope_active()
     if budgeted:
         require_call_reservation(provider=provider, model=model)
+    if single_attempt:
         fallbacks = []
     specs = _build_specs(provider, model, api_key, base_url, fallbacks)
     if specs is None:
@@ -625,7 +639,9 @@ async def _stream_impl(
     client = None
     reported_usage: Dict[str, Any] = {}
     try:
-        if budgeted:
+        if budgeted or (
+            single_attempt and str(deployments[0]["litellm_params"]["model"]).startswith("openai/")
+        ):
             client = _budgeted_stream_client(
                 provider, model, deployments[0]["litellm_params"], reported_usage
             )
@@ -643,9 +659,9 @@ async def _stream_impl(
                     "max_retries": 0,
                     "disable_fallbacks": True,
                     "enable_mid_stream_fallback_continuation": False,
-                    "client": client,
+                    **({"client": client} if client is not None else {}),
                 }
-                if budgeted
+                if single_attempt
                 else {}
             ),
         )
@@ -700,6 +716,7 @@ def stream_events(
     """返回 LiteLLM 流事件迭代器；不支持时返回 ``None`` 由调用方降级。"""
     from modstore_server.strategic_portfolio_usage import require_call_reservation, scope_active
 
+    require_manual_life_capability()
     if scope_active():
         require_call_reservation(provider=provider, model=model)
         fallbacks = []

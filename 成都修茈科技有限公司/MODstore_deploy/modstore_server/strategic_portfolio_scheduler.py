@@ -28,6 +28,8 @@ def tick(*, limit: int = 10) -> dict[str, Any]:
             .where(
                 StrategicDecision.scope == "strategy_portfolio",
                 StrategicDecision.status.in_(("approved", "executing")),
+                # The life scheduler owns this subset and its extra daily lease.
+                ~StrategicDecision.scope_ref.like("user:%:xiaoc-life:%"),
             )
             .order_by(StrategicDecision.updated_at)
             .limit(max(1, min(limit, 100)))
@@ -36,6 +38,8 @@ def tick(*, limit: int = 10) -> dict[str, Any]:
     for decision_id in ids:
         try:
             status = portfolio_status(decision_id)
+            if str(status.get("period", "")).startswith("xiaoc-life:"):
+                continue
             owner = status["owner_user_id"]
             with get_session_factory()() as session:
                 principal = session.get(User, owner)

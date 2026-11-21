@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager
 from copy import deepcopy
+from pathlib import Path
 from types import ModuleType
 from typing import Any
 
@@ -64,6 +65,148 @@ def _pack_identity(pack: dict[str, Any]) -> dict[str, str]:
     }
 
 
+def _workspace_file(path: str, workspace: str, user_id: int, *, exists: bool) -> Path:
+    from modstore_server.integrations.vibe_adapter import VibePathError, ensure_within_workspace
+    from modstore_server.strategic_portfolio import PortfolioError
+
+    try:
+        root = ensure_within_workspace(workspace, user_id=user_id)
+        if not root.is_dir():
+            raise PortfolioError("strategy workspace is not a directory")
+        target = Path(path.strip()).expanduser()
+        target = (target if target.is_absolute() else root / target).resolve()
+        target.relative_to(root)
+        if exists:
+            target = ensure_within_workspace(target, user_id=user_id)
+            if not target.is_file():
+                raise PortfolioError("strategy file is not a regular file")
+    except (VibePathError, ValueError) as exc:
+        raise PortfolioError(
+            "strategy file is outside the selected workspace or unavailable"
+        ) from exc
+    return target
+
+
+def _verify_file_paths(payload: dict[str, Any], config: dict[str, Any], user_id: int) -> None:
+    from modstore_server.employee_path_guard import check_path_guard
+    from modstore_server.strategic_portfolio import PortfolioError
+
+    workspace = payload["project_root"]
+    actions = config.get("actions") or {}
+    nested = actions.get("actions")
+    actions = nested if isinstance(nested, dict) else actions
+    direct = actions.get("direct_python") or {}
+    output = payload.get("output_relpath") or direct.get("default_output_relpath")
+    source = payload.get("file_path")
+    if output and "direct_python" in actions.get("handlers", []):
+        source = source or payload.get("path") or payload.get("excel_path")
+    if source:
+        _workspace_file(str(source), workspace, user_id, exists=True)
+    if output and "direct_python" in actions.get("handlers", []):
+        target = _workspace_file(str(output), workspace, user_id, exists=False)
+        path = target.relative_to(Path(workspace)).as_posix()
+        guard = check_path_guard(
+            config=config,
+            result={"outputs": [{"handler": "direct_python", "files_changed": [path]}]},
+            employee_id="",
+        )
+        if guard.get("ok") is not True or guard.get("checked") is not True:
+            raise PortfolioError("strategy output is outside the approved employee scope")
+
+
+def _verify_file_support(
+    module: ModuleType, payload: dict[str, Any], config: dict[str, Any], user_id: int
+) -> None:
+    support = getattr(module, "_file_support", None)
+    if support is None:
+        return
+    from app.mod_sdk.file_employee_support import FileEmployeeSupport
+
+    if not isinstance(support, FileEmployeeSupport):
+        return
+    actions = config.get("actions") or {}
+    nested = actions.get("actions")
+    actions = nested if isinstance(nested, dict) else actions
+    direct = actions.get("direct_python") or {}
+    effective = deepcopy(payload)
+    for field in ("output_relpath", "template_relpath"):
+        effective[field] = (
+            effective.get(field)
+            or direct.get(f"default_{field}")
+            or support.rule_spec.get(f"default_{field}")
+        )
+    effective["output_relpath"] = effective["output_relpath"] or "outputs/employee_output.xlsx"
+    _verify_file_paths(effective, config, user_id)
+    template = support._resolve_template(effective, {"workspace_root": payload["project_root"]})
+    if template is not None:
+        # Use the original resolver's priority. Bundled templates are read from
+        # the immutable archive snapshot, while workspace templates stay tenant-bound.
+        snapshot = Path(str(module.__file__)).resolve().parents[2]
+        if not template.resolve().is_relative_to(snapshot):
+            _workspace_file(str(template), payload["project_root"], user_id, exists=True)
+
+
+def bind_file_receipts(
+    result: dict[str, Any], payload: dict[str, Any], config: dict[str, Any], user_id: int
+) -> None:
+    """Adapt legacy file employees only after checking real, authorized artifact bytes."""
+    from modstore_server import strategic_portfolio_usage as usage
+    from modstore_server.catalog_archive_integrity import sha256_file
+    from modstore_server.employee_path_guard import check_path_guard
+    from modstore_server.strategic_execution_receipts import _control
+    from modstore_server.strategic_portfolio import PortfolioError
+
+    if usage._SCOPE.get() is None:
+        return
+    workspace = payload["project_root"]
+    for handler in result.get("outputs") or []:
+        output = handler.get("output") if isinstance(handler, dict) else None
+        if not isinstance(output, dict) or handler.get("handler") != "direct_python":
+            continue
+        paths = [
+            str(item["output_path"])
+            for item in [output, *(output.get("items") or [])]
+            if isinstance(item, dict) and item.get("output_path")
+        ]
+        if not paths:
+            continue
+        try:
+            if (
+                handler.get("ok") is not True
+                or output.get("ok", output.get("success")) is not True
+                or _control(output, "file_employee") is not None
+                or len(str(output.get("summary") or "").strip()) < 10
+            ):
+                raise PortfolioError("file employee did not report a completed result with summary")
+            files = [
+                _workspace_file(path, workspace, user_id, exists=True)
+                for path in dict.fromkeys(paths)
+            ]
+            relative = [path.relative_to(Path(workspace)).as_posix() for path in files]
+            checked = {"handler": "direct_python", "files_changed": relative}
+            guard = check_path_guard(config=config, result={"outputs": [checked]}, employee_id="")
+            if guard.get("ok") is not True or guard.get("checked") is not True:
+                raise PortfolioError("file artifact is outside the approved employee scope")
+            artifacts = []
+            for rel, path in zip(relative, files, strict=True):
+                before = path.stat()
+                sha = sha256_file(path)
+                if before != path.stat():
+                    raise PortfolioError("file artifact changed while verifying its bytes")
+                artifacts.append(
+                    {
+                        "artifact_id": rel,
+                        "artifact_sha256": sha,
+                        "size_bytes": before.st_size,
+                        "path": rel,
+                    }
+                )
+            handler["files_changed"] = relative
+            output.update(status="completed", files_changed=relative, artifacts=artifacts)
+        except (OSError, ValueError) as exc:
+            handler.update(ok=False, error=f"file artifact verification failed: {exc}")
+
+
 def freeze_execution(owner_user_id: int, opportunity: dict[str, Any]) -> dict[str, Any]:
     """Resolve the existing tenant workspace and employee before presenting approval."""
     from modstore_server.db.db_base import get_session_factory
@@ -119,6 +262,7 @@ def freeze_execution(owner_user_id: int, opportunity: dict[str, Any]) -> dict[st
         actions = nested_actions
     if "direct_python" in actions.get("handlers", []) and not pack.get("stored_filename"):
         raise PortfolioError("strategic Python handlers require an immutable catalog archive")
+    _verify_file_paths(payload, config, owner_user_id)
     binding = {
         **_pack_identity(pack),
         "config_sha256": digest(config),
@@ -208,6 +352,7 @@ def verify_execution_binding(
         )
         if str(resolved) != item["input_data"]["project_root"]:
             raise PortfolioError("approved strategy workspace changed")
+        _verify_file_paths(payload, config or {}, status["owner_user_id"])
 
 
 @contextmanager
@@ -231,7 +376,6 @@ def approved_python_module(
     import zipfile
     from importlib.machinery import SourceFileLoader
     from importlib.util import module_from_spec, spec_from_file_location
-    from pathlib import Path
 
     from modman.archive_import import MAX_FILES, MAX_UNPACKED_BYTES
     from modstore_server import employee_executor as executor
@@ -309,4 +453,5 @@ def approved_python_module(
         module = module_from_spec(spec)
         usage.remaining_execution_seconds()
         loader.exec_module(module)
+        _verify_file_support(module, payload, config, user_id)
         yield module

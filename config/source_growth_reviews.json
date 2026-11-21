@@ -676,12 +676,12 @@
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_executor_merged_mod2.py": {
       "base_file": "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_executor_merged_mod2.py",
       "base_blob": "ca417b7d810eb99e9dc2c8e58be185ff102a89b7",
-      "head_blob": "edd1cce0c0772032078ad5094c47adb5d6f1fdd4",
+      "head_blob": "4aeb7c9fa0b36d313d5964aa89871f62aa4949d0",
       "before_lines": 1110,
-      "after_lines": 1117,
-      "reason": "Review request only: validate the frozen strategic employee package and effective runtime configuration before perception or model calls and preserve approved business inputs after cognition.",
-      "boundary": "Only calls into the shared strategic_execution_contract helper at existing execution boundaries; ordinary employee and reviewed duty execution remain on the existing route.",
-      "validation": "Integrated strategy, real employee, archive and cognition regressions are included in the 744-pass run. Changed production modules pass normal-import mypy. Required remote CI and human review are not implied by this record.",
+      "after_lines": 1121,
+      "reason": "Review request only: validate the frozen strategic employee package and effective runtime configuration before perception or model calls and preserve approved business inputs after cognition.；管理端真实文件员工贯通发现感知富化污染批准输入与旧产物回执缺字段，本次仅深复制感知输入并调用原合同薄适配。",
+      "boundary": "Only calls into the shared strategic_execution_contract helper at existing execution boundaries; ordinary employee and reviewed duty execution remain on the existing route.；原冻结输入、目录范围、严格终态和验证器均保留，产物摘要读取真实文件，普通非组合执行保持原协议。",
+      "validation": "Integrated strategy, real employee, archive and cognition regressions are included in the 744-pass run. Changed production modules pass normal-import mypy. Required remote CI and human review are not implied by this record.；真实管理端JWT/API/审批/CSV字节与SQL回执贯通，以及文件路径、符号链接、模板优先级和重复执行回归通过。",
       "follow_up": "Keep contract logic in the focused helper and review extraction of phase orchestration before further growth of the mechanical executor module.",
       "review_owner": "@42433422"
     },
@@ -772,12 +772,12 @@
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/strategic_portfolio_runtime.py": {
       "base_file": null,
       "base_blob": null,
-      "head_blob": "1d116048786ebde35c0dc509504e00356ace302d",
+      "head_blob": "03610140f21b42ee9798a660d7188032d3110e55",
       "before_lines": 0,
-      "after_lines": 845,
-      "reason": "Review request only: extend the new approved-portfolio runtime with actual tenant business inputs and strict payment attribution to one completed artifact and observation window.",
+      "after_lines": 851,
+      "reason": "Review request only: extend the new approved-portfolio runtime with actual tenant business inputs and strict payment attribution to one completed artifact and observation window.；管理端小 C 的原组合领取前接入每日生命周期额度校验，防止已批任务超出本轮实际预留。",
       "boundary": "Reuse StrategicDecision SQL state, existing employee dispatch and authoritative payment/customer receipts. Keep solver and execution-contract code in their existing separate modules; no remote unmetered delegate or new financial ledger.",
-      "validation": "744 integrated regressions passed with explicit optional promptfoo CLI and PostgreSQL skips; normal-import mypy passes the changed production files. Cases include future inputs, different artifact receipts, pre-completion confirmations and same-owner refunds. CI and architecture approval remain pending.",
+      "validation": "744 integrated regressions passed with explicit optional promptfoo CLI and PostgreSQL skips; normal-import mypy passes the changed production files. Cases include future inputs, different artifact receipts, pre-completion confirmations and same-owner refunds. CI and architecture approval remain pending.；小 C SQL 预算、队列恢复和真实模型用量回归覆盖本次六行接线。",
       "follow_up": "Extract discovery-source collection and business-outcome attribution into focused adapters in a separately reviewed change before adding further market or asset providers.",
       "review_owner": "@42433422"
     }

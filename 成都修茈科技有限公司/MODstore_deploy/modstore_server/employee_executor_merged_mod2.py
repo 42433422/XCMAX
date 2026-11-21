@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import importlib
+from copy import deepcopy
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
@@ -142,7 +143,7 @@ def _execute_employee_phase_01(state):
     ctx = _facade().build_employee_context(state["employee_id"], state["payload"])
     state["perceived"] = _facade()._perception_real(
         state["config"].get("perception", {}),
-        state["payload"],
+        deepcopy(state["payload"]),
         state["session"],
         state["user_id"],
     )
@@ -794,6 +795,9 @@ def _execute_employee_phase_02(state):
         state["employee_id"],
         state["user_id"],
     )
+    from modstore_server.strategic_execution_contract import bind_file_receipts
+
+    bind_file_receipts(state["result"], state["payload"], state["config"], state["user_id"])
     try:
         from modstore_server.employee_path_guard import check_path_guard
 
