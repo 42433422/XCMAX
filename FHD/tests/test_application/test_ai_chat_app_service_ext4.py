@@ -201,11 +201,9 @@ def _model_plan(
     ]
     assert len(planning_calls) == expected_model_calls
     assert completion.call_count - len(planning_calls) == bool(review_node_ids)
-    from app.application.workflow.planner_llm_gateway import planner_max_tokens
-
     for attempt in planning_calls[1:]:
         assert attempt.kwargs["temperature"] == 0.0
-        assert attempt.kwargs["max_tokens"] == planner_max_tokens()
+        assert attempt.kwargs["max_tokens"] is None
     return plan
 
 

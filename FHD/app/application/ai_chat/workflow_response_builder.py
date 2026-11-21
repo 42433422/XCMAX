@@ -70,10 +70,7 @@ def _chunk_source(chunk: dict[str, Any]) -> str:
 
 class AIChatWorkflowResponseMixin:
     def _knowledge_answer(self, step, user_message: str) -> str:
-        """把知识库检索结果整理成对用户的答复，而不是只回一行「成功」。
-
-        优先用模型按 TODO 的「根据检索结果作答」综合证据；模型不可用时退回确定性摘录。
-        """
+        """Keep the RAG service's answer, grounding decision and executed scope."""
         output = getattr(step, "output", None)
         out = output if isinstance(output, dict) else {}
         chunks = [
@@ -81,14 +78,29 @@ class AIChatWorkflowResponseMixin:
             for chunk in (out.get("chunks") or [])
             if isinstance(chunk, dict) and str(chunk.get("text") or "").strip()
         ]
-        deterministic = str(out.get("answer") or "").strip()
-        sources = sorted({_chunk_source(chunk) for chunk in chunks} - {""})
-        question = str(user_message or out.get("query") or "").strip()
-        answer = self._synthesize_knowledge_answer(question, chunks) or deterministic
+        answer = str(out.get("answer") or "").strip()
+        no_answer = out.get("no_answer") is True or out.get("answer_grounded") is False
+        # DatasetRagAppService.answer already synthesized against the executed
+        # query with grounding/citations and its context budget. Re-synthesizing
+        # here loses those guards and turns a continuation such as "A" into a
+        # new, unrelated question. Only raw retrieval still needs synthesis.
+        if not answer and not no_answer:
+            params = getattr(step, "params", None) or {}
+            question = str(
+                out.get("query") or params.get("query") or params.get("question") or user_message
+            ).strip()
+            answer = self._synthesize_knowledge_answer(question, chunks)
         if not answer:
-            return ""
-        if sources:
+            answer = (
+                "知识库中没有找到与该问题足够相关的内容，请补充资料或具体查询条件。"
+                if no_answer or not chunks
+                else "知识库检索已返回资料，但未能生成可靠的明细答复。"
+            )
+        sources = sorted({_chunk_source(chunk) for chunk in chunks} - {""})
+        if sources and not no_answer:
             answer = f"{answer}\n\n来源：{'、'.join(sources[:3])}"
+        if out.get("context_truncated") is True:
+            answer += "\n\n本次回答使用的检索资料已截断，不能据此认定为全部明细或完整合计。"
         return answer
 
     def _history_answer(self, steps, question: str) -> str:
@@ -109,9 +121,7 @@ class AIChatWorkflowResponseMixin:
             excerpts.append(reference + "\n" + content)
         if not excerpts:
             return "未找到本会话的历史原文。"
-        answer = self._synthesize_knowledge_answer(
-            question, [{"text": text} for text in excerpts], preserve_evidence=True
-        )
+        answer = self._synthesize_knowledge_answer(question, [{"text": text} for text in excerpts])
         rendered = "\n\n".join(excerpts)
         if any(page.get("has_more") for page in pages) or any(
             not row.get("content_complete") for row in rows
@@ -119,22 +129,15 @@ class AIChatWorkflowResponseMixin:
             rendered += "\n\n本次为历史片段，还有内容可继续读取。"
         return (answer + "\n\n" if answer else "") + rendered
 
-    def _synthesize_knowledge_answer(
-        self, question: str, chunks: list[dict[str, Any]], *, preserve_evidence: bool = False
-    ) -> str:
+    def _synthesize_knowledge_answer(self, question: str, chunks: list[dict[str, Any]]) -> str:
         if not question or not chunks:
             return ""
         complete = getattr(getattr(self, "workflow_planner", None), "complete_messages", None)
         if not callable(complete):
             return ""
         evidence = "\n\n".join(
-            f"[{index}] "
-            + (
-                str(chunk.get("text") or "")
-                if preserve_evidence
-                else str(chunk.get("text") or "").strip()[:800]
-            )
-            for index, chunk in enumerate(chunks if preserve_evidence else chunks[:5], start=1)
+            f"[{index}] {str(chunk.get('text') or '')}"
+            for index, chunk in enumerate(chunks, start=1)
         )
         try:
             data = complete(
@@ -283,6 +286,7 @@ class AIChatWorkflowResponseMixin:
 
         from app.domain.task_lifecycle.results import (
             execution_result_envelopes,
+            execution_result_error,
             execution_result_outcome_unknown,
         )
 
@@ -305,9 +309,21 @@ class AIChatWorkflowResponseMixin:
             lines.append(f"Artifacts: {len(artifact_payloads)} 个")
         response_text = "\n".join(lines)
         steps = getattr(agent_run, "steps", []) or []
+        model_reply = False
         if success and len(steps) == 1:
             step = steps[0]
-            if (step.status, step.tool_id, step.action) == ("completed", "customers", "query"):
+            if (
+                (step.status, step.tool_id, step.action) == ("completed", "conversation", "reply")
+                and (plan.metadata or {}).get("response_mode") == "reply"
+                and not getattr(agent_run, "tool_calls", [])
+                and isinstance(step.output, dict)
+                and step.output.get("success") is True
+                and not execution_result_error(step.output)
+                and str(step.output.get("response") or "").strip()
+            ):
+                response_text = str(step.output["response"]).strip()
+                model_reply, tool_call_count = True, 0
+            elif (step.status, step.tool_id, step.action) == ("completed", "customers", "query"):
                 response_text = _customer_query_summary(step.output) or response_text
             elif (step.status, step.tool_id, step.action) == (
                 "completed",
@@ -334,13 +350,17 @@ class AIChatWorkflowResponseMixin:
             response_text = self._history_answer(steps, user_message)
         payload: dict[str, Any] = {
             "success": success,
-            "message": "处理完成" if success else "处理失败",
+            "message": "回复完成" if model_reply else "处理完成" if success else "处理失败",
             "response": response_text,
             "run_id": agent_run.run_id,
             "agent_run_id": agent_run.run_id,
             "data": {
                 "text": response_text,
-                "action": "workflow_done" if success else "workflow_failed",
+                "action": "model_reply"
+                if model_reply
+                else "workflow_done"
+                if success
+                else "workflow_failed",
                 "run_id": agent_run.run_id,
                 "agent_run_id": agent_run.run_id,
                 "data": {
@@ -393,6 +413,7 @@ class AIChatWorkflowResponseMixin:
                             "duration_ms": step.duration_ms,
                         }
                         for step in getattr(agent_run, "steps", []) or []
+                        if not model_reply
                     ],
                 },
             },

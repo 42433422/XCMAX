@@ -35,6 +35,32 @@ class Connection:
 
 
 @dataclass(frozen=True)
+class PreparedChatRoute:
+    """One authenticated operation selection shared by budgeting and transport."""
+
+    connection: Connection = field(repr=False)
+    route: Route
+    snapshot: Payload = field(repr=False)
+    native_vision: bool = False
+
+    def assert_valid(self, connection: Connection, provider=None, model=None) -> None:
+        from app.infrastructure.modstore_transport import MarketModelError
+
+        if (
+            self.connection != connection
+            or len(self.route) != 2
+            or not all(isinstance(part, str) and part.strip() for part in self.route)
+            or (provider is not None and provider.lower() != self.route[0])
+            or (model is not None and model not in (self.route[1], "/".join(self.route)))
+            or (
+                self.snapshot
+                and (self.snapshot.get("provider"), self.snapshot.get("model")) != self.route
+            )
+        ):
+            raise MarketModelError({"status": 409})
+
+
+@dataclass(frozen=True)
 class ChatInput:
     messages: Messages
     temperature: float = 0.7

@@ -27,6 +27,8 @@ def isolated(tmp_path, monkeypatch):
     monkeypatch.setenv("MODSTORE_EMPLOYEE_PLATFORM_FALLBACK_ENABLED", "0")
     monkeypatch.delenv("MODSTORE_EMPLOYEE_BENCH_PROVIDER", raising=False)
     monkeypatch.delenv("MODSTORE_EMPLOYEE_BENCH_MODEL", raising=False)
+    monkeypatch.delenv("LITELLM_MASTER_KEY", raising=False)
+    monkeypatch.delenv("XCMAX_LITELLM_MASTER_KEY", raising=False)
     for name in list(os.environ):
         if name.endswith(("_API_KEY", "_BASE_URL")) or name in {
             "XIAOMI_MIMO_API_KEY",

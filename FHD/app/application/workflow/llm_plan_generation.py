@@ -149,7 +149,7 @@ class PlannerCompletion(Protocol):
         messages: list[dict[str, str]],
         http_client_factory: Callable[[], httpx.Client] | None = None,
         temperature: float = 0.1,
-        max_tokens: int = 1200,
+        max_tokens: int | None = None,
         **kwargs: Any,
     ) -> dict[str, Any] | None: ...
 
@@ -700,7 +700,7 @@ class LlmPlanGeneration:
                 prompt["coverage_feedback"] = _model_context_value(coverage_feedback)
                 prompt["task"] = (
                     "按目标核对反馈重新规划。能补齐时生成完整计划；范围仍无法确定时只向用户提问。"
-                    "若授权工具只能完成部分范围，用 mode=reply 说明可处理的范围，询问是否继续，勿生成部分写入计划。"
+                    "若授权工具只能完成部分范围，只生成一个 clarify.ask 说明可处理的范围并询问是否继续，勿生成部分写入计划。"
                 )
             messages = [
                 {
