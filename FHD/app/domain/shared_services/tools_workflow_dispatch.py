@@ -90,22 +90,10 @@ def _run_awaitable(value):
 
 
 def _image_adapter(runtime_context):
-    from app.db import HostSessionLocal
-    from app.db.models.user import Session
+    from app.application.market_llm.authentication import authenticated_agent_session_id
     from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
-    from app.infrastructure.auth.agent_mod_scope import AgentModAuthorizationError, _bound_actor
-    from app.utils.time import utc_now_naive
 
-    actor = _bound_actor(runtime_context)
-    if runtime_context.get("local_user_id") not in (None, actor.id, str(actor.id)):
-        raise AgentModAuthorizationError("当前会话账号不匹配")
-    # Runtime session_id identifies a chat, not an authenticated login. Resolve
-    # credentials only from the live, sealed actor's actual login session.
-    with HostSessionLocal() as db:
-        row = db.get(Session, runtime_context["_actor_authorization"]["session_row_id"])
-        if row is None or row.user_id != actor.id or row.expires_at <= utc_now_naive():
-            raise AgentModAuthorizationError("登录会话已失效")
-        return ModstorePlatformAdapter.from_session(row.session_id)
+    return ModstorePlatformAdapter.from_session(authenticated_agent_session_id(runtime_context))
 
 
 async def _generate_image_and_close(adapter, body):
@@ -130,7 +118,6 @@ def _registered_router_image_generate(action, params, runtime_context, profile, 
     from fastapi import HTTPException
 
     from app.application.market_llm.multimodal import safe_image_result_urls
-    from app.infrastructure.auth.agent_mod_scope import AgentModAuthorizationError
     from app.utils.operational_errors import RECOVERABLE_ERRORS
 
     if action != "generate":
@@ -153,7 +140,7 @@ def _registered_router_image_generate(action, params, runtime_context, profile, 
     receipt = {"client_request_id": request_id}
     try:
         adapter = _image_adapter(runtime_context)
-    except AgentModAuthorizationError:
+    except PermissionError:
         return {
             "success": False,
             "message": "生图需要当前账号的有效登录授权",

@@ -175,13 +175,18 @@ def begin_observation(assignment):
 
 
 def record_observation(assignment, *, result, duration_ms, session=None):
-    """Call after a real product attempt, including failures; persist no prompts or user text."""
+    """Queue an actual attempt; an optional business session owns the atomic commit.
+
+    Existing callers keep an independently committed observation. Transactional
+    product writes pass their session so a successful result and its observation
+    cannot be separated by a second commit. No prompts or user text are stored.
+    """
     if assignment is None:
         return
     from modstore_server.eventing.db_outbox import enqueue
     from modstore_server.llm_failure_classifier import classify_failure_kind
 
-    with nullcontext(session) if session is not None else get_session_factory()() as db:
+    with get_session_factory()() if session is None else nullcontext(session) as db:
         _enqueue_exposure(db, assignment)
         enqueue(
             db,

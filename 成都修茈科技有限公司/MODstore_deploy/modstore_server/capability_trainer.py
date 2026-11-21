@@ -182,7 +182,6 @@ def append_cases(
                     continue
                 row = {
                     "case_id": case_id,
-                    "employee_id": cluster["employee_id"],
                     "failure_reason": cluster["failure_reason"],
                     "task": sample.get("task") or cluster["failure_reason"],
                     "source_run": sample.get("run_id") or "",
@@ -270,7 +269,10 @@ def build_config(
         "files": {
             name: {"name": path.name, "sha256": _file_hash(path)} for name, path in files.items()
         },
-        "prompt_sha256": {"control": _hash(baseline_prompt), "candidate": _hash(candidate_prompt)},
+        "prompt_sha256": {
+            "control": _hash(baseline_prompt),
+            "candidate": _hash(candidate_prompt),
+        },
         "provider_id": provider["id"],
         "case_ids": [test["vars"]["case_id"] for test in tests],
         "case_sha256": [_hash(case["task"]) for case in cases],
@@ -279,7 +281,10 @@ def build_config(
     }
     bundle_path = out_dir / "training-bundle.json"
     bundle_path.write_text(json.dumps(bundle, ensure_ascii=False, sort_keys=True), encoding="utf-8")
-    return {**{name: str(path) for name, path in files.items()}, "bundle": str(bundle_path)}
+    return {
+        **{name: str(path) for name, path in files.items()},
+        "bundle": str(bundle_path),
+    }
 
 
 def _hash(text):
@@ -298,7 +303,10 @@ def decide(result: Dict[str, Any], *, bundle=None) -> Dict[str, Any]:
         "evaluation_scope": "failure_regression",
         "holdout_verified": False,
     }
-    arms: Dict[int, Dict[tuple[int, str, str], tuple[bool, Dict[str, Any]]]] = {0: {}, 1: {}}
+    arms: Dict[int, Dict[tuple[int, str, str], tuple[bool, Dict[str, Any]]]] = {
+        0: {},
+        1: {},
+    }
     for row in result.get("results", {}).get("results", []) or []:
         index, test_index = row.get("promptIdx"), row.get("testIdx")
         provider = row.get("provider") or {}
@@ -470,7 +478,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
 
-    mine_p = sub.add_parser("mine", help="挖掘失败簇")
+    mine_p = sub.add_parser("mine", help="统计失败簇，不输出原始样本")
     mine_p.add_argument("--ledger", default="")
     mine_p.add_argument("--days", type=int, default=DEFAULT_DAYS)
     mine_p.add_argument("--min-count", type=int, default=DEFAULT_MIN_COUNT)
@@ -497,7 +505,15 @@ def main(argv: Optional[List[str]] = None) -> int:
         ledger = Path(args.ledger) if args.ledger else _default_ledger()
         clusters = mine(ledger, days=args.days, min_count=args.min_count)
         print(
-            json.dumps({"ledger": str(ledger), "clusters": clusters}, ensure_ascii=False, indent=2)
+            json.dumps(
+                {
+                    "cluster_count": len(clusters),
+                    "failure_count": sum(cluster["count"] for cluster in clusters),
+                    "sample_count": sum(len(cluster["samples"]) for cluster in clusters),
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
         )
         return 0
     if args.command == "prepare":

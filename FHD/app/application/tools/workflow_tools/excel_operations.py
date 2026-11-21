@@ -123,8 +123,15 @@ class WorkbookOperations:
                 "workspace_root": root,
                 "resolved_path": str(path),
             }
+        if header is None:
+            from app.application.tools.workflow_tools.excel_analysis import auto_header_row
+
+            header = auto_header_row(path, str(sheet).strip() if sheet else None)
         df = self.io.read(path, sheet_name=sheet, header_row_1based=header)
-        return self.schema_factory().understand_dataframe(df, file_path=file_path)
+        return {
+            **self.schema_factory().understand_dataframe(df, file_path=file_path),
+            "header_row": header,
+        }
 
     def vector_index(self, args: Payload, workspace_root: str | None) -> Payload:
         file_path = str(args.get("file_path") or "").strip()

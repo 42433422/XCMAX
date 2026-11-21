@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from logging import Logger
-from typing import Protocol, cast
+from typing import Any, Protocol, cast
 
 from fastapi import Request
 
@@ -30,6 +30,27 @@ class SessionPorts:
 class Credential:
     token: str
     source: str
+
+
+def authenticated_agent_session_id(context: dict[str, Any]) -> str:
+    """Resolve a live sealed actor's login session or raise the public permission error."""
+    from app.db import HostSessionLocal
+    from app.db.models.user import Session
+    from app.infrastructure.auth.agent_mod_scope import AgentModAuthorizationError, _bound_actor
+    from app.utils.time import utc_now_naive
+
+    try:
+        actor = _bound_actor(context)
+    except AgentModAuthorizationError as exc:
+        raise PermissionError(str(exc)) from exc
+    if context.get("local_user_id") not in (None, actor.id, str(actor.id)):
+        raise PermissionError("当前会话账号不匹配")
+    # A runtime session_id identifies a chat, not an authenticated login.
+    with HostSessionLocal() as db:
+        row = db.get(Session, context["_actor_authorization"]["session_row_id"])
+        if row is None or row.user_id != actor.id or row.expires_at <= utc_now_naive():
+            raise PermissionError("登录会话已失效")
+        return cast(str, row.session_id)
 
 
 def load_session_ports() -> SessionPorts:

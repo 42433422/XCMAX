@@ -168,9 +168,23 @@ def _writes(gateway):
     return [call for call in gateway.commands if call[:3] == ["gh", "workflow", "run"]]
 
 
-def test_staging_dispatch_binds_exact_release_and_artifact(dispatch_environment):
+def test_staging_dispatch_binds_exact_release_and_artifact(dispatch_environment, monkeypatch):
     gateway = GitHubFixture([])
-    _submit(gateway, environment="staging")
+    run = gateway._run
+
+    def submit_after_intent(args):
+        if args[:3] == ["gh", "workflow", "run"]:
+            intent = store._read_ledger(limit=0)[-1]
+            assert intent["event"] == "deploy_dispatch_intent"
+            assert intent["merge_sha"] == MERGE_SHA
+            assert intent["inputs"] == {
+                "release_sha": MERGE_SHA, "release_artifact_sha256": ARTIFACT,
+            }
+        return run(args)
+
+    monkeypatch.setattr(gateway, "_run", submit_after_intent)
+    receipt = _submit(gateway, environment="staging")
+    assert receipt.head_sha == MERGE_SHA and receipt.environment == "staging"
     command = _writes(gateway)[0]
     assert f"release_sha={MERGE_SHA}" in command
     assert f"release_artifact_sha256={ARTIFACT}" in command
@@ -180,6 +194,7 @@ def test_pending_delivery_recovers_after_history_eviction_and_stays_terminal(mon
     store._append_ledger(
         {
             "event": "merge_requested",
+            "ok": True,
             "phase": "merge",
             "status": "pending",
             "run_id": "evicted-original",
@@ -224,6 +239,8 @@ def test_evicted_failed_merge_is_not_reopened_after_remediation_resolution():
     store._append_ledger(
         {
             "event": "merge_requested",
+            "ok": True,
+            "branch": "repair/original",
             "status": "pending",
             "run_id": "evicted-failure",
             "para_task_id": "failed-task",
@@ -296,6 +313,8 @@ def test_memory_terminal_before_interrupted_ledger_append_is_recovered():
     store._append_ledger(
         {
             "event": "merge_requested",
+            "ok": True,
+            "branch": "repair/original",
             "status": "pending",
             "run_id": "original-loop",
             "para_task_id": "original-task",
@@ -307,6 +326,7 @@ def test_memory_terminal_before_interrupted_ledger_append_is_recovered():
                 {
                     "run_id": "original-loop",
                     "para_task_id": "original-task",
+                    "branch": "repair/original",
                     "status": "completed_merge_failed",
                     "merge_reconciliation": {"status": "merge_conflict"},
                 }

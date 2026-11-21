@@ -25,7 +25,9 @@ from modstore_server.telemetry_backlog_metrics import (
 from modstore_server.telemetry_backlog_quality import (
     _scan_coverage_ratchet_gap as _scan_coverage_ratchet_gap,
 )
-from modstore_server.telemetry_backlog_quality import _scan_workflow_drift as _scan_workflow_drift
+from modstore_server.telemetry_backlog_quality import (
+    _scan_workflow_drift as _scan_workflow_drift,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -153,9 +155,9 @@ def run_telemetry_scan(
             )
             results.append(r)
         except RECOVERABLE_ERRORS as exc:
-            logger.warning("telemetry signal ingest failed: %s", exc)
-            failures.append({"type": signal.get("type"), "error": str(exc)})
-            results.append({"ok": False, "error": str(exc)})
+            logger.warning("telemetry signal ingest failed: %s", type(exc).__name__)
+            failures.append({"type": signal.get("type"), "error": "telemetry_signal_ingest_failed"})
+            results.append({"ok": False, "error": "telemetry_signal_ingest_failed"})
 
     market_payloads = [s["payload"] for s in signals if s.get("type") == "market_signal"]
     release_plan = {}
@@ -163,8 +165,8 @@ def run_telemetry_scan(
         try:
             release_plan = plan_release_candidate_from_market(market_payloads)
         except RECOVERABLE_ERRORS as exc:
-            logger.warning("release_planning from market failed: %s", exc)
-            failures.append({"type": "release_planning", "error": str(exc)})
+            logger.warning("release_planning from market failed: %s", type(exc).__name__)
+            failures.append({"type": "release_planning", "error": "release_planning_failed"})
 
     # 部分信号入库失败时必须如实返回 ok=False，否则调度器会记为成功，
     # 探针坏掉也不会被任何人发现。

@@ -130,7 +130,9 @@ def test_tool_uses_sealed_login_owner_and_preserves_billing_receipt(image_runtim
     assert result["client_request_id"] == remote.requests[0]["body"]["client_request_id"]
 
 
-@pytest.mark.parametrize("mutation", ["missing", "actor", "tenant", "expired", "inactive"])
+@pytest.mark.parametrize(
+    "mutation", ["missing", "actor", "local_user", "tenant", "expired", "inactive"]
+)
 def test_tool_denies_unbound_or_revoked_identity_before_any_model_request(image_runtime, mutation):
     factory, context, remote = image_runtime
     if mutation == "missing":
@@ -138,6 +140,8 @@ def test_tool_denies_unbound_or_revoked_identity_before_any_model_request(image_
         context["session_id"] = ""
     elif mutation == "actor":
         context["actor_id"] = "2"
+    elif mutation == "local_user":
+        context["local_user_id"] = 2
     elif mutation == "tenant":
         context["tenant_id"] = "8"
     else:
@@ -148,6 +152,8 @@ def test_tool_denies_unbound_or_revoked_identity_before_any_model_request(image_
                 )
             else:
                 db.get(User, 1).is_active = False
+    with pytest.raises(PermissionError):
+        authentication.authenticated_agent_session_id(context)
     assert execute(context)["success"] is False
     assert remote.requests == []
 

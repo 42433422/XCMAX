@@ -45,8 +45,6 @@ _OPTIONAL_DYNAMIC_TARGETS = frozenset(
     {
         # 测试数据库管理器由测试环境按需注入（app/db/__init__.py 内 try/except）。
         "app.db.test_db_manager",
-        # 遗留自然语言 pandas 转换器（已退役），调用点已按错误路径兜底。
-        "app.legacy.excel_text_to_pandas",
     }
 )
 

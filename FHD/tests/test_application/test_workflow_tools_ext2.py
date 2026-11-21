@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -333,11 +333,9 @@ class TestRunNaturalLanguagePandasExtended:
         from app.application.tools.workflow import run_natural_language_pandas
 
         df = pd.DataFrame({"name": ["A"], "value": [1]})
-        # ExcelTextToPandas doesn't exist as a module, so the import will fail
-        # and the function will catch ImportError (in RECOVERABLE_ERRORS)
-        result = run_natural_language_pandas(df, "show all")
+        with patch("app.application.tools.workflow.adapters.translate_pandas", return_value=None):
+            result = run_natural_language_pandas(df, "show all")
         assert result["result_kind"] == "dataframe"
-        # Since import fails, generated_code will be empty and error will be set
         assert result["generated_code"] == ""
 
     def test_exception_in_translation(self):
@@ -346,10 +344,23 @@ class TestRunNaturalLanguagePandasExtended:
         from app.application.tools.workflow import run_natural_language_pandas
 
         df = pd.DataFrame({"name": ["A"], "value": [1]})
-        # The import of ExcelTextToPandas will fail, causing an error
-        result = run_natural_language_pandas(df, "show all")
-        # The function catches RECOVERABLE_ERRORS and sets error_msg
-        assert "error" in result or result["generated_code"] == ""
+        with patch(
+            "app.application.tools.workflow.adapters.translate_pandas",
+            side_effect=OSError("llm down"),
+        ):
+            result = run_natural_language_pandas(df, "show all")
+        assert result["error"] == "excel_query_failed"
+
+    def test_translation_unavailable(self):
+        import pandas as pd
+
+        from app.application.tools.workflow import run_natural_language_pandas
+
+        df = pd.DataFrame({"name": ["A"], "value": [1]})
+        with patch("app.application.tools.workflow.adapters.translate_pandas", return_value=None):
+            result = run_natural_language_pandas(df, "show all")
+        assert result["error"] == "query_translation_failed"
+        assert result["generated_code"] == ""
 
     def test_successful_translation(self):
         import pandas as pd
@@ -357,16 +368,9 @@ class TestRunNaturalLanguagePandasExtended:
         from app.application.tools.workflow import run_natural_language_pandas
 
         df = pd.DataFrame({"name": ["A", "B"], "value": [1, 2]})
-        # Mock the ExcelTextToPandas import to simulate successful translation
-        mock_converter = Mock()
-        mock_converter.translate.return_value = "result = df[df['value'] > 1]"
-        with patch.dict(
-            "sys.modules",
-            {
-                "app.legacy.excel_text_to_pandas": Mock(
-                    ExcelTextToPandas=Mock(return_value=mock_converter)
-                )
-            },
+        with patch(
+            "app.application.tools.workflow.adapters.translate_pandas",
+            return_value='{"query_expression": "c1 > 1"}',
         ):
             result = run_natural_language_pandas(df, "value greater than 1")
         assert result["result_kind"] == "dataframe"

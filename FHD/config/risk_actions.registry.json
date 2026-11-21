@@ -1955,6 +1955,7 @@
         "read": {
           "risk": "low",
           "idempotent": true,
+          "read_only": true,
           "required_params": [
             "file_path"
           ],
@@ -1963,6 +1964,7 @@
         "structure": {
           "risk": "low",
           "idempotent": true,
+          "read_only": true,
           "required_params": [
             "file_path"
           ],
@@ -1971,6 +1973,7 @@
         "query": {
           "risk": "low",
           "idempotent": true,
+          "read_only": true,
           "required_params": [
             "file_path",
             "question"
@@ -1980,6 +1983,7 @@
         "statistics": {
           "risk": "low",
           "idempotent": true,
+          "read_only": true,
           "required_params": [
             "file_path"
           ],

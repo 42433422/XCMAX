@@ -277,8 +277,9 @@ export function useModStoreCatalog(state: ModStoreState): ModStoreCatalog {
   const searchMods = (): Promise<void> => loadMods(true)
 
   const switchTab = async (tab: string): Promise<void> => {
-    currentTab.value = tab
-    filterInstalled.value = tab === 'installed'
+    // Resolve caller input to a fixed navigation ID before loading or caching.
+    currentTab.value = storeNavTabs.find(entry => entry.id === tab)?.id ?? 'host_foundation'
+    filterInstalled.value = currentTab.value === 'installed'
     allMods.value = []
     filteredMods.value = []
     await loadMods(false)

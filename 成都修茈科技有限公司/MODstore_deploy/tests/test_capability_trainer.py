@@ -42,6 +42,28 @@ def test_append_cases_is_idempotent(tmp_path):
     assert second == []
     rows = (tmp_path / "daily-orchestrator.jsonl").read_text(encoding="utf-8").splitlines()
     assert len(rows) == 1
+    persisted = json.loads(rows[0])
+    assert "employee_id" not in persisted
+    assert persisted["task"] == "任务正文"
+    assert persisted["case_id"] == first[0]["case_id"]
+
+
+def test_mine_cli_reports_counts_without_private_samples(tmp_path, monkeypatch, capsys):
+    monkeypatch.delenv("MODSTORE_RETORT_GROWTHBOOK_URL", raising=False)
+    ledger = tmp_path / "private-ledger.jsonl"
+    record = _rec(employee="private-pack-sentinel", reason="private-reason-sentinel")
+    record["report_excerpt"] = "private-task-sentinel"
+    ledger.write_text("\n".join(json.dumps(record) for _ in range(2)), encoding="utf-8")
+    assert trainer.main(["mine", "--ledger", str(ledger)]) == 0
+    output = capsys.readouterr().out
+    assert json.loads(output) == {
+        "cluster_count": 1,
+        "failure_count": 2,
+        "sample_count": 2,
+    }
+    assert "private-" not in output
+    assert str(ledger) not in output
+    assert trainer.mine(ledger)[0]["samples"][0]["task"] == "private-task-sentinel"
 
 
 def test_select_pack_prefers_latest_version(tmp_path):
@@ -90,11 +112,14 @@ def paired_result():
 
 
 def test_decide_requires_paired_provider_case_and_frozen_bundle():
-    result, bundle = paired_result(), {
-        "provider_id": "model",
-        "case_ids": ["case"],
-        "case_sha256": [trainer._hash("actual case")],
-    }
+    result, bundle = (
+        paired_result(),
+        {
+            "provider_id": "model",
+            "case_ids": ["case"],
+            "case_sha256": [trainer._hash("actual case")],
+        },
+    )
     assert trainer.decide(result)["verdict"] == "keep_baseline"
     assert trainer.decide(result, bundle=bundle)["verdict"] == "candidate_for_approval"
     unavailable = deepcopy(result)
@@ -187,7 +212,11 @@ def test_case_binding_preserves_exact_json_decoded_text_including_newlines():
     task = "真实案例\r\n第二行\n"
     for row in result["results"]["results"]:
         row["vars"]["task"] = task
-    bundle = {"provider_id": "model", "case_ids": ["case"], "case_sha256": [trainer._hash(task)]}
+    bundle = {
+        "provider_id": "model",
+        "case_ids": ["case"],
+        "case_sha256": [trainer._hash(task)],
+    }
     transported = json.loads(json.dumps(result, ensure_ascii=True))
     assert trainer.decide(transported, bundle=bundle)["verdict"] == "candidate_for_approval"
     for row in transported["results"]["results"]:
@@ -204,7 +233,10 @@ def test_training_cost_bounds_and_unconfigured_model_fail_closed(tmp_path, monke
     monkeypatch.delenv("XCAGI_LLM_MODEL", raising=False)
     with pytest.raises(ValueError, match="not_configured"):
         trainer.build_config(
-            out_dir=tmp_path, baseline_prompt="b", candidate_prompt="c", cases=[{"task": "case"}]
+            out_dir=tmp_path,
+            baseline_prompt="b",
+            candidate_prompt="c",
+            cases=[{"task": "case"}],
         )
     monkeypatch.setenv("XCAGI_LLM_MODEL", "model")
     monkeypatch.setenv("XCAGI_LLM_BASE_URL", "https://platform.test/v1")

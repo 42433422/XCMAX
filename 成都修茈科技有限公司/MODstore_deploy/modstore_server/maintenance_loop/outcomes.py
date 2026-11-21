@@ -82,16 +82,26 @@ def _reconcile_requested_merge_feedback(
         return {"changed": False, "merged": 0, "remediation_added": 0}
     # The recent list is a bounded UI projection. Durable terminal records must
     # fence stale projections after a crash, and remain available after eviction.
-    pending_runs = {
-        str(run.get("run_id") or run.get("para_task_id")): run
-        for run in store.merge_feedback_runs()
-    }
-    changed = False
+    cursor = memory.get("delivery_recovery_cursor") or {}
+    try:
+        recovered, next_cursor = store._pending_delivery_page(
+            cursor, recent_runs=recent_runs, include_terminal=True
+        )
+    except RECOVERABLE_ERRORS:
+        config.logger.exception("failed to page durable pending deliveries")
+        recovered, next_cursor = [], cursor
+    changed = cursor != next_cursor
+    if changed:
+        memory["delivery_recovery_cursor"] = next_cursor
+    pending_runs = {str(run.get("run_id") or run.get("para_task_id")): run for run in recovered}
     for run in recent_runs if isinstance(recent_runs, list) else []:
         if isinstance(run, dict):
             key = str(run.get("run_id") or run.get("para_task_id"))
             saved = pending_runs.get(key)
-            if saved and saved.get("status") in {"completed_merged", "completed_merge_failed"}:
+            if saved and saved.get("status") in {
+                "completed_merged",
+                "completed_merge_failed",
+            }:
                 changed = changed or any(
                     run.get(k) != saved.get(k)
                     for k in ("status", "merge_reconciliation", "deployment_receipt")
@@ -106,7 +116,8 @@ def _reconcile_requested_merge_feedback(
                 store._append_ledger({**run, "event": "merge_feedback_reconciled"})
             elif saved:
                 run.update(saved)
-            pending_runs[key] = run
+            if saved:
+                pending_runs[key] = run
     if not isinstance(open_items, list):
         open_items = []
         memory["open_items"] = open_items
@@ -134,6 +145,14 @@ def _reconcile_requested_merge_feedback(
             before = dict(run)
             merge_sha = str(task.get("merge_commit_sha") or "").strip()
             existing_receipt = run.get("merge_reconciliation")
+            bound_sha = run.get("delivery_merge_sha") or (
+                existing_receipt.get("merge_commit_sha")
+                if isinstance(existing_receipt, dict)
+                else ""
+            )
+            if bound_sha and bound_sha != merge_sha:
+                config.logger.error("recovered merge SHA changed run_id=%s", run.get("run_id"))
+                continue
             receipt = {
                 "merge_commit_sha": merge_sha,
                 "reconciled_at": config._iso(config._utc_now()),
@@ -182,7 +201,18 @@ def _reconcile_requested_merge_feedback(
                 changed = True
             if run != before:
                 store._write_loop_memory(memory)
-                store._append_ledger({**run, "event": "merge_feedback_reconciled"})
+                if run["status"] == "completed_merged":
+                    deployment._append_deploy_receipt_event(
+                        {
+                            **run,
+                            "event": "delivery_reconciled",
+                            "phase": "deployment",
+                            "merge_sha": merge_sha,
+                            "ok": True,
+                        }
+                    )
+                else:
+                    store._append_ledger({**run, "event": "merge_feedback_reconciled"})
             merged += 1
             continue
         terminal_failure_statuses = {

@@ -353,7 +353,9 @@ class GhActionsDeploymentGateway:
             ):
                 raise DeploymentReceiptError("deploy_ref_not_at_merge_sha")
         inputs = (
-            self._production_inputs(merge_sha, action_id) if environment == "production" else {}
+            self._production_inputs(merge_sha, action_id)
+            if environment == "production"
+            else {"release_sha": merge_sha}
         )
         # apply-latest must already refer to the expected artifact before it is
         # allowed to mutate the server. Post-deploy readback remains mandatory.
