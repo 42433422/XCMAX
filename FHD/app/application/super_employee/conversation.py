@@ -12,6 +12,7 @@ from typing import Any
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
+from .cli import cli_exception, require_cli_success
 from .output import CliOutput
 from .profiles import SuperEmployeeToolProfile
 from .protocols import ConversationPorts
@@ -124,7 +125,7 @@ class ConversationSessions:
         idle_timeout = self._ports.idle_timeout()
         hard_cap = self._ports.hard_cap()
 
-        def _run(prompt: str, resume: str | None) -> tuple[int, str, str, str]:
+        def _run(prompt: str, resume: str | None) -> tuple[int | None, str, str, str]:
             cmd = self.conversation_cmd(cli_path, prompt, resume)
             return self._ports.run_idle(cmd, cwd, idle_timeout, hard_cap)
 
@@ -133,29 +134,18 @@ class ConversationSessions:
                 self.conversation_prompt(text, cwd, bool(session_id)), session_id or None
             )
         except (OSError, subprocess.SubprocessError) as exc:
-            return f"{self._p.display_tool} CLI 调用失败：{str(exc)[:300]}"
+            raw = getattr(exc, "stdout", "") or ""
+            stdout = raw.decode("utf-8", errors="replace") if isinstance(raw, bytes) else raw
+            raise cli_exception(
+                self._p.display_tool,
+                exc,
+                partial_text=self._output.parse_claude_stream_json(stdout),
+                started=True,
+            ) from exc
         body, new_sid = self._output.parse_stream_json_full(stdout)
-        if session_id and (not body) and (not killed):
-            low = (stderr + stdout).lower()
-            if "no conversation" in low or "session" in low or returncode != 0:
-                rec["session_id"] = ""
-                self._ports.set_session(key, rec)
-                try:
-                    returncode, stdout, stderr, killed = _run(
-                        self.conversation_prompt(text, cwd, False), None
-                    )
-                    body, new_sid = self._output.parse_stream_json_full(stdout)
-                except (OSError, subprocess.SubprocessError):
-                    pass
-        if killed.startswith("idle"):
-            return f"{self._p.display_tool} 静默 {idle_timeout:g} 秒判定卡住已结束，请重试。"
-        if killed.startswith("hardcap"):
-            return f"{self._p.display_tool} 运行超过上限 {hard_cap:g} 秒已停止，请把任务拆小。"
+        # A failed resume may already have effects. Never replay it as a fresh task.
+        require_cli_success(self._p.display_tool, returncode, body, stderr, killed)
         if new_sid and new_sid != session_id:
             rec["session_id"] = new_sid
             self._ports.set_session(key, rec)
-        if body:
-            return body
-        if returncode != 0:
-            return f"{self._p.display_tool} 本次返回失败（code {returncode}）：{(stderr.strip() or stdout.strip())[:400]}"
-        return ""
+        return body

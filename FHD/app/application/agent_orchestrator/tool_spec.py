@@ -299,10 +299,14 @@ def build_tool_specs_v2() -> dict[tuple[str, str], ToolActionSpecV2]:
             required = action_meta.get("required_params")
             required_params = [str(x) for x in required] if isinstance(required, list) else []
             risk = _risk_value(action_meta.get("risk"))
-            input_schema = _SPECIAL_INPUT_SCHEMAS.get(
-                (str(tool_id), normalized_action),
-                _schema_from_required(required_params),
-            )
+            input_schema = _SPECIAL_INPUT_SCHEMAS.get((str(tool_id), normalized_action))
+            if input_schema is None:
+                configured_schema = action_meta.get("input_schema")
+                input_schema = (
+                    configured_schema
+                    if isinstance(configured_schema, dict)
+                    else _schema_from_required(required_params)
+                )
             output_schema = _SPECIAL_OUTPUT_SCHEMAS.get(
                 (str(tool_id), normalized_action),
                 _DEFAULT_OUTPUT_SCHEMA,
@@ -314,7 +318,7 @@ def build_tool_specs_v2() -> dict[tuple[str, str], ToolActionSpecV2]:
             spec = ToolActionSpecV2(
                 tool_id=str(tool_id),
                 action=normalized_action,
-                description=tool_description,
+                description=str(action_meta.get("description") or tool_description),
                 input_schema=deepcopy(input_schema),
                 output_schema=deepcopy(output_schema),
                 risk=risk,
