@@ -1143,3 +1143,43 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
     ),
     ("sales", "create_order"): _SALES_QUOTE_INPUT,
 }
+
+# Computer Use stays in the existing desktop tool catalog; adapters validate the
+# discriminated action contracts before issuing any input.
+_COMPUTER_REQUEST = {"type": "string", "minLength": 1, "maxLength": 128}
+for _action in ("computer_status", "computer_observe"):
+    _SPECIAL_INPUT_SCHEMAS[("desktop_automation", _action)] = {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": False,
+    }
+for _action in ("computer_result", "computer_stop"):
+    _SPECIAL_INPUT_SCHEMAS[("desktop_automation", _action)] = {
+        **_object_schema(["request_id"], {"request_id": _COMPUTER_REQUEST}),
+        "additionalProperties": False,
+    }
+_SPECIAL_INPUT_SCHEMAS[("desktop_automation", "computer_execute")] = {
+    **_object_schema(
+        ["request_id", "target", "steps"],
+        {
+            "request_id": _COMPUTER_REQUEST,
+            "target": {"type": "string", "enum": ["browser", "desktop"]},
+            "snapshot_id": {
+                "type": "string",
+                "description": "desktop 必须使用 computer_observe 最新返回的 snapshot_id，120秒内且仅用一次",
+            },
+            "steps": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 20,
+                "items": {"type": "object", "required": ["action"]},
+                "description": 'browser: navigate(url), click(target), fill(target,text), press(target,key), select(target,value), check(target,checked); target 如 {"role":"button","name":"保存"}、{"label":"姓名"}、{"test_id":"save"} 或 {"selector":"#save"}。desktop: click(x,y), move(x,y), drag(x,y,to_x,to_y), type(text), press(keys), scroll(x,y,clicks)；坐标使用截图返回的 input_width/input_height。',
+            },
+            "verification": {
+                "type": "object",
+                "description": 'browser 后置回读 {"kind":"text|value|url|visible|checked","target":{...},"expected":...}，url 不带 target，visible/checked 的 expected 为布尔值。desktop 为 {"pixels":[{"x":0,"y":0,"rgb":[0,0,0],"tolerance":0}]}，像素为截图物理坐标，仅证明视觉条件。未提供时任务保持未核验。',
+            },
+        },
+    ),
+    "additionalProperties": False,
+}

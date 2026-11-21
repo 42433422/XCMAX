@@ -1711,7 +1711,7 @@
       }
     },
     "desktop_automation": {
-      "description": "已登记桌面应用：打开应用或查询运行状态；不执行任意命令或消息发送",
+      "description": "桌面应用与 Computer Use：computer_status 查询组件；computer_observe 获取本机主屏截图和 snapshot_id；computer_execute 批准后按 target=desktop/browser 执行有限 steps 并验证 verification。桌面坐标来自新截图；浏览器仅服务端允许来源且每次独立会话。computer_result 读 request_id 原回执，computer_stop 请求停止；不自动重试输入或把点击成功当业务完成。",
       "availability": "shared",
       "actions": {
         "list": {
@@ -1733,6 +1733,41 @@
           "required_params": [
             "app_id"
           ]
+        },
+        "computer_status": {
+          "risk": "low",
+          "idempotent": true,
+          "read_only": true,
+          "required_params": []
+        },
+        "computer_observe": {
+          "risk": "low",
+          "idempotent": false,
+          "read_only": true,
+          "required_params": [],
+          "timeout_seconds": 30,
+          "retry": {"max_attempts": 1}
+        },
+        "computer_execute": {
+          "risk": "high",
+          "idempotent": false,
+          "approval": "always",
+          "requires_write_approval": true,
+          "required_params": ["request_id", "target", "steps"],
+          "timeout_seconds": 90,
+          "retry": {"max_attempts": 1}
+        },
+        "computer_stop": {
+          "risk": "low",
+          "idempotent": false,
+          "required_params": ["request_id"],
+          "retry": {"max_attempts": 1}
+        },
+        "computer_result": {
+          "risk": "low",
+          "idempotent": true,
+          "read_only": true,
+          "required_params": ["request_id"]
         }
       }
     },

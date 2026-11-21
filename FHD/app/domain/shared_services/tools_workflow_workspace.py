@@ -13,8 +13,11 @@ logger = logging.getLogger(__name__)
 def _registered_router_desktop_automation(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
+    from app.application.computer_use import COMPUTER_ACTIONS, invoke_computer_use
     from app.desktop_automation.service import get_desktop_automation_service
 
+    if action in COMPUTER_ACTIONS:
+        return invoke_computer_use(action, params, runtime_context)
     if not runtime_context.get("user_id"):
         return {"success": False, "message": "桌面动作需要已登录账号"}
     svc = get_desktop_automation_service()

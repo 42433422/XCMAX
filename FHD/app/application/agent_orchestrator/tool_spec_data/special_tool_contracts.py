@@ -18,6 +18,18 @@ def _success(**fields: Any) -> dict[str, Any]:
 
 
 _SPECIAL_TOOL_CONTRACTS: dict[tuple[str, str], list[dict[str, Any]]] = {
+    ("desktop_automation", "computer_execute"): [
+        _sample(
+            "verify_browser_page",
+            {
+                "request_id": "computer-example-1",
+                "target": "browser",
+                "steps": [{"action": "navigate", "url": "https://example.com/"}],
+                "verification": {"kind": "url", "expected": "https://example.com/"},
+            },
+            _success(executed=True, verified=True, request_id="computer-example-1"),
+        )
+    ],
     ("sales", "create_order"): [
         _sample(
             "confirmed_named_order",
