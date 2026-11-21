@@ -32,6 +32,30 @@ def find_waiting_step(run: AgentRun, *, approved_step_id: str = "") -> AgentStep
     )
 
 
+def is_planning_clarification(run: AgentRun, step: AgentStep) -> bool:
+    """Only an unanswered, standalone planning question may replace its empty graph."""
+    from app.application.workflow.workflow_types import plan_from_dict, validate_plan_graph
+
+    plan = plan_from_dict(run.metadata.get("plan"))
+    return bool(
+        plan
+        and not validate_plan_graph(plan)
+        and plan.metadata.get("planning_clarification") is True
+        and len(plan.nodes) == len(run.steps) == 1
+        and run.steps[0].step_id == step.step_id
+        and run.status == step.status == "waiting_user"
+        and not run.tool_calls
+        and (step.tool_id, step.action) == ("clarify", "ask")
+        and step.params.get("clarification") == {"reason": "planning_scope"}
+        and not step.params.get("target_node_id")
+        and plan.nodes[0].node_id == step.node_id
+        and plan.nodes[0].params == step.params
+        and not plan.nodes[0].depends_on
+        and not plan.nodes[0].branches
+        and plan.nodes[0].next is None
+    )
+
+
 def is_plan_confirmation(step: AgentStep) -> bool:
     """计划级确认：澄清不绑定具体节点，只做「继续/取消」闸门。
 
