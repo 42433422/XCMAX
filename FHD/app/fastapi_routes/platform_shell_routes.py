@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Body, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Request, Response, UploadFile
 from pydantic import BaseModel, Field
 
+from app.infrastructure.auth.dependencies import require_identified_user
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -93,36 +94,52 @@ async def platform_shell_employee_tools():
     return {"success": True, "data": build_employee_tools_status()}
 
 
-@router.get("/employee-directory")
-async def platform_shell_employee_directory():
+def _employee_directory_for_request(request: Request) -> tuple[list[dict], bool]:
+    from app.fastapi_routes.system_routes import _is_platform_admin
+    from app.infrastructure.auth.dependencies import get_logged_in_user
+    from app.mod_sdk.employee_directory import visible_employee_directory
+
+    user = get_logged_in_user(request)
+    include_admin = _is_platform_admin(user)
+    return visible_employee_directory(request, include_admin=include_admin), include_admin
+
+
+@router.get("/employee-directory", dependencies=[Depends(require_identified_user)])
+async def platform_shell_employee_directory(request: Request, response: Response):
     """统一员工目录：智能对话 / 员工工作台 / 信息形象 共用同一份可用员工名单。
 
     展示口径包含 prompt-only 员工（对话型专家），执行类接口仍只取 runtime_ok。
     """
-    from app.mod_sdk.employee_directory import build_employee_directory
+    employees, include_admin = _employee_directory_for_request(request)
+    response.headers["Cache-Control"] = "private, no-store"
+    return {
+        "success": True,
+        "data": {
+            "employees": employees,
+            "count": len(employees),
+            "scope": "platform" if include_admin else "tenant",
+        },
+    }
 
-    employees = build_employee_directory(include_prompt_only=True)
-    return {"success": True, "data": {"employees": employees, "count": len(employees)}}
 
-
-@router.get("/employee-ssot")
-async def platform_shell_employee_ssot():
+@router.get("/employee-ssot", dependencies=[Depends(require_identified_user)])
+async def platform_shell_employee_ssot(request: Request, response: Response):
     """Employee & department SSOT derived views.
 
     Source ``config/duty_roster.json`` derives:
     * ``admin`` - admin 6 depts + on-duty employees.
     * ``enterprise`` - enterprise 4 layers + listed/unlisted employees.
     """
-    from app.application.ops_closure_status import _installed_employee_pack_ids
+    from app.mod_sdk.employee_directory import scope_employee_ssot
     from app.mod_sdk.employee_ssot import derive_employee_ssot
 
-    installed: set[str] = set()
-    try:
-        installed = _installed_employee_pack_ids()
-    except RECOVERABLE_ERRORS as exc:
-        logger.warning("employee-ssot: failed to read installed employee_pack: %s", exc)
-
-    return {"success": True, "data": derive_employee_ssot(installed_ids=installed)}
+    employees, include_admin = _employee_directory_for_request(request)
+    response.headers["Cache-Control"] = "private, no-store"
+    payload = derive_employee_ssot(installed_ids={row["pack_id"] for row in employees})
+    return {
+        "success": True,
+        "data": scope_employee_ssot(payload, employees, include_admin=include_admin),
+    }
 
 
 class OfficeSampleCleanupBody(BaseModel):

@@ -2,23 +2,23 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { createRouter, createMemoryHistory } from 'vue-router'
-import { fetchEmployeeSsot } from '@/utils/platformShellApi'
+import { fetchEmployeeDirectory } from '@/api/employeeDirectory'
+import { setRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
 import RuntimePanel from '@/components/chat/AgentTaskRuntimePanel.vue'
 import { ElDialog, ElInput, ElSelect } from 'element-plus'
 import Workspace from './EmployeeWorkspaceLoopConsole.vue'
 import { useAgentTaskCenterStore } from '@/stores/agentTaskCenter'
 const api = vi.hoisted(() => ({ listTasks: vi.fn(), getTaskRuntime: vi.fn(), getTask: vi.fn(), createTask: vi.fn() }))
 vi.mock('@/api/agentRuns', () => ({ default: api }))
-vi.mock('@/utils/platformShellApi', () => ({
-  fetchEmployeeSsot: vi.fn(async () => ({
-    contacts: [
-      { employee_id: 'auditor', display_name: '巡检员', installed: true, runnable: true },
-      { employee_id: 'planned', display_name: '未安装员工', installed: false, runnable: false },
-    ],
-  })),
+vi.mock('@/api/employeeDirectory', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/api/employeeDirectory')>(),
+  fetchEmployeeDirectory: vi.fn(async () => [
+    { pack_id: 'auditor', label: '巡检员', department: '运营管理部', runtime_ok: true },
+    { pack_id: 'planned', label: '对话员工', prompt_only: true, runtime_ok: false },
+  ]),
 }))
 vi.mock('./TaskExecutionGraph.vue', () => ({ default: { template: '<div>真实执行图</div>' } }))
-vi.mock('@/components/chat/AgentTaskRuntimePanel.vue', () => ({ default: { template: '<div>执行结果</div>' } }))
+vi.mock('@/components/chat/AgentTaskRuntimePanel.vue', () => ({ default: { props: ['task', 'controlState'], template: '<div>执行结果</div>' } }))
 const task = {
   task_id: 'existing',
   user_id: '1',
@@ -48,6 +48,7 @@ async function setup(query: Record<string, string> = {}) {
     { path: '/', component: { template: '<div />' } },
     { path: '/task/:taskId', name: 'task-workspace', component: { template: '<div />' } },
     { path: '/employees', name: 'duty-roster-graph', component: { template: '<div />' } },
+    { path: '/workflow-employee-space', name: 'workflow-employee-space', component: { template: '<div />' } },
     { path: '/workflow-employee-space/stitch-full', name: 'workflow-employee-stitch-full', component: { template: '<div />' } },
   ] })
   await router.push({ path: '/', query })
@@ -61,6 +62,7 @@ async function setup(query: Record<string, string> = {}) {
 }
 beforeEach(() => {
   vi.clearAllMocks()
+  setRuntimeTenantStorageScopeInput(null)
   api.listTasks.mockResolvedValue({ success: true, data: [task] })
   api.getTaskRuntime.mockResolvedValue({
     success: true,
@@ -111,7 +113,7 @@ describe('employee task workspace', () => {
     expect(first.runtime_context.invoke_mode).toBeUndefined()
     expect(wrapper.text()).toContain('再次提交将核对同一任务')
   })
-  it('does not dispatch an uninstalled employee', async () => {
+  it('does not dispatch a prompt-only employee without an executable runtime', async () => {
     await setup()
     await wrapper
       .findAll('button')
@@ -183,7 +185,7 @@ describe('workspace submission and navigation boundaries', () => {
   })
   it('renders directory failures without allowing a new task', async () => {
     await setup()
-    vi.mocked(fetchEmployeeSsot).mockRejectedValueOnce(new Error('offline'))
+    vi.mocked(fetchEmployeeDirectory).mockRejectedValueOnce(new Error('offline'))
     await clickButton('新建任务')
     expect(wrapper.text()).toContain('员工目录读取失败')
     await submitTask()
@@ -261,5 +263,53 @@ describe('workspace submission and navigation boundaries', () => {
     expect(wrapper.text()).toContain('执行员工 巡检员')
     expect(wrapper.text()).toContain('实际执行完成')
     expect(wrapper.text()).toContain('真实执行图')
+  })
+
+  it('keeps an employee selection when opening tasks, the office and the graph', async () => {
+    const own = { ...task, metadata: { employee_id: 'auditor' } }
+    api.listTasks.mockResolvedValue({ success: true, data: [own, { ...task, task_id: 'other-task', title: '其他员工任务', metadata: { employee_id: 'another' } }] })
+    api.getTask.mockResolvedValue({ success: true, data: own })
+    await setup({ employee: 'auditor' })
+    expect(wrapper.findAll('.workspace-task')).toHaveLength(1)
+    expect(wrapper.find('.workspace-task').text()).toContain('已有巡检任务')
+    await clickButton('员工空间')
+    expect(wrapper.vm.$route.name).toBe('workflow-employee-space')
+    expect(wrapper.vm.$route.query.employee).toBe('auditor')
+    await clickButton('员工图谱')
+    expect(wrapper.vm.$route.name).toBe('workflow-employee-stitch-full')
+    expect(wrapper.vm.$route.query.employee).toBe('auditor')
+  })
+
+  it('opens the selected employee compose form without dispatching on navigation', async () => {
+    await setup({ employee: 'auditor', compose: '1' })
+    expect(wrapper.findComponent(ElDialog).props('modelValue')).toBe(true)
+    expect(wrapper.findAllComponents(ElSelect).find(c => c.props('ariaLabel') === '执行员工')!.props('modelValue')).toBe('auditor')
+    expect(wrapper.vm.$route.query.compose).toBeUndefined()
+    expect(api.createTask).not.toHaveBeenCalled()
+  })
+
+  it('disables task controls while the shared task state is stale', async () => {
+    api.getTask.mockResolvedValue({ success: true, data: { ...task, capabilities: { retry: true } } })
+    const store = await setup()
+    store.stale = true
+    await flushPromises()
+    expect(wrapper.findAll('button').find(button => button.text() === '重试')!.attributes('disabled')).toBeDefined()
+    expect(wrapper.findComponent(RuntimePanel).props('controlState').needsVerification).toBe(true)
+  })
+
+  it('drops an old submission response after the account scope changes', async () => {
+    await setup({ employee: 'auditor' })
+    await composeTask()
+    let resolve!: (response: unknown) => void
+    api.createTask.mockImplementationOnce(() => new Promise(r => { resolve = r }))
+    await submitTask()
+    const oldId = api.createTask.mock.calls[0][0].task_id
+    setRuntimeTenantStorageScopeInput({ localUserId: 'another-account' })
+    await flushPromises()
+    resolve({ success: true, data: { run_id: 'old-account-run' } })
+    await flushPromises()
+    expect(wrapper.vm.$route.query.task).not.toBe(oldId)
+    expect(wrapper.findComponent(ElDialog).props('modelValue')).toBe(false)
+    expect(api.createTask).toHaveBeenCalledOnce()
   })
 })

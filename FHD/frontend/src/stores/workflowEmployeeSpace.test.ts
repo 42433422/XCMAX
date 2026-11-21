@@ -30,7 +30,7 @@ describe('workflowEmployeeSpace store', () => {
     vi.useFakeTimers()
   })
 
-  it('applyFromWorkflowPayload creates snapshot and bumps processed', () => {
+  it('applyFromWorkflowPayload records activity without claiming task completion', () => {
     const s = useWorkflowEmployeeSpaceStore()
     s.applyFromWorkflowPayload('工作流 · 测试', {
       employeeId: 'emp1',
@@ -43,7 +43,7 @@ describe('workflowEmployeeSpace store', () => {
     })
     expect(s.snapshots.emp1.stage).toBe('阶段A')
     expect(s.snapshots.emp1.visuallyBusy).toBe(true)
-    expect(s.sessions.emp1.processedCount).toBe(1)
+    expect(s.sessions.emp1.processedCount).toBe(0)
   })
 
   it('applyFromWorkflowPayload ignores empty empId', () => {
@@ -65,7 +65,7 @@ describe('workflowEmployeeSpace store', () => {
     }
     s.applyFromWorkflowPayload('工作流 · 二', payload)
     s.applyFromWorkflowPayload('工作流 · 二', payload)
-    expect(s.sessions.emp2.processedCount).toBe(1)
+    expect(s.sessions.emp2.processedCount).toBe(0)
   })
 
   it('heartbeat does not bump processed', () => {
@@ -148,4 +148,32 @@ describe('workflowEmployeeSpace store', () => {
     expect(s.snapshots).toEqual({})
     expect(s.sessions).toEqual({})
   })
+})
+
+it('refreshes an identical heartbeat timestamp without manufacturing a completed task', () => {
+  setActivePinia(createPinia())
+  vi.useFakeTimers()
+  const store = useWorkflowEmployeeSpaceStore()
+  const payload = { employeeId: 'heartbeat', workflowStageLine: '监控中' }
+  store.applyFromWorkflowPayload('监控', payload, { isHeartbeat: true })
+  const before = store.snapshots.heartbeat.lastActivityAt
+  vi.advanceTimersByTime(1000)
+  store.applyFromWorkflowPayload('监控', payload, { isHeartbeat: true })
+  expect(store.snapshots.heartbeat.lastActivityAt).toBeGreaterThan(before)
+  expect(store.sessions.heartbeat?.processedCount || 0).toBe(0)
+  vi.useRealTimers()
+})
+
+it('does not persist an old scope activity into a new tenant during the debounce', () => {
+  setActivePinia(createPinia())
+  vi.useFakeTimers()
+  sessionStorage.clear()
+  const store = useWorkflowEmployeeSpaceStore()
+  store.reloadForTenantScope('old')
+  store.applyFromWorkflowPayload('旧租户', { employeeId: 'old-employee' })
+  store.reloadForTenantScope('new')
+  vi.advanceTimersByTime(300)
+  expect(sessionStorage.getItem('xcagi_workflow_employee_space_v1:new')).toBeNull()
+  expect(JSON.parse(sessionStorage.getItem('xcagi_workflow_employee_space_v1:old') || '{}').snapshots['old-employee']).toBeDefined()
+  vi.useRealTimers()
 })

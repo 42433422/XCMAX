@@ -140,11 +140,11 @@ describe('EmployeeWorkspaceView', () => {
       },
     })
     expect(wrapper.find('#view-workflow-employee-space').exists()).toBe(true)
-    expect(wrapper.find('.ews-page-title').text()).toBe('员工工作台')
+    expect(wrapper.find('.ews-page-title').text()).toBe('员工工作空间')
     expect(wrapper.find('.ews-page-sub').exists()).toBe(false)
     expect(wrapper.find('.stub-scene').exists()).toBe(true)
   })
-  it('keeps the separate workspace scene in admin mode', async () => {
+  it('keeps the separate workspace/office scene independently available in admin mode', async () => {
     vi.stubEnv('VITE_XCMAX_ADMIN_CONSOLE', '1')
     const mod = await import('./EmployeeWorkspaceView.vue')
     const wrapper = mount(mod.default, { global: { stubs: {
@@ -154,6 +154,7 @@ describe('EmployeeWorkspaceView', () => {
     expect(wrapper.find('.stub-loop-console').exists()).toBe(false)
     expect(wrapper.find('.stub-scene').exists()).toBe(true)
     expect(wrapper.find('.ews-page-head').exists()).toBe(true)
+    expect(wrapper.find('.ews-page-title').text()).toBe('员工工作空间')
     wrapper.unmount()
   })
 })

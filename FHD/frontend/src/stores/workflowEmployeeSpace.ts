@@ -38,6 +38,13 @@ export type WorkflowEmployeeSpaceSnapshot = {
   /** 用于像素工位：是否在「干活」视觉态 */
   visuallyBusy: boolean
   lastActivityAt: number
+  authority?: 'task-center' | 'activity'
+  status?: string
+  taskId?: string
+  runId?: string
+  stale?: boolean
+  indeterminate?: boolean
+  officeState?: 'working' | 'reading' | 'waiting' | 'error' | 'done' | 'idle' | 'offline'
 }
 
 /**
@@ -46,8 +53,7 @@ export type WorkflowEmployeeSpaceSnapshot = {
  * - `enabledAt`: 当前一次「副窗一键托管」打开的时间戳；关闭时清空，再开则刷新。
  * - `firstActivityAt`: 首次实际处理活动的时间戳（跨会话累计，仅记录第一次）。
  * - `lastActivityAt`: 最近一次活动；用于「最近 5 分钟无新活动 → 视觉态淡化」类判断。
- * - `processedCount`: 累计处理任务数（仅 applyFromWorkflowPayload 的非心跳调用，
- *    心跳轮询如 wechat_star_feed_polled 不计数）。
+ * - `processedCount`: 旧版兼容字段；完成数从服务端任务列表投影，活动不计为完成。
  * - `sessionMs`: 本次启用累计时长；关闭时把 `now - enabledAt` 累加进 `lifetimeMs` 后清零。
  * - `lifetimeMs`: 历史累计工时（已下班的所有 session 之和）。当前 session 的实时时长在外层渲染时按 `now - enabledAt` 计算后叠加。
  */
@@ -125,13 +131,14 @@ let sessionsPersistTimer: number | null = null
 
 function schedulePersist(snapshots: Record<string, WorkflowEmployeeSpaceSnapshot>) {
   if (typeof window === 'undefined') return
+  const key = workflowEmployeeSpaceStorageKey()
   if (persistTimer != null) window.clearTimeout(persistTimer)
   persistTimer = window.setTimeout(() => {
     persistTimer = null
     try {
       const out: PersistedV1 = { schemaVersion: 1, snapshots: { ...snapshots } }
       // empId values are public fixed workflow labels, not credentials. lgtm[js/clear-text-storage-of-sensitive-data]
-      sessionStorage.setItem(workflowEmployeeSpaceStorageKey(), JSON.stringify(out))
+      sessionStorage.setItem(key, JSON.stringify(out))
     } catch {
       /* quota / private mode */
     }
@@ -140,6 +147,7 @@ function schedulePersist(snapshots: Record<string, WorkflowEmployeeSpaceSnapshot
 
 function scheduleSessionsPersist(sessions: Record<string, WorkflowEmployeeSession>) {
   if (typeof window === 'undefined') return
+  const key = workflowEmployeeSessionsStorageKey()
   if (sessionsPersistTimer != null) window.clearTimeout(sessionsPersistTimer)
   sessionsPersistTimer = window.setTimeout(() => {
     sessionsPersistTimer = null
@@ -147,7 +155,7 @@ function scheduleSessionsPersist(sessions: Record<string, WorkflowEmployeeSessio
       const out: PersistedSessionsV1 = { schemaVersion: 1, sessions: { ...sessions } }
       /** 工时累计跨页要存活，用 localStorage（与 xcagi_workflow_ai_employees 持久层一致） */
       // empId values are public fixed workflow labels, not credentials. lgtm[js/clear-text-storage-of-sensitive-data]
-      localStorage.setItem(workflowEmployeeSessionsStorageKey(), JSON.stringify(out))
+      localStorage.setItem(key, JSON.stringify(out))
     } catch {
       /* quota / private mode */
     }
@@ -231,7 +239,7 @@ export const useWorkflowEmployeeSpaceStore = defineStore('workflowEmployeeSpace'
     scheduleSessionsPersist(sessions.value)
   }
 
-  function bumpProcessed(empId: string) {
+  function markActivity(empId: string) {
     if (!empId) return
     const cur = ensureSession(empId)
     const now = Date.now()
@@ -239,7 +247,6 @@ export const useWorkflowEmployeeSpaceStore = defineStore('workflowEmployeeSpace'
       ...sessions.value,
       [empId]: {
         ...cur,
-        processedCount: cur.processedCount + 1,
         firstActivityAt: cur.firstActivityAt ?? now,
         lastActivityAt: now,
       },
@@ -262,6 +269,7 @@ export const useWorkflowEmployeeSpaceStore = defineStore('workflowEmployeeSpace'
     const visuallyBusy = snapshotVisuallyBusy(payload || {})
 
     const next: WorkflowEmployeeSpaceSnapshot = {
+      authority: 'activity',
       empId,
       panelTitle: String(panelTitle || '').trim() || `工作流 · ${empId}`,
       shortName: shortNameFromPanelTitle(panelTitle),
@@ -285,15 +293,10 @@ export const useWorkflowEmployeeSpaceStore = defineStore('workflowEmployeeSpace'
       prev.visuallyBusy === next.visuallyBusy &&
       prev.panelTitle === next.panelTitle
 
-    /**
-     * 心跳（如星标轮询）即便相同也写一次 lastActivityAt 以保留「在线」感，
-     * 但不计入「已处理任务数」；真实活动且状态变化时才递增 processedCount。
-     */
+    // Activity and heartbeat are not completed task receipts.
     if (!options.isHeartbeat && !sameSnapshot) {
-      bumpProcessed(empId)
+      markActivity(empId)
     }
-
-    if (sameSnapshot) return
 
     snapshots.value = { ...snapshots.value, [empId]: next }
     schedulePersist(snapshots.value)

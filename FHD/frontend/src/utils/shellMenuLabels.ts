@@ -4,6 +4,7 @@
  */
 
 import { DEFAULT_INDUSTRY_ID } from '@/constants/industryDefaults'
+import { MENU_DEFAULT_NAMES } from '@/utils/coreNavLabel'
 
 export type ShellModLike = {
   id: string
@@ -77,8 +78,9 @@ export const SHELL_VIEW_TITLE_BASE: Record<string, string> = {
   'approval-flow-management': '审批流程管理',
   'approval-rules': '审批流程规则',
   'workflow-visualization': '流程可视化',
-  'workflow-employee-space': '员工工作台',
-  'workflow-employee-stitch-full': '员工工作流全景',
+  'employee-workbench': MENU_DEFAULT_NAMES['employee-workbench'],
+  'workflow-employee-space': MENU_DEFAULT_NAMES['workflow-employee-space'],
+  'workflow-employee-stitch-full': MENU_DEFAULT_NAMES['workflow-employee-stitch-full'],
   'batch-analyze': '批量分析',
   'kitten-finance': '财务分析',
   'chat-debug': '对话调试',

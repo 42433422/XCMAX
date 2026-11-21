@@ -34,12 +34,11 @@ export const MENU_DEFAULT_NAMES: Record<string, string> = {
   'enterprise-customer-service': '信息',
   'internal-customer-service': '信息',
   'other-tools': '员工视图',
-  'workflow-employee-space': '员工工作台',
   'workflow-visualization': '流程可视化',
   'label-editor': '模板编辑器',
   'batch-analyze': '批量分析',
   'chat-debug': '对话调试',
-  ...Object.fromEntries([...navigationCatalog.core, ...navigationCatalog.industry, navigationCatalog.settings, navigationCatalog.admin].map(item => [item.key, item.name])),
+  ...Object.fromEntries([...navigationCatalog.core.flatMap(item => [item, ...(item.children ?? [])]), ...navigationCatalog.industry, navigationCatalog.settings, navigationCatalog.admin].map(item => [item.key, item.name])),
 }
 
 /**

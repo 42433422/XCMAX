@@ -1,14 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import { defineComponent, h, nextTick, ref } from 'vue'
+import { defineComponent, h, nextTick, reactive, ref } from 'vue'
 import { mount } from '@vue/test-utils'
-import {
-  formatWorkDurationShort,
-  totalWorkMs,
-  useNowMsTicker,
-  useWorkflowEmployeeDesks,
-  type WorkflowEmployeeDeskRow,
-} from './useWorkflowEmployeeDesks'
+import { formatWorkDurationShort, totalWorkMs, useNowMsTicker, useWorkflowEmployeeDesks } from './useWorkflowEmployeeDesks'
 import type { WorkflowEmployeeSession, WorkflowEmployeeSpaceSnapshot } from '@/stores/workflowEmployeeSpace'
 
 // Mock pinia 的 storeToRefs，使其直接返回 store（保留响应性）
@@ -25,6 +19,8 @@ const registryEntriesRef = ref<Array<{ id: string; label: string; hostModId?: st
 const workflowEnabledRef = ref<Record<string, boolean>>({})
 const snapshotsRef = ref<Record<string, WorkflowEmployeeSpaceSnapshot>>({})
 const sessionsRef = ref<Record<string, WorkflowEmployeeSession>>({})
+const taskCenter = reactive({ tasks: [] as any[], connected: true, stale: false, lastVerifiedAt: 100, error: '', start: vi.fn() })
+vi.mock('@/stores/agentTaskCenter', () => ({ useAgentTaskCenterStore: () => taskCenter }))
 
 // Mock workflowAiEmployees store
 vi.mock('@/stores/workflowAiEmployees', () => ({
@@ -59,6 +55,7 @@ function resetMocks() {
   workflowEnabledRef.value = {}
   snapshotsRef.value = {}
   sessionsRef.value = {}
+  Object.assign(taskCenter, { tasks: [], connected: true, stale: false, lastVerifiedAt: 100, error: '' })
 }
 
 beforeEach(() => {
@@ -70,16 +67,29 @@ beforeEach(() => {
 describe('duration formatting and accumulated work', () => {
   it.each([
     ...[NaN, Infinity, -Infinity, -1, -1000, 0].map((input) => [input, '0m']),
-    [1, '0s'], [999, '0s'], [1000, '1s'], [59000, '59s'], [60000, '1m'], [3540000, '59m'],
-    [3600000, '1h'], [7200000, '2h'], [9000000, '2h 30m'], [86400000, '1d'],
-    [172800000, '2d'], [126000000, '1d 11h'],
+    [1, '0s'],
+    [999, '0s'],
+    [1000, '1s'],
+    [59000, '59s'],
+    [60000, '1m'],
+    [3540000, '59m'],
+    [3600000, '1h'],
+    [7200000, '2h'],
+    [9000000, '2h 30m'],
+    [86400000, '1d'],
+    [172800000, '2d'],
+    [126000000, '1d 11h'],
   ])('formats %s milliseconds as %s', (input, expected) => {
     expect(formatWorkDurationShort(input as number)).toBe(expected)
   })
   it.each([
-    [undefined, 0], [null, 0], [{ lifetimeMs: 5000, enabledAt: null }, 5000],
-    [{ lifetimeMs: 5000, enabledAt: 10000 }, 15000], [{ lifetimeMs: 5000, enabledAt: 30000 }, 5000],
-    [{ lifetimeMs: -100, enabledAt: null }, 0], [{ lifetimeMs: 0, enabledAt: null }, 0],
+    [undefined, 0],
+    [null, 0],
+    [{ lifetimeMs: 5000, enabledAt: null }, 5000],
+    [{ lifetimeMs: 5000, enabledAt: 10000 }, 15000],
+    [{ lifetimeMs: 5000, enabledAt: 30000 }, 5000],
+    [{ lifetimeMs: -100, enabledAt: null }, 0],
+    [{ lifetimeMs: 0, enabledAt: null }, 0],
     [{ lifetimeMs: 0, enabledAt: 15000 }, 5000],
   ])('accumulates session %j as %s milliseconds', (session, expected) => {
     expect(totalWorkMs(session as WorkflowEmployeeSession, 20000)).toBe(expected)
@@ -222,232 +232,80 @@ describe('useNowMsTicker', () => {
   })
 })
 
-describe('useWorkflowEmployeeDesks', () => {
+describe('useWorkflowEmployeeDesks shared task projection', () => {
   function setupComposable() {
-    let captured: ReturnType<typeof useWorkflowEmployeeDesks> | null = null
-    const TestComp = defineComponent({
-      setup() {
-        captured = useWorkflowEmployeeDesks()
-        return () => h('div')
-      },
-    })
-    const wrapper = mount(TestComp)
-    return { captured: captured!, wrapper }
-  }
-
-  describe('employeeIds computed', () => {
-    it('空 registry 返回空数组', async () => {
-      const { captured, wrapper } = setupComposable()
-      await nextTick()
-      expect(captured.employeeIds.value).toEqual([])
-      wrapper.unmount()
-    })
-
-    it('返回 registry 中所有员工 id', async () => {
-      registryEntriesRef.value = [
-        { id: 'emp1', label: '员工1' },
-        { id: 'emp2', label: '员工2' },
-      ]
-      const { captured, wrapper } = setupComposable()
-      await nextTick()
-      expect(captured.employeeIds.value).toEqual(['emp1', 'emp2'])
-      wrapper.unmount()
-    })
-  })
-
-  describe('desks computed', () => {
-    it('空 registry 返回空数组', async () => {
-      const { captured, wrapper } = setupComposable()
-      await nextTick()
-      expect(captured.desks.value).toEqual([])
-      wrapper.unmount()
-    })
-
-    it('返回每个员工的工位信息', async () => {
-      registryEntriesRef.value = [{ id: 'emp1', label: '员工1', hostModId: 'mod1', carrierModId: 'mod2' }]
-      workflowEnabledRef.value = { emp1: true }
-      const { captured, wrapper } = setupComposable()
-      await nextTick()
-
-      const desks = captured.desks.value
-      expect(desks).toHaveLength(1)
-      expect(desks[0].empId).toBe('emp1')
-      expect(desks[0].panelTitle).toBe('工作流 · 员工1')
-      expect(desks[0].shortName).toBe('员工1')
-      expect(desks[0].enabled).toBe(true)
-      expect(desks[0].hostModId).toBe('mod1')
-      expect(desks[0].carrierModId).toBe('mod2')
-      wrapper.unmount()
-    })
-
-    it('未注册的员工 enabled 为 false', async () => {
-      registryEntriesRef.value = [{ id: 'emp1', label: '员工1' }]
-      workflowEnabledRef.value = {}
-      const { captured, wrapper } = setupComposable()
-      await nextTick()
-
-      expect(captured.desks.value[0].enabled).toBe(false)
-      wrapper.unmount()
-    })
-
-    it('workflowEnabled 中值为 false 时 enabled 为 false', async () => {
-      registryEntriesRef.value = [{ id: 'emp1', label: '员工1' }]
-      workflowEnabledRef.value = { emp1: false }
-      const { captured, wrapper } = setupComposable()
-      await nextTick()
-
-      expect(captured.desks.value[0].enabled).toBe(false)
-      wrapper.unmount()
-    })
-
-    it('snapshot 存在时使用 snapshot.shortName', async () => {
-      registryEntriesRef.value = [{ id: 'emp1', label: '员工1' }]
-      snapshotsRef.value = {
-        emp1: {
-          empId: 'emp1',
-          panelTitle: '工作流 · 员工1',
-          shortName: '快照短名',
-          stage: 'stage',
-          progressPct: 50,
-          progressLabel: 'label',
-          hintLine: 'hint',
-          idle: false,
-          visuallyBusy: true,
-          lastActivityAt: 0,
+    let captured!: ReturnType<typeof useWorkflowEmployeeDesks>
+    const wrapper = mount(
+      defineComponent({
+        setup() {
+          captured = useWorkflowEmployeeDesks()
+          return () => h('div')
         },
-      }
-      const { captured, wrapper } = setupComposable()
-      await nextTick()
-
-      expect(captured.desks.value[0].shortName).toBe('快照短名')
-      expect(captured.desks.value[0].snapshot).toBeTruthy()
-      wrapper.unmount()
-    })
-
-    it('snapshot 不存在时使用 shortNameFromPanelTitle', async () => {
-      registryEntriesRef.value = [{ id: 'emp1', label: '标签打印 AI 员工' }]
-      const { captured, wrapper } = setupComposable()
-      await nextTick()
-
-      expect(captured.desks.value[0].shortName).toBe('标签打印')
-      wrapper.unmount()
-    })
-
-    it('session 存在时附加到工位', async () => {
-      registryEntriesRef.value = [{ id: 'emp1', label: '员工1' }]
-      sessionsRef.value = {
-        emp1: {
-          empId: 'emp1',
-          enabledAt: 1000,
-          firstActivityAt: 2000,
-          lastActivityAt: 3000,
-          processedCount: 5,
-          lifetimeMs: 10000,
-        },
-      }
-      const { captured, wrapper } = setupComposable()
-      await nextTick()
-
-      expect(captured.desks.value[0].session).toBeTruthy()
-      expect(captured.desks.value[0].session?.processedCount).toBe(5)
-      wrapper.unmount()
-    })
-  })
-
-  describe('onDutyDesks computed', () => {
-    it('只返回 enabled 为 true 的工位', async () => {
-      registryEntriesRef.value = [
-        { id: 'emp1', label: '员工1' },
-        { id: 'emp2', label: '员工2' },
-        { id: 'emp3', label: '员工3' },
-      ]
-      workflowEnabledRef.value = { emp1: true, emp2: false, emp3: true }
-      const { captured, wrapper } = setupComposable()
-      await nextTick()
-
-      const onDuty = captured.onDutyDesks.value
-      expect(onDuty).toHaveLength(2)
-      expect(onDuty.map((d) => d.empId)).toEqual(['emp1', 'emp3'])
-      wrapper.unmount()
-    })
-
-    it('全部未启用时返回空数组', async () => {
-      registryEntriesRef.value = [{ id: 'emp1', label: '员工1' }]
-      workflowEnabledRef.value = {}
-      const { captured, wrapper } = setupComposable()
-      await nextTick()
-
-      expect(captured.onDutyDesks.value).toEqual([])
-      wrapper.unmount()
-    })
-  })
-
-  function desk(overrides: Partial<WorkflowEmployeeDeskRow> = {}): WorkflowEmployeeDeskRow {
-    return { empId: 'emp1', panelTitle: '工作流 · 员工1', shortName: '员工1', enabled: true, ...overrides }
+      }),
+    )
+    return { captured, wrapper }
   }
-  function snapshot(overrides: Partial<WorkflowEmployeeSpaceSnapshot> = {}): WorkflowEmployeeSpaceSnapshot {
-    return { empId: 'emp1', panelTitle: '', shortName: '', stage: '', progressPct: 0, progressLabel: '',
-      hintLine: '', idle: false, visuallyBusy: false, lastActivityAt: 0, ...overrides }
+  const running = {
+    task_id: 'task-1',
+    active_run_id: 'run-1',
+    status: 'running',
+    title: '打印发货标签',
+    metadata: { employee_id: 'emp1' },
+    updated_at: '2026-11-22T01:00:00Z',
   }
-  it.each([
-    [desk({ enabled: false }), '副窗未启用'], [desk(), '暂无快照'],
-    [desk({ snapshot: snapshot({ stage: '处理中' }) }), '处理中'],
-    [desk({ snapshot: snapshot({ progressLabel: '50% 完成' }) }), '50% 完成'],
-    [desk({ snapshot: snapshot({ hintLine: '提示信息' }) }), '提示信息'],
-    [desk({ snapshot: snapshot() }), '待命'],
-  ])('statusLine prioritizes the displayed state for %j', async (row, expected) => {
+
+  it('retains registry identity, entitlement carriers and management preference', () => {
+    registryEntriesRef.value = [
+      { id: 'emp1', label: '员工1', hostModId: 'host', carrierModId: 'carrier' },
+      { id: 'emp2', label: '员工2' },
+    ]
+    workflowEnabledRef.value = { emp1: true }
     const { captured, wrapper } = setupComposable()
-    await nextTick()
-    expect(captured.statusLine(row as WorkflowEmployeeDeskRow)).toBe(expected)
-    wrapper.unmount()
-  })
-  it.each([
-    [desk({ shortName: '张三', enabled: false }), '员工 张三。副窗未启用'],
-    [desk({ shortName: '张三' }), '员工 张三。等待活动'],
-    [desk({ shortName: '张三', snapshot: snapshot({ stage: '忙碌中' }) }), '员工 张三。忙碌中'],
-  ])('ariaLabel describes %j accessibly', async (row, expected) => {
-    const { captured, wrapper } = setupComposable()
-    await nextTick()
-    expect(captured.ariaLabel(row as WorkflowEmployeeDeskRow)).toBe(expected)
-    wrapper.unmount()
-  })
-  it.each([
-    [desk({ enabled: false }), false], [desk(), false],
-    [desk({ snapshot: snapshot({ visuallyBusy: true }) }), true], [desk({ snapshot: snapshot() }), false],
-  ])('isBusy reflects enabled activity for %j', async (row, expected) => {
-    const { captured, wrapper } = setupComposable()
-    await nextTick()
-    expect(captured.isBusy(row as WorkflowEmployeeDeskRow)).toBe(expected)
-    wrapper.unmount()
-  })
-  it.each([undefined, 42, 0])('processedCount reads session count %s', async (count) => {
-    const { captured, wrapper } = setupComposable()
-    await nextTick()
-    const session = count === undefined ? undefined : { empId: 'emp1', enabledAt: null, firstActivityAt: null,
-      lastActivityAt: null, processedCount: count, lifetimeMs: 0 }
-    expect(captured.processedCount(desk({ session }))).toBe(count ?? 0)
+    expect(captured.employeeIds.value).toEqual(['emp1', 'emp2'])
+    expect(captured.desks.value[0]).toMatchObject({
+      empId: 'emp1',
+      shortName: '员工1',
+      hostModId: 'host',
+      carrierModId: 'carrier',
+      enabled: true,
+    })
+    expect(captured.onDutyDesks.value.map((row) => row.empId)).toEqual(['emp1'])
+    expect(taskCenter.start).toHaveBeenCalledOnce()
     wrapper.unmount()
   })
 
-  describe('resolvePanelTitle（通过 desks 间接测试）', () => {
-    it('registry 中存在员工时返回"工作流 · {label}"', async () => {
-      registryEntriesRef.value = [{ id: 'emp1', label: '自定义标签' }]
-      const { captured, wrapper } = setupComposable()
-      await nextTick()
-      expect(captured.desks.value[0].panelTitle).toBe('工作流 · 自定义标签')
-      wrapper.unmount()
-    })
+  it('projects the same task transitions into every mounted view without consulting the activity cache', () => {
+    registryEntriesRef.value = [{ id: 'emp1', label: '员工1' }]
+    taskCenter.tasks = [running]
+    snapshotsRef.value.emp1 = { shortName: '旧缓存', visuallyBusy: false } as WorkflowEmployeeSpaceSnapshot
+    const first = setupComposable(),
+      second = setupComposable()
+    expect(first.captured.desks.value[0].taskId).toBe('task-1')
+    // A local enable toggle cannot hide a task that is actually executing.
+    expect(first.captured.isBusy(first.captured.desks.value[0])).toBe(true)
+    taskCenter.tasks = [{ ...running, status: 'waiting_user' }]
+    expect(first.captured.desks.value[0].snapshot?.officeState).toBe('waiting')
+    expect(second.captured.statusLine(second.captured.desks.value[0])).toBe('等待审批')
+    taskCenter.stale = true
+    expect(first.captured.isBusy(first.captured.desks.value[0])).toBe(false)
+    expect(second.captured.desks.value[0].snapshot?.officeState).toBe('offline')
+    taskCenter.tasks = [] // GlobalTaskCenter clears this on an authenticated scope change.
+    expect(first.captured.desks.value[0].tasks).toEqual([])
+    expect(second.captured.desks.value[0].taskId).toBeUndefined()
+    first.wrapper.unmount()
+    second.wrapper.unmount()
+  })
 
-    it('registry 中不存在员工时（理论上不会发生，但 fallback）返回"工作流 · {empId}"', async () => {
-      // 通过手动构造 desks 验证 fallback 逻辑
-      registryEntriesRef.value = [{ id: 'emp1', label: '员工1' }]
-      const { captured, wrapper } = setupComposable()
-      await nextTick()
-      // desks 只会基于 registryEntries 生成，所以这里测试 label 为空的情况
-      registryEntriesRef.value = [{ id: 'emp1', label: '' }]
-      await nextTick()
-      expect(captured.desks.value[0].panelTitle).toBe('工作流 · ')
-      wrapper.unmount()
-    })
+  it('counts completed visible server tasks once and excludes phase updates and old cumulative counters', () => {
+    registryEntriesRef.value = [{ id: 'emp1', label: '员工1' }]
+    sessionsRef.value.emp1 = { processedCount: 99 } as WorkflowEmployeeSession
+    taskCenter.tasks = [running, { ...running, task_id: 'done-1', status: 'completed' }]
+    const { captured, wrapper } = setupComposable()
+    const count = () => captured.processedCount(captured.desks.value[0])
+    expect(count()).toBe(1)
+    taskCenter.tasks = [running, { ...running, task_id: 'done-1', status: 'completed' }]
+    expect(count()).toBe(1)
+    expect(captured.desks.value[0].session?.processedCount).toBe(99)
+    wrapper.unmount()
   })
 })
