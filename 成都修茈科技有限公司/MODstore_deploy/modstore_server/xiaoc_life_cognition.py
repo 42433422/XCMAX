@@ -88,6 +88,7 @@ def _timestamp(value: Any) -> str:
 def portfolio_feedback(record: dict[str, Any]) -> dict[str, Any]:
     """Project original review evidence, never customer text or a model's verdict."""
     from modstore_server.strategy_bets import (
+        CUSTOMER_ACCEPTANCE_METRIC,
         DOMAIN_METRIC,
         METRIC_SOURCES,
         REVENUE_METRIC,
@@ -143,6 +144,7 @@ def portfolio_feedback(record: dict[str, Any]) -> dict[str, Any]:
         verdict = row.get("verdict")
         if metric not in {
             *METRIC_SOURCES,
+            CUSTOMER_ACCEPTANCE_METRIC,
             REVENUE_METRIC,
             DOMAIN_METRIC,
         } or verdict not in {
@@ -159,6 +161,9 @@ def portfolio_feedback(record: dict[str, Any]) -> dict[str, Any]:
                 "verdict": verdict,
                 "value": _number(evidence.get("value")),
                 "threshold": _number(target.get("threshold")),
+                "window_start": _timestamp(row.get("window_start")),
+                "window_end": _timestamp(row.get("window_end")),
+                "reviewed_at": _timestamp(row.get("reviewed_at")),
                 "direction": (
                     target.get("direction") if target.get("direction") in {"min", "max"} else None
                 ),

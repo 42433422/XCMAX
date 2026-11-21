@@ -44,8 +44,43 @@ def test_append_cases_is_idempotent(tmp_path):
     assert len(rows) == 1
     persisted = json.loads(rows[0])
     assert "employee_id" not in persisted
+    assert "resource_id" not in persisted
+    assert persisted["surface"] == "employee_prompt"
     assert persisted["task"] == "任务正文"
-    assert persisted["case_id"] == first[0]["case_id"]
+    assert persisted["case_id"] == first[0]["case_id"] == "292ff0293853d560"
+    # Existing corpora keep their original identity/hash and are not rewritten.
+    legacy = {**persisted, "employee_id": "daily-orchestrator"}
+    legacy.pop("surface")
+    path = tmp_path / "daily-orchestrator.jsonl"
+    path.write_text(json.dumps(legacy) + "\n", encoding="utf-8")
+    assert trainer.append_cases(tmp_path, clusters) == []
+    assert json.loads(path.read_text(encoding="utf-8")) == legacy
+
+
+def test_workflow_corpus_preserves_context_without_redundant_resource_identity(tmp_path):
+    context = {"target_employee_pack_id": "worker@1.0", "execution_feedback": {"status": "failed"}}
+    cluster = {
+        "surface": "workflow_nl_prompt",
+        "resource_id": "workflow_nl_generator",
+        "failure_reason": "execution_failed",
+        "samples": [{"task": "生成工作流", "run_id": "wf-run", "generation_context": context}],
+    }
+    original = deepcopy(cluster)
+    written = trainer.append_cases(tmp_path, [cluster])
+    path = tmp_path / "workflow_nl_prompt-workflow_nl_generator.jsonl"
+    persisted = json.loads(path.read_text(encoding="utf-8"))
+    assert persisted == written[0]
+    assert persisted["surface"] == "workflow_nl_prompt"
+    assert persisted["generation_context"] == context
+    assert persisted["task"] == "生成工作流"
+    assert persisted["source_run"] == "wf-run"
+    assert "employee_id" not in persisted and "resource_id" not in persisted
+    assert cluster == original
+    assert trainer.training_identity(cluster) == ("workflow_nl_prompt", "workflow_nl_generator")
+    assert trainer.append_cases(tmp_path, [cluster]) == []
+    changed = deepcopy(cluster)
+    changed["samples"][0]["generation_context"]["target_employee_pack_id"] = "other-worker@1.0"
+    assert trainer.append_cases(tmp_path, [changed])[0]["case_id"] != persisted["case_id"]
 
 
 def test_mine_cli_reports_counts_without_private_samples(tmp_path, monkeypatch, capsys):
@@ -63,7 +98,9 @@ def test_mine_cli_reports_counts_without_private_samples(tmp_path, monkeypatch, 
     }
     assert "private-" not in output
     assert str(ledger) not in output
-    assert trainer.mine(ledger)[0]["samples"][0]["task"] == "private-task-sentinel"
+    cluster = trainer.mine(ledger)[0]
+    assert trainer.training_identity(cluster) == ("employee_prompt", "private-pack-sentinel")
+    assert cluster["samples"][0]["task"] == "private-task-sentinel"
 
 
 def test_select_pack_prefers_latest_version(tmp_path):

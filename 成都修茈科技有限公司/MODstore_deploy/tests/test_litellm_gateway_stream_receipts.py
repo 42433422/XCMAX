@@ -18,10 +18,11 @@ from modstore_server.platform_model_config import PlatformApiKey
 from tests import test_strategic_stream_usage as stream_tests
 
 GATEWAY_MODEL = "xcmax-kimi-code"
+real_router_runtime = stream_tests.real_router_runtime
 
 
 @pytest.fixture
-def gateway_mandate(tmp_path, monkeypatch):
+def gateway_mandate(tmp_path, monkeypatch, request):
     create_proposal = portfolio.create_portfolio_proposal
 
     def gateway_proposal(**kwargs):
@@ -29,7 +30,7 @@ def gateway_mandate(tmp_path, monkeypatch):
         return create_proposal(**kwargs)
 
     monkeypatch.setattr(portfolio, "create_portfolio_proposal", gateway_proposal)
-    yield from stream_tests.mandate.__wrapped__(tmp_path, monkeypatch)
+    yield from stream_tests.mandate.__wrapped__(tmp_path, monkeypatch, request)
 
 
 @pytest.mark.parametrize(
@@ -78,7 +79,7 @@ def test_fallback_receipts_preserve_both_router_layers(headers, used, count):
 @pytest.mark.parametrize(
     "fallback_header,receipt,reported_models,unknown",
     [
-        (None, "reported", None, False),
+        (None, "reported", None, True),
         ("0", "reported", None, False),
         ("1", "reported", None, True),
         ("unreported", "reported", None, True),
@@ -91,11 +92,17 @@ def test_fallback_receipts_preserve_both_router_layers(headers, used, count):
     ],
 )
 async def test_real_gateway_stream_keeps_unverified_attempts_reserved(
-    gateway_mandate, monkeypatch, fallback_header, receipt, reported_models, unknown
+    gateway_mandate,
+    monkeypatch,
+    fallback_header,
+    receipt,
+    reported_models,
+    unknown,
+    real_router_runtime,
 ):
-    monkeypatch.setenv("LITELLM_LOCAL_MODEL_COST_MAP", "True")
-    import litellm
     from openai import DefaultAsyncHttpxClient
+
+    litellm = real_router_runtime
 
     transport_api = importlib.import_module(
         DefaultAsyncHttpxClient.__mro__[1].__module__.split(".")[0]
@@ -140,7 +147,10 @@ async def test_real_gateway_stream_keeps_unverified_attempts_reserved(
     def respond(request):
         wire_requests.append(json.loads(request.content))
         assert stream_tests._calls(gateway_mandate)[1][0]["status"] == "pending"
-        headers = {"content-type": "text/event-stream"}
+        headers = {
+            "content-type": "text/event-stream",
+            "X-LiteLLM-Attempted-Retries": "0",
+        }
         if fallback_header is not None:
             headers["X-LiteLLM-Attempted-Fallbacks"] = fallback_header
         return transport_api.Response(200, text=wire, headers=headers)
@@ -208,7 +218,8 @@ async def test_real_gateway_stream_keeps_unverified_attempts_reserved(
 @pytest.mark.parametrize(
     "fallback_header,response_model,usage_model,unknown",
     [
-        (None, GATEWAY_MODEL, None, False),
+        (None, GATEWAY_MODEL, None, True),
+        ("0", GATEWAY_MODEL, None, False),
         ("1", GATEWAY_MODEL, None, True),
         ("unreported", GATEWAY_MODEL, None, True),
         ("0", "different-upstream-model", None, True),
@@ -240,7 +251,7 @@ async def test_platform_key_gateway_receipts_keep_actual_route_identity(
         requests.append(json.loads(request.content))
         assert stream_tests._calls(gateway_mandate)[1][0]["status"] == "pending"
         assert request.headers["authorization"] == "Bearer platform-test-key"
-        headers = {}
+        headers = {"X-LiteLLM-Attempted-Retries": "0"}
         if fallback_header is not None:
             headers["X-LiteLLM-Attempted-Fallbacks"] = fallback_header
         measured = {"prompt_tokens": 4, "completion_tokens": 2, "total_tokens": 6}

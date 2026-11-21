@@ -40,19 +40,34 @@ def _candidate(body):
 def create_training_candidate(body):
     """The service may propose; existing admin checkpoint approvals own execution."""
     from modstore_server import retort_evolution as service
-    from modstore_server.capability_trainer import mine
+    from modstore_server.capability_trainer import (
+        mine,
+        prompt_from_source,
+        training_identity,
+    )
     from modstore_server.customer_ticket_github import configuration, github
     from modstore_server.maintenance_loop.store import ledger_path
     from modstore_server.retort_evolution_api import _templates
+    from modstore_server.retort_experiment_surfaces import (
+        WORKFLOW_NL_PROMPT_PATH,
+        surface_identity,
+    )
     from modstore_server.retort_feedback_experiments import freeze_experiment_policy
     from modstore_server.retort_feedback_recovery import freeze_recovery_policy
 
     if len(json_dumps(body).encode()) > 2_000_000:
         raise ValueError("training_candidate_too_large")
+    surface, resource = training_identity(body)
     candidates = [
         (key, template)
         for key, template in _templates().items()
-        if (template.get("training_candidate") or {}).get("employee_id") == body["employee_id"]
+        if (policy := template.get("training_candidate"))
+        and policy.get(
+            "surface",
+            (policy.get("growthbook", {}).get("lifecycle") or {}).get("surface", "employee_prompt"),
+        )
+        == surface
+        and policy.get("employee_id" if surface == "employee_prompt" else "resource_id") == resource
     ]
     if len(candidates) != 1:
         raise ValueError("training_employee_template_unbound")
@@ -82,28 +97,57 @@ def create_training_candidate(body):
                     raise ValueError("training_candidate_request_conflict")
                 return request_id
         observed = {
-            str(sample["run_id"]): sample.get("task")
+            str(sample["run_id"]): sample
             for cluster in mine(ledger_path(), days=14, min_count=1)
-            if cluster["employee_id"] == body["employee_id"]
+            if training_identity(cluster) == (surface, resource)
             for sample in cluster["samples"]
             if sample.get("run_id")
         }
         if not body["failure_run_ids"] or not set(body["failure_run_ids"]).issubset(observed):
             raise ValueError("training_failure_source_unbound")
         source_hashes = {
-            hashlib.sha256(observed[run_id].encode("utf-8")).hexdigest()
+            hashlib.sha256(observed[run_id]["task"].encode("utf-8")).hexdigest()
             for run_id in body["failure_run_ids"]
-            if isinstance(observed[run_id], str) and observed[run_id].strip()
+            if isinstance(observed[run_id].get("task"), str) and observed[run_id]["task"].strip()
         }
-        cases = json.loads(body["bundle_json"])["case_sha256"]
+        bundle = json.loads(body["bundle_json"])
+        cases = bundle["case_sha256"]
         if not cases or not set(cases).issubset(source_hashes):
             raise ValueError("training_reproduction_source_unbound")
+        if surface == "workflow_nl_prompt":
+            from modstore_server.workflow_nl_training import _digest
+
+            pairs = {
+                (
+                    hashlib.sha256(sample["task"].encode()).hexdigest(),
+                    _digest(sample["generation_context"]),
+                )
+                for run_id in body["failure_run_ids"]
+                if (sample := observed[run_id]).get("prompt_sha256")
+                == hashlib.sha256(proposal["control_prompt"].encode()).hexdigest()
+            }
+            contexts = bundle.get("case_context_sha256", [])
+            if (
+                bundle.get("surface") != surface
+                or len(contexts) != len(cases)
+                or not set(zip(cases, contexts)).issubset(pairs)
+            ):
+                raise ValueError("training_workflow_reproduction_unbound")
         repository = configuration()["repository"]
         if github("GET", f"/repos/{repository}/commits/main")["sha"] != body["source_sha"]:
             raise ValueError("training_baseline_not_current_main")
         prompt_path = policy.get("prompt_path", "")
         path = Path(prompt_path)
-        if not prompt_path or path.is_absolute() or ".." in path.parts or path.name != "prompt.txt":
+        if (
+            not prompt_path
+            or path.is_absolute()
+            or ".." in path.parts
+            or (
+                path.name != "prompt.txt"
+                if surface == "employee_prompt"
+                else prompt_path != WORKFLOW_NL_PROMPT_PATH
+            )
+        ):
             raise ValueError("training_prompt_path_unbound")
         content = github(
             "GET",
@@ -111,13 +155,22 @@ def create_training_candidate(body):
         )
         if (
             content.get("encoding") != "base64"
-            or base64.b64decode(content["content"], validate=False).decode("utf-8")
+            or prompt_from_source(
+                base64.b64decode(content["content"], validate=False).decode("utf-8"),
+                surface=surface,
+            )
             != proposal["control_prompt"]
         ):
             raise ValueError("training_baseline_prompt_changed")
         growthbook = dict(policy.get("growthbook") or {})
+        if (
+            proposal["offline_evidence"].get("feedback_scope") == "workflow_execution_terminal"
+            and (growthbook.get("lifecycle") or {}).get("measurement_scope")
+            != "workflow_execution_terminal"
+        ):
+            raise ValueError("training_execution_experiment_required")
         growthbook["lifecycle"] = {**(growthbook.get("lifecycle") or {}), **proposal}
-        if growthbook["lifecycle"].get("employee_id") != body["employee_id"]:
+        if surface_identity(growthbook["lifecycle"]) != (surface, resource):
             raise ValueError("training_experiment_surface_unbound")
         growthbook = freeze_experiment_policy(growthbook)
         request = {key: template[key] for key in ("criterion_ids", "checks", "container_image")}
@@ -133,7 +186,12 @@ def create_training_candidate(body):
             owner_id,
             training_candidate={
                 "template_id": template_id,
-                "employee_id": body["employee_id"],
+                "surface": surface,
+                **(
+                    {"employee_id": resource}
+                    if surface == "employee_prompt"
+                    else {"resource_id": resource, "prompt_symbol": "SYSTEM_PROMPT"}
+                ),
                 "submission_digest": source_digest,
                 "failure_run_ids": body["failure_run_ids"],
                 "workflow_run_id": body["workflow_run_id"],
@@ -157,6 +215,7 @@ def training_plan(request_id):
     return "\n\n以下是待审批的产品 prompt 替换数据；离线通过仅允许进入审批，必须完成正式发布与在线实验。\n" + json_dumps(
         {
             "path": source["prompt_path"],
+            **({"symbol": source["prompt_symbol"]} if source.get("prompt_symbol") else {}),
             "expected_sha256": life["offline_evidence"]["prompt_sha256"]["control"],
             "replacement": life["treatment_prompt"],
             "offline_evidence": life["offline_evidence"],

@@ -965,10 +965,10 @@ describe('ModStore.coverage – searchMods', () => {
     wrapper.unmount()
   })
 
-  it('searchMods：非 market tab 且 query 非空 → /api/mod-store/search', async () => {
+  it('searchMods：非 market tab 且 query 非空 → 完整目录按查询过滤', async () => {
     mockApiFetch.mockResolvedValue({
       ok: true,
-      json: async () => ({ success: true, data: [makeMod({ id: 's1' })] }),
+      json: async () => ({ success: true, data: { available: [makeMod({ id: 'hello-employee', artifact: 'employee_pack' })] } }),
     })
     const { wrapper } = await mountModStore({ tab: 'all' })
     await waitForAsync()
@@ -979,8 +979,8 @@ describe('ModStore.coverage – searchMods', () => {
     await flushPromises()
     expect(mockApiFetch).toHaveBeenCalled()
     const callArg = mockApiFetch.mock.calls[0][0] as string
-    expect(callArg).toContain('/api/mod-store/search')
-    expect(callArg).toContain('q=hello')
+    expect(callArg).toBe('/api/mod-store/catalog')
+    expect(vm.filteredMods.map((item: any) => item.id)).toEqual(['hello-employee'])
     wrapper.unmount()
   })
 
@@ -1992,6 +1992,32 @@ describe('AI market modules and employees', () => {
       expect(wrapper.findAll('.store-card .card-title').map(item => item.text())).toEqual(['A Package', 'B Report', 'Z Daily report'])
       expect(wrapper.get('.store-main__meta').text()).toContain('共 3 个模块')
       expect((wrapper.vm as any).filteredMods.map((item: any) => item.id)).toContain('last-module')
+    } finally { wrapper.unmount() }
+  })
+
+  it('finds employees beyond the first 50 matching modules in the combined catalog', async () => {
+    const rows = [
+      ...Array.from({ length: 60 }, (_, index) => ({ ...moduleRow, id: `daily-module-${index}` })),
+      { ...employee, id: 'employee-61', name: 'Z Report', description: 'DAILY customer support' },
+      { ...employee, id: 'daily-employee', name: 'A Report' },
+      { ...employee, id: 'nonmatch-employee', name: 'Other employee', author: 'Daily author' },
+    ]
+    mockApiFetch.mockImplementation(async (url: string) => {
+      if (url === '/api/mod-store/catalog') return catalogResponse(rows)
+      const params = new URL(url, 'https://test.local').searchParams
+      const query = String(params.get('q') || '').trim().toLowerCase()
+      const matches = rows.filter(row => [row.name, row.id, row.description].some(field => String(field || '').toLowerCase().includes(query)))
+      return { ok: true, json: async () => ({ success: true, data: matches.slice(0, Number(params.get('limit') || 50)) }) }
+    })
+    const { wrapper } = await mountModStore({ type: 'employee', tab: 'all' })
+    try {
+      await waitForAsync()
+      mockApiFetch.mockClear()
+      await wrapper.get('.store-search__input').setValue(' dAiLy ')
+      await wrapper.get('form.store-search').trigger('submit')
+      await waitForAsync()
+      expect(wrapper.findAll('.store-card .card-title').map(item => item.text())).toEqual(['A Report', 'Z Report'])
+      expect(mockApiFetch).toHaveBeenCalledExactlyOnceWith('/api/mod-store/catalog', { timeoutMs: 90_000 })
     } finally { wrapper.unmount() }
   })
 

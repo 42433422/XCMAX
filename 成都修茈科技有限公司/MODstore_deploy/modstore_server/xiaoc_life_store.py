@@ -144,6 +144,8 @@ def _active_principal(session: Session, user_id: int | None) -> bool:
 
 
 def _blockers(data: dict[str, Any], session: Session) -> list[str]:
+    from modstore_server.strategic_remote_life import waiting_deadline
+
     if data["level"] < 4 or data["paused"]:
         return []
     blocked = []
@@ -158,7 +160,7 @@ def _blockers(data: dict[str, Any], session: Session) -> list[str]:
     if data.get("unknown_usage"):
         blocked.append("上一轮模型用量或执行结果未知，保留额度等待回执核对")
     active = data.get("active_cycle")
-    if active and parse_time(active["deadline"]) <= utcnow():
+    if active and waiting_deadline(data) <= utcnow():
         blocked.append("上一轮运行租约已到期，等待原回执，不重复执行")
     return blocked
 
@@ -373,6 +375,8 @@ def require_life_capability(minimum_level: int) -> None:
 
 
 def claim_cycle(*, domain: str, reserve_tokens: int) -> dict[str, Any] | None:
+    from modstore_server.strategic_remote_life import waiting_deadline
+
     if (
         domain not in MINIMUM_LEVEL
         or type(reserve_tokens) is not int
@@ -383,7 +387,7 @@ def claim_cycle(*, domain: str, reserve_tokens: int) -> dict[str, Any] | None:
     def claim(data: dict[str, Any], session: Session) -> dict[str, Any] | None:
         now = utcnow()
         if data.get("active_cycle"):
-            if parse_time(data["active_cycle"]["deadline"]) <= now:
+            if waiting_deadline(data) <= now:
                 data["unknown_usage"] = True
                 data["last_status"] = "blocked"
             return None
@@ -438,6 +442,8 @@ def claim_cycle(*, domain: str, reserve_tokens: int) -> dict[str, Any] | None:
 
 
 def cycle_active(claim: dict[str, Any]) -> bool:
+    from modstore_server.strategic_remote_life import execution_deadline
+
     with get_session_factory()() as session:
         row = session.get(XiaoCLifeState, IDENTITY_ID)
         if row is None:
@@ -458,7 +464,7 @@ def cycle_active(claim: dict[str, Any]) -> bool:
             )
             and current.get("lease_token")
             and current.get("policy_revision") == data["revision"]
-            and parse_time(current["deadline"]) > utcnow()
+            and execution_deadline(data, claim) > utcnow()
             and not data["paused"]
             and data["level"] >= MINIMUM_LEVEL[claim["domain"]]
             and not _blockers(data, session)
@@ -632,6 +638,9 @@ def defer_cycle(
 
 def record_cycle_step(claim: dict[str, Any], *, kind: str, details: dict[str, Any]) -> None:
     """Journal existing execution identities before leaving the process."""
+    from modstore_server.strategic_remote_life import execution_deadline, require_step
+
+    require_step(kind, details)
 
     def record(data: dict[str, Any], _session: Session) -> None:
         active = data.get("active_cycle") or {}
@@ -642,7 +651,7 @@ def record_cycle_step(claim: dict[str, Any], *, kind: str, details: dict[str, An
         if (
             active.get("policy_revision") != data["revision"]
             or data["paused"]
-            or parse_time(active["deadline"]) <= utcnow()
+            or execution_deadline(data, claim) <= utcnow()
             or data["level"] < MINIMUM_LEVEL[active["domain"]]
             or _blockers(data, _session)
         ):
@@ -673,6 +682,9 @@ def record_life_reservation(reservation: dict[str, Any]) -> None:
 
 def portfolio_life_guard(decision_id: str, proposal: dict[str, Any], state: dict[str, Any]) -> None:
     """Existing portfolio/model admission consults this only for life-owned work."""
+    from modstore_server.strategic_remote_life import require_portfolio
+
+    require_portfolio(proposal, decision_id)
     if not str(proposal.get("period", "")).startswith("xiaoc-life:"):
         return
     claim = _CLAIM.get()
@@ -697,6 +709,9 @@ def portfolio_life_guard(decision_id: str, proposal: dict[str, Any], state: dict
 
 
 def require_life_task_capacity(proposal: dict[str, Any], tokens: int) -> None:
+    from modstore_server.strategic_remote_life import require_new_task
+
+    require_new_task()
     if not str(proposal.get("period", "")).startswith("xiaoc-life:"):
         return
     claim = _CLAIM.get()

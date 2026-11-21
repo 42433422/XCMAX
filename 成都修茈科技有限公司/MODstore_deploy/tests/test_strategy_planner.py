@@ -1,4 +1,6 @@
 import json
+import logging
+from types import SimpleNamespace
 
 import pytest
 
@@ -178,3 +180,107 @@ def test_scheduled_plan_is_sql_proposal_then_authenticated_approval_and_executio
     state = runtime.run_portfolio_cycle(decision_id, owner_user_id=7)
     assert len(executions) == 1 and state["tasks"]["a"]["status"] == "completed"
     assert not ledger.exists()
+
+
+def test_historical_domain_aliases_retain_unrated_status_without_stale_gaps(tmp_path, monkeypatch):
+    from modstore_server import strategy_planner
+
+    report = tmp_path / "domain.json"
+    report.write_text(
+        json.dumps(
+            {
+                "audited_at": "2026-11-15T00:00:00+00:00",
+                "source": "historical-3396",
+                "domains": [
+                    {
+                        "domain_id": "di-layering",
+                        "status": "UNRATED",
+                        "score": 9,
+                        "blocking_gap": "outdated gap must not become current evidence",
+                    }
+                ],
+            }
+        )
+    )
+    monkeypatch.setenv("MODSTORE_DOMAIN_AUDIT_PATH", str(report))
+    context = strategy_planner._domain_status()
+    assert context["domains"][0]["domain_id"] == "architecture"
+    assert context["domains"][0]["score"] is None
+    assert context["audited_at"].startswith("2026-11-15")
+    assert "blocking_gap" not in json.dumps(context)
+
+
+@pytest.fixture
+def private_market_context(monkeypatch):
+    context = {
+        "assets": {"status": "unknown"},
+        "repo": {"status": "ok"},
+        "domains": {"status": "unknown"},
+        "market": {
+            "queries": [
+                {
+                    "query_id": "query-1",
+                    "domain_id": "customer-service",
+                    "acceptance_target": 0.9,
+                    "window_days": 14,
+                    "employee_id": "private-employee-sentinel",
+                    "customer_goal_ids": ["private-customer-goal"],
+                }
+            ],
+            "evidence": [
+                {
+                    "query_id": "query-1",
+                    "evidence_id": "evidence-1",
+                    "title": "private-market-observation",
+                }
+            ],
+        },
+        "active_bets": ["private-active-bet"],
+    }
+    monkeypatch.setattr(strategy_planner, "collect_context", lambda: context)
+    monkeypatch.setattr(strategy_planner.strategy_bets, "read_metric", lambda _: None)
+    return context
+
+
+@pytest.mark.parametrize("command", ["plan", "context"])
+def test_cli_summary_keeps_private_market_data_in_internal_result(
+    private_market_context, capsys, command
+):
+    result = strategy_planner.plan_strategy(dry_run=True)
+    assert result["candidates"][0]["employee_id"] == "private-employee-sentinel"
+    assert result["candidates"][0]["customer_goal_ids"] == ["private-customer-goal"]
+    assert strategy_planner._main([command, "--dry-run"]) == 0
+    output = capsys.readouterr().out
+    assert "private-" not in output
+    summary = json.loads(output)
+    assert summary["ok"] is True
+    assert summary["candidate_count"] == int(command == "plan")
+
+
+def test_registered_strategy_job_logs_counts_without_market_candidate_payload(
+    private_market_context, monkeypatch, caplog
+):
+    from modstore_server import workflow_scheduler as scheduler
+    from modstore_server.workflow_scheduler_startup_phase04 import _register_scheduler_phase_04
+
+    result = strategy_planner.plan_strategy(dry_run=True)
+    assert result["candidates"][0]["employee_id"] == "private-employee-sentinel"
+    registered = {}
+    tracked = []
+
+    def add_job(func, *args, **kwargs):
+        registered[kwargs["id"]] = func
+
+    def run_tracked(name, callback):
+        tracked.append(name)
+        return callback()
+
+    monkeypatch.setattr(scheduler, "_scheduler", SimpleNamespace(add_job=add_job))
+    monkeypatch.setattr(scheduler, "_run_tracked_scheduler_job", run_tracked)
+    monkeypatch.setattr(strategy_planner, "plan_strategy", lambda: result)
+    _register_scheduler_phase_04()
+    with caplog.at_level(logging.INFO, logger=scheduler.__name__):
+        registered["strategy_planner"]()
+    assert tracked == ["strategy_planner"]
+    assert "private-" not in caplog.text
+    assert "candidates=1" in caplog.text

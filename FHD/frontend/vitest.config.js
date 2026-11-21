@@ -59,8 +59,9 @@ export default defineConfig({
       // Real Mod views live outside frontend/src, matching production Vite resolution.
       { find: 'vue-router', replacement: path.resolve(__dirname, 'node_modules/vue-router') },
       { find: 'pinia', replacement: path.resolve(__dirname, 'node_modules/pinia') },
+      { find: 'element-plus', replacement: path.resolve(__dirname, 'node_modules/element-plus') },
     ],
-    dedupe: ['vue', 'vue-router', 'pinia'],
+    dedupe: ['vue', 'vue-router', 'pinia', 'element-plus'],
   },
   test: {
     setupFiles: ['./vitest.setup.ts'],

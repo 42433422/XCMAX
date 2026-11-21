@@ -53,7 +53,15 @@ def gateway_life(database, monkeypatch, tmp_path):
     monkeypatch.setattr(llm_catalog, "_cache", {})
     monkeypatch.setattr(llm_catalog, "_last_force_refresh", {})
     monkeypatch.setattr(http_clients, "_external_async_client", None)
-    gateway = {"calls": [], "max_budget": 100.0, "budget_http_status": 200}
+    gateway = {
+        "calls": [],
+        "max_budget": 100.0,
+        "budget_http_status": 200,
+        "attempt_headers": {
+            "x-litellm-attempted-retries": "0",
+            "x-litellm-attempted-fallbacks": "0",
+        },
+    }
 
     def respond(request):
         gateway["calls"].append(request)
@@ -127,8 +135,11 @@ def gateway_life(database, monkeypatch, tmp_path):
             "interests": [],
             "self_assessment": None,
         }
+        headers = httpx.Headers(gateway["attempt_headers"])
+        headers.update(gateway.get("response_headers", {}))
         return httpx.Response(
             200,
+            headers=headers,
             json={
                 "id": "chatcmpl-life-gateway",
                 "object": "chat.completion",
@@ -147,7 +158,6 @@ def gateway_life(database, monkeypatch, tmp_path):
                 },
                 **gateway.get("response_overrides", {}),
             },
-            headers=gateway.get("response_headers", {}),
         )
 
     transport = httpx.MockTransport(respond)
@@ -232,6 +242,29 @@ def test_default_gateway_cognition_settles_both_ledgers_and_repeated_ticks_are_i
             )
             == 1
         )
+
+
+def test_gateway_budget_does_not_settle_unverified_attempts_or_release_the_life_hold(
+    gateway_life, database
+):
+    gateway_life["attempt_headers"] = {}
+    state = asyncio.run(runtime.tick_async())
+    cycle = next(event for event in state["events"] if event["id"].startswith("cycle:"))
+    assert cycle["status"] == "unknown"
+    assert state["unknown_usage"] is True and not state["goals"]
+    assert state["budget"]["used_tokens"] == 0 and state["budget"]["reserved_tokens"] > 0
+    with database() as session:
+        request = session.scalar(
+            select(LlmClientRequest).where(
+                LlmClientRequest.client_request_id == gateway_life["request_id"]
+            )
+        )
+        receipt = json.loads(request.done_json)
+        assert request.state == receipt["status"] == "unknown"
+        assert receipt["gateway_attempts_verified"] is False
+        assert receipt["actual_tokens"] is None
+    asyncio.run(runtime.tick_async())
+    assert sum(request.method == "POST" for request in gateway_life["calls"]) == 1
 
 
 @pytest.mark.parametrize("missing_budget", ["unlimited", "database_unavailable"])

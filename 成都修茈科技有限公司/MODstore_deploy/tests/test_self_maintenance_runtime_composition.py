@@ -235,6 +235,29 @@ def test_lease_and_admission_denials_never_dispatch_or_finalize_memory(lease_ava
     assert not platform_llm_scope_active()
 
 
+@pytest.mark.parametrize("cloud_device", [None, "   "])
+def test_cloud_opt_in_without_device_fails_without_dispatch(monkeypatch, cloud_device):
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_DOT_MAILBOX", "1")
+    monkeypatch.setenv("MODSTORE_PARA_DEVICE_ID", "legacy-mac")
+    if cloud_device is None:
+        monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_DEVICE_ID", raising=False)
+    else:
+        monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_DEVICE_ID", cloud_device)
+    harness = RuntimeHarness("missing-cloud-device")
+
+    result = harness.runtime.run()
+
+    assert harness.calls == []
+    assert result["status"] == "failed"
+    assert result["failed_step"] == "code"
+    assert (
+        result["error"] == "MODSTORE_SELF_MAINTENANCE_DEVICE_ID is required for dot mailbox routing"
+    )
+    assert [row["phase"] for row in harness.ledger] == ["start", "complete"]
+    assert harness.outcomes == [result]
+    assert not harness.lock.locked()
+
+
 def test_failed_review_stops_qa_and_records_one_failed_terminal_outcome():
     harness = RuntimeHarness("reject", fail_step="review")
     result = harness.runtime.run()

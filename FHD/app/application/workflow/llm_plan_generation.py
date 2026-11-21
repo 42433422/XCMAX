@@ -14,7 +14,6 @@ from app.application.workflow.clarification_selection import CLARIFICATION_PARSE
 from app.application.workflow.planner_prompt_profile import (
     BASE_RULES,
     ELT_IMPORT_RULE,
-    _slim_schema,
     attachment_import_manifest,
     select_rules_for_prompt,
     select_tools_for_prompt,
@@ -150,7 +149,7 @@ class PlannerCompletion(Protocol):
         messages: list[dict[str, str]],
         http_client_factory: Callable[[], httpx.Client] | None = None,
         temperature: float = 0.1,
-        max_tokens: int = 1200,
+        max_tokens: int | None = None,
         **kwargs: Any,
     ) -> dict[str, Any] | None: ...
 
@@ -289,12 +288,12 @@ def _tool_specs(tool_registry: dict[str, Any]) -> list[dict[str, Any]]:
                     "action": name,
                     "description": str(
                         getattr(contract, "description", "") or spec.get("description") or ""
-                    )[:160],
+                    )[:240],
                     "risk": metadata.get("risk", "low"),
                     "idempotent": bool(metadata.get("idempotent", False)),
-                    "output_schema": _slim_schema(getattr(contract, "output_schema", {})),
+                    "output_schema": getattr(contract, "output_schema", {}),
                     "required_params": metadata.get("required_params", []),
-                    "input_schema": _slim_schema(raw_schema),
+                    "input_schema": raw_schema,
                 }
             )
         result.append(

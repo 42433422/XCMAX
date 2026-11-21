@@ -19,6 +19,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 
 from modstore_server.db.db_base import get_session_factory
 from modstore_server.db.strategic import StrategicActionItem, StrategicDecision
+from modstore_server.strategic_customer_outcomes import CustomerGoalBinding
 from modstore_server.strategic_layer import (
     AutonomyEvaluator,
     DecisionProposer,
@@ -29,6 +30,7 @@ from modstore_server.strategy_bets import BetHypothesis
 
 SCHEMA = "xcagi.strategic_portfolio/v1"
 RESOURCES = ("cost_cents", "tokens", "compute_seconds")
+COMPANY_MAX_CANDIDATES = 256
 T = TypeVar("T")
 
 
@@ -47,6 +49,7 @@ class ModelTariff(BaseModel):
 
 class PortfolioLimits(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
+    company_budget_id: str = Field(default="", max_length=64)
     cost_cents: int = Field(ge=0, le=100_000_000)
     tokens: int = Field(ge=0, le=1_000_000_000)
     compute_seconds: int = Field(ge=1, le=7_776_000)
@@ -84,9 +87,17 @@ class Opportunity(BaseModel):
     depends_on: list[str] = Field(default_factory=list, max_length=32)
     source_refs: list[str] = Field(min_length=1, max_length=32)
     customer_goal_ids: list[str] = Field(default_factory=list, max_length=32)
+    customer_goal_bindings: list[CustomerGoalBinding] = Field(default_factory=list, max_length=32)
     hypothesis: BetHypothesis | None = None
     input_data: dict[str, Any] = Field(default_factory=dict, max_length=64)
     execution_binding: dict[str, str] = Field(default_factory=dict, max_length=8)
+
+    @model_validator(mode="after")
+    def bound_goals(self) -> Opportunity:
+        ids = [row.customer_goal_id for row in self.customer_goal_bindings]
+        if ids and (len(ids) != len(set(ids)) or set(ids) != set(self.customer_goal_ids)):
+            raise ValueError("customer bindings must identify each approved goal exactly once")
+        return self
 
     @field_validator("input_data")
     @classmethod
@@ -114,14 +125,19 @@ def digest(value: Any) -> str:
 
 
 def optimize_portfolio(
-    opportunities: list[dict[str, Any]], limits: dict[str, Any]
+    opportunities: list[dict[str, Any]],
+    limits: dict[str, Any],
+    *,
+    max_selected: int | None = None,
+    groups: list[tuple[list[str], dict[str, int]]] | None = None,
 ) -> dict[str, Any]:
     """Select a dependency-complete portfolio within all three resource caps."""
     from ortools.sat.python import cp_model
 
     cap = PortfolioLimits.model_validate(limits)
-    if not 1 <= len(opportunities) <= 128:
-        raise PortfolioError("a portfolio requires 1..128 opportunities")
+    maximum = COMPANY_MAX_CANDIDATES if groups is not None else 128
+    if not 1 <= len(opportunities) <= maximum:
+        raise PortfolioError(f"allocation requires 1..{maximum} opportunities")
     rows = [Opportunity.model_validate(row) for row in opportunities]
     by_id = {row.opportunity_id: row for row in rows}
     if len(by_id) != len(rows):
@@ -132,20 +148,44 @@ def optimize_portfolio(
     order = list(TopologicalSorter(graph).static_order())
     model = cp_model.CpModel()
     variables = {key: model.new_bool_var(f"opportunity_{index}") for index, key in enumerate(order)}
+    if max_selected is not None:
+        model.add(sum(variables.values()) <= max_selected)
     for key in RESOURCES:
         model.add(
             sum(getattr(row, key) * variables[row.opportunity_id] for row in rows)
             <= getattr(cap, key)
         )
+    grouped: set[str] = set()
+    for identifiers, budget in groups or []:
+        if (
+            not identifiers
+            or len(set(identifiers)) != len(identifiers)
+            or not set(identifiers).issubset(by_id)
+            or grouped.intersection(identifiers)
+            or any(
+                type(budget.get(key)) is not int or budget[key] < 0 for key in (*RESOURCES, "slots")
+            )
+        ):
+            raise PortfolioError("invalid disjoint approved allocation groups")
+        grouped.update(identifiers)
+        model.add(sum(variables[key] for key in identifiers) <= budget["slots"])
+        for resource in RESOURCES:
+            model.add(
+                sum(getattr(by_id[key], resource) * variables[key] for key in identifiers)
+                <= budget[resource]
+            )
+    if groups is not None and grouped != set(by_id):
+        raise PortfolioError("every company candidate requires its own portfolio limits")
     for row in rows:
         if row.risk == "high":
             model.add(variables[row.opportunity_id] == 0)
         for dep in row.depends_on:
             model.add(variables[row.opportunity_id] <= variables[dep])
     # Each boolean coefficient is below 2**31 (upstream OR-Tools issue #5293).
-    model.maximize(
-        sum(row.value_score * row.confidence_bps * variables[row.opportunity_id] for row in rows)
+    utility = sum(
+        row.value_score * row.confidence_bps * variables[row.opportunity_id] for row in rows
     )
+    model.maximize(utility)
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = 2.0
     solver.parameters.num_search_workers = 1
@@ -154,15 +194,35 @@ def optimize_portfolio(
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         raise PortfolioError("portfolio solver could not prove a feasible allocation")
     selected = [key for key in order if solver.value(variables[key])]
+    optimal = status == cp_model.OPTIMAL
+    if groups is not None and optimal and (remaining := 2.0 - solver.wall_time) > 0.005:
+        # Stable FIFO only breaks equal utility. It cannot outweigh a more
+        # valuable approved choice or introduce large mixed-radix coefficients.
+        optimum = sum(by_id[key].value_score * by_id[key].confidence_bps for key in selected)
+        model.add(utility == optimum)
+        model.maximize(
+            sum((len(order) - index) * variables[key] for index, key in enumerate(order))
+        )
+        solver.parameters.max_time_in_seconds = remaining
+        tied = solver.solve(model)
+        if tied in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+            selected = [key for key in order if solver.value(variables[key])]
     allocation = {key: sum(getattr(by_id[item], key) for item in selected) for key in RESOURCES}
     if any(allocation[key] > getattr(cap, key) for key in RESOURCES) or any(
         by_id[key].risk == "high" or not set(by_id[key].depends_on).issubset(selected)
         for key in selected
     ):
         raise PortfolioError("optimizer returned an invalid allocation")
+    for identifiers, budget in groups or []:
+        chosen = set(identifiers).intersection(selected)
+        if len(chosen) > budget["slots"] or any(
+            sum(getattr(by_id[key], resource) for key in chosen) > budget[resource]
+            for resource in RESOURCES
+        ):
+            raise PortfolioError("optimizer exceeded an approved portfolio group")
     return {
         "solver": "google/or-tools@9.15.6755/CP-SAT",
-        "optimal": status == cp_model.OPTIMAL,
+        "optimal": optimal,
         "selected": selected,
         "deferred": [key for key in order if key not in selected],
         "allocation": allocation,
@@ -186,7 +246,11 @@ def create_portfolio_proposal(
         or not idempotency_key.strip()
     ):
         raise PortfolioError("owner, goal and idempotency key are required")
-    cap = PortfolioLimits.model_validate(limits)
+    from modstore_server.strategic_company_resources import bind_limits
+
+    cap = PortfolioLimits.model_validate(
+        bind_limits(owner_user_id, PortfolioLimits.model_validate(limits).model_dump())
+    )
     if _date(cap.expires_at) <= datetime.now(UTC):
         raise PortfolioError("budget authorization must have a future expiry")
     from modstore_server.strategic_execution_contract import freeze_execution
@@ -244,10 +308,14 @@ def mutate_portfolio(
     decision_id: str, mutate: Callable[..., T], *, owner_user_id: int | None = None
 ) -> T:
     """Atomically change the existing ledger and action rows, including SQLite."""
+    from modstore_server.strategic_company_accounting import synchronize_portfolio
+    from modstore_server.strategic_company_resources import CompanyConflict
+
     for attempt in range(6):
         with get_session_factory()() as session:
             row, proposal, state = _row(session, decision_id, owner_user_id)
             previous = row.execution_result_json
+            before = json.loads(previous or "{}")
             expected_status, expected_payload, expected_actor = (
                 row.status,
                 row.decision_payload_json,
@@ -264,6 +332,7 @@ def mutate_portfolio(
             }
             session.expunge(row)
             try:
+                synchronize_portfolio(session, decision_id, proposal, before, state)
                 changed = cast(
                     CursorResult[Any],
                     session.execute(
@@ -283,9 +352,13 @@ def mutate_portfolio(
                     continue
                 session.commit()
                 return result
-            except (IntegrityError, OperationalError):
+            except (CompanyConflict, IntegrityError, OperationalError) as exc:
                 session.rollback()
                 if attempt == 5:
+                    if isinstance(exc, CompanyConflict):
+                        raise PortfolioError(
+                            "company resource capacity changed; retry when available"
+                        ) from exc
                     raise
     raise PortfolioError("concurrent portfolio change; retry with the same identity")
 
@@ -312,8 +385,13 @@ def require_active_portfolio_owner(owner_user_id: int, session: Any = None) -> N
         raise PortfolioError("portfolio owner is no longer an active administrator")
 
 
-def require_authorization(row: Any, proposal: dict[str, Any], state: dict[str, Any]) -> None:
-    require_active_portfolio_owner(proposal["owner_user_id"])
+def require_authorization(
+    row: Any, proposal: dict[str, Any], state: dict[str, Any], *, session: Any = None
+) -> None:
+    from modstore_server.strategic_company_resources import require_company_authorization
+
+    require_active_portfolio_owner(proposal["owner_user_id"], session)
+    require_company_authorization(proposal, session)
     if row.status not in {"approved", "executing"} or row.decided_by not in {
         "user",
         "council-vote",
@@ -424,7 +502,10 @@ def authorize_portfolio(
     def apply(
         row: Any, proposal: dict[str, Any], state: dict[str, Any], _session: Any
     ) -> dict[str, Any]:
+        from modstore_server.strategic_company_resources import require_company_authorization
+
         require_active_portfolio_owner(owner_user_id, _session)
+        require_company_authorization(proposal, _session)
         if row.status != "proposed" or proposal["proposal_sha256"] != expected_proposal_sha256:
             raise PortfolioError("portfolio approval state or proposal hash changed")
         if _date(proposal["limits"]["expires_at"]) <= datetime.now(UTC):

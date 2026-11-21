@@ -17,11 +17,18 @@ from modstore_server.strategic_portfolio import (
     portfolio_status,
     stop_portfolio,
 )
-from modstore_server.strategic_portfolio_runtime import review_portfolio, run_portfolio_cycle
+from modstore_server.strategic_portfolio_runtime import (
+    review_portfolio,
+    run_portfolio_cycle,
+)
 
 
 def tick(*, limit: int = 10) -> dict[str, Any]:
     """Recheck the principal and guardrails before every bounded execution cycle."""
+    from modstore_server.strategic_company_planner import prioritized_portfolios
+    from modstore_server.strategic_remote_receipts import reconcile_pending_reports
+
+    reconcile_pending_reports(limit=limit)
     with get_session_factory()() as session:
         ids = session.scalars(
             select(StrategicDecision.decision_id)
@@ -34,6 +41,9 @@ def tick(*, limit: int = 10) -> dict[str, Any]:
             .order_by(StrategicDecision.updated_at)
             .limit(max(1, min(limit, 100)))
         ).all()
+        ids = list(dict.fromkeys([*prioritized_portfolios(session), *ids]))[
+            : max(1, min(limit, 100))
+        ]
     results: list[dict[str, Any]] = []
     for decision_id in ids:
         try:

@@ -164,7 +164,9 @@ def run_telemetry_scan(
             release_plan = plan_release_candidate_from_market(market_payloads)
         except RECOVERABLE_ERRORS as exc:
             logger.warning("release_planning from market failed: %s", type(exc).__name__)
-            failures.append({"type": "release_planning", "error": "release_planning_failed"})
+            failures.append(
+                {"type": "release_planning", "error": "telemetry_release_planning_failed"}
+            )
 
     # 部分信号入库失败时必须如实返回 ok=False，否则调度器会记为成功，
     # 探针坏掉也不会被任何人发现。

@@ -136,13 +136,17 @@ export function useModStoreCatalog(state: ModStoreState): ModStoreCatalog {
     return mods
   }
 
-  const loadCatalogAvailable = async (): Promise<StoreModRow[]> => {
+  const requestCatalogAvailable = async (): Promise<StoreModRow[]> => {
     const response = await apiFetch('/api/mod-store/catalog', { timeoutMs: 90_000 })
     const data = await response.json()
     if (!data.success) {
       throw new Error(data.message || data.error || '获取本地目录失败')
     }
-    const rows = data.data.available || []
+    return data.data.available || []
+  }
+
+  const loadCatalogAvailable = async (): Promise<StoreModRow[]> => {
+    const rows = await requestCatalogAvailable()
     catalogSnapshot.value = rows
     return rows
   }
@@ -228,22 +232,13 @@ export function useModStoreCatalog(state: ModStoreState): ModStoreCatalog {
         allMods.value = refineMarketItems(result.items || [], tab)
         writeMarketCatalogCache(cacheKey, tab, allMods.value)
       } else {
-        // The search endpoint limits mixed employee/module matches before this view can separate them.
-        const serverSearch = Boolean(query) && type === 'employee'
-        const params = new URLSearchParams({ q: query, limit: '50' })
-        const response = await apiFetch(serverSearch ? `/api/mod-store/search?${params}` : '/api/mod-store/catalog', { timeoutMs: 90_000 })
-        const data = await response.json()
+        // Filter the complete combined directory; /search caps mixed matches before classification.
+        const rows = await requestCatalogAvailable()
         if (!current()) return
-        if (!data.success) throw new Error(data.message || data.error || '获取目录失败')
-        if (serverSearch) {
-          allMods.value = data.data || []
-        } else {
-          catalogSnapshot.value = data.data.available || []
-          allMods.value = type === 'module'
-            ? refineMarketItems(catalogSnapshot.value, tab).filter((item) =>
-              !query || [item.name, item.id, item.description].some((field) => String(field || '').toLowerCase().includes(query.toLowerCase())))
-            : catalogSnapshot.value
-        }
+        catalogSnapshot.value = rows
+        const needle = query.toLowerCase()
+        allMods.value = refineMarketItems(rows, tab).filter((item) =>
+          !needle || [item.name, item.id, item.description].some((field) => String(field || '').toLowerCase().includes(needle)))
       }
       fromCache.value = false
       applyFilters()

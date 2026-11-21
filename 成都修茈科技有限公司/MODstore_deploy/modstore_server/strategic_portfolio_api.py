@@ -12,6 +12,8 @@ from modstore_server.api.actor_identity import authenticated_admin_actor
 from modstore_server.api.deps import require_admin
 from modstore_server.db.strategic import StrategicDecision
 from modstore_server.models import User, get_session_factory
+from modstore_server.strategic_company_api import router as company_router
+from modstore_server.strategic_market_research import MarketResearchConfig
 from modstore_server.strategic_portfolio import (
     SCHEMA,
     Opportunity,
@@ -21,6 +23,7 @@ from modstore_server.strategic_portfolio import (
 )
 
 router = APIRouter(prefix="/portfolios", tags=["strategic-portfolio"])
+router.include_router(company_router)
 
 
 class DiscoverRequest(BaseModel):
@@ -29,6 +32,7 @@ class DiscoverRequest(BaseModel):
     limits: PortfolioLimits
     use_llm: bool = True
     input_data: dict[str, Any] = Field(default_factory=dict, max_length=64)
+    market_research: MarketResearchConfig | None = None
 
 
 class ProposalRequest(DiscoverRequest):
@@ -93,6 +97,7 @@ async def discover_opportunities(
             use_llm=body.use_llm,
             owner_user_id=int(admin.id),
             input_data=body.input_data,
+            market_research=body.market_research.model_dump() if body.market_research else None,
         )
     except PortfolioError as exc:
         raise HTTPException(409, str(exc)) from exc

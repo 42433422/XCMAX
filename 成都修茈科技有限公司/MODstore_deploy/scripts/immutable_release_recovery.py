@@ -60,7 +60,11 @@ def request_payload(value: Any) -> dict[str, Any]:
     ):
         raise RecoveryError("invalid_rollback_request_id")
     reason = value.get("reason")
-    if reason not in ("experiment_regression", "original_customer_reopened"):
+    if reason not in (
+        "experiment_regression",
+        "original_customer_reopened",
+        "verified_customer_refund",
+    ):
         raise RecoveryError("unsupported_rollback_reason")
     expected, target = (
         identity(value.get("expected_identity")),

@@ -16,12 +16,9 @@ from app.application.agent_orchestrator.context_window_manager import (
 from app.application.facades.tools_facade import get_workflow_tool_registry
 from app.application.workflow import planner_prompt_profile as profile
 from app.application.workflow.llm_plan_generation import _tool_specs
-from app.application.workflow.planner_llm_gateway import (
-    _compact_tool_registry,
-    _prepare_model_messages,
-    _shrink_planner_prompt,
-)
+from app.application.workflow.planner_llm_gateway import _prepare_model_messages
 from app.application.workflow.planner_prompt_profile import _slim_schema
+from app.infrastructure.llm.model_context_windows import ModelLimits
 
 
 @pytest.mark.parametrize(
@@ -51,13 +48,26 @@ def test_real_employee_inputs_and_preview_result_paths_reach_model():
     }
 
 
+@pytest.mark.asyncio
 @pytest.mark.parametrize("action_name", ["quote", "create_order"])
-def test_real_sales_catalog_requires_customer_through_budget_projection(action_name):
+async def test_real_sales_catalog_requires_customer_through_budget_projection(
+    monkeypatch, action_name
+):
     registry = get_workflow_tool_registry()
     prompt = {"tool_registry": _tool_specs({"sales": registry["sales"]})}
-    _compact_tool_registry(prompt)
-    outbound = [{"role": "user", "content": json.dumps(prompt, ensure_ascii=False)}]
-    assert _shrink_planner_prompt(outbound)
+    monkeypatch.setattr(
+        "app.application.agent_orchestrator.context_window_manager.get_context_window_manager",
+        ContextWindowManager,
+    )
+    provider = SimpleNamespace(model_name="test-model", chat_completion=AsyncMock())
+    outbound = await _prepare_model_messages(
+        provider,
+        {},
+        [{"role": "user", "content": json.dumps(prompt, ensure_ascii=False)}],
+        200,
+        {},
+        model_limits=ModelLimits(model="test-model", context_window=128_000),
+    )
     for projected in (prompt, json.loads(outbound[-1]["content"])):
         action = next(
             item
@@ -71,6 +81,7 @@ def test_real_sales_catalog_requires_customer_through_budget_projection(action_n
         assert any(error.validator == "anyOf" and not error.path for error in errors)
         validator.validate({**params, "customer_id": 1})
         validator.validate({**params, "customer_name": "客户甲"})
+    provider.chat_completion.assert_not_awaited()
 
 
 @pytest.mark.parametrize(
@@ -130,8 +141,8 @@ def test_slim_schema_preserves_composition_boolean_schemas_and_literal_field_nam
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("oversized", [None, "latest_input", "native_schema"])
-async def test_real_budget_retry_preserves_tools_and_reserved_input(monkeypatch, oversized):
+@pytest.mark.parametrize("oversized", [None, "tool_catalog", "latest_input", "native_schema"])
+async def test_real_budget_preserves_full_tools_or_rejects_before_io(monkeypatch, oversized):
     schema = {
         "type": "object",
         "properties": {"quantity": {"type": "integer", "description": "数量说明" * 500}},
@@ -139,7 +150,7 @@ async def test_real_budget_retry_preserves_tools_and_reserved_input(monkeypatch,
         "additionalProperties": False,
     }
     prompt = {
-        "user_message": "中" * 3000 if oversized == "latest_input" else "核对产品库存",
+        "user_message": "中" * 40_000 if oversized == "latest_input" else "核对产品库存",
         "rules": ["完整处理用户目标；字段必须符合工具契约。"],
         "tool_registry": [
             {
@@ -161,35 +172,55 @@ async def test_real_budget_retry_preserves_tools_and_reserved_input(monkeypatch,
         "tools": [{"type": "function", "function": {"name": "submit_plan"}}],
     }
     if oversized == "native_schema":
-        extra["tools"][0]["function"]["description"] = "外部协议" * 1000
+        extra["tools"][0]["function"]["description"] = "外部协议" * 10_000
     original = copy.deepcopy(prompt)
-    manager = ContextWindowManager(token_budget=1500)
+    original_extra = copy.deepcopy(extra)
+    manager = ContextWindowManager()
+    limits = ModelLimits(
+        model="test-model",
+        context_window=1500 if oversized == "tool_catalog" else 32_768,
+        max_output_tokens=1024,
+    )
     monkeypatch.setattr(
         "app.application.agent_orchestrator.context_window_manager.get_context_window_manager",
         lambda: manager,
     )
     provider = SimpleNamespace(model_name="test-model", chat_completion=AsyncMock())
     messages = [{"role": "user", "content": json.dumps(prompt, ensure_ascii=False)}]
+    context = {}
     if oversized:
-        with pytest.raises(ContextWindowExceeded):
-            await _prepare_model_messages(provider, {}, messages, 200, extra)
+        with pytest.raises(ContextWindowExceeded) as caught:
+            await _prepare_model_messages(
+                provider, context, messages, 200, extra, model_limits=limits
+            )
+        assert caught.value.reason == "fixed_context_overflow"
+        assert (
+            context["_context_budget"]["required_tokens"]
+            > context["_context_budget"]["budget_tokens"]
+        )
     else:
-        outbound = await _prepare_model_messages(provider, {}, messages, 200, extra)
+        outbound = await _prepare_model_messages(
+            provider, context, messages, 200, extra, model_limits=limits
+        )
         sent = json.loads(outbound[-1]["content"])
         assert sent["user_message"] == original["user_message"]
         assert sent["rules"] == original["rules"]
         assert {tool["tool_id"] for tool in sent["tool_registry"]} == {"conversation", "inventory"}
         for tool in sent["tool_registry"]:
+            assert tool["description"] == "工具说明" * 1000
             action = tool["actions"][0]
             assert action["action"] == "query"
+            assert action["description"] == "查询说明" * 1000
             for field in ("input_schema", "output_schema"):
                 contract = action.get(field) or sent["tool_schemas"][action[field + "_ref"]]
+                assert contract == schema
                 validator = Draft202012Validator(contract)
                 validator.validate({"quantity": 1})
                 assert list(validator.iter_errors({}))
-        reserved = 200 + estimate_messages_tokens(
+        schema_tokens = estimate_messages_tokens(
             [{"role": "system", "content": json.dumps(extra, ensure_ascii=False)}]
         )
-        assert estimate_messages_tokens(outbound) + reserved <= manager.token_budget
+        assert estimate_messages_tokens(outbound) <= limits.input_budget(200, schema_tokens)
     assert json.loads(messages[-1]["content"]) == original
+    assert extra == original_extra
     provider.chat_completion.assert_not_awaited()

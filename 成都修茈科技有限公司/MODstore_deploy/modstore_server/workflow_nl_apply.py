@@ -6,8 +6,12 @@ from __future__ import annotations
 import asyncio
 import importlib
 import logging
+import sqlite3
 import time
+from typing import Any
 from uuid import uuid4
+
+from sqlalchemy.exc import SQLAlchemyError
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
@@ -60,7 +64,12 @@ async def apply_nl_workflow_graph(
         record_observation,
         select_variant,
     )
-    from modstore_server.retort_experiment_surfaces import WORKFLOW_NL_RESOURCE
+    from modstore_server.retort_experiment_surfaces import (
+        WORKFLOW_CUSTOMER_MEASUREMENT,
+        WORKFLOW_EXECUTION_MEASUREMENT,
+        WORKFLOW_NL_RESOURCE,
+    )
+    from modstore_server.workflow_nl_training import record_failure
 
     system_prompt, assignment = select_variant(
         surface="workflow_nl_prompt",
@@ -70,7 +79,39 @@ async def apply_nl_workflow_graph(
         default_value=_facade().SYSTEM_PROMPT,
     )
     begin_observation(assignment)
+    event_name = (
+        "experiment.generation_observed"
+        if assignment
+        and assignment.get("measurement_scope")
+        in {WORKFLOW_EXECUTION_MEASUREMENT, WORKFLOW_CUSTOMER_MEASUREMENT}
+        and not assignment.get("execution_id")
+        else "experiment.observed"
+    )
     started = time.perf_counter()
+    generation_feedback: dict[str, Any] = {}
+
+    def record_generation(applied, *, session=None):
+        if generation_feedback:
+            record_failure(
+                db,
+                user,
+                wf,
+                **generation_feedback,
+                applied=applied,
+                assignment=assignment,
+                session=session,
+            )
+
+    def preserve_failed_generation(applied):
+        try:
+            record_generation(applied)
+        except RECOVERABLE_ERRORS as exc:
+            logger.warning(
+                "workflow failure provenance not saved workflow_id=%s error_type=%s",
+                workflow_id,
+                type(exc).__name__,
+            )
+
     try:
         result = await _generate_graph(
             db,
@@ -85,13 +126,17 @@ async def apply_nl_workflow_graph(
             target_employee_label=target_employee_label,
             status_hook=status_hook,
             preset_eskill_nodes=preset_eskill_nodes,
+            assignment=assignment,
+            generation_feedback=generation_feedback,
         )
     except _GENERATION_ERRORS as exc:
         db.rollback()
+        failure = {"ok": False, "error": type(exc).__name__}
+        preserve_failed_generation(failure)
         try:
             record_observation(
                 assignment,
-                result={"ok": False, "error": type(exc).__name__},
+                result=failure,
                 duration_ms=(time.perf_counter() - started) * 1000,
                 session=db,
             )
@@ -115,13 +160,14 @@ async def apply_nl_workflow_graph(
         # retried by the existing outbox without replaying model/graph creation.
         observed = dict(result)
         observed["ok"] = observed.get("ok") is True and observed.get("sandbox_ok") is True
+        record_generation(result, session=db)
         record_observation(
             assignment,
             result=observed,
             duration_ms=(time.perf_counter() - started) * 1000,
             session=db,
         )
-        if result.get("ok") is True or assignment is not None:
+        if result.get("ok") is True or assignment is not None or generation_feedback:
             db.commit()
     except RECOVERABLE_ERRORS as exc:
         db.rollback()
@@ -162,13 +208,14 @@ async def apply_nl_workflow_graph(
             else:
                 result["experiment_observation"] = {
                     "status": "queued",
-                    "event_id": f"experiment.observed:{assignment['observation_id']}",
+                    "event_id": f"{event_name}:{assignment['observation_id']}",
                 }
+        preserve_failed_generation(result)
         return result
     if assignment is not None:
         result["experiment_observation"] = {
             "status": "queued",
-            "event_id": f"experiment.observed:{assignment['observation_id']}",
+            "event_id": f"{event_name}:{assignment['observation_id']}",
         }
     return result
 
@@ -219,6 +266,8 @@ async def _generate_graph(
     target_employee_label,
     status_hook,
     preset_eskill_nodes,
+    assignment=None,
+    generation_feedback=None,
 ):
     wf, prov, mdl = workflow, provider, model
     employee_pack_id = str(target_employee_pack_id or "").strip()
@@ -246,6 +295,21 @@ async def _generate_graph(
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_msg},
     ]
+    from modstore_server.workflow_nl_training import capture_request
+
+    reproduction = capture_request(
+        db,
+        user,
+        workflow=wf,
+        task=user_msg,
+        system_prompt=system_prompt,
+        context={
+            "brief": brief,
+            "target_employee_pack_id": target_employee_pack_id,
+            "target_employee_label": target_employee_label,
+            "preset_nodes": preset_nodes,
+        },
+    )
     if status_hook:
         try:
             maybe = status_hook(f"正在调用 {prov}/{mdl} 生成画布节点与边…")
@@ -268,6 +332,35 @@ async def _generate_graph(
         if "missing api key" in e.lower():
             e = "该供应商未配置可用 API Key（平台或 BYOK）"
         return {"ok": False, "error": e}
+    if generation_feedback is not None and (reproduction is not None or assignment is not None):
+        generation_feedback.update(reproduction=reproduction, model_result=result)
+    return _apply_generated_response(
+        db,
+        user,
+        workflow=wf,
+        result=result,
+        brief=brief,
+        target_employee_pack_id=target_employee_pack_id,
+        target_employee_label=target_employee_label,
+        preset_nodes=preset_nodes,
+    )
+
+
+def _apply_generated_response(
+    db,
+    user,
+    *,
+    workflow,
+    result,
+    brief,
+    target_employee_pack_id=None,
+    target_employee_label=None,
+    preset_nodes=None,
+    validate_in_session=False,
+):
+    """The same conversion and static checks serve live generation and offline regression."""
+    workflow_id = workflow.id
+    preset_nodes = preset_nodes or []
     data = _facade()._extract_json_object(str(result.get("content") or ""))
     if not data:
         return {"ok": False, "error": "模型返回无法解析为 JSON 对象"}
@@ -486,9 +579,10 @@ async def _generate_graph(
                 continue
             cfg = n.get("config") if isinstance(n.get("config"), dict) else {}
             temp_skill_id = str(cfg.get("temp_skill_id") or "")
-            if temp_skill_id in blueprint_refs or str(cfg.get("skill_id") or "").strip():
-                if temp_skill_id not in preset_alias_refs:
-                    continue
+            if (
+                temp_skill_id in blueprint_refs or str(cfg.get("skill_id") or "").strip()
+            ) and temp_skill_id not in preset_alias_refs:
+                continue
             preset_skill_id = preset_name_to_skill.get(str(n.get("name") or "").strip()) or (
                 sole_preset_skill_id if temp_skill_id in preset_alias_refs else ""
             )
@@ -510,13 +604,6 @@ async def _generate_graph(
             "ok": False,
             "error": f"ESkill 节点引用了不存在的 temp_skill_id: {', '.join(missing_refs)}",
         }
-    if status_hook:
-        try:
-            maybe = status_hook("正在创建 AI 生成的 Skill…")
-            if hasattr(maybe, "__await__"):
-                await maybe
-        except RECOVERABLE_ERRORS:
-            pass
     id_map: _facade().Dict[str, int] = {}
     temp_to_skill: _facade().Dict[str, int] = {}
     try:
@@ -557,9 +644,22 @@ async def _generate_graph(
                 )
             )
         db.flush()
-        report = _validate_uncommitted_graph(db, user, wf)
+        if validate_in_session:
+            from modstore_server.workflow_engine import workflow_engine
+
+            report = workflow_engine.run_sandbox(
+                db, workflow, {}, mock_employees=True, validate_only=True, user_id=user.id
+            )
+        else:
+            report = _validate_uncommitted_graph(db, user, workflow)
     except RECOVERABLE_ERRORS as ex:
         db.rollback()
+        if isinstance(ex, (SQLAlchemyError, sqlite3.DatabaseError, OSError)):
+            return {
+                "ok": False,
+                "error": f"写入节点/边失败: {ex}",
+                "error_code": "workflow_persistence_failed",
+            }
         return {"ok": False, "error": f"写入节点/边失败: {ex}"}
     errs = [str(x) for x in report.get("errors") or []]
     val_ok = bool(report.get("ok"))

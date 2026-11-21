@@ -20,6 +20,7 @@ from modstore_server.llm_chat_providers import (
 from modstore_server.llm_chat_providers import chat_google as chat_google
 from modstore_server.llm_chat_providers import chat_openai_compatible as chat_openai_compatible
 from modstore_server.llm_chat_providers import stream_openai_compatible as stream_openai_compatible
+from modstore_server.llm_gateway_contract import gateway_body
 from modstore_server.llm_key_resolver import (
     OAI_COMPAT_OPENAI_STYLE_PROVIDERS,
     is_minimax_token_plan_key,
@@ -35,7 +36,7 @@ from modstore_server.llm_media_proxy import video_openai_compatible as video_ope
 from modstore_server.multimodal_llm import messages_use_openai_multipart_content
 from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 from modstore_server.platform_model_config import PlatformApiKey
-from modstore_server.xiaoc_life_chat import require_manual_life_capability
+from modstore_server.xiaoc_life_chat import manual_life_scope_active, require_manual_life_capability
 
 _MODEL_ALIASES: dict[tuple[str, str], str] = {
     # 官方 V2.5 于 2026-10-21 下线；保留原账号凭证和私有兼容端点。
@@ -131,7 +132,11 @@ def _openai_chat_body(
     tools: Optional[List[Dict[str, Any]]] = None,
     tool_choice: Any = None,
 ) -> Dict[str, Any]:
+    from modstore_server.strategic_portfolio_usage import scope_active
+
     body: Dict[str, Any] = {"model": model, "messages": messages}
+    if scope_active() or manual_life_scope_active():
+        body.update(gateway_body(provider))
     if stream:
         body["stream"] = True
         body["stream_options"] = {"include_usage": True}

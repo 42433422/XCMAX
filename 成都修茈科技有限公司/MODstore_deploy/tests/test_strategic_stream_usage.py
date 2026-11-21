@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import warnings
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
@@ -21,7 +22,29 @@ from modstore_server import strategic_portfolio_usage as usage
 
 
 @pytest.fixture
-def mandate(tmp_path, monkeypatch):
+def real_router_runtime(monkeypatch):
+    """Retain the pinned SDK's own warning policy independently of import order.
+
+    pytest reinstalls warnings-as-errors after collection; LiteLLM applies its
+    Pydantic interoperability filters only at first import. Reapply those same
+    upstream defaults for real-Router tests, then restore all caller filters.
+    Production mode prevents the upstream helper from reading a local .env.
+    """
+    monkeypatch.setenv("LITELLM_LOCAL_MODEL_COST_MAP", "True")
+    monkeypatch.setenv("LITELLM_MODE", "PRODUCTION")
+    with warnings.catch_warnings():
+        import litellm
+        from litellm._process_defaults import apply_process_defaults
+
+        apply_process_defaults()
+        # This fixture must not hide unrelated application/runtime warnings.
+        with pytest.raises(UserWarning, match="unrelated runtime warning"):
+            warnings.warn("unrelated runtime warning", UserWarning, stacklevel=1)
+        yield litellm
+
+
+@pytest.fixture
+def mandate(tmp_path, monkeypatch, request):
     from modstore_server import db, employee_runtime, models
     from modstore_server.db.db_base import Base
     from modstore_server.db.identity import User
@@ -71,7 +94,7 @@ def mandate(tmp_path, monkeypatch):
             "expires_at": (datetime.now(UTC) + timedelta(days=1)).isoformat(),
             "tariffs": [
                 {
-                    "provider": "openai",
+                    "provider": getattr(request, "param", "openai"),
                     "model": "approved-model",
                     "input_cents_per_million": 100,
                     "output_cents_per_million": 100,
@@ -386,15 +409,15 @@ ROUTER_SDK_WARNINGS = (
 @pytest.mark.parametrize("fallback", [False, True])
 @pytest.mark.parametrize("receipt", ["reported", "absent", "partial"])
 async def test_real_router_requires_original_usage_and_one_reserved_attempt(
-    mandate, monkeypatch, fallback, receipt
+    mandate, monkeypatch, fallback, receipt, real_router_runtime
 ):
     # Exercise the complete Router -> SDK -> HTTP -> provider wrapper -> router
     # wrapper chain. Returning a bare CustomStreamWrapper misses router prefetch.
     import importlib
 
-    monkeypatch.setenv("LITELLM_LOCAL_MODEL_COST_MAP", "True")
-    import litellm
     from openai import DefaultAsyncHttpxClient
+
+    litellm = real_router_runtime
 
     transport_api = importlib.import_module(
         DefaultAsyncHttpxClient.__mro__[1].__module__.split(".")[0]

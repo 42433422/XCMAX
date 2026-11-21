@@ -35,6 +35,44 @@ export type KellaiDataStatus = {
   latest_customer_at?: string
 }
 
+export type KellaiChannel = {
+  id: string | number
+  type: string
+  name: string
+  enabled: boolean
+  connected: boolean
+  connection_id: string
+  capabilities: {
+    send: boolean
+    receive: boolean
+    contacts: boolean
+    sync: boolean
+    transport?: string
+    receive_mode?: string
+    reason?: string
+    [key: string]: unknown
+  }
+}
+
+export type KellaiSendInput = {
+  client_request_id: string
+  customer_id: number
+  channel_type: string
+  contact_id: string
+  content: string
+}
+
+export type KellaiSendReceipt = {
+  request_id: string
+  status: 'sending' | 'accepted' | 'delivered' | 'failed' | 'unknown' | 'requires_desktop_execution' | string
+  provider_state?: 'accepted' | 'sent' | 'delivered' | 'read' | 'failed' | 'unknown' | string
+  message_id?: string | null
+  provider_message_id?: string | null
+  persisted?: boolean
+  replayed?: boolean
+  error?: string | null
+}
+
 export type KellaiCustomer = {
   customer_id: number
   display_name: string
@@ -119,7 +157,7 @@ export type KellaiFollowUpOverview = {
 type Envelope<T> = {
   success?: boolean
   data?: T
-  detail?: string
+  detail?: string | { error?: string; message?: string }
   error?: string
   message?: string
 }
@@ -130,7 +168,7 @@ const PAIRING_HEADERS: HeadersInit = {
   ...clientShellRequestHeaders(),
 }
 
-async function request<T>(path: string, init?: RequestInit, allowEmptyData = false): Promise<T> {
+async function request<T>(path: string, init?: RequestInit, allowEmptyData = false, receiptRequestId?: string): Promise<T> {
   const response = await apiFetch(path, {
     ...init,
     headers: {
@@ -139,8 +177,13 @@ async function request<T>(path: string, init?: RequestInit, allowEmptyData = fal
     },
   })
   const payload = (await response.json().catch(() => ({}))) as Envelope<T>
-  if (!response.ok || payload.success !== true || (!allowEmptyData && payload.data === undefined)) {
-    throw new Error(payload.detail || payload.error || payload.message || `请求失败（HTTP ${response.status}）`)
+  const receipt = payload.data as Partial<KellaiSendReceipt> | undefined
+  const validReceipt = receiptRequestId && receipt?.request_id === receiptRequestId
+    && typeof receipt.status === 'string'
+    && ['sending', 'unknown', 'accepted', 'delivered', 'failed', 'cancelled', 'requires_desktop_execution', 'rejected'].includes(receipt.status)
+  if (!response.ok || (receiptRequestId ? !validReceipt : payload.success !== true) || (!allowEmptyData && payload.data === undefined)) {
+    const detail = typeof payload.detail === 'string' ? payload.detail : payload.detail?.message || payload.detail?.error
+    throw new Error(detail || payload.error || payload.message || `请求失败（HTTP ${response.status}）`)
   }
   return payload.data as T
 }
@@ -150,11 +193,26 @@ export const kellaiBindingApi = {
     return request<KellaiBindingStatus>('/api/kellai/binding/status')
   },
 
-  start(): Promise<{ request_id: string; expires_at: string }> {
+  start(requestedScopes?: string[]): Promise<{ request_id: string; expires_at: string }> {
     return request<{ request_id: string; expires_at: string }>('/api/kellai/binding/start', {
       method: 'POST',
-      body: '{}',
+      body: JSON.stringify(requestedScopes ? { requested_scopes: requestedScopes } : {}),
     })
+  },
+
+  async channels(): Promise<KellaiChannel[]> {
+    const data = await request<{ channels?: KellaiChannel[] }>('/api/kellai/binding/channels')
+    return data.channels || []
+  },
+
+  sendMessage(input: KellaiSendInput): Promise<KellaiSendReceipt> {
+    return request<KellaiSendReceipt>('/api/kellai/binding/messages/send', {
+      method: 'POST', body: JSON.stringify(input),
+    }, false, input.client_request_id)
+  },
+
+  sendReceipt(requestId: string): Promise<KellaiSendReceipt> {
+    return request<KellaiSendReceipt>(`/api/kellai/binding/messages/requests/${encodeURIComponent(requestId)}`, undefined, false, requestId)
   },
 
   dataStatus(): Promise<KellaiDataStatus> {

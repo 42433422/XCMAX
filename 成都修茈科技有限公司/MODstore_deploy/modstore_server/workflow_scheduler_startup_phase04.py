@@ -206,10 +206,11 @@ def _register_scheduler_phase_04():
 
             out = _run_tracked_scheduler_job("strategy_planner", plan_strategy)
             logger.info(
-                "strategy plan: candidates=%s registered=%s evidence=%s",
-                out.get("candidates"),
-                out.get("registered"),
-                out.get("evidence"),
+                "strategy plan: status=%s candidates=%s registered=%s dispatched=%s",
+                out.get("status"),
+                len(out.get("candidates") or []),
+                len(out.get("registered") or []),
+                len(out.get("dispatched") or []),
             )
         except RECOVERABLE_ERRORS:
             logger.exception("strategy planner job failed")

@@ -20,8 +20,10 @@ from modstore_server.models import (
     User,
     WorkflowEdge,
     WorkflowNode,
+    WorkflowSandboxRun,
     get_session_factory,
 )
+from modstore_server.workflow_sandbox_state import workflow_graph_fingerprint
 from tests import test_retort_workflow_experiment as experiment_fixtures
 from tests.test_retort_experiment_lifecycle import start
 from tests.test_retort_workflow_experiment import observations
@@ -84,6 +86,22 @@ def persisted_graph(run):
         }
 
 
+def generation_provenance(run):
+    with get_session_factory()() as db:
+        workflow_id = run["workflows"][run["users"][0]]
+        rows = db.query(WorkflowSandboxRun).filter_by(workflow_id=workflow_id).all()
+        return [
+            {
+                "ok": row.ok,
+                "fingerprint": row.graph_fingerprint,
+                "current_fingerprint": workflow_graph_fingerprint(db, workflow_id),
+                "report": json_loads(row.report_json, {}),
+            }
+            for row in rows
+            if json_loads(row.report_json, {}).get("phase") == "natural_language_generation"
+        ]
+
+
 @pytest.mark.asyncio
 async def test_observation_write_failure_cannot_leave_saved_graph_reported_failed(
     workflow_with_skill, monkeypatch
@@ -115,11 +133,19 @@ async def test_observation_write_failure_cannot_leave_saved_graph_reported_faile
     assert result["experiment_observation"]["status"] == "not_recorded"
     assert observations(run) == []
     assert len(observations(run, "experiment.exposed")) == 1
+    provenance = generation_provenance(run)
+    assert len(provenance) == 1 and provenance[0]["ok"] is False
+    assert provenance[0]["report"]["training_eligible"] is False
+    assert provenance[0]["fingerprint"] == provenance[0]["current_fingerprint"]
 
     monkeypatch.setattr(db_outbox, "enqueue", original)
     retried = await run["generate"]()
     assert retried["ok"] is True and retried["sandbox_ok"] is True
     graph = persisted_graph(run)
+    provenance = generation_provenance(run)
+    successful = [row for row in provenance if row["ok"]]
+    assert len(provenance) == 2 and len(successful) == 1
+    assert successful[0]["fingerprint"] == successful[0]["current_fingerprint"]
     assert len(graph["nodes"]) == 3 and len(graph["edges"]) == 2
     assert graph["skill"] and len(graph["versions"]) == 1
     assert len(observations(run)) == 1
@@ -127,12 +153,23 @@ async def test_observation_write_failure_cannot_leave_saved_graph_reported_faile
 
 @pytest.mark.asyncio
 async def test_committed_graph_survives_original_outbox_retry_without_regeneration(
-    workflow_with_skill,
+    workflow_with_skill, monkeypatch
 ):
     run = workflow_with_skill
+    fetch_pending = db_outbox.fetch_pending
+    # Other tests retain their pending events in this shared database. Keep the
+    # real SQL query/claim/delivery contract scoped to this experiment's rows.
+    monkeypatch.setattr(
+        db_outbox,
+        "fetch_pending",
+        lambda **kwargs: fetch_pending(aggregate_prefix=run["id"], **kwargs),
+    )
     result = await run["generate"]()
     assert result["ok"] is True and result["sandbox_ok"] is True
     graph = persisted_graph(run)
+    provenance = generation_provenance(run)
+    assert len(provenance) == 1 and provenance[0]["ok"] is True
+    assert provenance[0]["fingerprint"] == provenance[0]["current_fingerprint"]
     with get_session_factory()() as db:
         row = (
             db.query(OutboxEvent)
@@ -145,6 +182,7 @@ async def test_committed_graph_survives_original_outbox_retry_without_regenerati
         assert payload["measurement_scope"] == "workflow_generation_static_validation"
         assert payload["success"] is True
         assert payload["workflow_id"] == run["workflows"][run["users"][0]]
+        assert provenance[0]["report"]["assignment"]["observation_id"] == payload["observation_id"]
         sandbox = (
             db.query(OutboxEvent)
             .filter_by(
@@ -219,6 +257,10 @@ async def test_final_commit_failure_rolls_back_graph_skills_and_observation(
     }
     assert observations(run) == []
     assert len(observations(run, "experiment.exposed")) == 1
+    provenance = generation_provenance(run)
+    assert len(provenance) == 1 and provenance[0]["ok"] is False
+    assert provenance[0]["report"]["training_eligible"] is False
+    assert provenance[0]["fingerprint"] == provenance[0]["current_fingerprint"]
 
 
 def test_management_workflow_http_status_matches_saved_state_and_polling_is_read_only(

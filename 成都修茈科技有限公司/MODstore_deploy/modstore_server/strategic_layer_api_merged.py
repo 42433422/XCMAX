@@ -31,7 +31,11 @@ def _report_service() -> _facade().StrategicReportService:
 def _portfolio_boundary(decision_id, principal=None):
     """Portfolio budget approval/results have their own authenticated contract."""
     record = _ledger().get(decision_id)
-    if record is None or record.decision_payload.get("schema") != "xcagi.strategic_portfolio/v1":
+    if record is None or record.decision_payload.get("schema") not in {
+        "xcagi.strategic_portfolio/v1",
+        "xcagi.strategy_company_budget/v1",
+        "xcagi.strategy_company_policy/v1",
+    }:
         return
     if principal is None:
         raise HTTPException(409, "Use the portfolio API for budget and execution changes")
@@ -171,10 +175,15 @@ def propose_decision(
     _: _facade().User = _facade().Depends(_facade().require_admin),
 ) -> _facade().Dict[str, _facade().Any]:
     """提议新决策；服务层立即评估自治边界并决定初始状态。"""
-    if (
-        body.scope == "strategy_portfolio"
-        or body.payload.get("schema") == "xcagi.strategic_portfolio/v1"
-    ):
+    if body.scope in {
+        "strategy_portfolio",
+        "strategy_company_budget",
+        "strategy_company_policy",
+    } or body.payload.get("schema") in {
+        "xcagi.strategic_portfolio/v1",
+        "xcagi.strategy_company_budget/v1",
+        "xcagi.strategy_company_policy/v1",
+    }:
         raise HTTPException(409, "Use the authenticated portfolio proposal API")
     try:
         decision_type = _facade().DecisionType(body.decision_type)
@@ -228,7 +237,14 @@ def list_decisions(
         .list_recent(status=status_enum, decision_type=type_enum, scope=scope, limit=limit)
     )
     records = [
-        r for r in records if r.decision_payload.get("schema") != "xcagi.strategic_portfolio/v1"
+        r
+        for r in records
+        if r.decision_payload.get("schema")
+        not in {
+            "xcagi.strategic_portfolio/v1",
+            "xcagi.strategy_company_budget/v1",
+            "xcagi.strategy_company_policy/v1",
+        }
     ]
     return {
         "ok": True,

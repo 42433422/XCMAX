@@ -22,6 +22,7 @@ import time
 from collections.abc import Mapping
 from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
 
+from modstore_server.llm_gateway_contract import gateway_body, gateway_single_attempt
 from modstore_server.llm_key_resolver import (
     OAI_COMPAT_OPENAI_STYLE_PROVIDERS,
     is_minimax_token_plan_key,
@@ -80,18 +81,33 @@ def model_registry_entry(provider: str, model: str) -> dict[str, Any]:
     module = _load_litellm()
     if module is None:
         return {}
-    namespace = {"google": "gemini", "xiaomi": "xiaomi_mimo", "together": "together_ai"}.get(
-        provider, provider
-    )
-    info = module.model_cost.get(f"{namespace}/{model}") or module.model_cost.get(model) or {}
-    return info if info.get("litellm_provider") == namespace else {}
+    namespace = {
+        "google": "gemini",
+        "xiaomi": "xiaomi_mimo",
+        "together": "together_ai",
+        "doubao": "volcengine",
+    }.get(provider, provider)
+    registry = getattr(module, "model_cost", {})
+    info = registry.get(f"{namespace}/{model}") or registry.get(model) or {}
+    if not isinstance(info, dict) or info.get("litellm_provider") != namespace:
+        return {}
+    lookup = getattr(module, "get_model_info", None)
+    if callable(lookup):
+        try:
+            resolved = lookup(model=model, custom_llm_provider=namespace)
+        except RECOVERABLE_ERRORS:
+            pass  # Unknown aliases have no inferred capacity; use the pinned registry only.
+        else:
+            if isinstance(resolved, dict) and resolved.get("litellm_provider") == namespace:
+                info = resolved
+    return info
 
 
 def model_limits(provider: str, model: str) -> dict[str, int]:
     info = model_registry_entry(provider, model)
     return {
         key: value
-        for key in ("max_input_tokens", "max_output_tokens")
+        for key in ("context_window", "max_input_tokens", "max_output_tokens")
         if type(value := info.get(key)) is int and value > 0
     }
 
@@ -169,7 +185,12 @@ def _deployment(
     return {
         "model_name": alias,
         "litellm_params": {**params, "model": litellm_model},
-        "model_info": {"id": alias, "provider": provider, "model": model},
+        "model_info": {
+            "id": alias,
+            "provider": provider,
+            "model": model,
+            **model_limits(provider, model),
+        },
     }
 
 
@@ -360,6 +381,7 @@ def _budgeted_stream_client(
     params: Dict[str, Any],
     reported: Dict[str, Any],
     *,
+    stream: bool = True,
     http_client: Any = None,
 ) -> Any:
     """Use LiteLLM's client injection to observe raw SDK chunks before its router.
@@ -393,15 +415,25 @@ def _budgeted_stream_client(
             return chunk
 
     class ReceiptClient(AsyncOpenAI):
+        gateway_attempts_verified = False
+
         async def post(self, path, **kwargs):
             from modstore_server.strategic_portfolio import PortfolioError
             from modstore_server.strategic_portfolio_usage import require_call_reservation
 
-            if path != "/chat/completions" or kwargs.get("stream") is not True:
-                raise PortfolioError("metered client requires the approved chat stream")
+            if path != "/chat/completions" or bool(kwargs.get("stream")) != stream:
+                raise PortfolioError("metered client requires the approved chat request")
             require_call_reservation(provider=provider, model=model, start_transport=True)
-            kwargs["stream_cls"] = ReceiptStream
-            return await super().post(path, **kwargs)
+            if stream:
+                kwargs["stream_cls"] = ReceiptStream
+            response = await super().post(path, **kwargs)
+            if provider == "litellm":
+                # LiteLLM requests the native SDK raw response here. Its own
+                # Router later replaces attempt headers with local-hop counts.
+                self.gateway_attempts_verified = gateway_single_attempt(
+                    getattr(response, "headers", {})
+                )
+            return response
 
     return ReceiptClient(
         api_key=params["api_key"],
@@ -469,6 +501,8 @@ def _normalize_response(
                 "代码生成路径禁止将推理链当作正文；请增大 max_tokens、换用非推理模型，或降低推理长度。"
             ),
             "content": "",
+            "provider": provider,
+            "model": used_model,
             "usage": usage,
             "reasoning_trace": reasoning,
             **meta,
@@ -524,7 +558,12 @@ async def chat(
     timeout_s = total_timeout_s or float(_router_settings()["request_timeout_seconds"])
     started = time.perf_counter()
     outcome = "success"
+    client = None
     try:
+        if single_attempt and provider == "litellm":
+            client = _budgeted_stream_client(
+                provider, model, deployments[0]["litellm_params"], {}, stream=False
+            )
         call = router.acompletion(
             model=_PRIMARY_ALIAS,
             messages=messages,
@@ -536,6 +575,11 @@ async def chat(
                 else {}
             ),
             **({"timeout": float(primary_timeout_s)} if primary_timeout_s else {}),
+            **(
+                {"extra_body": gateway_body(provider), "client": client}
+                if client is not None
+                else {}
+            ),
         )
         response = await asyncio.wait_for(call, timeout=float(timeout_s))
         hidden = getattr(response, "_hidden_params", None) or {}
@@ -554,6 +598,10 @@ async def chat(
             model=model,
             forbid_reasoning_fallback=forbid_reasoning_fallback,
         )
+        if provider == "litellm":
+            result["gateway_attempts_verified"] = (
+                client is not None and client.gateway_attempts_verified is True
+            )
         outcome = "success" if result.get("ok") else "error"
         return result
     except asyncio.CancelledError:
@@ -563,7 +611,11 @@ async def chat(
         outcome = "error"
         return _error_payload(exc, timeout_s=timeout_s)
     finally:
-        _observe(provider, model, time.perf_counter() - started, "chat", outcome)
+        try:
+            if client is not None:
+                await client.close()
+        finally:
+            _observe(provider, model, time.perf_counter() - started, "chat", outcome)
 
 
 def _stream_delta_events(
@@ -690,6 +742,7 @@ async def _stream_impl(
                     "disable_fallbacks": True,
                     "enable_mid_stream_fallback_continuation": False,
                     **({"client": client} if client is not None else {}),
+                    **({"extra_body": gateway_body(provider)} if provider == "litellm" else {}),
                 }
                 if single_attempt
                 else {}
@@ -709,6 +762,17 @@ async def _stream_impl(
                             **_fallback_meta(chunk),
                             "usage_estimated": not _reported_stream_usage(
                                 reported_receipt.get("usage", {}), usage
+                            ),
+                            **(
+                                {
+                                    "gateway_attempts_verified": (
+                                        client is not None
+                                        and client.gateway_attempts_verified is True
+                                    ),
+                                    "model": reported_receipt.get("model"),
+                                }
+                                if provider == "litellm"
+                                else {}
                             ),
                         }
                         if budgeted

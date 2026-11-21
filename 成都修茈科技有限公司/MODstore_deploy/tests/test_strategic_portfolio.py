@@ -487,7 +487,7 @@ def test_discovery_reuses_planner_and_filters_other_account_context(database, mo
     )
     monkeypatch.setattr(llm, "resolve_platform_bench_llm", lambda: ("test", "model"))
 
-    async def admission(*_args):
+    async def admission(*_args, **_kwargs):
         return planning_budget(budget_source="existing_platform_subscription_quota", max_calls=1)
 
     monkeypatch.setattr(usage, "planning_admission", admission)
@@ -940,3 +940,50 @@ def test_preregistered_metric_window_freezes_miss_and_stops_investment(
     sample["readings"]["SLO-API-01"]["reading_numeric"] = 1.0
     report_path.write_text(json.dumps(sample))
     assert runtime.review_portfolio(decision_id)["hypotheses"][0]["snapshot_sha256"] == digest
+
+
+def test_legacy_bets_cannot_self_authorize_or_dispatch():
+    from modstore_server import strategy_bets, strategy_planner
+
+    with pytest.raises(ValueError, match="authenticated"):
+        strategy_bets.register_bet(bet_id="legacy", budget={"tokens": 1_000_000})
+    with pytest.raises(strategy_bets.BudgetExceeded):
+        strategy_bets.record_spend("legacy", tokens=1)
+    assert strategy_planner.dispatch_bet({})["status"] == "blocked"
+
+
+def test_scheduled_discovery_persists_once_and_never_approves(database, monkeypatch):
+    from modstore_server import strategy_planner
+
+    seed_owner(database)
+    calls = []
+
+    async def discover(**_kwargs):
+        calls.append(True)
+        return {"source": "live_metric", "opportunities": [opportunity()]}
+
+    monkeypatch.setattr(runtime, "discover_portfolio_opportunities", discover)
+    template = {
+        "owner_user_id": 7,
+        "goal": "Improve delivery",
+        "limits": limits(),
+        "period_days": 7,
+        "use_llm": False,
+    }
+    first = asyncio.run(strategy_planner.run_scheduled_discovery(template=template))
+    second = asyncio.run(strategy_planner.run_scheduled_discovery(template=template))
+    assert first["status"] == "awaiting_approval" and second["idempotent"]
+    assert len(calls) == 1
+    state = p.portfolio_status(first["registered"][0], owner_user_id=7)
+    assert state["status"] == "proposed" and not state.get("authorization")
+    with pytest.raises(p.PortfolioError):
+        runtime.run_portfolio_cycle(state["decision_id"])
+    from modstore_server.db.llm_chat import LlmClientRequest
+
+    with database() as session:
+        receipt = session.execute(select(LlmClientRequest)).scalar_one()
+        receipt.state, receipt.done_json = "processing", '{"status":"running"}'
+        session.commit()
+    recovered = asyncio.run(strategy_planner.run_scheduled_discovery(template=template))
+    assert recovered["recovered"] and recovered["registered"] == first["registered"]
+    assert len(calls) == 1
