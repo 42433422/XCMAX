@@ -310,9 +310,7 @@ async def run_offline_login(
         )
     if is_admin_account_kind((result.get("user") or {}).get("role")):
         delete_session_quiet(result.get("session_id"))
-        return None, JSONResponse(
-            forbidden_payload(), status_code=_login_client_http_status(403)
-        )
+        return None, JSONResponse(forbidden_payload(), status_code=_login_client_http_status(403))
     session_id = result.get("session_id")
     result = await finalize_enterprise_login(
         result=result,
