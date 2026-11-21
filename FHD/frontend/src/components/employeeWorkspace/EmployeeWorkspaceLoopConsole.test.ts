@@ -48,6 +48,7 @@ async function setup(query: Record<string, string> = {}) {
     { path: '/', component: { template: '<div />' } },
     { path: '/task/:taskId', name: 'task-workspace', component: { template: '<div />' } },
     { path: '/employees', name: 'duty-roster-graph', component: { template: '<div />' } },
+    { path: '/workflow-employee-space/stitch-full', name: 'workflow-employee-stitch-full', component: { template: '<div />' } },
   ] })
   await router.push({ path: '/', query })
   await router.isReady()
@@ -228,7 +229,7 @@ describe('workspace submission and navigation boundaries', () => {
     expect(wrapper.vm.$route.query.task).toBeUndefined()
     expect(wrapper.text()).toContain('选择任务，查看工作空间与执行流程')
     await clickButton('员工图谱')
-    expect(wrapper.vm.$route.name).toBe('duty-roster-graph')
+    expect(wrapper.vm.$route.name).toBe('workflow-employee-stitch-full')
   })
   it('routes a task conversation and forwards every runtime control to the selected task', async () => {
     api.getTask.mockResolvedValue({ success: true, data: { ...task, capabilities: { approve: true, pause: true, resume: true, cancel: true, retry: true } } })

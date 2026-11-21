@@ -14,13 +14,13 @@ describe('coreMenuCatalog', () => {
     for (const item of [...catalog.core, ...catalog.industry]) {
       expect(MENU_DEFAULT_NAMES[item.key]).toBe(item.name)
     }
-    expect(catalog.core.find(item => item.key === 'employee-workflow')?.path).toBe('/workflow-employee-space')
+    expect(catalog.core.find(item => item.key === 'employee-workflow')?.path).toBe('/employee-workbench')
     expect(catalog.industry.find(item => item.key === 'template-preview')?.requires_desktop).toBe(false)
   })
 
   it('keeps the admin workflow subgroup separate from employee navigation', () => {
-    expect(ADMIN_EMPLOYEE_WORKFLOW_MENU_CHILDREN.map(item => item.key)).toEqual(['duty-roster-graph'])
-    expect(CORE_MENU_ITEMS_BASE.flatMap(item => item.children || []).map(item => item.key)).toEqual(['workflow-employee-space'])
+    expect(ADMIN_EMPLOYEE_WORKFLOW_MENU_CHILDREN.map(item => item.key)).toEqual([])
+    expect(CORE_MENU_ITEMS_BASE.flatMap(item => item.children || []).map(item => item.key)).toEqual(['employee-workbench', 'workflow-employee-space', 'workflow-employee-stitch-full'])
   })
   it('exposes business docking as a core menu item', () => {
     expect(CORE_MENU_ITEMS_BASE).toContainEqual(expect.objectContaining({ key: 'business-docking', name: '数据对接中心' }))

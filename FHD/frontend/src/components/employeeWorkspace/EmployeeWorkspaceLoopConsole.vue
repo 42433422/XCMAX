@@ -25,6 +25,7 @@ import { taskStatusLabel } from '@/utils/taskWorkspacePresentation'
 import { taskSummariesToTaskItems } from '@/utils/agentTaskWorkspaceModel'
 import AgentTaskRuntimePanel from '@/components/chat/AgentTaskRuntimePanel.vue'
 import TaskExecutionGraph from './TaskExecutionGraph.vue'
+import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 
 const props = withDefaults(defineProps<{ initialPane?: string; archiveOnly?: boolean }>(), { initialPane: 'flow', archiveOnly: false })
 const store = useAgentTaskCenterStore()
@@ -132,7 +133,10 @@ async function submit() {
       tool_id: 'employee',
       action: 'execute',
       params,
-      runtime_context: { source: 'admin_employee_workspace', client_surface: 'admin_console' },
+      runtime_context: {
+        source: isAdminConsoleSpa() ? 'admin_employee_workspace' : 'desktop_employee_workbench',
+        client_surface: isAdminConsoleSpa() ? 'admin_console' : 'enterprise_desktop',
+      },
     })
     if (response.success === false || !response.data?.run_id) throw new Error(response.message || '任务提交未确认')
     const id = pendingSubmission.value.taskId
@@ -199,7 +203,7 @@ onActivated(() => void refresh())
         >
       </div>
       <div class="workspace-toolbar-actions">
-        <el-button @click="router.push({ name: 'duty-roster-graph' })">员工图谱</el-button>
+        <el-button @click="router.push({ name: isAdminConsoleSpa() ? 'duty-roster-graph' : 'workflow-employee-stitch-full' })">员工图谱</el-button>
         <el-button :loading="loading" @click="refresh">刷新</el-button>
         <el-button v-if="!archiveOnly" type="primary" @click="openCompose">新建任务</el-button>
       </div>
