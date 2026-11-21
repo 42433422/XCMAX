@@ -87,6 +87,32 @@ describe('useAgentRunEvents', () => {
     expect(String(update?.title)).not.toContain('Agent')
   })
 
+  it.each([
+    ['completed', 'success', true], ['failed', 'failed', true], ['blocked', 'blocked', false],
+    ['waiting_user', 'queued', false], ['paused', 'paused', false], ['cancelled', 'cancelled', true],
+    ['rejected', 'blocked', true], ['', 'running', false],
+  ])('uses explicit observed status %s in the event-only fallback', (status, expected, terminal) => {
+    const update = buildAgentRunTaskUpdate({ runId: 'run-observed', events: [
+      { event_id: 'tool', run_id: 'run-observed', event_type: 'tool.completed' },
+      { event_id: 'observation', run_id: 'run-observed', event_type: 'run.observed', data: { status } },
+    ] })
+    expect(update).toMatchObject({ status: expected, payload: { terminal } })
+  })
+
+  it('keeps terminal evidence after an observation and clears resolved failure on a successful retry', () => {
+    const events = [
+      { event_id: 'failed', run_id: 'run-1', event_type: 'tool.failed', message: '第一次超时' },
+      { event_id: 'tool', run_id: 'run-1', event_type: 'tool.completed' },
+      { event_id: 'done', run_id: 'run-1', event_type: 'run.completed' },
+      { event_id: 'observation', run_id: 'run-1', event_type: 'run.observed', data: { status: 'completed' } },
+    ]
+    expect(buildAgentRunTaskUpdate({ runId: 'run-1', events })).toMatchObject({ status: 'success', error: '', payload: { terminal: true } })
+    expect(buildAgentRunTaskUpdate({ runId: 'run-1', events: [events[1], events[2], { ...events[3], data: {} }] }))
+      .toMatchObject({ status: 'success', payload: { terminal: true } })
+    expect(buildAgentRunTaskUpdate({ runId: 'run-1', events: [events[0], events[3]] }))
+      .toMatchObject({ status: 'failed', stage: '未确认执行结果' })
+  })
+
   it('sanitizes legacy backend event messages before showing them to users', () => {
     const update = buildAgentRunTaskUpdate({
       runId: 'run_legacy',

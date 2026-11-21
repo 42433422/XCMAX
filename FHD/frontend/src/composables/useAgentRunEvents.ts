@@ -17,6 +17,12 @@ export interface UseAgentRunEventSyncOptions {
 }
 
 const TERMINAL_EVENT_TYPES = new Set(['run.completed', 'run.failed', 'planner.blocked'])
+const OBSERVED_STATUSES: Record<string, TaskItem['status']> = {
+  queued: 'queued', planning: 'running', running: 'running', retrying: 'running',
+  completed: 'success', failed: 'failed', blocked: 'blocked', waiting_user: 'queued',
+  paused: 'paused', cancelled: 'cancelled', rejected: 'blocked',
+}
+const OBSERVED_TERMINAL = new Set(['completed', 'failed', 'cancelled', 'rejected'])
 
 /** 视为「只读查询」的工具 action（答案优先，不创建任务面板行）。 */
 const READONLY_QUERY_ACTIONS = new Set(['query', 'list', 'search', 'read', 'get', 'count'])
@@ -54,7 +60,8 @@ function isTrivialReadOnlyQueryRun(events: AgentRunEvent[]): boolean {
   const data = asRecord(toolStarted[0].data)
   const action = asString(data.action).trim().toLowerCase()
   if (!READONLY_QUERY_ACTIONS.has(action)) return false
-  const blocked = events.some((event) => ['tool.failed', 'step.blocked', 'step.waiting_user', 'planner.blocked'].includes(event.event_type))
+  const blocked = events.some((event) => ['tool.failed', 'step.blocked', 'step.waiting_user', 'planner.blocked'].includes(event.event_type)
+    || (event.event_type === 'run.observed' && ['failed', 'blocked', 'waiting_user', 'paused', 'cancelled', 'rejected'].includes(asString(event.data?.status))))
   return !blocked
 }
 
@@ -73,6 +80,11 @@ export function extractAgentRunId(payload: unknown): string {
 }
 
 function eventLabel(event: AgentRunEvent): string {
+  if (event.event_type === 'run.observed') {
+    const labels: Record<string, string> = { completed: '智能任务执行完成', failed: '智能任务执行失败',
+      blocked: '任务已阻断', waiting_user: '等待用户确认', paused: '任务已暂停', cancelled: '任务已取消', rejected: '任务已拒绝' }
+    if (labels[asString(event.data?.status)]) return labels[asString(event.data?.status)]
+  }
   const message = asString(event.message).trim()
   if (message) return normalizeTaskDisplayText(message)
   const type = asString(event.event_type).trim()
@@ -92,7 +104,10 @@ function eventLabel(event: AgentRunEvent): string {
   return labels[type] || '执行状态已更新'
 }
 
-function statusFromEvents(events: AgentRunEvent[]): TaskItem['status'] {
+function statusFromEvents(events: AgentRunEvent[], observedStatus: string): TaskItem['status'] {
+  if (OBSERVED_STATUSES[observedStatus]) {
+    return observedStatus === 'completed' && !hasConfirmedAgentRunExecution(events) ? 'failed' : OBSERVED_STATUSES[observedStatus]
+  }
   if (events.some((event) => ['run.failed', 'tool.failed', 'planner.blocked', 'step.blocked'].includes(event.event_type))) {
     return 'failed'
   }
@@ -103,7 +118,9 @@ function statusFromEvents(events: AgentRunEvent[]): TaskItem['status'] {
   return events.length ? 'running' : 'queued'
 }
 
-function progressFromEvents(events: AgentRunEvent[]): number {
+function progressFromEvents(events: AgentRunEvent[], observedStatus: string): number {
+  if (OBSERVED_TERMINAL.has(observedStatus)) return 100
+  if (observedStatus === 'waiting_user') return 85
   if (!events.length) return 5
   if (events.some((event) => event.event_type === 'run.completed')) return 100
   if (events.some((event) => ['run.failed', 'planner.blocked'].includes(event.event_type))) return 100
@@ -125,9 +142,12 @@ export function buildAgentRunTaskUpdate(params: {
   if (!hasAgentRunExecutionEvidence(events)) return null
   if (isTrivialReadOnlyQueryRun(events)) return null
   const last = events[events.length - 1]
-  const status = statusFromEvents(events)
+  const stateEvent = [...events].reverse().find(event => TERMINAL_EVENT_TYPES.has(event.event_type)
+    || (event.event_type === 'run.observed' && OBSERVED_STATUSES[asString(event.data?.status)]))
+  const observedStatus = stateEvent?.event_type === 'run.observed' ? asString(stateEvent.data?.status) : ''
+  const status = statusFromEvents(events, observedStatus)
   const unconfirmedCompletion =
-    status === 'failed' && events.some((event) => event.event_type === 'run.completed') && !hasConfirmedAgentRunExecution(events)
+    status === 'failed' && (observedStatus === 'completed' || events.some((event) => event.event_type === 'run.completed')) && !hasConfirmedAgentRunExecution(events)
   const stage = unconfirmedCompletion ? '未确认执行结果' : last ? eventLabel(last) : '等待执行状态'
   const errorEvent = [...events]
     .reverse()
@@ -139,16 +159,16 @@ export function buildAgentRunTaskUpdate(params: {
     source: 'agent',
     title: `智能任务：${userTitle || params.runId}`,
     status,
-    progress: progressFromEvents(events),
+    progress: progressFromEvents(events, observedStatus),
     stage,
     summary: status === 'success' ? '智能任务执行完成' : stage,
-    error: errorEvent ? eventLabel(errorEvent) : status === 'failed' ? '未收到可确认的工具执行结果' : '',
+    error: status === 'success' ? '' : errorEvent ? eventLabel(errorEvent) : status === 'failed' ? '未收到可确认的工具执行结果' : '',
     messageRef: params.messageRef,
     payload: {
       agentRunId: params.runId,
       agentEvents: events,
       lastAgentEventId: asString(last?.event_id),
-      terminal: last ? TERMINAL_EVENT_TYPES.has(last.event_type) : false,
+      terminal: observedStatus ? OBSERVED_TERMINAL.has(observedStatus) : !!stateEvent && TERMINAL_EVENT_TYPES.has(stateEvent.event_type),
     },
   }
 }

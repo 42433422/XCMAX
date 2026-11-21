@@ -76,3 +76,118 @@ class TestRetention:
         store.cleanup_expired()
         assert not old.exists()
         assert keep.exists()
+
+
+def test_otlp_export_preserves_stored_ids_parent_error_and_elapsed(tmp_path, monkeypatch):
+    from unittest.mock import MagicMock
+
+    from opentelemetry.sdk.trace.export import SpanExportResult
+    from opentelemetry.trace import StatusCode
+
+    monkeypatch.setenv("XCAGI_OTLP_ENDPOINT", "http://collector.invalid")
+    store = TraceStore(base_dir=tmp_path)
+    exporter = MagicMock()
+    exporter.export.return_value = SpanExportResult.SUCCESS
+    monkeypatch.setattr(store, "_get_otlp_exporter", lambda endpoint: exporter)
+    item = _span("b" * 16, trace_id="a" * 32, start_time=1000.0, status="error")
+    item.update(
+        parent_span_id="c" * 16,
+        end_time=900.0,
+        duration_ms=25.5,
+        events=[{"name": "response", "timestamp": 1000.02, "attributes": {"count": 1}}],
+    )
+    store.record(item)
+    store.flush()
+    exported = exporter.export.call_args.args[0][0]
+    assert exported.context.trace_id == int(item["trace_id"], 16)
+    assert exported.context.span_id == int(item["span_id"], 16)
+    assert exported.parent.span_id == int(item["parent_span_id"], 16)
+    assert exported.start_time == 1_000_000_000_000
+    assert exported.end_time - exported.start_time == 25_500_000
+    assert exported.status.status_code == StatusCode.ERROR
+    assert exported.events[0].name == "response"
+    assert store.query()[0]["trace_id"] == item["trace_id"]
+
+
+def test_otlp_bad_legacy_ids_remain_queryable_without_fabricated_trace(tmp_path, monkeypatch):
+    from unittest.mock import MagicMock
+
+    monkeypatch.setenv("XCAGI_OTLP_ENDPOINT", "http://collector.invalid")
+    store = TraceStore(base_dir=tmp_path)
+    exporter = MagicMock()
+    monkeypatch.setattr(store, "_get_otlp_exporter", exporter)
+    store.record(_span("legacy-span", trace_id="legacy-trace"))
+    store.flush()
+    exporter.assert_not_called()
+    assert store.query(trace_id="legacy-trace")[0]["span_id"] == "legacy-span"
+    assert not store._otlp_failed
+
+
+def test_otlp_export_failure_does_not_break_jsonl_flush(tmp_path, monkeypatch):
+    from unittest.mock import MagicMock
+
+    monkeypatch.setenv("XCAGI_OTLP_ENDPOINT", "http://collector.invalid")
+    store = TraceStore(base_dir=tmp_path)
+    exporter = MagicMock()
+    exporter.export.side_effect = TypeError("broken exporter")
+    monkeypatch.setattr(store, "_get_otlp_exporter", lambda endpoint: exporter)
+    store.record(_span("b" * 16, trace_id="a" * 32))
+    store.flush()
+    assert store.query(trace_id="a" * 32)
+    assert store._otlp_failed
+
+
+def test_genai_propagation_survives_background_flush(tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from unittest.mock import MagicMock
+
+    from opentelemetry.sdk.trace.export import SpanExportResult
+
+    from app.infrastructure.llm.genai_telemetry import start_genai_span
+    from app.neuro_bus.tracer import TraceContext
+
+    monkeypatch.setenv("XCAGI_OTLP_ENDPOINT", "http://collector.invalid")
+    store = TraceStore(base_dir=tmp_path)
+    exporter = MagicMock()
+    exporter.export.return_value = SpanExportResult.SUCCESS
+    monkeypatch.setattr(store, "_get_otlp_exporter", lambda endpoint: exporter)
+    with TraceContext("a" * 32, "b" * 16, trace_flags="00", trace_state="vendor=opaque"):
+        span = start_genai_span(
+            provider_id="test",
+            model="test",
+            temperature=0,
+            max_tokens=1,
+            profile="test",
+            caller=None,
+            tenant_id=None,
+            messages=[],
+        )
+        span.finish()
+        assert span.to_dict()["trace_flags"] == "00"
+        assert span.to_dict()["trace_state"] == "vendor=opaque"
+        store.record(span.to_dict())
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        pool.submit(store.flush).result()
+    exported = exporter.export.call_args.args[0][0]
+    assert exported.context.trace_flags == 0
+    assert exported.context.trace_state.to_header() == "vendor=opaque"
+    assert exported.parent.trace_flags == 0
+    assert exported.parent.trace_state.to_header() == "vendor=opaque"
+
+
+def test_transient_otlp_failure_does_not_disable_later_exports(tmp_path, monkeypatch):
+    from unittest.mock import MagicMock
+
+    from opentelemetry.sdk.trace.export import SpanExportResult
+
+    monkeypatch.setenv("XCAGI_OTLP_ENDPOINT", "http://collector.invalid")
+    store = TraceStore(base_dir=tmp_path)
+    exporter = MagicMock()
+    exporter.export.side_effect = [SpanExportResult.FAILURE, SpanExportResult.SUCCESS]
+    monkeypatch.setattr(store, "_get_otlp_exporter", lambda endpoint: exporter)
+    for span_id in ("b" * 16, "c" * 16):
+        store.record(_span(span_id, trace_id="a" * 32))
+        store.flush()
+    assert exporter.export.call_count == 2
+    assert not store._otlp_failed
+    assert len(store.query()) == 2

@@ -8,6 +8,21 @@ import {
 } from './agentStepChain'
 
 describe('stepsFromNodeResults', () => {
+  it('preserves trace/error fields and distinguishes zero from missing or invalid time', () => {
+    const rows = [0, undefined, -1, NaN, Infinity].map((duration_ms, index) => ({
+      node_id: `n${index}`, success: false, tool_id: 'excel', action: 'read', duration_ms,
+      trace_id: 'trace-a', span_id: 'span-a', parent_span_id: 'span-parent', run_id: 'run-a',
+      task_id: 'task-a', request_id: 'request-a', call_id: 'call-a', attempt: 2,
+      error_code: 'tool_timeout', error_type: 'TimeoutError',
+    }))
+    const steps = stepsFromNodeResults(rows)
+    expect(steps[0]).toMatchObject({ durationMs: 0, trace_id: 'trace-a', span_id: 'span-a', run_id: 'run-a',
+      error_code: 'tool_timeout', error_type: 'TimeoutError', attempt: 2 })
+    expect(steps.slice(1).every(step => step.durationMs === undefined)).toBe(true)
+    expect(chainDurationMs(steps)).toBeUndefined()
+    expect(chainDurationMs([steps[0]])).toBe(0)
+  })
+
   it('把成功的 node_results 映射为已完成步骤', () => {
     const steps = stepsFromNodeResults([
       { node_id: 'n1', success: true, tool_id: 'business_db', action: 'query', output_preview: '3 行', duration_ms: 320 },

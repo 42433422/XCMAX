@@ -1,56 +1,60 @@
-"""app/middleware/neuro_http_trace 单测：HTTP Neuro trace 中间件覆盖。
-
-直接驱动 async 函数（fake request + fake call_next），不起真实 ASGI（铁律4）。
-覆盖：redact 敏感头/普通头/截断/异常 / 禁用短路 / 正常完成 / call_next 异常 / publish 异常容错（铁律3）。
-"""
+"""Exercise full ASGI response lifetime, correlation, isolation and failure semantics."""
 
 from __future__ import annotations
 
-import uuid
+import asyncio
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
 
-from app.middleware.neuro_http_trace import _redact_headers, neuro_http_trace_middleware
-
-
-def _make_request(
-    method: str = "GET",
-    path: str = "/api/health",
-    query: str = "",
-    headers: dict[str, str] | None = None,
-    client_host: str | None = "127.0.0.1",
-) -> MagicMock:
-    """构造 MagicMock Request，覆盖 middleware 访问的所有属性。"""
-    request = MagicMock()
-    request.method = method
-    request.url.path = path
-    request.url.query = query
-    request.headers = headers if headers is not None else {}
-    if client_host is None:
-        request.client = None
-    else:
-        request.client.host = client_host
-    return request
+from app.middleware import neuro_http_trace as middleware
+from app.middleware.neuro_http_trace import NeuroHttpTraceMiddleware, _redact_headers
+from app.neuro_bus.tracer import get_trace_context
 
 
 @pytest.fixture
-def neuro_enabled(monkeypatch) -> MagicMock:
-    """Patch neuro_bus 依赖为 enabled + sampling；返回 publish_neuro_event mock。"""
+def neuro_enabled(monkeypatch):
     monkeypatch.setattr(
-        "app.neuro_bus.integrations.intent_integration.is_neuro_stack_enabled",
-        MagicMock(return_value=True),
+        "app.neuro_bus.integrations.intent_integration.is_neuro_stack_enabled", lambda: True
     )
-    monkeypatch.setattr(
-        "app.neuro_bus.neuro_trace_config.should_sample_http",
-        MagicMock(return_value=True),
-    )
-    publish_mock = MagicMock(return_value=True)
-    monkeypatch.setattr(
-        "app.neuro_bus.application_neuro_bridge.publish_neuro_event",
-        publish_mock,
-    )
-    return publish_mock
+    monkeypatch.setattr("app.neuro_bus.neuro_trace_config.should_sample_http", lambda: True)
+    publish = MagicMock(return_value=True)
+    monkeypatch.setattr("app.neuro_bus.application_neuro_bridge.publish_neuro_event", publish)
+    return publish
+
+
+def _scope(*, headers=(), path="/api/ai/chat/stream", kind="http"):
+    return {
+        "type": kind,
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "http",
+        "path": path,
+        "query_string": b"limit=10",
+        "headers": list(headers),
+        "client": ("127.0.0.1", 5000),
+        "server": ("test", 80),
+    }
+
+
+async def _drive(app, *, scope=None, disconnected=False):
+    messages = []
+
+    async def receive():
+        return {"type": "http.disconnect" if disconnected else "http.request", "body": b""}
+
+    async def send(message):
+        messages.append(message)
+
+    await NeuroHttpTraceMiddleware(app)(scope or _scope(), receive, send)
+    return messages
+
+
+async def _success(scope, receive, send):
+    await send({"type": "http.response.start", "status": 200, "headers": []})
+    await send({"type": "http.response.body", "body": b"done"})
 
 
 class TestRedactHeaders:
@@ -114,253 +118,256 @@ class TestRedactHeaders:
         assert _redact_headers(_PartialHeaders()) == {"X-Ok": "ok"}
 
 
-class TestNeuroHttpTraceMiddleware:
-    """neuro_http_trace_middleware 异步中间件测试。"""
+async def test_w3c_request_and_response_share_context(neuro_enabled):
+    trace_id, parent_id = "1" * 32, "2" * 16
+    scope = _scope(
+        headers=[
+            (b"traceparent", f"00-{trace_id}-{parent_id}-00".encode()),
+            (b"x-request-id", b"test-request-123"),
+        ]
+    )
+    before = get_trace_context()
 
-    async def test_disabled_stack_short_circuits_to_call_next(self, monkeypatch):
-        """is_neuro_stack_enabled() == False 时短路，不发布事件。"""
-        monkeypatch.setattr(
-            "app.neuro_bus.integrations.intent_integration.is_neuro_stack_enabled",
-            MagicMock(return_value=False),
-        )
-        sample_mock = MagicMock(return_value=True)
-        monkeypatch.setattr(
-            "app.neuro_bus.neuro_trace_config.should_sample_http",
-            sample_mock,
-        )
-        publish_mock = MagicMock()
-        monkeypatch.setattr(
-            "app.neuro_bus.application_neuro_bridge.publish_neuro_event",
-            publish_mock,
-        )
+    async def app(scope, receive, send):
+        context = get_trace_context()
+        assert context["trace_id"] == trace_id
+        assert context["span_id"] != parent_id
+        assert context["request_id"] == "test-request-123"
+        assert scope["state"]["trace_id"] == trace_id
+        await _success(scope, receive, send)
 
-        request = _make_request()
-        response = MagicMock(status_code=200)
+    messages = await _drive(app, scope=scope)
+    headers = dict(messages[0]["headers"])
+    assert headers[b"x-trace-id"].decode() == trace_id
+    assert headers[b"x-request-id"] == b"test-request-123"
+    assert headers[b"traceparent"].decode().endswith("-00")
+    started, completed = [call.args[1] for call in neuro_enabled.call_args_list]
+    assert started["parent_span_id"] == parent_id
+    assert completed["trace_id"] == started["trace_id"]
+    assert completed["span_id"] == started["span_id"]
+    assert completed["duration_ms"] == completed["latency_ms"]
+    assert get_trace_context() == before
 
-        async def call_next(_req):
-            return response
 
-        result = await neuro_http_trace_middleware(request, call_next)
+@pytest.mark.parametrize("traceparent", ["garbage", "00-" + "0" * 32 + "-" + "1" * 16 + "-01"])
+async def test_invalid_traceparent_gets_new_valid_trace(traceparent, neuro_enabled):
+    messages = await _drive(
+        _success, scope=_scope(headers=[(b"traceparent", traceparent.encode())])
+    )
+    headers = dict(messages[0]["headers"])
+    assert len(headers[b"x-trace-id"]) == 32
+    assert headers[b"x-trace-id"] != b"0" * 32
+    assert len(headers[b"traceparent"]) == 55
 
-        assert result is response
-        sample_mock.assert_not_called()  # 短路求值
-        publish_mock.assert_not_called()
 
-    async def test_disabled_sampling_short_circuits_to_call_next(self, monkeypatch):
-        """should_sample_http() == False 时短路，不发布事件。"""
-        monkeypatch.setattr(
-            "app.neuro_bus.integrations.intent_integration.is_neuro_stack_enabled",
-            MagicMock(return_value=True),
-        )
-        monkeypatch.setattr(
-            "app.neuro_bus.neuro_trace_config.should_sample_http",
-            MagicMock(return_value=False),
-        )
-        publish_mock = MagicMock()
-        monkeypatch.setattr(
-            "app.neuro_bus.application_neuro_bridge.publish_neuro_event",
-            publish_mock,
-        )
+@pytest.mark.parametrize("sampled", [False, True])
+async def test_disabled_sampling_preserves_correlation(sampled, neuro_enabled, monkeypatch):
+    monkeypatch.setattr("app.neuro_bus.neuro_trace_config.should_sample_http", lambda: sampled)
 
-        request = _make_request()
-        response = MagicMock(status_code=200)
+    async def app(scope, receive, send):
+        assert get_trace_context()["trace_id"]
+        await _success(scope, receive, send)
 
-        async def call_next(_req):
-            return response
+    await _drive(app)
+    assert neuro_enabled.call_count == (2 if sampled else 0)
 
-        result = await neuro_http_trace_middleware(request, call_next)
 
-        assert result is response
-        publish_mock.assert_not_called()
+async def test_stream_completion_waits_for_last_byte(neuro_enabled, monkeypatch):
+    ticks = [0]
+    monkeypatch.setattr(middleware, "time", SimpleNamespace(perf_counter_ns=lambda: ticks[0]))
 
-    async def test_import_failure_short_circuits_to_call_next(self, monkeypatch):
-        """is_neuro_stack_enabled 抛 ImportError 时短路，不发布事件。"""
-        monkeypatch.setattr(
-            "app.neuro_bus.integrations.intent_integration.is_neuro_stack_enabled",
-            MagicMock(side_effect=ImportError("missing dep")),
-        )
-        publish_mock = MagicMock()
-        monkeypatch.setattr(
-            "app.neuro_bus.application_neuro_bridge.publish_neuro_event",
-            publish_mock,
-        )
+    async def app(scope, receive, send):
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        ticks[0] = 500_000_000
+        await send({"type": "http.response.body", "body": b"data: first\n\n", "more_body": True})
+        assert neuro_enabled.call_count == 1
+        await asyncio.sleep(0)
+        assert get_trace_context()["trace_id"] == scope["state"]["trace_id"]
+        ticks[0] = 1_500_000_000
+        await send({"type": "http.response.body", "body": b"", "more_body": False})
 
-        request = _make_request()
-        response = MagicMock(status_code=200)
+    await _drive(app)
+    assert neuro_enabled.call_args.args[0] == "http.request.completed"
+    assert neuro_enabled.call_args.args[1]["duration_ms"] == 1500
 
-        async def call_next(_req):
-            return response
 
-        result = await neuro_http_trace_middleware(request, call_next)
+async def test_stream_failure_after_headers_is_not_success(neuro_enabled):
+    failure = TypeError("secret=private-value")
 
-        assert result is response
-        publish_mock.assert_not_called()
+    async def app(scope, receive, send):
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"partial", "more_body": True})
+        raise failure
 
-    async def test_normal_request_publishes_started_and_completed(self, neuro_enabled):
-        """正常请求：发布 started + completed 事件。"""
-        request = _make_request(
-            method="POST",
-            path="/api/orders",
-            query="limit=10",
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": "Bearer secret",
-            },
-            client_host="10.0.0.1",
-        )
-        response = MagicMock(status_code=201)
+    with pytest.raises(TypeError) as exc:
+        await _drive(app)
+    assert exc.value is failure
+    assert neuro_enabled.call_count == 2
+    event, detail = neuro_enabled.call_args.args
+    assert event == "http.request.failed"
+    assert detail["outcome"] == "error" and detail["error_type"] == "TypeError"
+    assert "private-value" not in detail["error"]
 
-        async def call_next(_req):
-            return response
 
-        result = await neuro_http_trace_middleware(request, call_next)
+@pytest.mark.parametrize("raises", [False, True])
+async def test_disconnect_and_cancel_have_terminal_cancelled(neuro_enabled, raises):
+    async def app(scope, receive, send):
+        if raises:
+            raise asyncio.CancelledError
+        assert (await receive())["type"] == "http.disconnect"
 
-        assert result is response
-        assert neuro_enabled.call_count == 2
+    if raises:
+        with pytest.raises(asyncio.CancelledError):
+            await _drive(app)
+    else:
+        await _drive(app, disconnected=True)
+    assert neuro_enabled.call_args.args[0] == "http.request.cancelled"
+    assert neuro_enabled.call_args.args[1]["outcome"] == "cancelled"
 
-        started_call = neuro_enabled.call_args_list[0]
-        assert started_call.args[0] == "http.request.started"
-        assert started_call.kwargs["domain"] == "global"
-        started = started_call.args[1]
-        assert started["method"] == "POST"
-        assert started["path"] == "/api/orders"
-        assert started["query"] == "limit=10"
-        assert started["client"] == "10.0.0.1"
-        uuid.UUID(started["request_id"])  # 合法 UUID
-        assert started["headers"]["Authorization"] == "<redacted>"
-        assert started["headers"]["Content-Type"] == "application/json"
 
-        completed_call = neuro_enabled.call_args_list[1]
-        assert completed_call.args[0] == "http.request.completed"
-        completed = completed_call.args[1]
-        assert completed["status_code"] == 201
-        assert completed["request_id"] == started["request_id"]
-        assert completed["method"] == "POST"
-        assert isinstance(completed["latency_ms"], float)
+async def test_incomplete_stream_is_not_success(neuro_enabled):
+    async def app(scope, receive, send):
+        await send({"type": "http.response.start", "status": 200, "headers": []})
 
-    async def test_call_next_raises_publishes_failed_and_reraises(self, neuro_enabled):
-        """call_next 抛 ValueError 时发布 failed 事件并重新抛出。"""
-        request = _make_request(method="GET", path="/api/broken")
+    await _drive(app)
+    assert neuro_enabled.call_args.args[0] == "http.request.failed"
 
-        async def call_next(_req):
-            raise ValueError("downstream failed")
 
-        with pytest.raises(ValueError, match="downstream failed"):
-            await neuro_http_trace_middleware(request, call_next)
+async def test_concurrent_requests_do_not_share_context(neuro_enabled):
+    contexts = []
+    both_started = asyncio.Event()
 
-        assert neuro_enabled.call_count == 2
-        assert neuro_enabled.call_args_list[0].args[0] == "http.request.started"
+    async def app(scope, receive, send):
+        original = get_trace_context()
+        contexts.append(original)
+        if len(contexts) == 2:
+            both_started.set()
+        await both_started.wait()
+        assert get_trace_context() == original
+        await _success(scope, receive, send)
 
-        failed_call = neuro_enabled.call_args_list[1]
-        assert failed_call.args[0] == "http.request.failed"
-        failed = failed_call.args[1]
-        assert failed["error"] == "downstream failed"
-        assert failed["method"] == "GET"
-        assert failed["path"] == "/api/broken"
-        assert isinstance(failed["latency_ms"], float)
+    before = get_trace_context()
+    await asyncio.gather(_drive(app), _drive(app))
+    assert contexts[0]["trace_id"] != contexts[1]["trace_id"]
+    assert contexts[0]["request_id"] != contexts[1]["request_id"]
+    assert get_trace_context() == before
 
-    async def test_publish_started_failure_is_swallowed(self, neuro_enabled):
-        """started publish 抛 RuntimeError 时被吞掉，仍走 call_next 与 completed。"""
 
-        def _flaky(event_type, payload, domain="global"):
-            if event_type == "http.request.started":
-                raise RuntimeError("publish down")
-            return True
+@pytest.mark.parametrize("failure_type", [RuntimeError, TypeError, AttributeError])
+async def test_export_failure_preserves_application_error(neuro_enabled, failure_type):
+    neuro_enabled.side_effect = failure_type("publisher unavailable")
 
-        neuro_enabled.side_effect = _flaky
+    async def app(scope, receive, send):
+        raise ValueError("original application error")
 
-        request = _make_request()
-        response = MagicMock(status_code=200)
+    with pytest.raises(ValueError, match="original application error"):
+        await _drive(app)
 
-        async def call_next(_req):
-            return response
 
-        result = await neuro_http_trace_middleware(request, call_next)
+async def test_non_http_scope_passes_through(neuro_enabled):
+    async def app(scope, receive, send):
+        assert scope["type"] == "websocket"
 
-        assert result is response
-        assert neuro_enabled.call_count == 2  # started(抛错) + completed
+    await _drive(app, scope=_scope(kind="websocket"))
+    neuro_enabled.assert_not_called()
 
-    async def test_publish_completed_failure_is_swallowed(self, neuro_enabled):
-        """completed publish 抛 ValueError 时被吞掉，response 正常返回。"""
 
-        def _flaky(event_type, payload, domain="global"):
-            if event_type == "http.request.completed":
-                raise ValueError("completed publish failed")
-            return True
+async def test_starlette_middleware_stack_preserves_stream_context(neuro_enabled):
+    import httpx
+    from fastapi import FastAPI
+    from starlette.responses import StreamingResponse
 
-        neuro_enabled.side_effect = _flaky
+    app = FastAPI()
 
-        request = _make_request()
-        response = MagicMock(status_code=200)
+    @app.middleware("http")
+    async def inner_base_http(request, call_next):
+        return await call_next(request)
 
-        async def call_next(_req):
-            return response
+    app.add_middleware(NeuroHttpTraceMiddleware)
 
-        result = await neuro_http_trace_middleware(request, call_next)
+    @app.get("/stream")
+    async def stream():
+        before = get_trace_context()
 
-        assert result is response
+        async def chunks():
+            yield b"data: first\n\n"
+            await asyncio.sleep(0)
+            assert get_trace_context() == before
+            yield b"data: last\n\n"
 
-    async def test_publish_failed_failure_swallowed_and_original_reraised(self, neuro_enabled):
-        """call_next 抛错且 failed publish 也抛错时，原错误仍正确传播。"""
+        return StreamingResponse(chunks(), media_type="text/event-stream")
 
-        def _flaky(event_type, payload, domain="global"):
-            if event_type == "http.request.failed":
-                raise RuntimeError("failed publish also broken")
-            return True
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.get("/stream")
+    assert response.text.endswith("data: last\n\n")
+    assert neuro_enabled.call_args.args[0] == "http.request.completed"
+    assert neuro_enabled.call_args.args[1]["trace_id"] == response.headers["X-Trace-ID"]
 
-        neuro_enabled.side_effect = _flaky
 
-        request = _make_request()
+@pytest.mark.parametrize(
+    "path,status,code", [("/bug", 500, "internal_error"), ("/denied", 403, "http_403")]
+)
+async def test_error_handler_retains_trace_after_context_unwinds(neuro_enabled, path, status, code):
+    import httpx
+    from fastapi import FastAPI, HTTPException
 
-        async def call_next(_req):
-            raise ValueError("original downstream")
+    from app.middleware.error_handler import register_exception_handlers
 
-        with pytest.raises(ValueError, match="original downstream"):
-            await neuro_http_trace_middleware(request, call_next)
+    app = FastAPI()
+    register_exception_handlers(app)
+    app.add_middleware(NeuroHttpTraceMiddleware)
 
-    async def test_client_none_yields_empty_string(self, neuro_enabled):
-        """request.client 为 None 时 started payload 的 client 字段为空串。"""
-        request = _make_request(client_host=None)
-        response = MagicMock(status_code=200)
+    @app.get("/bug")
+    async def bug():
+        raise TypeError("private backend error")
 
-        async def call_next(_req):
-            return response
+    @app.get("/denied")
+    async def denied():
+        raise HTTPException(403, "permission denied")
 
-        await neuro_http_trace_middleware(request, call_next)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app, raise_app_exceptions=False), base_url="http://test"
+    ) as client:
+        response = await client.get(path)
+    assert response.status_code == status
+    assert response.json()["error_code"] == code
+    assert response.json()["trace_id"] == response.headers["X-Trace-ID"]
+    assert response.json()["span_id"] == neuro_enabled.call_args.args[1]["span_id"]
+    assert "private backend error" not in response.text
 
-        started = neuro_enabled.call_args_list[0].args[1]
-        assert started["client"] == ""
 
-    async def test_long_path_and_query_are_truncated(self, neuro_enabled):
-        """path > 800 与 query > 500 字符在所有 payload 中被截断。"""
-        long_path = "/x" + "a" * 1000
-        long_query = "q=" + "b" * 600
-        request = _make_request(path=long_path, query=long_query)
-        response = MagicMock(status_code=200)
+async def test_http_scope_preserves_sdk_root_sampling_decision(neuro_enabled, monkeypatch):
+    from opentelemetry import trace
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.sampling import ALWAYS_OFF, ParentBased
 
-        async def call_next(_req):
-            return response
+    from app.neuro_bus.tracer import NeuroTracer
 
-        await neuro_http_trace_middleware(request, call_next)
+    provider = TracerProvider(sampler=ParentBased(ALWAYS_OFF))
+    monkeypatch.setattr(trace, "get_tracer", lambda *a, **kw: provider.get_tracer("sampling"))
 
-        started = neuro_enabled.call_args_list[0].args[1]
-        assert len(started["path"]) == 800
-        assert len(started["query"]) == 500
+    flags = []
 
-        completed = neuro_enabled.call_args_list[1].args[1]
-        assert len(completed["path"]) == 800
+    async def app(scope, receive, send):
+        flags.append(get_trace_context()["trace_flags"])
+        assert int(flags[0], 16) & 1 == 0
+        child = NeuroTracer().start_span("child")
+        assert not child._otel_span.is_recording()
+        with child.context():
+            assert int(get_trace_context()["trace_flags"], 16) & 1 == 0
+        child.finish()
+        await _success(scope, receive, send)
 
-    async def test_request_id_is_uuid_and_shared_across_events(self, neuro_enabled):
-        """started 与 completed 共享同一个合法 UUID request_id。"""
-        request = _make_request()
-        response = MagicMock(status_code=200)
+    try:
+        response = await _drive(app)
+        assert dict(response[0]["headers"])[b"traceparent"].endswith(("-" + flags[0]).encode())
+    finally:
+        provider.shutdown()
 
-        async def call_next(_req):
-            return response
 
-        await neuro_http_trace_middleware(request, call_next)
-
-        started = neuro_enabled.call_args_list[0].args[1]
-        completed = neuro_enabled.call_args_list[1].args[1]
-        uuid.UUID(started["request_id"])  # 不抛即为合法 UUID
-        assert started["request_id"] == completed["request_id"]
+async def test_publisher_type_error_cannot_turn_success_into_failure(neuro_enabled):
+    neuro_enabled.side_effect = TypeError("bad publisher")
+    messages = await _drive(_success)
+    assert messages[-1]["body"] == b"done"

@@ -1614,7 +1614,10 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         return observation
 
     def _plan(self, run: AgentRun, *, runtime_context: dict[str, Any]) -> PlanGraph:
-        return self._planning.plan(run, runtime_context=runtime_context)
+        from app.application.agent_orchestrator.task_context import observe_run_phase
+
+        with observe_run_phase(run, "planning"):
+            return self._planning.plan(run, runtime_context=runtime_context)
 
     def _recall_knowledge_for_run(self, run: AgentRun, *, context: dict[str, Any]) -> None:
         return self._planning.recall_knowledge_for_run(run, context=context)
