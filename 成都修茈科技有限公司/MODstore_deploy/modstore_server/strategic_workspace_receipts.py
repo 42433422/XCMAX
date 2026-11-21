@@ -226,4 +226,4 @@ def reconcile_request(request_id: str) -> bool:
     )
     result["remote_receipt"]["native_compute"] = {"jobs": jobs, "compute_seconds": elapsed}
     _finish(task, result, elapsed, remote_receipt=(request_id, digest(snapshot)))
-    return True
+    return idle or remote.read_request(request_id)[2] in {"execution_completed", "failed"}

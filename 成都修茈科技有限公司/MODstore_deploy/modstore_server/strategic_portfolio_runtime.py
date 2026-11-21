@@ -494,6 +494,15 @@ def _finish(
             allowed_statuses.add("waiting")
         if saved["lease_token"] != task["lease_token"] or saved["status"] not in allowed_statuses:
             raise PortfolioError("execution completion does not own its lease")
+        calls = list(saved["calls"].values())
+        unknown_usage = any(call["status"] != "settled" for call in calls)
+        if remote_record is not None and unknown_usage:
+            # The model reader and native receipt reader can race. Check inside
+            # this CAS, before changing the original worker or remote terminal,
+            # so accounting can later finish this same execution without replay.
+            if not state.get("halted"):
+                state.update(halted=True, stop_reason="upstream_usage_unknown")
+            return
         from modstore_server.cred_vault import redact
         from modstore_server.strategic_execution_receipts import evaluate_execution_receipt
 
@@ -512,8 +521,6 @@ def _finish(
             ok, reason = False, "downstream_execution_receipt_pending"
             if not bound_worker:
                 state.update(halted=True, stop_reason=reason)
-        calls = list(saved["calls"].values())
-        unknown_usage = any(call["status"] != "settled" for call in calls)
         if unknown_usage:
             state.update(halted=True, stop_reason="upstream_usage_unknown")
         if elapsed > saved["reservation"]["compute_seconds"]:
@@ -570,7 +577,7 @@ def _finish(
                 "execution_completed" if saved["status"] == "completed" else "failed"
             )
             remote_record.updated_at = time.time()
-            if prior_stop[0]:
+            if prior_stop[0] and prior_stop[1] != "upstream_usage_unknown":
                 state.update(halted=True, stop_reason=prior_stop[1])
 
     mutate_portfolio(task["decision_id"], apply)

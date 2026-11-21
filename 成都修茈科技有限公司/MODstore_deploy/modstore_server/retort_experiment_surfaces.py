@@ -1,4 +1,4 @@
-"""The two prompt surfaces with real, authenticated product consumers."""
+"""Prompt surfaces with real, authenticated product consumers."""
 
 from __future__ import annotations
 
@@ -11,6 +11,9 @@ WORKFLOW_CUSTOMER_MEASUREMENT = "workflow_customer_accepted_outcome"
 WORKFLOW_NL_PROMPT_PATH = (
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_nl_graph.py"
 )
+RAG_RESOURCE = "employee_rag_context"
+RAG_MEASUREMENT = "rag_citation_integrity"
+RAG_PROMPT_PATH = "成都修茈科技有限公司/MODstore_deploy/modstore_server/rag_service.py"
 
 
 def surface_identity(lifecycle):
@@ -30,6 +33,13 @@ def surface_identity(lifecycle):
         # This shared generator serves many owners. The runtime separately binds
         # each observation to that authenticated owner's actual workflow ID.
         return surface, WORKFLOW_NL_RESOURCE
+    elif (
+        surface == "rag_context_prompt"
+        and lifecycle.get("resource_id") == RAG_RESOURCE
+        and not lifecycle.get("employee_id")
+        and lifecycle.get("measurement_scope") == RAG_MEASUREMENT
+    ):
+        return surface, RAG_RESOURCE
     raise ValueError("invalid_feedback_experiment_lifecycle")
 
 

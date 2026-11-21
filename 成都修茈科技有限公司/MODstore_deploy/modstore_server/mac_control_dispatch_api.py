@@ -108,7 +108,7 @@ def training_failures(
         ledger_path(), days=max(1, min(90, days)), min_count=max(1, min(50, min_count))
     )[:20]
     for cluster in clusters:
-        if cluster.get("surface") == "workflow_nl_prompt":
+        if cluster.get("surface") in {"workflow_nl_prompt", "rag_context_prompt"}:
             # Authenticated private training transport must preserve exact
             # reproduction bytes; public evidence contains only their hashes.
             continue
@@ -123,10 +123,13 @@ class TrainingCandidateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     request_key: str = Field(min_length=8, max_length=128)
     surface: str = Field(
-        default="employee_prompt", pattern=r"^(employee_prompt|workflow_nl_prompt)$"
+        default="employee_prompt",
+        pattern=r"^(employee_prompt|workflow_nl_prompt|rag_context_prompt)$",
     )
     employee_id: str = Field(default="", pattern=r"^(?:[A-Za-z0-9_-]{1,128})?$")
-    resource_id: str = Field(default="", pattern=r"^(?:workflow_nl_generator)?$")
+    resource_id: str = Field(
+        default="", pattern=r"^(?:workflow_nl_generator|employee_rag_context)?$"
+    )
     source_sha: str = Field(pattern=r"^[0-9a-f]{40}$")
     failure_run_ids: list[str] = Field(min_length=1, max_length=20)
     workflow_run_id: int = Field(gt=0)

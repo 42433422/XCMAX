@@ -27,7 +27,9 @@ def tick(*, limit: int = 10) -> dict[str, Any]:
     """Recheck the principal and guardrails before every bounded execution cycle."""
     from modstore_server.strategic_company_planner import prioritized_portfolios
     from modstore_server.strategic_remote_receipts import reconcile_pending_reports
+    from modstore_server.strategic_usage_reconciliation import reconcile_pending_usage
 
+    reconcile_pending_usage(limit=limit)
     reconcile_pending_reports(limit=limit)
     with get_session_factory()() as session:
         ids = session.scalars(
@@ -61,6 +63,9 @@ def tick(*, limit: int = 10) -> dict[str, Any]:
                 reason = "authorization_expired"
             elif status.get("halted"):
                 reason = str(status.get("stop_reason") or "portfolio_guardrail")
+            if reason == "upstream_usage_unknown":
+                results.append({"decision_id": decision_id, "status": "waiting_for_usage"})
+                continue
             if reason:
                 stopped = stop_portfolio(
                     decision_id,

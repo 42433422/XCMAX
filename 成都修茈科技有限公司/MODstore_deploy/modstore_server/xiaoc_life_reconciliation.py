@@ -62,6 +62,9 @@ def _verified_usage(steps: list[dict[str, Any]], owner: int) -> int | None:
 
 def reconcile_usage() -> dict[str, int]:
     """Resolve only the original persisted receipt, never replay an uncertain call."""
+    from modstore_server.strategic_usage_reconciliation import reconcile_pending_usage
+
+    reconcile_pending_usage()
     read_state()
     with get_session_factory()() as session:
         row = session.get(XiaoCLifeState, IDENTITY_ID)

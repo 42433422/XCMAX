@@ -29,10 +29,10 @@ from app.application.user_memory.candidates import CandidateMemory, CandidatePor
 from app.application.user_memory.composition import create_memory_repository
 from app.application.user_memory.feedback import FeedbackMemory, FeedbackPorts
 from app.application.user_memory.patterns import ActionMemory, PatternPorts
-from app.application.user_memory.policy import MemoryPolicy, PolicyPorts
 from app.application.user_memory.preferences import PreferenceMemory
 from app.application.user_memory.protocols import MemoryAccess, MemoryStore, late_callback
 from app.application.user_memory.queries import MemoryQueries, QueryPorts
+from app.domain.user_memory.policy import MemoryPolicy, PolicyPorts
 from app.domain.user_memory.records import ActionPattern as ActionPattern
 from app.domain.user_memory.records import ContextSummary as ContextSummary
 from app.domain.user_memory.records import FeedbackRecord as FeedbackRecord

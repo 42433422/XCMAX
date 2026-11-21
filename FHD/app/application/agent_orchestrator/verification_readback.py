@@ -488,6 +488,9 @@ def verify_independent_result(
     from app.application.agent_orchestrator.verification_sales import SALES_ACTIONS
 
     sales_action = step.tool_id == "sales" and step.action in SALES_ACTIONS
+    from app.application.agent_orchestrator.verification_purchase import PURCHASE_ACTIONS
+
+    purchase_action = step.tool_id == "purchase" and step.action in PURCHASE_ACTIONS
     cognition_action = step.tool_id == "enterprise_cognition" and step.action in {
         "bind_goal",
         "plan",
@@ -499,16 +502,27 @@ def verify_independent_result(
     )
 
     surface_action = supports_surface_verification(step.tool_id, step.action)
+    from app.application.agent_orchestrator.verification_multitask import (
+        OPERATIONS,
+        employee_payload,
+    )
+
+    employee_completion = (
+        action == ("employee", "execute")
+        and str(employee_payload(step.params).get("continuity_action") or "").strip() in OPERATIONS
+    )
     employee_admission = action == ("employee", "execute") and employee == "clerk"
     if not (
         action == ("customers", "create")
         or catalog_action
         or file_action
         or sales_action
+        or purchase_action
         or cognition_action
         or kellai_action
         or surface_action
         or employee_admission
+        or employee_completion
     ):
         return _report("inconclusive", "result_verifier_unavailable", "host_registry")
     if not _scope_matches(run, step, call, context):
@@ -534,12 +548,24 @@ def verify_independent_result(
             )
 
             return verify_surface_result(run, step, call, output, context)
+        if employee_completion:
+            from app.application.agent_orchestrator.verification_multitask import (
+                verify_employee_completion,
+            )
+
+            return verify_employee_completion(run, step, call, output, context, employee)
         if employee_admission:
             return _employee_admission(run, step, call, output, context)
         if sales_action:
             from app.application.agent_orchestrator.verification_sales import verify_sales_result
 
             return verify_sales_result(step, call, output, context)
+        if purchase_action:
+            from app.application.agent_orchestrator.verification_purchase import (
+                verify_purchase_result,
+            )
+
+            return verify_purchase_result(step, call, output, context)
         if cognition_action:
             from app.application.agent_orchestrator.verification_cognition import (
                 verify_cognition_result,

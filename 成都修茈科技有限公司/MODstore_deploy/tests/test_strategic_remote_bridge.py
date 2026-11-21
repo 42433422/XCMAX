@@ -313,12 +313,15 @@ def test_unknown_provider_usage_keeps_hold_and_business_receipt_cannot_release_i
         )
     remote.github.publish(receipt)
     download_transport(remote, monkeypatch)
-    assert receipts.reconcile_request(remote.request_id)
+    assert not receipts.reconcile_request(remote.request_id)
     result = p.portfolio_status(remote.decision_id)
     final_call = next(iter(result["tasks"]["a"]["calls"].values()))
-    assert result["halted"] and result["tasks"]["a"]["status"] == "unknown"
+    assert result["halted"] and result["tasks"]["a"]["status"] == state["tasks"]["a"]["status"]
     assert final_call == call
-    assert result["tasks"]["a"]["actual_tokens"] == call["reserved_tokens"]
+    assert result["tasks"]["a"]["actual_tokens"] == state["tasks"]["a"]["actual_tokens"] == 0
+    assert bridge.read_request(remote.request_id)[2] == "reported"
+    assert not receipts.reconcile_request(remote.request_id)
+    assert len(remote.github.writes) == 1
     if stopped:
         assert result["stop_reason"] == "approved operation stopped"
 

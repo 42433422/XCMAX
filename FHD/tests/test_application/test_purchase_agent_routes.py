@@ -26,11 +26,20 @@ def _client(fake_service: MagicMock, monkeypatch: pytest.MonkeyPatch) -> TestCli
 def _assert_purchase_run(repo: InMemoryAgentRunRepository, run_id: str, action: str) -> None:
     run = repo.get(run_id)
     assert run is not None
-    assert (run.user_id, run.status) == ("tenant-a", "completed")
+    # A fake service reply exercises routing, but cannot prove an actual SQL effect.
+    assert (run.user_id, run.status) == ("tenant-a", "blocked")
     assert run.metadata["runtime_context"]["tenant_id"] == 7
     assert run.tool_calls[0].action == action
     assert run.tool_calls[0].permission == f"tool.purchase.{action}"
     assert run.tool_calls[0].cost_units == 2
+    assert run.tool_calls[0].metadata["verification"]["accepted"] is False
+
+
+def _execution_number(repo, response, action):
+    from app.domain.shared_services.purchase_service import purchase_execution_number
+
+    run = repo.get(response.json()["run_id"])
+    return purchase_execution_number(action, run.run_id, run.steps[0].step_id, "7")
 
 
 def test_purchase_supplier_mutation_routes_execute_through_agent_orchestrator(
@@ -128,11 +137,21 @@ def test_purchase_order_mutation_routes_execute_through_agent_orchestrator(
     assert cancel_order.status_code == 200
     assert create_inbound.status_code == 200
 
-    svc.create_purchase_order.assert_called_once_with({"supplier_id": 7})
+    svc.create_purchase_order.assert_called_once_with(
+        {
+            "supplier_id": 7,
+            "order_no": _execution_number(repo, create_order, "create_order"),
+        }
+    )
     svc.update_purchase_order.assert_called_once_with(9, {"remark": "调整交期"})
     svc.approve_purchase_order.assert_called_once_with(9, "manager-p54")
     svc.cancel_purchase_order.assert_called_once_with(9)
-    svc.create_purchase_inbound.assert_called_once_with({"order_id": 9})
+    svc.create_purchase_inbound.assert_called_once_with(
+        {
+            "order_id": 9,
+            "inbound_no": _execution_number(repo, create_inbound, "create_inbound"),
+        }
+    )
 
     _assert_purchase_run(repo, create_order.json()["run_id"], "create_order")
     _assert_purchase_run(repo, update_order.json()["run_id"], "update_order")

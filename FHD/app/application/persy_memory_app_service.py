@@ -51,11 +51,11 @@ from app.application.persy_memory_utils import (
 from app.application.persy_memory_utils import (
     merge_memory_graph as merge_memory_graph,
 )
-from app.application.user_memory.policy import is_recallable_memory
 from app.domain.shared_services.user_memory_service import (
     UserMemoryService,
     get_user_memory_service,
 )
+from app.domain.user_memory.policy import is_recallable_memory
 from app.security.secrets_redactor import redact_text
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 

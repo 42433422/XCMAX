@@ -902,6 +902,7 @@ def begin_idempotent_replay(
 ) -> tuple[str, dict[str, Any] | None]:
     from app.application.agent_orchestrator.business_write_guard import (
         owns_elt_step,
+        owns_handoff_read,
         worker_claim_guard,
     )
     from app.application.agent_orchestrator.worker_repository import WorkerLeaseLost
@@ -915,6 +916,7 @@ def begin_idempotent_replay(
             if (
                 claim is not None
                 and str(context.get("run_id") or context.get("agent_run_id") or "") != claim[0]
+                and not (safe_read and owns_handoff_read(context, tool_id, action, params))
             ):
                 raise WorkerLeaseLost("tool claim does not belong to the current task")
             return _begin_idempotent_replay(

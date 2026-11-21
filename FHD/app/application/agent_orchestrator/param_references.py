@@ -70,6 +70,44 @@ def validate_plan_references(value: Any, allowed_sources: set[str] | frozenset[s
     return None
 
 
+def host_reference_params(
+    tool_id: str, action: str, params: dict[str, Any]
+) -> tuple[dict[str, Any], list[tuple[tuple[Any, ...], dict[str, Any]]]]:
+    """Separate the existing employee chain's own prior-node references from its host.
+
+    Only valid references within the four-step chain are deferred. Its original
+    runtime resolves them after each registered child, before the child tool's
+    normal schema, permission and unresolved-reference gates.
+    """
+    if (tool_id, action) != ("employee", "execute"):
+        return params, []
+    nested = params.get("input") if isinstance(params.get("input"), dict) else {}
+    if nested.get("continuity_action", params.get("continuity_action")) != "chain":
+        return params, []
+    location = ("input", "steps") if "steps" in nested else ("steps",)
+    steps = nested.get("steps", params.get("steps"))
+    if not isinstance(steps, list) or len(steps) != 4:
+        return params, []
+    from copy import deepcopy
+
+    host = deepcopy(params)
+    current = host
+    for key in location:
+        current = current[key]
+    allowed: set[str] = set()
+    deferred = []
+    for index, step in enumerate(steps):
+        if not isinstance(step, dict) or not isinstance(step.get("params"), dict):
+            return params, []
+        identity = str(step.get("step_id") or f"s{index + 1}")
+        if identity in allowed or validate_plan_references(step["params"], allowed):
+            return params, []
+        allowed.add(identity)
+        deferred.append(((*location, index, "params"), deepcopy(step["params"])))
+        current[index]["params"] = {}
+    return host, deferred
+
+
 def _tokens(path: str) -> list[str | int]:
     tokens: list[str | int] = []
     pos = 0
@@ -232,8 +270,9 @@ def refuse_unresolved_step(run: Any, step: Any, node_outputs: dict[str, Any]) ->
 
     spec = build_tool_specs_v2().get((step.tool_id, step.action))
     ambiguities: list[AmbiguousReference] = []
+    host, deferred = host_reference_params(step.tool_id, step.action, dict(step.params or {}))
     resolved = resolve_references(
-        dict(step.params or {}),
+        host,
         node_outputs,
         problems,
         spec.input_schema if spec else None,
@@ -242,6 +281,11 @@ def refuse_unresolved_step(run: Any, step: Any, node_outputs: dict[str, Any]) ->
     if not problems:
         problems = [f"无法识别的占位符 {p[:80]}" for p in unresolved_placeholders(resolved)]
     if not problems:
+        for path, original in deferred:
+            target = resolved
+            for key in path[:-1]:
+                target = target[key]
+            target[path[-1]] = original
         if resolved != step.params:
             step.params = resolved
             run.add_event("step.references_resolved", f"步骤 {step.node_id} 参数引用已解析")

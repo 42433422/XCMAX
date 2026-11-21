@@ -46,7 +46,9 @@ from .super_employee.common import _SUBTASK_LABELS as _SUBTASK_LABELS
 from .super_employee.common import _TASK_MARKERS as _TASK_MARKERS
 from .super_employee.common import DEFAULT_PARA_API_URL as DEFAULT_PARA_API_URL
 from .super_employee.common import DISPATCHER_MESSAGE_KIND, _chunk_text, _utc_now
-from .super_employee.common import PARA_TERMINAL_TASK_STATUSES as PARA_TERMINAL_TASK_STATUSES
+from .super_employee.common import (
+    PARA_TERMINAL_TASK_STATUSES as PARA_TERMINAL_TASK_STATUSES,
+)
 from .super_employee.common import TASK_ID_RE as TASK_ID_RE
 from .super_employee.common import _coerce_list as _coerce_list
 from .super_employee.common import _relay_wt_lock as _relay_wt_lock
@@ -292,9 +294,33 @@ class SuperEmployeeService:
             and row.get("kind") == DISPATCHER_MESSAGE_KIND
             and (not task_id or row.get("task_id") == task_id)
         ]
-        if len(rows) != 1:
+        if len(rows) > 1:
             return None
-        original_id = str(rows[0].get("task_id") or "")
+        original_id = str(rows[0].get("task_id") or "") if rows else ""
+        with self._messages.dispatch_lock(user_id, request_id):
+            request = self._messages.read_dispatch_request(user_id, request_id)
+            receipt = request.get("dispatch_receipt") if request else None
+            if request and isinstance(receipt, dict) and receipt.get("dispatcher") == "para_api":
+                if request.get("employee_id") != self._p.employee_id:
+                    return None
+                if receipt.get("pending_request_id") or receipt.get("status") in {
+                    "dispatching",
+                    "dispatch_unknown",
+                    "dispatch_pending",
+                }:
+                    receipt = self._dispatching.reconcile(request)
+                original_id = str(receipt.get("task_id") or original_id)
+                if task_id and task_id != original_id:
+                    return None
+                if receipt.get("accepted") is not True:
+                    return {
+                        "dispatch": {
+                            "request_id": request_id,
+                            "task_id": original_id,
+                            "status": receipt.get("status", "dispatch_unknown"),
+                        },
+                        "assistant_message": {"body": self._dispatch_reply(receipt)},
+                    }
         if not original_id:
             return None
         task = self._fetch_para_task(original_id)
@@ -303,7 +329,11 @@ class SuperEmployeeService:
         state = str(task.get("status") or "unknown")
         state = {"merged": "completed", "merge_conflict": "blocked"}.get(state, state)
         return {
-            "dispatch": {"request_id": request_id, "task_id": original_id, "status": state},
+            "dispatch": {
+                "request_id": request_id,
+                "task_id": original_id,
+                "status": state,
+            },
             "assistant_message": {"body": self._para_task_status_reply(task)},
         }
 
@@ -370,7 +400,14 @@ class SuperEmployeeService:
             for key in ("task", "scope", "workspace_id", "mode", "target_devices"):
                 if previous_request.get(key) != dispatch_request.get(key):
                     raise ValueError(f"request_id 已绑定其他任务参数：{key}")
-            for key in ("branch", "repo_url", "para_tier", "tier", "escalate", "max_devices"):
+            for key in (
+                "branch",
+                "repo_url",
+                "para_tier",
+                "tier",
+                "escalate",
+                "max_devices",
+            ):
                 if previous_request.get("raw_context", {}).get(key) != ctx.get(key):
                     raise ValueError(f"request_id 已绑定其他任务参数：{key}")
             dispatch_request = previous_request
@@ -384,7 +421,10 @@ class SuperEmployeeService:
                 fallback_body, fallback_dispatcher = self._compose_direct_chat_reply(text, ctx)
             except CliExecutionError as exc:
                 failure = exc
-                fallback_body, fallback_dispatcher = exc.reply_body(), f"{self._p.tool_name}_cli"
+                fallback_body, fallback_dispatcher = (
+                    exc.reply_body(),
+                    f"{self._p.tool_name}_cli",
+                )
             if fallback_body and (
                 not fallback_body.startswith(f"{self._p.display_tool} CLI 暂时没有返回内容")
             ):
@@ -430,9 +470,9 @@ class SuperEmployeeService:
                 "workspace_id": self._grant.workspace_id or "",
                 "para_tier": dispatch.get("para_tier"),
                 "reconciliation_required": dispatch.get("reconciliation_required", False),
-                "devices": dispatch.get("devices")
-                if isinstance(dispatch.get("devices"), list)
-                else [],
+                "devices": (
+                    dispatch.get("devices") if isinstance(dispatch.get("devices"), list) else []
+                ),
             },
         )
         existing_rows = self._read_all_message_rows() if previous_request else []
@@ -488,7 +528,10 @@ class SuperEmployeeService:
             created_at=_utc_now(),
             request_id=user_msg["dispatch_request_id"],
             status=status,
-            extra={"kind": self._p.direct_kind, **({"cli_execution": receipt} if failure else {})},
+            extra={
+                "kind": self._p.direct_kind,
+                **({"cli_execution": receipt} if failure else {}),
+            },
         )
         self._append_messages([user_msg, assistant])
         result_dispatch = {
@@ -574,7 +617,10 @@ class SuperEmployeeService:
                 for chunk in _chunk_text(body):
                     yield {"type": "token", "text": chunk}
                     await asyncio.sleep(0.03)
-                yield {"type": "done", "result": {"response": body, "dispatcher": "dev_loop"}}
+                yield {
+                    "type": "done",
+                    "result": {"response": body, "dispatcher": "dev_loop"},
+                }
             except CliExecutionError as exc:
                 yield exc.event()
             except RECOVERABLE_ERRORS as exc:
@@ -601,12 +647,18 @@ class SuperEmployeeService:
                         return
             body = final_text.strip()
             require_cli_success(self._p.display_tool, 0 if completed else None, body)
-            yield {"type": "done", "result": {"response": body, "dispatcher": "cli_stream"}}
+            yield {
+                "type": "done",
+                "result": {"response": body, "dispatcher": "cli_stream"},
+            }
         except CliExecutionError as exc:
             yield exc.event()
         except RECOVERABLE_ERRORS as exc:
             logger.exception("invoke_stream cli failed: %s", exc)
-            yield {"type": "error", "message": f"{self._p.display_tool} CLI 调用失败：{exc}"}
+            yield {
+                "type": "error",
+                "message": f"{self._p.display_tool} CLI 调用失败：{exc}",
+            }
 
     def _cli_reply_body(self, text: str, context: dict[str, Any]) -> str:
         if str(
@@ -642,7 +694,11 @@ class SuperEmployeeService:
         env.setdefault("GIT_TERMINAL_PROMPT", "0")
         env.setdefault("GIT_ASKPASS", "true")
         return subprocess.run(
-            ["git", "-C", cwd, *args], capture_output=True, text=True, timeout=timeout, env=env
+            ["git", "-C", cwd, *args],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            env=env,
         )
 
     def _is_git_repo(self, cwd: str) -> bool:
@@ -840,6 +896,38 @@ class SuperEmployeeService:
         return self._dispatching.create_para_task(client, api_url, token, request, devices, tier)
 
     def _sync_para_task_updates(self, *, user_id: int, rows: list[dict[str, Any]]) -> None:
+        changed = False
+        pending = [
+            row
+            for row in rows
+            if int(row.get("user_id") or 0) == int(user_id)
+            and row.get("kind") == DISPATCHER_MESSAGE_KIND
+            and row.get("dispatcher") == "para_api"
+            and row.get("status") in {"dispatching", "dispatch_unknown", "dispatch_pending"}
+        ]
+        for row in pending[-8:]:
+            recovered = self.read_dispatch_receipt(
+                user_id=user_id,
+                request_id=str(row.get("dispatch_request_id") or ""),
+                task_id=str(row.get("task_id") or ""),
+            )
+            if recovered is None:
+                continue
+            dispatch = recovered["dispatch"]
+            uncertain = dispatch["status"] in {
+                "dispatching",
+                "dispatch_unknown",
+                "dispatch_pending",
+            }
+            row.update(
+                task_id=dispatch["task_id"],
+                status=dispatch["status"],
+                reconciliation_required=uncertain,
+                body=recovered["assistant_message"]["body"],
+            )
+            changed = True
+        if changed:
+            self._write_all_message_rows(rows)
         return self._sync.sync_para_task_updates(user_id=user_id, rows=rows)
 
     def _upgrade_legacy_dispatcher_row(self, row: dict[str, Any]) -> bool:

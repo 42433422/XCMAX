@@ -95,6 +95,12 @@ jobs:
             python -m modstore_server.capability_trainer baseline \
               --surface "$surface" --source "$PYTHONPATH/modstore_server/workflow_nl_graph.py" \
               --out "$baseline"
+          elif [ "$surface" = rag_context_prompt ]; then
+            [[ "$employee" = employee_rag_context ]] || exit 1
+            baseline=/tmp/rag-baseline.txt
+            python -m modstore_server.capability_trainer baseline \
+              --surface "$surface" --source "$PYTHONPATH/modstore_server/rag_service.py" \
+              --out "$baseline"
           elif [ "$surface" = employee_prompt ]; then
             pack="$(ls -d "$PACKS_DIR/${employee}@"* 2>/dev/null | sort -V | tail -1 || true)"
             if [ -z "$pack" ] || [ ! -f "$pack/prompt.txt" ]; then

@@ -380,10 +380,10 @@ async def test_exact_turn_get_refreshes_only_the_original_dispatch(bound_super, 
 
 
 @pytest.mark.parametrize("state", ["completed", "running", "missing", "wrong_task", "ambiguous"])
-def test_dispatch_reader_never_backfills_or_invokes(state):
-    from app.application.super_employee_service import SuperEmployeeService
+def test_dispatch_reader_never_backfills_or_invokes(state, tmp_path):
+    from app.application.codex_super_employee_service import CodexSuperEmployeeService
 
-    service = object.__new__(SuperEmployeeService)
+    service = CodexSuperEmployeeService(storage_root=tmp_path)
     row = {
         "user_id": 71,
         "dispatch_request_id": "original-dispatch",

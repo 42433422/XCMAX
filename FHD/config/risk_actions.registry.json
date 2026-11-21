@@ -835,18 +835,21 @@
         },
         "query_suppliers": {
           "risk": "low",
+          "read_only": true,
           "idempotent": true,
           "required_params": [],
           "availability": "shared"
         },
         "query_orders": {
           "risk": "low",
+          "read_only": true,
           "idempotent": true,
           "required_params": [],
           "availability": "shared"
         },
         "query_inbounds": {
           "risk": "low",
+          "read_only": true,
           "idempotent": true,
           "required_params": [],
           "availability": "shared"
