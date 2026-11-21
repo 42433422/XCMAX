@@ -37,7 +37,7 @@ from app.domain.app_pure.git_workspace_manager import GitWorkspaceManager
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_io.path_utils import get_app_data_dir
 
-from .super_employee.cli import CliExecutor
+from .super_employee.cli import CliExecutionError, CliExecutor
 from .super_employee.common import _PARA_TOKEN_CACHE as _PARA_TOKEN_CACHE
 from .super_employee.common import _PARA_TOKEN_TTL as _PARA_TOKEN_TTL
 from .super_employee.common import _RELAY_WT_LOCKS as _RELAY_WT_LOCKS
@@ -278,6 +278,42 @@ class SuperEmployeeService:
         ]
         return rows[-max(1, min(int(limit), 200)) :]
 
+    def _record_direct_reply(
+        self,
+        user_msg: dict[str, Any],
+        body: str,
+        dispatch: dict[str, Any],
+        failure: CliExecutionError | None = None,
+    ) -> dict[str, Any]:
+        status = "failed" if failure else "completed"
+        details = failure.payload() if failure else {}
+        assistant_msg = self._message_row(
+            user_id=user_msg["user_id"],
+            role="assistant",
+            body=body,
+            created_at=_utc_now(),
+            request_id=user_msg["dispatch_request_id"],
+            status=status,
+            extra={"kind": self._p.direct_kind, **details},
+        )
+        self._append_messages([user_msg, assistant_msg])
+        return {
+            "employee": {
+                "id": self._p.employee_id,
+                "name": self._p.employee_name,
+                "device_scope": "all_devices",
+            },
+            "dispatch": {
+                **dispatch,
+                "status": status,
+                **details,
+                **({"accepted": False, "queued": False} if failure else {}),
+            },
+            "message": self._public_message(user_msg),
+            "assistant_message": self._public_message(assistant_msg),
+            "messages": self.list_messages(user_id=user_msg["user_id"]),
+        }
+
     def invoke(
         self, *, user_id: int, message: str, context: dict[str, Any] | None = None
     ) -> dict[str, Any]:
@@ -313,37 +349,21 @@ class SuperEmployeeService:
             status="sent",
         )
         if self._should_reply_with_cli(text, ctx):
-            direct_body, direct_dispatcher = self._compose_direct_chat_reply(text, ctx)
-            assistant_msg = self._message_row(
-                user_id=int(user_id),
-                role="assistant",
-                body=direct_body,
-                created_at=_utc_now(),
-                request_id=request_id,
-                status="completed",
-                extra={"kind": self._p.direct_kind},
-            )
-            self._append_messages([user_msg, assistant_msg])
+            failure = None
+            try:
+                direct_body, direct_dispatcher = self._compose_direct_chat_reply(text, ctx)
+            except CliExecutionError as exc:
+                failure = exc
+                direct_body, direct_dispatcher = exc.reply_body(), f"{self._p.tool_name}_cli"
             dispatch = {
                 "request_id": request_id,
-                "status": "completed",
                 "accepted": True,
                 "queued": False,
                 "para_tier": 1,
                 "device_scope": "local_device",
                 "dispatcher": direct_dispatcher,
             }
-            return {
-                "employee": {
-                    "id": self._p.employee_id,
-                    "name": self._p.employee_name,
-                    "device_scope": "all_devices",
-                },
-                "dispatch": dispatch,
-                "message": self._public_message(user_msg),
-                "assistant_message": self._public_message(assistant_msg),
-                "messages": self.list_messages(user_id=int(user_id)),
-            }
+            return self._record_direct_reply(user_msg, direct_body, dispatch, failure)
         dispatch_request = self._build_dispatch_request(
             request_id=request_id,
             created_at=created_at,
@@ -353,37 +373,26 @@ class SuperEmployeeService:
         )
         dispatch = self._dispatch(dispatch_request)
         if dispatch.get("accepted") is not True:
-            fallback_body, fallback_dispatcher = self._compose_direct_chat_reply(text, ctx)
+            failure = None
+            try:
+                fallback_body, fallback_dispatcher = self._compose_direct_chat_reply(text, ctx)
+            except CliExecutionError as exc:
+                failure = exc
+                fallback_body, fallback_dispatcher = exc.reply_body(), f"{self._p.tool_name}_cli"
             if fallback_body and (
                 not fallback_body.startswith(f"{self._p.display_tool} CLI 暂时没有返回内容")
             ):
-                assistant_msg = self._message_row(
-                    user_id=int(user_id),
-                    role="assistant",
-                    body=fallback_body,
-                    created_at=_utc_now(),
-                    request_id=request_id,
-                    status="completed",
-                    extra={"kind": self._p.direct_kind},
-                )
-                self._append_messages([user_msg, assistant_msg])
-                return {
-                    "employee": {
-                        "id": self._p.employee_id,
-                        "name": self._p.employee_name,
-                        "device_scope": "all_devices",
-                    },
-                    "dispatch": {
+                return self._record_direct_reply(
+                    user_msg,
+                    fallback_body,
+                    {
                         **dispatch,
-                        "status": "completed",
                         "para_tier": 1,
                         "device_scope": "local_device",
                         "fallback": fallback_dispatcher,
                     },
-                    "message": self._public_message(user_msg),
-                    "assistant_message": self._public_message(assistant_msg),
-                    "messages": self.list_messages(user_id=int(user_id)),
-                }
+                    failure,
+                )
         dispatcher_msg = self._message_row(
             user_id=int(user_id),
             role="system",
@@ -466,6 +475,8 @@ class SuperEmployeeService:
                     yield {"type": "token", "text": chunk}
                     await asyncio.sleep(0.03)
                 yield {"type": "done", "result": {"response": body, "dispatcher": "dev_loop"}}
+            except CliExecutionError as exc:
+                yield {"type": "error", **exc.payload()}
             except RECOVERABLE_ERRORS as exc:
                 logger.exception("invoke_stream dev_loop failed: %s", exc)
                 yield {"type": "error", "message": f"开发任务执行失败：{exc}"}
@@ -474,6 +485,7 @@ class SuperEmployeeService:
         yield {"type": "status", "text": f"{self._p.display_tool} 正在思考…"}
         try:
             final_text = ""
+            completed = False
             async with aclosing(self._run_cli_streaming(cli_path, prompt, base_cwd)) as stream:
                 async for event in stream:
                     if event["type"] == "token":
@@ -483,13 +495,21 @@ class SuperEmployeeService:
                         yield event
                     elif event["type"] == "done":
                         final_text = event.get("text", final_text)
+                        completed = True
                     elif event["type"] == "error":
                         yield event
                         return
+            if not completed:
+                raise CliExecutionError(
+                    f"{self._p.display_tool} CLI 未返回完成回执；请先核对原任务。",
+                    partial_output=final_text,
+                )
             body = final_text.strip()
             if not body:
                 body = f"{self._p.display_tool} CLI 暂时没有返回内容，请确认本机 {self._p.display_tool} 已登录后重试。"
             yield {"type": "done", "result": {"response": body, "dispatcher": "cli_stream"}}
+        except CliExecutionError as exc:
+            yield {"type": "error", **exc.payload()}
         except RECOVERABLE_ERRORS as exc:
             logger.exception("invoke_stream cli failed: %s", exc)
             yield {"type": "error", "message": f"{self._p.display_tool} CLI 调用失败：{exc}"}

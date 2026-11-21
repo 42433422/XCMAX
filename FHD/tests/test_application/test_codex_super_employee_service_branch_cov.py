@@ -348,11 +348,14 @@ class TestCliReplyBodyBoundary:
         assert "cli answer" in result or isinstance(result, str)
 
     def test_cli_execution_oserror(self, tmp_path, monkeypatch):
+        from app.application.super_employee.cli import CliExecutionError
+
         monkeypatch.setenv("XCMAX_CODEX_CLI_CHAT_ENABLED", "1")
         svc = _make_svc(tmp_path, cli_runner=_error_runner(OSError("boom")))
         with patch.object(svc, "_cli_path", return_value=str(tmp_path / "codex")):
-            result = svc._cli_reply_body("你好", {})
-        assert result == "" or isinstance(result, str)
+            with pytest.raises(CliExecutionError, match="CLI 调用失败") as raised:
+                svc._cli_reply_body("你好", {})
+        assert "boom" not in str(raised.value)
 
 
 # ─────────────── _direct_reply_body 边界 ─────────────────────────

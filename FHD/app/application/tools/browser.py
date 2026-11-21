@@ -146,6 +146,12 @@ def execute_browser(action: str, params: dict, context: dict) -> dict:
             "retryable": False,
             "message": "浏览器任务的参数、身份、审批或站点配置未通过校验，未执行。",
         }
+
+    def recheck_authority() -> None:
+        require_surface_authority(
+            "browser", action, params, context, approval_required=action == "execute"
+        )
+
     result = {"success": False, "outcome": "unknown", "reconciliation_required": True}
     try:
         budget = remaining_invocation_seconds(120.0)
@@ -160,9 +166,7 @@ def execute_browser(action: str, params: dict, context: dict) -> dict:
                     allowed_origins=origins,
                     deadline_monotonic=time.monotonic() + budget,
                     executable_path=os.environ.get("XCAGI_BROWSER_EXECUTABLE") or None,
-                    before_action=lambda: require_surface_authority(
-                        "browser", action, params, context, approval_required=action == "execute"
-                    ),
+                    before_action=recheck_authority,
                 )
             )
             _persist_artifacts(result, root, run.run_id, int(actor.id), str(context["tenant_id"]))

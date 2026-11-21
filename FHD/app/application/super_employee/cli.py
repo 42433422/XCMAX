@@ -16,6 +16,40 @@ from .profiles import SuperEmployeeToolProfile
 from .protocols import CliPorts
 
 
+class CliExecutionError(RuntimeError):
+    """A CLI attempt failed; partial output is evidence, never a success receipt."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        returncode: int | None = None,
+        partial_output: str = "",
+        started: bool = True,
+    ) -> None:
+        super().__init__(message)
+        self.returncode = returncode
+        self.partial_output = partial_output
+        self.started = started
+
+    def payload(self) -> dict[str, Any]:
+        return {
+            "success": False,
+            "error_code": "cli_execution_failed",
+            "message": str(self),
+            "returncode": self.returncode,
+            "partial_output": self.partial_output,
+            "retryable": False,
+            "outcome": "unknown" if self.started else "failed",
+            "reconciliation_required": self.started,
+        }
+
+    def reply_body(self) -> str:
+        return str(self) + (
+            f"\n\n未确认完成的输出：\n{self.partial_output}" if self.partial_output else ""
+        )
+
+
 class CliExecutor:
     def __init__(self, profile: SuperEmployeeToolProfile, ports: CliPorts) -> None:
         self._p, self._ports = profile, ports
@@ -34,41 +68,40 @@ class CliExecutor:
             if runner is not subprocess.run:
                 try:
                     proc = runner(cmd, text=True, capture_output=True, cwd=cwd)
-                except (OSError, subprocess.SubprocessError) as exc:
-                    return f"{self._p.display_tool} CLI 调用失败：{str(exc)[:300]}"
-                returncode = int(getattr(proc, "returncode", 0) or 0)
+                except (OSError, subprocess.SubprocessError):
+                    raise CliExecutionError(f"{self._p.display_tool} CLI 调用失败。") from None
+                returncode = getattr(proc, "returncode", None)
                 stdout = str(getattr(proc, "stdout", "") or "")
-                stderr = str(getattr(proc, "stderr", "") or "")
                 killed_reason = ""
             else:
                 try:
-                    returncode, stdout, stderr, killed_reason = self._ports.run_idle(
+                    returncode, stdout, _stderr, killed_reason = self._ports.run_idle(
                         cmd, cwd, idle_timeout, hard_cap
                     )
-                except (OSError, subprocess.SubprocessError) as exc:
-                    return f"{self._p.display_tool} CLI 调用失败：{str(exc)[:300]}"
-            if killed_reason.startswith("idle"):
-                return f"{self._p.display_tool} CLI 静默 {idle_timeout:g} 秒无任何输出，判定卡住已结束。可能是网络或工具挂起，请重试。"
-            if killed_reason.startswith("hardcap"):
-                return f"{self._p.display_tool} CLI 运行超过上限 {hard_cap:g} 秒仍未结束，已停止。请把任务拆小一点再试。"
+                except (OSError, subprocess.SubprocessError):
+                    raise CliExecutionError(f"{self._p.display_tool} CLI 调用失败。") from None
+            body = ""
             if self._p.cli_stream_json:
                 body = self._output.parse_claude_stream_json(stdout)
-                if body:
-                    return body
-                if returncode != 0:
-                    detail = (stderr.strip() or stdout.strip())[:500]
-                    return f"{self._p.display_tool} CLI 已接入，但本次返回失败（code {returncode}）：{detail}"
-                return ""
-            if self._p.cli_reads_output_file and output_path.exists():
+            elif self._p.cli_reads_output_file and output_path.exists():
                 body = output_path.read_text(encoding="utf-8", errors="replace").strip()
-                if body:
-                    return body
-            cleaned = self._output.clean_cli_stdout(stdout.strip())
-            if cleaned:
-                return cleaned
-            if returncode != 0:
-                return f"{self._p.display_tool} CLI 已接入，但本次返回失败（code {returncode}）：{stderr.strip()[:500]}"
-        return ""
+            if not body and not self._p.cli_stream_json:
+                body = self._output.clean_cli_stdout(stdout.strip())
+            failure = ""
+            if killed_reason.startswith("idle"):
+                failure = f"{self._p.display_tool} CLI 静默 {idle_timeout:g} 秒无输出，已停止；请先核对原任务。"
+            elif killed_reason.startswith("hardcap"):
+                failure = f"{self._p.display_tool} CLI 运行超过上限 {hard_cap:g} 秒，已停止；请先核对原任务。"
+            elif type(returncode) is not int or returncode != 0:
+                code = returncode if type(returncode) is int else "unknown"
+                failure = f"{self._p.display_tool} CLI 返回失败（code {code}）；请先核对原任务。"
+            if failure:
+                raise CliExecutionError(
+                    failure,
+                    returncode=returncode if type(returncode) is int else None,
+                    partial_output=body,
+                )
+            return body
 
     def run_cli_idle(
         self, cmd: list[str], cwd: str, idle_timeout: float, hard_cap: float
@@ -133,7 +166,12 @@ class CliExecutor:
                 break
         t_out.join(timeout=2)
         t_err.join(timeout=2)
-        return (int(proc.returncode or 0), "".join(out_parts), "".join(err_parts), killed_reason)
+        return (
+            proc.returncode if proc.returncode is not None else -1,
+            "".join(out_parts),
+            "".join(err_parts),
+            killed_reason,
+        )
 
     async def run_cli_streaming(
         self, cli_path: str, prompt: str, cwd: str
@@ -157,8 +195,9 @@ class CliExecutor:
                     stderr=asyncio.subprocess.PIPE,
                     env=env,
                 )
-            except (OSError, FileNotFoundError) as exc:
-                yield {"type": "error", "message": f"{self._p.display_tool} CLI 启动失败：{exc}"}
+            except (OSError, FileNotFoundError):
+                failure = CliExecutionError(f"{self._p.display_tool} CLI 启动失败。", started=False)
+                yield {"type": "error", **failure.payload()}
                 return
             idle_timeout = self._ports.idle_timeout()
             hard_cap = self._ports.hard_cap()
@@ -166,16 +205,20 @@ class CliExecutor:
             last_activity = time.monotonic()
             stream_json = self._p.cli_stream_json
             text_parts: list[str] = []
+            stdout_prefix = ""
 
-            stderr_prefix = bytearray()
+            def partial_output() -> str:
+                if not stream_json and self._p.cli_reads_output_file and output_path.exists():
+                    with suppress(OSError):
+                        return output_path.read_text(encoding="utf-8", errors="replace").strip()
+                return "".join(text_parts) if stream_json else stdout_prefix
 
             async def drain_stderr() -> None:
                 nonlocal last_activity
                 if proc.stderr is not None:
-                    while data := await proc.stderr.read(8192):
+                    while await proc.stderr.read(8192):
                         last_activity = time.monotonic()
-                        # Drain the entire pipe, retaining only bounded error context.
-                        stderr_prefix.extend(data[: max(0, 4096 - len(stderr_prefix))])
+                        # Drain without returning CLI stderr, which may contain credentials.
 
             def timeout_message() -> str:
                 now = time.monotonic()
@@ -190,7 +233,8 @@ class CliExecutor:
             try:
                 while proc.stdout is not None:
                     if message := timeout_message():
-                        yield {"type": "error", "message": message}
+                        failure = CliExecutionError(message, partial_output=partial_output())
+                        yield {"type": "error", **failure.payload()}
                         return
                     try:
                         raw_line = await asyncio.wait_for(proc.stdout.readline(), timeout=3.0)
@@ -200,6 +244,8 @@ class CliExecutor:
                         break
                     last_activity = time.monotonic()
                     line = raw_line.decode("utf-8", errors="replace").rstrip()
+                    if not stream_json:
+                        stdout_prefix += (line + "\n")[: max(0, 16_384 - len(stdout_prefix))]
                     if stream_json and line.startswith("{"):
                         token = self._output.parse_stream_json_line(line)
                         if token:
@@ -208,7 +254,8 @@ class CliExecutor:
                 # EOF does not guarantee process exit. Retain the same time limits.
                 while True:
                     if message := timeout_message():
-                        yield {"type": "error", "message": message}
+                        failure = CliExecutionError(message, partial_output=partial_output())
+                        yield {"type": "error", **failure.payload()}
                         return
                     try:
                         await asyncio.wait_for(proc.wait(), timeout=3.0)
@@ -218,18 +265,19 @@ class CliExecutor:
                         continue
                 with suppress(TimeoutError):
                     await asyncio.wait_for(stderr_task, timeout=2.0)
-                returncode = int(proc.returncode or 0)
+                returncode = proc.returncode
                 body = "".join(text_parts).strip() if stream_json else ""
                 if not stream_json and self._p.cli_reads_output_file and output_path.exists():
                     body = output_path.read_text(encoding="utf-8", errors="replace").strip()
-                if body or returncode == 0:
+                if type(returncode) is int and returncode == 0:
                     yield {"type": "done", "text": body}
                 else:
-                    detail = stderr_prefix.decode("utf-8", errors="replace")[:300]
-                    yield {
-                        "type": "error",
-                        "message": f"{self._p.display_tool} CLI 返回失败（code {returncode}）：{detail}",
-                    }
+                    failure = CliExecutionError(
+                        f"{self._p.display_tool} CLI 返回失败（code {returncode}）；请先核对原任务。",
+                        returncode=returncode if type(returncode) is int else None,
+                        partial_output=body or partial_output(),
+                    )
+                    yield {"type": "error", **failure.payload()}
             finally:
                 # Closing/cancelling the async iterator also owns process cleanup.
                 if not reaped:

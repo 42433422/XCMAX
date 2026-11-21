@@ -126,8 +126,8 @@ def website():
                         border:0"></iframe></body>""")
             self.send("""<!doctype html><html><body>
                 <label>Name <input id="name"></label>
-                <label>Plan <select id="plan"><option value="normal">Normal</option>
-                    <option value="pro">Pro</option></select></label>
+                <label for="plan">Plan</label><select id="plan">
+                    <option value="normal">Normal</option><option value="pro">Pro</option></select>
                 <label>Accept <input id="terms" type="checkbox"></label>
                 <label>Evidence <input id="upload" type="file"></label><p id="filename"></p>
                 <label>Command <input id="command"></label><p id="key"></p>
@@ -358,16 +358,26 @@ from pathlib import Path
 from app.application.agent_orchestrator.tool_process import _apply_resource_limits
 from app.infrastructure.browser.runtime import execute_browser_plan
 settings = json.loads(sys.argv[1])
+profile = settings["profile"]
+original = {name: resource.getrlimit(getattr(resource, name))
+            for name in ("RLIMIT_CPU", "RLIMIT_AS", "RLIMIT_NOFILE")}
 _apply_resource_limits()
+if profile == "cpu_fd_only":
+    resource.setrlimit(resource.RLIMIT_AS, original["RLIMIT_AS"])
+elif profile == "address_space_only":
+    for name in ("RLIMIT_CPU", "RLIMIT_NOFILE"):
+        resource.setrlimit(getattr(resource, name), original[name])
 limits = {name: resource.getrlimit(getattr(resource, name))[0]
           for name in ("RLIMIT_CPU", "RLIMIT_AS", "RLIMIT_NOFILE")}
-print(json.dumps({"limits": limits}), flush=True)
-result = asyncio.run(execute_browser_plan(
-    {"url": settings["origin"], "steps": [
+print(json.dumps({"profile": profile, "limits": limits}), flush=True)
+plan = {"url": settings["origin"], "steps": [
         {"action": "fill", "locator": {"label": "Name"}, "value": "Limited"},
         {"action": "click", "locator": {"selector": "#submit"}}],
      "verify": [{"kind": "text", "locator": {"selector": "#receipt"},
-                 "expected": "receipt-1:Limited"}]},
+                 "expected": "receipt-1:Limited"}]}
+if profile != "production":
+    plan = {"url": settings["origin"] + "/cookies/read", "observe": True}
+result = asyncio.run(execute_browser_plan(plan,
     artifact_dir=Path(settings["artifact_dir"]),
     allowed_origins=frozenset({settings["origin"]}),
     executable_path=settings["executable"], deadline_monotonic=time.monotonic() + 12))
@@ -385,25 +395,40 @@ print(json.dumps({"result": result}), flush=True)
         "XCAGI_TOOL_MAX_FILES",
     ):
         environment.pop(key, None)
-    settings = {"origin": origin, "artifact_dir": str(tmp_path), "executable": browser_executable}
-    with subprocess.Popen(
-        [sys.executable, "-c", script, json.dumps(settings)],
-        env=environment,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        start_new_session=True,
-    ) as process:
-        try:
-            stdout, stderr = process.communicate(timeout=20)
-        finally:
-            # A failed browser launch must not leave its driver/children running.
-            with suppress(ProcessLookupError):
-                os.killpg(process.pid, signal.SIGKILL)
-    print(stdout)
-    print(stderr)
-    assert process.returncode == 0, (stdout, stderr[-4000:])
-    records = [json.loads(line) for line in stdout.splitlines()]
+
+    def launch(profile):
+        settings = {
+            "origin": origin,
+            "artifact_dir": str(tmp_path / profile),
+            "executable": browser_executable,
+            "profile": profile,
+        }
+        with subprocess.Popen(
+            [sys.executable, "-c", script, json.dumps(settings)],
+            env=environment,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            start_new_session=True,
+        ) as process:
+            try:
+                stdout, stderr = process.communicate(timeout=20)
+            finally:
+                with suppress(ProcessLookupError):
+                    os.killpg(process.pid, signal.SIGKILL)
+        print(f"resource_profile={profile} exit={process.returncode}")
+        print(stdout)
+        print(stderr)
+        return process.returncode, stdout, stderr
+
+    returncode, stdout, stderr = launch("production")
+    records = [json.loads(line) for line in stdout.splitlines()] if returncode == 0 else []
+    if not records or not records[-1]["result"]["success"]:
+        # Diagnostics only, on synthetic GET pages. Neither comparison replaces
+        # the production-default assertions or changes the mandatory CI gate.
+        for profile in ("cpu_fd_only", "address_space_only"):
+            launch(profile)
+    assert returncode == 0, (stdout, stderr[-4000:])
     assert records[0]["limits"] == {
         "RLIMIT_CPU": 60,
         "RLIMIT_AS": 2048 * 1024 * 1024,

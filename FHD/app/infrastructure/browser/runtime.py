@@ -14,11 +14,14 @@ import time
 from collections.abc import Callable
 from contextlib import suppress
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urljoin, urlsplit
 from uuid import uuid4
 
 from app.infrastructure.browser.snapshot import redacted_page_snapshot
+
+if TYPE_CHECKING:
+    from playwright.async_api import Browser, BrowserContext, Page
 
 MAX_ARTIFACT_BYTES = 25 * 1024 * 1024
 MAX_SNAPSHOT_CHARS = 30_000
@@ -173,28 +176,33 @@ async def execute_browser_plan(
         "artifacts": [],
     }
     attempted = False
-    browser = context = page = None
+    browser: Browser | None = None
+    context: BrowserContext | None = None
+    page: Page | None = None
     blocked: set[str] = set()
 
     def require_allowed(url: str) -> None:
         if _origin(url) not in allowed:
             raise BrowserPolicyError("browser_origin_not_allowed")
 
-    def check_network() -> None:
+    def check_network() -> Page:
         if blocked:
             raise BrowserPolicyError("browser_network_blocked")
+        if page is None:
+            raise RuntimeError("browser_page_unavailable")
         require_allowed(page.url)
+        return page
 
     async def verify(checks: list[dict[str, Any]]) -> list[dict[str, str]]:
         receipts = []
         for check in checks:
-            check_network()
+            active_page = check_network()
             timeout = _timeout(deadline_monotonic)
             kind = check["kind"]
             if kind == "url":
-                await expect(page).to_have_url(check["expected"], timeout=timeout)
+                await expect(active_page).to_have_url(check["expected"], timeout=timeout)
             else:
-                locator = _locator(page, check["locator"], check.get("frame"))
+                locator = _locator(active_page, check["locator"], check.get("frame"))
                 if kind == "visible":
                     visibility = (
                         "to_be_hidden" if check.get("expected") == "false" else "to_be_visible"
