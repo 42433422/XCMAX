@@ -110,7 +110,11 @@ class DocumentUpload:
                             raise ValueError("资料文件不能超过 25 MB")
                         target.write(chunk)
             except (OSError, ValueError) as exc:
-                return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
+                self._logger.warning("knowledge upload staging failed: %s", exc)
+                message = (
+                    "资料文件不能超过 25 MB" if size > self._max_bytes else "资料文件暂时无法保存"
+                )
+                return JSONResponse({"success": False, "message": message}, status_code=400)
             try:
                 await file.close()
             finally:

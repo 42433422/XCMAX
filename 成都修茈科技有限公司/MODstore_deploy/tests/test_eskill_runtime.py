@@ -4,6 +4,8 @@ import importlib
 import json
 from pathlib import Path
 
+import pytest
+
 
 def _bootstrap(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("MODSTORE_DB_PATH", str(tmp_path / "modstore.db"))
@@ -54,6 +56,57 @@ def _seed_eskill(session, models, *, min_length: int = 0):
     session.commit()
     session.refresh(skill)
     return user, skill
+
+
+@pytest.mark.parametrize(
+    ("on_error", "dynamic_fails", "expected_stage"),
+    [
+        (False, False, "static_error"),
+        (True, False, "solidified"),
+        (True, True, "rollback_or_ai_intervention"),
+    ],
+)
+def test_eskill_exception_text_never_reaches_result_patch_or_history(
+    tmp_path, monkeypatch, on_error, dynamic_fails, expected_stage
+):
+    models = _bootstrap(tmp_path, monkeypatch)
+    from modstore_server.eskill_runtime import ESkillRuntime
+
+    runtime = ESkillRuntime()
+    calls = 0
+    private = "Traceback /private/skill.db token=private-execution-error"
+
+    def execute(logic, input_data, *, user_id):
+        nonlocal calls
+        calls += 1
+        if calls == 1 or dynamic_fails:
+            raise OSError(private)
+        return {"brief": "recovered"}
+
+    monkeypatch.setattr(runtime, "_execute_logic", execute)
+    with models.get_session_factory()() as session:
+        user, skill = _seed_eskill(session, models)
+        result = runtime.run(
+            session,
+            eskill_id=skill.id,
+            user_id=user.id,
+            input_data={"topic": "ESkill"},
+            trigger_policy_override={"on_error": on_error},
+        )
+        assert result["stage"] == expected_stage
+        assert private not in json.dumps(result)
+        saved = session.get(models.ESkillRun, result["run_id"])
+        assert private not in saved.error_message + saved.patch_json + saved.output_json
+        assert saved.stage == expected_stage
+        if on_error:
+            assert (
+                result["patch"]["changes"]["metadata"]["last_error"]
+                == "eskill_execution_failed"
+            )
+        if expected_stage == "solidified":
+            assert result["output"]["brief"] == "recovered" and result["error"] == ""
+        else:
+            assert result["error"] and result["output"] == {}
 
 
 def test_eskill_runtime_static_success(tmp_path, monkeypatch):

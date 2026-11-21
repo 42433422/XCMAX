@@ -294,7 +294,7 @@ def build_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
             "schema": "xcagi.runtime_inventory/v1",
             "ok": False,
             "failed_must_run": -1,
-            "note": f"runtime inventory unavailable: {exc}",
+            "note": "runtime inventory unavailable",
         }
 
     return {
@@ -394,9 +394,9 @@ def public_hall_targets() -> List[Path]:
 def write_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
     try:
         payload = build_public_company_hall(day=day)
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("public_company_hall: build failed")
-        return {"ok": False, "error": str(exc), "written": []}
+        return {"ok": False, "error": "company_hall_unavailable", "written": []}
 
     body = json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
     written: List[str] = []

@@ -69,6 +69,24 @@ def test_create_rejects_existing(tmp_path: Path) -> None:
     assert "already exists" in (result.error or "")
 
 
+def test_commit_failure_restores_backup_without_exposing_exception(tmp_path: Path, monkeypatch) -> None:
+    _make_project(tmp_path)
+    applier = PatchApplier(tmp_path)
+    restored = []
+
+    def fail_commit(*args, **kwargs):
+        raise OSError("/private/credentials token=private-commit-token")
+
+    monkeypatch.setattr(applier, "_commit", fail_commit)
+    monkeypatch.setattr(applier, "_rollback", restored.append)
+    result = applier.apply(ProjectPatch(edits=[FileEdit(path="new.py", operation="create", contents="x")]))
+    assert result.applied is False
+    assert result.error == "commit_failed"
+    assert len(restored) == 1
+    assert "private-commit-token" not in json.dumps(result.to_dict())
+    assert not (tmp_path / "new.py").exists()
+
+
 def test_dry_run_does_not_touch_disk(tmp_path: Path) -> None:
     _make_project(tmp_path)
     original = (tmp_path / "pkg" / "math.py").read_text(encoding="utf-8")

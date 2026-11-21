@@ -433,13 +433,17 @@ def test_materials_batch_delete_non_dict_400(materials_client: TestClient) -> No
     assert r.status_code == 422 or r.status_code == 400
 
 
-def test_materials_batch_delete_service_error_still_ok(
-    materials_client: TestClient, mock_material_svc: MagicMock
+def test_materials_batch_delete_service_error_requires_reconciliation(
+    materials_client: TestClient, mock_material_svc: MagicMock, local_tools
 ) -> None:
     mock_material_svc.batch_delete_materials.side_effect = RuntimeError("partial fail")
     r = materials_client.post("/api/materials/batch-delete", json={"ids": [1, 2]})
-    assert r.status_code == 200
-    assert r.json()["deleted_count"] == 2
+    mock_material_svc.batch_delete_materials.assert_called_once_with([1, 2])
+    assert r.status_code == 400
+    assert r.json()["success"] is False
+    assert r.json()["outcome"] == "unknown"
+    assert r.json()["reconciliation_required"] and r.json()["retryable"] is False
+    assert "deleted_count" not in r.json()
 
 
 def test_materials_export_file_success(

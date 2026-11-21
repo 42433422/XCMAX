@@ -355,7 +355,7 @@ def compat_tts(request: Request, payload: dict[str, Any] = Body(default_factory=
             {
                 "success": False,
                 "code": "TTS_UPSTREAM_FORBIDDEN",
-                "message": str(error),
+                "message": "Edge 语音上游拒绝了握手（HTTP 403）；请检查系统时间/网络，或改用离线语音包。",
                 "data": {
                     "reason": "edge_403",
                     "fallback": "offline_tts",

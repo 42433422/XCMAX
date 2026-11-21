@@ -257,9 +257,10 @@ class TestMaterialsRouter:
             result = _registered_router_materials(
                 "batch_delete", {"ids": [1, 2]}, _ctx(), "normal", ""
             )
-            assert result["success"] is True
-            assert result["deleted_count"] == 2
-            assert "warning" in result
+            assert result["success"] is False
+            assert result["outcome"] == "unknown"
+            assert result["reconciliation_required"] and result["retryable"] is False
+            assert "deleted_count" not in result and "warning" not in result
 
     def test_batch_delete_returns_dict(self) -> None:
         mock_svc = MagicMock()

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import threading
@@ -424,8 +425,9 @@ def resume_action(
         )
         outcome = raw_outcome if isinstance(raw_outcome, dict) else {"result": raw_outcome}
         ok = bool(outcome.get("ok", outcome.get("success", True)))
-    except RECOVERABLE_ERRORS as exc:
-        outcome = {"ok": False, "error": str(exc)}
+    except RECOVERABLE_ERRORS:
+        logging.getLogger(__name__).exception("approved action execution failed")
+        outcome = {"ok": False, "error": "action_execution_failed"}
         ok = False
     return complete_action(
         action_id,

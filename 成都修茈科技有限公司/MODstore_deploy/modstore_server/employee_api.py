@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import shutil
 import uuid
@@ -139,7 +140,8 @@ async def list_employees(
     except RECOVERABLE_ERRORS as e:
         if isinstance(e, HTTPException):
             raise e
-        raise HTTPException(500, f"获取员工列表失败: {e}")
+        logging.getLogger(__name__).exception("employee list unavailable")
+        raise HTTPException(500, "获取员工列表失败") from None
 
 
 @router.get(
@@ -187,8 +189,9 @@ async def employee_catalog_manifest_diagnostics(
                 lib_manifest_ok = bool(not err and isinstance(data, dict))
             except (OSError, ValueError, FileNotFoundError):
                 pass
-    except RECOVERABLE_ERRORS as exc:
-        lib_root = f"(error: {exc})"
+    except RECOVERABLE_ERRORS:
+        logging.getLogger(__name__).exception("employee library diagnostics failed")
+        lib_root = "(unavailable)"
 
     in_json = False
     in_db = False
@@ -254,8 +257,9 @@ async def get_employee_status_endpoint(
         raise HTTPException(403, str(e))
     except ValueError as e:
         raise HTTPException(404, str(e))
-    except RECOVERABLE_ERRORS as e:
-        raise HTTPException(500, f"获取员工状态失败: {e}")
+    except RECOVERABLE_ERRORS:
+        logging.getLogger(__name__).exception("employee status unavailable")
+        raise HTTPException(500, "获取员工状态失败") from None
 
 
 @router.get("/{employee_id}/manifest", summary="获取员工包完整 manifest")
@@ -280,8 +284,9 @@ async def get_employee_manifest_endpoint(
         raise HTTPException(403, str(e))
     except ValueError as e:
         raise HTTPException(404, str(e))
-    except RECOVERABLE_ERRORS as e:
-        raise HTTPException(500, f"获取员工包 manifest 失败: {e}")
+    except RECOVERABLE_ERRORS:
+        logging.getLogger(__name__).exception("employee manifest unavailable")
+        raise HTTPException(500, "获取员工包 manifest 失败") from None
 
 
 @router.post("/{employee_id}/execute", summary="执行员工任务")

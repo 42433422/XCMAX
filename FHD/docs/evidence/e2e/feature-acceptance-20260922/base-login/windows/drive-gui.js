@@ -10,6 +10,7 @@
 
 const fs = require('fs')
 const path = require('path')
+const crypto = require('node:crypto')
 
 const OUT = process.argv[2] || '.'
 const PORT = process.env.CDP_PORT || '9222'
@@ -73,6 +74,23 @@ async function evalJs(expr, timeoutMs = 60000) {
   return r.result && r.result.value
 }
 
+async function evalPage(fn, ...args) {
+  const objectGroup = `base-login-${crypto.randomUUID()}`
+  try {
+    const context = await send('Runtime.evaluate', { expression: 'globalThis', objectGroup })
+    const objectId = context.result?.objectId
+    if (!objectId) throw new Error('page execution context unavailable')
+    const r = await send('Runtime.callFunctionOn', {
+      objectId, objectGroup, functionDeclaration: fn.toString(), arguments: args.map(value => ({ value })),
+      returnByValue: true, awaitPromise: true, userGesture: true,
+    })
+    if (r.exceptionDetails) throw new Error('in-page function failed')
+    return r.result?.value
+  } finally {
+    await send('Runtime.releaseObjectGroup', { objectGroup }).catch(() => note('page object release failed', {}))
+  }
+}
+
 async function shot(name) {
   const r = await send('Page.captureScreenshot', { format: 'png' })
   const p = path.join(SHOT_DIR, name)
@@ -81,14 +99,17 @@ async function shot(name) {
   return p
 }
 
-const FINDER = (text, tag) => `Array.from(document.querySelectorAll(${JSON.stringify(tag)}))`
-  + `.find(e => e.offsetParent !== null && (e.textContent||'').replace(/\\s+/g,'') === ${JSON.stringify(String(text).replace(/\s+/g, ''))})`
+const FINDER = (text, tag) => ({ text: String(text).replace(/\s+/g, ''), tag })
 
 async function rectOf(finder) {
-  return evalJs(`(() => { const el = (${finder}); if (!el) return null;
+  return evalPage((query) => {
+    const el = Array.from(document.querySelectorAll(query.tag))
+      .find(e => e.offsetParent !== null && (e.textContent || '').replace(/\s+/g, '') === query.text);
+    if (!el) return null;
     const r = el.getBoundingClientRect(); if (!r.width && !r.height) return null;
     return {x: r.left + r.width/2, y: r.top + r.height/2, w: r.width, h: r.height,
-            text: (el.textContent||el.value||'').trim().slice(0,60)}; })()`)
+            text: (el.textContent||el.value||'').trim().slice(0,60)};
+  }, finder)
 }
 
 async function clickFinder(finder, label, waitMs = 900) {
@@ -114,8 +135,8 @@ async function clickText(text, tag = 'button') {
 }
 
 async function typeInto(selector, text) {
-  const ok = await evalJs(`(() => { const el = document.querySelector(${JSON.stringify(selector)});
-    if (!el) return false; el.focus(); return document.activeElement === el; })()`)
+  const ok = await evalPage((field) => { const el = document.querySelector(field);
+    if (!el) return false; el.focus(); return document.activeElement === el; }, selector)
   if (!ok) throw new Error('cannot focus ' + selector)
   await send('Input.insertText', { text })
   await sleep(400)

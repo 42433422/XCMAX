@@ -49,6 +49,34 @@ describe('useWorkbenchStore', () => {
     expect(agent.system_prompt).toBe('你好')
   })
 
+  it.each([
+    '__proto__.polluted', 'constructor.prototype.polluted', 'identity.__proto__.polluted',
+    'identity.constructor.prototype.polluted', 'identity.prototype.polluted',
+    'identity.__proto__', 'identity.constructor', 'identity.prototype', '', '.name', 'identity..name',
+  ])('patchManifest rejects unsafe path %s before changing the manifest', (path) => {
+    const store = useWorkbenchStore()
+    store.setTarget('employee', null, {})
+    try {
+      expect(() => store.patchManifest(path, 'untrusted')).toThrow('Invalid manifest path')
+      expect(store.target.manifest).toEqual({})
+      expect(store.dirty).toBe(false)
+      expect(Object.prototype).not.toHaveProperty('polluted')
+    } finally {
+      delete (Object.prototype as Record<string, unknown>).polluted
+    }
+  })
+
+  it('patchManifest creates an own branch instead of changing an inherited object', () => {
+    const inherited = { identity: { name: 'original' } }
+    const store = useWorkbenchStore()
+    store.setTarget('employee', null, Object.create(inherited))
+    store.patchManifest('identity.name', 'updated')
+    expect(inherited.identity.name).toBe('original')
+    expect(Object.prototype.hasOwnProperty.call(store.target.manifest, 'identity')).toBe(true)
+    expect(store.target.manifest.identity).toEqual({ name: 'updated' })
+    expect(store.dirty).toBe(true)
+  })
+
   it('selectNode sets selectedNodeId and switches inspector to node mode', () => {
     const store = useWorkbenchStore()
     store.selectNode('emp-identity')
