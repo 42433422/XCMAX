@@ -7,7 +7,6 @@ Dialogue, model text, and compression summaries are not execution results.
 from __future__ import annotations
 
 import asyncio
-import fcntl
 import hashlib
 import json
 import os
@@ -20,6 +19,11 @@ from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import IO, Any
+
+# Windows workspace ledgers intentionally reject writes (ENOTSUP) before flock.
+# Keep the module importable for the cross-platform read/execute contracts.
+if os.name != "nt":
+    import fcntl
 
 from app.application.agent_orchestrator.context_window_manager import (
     ContextWindowManager,
