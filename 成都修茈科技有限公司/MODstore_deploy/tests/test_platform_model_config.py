@@ -894,3 +894,47 @@ async def test_platform_default_prefers_unified_gateway(database, monkeypatch):
     assert selected["provider"] == "litellm"
     assert selected["model"] == "xcmax-kimi-code"
     assert selected["source"] == "platform_gateway"
+
+
+@pytest.mark.asyncio
+async def test_gateway_route_returns_selected_deployment_capacity_for_default_and_explicit(
+    database, monkeypatch
+):
+    from modstore_server import llm_api, llm_catalog
+
+    monkeypatch.setenv("LITELLM_MASTER_KEY", "gateway-master-key")
+    llm_catalog.clear_all_catalog_cache()
+    capabilities = {
+        "context_window": 131072,
+        "max_input_tokens": 126976,
+        "max_output_tokens": 16384,
+        "resolved_model": "doubao/seed-code",
+        "source": "litellm_model_info",
+    }
+
+    async def fetch(_base, _key, **_kwargs):
+        return (
+            [
+                {
+                    "id": "xcmax-doubao-code",
+                    "model_capabilities": {**capabilities, "api_key": "never-public"},
+                },
+                {"id": "xcmax-other-code", "max_input_tokens": 4096},
+            ],
+            None,
+        )
+
+    monkeypatch.setattr(llm_catalog, "_fetch_openai_compatible_records", fetch)
+    for kwargs in ({}, {"provider": "litellm", "model": "xcmax-doubao-code"}):
+        selected = await llm_api.resolve_default_llm_route(database, 1, **kwargs)
+        assert selected["provider"] == "litellm" and selected["model"] == "xcmax-doubao-code"
+        assert selected["model_capabilities"] == capabilities
+        assert "never-public" not in json.dumps(selected)
+        assert "gateway-master-key" not in json.dumps(selected)
+        assert selected["route_token"]
+    selected = await llm_api.resolve_default_llm_route(
+        database, 1, provider="litellm", model="xcmax-other-code"
+    )
+    assert selected["model_capabilities"]["max_input_tokens"] == 4096
+    assert "context_window" not in selected["model_capabilities"]
+    llm_catalog.clear_all_catalog_cache()
