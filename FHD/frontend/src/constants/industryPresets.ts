@@ -245,7 +245,7 @@ export const INDUSTRY_PRESETS: Record<string, IndustryPreset> = {
       chat: '运维对话',
       im: '信息',
       'ai-ecosystem': '智能生态',
-      'mod-store': '能力库',
+      'mod-store': 'AI 市场',
       'employee-workflow': '编制工作台',
       'workflow-visualization': '流程可视化',
       'duty-roster-graph': '员工图谱',

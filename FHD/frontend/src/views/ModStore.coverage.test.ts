@@ -42,7 +42,7 @@ const mockPromptAdvancedTutorialAfterInstall = vi.fn().mockResolvedValue('alread
 const mockMarkProductFlowCompleted = vi.fn()
 const mockMarkHostPackAcknowledged = vi.fn()
 
-const mockCatalogStoreCollection = vi.fn((row: any) => row?.store_collection || '')
+const mockCatalogStoreCollection = vi.fn((row: any) => row?.store_collection || 'industry_mod')
 const mockIsHostFoundationEmployeePackId = vi.fn((id: string) => id === 'xcagi-host-foundation-employee')
 const mockReadBuildEdition = vi.fn(() => 'generic')
 const mockIsOfficeEmployeePkg = vi.fn((id: string) => String(id || '').startsWith('office-emp-'))
@@ -93,6 +93,7 @@ vi.mock('@/constants/genericModPack', () => ({
   catalogStoreCollection: (...args: unknown[]) => mockCatalogStoreCollection(...args),
   HOST_FOUNDATION_EMPLOYEE_PACK_ID: 'xcagi-host-foundation-employee',
   isHostFoundationEmployeePackId: (...args: unknown[]) => mockIsHostFoundationEmployeePackId(...(args as [string])),
+  isEmployeePackListingModId: (id: string) => mockIsHostFoundationEmployeePackId(id) || mockIsOfficeEmployeePkg(id) || mockIsOfficeAuxPack1Pkg(id) || id === 'lan-gate-ai-employee',
   readBuildEdition: (...args: unknown[]) => mockReadBuildEdition(...args),
   STORE_COLLECTION_HOST_FOUNDATION: 'host_foundation',
   STORE_COLLECTION_INDUSTRY_MOD: 'industry_mod',
@@ -229,7 +230,7 @@ describe('ModStore.coverage – 计算属性与标签函数', () => {
       ok: true,
       json: async () => ({ success: true, data: { available: [] } }),
     })
-    mockCatalogStoreCollection.mockImplementation((row: any) => row?.store_collection || '')
+    mockCatalogStoreCollection.mockImplementation((row: any) => row?.store_collection || 'industry_mod')
     mockIsHostFoundationEmployeePackId.mockImplementation((id: string) => id === 'xcagi-host-foundation-employee')
     mockIsOfficeEmployeePkg.mockImplementation((id: string) => String(id || '').startsWith('office-emp-'))
     mockIsOfficeAuxPack1Pkg.mockImplementation((id: string) => String(id || '').startsWith('office-aux-'))
@@ -244,7 +245,7 @@ describe('ModStore.coverage – 计算属性与标签函数', () => {
       { tab: 'office_aux', expectText: '办公员工附属包1' },
       { tab: 'workflow', expectText: '工作流员工' },
       { tab: 'ai_employee', expectText: 'AI 员工' },
-      { tab: 'industry_mod', expectText: '行业扩展' },
+      { tab: 'industry_mod', expectText: '业务模块' },
       { tab: 'installed', expectText: '已安装' },
     ]
     for (const { tab, expectText } of tabs) {
@@ -348,12 +349,12 @@ describe('ModStore.coverage – 计算属性与标签函数', () => {
     wrapper.unmount()
   })
 
-  it('marketItemKindLabel：覆盖员工/扩展 Mod 分支', async () => {
+  it('marketItemKindLabel：覆盖员工/模块分支', async () => {
     const { wrapper } = await mountModStore({ tab: 'all' })
     await waitForAsync()
     const vm: any = wrapper.vm
     expect(vm.marketItemKindLabel(makeMod({ artifact: 'employee_pack' }))).toBe('员工')
-    expect(vm.marketItemKindLabel(makeMod({ artifact: 'mod' }))).toBe('扩展 Mod')
+    expect(vm.marketItemKindLabel(makeMod({ artifact: 'mod' }))).toBe('模块')
     wrapper.unmount()
   })
 
@@ -391,7 +392,7 @@ describe('ModStore.coverage – oneClickPendingCount / oneClickCtaLabel', () => 
       ok: true,
       json: async () => ({ success: true, data: { available: [] } }),
     })
-    mockCatalogStoreCollection.mockImplementation((row: any) => row?.store_collection || '')
+    mockCatalogStoreCollection.mockImplementation((row: any) => row?.store_collection || 'industry_mod')
     mockFetchDeliverableStatus.mockResolvedValue({ deliverable: true, missing_mod_ids: [] })
     mockFetchMarketCatalog.mockResolvedValue({ items: [] })
   })
@@ -964,10 +965,10 @@ describe('ModStore.coverage – searchMods', () => {
     wrapper.unmount()
   })
 
-  it('searchMods：非 market tab 且 query 非空 → /api/mod-store/search', async () => {
+  it('searchMods：非 market tab 且 query 非空 → 完整目录按查询过滤', async () => {
     mockApiFetch.mockResolvedValue({
       ok: true,
-      json: async () => ({ success: true, data: [makeMod({ id: 's1' })] }),
+      json: async () => ({ success: true, data: { available: [makeMod({ id: 'hello-employee', artifact: 'employee_pack' })] } }),
     })
     const { wrapper } = await mountModStore({ tab: 'all' })
     await waitForAsync()
@@ -978,8 +979,8 @@ describe('ModStore.coverage – searchMods', () => {
     await flushPromises()
     expect(mockApiFetch).toHaveBeenCalled()
     const callArg = mockApiFetch.mock.calls[0][0] as string
-    expect(callArg).toContain('/api/mod-store/search')
-    expect(callArg).toContain('q=hello')
+    expect(callArg).toBe('/api/mod-store/catalog')
+    expect(vm.filteredMods.map((item: any) => item.id)).toEqual(['hello-employee'])
     wrapper.unmount()
   })
 
@@ -1006,12 +1007,12 @@ describe('ModStore.coverage – applyFilters / 排序分支', () => {
       ok: true,
       json: async () => ({ success: true, data: { available: [] } }),
     })
-    mockCatalogStoreCollection.mockImplementation((row: any) => row?.store_collection || '')
+    mockCatalogStoreCollection.mockImplementation((row: any) => row?.store_collection || 'industry_mod')
     mockFetchMarketCatalog.mockResolvedValue({ items: [] })
   })
 
   it('applyFilters：sortBy=downloads 排序', async () => {
-    const { wrapper } = await mountModStore({ tab: 'all' })
+    const { wrapper } = await mountModStore({ type: 'module', tab: 'all' })
     await waitForAsync()
     const vm: any = wrapper.vm
     vm.allMods = [makeMod({ id: 'a', name: 'A', total_downloads: 5 }), makeMod({ id: 'b', name: 'B', download_count: 10 })]
@@ -1022,7 +1023,7 @@ describe('ModStore.coverage – applyFilters / 排序分支', () => {
   })
 
   it('applyFilters：sortBy=rating 排序', async () => {
-    const { wrapper } = await mountModStore({ tab: 'all' })
+    const { wrapper } = await mountModStore({ type: 'module', tab: 'all' })
     await waitForAsync()
     const vm: any = wrapper.vm
     vm.allMods = [makeMod({ id: 'a', name: 'A', avg_rating: 3 }), makeMod({ id: 'b', name: 'B', avg_rating: 5 })]
@@ -1033,7 +1034,7 @@ describe('ModStore.coverage – applyFilters / 排序分支', () => {
   })
 
   it('applyFilters：sortBy=created_at 排序', async () => {
-    const { wrapper } = await mountModStore({ tab: 'all' })
+    const { wrapper } = await mountModStore({ type: 'module', tab: 'all' })
     await waitForAsync()
     const vm: any = wrapper.vm
     vm.allMods = [makeMod({ id: 'a', name: 'A', created_at: '2024-01-01' }), makeMod({ id: 'b', name: 'B', created_at: '2024-06-01' })]
@@ -1044,7 +1045,7 @@ describe('ModStore.coverage – applyFilters / 排序分支', () => {
   })
 
   it('applyFilters：sortBy=name（默认）排序', async () => {
-    const { wrapper } = await mountModStore({ tab: 'all' })
+    const { wrapper } = await mountModStore({ type: 'module', tab: 'all' })
     await waitForAsync()
     const vm: any = wrapper.vm
     vm.allMods = [makeMod({ id: 'b', name: 'Banana' }), makeMod({ id: 'a', name: 'Apple' })]
@@ -1055,7 +1056,7 @@ describe('ModStore.coverage – applyFilters / 排序分支', () => {
   })
 
   it('applyFilters：filterInstalled=true 仅显示已安装', async () => {
-    const { wrapper } = await mountModStore({ tab: 'all' })
+    const { wrapper } = await mountModStore({ type: 'module', tab: 'all' })
     await waitForAsync()
     const vm: any = wrapper.vm
     vm.allMods = [makeMod({ id: 'a', name: 'A', is_installed: true }), makeMod({ id: 'b', name: 'B', is_installed: false })]
@@ -1078,7 +1079,7 @@ describe('ModStore.coverage – switchTab', () => {
       json: async () => ({ success: true, data: { available: [] } }),
     })
     mockFetchMarketCatalog.mockResolvedValue({ items: [] })
-    mockCatalogStoreCollection.mockImplementation((row: any) => row?.store_collection || '')
+    mockCatalogStoreCollection.mockImplementation((row: any) => row?.store_collection || 'industry_mod')
   })
 
   it('switchTab：切到 installed 且 allMods 为空时 loadMods', async () => {
@@ -1144,7 +1145,7 @@ describe('ModStore.coverage – loadMods / loadMarketTab 错误路径', () => {
       json: async () => ({ success: true, data: { available: [] } }),
     })
     mockFetchMarketCatalog.mockResolvedValue({ items: [] })
-    mockCatalogStoreCollection.mockImplementation((row: any) => row?.store_collection || '')
+    mockCatalogStoreCollection.mockImplementation((row: any) => row?.store_collection || 'industry_mod')
   })
 
   it('loadMods：catalog 接口 success=false 抛错', async () => {
@@ -1253,7 +1254,7 @@ describe('ModStore.coverage – runOneClickInstallAndOnboard', () => {
     mockInstallHostFoundation.mockResolvedValue({ success: true, message: '' })
     mockFetchMarketCatalog.mockResolvedValue({ items: [] })
     mockPromptAdvancedTutorialAfterInstall.mockResolvedValue('already_completed')
-    mockCatalogStoreCollection.mockImplementation((row: any) => row?.store_collection || '')
+    mockCatalogStoreCollection.mockImplementation((row: any) => row?.store_collection || 'industry_mod')
     mockIsOfficeEmployeePkg.mockImplementation((id: string) => String(id || '').startsWith('office-emp-'))
     mockAutoOnboardInstalledMarketItem.mockResolvedValue({
       onboardedIds: [],
@@ -1535,7 +1536,7 @@ describe('ModStore.coverage – onMounted / onBeforeUnmount', () => {
 
 /* ══════════════════════════════════════════════════════════════════ */
 
-describe('ModStore.coverage – 模板条件渲染分支', () => {
+describe('ModStore.coverage – 条件渲染分支', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
@@ -1543,7 +1544,7 @@ describe('ModStore.coverage – 模板条件渲染分支', () => {
       ok: true,
       json: async () => ({ success: true, data: { available: [] } }),
     })
-    mockCatalogStoreCollection.mockImplementation((row: any) => row?.store_collection || '')
+    mockCatalogStoreCollection.mockImplementation((row: any) => row?.store_collection || 'industry_mod')
     mockResolveEnterpriseOrgLayerForCatalogItem.mockReturnValue(null)
     mockFetchMarketCatalog.mockResolvedValue({ items: [] })
   })
@@ -1582,14 +1583,18 @@ describe('ModStore.coverage – 模板条件渲染分支', () => {
     await waitForAsync()
     const text = wrapper.text()
     expect(text).toContain('M1')
-    expect(text).toContain('M2')
-    // M1 已安装 → 卸载按钮；M2 未安装 → 安装按钮
+    expect(text).not.toContain('M2')
+    // 员工页保留安装、卸载和更新操作；模块在另一类别中展示。
     expect(text).toContain('卸载')
     expect(text).toContain('安装')
     // M1 有更新
     expect(text).toContain('更新')
-    // 招聘市场式卡片：远端条目通过「详情」进入网页信息
     expect(text).toContain('详情')
+    await wrapper.findAll('.el-segmented__item').find(item => item.text() === '模块')!.get('input').setValue()
+    await waitForAsync()
+    expect(wrapper.get('.store-card').text()).toContain('M2')
+    expect(wrapper.get('.store-card').text()).not.toContain('M1')
+    expect(wrapper.get('.store-card').text()).toContain('安装')
     wrapper.unmount()
   })
 
@@ -1603,7 +1608,7 @@ describe('ModStore.coverage – 模板条件渲染分支', () => {
         },
       }),
     })
-    const { wrapper } = await mountModStore({ tab: 'all' })
+    const { wrapper } = await mountModStore({ type: 'module', tab: 'all' })
     await waitForAsync()
     expect(wrapper.text()).toContain('暂无描述')
     wrapper.unmount()
@@ -1624,7 +1629,7 @@ describe('ModStore.coverage – 模板条件渲染分支', () => {
         },
       }),
     })
-    const { wrapper } = await mountModStore({ tab: 'all' })
+    const { wrapper } = await mountModStore({ type: 'module', tab: 'all' })
     await waitForAsync()
     expect(wrapper.text()).not.toContain('L2 战术层')
     wrapper.unmount()
@@ -1726,7 +1731,7 @@ describe('ModStore.coverage – 移动端视图', () => {
       ok: true,
       json: async () => ({ success: true, data: { available: [] } }),
     })
-    mockCatalogStoreCollection.mockImplementation((row: any) => row?.store_collection || '')
+    mockCatalogStoreCollection.mockImplementation((row: any) => row?.store_collection || 'industry_mod')
     mockFetchMarketCatalog.mockResolvedValue({ items: [] })
   })
 
@@ -1740,7 +1745,7 @@ describe('ModStore.coverage – 移动端视图', () => {
         },
       }),
     })
-    const { wrapper } = await mountModStore({ tab: 'all' })
+    const { wrapper } = await mountModStore({ type: 'module', tab: 'all' })
     await waitForAsync()
     const vm: any = wrapper.vm
     vm.isMobileViewport = true
@@ -1759,7 +1764,7 @@ describe('ModStore.coverage – 移动端视图', () => {
         },
       }),
     })
-    const { wrapper } = await mountModStore({ tab: 'all' })
+    const { wrapper } = await mountModStore({ type: 'module', tab: 'all' })
     await waitForAsync()
     const vm: any = wrapper.vm
     vm.isMobileViewport = true
@@ -1778,7 +1783,7 @@ describe('ModStore.coverage – 移动端视图', () => {
         },
       }),
     })
-    const { wrapper } = await mountModStore({ tab: 'all' })
+    const { wrapper } = await mountModStore({ type: 'module', tab: 'all' })
     await waitForAsync()
     const vm: any = wrapper.vm
     vm.isMobileViewport = true
@@ -1826,7 +1831,7 @@ describe('ModStore market discovery presentation', () => {
     vi.clearAllMocks()
     mockFetchMarketCatalog.mockResolvedValue({ items: [] })
     mockApiFetch.mockResolvedValue({ ok: true, json: async () => ({ success: true, data: { available: [] } }) })
-    mockCatalogStoreCollection.mockImplementation((row: any) => row?.store_collection || '')
+    mockCatalogStoreCollection.mockImplementation((row: any) => row?.store_collection || 'industry_mod')
   })
 
   it('counts featured employee packs from the full catalog rather than the filtered list', async () => {
@@ -1842,11 +1847,10 @@ describe('ModStore market discovery presentation', () => {
       vm.filteredMods = []
       await flushPromises()
       const packs = wrapper.findAll('.store-feature')
-      expect(packs.map(pack => pack.get('.store-feature__name').text())).toEqual(['办公员工包', '办公员工附属包1', '工作流员工', '行业扩展'])
+      expect(packs.map(pack => pack.get('.store-feature__name').text())).toEqual(['办公员工包', '办公员工附属包1', '工作流员工'])
       expect(packs[0].get('.store-feature__meta').text()).toContain('10 个员工')
       expect(packs[1].get('.store-feature__meta').text()).toContain('5 个员工')
       expect(packs[2].get('.store-feature__meta').text()).toContain('2 个员工 · 已装 1')
-      expect(packs[3].get('.store-feature__meta').text()).toContain('1 个员工 · 已装 1')
     } finally { wrapper.unmount() }
   })
 
@@ -1867,7 +1871,7 @@ describe('ModStore market discovery presentation', () => {
     const { wrapper } = await mountModStore()
     try {
       await waitForAsync()
-      ;(wrapper.vm as any).filteredMods = [makeMod({ name: '报表助手' })]
+      ;(wrapper.vm as any).filteredMods = [makeMod({ name: '报表助手', artifact: 'employee_pack' })]
       await flushPromises()
       const avatar = wrapper.get('.store-card__avatar img')
       expect(avatar.attributes('src')).toBeTruthy()
@@ -1875,6 +1879,205 @@ describe('ModStore market discovery presentation', () => {
       expect((avatar.element as HTMLImageElement).style.display).toBe('none')
       expect(wrapper.get('.store-card').text()).toContain('报表助手')
       expect(wrapper.find('.store-card__avatar i').exists()).toBe(true)
+    } finally { wrapper.unmount() }
+  })
+})
+
+describe('AI market modules and employees', () => {
+  const moduleRow = makeMod({ id: 'erp-module', name: 'ERP 模块', store_collection: 'industry_mod', package_file: 'erp.zip' })
+  const bundle = makeMod({ id: 'quality-bundle', name: '质量模块包', artifact: 'bundle', store_collection: 'industry_mod' })
+  const employee = makeMod({ id: 'report-employee', name: '报表员工', artifact: 'employee_pack', store_collection: 'industry_mod' })
+  const catalogResponse = (rows: ReturnType<typeof makeMod>[]) => ({ ok: true, json: async () => ({ success: true, data: { available: rows } }) })
+  const switchType = async (wrapper: any, label: string) => {
+    await wrapper.findAll('.el-segmented__item').find((item: any) => item.text() === label)!.get('input').setValue()
+    await waitForAsync()
+  }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    mockCatalogStoreCollection.mockImplementation((row: any) => row?.store_collection || 'industry_mod')
+    mockIsHostFoundationEmployeePackId.mockImplementation((id: string) => id === 'xcagi-host-foundation-employee')
+    mockIsOfficeEmployeePkg.mockImplementation((id: string) => String(id || '').startsWith('office-emp-'))
+    mockIsOfficeAuxPack1Pkg.mockImplementation((id: string) => String(id || '').startsWith('office-aux-'))
+    mockFetchMarketCatalog.mockResolvedValue({ items: [employee, moduleRow] })
+    mockApiFetch.mockResolvedValue(catalogResponse([moduleRow, bundle, employee]))
+    mockAutoOnboardInstalledMarketItem.mockResolvedValue({ onboardedIds: [], plannerRefreshed: false, enterpriseStackLabel: '' })
+  })
+
+  it('loads modules and bundles through the existing package catalog, with separate employee controls', async () => {
+    const { wrapper } = await mountModStore({ type: 'module' })
+    try {
+      await waitForAsync()
+      expect(wrapper.findAll('.el-segmented__item').map(item => item.text())).toEqual(['模块', '员工'])
+      expect(wrapper.findAll('.store-card .card-title').map(item => item.text())).toEqual(['ERP 模块', '质量模块包'])
+      expect(wrapper.get('.store-main__meta').text()).toContain('共 2 个模块')
+      expect(wrapper.find('[data-tour="store-one-click-install"]').exists()).toBe(false)
+      expect(wrapper.find('.store-hero-grid').exists()).toBe(false)
+      expect(wrapper.find('.store-card__avatar img').exists()).toBe(false)
+      expect(mockFetchMarketCatalog).not.toHaveBeenCalled()
+      expect(mockApiFetch).toHaveBeenCalledWith('/api/mod-store/catalog', { timeoutMs: 90_000 })
+    } finally { wrapper.unmount() }
+  })
+
+  it('keeps employee artifacts in AI员工 even when an older collection says industry_mod', async () => {
+    const { wrapper } = await mountModStore({ tab: 'ai_employee' })
+    try {
+      await waitForAsync()
+      expect((wrapper.vm as any).marketType).toBe('employee')
+      expect(wrapper.findAll('.store-card .card-title').map(item => item.text())).toEqual(['报表员工'])
+      expect(wrapper.find('[data-tour="store-one-click-install"]').exists()).toBe(true)
+      expect(wrapper.get('.store-tabs').text()).not.toContain('行业扩展')
+    } finally { wrapper.unmount() }
+  })
+
+  it('preserves legacy category links and unrelated query values when changing type or browser location', async () => {
+    const { wrapper, router } = await mountModStore({ tab: 'office', redirect: '/work', onboarding: '1' })
+    try {
+      await waitForAsync()
+      expect((wrapper.vm as any).marketType).toBe('employee')
+      await switchType(wrapper, '模块')
+      expect(router.currentRoute.value.query).toMatchObject({ type: 'module', tab: 'industry_mod', redirect: '/work', onboarding: '1' })
+      await switchType(wrapper, '员工')
+      expect(router.currentRoute.value.query).toMatchObject({ type: 'employee', tab: 'office', redirect: '/work', onboarding: '1' })
+      await router.push({ query: { tab: 'industry_mod', redirect: '/work' } })
+      await waitForAsync()
+      expect((wrapper.vm as any).marketType).toBe('module')
+      expect(wrapper.get('.store-main__title').text()).toBe('业务模块')
+      await router.push({ query: {} })
+      await waitForAsync()
+      expect((wrapper.vm as any).marketType).toBe('employee')
+      expect((wrapper.vm as any).currentTab).toBe('host_foundation')
+    } finally { wrapper.unmount() }
+  })
+
+  it('ignores a slow employee response after switching to modules', async () => {
+    let finishEmployee!: (value: { items: ReturnType<typeof makeMod>[] }) => void
+    mockFetchMarketCatalog.mockReturnValue(new Promise(resolve => { finishEmployee = resolve }))
+    const { wrapper } = await mountModStore({ tab: 'ai_employee' })
+    try {
+      await flushPromises()
+      await switchType(wrapper, '模块')
+      finishEmployee({ items: [employee] })
+      await waitForAsync()
+      expect((wrapper.vm as any).marketType).toBe('module')
+      expect(wrapper.findAll('.store-card .card-title').map(item => item.text())).toEqual(['ERP 模块', '质量模块包'])
+      expect((wrapper.vm as any).loading).toBe(false)
+    } finally { wrapper.unmount() }
+  })
+
+  it('finds modules after more than 50 matching employees using the complete catalog search fields', async () => {
+    const rows = [
+      ...Array.from({ length: 60 }, (_, index) => ({ ...employee, id: `employee-${index}`, name: `Daily employee ${index}` })),
+      { ...moduleRow, id: 'name-match', name: 'Z Daily report' },
+      { ...bundle, id: 'daily-bundle', name: 'A Package' },
+      { ...moduleRow, id: 'no-match', name: 'Other module', author: 'Daily author', pkg_id: 'daily-alias' },
+      { ...moduleRow, id: 'last-module', name: 'B Report', description: 'DAILY production summary' },
+    ]
+    mockApiFetch.mockImplementation(async (url: string) => {
+      if (url === '/api/mod-store/catalog') return catalogResponse(rows)
+      const params = new URL(url, 'https://test.local').searchParams
+      const query = String(params.get('q') || '').trim().toLowerCase()
+      const matches = rows.filter(row => [row.name, row.id, row.description].some(field => String(field || '').toLowerCase().includes(query)))
+      return { ok: true, json: async () => ({ success: true, data: matches.slice(0, Number(params.get('limit') || 50)) }) }
+    })
+    const { wrapper } = await mountModStore({ type: 'module' })
+    try {
+      await waitForAsync()
+      mockApiFetch.mockClear()
+      await wrapper.get('.store-search__input').setValue('  dAiLy  ')
+      await wrapper.get('form.store-search').trigger('submit')
+      await waitForAsync()
+      expect(mockApiFetch).toHaveBeenCalledExactlyOnceWith('/api/mod-store/catalog', { timeoutMs: 90_000 })
+      expect(wrapper.findAll('.store-card .card-title').map(item => item.text())).toEqual(['A Package', 'B Report', 'Z Daily report'])
+      expect(wrapper.get('.store-main__meta').text()).toContain('共 3 个模块')
+      expect((wrapper.vm as any).filteredMods.map((item: any) => item.id)).toContain('last-module')
+    } finally { wrapper.unmount() }
+  })
+
+  it('finds employees beyond the first 50 matching modules in the combined catalog', async () => {
+    const rows = [
+      ...Array.from({ length: 60 }, (_, index) => ({ ...moduleRow, id: `daily-module-${index}` })),
+      { ...employee, id: 'employee-61', name: 'Z Report', description: 'DAILY customer support' },
+      { ...employee, id: 'daily-employee', name: 'A Report' },
+      { ...employee, id: 'nonmatch-employee', name: 'Other employee', author: 'Daily author' },
+    ]
+    mockApiFetch.mockImplementation(async (url: string) => {
+      if (url === '/api/mod-store/catalog') return catalogResponse(rows)
+      const params = new URL(url, 'https://test.local').searchParams
+      const query = String(params.get('q') || '').trim().toLowerCase()
+      const matches = rows.filter(row => [row.name, row.id, row.description].some(field => String(field || '').toLowerCase().includes(query)))
+      return { ok: true, json: async () => ({ success: true, data: matches.slice(0, Number(params.get('limit') || 50)) }) }
+    })
+    const { wrapper } = await mountModStore({ type: 'employee', tab: 'all' })
+    try {
+      await waitForAsync()
+      mockApiFetch.mockClear()
+      await wrapper.get('.store-search__input').setValue(' dAiLy ')
+      await wrapper.get('form.store-search').trigger('submit')
+      await waitForAsync()
+      expect(wrapper.findAll('.store-card .card-title').map(item => item.text())).toEqual(['A Report', 'Z Report'])
+      expect(mockApiFetch).toHaveBeenCalledExactlyOnceWith('/api/mod-store/catalog', { timeoutMs: 90_000 })
+    } finally { wrapper.unmount() }
+  })
+
+  it('searches installed and uninstalled modules together until the installed-only filter is checked', async () => {
+    const installed = { ...moduleRow, id: 'installed-erp', pkg_id: 'installed-erp', name: 'ERP 已安装模块', is_installed: true }
+    mockApiFetch.mockResolvedValue(catalogResponse([moduleRow, installed, employee]))
+    const { wrapper } = await mountModStore({ type: 'module' })
+    try {
+      await waitForAsync()
+      await wrapper.get('.store-search__input').setValue('ERP')
+      await wrapper.get('form.store-search').trigger('submit')
+      await waitForAsync()
+      expect(mockApiFetch).toHaveBeenLastCalledWith('/api/mod-store/catalog', { timeoutMs: 90_000 })
+      expect(wrapper.findAll('.store-card')).toHaveLength(2)
+      await wrapper.get('.store-filter-check input').setValue(true)
+      expect(wrapper.findAll('.store-card')).toHaveLength(1)
+      expect(wrapper.get('.store-card').text()).toContain('ERP 已安装模块')
+      await wrapper.get('form.store-search').trigger('submit')
+      await waitForAsync()
+      expect(mockApiFetch).toHaveBeenLastCalledWith('/api/mod-store/catalog', { timeoutMs: 90_000 })
+      expect(wrapper.findAll('.store-card')).toHaveLength(1)
+      await wrapper.get('.store-filter-check input').setValue(false)
+      expect(wrapper.findAll('.store-card')).toHaveLength(2)
+    } finally { wrapper.unmount() }
+  })
+
+  it('keeps only the latest module search result when responses arrive out of order', async () => {
+    let finishFirst!: (value: any) => void
+    mockApiFetch.mockResolvedValue(catalogResponse([moduleRow, bundle]))
+    const { wrapper } = await mountModStore({ type: 'module' })
+    try {
+      await waitForAsync()
+      mockApiFetch.mockImplementationOnce(() => new Promise(resolve => { finishFirst = resolve }))
+      await wrapper.get('.store-search__input').setValue('ERP')
+      await wrapper.get('form.store-search').trigger('submit')
+      await flushPromises()
+      await wrapper.get('.store-search__input').setValue('质量')
+      await wrapper.get('form.store-search').trigger('submit')
+      await waitForAsync()
+      finishFirst(catalogResponse([moduleRow, bundle]))
+      await waitForAsync()
+      expect(wrapper.findAll('.store-card .card-title').map(item => item.text())).toEqual(['质量模块包'])
+    } finally { wrapper.unmount() }
+  })
+
+  it('installs a module through the existing package API and retains the post-install hook and details', async () => {
+    mockApiFetch.mockImplementation(async (url: string) => url === '/api/mod-store/install'
+      ? { ok: true, json: async () => ({ success: true }) }
+      : catalogResponse([{ ...moduleRow }]))
+    const { wrapper } = await mountModStore({ type: 'module' })
+    try {
+      await waitForAsync()
+      await wrapper.get('.store-card .btn-primary').trigger('click')
+      await waitForAsync()
+      const installCall = mockApiFetch.mock.calls.find(([url]) => url === '/api/mod-store/install')!
+      expect(JSON.parse(installCall[1].body)).toMatchObject({ pkg_id: 'erp-module', package_file: 'erp.zip', activate: true })
+      expect(mockAutoOnboardInstalledMarketItem).toHaveBeenCalledWith(expect.objectContaining({ id: 'erp-module' }))
+      expect(mockAppAlert).toHaveBeenCalledWith('模块 ERP 模块 安装成功！')
+      await wrapper.get('.store-card .btn-ghost').trigger('click')
+      expect(wrapper.find('.mod-details-stub').exists()).toBe(true)
     } finally { wrapper.unmount() }
   })
 })

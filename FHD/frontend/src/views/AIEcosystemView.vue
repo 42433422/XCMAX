@@ -47,8 +47,8 @@
           <span class="app-launcher-icon app-launcher-icon--modstore" aria-hidden="true">
             <ModStoreLauncherIcon />
           </span>
-          <span class="app-launcher-name">员工商店</span>
-          <span class="app-launcher-desc">MOD 扩展浏览、安装与本机 .xcmod 目录</span>
+          <span class="app-launcher-name">AI 市场</span>
+          <span class="app-launcher-desc">发现业务模块与 AI 员工，按需安装和管理企业能力</span>
         </button>
       </div>
     </div>
