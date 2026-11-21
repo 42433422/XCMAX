@@ -436,7 +436,12 @@ class EmployeeDispatcher:
 
     def dispatch_reply(self, dispatch: dict[str, Any]) -> str:
         if dispatch.get("status") in {"dispatching", "dispatch_unknown"}:
-            return "执行结果待核对；已保留原请求和任务回执，不会重新派发。"
+            if dispatch.get("dispatcher") == "para_api" and not dispatch.get("task_id"):
+                return (
+                    "Para 可能已创建任务，但未能确认任务 ID，需要人工核对；"
+                    "已保留原请求，不会重新派发。"
+                )
+            return "执行结果待核对；已保留原请求和已有回执，不会重新派发。"
         if dispatch.get("status") == "completed":
             return str(dispatch.get("response", {}).get("text") or "任务已完成。")
         return "思考中..."

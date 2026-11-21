@@ -82,6 +82,8 @@ def test_lost_ack_is_durable_and_never_falls_through(tmp_path, monkeypatch, erro
     first = create().invoke(user_id=7, message="修复登录问题", context=context)
     assert first["dispatch"]["status"] == "dispatch_unknown"
     assert first["dispatch"]["queued"] is False
+    assert not first["dispatch"].get("task_id")
+    assert "需要人工核对" in first["assistant_message"]["body"]
     saved = json.loads(Path(first["dispatch"]["outbox_path"]).read_text())
     assert saved["request_id"] == "original-request"
     assert saved["dispatch_receipt"]["reconciliation_required"] is True
@@ -90,6 +92,7 @@ def test_lost_ack_is_durable_and_never_falls_through(tmp_path, monkeypatch, erro
     second = second_service.invoke(user_id=7, message="修复登录问题", context=context)
     assert second["dispatch"]["request_id"] == "original-request"
     assert second["dispatch"]["status"] == "dispatch_unknown"
+    assert "需要人工核对" in second["assistant_message"]["body"]
     assert len(effects) == 1
     assert not any(host == "hook.test" for _, host, _ in requests)
     assert len(second_service._read_all_message_rows()) == 2
@@ -111,6 +114,7 @@ def test_process_exit_after_send_recovers_the_pre_send_receipt(tmp_path, monkeyp
         create().invoke(user_id=7, message="修复登录问题", context=context)
     recovered = create().invoke(user_id=7, message="修复登录问题", context=context)
     assert recovered["dispatch"]["status"] == "dispatch_unknown"
+    assert "需要人工核对" in recovered["assistant_message"]["body"]
     assert effects == ["created"]
 
 
