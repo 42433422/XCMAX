@@ -98,9 +98,7 @@ def test_public_workflow_rows_still_reject_nested_credentials(tmp_path) -> None:
         write_manifest(mod_dir, manifest)
 
 
-def test_manifest_read_diagnostics_expose_location_within_document_only(
-    tmp_path, monkeypatch
-):
+def test_manifest_read_diagnostics_expose_location_within_document_only(tmp_path, monkeypatch):
     mod_dir = tmp_path / "private-library"
     mod_dir.mkdir()
     assert read_manifest(mod_dir) == (None, "缺少 manifest.json")

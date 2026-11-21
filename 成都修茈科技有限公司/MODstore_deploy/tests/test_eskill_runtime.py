@@ -99,10 +99,7 @@ def test_eskill_exception_text_never_reaches_result_patch_or_history(
         assert private not in saved.error_message + saved.patch_json + saved.output_json
         assert saved.stage == expected_stage
         if on_error:
-            assert (
-                result["patch"]["changes"]["metadata"]["last_error"]
-                == "eskill_execution_failed"
-            )
+            assert result["patch"]["changes"]["metadata"]["last_error"] == "eskill_execution_failed"
         if expected_stage == "solidified":
             assert result["output"]["brief"] == "recovered" and result["error"] == ""
         else:
