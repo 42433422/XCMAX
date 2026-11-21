@@ -243,6 +243,54 @@ def test_windows_identity_adapter_uses_pinned_native_read_contract(tmp_path, mon
     assert load_identity_card(tmp_path, "clerk") == (None, "handoff_identity_unverified")
 
 
+@pytest.fixture
+def windows_continuity_wait(monkeypatch):
+    """Exercise the real module with Windows imports, without changing global os.name."""
+    import builtins
+    import sys
+    from importlib.util import module_from_spec, spec_from_file_location
+    from types import SimpleNamespace
+
+    from app.application.employee_runtime import continuity_tool_wait
+
+    spec = spec_from_file_location(
+        "continuity_tool_wait_windows_probe", continuity_tool_wait.__file__
+    )
+    assert spec is not None and spec.loader is not None
+    module = module_from_spec(spec)
+    windows_os = SimpleNamespace(**{**vars(os), "name": "nt"})
+
+    def import_module(name, *args, **kwargs):
+        if name == "fcntl":
+            raise ModuleNotFoundError("fcntl is unavailable on Windows")
+        if name == "os":
+            return windows_os
+        return builtins.__import__(name, *args, **kwargs)
+
+    module.__dict__["__builtins__"] = {**vars(builtins), "__import__": import_module}
+    monkeypatch.setitem(sys.modules, module.__name__, module)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_windows_continuity_wait_imports_without_fcntl(windows_continuity_wait):
+    assert "fcntl" not in vars(windows_continuity_wait)
+    assert windows_continuity_wait.ContinuityRequestContext().state == {}
+
+
+def test_windows_claim_rejects_before_ledger_or_lock_access(windows_continuity_wait):
+    import errno
+
+    class NoAccess:
+        def __getattribute__(self, name):
+            pytest.fail(f"Windows claim must reject before accessing {name}")
+
+    with pytest.raises(OSError) as rejected:
+        with windows_continuity_wait.unlocked_claim(NoAccess(), {}, {}, {}, NoAccess()):
+            pytest.fail("Windows claim must not enter the unlocked body")
+    assert rejected.value.errno == errno.ENOTSUP
+
+
 def test_employee_entry_explicit_workspace_wins_over_nested_body(tmp_path):
     from app.application.employee_runtime.agent import EmployeeAgent
 

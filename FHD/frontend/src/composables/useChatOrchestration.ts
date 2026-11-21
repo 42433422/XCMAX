@@ -43,6 +43,7 @@ import { useOnboardingFirstOrderRun } from './useOnboardingFirstOrderRun'
 import { APPROVAL_GRANT_MISSING_MESSAGE, approveRunWithFreshGrant } from '@/api/agentRunApproval'
 import agentRunsApi from '@/api/agentRuns'
 import { approvalCardId, parseApprovalCardFromPayload } from '@/utils/chatApprovalCard'
+import { pendingRuntimeRunId, runtimeContinuationFromPayload } from '@/utils/chatRuntimeContinuation'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
 import { approvalApi } from '@/api/approval'
 import chatApi from '@/api/chat'
@@ -55,7 +56,7 @@ import { activeChatTurnMessage, activeChatTurnStatus, droppedRoundFromHistory, r
 import { useAiSdkChatRound } from './chat-orchestration/useAiSdkChatRound'
 import { stepsFromAiParts } from '@/utils/agentStepChain'
 import { activeRunIdOfTask } from '@/utils/agentTaskWorkspaceModel'
-import { requiresTurnReconciliation } from './chat-orchestration/chatOrchestrationShared'
+import { plannerExecutionState, requiresTurnReconciliation } from './chat-orchestration/chatOrchestrationShared'
 
 function durableRecallMessageId(message: ChatMessage): number | undefined {
   if (message.persistence?.status !== 'saved') return undefined
@@ -356,9 +357,10 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       }
       const response = asString(payload.response || payload.message || result.text).trim()
       if (!response || typeof payload.success !== 'boolean') return
-      const action = requiresTurnReconciliation(payload) ? 'unknown'
+      const state = plannerExecutionState(payload)
+      const action = state === 'unknown' ? 'unknown'
         : parseApprovalCardFromPayload(payload)?.status === 'pending' ? 'waiting_approval'
-          : payload.success ? 'completed' : 'failed'
+          : state || (payload.success ? 'completed' : 'failed')
       finishObservedTurn(observation, action, response, payload)
     })
     // The workspace already consumes task updates and polls when its stream is unavailable.
@@ -371,7 +373,8 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     if (observedTurn !== observation || index < 0) return
     const execution = payload ? readChatExecution(payload) : undefined
     const card = payload ? parseApprovalCardFromPayload(payload) : undefined
-    applyPlainTextToMessageIndex(index, text, { workflowAction: action, ...(execution ? { execution } : {}), ...(card ? { approvalCard: card } : {}) })
+    const runtimeContinuation = payload ? runtimeContinuationFromPayload(payload) : undefined
+    applyPlainTextToMessageIndex(index, text, { workflowAction: action, ...(execution ? { execution } : {}), ...(card ? { approvalCard: card } : {}), ...(runtimeContinuation ? { runtimeContinuation } : {}) })
     delete message.toolProgressLabel
     stopTurnObservation()
     flushMessagesCache()
@@ -572,7 +575,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     [messages, isLoading],
     ([list, loading]) => {
       if (loading || isRecalling.value || !approvalModeState.enabled || approvalModeState.mode !== 'auto') return
-      const card = list.find(msg => msg.role === 'ai' && msg.approvalCard?.status === 'pending'
+      const card = list.find(msg => msg.role === 'ai' && !msg.runtimeContinuation?.runId && msg.approvalCard?.status === 'pending'
         && !msg.approvalCard.submitting && !msg.approvalCard.error
         && !msg.approvalCard.approval_path && !msg.approvalCard.approval_request_ids?.length)?.approvalCard
       if (card) void confirmWorkflowFromCard(approvalCardId(card))
@@ -636,15 +639,16 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       turnId,
       taskId: createBusinessHarnessId('task'),
     }
+    const continuingRuntime = Boolean(pendingRuntimeRunId(requestScope.messages, taskSessionId))
     let queued = false
     try {
-      if (await onboardingFirstOrderRun.tryStart(message, localScope)) {
+      if (!continuingRuntime && await onboardingFirstOrderRun.tryStart(message, localScope)) {
         await refreshHistorySessions()
         return
       }
       const isCurrent = localScope.isCurrent
       if (!isCurrent()) { rollbackUnsentUser(); return }
-      const previewModified = await handleShipmentModify(message, localScope.isCurrent)
+      const previewModified = !continuingRuntime && await handleShipmentModify(message, localScope.isCurrent)
       if (!isCurrent()) { rollbackUnsentUser(); return }
       if (previewModified) {
         await saveMessage('user', message, taskSessionId)
@@ -652,7 +656,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
         return
       }
 
-      const printHandled = await handleStartPrintCommand(message, localScope)
+      const printHandled = !continuingRuntime && await handleStartPrintCommand(message, localScope)
       if (!isCurrent()) { rollbackUnsentUser(); return }
       if (printHandled) {
         await saveMessage('user', message, taskSessionId)
@@ -714,8 +718,9 @@ export function useChatOrchestration(options: UseChatViewOptions) {
 
   async function controlWorkflowFromCard(cardId: string, action: 'confirm' | 'cancel') {
     if (!cardId || isLoading.value || isRecalling.value) return
-    const card = messages.value.find(msg => msg.role === 'ai' && msg.approvalCard
-      && approvalCardId(msg.approvalCard) === cardId)?.approvalCard
+    const approvalMessage = messages.value.find(msg => msg.role === 'ai' && msg.approvalCard
+      && approvalCardId(msg.approvalCard) === cardId)
+    const card = approvalMessage?.approvalCard
     if (!card || card.status !== 'pending' || card.submitting || card.approval_path || card.approval_request_ids?.length) return
     const round = chatSessionActivity.beginRound()
     const scope = captureLocalScope()
@@ -726,6 +731,8 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     const control = action === 'confirm' ? '确认' : '取消'
     try {
       const runId = String(card.run_id || card.agent_run_id || '').trim()
+      const parent = approvalMessage?.runtimeContinuation
+      if (parent?.runId && parent.runId === runId) throw new Error('审批卡缺少业务子任务标识，请到原任务核对。')
       let runHandled = false
       if (runId) {
         try {
@@ -736,7 +743,8 @@ export function useChatOrchestration(options: UseChatViewOptions) {
           if (!receipt.success || receipt.data?.run_id !== runId) throw new Error(receipt.message || '未收到原任务的操作回执，请核对后重试')
           if (action === 'cancel' && receipt.data.status !== 'cancelled') throw new Error('取消请求已提交，任务尚未确认取消。请在原任务中核对状态。')
           card.status = action === 'confirm' ? 'confirmed' : 'cancelled'
-          await addAndSaveMessage(action === 'confirm' ? '已收到确认回执，任务已提交执行，请在任务中查看实际结果。' : '已收到取消回执，任务已取消。', 'ai', undefined, scope.sessionId)
+          await addAndSaveMessage(action === 'confirm' ? '已收到确认回执，任务已提交执行，请在任务中查看实际结果。' : '已收到取消回执，任务已取消。', 'ai',
+            parent?.sessionId === scope.sessionId ? { runtimeContinuation: { ...parent } } : undefined, scope.sessionId)
           if (isCurrent()) await syncAgentRunFromPayload({ run_id: runId }, control, isCurrent).catch(() => undefined)
           runHandled = true
         } catch (error) {

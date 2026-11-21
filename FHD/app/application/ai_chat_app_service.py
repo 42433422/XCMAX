@@ -274,8 +274,6 @@ class AIChatApplicationService(
         )
 
         ctx = ensure_business_harness_context(context, message=message)
-        ctx = self._inject_excel_vector_context(message=message, context=ctx)
-        ctx = self._inject_wechat_contact_context(message=message, context=ctx)
 
         def _finalize(resp: dict[str, Any]) -> dict[str, Any]:
             def unknown_result(payload: dict[str, Any]) -> dict[str, Any]:
@@ -374,6 +372,20 @@ class AIChatApplicationService(
                 logger.warning("dialogue turn settle failed", exc_info=True)
             return resp
 
+        from app.application.agent_runtime.chat import try_runtime_chat
+
+        runtime_result = try_runtime_chat(
+            user_id=user_id,
+            message=message,
+            context=ctx,
+            file_context=file_context or {},
+            service=self,
+        )
+        if runtime_result is not None:
+            return _finalize(runtime_result)
+
+        ctx = self._inject_excel_vector_context(message=message, context=ctx)
+        ctx = self._inject_wechat_contact_context(message=message, context=ctx)
         workflow_result = self._try_handle_dynamic_workflow(
             user_id=user_id,
             message=message,

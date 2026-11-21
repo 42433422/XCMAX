@@ -219,6 +219,15 @@ def persist_chat_turn(
         "attachments": inner_payload.get("attachments"),
         "businessResult": extract_payload_business_result(response_data),
     }
+    continuation = response_data.get("runtime_context_update")
+    if response_data.get("runtime") == "codex" and isinstance(continuation, dict):
+        ui_payload["runtimeContinuation"] = {
+            "runId": continuation.get("agent_runtime_run_id"),
+            "status": str(
+                continuation.get("status") or response_data.get("execution_state") or status
+            ),
+            "sessionId": session_id,
+        }
     ui_payload = {key: value for key, value in ui_payload.items() if value not in (None, "", [])}
     harness_metadata = {
         "protocol": context.get("business_harness_protocol") or "xcagi.business-harness.v1",

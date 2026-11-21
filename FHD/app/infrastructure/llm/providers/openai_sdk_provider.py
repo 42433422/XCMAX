@@ -29,6 +29,27 @@ from ..response_completion import normal_finish_reason
 from .providers_base import raise_for_stream_failure
 
 
+def _bounded_sdk_timeout(timeout: Any, remaining: float) -> httpx.Timeout:
+    """Respect both the model client's phase timeouts and the invocation deadline.
+
+    SDK defaults may contain a nested httpx.Timeout phase; comparing that object
+    to seconds raises TypeError. Normalize it before applying the deadline cap.
+    Unknown timeout types remain invalid rather than bypassing the deadline.
+    """
+    configured = httpx.Timeout(timeout)
+    phases: dict[str, float] = {}
+    for name, value in configured.as_dict().items():
+        if isinstance(value, httpx.Timeout):
+            value = value.as_dict()[name]
+        if value is None:
+            phases[name] = remaining
+        elif isinstance(value, (int, float)) and not math.isnan(value) and value >= 0:
+            phases[name] = min(float(value), remaining)
+        else:
+            raise ValueError(f"invalid {name} timeout for SDK request")
+    return httpx.Timeout(**phases)
+
+
 def _budgeted_client(client, kwargs):
     from app.application.tool_execution_deadline import (
         check_invocation_deadline,
@@ -51,12 +72,7 @@ def _budgeted_client(client, kwargs):
                 configured = kwargs.get("timeout", client.timeout)
                 if isinstance(configured, NotGiven):
                     configured = client.timeout
-                kwargs["timeout"] = httpx.Timeout(
-                    **{
-                        name: maximum if value is None else min(value, maximum)
-                        for name, value in httpx.Timeout(configured).as_dict().items()
-                    }
-                )
+                kwargs["timeout"] = _bounded_sdk_timeout(configured, maximum)
             else:
                 kwargs["timeout"] = maximum
         # The MODstore-compatible facade has no SDK retry layer and already
@@ -86,13 +102,7 @@ async def _sdk_responses(client: Any, request: dict[str, Any], *, stream: bool):
                         timeout = request.get("timeout", client.timeout)
                         if isinstance(timeout, NotGiven):
                             timeout = client.timeout
-                        configured = httpx.Timeout(timeout)
-                        request["timeout"] = httpx.Timeout(
-                            **{
-                                name: remaining if value is None else min(value, remaining)
-                                for name, value in configured.as_dict().items()
-                            }
-                        )
+                        request["timeout"] = _bounded_sdk_timeout(timeout, remaining)
                     check_invocation_deadline()
                     raw = stack.enter_context(
                         scoped.chat.completions.with_streaming_response.create(**request)

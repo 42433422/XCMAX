@@ -35,6 +35,7 @@ gunicorn>=22.0.0
 gevent>=25.4.2
 python-dotenv>=1.2.2
 httpx==0.28.1
+httpx-sse==0.4.3
 socksio>=1.0.0
 requests>=2.33.0
 urllib3>=2.8.0

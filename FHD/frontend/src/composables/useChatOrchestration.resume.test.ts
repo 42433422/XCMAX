@@ -139,6 +139,26 @@ describe('persisted chat turn observation through the real SDK and task workspac
     expect(receiptReads()).toHaveLength(0)
   })
 
+  it.each(['child_approval', 'authorization'])('keeps %s ahead of a runtime completion envelope when observing the original turn', async kind => {
+    const reply = originalReply()
+    resumed[0].emit({ type: 'done', result: {
+      success: true, response: '原任务仍在等待授权。', runtime: 'codex', run_id: 'original-run', execution_state: 'completed',
+      runtime_context_update: { agent_runtime_run_id: 'original-run', conversation_id: 'original', status: 'waiting_approval' },
+      ...(kind === 'child_approval'
+        ? { data: { action: 'approval_pending', data: { approval_card: { run_id: 'original-child', approval_required: true } } } }
+        : { requires_token: true }),
+    } })
+    resumed[0].close()
+    await vi.waitFor(() => expect(reply.workflowAction).toBe(kind === 'child_approval' ? 'waiting_approval' : 'waiting_auth'))
+    expect(reply.runtimeContinuation).toEqual({ runId: 'original-run', status: 'waiting_approval', sessionId: 'original' })
+    if (kind === 'child_approval') expect(reply.approvalCard?.run_id).toBe('original-child')
+    else expect(reply.approvalCard).toBeUndefined()
+    expect(api.messages.value.filter(message => message.role === 'ai')).toEqual([reply])
+    expect(resumed[0].signal?.aborted).toBe(true)
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(0)
+    expect(receiptReads()).toHaveLength(0)
+  })
+
   it.each(['waiting_auth', 'unknown'])(
     'keeps %s without posting after a retired unlock event or sending password authorization',
     async expectedState => {

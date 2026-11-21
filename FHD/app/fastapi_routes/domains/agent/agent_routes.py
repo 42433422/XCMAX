@@ -556,6 +556,8 @@ def _control_agent_run(
     action: str,
     principal: AgentPrincipal,
     runtime_context: dict[str, Any] | None = None,
+    control_input: dict[str, Any] | None = None,
+    parent_control: tuple[str, int] | None = None,
 ) -> dict[str, Any] | JSONResponse:
     def apply_control() -> dict[str, Any] | JSONResponse:
         orchestrator = AgentOrchestrator()
@@ -564,6 +566,28 @@ def _control_agent_run(
         if error is not None:
             return error
         assert current is not None
+        if current.metadata.get("runtime_type") == "codex":
+            from app.fastapi_routes.domains.agent.route_support import control_codex_run
+
+            return control_codex_run(
+                current,
+                action=action,
+                principal=principal,
+                orchestrator=orchestrator,
+                body=control_input or {"runtime_context": runtime_context or {}},
+            )
+        if action == "resume":
+            from app.fastapi_routes.domains.agent.route_support import guard_codex_child_control
+
+            denied = guard_codex_child_control(
+                current,
+                action=action,
+                principal=principal,
+                orchestrator=orchestrator,
+                parent_control=parent_control,
+            )
+            if denied is not None:
+                return denied
         if action == "resume" and requires_retry_reconciliation(current):
             return JSONResponse(
                 {"success": False, "message": "任务执行结果需要人工核对，暂不能恢复"},
@@ -658,6 +682,7 @@ def resume_agent_run(
             action="resume",
             principal=principal,
             runtime_context=runtime_context,
+            control_input=body,
         )
     except RuntimeContextOwnershipError:
         return JSONResponse(
@@ -682,6 +707,19 @@ def retry_agent_run(
         if error is not None:
             return error
         assert run is not None
+        if run.metadata.get("runtime_type") == "codex":
+            from app.fastapi_routes.domains.agent.route_support import control_codex_run
+
+            return control_codex_run(
+                run, action="retry", principal=principal, orchestrator=orchestrator
+            )
+        from app.fastapi_routes.domains.agent.route_support import guard_codex_child_control
+
+        denied = guard_codex_child_control(
+            run, action="retry", principal=principal, orchestrator=orchestrator
+        )
+        if denied is not None:
+            return denied
         if (
             run.status in {"queued", "running", "retrying"}
             and (run.metadata.get("recovery") or {}).get("state") == "safe_checkpoint_resume"

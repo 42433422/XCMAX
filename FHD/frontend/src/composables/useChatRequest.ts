@@ -7,6 +7,8 @@ import { createBusinessHarnessId } from '@/utils/businessHarnessIds'
 import { isOfficeEltToolMessage } from '@/domain/optionalTemplateSelection'
 import { isWorkflowControlMessage } from '@/utils/chatSseStream'
 import { captureChatArtifacts } from '@/utils/chatArtifactContext'
+import { resolveChatIdentity } from '@/utils/chatStorageKeys'
+import { pendingRuntimeRunId } from '@/utils/chatRuntimeContinuation'
 import { useApprovalMode } from './useApprovalMode'
 export type ChatRequestScope = {
   signal?: AbortSignal
@@ -51,6 +53,13 @@ export function useChatRequest(deps: UseChatRequestDeps) {
   const progressKey = (target?: string) => String(target || sessionId?.value || '').trim() || 'default'
   const loadingProgressText = computed(() => progressBySession.value[progressKey()] || '处理中...')
   const queuedBatches = new Map<string, { messages: string[]; timer: number }>()
+
+  function runtimeContext(session: string, scope?: ChatRequestScope): Record<string, unknown> {
+    if (scope?.isCurrent?.() === false || (scope?.identity && scope.identity !== resolveChatIdentity())) return {}
+    const history = scope?.messages || (session === String(sessionId?.value || '').trim() ? messages.value : [])
+    const runId = pendingRuntimeRunId(history, session)
+    return runId ? { agent_runtime_run_id: runId } : {}
+  }
 
   // 一个 turn 的首次提交决定附件；同 turn 重连和显式 retry 均复用快照。
   const artifactBatches = new Map<string, ReturnType<typeof captureChatArtifacts>>()
@@ -101,6 +110,7 @@ export function useChatRequest(deps: UseChatRequestDeps) {
       session_id: scopedSessionId,
       turn_id: turnId,
       task_id: taskId,
+      ...(!plannerOpts?.expectedWorkflowPlanId ? runtimeContext(scopedSessionId, scope) : {}),
       task_title: String(message || '')
         .trim()
         .slice(0, 80),
@@ -177,6 +187,7 @@ export function useChatRequest(deps: UseChatRequestDeps) {
       session_id: scopedSessionId,
       turn_id: turnId,
       task_id: taskId,
+      ...runtimeContext(scopedSessionId, scope),
       task_title: String(batchTexts[0] || '')
         .trim()
         .slice(0, 80),

@@ -256,4 +256,66 @@ describe('useChatOrchestration batch/json', () => {
       }),
     )
   })
+
+  it('retains a Codex child approval and parent continuation on a success=false JSON wait', async () => {
+    enqueueChatBatchMessage.mockImplementation((_m: string, _d: number, cb: (msgs: string[]) => void) => cb(['only-one']))
+    requestChatByModeWithTimeout.mockResolvedValueOnce({
+      success: false, response: '等待原任务审批', runtime: 'codex', run_id: 'parent', execution_state: 'waiting_approval',
+      runtime_context_update: { agent_runtime_run_id: 'parent', conversation_id: 's' },
+      data: { action: 'approval_pending', data: { approval_card: { run_id: 'child', approval_required: true } } },
+    })
+    const api = useChatOrchestration({ sessionId: ref('s') })
+    await api.sendMessage('execute')
+    await vi.waitFor(() => expect(addMessage).toHaveBeenCalledWith('等待原任务审批', 'ai', expect.objectContaining({
+      runtimeContinuation: { runId: 'parent', status: 'waiting_approval', sessionId: 's' },
+      workflowAction: 'waiting_approval', approvalCard: expect.objectContaining({ run_id: 'child' }),
+    }), expect.any(Object)))
+    expect(addMessage.mock.calls.some(call => String(call[0]).startsWith('处理失败'))).toBe(false)
+  })
+
+  it('keeps a preserved parent on a blocked JSON admission without showing the round as waiting', async () => {
+    enqueueChatBatchMessage.mockImplementation((_m: string, _d: number, cb: (msgs: string[]) => void) => cb(['only-one']))
+    requestChatByModeWithTimeout.mockResolvedValueOnce({
+      success: false, message: 'runtime_not_qualified', runtime: 'codex', run_id: 'parent', execution_state: 'blocked',
+      runtime_context_update: { agent_runtime_run_id: 'parent', conversation_id: 's', status: 'waiting_user' },
+    })
+    await useChatOrchestration({ sessionId: ref('s') }).sendMessage('continue')
+    await vi.waitFor(() => expect(addMessage).toHaveBeenCalledWith('处理失败: runtime_not_qualified', 'ai', expect.objectContaining({
+      runtimeContinuation: { runId: 'parent', status: 'waiting_user', sessionId: 's' }, workflowAction: 'blocked',
+    }), expect.any(Object)))
+  })
+
+  it('preserves each original parent when both runtime batch admissions are blocked', async () => {
+    requestChatByModeBatchWithTimeout.mockResolvedValueOnce({
+      success: false, batch: true,
+      results: ['parent-1', 'parent-2'].map(runId => ({
+        success: false, message: `runtime_not_qualified: ${runId}`, runtime: 'codex',
+        run_id: runId, execution_state: 'blocked',
+        runtime_context_update: { agent_runtime_run_id: runId, conversation_id: 's', status: 'waiting_user' },
+      })),
+    })
+    await useChatOrchestration({ sessionId: ref('s') }).sendMessage('continue')
+    await vi.waitFor(() => {
+      for (const runId of ['parent-1', 'parent-2']) {
+        expect(addMessage).toHaveBeenCalledWith(`处理失败: runtime_not_qualified: ${runId}`, 'ai', expect.objectContaining({
+          runtimeContinuation: { runId, status: 'waiting_user', sessionId: 's' }, workflowAction: 'blocked',
+        }), expect.any(Object))
+      }
+    })
+    expect(addMessage.mock.calls.some(call => String(call[0]).includes('批量请求失败'))).toBe(false)
+  })
+
+  it('keeps reconciliation ahead of a blocked runtime envelope and its retained parent', async () => {
+    enqueueChatBatchMessage.mockImplementation((_m: string, _d: number, cb: (msgs: string[]) => void) => cb(['only-one']))
+    requestChatByModeWithTimeout.mockResolvedValueOnce({
+      success: false, response: '请核对原任务回执', runtime: 'codex', run_id: 'parent', execution_state: 'blocked',
+      runtime_context_update: { agent_runtime_run_id: 'parent', conversation_id: 's', status: 'waiting_user' },
+      data: { reconciliation_required: true },
+    })
+    await useChatOrchestration({ sessionId: ref('s') }).sendMessage('continue')
+    await vi.waitFor(() => expect(addMessage).toHaveBeenCalledWith('请核对原任务回执', 'ai', expect.objectContaining({
+      runtimeContinuation: { runId: 'parent', status: 'waiting_user', sessionId: 's' }, workflowAction: 'unknown',
+    }), expect.any(Object)))
+    expect(addMessage.mock.calls.some(call => String(call[0]).startsWith('处理失败'))).toBe(false)
+  })
 })

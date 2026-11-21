@@ -30,6 +30,10 @@ computer-use = [
     "PyAutoGUI==0.9.54",
     "pyperclip==1.9.0",
 ]
+# Optional local agent engine. Native installs do not download the Codex binary.
+codex-runtime = [
+    "openai-codex==0.171.0",
+]
 # 可选：Docling 文档解析后端（PDF/DOCX/PPTX 的版面、表格与扫描件 OCR）。
 # 默认不安装；安装后由 XCAGI_DOC_PARSER=auto 自动启用。
 doc-parsing = [
@@ -70,6 +74,7 @@ server-api = [
     "gevent>=25.4.2",
     "python-dotenv>=1.2.2",
     "httpx==0.28.1",
+    "httpx-sse==0.4.3",
     "socksio>=1.0.0",
     "requests>=2.33.0",
     "urllib3>=2.8.0",

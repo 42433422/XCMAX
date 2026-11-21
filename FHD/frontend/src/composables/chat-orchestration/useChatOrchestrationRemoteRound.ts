@@ -33,6 +33,7 @@ import { modelOutcomeFromText, readChatExecution } from '@/components/chat/chatF
 import type { PlannerChatOptions } from '../useChatRequest'
 import { isOfficeEltToolMessage } from '@/domain/optionalTemplateSelection'
 import { parseApprovalCardFromPayload } from '@/utils/chatApprovalCard'
+import { isRuntimeWaiting, pendingRuntimeRunId, runtimeContinuationFromPayload } from '@/utils/chatRuntimeContinuation'
 
 /** Bound the initial model wait; once content or a tool marker arrives, use the reply budget. */
 export const CHAT_STREAM_STALL_MS = 40_000
@@ -122,6 +123,8 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
     const routeMetadata = readChatModelRoute(payload.route_metadata)
     const execution = readChatExecution(payload)
     const businessResult = readPlannerBusinessResult(payload)
+    const runtimeContinuation = runtimeContinuationFromPayload(payload)
+    const approvalCard = runtimeContinuation ? parseApprovalCardFromPayload(payload) : null
     const receipt = asRecord(payload.history_persistence)
     const receiptIds = asArray(receipt.message_ids)
     const extras: UiChatMessageExtras = {
@@ -130,6 +133,8 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       ...(responseCameFromCache(payload) ? { sameAsPrevious: true } : {}),
       ...(execution ? { execution } : {}),
       ...(businessResult ? { businessResult } : {}),
+      ...(runtimeContinuation ? { runtimeContinuation } : {}),
+      ...(approvalCard ? { approvalCard } : {}),
     }
     if (receipt.status === 'saved' && receiptIds.length) {
       const turnId = String(receipt.turn_id || payload.turn_id || '')
@@ -151,19 +156,28 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
     return Object.keys(extras).length ? extras : undefined
   }
 
+  function isUnfinishedResponse(value: unknown): boolean {
+    const payload = asPlannerPayload(value)
+    const isRuntime = payload.runtime === 'codex' || asRecord(payload.data).runtime === 'codex'
+    // A rejected runtime admission is terminal for this round, even when its parent is retained.
+    // Canonical state keeps reconciliation and authorization waits ahead of the runtime envelope.
+    if (isRuntime && ['blocked', 'reply_completed'].includes(plannerExecutionState(payload))) return false
+    return isUnfinishedPlannerResponse(payload)
+  }
+
   function conversationStatus(payload: ChatPlannerPayload): ChatConversationStatus {
     const activeTurn = readActiveChatTurn(payload)
     if (activeTurn) return ['waiting_approval', 'paused'].includes(activeTurn.status) ? 'waiting' : 'review'
     if (requiresTurnReconciliation(payload)) return 'review'
     if (payload.requires_token || parseApprovalCardFromPayload(payload)?.status === 'pending') return 'waiting'
     if (['waiting_user', 'waiting_approval', 'waiting_input', 'waiting_auth', 'paused'].includes(plannerExecutionState(payload))) return 'waiting'
-    if (isUnfinishedPlannerResponse(payload)) return 'review'
+    if (isUnfinishedResponse(payload)) return 'review'
     if (['cancelled', 'interrupted'].includes(plannerExecutionState(payload))) return 'stopped'
     return payload.success === false ? 'error' : 'ready'
   }
 
   function observeModelOutcome(text: string, payload?: ChatPlannerPayload) {
-    if (isUnfinishedPlannerResponse(payload)) return
+    if (isUnfinishedResponse(payload)) return
     const execution = readChatExecution(payload)
     if (execution?.effect === 'preview') return
     const outcome = modelOutcomeFromText(text)
@@ -230,7 +244,8 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       if (round.isActive()) addMessage(text, 'ai', { turnId: requestScope.turnId, ...extras }, { speak: ttsEnabled.value })
     }
     const primaryText = remoteMessages[0] || ''
-    const aiModBrief = remoteMessages.length === 1 && !isAdminConsoleSpa() ? aiModBriefFromChat(primaryText) : ''
+    const continuingRuntime = Boolean(pendingRuntimeRunId(requestScope.messages, requestScope.sessionId))
+    const aiModBrief = !continuingRuntime && remoteMessages.length === 1 && !isAdminConsoleSpa() ? aiModBriefFromChat(primaryText) : ''
 
     if (aiModBrief) {
       round.setLoading(true)
@@ -273,12 +288,12 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
     /** 查产品类话术可不必等 /ai/chat 或连通性探测，直接走产品列表接口 */
     /** 管理端（admin-console）无产品库业务，不走产品快路径，避免「查询…」话术被误判为产品检索 */
     const kwFast =
-      remoteMessages.length === 1 && !isAdminConsoleSpa() && !resolveExcelAnalysisContextForRequest() && multimodalPendingCount.value === 0
+      !continuingRuntime && remoteMessages.length === 1 && !isAdminConsoleSpa() && !resolveExcelAnalysisContextForRequest() && multimodalPendingCount.value === 0
         ? extractLikelyProductQueryKeyword(primaryText)
         : null
 
     // 快路径会自己拉产品列表并注水副窗；再 prefetch 会多打一遍相同接口，徒增等待
-    if (!kwFast && round.isActive()) {
+    if (!continuingRuntime && !kwFast && round.isActive()) {
       maybePrefetchProductAssistantFloat(primaryText)
     }
 
@@ -525,7 +540,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           streamMessage.workflowAction = String(wrap.execution_state || asRecord(data.data).status || data.status
             || data.action || (wrap.success === false ? 'failed' : 'completed'))
         }
-        if (isUnfinishedPlannerResponse(wrap)) return
+        if (isUnfinishedResponse(wrap)) return
         if (wrap.task) {
           showTaskConfirm(wrap.task)
           emitAssistantPush({
@@ -883,9 +898,9 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       if (activeTurn) deps.observeActiveTurn?.(activeTurn)
     }
     if (data.batch && Array.isArray(data.results)) {
-      if (data.success || results.some(isUnfinishedPlannerResponse)) {
+      if (data.success || results.some(isUnfinishedResponse) || results.some(part => runtimeContinuationFromPayload(part))) {
         for (const part of results) {
-          if (isUnfinishedPlannerResponse(part)) {
+          if (isUnfinishedResponse(part)) {
             await showUnfinished(part)
           } else if (part && part.success) {
             await addRoundMessage(part.response || '', responseExtras(part))
@@ -906,7 +921,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           }
         }
         attachContextSummaryToLastAiMessage()
-        const lastOk = [...results].reverse().find((p) => p && p.success)
+        const lastOk = [...results].reverse().find((p) => p && (p.success || isRuntimeWaiting(p)))
         if (lastOk) {
           consumeStateUpdates(lastOk)
           attachThinkingStepsToLastAiMessage(lastOk)
@@ -914,7 +929,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           attachWorkflowTraceToLastAiMessage(lastOk)
           attachApprovalCardToLastAiMessage(lastOk)
         }
-        if (results.some(isUnfinishedPlannerResponse)) return
+        if (results.some(isUnfinishedResponse)) return
         const lastTask = [...results].reverse().find((p) => p.task)
         if (lastTask?.task) {
           showTaskConfirm(lastTask.task)
@@ -944,7 +959,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       return
     }
 
-    if (isUnfinishedPlannerResponse(data)) {
+    if (isUnfinishedResponse(data)) {
       await showUnfinished(data)
       return
     }

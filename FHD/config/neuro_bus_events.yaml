@@ -52,6 +52,10 @@ streams:
         - { type: "task.worker_failed", const: TASK_WORKER_FAILED }
         - { type: "task.worker_recovered", const: TASK_WORKER_RECOVERED }
         - { type: "task.recovery_blocked", const: TASK_RECOVERY_BLOCKED }
+      runtime:
+        - { type: "runtime.input_answered", const: RUNTIME_INPUT_ANSWERED, payload_fields: [question, answer] }
+        - { type: "runtime.codex.started", const: RUNTIME_CODEX_STARTED, payload_fields: [thread_id] }
+        - { type: "runtime.codex.finished", const: RUNTIME_CODEX_FINISHED, payload_fields: [runtime_status, business_completed, receipt_count] }
       orchestration:
         - { type: "approval.resume_plan_rejected", const: APPROVAL_RESUME_PLAN_REJECTED }
         - { type: "approval.resume_proof_missing", const: APPROVAL_RESUME_PROOF_MISSING }

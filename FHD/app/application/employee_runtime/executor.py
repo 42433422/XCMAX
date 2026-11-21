@@ -307,7 +307,12 @@ def _action_direct_python_module(
 
 
 def _cognition_fhd(
-    config: dict[str, Any], perceived: dict[str, Any], memory: dict[str, Any], task: str
+    config: dict[str, Any],
+    perceived: dict[str, Any],
+    memory: dict[str, Any],
+    task: str,
+    *,
+    defer_to_runtime: bool = False,
 ) -> dict[str, Any]:
     cog_cfg = _get_section(config, "cognition")
     agent = cog_cfg.get("agent") if isinstance(cog_cfg.get("agent"), dict) else {}
@@ -316,11 +321,19 @@ def _cognition_fhd(
     system_prompt = str(
         agent.get("system_prompt") or cog_cfg.get("system_prompt") or "你是智能员工助手。"
     )
+    normalized = perceived.get("normalized_input") if isinstance(perceived, dict) else {}
+    if defer_to_runtime:
+        return {
+            "reasoning": "",
+            "input": normalized if isinstance(normalized, dict) else {},
+            "memory": memory,
+            "system_prompt": system_prompt,
+            "skipped_cognition": True,
+        }
     model_cfg = agent.get("model") if isinstance(agent.get("model"), dict) else {}
     if not isinstance(model_cfg, dict):
         model_cfg = {}
     max_tokens = int(model_cfg.get("max_tokens") or 4000)
-    normalized = perceived.get("normalized_input") if isinstance(perceived, dict) else {}
     user_payload = json.dumps({"task": task, "input": normalized}, ensure_ascii=False)[:12000]
     messages = [
         {"role": "system", "content": system_prompt},
@@ -368,6 +381,8 @@ def _actions_fhd(
     agent_gate: Any = None,
     agent_max_iterations: int | None = None,
     runtime_context: dict[str, Any] | None = None,
+    on_event: Any = None,
+    settings: Any = None,
 ) -> dict[str, Any]:
     actions_cfg = _normalize_actions_cfg(config)
     handlers = _handler_list(actions_cfg)
@@ -425,6 +440,8 @@ def _actions_fhd(
                     gate=agent_gate,
                     max_iterations=agent_max_iterations,
                     runtime_context=runtime_context,
+                    on_event=on_event,
+                    settings=settings,
                 )
             )
         elif handler == "llm_md":

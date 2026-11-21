@@ -3,7 +3,14 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
+from copy import deepcopy
 from typing import Any
+
+from app.application.employee_runtime.write_approval import invoke_employee_gate
+
+# Gates may additionally accept the trusted per-call runtime_context keyword.
+GateFn = Callable[..., dict[str, Any]]
 
 logger = logging.getLogger(__name__)
 
@@ -194,3 +201,138 @@ def host_employee_denial(
             "error": "宿主管理员工和专用工具需要平台管理员权限",
         }
     return None
+
+
+def _codex_employee_tool_scope(
+    tools: list[dict[str, Any]],
+    gate: GateFn | None,
+) -> tuple[list[str], Callable[..., dict[str, Any]]]:
+    """Project declared functions onto exact actions and retain the original gate.
+
+    A name alone never grants all actions of a multi-action capability. These
+    two aliases share their existing parameters with the canonical DB router;
+    unrecognised aliases and action domains are deliberately unsupported.
+    """
+    from jsonschema import Draft202012Validator, SchemaError
+    from referencing import Registry
+    from referencing.exceptions import Unresolvable
+
+    from app.application.agent_orchestrator.tool_spec import build_tool_specs_v2
+    from app.application.tools.registered_capabilities import ERP_CAPABILITY_TOOL_NAME
+
+    canonical = build_tool_specs_v2()
+    aliases = {
+        "business_db_read": ("business_db", "read"),
+        "business_db_write": ("business_db", "write"),
+    }
+    bindings: dict[tuple[str, str], tuple[str, Any, bool, bool]] = {}
+    for tool in tools:
+        function = tool.get("function") if isinstance(tool, dict) else None
+        if not isinstance(function, dict):
+            raise ValueError("员工工具缺少 function 契约")
+        name = function.get("name")
+        schema = function.get("parameters")
+        if not isinstance(name, str) or not name or not isinstance(schema, dict):
+            raise ValueError("员工工具缺少明确的名称或参数契约")
+        schema = deepcopy(schema)
+        properties = schema.get("properties", {})
+        if schema.get("type", "object") != "object" or not isinstance(properties, dict):
+            raise ValueError(f"员工工具 {name} 的参数契约无法映射")
+        try:
+            Draft202012Validator.check_schema(schema)
+        except SchemaError as exc:
+            raise ValueError(f"员工工具 {name} 的参数契约无效") from exc
+        validator = Draft202012Validator(schema, registry=Registry())
+        has_action = "action" in properties
+        is_capability = name == ERP_CAPABILITY_TOOL_NAME
+        if is_capability:
+            branches = schema.get("anyOf")
+            if not isinstance(branches, list) or not branches:
+                raise ValueError("员工 ERP 能力必须声明完整且有限的动作契约")
+            keys = []
+            for branch in branches:
+                fields = branch.get("properties") if isinstance(branch, dict) else None
+                if not isinstance(fields, dict):
+                    raise ValueError("员工 ERP 能力分支缺少明确的参数契约")
+                pair = []
+                for field in ("tool_id", "action"):
+                    domain = fields.get(field)
+                    choices = domain.get("enum") if isinstance(domain, dict) else None
+                    if (
+                        not isinstance(choices, list)
+                        or len(choices) != 1
+                        or not isinstance(choices[0], str)
+                        or not choices[0]
+                    ):
+                        raise ValueError("员工 ERP 能力分支必须绑定唯一工具和动作")
+                    pair.append(choices[0])
+                keys.append((pair[0], pair[1]))
+        elif name in aliases:
+            if has_action:
+                raise ValueError(f"员工工具 {name} 的固定动作不能被参数覆盖")
+            keys = [aliases[name]]
+        else:
+            candidates = {
+                (spec.tool_id, spec.action) for spec in canonical.values() if spec.tool_id == name
+            }
+            if has_action:
+                action_schema = properties["action"]
+                if not isinstance(action_schema, dict):
+                    raise ValueError(f"员工工具 {name} 的动作契约无效")
+                actions = (
+                    [action_schema["const"]]
+                    if "const" in action_schema
+                    else action_schema.get("enum")
+                )
+                if (
+                    not isinstance(actions, list)
+                    or not actions
+                    or any(not isinstance(action, str) or not action for action in actions)
+                ):
+                    raise ValueError(f"员工工具 {name} 必须声明有限且明确的动作")
+                keys = [(name, action) for action in actions]
+                if not set(keys).issubset(candidates):
+                    raise ValueError(f"员工工具 {name} 含未登记的动作")
+            elif len(candidates) == 1:
+                keys = list(candidates)
+            else:
+                raise ValueError(f"员工工具 {name} 无法映射到唯一的登记动作")
+        for key in keys:
+            if key not in canonical or key in bindings:
+                raise ValueError(f"员工工具 {name} 的动作映射缺失或不唯一")
+            bindings[key] = (name, validator, has_action, is_capability)
+
+    def check(
+        tool_id: str,
+        action: str,
+        params: dict[str, Any],
+        *,
+        runtime_context: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        binding = bindings.get((tool_id, action))
+        if binding is None or not isinstance(params, dict):
+            return {"ok": False, "reason": "工具动作不在员工授权范围内"}
+        name, validator, has_action, is_capability = binding
+        if is_capability:
+            arguments = {"tool_id": tool_id, "action": action, "params": deepcopy(params)}
+        else:
+            arguments = deepcopy(params)
+            if "action" in arguments and (not has_action or arguments["action"] != action):
+                return {"ok": False, "reason": "工具参数与已授权动作不一致"}
+            if has_action:
+                arguments["action"] = action
+        try:
+            if next(validator.iter_errors(arguments), None) is not None:
+                return {"ok": False, "reason": "工具参数不符合员工契约"}
+        except Unresolvable:
+            return {"ok": False, "reason": "员工工具契约的引用无法解析"}
+        verdict = (
+            invoke_employee_gate(gate, name, arguments, runtime_context=dict(runtime_context or {}))
+            if gate is not None
+            else {"ok": True}
+        )
+        if not isinstance(verdict, dict) or type(verdict.get("ok")) is not bool:
+            return {"ok": False, "reason": "工具授权结果无效，未执行"}
+        return verdict
+
+    return sorted(f"{tool_id}.{action}" for tool_id, action in bindings), check

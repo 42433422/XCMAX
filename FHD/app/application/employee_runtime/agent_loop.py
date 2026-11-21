@@ -7,11 +7,15 @@ import logging
 import re
 import time
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.application.employee_runtime.result_verifier import (
     execution_result_error,
     pending_employee_result,
+)
+from app.application.employee_runtime.tool_scope import GateFn as GateFn
+from app.application.employee_runtime.tool_scope import (
+    _codex_employee_tool_scope as _codex_employee_tool_scope,
 )
 from app.application.employee_runtime.write_approval import invoke_employee_gate
 from app.application.tool_execution_deadline import (
@@ -22,10 +26,58 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
-# Gates may additionally accept the trusted per-call runtime_context keyword.
-GateFn = Callable[..., dict[str, Any]]
+if TYPE_CHECKING:
+    from app.infrastructure.codex.policy import RuntimeSettings
+
 
 _DEFAULT_MAX_ITERATIONS = 6
+
+
+def _runtime_entry_error(code: str, message: str) -> dict[str, Any]:
+    return {
+        "handler": "agent",
+        "runtime": "codex",
+        "ok": False,
+        "error_code": code,
+        "error": message,
+        "output": "",
+        "rounds": 0,
+        "tool_calls": [],
+        "trajectory": [],
+        "exit_status": "unsupported",
+        "retryable": False,
+        "legacy_fallback_allowed": False,
+    }
+
+
+def _employee_runtime_context(
+    employee_id: str,
+    runtime_context: dict[str, Any] | None,
+    workspace_root: str | None,
+) -> dict[str, Any]:
+    """Use only host context for identity and stable request correlation."""
+    import hashlib
+
+    context = dict(runtime_context or {})
+    context.update(employee_id=employee_id, source="employee_runtime")
+    if workspace_root is not None:
+        context["workspace_root"] = workspace_root
+    node = context.get("step_id") or context.get("node_id")
+    if node and context.get("run_id"):
+        # StepExecution supplies its current durable run, which is this nested
+        # employee runtime's immediate parent. The gateway verifies ownership.
+        context["parent_run_id"] = context["run_id"]
+    if context.get("parent_run_id") and node:
+        identity = [context["parent_run_id"], employee_id, node]
+        context["turn_id"] = (
+            "employee_"
+            + hashlib.sha256(
+                json.dumps(identity, ensure_ascii=False, separators=(",", ":")).encode()
+            ).hexdigest()
+        )
+    elif not context.get("turn_id") and context.get("client_request_id"):
+        context["turn_id"] = context["client_request_id"]
+    return context
 
 
 def default_employee_tools(
@@ -290,9 +342,44 @@ def run_employee_agent_loop(
     model: str | None = None,
     history: list[dict[str, Any]] | None = None,
     runtime_context: dict[str, Any] | None = None,
+    on_event: Callable[[dict[str, Any]], Any] | None = None,
+    settings: RuntimeSettings | None = None,
 ) -> dict[str, Any]:
     """运行员工多轮工具循环，返回统一结果 dict。"""
+    from app.infrastructure.codex import policy
+
     deadline = time.monotonic() + remaining_invocation_seconds(max(0.001, wall_time_limit_sec))
+    try:
+        selected_runtime = settings if settings is not None else policy.runtime_settings()
+    except policy.RuntimePolicyError:
+        return _runtime_entry_error("runtime_configuration_invalid", "员工运行时配置无效")
+    if selected_runtime.engine == "codex" and "employee" in selected_runtime.surfaces:
+        from app.application.agent_runtime.gateway import run_runtime_task
+
+        if gate is None:
+            return _runtime_entry_error("gate_required", "员工工作空间和风险授权门尚未恢复，未执行")
+        try:
+            allowed_actions, runtime_gate = _codex_employee_tool_scope(
+                tools if tools is not None else default_employee_tools(runtime_context),
+                gate,
+            )
+        except ValueError as exc:
+            return _runtime_entry_error("employee_runtime_tools_unsupported", str(exc))
+        with invocation_deadline(deadline):
+            return run_runtime_task(
+                task=task,
+                system_prompt=system_prompt,
+                runtime_context=_employee_runtime_context(
+                    employee_id, runtime_context, workspace_root
+                ),
+                history=history,
+                input_data=input_data,
+                completion_mode="business",
+                allowed_actions=allowed_actions,
+                gate=runtime_gate,
+                on_event=on_event,
+                settings=selected_runtime,
+            )
     try:
         from app.infrastructure.llm.client import (
             get_openai_compatible_client,

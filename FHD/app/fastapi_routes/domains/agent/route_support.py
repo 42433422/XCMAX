@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import copy
 import logging
+import time
+import uuid
 from collections.abc import Callable
 from dataclasses import replace
 from typing import Any, TypeVar, cast
@@ -11,7 +14,8 @@ from fastapi.responses import JSONResponse
 
 from app.application.agent_orchestrator import AgentOrchestrator
 from app.application.agent_orchestrator.approval_grant import issue_approval_grant
-from app.application.agent_orchestrator.run_models import AgentRun
+from app.application.agent_orchestrator.run_lifecycle import requires_retry_reconciliation
+from app.application.agent_orchestrator.run_models import AgentRun, utc_now_iso
 from app.application.agent_orchestrator.task_dispatcher import notify_agent_task_dispatcher
 from app.application.agent_orchestrator.task_execution_models import AgentTaskExecution
 from app.application.agent_orchestrator.task_execution_repository import (
@@ -20,6 +24,8 @@ from app.application.agent_orchestrator.task_execution_repository import (
 from app.application.agent_orchestrator.task_models import (
     AgentTask,
     attention_for_status,
+    mod_id_of_run,
+    tenant_id_of_run,
 )
 from app.application.agent_orchestrator.task_progress import fallback_task_progress_snapshot
 from app.application.agent_orchestrator.unified_task import (
@@ -34,6 +40,11 @@ from app.application.agent_orchestrator.unified_task import (
 )
 from app.domain.task_lifecycle.adapters import canonical_execution_state
 from app.infrastructure.auth.agent_principal import AgentPrincipal
+from app.infrastructure.codex.binding import (
+    CodexBindingError,
+    CodexBindingStore,
+    canonical_digest,
+)
 from app.utils.json_safe import json_safe
 
 logger = logging.getLogger(__name__)
@@ -185,6 +196,14 @@ def redact_internal_errors(value: Any) -> Any:
 def public_run_dict(run: Any, *, read_run: Callable[[str], Any] | None = None) -> dict[str, Any]:
     # to_dict shares metadata with the stored run: redact only the recursive copy.
     data = cast("dict[str, Any]", redact_internal_errors(run.to_dict()))
+    metadata = data.get("metadata") or {}
+    if (
+        metadata.get("runtime_type") == "codex"
+        or (metadata.get("runtime_context") or {}).get("source") == "codex_runtime"
+    ):
+        from app.application.agent_runtime.gateway import public_runtime_result
+
+        data = public_runtime_result(data)
     if isinstance(data.get("metadata"), dict):
         data["metadata"].pop("_tool_approval_grants", None)
         context = data["metadata"].get("runtime_context")
@@ -269,8 +288,266 @@ def sync_execution_terminal_state(run: Any) -> None:
         get_task_execution_repository().transition(run.run_id, state)
 
 
+def _children(store: CodexBindingStore, run: Any) -> list[Any]:
+    children = {}
+    for call in (run.metadata.get("codex_runtime") or {}).get("calls", {}).values():
+        child = store.repository.get(str(call.get("child_run_id") or ""))
+        if child is None:
+            task = store.repository.get_task(
+                user_id=run.user_id, task_id=call["child_task_id"], tenant_id=tenant_id_of_run(run)
+            )
+            child = store.repository.get(task.active_run_id) if task else None
+        if child is None:
+            continue
+        if (
+            child.user_id != run.user_id
+            or tenant_id_of_run(child) != tenant_id_of_run(run)
+            or mod_id_of_run(child) != mod_id_of_run(run)
+            or (child.metadata.get("runtime_context") or {}).get("parent_run_id") != run.run_id
+        ):
+            raise CodexBindingError("owner_changed", "原子任务归属已变化")
+        children[child.run_id] = child
+    return list(children.values())
+
+
+def guard_codex_child_control(
+    run: Any,
+    *,
+    action: str,
+    principal: Any,
+    orchestrator: Any,
+    parent_control: tuple[str, int] | None = None,
+) -> JSONResponse | None:
+    context = run.metadata.get("runtime_context") or {}
+    parent_id = str(context.get("parent_run_id") or "")
+    original_parent = context.get("_codex_parent_run_id")
+    if not parent_id and not original_parent:
+        return None
+    parent = orchestrator.get_run(parent_id) if parent_id else None
+    if (
+        not original_parent
+        and context.get("source") != "codex_runtime"
+        and (parent is None or parent.metadata.get("runtime_type") != "codex")
+    ):
+        return None
+    code = "codex_child_retry_forbidden" if action == "retry" else "codex_parent_control_required"
+    try:
+        if original_parent and original_parent != parent_id:
+            raise CodexBindingError(code, "原 Codex 父任务绑定不一致，不能恢复或重试")
+        if action == "retry":
+            raise CodexBindingError(code, "请先核对原父任务；不能绕过父任务预算重新执行子任务")
+        store = CodexBindingStore(orchestrator._repo)
+        binding = store.get(parent_id)
+        parent, metadata = binding.run, binding.metadata
+        store._validate_authority(parent, metadata)
+        store._validate_control(parent)
+        commands = store.repository.latest_task_control(parent_id)
+        managed = (
+            parent_control == (parent_id, metadata.get("generation"))
+            and commands is not None
+            and commands.action == "resume"
+            and commands.requested_by == principal.user_id
+        )
+        held = any(
+            call.get("child_run_id") == run.run_id and call.get("reservation_state") == "held"
+            for call in metadata.get("calls", {}).values()
+        )
+        if (
+            parent.user_id != run.user_id
+            or tenant_id_of_run(parent) != tenant_id_of_run(run)
+            or mod_id_of_run(parent) != mod_id_of_run(run)
+            or parent.status not in {"queued", "planning", "running", "retrying", "waiting_user"}
+            or (
+                (metadata.get("revoked") or float(metadata.get("expires_at", 0)) <= time.time())
+                and not managed
+            )
+            or not held
+            or requires_retry_reconciliation(parent)
+            or metadata.get("model_reconciliation_required")
+        ):
+            raise CodexBindingError(code, "请从原父任务恢复，原子任务授权或预算不能单独重建")
+    except CodexBindingError as exc:
+        return JSONResponse(
+            {"success": False, "error_code": code, "parent_run_id": parent_id, "message": str(exc)},
+            status_code=409,
+        )
+    return None
+
+
+def control_codex_run(
+    run: Any,
+    *,
+    action: str,
+    principal: Any,
+    orchestrator: Any,
+    body: dict[str, Any] | None = None,
+) -> JSONResponse:
+    """Called only after the normal route's authenticated ownership check."""
+    from app.application.agent_runtime.gateway import run_runtime_task
+
+    store = CodexBindingStore(orchestrator._repo)
+    data = body or {}
+    try:
+        if action in {"pause", "cancel"}:
+            # Existing durable control commands fence callbacks immediately;
+            # revoke the grant before stopping any already-published child.
+            method = orchestrator.pause_run if action == "pause" else orchestrator.cancel_run
+            controlled = method(run.run_id, requested_by=principal.user_id)
+            store.close(run.run_id, "paused" if action == "pause" else "cancelled")
+            for child in _children(store, store.repository.get(run.run_id)):
+                method(child.run_id, requested_by=principal.user_id)
+            if (controlled.metadata.get("codex_runtime") or {}).get("calls"):
+                store.receipt_snapshot(run.run_id)
+            return JSONResponse(run_response(store.repository.get(run.run_id), principal=principal))
+
+        binding = store.get(run.run_id)
+        context = binding.context
+        if principal.actor_authorization != context.get("_actor_authorization") or (
+            principal.mod_authorization or None
+        ) != (context.get("_mod_authorization") or None):
+            raise CodexBindingError("owner_changed", "恢复需要原任务的可信登录与业务范围")
+        store._validate_authority(run, binding.metadata)
+        if run.status in {"completed", "cancelled", "rejected"}:
+            raise CodexBindingError("run_inactive", "终态任务不能恢复；重新执行业务请提交新任务")
+        if (
+            requires_retry_reconciliation(run)
+            or binding.metadata.get("model_reconciliation_required")
+            or any(
+                call.get("state") in {"reserved", "unknown"}
+                for call in (binding.metadata.get("model_requests") or {}).values()
+            )
+        ):
+            raise CodexBindingError("reconciliation_required", "原任务结果尚需核对，不能续跑")
+        rows = store.receipt_snapshot(run.run_id)
+        if any(row.get("state") in {"unknown", "claimed"} for row in rows):
+            raise CodexBindingError("reconciliation_required", "原调用结果尚未确定，不能重放")
+        prompt = run.metadata.get("_codex_system_prompt")
+        if not isinstance(prompt, str):
+            raise CodexBindingError(
+                "resume_context_missing", "原任务缺少服务端运行指令，请重新发起任务"
+            )
+        actions = run.metadata.get("runtime_allowed_actions")
+        gate = None
+        original_input = copy.deepcopy(run.metadata.get("_codex_input_data"))
+        if run.metadata.get("runtime_gate_required"):
+            from app.application.employee_runtime.agent import restore_codex_employee_gate
+
+            restored_actions, gate = restore_codex_employee_gate(
+                str(context.get("employee_id") or ""),
+                context,
+                input_data=original_input,
+            )
+            if sorted(restored_actions) != sorted(actions or []):
+                raise CodexBindingError("owner_changed", "原员工能力目录已变化，请重新发起任务")
+        raw_context = data.get("runtime_context") or {}
+        if not isinstance(raw_context, dict) or set(raw_context) - {"turn_id"}:
+            raise CodexBindingError("identity_override", "续跑不能修改原任务的运行范围")
+        request_id = (
+            data.get("request_id") or raw_context.get("turn_id") or f"control_{uuid.uuid4().hex}"
+        )
+        if not isinstance(request_id, str) or not request_id.strip() or len(request_id) > 160:
+            raise CodexBindingError("invalid_request", "续跑请求标识无效")
+        context["turn_id"] = request_id
+        message = data.get("message")
+        if message is not None and (
+            not isinstance(message, str) or not message.strip() or len(message) > 16000
+        ):
+            raise CodexBindingError("invalid_request", "补充信息无效")
+        request_key = canonical_digest({"turn_id": request_id, "owner": run.user_id})
+        duplicate = request_key in (run.metadata.get("runtime_requests") or {})
+        if not duplicate:
+            if (
+                binding.metadata.get("coordinator_active")
+                and not binding.metadata.get("revoked")
+                and float(binding.metadata.get("expires_at", 0)) > time.time()
+            ):
+                raise CodexBindingError("binding_conflict", "原任务仍有活动执行者")
+            command = store.repository.request_task_control(
+                run.run_id, "resume", requested_by=principal.user_id
+            )
+            generation = binding.metadata.get("generation")
+            if not isinstance(generation, int) or isinstance(generation, bool):
+                raise CodexBindingError("binding_missing", "原运行授权版本无效")
+
+            def resume(parent, metadata):
+                if metadata.get("generation") != generation or parent.status in {
+                    "completed",
+                    "cancelled",
+                    "rejected",
+                }:
+                    raise CodexBindingError("binding_conflict", "原任务状态已变化")
+                parent.status = "running"
+                parent.error = ""
+                parent.metadata["control"] = {
+                    "state": "running",
+                    "requested_by": principal.user_id,
+                    "command_id": command.command_id,
+                }
+                parent.add_event(
+                    "run.resumed", "原 Codex 任务恢复", {"command_id": command.command_id}
+                )
+
+            store.update(run.run_id, resume)
+            # The parent command is the authority to resume its still-reserved
+            # paused child through the original frozen-plan transaction.
+            from app.fastapi_routes.domains.agent.agent_routes import _control_agent_run
+
+            for child in _children(store, run):
+                if child.status == "paused":
+                    response = _control_agent_run(
+                        child.run_id,
+                        action="resume",
+                        principal=principal,
+                        parent_control=(run.run_id, generation),
+                    )
+                    if isinstance(response, JSONResponse) and response.status_code >= 400:
+                        store.repository.mark_task_control(
+                            command.command_id, "rejected", applied_at=utc_now_iso()
+                        )
+                        store.update(
+                            run.run_id, lambda parent, metadata: setattr(parent, "status", "paused")
+                        )
+                        return response
+            store.repository.mark_task_control(
+                command.command_id, "applied", applied_at=utc_now_iso()
+            )
+        result = run_runtime_task(
+            run_id=run.run_id,
+            task=message or run.message,
+            system_prompt=prompt,
+            runtime_context=context,
+            input_data=original_input,
+            allowed_actions=actions,
+            gate=gate,
+            completion_mode=run.metadata.get("runtime_completion_mode", "business"),
+            answer_to_waiting_input=bool(message and binding.metadata.get("waiting_input")),
+            expected_operations=copy.deepcopy(run.metadata.get("runtime_expected_operations")),
+        )
+        response = run_response(store.repository.get(run.run_id), principal=principal)
+        response["runtime_result"] = result
+        code = (
+            202
+            if result.get("execution_state") in {"running", "waiting_user"}
+            else 200
+            if result.get("ok")
+            else 409
+        )
+        return JSONResponse(response, status_code=code)
+    except (CodexBindingError, ValueError) as exc:
+        return JSONResponse(
+            {
+                "success": False,
+                "error_code": getattr(exc, "code", "runtime_control_denied"),
+                "message": str(exc),
+            },
+            status_code=409,
+        )
+
+
 __all__ = [
     "PUBLIC_APPROVAL_ERROR",
+    "control_codex_run",
+    "guard_codex_child_control",
     "enqueue_run",
     "internal_error_response",
     "owned_run",

@@ -223,6 +223,8 @@ async def test_minimax_adapter_preserves_unknown_finish(monkeypatch, finish_reas
 
 def test_incomplete_reply_review_cannot_admit_a_complete_answer(monkeypatch):
     message = "解释一下 Python 列表推导式"
+    # This negative control owns one audit; the production retry policy is unchanged.
+    monkeypatch.setenv("XCAGI_GOAL_COVERAGE_MAX_ATTEMPTS", "1")
 
     def complete(**kwargs):
         request = json.loads(kwargs["messages"][1]["content"])
@@ -232,7 +234,14 @@ def test_incomplete_reply_review_cannot_admit_a_complete_answer(monkeypatch):
             )
             response["choices"][0]["finish_reason"] = "length"
             return response
-        return {"choices": [{"message": {"content": '{"mode":"reply","reply":"完整回答"}'}}]}
+        return {
+            "choices": [
+                {
+                    "message": {"content": '{"mode":"reply","reply":"完整回答"}'},
+                    "finish_reason": "stop",
+                }
+            ]
+        }
 
     completion = Mock(side_effect=complete)
     dispatch, risk = _dispatch(monkeypatch, completion)

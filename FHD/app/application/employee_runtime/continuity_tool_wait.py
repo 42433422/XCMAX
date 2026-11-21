@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import fcntl
+import errno
 import math
 import os
 import signal
@@ -12,6 +12,11 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import IO, Any
+
+# Windows durable ledgers reject writes before POSIX flock is required.
+# Do not import fcntl on Windows: even read-only runtime imports must work.
+if os.name != "nt":
+    import fcntl
 
 from app.application.tool_execution_deadline import remaining_invocation_seconds
 
@@ -132,6 +137,8 @@ def unlocked_claim(runtime, task, step, call, path_lock):
     Dispatch admits only read/pause/restart while a claim is running. No caller
     may rebind its identity, replace its steps or retry its unknown side effects.
     """
+    if os.name == "nt":
+        raise OSError(errno.ENOTSUP, "durable claims require POSIX flock")
     handle = runtime._ledger_lock_handle
     identity = tuple(task[key] for key in ("task_id", "tenant_id", "user_id", "owner_employee"))
     original_tasks = dict(runtime.state["tasks"])

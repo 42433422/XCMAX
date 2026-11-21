@@ -33,6 +33,13 @@ export interface ChatApprovalCard {
   error?: string
 }
 
+/** A server-owned parent run hint; it never carries identity or approval authority. */
+export interface ChatRuntimeContinuation {
+  runId: string | null
+  status: string
+  sessionId: string
+}
+
 export interface UiChatMessage {
   /** Local rendering identity, retained across cache reads and server reconciliation. */
   uiKey?: string
@@ -41,6 +48,8 @@ export interface UiChatMessage {
   time: string
   /** Request turn shared with server history; independent of local display text. */
   turnId?: string
+  /** Persist the waiting parent with the reply that requested input, including terminal clears. */
+  runtimeContinuation?: ChatRuntimeContinuation
   /** Owned workspace link from an observed server turn. */
   recoveryTaskId?: string
   serverMessageId?: number

@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { ref } from 'vue'
+import { nextTick, ref } from 'vue'
 import { setActivePinia, createPinia } from 'pinia'
 import { mount } from '@vue/test-utils'
 import ChatMessageList from '@/components/chat/ChatMessageList.vue'
 import { lastChatModelRoute } from '@/utils/chatModelRoute'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { readDroppedRoundOutcome } from '@/utils/droppedRoundPresentation'
+
+vi.mock('@/components/chat/AgentRunTrace.vue', () => ({ default: { template: '<div />' } }))
 
 const {
   applyPlainTextToMessageIndex,
@@ -238,6 +240,7 @@ import { useChatOrchestration } from './useChatOrchestration'
 import { setRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
 import { extractLikelyProductQueryKeyword } from './useChatPersistence'
 import { authApi } from '@/api/auth'
+import { useApprovalMode } from './useApprovalMode'
 
 describe('useChatOrchestration stream', () => {
   beforeEach(() => {
@@ -270,6 +273,47 @@ describe('useChatOrchestration stream', () => {
     expect(refreshHistorySessions).toHaveBeenCalledOnce()
     expect(saveMessage).not.toHaveBeenCalled()
     expect(requestChatByModeWithTimeout).not.toHaveBeenCalled()
+  })
+
+  it('renders a Codex input wait as waiting despite success=false and keeps its continuation', async () => {
+    readPlannerSseResponse.mockImplementationOnce(async (_response, onEvent) => {
+      onEvent({ type: 'done', result: { success: false, response: '请补充客户名称', runtime: 'codex',
+        execution_state: 'waiting_user', needs_user_input: true,
+        runtime_context_update: { agent_runtime_run_id: 'parent', conversation_id: 's' } } })
+    })
+    const api = useChatOrchestration({ sessionId: ref('s') })
+    api.messages.value = [{ role: 'ai', content: '', time: '', streamingShell: true }]
+    await api.sendMessage('处理订单')
+    expect(applyPlainTextToMessageIndex).toHaveBeenLastCalledWith(0, '请补充客户名称', expect.objectContaining({
+      workflowAction: 'waiting_user', runtimeContinuation: { runId: 'parent', status: 'waiting_user', sessionId: 's' },
+    }))
+    expect(api.isLoading.value).toBe(false)
+  })
+
+  it('sends an answer to a waiting runtime without taking the product fast path', async () => {
+    vi.mocked(extractLikelyProductQueryKeyword).mockReturnValue('customer-supplied-model')
+    const api = useChatOrchestration({ sessionId: ref('s') })
+    api.messages.value = [{ role: 'ai', content: '请补充型号', time: '',
+      runtimeContinuation: { runId: 'parent', status: 'waiting_user', sessionId: 's' } }]
+    await api.sendMessage('查询 customer-supplied-model')
+    expect(searchProducts).not.toHaveBeenCalled()
+    expect(sendChatStream).toHaveBeenCalledOnce()
+  })
+
+  it('does not implicitly approve a runtime child when legacy automatic mode is enabled', async () => {
+    const approval = useApprovalMode()
+    const original = { ...approval.state }
+    approval.state.enabled = true
+    approval.state.mode = 'auto'
+    try {
+      const api = useChatOrchestration({ sessionId: ref('s') })
+      api.messages.value = [{ role: 'ai', content: '等待审批', time: '',
+        runtimeContinuation: { runId: 'parent', status: 'waiting_approval', sessionId: 's' },
+        approvalCard: { kind: 'approval_pending', run_id: 'child', status: 'pending' } }]
+      await nextTick()
+      expect(getRun).not.toHaveBeenCalled()
+      expect(continueRun).not.toHaveBeenCalled()
+    } finally { Object.assign(approval.state, original) }
   })
 
   it('checks the official session immediately after an SSE 401', async () => {
@@ -692,6 +736,32 @@ describe('useChatOrchestration stream', () => {
       expect(test.first.status).toBe('confirmed')
       expect(test.second.status).toBe('pending')
       expect(requestChatByModeWithTimeout).not.toHaveBeenCalled()
+    } finally { test.wrapper.unmount() }
+  })
+
+  it('keeps the runtime parent on a child approval receipt for an explicit later continuation', async () => {
+    getRun.mockResolvedValue({ success: true, approval: { grant: 'child-grant' } })
+    continueRun.mockResolvedValue({ success: true, data: { run_id: 'run-A', status: 'queued' } })
+    const test = approvalHost()
+    const continuation = { runId: 'parent', status: 'waiting_approval', sessionId: 's' }
+    test.api.messages.value[0].runtimeContinuation = continuation
+    try {
+      await test.api.confirmWorkflowFromCard('card-A')
+      expect(continueRun).toHaveBeenCalledWith('run-A', expect.objectContaining({ approval_grant: 'child-grant' }))
+      expect(addAndSaveMessage).toHaveBeenCalledWith(expect.stringContaining('任务已提交执行'), 'ai', { runtimeContinuation: continuation }, expect.objectContaining({ sessionId: 's' }))
+      expect(requestChatByModeWithTimeout).not.toHaveBeenCalled()
+    } finally { test.wrapper.unmount() }
+  })
+
+  it('rejects a stale approval card that points to a runtime parent', async () => {
+    const test = approvalHost()
+    test.api.messages.value[0].runtimeContinuation = { runId: 'run-A', status: 'waiting_approval', sessionId: 's' }
+    try {
+      await test.api.confirmWorkflowFromCard('card-A')
+      expect(getRun).not.toHaveBeenCalled()
+      expect(continueRun).not.toHaveBeenCalled()
+      expect(test.first.error).toContain('业务子任务')
+      expect(test.first.status).toBe('pending')
     } finally { test.wrapper.unmount() }
   })
 

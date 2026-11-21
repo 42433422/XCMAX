@@ -69,8 +69,9 @@ def test_deadline_is_trusted_and_late_success_is_unknown(monkeypatch, late):
 
 @pytest.mark.parametrize("claimed_success", [False, True])
 @pytest.mark.parametrize("condition", ["timely", "late", "unknown_io"])
+@pytest.mark.parametrize("error_code", ["tool_delivery_incomplete", "mcp_session_lost"])
 def test_reconciliation_receipt_keeps_top_level_delivery_only_when_returned_within_budget(
-    monkeypatch, claimed_success, condition
+    monkeypatch, claimed_success, condition, error_code
 ):
     from app.application.agent_orchestrator import tool_executor as tools
     from app.application.tool_execution_deadline import invocation_deadline
@@ -82,7 +83,7 @@ def test_reconciliation_receipt_keeps_top_level_delivery_only_when_returned_with
         "success": claimed_success,
         "outcome": "succeeded" if claimed_success else "unknown",
         "execution_outcome": "succeeded",
-        "error_code": "tool_delivery_incomplete",
+        "error_code": error_code,
         "message": "The action was verified; one attachment was not delivered.",
         "retryable": True,
         "reconciliation_required": True,
@@ -91,6 +92,8 @@ def test_reconciliation_receipt_keeps_top_level_delivery_only_when_returned_with
         "verification": [{"status": "passed"}],
         "artifacts": [{"artifact_id": "json_receipt", "artifact_type": "file"}],
     }
+    if error_code == "mcp_session_lost":
+        receipt.update(server="browser", session_id="original-session", task_id="original-task")
     calls = []
 
     def execute(step, *, runtime_context, deadline_monotonic):
@@ -115,6 +118,9 @@ def test_reconciliation_receipt_keeps_top_level_delivery_only_when_returned_with
         assert result["message"] == receipt["message"]
         for key in ("artifacts", "run_id", "execution_outcome", "steps", "verification"):
             assert result[key] == receipt[key]
+        if error_code == "mcp_session_lost":
+            for key in ("server", "session_id", "task_id"):
+                assert result[key] == receipt[key]
         assert result["reconciliation_evidence"] == receipt
         result["steps"][0]["status"] = "later_observation"
         assert result["reconciliation_evidence"]["steps"][0]["status"] == "completed"

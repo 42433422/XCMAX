@@ -97,6 +97,22 @@ jobs:
           python -m pytest tests/test_routes/test_route_registry.py \
             tests/test_routes/test_registry_unit.py -x -q --tb=short
 
+      - name: Optional local runtime contracts
+        env:
+          XCAGI_PRODUCT_SKU: enterprise
+        run: |
+          set -euo pipefail
+          python -m pip install 'openai-codex==0.171.0'
+          python -m pytest tests/test_application/test_codex_*.py \
+            tests/test_infrastructure/test_codex_transport_contract.py \
+            tests/test_routes/test_codex_control.py -q --tb=short --junitxml=codex-runtime-results.xml
+          python - <<'PYCODE'
+          import xml.etree.ElementTree as ET
+          cases = ET.parse("codex-runtime-results.xml").findall(".//testcase")
+          real = [case for case in cases if case.get("classname", "").endswith("test_codex_gateway_integration") and case.get("name") == "test_real_pinned_cli_private_gateway_clarification_resume_and_billing"]
+          assert len(real) == 1 and not any(real[0].find(tag) is not None for tag in ("skipped", "failure", "error")), "Pinned Codex SDK/CLI process smoke must execute and pass"
+          PYCODE
+
       - name: Offline Agent contract fixtures (process boundary tested separately)
         env:
           SECRET_KEY: "ci-agent-eval-secret-at-least-32-bytes"
