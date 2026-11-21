@@ -221,6 +221,88 @@ def test_failed_review_stops_qa_and_records_one_failed_terminal_outcome():
     assert not harness.lock.locked()
 
 
+@pytest.mark.parametrize("failed_step", ["code", "review", "qa"])
+def test_terminal_failure_resumes_with_fresh_request_and_original_code_target(
+    failed_step, tmp_path, monkeypatch
+):
+    from modstore_server.maintenance_loop import outcomes, store
+
+    path = tmp_path / "memory.json"
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(path))
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_LEDGER", str(tmp_path / "ledger.jsonl"))
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_RESUME_REVIEW_QA", "1")
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MAX_RETRIES", "3")
+    for name in ("record_loop_evolution_knowledge", "salvage_kb_from_workspace"):
+        monkeypatch.setattr(outcomes.self_evolution_knowledge, name, lambda *args, **kwargs: {})
+    harness = RuntimeHarness("terminal-retry", fail_step=failed_step)
+    store._write_loop_memory(harness.memory)
+    harness.runtime.state = replace(
+        harness.runtime.state,
+        load_memory=store._load_loop_memory,
+        write_memory=store._write_loop_memory,
+        memory_path=lambda: path,
+        record_outcome=outcomes._update_loop_memory,
+    )
+    harness.runtime.policy = replace(
+        harness.runtime.policy, decide=lambda **kwargs: {"action": "stop"}
+    )
+    execute = harness.runtime.execution.run_step
+
+    def run_step(**kwargs):
+        result, ok, error, _, report, code_retries, marker_retries = execute(**kwargs)
+        step = kwargs["step_name"]
+        attempt = sum(call["step_name"] == step for call in harness.calls)
+        code_attempt = sum(call["step_name"] == "code" for call in harness.calls)
+        persisted = store._load_loop_memory()["pending_execution"]
+        assert persisted["request_id"] == kwargs["extra"]["request_id"]
+        if attempt > 1:
+            ok, error = True, ""
+        para = {"task_id": f"task-{step}-{attempt}", "branch": f"branch-code-{code_attempt}"}
+        return result, ok, error, para, report, code_retries, marker_retries
+
+    harness.runtime.execution = replace(harness.runtime.execution, run_step=run_step)
+    first = harness.runtime.run()
+    assert first["status"] == "failed" and first["failed_step"] == failed_step
+    memory = store._load_loop_memory()
+    assert "pending_execution" not in memory
+    failed_items = [item for item in memory["open_items"] if item["kind"] == "failed_steps"]
+    assert len(failed_items) == 1 and failed_items[0]["steps"] == [failed_step]
+    assert failed_items[0]["run_id"] == first["run_id"]
+    previous_calls = list(harness.calls)
+
+    restarted = MaintenanceRuntime(
+        state=harness.runtime.state,
+        recovery=harness.runtime.recovery,
+        policy=harness.runtime.policy,
+        execution=harness.runtime.execution,
+        prompts=harness.runtime.prompts,
+        now=harness.runtime.now,
+        new_run_id=lambda: "after-terminal-failure",
+    )
+    second = restarted.run()
+    next_calls = harness.calls[len(previous_calls) :]
+    order = ["code", "review", "qa"]
+    assert second["status"] == "completed"
+    assert second["resume_candidate"]["failed_run_id"] == first["run_id"]
+    assert [call["step_name"] for call in next_calls] == order[order.index(failed_step) :]
+    assert {call["extra"]["request_id"] for call in previous_calls}.isdisjoint(
+        call["extra"]["request_id"] for call in next_calls
+    )
+    assert all("para_task_id" not in call["extra"] for call in next_calls)
+    if failed_step == "code":
+        assert second["para_task_id"] != first["para_task_id"]
+        assert "branch" not in next_calls[0]["extra"]
+    else:
+        assert second["para_task_id"] == first["para_task_id"]
+        assert second["branch"] == first["branch"]
+        assert all(
+            call["extra"]["review_target_para_task_id"] == first["para_task_id"]
+            and call["extra"]["review_target_branch"] == first["branch"]
+            for call in next_calls
+        )
+    assert "pending_execution" not in store._load_loop_memory()
+
+
 @pytest.mark.parametrize("pending_step", ["code", "review", "qa"])
 def test_restart_reconciles_exact_pending_step_before_downstream_work(
     pending_step, tmp_path, monkeypatch

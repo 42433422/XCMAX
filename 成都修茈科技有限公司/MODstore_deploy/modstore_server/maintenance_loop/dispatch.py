@@ -49,7 +49,7 @@ def _execute_employee_task_with_retries(
 ) -> Dict[str, Any]:
     retries = max(0, config._env_int("MODSTORE_SELF_MAINTENANCE_STEP_RETRIES", 2))
     delay_sec = max(1, config._env_int("MODSTORE_SELF_MAINTENANCE_STEP_RETRY_DELAY_SEC", 10))
-    attempts = retries + 1
+    attempts = 1 if input_data.get("request_id") or input_data.get("para_task_id") else retries + 1
     bench_override = _loop_platform_bench_override()
     result: Dict[str, Any] = {}
     for attempt in range(1, attempts + 1):
@@ -142,8 +142,8 @@ def _run_step_with_inner_retries(
         failure_reason = "" if ok else results._extract_failure_reason(result, para_meta)
         is_final = attempt >= inner_max
         should_retry = False
-        if extra.get("para_task_id"):
-            # Reconciliation only reads the original task; it cannot repair its report.
+        if extra.get("para_task_id") or extra.get("request_id"):
+            # A durable attempt executes/reads once; outer repair persists a new identity.
             break
         if not ok and (not is_final):
             if (

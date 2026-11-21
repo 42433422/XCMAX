@@ -591,6 +591,53 @@ def test_explicit_non_success_status_cannot_be_hidden_by_ok_envelope(status):
     assert not _maintenance_results._employee_result_ok({"result": {"ok": True, "status": status}})
 
 
+@pytest.mark.parametrize(
+    "step_name,receipt",
+    [
+        ("code", _make_result(ok=False, error="exit=1 pytest assertion failed")),
+        ("code", _make_result(ok=False, error="connection refused")),
+        ("review", _make_result(ok=True, report="missing structured review")),
+        ("qa", _make_result(ok=True, report="missing structured qa")),
+    ],
+)
+def test_durable_request_identity_never_replays_inner_dispatch(
+    monkeypatch, captured_ledger, step_name, receipt
+):
+    calls = []
+    for kind in ("STEP", "CODE_FIX", "MARKER"):
+        monkeypatch.setenv(f"MODSTORE_SELF_MAINTENANCE_{kind}_RETRIES", "2")
+    monkeypatch.setattr(_maintenance_dispatch, "_loop_platform_bench_override", lambda: None)
+    monkeypatch.setattr(
+        _maintenance_para_client, "_wait_for_para_device_online", lambda: {"online": True}
+    )
+    monkeypatch.setattr(_maintenance_para_client, "_fetch_para_task_report_excerpt", lambda *a: "")
+    monkeypatch.setattr(
+        _maintenance_dispatch.time, "sleep", lambda _: pytest.fail("durable attempt replayed")
+    )
+
+    def execute(employee_id, task, input_data, **kwargs):
+        calls.append((task, input_data.copy()))
+        return receipt
+
+    monkeypatch.setattr(_maintenance_dispatch.employee_executor, "execute_employee_task", execute)
+    _, ok, _, _, _, code_retries, marker_retries = (
+        _maintenance_dispatch._run_step_with_inner_retries(
+            employee_id="vibe-coding-maintainer",
+            step_name=step_name,
+            task_text="original task",
+            extra={"request_id": "a" * 32},
+            user_id=1,
+            run_id="durable-attempt",
+        )
+    )
+    assert ok is (step_name != "code")
+    assert len(calls) == 1 and calls[0][0] == "original task"
+    assert calls[0][1]["request_id"] == "a" * 32
+    assert receipt["self_maintenance_retry_attempts"] == 1
+    assert code_retries == marker_retries == 0
+    assert not captured_ledger
+
+
 def test_reconciliation_reads_original_task_once_without_waiting_for_idle_device(monkeypatch):
     calls = []
     monkeypatch.setattr(_maintenance_dispatch, "_loop_platform_bench_override", lambda: None)
