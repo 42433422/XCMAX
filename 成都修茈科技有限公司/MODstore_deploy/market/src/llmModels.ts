@@ -1,6 +1,12 @@
 /** 仅 UI 元数据；真实模型列表来自 GET /api/llm/catalog */
 
 export const LLM_UI_META = {
+  litellm: {
+    id: 'litellm',
+    label: '统一网关',
+    iconSlug: 'openai',
+    doc: 'https://docs.litellm.ai',
+  },
   openai: {
     id: 'openai',
     label: 'OpenAI',
