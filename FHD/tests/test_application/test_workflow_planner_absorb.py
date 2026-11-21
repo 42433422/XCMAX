@@ -66,8 +66,13 @@ def test_batch_import_can_ask_for_clarification_before_planning_writes(monkeypat
     )
     assert not result.metadata.get("planning_rejected")
     assert len(result.nodes) == 1
-    assert (result.nodes[0].tool_id, result.nodes[0].action) == ("conversation", "reply")
-    assert result.nodes[0].params["response"] == question
+    if kind == "reply":
+        assert (result.nodes[0].tool_id, result.nodes[0].action) == ("conversation", "reply")
+        assert result.nodes[0].params["response"] == question
+    else:
+        assert (result.nodes[0].tool_id, result.nodes[0].action) == ("clarify", "ask")
+        assert result.nodes[0].params["question"] == question
+        assert result.metadata["planning_clarification"] is True
 
 
 def _ambiguous_delete_plan(plan_id: str = "p_delete") -> PlanGraph:
