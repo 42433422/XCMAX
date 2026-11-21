@@ -89,7 +89,19 @@ def test_registered_capability_atomically_binds_one_run_before_execution(
     execute.assert_called_once()
 
 
-@pytest.mark.parametrize("change", ["params", "tool", "action", "mod"])
+@pytest.mark.parametrize(
+    "change",
+    [
+        "params",
+        "tool",
+        "action",
+        "mod_id",
+        "employee_id",
+        "employee_tool_allowlist",
+        "workspace_id",
+        "mutation_policy",
+    ],
+)
 def test_registered_identity_conflict_cannot_dispatch_different_content(capability_runner, change):
     from app.application.tools.registered_capabilities import execute_registered_capability
 
@@ -110,11 +122,12 @@ def test_registered_identity_conflict_cannot_dispatch_different_content(capabili
     elif change == "action":
         args["action"] = "query"
     else:
-        context["mod_id"] = "another-mod"
+        context[change] = ["print"] if change == "employee_tool_allowlist" else "changed"
     response = json.loads(execute_registered_capability(args, runtime_context=context))
     assert response["success"] is False
     assert response["error_code"] == "task_idempotency_conflict"
     assert runner.get_run(original["agent_run_id"]).steps[0].params == {}
+    assert len(runner.list_runs(user_id="owner")) == 1
     execute.assert_called_once()
 
 

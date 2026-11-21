@@ -9,13 +9,9 @@ mock 掉 vibe-coding 的 ``VibeCoder.code`` / ``code_factory.repair``,验证:
 from __future__ import annotations
 
 import asyncio
-import importlib.util
 from typing import Any, Dict, List
 
 import pytest
-
-if importlib.util.find_spec("vibe_coding") is None:
-    pytest.skip("vibe-coding 未安装,跳过 vibe agent loop 测试", allow_module_level=True)
 
 from modstore_server.script_agent.brief import Brief, BriefInputFile, Verdict
 from modstore_server.script_agent.sandbox_runner import SandboxResult
@@ -37,7 +33,7 @@ def _make_sandbox_result(**overrides) -> SandboxResult:
         "returncode": 0,
         "stdout": "ok",
         "stderr": "",
-        "outputs": [],
+        "outputs": [{"filename": "result.json", "path": "/tmp/sandbox_stub/outputs/result.json"}],
         "errors": [],
         "timed_out": False,
     }
@@ -122,10 +118,13 @@ def stub_collect_context(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def stub_judge(monkeypatch):
+    from modstore_server.script_agent.llm_client import RealLlmClient, StubLlmClient
+
     async def _judge(brief, plan, result, *, llm):
         return Verdict(ok=bool(result.ok), reason="ok" if result.ok else "fail", suggestions=[])
 
     monkeypatch.setattr("modstore_server.script_agent.agent_loop.judge", _judge)
+    monkeypatch.setattr(RealLlmClient, "from_user_session", lambda *args, **kw: StubLlmClient([]))
 
 
 def _collect(events):
@@ -206,3 +205,66 @@ def test_vibe_loop_errors_when_coder_construction_fails(monkeypatch):
     )
     assert events[-1].type == "error"
     assert any("vibe-coding 未安装" in str(ev.payload) for ev in events)
+
+
+@pytest.mark.parametrize(
+    "case",
+    ["timeout", "employee_accepted", "employee_rejected", "unknown", "runner_exception"],
+)
+def test_vibe_loop_preserves_unsafe_receipt_without_repair(monkeypatch, tmp_path, stub_coder, case):
+    from modstore_server.script_agent.agent_loop import run_vibe_agent_loop
+
+    result = _make_sandbox_result(work_dir=str(tmp_path))
+    if case == "timeout":
+        result.ok, result.returncode, result.timed_out = False, -9, True
+        result.outputs = []
+    elif case.startswith("employee"):
+        result.sdk_calls = [
+            {
+                "method": "employee_run",
+                "ok": True,
+                "result": {"ok": True, "accepted": True, "task_id": "original-task"},
+            }
+        ]
+        if case == "employee_rejected":
+            result.sdk_calls[0]["result"]["completed"] = True
+
+            async def reject(*args, **kwargs):
+                return Verdict(ok=False, reason="artifact not accepted")
+
+            monkeypatch.setattr("modstore_server.script_agent.agent_loop.judge", reject)
+    elif case == "unknown":
+        result.sdk_calls = [{"method": "ai", "ok": False, "outcome": "unknown"}]
+
+    calls = 0
+
+    async def runner(**kwargs):
+        nonlocal calls
+        calls += 1
+        if case == "runner_exception":
+            raise TimeoutError("sandbox acknowledgement lost")
+        return result
+
+    events = _collect(
+        run_vibe_agent_loop(
+            _brief(),
+            user_id=1,
+            session_id="unsafe",
+            provider="openai",
+            model="test",
+            sandbox_runner=runner,
+            max_iterations=3,
+        )
+    )
+    assert calls == 1 and events[-1].type == "error"
+    assert stub_coder.code_factory.repair_called_with == {}
+    outcome = events[-1].payload["outcome"]
+    assert outcome["ok"] is False
+    assert outcome["outcome"] == "unverified" and outcome["retryable"] is False
+    if case == "runner_exception":
+        assert outcome["last_result"] is None
+    else:
+        assert outcome["last_result"]["returncode"] == result.returncode
+        assert outcome["last_result"]["timed_out"] is result.timed_out
+        assert outcome["last_result"]["sdk_calls"] == result.sdk_calls
+    assert not (tmp_path / "outputs" / "summary.md").exists()

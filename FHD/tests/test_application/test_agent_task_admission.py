@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import threading
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
@@ -10,6 +12,31 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.application.agent_orchestrator import AgentRun, SQLAlchemyAgentRunRepository
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+
+
+@pytest.fixture(params=["sqlite", "postgres"])
+def admission_sessions(request, tmp_path):
+    admin = None
+    schema = "task_admission_" + uuid.uuid4().hex
+    if request.param == "postgres":
+        url = os.environ.get("XCAGI_TEST_AGENT_POSTGRES_URL")
+        if not url:
+            pytest.skip("requires CI PostgreSQL service")
+        admin = create_engine(url)
+        with admin.begin() as db:
+            db.exec_driver_sql(f'CREATE SCHEMA "{schema}"')
+        engine = create_engine(url, connect_args={"options": f"-csearch_path={schema}"})
+    else:
+        engine = create_engine(f"sqlite:///{tmp_path / 'admission.db'}")
+    try:
+        yield sessionmaker(bind=engine)
+    finally:
+        engine.dispose()
+        if admin is not None:
+            with admin.begin() as db:
+                db.exec_driver_sql(f'DROP SCHEMA "{schema}" CASCADE')
+            admin.dispose()
 
 
 def _scope_run(user_id: str, task_id: str, mod_id: str) -> AgentRun:
@@ -66,19 +93,31 @@ def test_task_projection_keeps_the_bound_run_until_a_new_attempt(tmp_path, durab
         engine.dispose()
 
 
-@pytest.mark.parametrize("conflict", ["", "params", "mod"])
+@pytest.mark.parametrize(
+    "conflict",
+    [
+        "",
+        "params",
+        "mod",
+        "mod_id",
+        "employee_id",
+        "employee_tool_allowlist",
+        "workspace_id",
+        "mutation_policy",
+    ],
+)
 def test_unified_task_concurrent_admission_uses_one_complete_sql_record(
-    tmp_path, monkeypatch, conflict
+    admission_sessions, monkeypatch, conflict
 ):
     from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.agent_orchestrator.approval_grant import authorization_scope_hash
     from app.application.agent_orchestrator.unified_task import (
         UnifiedTaskConflictError,
         create_unified_task,
     )
     from app.db.models.agent import AgentRunRecord, AgentTaskRecord
 
-    engine = create_engine(f"sqlite:///{tmp_path / 'admission.db'}")
-    factory = sessionmaker(bind=engine)
+    factory = admission_sessions
     repo = SQLAlchemyAgentRunRepository(session_factory=factory)
     repo._ensure_schema()
     barrier = threading.Barrier(2)
@@ -91,6 +130,16 @@ def test_unified_task_concurrent_admission_uses_one_complete_sql_record(
     monkeypatch.setattr(AgentOrchestrator, "start_task_from_plan", prepare)
 
     def submit(index):
+        context = {
+            "tenant_id": "tenant-a",
+            "_mod_authorization": {"mod_id": str(index if conflict == "mod" else 0)},
+        }
+        if conflict not in {"", "params", "mod"}:
+            context[conflict] = (
+                (["customers"] if index else ["customers.query"])
+                if conflict == "employee_tool_allowlist"
+                else str(index)
+            )
         try:
             return create_unified_task(
                 orchestrator=AgentOrchestrator(
@@ -105,39 +154,37 @@ def test_unified_task_concurrent_admission_uses_one_complete_sql_record(
                 tool_id="customers",
                 action="query",
                 params={"keyword": str(index if conflict == "params" else 0)},
-                runtime_context={
-                    "tenant_id": "tenant-a",
-                    "_mod_authorization": {"mod_id": str(index if conflict == "mod" else 0)},
-                },
+                runtime_context=context,
             )
         except UnifiedTaskConflictError as exc:
             return exc
 
-    try:
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            results = list(pool.map(submit, (0, 1)))
-        successful = [result for result in results if not isinstance(result, Exception)]
-        assert len(successful) == (1 if conflict else 2)
-        assert len({result.run.run_id for result in successful}) == 1
-        assert sum(not result.deduplicated for result in successful) == 1
-        with factory() as db:
-            assert db.query(AgentRunRecord).count() == 1
-            task = db.query(AgentTaskRecord).one()
-            assert task.active_run_id == successful[0].run.run_id
-            assert task.status == "waiting_user"
-        assert successful[0].run.metadata["task_request_fingerprint"]
-    finally:
-        engine.dispose()
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(submit, (0, 1)))
+    successful = [result for result in results if not isinstance(result, Exception)]
+    assert len(successful) == (1 if conflict else 2)
+    assert len({result.run.run_id for result in successful}) == 1
+    assert sum(not result.deduplicated for result in successful) == 1
+    with factory() as db:
+        assert db.query(AgentRunRecord).count() == 1
+        task = db.query(AgentTaskRecord).one()
+        assert task.active_run_id == successful[0].run.run_id
+        assert task.status == "waiting_user"
+    stored = repo.get(successful[0].run.run_id)
+    assert stored.metadata["task_request_fingerprint"]
+    assert stored.metadata["execution_authorization_scope"] == authorization_scope_hash(
+        {**stored.metadata["runtime_context"], "user_id": "owner"}
+    )
+    assert len(stored.steps) == 1 and not stored.tool_calls
 
 
 @pytest.mark.parametrize("initial_only", [True, False])
 def test_task_admission_rolls_back_identity_if_run_persistence_fails(
-    tmp_path, monkeypatch, initial_only
+    admission_sessions, monkeypatch, initial_only
 ):
     from app.db.models.agent import AgentRunRecord, AgentTaskRecord
 
-    engine = create_engine(f"sqlite:///{tmp_path / 'admission-rollback.db'}")
-    factory = sessionmaker(bind=engine)
+    factory = admission_sessions
     repo = SQLAlchemyAgentRunRepository(session_factory=factory)
     original = repo.save_in_session
 
@@ -148,13 +195,59 @@ def test_task_admission_rolls_back_identity_if_run_persistence_fails(
 
     run = _scope_run("owner", "atomic-task", "mod")
     monkeypatch.setattr(repo, "save_in_session", fail_after_save)
-    try:
-        with pytest.raises(RuntimeError, match="injected"):
-            repo.create_task_run(run, initial_only=initial_only)
-        with factory() as db:
-            assert db.query(AgentRunRecord).count() == db.query(AgentTaskRecord).count() == 0
-    finally:
-        engine.dispose()
+    with pytest.raises(RuntimeError, match="injected"):
+        repo.create_task_run(run, initial_only=initial_only)
+    with factory() as db:
+        assert db.query(AgentRunRecord).count() == db.query(AgentTaskRecord).count() == 0
+
+
+def test_admission_loser_rechecks_revoked_permission(
+    admission_sessions, trusted_actor, monkeypatch
+):
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.agent_orchestrator.unified_task import (
+        UnifiedTaskConflictError,
+        create_unified_task,
+    )
+    from app.db.models.agent import AgentRunRecord, AgentTaskRecord
+    from app.db.models.permission import Role
+
+    actor = trusted_actor(role="admission-reader", permissions=["customer.view"])
+    factory = admission_sessions
+    winner = SQLAlchemyAgentRunRepository(session_factory=factory)
+    winner._ensure_schema()
+    loser = SQLAlchemyAgentRunRepository(session_factory=factory, auto_create=False)
+    service = AgentOrchestrator(repository=loser)
+    original = loser.create_task_run
+    published = []
+
+    def competing_publication(candidate, **kwargs):
+        # A separate transaction wins after lookup, then the live role is revoked.
+        saved, created = winner.create_task_run(candidate, **kwargs)
+        assert created
+        published.append(saved.run_id)
+        with actor.factory.begin() as db:
+            role = db.query(Role).filter_by(name="admission-reader").one()
+            role.permissions.clear()
+        return original(candidate, **kwargs)
+
+    monkeypatch.setattr(loser, "create_task_run", competing_publication)
+    with pytest.raises(UnifiedTaskConflictError):
+        create_unified_task(
+            orchestrator=service,
+            user_id=str(actor.user_id),
+            task_id="revoked-during-publication",
+            title="query",
+            message="query",
+            tool_id="customers",
+            action="query",
+            params={},
+            runtime_context=actor.context,
+        )
+    with factory() as db:
+        assert db.query(AgentRunRecord).count() == db.query(AgentTaskRecord).count() == 1
+    stored = winner.get(published[0])
+    assert stored.status == "waiting_user" and not stored.tool_calls
 
 
 @pytest.mark.parametrize("terminal", ["completed", "failed", "cancelled", "rejected"])

@@ -379,24 +379,41 @@ async def test_exact_turn_get_refreshes_only_the_original_dispatch(bound_super, 
     service.list_messages.assert_not_called()
 
 
-@pytest.mark.parametrize("state", ["completed", "running", "missing", "wrong_task", "ambiguous"])
-def test_dispatch_reader_never_backfills_or_invokes(state):
+@pytest.mark.parametrize("state", ["completed", "running", "missing", "wrong_task", "unbound"])
+def test_dispatch_reader_never_backfills_or_invokes(state, tmp_path):
+    from app.application.message_repository import MessageRepository
     from app.application.super_employee_service import SuperEmployeeService
 
     service = object.__new__(SuperEmployeeService)
-    row = {
+    service._messages = MessageRepository(tmp_path, "reader")
+    request = {
         "user_id": 71,
-        "dispatch_request_id": "original-dispatch",
-        "task_id": "original-task",
-        "kind": "dispatcher",
+        "request_id": "original-dispatch",
+        "created_at": "2026-11-21T00:00:00Z",
+        "dispatch_receipt": {
+            "request_id": "original-dispatch",
+            "task_id": "original-task",
+            "dispatcher": "para_api",
+            "status": "accepted",
+            "api_url": "" if state == "unbound" else "https://para.test",
+        },
     }
+    service._messages.write_outbox(request, status="accepted", accepted=True, reason="")
     service._read_all_message_rows = MagicMock(
-        return_value=[row, row] if state == "ambiguous" else [row]
+        side_effect=AssertionError("presentation rows are not dispatch authority")
     )
-    service._fetch_para_task = MagicMock(
-        return_value=None
-        if state == "missing"
-        else {"id": "other-task" if state == "wrong_task" else "original-task", "status": state}
+    service._para_api_url = lambda: "https://para.test"
+    service._http_client_factory = MagicMock()
+    service._para_token = MagicMock(return_value="read-token")
+    service._para_request = MagicMock(
+        return_value={
+            "task": None
+            if state == "missing"
+            else {
+                "id": "other-task" if state == "wrong_task" else "original-task",
+                "status": state,
+            }
+        }
     )
     service._para_task_status_reply = lambda task: "task receipt"
     service.list_messages = MagicMock(side_effect=AssertionError("may backfill CLI"))
@@ -405,7 +422,7 @@ def test_dispatch_reader_never_backfills_or_invokes(state):
     receipt = service.read_dispatch_receipt(
         user_id=71, request_id="original-dispatch", task_id="original-task"
     )
-    assert (receipt is None) is (state in {"missing", "wrong_task", "ambiguous"})
+    assert (receipt is None) is (state in {"missing", "wrong_task", "unbound"})
     assert (
         service.read_dispatch_receipt(
             user_id=72, request_id="original-dispatch", task_id="original-task"
@@ -413,5 +430,6 @@ def test_dispatch_reader_never_backfills_or_invokes(state):
         is None
     )
     service.list_messages.assert_not_called()
+    service._read_all_message_rows.assert_not_called()
     service.invoke.assert_not_called()
     service._compose_direct_chat_reply.assert_not_called()

@@ -13,6 +13,7 @@ from app.application.employee_runtime.result_verifier import (
     execution_result_error,
     pending_employee_result,
 )
+from app.application.employee_runtime.write_approval import invoke_employee_gate
 from app.application.tool_execution_deadline import (
     invocation_deadline,
     remaining_invocation_seconds,
@@ -21,8 +22,8 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
-# gate 签名：(tool_name, args) -> {"ok": bool, "reason": str}
-GateFn = Callable[[str, dict[str, Any]], dict[str, Any]]
+# Gates may additionally accept the trusted per-call runtime_context keyword.
+GateFn = Callable[..., dict[str, Any]]
 
 _DEFAULT_MAX_ITERATIONS = 6
 
@@ -538,6 +539,15 @@ def run_employee_agent_loop(
                     "repeat_count": repeat_limit,
                 }
 
+            call_context = {
+                **dict(runtime_context or {}),
+                "employee_id": employee_id,
+                "source": "employee_runtime",
+                "call_id": tc_id,
+                "tool_call_id": tc_id,
+            }
+            if workspace_root is not None:
+                call_context["workspace_root"] = workspace_root
             verdict: dict[str, Any] = {
                 "ok": False,
                 "reason": "工具不在员工授权白名单，未执行",
@@ -546,7 +556,9 @@ def run_employee_agent_loop(
                 verdict = {"ok": True}
                 if gate is not None:
                     try:
-                        verdict = gate(tool_name, args)
+                        verdict = invoke_employee_gate(
+                            gate, tool_name, args, runtime_context=call_context
+                        )
                     except RECOVERABLE_ERRORS:
                         logger.exception("employee tool gate failed closed: %s", tool_name)
                         verdict = {"ok": False, "reason": "工具授权检查失败，未执行"}
@@ -639,12 +651,7 @@ def run_employee_agent_loop(
                             tool_name,
                             args,
                             workspace_root,
-                            runtime_context={
-                                **(runtime_context or {}),
-                                "employee_id": employee_id,
-                                "source": "employee_runtime",
-                                "call_id": tc_id,
-                            },
+                            runtime_context=call_context,
                         )
                     )
                 if time.monotonic() >= deadline or budget.uncertain:

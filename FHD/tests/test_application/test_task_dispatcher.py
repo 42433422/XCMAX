@@ -357,3 +357,52 @@ def test_worker_yield_preserves_unfinished_receipts(actor, status, tool, output,
     assert stored.state == expected
     assert not stored.finished_at
     assert queue.claim("another-worker", lease_seconds=30) is None
+
+
+@pytest.mark.parametrize(
+    "state",
+    ["waiting_approval", "waiting_auth", "waiting_input", "unknown", "timeout", "timed_out"],
+)
+def test_real_step_preserves_accepted_wait_without_inventing_unknown(actor, state):
+    from types import SimpleNamespace
+
+    calls = []
+    output = {
+        "success": False,
+        "execution_state": state,
+        "execution_accepted": True,
+        "retryable": False,
+        "task_id": "original-child",
+        "approval_request_id": "original-approval",
+    }
+
+    def execute(step, *, runtime_context):
+        calls.append(runtime_context["idempotency_key"])
+        return dict(output)
+
+    repository = InMemoryAgentRunRepository()
+    queue = InMemoryTaskExecutionRepository()
+    run = _queued_run(actor, f"accepted-{state}")
+    repository.save(run)
+    queue.enqueue(run)
+    claim = queue.claim("worker", lease_seconds=30)
+    dispatcher = AgentTaskDispatcher(
+        execution_repository=queue,
+        run_repository=repository,
+        orchestrator_factory=lambda repo: _orchestrator_factory(
+            repo, SimpleNamespace(execute=execute)
+        ),
+    )
+    dispatcher._execute_claim(claim, "worker")
+    saved = repository.get(run.run_id)
+    uncertain = state in {"unknown", "timeout", "timed_out"}
+    assert queue.get(run.run_id).state == ("unknown" if uncertain else state)
+    assert saved.steps[0].output["execution_state"] == state
+    assert saved.steps[0].output["approval_request_id"] == "original-approval"
+    assert saved.steps[0].output["task_id"] == "original-child"
+    assert bool(saved.steps[0].output.get("reconciliation_required")) is uncertain
+    assert (
+        saved.metadata.get("recovery", {}).get("state") == "manual_reconciliation_required"
+    ) is uncertain
+    assert len(calls) == 1
+    assert queue.claim("another-worker", lease_seconds=30) is None

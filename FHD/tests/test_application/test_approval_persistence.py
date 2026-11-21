@@ -310,7 +310,7 @@ def test_batch_approval_deduplicates_across_service_restarts(db, monkeypatch, en
                 side_effect=AssertionError("a write gate only stages the original approval")
             )
             monkeypatch.setattr(AgentOrchestrator, "execute_dispatched_run", dispatch)
-            gate = build_write_approval_gate("employee", context)
+            gate = build_write_approval_gate("employee", runtime_context=context)
 
         def call(ids):
             if entry == "employee_gate":

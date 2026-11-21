@@ -5,12 +5,15 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Tuple
 
 from modstore_server import self_maintenance_retry
+from modstore_server.customer_issue_delivery_contract import (
+    execution_requires_reconciliation,
+)
 
 from . import config
 
 
 def _employee_result_ok(result: Dict[str, Any]) -> bool:
-    if not result or result.get("handler_failed"):
+    if not result or result.get("handler_failed") or execution_requires_reconciliation(result):
         return False
     report_text = _extract_report_excerpt(result).lower()
     if "blocked by risk middleware" in report_text:
@@ -287,7 +290,14 @@ def _extract_para_meta(
         "error": output.get("error") if isinstance(output, dict) else None,
         "para_status": para_result.get("status"),
         "subtask_id": first_subtask.get("id") or response.get("subtaskId"),
-        "task_id": para_result.get("task_id") or para_result.get("id") or response.get("taskId"),
+        "task_id": (
+            output.get("task_id") or output.get("para_task_id")
+            if isinstance(output, dict)
+            else None
+        )
+        or para_result.get("task_id")
+        or para_result.get("id")
+        or response.get("taskId"),
     }
 
 
@@ -342,8 +352,6 @@ def _extract_report_excerpt(result: Dict[str, Any], limit: int = 4000) -> str:
 def _is_transient_employee_dispatch_failure(
     result: Dict[str, Any],
 ) -> bool:
-    if _is_accepted_para_wait_timeout(result):
-        return False
     return self_maintenance_retry.is_transient_dispatch_failure(result)
 
 

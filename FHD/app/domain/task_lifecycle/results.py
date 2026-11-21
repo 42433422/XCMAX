@@ -30,11 +30,15 @@ _APPROVAL_STATES = {
     "awaiting_approval",
     "pending_approval",
 }
-_ACTIVE_STATES = {
+_UNKNOWN_STATES = {
     "unknown",
     "interrupted",
     "partial",
     "partial_success",
+    "timeout",
+    "timed_out",
+}
+_ACTIVE_STATES = _UNKNOWN_STATES | {
     "blocked",
     "pending",
     "accepted",
@@ -195,7 +199,7 @@ def execution_result_error(data: dict[str, Any]) -> str:
 def execution_result_outcome_unknown(data: dict[str, Any]) -> bool:
     """Distinguish uncertain effects from ordinary pending or approval states."""
     return any(
-        execution_result_states(result) & {"unknown", "interrupted", "partial", "partial_success"}
+        execution_result_states(result) & _UNKNOWN_STATES
         or result.get("reconciliation_required") is True
         or result.get("requires_reconciliation") is True
         or result.get("outcome_unknown") is True

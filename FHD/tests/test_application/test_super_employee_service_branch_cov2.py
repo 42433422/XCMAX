@@ -278,8 +278,10 @@ class TestDispatchModeBranches:
         req = _make_request()
         result = svc._dispatch(req)
         assert result["accepted"] is False
-        # Non-JSON body with 200 status and no success flag → dispatch_failed
-        assert result["status"] == "dispatch_failed"
+        # A successful HTTP exchange without an acknowledgement does not prove
+        # that the remote handler made no changes.
+        assert result["status"] == "dispatch_unknown"
+        assert result["safe_to_fallback"] is False
 
     def test_webhook_accepted_with_success_flag(self, tmp_path, monkeypatch) -> None:
         monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_DISPATCH_MODE", "unknown_mode")
@@ -310,7 +312,7 @@ class TestDispatchModeBranches:
         result = svc._dispatch(req)
         assert result["accepted"] is True
 
-    def test_webhook_exception_goes_to_outbox(self, tmp_path, monkeypatch) -> None:
+    def test_webhook_exception_preserves_unknown_receipt(self, tmp_path, monkeypatch) -> None:
         monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_DISPATCH_MODE", "unknown_mode")
         monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_WEBHOOK", "http://hook.test")
         mock_client = _mock_http_client(post_exc=RuntimeError("network error"))
@@ -322,7 +324,8 @@ class TestDispatchModeBranches:
         req = _make_request()
         result = svc._dispatch(req)
         assert result["accepted"] is False
-        assert result["status"] == "dispatch_error"
+        assert result["status"] == "dispatch_unknown"
+        assert result["safe_to_fallback"] is False
 
 
 # ───────────────────── _dispatch_to_para error branches ─────────────────────
@@ -606,7 +609,7 @@ class TestCreateParaTask:
         call_kwargs = mock_client.request.call_args
         assert call_kwargs.kwargs.get("json", {}).get("repo_url") == "https://repo.git"
 
-    def test_task_not_dict_keeps_previous(self, tmp_path) -> None:
+    def test_missing_task_receipt_is_unknown(self, tmp_path) -> None:
         svc = _make_svc(tmp_path, cli_runner=_null_runner)
         mock_client = MagicMock()
         mock_resp = _mock_response(
@@ -623,7 +626,8 @@ class TestCreateParaTask:
             [{"id": "d1", "name": "dev1"}],
             tier=2,
         )
-        assert result["accepted"] is True
+        assert result["accepted"] is False
+        assert result["status"] == "dispatch_unknown"
         assert result["task_id"] == ""
 
     def test_task_id_chained_across_devices(self, tmp_path) -> None:

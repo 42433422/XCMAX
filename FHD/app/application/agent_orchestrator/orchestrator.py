@@ -334,7 +334,16 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
             return cast("AgentRun", self._repo.save(value)) if persist else value
 
         context = dict(runtime_context or {})
+        from app.application.agent_orchestrator.approval_grant import (
+            authorization_scope_hash,
+        )
         from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+        from app.application.agent_orchestrator.tool_permission import actor_tool_denial
+
+        scope = dict(context)
+        if not isinstance(scope.get("_actor_authorization"), dict):
+            scope["user_id"] = str(user_id or "")
+        authorization_scope = authorization_scope_hash(scope)
 
         plan = copy.deepcopy(plan)
         self._apply_approval_risk_policy(plan)
@@ -359,6 +368,11 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 existing.user_id == str(user_id or "")
                 and existing.plan_id == str(plan.plan_id or "")
                 and existing.metadata.get("execution_idempotency_key") == idempotency_key
+                and existing.metadata.get("execution_authorization_scope") == authorization_scope
+                and all(
+                    actor_tool_denial(step.tool_id, step.action, scope, step.params) is None
+                    for step in existing.steps
+                )
             ):
                 return cast("AgentRun", existing)
             logger.error("plan idempotency collision; refusing to start run_id=%s", run_id)
@@ -381,6 +395,7 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         run.metadata["runtime_context"] = context
         run.metadata["plan_sha256"] = plan_sha256
         run.metadata["execution_idempotency_key"] = idempotency_key
+        run.metadata["execution_authorization_scope"] = authorization_scope
         apply_task_context(run, runtime_context)
         run.add_event("run.created", "Agent run 已创建")
         run.add_event(
@@ -531,7 +546,12 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         waiting_step.status = "pending"
         run.status = "running"
         run.error = ""
+        from app.application.agent_orchestrator.approval_grant import (
+            approval_receipt_claims,
+        )
+
         run.metadata["approval_receipt"] = {
+            **approval_receipt_claims(run, waiting_step),
             "task_id": str((context or {}).get("task_id") or run.run_id),
             "step_id": waiting_step.step_id,
             "tool_id": waiting_step.tool_id,
@@ -1405,6 +1425,10 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 )
                 self._repo.save(run)
                 return dict(step.output)
+            from app.application.agent_orchestrator.approval_grant import (
+                approval_scope_matches,
+            )
+
             if not self._can_auto_execute(step) and not (
                 approved and approved in {step.step_id, step.node_id}
             ):
@@ -1440,6 +1464,27 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 )
                 return denial
             while True:
+                if approved in {
+                    step.step_id,
+                    step.node_id,
+                } and not approval_scope_matches(run, step):
+                    step.status = run.status = "waiting_user"
+                    step.output = {
+                        "success": False,
+                        "error_code": "approval_scope_changed",
+                        "retryable": False,
+                        "message": "审批后的身份范围、参数或工具契约已变化，请重新审批",
+                    }
+                    run.error = step.error = step.output["message"]
+                    (run.metadata.get("dispatch") or {}).pop("approved_step_id", None)
+                    run.add_event("approval.scope_changed", run.error, {"step_id": step.step_id})
+                    self._repo.save(run)
+                    stopped_for_interaction = True
+                    return {
+                        "success": True,
+                        "requires_approval": True,
+                        "step_id": step.step_id,
+                    }
                 budget = budget_exceeded_payload(
                     run,
                     additional_cost_units=self._step_cost_units(step),

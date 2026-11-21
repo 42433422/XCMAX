@@ -11,12 +11,15 @@ from typing import Any, Protocol
 
 from app.application.admin_control.protocols import JsonObject
 from app.application.agent_orchestrator import AgentOrchestrator
+from app.application.agent_orchestrator.approval_grant import authorization_scope_hash
 from app.application.agent_orchestrator.business_action_ledger import canonical_hash
 from app.application.agent_orchestrator.run_models import AgentRun, AgentStep, ToolCall, utc_now_iso
 from app.application.agent_orchestrator.task_context import apply_task_context
+from app.application.agent_orchestrator.tool_permission import actor_tool_denial
 from app.application.agent_orchestrator.trace_payloads import _payload_status
 from app.application.agent_orchestrator.unified_task import (
     UnifiedTaskConflictError,
+    _assert_reused_run_scope,
     publish_task_run,
 )
 from app.application.employee_runtime.result_verifier import pending_employee_result
@@ -186,6 +189,12 @@ def _assert_employee_identity(
         or run.metadata.get("admin_employee_key") != key
     ):
         raise UnifiedTaskConflictError("原请求已绑定不同员工或授权范围")
+    _assert_reused_run_scope(
+        run,
+        user_id=str(context["user_id"]),
+        tenant_id=str(context["tenant_id"]),
+        runtime_context=context,
+    )
 
 
 def _settle_receipt(run: AgentRun, result: dict[str, Any]) -> None:
@@ -374,6 +383,9 @@ def execute_admitted_employee(
         "authorization": _scope(context),
     }
     run = AgentRun(user_id=str(work.user_id), message=work.task, status="running")
+    scope = dict(context)
+    if not isinstance(scope.get("_actor_authorization"), dict):
+        scope["user_id"] = run.user_id
     from app.application.agent_orchestrator.tool_spec import (
         DEFAULT_TIMEOUT_SECONDS,
         get_tool_action_spec,
@@ -387,6 +399,7 @@ def execute_admitted_employee(
     )
     run.metadata.update(
         runtime_context=context,
+        execution_authorization_scope=authorization_scope_hash(scope),
         admin_employee_key=work.idempotency_key,
         admin_employee_id=work.employee_id,
         admin_employee_scope=_scope(context),
@@ -399,6 +412,9 @@ def execute_admitted_employee(
     step = AgentStep(
         "employee", "employee", "execute", params=params, risk="high", status="running"
     )
+    denial = actor_tool_denial(step.tool_id, step.action, scope, step.params)
+    if denial is not None:
+        return {**denial, "execution_state": "blocked", "execution_status": "not_started"}
     call = ToolCall(step.step_id, step.node_id, step.tool_id, step.action, params=params)
     run.steps, run.tool_calls = [step], [call]
     run.add_event("run.created", "管理端员工任务已登记，等待原调用回执")

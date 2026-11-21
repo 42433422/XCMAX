@@ -2,19 +2,22 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import logging
 from typing import Any, cast
 
-from app.application.employee_runtime.tool_scope import CODE_WRITE_TOOLS, WRITE_TOOLS
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+_GATE_INVOCATION_ERRORS = (TypeError,) + RECOVERABLE_ERRORS
 
 
 def build_write_approval_gate(
     employee_id: str,
     input_data: dict[str, Any] | None = None,
+    *,
+    runtime_context: dict[str, Any] | None = None,
 ):
     """返回 agent_loop gate：(tool_name, args) -> {ok, reason}。
 
@@ -22,13 +25,36 @@ def build_write_approval_gate(
     业务写操作从当前注册契约解析动作，绑定原 AgentRun 后持久化审批。
     模型参数和员工输入不能自我声明批准，也不能携带服务端写令牌绕过审批。
     """
-    payload = dict(input_data or {})
+    # Legacy positional input is model/user data, never approval evidence.
+    trusted_context = dict(runtime_context or {})
 
-    def gate(tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
+    def gate(
+        tool_name: str,
+        args: dict[str, Any],
+        *,
+        runtime_context: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        from resources.config.risk_actions_loader import (
+            list_code_write_tools,
+            list_write_tools,
+        )
+
         name = str(tool_name or "").strip()
-        if name not in WRITE_TOOLS and name not in CODE_WRITE_TOOLS:
+        code_writes = list_code_write_tools()
+        if name not in list_write_tools() and name not in code_writes:
             return {"ok": True}
-        if name in CODE_WRITE_TOOLS:
+        if runtime_context is not None and not str(runtime_context.get("call_id") or "").strip():
+            return {
+                "ok": False,
+                "blocked": True,
+                "execution_state": "blocked",
+                "retryable": False,
+                "reason": "写操作缺少当前工具调用标识，未创建审批或执行，不能复用父调用标识。",
+            }
+        # The loop supplies its current tool-call identity separately from model
+        # arguments. Keep this exact scope when staging the original approval.
+        payload = {**trusted_context, **dict(runtime_context or {}), "employee_id": employee_id}
+        if name in code_writes:
             from app.domain.autonomy.autonomy_guard import evaluate_risk
 
             decision = evaluate_risk(
@@ -109,16 +135,53 @@ def build_write_approval_gate(
     return gate
 
 
+def invoke_employee_gate(
+    gate: Any,
+    tool_name: str,
+    args: dict[str, Any],
+    *,
+    runtime_context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Adapt legacy validation gates before invocation, never retry after a call."""
+    options: dict[str, Any] = {"runtime_context": runtime_context}
+    try:
+        signature = inspect.signature(gate)
+        try:
+            signature.bind(tool_name, args, **options)
+        except TypeError:
+            signature.bind(tool_name, args)
+            options = {}
+    except (TypeError, ValueError):
+        return {"ok": False, "blocked": True, "reason": "工具授权接口无效，未调用"}
+    try:
+        return cast("dict[str, Any]", gate(tool_name, args, **options))
+    except _GATE_INVOCATION_ERRORS:
+        # A write gate can already have published an approval. Losing its return
+        # value is not evidence that nothing happened and cannot trigger replay.
+        return {
+            "ok": False,
+            "execution_state": "unknown",
+            "retryable": False,
+            "requires_reconciliation": True,
+            "reason": "工具授权回执尚未确认，请核对原任务，勿重复提交。",
+        }
+
+
 def compose_gates(*gates: Any) -> Any:
     """合并多个 gate（WorkspaceGuard + write approval 等）。"""
     active = [g for g in gates if g is not None]
     if not active:
         return None
 
-    def combined(tool_name: str, args: dict[str, Any]) -> dict[str, Any]:
+    def combined(
+        tool_name: str,
+        args: dict[str, Any],
+        *,
+        runtime_context: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         for g in active:
             try:
-                verdict = g(tool_name, args)
+                verdict = invoke_employee_gate(g, tool_name, args, runtime_context=runtime_context)
             except RECOVERABLE_ERRORS:
                 return {"ok": False, "reason": "工具授权检查失败，未执行"}
             if not isinstance(verdict, dict) or type(verdict.get("ok")) is not bool:
@@ -130,4 +193,4 @@ def compose_gates(*gates: Any) -> Any:
     return combined
 
 
-__all__ = ["build_write_approval_gate", "compose_gates"]
+__all__ = ["build_write_approval_gate", "compose_gates", "invoke_employee_gate"]

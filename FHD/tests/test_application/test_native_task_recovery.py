@@ -8,7 +8,9 @@ import os
 import sqlite3
 import subprocess
 import sys
+import threading
 import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from multiprocessing.connection import wait
@@ -628,7 +630,9 @@ def test_spawned_elt_checkpoint_transfers_only_the_exact_approved_claim(
     trusted_actor, monkeypatch, tmp_path, cleanup_verified
 ):
     from app.application.agent_orchestrator import tool_process
-    from app.application.agent_orchestrator.approval_grant import _params_hash
+    from app.application.agent_orchestrator.approval_grant import (
+        approval_receipt_claims,
+    )
     from app.application.agent_orchestrator.elt_checkpoint_recovery import ELT_CHECKPOINT_PROTOCOL
     from app.application.workflow.workflow_types import plan_fingerprint
 
@@ -675,10 +679,10 @@ def test_spawned_elt_checkpoint_transfers_only_the_exact_approved_claim(
             "tool_id": step.tool_id,
             "action": step.action,
             "approved_by": run.user_id,
-            "params_sha256": _params_hash(step),
             "plan_sha256": plan_fingerprint(plan),
         },
     )
+    run.metadata["approval_receipt"].update(approval_receipt_claims(run, step))
     repository.save(run)
     queue.enqueue(run)
     old = queue.claim("old", lease_seconds=60)
@@ -895,6 +899,111 @@ def test_unknown_checkpoint_version_fails_before_tool_dispatch(trusted_actor):
     stored = service.execute_dispatched_run(run.run_id)
     assert stored.status == "blocked" and "版本" in stored.error
     assert calls == []
+
+
+@pytest.fixture(params=["sqlite", "postgres"])
+def receipt_fence_repositories(request, tmp_path):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    admin = None
+    schema = "receipt_fence_" + uuid.uuid4().hex
+    if request.param == "postgres":
+        url = os.environ.get("XCAGI_TEST_AGENT_POSTGRES_URL")
+        if not url:
+            pytest.skip("requires CI PostgreSQL service")
+        admin = create_engine(url)
+        with admin.begin() as db:
+            db.exec_driver_sql(f'CREATE SCHEMA "{schema}"')
+        engine = create_engine(url, connect_args={"options": f"-csearch_path={schema}"})
+    else:
+        engine = create_engine(f"sqlite:///{tmp_path / 'receipt-fence.db'}")
+    factory = sessionmaker(bind=engine)
+    repository = SQLAlchemyAgentRunRepository(session_factory=factory)
+    repository._ensure_schema()
+    try:
+        yield repository, SQLAlchemyAgentRunRepository(session_factory=factory, auto_create=False)
+    finally:
+        engine.dispose()
+        if admin is not None:
+            with admin.begin() as db:
+                db.exec_driver_sql(f'DROP SCHEMA "{schema}" CASCADE')
+            admin.dispose()
+
+
+@pytest.mark.parametrize("terminal", ["completed", "blocked"])
+@pytest.mark.parametrize("context_change", ["untrusted_sources", "session_row_id"])
+def test_late_context_update_cannot_erase_terminal_or_unknown_receipt(
+    receipt_fence_repositories, terminal, context_change
+):
+    repository, late_writer = receipt_fence_repositories
+    run = AgentRun(user_id="receipt-owner", message="original request", status="running")
+    run.metadata["task_context"] = {"task_id": "receipt-task", "attempt": 1}
+    run.metadata["runtime_context"] = {
+        "tenant_id": "receipt-tenant",
+        "_mod_authorization": {"mod_id": "receipt-mod"},
+        "_actor_authorization": {"user_id": "receipt-owner", "session_row_id": 1},
+    }
+    repository.save(run)
+    stale = late_writer.get(run.run_id)
+    stale.final_output = {"answer": "stale"}
+    if context_change == "untrusted_sources":
+        stale.metadata["runtime_context"][context_change] = [
+            {"source": "tool_output", "text": "observation"}
+        ]
+    else:
+        stale.metadata["runtime_context"]["_actor_authorization"][context_change] = 2
+    terminal_committed = threading.Event()
+
+    def save_late():
+        assert terminal_committed.wait(10)
+        return late_writer.save(stale)
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        result = pool.submit(save_late)
+        run.status = terminal
+        run.final_output = {"answer": "authoritative"}
+        if terminal == "blocked":
+            run.metadata.update(
+                non_retryable=True, recovery={"state": "manual_reconciliation_required"}
+            )
+        try:
+            repository.save(run)
+        finally:
+            terminal_committed.set()
+        assert result.result(timeout=10).status == terminal
+    saved = repository.get(run.run_id)
+    assert saved.status == terminal
+    assert saved.final_output["answer"] == "authoritative"
+    task = repository.get_task(
+        user_id=run.user_id, task_id="receipt-task", tenant_id="receipt-tenant"
+    )
+    assert (task.active_run_id, task.status, task.attempt) == (run.run_id, terminal, 1)
+    if terminal == "blocked":
+        assert saved.metadata["non_retryable"] is True
+        assert saved.metadata["recovery"]["state"] == "manual_reconciliation_required"
+
+
+@pytest.mark.parametrize("changed", ["user_id", "tenant_id", "mod_id"])
+def test_existing_run_identity_cannot_change_with_context(receipt_fence_repositories, changed):
+    repository, late_writer = receipt_fence_repositories
+    run = AgentRun(user_id="original-owner", message="bound request", status="running")
+    run.metadata["runtime_context"] = {
+        "tenant_id": "original-tenant",
+        "_mod_authorization": {"mod_id": "original-mod"},
+    }
+    repository.save(run)
+    original = repository.get(run.run_id).to_dict()
+    modified = late_writer.get(run.run_id)
+    if changed == "user_id":
+        modified.user_id = "other-owner"
+    elif changed == "tenant_id":
+        modified.metadata["runtime_context"]["tenant_id"] = "other-tenant"
+    else:
+        modified.metadata["runtime_context"]["_mod_authorization"]["mod_id"] = "other-mod"
+    with pytest.raises(ValueError, match="run identity"):
+        late_writer.save(modified)
+    assert repository.get(run.run_id).to_dict() == original
 
 
 @pytest.mark.skipif(

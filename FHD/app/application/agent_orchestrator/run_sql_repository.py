@@ -231,23 +231,18 @@ def preserve_run_evidence(
     """Keep receipts across mutable context updates; only a verified CAS replaces a plan."""
     if previous is None:
         return
+    if (run.run_id, run.user_id, run.created_at, tenant_id_of_run(run), mod_id_of_run(run)) != (
+        previous.run_id,
+        previous.user_id,
+        previous.created_at,
+        tenant_id_of_run(previous),
+        mod_id_of_run(previous),
+    ):
+        raise ValueError("run identity cannot change")
     generation, prior_generation = _planning_generation(run), _planning_generation(previous)
-    if generation or prior_generation:
-        if (run.run_id, run.user_id, run.created_at, tenant_id_of_run(run), mod_id_of_run(run)) != (
-            previous.run_id,
-            previous.user_id,
-            previous.created_at,
-            tenant_id_of_run(previous),
-            mod_id_of_run(previous),
-        ):
-            raise ValueError("planning generation identity cannot change")
-        if generation != prior_generation:
-            if not allow_planning_replacement or not _valid_planning_replacement(run, previous):
-                raise ValueError(
-                    "planning generation replacement requires the original snapshot CAS"
-                )
-            return
-    elif not same_run_generation(run, previous):
+    if generation != prior_generation:
+        if not allow_planning_replacement or not _valid_planning_replacement(run, previous):
+            raise ValueError("planning generation replacement requires the original snapshot CAS")
         return
     old = previous.metadata
     if old.get("non_retryable"):
