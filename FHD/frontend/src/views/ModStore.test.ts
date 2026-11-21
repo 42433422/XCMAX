@@ -53,6 +53,6 @@ describe('ModStore.vue', () => {
       },
     })
     expect(wrapper.find('.mod-store').exists()).toBe(true)
-    expect(wrapper.text()).toContain('AI 员工市场')
+    expect(wrapper.text()).toContain('AI 市场')
   })
 })
