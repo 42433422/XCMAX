@@ -19,10 +19,13 @@ from collections.abc import Awaitable, Callable
 from concurrent.futures import Future
 from concurrent.futures import TimeoutError as FutureTimeout
 from dataclasses import asdict
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.infrastructure.mcp.config import McpServerConfig
 from app.utils.operational_errors import BOUNDARY_ERRORS
+
+if TYPE_CHECKING:
+    from anyio import CancelScope
 
 Operation = Callable[[Any], Awaitable[Any]]
 Connection = Callable[[McpServerConfig, Operation], Awaitable[Any]]
@@ -53,7 +56,7 @@ class _Session:
         self._lost = False
         self._pending: set[Future[Any]] = set()
         self._loop: asyncio.AbstractEventLoop | None = None
-        self._task: asyncio.Task[Any] | None = None
+        self._cancel_scope: CancelScope | None = None
         self._queue: asyncio.Queue[tuple[Operation, Future[Any]]] | None = None
         self._thread = threading.Thread(target=self._run, name="mcp-session", daemon=True)
         self._thread.start()
@@ -68,10 +71,11 @@ class _Session:
 
     def close(self) -> None:
         self.lose()
-        loop, task = self._loop, self._task
-        if loop is not None and task is not None:
+        loop, scope = self._loop, self._cancel_scope
+        if loop is not None and scope is not None:
             try:
-                loop.call_soon_threadsafe(task.cancel)
+                # Respect the official SDK's shielded process/transport cleanup.
+                loop.call_soon_threadsafe(scope.cancel)
             except RuntimeError:  # The owner already finished and closed its loop.
                 pass
 
@@ -87,27 +91,31 @@ class _Session:
             self._closed.set()
 
     async def _serve(self) -> None:
+        from anyio import CancelScope
+
         self._loop = asyncio.get_running_loop()
-        self._task = asyncio.current_task()
         self._queue = asyncio.Queue()
-        self._ready.set()
         try:
-            if not self._lost:
-                await self.connection(self.config, self._consume)
+            with CancelScope() as scope:
+                self._cancel_scope = scope
+                self._ready.set()
+                if not self._lost:
+                    await self.connection(self.config, self._consume)
         except asyncio.CancelledError:
             pass
         except BOUNDARY_ERRORS:  # Isolate SDK/transport failure; never log credentials or args.
             pass
 
     async def _consume(self, session: Any) -> None:
+        from anyio import fail_after
+
         assert self._queue is not None
         while not self._lost:
-            operation, future = await asyncio.wait_for(
-                self._queue.get(), timeout=self.config.session_idle_seconds
-            )
+            with fail_after(self.config.session_idle_seconds):
+                operation, future = await self._queue.get()
             if self._lost:
                 return
-            async with asyncio.timeout(self.config.timeout_seconds):
+            with fail_after(self.config.timeout_seconds):
                 result = await operation(session)
             with self._lock:
                 if not future.done():

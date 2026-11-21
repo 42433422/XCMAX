@@ -62,7 +62,10 @@ def _sync(coro_factory: Callable[[], Coroutine[Any, Any, T]], timeout: float) ->
     """在独立线程运行协程，避免与请求所在事件循环互相阻塞。"""
 
     async def bounded() -> T:
-        async with asyncio.timeout(timeout):
+        import anyio
+
+        # Native asyncio cancellation can pierce the SDK's shielded teardown.
+        with anyio.fail_after(timeout):
             return await coro_factory()
 
     def run() -> T:
@@ -161,9 +164,9 @@ def _read_only(tool: Any) -> bool:
     return hint is True
 
 
-def _field(value: Any, python_name: str, wire_name: str) -> Any:
+def _field(value: Any, python_name: str, wire_name: str, default: Any = None) -> Any:
     """SDK 2 uses snake_case attributes; wire-shaped adapters keep MCP aliases."""
-    return getattr(value, python_name, getattr(value, wire_name, None))
+    return getattr(value, python_name, getattr(value, wire_name, default))
 
 
 async def _list_all_tools(session: Any, *, max_pages: int = 10) -> list[Any]:
@@ -239,6 +242,31 @@ def _result_text(result: Any) -> str:
             return "\n".join(parts)
     structured = _field(result, "structured_content", "structuredContent")
     return _serialize(structured) if structured is not None else ""
+
+
+def _result_error(result: Any, tool_name: str) -> str:
+    """Classify the MCP envelope, without interpreting resource or prompt text."""
+    structured = _field(result, "structured_content", "structuredContent")
+    business = (
+        structured if tool_name not in RESOURCE_ACTIONS and isinstance(structured, dict) else {}
+    )
+    if result is None or ("success" in business and type(business["success"]) is not bool):
+        return "mcp_result_invalid"
+    if _field(result, "result_type", "resultType", "complete") != "complete":
+        return "mcp_result_incomplete"
+    collection = {
+        "mcp_list_resources": "resources",
+        "mcp_read_resource": "contents",
+        "mcp_list_prompts": "prompts",
+        "mcp_get_prompt": "messages",
+    }.get(tool_name, "content")
+    is_error = _field(result, "is_error", "isError", False)
+    # Empty lists are valid MCP results; missing envelopes are not completion.
+    if not isinstance(getattr(result, collection, None), list) or type(is_error) is not bool:
+        return "mcp_result_invalid"
+    if business.get("success") is False:
+        return "mcp_business_error"
+    return "mcp_tool_error" if is_error else ""
 
 
 async def _run_synthetic(session: Any, action: str, arguments: dict[str, Any]) -> Any:
@@ -330,10 +358,12 @@ def call_tool(
                 retry_safe=safe_read,
             )
         text = _result_text(result)
-        is_error = bool(_field(result, "is_error", "isError"))
+        error_code = _result_error(result, tool_name)
+        result_type = _field(result, "result_type", "resultType", "complete")
         structured = _field(result, "structured_content", "structuredContent")
         blocks = getattr(result, "content", None)
         evidence = {
+            **({"result_type": result_type} if result_type != "complete" else {}),
             **(
                 {"structured_content": json.loads(_serialize(structured))}
                 if structured is not None
@@ -365,14 +395,14 @@ def call_tool(
             **uncertain,
         }
     return {
-        "success": not is_error,
+        "success": not bool(error_code),
         "tool": tool_name,
         "server": config.name,
         "content": text,
-        "message": text if is_error else "",
+        "message": (text or "MCP 工具未返回有效的完成结果") if error_code else "",
         **evidence,
         **({"session_id": session_id} if session_id else {}),
-        **({"error_code": "mcp_tool_error", **uncertain} if is_error else {}),
+        **({"error_code": error_code, **uncertain} if error_code else {}),
     }
 
 

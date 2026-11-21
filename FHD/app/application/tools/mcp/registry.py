@@ -14,8 +14,15 @@ import threading
 import time
 from copy import deepcopy
 from dataclasses import asdict
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+from app.domain.autonomy.browser_policy import (
+    BROWSER_ACTIONS,
+    MAX_BROWSER_DECISIONS,
+    MAX_BROWSER_SECONDS,
+    MAX_BROWSER_STEPS,
+    browser_action_allowed,
+)
 from app.infrastructure.mcp.client import (
     RESOURCE_ACTIONS,
     McpToolInfo,
@@ -24,6 +31,9 @@ from app.infrastructure.mcp.client import (
 )
 from app.infrastructure.mcp.config import McpServerConfig, load_server_configs, mcp_enabled
 from app.utils.operational_errors import BOUNDARY_ERRORS
+
+if TYPE_CHECKING:
+    from app.application.workflow.workflow_types import PlanGraph
 
 logger = logging.getLogger(__name__)
 
@@ -221,8 +231,6 @@ def call_mcp_tool(
         key: value for key, value in dict(params or {}).items() if not str(key).startswith("_")
     }
     if config.browser:
-        from app.application.tools.mcp.browser_policy import browser_action_allowed
-
         if not browser_action_allowed(str(action), arguments):
             return {
                 "success": False,
@@ -288,6 +296,50 @@ def browser_server_config(tool_id: str) -> McpServerConfig | None:
     _tools, servers = _snapshot()
     config = servers.get(str(tool_id))
     return config if config and config.browser and config.session_mode == "persistent" else None
+
+
+def browser_execution_contract(plan: PlanGraph) -> dict[str, Any] | None:
+    """Describe only a local, valid controller entry; plan claims never enable it."""
+    if len(plan.nodes) != 1:
+        return None
+    seed = plan.nodes[0]
+    if (
+        not seed.tool_id.startswith("mcp__")
+        or seed.action not in {"browser_navigate", "browser_snapshot"}
+        or seed.depends_on
+        or seed.next
+        or seed.branches
+        or not browser_action_allowed(seed.action, seed.params)
+    ):
+        return None
+    if browser_server_config(seed.tool_id) is None:
+        return None
+    return {
+        "seed_node_id": seed.node_id,
+        "tool_id": seed.tool_id,
+        "actions": sorted(BROWSER_ACTIONS),
+        "limits": {
+            "steps": MAX_BROWSER_STEPS,
+            "model_decisions": MAX_BROWSER_DECISIONS,
+            "scheduling_deadline_seconds": MAX_BROWSER_SECONDS,
+        },
+        "semantics": (
+            "这个本地认可的单节点是原 AgentRun 的浏览器控制入口，不是任务完成声明。"
+            "执行层每次读取实际页面，再向同一图追加一个动作，重新经过原权限、审批和预算。"
+            "用户授权的同一连续浏览器交互可作为一个控制目标映射到该入口；"
+            "该目标仍必须完整保留原话中的对象、范围、否定、条件和先后顺序。"
+        ),
+        "verification_scope": (
+            "终态仅证明 browser_wait_for 对非空文本成功，随后同会话新快照读回该文本；"
+            "不能证明未读回的业务数据库、付款或外部投递成功。"
+        ),
+        "handoff": "登录、验证码、外部发送、付款和不支持的操作须暂停询问，不能宣称完成。",
+        "review_requirement": (
+            "必须独立判断整个原始目标是否能由这些动作及页面文本验证覆盖。"
+            "不能遗漏不属于该连续浏览器交互的其他目标，不能因为存在控制入口就判通过；"
+            "若目标超出能力，沿用原 violations/unsupported/clarification_question 规则。"
+        ),
+    }
 
 
 def release_run_browser_sessions(context: dict[str, Any]) -> int:

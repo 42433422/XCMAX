@@ -6,6 +6,7 @@ from typing import Any
 
 from app.application.message_repository import MessageRepository
 
+from .cli import CliExecutionError
 from .common import (
     DISPATCHER_MESSAGE_KIND,
     PARA_TERMINAL_TASK_STATUSES,
@@ -81,7 +82,11 @@ class MessageSynchronizer:
             self._ports.write_rows(rows)
 
     def upgrade_legacy_dispatcher_row(self, row: dict[str, Any]) -> bool:
-        if str(row.get("kind") or "") == DISPATCHER_MESSAGE_KIND:
+        if str(row.get("kind") or "") in {
+            DISPATCHER_MESSAGE_KIND,
+            self._p.direct_kind,
+            self._p.result_kind,
+        } or row.get("cli_execution"):
             return False
         if str(row.get("role") or "") != "assistant":
             return False
@@ -135,8 +140,12 @@ class MessageSynchronizer:
                 continue
             text = str(item.get("body") or "")
             body = self._ports.direct_reply(text)
+            failure = None
             if not body and cli_backfills < 1 and self._ports.should_reply(text, {}):
-                (body, _) = self._ports.compose_reply(text, {})
+                try:
+                    (body, _) = self._ports.compose_reply(text, {})
+                except CliExecutionError as exc:
+                    failure, body = exc, exc.body
                 cli_backfills += 1
             if not body:
                 continue
@@ -147,8 +156,11 @@ class MessageSynchronizer:
                     body=body,
                     created_at=_utc_now(),
                     request_id=request_id,
-                    status="completed",
-                    extra={"kind": self._p.direct_kind},
+                    status="failed" if failure else "completed",
+                    extra={
+                        "kind": self._p.direct_kind,
+                        **({"cli_execution": failure.receipt} if failure else {}),
+                    },
                 )
             )
             request_ids_with_reply.add(request_id)

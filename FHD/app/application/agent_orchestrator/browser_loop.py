@@ -7,7 +7,6 @@ ordinary permission, approval, billing, lease and checkpoint boundaries.
 from __future__ import annotations
 
 import copy
-import re
 import time
 from typing import Any
 
@@ -15,21 +14,24 @@ from app.application.agent_orchestrator.browser_loop_model import request_browse
 from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
 from app.application.agent_orchestrator.run_usage import RunUsageLedger
 from app.application.agent_orchestrator.tool_spec import get_tool_action_spec, validate_tool_call
-from app.application.tools.mcp.browser_policy import (
-    BROWSER_ACTIONS,
-    MAX_BROWSER_DECISIONS,
-    MAX_BROWSER_SECONDS,
-    MAX_BROWSER_STEPS,
-    browser_action_allowed,
+from app.application.tools.mcp.registry import (
     browser_execution_contract,
+    browser_server_config,
 )
-from app.application.tools.mcp.registry import browser_server_config
 from app.application.workflow.workflow_types import (
     PlanGraph,
     WorkflowNode,
     plan_from_dict,
     plan_to_dict,
     validate_plan_graph,
+)
+from app.domain.autonomy.browser_evidence import snapshot_text, targets_observed
+from app.domain.autonomy.browser_policy import (
+    BROWSER_ACTIONS,
+    MAX_BROWSER_DECISIONS,
+    MAX_BROWSER_SECONDS,
+    MAX_BROWSER_STEPS,
+    browser_action_allowed,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -144,31 +146,6 @@ def _handoff(run: AgentRun, question: str) -> bool:
     return True
 
 
-def _snapshot_text(output: dict[str, Any]) -> str:
-    """Use only the actual accessibility snapshot, never echoed code/URL/messages."""
-    content = str(output.get("content") or "")
-    match = re.search(r"### Snapshot\s*\n```(?:yaml)?\s*\n(.*?)\n```", content, re.S)
-    return match.group(1) if match else ""
-
-
-def _targets_observed(params: dict[str, Any], snapshot: str) -> bool:
-    targets = [params["target"]] if "target" in params else []
-    if isinstance(params.get("fields"), list):
-        targets.extend(
-            field["target"]
-            for field in params["fields"]
-            if isinstance(field, dict) and "target" in field
-        )
-    if not targets:
-        return True
-    # Refs are node metadata, not quoted labels or text values after a YAML colon.
-    prefixes = [
-        re.sub(r'"(?:\\.|[^"\\])*"', "", line).split(":", 1)[0] for line in snapshot.splitlines()
-    ]
-    refs = set(re.findall(r"\[ref=([A-Za-z0-9_]+)\]", "\n".join(prefixes)))
-    return all(isinstance(target, str) and target in refs for target in targets)
-
-
 def _actions(run: AgentRun) -> list[dict[str, Any]]:
     result = []
     for action in sorted(BROWSER_ACTIONS):
@@ -220,7 +197,7 @@ def advance_browser_run(run: AgentRun, context: dict[str, Any], usage: RunUsageL
             _append(run, "browser_snapshot", {})
             state["phase"] = "observe"
             return True
-        snapshot = _snapshot_text(last.output)
+        snapshot = snapshot_text(last.output)
         if not snapshot:
             return _handoff(run, "页面没有可用的可访问性快照，请检查登录或页面状态后继续。")
         verification = state.get("verification")
@@ -300,7 +277,7 @@ def advance_browser_run(run: AgentRun, context: dict[str, Any], usage: RunUsageL
             state["verification"] = {"text": decision.assertion, "node_id": node_id}
             state["phase"] = "verify"
             return True
-        if not _targets_observed(decision.params, snapshot[:24_000]):
+        if not targets_observed(decision.params, snapshot[:24_000]):
             return _block(
                 run,
                 "browser_target_unobserved",

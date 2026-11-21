@@ -87,7 +87,8 @@ defaults:
 jobs:
   browser-agent-integration:
     name: Browser Agent real MCP integration
-    runs-on: ubuntu-latest
+    # Use the existing sandbox-capable browser acceptance host; never disable Chromium's sandbox.
+    runs-on: ubuntu-22.04
     timeout-minutes: 20
     env:
       XCAGI_BROWSER_MCP_LIVE: "1"

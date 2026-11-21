@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Any, Literal
-
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from typing import Any
 
 from app.application.agent_orchestrator.budget import budget_exceeded_payload
 from app.application.agent_orchestrator.context_window_manager import estimate_messages_tokens
@@ -16,39 +14,14 @@ from app.application.agent_orchestrator.repair_advisor import (
 )
 from app.application.agent_orchestrator.run_models import AgentRun
 from app.application.agent_orchestrator.run_usage import RunUsageLedger
-from app.application.tools.mcp.browser_policy import MAX_BROWSER_DECISIONS
 from app.application.workflow.planner_llm_gateway import request_planner_completion
+from app.domain.autonomy.browser_evidence import BrowserDecision
+from app.domain.autonomy.browser_policy import MAX_BROWSER_DECISIONS
 from app.infrastructure.billing.model_usage import estimate_llm_cost_units
 from app.services import get_ai_conversation_service
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 MAX_OUTPUT_TOKENS = 4096
-
-
-class BrowserDecision(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True, str_strip_whitespace=True)
-
-    mode: Literal["action", "verify", "finish", "wait"]
-    action: str = ""
-    params: dict[str, Any] = Field(default_factory=dict)
-    assertion: str = Field(default="", max_length=500)
-    evidence_node_id: str = ""
-    reason: str = Field(default="", max_length=1000)
-
-    @model_validator(mode="after")
-    def valid_mode(self) -> BrowserDecision:
-        if self.mode == "action":
-            if not self.action or self.assertion or self.evidence_node_id:
-                raise ValueError("action requires exactly one registered action")
-        elif self.action or self.params:
-            raise ValueError("only action accepts tool parameters")
-        if self.mode == "verify" and not self.assertion:
-            raise ValueError("verification requires nonempty visible page text")
-        if self.mode == "finish" and not self.evidence_node_id:
-            raise ValueError("finish requires an independent verification receipt")
-        if self.mode == "wait" and not self.reason:
-            raise ValueError("handoff requires a question")
-        return self
 
 
 def _user_clarification_context(run: AgentRun) -> dict[str, Any]:

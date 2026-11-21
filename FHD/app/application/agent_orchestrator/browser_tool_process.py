@@ -47,10 +47,8 @@ def _worker_loop(executor_type, folder, commands, control, start, stream, scope,
 
     first = True
     try:
-        while commands.recv_bytes(1) == b"q":
-            raw = Path(folder, "request").read_bytes()
-            if len(raw) > _PAYLOAD_LIMIT:
-                raise ValueError("browser worker request exceeds transport limit")
+        while True:
+            raw = commands.recv_bytes(_PAYLOAD_LIMIT)
             request = json.loads(raw)
             payload = json.loads(request["payload"])
             if (mcp_session_scope(payload["context"]), payload["step"]["tool_id"]) != (
@@ -92,6 +90,7 @@ class _BrowserWorker:
         self.lost = False
         self.clean: bool | None = None
         self.stopped = threading.Event()
+        self.sender: threading.Thread | None = None
         self.expires_at = time.monotonic() + config.session_idle_seconds
         self.failure_code = "mcp_session_lost"
         self.folder = tempfile.mkdtemp(prefix="xcagi-browser-tool-")
@@ -141,6 +140,9 @@ class _BrowserWorker:
                     clean = False
             for connection in (self.commands, self.control, self.stream):
                 connection.close()
+            if self.sender is not None and self.sender.ident is not None:
+                self.sender.join(timeout=1)
+                clean = clean and not self.sender.is_alive()
             if clean:
                 try:
                     shutil.rmtree(self.folder, onerror=boundary._ignore_missing_cleanup_entry)
@@ -199,6 +201,32 @@ class _BrowserWorker:
                 break
         raise TimeoutError("browser worker deadline or lifetime ended")
 
+    def _send_request(self, payload: bytes, deadline: float) -> None:
+        """Bound pipe backpressure by the action deadline; never spool credentials."""
+        sent, failed = threading.Event(), threading.Event()
+
+        def send() -> None:
+            try:
+                self.commands.send_bytes(payload)
+            except BOUNDARY_ERRORS:
+                failed.set()
+            finally:
+                sent.set()
+
+        sender = threading.Thread(target=send, daemon=True, name="browser-tool-send")
+        with self.cleanup_lock:
+            if self.lost:
+                raise RuntimeError("browser worker lifetime ended")
+            self.sender = sender
+            sender.start()
+        if not sent.wait(max(0, deadline - time.monotonic())):
+            raise TimeoutError("browser worker request deadline")
+        sender.join(timeout=max(0, deadline - time.monotonic()))
+        if sender.is_alive():
+            raise TimeoutError("browser worker sender deadline")
+        if failed.is_set():
+            raise OSError("browser worker request transport failed")
+
     def call(self, step, context, deadline, business_url) -> dict[str, Any]:
         from app.infrastructure.chat_stream_lifetime import StreamLifetime, current_lifetime
         from app.infrastructure.llm.client import (
@@ -225,11 +253,10 @@ class _BrowserWorker:
             )
             request = json.dumps(
                 {"payload": payload, "deadline": deadline, "llm_scope": llm_scope}, allow_nan=False
-            )
-            if len(request.encode()) > _PAYLOAD_LIMIT:
+            ).encode("utf-8")
+            if len(request) > _PAYLOAD_LIMIT:
                 return _failure("tool_context_not_serializable", unknown=False)
             Path(self.folder, "result").unlink(missing_ok=True)
-            Path(self.folder, "request").write_text(request, encoding="utf-8")
             lifetime = current_lifetime.get() or StreamLifetime()
             lifetime.worker_started()
             relay = threading.Thread(
@@ -245,9 +272,8 @@ class _BrowserWorker:
                 lifetime.worker_finished()
                 raise
             self.start.clear()
-            self.commands.send_bytes(b"q")
+            self._send_request(request, deadline)
             self._wait(b"r", deadline)
-            Path(self.folder, "request").unlink(missing_ok=True)
             self.start.set()
             self._wait(b"d", deadline)
             raw = Path(self.folder, "result").read_bytes()
@@ -280,7 +306,6 @@ class _BrowserWorker:
             return _failure(code if self.clean else "tool_cleanup_unresolved")
         finally:
             stopped.set()
-            Path(self.folder, "request").unlink(missing_ok=True)
             Path(self.folder, "result").unlink(missing_ok=True)
             self.expires_at = time.monotonic() + self.config.session_idle_seconds
             self.lock.release()

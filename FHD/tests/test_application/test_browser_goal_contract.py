@@ -7,7 +7,7 @@ import json
 import pytest
 
 from app.application.tools.mcp import registry
-from app.application.tools.mcp.browser_policy import browser_execution_contract
+from app.application.tools.mcp.registry import browser_execution_contract
 from app.application.workflow.goal_coverage import review_goal_coverage
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 from app.infrastructure.mcp.config import McpServerConfig

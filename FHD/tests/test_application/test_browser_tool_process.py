@@ -5,8 +5,13 @@ from __future__ import annotations
 import json
 import os
 import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
 from copy import deepcopy
+from pathlib import Path
+from types import SimpleNamespace
 
 import psutil
 import pytest
@@ -134,6 +139,101 @@ def test_actual_worker_timeout_reaps_delayed_side_effect_and_never_replays(brows
     assert call(browser, "browser_snapshot")["error_code"] == "mcp_session_lost"
     time.sleep(2.1)
     assert "late-write" not in browser[2].read_text()
+
+
+def test_real_worker_keeps_captured_model_credentials_off_disk(browser, monkeypatch):
+    from app.infrastructure.llm.client import llm_client_scope
+
+    first = call(browser, "browser_snapshot")
+    state(first)
+    worker = next(iter(workers._WORKERS.values()))
+    process = psutil.Process(worker.process.pid)
+    sent = threading.Event()
+    frames = []
+    send = worker.commands.send_bytes
+    secret = f"fixture-credential-{time.monotonic_ns()}"
+
+    def observe_send(payload):
+        frames.append(payload)
+        sent.set()
+        return send(payload)
+
+    monkeypatch.setattr(worker.commands, "send_bytes", observe_send)
+    process.suspend()
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        with llm_client_scope(
+            SimpleNamespace(api_key=secret, base_url="https://fixture.invalid"), "fixture"
+        ):
+            future = executor.submit(copy_context().run, call, browser, "browser_snapshot")
+        try:
+            assert sent.wait(timeout=5)
+            folder = Path(worker.folder)
+            assert not (folder / "request").exists()
+            assert all(
+                secret.encode() not in path.read_bytes()
+                for path in folder.rglob("*")
+                if path.is_file()
+            )
+            assert json.loads(frames[0])["llm_scope"]["api_key"] == secret
+        finally:
+            if process.is_running():
+                process.resume()
+        result = future.result(timeout=10)
+    assert result["session_id"] == first["session_id"] and state(result)["clicks"] == 0
+
+
+def test_backpressured_request_deadline_reaps_worker_and_sender_thread(browser, monkeypatch):
+    first = call(browser, "browser_snapshot")
+    browser_pid = state(first)["pid"]
+    worker = next(iter(workers._WORKERS.values()))
+    worker_pid = worker.process.pid
+    sender_threads = []
+    send = worker.commands.send_bytes
+
+    def observe_send(payload):
+        assert 64 * 1024 < len(payload) <= workers._PAYLOAD_LIMIT
+        sender_threads.append(threading.current_thread())
+        return send(payload)
+
+    monkeypatch.setattr(worker.commands, "send_bytes", observe_send)
+    context = deepcopy(browser[1])
+    context["fixture_padding"] = "x" * (2 * 1024 * 1024)
+    psutil.Process(worker_pid).suspend()
+    began = time.monotonic()
+    result = call(browser, "browser_snapshot", context=context, timeout=0.5)
+    assert time.monotonic() - began < 5
+    assert result["success"] is False and result["retryable"] is False
+    assert result["outcome"] == "unknown"
+    assert sender_threads and all(not thread.is_alive() for thread in sender_threads)
+    assert not psutil.pid_exists(worker_pid) and not psutil.pid_exists(browser_pid)
+    assert not Path(worker.folder).exists()
+    assert call(browser, "browser_snapshot")["error_code"] == "mcp_session_lost"
+
+
+def test_large_request_and_oversize_rejection_keep_worker_usable(browser, monkeypatch):
+    first = call(browser, "browser_snapshot")
+    state(first)
+    worker = next(iter(workers._WORKERS.values()))
+    sends = []
+    send = worker.commands.send_bytes
+
+    def observe_send(payload):
+        sends.append((len(payload), threading.current_thread()))
+        return send(payload)
+
+    monkeypatch.setattr(worker.commands, "send_bytes", observe_send)
+    context = deepcopy(browser[1])
+    context["fixture_padding"] = "x" * (2 * 1024 * 1024)
+    result = call(browser, "browser_snapshot", context=context)
+    assert result["session_id"] == first["session_id"] and state(result)["clicks"] == 0
+    assert len(sends) == 1 and 2 * 1024 * 1024 < sends[0][0] <= workers._PAYLOAD_LIMIT
+    assert not sends[0][1].is_alive()
+    context["fixture_padding"] = "x" * workers._PAYLOAD_LIMIT
+    rejected = call(browser, "browser_snapshot", context=context)
+    assert rejected["error_code"] == "tool_context_not_serializable"
+    assert rejected["outcome"] == "not_started" and len(sends) == 1
+    current = call(browser, "browser_snapshot")
+    assert current["session_id"] == first["session_id"] and state(current)["clicks"] == 0
 
 
 def test_actor_binding_change_cannot_reuse_previous_browser_process(browser):

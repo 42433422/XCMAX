@@ -6,6 +6,7 @@ import asyncio
 import json
 import os
 import sys
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
@@ -61,6 +62,31 @@ async def browser_evidence() -> CallToolResult:
 @server.tool()
 async def browser_stale_ref() -> CallToolResult:
     return CallToolResult(isError=True, content=[TextContent(type="text", text="stale ref")])
+
+@server.tool()
+async def receipt_contract(case: str) -> CallToolResult:
+    with log.open("a") as stream:
+        stream.write("receipt:" + case + "\\n")
+    payloads = {
+        "business_error": {"success": False, "reason": "declined"},
+        "invalid_success": {"success": "false"},
+        "created_task": {"accepted": True},
+        "complete": {"success": True},
+        "empty": None,
+    }
+    return CallToolResult(
+        content=[],
+        structured_content=payloads[case],
+        result_type="complete",
+    )
+
+@server.resource("fixture://result")
+def receipt_document() -> str:
+    return '{"success": false, "accepted": true}'
+
+@server.prompt()
+def receipt_prompt() -> str:
+    return '{"success": false, "accepted": true}'
 
 server.run(transport="stdio")
 """
@@ -227,6 +253,130 @@ def test_full_evidence_and_recoverable_tool_error_keep_session_identity(server):
     assert evidence["content_blocks"][1]["data"] == "c3ludGhldGlj"
 
 
+@pytest.mark.parametrize("session_mode", ["stateless", "persistent"])
+def test_official_sdk_result_contract_does_not_promote_partial_receipts(server, session_mode):
+    config, log = server
+    config = replace(config, session_mode=session_mode)
+    first = _call(config, "browser_snapshot")
+    generation = first.get("session_id")
+    for case, expected_error in (
+        ("business_error", "mcp_business_error"),
+        ("invalid_success", "mcp_result_invalid"),
+        ("created_task", None),
+        ("complete", None),
+        ("empty", None),
+    ):
+        result = _call(config, "receipt_contract", {"case": case}, expected_session_id=generation)
+        assert result["success"] is (expected_error is None), result
+        assert result.get("error_code") == expected_error
+        assert result.get("session_id") == generation
+        assert result["content_blocks"] == []
+        if expected_error:
+            assert result["outcome"] == "unknown" and result["retryable"] is False
+            assert result["reconciliation_required"] is True
+        if case == "business_error":
+            assert result["structured_content"]["success"] is False
+        assert log.read_text().splitlines().count(f"receipt:{case}") == 1
+    after = _call(config, "browser_snapshot", expected_session_id=generation)
+    assert after["success"] is True and after.get("session_id") == generation
+
+
+@pytest.mark.parametrize("session_mode", ["stateless", "persistent"])
+def test_official_sdk_resource_and_prompt_documents_are_not_business_receipts(server, session_mode):
+    config, _log = server
+    config = replace(config, session_mode=session_mode)
+    generation = _call(config, "browser_snapshot").get("session_id")
+    for action, params in (
+        ("mcp_list_resources", {}),
+        ("mcp_read_resource", {"uri": "fixture://result"}),
+        ("mcp_list_prompts", {}),
+        ("mcp_get_prompt", {"name": "receipt_prompt"}),
+    ):
+        result = _call(config, action, params, expected_session_id=generation)
+        assert result["success"] is True, result
+        assert result.get("session_id") == generation
+        if action in {"mcp_read_resource", "mcp_get_prompt"}:
+            assert json.loads(result["content"]) == {"success": False, "accepted": True}
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        None,
+        SimpleNamespace(accepted=True),
+        SimpleNamespace(content=None),
+        SimpleNamespace(content=[], structuredContent={"success": 0}),
+        SimpleNamespace(content=[], structuredContent={"success": None}),
+    ],
+    ids=["missing", "accepted-only", "missing-content", "numeric-success", "null-success"],
+)
+def test_missing_mcp_result_shape_is_not_success(monkeypatch, raw):
+    async def connection(config, operation):
+        return raw
+
+    monkeypatch.setattr(client, "_with_session", connection)
+    result = client.call_tool(McpServerConfig(name="contract", command="unused"), "write", {})
+    assert result["success"] is False
+    assert result["error_code"] == "mcp_result_invalid"
+    assert result["outcome"] == "unknown" and result["retryable"] is False
+
+
+@pytest.mark.parametrize("wire_alias", [False, True])
+@pytest.mark.parametrize("action", ["write", "mcp_read_resource"])
+def test_noncomplete_sdk_results_are_not_completion(monkeypatch, action, wire_alias):
+    from mcp.types import CallToolResult, ReadResourceResult
+
+    # The SDK's legacy 2025-11-25 stdio wire omits resultType. Check the
+    # normalized SDK result and legacy attribute adapter without inventing a
+    # completion rule for arbitrary {"accepted": true} business payloads.
+    raw = (
+        ReadResourceResult(contents=[], result_type="accepted")
+        if action == "mcp_read_resource"
+        else CallToolResult(
+            content=[], structured_content={"accepted": True}, result_type="accepted"
+        )
+    )
+    if wire_alias:
+        raw = SimpleNamespace(**raw.model_dump(mode="json", by_alias=True))
+    calls = []
+
+    async def connection(config, operation):
+        calls.append(action)
+        return raw
+
+    monkeypatch.setattr(client, "_with_session", connection)
+    result = client.call_tool(McpServerConfig(name="contract", command="unused"), action, {})
+    assert result["success"] is False and result["error_code"] == "mcp_result_incomplete"
+    assert result["result_type"] == "accepted" and calls == [action]
+    if action == "write":
+        assert result["structured_content"] == {"accepted": True}
+        assert result["outcome"] == "unknown" and result["retryable"] is False
+
+
+@pytest.mark.parametrize("action", client.RESOURCE_ACTIONS)
+def test_empty_standard_resource_and_prompt_results_remain_valid(monkeypatch, action):
+    from mcp.types import (
+        GetPromptResult,
+        ListPromptsResult,
+        ListResourcesResult,
+        ReadResourceResult,
+    )
+
+    result = {
+        "mcp_list_resources": ListResourcesResult(resources=[]),
+        "mcp_read_resource": ReadResourceResult(contents=[]),
+        "mcp_list_prompts": ListPromptsResult(prompts=[]),
+        "mcp_get_prompt": GetPromptResult(messages=[]),
+    }[action]
+
+    async def connection(config, operation):
+        return result
+
+    monkeypatch.setattr(client, "_with_session", connection)
+    actual = client.call_tool(McpServerConfig(name="contract", command="unused"), action, {})
+    assert actual["success"] is True and actual["content"] == ""
+
+
 def test_configuration_rotation_invalidates_session_instead_of_reusing_credentials(
     server,
 ):
@@ -310,3 +460,67 @@ def test_explicit_release_reaps_the_real_stdio_process(server):
     client.close_scope("tenant1:user1:run1")
     with pytest.raises(ProcessLookupError):
         os.kill(pid, 0)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX asyncio subprocess transport")
+def test_release_during_sdk_shutdown_finishes_transport_cleanup(server, monkeypatch):
+    import anyio
+    from mcp.client import stdio
+
+    config, _log = server
+    config = replace(config, session_idle_seconds=0.02)
+    closing_stdout = threading.Event()
+    interrupted = threading.Event()
+    processes = []
+    spawn, close_pipe = stdio._create_platform_compatible_process, stdio._close_pipe
+
+    async def observe_process(*args, **kwargs):
+        process = await spawn(*args, **kwargs)
+        processes.append(process)
+        return process
+
+    async def observe_close(stream):
+        await close_pipe(stream)
+        if processes and stream is processes[0].stdout:
+            closing_stdout.set()
+            # Expose the real SDK shielded shutdown race without replacing it.
+            try:
+                await anyio.sleep(0.1)
+            except asyncio.CancelledError:
+                interrupted.set()
+                raise
+
+    monkeypatch.setattr(stdio, "_create_platform_compatible_process", observe_process)
+    monkeypatch.setattr(stdio, "_close_pipe", observe_close)
+    try:
+        pid = _state(_call(config, "browser_snapshot"))["pid"]
+        assert closing_stdout.wait(timeout=5)
+        assert client.close_scope("tenant1:user1:run1") == 1
+        with pytest.raises(ProcessLookupError):
+            os.kill(pid, 0)
+        assert not interrupted.is_set()
+        assert processes[0]._process._transport.is_closing()
+    finally:
+        client.close_all_sessions()
+        # Keep a failed assertion from leaking the fixture's retained transport.
+        for process in processes:
+            process._process._transport.close()
+
+
+def test_stateless_deadline_does_not_interrupt_sdk_shielded_cleanup():
+    import anyio
+
+    finished, cleaned = threading.Event(), threading.Event()
+
+    async def shutdown():
+        try:
+            with anyio.CancelScope(shield=True):
+                await anyio.sleep(0.1)
+                cleaned.set()
+        finally:
+            finished.set()
+
+    with pytest.raises(client.McpClientError):
+        client._sync(shutdown, 0.02)
+    assert finished.wait(timeout=2)
+    assert cleaned.is_set()

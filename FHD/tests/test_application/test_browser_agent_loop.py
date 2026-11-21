@@ -14,6 +14,7 @@ from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 from app.application.agent_orchestrator.tool_spec import invalidate_tool_specs_cache
 from app.application.tools.mcp import registry
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+from app.domain.autonomy.browser_evidence import snapshot_text
 from app.infrastructure.mcp.client import McpToolInfo
 from app.infrastructure.mcp.config import McpServerConfig
 from tests.fixtures.planner_model import goal_review_response
@@ -499,7 +500,7 @@ def test_initial_seed_has_the_same_parameter_boundary(harness, action, params):
 
 def test_snapshot_evidence_excludes_echoed_javascript(harness):
     assert (
-        browser_loop._snapshot_text(
+        snapshot_text(
             {
                 "content": '### Ran Playwright code\n```js\nawait page.getByText("saved")\n```\n### Snapshot\n```yaml\n- generic: Home\n```'
             }

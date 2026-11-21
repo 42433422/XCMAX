@@ -14,6 +14,7 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
+from app.application.super_employee.cli import CliExecutionError
 from app.application.super_employee_service import (
     _PARA_TOKEN_CACHE,
     CLAUDE_PROFILE,
@@ -234,6 +235,10 @@ class TestInvokeDirect:
 
 
 class TestInvokeDispatch:
+    @pytest.fixture(autouse=True)
+    def _isolate_dispatch_from_local_cli(self, monkeypatch):
+        monkeypatch.setenv("XCMAX_CODEX_CLI_CHAT_ENABLED", "0")
+
     def test_outbox_mode_writes_file(self, tmp_path, monkeypatch):
         monkeypatch.setenv("XCMAX_CODEX_SUPER_EMPLOYEE_DISPATCH_MODE", "outbox")
         svc = _make_svc(tmp_path)
@@ -814,18 +819,24 @@ class TestCliReplyBody:
         cli.write_text("#!/bin/sh\n")
         cli.chmod(0o755)
         svc = _make_svc(tmp_path, cli_runner=_error_runner(subprocess.TimeoutExpired("cmd", 45)))
-        with patch.object(svc, "_cli_path", return_value=str(cli)):
-            result = svc._cli_reply_body("hi", {})
-        assert "超过" in result or "CLI" in result
+        with (
+            patch.object(svc, "_cli_path", return_value=str(cli)),
+            pytest.raises(CliExecutionError) as error,
+        ):
+            svc._cli_reply_body("hi", {})
+        assert error.value.receipt["error_code"] == "cli_timeout"
 
     def test_os_error_returns_failure_message(self, tmp_path):
         cli = tmp_path / "codex"
         cli.write_text("#!/bin/sh\n")
         cli.chmod(0o755)
         svc = _make_svc(tmp_path, cli_runner=_error_runner(OSError("no such")))
-        with patch.object(svc, "_cli_path", return_value=str(cli)):
-            result = svc._cli_reply_body("hi", {})
-        assert "CLI" in result
+        with (
+            patch.object(svc, "_cli_path", return_value=str(cli)),
+            pytest.raises(CliExecutionError) as error,
+        ):
+            svc._cli_reply_body("hi", {})
+        assert error.value.receipt["error_code"] == "cli_launch_failed"
 
     def test_reads_output_file_when_exists(self, tmp_path):
         cli = tmp_path / "codex"
@@ -862,9 +873,13 @@ class TestCliReplyBody:
             return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="something bad")
 
         svc = _make_svc(tmp_path, cli_runner=fail_runner)
-        with patch.object(svc, "_cli_path", return_value=str(cli)):
-            result = svc._cli_reply_body("hi", {})
-        assert "CLI" in result or "code" in result
+        with (
+            patch.object(svc, "_cli_path", return_value=str(cli)),
+            pytest.raises(CliExecutionError) as error,
+        ):
+            svc._cli_reply_body("hi", {})
+        assert error.value.receipt["error_code"] == "cli_nonzero_exit"
+        assert error.value.receipt["exit_code"] == 1
 
     def test_claude_profile_reads_stdout(self, tmp_path):
         import json as _json

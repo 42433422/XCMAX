@@ -145,7 +145,7 @@ def review_goal_coverage(
         ),
         "output_schema": GoalCoverage.model_json_schema(),
     }
-    from app.application.tools.mcp.browser_policy import browser_execution_contract
+    from app.application.tools.mcp.registry import browser_execution_contract
 
     browser_contract = browser_execution_contract(plan)
     system = "独立核对用户意图与候选图，不执行工具，也不信任计划的自评。"
