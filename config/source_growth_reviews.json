@@ -64,23 +64,13 @@
     "FHD/app/application/agent_orchestrator/tool_spec_data/input_schemas.py": {
       "base_file": "FHD/app/application/agent_orchestrator/tool_spec_data/input_schemas.py",
       "base_blob": "36244a3dde121a2229a9f1d2f664e1274bd621ac",
-<<<<<<< HEAD
-      "head_blob": "21723028d6315ddebc84540d22b8ebf69453551b",
+      "head_blob": "67ef5cfeda81842374a1f8ba3815488e996a7f5c",
       "before_lines": 1142,
-      "after_lines": 1145,
-      "reason": "用户明确授权复用现有组件完成客来来闭环；本文件仅接入领域层独立输入合同及规范导入间隔，避免继续在既有大表内实现渠道逻辑。本记录是评审请求，不是审批证据。",
-      "boundary": "仅登记读取渠道、客户、会话、发送与查询回执的有界输入合同；发送仍需当前账号与企业绑定、messages.send scope及持久化精确参数审批，不从模型参数取得授权。",
-      "validation": "客来来绑定与Agent执行、SKU和导航等192项后端回归及71项前端回归通过；全量前端与物理Mod视图类型检查通过。远端完整CI、主序列评审和真实渠道凭据验收待完成。",
-      "follow_up": "继续把渠道合同保留在独立工具族模块；首次真实渠道验收需核对供应商受理回执与未知结果恢复，不把accepted视为delivered。",
-=======
-      "head_blob": "d54a30dd6a79f67b9eff704e7aa6780b16f51be8",
-      "before_lines": 1142,
-      "after_lines": 1182,
-      "reason": "按用户的 Computer Use 桌面与浏览器开源集成请求，在已有 desktop_automation 工具目录声明五个动作及有界参数，避免新增另一套工具注册接口。此记录是架构审查请求，不代表人工已批准。",
-      "boundary": "仅增加参数描述、额外字段拒绝和最多20步的批次约束；既有 Agent 持久审批、密封身份、本机账号租户绑定和执行器运行时校验共同决定能否输入。",
-      "validation": "243项整合回归通过，涵盖工具契约全目录、真实 Agent 审批与执行分发（使用内存仓储和fake适配器）、未核验阻塞及防重放；远端CI和Windows/macOS真机验收仍待完成。 合入main171后同时验证澄清/知识查询续接、Windows打包契约及剪贴板非文本保护。",
-      "follow_up": "继续在既有 tool_spec_data 中维护同一工具契约；若该工具族继续增长，评审后按工具族拆分静态数据，保持唯一注册入口。",
->>>>>>> 6f51824dd74d1768f368db86df158ea607b3851b
+      "after_lines": 1185,
+      "reason": "本记录是评审请求，不是审批证据。集成树在同一输入合同文件中同时保留客来来有界输入合同（#3435）与 Computer Use 桌面/浏览器动作参数声明（#3430）；不把任一来源评审请求视为已批准，也不合并成新的批准记录。最终将按与当前 main 的 merge-base 重算精确 identity 后再提交。",
+      "boundary": "仅登记读取渠道、客户、会话、发送与查询回执的有界输入合同；发送仍需当前账号与企业绑定、messages.send scope及持久化精确参数审批，不从模型参数取得授权。 仅增加参数描述、额外字段拒绝和最多20步的批次约束；既有 Agent 持久审批、密封身份、本机账号租户绑定和执行器运行时校验共同决定能否输入。",
+      "validation": "客来来与 Computer Use 各自登记的回归范围保留待集成后按真实调用链复验；远端 CI、真机与真实渠道验收仍待完成。本说明不是通过证明。",
+      "follow_up": "继续把渠道合同保留在独立工具族模块；首次真实渠道验收需核对供应商受理回执与未知结果恢复，不把accepted视为delivered。 继续在既有 tool_spec_data 中维护同一工具契约；若该工具族继续增长，评审后按工具族拆分静态数据，保持唯一注册入口。",
       "review_owner": "@42433422"
     },
     "FHD/app/application/agent_orchestrator/tool_spec_data/output_schemas.py": {
