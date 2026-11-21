@@ -2,6 +2,7 @@ import { getRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRun
 import { getActiveExtensionModHeaders } from '@/utils/apiBase'
 import { clientShellRequestHeaders } from '@/utils/clientShell'
 import { createTraceId, sseConnections } from '@/utils/networkStability'
+import { createParser } from 'eventsource-parser'
 
 /**
  * Credentialed SSE transport.
@@ -68,7 +69,7 @@ class StreamHub {
     if (!this.owners.size) this.terminate(false)
   }
 
-  private emit(type: string, init: EventInit & { detail?: unknown; data?: string } = {}): void {
+  private emit(type: string, init: EventInit & { detail?: unknown; data?: string; lastEventId?: string } = {}): void {
     for (const owner of [...this.owners]) owner.emit(type, init)
   }
 
@@ -97,6 +98,8 @@ class StreamHub {
         },
         signal: this.controller.signal,
       })
+      if (this.controller.signal.aborted) return
+      if (!scopeMatches()) { this.terminate(true); return }
       if (response.status === 401 || response.status === 403) {
         this.emit('stream.unauthorized', { detail: response.status } as EventInit)
         this.terminate(false)
@@ -105,29 +108,32 @@ class StreamHub {
       if (!response.ok || !response.body) throw new Error('Task stream unavailable')
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
-      let buffer = ''
-      let event = 'message'
-      let data: string[] = []
+      let trailingCR = false
+      const isCurrent = () => !this.controller.signal.aborted && scopeMatches()
+      const parser = createParser({
+        maxBufferSize: 8 * 1024 * 1024,
+        onEvent: ({ event, data, id }) => {
+          if (isCurrent()) this.emit(event || 'message', { data, lastEventId: id })
+        },
+        onComment: () => { if (isCurrent()) this.emit('stream.heartbeat') },
+        onError: (error) => {
+          if (error.type === 'max-buffer-size-exceeded') this.terminate(true)
+        },
+      })
       try {
         while (!this.controller.signal.aborted) {
           const chunk = await reader.read()
-          if (this.controller.signal.aborted || !scopeMatches() || chunk.done) break
-          buffer += decoder.decode(chunk.value, { stream: true })
-          let newline: number
-          while ((newline = buffer.indexOf('\n')) >= 0) {
-            const line = buffer.slice(0, newline).replace(/\r$/, '')
-            buffer = buffer.slice(newline + 1)
-            if (!line) {
-              if (data.length && !this.controller.signal.aborted && scopeMatches()) {
-                this.emit(event, { data: data.join('\n') })
-              }
-              event = 'message'
-              data = []
-            } else if (line.startsWith('event:')) event = line.slice(6).replace(/^ /, '')
-            else if (line.startsWith('data:')) data.push(line.slice(5).replace(/^ /, ''))
+          if (!isCurrent()) break
+          const decoded = chunk.done ? decoder.decode() : decoder.decode(chunk.value, { stream: true })
+          if (decoded) { trailingCR = decoded.endsWith('\r'); parser.feed(decoded) }
+          if (chunk.done) {
+            // Resolve a final CR as CRLF; never complete an unterminated event.
+            if (trailingCR) parser.feed('\n')
+            break
           }
         }
       } finally {
+        parser.reset()
         await reader.cancel().catch(() => undefined)
         reader.releaseLock()
       }

@@ -7,6 +7,9 @@ import {
   type WorkflowEmployeeSpaceSnapshot,
 } from '@/stores/workflowEmployeeSpace'
 import { shortNameFromPanelTitle } from '@/utils/workflowEmployeeDisplayName'
+import { useAgentTaskCenterStore } from '@/stores/agentTaskCenter'
+import type { AgentTaskSummary } from '@/api/agentRuns'
+import { employeeStatusOfTask, employeeTaskSnapshot, tasksForEmployee } from '@/utils/workflowEmployeeTaskState'
 
 export type WorkflowEmployeeDeskRow = {
   empId: string
@@ -15,10 +18,15 @@ export type WorkflowEmployeeDeskRow = {
   enabled: boolean
   hostModId?: string
   carrierModId?: string
+  enterpriseLayer?: string
   /** 仅提示词、无本地运行时的对话型员工 */
   promptOnly?: boolean
   snapshot?: WorkflowEmployeeSpaceSnapshot
   session?: WorkflowEmployeeSession
+  taskId?: string
+  tasks?: AgentTaskSummary[]
+  /** Completed tasks in the currently visible server list, not a lifetime counter. */
+  completedCount?: number
 }
 
 export function formatWorkDurationShort(ms: number): string {
@@ -65,6 +73,7 @@ export function useNowMsTicker(intervalMs = 30000) {
 
 /** 员工与状态：对话型员工没有副窗快照，用上岗状态表达。 */
 export function resolveDeskStatusLine(row: WorkflowEmployeeDeskRow): string {
+  if (row.snapshot?.authority === 'task-center') return row.snapshot.stage
   if (row.promptOnly) return row.enabled ? '待命' : '待召唤'
   if (!row.enabled) return '副窗未启用'
   const s = row.snapshot
@@ -75,8 +84,16 @@ export function resolveDeskStatusLine(row: WorkflowEmployeeDeskRow): string {
 export function useWorkflowEmployeeDesks() {
   const wfEmp = useWorkflowAiEmployeesStore()
   const spaceStore = useWorkflowEmployeeSpaceStore()
+  const taskCenter = useAgentTaskCenterStore()
   const { enabled: workflowEnabled, registryEntries } = storeToRefs(wfEmp)
-  const { snapshots, sessions } = storeToRefs(spaceStore)
+  const { sessions } = storeToRefs(spaceStore)
+  const syncState = computed(() => ({
+    connected: taskCenter.connected,
+    stale: taskCenter.stale,
+    lastVerifiedAt: taskCenter.lastVerifiedAt,
+    error: taskCenter.error,
+  }))
+  onMounted(() => taskCenter.start())
 
   const employeeIds = computed(() => registryEntries.value.map((e) => e.id))
 
@@ -91,7 +108,16 @@ export function useWorkflowEmployeeDesks() {
       const entry = registryEntries.value.find((e) => e.id === empId)
       const panelTitle = resolvePanelTitle(empId)
       const en = workflowEnabled.value[empId] === true
-      const snap = snapshots.value[empId]
+      const employeeTasks = tasksForEmployee(taskCenter.tasks, empId)
+      const snap = employeeTaskSnapshot({
+        empId,
+        panelTitle,
+        shortName: shortNameFromPanelTitle(panelTitle),
+        enabled: en,
+        tasks: employeeTasks,
+        stale: taskCenter.stale,
+        lastVerifiedAt: taskCenter.lastVerifiedAt,
+      })
       const sess = sessions.value[empId]
       return {
         empId,
@@ -100,9 +126,14 @@ export function useWorkflowEmployeeDesks() {
         enabled: en,
         hostModId: entry?.hostModId,
         carrierModId: entry?.carrierModId,
+        enterpriseLayer: entry?.enterprise_layer,
         promptOnly: entry?.prompt_only === true,
         snapshot: snap,
         session: sess,
+        taskId: employeeTasks[0]?.task_id,
+        tasks: employeeTasks,
+        completedCount: employeeTasks.filter((task) => task.status === 'completed' && employeeStatusOfTask(task, empId) === 'completed')
+          .length,
       }
     })
   })
@@ -114,12 +145,14 @@ export function useWorkflowEmployeeDesks() {
   }
 
   function ariaLabel(row: WorkflowEmployeeDeskRow): string {
+    if (row.snapshot?.authority === 'task-center') return `员工 ${row.shortName}。${statusLine(row)}`
     if (row.promptOnly) return `员工 ${row.shortName}。${row.enabled ? '已上岗，待召唤' : '待召唤'}`
     const state = !row.enabled ? '副窗未启用' : row.snapshot ? statusLine(row) : '等待活动'
     return `员工 ${row.shortName}。${state}`
   }
 
   function isBusy(row: WorkflowEmployeeDeskRow): boolean {
+    if (row.snapshot?.authority === 'task-center') return !row.snapshot.stale && row.snapshot.visuallyBusy
     if (!row.enabled) return false
     const s = row.snapshot
     if (!s) return false
@@ -127,7 +160,7 @@ export function useWorkflowEmployeeDesks() {
   }
 
   function processedCount(row: WorkflowEmployeeDeskRow): number {
-    return row.session?.processedCount ?? 0
+    return row.completedCount ?? 0
   }
 
   return {
@@ -138,5 +171,7 @@ export function useWorkflowEmployeeDesks() {
     ariaLabel,
     isBusy,
     processedCount,
+    syncState,
+    taskCenter,
   }
 }

@@ -13,6 +13,11 @@ from app.application.agent_orchestrator.task_progress import (
     progress_snapshot_of_task_metadata,
     task_progress_snapshot,
 )
+from app.domain.task_lifecycle.results import (
+    execution_result_error,
+    execution_result_outcome_unknown,
+    execution_result_requires_reconciliation,
+)
 
 TaskAttention = Literal["", "approval_required", "blocked", "failed", "result_unread"]
 TaskControlAction = Literal["pause", "cancel", "resume"]
@@ -162,11 +167,47 @@ def task_from_run(run: AgentRun, *, existing: AgentTask | None = None) -> AgentT
         current.archived_at = ""
     current.attempt = attempt
     current.run_count = max(current.run_count + int(is_new_run), attempt)
+    employee_assignments = [
+        {
+            "employee_id": str(step.params.get("employee_id") or step.params.get("pack_id")),
+            "step_id": step.step_id,
+            "status": step.status,
+        }
+        for step in run.steps
+        if step.tool_id == "employee"
+        and (step.params.get("employee_id") or step.params.get("pack_id"))
+    ]
+    employee_ids = {row["employee_id"] for row in employee_assignments}
+    active_employee_ids = {
+        row["employee_id"]
+        for row in employee_assignments
+        if row["status"] in {"running", "retrying"}
+    }
+    current_ids = active_employee_ids or employee_ids
     current.metadata = {
         **dict(current.metadata or {}),
         "task_model_version": int(runtime.get("task_model_version") or 1),
         "task_request": dict(run.metadata.get("task_request") or {}),
         "task_request_fingerprint": str(run.metadata.get("task_request_fingerprint") or ""),
+        # Explicit execution identity survives the lightweight task SSE snapshot.
+        # Never copy runtime credentials or infer an assignee from a task title.
+        "employee_id": (next(iter(current_ids)) if len(current_ids) == 1 else "")
+        if employee_assignments
+        else str(runtime.get("employee_id") or ""),
+        "employee_assignments": employee_assignments,
+        "reconciliation_required": any(
+            execution_result_outcome_unknown(output)
+            or (
+                run.status == "completed"
+                and bool(
+                    execution_result_error(output)
+                    or execution_result_requires_reconciliation(output)
+                )
+            )
+            for output in [run.final_output, *(step.output for step in run.steps)]
+        ),
+        "parent_run_id": str(context.get("parent_run_id") or ""),
+        "parent_task_id": str(runtime.get("parent_task_id") or ""),
         "progress": task_progress_snapshot(run),
         "business_result": dict(run.final_output.get("business_result") or {})
         if isinstance(run.final_output.get("business_result"), dict)

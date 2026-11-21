@@ -243,7 +243,7 @@ export type DutyDepartment = {
 
 export const SIX_LINE_DEPARTMENTS: Record<string, DutyDepartment> = {
   ops_acquisition: {
-    label: 'O-A 获客部',
+    label: '市场营销部',
     five_line_id: 'ops_acquisition',
     subzones: {
       'public-acquisition': { label: '公域获客 O1', ids: [
@@ -269,7 +269,7 @@ export const SIX_LINE_DEPARTMENTS: Record<string, DutyDepartment> = {
     },
   },
   ops_partner: {
-    label: 'O-B 伙伴部',
+    label: '商务合作部',
     five_line_id: 'ops_partner',
     subzones: {
       'partner-onboard': { label: '生态接入 B1', ids: [
@@ -290,7 +290,7 @@ export const SIX_LINE_DEPARTMENTS: Record<string, DutyDepartment> = {
     },
   },
   prod_web: {
-    label: 'P-W 网站部',
+    label: '数字平台部',
     five_line_id: 'prod_web',
     subzones: {
       'static-site': { label: '营销静态 P1a', ids: [
@@ -324,7 +324,7 @@ export const SIX_LINE_DEPARTMENTS: Record<string, DutyDepartment> = {
     },
   },
   prod_mod: {
-    label: 'P-M Mod 部',
+    label: '智能应用研发部',
     five_line_id: 'prod_mod',
     subzones: {
       'craft-pipeline': { label: 'Craft 13 步 P2', ids: [
@@ -360,7 +360,7 @@ export const SIX_LINE_DEPARTMENTS: Record<string, DutyDepartment> = {
     },
   },
   prod_software: {
-    label: 'P-S 软件部',
+    label: '软件研发部',
     five_line_id: 'prod_software',
     subzones: {
       'core-coding': { label: '核心编码 P2', ids: [
@@ -398,7 +398,7 @@ export const SIX_LINE_DEPARTMENTS: Record<string, DutyDepartment> = {
     },
   },
   shared_retention: {
-    label: 'S-R 归档部',
+    label: '安全治理部',
     five_line_id: 'shared_retention',
     subzones: {
       'ttl-janitor': { label: 'TTL 清理 R1', ids: [

@@ -2,8 +2,11 @@ import type { EnterpriseModStack } from '@/constants/enterpriseModStack'
 import { buildEnterpriseModStack } from '@/constants/enterpriseModStack'
 import { fetchIndustryBaseline, fetchOnboardingIndustryCatalog } from '@/utils/platformShellApi'
 import { fetchWorkspacePrefs } from '@/utils/workspacePrefsApi'
+import { employeeDirectoryScope } from '@/api/employeeDirectory'
 
 let cachedStack: EnterpriseModStack | null = null
+let cachedScope = ''
+let requestGeneration = 0
 
 function buildOfflineEnterpriseModStack(industryId: string): EnterpriseModStack {
   return buildEnterpriseModStack({
@@ -22,7 +25,9 @@ function buildOfflineEnterpriseModStack(industryId: string): EnterpriseModStack 
 }
 
 export async function resolveEnterpriseModStack(force = false): Promise<EnterpriseModStack> {
-  if (cachedStack && !force) return cachedStack
+  const scope = employeeDirectoryScope()
+  if (cachedStack && cachedScope === scope && !force) return cachedStack
+  const generation = ++requestGeneration
 
   let industryId = '通用'
   try {
@@ -42,15 +47,22 @@ export async function resolveEnterpriseModStack(force = false): Promise<Enterpri
     }
   }
 
+  let stack: EnterpriseModStack
   try {
     const plan = await fetchIndustryBaseline(industryId, force)
-    cachedStack = buildEnterpriseModStack(plan)
+    stack = buildEnterpriseModStack(plan)
   } catch {
-    cachedStack = buildOfflineEnterpriseModStack(industryId)
+    stack = buildOfflineEnterpriseModStack(industryId)
   }
-  return cachedStack
+  if (scope !== employeeDirectoryScope()) throw new Error('企业工作空间上下文已变更，请重试')
+  if (generation === requestGeneration) {
+    cachedStack = stack
+    cachedScope = scope
+  }
+  return stack
 }
 
 export function invalidateEnterpriseModStackCache(): void {
   cachedStack = null
+  requestGeneration++
 }

@@ -3,17 +3,19 @@
     <div class="page-content psf">
       <header class="psf-head">
         <div class="psf-head-row">
-          <router-link :to="{ name: 'workflow-employee-space' }" class="psf-link-btn"> 返回员工空间 </router-link>
+          <router-link :to="{ name: 'workflow-employee-space', query: { employee: selectedEmpId || undefined } }" class="psf-link-btn"> 返回员工空间 </router-link>
+          <router-link :to="{ name: 'employee-workbench', query: { employee: selectedEmpId || undefined } }" class="psf-link-btn">员工工作台</router-link>
           <router-link v-if="showWorkflowPanoramaNav" :to="workflowVisualizationLocation" class="psf-link-btn psf-link-btn--ghost">
             流程全景说明
           </router-link>
         </div>
         <div class="psf-head-text">
-          <h2 class="psf-title">员工工作流全景</h2>
+          <h2 class="psf-title">员工图谱</h2>
           <p class="psf-sub">
-            企业端<strong class="psf-sub-em">四部门节点图</strong>：员工归属「行业通用 + 定制」组成的企业 Mod，上岗后进入该栈下的工具 / 执行
-            / 服务 / 管理四部门。
+            企业端<strong class="psf-sub-em">四部门节点图</strong>：{{ departmentNames }}。员工按当前账号可用目录和原有部门展示。
           </p>
+          <p class="psf-sub" role="status">{{ syncState.stale ? '任务状态待核对，暂不显示为待命' : syncState.connected ? '任务状态实时同步' : '任务状态定时核对中' }}</p>
+          <p v-if="registryError" class="psf-sub" role="alert">{{ registryError }} <button type="button" @click="refreshRegistry">重新同步员工目录</button></p>
         </div>
       </header>
 
@@ -21,7 +23,7 @@
         <div class="psf-stat" role="listitem">
           <p class="psf-stat-k">总工位</p>
           <p class="psf-stat-v">{{ totalCount }}</p>
-          <p class="psf-stat-sub">已上岗 AI 员工（企业 Mod 栈内）</p>
+          <p class="psf-stat-sub">当前账号可用的 AI 员工</p>
         </div>
         <div class="psf-stat" role="listitem">
           <p class="psf-stat-k">已托管</p>
@@ -31,12 +33,12 @@
         <div class="psf-stat" role="listitem">
           <p class="psf-stat-k">工作中</p>
           <p class="psf-stat-v psf-stat-v--busy">{{ busyCount }}</p>
-          <p class="psf-stat-sub">最近活跃 · 视觉忙态</p>
+          <p class="psf-stat-sub">任务账本确认的运行状态</p>
         </div>
         <div class="psf-stat" role="listitem">
           <p class="psf-stat-k">待命</p>
           <p class="psf-stat-v psf-stat-v--idle">{{ idleEnabledCount }}</p>
-          <p class="psf-stat-sub">已托管但暂无忙态</p>
+          <p class="psf-stat-sub">已托管且已核对无运行任务</p>
         </div>
       </div>
 
@@ -45,7 +47,7 @@
           <div>
             <h3 id="psf-monitor-h" class="psf-monitor-title">四部门节点图</h3>
             <p class="psf-monitor-desc">
-              四栏为四部门；横幅展示当前企业 Mod（行业包 + 定制 Mod）。AI 市场安装的员工自动挂靠该栈并上岗。绿点=已托管、蓝点=忙。
+              四栏对应原有部门；员工与任务状态与工作空间、工作台同步。点击员工可查看详情，接入中断时保留上次状态并标记待核对。
             </p>
           </div>
         </div>
@@ -56,7 +58,6 @@
               :desks="panoramaDesks"
               :selected-emp-id="selectedEmpId"
               :is-busy="isBusy"
-              :enterprise-stack-label="enterpriseStackLabel"
               @select="onSelectEmp"
             />
             <PaneResizeHandle
@@ -67,7 +68,7 @@
               @reset="resetPanoramaPaneWidth"
             />
           </div>
-          <WorkflowEmployeeInspector v-model:selected-emp-id="selectedEmpId" :desks="panoramaDesks" hide-workspace-link />
+          <WorkflowEmployeeInspector :selected-emp-id="selectedEmpId" :desks="panoramaDesks" hide-workspace-link @update:selected-emp-id="onSelectEmp" />
         </div>
       </section>
     </div>
@@ -75,7 +76,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import PaneResizeHandle from '@/components/PaneResizeHandle.vue'
 import { useResizablePane } from '@/composables/useResizablePane'
 import EnterpriseEstablishmentGraph from '@/components/workflow/EnterpriseEstablishmentGraph.vue'
@@ -83,49 +84,31 @@ import WorkflowEmployeeInspector from '@/components/workflow/WorkflowEmployeeIns
 import { useWorkflowEmployeeDesks, type WorkflowEmployeeDeskRow } from '@/composables/useWorkflowEmployeeDesks'
 import { resolveWorkflowVisualizationLocation } from '@/utils/workflowNav'
 import { useWorkflowPanoramaNavVisible } from '@/composables/useWorkflowPanoramaNavVisible'
-import { type EnterpriseModStack } from '@/constants/enterpriseModStack'
-import { useModsStore } from '@/stores/mods'
-import { resolveEnterpriseModStack } from '@/utils/enterpriseModStackApi'
-import { workflowHostVisibleOnPanorama } from '@/utils/workflowEmployeeScope'
+import { isCustomPhaseEmployeeCarrierModId } from '@/utils/modWorkflowEmployees'
+import { ENTERPRISE_ORG_LAYERS } from '@/constants/enterpriseWorkflowEstablishment'
+import { useWorkspaceDeskSelection } from '@/composables/useWorkspaceDeskSelection'
+import { useWorkflowEmployeeRegistrySync } from '@/composables/useWorkflowEmployeeRegistrySync'
 
 const workflowVisualizationLocation = resolveWorkflowVisualizationLocation()
 const { showWorkflowPanoramaNav } = useWorkflowPanoramaNavVisible()
 const PANORAMA_LAYOUT_MQ = '(max-width: 960px)'
 
-const enterpriseStack = ref<EnterpriseModStack | null>(null)
-const enterpriseStackLabel = computed(() => enterpriseStack.value?.stackLabel || '')
+const departmentNames = ENTERPRISE_ORG_LAYERS.map(department => department.label).join('、')
 
-const modsStore = useModsStore()
-const { desks, isBusy } = useWorkflowEmployeeDesks()
+const { error: registryError, refresh: refreshRegistry } = useWorkflowEmployeeRegistrySync()
+const { desks, isBusy, syncState } = useWorkflowEmployeeDesks()
+// The backend directory enforces account/manifest visibility; use the same rows as the office.
+const panoramaDesks = computed<WorkflowEmployeeDeskRow[]>(() => desks.value
+  .filter(row => !isCustomPhaseEmployeeCarrierModId(row.carrierModId || row.hostModId)))
 
-const panoramaDesks = computed<WorkflowEmployeeDeskRow[]>(() => {
-  const stack = enterpriseStack.value
-  const entitled = modsStore.entitledModIds
-  return desks.value.filter((d) => workflowHostVisibleOnPanorama(d.hostModId || d.carrierModId, stack, entitled))
-})
-
-const selectedEmpId = ref<string | null>(null)
+const { selectedEmpId, selectDesk } = useWorkspaceDeskSelection(panoramaDesks)
 
 const totalCount = computed(() => panoramaDesks.value.length)
 const enabledCount = computed(() => panoramaDesks.value.filter((d) => d.enabled).length)
 const busyCount = computed(() => panoramaDesks.value.filter((d) => isBusy(d)).length)
-const idleEnabledCount = computed(() => Math.max(0, enabledCount.value - busyCount.value))
-
-watch(
-  () => panoramaDesks.value.map((d) => d.empId).join('\0'),
-  () => {
-    const list = panoramaDesks.value
-    if (!list.length) {
-      selectedEmpId.value = null
-      return
-    }
-    const cur = selectedEmpId.value
-    if (!cur || !list.some((d) => d.empId === cur)) {
-      selectedEmpId.value = list[0].empId
-    }
-  },
-  { immediate: true },
-)
+const idleEnabledCount = computed(() => panoramaDesks.value.filter(d => d.enabled
+  && d.snapshot?.authority === 'task-center' && !d.snapshot.stale
+  && ['idle', 'done'].includes(d.snapshot.officeState || '')).length)
 
 const isPanoramaPaneResizable = ref(true)
 let panoramaPaneViewportMedia: MediaQueryList | null = null
@@ -146,8 +129,8 @@ const {
   enabled: () => isPanoramaPaneResizable.value,
 })
 
-function onSelectEmp(empId: string) {
-  selectedEmpId.value = empId
+function onSelectEmp(empId: string | null) {
+  selectDesk(empId)
 }
 
 function onPanoramaPaneViewportChange(event: MediaQueryList | MediaQueryListEvent): void {
@@ -158,9 +141,6 @@ function onPanoramaPaneViewportChange(event: MediaQueryList | MediaQueryListEven
 }
 
 onMounted(() => {
-  void resolveEnterpriseModStack().then((stack) => {
-    enterpriseStack.value = stack
-  })
   panoramaPaneViewportMedia = window.matchMedia(PANORAMA_LAYOUT_MQ)
   onPanoramaPaneViewportChange(panoramaPaneViewportMedia)
   if (typeof panoramaPaneViewportMedia.addEventListener === 'function') {

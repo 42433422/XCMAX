@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 // Mock @vue-flow/core and sub-modules
+const graphCalls = vi.hoisted(() => ({ fitView: vi.fn(), layout: vi.fn() }))
 vi.mock('@vue-flow/core', () => ({
   VueFlow: {
     name: 'VueFlow',
@@ -10,7 +11,7 @@ vi.mock('@vue-flow/core', () => ({
     template: '<div class="vue-flow-mock"><slot /><slot name="node-group" /><slot name="node-default" /></div>',
   },
   useVueFlow: () => ({
-    fitView: vi.fn(),
+    fitView: graphCalls.fitView,
   }),
 }))
 vi.mock('@vue-flow/background', () => ({
@@ -24,6 +25,7 @@ vi.mock('@vue-flow/minimap', () => ({
 }))
 vi.mock('@/composables/useAutoLayout', () => ({
   computeGridLayout: (ids: string[], opts: Record<string, number>) => {
+    graphCalls.layout()
     const positions = new Map<string, { x: number; y: number }>()
     const cols = opts.cols || 2
     let x = 0
@@ -115,6 +117,7 @@ function mountComponent(propsOverrides = {}) {
 describe('EnterpriseEstablishmentGraph', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
+    vi.clearAllMocks()
   })
 
   it('renders the root element with correct aria-label', () => {
@@ -213,6 +216,25 @@ describe('EnterpriseEstablishmentGraph', () => {
     expect(disabledNode).toBeTruthy()
     expect(disabledNode.data.enabled).toBe(false)
     expect(disabledNode.style.background).toContain('#f8fafc')
+  })
+
+  it('updates task badges without rebuilding the department layout or moving the viewport', async () => {
+    const wrapper = mountComponent()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    const positions = vm.flowNodes.map((node: any) => ({ id: node.id, position: node.position }))
+    graphCalls.fitView.mockClear()
+    graphCalls.layout.mockClear()
+    await wrapper.setProps({ desks: sampleDesks.map(row => ({ ...row,
+      snapshot: { visuallyBusy: false, stale: true, stage: '待核对', officeState: 'offline' },
+    })) })
+    expect(vm.flowNodes.find((node: any) => node.data?.empId === 'tool-001').data).toMatchObject({
+      busy: false, stale: true, statusLine: '待核对', taskState: 'offline',
+    })
+    expect(vm.flowNodes.map((node: any) => ({ id: node.id, position: node.position }))).toEqual(positions)
+    expect(graphCalls.layout).not.toHaveBeenCalled()
+    expect(graphCalls.fitView).not.toHaveBeenCalled()
+    wrapper.unmount()
   })
 
   it('creates placeholder nodes for empty zones', () => {
