@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import importlib
 import os
-from datetime import UTC
+from datetime import UTC, datetime, timedelta
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
@@ -14,11 +14,26 @@ def _facade():
 
 
 def _register_scheduler_phase_04():
+    from apscheduler.triggers.cron import CronTrigger
     from apscheduler.triggers.interval import IntervalTrigger
 
     from modstore_server.retort_evolution import tick as retort_tick
-    from modstore_server.workflow_scheduler import _run_tracked_scheduler_job, _scheduler
+    from modstore_server.strategic_portfolio_scheduler import tick as portfolio_tick
+    from modstore_server.workflow_scheduler import (
+        _business_misfire_grace_time,
+        _run_tracked_scheduler_job,
+        _scheduler,
+        logger,
+    )
 
+    _scheduler.add_job(
+        lambda: _run_tracked_scheduler_job("strategic_portfolio", portfolio_tick),
+        IntervalTrigger(seconds=60),
+        id="strategic_portfolio",
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+    )
     _scheduler.add_job(
         lambda: _run_tracked_scheduler_job("retort_evolution", retort_tick),
         IntervalTrigger(seconds=30),
@@ -30,8 +45,6 @@ def _register_scheduler_phase_04():
     if os.environ.get("MODSTORE_RETORT_FEEDBACK_ACTOR_ID") and os.environ.get(
         "MODSTORE_RETORT_FEEDBACK_TEMPLATE"
     ):
-        from apscheduler.triggers.cron import CronTrigger
-
         from modstore_server.retort_customer_feedback import scheduled_create
 
         _scheduler.add_job(
@@ -144,7 +157,7 @@ def _register_scheduler_phase_04():
     try:
         _facade()._scheduler.add_job(
             _self_evolution_metrics_job,
-            _facade().CronTrigger(day_of_week="sun", hour=0, minute=35, timezone="UTC"),
+            _facade().CronTrigger(day_of_week="sun", hour=0, minute=50, timezone="UTC"),
             id="self_evolution_metrics",
             replace_existing=True,
             next_run_time=_facade().datetime.now(_facade().timezone.utc)
@@ -156,44 +169,64 @@ def _register_scheduler_phase_04():
     except RECOVERABLE_ERRORS:
         _facade().logger.exception("register self evolution metrics job failed")
 
-    def _auto_fix_loop_job() -> None:
+    def _strategy_bet_review_job() -> None:
+        from modstore_server.workflow_scheduler import _run_tracked_scheduler_job, logger
+
         try:
-            from modstore_server.auto_fix_loop import register_auto_fix_event_bindings
+            from modstore_server.strategy_bets import run_review
 
-            register_auto_fix_event_bindings()
+            out = _run_tracked_scheduler_job("strategy_bet_review", run_review)
+            logger.info(
+                "strategy bet review: reviewed=%s verdicts=%s",
+                out.get("reviewed"),
+                out.get("verdicts"),
+            )
         except RECOVERABLE_ERRORS:
-            _facade().logger.debug("auto_fix event bindings registration skipped")
+            logger.exception("strategy bet review job failed")
 
-    _facade()._scheduler.add_job(
-        _auto_fix_loop_job,
-        _facade().IntervalTrigger(hours=1),
-        id="auto_fix_event_bindings_refresh",
-        replace_existing=True,
-    )
+    try:
+        _scheduler.add_job(
+            _strategy_bet_review_job,
+            CronTrigger(hour=21, minute=40, timezone="Asia/Shanghai"),
+            id="strategy_bet_review",
+            replace_existing=True,
+            next_run_time=datetime.now(UTC) + timedelta(seconds=115),
+            misfire_grace_time=_business_misfire_grace_time(),
+            coalesce=True,
+            max_instances=1,
+        )
+    except RECOVERABLE_ERRORS:
+        logger.exception("register strategy bet review job failed")
 
-    def _auto_version_bump_job() -> None:
+    def _strategy_planner_job() -> None:
+        from modstore_server.workflow_scheduler import _run_tracked_scheduler_job, logger
+
         try:
-            from modstore_server.auto_version_bump import auto_version_bump
-            from modstore_server.integrations.ops_action_handlers import repo_root
+            from modstore_server.strategy_planner import plan_strategy
 
-            root = str(repo_root())
-            out = auto_version_bump(root)
-            if out.get("ok") and (not out.get("skipped")):
-                _facade().logger.info(
-                    "auto version bump: %s → %s (anchors=%d)",
-                    out.get("old_version"),
-                    out.get("new_version"),
-                    out.get("anchors_synced"),
-                )
+            out = _run_tracked_scheduler_job("strategy_planner", plan_strategy)
+            logger.info(
+                "strategy plan: candidates=%s registered=%s evidence=%s",
+                out.get("candidates"),
+                out.get("registered"),
+                out.get("evidence"),
+            )
         except RECOVERABLE_ERRORS:
-            _facade().logger.exception("auto version bump job failed")
+            logger.exception("strategy planner job failed")
 
-    _facade()._scheduler.add_job(
-        _auto_version_bump_job,
-        _facade().CronTrigger(hour=6, minute=0),
-        id="auto_version_bump_daily",
-        replace_existing=True,
-    )
+    try:
+        _scheduler.add_job(
+            _strategy_planner_job,
+            CronTrigger(day_of_week="mon", hour=21, minute=50, timezone="Asia/Shanghai"),
+            id="strategy_planner",
+            replace_existing=True,
+            next_run_time=datetime.now(UTC) + timedelta(seconds=140),
+            misfire_grace_time=_business_misfire_grace_time(),
+            coalesce=True,
+            max_instances=1,
+        )
+    except RECOVERABLE_ERRORS:
+        logger.exception("register strategy planner job failed")
 
     def _telemetry_backlog_scan_job() -> None:
         try:

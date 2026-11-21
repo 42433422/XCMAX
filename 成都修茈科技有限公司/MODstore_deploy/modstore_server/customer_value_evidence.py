@@ -17,7 +17,7 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from modstore_server import payment_orders
 from modstore_server.customer_value_classification import amount_cents as _amount_cents
@@ -40,6 +40,7 @@ from modstore_server.customer_value_payment_source import (
 from modstore_server.customer_value_payment_source import (
     payment_evidence_marker,
 )
+from modstore_server.customer_value_refunds import WalletRefundEvidence
 from modstore_server.models import (
     CustomerValueReceipt,
     UpdateInstallationReceipt,
@@ -70,6 +71,7 @@ def append_customer_value_receipt(
     payment_order: dict[str, Any] | None = None,
     session_factory: Callable[..., Any] | None = None,
     now: datetime | None = None,
+    refund_evidence: WalletRefundEvidence | None = None,
 ) -> dict[str, Any]:
     """Append one receipt or return the existing idempotent record.
 
@@ -79,6 +81,11 @@ def append_customer_value_receipt(
     """
 
     data = dict(payload or {})
+    native_refund = refund_evidence is not None
+    if native_refund:
+        if type(refund_evidence) is not WalletRefundEvidence:
+            raise ValueError("refund evidence must come from the authenticated ledger reader")
+        refund_evidence.require_payload(data)
     receipt_kind = _text(data.get("receipt_kind"), 32).lower()
     verification_status = _text(data.get("verification_status") or "pending_evidence", 32).lower()
     if receipt_kind not in RECEIPT_KINDS:
@@ -96,7 +103,9 @@ def append_customer_value_receipt(
     artifact_id = _text(data.get("artifact_id"), 256)
     acceptance_id = _text(data.get("acceptance_id"), 128)
     if verification_status == "verified":
-        required = {"customer_ref": customer_ref, "customer_goal_id": goal_id}
+        required = {"customer_ref": customer_ref}
+        if not native_refund:
+            required["customer_goal_id"] = goal_id
         if receipt_kind in {"delivery", "first_use", "outcome", "acceptance", "reuse"}:
             required["artifact_id"] = artifact_id
         if receipt_kind == "acceptance":
@@ -167,7 +176,7 @@ def append_customer_value_receipt(
                 raise ValueError(
                     "verified goal requires customer confirmation and agreement digest"
                 )
-        if order_no:
+        if order_no and not native_refund:
             if payment_order is None:
                 payment_order = payment_orders.find(order_no)
             eligible, reason = classify_payment_order(dict(payment_order or {}))
@@ -188,6 +197,9 @@ def append_customer_value_receipt(
         "acceptance_id": acceptance_id,
         "evidence_digest": evidence_digest,
     }
+    if native_refund:
+        # One native credit is one order-level receipt, independent of goal count.
+        identity = {"receipt_kind": receipt_kind, "source_event_id": source_event_id}
     receipt_id = "cvr_" + hashlib.sha256(_canonical_json(identity).encode("utf-8")).hexdigest()[:48]
 
     sf = session_factory or get_session_factory()
@@ -261,6 +273,8 @@ def append_customer_value_receipt(
             .first()
         )
         if existing is not None:
+            if native_refund and existing.evidence_digest != evidence_digest:
+                raise ValueError("native refund identity conflicts with the original receipt")
             return {"ok": True, "created": False, "receipt_id": receipt_id}
         row = CustomerValueReceipt(
             receipt_id=receipt_id,
@@ -286,7 +300,14 @@ def append_customer_value_receipt(
             recorded_at=(now or datetime.now(UTC)).astimezone(UTC).replace(tzinfo=None),
         )
         session.add(row)
-        session.commit()
+        try:
+            session.commit()
+        except IntegrityError:
+            session.rollback()
+            existing = session.query(CustomerValueReceipt).filter_by(receipt_id=receipt_id).first()
+            if not native_refund or existing is None or existing.evidence_digest != evidence_digest:
+                raise
+            return {"ok": True, "created": False, "receipt_id": receipt_id}
     return {"ok": True, "created": True, "receipt_id": receipt_id}
 
 

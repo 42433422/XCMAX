@@ -6,9 +6,12 @@ import logging
 import sys
 from typing import Any, Dict, List, Optional
 
-from fastapi import Depends, Query
+from fastapi import Depends, HTTPException, Query
+from sqlalchemy import select
 
 from modstore_server.api.deps import get_current_user, require_admin
+from modstore_server.db.db_base import get_session_factory
+from modstore_server.db.strategic import StrategicActionItem, StrategicDecision
 from modstore_server.models import User
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.strategic_layer import (
@@ -16,6 +19,7 @@ from modstore_server.strategic_layer import (
     MeetingParticipants,
     MeetingStatus,
 )
+from modstore_server.strategic_layer_api_merged import _portfolio_boundary
 from modstore_server.strategic_layer_models import (
     CancelMeetingRequest,
     ConcludeMeetingRequest,
@@ -33,6 +37,23 @@ def _facade() -> Any:
 
 
 router = _facade().router
+
+
+def _portfolio_action_ids(action_ids: list[str]) -> set[str]:
+    with get_session_factory()() as session:
+        return set(
+            session.scalars(
+                select(StrategicActionItem.action_id)
+                .join(
+                    StrategicDecision,
+                    StrategicActionItem.decision_id == StrategicDecision.decision_id,
+                )
+                .where(
+                    StrategicActionItem.action_id.in_(action_ids),
+                    StrategicDecision.scope == "strategy_portfolio",
+                )
+            ).all()
+        )
 
 
 @router.post("/meetings", response_model=Dict[str, Any])
@@ -115,6 +136,8 @@ def conclude_meeting(
     meeting_id: str, body: ConcludeMeetingRequest, _: User = Depends(require_admin)
 ) -> Dict[str, Any]:
     """结束会议 + 决议写入决策账本 + action items 闭环。"""
+    for item in [*body.decisions, *body.action_items]:
+        _portfolio_boundary(str(item.get("decision_id") or ""))
     decision_refs: List[MeetingDecisionRef] = []
     for d in body.decisions:
         try:
@@ -176,6 +199,8 @@ def list_action_items(
         ._meeting_service()
         .list_action_items(meeting_id=meeting_id, assigned_to=assignee, status=status, limit=limit)
     )
+    protected = _portfolio_action_ids([item["action_id"] for item in items])
+    items = [item for item in items if item["action_id"] not in protected]
     return {"ok": True, "count": len(items), "items": items}
 
 
@@ -184,6 +209,8 @@ def update_action_item(
     action_item_id: str, body: UpdateActionItemRequest, _: User = Depends(require_admin)
 ) -> Dict[str, Any]:
     """更新 action item（状态/结果/阻塞原因/完成时间）。"""
+    if _portfolio_action_ids([action_item_id]):
+        raise HTTPException(409, "Portfolio execution results require an executor receipt")
     completed_at = _facade()._parse_dt(body.completed_at)
     try:
         item = (

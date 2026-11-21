@@ -10,6 +10,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, wri
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
+import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { probeTools } from './tool_preflight.mjs';
 import {
@@ -35,6 +36,7 @@ import { createReceiptOutbox, createParaReportOutbox, requestManagedParaSession 
 import { sourceIdentity } from './control_git_handoff.mjs';
 import { candidateBaseSha, candidateMode, exportCandidate, githubReadEnv } from './github_para_candidate.mjs';
 import { isOpenCodeReady, openCodeExecutable, runOpenCodeAgent } from './opencode_agent.mjs';
+import { bindWorkspaceTask, requireWorkspaceCandidate } from './strategic_workspace_controller.mjs';
 import { reportOnlyPatchInstruction, writeReportOnlyPatch, writeTaskMetadata } from './report_only_patch.mjs';
 import { cliResult, streamCliOutput } from './cli_output_stream.mjs';
 import {
@@ -80,6 +82,7 @@ const token = credentialVault.getCredential('DEVFLEET_DEVICE_TOKEN', {
 });
 // Model children receive only their model authentication; prompt grants may only narrow it.
 const toolEnv = (prompt, tool) => credentialVault.childEnv(process.env, parseCredentialGrant(prompt), { tool });
+const workspaceTaskGrants = new WeakMap();
 const apiBase = (process.env.DEVFLEET_API_URL || 'http://localhost:3001').replace(/\/$/, '');
 const workspaceRoot = process.env.DEVFLEET_WORKSPACE_ROOT || '/tmp/devfleet-e2e/agent-workspace';
 const bareRepo = process.env.DEVFLEET_BARE_REPO || '/Users/a4243342/XCMAX-runtime/devfleet-bare.git';
@@ -533,9 +536,10 @@ function toolAvailable(tool) {
   return false;
 }
 
-function runToolOnce(tool, taskDir, prompt, log, reportOnly) {
-  if (tool === 'opencode') return runOpenCodeAgent(taskDir, prompt, {
-    env: toolEnv(prompt, tool), timeoutMs: toolCommandTimeoutMs, reportOnly, log,
+function runToolOnce(tool, taskDir, prompt, log, reportOnly, workspaceGrant, runAgent = runOpenCodeAgent) {
+  if (tool === 'opencode') return runAgent(taskDir, prompt, {
+    env: workspaceGrant?.modelEnv || toolEnv(prompt, tool),
+    timeoutMs: Math.min(toolCommandTimeoutMs, workspaceGrant?.timeoutMs ?? Infinity), reportOnly, log,
   });
   if (tool === 'trae') return runTraeAgent(taskDir, prompt, log);
   if (tool === 'claude_code') return runClaudeAgent(taskDir, prompt, log);
@@ -559,7 +563,10 @@ function describeToolError(tool, err) {
   return { summary, raw: `${tail}${timedOut ? '\ntimed out' : ''}${err?.code === 'ENOENT' ? '\nnot installed' : ''}`.toLowerCase() };
 }
 
-async function runToolFallbackChain({ ws, task, taskDir, prompt, plan, requestedTool, baseHead, reportOnly }) {
+async function runToolFallbackChain({ ws, task, taskDir, prompt, plan, requestedTool, baseHead, reportOnly, workspaceGrant, runAgent }) {
+  if (process.env.PARA_STRATEGIC_REQUEST_ID && (!workspaceGrant || plan.length !== 1 || plan[0] !== 'opencode')) {
+    throw new Error('workspace_requires_bound_opencode_task');
+  }
   const log = (content, level = 'info') => send(ws, {
     type: 'task_log',
     task_id: task.task_id,
@@ -588,7 +595,7 @@ async function runToolFallbackChain({ ws, task, taskDir, prompt, plan, requested
     let failure = null;
     let output = '';
     try {
-      output = String(await runToolOnce(tool, taskDir, prompt, log, reportOnly) || '');
+      output = String(await runToolOnce(tool, taskDir, prompt, log, reportOnly, workspaceGrant, runAgent) || '');
       if (tool === 'codex' && output.startsWith('[codex exit=')) {
         const dirty = await gitMaybe(taskDir, ['status', '--porcelain', '--', '.']);
         if (!dirty && !(await headMovedFromBase(taskDir, baseHead))) failure = describeCodexFailure(output);
@@ -1229,6 +1236,7 @@ async function finalizeTask(ws, task, taskDir, baseHead = '') {
 }
 
 async function settleCandidate(ws, task, taskDir, baseHead) {
+  requireWorkspaceCandidate(task, workspaceTaskGrants.get(task));
   const receipt = await exportCandidate(task, taskDir, baseHead);
   await postTaskReport(task, { status: 'completed', progress: 100, content: JSON.stringify(receipt) });
   send(ws, { type: 'task_progress', task_id: task.task_id, subtask_id: task.subtask_id,
@@ -1322,8 +1330,9 @@ async function failTask(ws, task, content) {
   }
 }
 
-async function handleTask(ws, task) {
+export async function handleTask(ws, task, { runAgent = runOpenCodeAgent } = {}) {
   let taskDir = null;
+  let workspaceGrant;
   try {
   // Budget refusal precedes workspace fetches, credential grants and model probes.
   const reportOnly = isReportOnlyTask(task);
@@ -1355,6 +1364,11 @@ async function handleTask(ws, task) {
     progress: 10,
     status: 'running',
   });
+  workspaceGrant = await bindWorkspaceTask(task);
+  if (workspaceGrant) {
+    if ((workspaceGrant.role === 'fix') === reportOnly) throw new Error('workspace_role_mode_mismatch');
+    workspaceTaskGrants.set(task, workspaceGrant);
+  }
   taskDir = await prepareWorkspace(task);
   const reportOnlyRefEvidence = reportOnly
     ? await prepareReportOnlyTargetBranch(taskDir, task)
@@ -1443,6 +1457,8 @@ async function handleTask(ws, task) {
       requestedTool,
       baseHead,
       reportOnly,
+      workspaceGrant,
+      runAgent,
     }));
     if (toolError && (devTool === 'opencode' || fallbackPlan.includes('opencode'))) {
       await failTask(ws, task, toolError);
@@ -1757,6 +1773,8 @@ async function handleTask(ws, task) {
     // 无论成功/失败/未变更，任务结束即回收 per-task 克隆，避免 workspace 撑爆磁盘。
     codexModelAttemptsByTaskDir.delete(taskDir);
     if (!paraReports.handles(task)) cleanupWorkspace(taskDir);
+    workspaceTaskGrants.delete(task);
+    if (workspaceGrant) await workspaceGrant.close();
   }
 }
 
@@ -1956,6 +1974,7 @@ function connect() {
   }, 30_000);
 }
 
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
 if (process.argv.includes('--spawn')) {
   const child = spawn(process.execPath, [new URL(import.meta.url).pathname], {
     detached: true,
@@ -1967,4 +1986,6 @@ if (process.argv.includes('--spawn')) {
 } else {
   gcStaleWorkspaces();
   connect();
+}
+
 }

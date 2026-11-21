@@ -376,7 +376,11 @@ class _WorkflowEnginePart02Mixin:
         if not isinstance(sub_input, dict):
             sub_input = {"value": sub_input}
         sub_input["_sub_workflow_depth"] = current_depth
-        sub_result = _facade().execute_workflow(int(sub_workflow_id), sub_input, user_id=user_id)
+        from modstore_server.workflow_event_runner import run_recorded_workflow
+
+        sub_result = run_recorded_workflow(
+            workflow_id=int(sub_workflow_id), input_data=sub_input, user_id=user_id
+        )
         return {
             output_var: sub_result,
             "sub_workflow_id": int(sub_workflow_id),

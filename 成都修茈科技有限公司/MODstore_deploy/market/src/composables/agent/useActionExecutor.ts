@@ -5,6 +5,7 @@ import { useButlerOrchestrator } from './useButlerOrchestrator'
 import { ACTION_RISKS, ROUTE_NAME_MAP } from '../../utils/agent/agentActionTypes'
 import { serializeVisibleDom } from '../../utils/agent/pageSerializer'
 import type { SkillResult } from '../../types/agent'
+import { checkXiaoCLifeAction } from './xiaocLifeActionGuard'
 
 const ACTION_LOG_KEY = 'xc_butler_action_log'
 const MAX_LOG_ENTRIES = 50
@@ -46,6 +47,8 @@ export function useActionExecutor() {
 
   /** 导航到指定路由（低风险） */
   async function navigate(args: { route?: string; name?: string; query?: Record<string, string> }): Promise<SkillResult> {
+    const blocked = await checkXiaoCLifeAction()
+    if (blocked) return blocked
     const label = `跳转到 ${args.route || args.name}`
     agentStore.setMode('operating')
     try {
@@ -79,10 +82,14 @@ export function useActionExecutor() {
     const ok = await requestAction('click', ACTION_RISKS.click, label, args)
     if (!ok) return { success: false, message: '用户已取消' }
 
+    const blocked = await checkXiaoCLifeAction()
+    if (blocked) return blocked
+
     agentStore.setMode('operating')
     try {
       const el = findElement(args)
       if (!el) return { success: false, message: `未找到目标元素：${label}` }
+      if (el.closest('[data-xiaoc-control-plane]')) return { success: false, message: '小 C 的自主等级与预算只能由管理员直接设置。' }
       ;(el as HTMLElement).click()
       appendLog({ ts: Date.now(), action: 'click', label, risk: 'medium', success: true })
       return { success: true, message: `已点击：${label}` }
@@ -108,10 +115,14 @@ export function useActionExecutor() {
     const ok = await requestAction('fill', ACTION_RISKS.fill, label, args)
     if (!ok) return { success: false, message: '用户已取消' }
 
+    const blocked = await checkXiaoCLifeAction()
+    if (blocked) return blocked
+
     agentStore.setMode('operating')
     try {
       const el = findElement(args) as HTMLInputElement | HTMLTextAreaElement | null
       if (!el) return { success: false, message: `未找到输入框：${args.label}` }
+      if (el.closest('[data-xiaoc-control-plane]')) return { success: false, message: '小 C 的自主等级与预算只能由管理员直接设置。' }
       const nativeInputValueSetter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value')?.set
       if (nativeInputValueSetter) {
         nativeInputValueSetter.call(el, args.value)
@@ -144,10 +155,14 @@ export function useActionExecutor() {
     const ok = await requestAction('select', ACTION_RISKS.select, label, args)
     if (!ok) return { success: false, message: '用户已取消' }
 
+    const blocked = await checkXiaoCLifeAction()
+    if (blocked) return blocked
+
     agentStore.setMode('operating')
     try {
       const el = findElement(args) as HTMLSelectElement | null
       if (!el) return { success: false, message: `未找到选择框：${args.label}` }
+      if (el.closest('[data-xiaoc-control-plane]')) return { success: false, message: '小 C 的自主等级与预算只能由管理员直接设置。' }
       el.value = args.value
       el.dispatchEvent(new Event('change', { bubbles: true }))
       appendLog({ ts: Date.now(), action: 'select', label, risk: 'medium', success: true })
@@ -170,6 +185,8 @@ export function useActionExecutor() {
 
   /** 滚动页面（低风险） */
   async function scroll(args: { direction: 'up' | 'down' | 'top' | 'bottom'; px?: number }): Promise<SkillResult> {
+    const blocked = await checkXiaoCLifeAction()
+    if (blocked) return blocked
     const px = args.px || 300
     switch (args.direction) {
       case 'top':
@@ -190,6 +207,8 @@ export function useActionExecutor() {
 
   /** 读取页面内容（低风险） */
   async function read(): Promise<SkillResult> {
+    const blocked = await checkXiaoCLifeAction()
+    if (blocked) return blocked
     const content = serializeVisibleDom()
     return {
       success: true,
@@ -213,6 +232,9 @@ export function useActionExecutor() {
     if (!ok) {
       return { success: false, message: '用户已取消', assistantReply: '已取消，未做任何修改。' }
     }
+
+    const blocked = await checkXiaoCLifeAction(3)
+    if (blocked) return blocked
 
     if (!tgt) {
       return {

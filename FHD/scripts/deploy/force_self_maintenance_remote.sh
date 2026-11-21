@@ -37,15 +37,10 @@ try_bases=(
   "http://127.0.0.1:5101"
 )
 
-echo "Probe candidate bases:"
-for base in "${try_bases[@]}"; do
-  code="$(curl --noproxy '*' -sS --max-time 5 -o /tmp/ms-health.json -w '%{http_code}' "${base}/api/health" || true)"
-  echo "  ${base}/api/health -> HTTP ${code}"
-done
-
 BEARER_TOKEN=""
 CHOSEN_BASE=""
 
+# Single probe: health/status logging and base selection both read this result.
 choose_base_via_http() {
   local base code ok_flag
   for base in "${try_bases[@]}"; do
@@ -133,7 +128,115 @@ success = status == "completed" or status.startswith("completed_")
 print("1" if success else "0")
 PY
 )"
+  RUN_ID="$(python3 - <<'PY'
+import json
+try:
+    payload = json.load(open("/tmp/loop-run.json"))
+except Exception:
+    print("")
+    raise SystemExit(0)
+result = payload.get("result") if isinstance(payload, dict) else None
+source = result if isinstance(result, dict) else payload
+print(str(source.get("run_id") or ""))
+PY
+)"
   [[ "${ok_run}" == "1" ]]
+}
+
+# Machine-readable outcome for the GitHub job summary.  Emitted on every exit
+# path so a skipped/blocked loop can never look like a successful run.
+emit_summary() {
+  local outcome="$1"
+  local detail="$2"
+  python3 - "${DEPLOYED_SHA:-}" "${GATE_SUMMARY:-{}}" "$outcome" "$detail" "${RUN_ID:-}" <<'PY'
+import json
+import sys
+
+deployed, gate, outcome, detail, run_id = sys.argv[1:]
+try:
+    gate_payload = json.loads(gate)
+except ValueError:
+    gate_payload = {"raw": gate}
+print(
+    "LOOP_SUMMARY_JSON="
+    + json.dumps(
+        {
+            "deployed_sha": deployed,
+            "detail": detail,
+            "gate": gate_payload,
+            "outcome": outcome,
+            "run_id": run_id,
+        },
+        ensure_ascii=False,
+    )
+)
+PY
+}
+
+# Assert the running instance really is the immutable release it claims to be.
+# This replaces the old break-glass bypass: the gate now stays fail-closed and
+# an operator must deploy the exact SHA instead of faking the manifest.
+verify_runtime_identity() {
+  local base="$1"
+  local deployed_sha health_sha
+  deployed_sha="$(python3 - <<'PY'
+import json
+
+try:
+    print(json.load(open("/opt/xcmax/current/.xcmax-release.json")).get("git_sha") or "")
+except Exception:
+    print("")
+PY
+)"
+  health_sha="$(curl --noproxy '*' -fsS --max-time 10 "${base}/api/health" 2>/dev/null \
+    | python3 -c 'import json,sys
+try:
+    print(json.load(sys.stdin).get("git_sha") or "")
+except Exception:
+    print("")')"
+  echo "runtime identity deployed=${deployed_sha:-missing} health=${health_sha:-missing}" >&2
+  [[ "$deployed_sha" =~ ^[0-9a-f]{40}$ ]] \
+    || { echo "immutable release manifest is missing an exact git_sha" >&2; return 1; }
+  [[ "$health_sha" == "$deployed_sha" ]] \
+    || { echo "running health identity differs from the immutable release manifest" >&2; return 1; }
+  if [ -n "${TARGET_SHA:-}" ]; then
+    [[ "$TARGET_SHA" == "$deployed_sha" ]] || {
+      echo "deployed ${deployed_sha} != requested ${TARGET_SHA}; deploy that exact SHA via modstore-prod-deploy.yml first" >&2
+      return 1
+    }
+  fi
+  printf '%s' "$deployed_sha"
+}
+
+# The gate itself must agree that provenance is clean before any mutation.
+verify_provenance_gate() {
+  local status_file="$1"
+  python3 - "$status_file" <<'PY'
+import json
+import sys
+
+payload = json.load(open(sys.argv[1], encoding="utf-8"))
+gate = payload.get("current_gate") or {}
+gaps = [str(item) for item in (gate.get("gaps") or [])]
+blocked = [item for item in gaps if "runtime provenance blocked" in item]
+if blocked:
+    print("runtime provenance blocked: " + "; ".join(blocked), file=sys.stderr)
+    raise SystemExit(1)
+provenance = gate.get("runtime_provenance")
+if isinstance(provenance, dict) and provenance.get("ok") is False:
+    print("runtime provenance ok=false", file=sys.stderr)
+    raise SystemExit(1)
+print(
+    json.dumps(
+        {
+            "gaps": gaps,
+            "provenance": provenance if isinstance(provenance, dict) else None,
+            "signal_count": gate.get("signal_count"),
+        },
+        ensure_ascii=False,
+    )
+)
+PY
 }
 
 run_inprocess_with_live_env() {
@@ -164,8 +267,8 @@ if pid and Path(f"/proc/{pid}/environ").exists():
         env[k.decode()] = v.decode(errors="replace")
     for k, v in env.items():
         os.environ[k] = v
-# Break-glass: production worktree is often dirty vs PARA branch=main.
-os.environ["MODSTORE_SELF_MAINTENANCE_REQUIRE_CLEAN_RUNTIME"] = "0"
+# Production runs an immutable release whose identity is verified by the
+# preflight below, so the provenance gate must stay fail-closed here.
 # Force path: don't stall when Mac already has a codex currentTask.
 os.environ["MODSTORE_SELF_MAINTENANCE_ALLOW_BUSY_DEVICE"] = "1"
 os.environ["MODSTORE_SELF_MAINTENANCE_DEVICE_ONLINE_WAIT_SEC"] = os.environ.get(
@@ -190,17 +293,40 @@ result = run_self_maintenance_loop(
     reason=os.environ.get("LOOP_REASON") or "gha-force-realrun",
 )
 print(json.dumps(result, ensure_ascii=False, default=str)[:4000])
+try:
+    Path("/tmp/xcmax-loop-run-id").write_text(str(result.get("run_id") or ""), encoding="utf-8")
+except OSError:
+    pass
 status = str(result.get("status") or "")
 success = status == "completed" or status.startswith("completed_")
 raise SystemExit(0 if success else 3)
 PY
 }
 
-# Prefer known MODstore listeners even when /status probe was flaky.
-preferred_http_bases=(
-  "http://127.0.0.1:9999"
-  "http://127.0.0.1:9990"
-)
+# Fail-closed preflight: prove the running instance is an exact immutable
+# release AND that the gate itself reports clean provenance.  Nothing below
+# mutates code until both checks pass.  The base probe is the same one the
+# HTTP fallback uses, so a candidate list is never duplicated.
+CHOSEN_BASE=""
+PREFLIGHT_BASE=""
+if choose_base_via_http; then
+  PREFLIGHT_BASE="$CHOSEN_BASE"
+fi
+if [ -z "${PREFLIGHT_BASE}" ]; then
+  emit_summary "identity_unavailable" "no MODstore status listener answered"
+  echo "No MODstore status listener answered; cannot verify runtime identity" >&2
+  exit 3
+fi
+echo "Preflight status base=${PREFLIGHT_BASE}"
+if ! DEPLOYED_SHA="$(verify_runtime_identity "$PREFLIGHT_BASE")"; then
+  emit_summary "identity_failed" "runtime identity preflight failed"
+  exit 6
+fi
+if ! GATE_SUMMARY="$(verify_provenance_gate /tmp/ms-status.json)"; then
+  emit_summary "provenance_blocked" "runtime provenance gate blocked"
+  exit 7
+fi
+echo "Preflight gate=${GATE_SUMMARY}"
 
 # Run outside the API worker first.  Self-maintenance can deploy and restart
 # MODstore; an HTTP request hosted by that same service would be terminated in
@@ -208,26 +334,31 @@ preferred_http_bases=(
 echo "Trying in-process loop with live production env first"
 if run_inprocess_with_live_env; then
   echo "Loop force-run via in-process python succeeded"
+  RUN_ID="$(cat /tmp/xcmax-loop-run-id 2>/dev/null || true)"
+  emit_summary "completed" "in_process"
   exit 0
 fi
 
 echo "In-process force-run unavailable; trying authenticated HTTP fallbacks"
-if choose_base_via_http; then
-  echo "Using base=${CHOSEN_BASE}"
-  head -c 1200 /tmp/ms-status.json || true
-  echo
-  ensure_bearer_token "$CHOSEN_BASE" || true
-  if post_run_http "$CHOSEN_BASE"; then
-    echo "Loop force-run via HTTP succeeded"
-    exit 0
-  fi
-  echo "HTTP /run unavailable on chosen base; trying preferred MODstore ports"
+echo "Using preflight base=${PREFLIGHT_BASE}"
+head -c 1200 /tmp/ms-status.json || true
+echo
+ensure_bearer_token "$PREFLIGHT_BASE" || true
+if post_run_http "$PREFLIGHT_BASE"; then
+  echo "Loop force-run via HTTP succeeded"
+  emit_summary "completed" "http:${PREFLIGHT_BASE}"
+  exit 0
 fi
+echo "HTTP /run unavailable on preflight base; trying the remaining candidates"
 
-for base in "${preferred_http_bases[@]}"; do
+for base in "${try_bases[@]}"; do
+  if [ "$base" = "$PREFLIGHT_BASE" ]; then
+    continue
+  fi
   ensure_bearer_token "$base" || true
   if post_run_http "$base"; then
     echo "Loop force-run via HTTP succeeded on ${base}"
+    emit_summary "completed" "http:${base}"
     exit 0
   fi
 done
@@ -235,4 +366,5 @@ done
 echo "All force-run strategies failed; dumping listeners/containers"
 ss -lntp 2>/dev/null | head -60 || true
 docker ps --format '{{.Names}}\t{{.Ports}}' 2>/dev/null | head -40 || true
+emit_summary "failed" "all_force_run_strategies_failed"
 exit 3

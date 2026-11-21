@@ -20,17 +20,20 @@ if str(_FHD_ROOT) not in sys.path:
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-# 修复：plan 中是 parent.parent.parent（3 层），但脚本在 FHD/scripts/dev/，
-# 4 层 parent 才能到项目根 /Users/a4243342/Desktop/XCMAX
-_REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
-sys.path.insert(0, str(_REPO_ROOT / "成都修茈科技有限公司" / "MODstore_deploy"))
 # 共享 approval ledger client（FHD/scripts/ci/_approval_ledger_client.py）
 _FHD_SCRIPTS = Path(__file__).resolve().parent.parent  # FHD/scripts
 sys.path.insert(0, str(_FHD_SCRIPTS / "ci"))
 
 from _approval_ledger_client import post_to_approval_ledger
 from _im_notify_client import notify_boss_im
-from modstore_server.evolution_ledger import append_event
+
+# Keep MODstore's sibling packages (including tests) out of later spawn imports.
+_MODSTORE_ROOT = str(_FHD_ROOT.parent / "成都修茈科技有限公司" / "MODstore_deploy")
+sys.path.insert(0, _MODSTORE_ROOT)
+try:
+    from modstore_server.evolution_ledger import append_event
+finally:
+    sys.path.remove(_MODSTORE_ROOT)
 
 
 def escalate(

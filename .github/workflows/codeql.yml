@@ -11,7 +11,8 @@ on:
   schedule:
     # Keep the release scanner's CodeQL provenance fresh enough for the
     # required two-consecutive-day zero-finding proof.
-    - cron: "17 18 * * *"
+    # 每日 00:45（北京时间），避开 02:00-05:00 集成窗口
+    - cron: "45 16 * * *"
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}

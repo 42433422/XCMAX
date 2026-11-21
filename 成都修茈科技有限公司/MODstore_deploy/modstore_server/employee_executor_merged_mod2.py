@@ -8,6 +8,8 @@
 from __future__ import annotations
 
 import importlib
+from copy import deepcopy
+from pathlib import Path
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
@@ -84,6 +86,9 @@ def _execute_employee_phase_01(state):
         )
         state["runtime_policy"] = {}
     state["config"] = _facade().bind_reviewed_burn_in_handlers(state["config"], burn_in_eligibility)
+    from modstore_server.strategic_execution_contract import verify_execution_binding
+
+    verify_execution_binding(state["employee_id"], config=state["config"])
     actions_section = state["config"].get("actions") or {}
     actions_inner = (
         actions_section.get("actions")
@@ -139,7 +144,7 @@ def _execute_employee_phase_01(state):
     ctx = _facade().build_employee_context(state["employee_id"], state["payload"])
     state["perceived"] = _facade()._perception_real(
         state["config"].get("perception", {}),
-        state["payload"],
+        deepcopy(state["payload"]),
         state["session"],
         state["user_id"],
     )
@@ -240,6 +245,9 @@ def _execute_employee_phase_01(state):
         state["reasoning"] if isinstance(state["reasoning"], dict) else {},
         state["payload"] if isinstance(state["payload"], dict) else {},
     )
+    from modstore_server.strategic_execution_contract import bind_reasoning_input
+
+    bind_reasoning_input(state["reasoning"], state["payload"])
     return (False, None)
 
 
@@ -488,7 +496,7 @@ def _execute_employee_phase_03(state):
         metric_error = ""
     elif burn_in_acceptance:
         metric_error = "burn-in acceptance: " + ";".join(
-            (str(item) for item in burn_in_acceptance.get("reasons") or [])
+            str(item) for item in burn_in_acceptance.get("reasons") or []
         )
     else:
         metric_error = _facade()._handler_failure_detail(
@@ -500,11 +508,9 @@ def _execute_employee_phase_03(state):
         state["exec_status"] = "blocked_by_path_guard"
         violations = _pg.get("violations") or []
         vstr = "; ".join(
-            (
-                f"{v.get('path', '')}({v.get('reason', '')})"
-                for v in violations[:5]
-                if isinstance(v, dict)
-            )
+            f"{v.get('path', '')}({v.get('reason', '')})"
+            for v in violations[:5]
+            if isinstance(v, dict)
         )
         metric_error = f"path_guard violations: {vstr}"[:500]
         metric_failure_kind = "path_guard_violation"
@@ -790,6 +796,9 @@ def _execute_employee_phase_02(state):
         state["employee_id"],
         state["user_id"],
     )
+    from modstore_server.strategic_execution_contract import bind_file_receipts
+
+    bind_file_receipts(state["result"], state["payload"], state["config"], state["user_id"])
     try:
         from modstore_server.employee_path_guard import check_path_guard
 
@@ -797,6 +806,7 @@ def _execute_employee_phase_02(state):
             config=state["config"],
             result=state["result"] if isinstance(state["result"], dict) else {},
             employee_id=state["employee_id"],
+            project_root=Path(state["_project_root"]) if state["_project_root"] else None,
         )
         if isinstance(state["result"], dict):
             state["result"]["path_guard"] = _path_guard
@@ -896,6 +906,9 @@ def execute_employee_task(
             pack = _facade().load_employee_pack_resolved(
                 session, employee_id, user_id=user_id or None, execute=True
             )
+            from modstore_server.strategic_execution_contract import verify_execution_binding
+
+            verify_execution_binding(employee_id, user_id=user_id, pack=pack, payload=payload)
             try:
                 state = {
                     "pack": pack,

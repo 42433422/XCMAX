@@ -2,8 +2,6 @@
 """owner 审计演化决策 ledger 的 CLI。
 
 复用 modstore_server.evolution_ledger 的 list_events / mark_audited API。
-与 FHD/scripts/autonomy/evolution_decision_ledger.py 的 list/audit 子命令等价，
-但保留独立入口便于 owner 习惯用法（spec 中规定）。
 
 Usage::
 

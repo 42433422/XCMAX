@@ -571,7 +571,7 @@ def test_existing_database_upgrades_idempotently_without_trusting_existing_email
         )
         for _ in range(2):
             output = deployment_command(str(config.parent / "scripts/upgrade_database.py"))
-            assert "schema migration verified heads=20261119_personal_allowance" in output
+            assert "schema migration verified heads=20261121_xiaoc_life" in output
         init_db()
         init_db()
     else:

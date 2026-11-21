@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import json
 import os
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from datetime import UTC, datetime
 from pathlib import Path
-from uuid import UUID
+from uuid import NAMESPACE_URL, UUID, uuid5
 
-from sqlalchemy import text
+from sqlalchemy import case, text, update
 from sqlalchemy.exc import IntegrityError
 
 from modstore_server.customer_service_tools import json_dumps, json_loads
@@ -72,14 +72,23 @@ def run_lock(request_id):
             connection.execute(text("SELECT " + release), {"key": key})
 
 
-def create_run(request, actor_id, *, customer_feedback=None):
+def create_run(request, actor_id, *, customer_feedback=None, training_candidate=None):
     contract = load_repository_module("retort_engine.evolution_contract")
     protocol = contract.freeze_request(request, catalog())
     from modstore_server.customer_ticket_github import configuration
 
     if protocol["repository"] != configuration()["repository"]:
         raise ValueError("改进任务只能使用已绑定的共享产品仓库")
-    with get_session_factory()() as db:
+    source = customer_feedback or training_candidate or {}
+    lifecycle = (source.get("growthbook") or {}).get("lifecycle") or {}
+    from modstore_server.retort_experiment_surfaces import surface_identity, surface_lock_name
+
+    surface_lock = (
+        run_lock(str(uuid5(NAMESPACE_URL, surface_lock_name(lifecycle))))
+        if lifecycle
+        else nullcontext()
+    )
+    with surface_lock, get_session_factory()() as db:
         previous = db.get(RetortEvolutionRun, protocol["request_id"])
         if previous:
             if (
@@ -87,15 +96,34 @@ def create_run(request, actor_id, *, customer_feedback=None):
                 or json_loads(previous.protocol_json, {}) != protocol
                 or json_loads(previous.effects_json, {}).get("customer_feedback")
                 != customer_feedback
+                or json_loads(previous.effects_json, {}).get("training_candidate")
+                != training_candidate
             ):
                 raise ValueError("相同请求编号已绑定其他任务")
             return previous.id
+        if lifecycle:
+            active = db.query(RetortEvolutionRun).filter(RetortEvolutionRun.status.notin_(TERMINAL))
+            for other in active:
+                effects = json_loads(other.effects_json, {})
+                prior = effects.get("customer_feedback") or effects.get("training_candidate") or {}
+                prior_lifecycle = (prior.get("growthbook") or {}).get("lifecycle") or {}
+                if prior_lifecycle and surface_identity(prior_lifecycle) == surface_identity(
+                    lifecycle
+                ):
+                    raise ValueError("experiment_surface_already_reserved")
         row = RetortEvolutionRun(
             id=protocol["request_id"],
             user_id=actor_id,
             protocol_json=json_dumps(protocol),
             effects_json=json_dumps(
-                {"customer_feedback": customer_feedback} if customer_feedback else {}
+                {
+                    key: value
+                    for key, value in {
+                        "customer_feedback": customer_feedback,
+                        "training_candidate": training_candidate,
+                    }.items()
+                    if value
+                }
             ),
         )
         db.add(row)
@@ -110,6 +138,8 @@ def create_run(request, actor_id, *, customer_feedback=None):
                 or json_loads(previous.protocol_json, {}) != protocol
                 or json_loads(previous.effects_json, {}).get("customer_feedback")
                 != customer_feedback
+                or json_loads(previous.effects_json, {}).get("training_candidate")
+                != training_candidate
             ):
                 raise ValueError("相同请求编号已绑定其他任务") from None
             return previous.id
@@ -121,7 +151,10 @@ class ComponentPorts:
         self.request_id = request_id
 
     def plan(self, protocol):
-        from modstore_server.retort_customer_feedback import private_approval_context
+        from modstore_server.retort_customer_feedback import (
+            approval_policy,
+            private_approval_context,
+        )
 
         module = load_repository_module("retort_engine.models")
         tasks = [
@@ -139,8 +172,14 @@ class ComponentPorts:
         ]
         sources = protocol["references"]
         feedback = private_approval_context(self.request_id)
+        policy = approval_policy(self.request_id)
+        from modstore_server.retort_training_candidates import training_plan
+
+        training = training_plan(self.request_id)
         return {
             **({"private_customer_feedback": feedback} if feedback else {}),
+            **({"feedback_policy": policy} if policy else {}),
+            "prior_outcomes": outcome_knowledge(limit=5),
             "tasks": tasks,
             "sources": sources,
             "public_title": protocol["title"],
@@ -150,7 +189,8 @@ class ComponentPorts:
             + "\n\n参考：\n"
             + "\n".join(f"- {s['url']} @ {s['source_commit']}" for s in sources)
             + "\n\n测试协议："
-            + protocol["protocol_digest"],
+            + protocol["protocol_digest"]
+            + training,
         }
 
     def optimize(self, protocol, plan):
@@ -200,10 +240,40 @@ class ComponentPorts:
 
     def impact(self, state):
         from modstore_server.retort_customer_feedback import read_impact
+        from modstore_server.retort_training_candidates import read_training_impact
+        from modstore_server.workflow_customer_feedback import customer_refund_impact
 
-        return read_impact(self.request_id, state["delivery"])
+        return (
+            customer_refund_impact(self.request_id, state)
+            or read_training_impact(self.request_id, state)
+            or read_impact(self.request_id, state["delivery"], state=state)
+        )
+
+    def recover(self, state):
+        from modstore_server.retort_feedback_recovery import recover_release
+
+        self.remember(state)
+        policy = state.get("plan", {}).get("feedback_policy", {}).get("growthbook") or {}
+        experiment = {}
+        if policy.get("lifecycle"):
+            from modstore_server.retort_feedback_experiments import advance_experiment
+
+            experiment = advance_experiment(
+                self.request_id, state["delivery"], state=state, reject=True
+            )
+        result = recover_release(self.request_id, state)
+        if experiment and experiment.get("status") not in {"measured", "withdrawn"}:
+            result = {
+                "status": "waiting_recovery",
+                "reason": "experiment_withdrawal_unverified",
+                "release_recovery": result,
+                "experiment": experiment,
+            }
+        self.remember({**state, "recovery": result})
+        return result
 
     def remember(self, state):
+        rejected = state.get("impact", {}).get("status") == "customer_impact_rejected"
         knowledge = {
             "request_id": self.request_id,
             "protocol": state["protocol"],
@@ -213,7 +283,11 @@ class ComponentPorts:
             "plan": state["plan"],
             "optimization": state["optimization"],
             "evidence_verified": True,
-            "scope": "accepted_shared_host_delivery",
+            "scope": (
+                "rejected_shared_host_delivery" if rejected else "accepted_shared_host_delivery"
+            ),
+            "outcome": "rejected" if rejected else "accepted",
+            "recovery": state.get("recovery", {}),
         }
         if state.get("impact"):
             knowledge["customer_impact"] = state["impact"]
@@ -238,10 +312,19 @@ def advance_run(request_id, *, approval=None, ports=None):
                     raise ValueError("该任务已经结束，不能重复批准")
                 return json_loads(row.snapshot_json, {})
             protocol = json_loads(row.protocol_json, {})
-            customer_feedback = bool(json_loads(row.effects_json, {}).get("customer_feedback"))
+            sources = json_loads(row.effects_json, {})
+            customer_feedback = bool(
+                sources.get("customer_feedback") or sources.get("training_candidate")
+            )
+            recheck = row.status == "impact_recheck"
         graph = workflow.build_evolution_graph(ports or ComponentPorts(request_id), saver)
         config = {"configurable": {"thread_id": request_id}}
         before = graph.get_state(config)
+        if recheck and before.values.get("status") == "completed":
+            # Revisit only the impact/recovery tail using the original persisted
+            # delivery and approvals. Planning, execution and release are not replayed.
+            graph.update_state(config, {"status": "delivered"}, as_node="delivery")
+            before = graph.get_state(config)
         pauses = [i.value for task in before.tasks for i in task.interrupts]
         if approval is not None:
             if (
@@ -251,7 +334,12 @@ def advance_run(request_id, *, approval=None, ports=None):
             ):
                 raise ValueError("审批内容已变化，请刷新证据后重新审阅")
             value = Command(resume=approval)
-        elif pauses and pauses[0].get("kind") in {"execution", "delivery", "customer_impact"}:
+        elif pauses and pauses[0].get("kind") in {
+            "execution",
+            "delivery",
+            "customer_impact",
+            "recovery",
+        }:
             value = Command(resume={"poll": True})
         elif pauses:
             snapshot = _snapshot(before)
@@ -287,10 +375,27 @@ def _snapshot(state):
 
 def _project(request_id, snapshot, error=""):
     with get_session_factory()() as db:
-        row = db.get(RetortEvolutionRun, request_id)
-        row.snapshot_json = json_dumps(snapshot)
-        row.status, row.error = snapshot.get("status", "created"), error
-        row.updated_at = datetime.now(UTC)
+        status = snapshot.get("status", "created")
+        db.execute(
+            update(RetortEvolutionRun)
+            .where(RetortEvolutionRun.id == request_id)
+            .values(
+                snapshot_json=json_dumps(snapshot),
+                # The original customer can reopen after impact was read but
+                # before this projection. A stale completion must not lose that
+                # transaction's durable request to revisit the impact tail.
+                status=(
+                    case(
+                        (RetortEvolutionRun.status == "impact_recheck", "impact_recheck"),
+                        else_=status,
+                    )
+                    if status == "completed"
+                    else status
+                ),
+                error=error,
+                updated_at=datetime.now(UTC),
+            )
+        )
         db.commit()
 
 
@@ -314,6 +419,11 @@ def reflect(messages, *, max_tokens=4096):
 def tick():
     if not os.environ.get("MODSTORE_RETORT_CHECKPOINT_DSN"):
         return {"processed": 0, "reason": "not_configured"}
+    from modstore_server.workflow_customer_feedback import (
+        request_customer_refund_rechecks,
+    )
+
+    request_customer_refund_rechecks()
     with get_session_factory()() as db:
         ids = [
             r.id
@@ -331,17 +441,22 @@ def tick():
     return {"processed": len(ids), "errors": errors}
 
 
-def accepted_knowledge(limit=8):
+def outcome_knowledge(limit=8):
+    """Only structured, release-bound results enter the next decision; no customer text."""
     with get_session_factory()() as db:
         records = [
             json_loads(r.knowledge_json, {})
             for r in db.query(RetortEvolutionRun)
-            .filter_by(status="completed")
             .order_by(RetortEvolutionRun.updated_at.desc())
-            .limit(limit)
+            .limit(max(1, min(int(limit), 50)))
             if json_loads(r.knowledge_json, {}).get("evidence_verified") is True
             and json_loads(r.knowledge_json, {}).get("delivery", {}).get("status")
             == "deployment_verified"
+            and (
+                r.status == "completed"
+                or json_loads(r.knowledge_json, {}).get("customer_impact", {}).get("status")
+                == "customer_impact_rejected"
+            )
         ]
     return [
         {
@@ -352,6 +467,17 @@ def accepted_knowledge(limit=8):
             "delivery": r["delivery"],
             "sources": r["protocol"]["references"],
             "scope": r["scope"],
+            "outcome": r.get("outcome", "accepted"),
+            "customer_impact": {
+                key: value
+                for key, value in r.get("customer_impact", {}).items()
+                if key in {"status", "reason", "release_sha", "experiment", "commercial"}
+            },
+            "recovery_status": r.get("recovery", {}).get("status", "not_required"),
         }
         for r in records
     ]
+
+
+def accepted_knowledge(limit=8):
+    return [row for row in outcome_knowledge(limit) if row["outcome"] == "accepted"]
