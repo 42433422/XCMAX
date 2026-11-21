@@ -6,10 +6,14 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import re
 import threading
 import time
+from copy import deepcopy
+from dataclasses import asdict
 from typing import Any
 
 from app.infrastructure.mcp.client import (
@@ -25,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 _CACHE_TTL_SECONDS = 300.0
 _CACHE_LOCK = threading.Lock()
-_CACHE: dict[str, Any] = {"at": 0.0, "tools": {}, "servers": {}}
+_CACHE: dict[str, Any] = {"at": 0.0, "tools": {}, "servers": {}, "config_digest": ""}
 
 _SLUG = re.compile(r"[^A-Za-z0-9_]+")
 
@@ -86,9 +90,12 @@ def _action_spec(info: McpToolInfo, config: McpServerConfig) -> dict[str, Any]:
     return {
         "risk": "low" if read_only else "high",
         "idempotent": read_only,
+        "read_only": read_only,
+        "input_schema": deepcopy(schema),
         "required_params": required_params,
         "availability": "shared",
         "description": info.description,
+        "timeout_seconds": config.timeout_seconds,
         **({} if read_only else {"requires_write_approval": True}),
     }
 
@@ -117,10 +124,12 @@ def _register_with_guard(tools: dict[str, Any]) -> None:
         raise
 
 
-def _discover() -> tuple[dict[str, Any], dict[str, McpServerConfig]]:
+def _discover(
+    configs: list[McpServerConfig],
+) -> tuple[dict[str, Any], dict[str, McpServerConfig]]:
     tools: dict[str, Any] = {}
     servers: dict[str, McpServerConfig] = {}
-    for config in load_server_configs():
+    for config in configs:
         try:
             infos = list_tools(config)
         except BOUNDARY_ERRORS as exc:  # 单个服务器异常不影响其他服务器
@@ -135,7 +144,16 @@ def _discover() -> tuple[dict[str, Any], dict[str, McpServerConfig]]:
         for name in RESOURCE_ACTIONS:
             actions.setdefault(name, dict(_RESOURCE_ACTION_SPECS[name]))
         tools[tool_id] = {
-            "description": f"外部 MCP 服务器 {config.name}（{len(actions)} 个工具）",
+            "description": (
+                f"外部 MCP 服务器 {config.name}（{len(actions)} 个工具）"
+                + (
+                    "。AI 浏览器任务：仅规划一个 browser_navigate 或 browser_snapshot 起始节点，"
+                    "不得预先猜测页面 ref 或混入其他工具。原目标由同一 AgentRun 按最新页面逐步操作，"
+                    "每次动作使用现有权限审批，最终必须回读验证；请在原用户任务中明确完成条件。"
+                    if config.browser and config.session_mode == "persistent"
+                    else ""
+                )
+            ),
             "availability": "shared",
             "actions": actions,
         }
@@ -148,10 +166,18 @@ def _discover() -> tuple[dict[str, Any], dict[str, McpServerConfig]]:
 def _snapshot(now: float | None = None) -> tuple[dict[str, Any], dict[str, McpServerConfig]]:
     current = time.time() if now is None else now
     with _CACHE_LOCK:
-        if _CACHE["at"] and current - float(_CACHE["at"]) < _CACHE_TTL_SECONDS:
+        configs = load_server_configs()
+        digest = hashlib.sha256(
+            json.dumps([asdict(config) for config in configs], sort_keys=True).encode()
+        ).hexdigest()
+        if (
+            _CACHE["at"]
+            and _CACHE["config_digest"] == digest
+            and current - float(_CACHE["at"]) < _CACHE_TTL_SECONDS
+        ):
             return _CACHE["tools"], _CACHE["servers"]
-        tools, servers = _discover()
-        _CACHE.update(at=current, tools=tools, servers=servers)
+        tools, servers = _discover(configs)
+        _CACHE.update(at=current, tools=tools, servers=servers, config_digest=digest)
         return tools, servers
 
 
@@ -175,7 +201,11 @@ def merge_mcp_tools(registry: dict[str, Any]) -> dict[str, Any]:
 
 
 def call_mcp_tool(
-    tool_id: str, action: str, params: dict[str, Any] | None = None
+    tool_id: str,
+    action: str,
+    params: dict[str, Any] | None = None,
+    *,
+    runtime_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """执行外部 MCP 工具；未发现或已过期时返回明确错误。"""
     if not mcp_enabled():
@@ -190,13 +220,89 @@ def call_mcp_tool(
     arguments = {
         key: value for key, value in dict(params or {}).items() if not str(key).startswith("_")
     }
+    if config.browser:
+        from app.application.tools.mcp.browser_policy import browser_action_allowed
+
+        if not browser_action_allowed(str(action), arguments):
+            return {
+                "success": False,
+                "error_code": "mcp_browser_action_rejected",
+                "message": "浏览器动作或参数超出已启用的页面操作范围",
+                "retryable": False,
+            }
     spec = tools[str(tool_id)]["actions"][str(action)]
-    return call_tool(config, str(action), arguments, retry_safe=spec.get("idempotent") is True)
+    from app.application.agent_orchestrator.tool_spec import validate_schema_object
+
+    valid, message = validate_schema_object(spec.get("input_schema") or {}, arguments)
+    if not valid:
+        return {
+            "success": False,
+            "error_code": "mcp_arguments_invalid",
+            "message": message,
+            "retryable": False,
+        }
+    options: dict[str, Any] = {"retry_safe": spec.get("idempotent") is True}
+    if config.session_mode == "persistent":
+        context = dict(runtime_context or {})
+        scope = mcp_session_scope(context)
+        if not scope:
+            return {
+                "success": False,
+                "error_code": "mcp_session_scope_required",
+                "message": "有状态工具需要服务端企业、用户与运行身份",
+                "retryable": False,
+            }
+        options["session_scope"] = scope
+        outputs = context.get("node_outputs")
+        generations = {
+            value["session_id"]
+            for value in (outputs.values() if isinstance(outputs, dict) else [])
+            if isinstance(value, dict)
+            and value.get("server") == config.name
+            and isinstance(value.get("session_id"), str)
+            and value["session_id"]
+        }
+        if len(generations) > 1:
+            return {
+                "success": False,
+                "error_code": "mcp_session_lost",
+                "message": "原任务包含不一致的浏览器会话，需核对后重新开始",
+                "retryable": False,
+                "reconciliation_required": True,
+            }
+        if generations:
+            options["expected_session_id"] = next(iter(generations))
+    return call_tool(config, str(action), arguments, **options)
+
+
+def mcp_session_scope(context: dict[str, Any]) -> str:
+    """Only trusted executor context can bind a browser; model arguments cannot."""
+    identity = [str(context.get(key) or "").strip() for key in ("tenant_id", "user_id", "run_id")]
+    return hashlib.sha256(json.dumps(identity).encode()).hexdigest() if all(identity) else ""
+
+
+def browser_server_config(tool_id: str) -> McpServerConfig | None:
+    """A remote tool name/annotation cannot opt itself into the browser runtime."""
+    if not mcp_enabled():
+        return None
+    _tools, servers = _snapshot()
+    config = servers.get(str(tool_id))
+    return config if config and config.browser and config.session_mode == "persistent" else None
+
+
+def release_run_browser_sessions(context: dict[str, Any]) -> int:
+    from app.application.agent_orchestrator.browser_tool_process import close_browser_worker_scope
+    from app.infrastructure.mcp.client import close_scope
+
+    scope = mcp_session_scope(context)
+    if not scope:
+        return 0
+    return close_browser_worker_scope(scope) + close_scope(scope)
 
 
 def reset_mcp_cache_for_tests() -> None:
     with _CACHE_LOCK:
-        _CACHE.update(at=0.0, tools={}, servers={})
+        _CACHE.update(at=0.0, tools={}, servers={}, config_digest="")
 
 
 __all__ = [

@@ -285,7 +285,9 @@ class RunLifecycleMixin(DurableExecutionLeaseMixin):
                     "waiting_user" if previous.status == "waiting_user" else "running"
                 )
             if self._repo.save_control_if_unchanged(run, previous):
-                return cast("AgentRun", self._repo.get(run.run_id))
+                stored = cast("AgentRun", self._repo.get(run.run_id))
+                self._release_browser_run_resources(stored)
+                return stored
         raise RuntimeError("agent run changed repeatedly while recording control")
 
     def pause_run(self, run_id: str, *, requested_by: str = "") -> AgentRun | None:

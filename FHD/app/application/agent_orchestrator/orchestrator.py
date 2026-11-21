@@ -717,7 +717,9 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         if not self._repo.save_if_unchanged(run, previous):
             return None
         if not confirmed:
-            return cast("AgentRun", self._repo.get(run_id))
+            stored = cast("AgentRun", self._repo.get(run_id))
+            self._release_browser_run_resources(stored)
+            return stored
         self._execute_with_durable_lease(run, runtime_context=context)
         return cast("AgentRun", self._repo.save(run))
 
@@ -747,7 +749,9 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
             "审批已拒绝，未执行工具",
             dict(run.metadata["approval_decision"]),
         )
-        return cast("AgentRun | None", self._repo.save(run))
+        stored = cast("AgentRun", self._repo.save(run))
+        self._release_browser_run_resources(stored)
+        return stored
 
     def note_approval_timeout(self, run_id: str) -> AgentRun | None:
         """An expired approval window does not approve or execute the step."""
@@ -846,6 +850,9 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         return cast("list[RunEvent]", self._repo.list_events(run_id, after_event_id=after_event_id))
 
     def _apply_plan(self, run: AgentRun, plan: PlanGraph, *, stable_step_ids: bool = False) -> None:
+        from app.application.agent_orchestrator.browser_loop import initialize_browser_run
+
+        browser_error = initialize_browser_run(run, plan)
         self._apply_approval_risk_policy(plan)
         run.plan_id = plan.plan_id
         run.intent = plan.intent
@@ -867,10 +874,10 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
             for step in run.steps:
                 if step.node_id in required_ids:
                     step.risk = "high"
-        if graph_error:
+        if browser_error or graph_error:
             run.status = "blocked"
-            run.error = graph_error
-            run.add_event("planner.blocked", graph_error)
+            run.error = browser_error or graph_error or "browser_graph_invalid"
+            run.add_event("planner.blocked", run.error)
             return
         self._apply_repair_policy(run, plan_metadata)
         self._attach_artifacts_from_payload(run, plan_metadata, source="plan.metadata")
@@ -1528,6 +1535,13 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 run.add_event(
                     "step.skipped", step.error, {"step_id": step.step_id, "node_id": step.node_id}
                 )
+        from app.application.agent_orchestrator.browser_loop import advance_browser_run
+
+        if self._apply_requested_control(run):
+            return
+        if advance_browser_run(run, runtime_context, self._usage):
+            self._repo.save(run)
+            return
         run.status = "completed"
         self._ingest_confirmed_plan_artifacts(run)
         self._refresh_run_cost_metadata(run)
@@ -1540,6 +1554,9 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
             "ai_cost_units_total": run.metadata["ai_cost_units_total"],
             "repair_count": run.metadata.get("repair_count", 0),
         }
+        browser = run.metadata.get("browser_loop")
+        if isinstance(browser, dict) and browser.get("phase") == "verified":
+            run.final_output["browser"] = copy.deepcopy(browser.get("result"))
         self._append_llm_summary_to_final_output(run)
         self._remember_run_outcome_for(run)
         run.add_event("run.completed", "Agent run 执行完成", run.final_output)
