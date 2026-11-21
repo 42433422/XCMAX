@@ -462,6 +462,7 @@ class TestExecuteRegisteredWorkflowTool:
             "conversation_history",
             "kellai",
             "desktop_automation",
+            "image_generate",
             "customers",
             "products",
             "materials",

@@ -1151,6 +1151,21 @@
         }
       }
     },
+    "image_generate": {
+      "description": "根据文字描述生成图片，结果直接显示在对话中",
+      "availability": "shared",
+      "actions": {
+        "generate": {
+          "risk": "low",
+          "idempotent": false,
+          "required_params": [
+            "prompt"
+          ],
+          "availability": "shared",
+          "timeout_seconds": 180
+        }
+      }
+    },
     "excel_vector_index": {
       "description": "Excel 向量索引与语义查询",
       "availability": "shared",

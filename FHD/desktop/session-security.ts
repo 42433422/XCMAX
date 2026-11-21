@@ -1,37 +1,6 @@
-import { session, type Session } from 'electron'
+import { session } from 'electron'
 import { DEFAULT_PORT } from './desktop-config'
 import { isTrustedDesktopOrigin } from './desktop-navigation'
-import { desktopWorkspaceToken } from './backend-env'
-import { isTrustedIpcSender } from './ipc-sender-guard'
-import { desktopRuntime, hasVerifiedDesktopBackend } from './runtime-state'
-
-/** Authenticate the anonymous local workspace without disclosing the token to JS. */
-export function installDesktopWorkspaceCapability(ses: Session = session.defaultSession): void {
-  // All URLs must be intercepted: redirects must not carry a capability off-origin.
-  ses.webRequest.onBeforeSendHeaders((details, callback) => {
-    const headers = { ...details.requestHeaders }
-    for (const name of Object.keys(headers)) {
-      if (name.toLowerCase() === 'x-xcagi-workspace-capability') delete headers[name]
-    }
-    try {
-      const target = new URL(details.url)
-      if (hasVerifiedDesktopBackend() && details.resourceType === 'xhr'
-        && !target.username && !target.password
-        && target.pathname.startsWith('/api/local-workspace/')
-        && isTrustedDesktopOrigin(target.href, DEFAULT_PORT)
-        && details.frame && target.origin === new URL(details.frame.url).origin
-        && isTrustedIpcSender(
-          { sender: { id: details.webContentsId ?? -1 }, senderFrame: details.frame },
-          desktopRuntime.mainWindow,
-          { port: DEFAULT_PORT, splashUrl: '' },
-          [...desktopRuntime.auxiliaryWindows],
-        )) {
-        headers['X-XCAGI-Workspace-Capability'] = desktopWorkspaceToken
-      }
-    } catch { /* A destroyed frame or invalid URL never receives a capability. */ }
-    callback({ requestHeaders: headers })
-  })
-}
 
 /**
  * 媒体权限（麦克风/音频）仅放行可信本地 origin。

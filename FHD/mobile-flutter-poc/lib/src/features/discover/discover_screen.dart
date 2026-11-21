@@ -22,7 +22,6 @@ import '../scan/scan_qr_screen.dart';
 import '../tasks/task_list_screen.dart';
 import '../webview/desktop_tool_webview_screen.dart';
 import '../workspace/employee_workspace_screen.dart';
-import '../workspace/local_workspace_screen.dart';
 
 String? nativeMaterialsModForPath(String path) {
   final uri = Uri.tryParse(path);
@@ -68,8 +67,6 @@ const _authorizedRouteFallbacks = {
   'ai-ecosystem': '/ai-ecosystem',
 };
 const _staticItems = [
-  _WorkbenchItem('local-workspace', '本地工作台', 'data', Icons.folder_open,
-      subtitle: '在本机保存客户、商品和订单草稿'),
   _WorkbenchItem('ai-circle', 'AI交流圈', 'community', Icons.bubble_chart,
       subtitle: '看看员工动态与交流'),
   _WorkbenchItem('tasks', '任务', 'tasks', Icons.task_alt, subtitle: '查看进度与处理结果'),
@@ -485,12 +482,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   }
 
   void _open(_WorkbenchItem item) {
-    if (item.key == 'local-workspace') {
-      Navigator.of(context).push(MaterialPageRoute<void>(
-        builder: (_) => const LocalWorkspaceScreen(),
-      ));
-      return;
-    }
     final inventory = nativeInventoryModForPath(item.path);
     if (inventory != null) {
       Navigator.of(context).push(MaterialPageRoute(
