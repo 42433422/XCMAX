@@ -26,6 +26,7 @@ from app.application.tool_execution_deadline import (
     invocation_deadline,
     invocation_requires_reconciliation,
 )
+from app.domain.task_lifecycle.results import normalize_execution_result
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _SQL_TENANT_SCOPED_TOOL_IDS = frozenset(
@@ -615,6 +616,7 @@ class AgentToolExecutor:
             }
             if requires_reconciliation:
                 result.update(outcome="unknown", retryable=False, reconciliation_required=True)
+        result = normalize_execution_result(result)
         if idem_key:
             finish_idempotent_replay(idem_key, result)
         return cast("dict[str, Any]", result)
@@ -679,7 +681,9 @@ def execute_with_tool_deadline(
                     if callable(bounded)
                     else executor.execute(step, runtime_context=context)
                 )
-            record_result(result)
+            record_result(
+                normalize_execution_result(result) if isinstance(result, dict) else result
+            )
     except TimeoutError:
         pass
     except ToolConcurrencyLimitError:
@@ -725,6 +729,7 @@ def execute_with_tool_deadline(
             )
             and not result.get("reconciliation_required")
         ):
+            result = normalize_execution_result(result)
             if (
                 step.tool_id == "business_db"
                 and step.action == "write"

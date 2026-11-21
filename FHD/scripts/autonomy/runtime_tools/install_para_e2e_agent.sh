@@ -29,6 +29,7 @@ if [[ -f "$WATCHDOG_TARGET" ]]; then
   SNAPSHOT_TARGETS+=("$WATCHDOG_TARGET")
 fi
 node --test "$SCRIPT_DIR/e2e_agent_runtime_policy.test.mjs"
+node --test "$SCRIPT_DIR/cli_output_stream.test.mjs" "$SCRIPT_DIR/codex_model_gateway.test.mjs"
 node --test "$SCRIPT_DIR/report_only_target_branch.test.mjs"
 node --test "$SCRIPT_DIR/workspace_base_refresh.test.mjs"
 mkdir -p "$TARGET_DIR"

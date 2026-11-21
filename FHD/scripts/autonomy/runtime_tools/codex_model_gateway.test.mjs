@@ -36,7 +36,7 @@ test('Agent Plan switches only when Ark reports that the subscription quota is e
     ['AccountRateLimitExceeded', 'ark-code-latest'],
   ]) {
     const result = await runWithModelFallback({
-      candidates,
+      readOnlyProbe: true, candidates,
       classify: classifyAgentPlanError,
       runAttempt: async model => {
         if (model === candidates[1]) return { ok: true, output: 'OK' };
@@ -154,16 +154,17 @@ test('executor reference evidence preserves final controls and is counted in bud
   assert.ok(combined.includes('客户问题 😀'));
 });
 
-for (const [output, status] of [['review complete', 'completed'], ['[codex exit=1]\nmodel rejected', 'failed']]) {
+for (const [output, status] of [['[codex exit=1] is quoted evidence', 'completed'], ['model rejected', 'failed'], ['partial result', 'unknown']]) {
   test(`budget receipt reports actual CLI arguments for ${status}`, async () => {
     const logs = [];
     const execution = codexExecutionConfig({ prompt: incidentPrompt(), env: {}, reportOnly: true });
     const received = [];
+    const native = { ok: status === 'completed', output, receipt: { status } };
     const result = await runCodexBudgetedAttempt({
       execution, model: 'role-model', log: (line) => logs.push(line),
-      run: async (args) => { received.push(args); return output; },
+      run: async (args) => { received.push(args); return native; },
     });
-    assert.equal(result, output);
+    assert.equal(result, native);
     assert.deepEqual(received[0].slice(-3), ['-m', 'role-model', '-']);
     assert.ok(received[0].includes('model_reasoning_effort="low"'));
     const receipt = JSON.parse(logs[0].split('incident_execution_budget_receipt=')[1]);
@@ -200,11 +201,11 @@ test('模型错误分类：400 不支持 / 不存在 / 额度；普通失败不�
   assert.equal(classifyModelError(''), '');
 });
 
-test('400 自动降级到下一个模型，同一任务续跑成功', async () => {
+test('只读探活 400 自动降级到下一个模型', async () => {
   const calls = [];
   const availability = createModelAvailability();
   const result = await runWithModelFallback({
-    candidates: ['gpt-6.1-sol', 'gpt-5.6-terra'],
+    readOnlyProbe: true, candidates: ['gpt-6.1-sol', 'gpt-5.6-terra'],
     availability,
     runAttempt: async (model) => {
       calls.push(model);
@@ -222,9 +223,9 @@ test('400 自动降级到下一个模型，同一任务续跑成功', async () =
   assert.equal(availability.get('gpt-6.1-sol').status, 'unavailable');
 });
 
-test('候选全部失败：明确错误并附尝试过的模型列表', async () => {
+test('只读探活候选全部失败：明确错误并附尝试过的模型列表', async () => {
   const result = await runWithModelFallback({
-    candidates: ['a', 'b'],
+    readOnlyProbe: true, candidates: ['a', 'b'],
     availability: createModelAvailability(),
     runAttempt: async (model) => ({
       ok: false,
@@ -241,7 +242,7 @@ test('候选全部失败：明确错误并附尝试过的模型列表', async ()
 test('非模型类失败不降级（交给既有执行器回退 / 超时逻辑）', async () => {
   const calls = [];
   const result = await runWithModelFallback({
-    candidates: ['a', 'b'],
+    readOnlyProbe: true, candidates: ['a', 'b'],
     availability: createModelAvailability(),
     runAttempt: async (model) => {
       calls.push(model);
@@ -295,4 +296,21 @@ test('探活缓存过期后重新探活', async () => {
   assert.equal(availability.get('m').status, 'unavailable');
   clock = 500;
   assert.equal(availability.get('m'), null);
+});
+
+
+test('real task quota and unsupported failures never replay onto another model', async () => {
+  for (const message of ['insufficient_quota', 'unsupported_model']) {
+    const calls = [];
+    const result = await runWithModelFallback({
+      candidates: ['primary', 'backup'],
+      runAttempt: async model => {
+        calls.push(model);
+        return { ok: false, executionStarted: true, output: message, receipt: { status: 'failed' } };
+      },
+    });
+    assert.deepEqual(calls, ['primary']);
+    assert.equal(result.executionStarted, true);
+    assert.equal(result.receipt.status, 'failed');
+  }
 });
